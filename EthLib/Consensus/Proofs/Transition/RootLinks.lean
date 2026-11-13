@@ -472,10 +472,6 @@ private theorem linkCases_of_headerCases {first last before : ForkedBeaconState 
     simp only [moved, ↓reduceIte]
     exact read
 
-variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
-  [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
-  [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
-
 /-- Along a run, each pair of roots that a state records is one of the cases.
 
 The first state is at slot zero, has its latest header at its slot, or records that header's root.

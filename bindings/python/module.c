@@ -1063,6 +1063,8 @@ static PyMethodDef methods[] = {
   {"rlpx_ecies_decrypt", py_rlpx_ecies_decrypt, METH_VARARGS, DOC_rlpx_ecies_decrypt},
   {"devp2p_decode_message", py_devp2p_decode_message, METH_VARARGS, DOC_devp2p_decode_message},
   {"devp2p_encode_message", py_devp2p_encode_message, METH_VARARGS, DOC_devp2p_encode_message},
+  {"devp2p_route", py_devp2p_route, METH_VARARGS, DOC_devp2p_route},
+  {"devp2p_session", py_devp2p_session, METH_VARARGS, DOC_devp2p_session},
   {"discv4_decode", py_discv4_decode, METH_VARARGS, DOC_discv4_decode},
   {"discv4_encode", py_discv4_encode, METH_VARARGS, DOC_discv4_encode},
   {"discv4_record_signed_by", py_discv4_record_signed_by, METH_VARARGS, DOC_discv4_record_signed_by},

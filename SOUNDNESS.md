@@ -731,6 +731,11 @@ Both peers end with the same symmetric state, and each stores the static public 
 The send cipher of each peer is then the receive cipher of the other.
 The proof uses `x25519_agree` for the three tokens `ee`, `es` and `se`, so it needs no assumption on X25519.
 It says nothing about a peer that deviates from the specification, nor about secrecy.
+`libp2p_complete` (`Networking/Proofs/Noise/Libp2pHandshake.lean`) lifts it to the libp2p suite.
+It assumes that making each identity payload succeeds and that each payload fits in its message.
+Making a payload fails on the zero secret or when signing fails, so its success is a hypothesis.
+Each read of message 2 or 3 then succeeds, so, by `readLibp2p_authenticates`, it verified the signature of the other peer's identity key.
+Completion returns, on each side, the static key, the identity key and the extensions of the other peer, with swapped ciphers.
 
 No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key.
 Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
@@ -755,7 +760,8 @@ The DER signature of an identity has its own theorems (`Networking/Proofs/Libp2p
 So a positive number gets a leading zero byte exactly when its first nonzero byte is `0x80` or more, and zero is the single byte `0x00`.
 `decodeSignature_eq_ok_iff` proves that the decoder accepts exactly the encodings of r in [1, N) and s in [1, N/2], where N is the order of the secp256k1 group, and returns r and s.
 So each accepted pair r, s has exactly one byte encoding.
-No theorem relates the encoder to an independent model of X.690, and none is about ECDSA verification.
+No theorem relates the encoder to an independent model of X.690.
+`verify_sign` (`Networking/Proofs/Libp2p/PeerId.lean`) proves that a signature that a secret makes verifies under the key protobuf of that secret, since signing returns a low s that the strict decoder accepts.
 
 The bindings take explicit keys and state tuples.
 Callers must use fresh ephemeral keys and use the returned state after each successful cipher call.
@@ -1003,6 +1009,9 @@ That game does not model several such batches, each with its own challenge.
 There the adversary outputs a commitment, openings and `m` columns, and the verifier makes one oracle query per column.
 A column holds an opening when one of its entries has the commitment, the cell and the proof of the opening, at the cell index of the column.
 `verifyDataColumnSidecarKzgProofs_eq_verify` (`Consensus/Proofs/DataAvailability/Column.lean`) shows that the client's check of a sidecar is the batch check of such a column.
+`verifyDataColumnSidecar_eq_true_iff` (`Consensus/Proofs/Gossip/Sidecar.lean`) states exactly when a sidecar passes its shape check.
+A passing sidecar has one cell and one proof for each commitment it answers to, which from Gloas are the commitments given with it (those of the bid, when gossip checks it).
+Before Gloas it also answers to no more commitments than the blob limit at the epoch of its header.
 Let each column have at most `n` cells, and let the adversary make at most `q` queries.
 `columnPositionBindingAdvantage_le` bounds position-binding by the advantage of a BSDH reduction plus `(q + m)(n - 1)/r`.
 `columnCodeBindingAdvantage_le` bounds code-binding by the advantages of a BSDH reduction and an ARSDH reduction plus the same term.
@@ -1877,6 +1886,29 @@ The storage value of a slot that is not set is 0, so the answer must give that w
 EIP-1186 does not say which fields the answer holds for an address without an account.
 So the check judges no field of an absent account, and reports the absence.
 
+### The RLPx session
+
+`receive` (`Networking/Devp2p/Session.lean`) follows an RLPx session after the handshake, frame by frame.
+It follows ["p2p" Capability](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#p2p-capability), [Message Encoding](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#message-encoding) and [Message ID-based Multiplexing](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#message-id-based-multiplexing) in `rlpx.md`.
+Before the peer's Hello, only Hello and Disconnect pass, and Hello opens the session.
+In an active session, a Ping asks for a Pong.
+After a Disconnect, every frame is rejected.
+An ID from `0x10` on goes to the shared capability that holds it, and `route` gives that capability and the relative ID.
+
+`receive_beforeHello`, `receive_hello_active`, `receive_ping` and `receive_closed` (`Networking/Proofs/Devp2p/Session.lean`) state these steps.
+`route_negotiate` states that each ID a shared capability holds routes to it, and `route_negotiate_of_lt` that no ID below `0x10` does.
+`route_injective` states that two IDs never route to one place, and `route_comm` that both peers route every ID the same way.
+No theorem says anything about a sequence of frames beyond one step, or about timeouts.
+
+The source leaves three points open, and the session reads them as follows.
+It reads a Disconnect sent instead of Hello uncompressed, as it reads Hello, though "All messages following Hello are compressed" could be read otherwise.
+It never rejects a Hello for its version, as "Implementations must ignore any difference in protocol version" asks.
+It does not check the identities that the reasons `0x07`, `0x09` and `0x0a` name, which the source does not require.
+
+The session also rejects the data of a capability message above 16 MiB, compressed or not.
+"Message Encoding" says that messages carrying more "should be rejected by closing the connection".
+Compressed data is rejected when its Snappy header declares more, before it is decompressed.
+
 ### The block headers of the eth protocol
 
 `checkHeaders` (`Execution/Network/Blocks.lean`) checks an answer to a GetBlockHeaders request of the eth protocol.
@@ -2392,7 +2424,6 @@ The block must commit to the root of the state after it.
 The theorem shows that the envelope of that payload passes the checks of the block root and of the parent root against that state.
 It also shows that the envelope passes the checks of the builder, the mix, the gas limit, the block hash and the root of the requests.
 It shows that the payload builds on the latest block hash, and that the slot of the bid is the slot of the state.
-It assumes that the vectors whose length the preset sets have a positive length, as the root of the block needs.
 It rests on `BeaconBlock.hashTreeRoot_header`, which shows that a block has the root of its header.
 It also rests on `latestBlockHash_processBlock`, which shows that from Gloas the latest block hash after a block is the parent hash of the latest bid.
 `latestExecutionPayloadBid_processBlock` shows that from Gloas a block leaves its own bid as the latest bid.
@@ -2782,7 +2813,6 @@ A state that hashes to the zero root leaves the header of the latest block unfil
 So the next slot records the root of the header as it was.
 The first state must be at slot zero, or have its latest header at its own slot, as after a block, or record the root of its latest header at the slot before it.
 Genesis and every state that a block or a slot produces meet this, so a run may start at the state of a stored block.
-The theorem assumes that the vectors whose length the preset sets have a positive length, as the root of a block needs.
 `zeroPreimage_or_rootLinks_le_of_chainSteps` gives the `links` hypothesis of `RootsAbove.of_chainStep` for the last state of a run.
 It takes a map from roots to a preorder that orders the parent root of each block step between the first and the last state before the root of its block, as `rootLinks_cases_of_chainSteps` computes it.
 The map must also order the pairs of the first state and the first pair, and the result fails only on a zero preimage.
@@ -2799,7 +2829,12 @@ Along a run, the chain is the roots that the states of the run record (`ChainRoo
 `Run.finalized_le_currentJustified` then puts the finalized block at or before the current justified block, for a map from roots that orders the links of each state of the run, when the first state has the invariant and the finalized epoch starts after the first slot of the run.
 `Run.zeroPreimage_or_finalized_le_currentJustified` takes that order from `zeroPreimage_or_rootLinks_le_of_chainSteps`, so its only other case is a state between the first and the last state, by chain steps, that hashes to the zero root.
 Its order on block steps covers every path of chain steps between those states, not only the blocks of the run.
-This covers one chain; `accountable_safety` (`Consensus/Proofs/DirectSafety/Safety.lean`) treats two chains, and no theorem yet places the checkpoints of a fork-choice store.
+This covers one chain; `accountable_safety` (`Consensus/Proofs/DirectSafety/Safety.lean`) treats two chains.
+`Store.Reachable.chainRoots` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`) carries this agreement along the parents of each block of a reachable fork-choice store, where the chain of a block holds, at each slot, the root of its latest ancestor up to that slot.
+`Store.Reachable.getCheckpointBlock_of_blockState` reads from it that each checkpoint of the state of a block after the anchor epoch, before or after justification and finalization, has the checkpoint block of that block as root, and that the store knows it.
+`Store.Reachable.getCheckpointBlock_of_unrealizedJustification` gives the same for the unrealized justification of each block.
+`Store.Reachable.checkpoints_known` shows that each of the four checkpoints of the store is the anchor checkpoint or names a known block.
+These theorems have one other case, an anchor state that hashes to the zero root, and they do not tie together two checkpoints that come from the states of different blocks.
 
 Without a collision of header roots, the pairs of consecutive slots order the roots by ancestry.
 `RootsAbove.of_chainStep` then keeps each justified checkpoint below every root that the state records from its epoch on, which gives the source block of each recent link in the chain of its target block.
@@ -3236,12 +3271,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 386 operations and 49 size constants.
-The Python extension calls 386 of the operations and 49 of the constants.
+Lean exports 388 operations and 49 size constants.
+The Python extension calls 388 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9982 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1840), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (113), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (253), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1412), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (669), `x25519.c` (21), `xmss.c` (134).
+10006 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1840), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (113), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (253), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1414), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (671), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

@@ -33,6 +33,16 @@ The state of each checkpoint is the state of its block.
 It is processed to the start of the epoch of the checkpoint when it is before that start.
 
 The result does not say that the finalized block is an ancestor of the justified block.
+
+Other proofs take each checkpoint of a block state after the anchor epoch.
+
+They show that it names an ancestor of that block.
+
+They also show that each checkpoint of the store is that of the anchor, or names a known block.
+
+The one exception is an anchor state that hashes to the zero root.
+
+Two checkpoints of the store may still come from the states of two different blocks.
 -/
 
 @[expose] public section
