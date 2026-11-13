@@ -49,7 +49,7 @@ It also relates a caller to the frame that ends each message the caller sends. -
 structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter → Prop) : Prop where
   /-- The relation is transitive. -/
   trans : ∀ {a b c}, R a b → R b c → R a c
-  /-- A step that keeps the state up to the records of its reads keeps the relation. -/
+  /-- A step that only adds reads keeps the relation. -/
   static : ∀ {a b}, StaticStep a b → R a b
   /-- A write of storage that changes the refund counter keeps the relation. -/
   sstore : ∀ (evm : Evm fork Meter) (address : Address) (key : Bytes32) (value : U256)
@@ -271,7 +271,7 @@ theorem finishCall (rules : OrdinaryStepRules fork R) {kind : CallKind} {call : 
   dsimp only at h
   have pre : StaticStep evm (recordAccountRead { evm with
       memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-      evm.message.currentTarget) := ⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      evm.message.currentTarget) := ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl⟩
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
     exact (rules.static ((pre.trans (.of_sameContext (sameContext_refillStateGas _ _))).trans
@@ -593,7 +593,7 @@ private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
   dsimp only at h
   have pre : StaticStep evm (recordAccountRead { evm with
       memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-      evm.message.currentTarget) := ⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      evm.message.currentTarget) := ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl⟩
   split at h
   · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
     trivial
