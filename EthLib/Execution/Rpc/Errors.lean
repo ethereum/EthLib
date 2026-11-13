@@ -80,26 +80,44 @@ def rpcNonStandardErrors : ErrorGroup where
     methodNotSupported, ⟨-32005, "Limit exceeded"⟩,
     ⟨-32006, "JSON-RPC version not supported"⟩]
 
+/-- The code of an execution that ends with REVERT. -/
+def executionReverted : ErrorCode := ⟨3, "Execution reverted"⟩
+
+/-- The code of an execution that meets an invalid opcode. -/
+def invalidOpcode : ErrorCode := ⟨4, "Invalid opcode"⟩
+
 /-- The codes of a failed execution. -/
 def executionErrors : ErrorGroup where
   name := "ExecutionErrors"
   range := some (1, 199)
-  errors := [⟨1, "Nonce too low"⟩, ⟨2, "Nonce too high"⟩, ⟨3, "Execution reverted"⟩,
-    ⟨4, "Invalid opcode"⟩]
+  errors := [⟨1, "Nonce too low"⟩, ⟨2, "Nonce too high"⟩, executionReverted, invalidOpcode]
+
+/-- The code of a gas limit below the intrinsic gas of its transaction. -/
+def intrinsicGasTooLow : ErrorCode :=
+  ⟨800, "Intrinsic gas too low / Intrinsic gas exceeds gas limit"⟩
+
+/-- The code of an execution that runs out of gas. -/
+def ranOutOfGas : ErrorCode := ⟨801, "Transaction ran out of gas"⟩
+
+/-- The code of a priority fee above the fee cap. -/
+def priorityFeeAboveCap : ErrorCode := ⟨804, "Max priority fee per gas higher than max fee per gas"⟩
+
+/-- The code of a fee cap below the base fee of the block. -/
+def feeCapBelowBaseFee : ErrorCode := ⟨806, "Max fee per gas less than block base fee"⟩
+
+/-- The code of a sender whose balance does not cover the fee and the value. -/
+def insufficientFunds : ErrorCode := ⟨809, "Insufficient funds for gas * price + value"⟩
 
 /-- The codes of gas and fee faults. -/
 def gasErrors : ErrorGroup where
   name := "GasErrors"
   range := some (800, 999)
-  errors := [⟨800, "Intrinsic gas too low / Intrinsic gas exceeds gas limit"⟩,
-    ⟨801, "Transaction ran out of gas"⟩,
+  errors := [intrinsicGasTooLow, ranOutOfGas,
     ⟨802, "Gas price too low / Gas price below configured minimum"⟩,
-    ⟨803, "Tx gas limit exceeds max block gas limit"⟩,
-    ⟨804, "Max priority fee per gas higher than max fee per gas"⟩,
-    ⟨805, "Gas uint64 overflow"⟩, ⟨806, "Max fee per gas less than block base fee"⟩,
+    ⟨803, "Tx gas limit exceeds max block gas limit"⟩, priorityFeeAboveCap,
+    ⟨805, "Gas uint64 overflow"⟩, feeCapBelowBaseFee,
     ⟨807, "Max priority fee per gas higher than 2^256-1"⟩,
-    ⟨808, "Max fee per gas higher than 2^256-1"⟩,
-    ⟨809, "Insufficient funds for gas * price + value"⟩]
+    ⟨808, "Max fee per gas higher than 2^256-1"⟩, insufficientFunds]
 
 /-- The codes of the transaction pool. -/
 def txPoolErrors : ErrorGroup where

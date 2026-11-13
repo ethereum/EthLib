@@ -172,9 +172,10 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 /-- The record of a block, with its hash, from the state after it and the body that it ran. -/
 def recordOf {fork : Fork} (block : Block fork Execution.Transactions.Transaction)
     (state : Execution.State.State) (receipts : List (UInt8 × Receipt fork))
-    (logs : List Log) : Result BlockRecord := do
+    (logs : List Log) (accessList : Option Blocks.BlockAccessList := none) :
+    Result BlockRecord := do
   let hash ← block.header.hash.mapError fun e => (0, s!"block hash: {reprStr e}")
-  return ⟨fork, block, hash, state, receipts, logs⟩
+  return ⟨fork, block, hash, state, receipts, logs, accessList⟩
 
 /-- The record of a block after the last record of a chain, by the state transition. -/
 def nextRecord (config : ChainConfig) (checkSeal : Bool) (records : List BlockRecord)
@@ -185,7 +186,8 @@ def nextRecord (config : ChainConfig) (checkSeal : Bool) (records : List BlockRe
     (e.code, s!"block {block.header.number}: {blockErrorMessage e}")
   let state ← (stateTransition chain block checkSeal).mapError failed
   let result ← (runBody chain block).mapError failed
-  recordOf block state result.output.receipts result.output.logs
+  let accessList := result.output.accessListHash.map fun _ => result.output.body.builder.build
+  recordOf block state result.output.receipts result.output.logs accessList
 
 /-- The hash of thirty-two zero bytes, which a forkchoice state gives for no block. -/
 def zeroHash : Hash32 := Vector.replicate 32 (0 : UInt8)
@@ -277,10 +279,12 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
 
 /-- The responses of the chain view that its inputs build, to the texts of requests, as text.
 
+The access lists of the named block numbers are pruned first.
+
 A notification, or a batch of notifications, gets none. -/
-def serveOf (args : ViewInputs × List String) : Result (List (Option String)) := do
-  let view ← viewOf args.1
-  return args.2.map fun text => (view.serve text).map (·.compress)
+def serveOf (args : ViewInputs × List Nat × List String) : Result (List (Option String)) := do
+  let view := (← viewOf args.1).pruneAccessLists args.2.1
+  return args.2.2.map fun text => (view.serve text).map (·.compress)
 
 /-- Answer requests of the execution JSON-RPC API from the chain that the arguments build.
 
@@ -289,6 +293,10 @@ The arguments are the configuration, the state of the lowest block, and the bloc
 Each block is the name of its fork and its RLP form, the lowest block first.
 
 Then come the head, safe and finalized hashes, the network ID, and whether to check the seal.
+
+Next come the block numbers whose access lists are pruned, while their blocks remain available.
+
+From Glamsterdam, the access-list methods report code 4444 for a pruned list.
 
 The last argument is the list of the texts of the requests.
 
@@ -306,5 +314,26 @@ Any other bad input has code 0. -/
 @[export eth_rpc_serve]
 def serveExport (args : PyValue) : Result PyValue :=
   pyExport serveOf args
+
+/-- Encode a JSON access list with the same reader and RLP codec as the query methods. -/
+def encodeBlockAccessListOf (value : PyValue) : Result ByteArray := do
+  let bal ← (if containsBytes value then reject "block access list: not a JSON value"
+    else blockAccessListOfJson value.toJson).mapError fun reason =>
+      ((RpcError.invalidParams reason).code.natAbs.toUInt32, reason)
+  (Serialization.Rlp.Codec.encode bal).mapError fun _ =>
+    (internalError.code.natAbs.toUInt32, "cannot encode block access list")
+
+/-- Encode a block access-list JSON value as its EIP-7928 RLP bytes.
+
+The argument is the JSON value returned by `eth_getBlockAccessList`.
+
+The empty list encodes as `0xc0`.
+
+The order of the list is not checked, so the bytes match a header hash only for a canonical order.
+
+A value outside the JSON schema has code 32602, and an encoding failure has code 32603. -/
+@[export eth_rpc_encode_block_access_list]
+def encodeBlockAccessListExport (args : PyValue) : Result PyValue :=
+  pyExport encodeBlockAccessListOf args
 
 end EthLib.Execution.Rpc.Exports

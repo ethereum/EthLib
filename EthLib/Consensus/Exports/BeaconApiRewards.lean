@@ -66,4 +66,29 @@ Then come the identifiers of the validators. -/
 def apiSyncCommitteeRewardsExport (args : PyValue) : Result PyValue :=
   pyExport apiSyncCommitteeRewardsOf args
 
+/-- The JSON response of the block rewards endpoint. -/
+def apiBlockRewardsOf (args : String × String × ByteArray × ByteArray × Option PyValue) :
+    Result PyValue := do
+  let (name, fork, state, block, replacements) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let config ← configWithValue name replacements
+  let state ← decodeInput (BeaconState preset fork) state
+  let signed ← decodeInput (SignedBeaconBlock preset fork) block
+  let envelope ← apiError (BeaconApi.blockRewardsResponse config SignatureChecks.acceptAll
+    (.constant true) state signed.message)
+  return PyValue.ofJson envelope.toJson
+
+/-- The JSON response of the block rewards endpoint, as a `dict`.
+
+The arguments are the name, the fork, and the SSZ bytes of the state and of the signed block.
+
+The state is the one at the slot of the block, before the block.
+
+Then come the replacements of the configuration, or None.
+
+The block was imported, so no signature is checked, and the execution layer accepts its payload. -/
+@[export eth_consensus_api_block_rewards]
+def apiBlockRewardsExport (args : PyValue) : Result PyValue :=
+  pyExport apiBlockRewardsOf args
+
 end EthLib.Consensus.Exports

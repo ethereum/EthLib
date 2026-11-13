@@ -5,6 +5,7 @@ public import EthLib.Base.Base64
 public import EthLib.Base.BigEndian
 public import EthLib.Base.BlobSchedule
 public import EthLib.Base.Bytes
+public import EthLib.Base.Denominations
 public import EthLib.Base.ChainConfig
 public import EthLib.Base.Except
 public import EthLib.Base.Fork
