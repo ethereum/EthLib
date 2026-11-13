@@ -8,7 +8,9 @@ public import EthLib.Consensus.Proofs.DirectSafety.Safety
 
 Two runs from a shared prefix finalize and justify conflicting checkpoints.
 
-Either the runs exhibit a hash collision, or the following bound holds.
+Either the following bound holds, or the hashes of the runs show evidence.
+
+The evidence is a collision of the node hash or an object whose root is zero.
 
 The unslashed active stake at the reference state is at most three times the accountable stake.
 
