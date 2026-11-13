@@ -4,6 +4,8 @@ public import EthLib.Execution.Rpc.Methods
 public import EthLib.Execution.Proofs.Rpc.Raw
 public import EthLib.Execution.Proofs.Blocks.Receipt
 public import EthLib.Execution.Proofs.Transactions.Inclusion
+public import EthLib.Execution.Proofs.Transactions.Process
+public import EthLib.Execution.Proofs.Transactions.Settlement
 
 /-!
 # Proofs: the receipt objects
@@ -14,6 +16,10 @@ Their logs are numbered from 0 across the block, and the lookup of one receipt k
 
 From Byzantium, the status of a receipt object is `0x1` exactly when the receipt is a success.
 
+A receipt object has blob fields exactly for a blob transaction, with `2^17` blob gas per hash.
+
+Its price per blob gas is the base fee per blob gas at the excess blob gas of the header.
+
 In a valid view, take a canonical block after the lowest.
 
 Each receipt object has the Bloom filter of its logs.
@@ -23,6 +29,12 @@ The gas of the receipt objects adds up to the last cumulative gas.
 The base fee of the block is at most the maximum fee of each transaction.
 
 So the effective gas price follows the formula of the description.
+
+The sender bought the gas of each transaction where the run of the block reached it.
+
+Its balance fell there by exactly the fee that the receipt object reports.
+
+That fee is the gas limit times the effective gas price, plus the blob gas times its price.
 -/
 
 public section
@@ -142,6 +154,59 @@ theorem receiptInfo_contractAddress {r : BlockRecord} {config : ChainConfig}
   · simp [hto, bind, Except.bind, pure, Except.pure] at h
     subst h
     simp
+
+/-- The object of a receipt holds the sender of the lookup of its transaction. -/
+private theorem receiptInfo_transactionInfo {r : BlockRecord} {config : ChainConfig}
+    {index before firstLog : Nat} {tx : Transaction} {receipt : Receipt r.fork}
+    {info : ReceiptInfo} (h : r.receiptInfo config index before firstLog tx receipt = .ok info) :
+    ∃ ti, r.transactionInfo index tx = .ok ti ∧ info.sender = ti.sender := by
+  unfold receiptInfo at h
+  obtain ⟨ti, hti, h⟩ := bind_ok_iff.mp h
+  refine ⟨ti, hti, ?_⟩
+  rcases hto : tx.to with _ | a
+  · rcases hc : (Evm.createAddress ti.sender tx.nonce.toNat) with e | ca
+    · simp [hto, hc, bind, Except.bind, Functor.map, Except.map, Except.mapError] at h
+    · simp [hto, hc, bind, Except.bind, pure, Except.pure, Functor.map, Except.map,
+        Except.mapError] at h
+      subst h
+      rfl
+  · simp [hto, bind, Except.bind, pure, Except.pure] at h
+    subst h
+    rfl
+
+/-- The object of a receipt has blob fields exactly for a blob transaction.
+
+Its blob gas is `2^17` for each versioned hash of the transaction.
+
+From Dencun, its price is the base fee per blob gas at the excess blob gas of the header.
+
+That base fee follows the blob schedule of the chain at the number and timestamp of the block.
+
+Before Dencun the price is 0. -/
+theorem receiptInfo_blob {r : BlockRecord} {config : ChainConfig}
+    {index before firstLog : Nat} {tx : Transaction} {receipt : Receipt r.fork}
+    {info : ReceiptInfo} (h : r.receiptInfo config index before firstLog tx receipt = .ok info) :
+    info.blob = match tx with
+      | .blob t => some (2 ^ 17 * t.blobVersionedHashes.length,
+          if hd : .dencun ≤ r.fork then
+            Fees.BlobBaseFee.getBaseFeePerBlobGas
+              (Fees.BlobBaseFee.chainBlobSchedule config r.fork r.block.header.number
+                r.block.header.timestamp.toNat hd)
+              (r.block.header.excessBlobGas hd).toNat
+          else 0)
+      | _ => none := by
+  unfold receiptInfo at h
+  obtain ⟨ti, -, h⟩ := bind_ok_iff.mp h
+  rcases hto : tx.to with _ | a
+  · rcases hc : (Evm.createAddress ti.sender tx.nonce.toNat) with e | ca
+    · simp [hto, hc, bind, Except.bind, Functor.map, Except.map, Except.mapError] at h
+    · simp [hto, hc, bind, Except.bind, pure, Except.pure, Functor.map, Except.map,
+        Except.mapError] at h
+      subst h
+      rcases tx <;> rfl
+  · simp [hto, bind, Except.bind, pure, Except.pure] at h
+    subst h
+    rcases tx <;> rfl
 
 /-- The receipt objects of a block are one for each receipt, in order.
 
@@ -424,6 +489,20 @@ private theorem applyBody_receipts {fork : Fork} {config : ChainConfig}
     cases h
     rfl
 
+/-- A transaction that runs first has its sender buy the gas, on the block state it runs on. -/
+private theorem processTransaction_buyGas {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} {tx : Transaction}
+    {out : TransactionOutput} (h : processTransaction env block included tx = .ok out) :
+    ∃ bought, buyGas env (.ofBlock block) included.sender tx = .ok bought := by
+  unfold processTransaction at h
+  split at h
+  · cases h
+  split at h
+  · obtain ⟨_, bought, _, _, _, -, hb, -⟩ := runTransaction_eq_ok h
+    exact ⟨bought, hb⟩
+  · obtain ⟨_, bought, _, _, _, -, hb, -⟩ := runTransaction_eq_ok h
+    exact ⟨bought, hb⟩
+
 namespace ChainView
 
 /-- In a valid view, the receipts of a canonical block after the lowest are those of its run. -/
@@ -551,6 +630,78 @@ theorem Valid.effectiveGasPrice_receiptInfos {v : ChainView} {checkSeal : Bool}
   cases hinfo'
   rw [hprice]
   exact effectiveGasPrice_description (hv.baseFee_le_maxFeePerGas hi tx (List.mem_of_getElem? htx))
+
+/-- In a valid view, take a canonical block after the lowest, and a receipt object of it.
+
+The run of the block reached its transaction after those before it.
+
+There the sender bought the gas, and its balance fell by exactly the fee that the object reports.
+
+That fee is the gas limit times the effective gas price of the object.
+
+A blob transaction adds the blob gas of the object times its price per blob gas. -/
+theorem Valid.buyGas_receiptInfos {v : ChainView} {checkSeal : Bool}
+    (hv : v.Valid checkSeal) {i : Nat} (hi : i + 1 < v.canonical.length)
+    {infos : List ReceiptInfo} (h : v.canonical[i + 1].receiptInfos v.config = .ok infos)
+    {k : Nat} {tx : Transaction} {info : ReceiptInfo}
+    (htx : v.canonical[i + 1].block.transactions[k]? = some tx) (hinfo : infos[k]? = some info) :
+    ∃ hashes state body, ∃ before : BodyOutput v.canonical[i + 1].fork, ∃ bought,
+      recentHashes (v.chainAt i (by omega)).recent = .ok hashes ∧
+      daoTransfer v.config v.canonical[i + 1].fork v.canonical[i + 1].block.header.number
+        ⟨v.canonical[i].state, ∅, ∅, ∅, ∅⟩ = .ok state ∧
+      startSystemCalls (blockEnvironment v.config hashes v.canonical[i + 1].block.header)
+        v.canonical[i + 1].block.header.parentHash (.init state) = .ok body ∧
+      applyTransactions (blockEnvironment v.config hashes v.canonical[i + 1].block.header) body
+        (v.canonical[i + 1].block.transactions.take k) = .ok before ∧
+      buyGas (blockEnvironment v.config hashes v.canonical[i + 1].block.header)
+        (.ofBlock before.block) info.sender tx = .ok bought ∧
+      (bought.getAccount info.sender).balance.toNat + tx.gas.toNat * info.effectiveGasPrice +
+          (info.blob.map fun (used, price) => used * price).getD 0 =
+        ((State.TransactionState.ofBlock before.block).getAccount info.sender).balance.toNat := by
+  obtain ⟨hk', hinfo'⟩ := List.getElem?_eq_some_iff.mp hinfo
+  obtain ⟨-, -, hall⟩ := BlockRecord.receiptInfos_eq_ok h
+  obtain ⟨tx', receipt, htx', -, hri⟩ := hall k hk'
+  rw [htx] at htx'
+  cases htx'
+  rw [hinfo'] at hri
+  obtain ⟨-, -, -, -, -, -, -, -, hprice⟩ := BlockRecord.receiptInfo_eq_ok hri
+  have hblob := BlockRecord.receiptInfo_blob hri
+  obtain ⟨ti, hti, hsender⟩ := BlockRecord.receiptInfo_transactionInfo hri
+  obtain ⟨sender, hash, hs, -, hti2⟩ := BlockRecord.transactionInfo_eq_ok.mp hti
+  rw [hti2] at hsender
+  dsimp only at hsender
+  obtain ⟨-, result, hrun, -⟩ := hv.follows i hi
+  obtain ⟨hashes, hrec, happly, -⟩ := Blocks.runBody_eq_ok.mp hrun
+  obtain ⟨state, body, txs, -, -, hdao, hstart, htxs, -⟩ := Blocks.applyBody_eq_ok happly
+  have hlt : k < v.canonical[i + 1].block.transactions.length :=
+    (List.getElem?_eq_some_iff.mp htx).1
+  obtain ⟨-, hsteps⟩ := Blocks.applyTransactions_steps (fun _ _ => True) (fun _ => trivial)
+    (fun _ _ => trivial) (fun _ => trivial) htxs
+  obtain ⟨before, next, hbefore, hnext, -⟩ := hsteps k hlt
+  have hget : v.canonical[i + 1].block.transactions[k] = tx :=
+    Option.some.inj ((List.getElem?_eq_getElem hlt).symm.trans htx)
+  rw [hget] at hnext
+  obtain ⟨inc, out, hinc, hout, -⟩ := Blocks.applyTransaction_eq_ok hnext
+  have hincs : inc.sender = sender := Except.ok.inj ((checkInclusion_ok hinc).1.symm.trans hs)
+  obtain ⟨bought, hbought⟩ := processTransaction_buyGas hout
+  rw [hincs] at hbought
+  rw [hsender]
+  refine ⟨hashes, state, body, before, bought, hrec, hdao, hstart, hbefore, hbought, ?_⟩
+  have hbase : v.canonical[i + 1].baseFee = baseFeeOf (blockEnvironment v.config hashes
+      v.canonical[i + 1].block.header) := by
+    simp [baseFeeOf, BlockRecord.baseFee, blockEnvironment]
+  have hfee : tx.gas.toNat * info.effectiveGasPrice +
+      (info.blob.map fun (used, price) => used * price).getD 0 =
+      tx.gas.toNat * effectiveGasPrice (baseFeeOf (blockEnvironment v.config hashes
+        v.canonical[i + 1].block.header)) tx +
+      Fees.BlobBaseFee.calculateTotalBlobGas tx * blobGasPriceOf (blockEnvironment v.config hashes
+        v.canonical[i + 1].block.header) := by
+    rw [hprice, hbase, hblob]
+    rcases tx with t | t | t | t | t <;>
+      simp [Fees.BlobBaseFee.calculateTotalBlobGas, Fees.BlobBaseFee.GAS_PER_BLOB,
+        blobGasPriceOf, blockEnvironment]
+  obtain ⟨hle, hbal, -⟩ := buyGas_sender hfee hbought
+  omega
 
 /-- In a valid view, take a transaction that a lookup finds in a canonical block.
 

@@ -3820,6 +3820,8 @@ Their logs are numbered `0, 1, 2, …` across the block (`logIndex_receiptInfos`
 In a valid view, when that block is canonical, it is the object at that index among the receipts of the number of the block, so both methods give each log the same `logIndex` (`Valid.transactionReceipt_blockReceipts`).
 A block off the canonical chain is checked for its hash only, so a receipt found there has no such guarantee.
 A creation has the address that the sender makes at its nonce, and a call has none (`receiptInfo_contractAddress`).
+A receipt object has `blobGasUsed` and `blobGasPrice` exactly for a blob transaction (`receiptInfo_blob`).
+It reports `2^17` blob gas for each versioned hash, at the base fee per blob gas of the excess blob gas of its header.
 No text of a receipt or a log defines `logIndex`; the section "Log index" of the [notes of `eth_simulateV1`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx) states the rule and says that receipts use it.
 These properties hold whenever the receipt objects of a block are built.
 They fail with `-32603` when a block does not have one receipt for each transaction, or when the node cannot compute a sender, a hash or a contract address.
@@ -3830,6 +3832,8 @@ Each receipt has the Bloom filter of its logs, and so does each receipt object (
 The cumulative gas of its receipts never decreases (`Valid.cumulativeGasUsed_receipts`), so the gas of the receipt objects adds up to the last cumulative gas (`Valid.sum_gasUsed`).
 The base fee of the block is at most the maximum fee of each transaction (`Valid.baseFee_le_maxFeePerGas`).
 So the effective gas price of each receipt object follows the formula of the description, read in integers (`Valid.effectiveGasPrice_receiptInfos`, `effectiveGasPrice_description`).
+Where the run of the block reached a transaction, its sender bought the gas (`Valid.buyGas_receiptInfos`).
+Its balance fell by exactly the gas limit times `effectiveGasPrice`, plus `blobGasUsed` times `blobGasPrice`.
 From Glamsterdam, EIP-7778 makes the cumulative gas of a receipt the gas that the senders paid.
 As a choice of EthLib, the object copies it, so `gasUsed` is the gas that the sender paid, while the descriptions of `receipt.yaml` read "gas used".
 
