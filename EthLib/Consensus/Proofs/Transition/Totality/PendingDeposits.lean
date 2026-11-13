@@ -18,13 +18,15 @@ Every amount it credits comes from the queue, and leaves it.
 
 So the sum of the balances plus the amounts in the queue below `2^64` leaves room for each credit.
 
-It also bounds the sum of the amounts the pass reads against the churn.
+The same bound keeps the running total of the amounts that the pass reads below `2^64`.
 
 Each new validator takes the place of a deposit that leaves the queue.
 
 So the validators plus the pending deposits within the limit of the registry leave room for it.
 
-The churn is at most a cap of the configuration, so a bound on the carried churn plus that cap fits.
+The churn is at most a cap of the configuration, which Gloas changes.
+
+So the carried churn plus that cap must fit in 64 bits.
 
 The step after it, the pending consolidations, then succeeds too.
 -/
@@ -93,7 +95,9 @@ private theorem addValidatorToRegistry_exists_ok {state : BeaconState preset for
   · unfold BalancesMatch at matched
     simp [room, matched]
 
-/-- A pending deposit succeeds in a registry with room, when its amount fits beside the balances.
+/-- A pending deposit succeeds in a registry with room.
+
+The sum of the balances plus its amount must be below `2^64`.
 
 Each list of the registry must have one entry for each validator. -/
 private theorem applyPendingDeposit_exists_ok (config : Config) (checks : SignatureChecks)
@@ -244,11 +248,16 @@ private theorem passPendingDeposits_exists_ok (config : Config) (checks : Signat
       simp only [↓reduceIte, nextOk, passOk]
       exact ⟨_, rfl⟩
 
+/-- From Electra, the cap on the churn of pending deposits, which Gloas changes. -/
+def depositChurnCap (config : Config) (fork : Base.Fork) : Nat :=
+  if .glamsterdam ≤ fork then config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS.toNat
+  else config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
+
 /-- The churn of deposits succeeds when the effective balances sum below `2^64`.
 
 The registry must stay within its limit.
 
-The churn is then at most the larger of the two caps on the churn of deposits. -/
+The churn is then at most the cap of its fork. -/
 private theorem depositChurnLimit_exists_ok (config : Config) {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit) (summed : effectiveBalanceSum state < 2 ^ 64) :
     ∃ churn, depositChurnLimit config state = .ok churn ∧
@@ -294,17 +303,29 @@ private theorem applyPendingDeposit_consolidations {config : Config} {checks : S
 
 The validators plus the pending deposits must be within the limit of the registry.
 
-The registry has one balance for each validator, and from Altair one score and two flag lists.
+The registry has one balance for each validator.
+
+From Altair, each list of scores and of participation flags has one entry for each validator.
 
 The sum of the balances plus the amounts in the queue must be below `2^64`.
 
 So must the sum of the effective balances, which the churn reads.
 
-The churn carried from the last epoch plus the larger cap on the churn of deposits must fit too.
+The churn carried from the last epoch plus the cap on the churn of deposits must fit too.
 
 The current epoch plus one, and the first slot of the finalized epoch, must fit in 64 bits.
 
-The state after it keeps those bounds on the registry and on the balances. -/
+Afterwards the validators plus the pending deposits stay within the limit of the registry.
+
+There is still one balance for each validator.
+
+The sum of the balances plus the amounts in the queue does not grow.
+
+The registry does not shrink, and the pending consolidations and the current epoch stay.
+
+From Altair each list of scores and of flags still has one entry for each validator.
+
+The churn carried to the next epoch is at most the churn carried before plus the cap. -/
 theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (electra : .pectra ≤ fork)
     (loaded : registryLoad state ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat)
@@ -312,9 +333,7 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
     (scored : InactivityScoresMatch state)
     (funded : balanceSum state + pendingDepositSum state < 2 ^ 64)
     (summed : effectiveBalanceSum state < 2 ^ 64)
-    (churned : (state.depositBalanceToConsume electra).toNat +
-      max config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
-        config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS.toNat < 2 ^ 64)
+    (churned : (state.depositBalanceToConsume electra).toNat + depositChurnCap config fork < 2 ^ 64)
     (fits : (getCurrentEpoch state).toNat + 1 < 2 ^ 64)
     (finalized : state.finalizedCheckpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64) :
     ∃ after, processPendingDeposits config checks state electra = .ok after ∧
@@ -323,7 +342,10 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
       balanceSum after + pendingDepositSum after ≤ balanceSum state + pendingDepositSum state ∧
       state.validators.data.size ≤ after.validators.data.size ∧
       after.pendingConsolidations electra = state.pendingConsolidations electra ∧
-      getCurrentEpoch after = getCurrentEpoch state := by
+      getCurrentEpoch after = getCurrentEpoch state ∧
+      ParticipationMatches after ∧ InactivityScoresMatch after ∧
+      (after.depositBalanceToConsume electra).toNat ≤
+        (state.depositBalanceToConsume electra).toNat + depositChurnCap config fork := by
   have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   have load := loaded
   unfold registryLoad at load
@@ -391,7 +413,13 @@ The bounds are those of the pending deposits.
 
 Both indices of every queued consolidation must also be in the registry.
 
-Before Electra the step does nothing. -/
+Before Electra the step returns the state unchanged.
+
+The state after it keeps the registry within its limit and one balance for each validator.
+
+From Altair each list of scores and of flags keeps one entry for each validator.
+
+The sum of the balances plus the amounts in the queue does not grow. -/
 theorem processPendingBalances_total (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork)
     (loaded : registryLoad state ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat)
@@ -399,16 +427,18 @@ theorem processPendingBalances_total (config : Config) (checks : SignatureChecks
     (scored : InactivityScoresMatch state)
     (funded : balanceSum state + pendingDepositSum state < 2 ^ 64)
     (summed : effectiveBalanceSum state < 2 ^ 64)
-    (churned : ∀ electra : .pectra ≤ fork, (state.depositBalanceToConsume electra).toNat +
-      max config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
-        config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS.toNat < 2 ^ 64)
+    (churned : ∀ electra : .pectra ≤ fork,
+      (state.depositBalanceToConsume electra).toNat + depositChurnCap config fork < 2 ^ 64)
     (inside : ∀ electra : .pectra ≤ fork,
       ∀ consolidation ∈ (state.pendingConsolidations electra).data,
       consolidation.sourceIndex.toNat < state.validators.data.size ∧
         consolidation.targetIndex.toNat < state.validators.data.size)
     (fits : (getCurrentEpoch state).toNat + 1 < 2 ^ 64)
     (finalized : state.finalizedCheckpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64) :
-    ∃ after, processPendingBalances config checks state = .ok after := by
+    ∃ after, processPendingBalances config checks state = .ok after ∧
+      registryLoad after ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat ∧ BalancesMatch after ∧
+      ParticipationMatches after ∧ InactivityScoresMatch after ∧
+      balanceSum after + pendingDepositSum after ≤ balanceSum state + pendingDepositSum state := by
   unfold processPendingBalances
   split
   · rename_i electra

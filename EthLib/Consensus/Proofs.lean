@@ -196,6 +196,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Genesis
 public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
 public import EthLib.Consensus.Proofs.Transition.Totality.Justification
+public import EthLib.Consensus.Proofs.Transition.Totality.PendingDeposits
 public import EthLib.Consensus.Proofs.Transition.Totality.Registry
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoad
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadBlock
