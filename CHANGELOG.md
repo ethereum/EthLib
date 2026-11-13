@@ -576,6 +576,13 @@ Not yet released.
   A caller that destructures its result adds one pattern at the end.
   The new `processOperations_folds_of` gives the three folds of the operations and a step of any relation across the operations after them.
   `processOperations_folds` is its case for `BlockFrame`, with the same statement.
+- An SSZ type path that selects a compatible union option which the union does not declare fails with `badDeclaration` ([#2190](https://github.com/ethereum/EthLib/issues/2190)).
+  Before, `Desc.resolveStep` returned the default type, a Boolean, when a union had fewer options than selectors.
+  A well-formed union has one option per selector, so its paths resolve as before.
+  No C export or Python function changes.
+  In Lean, `resolveStep_compatibleUnion` takes the selected child and a proof of `options[slot]? = some child`, and concludes with that child.
+  `union_options_share_one_tree` quantifies over that child in the same way.
+  `resolveStep_compatibleUnion_of_wellFormed` gives the child for a well-formed union.
 
 ## 0.3.0
 

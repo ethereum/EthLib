@@ -19,6 +19,8 @@ Two lists of distinct elements that each hold every element with a nonzero term 
 
 A change of one term of a sum over distinct elements changes the sum by the same amount.
 
+A sum of a value where a test holds, and zero elsewhere, is its sum over the passing entries.
+
 Dropping the front where a test holds keeps each member that fails the test.
 
 Numbering the front of a list gives the front of the numbered list.
@@ -152,6 +154,15 @@ theorem sum_map_add_eq_of_eq_off {α : Type} {f g : α → Nat} {a : α}
       have := sum_map_add_eq_of_eq_off h d ha'
       rw [h x hxa]
       omega
+
+/-- A sum of a value where a test holds, and zero elsewhere, is its sum over the passing entries. -/
+theorem sum_map_ite_eq_sum_filter {α : Type} (test : α → Prop) [DecidablePred test]
+    (value : α → Nat) (entries : List α) :
+    (entries.map fun entry => if test entry then value entry else 0).sum =
+      ((entries.filter fun entry => test entry).map value).sum := by
+  induction entries with
+  | nil => rfl
+  | cons entry rest ih => by_cases passes : test entry <;> simp [passes, ih]
 
 /-- Dropping the front where a test holds keeps each member that fails the test. -/
 theorem mem_dropWhile_of_eq_false {α : Type} {test : α → Bool} {member : α}

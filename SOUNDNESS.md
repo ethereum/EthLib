@@ -1874,6 +1874,25 @@ It does not check the ommer headers against the chain, which needs the recent bl
 It does not ask that the sum of the gas limits of the transactions is at most the gas limit of the block, as `caps/eth.md` says.
 Block validity asks only that each transaction fits in the gas that the block still has, so the stricter rule would reject valid blocks.
 
+### The receipts of the eth protocol
+
+`receiptsMatch` (`Execution/Network/Receipts.lean`) checks the receipts of one block in a Receipts answer against the receipts root of its header.
+It follows "Receipt Encoding and Validity" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#receipt-encoding-and-validity).
+Each receipt is put back in its consensus form.
+On eth/68 it keeps the Bloom filter that the peer sent; from eth/69 on the filter of its logs is computed again.
+The trie root of the list must be the root of the header.
+
+`receiptsMatch_eq_true_iff` (`Execution/Proofs/Network/Receipts.lean`) states when the receipts of a block pass.
+Each receipt reads as a receipt in consensus form, the one at its position in the list.
+The receipts root of those forms, in the order of the list, is the root that the caller gives.
+`consensusOfItem_eth68_eq_ok_iff` states how a receipt reads on eth/68.
+A list reads as a legacy receipt, of type 0, and a byte string as a receipt whose type is not 0.
+So a legacy receipt sent as a byte string does not read.
+`consensusOfItem_eq_ok_iff` states that from eth/69 on a receipt reads as the list of [EIP-7642](https://eips.ethereum.org/EIPS/eip-7642#receipts-message-changes), with the Bloom filter of its logs computed again.
+From eth/69 on, the reader does not check the type of a receipt against the fork; only the root comparison rejects a wrong type.
+
+The caller gives the receipts root, the fork of the block and the eth version, and the check trusts them.
+
 ### The block access lists and the cells of the eth protocol
 
 `accessListsResponse` (`Execution/Network/Message.lean`) checks a BlockAccessLists answer of eth/71 against the access list hashes of the requested blocks.
@@ -1889,6 +1908,14 @@ The check trusts these hashes: it reads neither the block hashes of the request 
 That check follows "Cells (0x15)" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#cells-0x15).
 `checkCells_eq_ok_iff` (`Execution/Proofs/Network/Cells.lean`) states the rules of those cells.
 The caller gives the number of blobs of each transaction, and the check trusts it.
+
+`CellMask.has_eq_true_iff` states which index a bitmap marks: index `i` exactly when `i < 128` and bit `i % 8` of byte `i / 8` is set, counting from the least significant bit.
+"Cells (0x15)" fixes no bit order, and the check reads the bitmaps only through the subset rule and the count.
+`CellMask.subset_eq_true_iff` states the subset rule in those marks: one bitmap is a subset of another exactly when the other marks each index that it marks.
+`CellMask.count_eq_sum` states that the count of a bitmap, the `popcount` of "Cells (0x15)", is the number of set bits of its 16 bytes.
+`CellMask.count_le_count_of_subset` states that a subset counts no more indices than the bitmap that holds it.
+Together, `checkCells_eq_ok_iff` and `CellMask.count_le_count_of_subset` give that a response that passes has no more cells for each blob than the request asks for.
+No export calls the cells check, so no test of the bindings runs it.
 
 ### Weak subjectivity
 
@@ -2493,6 +2520,13 @@ The search is over the two branch climbs, or over the hash inputs of two executi
 
 From Gloas, `isValidLightClientHeader_parentBlockHash` binds the block hash of a header at a slot from Gloas to the parent block hash of the bid of a Gloas body.
 `isValidLightClientHeader_executionBlockHash` binds it, for an earlier slot from Capella, to the block hash of the payload of a body from Capella to Fulu that is from Deneb exactly when the slot is.
+For such a slot, `getLcExecutionRoot_rebuild` shows that the execution root is rebuilt from the block hash.
+The rebuilt execution header is a Deneb header for a slot from Deneb, and a Capella header before Deneb.
+`rebuildLcExecutionRoot_eq` states the rebuilt root on every input.
+At the genesis slot it is the root of the empty execution header of that fork.
+Otherwise the block hash climbs as field 12 of the execution header, through a slice of the branch that ends before its last 4 nodes.
+The slice has the 5 nodes before them from Deneb, and the 4 before them before Deneb; a shorter branch gives a length error.
+These two are rewrite lemmas: no theorem yet binds the rebuilt root to the payload of a body.
 The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.
 The index theorems `executionPayloadGindex_eq`, `payloadHeaderBlockHashGindex_eq`, `executionBlockHashGindex_eq` and `executionBlockHashGindexGloas_eq` hold at every preset.
 
@@ -2516,6 +2550,15 @@ The header slots of the store never move back.
 `initializeLightClientStore_headers` shows that a new store starts with one header for both.
 `LightClientStore.upgrade_beacon` shows that the upgrade of a store to a later fork keeps both beacon headers, so it keeps both slots too.
 So every store that these four steps reach from a bootstrap keeps that order.
+`processLightClientUpdate_optimisticHeader` gives the optimistic header after an update in full.
+It becomes the attested header when that header is newer and more members signed than the safety threshold.
+That threshold is half the larger count of signers, of the previous period and of the current one with the update.
+A newer finalized header signed by two thirds of the committee then replaces it if that header is newer still.
+`processLightClientUpdate_finalizedHeader` gives the finalized header after an update, which moves only with two thirds of the committee.
+`processLightClientUpdate_maxActiveParticipants` gives both counts of signers after an update.
+They move back a period when a newer finalized header enters the next period.
+That needs two thirds of the committee, and a store that knows the next committee.
+`SyncAggregate.participants_le` bounds the signers by the size of the committee, so their count fits in 64 bits.
 No theorem links an honest signer to the canonical chain; that is a property of the validators, not of the protocol text.
 
 ### Casper FFG
@@ -2756,6 +2799,11 @@ The OpenRPC description of the method makes the payload attributes optional, but
 The request lists must be well formed, and the payload must have a block at the active fork of the chain, which must be before Glamsterdam.
 From Deneb, the blob transactions of that block must carry the versioned hashes of the request.
 The block must pass the state transition.
+`executionEngine_accepts_newPayloadRequest_iff` states the same for the payload request of a block, from Bellatrix to Fulu, in terms of the block and the state.
+From Electra, the request lists are those of the requests of the block.
+From Deneb, the block of the payload reads the parent root of the latest block header of the state.
+From Deneb, the blob transactions must carry the versioned hashes of the commitments of the block, in the order of the commitments.
+The consensus test vectors fix the answer of the execution layer, so none of them checks the versioned hashes or the parent root that a block puts in its request.
 
 No payload build is specified, so `engine_getPayload` has no definition, and the export refuses payload attributes on a new valid head.
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
