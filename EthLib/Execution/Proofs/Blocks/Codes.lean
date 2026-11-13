@@ -12,6 +12,8 @@ A state holds its codes when the code of each of its accounts is in it.
 
 On such a state, the transition of a block never aborts for a missing code.
 
+Nor does it keep a transaction out of the block for the missing code of its sender.
+
 The system calls, the transactions and the requests each keep every code available.
 
 The DAO transfer, the withdrawals and the rewards change only balances.
@@ -21,6 +23,8 @@ The record of a call in the block access list reads the new code of each account
 That read finds the code, so joining a call to the body never fails.
 
 The checks of the block and of its output never fail with an abort or with an error of the state.
+
+Nor do they keep a transaction out of the block.
 
 The abort from Hegotá on is for a fork whose rules are not yet specified, not for a missing code.
 
@@ -262,9 +266,12 @@ theorem applyBody_hasCodes {config : ChainConfig} {env : BlockEnvironment fork}
 
 /-! ## Failures with no missing code -/
 
-/-- Whether an error of a block is an abort or a failure of the state for a missing code. -/
+/-- Whether an error of a block is for a missing code.
+
+It is an abort, a failure of the state, or a transaction kept out of the block for that code. -/
 private def Missing (e : BlockError) : Prop :=
-  ∃ c, e = .aborted (.state (.missingCode c)) ∨ e = .state (.missingCode c)
+  ∃ c, e = .aborted (.state (.missingCode c)) ∨ e = .state (.missingCode c) ∨
+    ∃ index, e = .invalidTransaction index (.missingCode c)
 
 /-- A move of ether never fails for a missing code. -/
 private theorem moveEther_ne_missingCode (tx : TransactionState) (sender recipient : Address)
@@ -317,18 +324,20 @@ private theorem applyDaoFork_ne_missingCode (tx : TransactionState) (c : Hash32)
 private theorem notMissing_state {α : Type} {x : Except State.StateError α}
     (h : ∀ c, x ≠ .error (.missingCode c)) : ∀ e, x = .error e → ¬Missing (.state e) :=
   fun e he ⟨c, hc⟩ => by
-    rcases hc with hc | hc
+    rcases hc with hc | hc | ⟨_, hc⟩
     · cases hc
     · cases hc
       exact h c he
+    · cases hc
 
 /-- An abort with no missing code is no missing code of the block. -/
 private theorem notMissing_aborted {α : Type} {x : Except EvmError α}
     (h : ∀ c, x ≠ .error (.state (.missingCode c))) : ∀ e, x = .error e → ¬Missing (.aborted e) :=
   fun e he ⟨c, hc⟩ => by
-    rcases hc with hc | hc
+    rcases hc with hc | hc | ⟨_, hc⟩
     · cases hc
       exact h c he
+    · cases hc
     · cases hc
 
 /-- A call that holds every code joins the body, so the join has no failure. -/
@@ -397,8 +406,9 @@ private theorem errorsMeet_applyTransaction {env : BlockEnvironment fork} {index
     {before : BodyOutput fork} (tx : Transaction) (available : HasCodes (.ofBlock before.block)) :
     ErrorsMeet (¬Missing ·) (applyTransaction env index before tx) := by
   unfold applyTransaction
-  refine ErrorsMeet.bind (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
-    fun included _ => ?_
+  refine ErrorsMeet.bind (ErrorsMeet.mapError fun _ he ⟨_, h⟩ => by
+    rcases h with h | h | ⟨_, h⟩ <;> cases h
+    exact Transactions.checkInclusion_ne_missingCode available _ he) fun included _ => ?_
   refine ErrorsMeet.bind (ErrorsMeet.aborted
     (notMissing_aborted (Transactions.processTransaction_ne_missingCode available)))
     fun out hout => ?_
@@ -408,7 +418,7 @@ private theorem errorsMeet_applyTransaction {env : BlockEnvironment fork} {index
   split
   · exact ErrorsMeet.bind (ErrorsMeet.pure _) fun _ _ => ErrorsMeet.pure _
   · exact ErrorsMeet.bind (ErrorsMeet.map _ (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by
-      rcases h with h | h <;> cases h)) fun _ _ => ErrorsMeet.pure _
+      rcases h with h | h | ⟨_, h⟩ <;> cases h)) fun _ _ => ErrorsMeet.pure _
 
 /-- The transactions on a body that holds every code never fail for a missing code. -/
 private theorem errorsMeet_applyTransactions {env : BlockEnvironment fork} {body : BodyState}
@@ -438,11 +448,12 @@ private theorem errorsMeet_checkedSystemCall {env : BlockEnvironment fork} {bloc
     refine ErrorsMeet.bind (ErrorsMeet.aborted
       (notMissing_aborted (systemCall_ne_missingCode env target data available))) fun _ _ => ?_
     split
-    · exact ErrorsMeet.throw fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
+    · exact ErrorsMeet.throw fun ⟨_, h⟩ => by rcases h with h | h | ⟨_, h⟩ <;> cases h
     · exact ErrorsMeet.pure _
   dsimp only
   split
-  · exact ErrorsMeet.bind (ErrorsMeet.throw fun ⟨_, h⟩ => by rcases h with h | h <;> cases h)
+  · exact ErrorsMeet.bind
+      (ErrorsMeet.throw fun ⟨_, h⟩ => by rcases h with h | h | ⟨_, h⟩ <;> cases h)
       fun _ _ => rest
   · exact rest
 
@@ -478,7 +489,7 @@ private theorem errorsMeet_blockRequests {depositContract : Address} {env : Bloc
   unfold blockRequests
   split
   · refine ErrorsMeet.bind
-      (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
+      (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h | ⟨_, h⟩ <;> cases h)
       fun _ _ => ?_
     refine ErrorsMeet.bind (errorsMeet_readRequests available) fun r _ => ?_
     exact ErrorsMeet.pure _
@@ -490,10 +501,10 @@ private theorem errorsMeet_accessListHashOf (body : BodyState) (gasLimit : Nat) 
   unfold accessListHashOf
   split
   · refine ErrorsMeet.bind
-      (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
+      (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h | ⟨_, h⟩ <;> cases h)
       fun _ _ => ?_
     exact ErrorsMeet.map _
-      (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
+      (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h | ⟨_, h⟩ <;> cases h)
   · exact ErrorsMeet.pure _
 
 /-- The body of a block on a block state that holds every code never fails for a missing code. -/
@@ -543,7 +554,7 @@ theorem applyBody_ne_missingCode (config : ChainConfig) (env : BlockEnvironment 
     applyBody config env block start ≠ .error (.aborted (.state (.missingCode codeHash))) ∧
       applyBody config env block start ≠ .error (.state (.missingCode codeHash)) :=
   ⟨fun h => errorsMeet_applyBody available _ h ⟨codeHash, .inl rfl⟩,
-    fun h => errorsMeet_applyBody available _ h ⟨codeHash, .inr rfl⟩⟩
+    fun h => errorsMeet_applyBody available _ h ⟨codeHash, .inr (.inl rfl)⟩⟩
 
 /-- A block that passes its transition leaves a state that holds every code.
 
@@ -562,6 +573,19 @@ theorem stateTransition_hasCodes {chain : BlockChain} {block : Block fork Transa
   rw [this] at hcode
   exact ⟨code, hcode⟩
 
+/-- The transition of a block on a state that holds every code never fails for a missing code. -/
+private theorem errorsMeet_stateTransition_missing {chain : BlockChain}
+    {block : Block fork Transaction} {checkSeal : Bool} (available : chain.state.HasCodes) :
+    ErrorsMeet (¬Missing ·) (stateTransition chain block checkSeal) :=
+  errorsMeet_stateTransition_of_plain
+    (fun _ ha hs _ hi ⟨_, h⟩ => by
+      rcases h with h | h | ⟨_, h⟩
+      · exact ha _ h
+      · exact hs _ h
+      · exact hi _ _ h)
+    (fun _ ⟨_, h⟩ => by rcases h with h | h | ⟨_, h⟩ <;> cases h)
+    fun _ => errorsMeet_applyBody ((State.State.hasCodes_ofState_iff _).mpr available)
+
 /-- The transition of a block never aborts for a missing code, on a state that holds every code.
 
 Nor does it fail with that error outside a call. -/
@@ -569,10 +593,17 @@ theorem stateTransition_ne_missingCode (chain : BlockChain) (block : Block fork 
     (checkSeal : Bool) (available : chain.state.HasCodes) (codeHash : Hash32) :
     stateTransition chain block checkSeal ≠ .error (.aborted (.state (.missingCode codeHash))) ∧
       stateTransition chain block checkSeal ≠ .error (.state (.missingCode codeHash)) := by
-  have fails : ErrorsMeet (¬Missing ·) (stateTransition chain block checkSeal) :=
-    errorsMeet_stateTransition (fun _ ha hs ⟨_, h⟩ => h.elim (ha _) (hs _))
-      (fun _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
-      fun _ => errorsMeet_applyBody ((State.State.hasCodes_ofState_iff _).mpr available)
-  exact ⟨fun h => fails _ h ⟨codeHash, .inl rfl⟩, fun h => fails _ h ⟨codeHash, .inr rfl⟩⟩
+  exact ⟨fun h => errorsMeet_stateTransition_missing available _ h ⟨codeHash, .inl rfl⟩,
+    fun h => errorsMeet_stateTransition_missing available _ h ⟨codeHash, .inr (.inl rfl)⟩⟩
+
+/-- No transaction of a block is invalid for the missing code of its sender.
+
+The state of the chain must hold the code of every account. -/
+theorem stateTransition_ne_invalidTransaction_missingCode (chain : BlockChain)
+    (block : Block fork Transaction) (checkSeal : Bool) (available : chain.state.HasCodes)
+    (index : Nat) (codeHash : Hash32) :
+    stateTransition chain block checkSeal ≠
+      .error (.invalidTransaction index (.missingCode codeHash)) :=
+  fun h => errorsMeet_stateTransition_missing available _ h ⟨codeHash, .inr (.inr ⟨index, rfl⟩)⟩
 
 end EthLib.Execution.Blocks

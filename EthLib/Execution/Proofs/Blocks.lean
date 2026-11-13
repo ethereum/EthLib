@@ -12,6 +12,7 @@ public import EthLib.Execution.Proofs.Blocks.BodyFollow
 public import EthLib.Execution.Proofs.Blocks.BodyGas
 public import EthLib.Execution.Proofs.Blocks.Bloom
 public import EthLib.Execution.Proofs.Blocks.Burn
+public import EthLib.Execution.Proofs.Blocks.CallsAgree
 public import EthLib.Execution.Proofs.Blocks.Codes
 public import EthLib.Execution.Proofs.Blocks.DaoFork
 public import EthLib.Execution.Proofs.Blocks.Difficulty
@@ -19,6 +20,7 @@ public import EthLib.Execution.Proofs.Blocks.Failures
 public import EthLib.Execution.Proofs.Blocks.Funded
 public import EthLib.Execution.Proofs.Blocks.Genesis
 public import EthLib.Execution.Proofs.Blocks.Halts
+public import EthLib.Execution.Proofs.Blocks.NeverAborts
 public import EthLib.Execution.Proofs.Blocks.NoAccount
 public import EthLib.Execution.Proofs.Blocks.NoncesFit
 public import EthLib.Execution.Proofs.Blocks.Overflow

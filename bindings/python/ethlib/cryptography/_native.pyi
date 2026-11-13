@@ -689,6 +689,14 @@ def consensus_api_payload_attestation_data(name: str, fork: str, anchor_state: b
     """The JSON response of the payload attestation data endpoint, as a `dict`, or None for 204."""
     ...
 
+def consensus_api_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, optimistic_roots: list[bytes], config: dict[str, Any] | None) -> dict[str, Any]:
+    """The JSON response of the fork choice endpoint, as a `dict`."""
+    ...
+
+def consensus_api_chain_heads(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, optimistic_roots: list[bytes], config: dict[str, Any] | None) -> dict[str, Any]:
+    """The JSON response of the heads endpoint, as a `dict`."""
+    ...
+
 def consensus_api_aggregate_attestation(name: str, fork: str, state: bytes, attestations: list[bytes], singles: list[bytes], optimistic_roots: list[bytes], data_root: bytes, slot: int, committee_index: int) -> dict[str, Any]:
     """The JSON response of the aggregate endpoint, as a `dict`."""
     ...

@@ -606,4 +606,53 @@ theorem processTransaction_ne_missingCode {fork : Fork} {env : BlockEnvironment 
   · exact noMiss_runTransaction available codeHash
   · exact noMiss_runTransaction available codeHash
 
+/-- A failed check fails with its own error. -/
+private theorem failIf_eq_error {condition : Bool} {error error' : InclusionError}
+    (h : failIf condition error = .error error') : error' = error := by
+  unfold failIf at h
+  split at h <;> cases h
+  rfl
+
+/-- The check of the gas a transaction takes from its block never fails for a missing code. -/
+private theorem checkBlockGas_ne_missingCode {fork : Fork} {env : BlockEnvironment fork}
+    {used : BlockGas} {tx : Transaction} (codeHash : Hash32) :
+    checkBlockGas env used tx ≠ .error (.missingCode codeHash) := by
+  unfold checkBlockGas
+  simp only [bind, Except.bind]
+  repeat' split
+  all_goals first
+    | (rename_i h; cases failIf_eq_error h; nofun)
+    | (intro h; nomatch failIf_eq_error h)
+    | simp_all
+
+/-- The checks of a sender never fail for a missing code when the state holds every code. -/
+private theorem checkSender_ne_missingCode {fork : Fork} {state : TransactionState}
+    {sender : Address} {tx : Transaction} (available : HasCodes state) (codeHash : Hash32) :
+    checkSender fork state sender tx ≠ .error (.missingCode codeHash) := by
+  obtain ⟨code, hcode⟩ := available sender
+  unfold checkSender
+  simp only [hcode, Except.mapError, bind, Except.bind]
+  repeat' split
+  all_goals first
+    | (rename_i h; cases failIf_eq_error h; nofun)
+    | (intro h; nomatch failIf_eq_error h)
+    | simp_all
+
+/-- No transaction is kept out of its block for the missing code of its sender.
+
+The state must hold the code of every account. -/
+theorem checkInclusion_ne_missingCode {fork : Fork} {chainId : UInt64}
+    {env : BlockEnvironment fork} {used : BlockGas} {state : TransactionState} {tx : Transaction}
+    (available : HasCodes state) (codeHash : Hash32) :
+    checkInclusion chainId env used state tx ≠ .error (.missingCode codeHash) := by
+  unfold checkInclusion
+  simp only [bind, Except.bind, pure, Except.pure]
+  repeat' split
+  all_goals first
+    | (rename_i h; cases failIf_eq_error h; nofun)
+    | (rename_i h; obtain ⟨_, -, rfl⟩ := EthLib.Base.mapError_eq_error h; nofun)
+    | (rename_i h; rintro ⟨⟩; exact checkBlockGas_ne_missingCode codeHash h)
+    | (rename_i h; rintro ⟨⟩; exact checkSender_ne_missingCode available codeHash h)
+    | (intro e; cases e)
+
 end EthLib.Execution.Transactions

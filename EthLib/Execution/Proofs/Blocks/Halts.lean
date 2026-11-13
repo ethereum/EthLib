@@ -180,7 +180,7 @@ theorem stateTransition_systemCallFailed {chain : BlockChain} {block : Block for
     (h : stateTransition chain block checkSeal = .error (.systemCallFailed address e)) :
     e.aborts = false :=
   errorsMeet_stateTransition_of_plain (P := CallErrorOk)
-    (fun _ _ _ hc address x he => absurd he (hc address x))
+    (fun _ _ _ hc _ address x he => absurd he (hc address x))
     (fun _ _ _ h => by cases h) (fun _ => errorsMeet_applyBody) _ h address e rfl
 
 /-- A block never fails for a system call that must succeed with an error of the state. -/

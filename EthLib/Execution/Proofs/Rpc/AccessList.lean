@@ -14,7 +14,9 @@ The JSON reader recovers every list that the writer writes, in the same order.
 
 The raw getter decodes to the retained list too.
 
-In a valid view, a retained list of a canonical block after the lowest hashes to its header field.
+The hash guarantee holds in a valid view, from Glamsterdam.
+
+There, a retained list of a canonical block after the lowest hashes to its header field.
 
 The lowest block, side blocks and the pending block are inputs.
 

@@ -672,6 +672,16 @@ def bindings : List Binding := [
       "verify: bool, slot: int, payload_present: bool, " ++
       "blob_data_available: bool) -> dict[str, Any] | None",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_fork_choice", `EthLib.Consensus.Exports.apiForkChoiceExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, optimistic_roots: list[bytes], config: dict[str, Any] | None) " ++
+      "-> dict[str, Any]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_chain_heads", `EthLib.Consensus.Exports.apiChainHeadsExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, optimistic_roots: list[bytes], config: dict[str, Any] | None) " ++
+      "-> dict[str, Any]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_api_aggregate_attestation",
     `EthLib.Consensus.Exports.apiAggregateAttestationExport,
     "(name: str, fork: str, state: bytes, attestations: list[bytes], singles: list[bytes], " ++

@@ -40,7 +40,7 @@ open Base Uint64 Serialization.Ssz
 variable {preset : Preset} {fork : Base.Fork}
 
 /-- The check of a deposit signature always succeeds, whatever its verdict. -/
-private theorem isValidDepositSignature_exists_ok (config : Config) (checks : SignatureChecks)
+theorem isValidDepositSignature_exists_ok (config : Config) (checks : SignatureChecks)
     (pubkey : Cryptography.Bls.BLSPubkey) (credentials : Bytes32) (amount : Gwei)
     (signature : Cryptography.Bls.BLSSignature) :
     ∃ valid, isValidDepositSignature config checks pubkey credentials amount signature =
@@ -278,26 +278,6 @@ theorem depositChurnLimit_exists_ok (config : Config) {state : BeaconState prese
     rw [UInt64.min_def]
     split <;> rename_i chosen <;> simp only [UInt64.le_iff_toNat_le] at chosen <;> omega
 
-/-- A pending deposit keeps the pending consolidations. -/
-private theorem applyPendingDeposit_consolidations {config : Config} {checks : SignatureChecks}
-    {state after : BeaconState preset fork} {deposit : PendingDeposit}
-    (computed : applyPendingDeposit config checks state deposit = .ok after) :
-    after.pendingConsolidations = state.pendingConsolidations := by
-  rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨_, added⟩
-  · rfl
-  · obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp raised
-    rfl
-  · unfold addValidatorToRegistry at added
-    split at added
-    · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at added
-      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := added
-      rfl
-    split at added
-    · cases added
-      rfl
-    · cases added
-
 /-- A pass over the pending consolidations changes only the balances. -/
 private theorem passPendingConsolidations_fields {nextEpoch : Epoch} :
     ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
@@ -519,11 +499,7 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
   · have total := processPendingDeposits_total_le computed
     unfold pendingDepositSum
     simpa only [electra, ↓reduceDIte] using total
-  · subst rest
-    have kept := foldlM_ok_invariant
-      (fun s : BeaconState preset fork => s.pendingConsolidations = state.pendingConsolidations)
-      (fun _ _ _ before step => (applyPendingDeposit_consolidations step).trans before) rfl applies
-    exact congrFun kept electra
+  · exact congrFun (processPendingDeposits_pendingConsolidations computed) electra
   · simp only [getCurrentEpoch, frame.slot]
   · subst rest
     exact flags.1
