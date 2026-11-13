@@ -1104,6 +1104,14 @@ def bindings : List Binding := [
   ⟨"devp2p_encode_message", `EthLib.Networking.Devp2p.Exports.encodeMessageExport,
     "(snappy: bool, plain: bytes) -> bytes",
     [`EthLib.Networking.Devp2p.P2pError], some "Devp2pError"⟩,
+  ⟨"devp2p_route", `EthLib.Execution.Network.Exports.routeExport,
+    "(ours: list[tuple[bytes, int]], theirs: list[tuple[bytes, int]], message_id: int) -> " ++
+      "tuple[bytes, int, int] | None",
+    [], some "Devp2pError"⟩,
+  ⟨"devp2p_session", `EthLib.Execution.Network.Exports.sessionExport,
+    "(hello: bytes, frames: list[bytes]) -> " ++
+      "list[tuple[str, str, bytes, int, int, bytes, bool]]",
+    [`EthLib.Networking.Devp2p.SessionError], some "Devp2pError"⟩,
   ⟨"discv4_decode", `EthLib.Networking.Discv4.Exports.decodeExport,
     "(packet: bytes) -> bytes",
     [`EthLib.Networking.Discv4.Discv4Error], some "Discv4Error"⟩,

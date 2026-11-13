@@ -8408,6 +8408,34 @@
    "docstring":
    "The frame data of the message in the uncompressed frame data `plain`."},
   {"summary":
+   "The shared capability that holds a message ID, given both lists of capabilities.",
+   "signature":
+   "(ours: list[tuple[bytes, int]], theirs: list[tuple[bytes, int]], message_id: int) -> tuple[bytes, int, int] | None",
+   "operation": "EthLib.Execution.Network.Exports.routeExport",
+   "method": "devp2p_route",
+   "errors": [],
+   "error_class": "Devp2pError",
+   "docstring":
+   "The shared capability that holds a message ID, given both lists of capabilities.\n\nIt gives the name and version of the capability, and the ID relative to its first one.\n\n`None` when no shared capability holds the ID."},
+  {"summary":
+   "The outcomes of the frames a session receives in turn, from before the peer's Hello.",
+   "signature":
+   "(hello: bytes, frames: list[bytes]) -> list[tuple[str, str, bytes, int, int, bytes, bool]]",
+   "operation": "EthLib.Execution.Network.Exports.sessionExport",
+   "method": "devp2p_session",
+   "errors":
+   [{"type": "EthLib.Networking.Devp2p.SessionError",
+     "codes":
+     [{"constructor": "beforeHello", "code": 1},
+      {"constructor": "secondHello", "code": 2},
+      {"constructor": "unknownId", "code": 3},
+      {"constructor": "closed", "code": 4},
+      {"constructor": "tooLarge", "code": 5},
+      {"constructor": "message", "code": null}]}],
+   "error_class": "Devp2pError",
+   "docstring":
+   "The outcomes of the frames a session receives in turn, from before the peer's Hello.\n\nOur Hello is given as its uncompressed frame data, and each frame as the data of a frame.\n\nEach outcome first gives the phase after the frame, then `p2p` or `capability`.\n\nThen come the capability's name and version, the message ID and the RLP data of the message.\n\nFor a capability message, the ID is relative to the capability's first ID.\n\nLast comes whether to send a Pong.\n\nA rejected frame raises the error of the session, and names the index of the frame."},
+  {"summary":
    "The hash, the sender's key and the content of the packet in the bytes `packet`.",
    "signature": "(packet: bytes) -> bytes",
    "operation": "EthLib.Networking.Discv4.Exports.decodeExport",

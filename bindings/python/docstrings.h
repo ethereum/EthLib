@@ -875,6 +875,12 @@
 #define DOC_devp2p_encode_message \
   "The frame data of the message in the uncompressed frame data `plain`."
 
+#define DOC_devp2p_route \
+  "The shared capability that holds a message ID, given both lists of capabilities."
+
+#define DOC_devp2p_session \
+  "The outcomes of the frames a session receives in turn, from before the peer's Hello."
+
 #define DOC_discv4_decode \
   "The hash, the sender's key and the content of the packet in the bytes `packet`."
 

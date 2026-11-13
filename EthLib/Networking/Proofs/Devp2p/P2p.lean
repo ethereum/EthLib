@@ -102,6 +102,96 @@ private theorem extract_id_append (idE rest : ByteArray) :
     (idE ++ rest).extract idE.size (idE ++ rest).size = rest :=
   ByteArray.extract_append_eq_right rfl ByteArray.size_append
 
+/-- Frame data that starts with an encoded message ID splits into that ID and the bytes after it. -/
+theorem splitFrame_append {id : Nat} {idE : ByteArray} (hid : encode (Item.scalar id) = .ok idE)
+    (rest : ByteArray) : splitFrame (idE ++ rest) = .ok (id, rest) := by
+  unfold splitFrame
+  simp only [decodeItem_id_append hid, extract_id_append, Except.mapError, bind, Except.bind,
+    toScalar_scalar, pure, Except.pure]
+
+/-- Uncompressed message data is the data itself. -/
+theorem messageData_false (rest : ByteArray) : messageData false rest = .ok rest := rfl
+
+/-- Compressed message data of at most 16 MiB reads back as the data before compression. -/
+theorem messageData_compress {data : ByteArray} (hsize : data.size ≤ MAX_MESSAGE_SIZE) :
+    messageData true (Snappy.compress data) = .ok data := by
+  have hmax : data.size ≤ Snappy.maxUncompressedLength := by
+    simp only [MAX_MESSAGE_SIZE, Snappy.maxUncompressedLength] at hsize ⊢; omega
+  simp only [messageData, ↓reduceIte, Proofs.Snappy.Compress.readPreamble_compress hmax,
+    Except.mapError, bind, Except.bind, Nat.not_lt.mpr hsize,
+    Proofs.Snappy.Compress.decompress_compress hmax]
+
+/-- Compressed message data whose preamble declares more than 16 MiB is rejected. -/
+theorem messageData_tooLarge {size : Nat} {rest : ByteArray} {tail : List UInt8}
+    (hpre : Snappy.readPreamble rest.data.toList = .ok (size, tail))
+    (hsize : MAX_MESSAGE_SIZE < size) :
+    messageData true rest = .error (.tooLarge size) := by
+  simp only [messageData, ↓reduceIte, hpre, Except.mapError, bind, Except.bind, hsize]
+  rfl
+
+/-- Compressed message data that a reader accepts is the decompressed block, of at most 16 MiB. -/
+theorem size_le_of_messageData {rest data : ByteArray} (h : messageData true rest = .ok data) :
+    Snappy.decompress rest = .ok data ∧ data.size ≤ MAX_MESSAGE_SIZE := by
+  simp only [messageData, ↓reduceIte, Except.mapError, bind, Except.bind] at h
+  cases hpre : Snappy.readPreamble rest.data.toList with
+  | error e => simp [hpre] at h
+  | ok p =>
+  by_cases hsize : MAX_MESSAGE_SIZE < p.1
+  · simp [hpre, hsize] at h
+  cases hd : Snappy.decompress rest with
+  | error e => simp [hpre, hsize, hd] at h
+  | ok out =>
+  simp only [hpre, hsize, hd, ↓reduceIte, Except.ok.injEq] at h
+  subst h
+  -- The preamble that the reader checked is the length that the block decompresses to.
+  obtain ⟨_, hdecl⟩ := Proofs.Snappy.Block.decompress_size_eq_declared hd
+  rw [Proofs.Snappy.Block.toList_eq_data_toList, hpre] at hdecl
+  have hp := congrArg Prod.fst (Except.ok.inj hdecl)
+  simp only at hp
+  exact ⟨rfl, by omega⟩
+
+/--
+The frame data of a message splits into its ID and a body that reads back as the message.
+
+The RLP list of the message must be at most 16 MiB, the most a reader decompresses.
+-/
+theorem decodeBody_encodeMessage {snappy : Bool} {m : Message} {data frame : ByteArray}
+    (hdata : encode m.toItem = .ok data) (hsize : data.size ≤ MAX_MESSAGE_SIZE)
+    (h : encodeMessage snappy m = .ok frame) :
+    ∃ rest, splitFrame frame = .ok (m.id, rest) ∧ decodeBody snappy m.id rest = .ok m := by
+  unfold encodeMessage at h
+  cases hid : encode (Item.scalar m.id) with
+  | error e => simp [hid, Except.mapError, bind, Except.bind] at h
+  | ok idE =>
+  simp only [hid, hdata, Except.mapError, bind, Except.bind, pure, Except.pure,
+    Except.ok.injEq] at h
+  subst h
+  refine ⟨_, splitFrame_append hid _, ?_⟩
+  have hmsg : messageData (snappy && m.id != 0x00)
+      (if (snappy && m.id != 0x00) = true then Snappy.compress data else data) = .ok data := by
+    by_cases hc : (snappy && m.id != 0x00) = true
+    · simp only [hc, ↓reduceIte, messageData_compress hsize]
+    · simp only [hc, Bool.false_eq_true, ↓reduceIte, messageData_false]
+  simp only [decodeBody, hmsg, bind, Except.bind, Except.mapError, decode_encode _ _ hdata,
+    Message.ofItem_toItem]
+
+/--
+Each message reads back from its uncompressed frame data, whatever the size of the message.
+-/
+theorem decodeBody_encodeMessage_false {m : Message} {data frame : ByteArray}
+    (hdata : encode m.toItem = .ok data) (h : encodeMessage false m = .ok frame) :
+    ∃ rest, splitFrame frame = .ok (m.id, rest) ∧ decodeBody false m.id rest = .ok m := by
+  unfold encodeMessage at h
+  cases hid : encode (Item.scalar m.id) with
+  | error e => simp [hid, Except.mapError, bind, Except.bind] at h
+  | ok idE =>
+  simp only [hid, hdata, Except.mapError, bind, Except.bind, pure, Except.pure,
+    Except.ok.injEq] at h
+  subst h
+  refine ⟨_, splitFrame_append hid _, ?_⟩
+  simp only [decodeBody, Bool.false_and, Bool.false_eq_true, ↓reduceIte, messageData_false, bind,
+    Except.bind, Except.mapError, decode_encode _ _ hdata, Message.ofItem_toItem]
+
 /--
 Each message reads back from its frame data, compressed or not.
 
@@ -110,39 +200,8 @@ The RLP list of the message must be at most 16 MiB, the most a reader decompress
 theorem decodeMessage_encodeMessage {snappy : Bool} {m : Message} {data frame : ByteArray}
     (hdata : encode m.toItem = .ok data) (hsize : data.size ≤ MAX_MESSAGE_SIZE)
     (h : encodeMessage snappy m = .ok frame) : decodeMessage snappy frame = .ok m := by
-  unfold encodeMessage at h
-  cases hid : encode (Item.scalar m.id) with
-  | error e => simp [hid, Except.mapError, bind, Except.bind] at h
-  | ok idE =>
-  simp only [hid, hdata, Except.mapError, bind, Except.bind, pure, Except.pure,
-    Except.ok.injEq] at h
-  subst h
-  have hdec : decode data = .ok m.toItem := decode_encode _ _ hdata
-  by_cases hc : (snappy && m.id != 0x00) = true
-  · -- A compressed body: the reader checks the declared size, then decompresses.
-    have hmax : data.size ≤ Snappy.maxUncompressedLength := by
-      simp only [MAX_MESSAGE_SIZE, Snappy.maxUncompressedLength] at hsize ⊢; omega
-    have hpre := Proofs.Snappy.Compress.readPreamble_compress hmax
-    have hd' := decodeItem_id_append hid (Snappy.compress data)
-    have hframe : (if (snappy && m.id != 0x00) = true then Snappy.compress data else data) =
-        Snappy.compress data := by simp [hc]
-    rw [hframe]
-    unfold decodeMessage
-    simp only [hd', extract_id_append, Except.mapError, bind, Except.bind, toScalar_scalar, hc,
-      ↓reduceIte]
-    have hlen : ¬ MAX_MESSAGE_SIZE < data.size := Nat.not_lt.mpr hsize
-    rw [hpre]
-    simp only [hlen, ↓reduceIte]
-    rw [Proofs.Snappy.Compress.decompress_compress hmax]
-    simp only [hdec, Message.ofItem_toItem]
-  · -- An uncompressed body is the RLP list itself.
-    have hd' := decodeItem_id_append hid data
-    have hframe : (if (snappy && m.id != 0x00) = true then Snappy.compress data else data) =
-        data := by simp [hc]
-    rw [hframe]
-    unfold decodeMessage
-    simp only [hd', extract_id_append, Except.mapError, bind, Except.bind, toScalar_scalar, hc,
-      Bool.false_eq_true, ↓reduceIte, pure, Except.pure, hdec, Message.ofItem_toItem]
+  obtain ⟨rest, hs, hb⟩ := decodeBody_encodeMessage hdata hsize h
+  simp only [decodeMessage, hs, bind, Except.bind, hb]
 
 /--
 With Snappy, a message other than Hello whose preamble declares more than 16 MiB is rejected.
@@ -155,10 +214,8 @@ theorem decodeMessage_tooLarge {id size : Nat} {idE rest : ByteArray} {tail : Li
     (hsize : MAX_MESSAGE_SIZE < size) :
     decodeMessage true (idE ++ rest) = .error (.tooLarge size) := by
   have hc : (true && id != 0x00) = true := by simpa using hne
-  unfold decodeMessage
-  simp only [decodeItem_id_append hid, extract_id_append, Except.mapError, bind, Except.bind,
-    toScalar_scalar, hc, ↓reduceIte, hpre, hsize]
-  rfl
+  simp only [decodeMessage, decodeBody, splitFrame_append hid, hc, messageData_tooLarge hpre hsize,
+    bind, Except.bind]
 
 /--
 With Snappy, a message other than Hello that a reader accepts decompresses to at most 16 MiB.
@@ -168,22 +225,10 @@ theorem size_le_of_decodeMessage {id : Nat} {idE rest : ByteArray} {m : Message}
     (h : decodeMessage true (idE ++ rest) = .ok m) :
     ∃ data, Snappy.decompress rest = .ok data ∧ data.size ≤ MAX_MESSAGE_SIZE := by
   have hc : (true && id != 0x00) = true := by simpa using hne
-  unfold decodeMessage at h
-  simp only [decodeItem_id_append hid, extract_id_append, Except.mapError, bind, Except.bind,
-    toScalar_scalar, hc, ↓reduceIte] at h
-  cases hpre : Snappy.readPreamble rest.data.toList with
-  | error e => simp [hpre] at h
-  | ok p =>
-  by_cases hsize : MAX_MESSAGE_SIZE < p.1
-  · simp [hpre, hsize] at h
-  cases hd : Snappy.decompress rest with
-  | error e => simp [hpre, hsize, hd] at h
-  | ok data =>
-  -- The preamble that the reader checked is the length that the block decompresses to.
-  obtain ⟨_, hdecl⟩ := Proofs.Snappy.Block.decompress_size_eq_declared hd
-  rw [Proofs.Snappy.Block.toList_eq_data_toList, hpre] at hdecl
-  have hp : p.1 = data.size := congrArg Prod.fst (Except.ok.inj hdecl)
-  exact ⟨data, rfl, hp ▸ Nat.not_lt.mp hsize⟩
+  simp only [decodeMessage, decodeBody, splitFrame_append hid, hc, bind, Except.bind] at h
+  cases hd : messageData true rest with
+  | error e => simp [hd] at h
+  | ok data => exact ⟨data, size_le_of_messageData hd⟩
 
 /-! ## Snappy -/
 

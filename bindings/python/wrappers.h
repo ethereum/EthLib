@@ -561,6 +561,8 @@ PyObject* py_rlpx_ecies_encrypt                           (PyObject* self, PyObj
 PyObject* py_rlpx_ecies_decrypt                           (PyObject* self, PyObject* args);
 PyObject* py_devp2p_decode_message                        (PyObject* self, PyObject* args);
 PyObject* py_devp2p_encode_message                        (PyObject* self, PyObject* args);
+PyObject* py_devp2p_route (PyObject* self, PyObject* args);
+PyObject* py_devp2p_session (PyObject* self, PyObject* args);
 PyObject* py_discv4_decode                                (PyObject* self, PyObject* args);
 PyObject* py_discv4_encode                                (PyObject* self, PyObject* args);
 PyObject* py_discv4_record_signed_by                      (PyObject* self, PyObject* args);
