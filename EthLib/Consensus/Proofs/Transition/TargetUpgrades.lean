@@ -351,6 +351,20 @@ theorem JustifiedEarly.of_initializeBeaconStateFromEth1 {fork : Fork}
   rw [frame.previousJustified, frame.currentJustified]
   rfl
 
+/-- The genesis state has its previous justified epoch below the previous epoch once it counts.
+
+It is at the genesis epoch, so the separation asks nothing of it. -/
+theorem JustifiedSeparated.of_initializeBeaconStateFromEth1 {fork : Fork}
+    {after : BeaconState preset fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
+    {deposits : Array Deposit}
+    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      .ok after) :
+    JustifiedSeparated after := by
+  intro later
+  have slot := (initializeBeaconStateFromEth1_checkpoints computed).1
+  simp [getCurrentEpoch, slot, GENESIS_SLOT, GENESIS_EPOCH, computeEpochAtSlot,
+    UInt64.lt_iff_toNat_lt] at later
+
 /-- Before Altair, the genesis state built from deposits has no pending attestations. -/
 theorem initializeBeaconStateFromEth1_pending {fork : Fork} {after : BeaconState preset fork}
     {eth1BlockHash : Hash32} {eth1Timestamp : UInt64} {deposits : Array Deposit}
