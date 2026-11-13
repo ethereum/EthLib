@@ -15,6 +15,7 @@ public import EthLib.Execution.Proofs.Blocks.Codes
 public import EthLib.Execution.Proofs.Blocks.DaoFork
 public import EthLib.Execution.Proofs.Blocks.Difficulty
 public import EthLib.Execution.Proofs.Blocks.Failures
+public import EthLib.Execution.Proofs.Blocks.Funded
 public import EthLib.Execution.Proofs.Blocks.Genesis
 public import EthLib.Execution.Proofs.Blocks.NoncesFit
 public import EthLib.Execution.Proofs.Blocks.ProofOfWork
