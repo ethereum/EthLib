@@ -873,6 +873,14 @@ def bindings : List Binding := [
     "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
       "epoch: int) -> bytes",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_digest_epochs", `EthLib.Consensus.Exports.digestEpochsExport,
+    "(name: str, config: dict[str, Any] | None) -> list[int]", [], some "ConsensusError"⟩,
+  ⟨"consensus_fork_of_digest", `EthLib.Consensus.Exports.forkOfDigestExport,
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
+      "digest: bytes) -> tuple[int, str] | None", [], some "ConsensusError"⟩,
+  ⟨"consensus_digests_identify", `EthLib.Consensus.Exports.digestsIdentifyExport,
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes) -> bool",
+    [], some "ConsensusError"⟩,
   ⟨"pq_keys_ssz", `EthLib.Consensus.Exports.pqKeysSszExport,
     "(type: str, data: bytes) -> tuple[bytes, bytes]",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,

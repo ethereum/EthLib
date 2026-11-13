@@ -889,6 +889,18 @@ def consensus_compute_fork_digest(name: str, config: dict[str, Any] | None, gene
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
     ...
 
+def consensus_digest_epochs(name: str, config: dict[str, Any] | None) -> list[int]:
+    """The epochs at which the fork digest can change, in increasing order and without repeats."""
+    ...
+
+def consensus_fork_of_digest(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, digest: bytes) -> tuple[int, str] | None:
+    """The first epoch with the given digest, among those at which it can change, with its fork."""
+    ...
+
+def consensus_digests_identify(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes) -> bool:
+    """Whether the digest of each epoch at which it can change reads back the fork at that epoch."""
+    ...
+
 def pq_keys_ssz(type: str, data: bytes) -> tuple[bytes, bytes]:
     """The root of the value that the bytes encode, and the bytes of that value, as a pair."""
     ...

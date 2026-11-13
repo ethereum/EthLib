@@ -452,6 +452,25 @@ def compute_fork_digest(
     return _native.consensus_compute_fork_digest(name, config, genesis_validators_root, epoch)
 
 
+def digest_epochs(name: str, config: dict[str, Any] | None = None) -> list[int]:
+    """The epochs at which the fork digest can change, in increasing order and without repeats."""
+    return _native.consensus_digest_epochs(name, config)
+
+
+def fork_of_digest(
+    name: str, genesis_validators_root: bytes, digest: bytes, config: dict[str, Any] | None = None
+) -> tuple[int, str] | None:
+    """The first epoch with the given digest, among those at which it can change, with its fork."""
+    return _native.consensus_fork_of_digest(name, config, genesis_validators_root, digest)
+
+
+def digests_identify(
+    name: str, genesis_validators_root: bytes, config: dict[str, Any] | None = None
+) -> bool:
+    """Whether the digest of each epoch at which it can change reads back the fork at that epoch."""
+    return _native.consensus_digests_identify(name, config, genesis_validators_root)
+
+
 def compute_matrix(blobs: Sequence[bytes]) -> list[bytes]:
     """The entries of the matrix of the blobs, each in its SSZ encoding."""
     return _native.consensus_compute_matrix(list(blobs))
@@ -1319,6 +1338,9 @@ __all__ = [
     "light_client_gossip_full_node",
     "light_client_gossip_light_client",
     "compute_fork_digest",
+    "digest_epochs",
+    "fork_of_digest",
+    "digests_identify",
     "process_epoch",
     "rewards_deltas",
     "rewards_deltas_batch",
