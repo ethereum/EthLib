@@ -7,23 +7,25 @@ public import EthLib.Consensus.Proofs.Transition.Trace
 /-!
 # Proofs: each checkpoint of a beacon state names a block of its own chain
 
-A chain predicate says which root is the latest block of a chain at or before each slot.
+A chain predicate holds the roots allowed at each slot.
 
-A state agrees with it above an anchor slot when two things hold.
+It is meant as the latest block of a chain at or before each slot.
 
-Each root that the state records above the anchor is the root of the chain at its slot.
+A state agrees with it from an anchor slot on when the following holds.
 
-Each checkpoint whose epoch starts above the anchor names the root of the chain at that start.
+Each root that the state records from the anchor on is a root of the chain at its slot.
+
+Each checkpoint whose epoch starts above the anchor names a root of the chain at that start.
 
 A block, the slots and the upgrades keep this, for a chain extended by the roots they record.
 
-A state with ordered checkpoint epochs agrees with every chain above its own slot.
+A state with the invariant of valid blocks agrees with every chain from its own slot on.
 
 Along a run, the chain is the roots that the states of the run record.
 
-With ordered root links in each state, the finalized block then comes before the justified one.
+With ordered links in each state, the finalized block is at or before the current justified one.
 
-Justification reads the root at the start of its epoch, as Gasper §4.4 and Definition 4.5 say.
+Each checkpoint names the block at the start of its epoch, as Gasper §4.1 defines checkpoints.
 
 The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
 -/
@@ -36,11 +38,11 @@ open Base Uint64 Serialization.Ssz SszType
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
-/-- A state agrees with a chain above an anchor slot.
+/-- A state agrees with a chain from an anchor slot on.
 
-The chain says which root is the latest block of the chain at or before each slot.
+The chain holds the roots allowed at each slot, meant as the latest block at or before it.
 
-Nothing is claimed at or below the anchor. -/
+Nothing is claimed about roots below the anchor, or checkpoints that start at or below it. -/
 structure ChainRoots {fork : Fork} (anchor : Slot) (chain : Slot → Root → Prop)
     (state : BeaconState preset fork) : Prop where
   /-- The state is at or above the anchor. -/
@@ -57,7 +59,9 @@ structure ChainRoots {fork : Fork} (anchor : Slot) (chain : Slot → Root → Pr
       checkpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < state.slot.toNat ∧
         chain (checkpoint.epoch * preset.SLOTS_PER_EPOCH) checkpoint.root
 
-/-- The first slot of an epoch is the product of numbers, when that product fits in 64 bits. -/
+/-- In 64 bits, the first slot of an epoch is the product of the epoch and the slots per epoch.
+
+That holds when the product fits. -/
 private theorem toNat_epoch_mul {epoch : Epoch}
     (fits : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64) :
     (epoch * preset.SLOTS_PER_EPOCH).toNat = epoch.toNat * preset.SLOTS_PER_EPOCH.toNat := by
@@ -95,11 +99,13 @@ theorem ChainRoots.congr {fork post : Fork} {anchor : Slot} {chain : Slot → Ro
   rw [slot]
   exact holds.checkpoints checkpoint mem late
 
-/-- A state with ordered checkpoint epochs agrees with every chain above its own slot.
+/-- A state with the invariant of valid blocks agrees with every chain from its own slot on.
 
-The ordered epochs put the start of each checkpoint epoch at or below the slot of the state.
+Its checkpoint epochs are ordered and end at most at its previous epoch.
 
-No root of the state is above its slot, so the claim on roots is empty. -/
+So each checkpoint epoch starts at or below the slot of the state.
+
+The state records no root at or above its own slot, so the claim on roots is empty. -/
 theorem ChainRoots.of_invariant {fork : Fork} {state : BeaconState preset fork}
     (holds : Invariant state) (chain : Slot → Root → Prop) :
     ChainRoots state.slot chain state := by
@@ -217,7 +223,7 @@ private theorem hashTreeRoot_latestBlockHeader_advanceSlotsAcross {count : Nat}
         hashTreeRoot forked.state.latestBlockHeader = .ok root) := by
   obtain ⟨-, -, -, stateRoot, hashed, header⟩ := advanceSlotAcross_cases step
   by_cases filled : next.state.latestBlockHeader.stateRoot = Vector.replicate 32 0
-  · obtain ⟨zero, same⟩ := unfilled_of_filled header filled
+  · obtain ⟨zero, same⟩ := header_unfilled_of_filled header filled
     rw [same] at rooted
     exact .inr ⟨zero ▸ hashed, rooted⟩
   · exact .inl (by
@@ -277,11 +283,9 @@ theorem ChainRoots.of_advanceSlotAcross
 
 /-- Slots, with the upgrades on the way, keep the agreement for the chain they extend.
 
-From the slot of the first state on, the chain gains the root of the last latest block header.
+From the slot of the first state on, the chain gains the root of the header of the last state.
 
 When the first state hashes to the zero root, it also gains the root of the first header.
-
-That header then stays unfilled through the first slot.
 
 The buffer of roots must cover two epochs. -/
 theorem ChainRoots.of_advanceSlotsAcross
@@ -324,7 +328,7 @@ theorem ChainRoots.of_advanceSlotsAcross
 
 /-- Slots in one fork keep the agreement for the chain they extend.
 
-From the slot of the first state on, the chain gains the root of the last latest block header.
+From the slot of the first state on, the chain gains the root of the header of the last state.
 
 When the first state hashes to the zero root, it also gains the root of the first header.
 
@@ -518,7 +522,7 @@ private theorem Run.invariant {first last : ForkedBeaconState preset}
 
 /-- The last state of a run agrees with the roots that the run records, above its first slot.
 
-The first state needs ordered checkpoint epochs, and the buffer of roots must cover two epochs. -/
+The first state needs the invariant of valid blocks, and the buffer must cover two epochs. -/
 theorem ChainRoots.of_run
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     {first last : ForkedBeaconState preset} (holds : Invariant first.state)
@@ -601,19 +605,14 @@ theorem Run.le_of_records {β : Type*} [Preorder β] {block : Root → β}
       cases olderLast
       exact le_rfl
 
-/-- Along a run, the finalized block comes before the current justified block.
+/-- Along a run, the finalized block is at or before the current justified block.
 
 The order is that of a map from roots that orders the links of each state of the run.
 
-The proofs of root links give that order, unless a state of the run hashes to the zero root.
-
 The finalized epoch must start after the first slot of the run.
 
-The first state needs ordered checkpoint epochs, and the buffer of roots must cover two epochs.
-
-An epoch must have at least one slot. -/
+The first state needs the invariant of valid blocks, and the buffer must cover two epochs. -/
 theorem Run.finalized_le_currentJustified {β : Type*} [Preorder β] {block : Root → β}
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     {first last : ForkedBeaconState preset} (holds : Invariant first.state)
     (run : Run config checks first last)
@@ -622,6 +621,11 @@ theorem Run.finalized_le_currentJustified {β : Type*} [Preorder β] {block : Ro
       last.state.finalizedCheckpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat) :
     block last.state.finalizedCheckpoint.root ≤
       block last.state.currentJustifiedCheckpoint.root := by
+  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by
+    rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | positive
+    · rw [zero] at after
+      omega
+    · exact positive
   have chained := ChainRoots.of_run window holds run
   have ordered := (run.invariant holds).ordered
   unfold CheckpointsOrdered at ordered
@@ -657,13 +661,15 @@ private theorem Run.chainSteps_of_mem {first last : ForkedBeaconState preset}
     · rw [List.mem_singleton.mp newest]
       exact ⟨(pre.chainSteps).tail step.chainStep, .refl⟩
 
-/-- Along a run, the finalized block comes before the current justified block.
+/-- Along a run, the finalized block is at or before the current justified block.
 
-The other case is a state of the run that hashes to the zero root.
+The other case is a state that hashes to the zero root, between the first and the last state.
+
+It is between them by chain steps, not necessarily a state of the run.
 
 The map from roots orders the parent root of each block step before the root of its block.
 
-The step is on any run from the first state to the last one.
+The step is on any path of chain steps from the first state to the last one.
 
 The root of its block takes the root of the state after the step as its state root.
 
@@ -675,14 +681,11 @@ Or it records the root of that header at the slot before it.
 
 The finalized epoch must start after the first slot of the run.
 
-The first state needs ordered checkpoint epochs, and the buffer of roots must cover two epochs.
-
-An epoch must have at least one slot. -/
+The first state needs the invariant of valid blocks, and the buffer must cover two epochs. -/
 theorem Run.zeroPreimage_or_finalized_le_currentJustified {β : Type*} [Preorder β]
     {block : Root → β} [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat]
     [NeZero preset.PTC_SIZE.toNat] [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     {first last : ForkedBeaconState preset} (holds : Invariant first.state)
     (run : Run config checks first last)
@@ -720,7 +723,7 @@ theorem Run.zeroPreimage_or_finalized_le_currentJustified {β : Type*} [Preorder
       Relation.ReflTransGen (ChainStep config checks) forked last ∧
       hashTreeRoot forked.state = .ok (Vector.replicate 32 0)
   · exact .inl zero
-  refine .inr (run.finalized_le_currentJustified positive window holds ?_ after)
+  refine .inr (run.finalized_le_currentJustified window holds ?_ after)
   intro middle member
   obtain ⟨toMiddle, fromMiddle⟩ := run.chainSteps_of_mem middle member
   -- The run up to this state has no zero preimage either, so its links are in order.

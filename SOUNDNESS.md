@@ -2732,14 +2732,15 @@ The other case is that the state before the transition hashes to the zero root, 
 `getBlockRootAtSlot_stateTransition_of_lt` shows that the roots of older slots are those of the state before.
 
 `ChainRoots` (`Consensus/Proofs/Transition/ChainRoots.lean`) says where the checkpoints of a state point, for a chain given as a predicate on slots and roots.
-Above an anchor slot, each root that the state records is the root of the chain at its slot, and each checkpoint whose epoch starts above the anchor names the root of the chain at that start.
-A state with the invariant agrees with every chain above its own slot (`ChainRoots.of_invariant`).
-A block keeps the agreement for the chain extended by its parent root, or, when the state before hashes to the zero root, by the root of its latest header (`ChainRoots.of_stateTransition`); slots with their upgrades keep it in the same way (`ChainRoots.of_advanceSlotsAcross`).
-These theorems assume that the buffer of roots covers two epochs.
+From an anchor slot on, each root that the state records is a root of the chain at its slot, and each checkpoint whose epoch starts above the anchor names a root of the chain at that start.
+A state with the invariant agrees with every chain from its own slot on (`ChainRoots.of_invariant`).
+A block keeps the agreement for the chain extended by its parent root, or, when the state before hashes to the zero root, by the root of its latest header (`ChainRoots.of_stateTransition`); slots with their upgrades keep it for the chain extended by the root of the header of the last state, and in the same zero case by the root of the first header (`ChainRoots.of_advanceSlotsAcross`).
+The theorems on blocks and slots assume that the buffer of roots covers two epochs.
 Along a run, the chain is the roots that the states of the run record (`ChainRoots.of_run`).
-`Run.finalized_le_currentJustified` then puts the finalized block before the current justified block, for a map from roots that orders the links of each state of the run, when the finalized epoch starts after the first slot of the run.
-`Run.zeroPreimage_or_finalized_le_currentJustified` takes that order from `zeroPreimage_or_rootLinks_le_of_chainSteps`, so its only other case is a state of the run that hashes to the zero root.
-This covers one chain; two chains are the subject of the direct safety theorems, and the store of the fork choice is not covered yet.
+`Run.finalized_le_currentJustified` then puts the finalized block at or before the current justified block, for a map from roots that orders the links of each state of the run, when the first state has the invariant and the finalized epoch starts after the first slot of the run.
+`Run.zeroPreimage_or_finalized_le_currentJustified` takes that order from `zeroPreimage_or_rootLinks_le_of_chainSteps`, so its only other case is a state between the first and the last state, by chain steps, that hashes to the zero root.
+Its order on block steps covers every path of chain steps between those states, not only the blocks of the run.
+This covers one chain; `accountable_safety` (`Consensus/Proofs/DirectSafety/Safety.lean`) treats two chains, and no theorem yet places the checkpoints of a fork-choice store.
 
 Without a collision of header roots, the pairs of consecutive slots order the roots by ancestry.
 `RootsAbove.of_chainStep` then keeps each justified checkpoint below every root that the state records from its epoch on, which gives the source block of each recent link in the chain of its target block.

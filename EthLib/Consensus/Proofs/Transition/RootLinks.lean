@@ -160,7 +160,7 @@ private theorem advanceSlots_latestBlockHeader_of_ne :
 /-- A header that the filling leaves with a zero state root was filled with the zero root.
 
 So the filling changed nothing. -/
-theorem unfilled_of_filled {header filled : BeaconBlockHeader} {stateRoot : Root}
+theorem header_unfilled_of_filled {header filled : BeaconBlockHeader} {stateRoot : Root}
     (equation : filled = if header.stateRoot = Vector.replicate 32 0 then
       { header with stateRoot := stateRoot } else header)
     (unfilled : filled.stateRoot = Vector.replicate 32 0) :
@@ -188,7 +188,7 @@ theorem hashTreeRoot_latestBlockHeader_advanceSlots {count : Nat}
         hashTreeRoot state.latestBlockHeader = .ok root) := by
   obtain ⟨stateRoot, hashed, header⟩ := advanceSlot_latestBlockHeader step
   by_cases filled : next.latestBlockHeader.stateRoot = Vector.replicate 32 0
-  · obtain ⟨zero, same⟩ := unfilled_of_filled header filled
+  · obtain ⟨zero, same⟩ := header_unfilled_of_filled header filled
     rw [same] at rooted
     exact .inr ⟨zero ▸ hashed, rooted⟩
   · exact .inl (by rw [advanceSlots_latestBlockHeader_of_ne count rest filled]; exact rooted)
@@ -505,7 +505,7 @@ private theorem rootLinks_cases_aux {first last : ForkedBeaconState preset}
             exact isZero
       · -- The new header was filled by the state before it, unless the state hashed to zero.
         refine .inl (.inr ⟨written, writtenRead, rooted, fun empty => ?_⟩)
-        obtain ⟨zero, -⟩ := unfilled_of_filled filled empty
+        obtain ⟨zero, -⟩ := header_unfilled_of_filled filled empty
         exact ⟨before, reach, toBefore, zero ▸ hashed⟩
     | @block fork pre post engine signed validateResult applied =>
       obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok applied
