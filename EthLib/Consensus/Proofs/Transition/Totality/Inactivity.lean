@@ -35,22 +35,6 @@ open Base Uint64
 
 variable {preset : Preset} {fork : Base.Fork} {state : BeaconState preset fork}
 
-/-- Each validator is eligible or not, without an error, in the previous epoch. -/
-private theorem isEligibleValidator_exists_ok (validator : Validator) :
-    ∃ decided, isEligibleValidator (getPreviousEpoch state) validator = .ok decided := by
-  have le := getPreviousEpoch_toNat state
-  have lt := (getCurrentEpoch state).toNat_lt
-  have sum : (getPreviousEpoch state).toNat + (1 : UInt64).toNat < 2 ^ 64 := by
-    simp only [UInt64.toNat_one]
-    omega
-  unfold isEligibleValidator
-  split
-  · exact ⟨_, rfl⟩
-  · split
-    · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure]
-      exact ⟨_, _, by rw [liftArith, addChecked_of_lt sum]; rfl, rfl⟩
-    · exact ⟨_, rfl⟩
-
 /-- For a registry within its limit, the eligible validators are listed without an error. -/
 theorem getEligibleValidatorIndices_exists_ok (within : state.RegistryWithinLimit) :
     ∃ eligible, getEligibleValidatorIndices state = .ok eligible := by
@@ -61,7 +45,8 @@ theorem getEligibleValidatorIndices_exists_ok (within : state.RegistryWithinLimi
     simpa [Array.getElem?_eq_some_iff] using (Array.getElem?_eq_some_iff.mp (by simpa using this)).1
   have bound : state.validators.data.size ≤ _ := within
   have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
-  obtain ⟨decided, ok⟩ := isEligibleValidator_exists_ok (state := state) validator
+  obtain ⟨decided, ok⟩ : ∃ decided, isEligibleValidator (getPreviousEpoch state) validator =
+      .ok decided := ⟨_, isEligibleValidator_getPreviousEpoch validator⟩
   simp only [bind_ok_iff, ok]
   cases decided
   · exact ⟨none, _, rfl, rfl⟩
