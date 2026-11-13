@@ -13,6 +13,10 @@ Before the first slot of the next fork epoch, the slots and blocks run as in one
 
 The fork of the state never moves back.
 
+The upgrades due at a slot run one after another, each on the state the one before made.
+
+After them no upgrade is due, so with two forks at one epoch both run.
+
 A valid block ran on the state of its own fork, at its slot.
 
 Each upgrade keeps the invariant that each valid block keeps, and the finalized checkpoint.
@@ -311,5 +315,66 @@ theorem stateTransitionAcross_invariant {fork : Fork} {engine : ExecutionEngine 
   refine ⟨frame.invariant advancedHolds, ?_⟩
   rw [frame.finalized]
   exact first
+
+/-! ## Every upgrade due at a slot -/
+
+/-- The upgrades run one after another, each on the state that the one before it made.
+
+Each runs on a state with an upgrade due, and the last state has none due. -/
+theorem processUpgrades_eq_ok_iff {forked after : ForkedBeaconState preset} :
+    processUpgrades config checks forked = .ok after ↔
+      (after = forked ∨ Relation.TransGen (fun pre post : ForkedBeaconState preset =>
+          upgradeDue config pre = true ∧
+            ∃ later, upgradeNext config checks pre = .ok ⟨post, later⟩) forked after) ∧
+        upgradeDue config after = false := by
+  constructor
+  · intro computed
+    fun_induction processUpgrades config checks forked generalizing after with
+    | case1 forked due more =>
+      obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp computed
+      obtain ⟨chain, done⟩ := more next rest
+      refine ⟨.inr ?_, done⟩
+      rcases chain with rfl | chain
+      · exact .single ⟨due, next.property, nextOk⟩
+      · exact .trans (.single ⟨due, next.property, nextOk⟩) chain
+    | case2 forked notDue =>
+      cases computed
+      exact ⟨.inl rfl, by simpa using notDue⟩
+  · rintro ⟨chain, done⟩
+    -- Each upgrade leaves the rest of the upgrades to the state it makes.
+    have same : ∀ {pre post : ForkedBeaconState preset},
+        Relation.TransGen (fun pre post : ForkedBeaconState preset =>
+          upgradeDue config pre = true ∧
+            ∃ later, upgradeNext config checks pre = .ok ⟨post, later⟩) pre post →
+        processUpgrades config checks pre = processUpgrades config checks post := by
+      intro pre post chain
+      induction chain with
+      | single step =>
+        obtain ⟨due, later, upgraded⟩ := step
+        rw [processUpgrades]
+        simp [due, upgraded, bind, Except.bind]
+      | tail _ step more =>
+        obtain ⟨due, later, upgraded⟩ := step
+        rw [more, processUpgrades]
+        simp [due, upgraded, bind, Except.bind]
+    rcases chain with rfl | chain
+    · exact processUpgrades_of_not_due done
+    · rw [same chain]
+      exact processUpgrades_of_not_due done
+
+/-- After the upgrades, the next fork does not start at the epoch of the slot.
+
+That holds when the slot is the first of its epoch, so no upgrade due at the slot is left out. -/
+theorem processUpgrades_nextFork_ne {forked after : ForkedBeaconState preset} {next : Fork}
+    {epoch : Epoch} (computed : processUpgrades config checks forked = .ok after)
+    (scheduled : config.nextFork after.fork = some (next, epoch))
+    (first : forked.state.slot % preset.SLOTS_PER_EPOCH = 0) :
+    computeEpochAtSlot preset forked.state.slot ≠ epoch := by
+  have slot : after.state.slot = forked.state.slot :=
+    processUpgrades_induction (property := fun state => state.state.slot = forked.state.slot)
+      (fun same stepOk => (upgradeFrame_upgradeNext stepOk).slot.trans same) rfl computed
+  have done := (processUpgrades_eq_ok_iff.mp computed).2
+  simp [upgradeDue, scheduled, slot, first] at done
+  exact done
 
 end EthLib.Consensus
