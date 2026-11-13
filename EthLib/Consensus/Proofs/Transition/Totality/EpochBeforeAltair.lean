@@ -40,22 +40,24 @@ open Base Uint64
 
 variable {preset : Preset} {fork : Base.Fork} {state : BeaconState preset fork}
 
-/-- A step that keeps the slot, the balances, the slashed balances and the historical roots.
+/-- A step that keeps the slot, the balances, the slashed balances and the historical lists.
 
 It keeps the effective balance at each position of the registry, and so the size of the registry. -/
 private def RegistryKept (state after : BeaconState preset fork) : Prop :=
   after.slot = state.slot ∧ after.balances = state.balances ∧ after.slashings = state.slashings ∧
     after.historicalRoots = state.historicalRoots ∧
+    after.historicalSummaries = state.historicalSummaries ∧
     after.validators.data.map (·.effectiveBalance) = state.validators.data.map (·.effectiveBalance)
 
 private theorem RegistryKept.refl (state : BeaconState preset fork) : RegistryKept state state :=
-  ⟨rfl, rfl, rfl, rfl, rfl⟩
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private theorem RegistryKept.trans {first second third : BeaconState preset fork}
     (one : RegistryKept first second) (two : RegistryKept second third) :
     RegistryKept first third :=
   ⟨two.1.trans one.1, two.2.1.trans one.2.1, two.2.2.1.trans one.2.2.1,
-    two.2.2.2.1.trans one.2.2.2.1, two.2.2.2.2.trans one.2.2.2.2⟩
+    two.2.2.2.1.trans one.2.2.2.1, two.2.2.2.2.1.trans one.2.2.2.2.1,
+    two.2.2.2.2.2.trans one.2.2.2.2.2⟩
 
 /-- A write of a validator with the effective balance of the old one keeps the registry kept. -/
 private theorem registryKept_setValidatorAt {after : BeaconState preset fork} {position : Nat}
@@ -65,7 +67,7 @@ private theorem registryKept_setValidatorAt {after : BeaconState preset fork} {p
   obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
   have read := getValidatorAt_eq_ok_iff.mp found
   rw [Array.getElem?_eq_getElem inside, Option.some.injEq] at read
-  refine ⟨rfl, rfl, rfl, rfl, ?_⟩
+  refine ⟨rfl, rfl, rfl, rfl, rfl, ?_⟩
   simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set, Array.map_set,
     same, ← read]
   rw [← Array.getElem_map (f := fun x : Validator => x.effectiveBalance)]
@@ -83,17 +85,18 @@ private theorem registryKept_initiateValidatorExit {config : Config}
   rw [setValidator_eq_setValidatorAt] at set
   rw [getValidator_eq_getValidatorAt] at found
   have last := registryKept_setValidatorAt (old := validator) set (by exact found) rfl
-  exact RegistryKept.trans ⟨rfl, rfl, rfl, rfl, rfl⟩ last
+  exact RegistryKept.trans ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩ last
 
 /-- Before Electra, the registry updates keep the slot and the balances.
 
-They keep the slashed balances and the historical roots.
+They keep the slashed balances, the historical roots and the historical summaries.
 
 They keep the effective balance at each position of the registry. -/
 theorem processRegistryUpdates_registryKept {config : Config} {after : BeaconState preset fork}
     (before : fork < .pectra) (computed : processRegistryUpdates config state = .ok after) :
     after.slot = state.slot ∧ after.balances = state.balances ∧
       after.slashings = state.slashings ∧ after.historicalRoots = state.historicalRoots ∧
+      after.historicalSummaries = state.historicalSummaries ∧
       after.validators.data.map (·.effectiveBalance) =
         state.validators.data.map (·.effectiveBalance) := by
   have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
@@ -130,7 +133,7 @@ theorem processRegistryUpdates_registryKept {config : Config} {after : BeaconSta
     exact registryKept_setValidatorAt set found rfl) first activated
 
 /-- Two registries with the same effective balances at each position have the same sum of them. -/
-private theorem effectiveBalanceSum_eq_of_map {other : BeaconState preset fork}
+theorem effectiveBalanceSum_eq_of_map {other : BeaconState preset fork}
     (same : other.validators.data.map (·.effectiveBalance) =
       state.validators.data.map (·.effectiveBalance)) :
     effectiveBalanceSum other = effectiveBalanceSum state := by
@@ -139,7 +142,7 @@ private theorem effectiveBalanceSum_eq_of_map {other : BeaconState preset fork}
   simpa [Array.toList_map, List.map_map, Function.comp_def] using this
 
 /-- Two registries with the same effective balances hold the same effective balances. -/
-private theorem exists_of_map {other : BeaconState preset fork} {validator : Validator}
+theorem exists_effectiveBalance_of_map {other : BeaconState preset fork} {validator : Validator}
     (same : other.validators.data.map (·.effectiveBalance) =
       state.validators.data.map (·.effectiveBalance))
     (member : validator ∈ other.validators.data) :
@@ -150,7 +153,7 @@ private theorem exists_of_map {other : BeaconState preset fork} {validator : Val
   exact Array.mem_map.mp mapped
 
 /-- Each effective balance is at most the sum of the effective balances. -/
-private theorem effectiveBalance_le_sum {validator : Validator}
+theorem effectiveBalance_le_effectiveBalanceSum {validator : Validator}
     (member : validator ∈ state.validators.data) :
     validator.effectiveBalance.toNat ≤ effectiveBalanceSum state :=
   List.le_sum_of_mem (List.mem_map_of_mem (Array.mem_toList_iff.mpr member))
@@ -316,7 +319,7 @@ theorem processEpoch_total_of_lt_altair {config : Config} {checks : SignatureChe
   obtain ⟨registered, registeredOk, -⟩ := processRegistryUpdates_total_of_lt_electra
     (config := config) rewarded electra ceiling (by rw [currentEpoch2]; exact first)
     (by rw [validators2]; exact exits) (by rw [validators2]; exact exitRoom)
-  obtain ⟨slot3, balances3, slashings3, roots3, effective3⟩ :=
+  obtain ⟨slot3, balances3, slashings3, roots3, -, effective3⟩ :=
     processRegistryUpdates_registryKept electra registeredOk
   rw [validators2] at effective3
   have size3 : registered.validators.data.size = state.validators.data.size := by
@@ -328,8 +331,8 @@ theorem processEpoch_total_of_lt_altair {config : Config} {checks : SignatureChe
   have below3 : ∀ validator ∈ registered.validators.data,
       validator.effectiveBalance.toNat < 2 ^ 63 := by
     intro validator member
-    obtain ⟨old, oldMember, same⟩ := exists_of_map effective3 member
-    have := effectiveBalance_le_sum oldMember
+    obtain ⟨old, oldMember, same⟩ := exists_effectiveBalance_of_map effective3 member
+    have := effectiveBalance_le_effectiveBalanceSum oldMember
     rw [same] at this
     omega
   have matched3 : BalancesMatch registered := by
@@ -343,7 +346,7 @@ theorem processEpoch_total_of_lt_altair {config : Config} {checks : SignatureChe
     (by unfold slashedBalanceSum; rw [slashings3, slashings2]; exact slashedProduct)
     (by rw [currentEpoch3]; exact halfway)
     (fun _ validator member => by
-      obtain ⟨old, oldMember, same⟩ := exists_of_map effective3 member
+      obtain ⟨old, oldMember, same⟩ := exists_effectiveBalance_of_map effective3 member
       rw [sum3, ← same]
       exact product old oldMember)
   have frame4 := processSlashings_frame slashedOk

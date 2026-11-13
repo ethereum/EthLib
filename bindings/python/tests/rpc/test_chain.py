@@ -40,6 +40,7 @@ RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_getStorageAt": "bytes",
     "eth_getStorageValues": None,
     "eth_getProof": None,
+    "eth_call": "bytes",
     "debug_getRawHeader": "bytes",
     "debug_getRawBlock": "bytes",
     "debug_getRawTransaction": "bytes",

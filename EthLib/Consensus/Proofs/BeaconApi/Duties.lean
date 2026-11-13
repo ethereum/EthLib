@@ -13,6 +13,10 @@ A requested validator in a committee of the epoch has exactly one duty.
 
 A request for an epoch after the next one is refused.
 
+From Gloas, a PTC request is refused outside the previous epoch to the next one.
+
+It is also refused before the Gloas fork epoch.
+
 In the current epoch, each proposer duty from the slot of the state on names its proposer.
 
 Each seat of a sync duty holds the key of the validator.
@@ -155,6 +159,50 @@ theorem ptcDuties_epoch_bound {config : Config} {state : BeaconState preset fork
     {rest : List ValidatorIndex} (far : (getCurrentEpoch state).toNat + 1 < epoch.toNat) :
     ptcDuties config state gloas epoch (index :: rest) = .error (invalidEpoch epoch) := by
   simp [ptcDuties, checkDutyEpoch_far far, bind, Except.bind]
+
+/-- From Gloas, the PTC duties of a request, against the current epoch of the state.
+
+An empty request gets the error of an empty request, code 400.
+
+The epoch must be from the previous epoch to the next one, and not before the Gloas fork epoch.
+
+The mixes of the state must also still hold the seed of the epoch.
+
+In that window it holds whenever the mixes outlast the seed lookahead by more than two epochs.
+
+Any other epoch gets the error of an invalid epoch, code 400.
+
+For an epoch in that range, a repeated index gets code 400 too.
+
+Else the answer runs the duty of each requested validator in turn, in request order.
+
+It keeps the validators in the PTC; the first index that fails ends the answer. -/
+theorem ptcDuties_eq {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {indices : List ValidatorIndex} :
+    ptcDuties config state gloas epoch indices =
+      if indices = [] then .error emptyIndices
+      else if (getCurrentEpoch state).toNat ≤ epoch.toNat + 1 ∧
+          epoch.toNat ≤ (getCurrentEpoch state).toNat + 1 ∧
+          config.GLOAS_FORK_EPOCH.toNat ≤ epoch.toNat ∧
+          (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+            epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat then
+        if indices.Nodup then
+          (·.filterMap id) <$> indices.mapM (ptcDuty config state gloas epoch)
+        else .error { code := 400, message := "Repeated validator index" }
+      else .error (invalidEpoch epoch) := by
+  unfold ptcDuties checkDutyEpoch
+  by_cases empty : indices = []
+  · simp [empty, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  have notEmpty : indices.isEmpty = false := List.isEmpty_eq_false_iff.mpr empty
+  simp only [empty, notEmpty, Bool.false_eq_true, ↓reduceIte, UInt64.lt_iff_toNat_lt]
+  by_cases ahead : epoch.toNat ≤ (getCurrentEpoch state).toNat + 1 <;>
+  by_cases seeded : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+      epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat <;>
+  by_cases behind : epoch.toNat + 1 < (getCurrentEpoch state).toNat <;>
+  by_cases early : epoch.toNat < config.GLOAS_FORK_EPOCH.toNat <;>
+  by_cases distinct : indices.Nodup <;>
+  simp [ahead, seeded, behind, early, distinct, throw, throwThe, MonadExceptOf.throw, bind,
+    Except.bind, pure, Except.pure, Functor.map, Except.map]
 
 /-- Each attester duty is in the requested epoch, at a committee index below the count it gives.
 
