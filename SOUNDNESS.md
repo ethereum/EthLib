@@ -772,7 +772,6 @@ The QUIC proofs (`Networking/Proofs/Quic/Keys.lean`) state the Initial and packe
 The keys have their required lengths in their types for AES-128-GCM and ChaCha20-Poly1305 with SHA-256.
 The Python suite checks the secrets, keys and labels of RFC 9001 Appendix A.1, and the keys of Appendix A.5.
 Anyone who sees the client's first Destination Connection ID can compute the Initial secrets, as RFC 9001 §5.2 says.
-Packet encryption, header protection and Retry integrity remain unspecified.
 These results establish neither cryptographic security nor constant-time execution.
 
 ### TLS 1.3 key schedule
@@ -786,6 +785,23 @@ No result covers message parsing, negotiation, peer authentication or the Diffie
 The schedule does not check the shared secret, and the SHA-384 schedule of TLS_AES_256_GCM_SHA384 is absent.
 The certificate, group and signature policy questions of [#2163](https://github.com/ethereum/EthLib/issues/2163) remain open.
 These results establish neither cryptographic security nor constant-time execution.
+
+### QUIC v1 packet protection
+
+`unprotect_protect` (`Networking/Proofs/Quic/Protection.lean`) proves the wire-packet round trip for AES-128-GCM and ChaCha20-Poly1305.
+The round trip assumes that the receiver reconstructs the sent packet number.
+RFC 9001 §5.5 notes that a long delay can break that reconstruction, and authentication then fails.
+`removeHeaderProtection_applyMask` proves that header removal restores the fields under the mask of the unchanged ciphertext sample.
+`unprotect_ok_iff` unfolds acceptance into header removal, packet-number reconstruction, AEAD authentication and the authenticated header checks.
+
+The decoder checks reserved bits only after authentication, and checks a long header's Length against the isolated payload.
+`unprotect_eq_error_of_decryptPayload` proves that an AEAD failure is reported before the checks of the authenticated header.
+Nonzero reserved bits in an authenticated header give their own error, since RFC 9000 §§17.2 and 17.3.1 make them a connection error.
+The other failures reject only this packet.
+`unprotect_eq_reservedBits_iff` proves that this error comes only from a packet whose payload authenticates.
+Initial packets require AES-128-GCM, as RFC 9001 §5 specifies.
+The Python suite compares complete packets and Retry tags with RFC 9001 Appendices A.2 to A.5.
+These operations do not track nonce reuse, key updates or AEAD usage limits, and the proofs establish no cryptographic security or constant-time execution.
 
 ### Noise XX and libp2p identities
 
@@ -4514,12 +4530,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 480 operations and 49 size constants.
-The Python extension calls 480 of the operations and 49 of the constants.
+Lean exports 483 operations and 49 size constants.
+The Python extension calls 483 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11274 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2358), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1568), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (131), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (772), `x25519.c` (21), `xmss.c` (134).
+11314 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2358), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1573), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (777), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

@@ -1537,6 +1537,18 @@ def quic_tls_finished(secret: bytes, transcript: bytes) -> bytes:
     """Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."""
     ...
 
+def quic_protect(suite: str, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes) -> bytes:
+    """Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4."""
+    ...
+
+def quic_unprotect(suite: str, secret: bytes, expected: int, offset: int, packet: bytes) -> tuple[bytes, bytes]:
+    """Authenticate one isolated QUIC v1 packet, RFC 9001 §§5.3 to 5.4."""
+    ...
+
+def quic_retry_tag(original_dcid: bytes, retry: bytes) -> bytes:
+    """Compute a QUIC v1 Retry tag from the original destination ID and untagged Retry, RFC 9001 §5.8."""
+    ...
+
 def quic_varint_encode(value: int) -> bytes:
     """Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."""
     ...

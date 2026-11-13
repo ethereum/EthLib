@@ -150,6 +150,7 @@ extern PyObject* REQRESP_ERROR;
 extern PyObject* CONSENSUS_ERROR;
 extern PyObject* HKDF_ERROR;
 extern PyObject* TLS13_ERROR;
+extern PyObject* QUIC_PROTECTION_ERROR;
 extern PyObject* PBKDF2_ERROR;
 extern PyObject* SCRYPT_ERROR;
 extern PyObject* X25519_ERROR;
@@ -768,5 +769,9 @@ PyObject* py_tls_certificate_read(PyObject* self, PyObject* args);
 PyObject* py_tls_certificate_authenticate(PyObject* self, PyObject* args);
 PyObject* py_tls_certificate_authenticate_peer(PyObject* self, PyObject* args);
 PyObject* py_tls_certificate_verify_p256(PyObject* self, PyObject* args);
+
+PyObject* py_quic_protect(PyObject* self, PyObject* args);
+PyObject* py_quic_unprotect(PyObject* self, PyObject* args);
+PyObject* py_quic_retry_tag(PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */
