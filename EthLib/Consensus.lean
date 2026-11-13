@@ -5,6 +5,7 @@ public import EthLib.Consensus.BeaconApi.Blocks
 public import EthLib.Consensus.BeaconApi.Committees
 public import EthLib.Consensus.BeaconApi.Duties
 public import EthLib.Consensus.BeaconApi.Config
+public import EthLib.Consensus.BeaconApi.Debug
 public import EthLib.Consensus.BeaconApi.Encoding
 public import EthLib.Consensus.BeaconApi.Identifiers
 public import EthLib.Consensus.BeaconApi.LightClient

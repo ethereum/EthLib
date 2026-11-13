@@ -8,6 +8,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Blocks
 public import EthLib.Consensus.Proofs.BeaconApi.Committees
 public import EthLib.Consensus.Proofs.BeaconApi.Duties
 public import EthLib.Consensus.Proofs.BeaconApi.Config
+public import EthLib.Consensus.Proofs.BeaconApi.Debug
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
 public import EthLib.Consensus.Proofs.BeaconApi.Identifiers
 public import EthLib.Consensus.Proofs.BeaconApi.LightClient
