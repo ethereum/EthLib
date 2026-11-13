@@ -39,6 +39,10 @@ A filter keeps the entries whose fields equal each value that it gives.
 
 The limit and the cursor of a query are not modelled here.
 
+The JSON of a received bid is that of its bid, plus the two timestamps as strings.
+
+This library writes each timestamp in decimal, as the example of [`misc.yaml`] does.
+
 Delivered payloads may also be sorted by value, lowest or highest first, as [`misc.yaml`] says.
 
 [submission endpoint]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/builder/blocks.yaml
@@ -228,6 +232,49 @@ structure BidTraceV2WithTimestamp where
   /-- The timestamp under the key `timestamp_ms`. -/
   timestampMs : Int64
   deriving DecidableEq
+
+namespace BidTraceV2WithTimestamp
+
+/-- The JSON of a signed integer of 64 bits: its decimal digits, after a minus sign if negative. -/
+def int64Json (x : Int64) : Lean.Json :=
+  .str (toString x.toInt)
+
+/-- The signed integer of 64 bits that a JSON string holds.
+
+Only the string that the writer gives is read, so any other spelling of the number is refused.
+
+The relay source gives the value the type string, so a JSON number is refused as well.
+
+The reader of an unsigned integer accepts a JSON number, by the mapping of SSZ to JSON. -/
+def readInt64 : Lean.Json → Except Err Int64
+  | .str text => match text.toInt? with
+    | some i =>
+      if toString i = text ∧ -2 ^ 63 ≤ i ∧ i < 2 ^ 63 then .ok (Int64.ofInt i)
+      else .error .typeMismatch
+    | none => .error .typeMismatch
+  | _ => .error .typeMismatch
+
+/-- The JSON object of a received bid: the object of the bid, with the two timestamps added. -/
+def toJson (entry : BidTraceV2WithTimestamp) : Except Err Lean.Json := do
+  let .obj fields ← BeaconApi.toApiJson entry.bid | throw .typeMismatch
+  return .obj ((fields.insert "timestamp" (int64Json entry.timestamp)).insert "timestamp_ms"
+    (int64Json entry.timestampMs))
+
+/-- The received bid that a JSON object holds.
+
+The reader takes the two timestamps out of the object, then reads the rest as a bid.
+
+So, as for a bid, a key that the source does not declare is refused. -/
+def ofJson (document : Lean.Json) : Except Err BidTraceV2WithTimestamp := do
+  let .obj fields := document | throw .structNotAnObject
+  let some timestamp := (document.getObjVal? "timestamp").toOption
+    | throw (.missingField "timestamp")
+  let some timestampMs := (document.getObjVal? "timestamp_ms").toOption
+    | throw (.missingField "timestamp_ms")
+  let bid ← BeaconApi.ofApiJson BidTraceV2 (.obj ((fields.erase "timestamp_ms").erase "timestamp"))
+  return ⟨bid, ← readInt64 timestamp, ← readInt64 timestampMs⟩
+
+end BidTraceV2WithTimestamp
 
 /-- The order of the delivered payloads by their value: lowest first, or highest first. -/
 inductive OrderBy where
