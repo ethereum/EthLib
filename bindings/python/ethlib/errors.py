@@ -292,6 +292,10 @@ class EngineError(EthLibError, ValueError):
     """An Engine API method returned a JSON-RPC error, whose code is the negative of this code."""
 
 
+class RpcError(EthLibError, ValueError):
+    """An execution JSON-RPC parameter was rejected, whose code is the negative of this code."""
+
+
 class JwtError(EthLibError, ValueError):
     """An Engine API authentication token could not be built or checked."""
 
@@ -364,6 +368,7 @@ __all__ = [
     "EvmError",
     "FeesError",
     "EngineError",
+    "RpcError",
     "JwtError",
     "ChainError",
 ]

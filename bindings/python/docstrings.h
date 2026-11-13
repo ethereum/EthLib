@@ -1178,6 +1178,15 @@
 #define DOC_engine_finalized_execution_block_hash \
   "From Bellatrix: the 32 bytes of the finalized block hash of a store."
 
+#define DOC_rpc_read_param \
+  "Read a parameter of the execution JSON-RPC API under the schema of the given name."
+
+#define DOC_rpc_error_groups \
+  "The groups of error codes of the execution JSON-RPC API, in the order of the source."
+
+#define DOC_rpc_pruned_history_unavailable \
+  "The code of history that the node pruned, with its message."
+
 #define DOC_pyvalue_echo \
   "The value that Python passes, back to Python, with each failure tuple read as a failure."
 

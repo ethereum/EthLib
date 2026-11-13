@@ -23,6 +23,10 @@ A `uintDecimal` is a number in decimal digits, without `0x` and without leading 
 
 A fixed byte string, such as `bytes4` or `hash32`, has exactly two lowercase digits per byte.
 
+A `bytesMax32` has at most 64 lowercase digits, an odd count and leading zeros included.
+
+A storage slot takes this type, and its digits write a number on 32 bytes.
+
 The value `notFound` is the JSON `null`, which a method answers when it finds nothing.
 
 A `ratio` is a JSON number from 0 to 1.
@@ -112,6 +116,17 @@ def bytes96 (what : String) (j : Json) : Read (Vector UInt8 96) := fixed what 96
 
 /-- Two hundred and fifty-six bytes. -/
 def bytes256 (what : String) (j : Json) : Read (Vector UInt8 256) := fixed what 256 j
+
+/-- A storage slot: at most 64 lowercase hex digits, read as a number on 32 big-endian bytes. -/
+def bytesMax32 (what : String) (j : Json) : Read Bytes32 := do
+  let digits ← hexDigits what j
+  if digits.size > 64 then reject s!"{what}: more than 64 hex digits" else
+  let mut value := 0
+  for c in digits do
+    match hexValue false c with
+    | some d => value := 16 * value + d.toNat
+    | none => reject s!"{what}: not a hex digit"
+  return Vector.ofFn fun i : Fin 32 => (value / 256 ^ (31 - i.val) % 256).toUInt8
 
 /-- A hash of 32 bytes. -/
 def hash32 (what : String) (j : Json) : Read Hash32 := fixed what 32 j

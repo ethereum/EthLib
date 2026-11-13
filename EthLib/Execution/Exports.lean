@@ -10,6 +10,7 @@ public import EthLib.Execution.Exports.Session
 public import EthLib.Execution.Exports.Snap
 public import EthLib.Execution.Exports.Pow
 public import EthLib.Execution.Exports.Precompiles
+public import EthLib.Execution.Exports.Rpc
 public import EthLib.Execution.Exports.State
 public import EthLib.Execution.Exports.Transactions
 public import EthLib.Execution.Exports.Transition

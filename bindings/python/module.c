@@ -122,6 +122,7 @@ PyObject* VALIDATOR_DUTY_ERROR;
 PyObject* PROPOSER_ERROR;
 PyObject* SLASHING_PROTECTION_ERROR;
 PyObject* BINDING_ERROR;
+PyObject* RPC_ERROR;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
 
@@ -1175,6 +1176,10 @@ static PyMethodDef methods[] = {
    METH_VARARGS, DOC_engine_prepare_execution_payload_gloas},
   {"engine_finalized_execution_block_hash", py_engine_finalized_execution_block_hash,
    METH_VARARGS, DOC_engine_finalized_execution_block_hash},
+  {"rpc_read_param", py_rpc_read_param, METH_VARARGS, DOC_rpc_read_param},
+  {"rpc_error_groups", py_rpc_error_groups, METH_VARARGS, DOC_rpc_error_groups},
+  {"rpc_pruned_history_unavailable", py_rpc_pruned_history_unavailable, METH_VARARGS,
+   DOC_rpc_pruned_history_unavailable},
   {"pyvalue_echo", py_pyvalue_echo, METH_VARARGS, DOC_pyvalue_echo},
   {NULL, NULL, 0, NULL},
 };
@@ -1258,6 +1263,7 @@ PyInit__native(void) {
     PROPOSER_ERROR = PyObject_GetAttrString(errors, "ProposerError");
     SLASHING_PROTECTION_ERROR = PyObject_GetAttrString(errors, "SlashingProtectionError");
     BINDING_ERROR = PyObject_GetAttrString(errors, "BindingError");
+    RPC_ERROR = PyObject_GetAttrString(errors, "RpcError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 

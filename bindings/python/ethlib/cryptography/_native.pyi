@@ -1573,6 +1573,18 @@ def engine_finalized_execution_block_hash(name: str, fork: str, anchor_state: by
     """From Bellatrix: the 32 bytes of the finalized block hash of a store."""
     ...
 
+def rpc_read_param(schema: str, value: object) -> int | bytes | tuple[Literal['number'], int] | tuple[Literal['tag'], Literal['earliest', 'finalized', 'safe', 'latest', 'pending']] | tuple[Literal['hash'], bytes, bool]:
+    """Read a parameter of the execution JSON-RPC API under the schema of the given name."""
+    ...
+
+def rpc_error_groups() -> list[tuple[str, tuple[tuple[bool, int], tuple[bool, int]] | None, list[tuple[tuple[bool, int], str]]]]:
+    """The groups of error codes of the execution JSON-RPC API, in the order of the source."""
+    ...
+
+def rpc_pruned_history_unavailable() -> tuple[tuple[bool, int], str]:
+    """The code of history that the node pruned, with its message."""
+    ...
+
 def pyvalue_echo(value: object) -> object:
     """The value that Python passes, back to Python, with each failure tuple read as a failure."""
     ...
