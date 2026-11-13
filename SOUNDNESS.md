@@ -4391,7 +4391,31 @@ The event covers Bellatrix to Gloas (the forks before Heze), and these gaps rema
 The exports of the events and their Python tests remain for #2091.
 The light client events and the event of an available payload depend on what the node has received, and are not defined here.
 
-No definition yet says when an event of a received object fires (#2090).
+The events of received objects are in `Consensus/BeaconApi/ObjectEvents.lean` (#2090).
+An object from a peer and one from a client take the same path: the gossip dispatch, then, for a block or an envelope, the handler of the fork choice.
+`eventsOfGossip_accept` (`Consensus/Proofs/BeaconApi/ObjectEvents.lean`) shows that an object whose topic has an event gives it exactly when gossip accepts the object.
+`receiveGossip_accept` shows that any event of a received message means that the dispatch accepted it.
+`receiveGossip_of_pass` and `publish_receiveGossip` show that a message which passes the gossip check of an endpoint, or which a publish endpoint does not refuse, gives the events that it gives from a peer.
+`itemEvents_singleton_of_pass` and `itemEvents_singleton_of_fail` show that the gossip event of an item of one message follows the same check.
+`eventsOfBlockImport_block` shows that a block event names a block that is new to the store and that the store then holds, and `eventsOfBlockImport_new` that such a block gives it.
+`blockEvent_gloas` shows that from Gloas a block event names the builder and the block hash of the bid of its block, and none before.
+`eventsOfEnvelopeImport_ok` and `eventsOfEnvelopeImport_of_accepted` show that an envelope is imported exactly when the envelope handler accepts it, and that the store then counts its payload as verified.
+`envelopeEvent?_eq_some` shows that it gives a payload event exactly when its payload is new to the store.
+`publishBlock_eventsOfBlockImport` and `publishEnvelope_eventsOfEnvelopeImport` show that an object that a publish endpoint integrates gives the store and the events of an import.
+`publishBlockEvents_integrated` and `publishEnvelopeEvents_integrated` show that such an object gives its gossip event, then its import event; `publishBlockEvents_of_fail` and `publishEnvelopeEvents_of_fail` show that an object that fails gossip gives none.
+The source leaves these points open, decided here:
+
+- The payloads are fixed only by examples; the field names and kinds come from them, and an object that an event carries is written whole in the JSON of the API.
+- The source does not say whether an object gives two events when it arrives twice. Each acceptance by gossip gives one gossip event; the rules of a topic ignore a copy whose keys they have seen. A block that the store already holds gives no block event, since the block handler then leaves the store as it was; an envelope whose payload the store already holds gives no payload event.
+- An object that passes gossip at a publish endpoint gives its gossip event even when a later check of its level refuses it, since the source names only the rules of the topic.
+- The example of the `attestation` event has the form of Electra, with committee bits, but from Electra the attestation subnets carry single attestations. Turning one into an attestation needs its committee, which the source does not specify for the event. So the `attestation` event comes before Electra, and the `single_attestation` event from Electra.
+- The source lists only the network as the origin of the payload attestation event, unlike the other gossip events. Here a payload vote submitted through the API gives it too, since it passes the same rules.
+- The aggregate, sync committee message and inclusion list topics have no event in the source, so they give none. The release removed the blob sidecar event, so blob sidecars give none at Deneb and Electra.
+- The slot of a payload event is the slot number of its payload, which gossip and the envelope handler check to equal the slot of its block.
+- The bid, payload vote and proposer preferences events name the consensus version of the fork, as their examples do. The source names no version for Heze, so from Heze these events carry none.
+
+The optimistic flag of a block is an input, as for the events of the fork choice.
+The export of these events and its Python tests remain for #2090.
 
 The debug answers show the tree of the fork choice and its leaves (`Consensus/BeaconApi/Debug.lean`).
 `mem_treeNodes` (`Consensus/Proofs/BeaconApi/Debug.lean`) shows that the listed nodes are exactly the nodes of the tree, and `nodeViews_nodes` shows that the views follow that list, by root and status as the API names them: one per block before Gloas, and from Gloas the pending and empty nodes of each block, with the full node once its payload is verified.
