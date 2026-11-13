@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Rpc.Request
-public import EthLib.Execution.Rpc.View
+public import EthLib.Execution.Rpc.TransactionInfo
 
 /-!
 # `Execution.Rpc.Methods`
@@ -27,6 +27,10 @@ A notification, a request without an identifier, gets no response, as section 4.
 A batch, an array of requests, gets the array of the responses to its requests, as section 6 says.
 
 An empty batch is an invalid request, and a batch of notifications gets no response.
+
+A missing parameter, or a parameter that its reader rejects, also gets `-32602`.
+
+A transaction whose sender or hash the node cannot compute gets `-32603`.
 
 [rpc]: https://www.jsonrpc.org/specification#error_object
 [eth]: https://github.com/ethereum/execution-apis/tree/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth
@@ -60,12 +64,43 @@ def noParams (params : List Json) (result : Json) : Except RpcError Json :=
   if params.isEmpty then .ok result
   else .error (RpcError.invalidParams "the method takes no parameter")
 
+/-- A parameter that a reader reads, or the error of invalid parameters. -/
+def readParam {α : Type} (reader : Json → Read α) (j : Json) : Except RpcError α :=
+  (reader j).mapError RpcError.invalidParams
+
+/-- The result of a method with one parameter, or the error of a missing or extra parameter. -/
+def oneParam (params : List Json) (f : Json → Except RpcError Json) : Except RpcError Json :=
+  match params with
+  | [a] => f a
+  | [] => .error (RpcError.invalidParams "missing parameter")
+  | _ => .error (RpcError.invalidParams "the method takes one parameter")
+
+/-- The result of a method with two parameters, or the error of a missing or extra parameter. -/
+def twoParams (params : List Json) (f : Json → Json → Except RpcError Json) :
+    Except RpcError Json :=
+  match params with
+  | [a, b] => f a b
+  | [] | [_] => .error (RpcError.invalidParams "missing parameter")
+  | _ => .error (RpcError.invalidParams "the method takes two parameters")
+
+/-- A transaction of a block as JSON, or `null` when there is none. -/
+def transactionResult (r : Except RpcError (Option TransactionInfo)) : Except RpcError Json :=
+  optionJson transactionInfoJson <$> r
+
 /-- The outcome of a method of the view, with its parameters by position. -/
 def call (v : ChainView) (method : String) (params : List Json) : Except RpcError Json :=
   match method with
   | "eth_blockNumber" => noParams params v.blockNumber
   | "eth_chainId" => noParams params v.chainId
   | "net_version" => noParams params v.netVersion
+  | "eth_getTransactionByHash" => oneParam params fun h => do
+    transactionResult (v.transactionByHash (← readParam (hash32 "transaction hash") h))
+  | "eth_getTransactionByBlockHashAndIndex" => twoParams params fun h i => do
+    let block := BlockParam.hash (← readParam (hash32 "block hash") h) false
+    transactionResult (v.transactionByBlockAndIndex block (← readParam (uint "index") i))
+  | "eth_getTransactionByBlockNumberAndIndex" => twoParams params fun b i => do
+    let block ← readParam (blockNumberOrTag "block") b
+    transactionResult (v.transactionByBlockAndIndex block (← readParam (uint "index") i))
   | _ => .error (methodNotFound.toRpcError (some (.str method)))
 
 /-- The response of the view to a request. -/

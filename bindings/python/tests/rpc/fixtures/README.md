@@ -22,6 +22,7 @@ The tests replay it through the state transition into a chain view, and send the
 They compare a result as a JSON value, and an error by its code, and by its data where the file gives it.
 A file marked `speconly` is checked against the schema of the result only, as `docs-api/docs/tests.md` of the source says.
 
+The view serves `eth_blockNumber`, `eth_chainId`, `net_version`, `eth_getTransactionByHash`, `eth_getTransactionByBlockHashAndIndex` and `eth_getTransactionByBlockNumberAndIndex`.
 The files of the other methods run through the readers of the parameters, without a chain.
 
 The files of the `debug_` methods and of `eth_getStorageAt` answer with an error, because a reader rejects a parameter.

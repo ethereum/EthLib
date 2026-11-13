@@ -3254,6 +3254,21 @@ Take a forkchoice update that sets a new head, and a view whose canonical chain 
 The head of the view is the head of the update (`head_hash_of_forkchoiceUpdated`, `Engine/Proofs/RpcView.lean`).
 The view resolves `safe` and `finalized` to the blocks that the update named, when their hashes are not zero (`resolve_safe_of_forkchoiceUpdated`, `resolve_finalized_of_forkchoiceUpdated`).
 A notification gets no response (`answerJson_notification`).
+
+A signed transaction of every kind reads back from its JSON form (`transactionOfJson_transactionJson`, `Proofs/Rpc/Transaction.lean`).
+A typed transaction holds its parity as a 256-bit number, while the schema types it as a byte, so the round trip asks that parity to be below 256.
+That bound holds for every transaction whose signature names a sender (`parityIsByte_of_recoverSender`).
+The object that the methods return reads back as its transaction too (`transactionOfJson_transactionInfoJson`).
+The object of a transaction of a block holds the context of that block, the sender that its signature names, its hash, and its effective gas price at the base fee of the block (`BlockRecord.transactionInfo_eq_ok`, `Proofs/Rpc/TransactionInfo.lean`).
+A lookup by hash returns only that object for a transaction of that hash, at its index in a block that the node holds (`transactionByHash_some`).
+It reads a canonical block whenever one has such a transaction (`transactionByHash_canonical`), and finds nothing only when no block of the node has one (`transactionByHash_none`).
+A lookup by block and index returns the object of the transaction at that index of the block that the parameter names (`transactionByBlockAndIndex_some`), and finds nothing exactly when that block is unknown or too short (`transactionByBlockAndIndex_none`).
+In a valid view, take a canonical block after the lowest.
+Its run started from the state of the block before, reached each of its transactions after those before it, and the inclusion check passed there.
+The sender and the gas price of the object are those that this check gave (`Valid.transactionInfo_inclusion`).
+The state transition calls the inclusion check, not the check of a transaction alone; both name the sender by the same recovery of the signature.
+The lowest block, the blocks off the canonical chain and the pending block do not run, so their senders are recovered but not tied to a transition.
+
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 
