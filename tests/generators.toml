@@ -244,6 +244,11 @@ version = "execution-apis 3284ee80, read with PyYAML 6.0.2"
 source = "https://github.com/ethereum/execution-apis/tree/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/openrpc/methods"
 imports = ["yaml"]
 
+[generators."execution-apis error groups"]
+computes = "nothing: the error groups of execution-apis, written by its authors"
+version = "execution-apis 3284ee80c3da3e516c53782dde75157cccf1ebdc"
+source = "https://github.com/ethereum/execution-apis/tree/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/error-groups"
+
 [generators."EIP-779 text"]
 computes = "nothing: the list of accounts in the text of EIP-779, copied by its author"
 version = "EIP-779 at EIPs 46976b2a"
@@ -604,6 +609,14 @@ checked = "the file has no _info, and ethereum/tests bd21d174 (2015) names no to
 cases = ["**"]
 generator = "not established"
 checked = "the files have no _info, and ethereum/tests 3930ca3a (2014) names no tool"
+
+[[directories."bindings/python/tests/rpc/fixtures"]]
+cases = ["*/*.io"]
+generator = "rpctestgen on go-ethereum"
+
+[[directories."bindings/python/tests/rpc/fixtures"]]
+cases = ["error-groups/*.yaml"]
+generator = "execution-apis error groups"
 
 [[directories."bindings/python/tests/trie/getproof"]]
 cases = ["**"]

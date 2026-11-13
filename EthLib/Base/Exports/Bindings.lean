@@ -35,6 +35,15 @@ def depositTreeType : String :=
 /-- The Python type of a deposit tree snapshot: its five fields, in order. -/
 def depositTreeSnapshotType : String := "tuple[list[bytes], bytes, int, bytes, int]"
 
+/-- The Python type of a block parameter: a number, a tag, or a hash and its flag. -/
+def rpcBlockParamType : String :=
+  "tuple[Literal['number'], int] | " ++
+    "tuple[Literal['tag'], Literal['earliest', 'finalized', 'safe', 'latest', 'pending']] | " ++
+    "tuple[Literal['hash'], bytes, bool]"
+
+/-- The Python type of an error code, which may be negative: its sign, then its absolute value. -/
+def rpcSignedCodeType : String := "tuple[bool, int]"
+
 /-- The Python type of gossip outcomes: valid with no reason, or ignore or reject with one. -/
 def gossipOutcomesType : String :=
   "list[tuple[Literal['valid'], None] | tuple[Literal['ignore', 'reject'], str]]"
@@ -1461,6 +1470,17 @@ def bindings : List Binding := [
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, config: dict | None) -> bytes",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"rpc_read_param", `EthLib.Execution.Rpc.Exports.readParamExport,
+    "(schema: str, value: object) -> int | bytes | " ++ rpcBlockParamType,
+    [], some "RpcError"⟩,
+  ⟨"rpc_error_groups", `EthLib.Execution.Rpc.Exports.errorGroupsExport,
+    "() -> list[tuple[str, tuple[" ++ rpcSignedCodeType ++ ", " ++ rpcSignedCodeType ++
+      "] | None, list[tuple[" ++ rpcSignedCodeType ++ ", str]]]]",
+    [], some "RpcError"⟩,
+  ⟨"rpc_pruned_history_unavailable",
+    `EthLib.Execution.Rpc.Exports.prunedHistoryUnavailableExport,
+    "() -> tuple[" ++ rpcSignedCodeType ++ ", str]",
+    [], some "RpcError"⟩,
   ⟨"pyvalue_echo", `EthLib.Exports.pyValueEcho,
     "(value: object) -> object",
     [], some "BindingError"⟩

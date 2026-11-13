@@ -10541,6 +10541,34 @@
    "docstring":
    "From Bellatrix: the 32 bytes of the finalized block hash of a store.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block, and the steps.\n\nThen come whether the signature checks run, and replacements of values of the configuration."},
   {"summary":
+   "Read a parameter of the execution JSON-RPC API under the schema of the given name.",
+   "signature":
+   "(schema: str, value: object) -> int | bytes | tuple[Literal['number'], int] | tuple[Literal['tag'], Literal['earliest', 'finalized', 'safe', 'latest', 'pending']] | tuple[Literal['hash'], bytes, bool]",
+   "operation": "EthLib.Execution.Rpc.Exports.readParamExport",
+   "method": "rpc_read_param",
+   "errors": [],
+   "error_class": "RpcError",
+   "docstring":
+   "Read a parameter of the execution JSON-RPC API under the schema of the given name.\n\nThe arguments are the name of a base type or a block schema, and the JSON value of the parameter.\n\nA number or a `byte` is an `int`, and a byte string, an address, a hash or a slot is `bytes`.\n\nA `bytes` value has an even number of digits, though the pattern of the source admits an odd one.\n\nA value that holds Python `bytes` at any depth has no JSON form, so every schema rejects it.\n\nA block parameter is a tuple of its kind and its number, its tag, or its hash and flag.\n\nA value that the schema rejects has code 32602, the code of invalid parameters without its sign.\n\nAn unknown schema has code 0."},
+  {"summary":
+   "The groups of error codes of the execution JSON-RPC API, in the order of the source.",
+   "signature":
+   "() -> list[tuple[str, tuple[tuple[bool, int], tuple[bool, int]] | None, list[tuple[tuple[bool, int], str]]]]",
+   "operation": "EthLib.Execution.Rpc.Exports.errorGroupsExport",
+   "method": "rpc_error_groups",
+   "errors": [],
+   "error_class": "RpcError",
+   "docstring":
+   "The groups of error codes of the execution JSON-RPC API, in the order of the source.\n\nEach group is its name, its range if it declares one, and its codes, each with its message.\n\nEach code and each bound is a pair: whether it is negative, then its absolute value."},
+  {"summary": "The code of history that the node pruned, with its message.",
+   "signature": "() -> tuple[tuple[bool, int], str]",
+   "operation": "EthLib.Execution.Rpc.Exports.prunedHistoryUnavailableExport",
+   "method": "rpc_pruned_history_unavailable",
+   "errors": [],
+   "error_class": "RpcError",
+   "docstring":
+   "The code of history that the node pruned, with its message.\n\nThe code is a pair: whether it is negative, then its absolute value."},
+  {"summary":
    "The value that Python passes, back to Python, with each failure tuple read as a failure.",
    "signature": "(value: object) -> object",
    "operation": "EthLib.Exports.pyValueEcho",

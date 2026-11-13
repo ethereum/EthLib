@@ -193,6 +193,7 @@ extern PyObject* VALIDATOR_DUTY_ERROR;
 extern PyObject* PROPOSER_ERROR;
 extern PyObject* SLASHING_PROTECTION_ERROR;
 extern PyObject* BINDING_ERROR;
+extern PyObject* RPC_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
@@ -643,6 +644,12 @@ PyObject* py_engine_rewrite_params                       (PyObject* self, PyObje
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
 PyObject* py_engine_finalized_execution_block_hash       (PyObject* self, PyObject* args);
+
+/* ---- Execution JSON-RPC API (`rpc.c`) --------------------------------- */
+
+PyObject* py_rpc_read_param                              (PyObject* self, PyObject* args);
+PyObject* py_rpc_error_groups                            (PyObject* self, PyObject* args);
+PyObject* py_rpc_pruned_history_unavailable              (PyObject* self, PyObject* args);
 
 /* ---- Typed values (`pyvalue.c`) --------------------------------------- */
 

@@ -3081,6 +3081,8 @@ A byte reads back from the hex digits of its value (`byte_byteJson`).
 The schema of a byte also admits a leading zero, so `0x05` reads as the byte 5 but no writer writes it.
 A decimal number reads back from its decimal digits (`uintDecimal_uintDecimalJson`).
 A 32-bit and a 256-bit number read back from their quantities (`uint32_quantityJson`, `uint256_quantityJson`).
+A storage slot, a number on 32 bytes, reads back from the hex of its 32 bytes (`bytesMax32_dataJson`).
+The schema also admits fewer than 64 digits, so `0x1` reads as slot 1 but no writer writes it.
 
 A block parameter names a block by its number, by a tag, or by its hash.
 A number or a tag reads back from the writer (`blockNumberOrTag_number`, `blockNumberOrTag_tag`), and a range reads back every number (`blockNumberOrTagForRange_number`) and every tag but `pending` (`blockNumberOrTagForRange_tag`), which it rejects (`blockNumberOrTagForRange_pending`).
