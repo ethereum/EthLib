@@ -19,6 +19,7 @@ public import EthLib.Execution.Proofs.Evm.Call.Nonce
 public import EthLib.Execution.Proofs.Evm.Call.NoncesFit
 public import EthLib.Execution.Proofs.Evm.Call.Parent
 public import EthLib.Execution.Proofs.Evm.Call.Reads
+public import EthLib.Execution.Proofs.Evm.Call.ReadsGrow
 public import EthLib.Execution.Proofs.Evm.Call.Rebuild
 public import EthLib.Execution.Proofs.Evm.Call.Run
 public import EthLib.Execution.Proofs.Evm.Call.StaticMessage
