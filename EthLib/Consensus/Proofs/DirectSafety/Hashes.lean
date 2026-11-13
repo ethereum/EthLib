@@ -164,24 +164,6 @@ private theorem genesis_header {g : ForkedBeaconState preset}
   rw [activatedHeader, depositedHeader]
   exact ⟨rfl, rfl⟩
 
-/-- A root that a slot step makes readable was readable before, or is the root of the cached header.
-
-The cached header is the one that caching the slot leaves, and its root is at the slot before. -/
-private theorem slot_root_origin {before after : ForkedBeaconState preset}
-    (ok : advanceSlotAcross config checks before = .ok after) {slot : Slot} {root : Root}
-    (read : getBlockRootAtSlot after.state slot = .ok root) :
-    getBlockRootAtSlot before.state slot = .ok root ∨
-      slot = before.state.slot ∧ ∃ cached, processSlot before.state = .ok cached ∧
-        hashTreeRoot cached.latestBlockHeader = .ok root := by
-  obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
-  obtain ⟨cached, cachedOk, _, _, header, _⟩ := advanceSlot_cachedRoots advancedOk
-  -- The upgrades keep the slot and the roots.
-  rw [getBlockRootAtSlot_congr (processUpgrades_slot upgraded)
-    (processUpgrades_blockRoots upgraded)] at read
-  rcases getBlockRootAtSlot_advanceSlot_cases advancedOk read with ⟨_, earlier⟩ | ⟨same, hashed⟩
-  · exact .inl earlier
-  · exact .inr ⟨same, cached, cachedOk, header ▸ hashed⟩
-
 private theorem step_slots {before after : ForkedBeaconState preset}
     (step : Step config checks before after) :
     before.state.slot.toNat ≤ after.state.slot.toNat ∧
@@ -417,10 +399,14 @@ private theorem run_root_chain {g a : ForkedBeaconState preset}
         chain.mono (fun _ member => List.mem_append_left step.hashObjects member)
     cases step with
     | slot ok =>
-      rcases slot_root_origin ok read with earlier | ⟨same, cached, cachedOk, hashed⟩
+      obtain ⟨-, -, origin, -⟩ := advanceSlotAcross_cases ok
+      rcases origin read with ⟨-, earlier⟩ | ⟨same, hashed⟩
       · exact liftEarlier earlier (by simp [Step.headers])
       -- The root at the slot before is that of the header that caching the slot leaves.
       · subst slot
+        obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
+        obtain ⟨cached, cachedOk, _, _, header, _⟩ := advanceSlot_cachedRoots advancedOk
+        rw [(latestBlockHeader_processUpgrades upgraded).trans header] at hashed
         have chain := ((run_header_state pre genesis nz).mono
           (fun _ member => List.mem_append_left (Step.slot ok).hashObjects member)).cached cachedOk
         refine ⟨cached.latestBlockHeader, ?_, hashed, ?_⟩
