@@ -459,7 +459,7 @@ variable {account allStorage : Address → Prop} {slot : Address → Bytes32 →
   {code : Hash32 → Prop}
 
 /-- A state with fewer reads than one whose reads are in the sets has its reads in the sets. -/
-private theorem ReadsIn.of_readsLe {tx tx' : TransactionState} (h : tx.ReadsLe tx')
+theorem ReadsIn.of_readsLe {tx tx' : TransactionState} (h : tx.ReadsLe tx')
     (hr : ReadsIn account slot tx') : ReadsIn account slot tx :=
   ⟨fun a ha => hr.account a (h.accountReads a ha),
     fun a k hk => hr.slot a k (h.storageReads a k hk)⟩
