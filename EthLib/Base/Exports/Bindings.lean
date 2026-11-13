@@ -633,6 +633,29 @@ def bindings : List Binding := [
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, root: bytes, envelope: bytes) -> bytes",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_attestation_data", `EthLib.Consensus.Exports.apiAttestationDataExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, optimistic_roots: list[bytes], slot: int, " ++
+      "committee_index: int) -> dict[str, Any]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_payload_attestation_data",
+    `EthLib.Consensus.Exports.apiPayloadAttestationDataExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, slot: int, payload_present: bool, " ++
+      "blob_data_available: bool) -> dict[str, Any] | None",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_aggregate_attestation",
+    `EthLib.Consensus.Exports.apiAggregateAttestationExport,
+    "(name: str, fork: str, state: bytes, attestations: list[bytes], singles: list[bytes], " ++
+      "optimistic_roots: list[bytes], data_root: bytes, slot: int, " ++
+      "committee_index: int) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_sync_committee_contribution",
+    `EthLib.Consensus.Exports.apiSyncCommitteeContributionExport,
+    "(name: str, fork: str, state: bytes, messages: list[bytes], " ++
+      "optimistic_roots: list[bytes], slot: int, subcommittee_index: int, " ++
+      "root: bytes) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
   ⟨"consensus_api_duties", `EthLib.Consensus.Exports.apiDutiesExport,
     "(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, " ++
       "epoch: int, indices: list[int], genesis_root: bytes) -> dict[str, Any]",
