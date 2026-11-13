@@ -593,6 +593,14 @@ def consensus_api_state_query_ssz(name: str, fork: str, state: bytes, query: str
     """The SSZ body of the response to a query on a state, as `bytes`."""
     ...
 
+def consensus_api_validator_status(validator: dict[str, Any], balance: int, epoch: int) -> tuple[str, str]:
+    """The status of a validator with a balance at an epoch, and the name of its group."""
+    ...
+
+def consensus_api_builder_status(name: str, fork: str, state: bytes, index: int) -> str:
+    """The status of the builder at an index of a state, as its name."""
+    ...
+
 def consensus_api_resolve(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, queries: list) -> list:
     """The answer to each query, against the store after the steps of a fork choice case."""
     ...
