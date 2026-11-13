@@ -3891,12 +3891,11 @@ As a choice of EthLib, the object copies it, so `gasUsed` is the gas that the se
 
 `eth_getLogs` reads the logs that a filter of [`filter.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/filter.yaml) selects (`Execution/Rpc/Filter.lean`).
 A filter names one block by its hash, or a range of canonical blocks by its bounds, and then the addresses and the topics at each position that it takes.
-A range reads exactly the canonical blocks between its bounds, whose two bounds are in order, the first at least the lowest block and the last at most the head (`filterBlocks_range`).
+A range is valid exactly when its bounds resolve to numbers in order, the first at least the lowest block and the last at most the head (`filterBlocks_range_eq_ok_iff`).
+It then reads exactly the canonical blocks between its bounds.
 A number bound above the head makes the range invalid, whatever the other bound, as the method requires (`filterBlocks_aboveHead`).
 So do bounds that resolve above the head or out of order, whatever the pruned history (`filterBlocks_invalid`).
-Conversely, bounds that name blocks in order between the lowest block and the head always read those blocks (`filterBlocks_range_eq_ok_iff`).
-So a range whose two bounds are the same block is valid.
-So is a last bound at the head, as the inclusive range of the method requires.
+So two equal bounds between the lowest block and the head are valid, and so is a last bound at the head, as the inclusive range of the method requires.
 A block hash reads the one block of that hash (`filterBlocks_hash`).
 The returned logs are the matching logs of the receipt objects of those blocks, in block order, then in their order in each block (`getLogs_eq_ok`).
 Every returned log matches the filter and is a log of a receipt object of a block that the filter reads (`getLogs_sound`).

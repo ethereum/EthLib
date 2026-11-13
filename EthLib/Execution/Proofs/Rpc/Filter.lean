@@ -17,7 +17,9 @@ It lies between the lowest block that the node holds and the head.
 
 A number bound above the head is an invalid range, whatever the other bound.
 
-Any bounds in order between the lowest block and the head read blocks, even two equal bounds.
+Bounds that resolve in order between the lowest block and the head make a valid range.
+
+So two equal bounds, or a last bound at the head, make a valid range.
 
 In a valid view, take a canonical block after the lowest.
 
@@ -170,36 +172,11 @@ theorem filterBlocks_invalid {v : ChainView} {fromBlock toBlock : Option BlockPa
       refine ⟨"the first bound is above the last", ?_⟩
       simp [hA, h1, h2, hh, hl, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
-/-- A range reads exactly the canonical blocks between its two bounds.
+/-- A range is valid exactly when its bounds resolve to numbers in order.
 
-Its first bound is at least the lowest block, and at most its last, which is at most the head. -/
-theorem filterBlocks_range {v : ChainView} {fromBlock toBlock : Option BlockParam}
-    {blocks : List BlockRecord} (h : v.filterBlocks (.range fromBlock toBlock) = .ok blocks) :
-    ∃ first last, v.boundNumber fromBlock = .ok first ∧ v.boundNumber toBlock = .ok last ∧
-      v.lowest.block.header.number ≤ first ∧ first ≤ last ∧ last ≤ v.head.block.header.number ∧
-      blocks = v.canonical.filter fun r =>
-        first ≤ r.block.header.number && r.block.header.number ≤ last := by
-  unfold filterBlocks at h
-  by_cases hA : (v.aboveHead fromBlock || v.aboveHead toBlock) = true
-  · simp [hA, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
-  · simp only [hA, ite_false, Bool.false_eq_true, bind, Except.bind] at h
-    obtain ⟨first, h1, h⟩ := bind_ok_iff.mp h
-    obtain ⟨last, h2, h⟩ := bind_ok_iff.mp h
-    by_cases hh : v.head.block.header.number < last
-    · simp [hh, throw, throwThe, MonadExceptOf.throw] at h
-    · by_cases hl : last < first
-      · simp [hh, hl, throw, throwThe, MonadExceptOf.throw] at h
-      · by_cases hp : first < v.lowest.block.header.number
-        · simp [hh, hl, hp, throw, throwThe, MonadExceptOf.throw] at h
-        · simp only [hh, hl, hp, ite_false, pure, Except.pure] at h
-          cases h
-          exact ⟨first, last, h1, h2, by omega, by omega, by omega, rfl⟩
+The first is at least the lowest block, and the last is at most the head.
 
-/-- A range reads blocks exactly when its bounds are in order between the lowest block and the head.
-
-It then reads the canonical blocks between its two bounds.
-
-So the two bounds of a range may be the same block, and the last bound may be the head. -/
+It then reads the canonical blocks between its two bounds. -/
 theorem filterBlocks_range_eq_ok_iff {v : ChainView} {fromBlock toBlock : Option BlockParam}
     {blocks : List BlockRecord} :
     v.filterBlocks (.range fromBlock toBlock) = .ok blocks ↔
@@ -208,17 +185,44 @@ theorem filterBlocks_range_eq_ok_iff {v : ChainView} {fromBlock toBlock : Option
         last ≤ v.head.block.header.number ∧
         blocks = v.canonical.filter fun r =>
           first ≤ r.block.header.number && r.block.header.number ≤ last := by
-  refine ⟨filterBlocks_range, ?_⟩
-  rintro ⟨first, last, h1, h2, hp, hl, hh, rfl⟩
-  have hA : ∀ {p : Option BlockParam} {n : Nat}, v.boundNumber p = .ok n →
-      n ≤ v.head.block.header.number → v.aboveHead p = false := by
-    intro p n hb hn
-    rcases p with _ | ⟨_ | _ | _⟩ <;> simp_all [aboveHead, boundNumber]
-  have hA1 := hA h1 (by omega)
-  have hA2 := hA h2 hh
-  unfold filterBlocks
-  simp [hA1, hA2, h1, h2, Nat.not_lt.mpr hh, Nat.not_lt.mpr hl, Nat.not_lt.mpr hp, bind,
-    Except.bind, pure, Except.pure]
+  constructor
+  · intro h
+    unfold filterBlocks at h
+    by_cases hA : (v.aboveHead fromBlock || v.aboveHead toBlock) = true
+    · simp [hA, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+    · simp only [hA, ite_false, Bool.false_eq_true, bind, Except.bind] at h
+      obtain ⟨first, h1, h⟩ := bind_ok_iff.mp h
+      obtain ⟨last, h2, h⟩ := bind_ok_iff.mp h
+      by_cases hh : v.head.block.header.number < last
+      · simp [hh, throw, throwThe, MonadExceptOf.throw] at h
+      · by_cases hl : last < first
+        · simp [hh, hl, throw, throwThe, MonadExceptOf.throw] at h
+        · by_cases hp : first < v.lowest.block.header.number
+          · simp [hh, hl, hp, throw, throwThe, MonadExceptOf.throw] at h
+          · simp only [hh, hl, hp, ite_false, pure, Except.pure] at h
+            cases h
+            exact ⟨first, last, h1, h2, by omega, by omega, by omega, rfl⟩
+  · rintro ⟨first, last, h1, h2, hp, hl, hh, rfl⟩
+    have hA : ∀ {p : Option BlockParam} {n : Nat}, v.boundNumber p = .ok n →
+        n ≤ v.head.block.header.number → v.aboveHead p = false := by
+      intro p n hb hn
+      rcases p with _ | ⟨_ | _ | _⟩ <;> simp_all [aboveHead, boundNumber]
+    have hA1 := hA h1 (by omega)
+    have hA2 := hA h2 hh
+    unfold filterBlocks
+    simp [hA1, hA2, h1, h2, Nat.not_lt.mpr hh, Nat.not_lt.mpr hl, Nat.not_lt.mpr hp, bind,
+      Except.bind, pure, Except.pure]
+
+/-- A range reads exactly the canonical blocks between its two bounds.
+
+Its first bound is at least the lowest block, and at most its last, which is at most the head. -/
+theorem filterBlocks_range {v : ChainView} {fromBlock toBlock : Option BlockParam}
+    {blocks : List BlockRecord} (h : v.filterBlocks (.range fromBlock toBlock) = .ok blocks) :
+    ∃ first last, v.boundNumber fromBlock = .ok first ∧ v.boundNumber toBlock = .ok last ∧
+      v.lowest.block.header.number ≤ first ∧ first ≤ last ∧ last ≤ v.head.block.header.number ∧
+      blocks = v.canonical.filter fun r =>
+        first ≤ r.block.header.number && r.block.header.number ≤ last :=
+  filterBlocks_range_eq_ok_iff.mp h
 
 /-- A block hash reads the one block of that hash that the node holds. -/
 theorem filterBlocks_hash {v : ChainView} {hash : Hash32} {blocks : List BlockRecord}
