@@ -1122,8 +1122,7 @@ private theorem link_source_lt {fork : Fork} {state : BeaconState preset fork}
     have laterNat := UInt64.lt_iff_toNat_lt.mp later
     apply UInt64.lt_iff_toNat_lt.mpr
     simp only [getPreviousEpoch_toNat] at settledNat
-    have one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := by decide
-    rw [one] at laterNat
+    rw [toNat_genesisEpoch_add_one] at laterNat
     simp only [↓reduceIte]
     omega
 
