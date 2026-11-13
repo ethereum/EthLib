@@ -33,6 +33,8 @@ A voluntary exit is signed by an active validator, which then has an exit epoch.
 The operations of a block hold every outstanding deposit, up to the most per block.
 
 They keep one balance for each validator.
+
+From Gloas an attestation weighs the payment of its slot by its attesters that had no flag before.
 -/
 
 @[expose] public section
@@ -479,6 +481,126 @@ theorem recordPaymentWeight_of_noWeight {gloas : .glamsterdam ≤ fork} {data : 
       rfl
     · exact Vector.getElem_set_ne _ _ (Ne.symm same)
   simp only [kept]
+
+/-- From Gloas, the weight of a payment after one attester.
+
+The attester must have flags in both participation lists, else the index is out of range.
+
+It adds its effective balance exactly when it had no flag before and has one after.
+
+The sum must then be below `2^64`, else it is an overflow.
+
+Otherwise the weight stays as it was, even when the attester gains a flag. -/
+theorem addPaymentWeight_eq_ok_iff {before updated : EpochParticipation preset fork}
+    {weight result : Gwei} {index : ValidatorIndex} :
+    addPaymentWeight state before updated weight index = .ok result ↔
+      ∃ old new, before.data[index.toNat]? = some old ∧ updated.data[index.toNat]? = some new ∧
+        if old = 0 ∧ new ≠ 0 then
+          ∃ validator, state.validators.data[index.toNat]? = some validator ∧
+            weight.toNat + validator.effectiveBalance.toNat < 2 ^ 64 ∧
+            result.toNat = weight.toNat + validator.effectiveBalance.toNat
+        else result = weight := by
+  unfold addPaymentWeight
+  rcases oldAt : before.data[index.toNat]? with _ | old
+  · simp
+  rcases newAt : updated.data[index.toNat]? with _ | new
+  · simp
+  simp only [Option.some.injEq, exists_and_left, exists_eq_left']
+  by_cases zero : old = 0
+  · subst zero
+    by_cases none : new = 0
+    · subst none
+      simp [pure, Except.pure, eq_comm]
+    · rcases found : state.validators.data[index.toNat]? with _ | validator <;>
+        simp [none, found, getValidator, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+          addChecked_ok_iff]
+  · simp [zero, pure, Except.pure, eq_comm]
+
+/-- From Gloas, an attester that already had a flag in the epoch adds no weight to a payment.
+
+That holds even when the attestation gives it a new flag. -/
+theorem addPaymentWeight_of_ne_zero {before updated : EpochParticipation preset fork}
+    {weight : Gwei} {index : ValidatorIndex} {old new : ParticipationFlags}
+    (oldAt : before.data[index.toNat]? = some old) (flagged : old ≠ 0)
+    (newAt : updated.data[index.toNat]? = some new) :
+    addPaymentWeight state before updated weight index = .ok weight :=
+  addPaymentWeight_eq_ok_iff.mpr ⟨old, new, oldAt, newAt, by simp [flagged]⟩
+
+/-- From Gloas, the attesters of an attestation add their effective balances to a weight.
+
+Each adds its balance when it had no flag before and has one after, and nothing otherwise. -/
+theorem foldlM_addPaymentWeight {before updated : EpochParticipation preset fork} :
+    ∀ {attesters : List ValidatorIndex} {weight result : Gwei},
+      attesters.foldlM (addPaymentWeight state before updated) weight = .ok result →
+        result.toNat = weight.toNat + (attesters.map fun index =>
+          if before.data[index.toNat]? = some 0 ∧ updated.data[index.toNat]? ≠ some 0 then
+            ((state.validators.data[index.toNat]?).map (·.effectiveBalance.toNat)).getD 0
+          else 0).sum
+  | [], _, _, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    simp [computed]
+  | index :: rest, weight, result, computed => by
+    simp only [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨next, step, folded⟩ := computed
+    rw [foldlM_addPaymentWeight folded, List.map_cons, List.sum_cons, ← Nat.add_assoc]
+    congr 1
+    obtain ⟨old, new, oldAt, newAt, value⟩ := addPaymentWeight_eq_ok_iff.mp step
+    rw [oldAt, newAt]
+    split at value
+    · rename_i fresh
+      obtain ⟨validator, found, _, sum⟩ := value
+      simp [fresh, found, sum]
+    · rename_i fresh
+      have notFresh : ¬(some old = some (0 : ParticipationFlags) ∧ some new ≠ some 0) := by
+        simpa using fresh
+      simp only [notFresh, value, ite_false, Nat.add_zero]
+
+/-- From Gloas, an attestation weighs the payment of its slot by the balances of its new attesters.
+
+A new attester had no flag in the epoch before the attestation and has one after it.
+
+Only a vote for the block of its own slot weighs, and only a payment of a positive amount.
+
+The payment keeps its withdrawal. -/
+theorem recordPaymentWeight_weight {gloas : .glamsterdam ≤ fork} {data : AttestationData}
+    {current : Bool} {before updated : EpochParticipation preset fork}
+    {attesters : List ValidatorIndex} {sameSlot : Bool} {payment : BuilderPendingPayment}
+    (computed : recordPaymentWeight state gloas data current before updated attesters = .ok after)
+    (same : isAttestationSameSlot state data = .ok sameSlot)
+    (found : (state.builderPendingPayments gloas)[
+      attestationPaymentPosition preset current data.slot]? = some payment) :
+    ∃ weight : Gwei, (after.builderPendingPayments gloas)[
+        attestationPaymentPosition preset current data.slot]? = some { payment with weight } ∧
+      weight.toNat = payment.weight.toNat +
+        if sameSlot = true ∧ 0 < payment.withdrawal.amount then
+          (attesters.map fun index =>
+            if before.data[index.toNat]? = some 0 ∧ updated.data[index.toNat]? ≠ some 0 then
+              ((state.validators.data[index.toNat]?).map (·.effectiveBalance.toNat)).getD 0
+            else 0).sum
+        else 0 := by
+  unfold recordPaymentWeight at computed
+  dsimp only at computed
+  split at computed
+  rotate_left
+  · cases computed
+  rename_i inside
+  have stored : (state.builderPendingPayments gloas)[
+      attestationPaymentPosition preset current data.slot] = payment := by
+    rw [RootedVector.getElem?_eq, Vector.getElem?_eq_getElem inside] at found
+    exact Option.some.inj found
+  subst stored
+  simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨sameSlot', sameOk, weight, weightOk, rfl⟩ := computed
+  rw [same, Except.ok.injEq] at sameOk
+  subst sameOk
+  refine ⟨weight, by simp, ?_⟩
+  split at weightOk
+  · rename_i weighs
+    simp only [weighs, and_self, ite_true]
+    exact foldlM_addPaymentWeight weightOk
+  · rename_i weighs
+    simp only [Except.ok.injEq] at weightOk
+    simp [weighs, weightOk]
 
 /-- From Altair, an attestation keeps the sizes of the registry and the balances. -/
 theorem sameSizes_processAttestationAltair {attestation : Attestation preset fork}
