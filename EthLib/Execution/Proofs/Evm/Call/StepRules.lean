@@ -41,7 +41,9 @@ So it can only look at the state and the substate, apart from the logs and the r
 
 It must hold of each write of storage, of transient storage and of a log.
 
-It must hold of the rise of a nonce, and of a caller that takes in a child related to it.
+It must hold of the rise of a nonce that is not the greatest.
+
+It must hold of a caller that takes in a child related to it.
 
 It also relates a caller to the frame that ends each message the caller sends. -/
 structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter → Prop) : Prop where
@@ -63,8 +65,9 @@ structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter
   log : ∀ {a b : Evm fork Meter} (log : Blocks.Log), b.state = a.state →
     b.substate = { a.substate with logs := a.substate.logs.push log } → b.message = a.message →
     b.code = a.code → R a b
-  /-- The rise of a nonce keeps the relation. -/
+  /-- The rise of a nonce that is not the greatest keeps the relation. -/
   incrementNonce : ∀ (evm : Evm fork Meter) (address : Address) (state : TransactionState),
+    (evm.state.getAccount address).nonce ≠ MAX_NONCE →
     evm.state.incrementNonce fork address = .ok state → R evm { evm with state }
   /-- A caller that takes in a child related to it is related to its frame before. -/
   incorporate : ∀ {caller child : Evm fork Meter}, R caller child →
@@ -107,7 +110,7 @@ theorem stepRules_messageCode :
   tstore _ _ _ _ := ⟨rfl, rfl⟩
   log _ _ _ hm hc := ⟨hm, hc⟩
   selfdestruct _ _ h := ⟨message_finishSelfdestruct h, code_finishSelfdestruct h⟩
-  incrementNonce _ _ _ _ := ⟨rfl, rfl⟩
+  incrementNonce _ _ _ _ _ := ⟨rfl, rfl⟩
   incorporate _ := ⟨message_incorporateChild _ _, code_incorporateChild _ _⟩
 
 namespace OrdinaryStepRules
@@ -317,6 +320,7 @@ theorem launchCreate (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter} {
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
     exact (rules.static (pre.trans (staticStep_skipCall hs)) :)
+  rename_i hcheck
   obtain ⟨address, -, h⟩ := Base.bind_ok_iff.mp h
   have c0 : StaticStep evm (recordAccountRead (accessAddress (recordAccountRead
       { evm with returnData := .empty } evm.message.currentTarget) address).2 address) :=
@@ -325,9 +329,16 @@ theorem launchCreate (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter} {
   · obtain ⟨e1, h1, hr⟩ := Base.bind_ok_iff.mp hr
     obtain ⟨e2, h2, hr⟩ := Base.bind_ok_iff.mp hr
     obtain ⟨state, hst, hr⟩ := Base.bind_ok_iff.mp hr
-    have ms : R evm { e2 with state } := rules.trans (rules.static (c0.trans (.of_sameContext
-      ((chargeStateGas_sameContext h1).trans (chargeGas_sameContext h2)))))
-      (rules.incrementNonce _ _ _ (Base.mapError_ok_iff.mp hst))
+    have c2 : StaticStep evm e2 := c0.trans (.of_sameContext
+      ((chargeStateGas_sameContext h1).trans (chargeGas_sameContext h2)))
+    have hn : (e2.state.getAccount evm.message.currentTarget).nonce ≠ MAX_NONCE := by
+      intro heq
+      refine hcheck (.inr (.inl ?_))
+      rw [← heq]
+      unfold TransactionState.getAccount
+      rw [(pre.state _ List.not_mem_nil).1, (c2.state _ List.not_mem_nil).1]
+    have ms : R evm { e2 with state } :=
+      rules.trans (rules.static c2) (rules.incrementNonce _ _ _ hn (Base.mapError_ok_iff.mp hst))
     split at hr
     · cases hr
       have md : R evm { e2 with state, gas := GasMeter.drain e2.gas } :=
@@ -443,8 +454,8 @@ theorem and {S : Evm fork Meter → Evm fork Meter → Prop} (r : StepRules fork
   log log hs hsub hm hc := ⟨r.log log hs hsub hm hc, s.log log hs hsub hm hc⟩
   selfdestruct beneficiary refund h :=
     ⟨r.selfdestruct beneficiary refund h, s.selfdestruct beneficiary refund h⟩
-  incrementNonce evm address state h :=
-    ⟨r.incrementNonce evm address state h, s.incrementNonce evm address state h⟩
+  incrementNonce evm address state hn h :=
+    ⟨r.incrementNonce evm address state hn h, s.incrementNonce evm address state hn h⟩
   incorporate h := ⟨r.incorporate h.1, s.incorporate h.2⟩
 
 /-- A successful SELFDESTRUCT keeps the relation. -/
@@ -739,6 +750,37 @@ theorem step_eq_child_resume {evm caller : Evm fork Meter} {message : Message fo
       resume = resumeCall fork caller newAccount outputStart outputSize) ∨
     ∃ newAccount address, resume = resumeCreate fork caller newAccount address :=
   (sends_step h).1
+
+/-- A call instruction sends only messages with a target. -/
+theorem callStep_target_ne {kind : CallKind} {evm caller : Evm fork Meter}
+    {message : Message fork} {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (h : callStep kind evm = .ok (.child caller message resume)) : message.target ≠ none := by
+  unfold Evm.callStep at h
+  obtain ⟨⟨call, e1⟩, -, h⟩ := Base.bind_ok_iff.mp h
+  dsimp only at h
+  split at h
+  · simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h; cases h
+  rcases hacc : accessAddress e1 call.address with ⟨cold, e2⟩
+  simp only [hacc] at h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  rcases keepReads_eq_ok h with h | ⟨_, hc⟩
+  · obtain ⟨⟨callee, e4⟩, -, h⟩ := Base.bind_ok_iff.mp h
+    dsimp only at h
+    rcases keepReads_eq_ok h with h | ⟨_, hc⟩
+    · obtain ⟨⟨subCall, e5⟩, -, h⟩ := Base.bind_ok_iff.mp h
+      unfold Evm.finishCall at h
+      split at h
+      · cases h
+      dsimp only at h
+      split at h
+      · obtain ⟨_, -, hc⟩ := Base.map_ok_iff.mp h; cases hc
+      · unfold Evm.genericCall at h
+        dsimp only at h
+        split at h
+        · obtain ⟨_, -, hc⟩ := Base.map_ok_iff.mp h; cases hc
+        · cases h; simp
+    · cases hc
+  · cases hc
 
 /-- Each creation that a successful step sends goes to an address where a contract may be deployed.
 
