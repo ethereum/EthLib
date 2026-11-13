@@ -32,15 +32,12 @@ theorem climbBranch_cons (index level : Nat) (node sibling : Bytes) (rest : List
   rfl
 
 /-- Climbing a joined branch climbs the front, then the back from where the front ends. -/
-theorem climbBranch_append (index : Nat) :
-    ∀ (level : Nat) (node : Bytes) (front back : List Bytes),
+theorem climbBranch_append (index level : Nat) (node : Bytes) (front back : List Bytes) :
     climbBranch index level node (front ++ back)
-      = climbBranch index (level + front.length) (climbBranch index level node front) back
-  | level, node, [], back => by simp
-  | level, node, sibling :: rest, back => by
-    rw [List.cons_append, climbBranch_cons, climbBranch_cons,
-      climbBranch_append index (level + 1),
-      show level + 1 + rest.length = level + (sibling :: rest).length by simp; omega]
+      = climbBranch index (level + front.length) (climbBranch index level node front) back := by
+  unfold climbBranch
+  rw [Cryptography.Merkle.climb_append]
+  simp [Nat.shiftRight_eq_div_pow, Nat.div_div_eq_div_mul, Nat.pow_add]
 
 /-- A node and its sibling combine to the node above them, in whichever order they sit. -/
 theorem combine_sibling {node : Nat → Bytes} (tree : MerkleTree node) (index : Nat)
