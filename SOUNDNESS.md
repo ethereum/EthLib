@@ -1995,6 +1995,21 @@ The storage value of a slot that is not set is 0, so the answer must give that w
 EIP-1186 does not say which fields the answer holds for an address without an account.
 So the check judges no field of an absent account, and reports the absence.
 
+The node's side is `AccountProof.ofState`: the answer that a state gives, with the proofs of its own tries.
+For an address with no account it gives the fields of the empty account and the root of the empty trie, one of the two readings that the check accepts.
+`ChainView.accountProof` (`Execution/Rpc/Proof.lean`) serves it as `eth_getProof` at the block that the parameter names.
+`verify_ofState` (`Execution/Proofs/State/AccountProofOfState.lean`) proves completeness: the answer passes the check against the state root.
+It reports the account present exactly when the state has it, and, for a present account, each slot set exactly when its word is not zero.
+The theorem does not assume distinct key hashes.
+When the answer does not pass, the search `findAnswerCollision` returns two keys with one hash.
+It reads the address, the addresses of the state, the slots asked for and the storage keys of the address.
+It assumes that an address with no account has the word zero at each slot asked for.
+No theorem shows that the state transition keeps that property, though the fixtures expect the word zero there.
+`Valid.verify_accountProof` applies it to a canonical block of a valid view, against the state root of its header.
+An answer at the pending block or at a block off the canonical chain is not covered, since the view does not check their states.
+`accountProof_agree` proves that the balance, the nonce and the words of the answer are those of `eth_getBalance`, `eth_getTransactionCount` and `eth_getStorageAt` at the same block.
+`accountProofOfJson_accountProofJson` proves that the reader reads back what the writer writes, for a nonce below `2^64`.
+
 ### The RLPx session
 
 `receive` (`Networking/Devp2p/Session.lean`) follows an RLPx session after the handshake, frame by frame.

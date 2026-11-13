@@ -22,8 +22,10 @@ The tests replay it through the state transition into a chain view, and send the
 They compare a result as a JSON value, and an error by its code, and by its data where the file gives it.
 A file marked `speconly` is checked against the schema of the result only, as `docs-api/docs/tests.md` of the source says.
 
-The view serves `eth_blockNumber`, `eth_chainId`, `eth_config`, `net_version`, `eth_getTransactionByHash`, `eth_getTransactionByBlockHashAndIndex`, `eth_getTransactionByBlockNumberAndIndex`, `eth_getHeaderByHash`, `eth_getHeaderByNumber`, `eth_getBlockByHash`, `eth_getBlockByNumber`, `eth_getBlockTransactionCountByHash`, `eth_getBlockTransactionCountByNumber`, `eth_getTransactionReceipt`, `eth_getBlockReceipts`, `eth_getLogs`, the account queries `eth_getBalance`, `eth_getTransactionCount`, `eth_getCode`, `eth_getStorageAt` and `eth_getStorageValues`, and the four raw getters `debug_getRawHeader`, `debug_getRawBlock`, `debug_getRawTransaction` and `debug_getRawReceipts`.
+The view serves `eth_blockNumber`, `eth_chainId`, `eth_config`, `net_version`, `eth_getTransactionByHash`, `eth_getTransactionByBlockHashAndIndex`, `eth_getTransactionByBlockNumberAndIndex`, `eth_getHeaderByHash`, `eth_getHeaderByNumber`, `eth_getBlockByHash`, `eth_getBlockByNumber`, `eth_getBlockTransactionCountByHash`, `eth_getBlockTransactionCountByNumber`, `eth_getTransactionReceipt`, `eth_getBlockReceipts`, `eth_getLogs`, the account queries `eth_getBalance`, `eth_getTransactionCount`, `eth_getCode`, `eth_getStorageAt` and `eth_getStorageValues`, the proof `eth_getProof`, and the four raw getters `debug_getRawHeader`, `debug_getRawBlock`, `debug_getRawTransaction` and `debug_getRawReceipts`.
 The files of the other methods run through the readers of the parameters, without a chain.
+
+The trie suite also checks each answer of `eth_getProof` against the state root of block 60.
 
 Two files of `eth_getStorageAt` and one of `debug_traceBlockByNumber` answer with an error, because a reader rejects a parameter.
 The files of `eth_getStorageAt` and of the raw getters that answer with an error go through the view, and also through the readers alone.
