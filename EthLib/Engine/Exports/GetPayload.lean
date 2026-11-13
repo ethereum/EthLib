@@ -28,6 +28,8 @@ The configuration determines the fork at the block's number and timestamp.
 A malformed store or method name has code 0.
 
 A parameter or request error has code 32602, 38001 or 38005.
+
+A second export reads a result of the method at a fork, and writes it back as JSON.
 -/
 
 public section
@@ -40,7 +42,6 @@ open EthLib.Base
 open EthLib.Base.ChainConfig.Exports (configOfJson)
 open EthLib.Execution.Blocks (Block)
 open EthLib.Execution.Transactions
-open EthLib.Serialization.JsonRpc (dataJson quantityJson listJson)
 
 /-- An ID, a fork, a block, accounts, requests, a value, network forms, an override and a list. -/
 abbrev PayloadEntry := PayloadId × String × ByteArray × ByteArray × List ByteArray × Nat ×
@@ -72,30 +73,6 @@ def getPayloadVersion (method : String) : Option Nat :=
   ["engine_getPayloadV1", "engine_getPayloadV2", "engine_getPayloadV3", "engine_getPayloadV4",
     "engine_getPayloadV5", "engine_getPayloadV6"].idxOf? method |>.map (· + 1)
 
-/-- The execution payload as JSON, with the fields of the version of its fork. -/
-def payloadJson (r : GetPayloadResponse) : Json :=
-  if h : .glamsterdam ≤ r.stored.fork then
-    Engine.Json.executionPayloadV4Json r.payload (r.stored.blockAccessList h)
-      (r.stored.built.block.header.slotNumber h)
-  else Engine.Json.executionPayloadJson r.payload
-
-/-- The JSON fields of the blobs bundle: its blobs, commitments and proofs, in order. -/
-def blobsBundleJson (bundle : BlobsBundle) : Json :=
-  Json.mkObj [("blobs", listJson (dataJson ·.toList) bundle.blobs),
-    ("commitments", listJson (dataJson ·.toList) bundle.commitments),
-    ("proofs", listJson (dataJson ·.toList) bundle.proofs)]
-
-/-- Version 1 returns the payload alone; later versions append their fields in order. -/
-def getPayloadResultJson (version : Nat) (r : GetPayloadResponse) : Json :=
-  if version = 1 then payloadJson r else
-  Json.mkObj ([("executionPayload", payloadJson r),
-    ("blockValue", quantityJson r.stored.built.blockValue)] ++
-    (if version ≥ 3 then [("blobsBundle", blobsBundleJson r.stored.bundle),
-      ("shouldOverrideBuilder", .bool r.stored.shouldOverrideBuilder)] else []) ++
-    (if version ≥ 4 then
-      [("executionRequests", listJson (dataJson ·.data.toList) r.stored.built.requests)]
-    else []))
-
 /-- The answer to a get-payload request, from a snapshot of build processes. -/
 def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyValue := do
   let (config, entries, request) := args
@@ -118,7 +95,7 @@ def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyVal
     | .noPayload => (0, "store: the block has no payload form")
     | .header e => (0, s!"store: the payload does not give the block: error {e.code}")
     | .bundle e => (0, s!"store: bundle error {e.code}")
-  return .ofJson (getPayloadResultJson version r)
+  return .ofJson (getPayloadResultJson (r.result version))
 
 /-- The answer to an `engine_getPayload` request, from the configuration and a store snapshot.
 
@@ -129,5 +106,25 @@ Each entry is the payload ID, the fork name and the four results of the payload 
 Then come its network blob transactions, the override flag and the block access list or `None`. -/
 @[export eth_engine_get_payload]
 def getPayloadExport (args : PyValue) : Result PyValue := pyExport getPayloadOf args
+
+/-- The result of the method that a name gives, read at a fork and written back as JSON. -/
+def readGetPayloadResultOf (args : String × String × PyValue) : Result PyValue := do
+  let (method, forkName, result) := args
+  let some version := getPayloadVersion method | throw (0, s!"no method {method}")
+  let fork ← EthLib.Exports.forkUpTo .glamsterdam forkName.toUTF8
+  let r ← (getPayloadResultOfJson version fork result.toJson).mapError
+    fun e => (e.code, s!"engine error: {reprStr e}")
+  return .ofJson (getPayloadResultJson r)
+
+/-- The result of an `engine_getPayload` method at a fork, read from its JSON and written back.
+
+The arguments are the method name, the fork name and the result, as `json.loads` gives it.
+
+A result that does not decode is an invalid parameter, with code 32602.
+
+An unknown method name, or a fork after Glamsterdam, has code 0. -/
+@[export eth_engine_read_get_payload_result]
+def readGetPayloadResultExport (args : PyValue) : Result PyValue :=
+  pyExport readGetPayloadResultOf args
 
 end EthLib.Engine.Exports

@@ -616,7 +616,7 @@ generator = "not established"
 checked = "the files have no _info, and ethereum/tests 3930ca3a (2014) names no tool"
 
 [[directories."bindings/python/tests/rpc/fixtures"]]
-cases = ["*/*.io"]
+cases = ["*/*.io", "chain.rlp", "genesis.json", "forkenv.json", "headfcu.json"]
 generator = "rpctestgen on go-ethereum"
 
 [[directories."bindings/python/tests/rpc/fixtures"]]

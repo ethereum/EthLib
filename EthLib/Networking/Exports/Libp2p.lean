@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Exports.PyDerive
 public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Networking.Libp2p.Mplex
+public import EthLib.Networking.Libp2p.MplexSession
 public import EthLib.Networking.Libp2p.Multistream
 public import EthLib.Networking.Libp2p.PeerId
 public import EthLib.Networking.Libp2p.Upgrade
@@ -44,6 +45,8 @@ Each such input breaks a rule of its source, so it has no bytes.
 Another export module that passes a frame imports its conversions from this module.
 
 The keys of a frame `dict` are the field names of its Lean structure, in snake case.
+
+The mplex streams of one side cross as a list of an ID, who opened it, and a state name.
 -/
 
 public section
@@ -182,6 +185,56 @@ def mplexDecodeExport (args : PyValue) : Result PyValue :=
     let (frame, rest) ← (Mplex.decode data.data.toList).mapError
       fun e => (e.code, s!"mplex frame rejected: {reprStr e}")
     return (frame, (⟨rest.toArray⟩ : ByteArray))) args
+
+/-- The name of a stream state in snake case, such as `remote_closed+local_reset`.
+
+The name says which sides closed the stream, then which sides reset it. -/
+def mplexStateName (s : Mplex.StreamState) : String :=
+  let closed := match s.localClosed, s.remoteClosed with
+    | false, false => "open"
+    | true, false => "local_closed"
+    | false, true => "remote_closed"
+    | true, true => "closed"
+  closed ++ (if s.localReset then "+local_reset" else "") ++
+    (if s.remoteReset then "+remote_reset" else "")
+
+/-- A message for a refused frame, phrased for someone reading a Python traceback. -/
+def mplexSessionMessage : Mplex.MplexSessionError → String
+  | .reusedId i l => s!"stream {i} (opened locally: {l}) was opened before"
+  | .unknownStream i l => s!"stream {i} (opened locally: {l}) is unknown"
+  | .writeAfterClose i l => s!"write on stream {i} (opened locally: {l}) after its close or reset"
+
+/-- The mplex frames at the start of the bytes, until the bytes end. -/
+def mplexFrames (data : List UInt8) : Except Mplex.MplexError (List Mplex.Frame) := do
+  let mut rest := data
+  let mut frames := #[]
+  for _ in List.range data.length do
+    if rest.isEmpty then break
+    let (frame, after) ← Mplex.decode rest
+    frames := frames.push frame
+    rest := after
+  return frames.toList
+
+/-- The streams of one side after the frames it receives and sends, from an empty table.
+
+Each event says whether this side receives its bytes, and holds whole frames.
+
+The streams come as their ID, whether this side opened them, and their state.
+
+A frame that does not decode, or that the side refuses, raises its error.
+
+The error names the index of the event. -/
+@[export eth_mplex_session]
+def mplexSessionExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (events : List (Bool × ByteArray)) => do
+    let mut streams : Mplex.Streams := []
+    for ((received, data), index) in events.zipIdx do
+      let frames ← (mplexFrames data.data.toList).mapError
+        fun e => (e.code, s!"event {index}: mplex frame rejected: {reprStr e}")
+      for frame in frames do
+        streams ← (Mplex.step received streams frame).mapError
+          fun e => (e.code, s!"event {index}: {mplexSessionMessage e}")
+    return streams.map fun ((id, opened), state) => (id, opened, mplexStateName state)) args
 
 /-- The bytes of a valid yamux frame. -/
 @[export eth_yamux_encode]

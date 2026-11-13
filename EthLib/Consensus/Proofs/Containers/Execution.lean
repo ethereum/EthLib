@@ -219,6 +219,21 @@ theorem ExecutionPayload.header_total {preset : Preset} {fork : Fork}
     simp [ExecutionPayload.header, tx, w, capella, bind, Except.bind, pure, Except.pure]
   · simp [ExecutionPayload.header, tx, capella, bind, Except.bind, pure, Except.pure]
 
+/-- The header of a payload keeps the parent hash and the fee recipient of the payload. -/
+theorem ExecutionPayload.header_parentHash_feeRecipient {preset : Preset} {fork : Fork}
+    {payload : ExecutionPayload preset fork} {header : ExecutionPayloadHeader preset fork}
+    (made : payload.header = .ok header) :
+    header.parentHash = payload.parentHash ∧ header.feeRecipient = payload.feeRecipient := by
+  unfold ExecutionPayload.header at made
+  obtain ⟨_, -, rest⟩ := Base.bind_ok_iff.mp made
+  dsimp only at rest
+  split at rest
+  · obtain ⟨_, -, rest⟩ := Base.bind_ok_iff.mp rest
+    cases rest
+    exact ⟨rfl, rfl⟩
+  · cases rest
+    exact ⟨rfl, rfl⟩
+
 /-- Before Gloas, the header of a payload has the root of the payload.
 
 Each list of the payload gives way to its root, which leaves the root of the payload unchanged.

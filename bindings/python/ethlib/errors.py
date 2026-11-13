@@ -190,7 +190,11 @@ class MultistreamError(EthLibError, ValueError):
 
 
 class MplexError(EthLibError, ValueError):
-    """The bytes do not start with an mplex frame, or a frame is outside the format."""
+    """
+    The bytes do not start with an mplex frame, a frame is outside the format, or a side refuses it.
+
+    Stream errors have codes from 101.
+    """
 
 
 class YamuxError(EthLibError, ValueError):

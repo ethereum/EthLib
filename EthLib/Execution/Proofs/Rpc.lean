@@ -5,6 +5,8 @@ public import EthLib.Execution.Proofs.Rpc.Base
 public import EthLib.Execution.Proofs.Rpc.BlockParam
 public import EthLib.Execution.Proofs.Rpc.Request
 public import EthLib.Execution.Proofs.Rpc.Errors
+public import EthLib.Execution.Proofs.Rpc.View
+public import EthLib.Execution.Proofs.Rpc.Methods
 
 /-!
 # `EthLib.Execution.Proofs.Rpc`
