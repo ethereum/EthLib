@@ -65,7 +65,9 @@ structure FinalizedCheckpointEvent where
 structure ChainReorgEvent where
   /-- The slot of the new head. -/
   slot : Slot
-  /-- The slots from the latest common ancestor of the two heads up to the old head. -/
+  /-- The slots from the latest common ancestor of the two heads up to the old head.
+
+The walk to that ancestor stops after as many steps as the slot of the old head. -/
   depth : UInt64
   /-- The root of the old head block. -/
   oldHeadBlock : Root

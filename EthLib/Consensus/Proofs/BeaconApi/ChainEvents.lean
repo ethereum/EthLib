@@ -21,7 +21,9 @@ open Base
 
 variable {preset : Preset} {fork : Fork}
 
-/-- When the root of an epoch's duties is read, reading it one epoch late gives the same root. -/
+/-- The root without a lag for an epoch is the root with a lag of one for the next epoch.
+
+The next epoch must fit in 64 bits. -/
 theorem dependentRoot_succ_of_ok {state : BeaconState preset fork} {epoch : Epoch}
     {genesisRoot root : Root} (room : epoch.toNat + 1 < 2 ^ 64)
     (read : dependentRoot state 0 epoch genesisRoot = .ok root) :
@@ -114,7 +116,8 @@ theorem chainEvents_head {config : Config} {optimistic : Root → Bool} {genesis
   obtain ⟨-, -, block, status, -⟩ := headEvent_spec made
   exact ⟨head, got, block, status⟩
 
-/-- A head event comes exactly when the head changes. -/
+/-- A head event comes exactly when the head block changes, or its payload moves from empty to full.
+-/
 theorem chainEvents_head_iff {config : Config} {optimistic : Root → Bool} {genesisRoot : Root}
     {before after : Store preset fork} {events : List ChainEvent} {old new : ForkChoiceNode}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)
@@ -131,7 +134,7 @@ theorem chainEvents_head_iff {config : Config} {optimistic : Root → Bool} {gen
     subst made
     simp_all
 
-/-- A reorganization comes exactly when the head changes to one that does not descend from it.
+/-- A reorganization comes exactly when the head changes and leaves the old head block behind.
 
 The old head block is then not an ancestor of the new head. -/
 theorem chainEvents_reorg_iff {config : Config} {optimistic : Root → Bool} {genesisRoot : Root}
@@ -154,7 +157,9 @@ theorem chainEvents_reorg_iff {config : Config} {optimistic : Root → Bool} {ge
 
 /-- The dependent roots of a head event are those of the attester duties, from the head state.
 
-The first is that of the duties of the epoch of the head, and the second that of the next epoch. -/
+The first is that of the duties of the epoch of the head, and the second that of the next epoch.
+
+The second needs the next epoch to fit in 64 bits. -/
 theorem chainEvents_dependent_roots_duties {config : Config} {optimistic : Root → Bool}
     {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)

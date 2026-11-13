@@ -4266,6 +4266,7 @@ The source leaves these points open, decided here:
 - The `epoch` of a reorganization is given only by example; it is the epoch of the new head.
 - From Gloas, a reorganization compares blocks, not payloads: a new head built on the old head block without its payload is no reorganization.
 - The `state` of a finalized event is the state root of the checkpoint block, not the state of the checkpoint.
+- From Gloas, the `state` of a head event is the state root of the block, also when its payload is full.
 - Emission on other payload transitions is optional, so a head event comes only on the transition from empty to full that the source requires.
 
 The optimistic flag of each event is an input, since it depends on what the node has verified.
