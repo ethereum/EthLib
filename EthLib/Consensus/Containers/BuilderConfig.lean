@@ -110,7 +110,9 @@ def BuilderEntry.terms (entry : BuilderEntry) : BidTerms :=
 
 An entry that does not serve the slot gives no bid, and does not fail the request.
 
-No two entries may share their URL and their authentication data, so the first one is kept. -/
+The source forbids two entries with one URL and one authentication data.
+
+Of such entries that serve the slot, the first one is kept. -/
 def BuilderConfig.entryTerms (config : BuilderConfig) (slot : Slot) : List BidTerms :=
   let usable := config.builders.data.toList.filter (·.serves slot)
   let distinct := usable.foldl (fun kept entry =>

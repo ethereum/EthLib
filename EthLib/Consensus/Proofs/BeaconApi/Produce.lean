@@ -18,7 +18,7 @@ From Gloas, a chosen bid is accepted, has the largest weight and beats the local
 
 No bid is chosen exactly when no accepted bid beats the local payload, so it wins a tie.
 
-Raising an execution payment that already reaches its cap does not change the choice.
+Changing an execution payment that reaches its cap to another at or above it keeps the choice.
 
 The weight of a bid fits in 128 bits.
 -/

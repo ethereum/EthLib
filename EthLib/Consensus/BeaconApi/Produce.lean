@@ -95,7 +95,7 @@ def cappedBidValue (bid : CandidateBid) : Nat :=
 
 /-- Whether the terms of a bid accept it.
 
-A signer must be among the keys of the terms, when they name some.
+The signer must be among the keys of the terms, when they name some.
 
 The value of the bid must reach the smallest value of the terms. -/
 def bidAccepted (bid : CandidateBid) : Bool :=
