@@ -166,3 +166,11 @@ def test_block_of_another_slot():
     ) as info:
         consensus.api_block_rewards("minimal", FORKS[fork], at_slot, block)
     assert info.value.code == 500
+
+
+@pytest.mark.parametrize("fork, case", _cases())
+def test_consensus_block_value(fork, case):
+    # The block production endpoints give the proposer's rewards of the block in Wei.
+    for at_slot, block, rewards, _ in _blocks(fork, case):
+        value = consensus.api_consensus_block_value("minimal", FORKS[fork], at_slot, block)
+        assert value == int(rewards["total"]) * 10**9
