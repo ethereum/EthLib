@@ -162,18 +162,25 @@ def checkAuthenticatedHeader (header : ByteArray) : Except Error Unit :=
     ensure (first &&& 0x40 != 0 ∧ first &&& reserved = 0) .header
   else .error .header
 
+/-- Initial packets always use AES-128-GCM, independently of TLS negotiation, RFC 9001 §5. -/
+def checkSuite (suite : CipherSuite) : Packet.Header → Except Error Unit
+  | .initial .. => ensure (suite = .aes128GcmSha256) .header
+  | _ => pure ()
+
 /-- Check an authenticated header against the wire codec and isolated payload length.
 
 Long-header Length fields include the encoded number and authentication tag, RFC 9000 §17.2.
 
 Retry and Version Negotiation use different protection and cannot enter this path. -/
-def checkHeader (header : ByteArray) (protectedLength : Nat) : Except Error Unit := do
+def checkHeader (suite : CipherSuite) (header : ByteArray) (protectedLength : Nat) :
+    Except Error Unit := do
   checkAuthenticatedHeader header
   if h : 0 < header.size then
     let width := numberLength header[0]
     let (decoded, trailing) ← (Packet.decode (header.size - (width.val + 1) - 1)
       header.data.toList).mapError fun _ => .header
     ensure (trailing = []) .header
+    checkSuite suite decoded
     match decoded with
     | .initial _ _ _ w length _ | .zeroRtt _ _ w length _ | .handshake _ _ w length _ =>
       ensure (length.val = w.val + 1 + protectedLength) .header
@@ -188,7 +195,7 @@ The header codec supplies `offset` and a header ending in the truncated packet n
 An insufficient ciphertext sample is an error, so callers add PADDING frames before sealing. -/
 def protect (suite : CipherSuite) (keys : PacketKeys suite) (number : PacketNumber)
     (offset : Nat) (header plaintext : ByteArray) : Except Error ByteArray := do
-  checkHeader header (plaintext.size + 16)
+  checkHeader suite header (plaintext.size + 16)
   if h : 0 < header.size then
     let first := header[0]
     let width := numberLength first
@@ -222,7 +229,7 @@ def unprotect (suite : CipherSuite) (keys : PacketKeys suite) (expected : Nat)
   let number ← reconstructNumber recovered.width recovered.truncatedNumber expected
   let plaintext ← decryptPayload suite keys number recovered.header
     recovered.ciphertext recovered.tag
-  checkHeader recovered.header (recovered.ciphertext.size + recovered.tag.size)
+  checkHeader suite recovered.header (recovered.ciphertext.size + recovered.tag.size)
   return (recovered.header, plaintext)
 
 /-- The fixed QUIC v1 Retry key, RFC 9001 §5.8. -/

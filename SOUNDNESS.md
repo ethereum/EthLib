@@ -759,7 +759,9 @@ These results establish neither cryptographic security nor constant-time executi
 The receiver must reconstruct the sent packet number, as RFC 9001 §5.5 requires for authentication.
 `removeHeaderProtection_applyMask` proves that header removal restores the fields under the mask of the unchanged ciphertext sample.
 `unprotect_ok_iff` characterizes acceptance by header removal, packet-number reconstruction, AEAD authentication and the authenticated header checks.
+
 The decoder checks reserved bits only after authentication, and checks a long header’s Length against the isolated payload.
+Initial packets require AES-128-GCM, as RFC 9001 §5 specifies.
 The Python suite compares complete packets and Retry tags with RFC 9001 Appendices A.2 to A.5.
 These operations do not track nonce reuse, key updates or AEAD usage limits, and the proofs establish no cryptographic security or constant-time execution.
 

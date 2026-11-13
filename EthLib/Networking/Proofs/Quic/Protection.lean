@@ -161,6 +161,13 @@ theorem removeHeaderProtection_applyMask (suite : CipherSuite)
   rfl
 
 
+/-- An Initial packet's suite check accepts exactly AES-128-GCM, RFC 9001 §5. -/
+theorem checkSuite_initial_ok_iff (suite : CipherSuite) (destination source token : List UInt8)
+    (width : Packet.PacketNumberLength) (length : Varint) (number : Nat) :
+    checkSuite suite (.initial destination source token width length number) = .ok () ↔
+      suite = .aes128GcmSha256 := by
+  simp only [checkSuite, ensure_ok_iff]
+
 /-- Both supported AEADs preserve text length and append a 16-byte tag, RFC 9001 §5.3. -/
 theorem encryptPayload_sizes (suite : CipherSuite) (keys : PacketKeys suite)
     (number : PacketNumber) (header plaintext ciphertext tag : ByteArray)
@@ -207,10 +214,10 @@ theorem unprotect_protect (suite : CipherSuite) (keys : PacketKeys suite)
     (hprotect : protect suite keys number offset header plaintext = .ok packet) :
     unprotect suite keys expected offset packet = .ok (header, plaintext) := by
   unfold protect at hprotect
-  cases hc : checkHeader header (plaintext.size + 16) with
+  cases hc : checkHeader suite header (plaintext.size + 16) with
   | error e => simp [hc, bind, Except.bind] at hprotect
   | ok u =>
-    have hcheck : checkHeader header (plaintext.size + 16) = .ok () := by
+    have hcheck : checkHeader suite header (plaintext.size + 16) = .ok () := by
       simpa only [Subsingleton.elim u ()] using hc
     simp only [hc, bind, Except.bind] at hprotect
     rw [dite_eq_left hheader] at hprotect
@@ -296,7 +303,8 @@ theorem unprotect_ok_iff (suite : CipherSuite) (keys : PacketKeys suite)
         reconstructNumber recovered.width recovered.truncatedNumber expected = .ok number ∧
         decryptPayload suite keys number recovered.header recovered.ciphertext recovered.tag =
           .ok plaintext ∧
-        checkHeader recovered.header (recovered.ciphertext.size + recovered.tag.size) = .ok () ∧
+        checkHeader suite recovered.header (recovered.ciphertext.size + recovered.tag.size) =
+          .ok () ∧
         recovered.header = header := by
   simp only [unprotect, bind_ok_iff]
   constructor

@@ -85,3 +85,25 @@ def test_sample_and_header_boundaries(suite: str) -> None:
     # The header's low byte must match the full number passed to nonce construction.
     with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.packetNumber"):
         quic.protect(suite, secret, 1, 1, b"\x40\x00", bytes(3))
+
+
+def test_initial_requires_aes() -> None:
+    # RFC 9001 §5 fixes AES-128-GCM for Initial, regardless of the negotiated TLS suite.
+    secret = bytes(32)
+    header = bytes.fromhex("c0000000010000001400")
+    with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.header"):
+        quic.protect(CHACHA, secret, 0, 9, header, bytes(3))
+    packet = quic.protect(AES, secret, 0, 9, header, bytes(3))
+    assert quic.unprotect(AES, secret, 0, 9, packet) == (header, bytes(3))
+    # This constructed ChaCha-protected Initial carries three PADDING bytes and a matching tag.
+    forbidden = bytes.fromhex("c700000001000000148005373807da97a14899e58ec96d558d14903ddc")
+    with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.header"):
+        quic.unprotect(CHACHA, secret, 0, 9, forbidden)
+    # A bad tag still fails authentication before the suite check.
+    corrupted = forbidden[:-1] + bytes([forbidden[-1] ^ 1])
+    with raises(
+        quic.QuicProtectionError,
+        "EthLib.Networking.Quic.Protection.Error.chacha\n"
+        "  (EthLib.Cryptography.ChaCha20Poly1305.ChaCha20Poly1305Error.authenticationFailed)",
+    ):
+        quic.unprotect(CHACHA, secret, 0, 9, corrupted)
