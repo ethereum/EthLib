@@ -1265,6 +1265,45 @@ def api_payload_attestation_data(
     )
 
 
+def api_fork_choice(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    *,
+    optimistic_roots: Sequence[bytes] = (),
+    config: dict[str, Any] | None = None,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API fork choice debug response of a store, or ForkChoiceError."""
+    # The store is built from the steps of a fork choice case, with its own config if it has one.
+    # The response has one node per block and payload status; before Gloas each node is "full".
+    # A store whose tree cannot be read raises code 500.
+    return _native.consensus_api_fork_choice(
+        name, fork, anchor_state, anchor_block, steps, verify, list(optimistic_roots), config
+    )
+
+
+def api_chain_heads(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    *,
+    optimistic_roots: Sequence[bytes] = (),
+    config: dict[str, Any] | None = None,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API chain heads: the leaves of the fork choice tree, or ForkChoiceError."""
+    # The store is built from the steps of a fork choice case, with its own config if it has one.
+    # Each leaf appears once by its block root; a store that cannot be read raises code 500.
+    return _native.consensus_api_chain_heads(
+        name, fork, anchor_state, anchor_block, steps, verify, list(optimistic_roots), config
+    )
+
+
 def api_aggregate_attestation(
     name: str,
     fork: str,
@@ -2061,6 +2100,8 @@ __all__ = [
     "KnownUpdate",
     "api_attestation_data",
     "api_payload_attestation_data",
+    "api_fork_choice",
+    "api_chain_heads",
     "api_aggregate_attestation",
     "api_sync_committee_contribution",
     "api_attestation_rewards",

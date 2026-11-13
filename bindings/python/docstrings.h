@@ -515,6 +515,12 @@
 #define DOC_consensus_api_payload_attestation_data \
   "The JSON response of the payload attestation data endpoint, as a `dict`, or None for 204."
 
+#define DOC_consensus_api_fork_choice \
+  "The JSON response of the fork choice endpoint, as a `dict`."
+
+#define DOC_consensus_api_chain_heads \
+  "The JSON response of the heads endpoint, as a `dict`."
+
 #define DOC_consensus_api_aggregate_attestation \
   "The JSON response of the aggregate endpoint, as a `dict`."
 
