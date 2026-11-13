@@ -1344,6 +1344,37 @@
    "docstring":
    "HKDF, RFC 5869 §2: extract, then expand.\n\nThe input keying material is secret, and this function makes no constant-time claim."},
   {"summary":
+   "The HkdfLabel of RFC 8446 §7.1, for a label without its `tls13 ` prefix.",
+   "signature": "(label: bytes, context: bytes, length: int) -> bytes",
+   "operation": "EthLib.Cryptography.Hash.Tls13.Exports.labelExport",
+   "method": "tls13_hkdf_label",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "The HkdfLabel of RFC 8446 §7.1, for a label without its `tls13 ` prefix."},
+  {"summary":
+   "Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 8446 §7.1.",
+   "signature":
+   "(secret: bytes, label: bytes, context: bytes, length: int) -> bytes",
+   "operation": "EthLib.Cryptography.Hash.Tls13.Exports.expandExport",
+   "method": "tls13_expand_label",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 8446 §7.1."},
+  {"summary":
    "The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1.",
    "signature": "(z: bytes, fixed_info: bytes, length: int) -> bytes",
    "operation": "EthLib.Cryptography.Hash.ConcatKdf.concatKdf",
@@ -2909,6 +2940,24 @@
    "docstring":
    "The SSZ body of the response to a query on a state, as `bytes`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and the query.\n\nOnly the queues, the lookahead and the builder fields have one.\n\nA query on a state before the fork that adds its field has code 400."},
   {"summary":
+   "The status of a validator with a balance at an epoch, and the name of its group.",
+   "signature":
+   "(validator: dict[str, Any], balance: int, epoch: int) -> tuple[str, str]",
+   "operation": "EthLib.Consensus.Exports.apiValidatorStatusExport",
+   "method": "consensus_api_validator_status",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The status of a validator with a balance at an epoch, and the name of its group.\n\nThe arguments are the validator as the JSON of the API, its balance and the epoch."},
+  {"summary": "The status of the builder at an index of a state, as its name.",
+   "signature": "(name: str, fork: str, state: bytes, index: int) -> str",
+   "operation": "EthLib.Consensus.Exports.apiBuilderStatusExport",
+   "method": "consensus_api_builder_status",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The status of the builder at an index of a state, as its name.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and the index."},
+  {"summary":
    "The answer to each query, against the store after the steps of a fork choice case.",
    "signature":
    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, queries: list) -> list",
@@ -4041,6 +4090,23 @@
    "error_class": "SszError",
    "docstring":
    "From Gloas: the failed checks of a request that submits preferences, by name, in order.\n\nThe arguments are the name of the preset and of the configuration, the fork and replacements.\n\nThen come the agreed data, the builder's current slot, the key of the path and the version header.\n\nThen come the SSZ bytes of the request."},
+  {"summary":
+   "The default data that a proposer and a builder agree, from the builder's URL.",
+   "signature": "(url: str) -> bytes",
+   "operation": "EthLib.Consensus.BuilderApi.defaultAuthData",
+   "method": "consensus_default_auth_data",
+   "errors":
+   [{"type": "EthLib.Consensus.BuilderApi.AuthDataError",
+     "codes":
+     [{"constructor": "noAuthority", "code": 1},
+      {"constructor": "noHost", "code": 2},
+      {"constructor": "badPort", "code": 3},
+      {"constructor": "badIpv6", "code": 4},
+      {"constructor": "nonAscii", "code": 5},
+      {"constructor": "badName", "code": 6}]}],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The default data that a proposer and a builder agree, from the builder's URL.\n\nIt is the host as ASCII bytes, with an IPv6 address compressed and in brackets.\n\nA host that is not ASCII gives an error, so an internationalized name must be in punycode."},
   {"summary":
    "The value of a builder's bid from its two payments and the proposer's execution payment cap.",
    "signature":
@@ -10187,6 +10253,82 @@
    "docstring":
    "The value of the unsigned varint at the start of the bytes, and the bytes after it."},
   {"summary":
+   "Derive the client and server Initial secrets for QUIC v1, RFC 9001 §5.2.",
+   "signature": "(destination_connection_id: bytes) -> tuple[bytes, bytes]",
+   "operation": "EthLib.Networking.Quic.Exports.initialExport",
+   "method": "quic_initial_secrets",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Derive the client and server Initial secrets for QUIC v1, RFC 9001 §5.2."},
+  {"summary":
+   "Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1.",
+   "signature": "(suite: str, secret: bytes) -> tuple[bytes, bytes, bytes]",
+   "operation": "EthLib.Networking.Quic.Exports.packetExport",
+   "method": "quic_packet_keys",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1."},
+  {"summary":
+   "Return the early, handshake, master, two handshake traffic and two application traffic secrets.",
+   "signature":
+   "(shared_secret: bytes, hello_transcript: bytes, server_transcript: bytes) -> tuple[bytes, bytes, bytes, bytes, bytes, bytes, bytes]",
+   "operation": "EthLib.Networking.Quic.Exports.scheduleExport",
+   "method": "quic_tls_key_schedule",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Return the early, handshake, master, two handshake traffic and two application traffic secrets.\n\nEach pair gives the client secret first.\n\nThe no-PSK schedule and transcript boundaries are those of RFC 8446 §7.1."},
+  {"summary":
+   "Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1.",
+   "signature": "(secret: bytes, label: bytes, messages: bytes) -> bytes",
+   "operation": "EthLib.Networking.Quic.Exports.deriveExport",
+   "method": "quic_tls_derive_secret",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1.\n\nThe label excludes the `tls13 ` prefix."},
+  {"summary":
+   "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4.",
+   "signature": "(secret: bytes, transcript: bytes) -> bytes",
+   "operation": "EthLib.Networking.Quic.Exports.finishedExport",
+   "method": "quic_tls_finished",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4.\n\nDuring the handshake the secret is the sender's handshake traffic secret."},
+  {"summary":
    "Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16.",
    "signature": "(value: int) -> bytes",
    "operation": "EthLib.Networking.Quic.Exports.encodeExport",
@@ -10457,6 +10599,26 @@
    "errors": [],
    "error_class": "GossipError",
    "docstring": "The bytes of an RPC."},
+  {"summary":
+   "The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch.",
+   "signature":
+   "(slot_duration_ms: int, slots_per_epoch: int) -> dict[str, Any]",
+   "operation": "EthLib.Networking.Gossip.gossipsubParameters",
+   "method": "gossip_parameters",
+   "errors": [],
+   "error_class": "GossipError",
+   "docstring":
+   "The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch.\n\nA seen message ID lasts two epochs, in whole seconds, with the remainder dropped."},
+  {"summary":
+   "What the router does with one RPC, with its client choices given as tables.",
+   "signature":
+   "(fork: str, params: dict[str, Any], backoff_ms: int, prune_backoff_ms: int, standing: list[tuple[bytes, dict[str, Any]]], validation: list[tuple[bytes, str | tuple[str, str]]], now: int, src: bytes, rpc: dict[str, Any], state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]",
+   "operation": "EthLib.Networking.Gossip.Exports.receiveRpcOf",
+   "method": "gossip_receive_rpc",
+   "errors": [],
+   "error_class": "GossipError",
+   "docstring":
+   "What the router does with one RPC, with its client choices given as tables.\n\nThe arguments come in this order.\n\n- The name of a fork, whose rule gives the ID of every message, whatever the digest of its topic.\n- The gossipsub parameters, then the two durations in milliseconds that the router takes.\n- The standing of some peers; any other peer has every flag false.\n- The validation result of some message IDs; any other message is ignored.\n- The time in milliseconds, the peer that sent the RPC, the RPC and the state.\n\nIn each table, the first entry for a key counts.\n\nOne rule for every message fits a router whose topics all carry digests of forks with that rule.\n\nPhase 0 has one rule, and every fork from Altair on has another."},
   {"summary":
    "The bytes of a receipt, decoded at the fork and encoded again with its transaction type.",
    "signature": "(fork: str, receipt: bytes) -> bytes",
@@ -11350,7 +11512,7 @@
   {"summary":
    "The payload status of an `engine_newPayload` request, on a chain that holds the parent.",
    "signature":
-   "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]",
+   "(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], terminal_total_difficulty: int, total_difficulty: int, request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]",
    "operation": "EthLib.Engine.Exports.newPayloadOnChainExport",
    "method": "engine_new_payload_on_chain",
    "errors":
@@ -11364,7 +11526,7 @@
       {"constructor": "unknownPayload", "code": 38001}]}],
    "error_class": "EngineError",
    "docstring":
-   "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe arguments are the chain configuration, the state, the recent blocks and the request.\n\nA valid payload also gives the RLP forms of its header and of the accounts after it.\n\nOtherwise both are `None`."},
+   "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe arguments are the chain configuration, the state, the recent blocks, two totals and the request.\n\nThe totals are the terminal total difficulty, and the total difficulty of the last recent block.\n\nThe terminal total difficulty must be below `2^256`, or the export raises with code 0.\n\nA valid payload also gives the RLP forms of its header and of the accounts after it.\n\nOtherwise both are `None`."},
   {"summary":
    "Build a payload on a chain, from attributes, the builder's choices and transactions.",
    "signature":
@@ -11387,7 +11549,8 @@
       {"constructor": "wrongBlockHash", "code": 403},
       {"constructor": "wrongVersionedHashes", "code": 404},
       {"constructor": "invalidBlock", "code": 405},
-      {"constructor": "invalidBlockAccessList", "code": 406}]},
+      {"constructor": "invalidBlockAccessList", "code": 406},
+      {"constructor": "invalidTerminalBlock", "code": 407}]},
     {"type": "EthLib.Execution.Blocks.BlockError",
      "codes":
      [{"constructor": "genesisNumber", "code": 201},

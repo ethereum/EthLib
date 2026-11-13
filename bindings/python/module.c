@@ -78,6 +78,7 @@ PyObject* ETHASH_ERROR;
 PyObject* REQRESP_ERROR;
 PyObject* CONSENSUS_ERROR;
 PyObject* HKDF_ERROR;
+PyObject* TLS13_ERROR;
 PyObject* PBKDF2_ERROR;
 PyObject* SCRYPT_ERROR;
 PyObject* X25519_ERROR;
@@ -714,6 +715,8 @@ static PyMethodDef methods[] = {
   {"aes_gcm_decrypt", py_aes_gcm_decrypt, METH_VARARGS, DOC_aes_gcm_decrypt},
   {"hmac_sha256", py_hmac_sha256, METH_VARARGS, DOC_hmac_sha256},
   {"hkdf_sha256", py_hkdf_sha256, METH_VARARGS, DOC_hkdf_sha256},
+  {"tls13_hkdf_label", py_tls13_hkdf_label, METH_VARARGS, DOC_tls13_hkdf_label},
+  {"tls13_expand_label", py_tls13_expand_label, METH_VARARGS, DOC_tls13_expand_label},
   {"concat_kdf_sha256", py_concat_kdf_sha256, METH_VARARGS, DOC_concat_kdf_sha256},
   {"pbkdf2_sha256", py_pbkdf2_sha256, METH_VARARGS, DOC_pbkdf2_sha256},
   {"salsa208", py_salsa208, METH_VARARGS, DOC_salsa208},
@@ -803,6 +806,10 @@ static PyMethodDef methods[] = {
    DOC_consensus_api_state_query},
   {"consensus_api_state_query_ssz", py_consensus_api_state_query_ssz, METH_VARARGS,
    DOC_consensus_api_state_query_ssz},
+  {"consensus_api_validator_status", py_consensus_api_validator_status, METH_VARARGS,
+   DOC_consensus_api_validator_status},
+  {"consensus_api_builder_status", py_consensus_api_builder_status, METH_VARARGS,
+   DOC_consensus_api_builder_status},
   {"consensus_is_valid_builder_signature", py_consensus_is_valid_builder_signature,
    METH_VARARGS, DOC_consensus_is_valid_builder_signature},
   {"consensus_process_registration", py_consensus_process_registration,
@@ -824,6 +831,8 @@ static PyMethodDef methods[] = {
    METH_VARARGS, DOC_consensus_builder_request_auth_failures},
   {"consensus_builder_preferences_failures", py_consensus_builder_preferences_failures,
    METH_VARARGS, DOC_consensus_builder_preferences_failures},
+  {"consensus_default_auth_data", py_consensus_default_auth_data,
+   METH_VARARGS, DOC_consensus_default_auth_data},
   {"consensus_builder_bid_value", py_consensus_builder_bid_value,
    METH_VARARGS, DOC_consensus_builder_bid_value},
   {"consensus_consensus_version", py_consensus_consensus_version,
@@ -1137,6 +1146,11 @@ static PyMethodDef methods[] = {
   {"varint_decode", py_varint_decode, METH_VARARGS, DOC_varint_decode},
   {"uvarint_encode", py_uvarint_encode, METH_VARARGS, DOC_uvarint_encode},
   {"uvarint_decode", py_uvarint_decode, METH_VARARGS, DOC_uvarint_decode},
+  {"quic_initial_secrets", py_quic_initial_secrets, METH_VARARGS, DOC_quic_initial_secrets},
+  {"quic_packet_keys", py_quic_packet_keys, METH_VARARGS, DOC_quic_packet_keys},
+  {"quic_tls_key_schedule", py_quic_tls_key_schedule, METH_VARARGS, DOC_quic_tls_key_schedule},
+  {"quic_tls_derive_secret", py_quic_tls_derive_secret, METH_VARARGS, DOC_quic_tls_derive_secret},
+  {"quic_tls_finished", py_quic_tls_finished, METH_VARARGS, DOC_quic_tls_finished},
   {"quic_varint_encode", py_quic_varint_encode, METH_VARARGS, DOC_quic_varint_encode},
   {"quic_varint_decode", py_quic_varint_decode, METH_VARARGS, DOC_quic_varint_decode},
   {"multistream_encode", py_multistream_encode, METH_VARARGS, DOC_multistream_encode},
@@ -1157,6 +1171,8 @@ static PyMethodDef methods[] = {
   {"gossip_decode_payload", py_gossip_decode_payload, METH_VARARGS, DOC_gossip_decode_payload},
   {"gossip_rpc_decode", py_gossip_rpc_decode, METH_VARARGS, DOC_gossip_rpc_decode},
   {"gossip_rpc_encode", py_gossip_rpc_encode, METH_VARARGS, DOC_gossip_rpc_encode},
+  {"gossip_parameters", py_gossip_parameters, METH_VARARGS, DOC_gossip_parameters},
+  {"gossip_receive_rpc", py_gossip_receive_rpc, METH_VARARGS, DOC_gossip_receive_rpc},
   {"receipt_reencode", py_receipt_reencode, METH_VARARGS, DOC_receipt_reencode},
   {"receipt_logs_bloom", py_receipt_logs_bloom, METH_VARARGS, DOC_receipt_logs_bloom},
   {"block_make_receipts", py_block_make_receipts, METH_VARARGS, DOC_block_make_receipts},
@@ -1271,6 +1287,7 @@ PyInit__native(void) {
     REQRESP_ERROR = PyObject_GetAttrString(errors, "ReqRespError");
     CONSENSUS_ERROR = PyObject_GetAttrString(errors, "ConsensusError");
     HKDF_ERROR = PyObject_GetAttrString(errors, "HkdfError");
+    TLS13_ERROR = PyObject_GetAttrString(errors, "Tls13Error");
     PBKDF2_ERROR = PyObject_GetAttrString(errors, "Pbkdf2Error");
     SCRYPT_ERROR = PyObject_GetAttrString(errors, "ScryptError");
     X25519_ERROR = PyObject_GetAttrString(errors, "X25519Error");

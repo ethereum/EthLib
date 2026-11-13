@@ -94,7 +94,7 @@ py_engine_new_payload_on_chain(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_engine_new_payload_on_chain, args, 4, ENGINE_ERROR);
+  return call_pyvalue_export(eth_engine_new_payload_on_chain, args, 6, ENGINE_ERROR);
 }
 
 PyObject*

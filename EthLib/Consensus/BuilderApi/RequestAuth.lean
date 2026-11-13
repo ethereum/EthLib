@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.BuilderApi
+public import EthLib.Consensus.BuilderApi.AuthData
 public import EthLib.Consensus.BuilderApi.Encoding
 
 /-!
@@ -69,6 +70,15 @@ The authentication and the preferences exist from Gloas only, so the header must
 def headerFailures (versionHeader : Option String) : List AuthFailure :=
   if versionHeader = some ConsensusVersion.gloas.name then [] else [.badVersion]
 
+/-- The data that a proposer and a builder agree: the data agreed out of band, if any.
+
+Otherwise it is the default data from the builder's URL. -/
+def agreedData (outOfBand : Option ByteArray) (builderUrl : String) :
+    Except AuthDataError ByteArray :=
+  match outOfBand with
+  | some data => .ok data
+  | none => defaultAuthData builderUrl
+
 /-- The failures of the data of an authentication, against the data agreed with the builder.
 
 Empty data fails, even when the agreed data is empty too. -/
@@ -86,7 +96,7 @@ def signatureFailures (config : Config) (checks : SignatureChecks) (pubkey : BLS
 
 The data must be the agreed data, and the slot must be the slot of the path.
 
-The agreed data is that agreed out of band, or by default the hostname of the builder's URL. -/
+The agreed data is the data agreed out of band, or by default the data from the builder's URL. -/
 def authFailures (config : Config) (checks : SignatureChecks) (agreed : ByteArray)
     (pathSlot : Slot) (pubkey : BLSPubkey) (versionHeader : Option String)
     (auth : SignedBuilderRequestAuth) : Except Err (List AuthFailure) := do

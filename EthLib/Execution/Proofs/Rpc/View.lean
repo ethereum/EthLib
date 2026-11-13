@@ -117,6 +117,22 @@ theorem resolve_finalized {v : ChainView} {r : BlockRecord}
   obtain ⟨hm, hh⟩ := canonicalByHash_some hc
   exact ⟨hm, by rw [hx, hh]⟩
 
+/-- A block parameter resolves only to a block that the node holds, or to its pending block. -/
+theorem resolve_mem {v : ChainView} {p : BlockParam} {r : BlockRecord}
+    (h : v.resolve p = .ok (some r)) : r ∈ v.canonical ++ v.side ∨ v.pending = some r := by
+  match p, h with
+  | .number _, h => exact .inl (List.mem_append_left _ (resolve_number h).1)
+  | .hash _ _, h => exact .inl (resolve_hash h).1
+  | .tag .safe, h => exact .inl (List.mem_append_left _ (resolve_safe h).1)
+  | .tag .finalized, h => exact .inl (List.mem_append_left _ (resolve_finalized h).1)
+  | .tag .pending, h => exact .inr (by simpa [ChainView.resolve, ChainView.byTag] using h)
+  | .tag .latest, h =>
+    obtain rfl : v.head = r := by simpa [ChainView.resolve, ChainView.byTag] using h
+    exact .inl (List.mem_append_left _ (List.getLast_mem _))
+  | .tag .earliest, h =>
+    obtain rfl : v.lowest = r := by simpa [ChainView.resolve, ChainView.byTag] using h
+    exact .inl (List.mem_append_left _ (List.head_mem _))
+
 /-- The last recent block of the chain after the canonical block at index `i` is that block. -/
 private theorem chainAt_getLast {v : ChainView} (i : Nat) (hi : i < v.canonical.length) :
     (v.chainAt i hi).recent.getLast? = some v.canonical[i].recent := by

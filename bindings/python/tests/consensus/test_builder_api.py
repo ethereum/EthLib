@@ -950,8 +950,9 @@ def test_registration_rules_in_order():
 
 # Where a minimal state stores the offset of its latest payload header, from Bellatrix to Fulu.
 HEADER_OFFSET_AT = 10_229
-# The block hash follows 472 bytes of the header: the parent hash, the fee recipient, two roots,
-# the bloom, the RANDAO mix, four numbers, the offset of the extra data and the base fee.
+# The block hash follows 472 bytes of the header.
+# They hold the parent hash, the fee recipient, two roots, the bloom and the RANDAO mix.
+# Four numbers, the offset of the extra data and the base fee come next.
 BLOCK_HASH_IN_HEADER = 472
 # The slot follows the genesis time and the genesis validators root.
 SLOT_AT = 40

@@ -209,6 +209,12 @@
 #define DOC_hkdf_sha256 \
   "HKDF, RFC 5869 §2: extract, then expand."
 
+#define DOC_tls13_hkdf_label \
+  "The HkdfLabel of RFC 8446 §7.1, for a label without its `tls13 ` prefix."
+
+#define DOC_tls13_expand_label \
+  "Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 8446 §7.1."
+
 #define DOC_concat_kdf_sha256 \
   "The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1."
 
@@ -443,6 +449,12 @@
 #define DOC_consensus_api_state_query_ssz \
   "The SSZ body of the response to a query on a state, as `bytes`."
 
+#define DOC_consensus_api_validator_status \
+  "The status of a validator with a balance at an epoch, and the name of its group."
+
+#define DOC_consensus_api_builder_status \
+  "The status of the builder at an index of a state, as its name."
+
 #define DOC_consensus_api_resolve \
   "The answer to each query, against the store after the steps of a fork choice case."
 
@@ -481,6 +493,9 @@
 
 #define DOC_consensus_builder_preferences_failures \
   "From Gloas: the failed checks of a request that submits preferences, by name, in order."
+
+#define DOC_consensus_default_auth_data \
+  "The default data that a proposer and a builder agree, from the builder's URL."
 
 #define DOC_consensus_builder_bid_value \
   "The value of a builder's bid from its two payments and the proposer's execution payment cap."
@@ -1049,6 +1064,21 @@
 #define DOC_uvarint_decode \
   "The value of the unsigned varint at the start of the bytes, and the bytes after it."
 
+#define DOC_quic_initial_secrets \
+  "Derive the client and server Initial secrets for QUIC v1, RFC 9001 §5.2."
+
+#define DOC_quic_packet_keys \
+  "Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1."
+
+#define DOC_quic_tls_key_schedule \
+  "Return the early, handshake, master, two handshake traffic and two application traffic secrets."
+
+#define DOC_quic_tls_derive_secret \
+  "Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1."
+
+#define DOC_quic_tls_finished \
+  "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."
+
 #define DOC_quic_varint_encode \
   "Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."
 
@@ -1108,6 +1138,12 @@
 
 #define DOC_gossip_rpc_encode \
   "The bytes of an RPC."
+
+#define DOC_gossip_parameters \
+  "The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch."
+
+#define DOC_gossip_receive_rpc \
+  "What the router does with one RPC, with its client choices given as tables."
 
 #define DOC_receipt_reencode \
   "The bytes of a receipt, decoded at the fork and encoded again with its transaction type."

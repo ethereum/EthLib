@@ -53,7 +53,7 @@ private theorem hash32_hash32Json (what : String) (x : Hash32) :
   fixed_dataJson what x false
 
 /-- The fields of a header have distinct names. -/
-private theorem names_distinct {fork : Fork} (hash : Hash32) (h : Header fork) :
+theorem names_distinct_headerFields {fork : Fork} (hash : Hash32) (h : Header fork) :
     (headerFields hash h).Pairwise fun a b => a.1 ≠ b.1 := by
   have := nodup_headerNames fork
   rw [← names_headerFields hash h, List.Nodup, List.pairwise_map] at this
@@ -88,12 +88,13 @@ theorem keys_headerJson {fork : Fork} {h : Header fork} {j : Lean.Json}
     (hj : headerJson h = .ok j) :
     ∃ kvs, j = .obj kvs ∧ (kvs.toList.map Prod.fst).Perm (headerNames fork) := by
   obtain ⟨hash, -, rfl⟩ := headerJson_ok hj
-  obtain ⟨kvs, hobj, -, hmem, hd⟩ := toList_mkObj (names_distinct hash h)
+  obtain ⟨kvs, hobj, -, hmem, hd⟩ := toList_mkObj (names_distinct_headerFields hash h)
   refine ⟨kvs, hobj, ?_⟩
   have nodup : ∀ l : List (String × Lean.Json), (l.Pairwise fun a b => a.1 ≠ b.1) → l.Nodup :=
     fun l h => h.imp_of_mem (fun {a b} _ _ hne heq => hne (by rw [heq]))
   have hp : kvs.toList.Perm (headerFields hash h) :=
-    (List.perm_ext_iff_of_nodup (nodup _ hd) (nodup _ (names_distinct hash h))).mpr hmem
+    (List.perm_ext_iff_of_nodup (nodup _ hd)
+      (nodup _ (names_distinct_headerFields hash h))).mpr hmem
   rw [← names_headerFields hash h]
   exact hp.map _
 
@@ -126,7 +127,7 @@ private theorem mem_sinceField {f fork : Fork} {α : Type} {g : α → Lean.Json
 theorem headerOfJson_headerJson {fork : Fork} {h : Header fork} {j : Lean.Json}
     (hj : headerJson h = .ok j) : headerOfJson fork j = .ok h := by
   obtain ⟨hash, hh, rfl⟩ := headerJson_ok hj
-  have hd := names_distinct hash h
+  have hd := names_distinct_headerFields hash h
   obtain ⟨fs, hfs, hp⟩ := fields_mkObj "header" hd (present hash h)
   have hex : hasExactly fs (headerNames fork) = true := by
     rw [← names_headerFields hash h]
