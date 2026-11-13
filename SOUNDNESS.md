@@ -3355,6 +3355,16 @@ The sender and the gas price of the object are those that this check gave (`Vali
 The state transition calls the inclusion check, not the check of a transaction alone; both name the sender by the same recovery of the signature.
 The lowest block, the blocks off the canonical chain and the pending block do not run, so their senders are recovered but not tied to a transition.
 
+The header object holds the hash of a header and each of its fields, and the reader of its fork reads the header back (`headerOfJson_headerJson`, `Proofs/Rpc/Header.lean`).
+Its names are exactly those of the fork (`keys_headerJson`, `names_headerFields`), so a field from a later fork never appears.
+No name comes twice (`nodup_headerNames`), and there is one name more than the RLP form of the header has items (`length_headerNames`).
+The schema requires none of the fields from a fork, so they stay optional after their fork too.
+The object writes each one exactly from its fork on, as the fixtures do.
+Only this direction of the round trip holds: the reader also takes a beneficiary in uppercase hex, and it ignores a field whose value is `null`.
+The methods write the object with the hash that the view keeps for the block, so they compute no hash.
+The header of `pending` is `null` (`headerByNumber_pending`), and any other block parameter gives the header of the block that it resolves to, or `null` for none (`headerByNumber_of_ne`).
+In a valid view, the object of each block that the node holds is what the writer gives, so the theorems above apply to it (`Valid.headerJson_eq`).
+
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 
