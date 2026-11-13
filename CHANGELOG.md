@@ -9,6 +9,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `DirectSafety.EnoughStake run high` requires the stake floor only at epoch calls whose current epoch is at most `high + 1`.
+  Supply the right finalized epoch to `accountable_safety`, and `j.epoch.toNat` to the other three direct safety endpoints.
+  Move `j` (and `k` for `accountable_justified_unique`) before the stake premises.
+  An existing unbounded floor proof adapts as `fun call _ => oldEnough call`.
+  Pass a target-epoch bound as the new `within` argument of `quorum_count`.
+  Remove the `starts` argument from `accountable_safety` and `accountable_safety_justified`, but keep it for `accountable_justified_unique`.
+  Removing `starts` is an equivalent restatement under `conflict`, not a strengthening.
+  `accountable_safety` uses the right finalized epoch instead of the maximum, which is equal under `ordered`.
+
 - `verify_kzg_proof` checks its inputs in the order of EIP-4844: the commitment, `z`, `y`, then the proof.
   When more than one input is invalid, the first in that order gives the error.
   Before, it checked the proof second, so an input with an invalid `z` and an invalid proof raised the error of the proof.
