@@ -155,8 +155,8 @@ theorem filterM_exists_ok {test : α → Except ε Bool} {list : List α}
   obtain ⟨out, computed⟩ := filterAuxM_exists_ok tested []
   exact ⟨out.reverse, by simp only [List.filterM, computed]; rfl⟩
 
-/-- A filter that a computation runs succeeds only when the test succeeds on each element. -/
-private theorem tested_of_filterAuxM_ok {test : α → Except ε Bool} :
+/-- A filter started with any kept list succeeds only when the test succeeds on each element. -/
+private theorem filterAuxM_ok_of_mem {test : α → Except ε Bool} :
     ∀ {list kept out : List α}, List.filterAuxM test list kept = .ok out →
       ∀ value ∈ list, ∃ passes, test value = .ok passes
   | [], _, _, _ => fun _ member => absurd member List.not_mem_nil
@@ -166,18 +166,18 @@ private theorem tested_of_filterAuxM_ok {test : α → Except ε Bool} :
     intro value member
     rcases List.mem_cons.mp member with rfl | later
     · exact ⟨chosen, chosenOk⟩
-    · exact tested_of_filterAuxM_ok computed value later
+    · exact filterAuxM_ok_of_mem computed value later
 
 /-- A filter that a computation runs succeeds only when the test succeeds on each element. -/
-theorem tested_of_filterM_ok {test : α → Except ε Bool} {list out : List α}
+theorem filterM_ok_of_mem {test : α → Except ε Bool} {list out : List α}
     (computed : list.filterM test = .ok out) :
     ∀ value ∈ list, ∃ passes, test value = .ok passes := by
   simp only [List.filterM, bind_ok_iff] at computed
   obtain ⟨reversed, filtered, -⟩ := computed
-  exact tested_of_filterAuxM_ok filtered
+  exact filterAuxM_ok_of_mem filtered
 
 /-- A filter that a computation runs keeps nothing exactly when no element passes the test. -/
-theorem filterM_ok_eq_nil_iff {test : α → Except ε Bool} {list out : List α}
+theorem eq_nil_iff_of_filterM_ok {test : α → Except ε Bool} {list out : List α}
     (computed : list.filterM test = .ok out) :
     out = [] ↔ ∀ value ∈ list, test value ≠ .ok true := by
   rw [List.eq_nil_iff_forall_not_mem]

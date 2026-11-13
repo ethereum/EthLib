@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Consensus.ForkChoice.Head
-public import EthLib.Base.Proofs.FilterM
+import EthLib.Base.Proofs.FilterM
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Proofs.ForkChoice.Store
 
@@ -24,7 +24,9 @@ Any other node weighs its votes in the justified state when the boost does not a
 
 The boost applies after a parent older than the previous slot, and after a parent that is not weak.
 
-After a weak parent it applies exactly when no other timely block of its proposer is in that slot.
+After a weak parent it needs the timeliness of every block of the store.
+
+It then applies exactly when no other timely block of the parent's proposer is in the slot before.
 
 The head has no child among the viable nodes, so the walk stops only at a leaf.
 
@@ -308,9 +310,9 @@ private theorem nextSlot_ok {slot : Slot} (fits : slot.toNat + 1 < 2 ^ 64) :
   rw [mapError_ok_iff, Uint64.addChecked_ok_iff, nextSlot_toNat fits]
   exact ⟨fits, rfl⟩
 
-/-- A filter over the entries of a map, read through what its test decides on each entry.
+/-- A successful filter over the entries of a map, when its test decides a property of each entry.
 
-It succeeds only when every entry is known, and then keeps nothing exactly when none is chosen. -/
+Every entry is then known, and the filter keeps nothing exactly when none is chosen. -/
 private theorem filterM_entries_ok_iff {β ε : Type} {test : Root × β → Except ε Bool}
     {entries : Std.TreeMap Root β} {known chosen : Root → β → Prop} {out : List (Root × β)}
     (computed : entries.toList.filterM test = .ok out)
@@ -320,12 +322,12 @@ private theorem filterM_entries_ok_iff {β ε : Type} {test : Root × β → Exc
       (out.isEmpty = true ↔
         ∀ root value, entries[root]? = some value → ¬ chosen root value) := by
   have tested := fun root value (entry : entries[root]? = some value) =>
-    tested_of_filterM_ok computed (root, value)
+    filterM_ok_of_mem computed (root, value)
       (Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr entry)
   refine ⟨fun root value entry => ?_, ?_⟩
   · obtain ⟨passes, passesOk⟩ := tested root value entry
     exact ((element root value passes).mp passesOk).1
-  · rw [List.isEmpty_iff, filterM_ok_eq_nil_iff computed]
+  · rw [List.isEmpty_iff, eq_nil_iff_of_filterM_ok computed]
     constructor
     · intro none root value entry picked
       obtain ⟨passes, passesOk⟩ := tested root value entry
