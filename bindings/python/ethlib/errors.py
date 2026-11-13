@@ -233,6 +233,8 @@ class EthWireError(EthLibError, ValueError):
 
     Header errors have codes from 201, and transaction errors codes from 301.
 
+    Session errors have codes from 701.
+
     A bad argument has code 0.
     """
 

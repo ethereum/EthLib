@@ -86,14 +86,7 @@ theorem lt_of_quantity {what : String} {bits : Nat} {j : Lean.Json} {value : Nat
     (h : quantity what bits j = .ok value) : value < 2 ^ bits := by
   unfold quantity at h
   obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  -- The checks for no digits and for a leading zero fail, so neither branch returns a value.
-  split at h
-  · cases h
-  split at h
-  · cases h
-  -- Whatever the digit loop returns, the last step compares it with the bound.
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  dsimp only at h
+  -- The last step compares the number with the bound.
   split at h
   · cases h
     assumption
@@ -142,7 +135,7 @@ theorem bytesMax_eq_ok_iff {what : String} {n : Nat} {j : Lean.Json} {b : ByteAr
     simp [bind, Except.bind, hn, pure, Except.pure]
 
 /-- ASCII characters encode to their own bytes. -/
-private theorem ascii_utf8Encode (l : List Char) (h : ∀ c ∈ l, c.val ≤ 0x7F) :
+theorem ascii_utf8Encode (l : List Char) (h : ∀ c ∈ l, c.val ≤ 0x7F) :
     l.utf8Encode = (l.map fun c => c.val.toUInt8).toByteArray := by
   induction l with
   | nil => rfl
@@ -189,7 +182,7 @@ private theorem hexDigitChar_ascii (n : Fin 16) : (hexDigitChar n).val ≤ 0x7F 
   revert n; decide +revert
 
 /-- The digits after the marker `0x` of an ASCII text are the codes of its characters. -/
-private theorem hexDigits_ascii (what : String) (l : List Char) (h : ∀ c ∈ l, c.val ≤ 0x7F) :
+theorem hexDigits_ascii (what : String) (l : List Char) (h : ∀ c ∈ l, c.val ≤ 0x7F) :
     hexDigits what (.str ("0x" ++ String.ofList l)) =
       .ok (l.map fun c => c.val.toUInt8).toByteArray := by
   unfold hexDigits
@@ -471,20 +464,19 @@ private theorem forIn_digits {ds : List UInt8}
     rw [List.forIn_cons, h c (by simp) acc]
     exact ih (fun c' hc' s => h c' (by simp [hc']) s) _
 
-/-- The decoder of numbers reads back a number below its bound, written in lowercase hex.
+/-- The decoder of numbers of any size reads back a number, written in lowercase hex.
 
 The text is `0x` and the digits of the number, without leading zeros, and `0x0` for zero.
 
-The converse also holds: no other text decodes to the number. -/
-theorem quantity_toDigits (what : String) {bits v : Nat} (hv : v < 2 ^ bits) :
-    quantity what bits (quantityJson v) = .ok v := by
+The converse, that no other text decodes to the number, is proved below. -/
+theorem uint_quantityJson (what : String) (v : Nat) : uint what (quantityJson v) = .ok v := by
   unfold quantityJson
   obtain ⟨hall, hval, hhead⟩ := toDigits_hex v
   have hascii : ∀ c ∈ Nat.toDigits 16 v, c.val ≤ 0x7F := by
     intro c hc
     obtain ⟨d, hd, rfl⟩ := hall c hc
     exact (hexValue_digitChar d hd).2
-  unfold quantity
+  unfold uint
   rw [hexDigits_ascii _ _ hascii]
   simp only [bind, Except.bind]
   have hne := Nat.toDigits_ne_nil (b := 16) (n := v)
@@ -499,7 +491,7 @@ theorem quantity_toDigits (what : String) {bits v : Nat} (hv : v < 2 ^ bits) :
     have hdata : (List.map (fun c => c.val.toUInt8) (Nat.toDigits 16 v)).toByteArray.data.toList =
         List.map (fun c => c.val.toUInt8) (Nat.toDigits 16 v) := by simp
     rw [hdata, forIn_digits, hval]
-    · simp [hv, pure, Except.pure]
+    · rfl
     · intro c hc s
       obtain ⟨c', hc', rfl⟩ := List.mem_map.mp hc
       obtain ⟨d, hd, rfl⟩ := hall c' hc'
@@ -517,6 +509,15 @@ theorem quantity_toDigits (what : String) {bits v : Nat} (hv : v < 2 ^ bits) :
         simp at hgt
       · exact hp
     exact hhead hpos (by rw [hx]; simp [digitChar_code_zero d hd hx48])
+
+/-- The decoder of numbers reads back a number below its bound, written in lowercase hex.
+
+The converse also holds: no other text decodes to the number. -/
+theorem quantity_toDigits (what : String) {bits v : Nat} (hv : v < 2 ^ bits) :
+    quantity what bits (quantityJson v) = .ok v := by
+  unfold quantity
+  rw [uint_quantityJson]
+  simp [hv, bind, Except.bind, pure, Except.pure]
 
 /-- The decoder of 64-bit numbers reads back any 64-bit number, written in lowercase hex. -/
 theorem uint64_toDigits (what : String) (x : UInt64) :
@@ -641,21 +642,17 @@ private theorem toUTF8_of_hexDigits {what s : String} {digits : ByteArray}
       rfl
   · cases h
 
-/-- The decoder of numbers returns a number exactly when the text is the canonical text of it.
+/-- The decoder of numbers of any size returns a number exactly when the text is its canonical text.
 
 That text is `0x` and the lowercase hex digits of the number, without leading zeros.
 
-The number must also be below the bound of the decoder.
-
 So uppercase digits, leading zeros, `0x` alone and any other text are rejected. -/
-theorem quantity_eq_ok_iff {what : String} {bits : Nat} {j : Lean.Json} {v : Nat} :
-    quantity what bits j = .ok v ↔ v < 2 ^ bits ∧ j = quantityJson v := by
+theorem uint_eq_ok_iff {what : String} {j : Lean.Json} {v : Nat} :
+    uint what j = .ok v ↔ j = quantityJson v := by
   unfold quantityJson
   constructor
-  · intro h
-    refine ⟨lt_of_quantity h, ?_⟩
-    have h' := h
-    unfold quantity at h'
+  · intro h'
+    unfold uint at h'
     cases j with
     | str s =>
       obtain ⟨digits, hd, h'⟩ := bind_ok_iff.mp h'
@@ -669,10 +666,7 @@ theorem quantity_eq_ok_iff {what : String} {bits : Nat} {j : Lean.Json} {v : Nat
       rename_i hlead
       -- The loop reads every digit, and the value it returns is the number.
       obtain ⟨w, hw, h'⟩ := bind_ok_iff.mp h'
-      have hwv : w = v := by
-        split at h'
-        · cases h'; rfl
-        · cases h'
+      have hwv : w = v := Except.ok.inj h'
       subst hwv
       rw [forIn_eq_forIn_toList] at hw
       obtain ⟨hall, hval⟩ := forIn_digits_ok (fun c s r hr => by
@@ -707,6 +701,27 @@ theorem quantity_eq_ok_iff {what : String} {bits : Nat} {j : Lean.Json} {v : Nat
     | _ =>
       obtain ⟨digits, hd, -⟩ := bind_ok_iff.mp h'
       simp [hexDigits] at hd
+  · rintro rfl
+    exact uint_quantityJson what v
+
+/-- The decoder of numbers returns a number exactly when the text is the canonical text of it.
+
+That text is `0x` and the lowercase hex digits of the number, without leading zeros.
+
+The number must also be below the bound of the decoder.
+
+So uppercase digits, leading zeros, `0x` alone and any other text are rejected. -/
+theorem quantity_eq_ok_iff {what : String} {bits : Nat} {j : Lean.Json} {v : Nat} :
+    quantity what bits j = .ok v ↔ v < 2 ^ bits ∧ j = quantityJson v := by
+  constructor
+  · intro h
+    refine ⟨lt_of_quantity h, ?_⟩
+    unfold quantity at h
+    obtain ⟨w, hw, h⟩ := bind_ok_iff.mp h
+    split at h
+    · cases h
+      exact uint_eq_ok_iff.mp hw
+    · cases h
   · rintro ⟨hv, rfl⟩
     exact quantity_toDigits what hv
 
@@ -1129,6 +1144,72 @@ theorem lookup_of_mem {fs : List (String × Lean.Json)} {k : String} {v : Lean.J
       have hb : (k == k') = false := by simpa using Ne.symm hne
       simp only [List.lookup, hb]
       exact ih hrest hm
+
+/-- An object built from pairs with distinct names, none of them `null`, has those pairs as fields.
+
+They may come in another order. -/
+theorem fields_mkObj (what : String) {pairs : List (String × Lean.Json)}
+    (distinct : pairs.Pairwise fun a b => a.1 ≠ b.1) (present : ∀ p ∈ pairs, p.2.isNull = false) :
+    ∃ fs, fields what (Lean.Json.mkObj pairs) = .ok fs ∧ fs.Perm pairs := by
+  obtain ⟨kvs, hobj, -, hmem, hd⟩ := toList_mkObj distinct
+  have hkeep : kvs.toList.filter (fun (_, v) => !v.isNull) = kvs.toList := by
+    rw [List.filter_eq_self]
+    intro p hp
+    simp [present p ((hmem p).mp hp)]
+  refine ⟨kvs.toList, ?_, ?_⟩
+  · rw [hobj]
+    simp only [fields, hkeep]
+    rfl
+  · -- Distinct names make both lists free of repeats, so equal members give a permutation.
+    have nodup : ∀ l : List (String × Lean.Json), (l.Pairwise fun a b => a.1 ≠ b.1) → l.Nodup :=
+      fun l h => h.imp_of_mem (fun {a b} _ _ hne heq => hne (by rw [heq]))
+    exact (List.perm_ext_iff_of_nodup (nodup _ hd) (nodup _ distinct)).mpr hmem
+
+/-- Fields that are some pairs in another order hold exactly the names of those pairs. -/
+theorem hasExactly_of_perm {fs pairs : List (String × Lean.Json)} (h : fs.Perm pairs) :
+    hasExactly fs (pairs.map Prod.fst) = true := by
+  simp only [hasExactly, List.length_map, h.length_eq, beq_self_eq_true, Bool.true_and,
+    List.all_eq_true, List.any_eq_true, List.mem_map]
+  rintro name ⟨p, hp, rfl⟩
+  exact ⟨p, h.mem_iff.mpr hp, by simp⟩
+
+/-- Fields that are pairs with distinct names, in another order, read each pair by its name. -/
+theorem field_of_perm {what k : String} {v : Lean.Json} {fs pairs : List (String × Lean.Json)}
+    (h : fs.Perm pairs) (distinct : pairs.Pairwise fun a b => a.1 ≠ b.1) (hm : (k, v) ∈ pairs) :
+    field what fs k = .ok v := by
+  have hd : fs.Pairwise fun a b => a.1 ≠ b.1 :=
+    (h.pairwise_iff fun hab => Ne.symm hab).mpr distinct
+  simp only [field, lookup_of_mem hd (h.mem_iff.mpr hm)]
+  rfl
+
+/-- The JSON of a string is not `null`. -/
+theorem isNull_str (s : String) : (Lean.Json.str s).isNull = false := by rfl
+
+/-- The JSON of an array is not `null`. -/
+theorem isNull_arr (a : Array Lean.Json) : (Lean.Json.arr a).isNull = false := by rfl
+
+/-- The decoder of byte strings of a size reads back a vector written as data. -/
+theorem fixed_dataJson {n : Nat} (what : String) (v : Vector UInt8 n) (upper : Bool) :
+    fixed what n (dataJson v.toList) upper = .ok v :=
+  fixed_hexString what n v upper
+
+/-- The decoder of addresses reads back an address written as data. -/
+theorem address_dataJson (what : String) (v : Vector UInt8 20) :
+    address what (dataJson v.toList) = .ok v :=
+  fixed_dataJson what v true
+
+/-- Fields that are some pairs in another order, with distinct names, read a name as those do. -/
+theorem lookup_of_perm {fs pairs : List (String × Lean.Json)} (h : fs.Perm pairs)
+    (distinct : pairs.Pairwise fun a b => a.1 ≠ b.1) (k : String) :
+    fs.lookup k = pairs.lookup k := by
+  cases hl : pairs.lookup k with
+  | none =>
+    rw [List.lookup_eq_none_iff] at hl ⊢
+    exact fun p hp => hl p (h.mem_iff.mp hp)
+  | some v =>
+    obtain ⟨l₁, l₂, rfl, -⟩ := List.lookup_eq_some_iff.mp hl
+    exact lookup_of_mem ((h.pairwise_iff fun hab => Ne.symm hab).mpr distinct)
+      (h.mem_iff.mpr (by simp))
 
 /-! ## The error object -/
 

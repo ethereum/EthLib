@@ -6,6 +6,7 @@ public import EthLib.Consensus.Proofs.Accessors.DrawProbability
 public import EthLib.Consensus.Proofs.Accessors.DrawRandomOracle
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
 public import EthLib.Consensus.Proofs.BuilderApi
+public import EthLib.Consensus.Proofs.BuilderApi.Encoding
 public import EthLib.Consensus.Proofs.Builders
 public import EthLib.Consensus.Proofs.Churn
 public import EthLib.Consensus.Proofs.ChurnReservations
@@ -49,6 +50,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.ForwardClock
 public import EthLib.Consensus.Proofs.ForkChoice.Ghost
 public import EthLib.Consensus.Proofs.ForkChoice.Handlers
 public import EthLib.Consensus.Proofs.ForkChoice.Head
+public import EthLib.Consensus.Proofs.ForkChoice.HonestConfirmations
 public import EthLib.Consensus.Proofs.ForkChoice.HonestDuties
 public import EthLib.Consensus.Proofs.ForkChoice.HonestEquivocators
 public import EthLib.Consensus.Proofs.ForkChoice.Network
@@ -186,6 +188,8 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Genesis
 public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
 public import EthLib.Consensus.Proofs.Transition.Totality.Justification
 public import EthLib.Consensus.Proofs.Transition.Totality.Registry
+public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoad
+public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadUpgrades
 public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Slashings

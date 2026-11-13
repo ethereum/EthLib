@@ -11,6 +11,8 @@ public import EthLib.Engine.Payload
 
 The JSON form of the parameters of the Engine API.
 
+It also writes payloads, in the canonical form: lowercase hex, and numbers without leading zeros.
+
 The Engine API is a JSON-RPC interface, with the encodings of the Ethereum JSON-RPC API.
 
 This module reads the base types with readers that the execution JSON-RPC API shares.
@@ -41,7 +43,7 @@ namespace EthLib.Engine.Json
 open Lean (Json)
 open EthLib.Base
 open EthLib.Serialization.JsonRpc
-open EthLib.Execution.Rpc (withdrawal)
+open EthLib.Execution.Rpc (withdrawal withdrawalJson)
 open EthLib.Execution.Blocks (Withdrawal)
 
 /-- A decoding that fails with an invalid parameter. -/
@@ -153,6 +155,40 @@ def AnyPayload.atFork (p : AnyPayload) (fork : Fork) : Decode (ExecutionPayload 
     withdrawals := ← since "withdrawals" p.withdrawals
     blobGasUsed := ← since "blobGasUsed" p.blobGasUsed
     excessBlobGas := ← since "excessBlobGas" p.excessBlobGas }
+
+/-- The fields of an execution payload that versions 1 to 3 hold, those of its fork only.
+
+They are written in the canonical form: lowercase hex, and numbers without leading zeros. -/
+def executionPayloadFields {fork : Fork} (p : ExecutionPayload fork) : List (String × Json) :=
+  [("parentHash", dataJson p.parentHash.toList), ("feeRecipient", dataJson p.feeRecipient.toList),
+    ("stateRoot", dataJson p.stateRoot.toList), ("receiptsRoot", dataJson p.receiptsRoot.toList),
+    ("logsBloom", dataJson p.logsBloom.toList), ("prevRandao", dataJson p.prevRandao.toList),
+    ("blockNumber", quantityJson p.blockNumber.toNat), ("gasLimit", quantityJson p.gasLimit.toNat),
+    ("gasUsed", quantityJson p.gasUsed.toNat), ("timestamp", quantityJson p.timestamp.toNat),
+    ("extraData", dataJson p.extraData.data.toList),
+    ("baseFeePerGas", quantityJson p.baseFeePerGas.toNat),
+    ("blockHash", dataJson p.blockHash.toList),
+    ("transactions", listJson (dataJson ·.data.toList) p.transactions)] ++
+  (if h : .shapella ≤ fork then [("withdrawals", listJson withdrawalJson (p.withdrawals h))]
+    else []) ++
+  (if h : .dencun ≤ fork then
+    [("blobGasUsed", quantityJson (p.blobGasUsed h).toNat),
+      ("excessBlobGas", quantityJson (p.excessBlobGas h).toNat)] else [])
+
+/-- An execution payload as JSON, with the fields of version 1, 2 or 3 that its fork has.
+
+The source bounds the extra data to 32 bytes, and only then is the result a valid payload. -/
+def executionPayloadJson {fork : Fork} (p : ExecutionPayload fork) : Json :=
+  Json.mkObj (executionPayloadFields p)
+
+/-- An execution payload of version 4 as JSON: the fields of its fork, the access list and the slot.
+
+Only from Dencun on are they the fields of version 4. -/
+def executionPayloadV4Json {fork : Fork} (p : ExecutionPayload fork) (blockAccessList : ByteArray)
+    (slotNumber : UInt64) : Json :=
+  Json.mkObj (executionPayloadFields p ++
+    [("blockAccessList", dataJson blockAccessList.data.toList),
+      ("slotNumber", quantityJson slotNumber.toNat)])
 
 end EthLib.Engine.Json
 

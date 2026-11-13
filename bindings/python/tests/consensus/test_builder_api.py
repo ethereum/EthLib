@@ -21,6 +21,10 @@ VERSIONS = ["bellatrix", "capella", "deneb", "electra", "fulu"]
 # The offset of the value in a bid: 4 bytes per variable-size field before it.
 VALUE_AT = {"bellatrix": 4, "capella": 4, "deneb": 8, "electra": 12, "fulu": 12}
 ZERO = bytes(32)
+# The bytes of a blob, its field elements, and the bound on the blobs of a bundle, in mainnet.
+BLOB_SIZE = 131_072
+FIELD_ELEMENTS_PER_BLOB = 4096
+MAX_BLOBS = 4096
 SECRET_KEY = 42
 PUBKEY = G2ProofOfPossession.SkToPk(SECRET_KEY)
 
@@ -258,6 +262,118 @@ def test_no_builder_api_messages_outside_bellatrix_to_fulu(fork: str):
 def test_no_container_at_gloas(name: str):
     with raises(ERROR, f"no container {name} at glamsterdam") as info:
         consensus.ssz_static("mainnet", "glamsterdam", name, b"")
+    assert info.value.code == 0
+
+
+def _list_root(roots: list[bytes], limit: int) -> bytes:
+    """The root of a list: its element roots in a tree of `limit` leaves, then its length."""
+    zero = ZERO
+    level = roots
+    width = 1
+    while width < limit:
+        if len(level) % 2:
+            level = [*level, zero]
+        level = [_sha(level[i] + level[i + 1]) for i in range(0, len(level), 2)]
+        zero = _sha(zero + zero)
+        width *= 2
+    node = level[0] if level else zero
+    return _sha(node + len(roots).to_bytes(32, "little"))
+
+
+def _items(data: bytes, start: int, end: int, size: int) -> list[bytes]:
+    """The fixed-size items of a list held between two offsets."""
+    assert (end - start) % size == 0
+    return [data[i : i + size] for i in range(start, end, size)]
+
+
+def _bundle_root(bundle: bytes, proofs_limit: int) -> bytes:
+    """The root of a blobs bundle, computed field by field in Python."""
+    first, second, third = struct.unpack_from("<III", bundle, 0)
+    commitments = _items(bundle, first, second, 48)
+    proofs = _items(bundle, second, third, 48)
+    blobs = _items(bundle, third, len(bundle), BLOB_SIZE)
+    # A commitment and a proof are 48-byte vectors, so their roots are those of a public key.
+    blob_roots = [_merkleize([blob[i : i + 32] for i in range(0, BLOB_SIZE, 32)]) for blob in blobs]
+    return _merkleize(
+        [
+            _list_root([_pubkey_root(c) for c in commitments], MAX_BLOBS),
+            _list_root([_pubkey_root(p) for p in proofs], proofs_limit),
+            _list_root(blob_roots, MAX_BLOBS),
+        ]
+    )
+
+
+@pytest.mark.parametrize("source", ["bellatrix", "capella"])
+def test_execution_payload_example(source: str):
+    # Before Deneb a builder reveals the payload alone; the example round-trips through Lean.
+    fork = consensus.consensus_version_fork(source)
+    data = _example(source, "execution_payload")
+    _, again = consensus.ssz_static("mainnet", fork, "ExecutionPayload", data)
+    assert again == data
+    envelope = _example_json(source, "execution_payload")
+    assert envelope["version"] == source
+    expected = envelope["data"]
+    # The block hash follows 472 bytes of fixed fields and offsets.
+    assert "0x" + data[472:504].hex() == expected["block_hash"]
+
+
+@pytest.mark.parametrize(
+    ("source", "proofs_limit", "size"),
+    [
+        ("deneb", MAX_BLOBS, 131_919),
+        ("electra", MAX_BLOBS, 131_919),
+        # From Fulu the bound is the field elements of every extended blob.
+        ("fulu", 2 * FIELD_ELEMENTS_PER_BLOB * MAX_BLOBS, 138_015),
+    ],
+)
+def test_revealed_payload_and_blobs_bundle(source: str, proofs_limit: int, size: int):
+    fork = consensus.consensus_version_fork(source)
+    data = _example(source, "execution_payload_and_blobs_bundle")
+    assert len(data) == size
+    root, again = consensus.ssz_static("mainnet", fork, "ExecutionPayloadAndBlobsBundle", data)
+    assert again == data
+    payload_at, bundle_at = struct.unpack_from("<II", data, 0)
+    payload, bundle = data[payload_at:bundle_at], data[bundle_at:]
+    bundle_root, again = consensus.ssz_static("mainnet", fork, "BlobsBundle", bundle)
+    assert again == bundle
+    assert bundle_root == _bundle_root(bundle, proofs_limit)
+    payload_root = _message_root("ExecutionPayload", fork, payload)
+    assert root == _sha(payload_root + bundle_root)
+    envelope = _example_json(source, "execution_payload_and_blobs_bundle")
+    assert envelope["version"] == source
+    expected = envelope["data"]["blobs_bundle"]
+    first, second, third = struct.unpack_from("<III", bundle, 0)
+    assert ["0x" + c.hex() for c in _items(bundle, first, second, 48)] == expected["commitments"]
+    assert ["0x" + p.hex() for p in _items(bundle, second, third, 48)] == expected["proofs"]
+    assert len(_items(bundle, third, len(bundle), BLOB_SIZE)) == len(expected["blobs"])
+
+
+def _bundle_of_proofs(count: int) -> bytes:
+    """A bundle with no commitment, no blob, and `count` zero proofs."""
+    proofs = 48 * count
+    return struct.pack("<III", 12, 12, 12 + proofs) + bytes(proofs)
+
+
+def test_blobs_bundle_proofs_over_bound():
+    # Before Fulu a bundle holds at most one proof per possible blob.
+    message = f"input rejected: EthLib.Serialization.Ssz.Err.overLimit {MAX_BLOBS} {MAX_BLOBS + 1}"
+    with raises(ERROR, message):
+        consensus.ssz_static("mainnet", "dencun", "BlobsBundle", _bundle_of_proofs(MAX_BLOBS + 1))
+
+
+def test_blobs_bundle_proofs_under_fulu_bound():
+    # From Fulu the same bundle decodes, under the larger bound of the source.
+    bundle = _bundle_of_proofs(MAX_BLOBS + 1)
+    root, again = consensus.ssz_static("mainnet", "fusaka", "BlobsBundle", bundle)
+    assert again == bundle
+    assert root == _bundle_root(bundle, 2 * FIELD_ELEMENTS_PER_BLOB * MAX_BLOBS)
+
+
+@pytest.mark.parametrize("fork", ["bellatrix", "shapella", "glamsterdam"])
+@pytest.mark.parametrize("name", ["BlobsBundle", "ExecutionPayloadAndBlobsBundle"])
+def test_no_blobs_bundle_outside_deneb_to_fulu(fork: str, name: str):
+    with raises(ERROR, f"no container {name} at {fork}") as info:
+        consensus.ssz_static("mainnet", fork, name, b"")
     assert info.value.code == 0
 
 

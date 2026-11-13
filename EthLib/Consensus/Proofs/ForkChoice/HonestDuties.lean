@@ -297,7 +297,7 @@ private theorem computeSlotAtTimeMs_inside {config : Config} {genesisTimeMs due 
 /-- Before Gloas, a store that holds only an anchor block at slot zero has that block as head.
 
 The clock of the store is at slot zero, and both checkpoints are the anchor. -/
-private theorem getHead_anchor {config : Config} {store : Store preset fork}
+theorem getHead_anchor {config : Config} {store : Store preset fork}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {anchorRoot : Root} (before : fork < .glamsterdam)
     (blocks : store.blocks =

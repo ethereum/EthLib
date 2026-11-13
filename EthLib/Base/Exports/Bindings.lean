@@ -1152,6 +1152,12 @@ def bindings : List Binding := [
     "(version: int, request: bytes, response: bytes) -> bool",
     [`EthLib.Execution.Network.EthError, `EthLib.Execution.Network.PoolError],
     some "EthWireError"⟩,
+  ⟨"eth_session", `EthLib.Execution.Network.Exports.ethSessionExport,
+    "(version: int, schedule: bytes, number: int, timestamp: int, " ++
+      "events: list[tuple[bool, int, bytes]]) -> list[tuple[str, int]]",
+    [`EthLib.Execution.Network.EthError, `EthLib.Execution.Network.StatusError,
+      `EthLib.Execution.Network.EthSessionError],
+    some "EthWireError"⟩,
   ⟨"eth_wire_hash", `EthLib.Execution.Network.wireHash,
     "(tx: bytes) -> bytes",
     [], some "EthWireError"⟩,

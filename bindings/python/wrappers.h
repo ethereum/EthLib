@@ -575,6 +575,7 @@ PyObject* py_eth_message_decode                           (PyObject* self, PyObj
 PyObject* py_eth_check_status                             (PyObject* self, PyObject* args);
 PyObject* py_eth_check_headers                            (PyObject* self, PyObject* args);
 PyObject* py_eth_check_pooled                             (PyObject* self, PyObject* args);
+PyObject* py_eth_session                                  (PyObject* self, PyObject* args);
 PyObject* py_eth_wire_hash                                (PyObject* self, PyObject* args);
 PyObject* py_eth_receipts_match                           (PyObject* self, PyObject* args);
 PyObject* py_eth_check_body                               (PyObject* self, PyObject* args);

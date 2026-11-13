@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.ForkChoice.Reachable
+public import EthLib.Consensus.Proofs.ForkChoice.ForwardClock
 
 /-!
 # Proofs: each block state of a store comes from the state of its parent
@@ -12,6 +12,8 @@ A known anchor block has the anchor state.
 Each other block has the state that its transition gives from the state of its parent.
 
 So along a chain of known blocks above the anchor, each state is the transition of the one before.
+
+When every handler runs with one setting of the signature checks, each transition uses it.
 -/
 
 @[expose] public section
@@ -34,18 +36,22 @@ Any other block is the message of a signed block whose transition gives that sta
 
 The transition starts from the state of the parent, which the store keeps.
 
-It ran with some signature checks and some execution engine, which may differ between blocks.
+It ran with some execution engine, which may differ between blocks.
+
+It ran with a setting of the signature checks that the given predicate allows.
 
 It checks the state root, and the signature of the proposer under those checks.
 
 Some checks accept every signature, so this says nothing on signatures. -/
-def BlockStatesFromParents (config : Config) (anchorState : BeaconState preset fork)
-    (anchorBlock : BeaconBlock preset fork) (store : Store preset fork) : Prop :=
+def BlockStatesFromParents (config : Config) (allowed : SignatureChecks → Prop)
+    (anchorState : BeaconState preset fork) (anchorBlock : BeaconBlock preset fork)
+    (store : Store preset fork) : Prop :=
   ∀ ⦃root : Root⦄ ⦃block : BeaconBlock preset fork⦄, store.blocks[root]? = some block →
     ∃ state, store.blockStates[root]? = some state ∧
       (block = anchorBlock → state = anchorState) ∧
       (block ≠ anchorBlock → ∃ parentState checks engine, ∃ signed : SignedBeaconBlock preset fork,
-        signed.message = block ∧ store.blockStates[block.parentRoot]? = some parentState ∧
+        allowed checks ∧ signed.message = block ∧
+        store.blockStates[block.parentRoot]? = some parentState ∧
         stateTransition config checks engine parentState signed true = .ok state)
 
 end Store
@@ -90,96 +96,136 @@ theorem Store.Reachable.anchor_known
     obtain ⟨r, h, f⟩ := ih
     exact ⟨r, h, blocks ▸ f⟩
 
+/-- A handler that keeps the blocks and the block states keeps the states from the parents. -/
+private theorem Store.BlockStatesFromParents.of_maps {allowed : SignatureChecks → Prop}
+    {after : Store preset fork} (blocks : after.blocks = store.blocks)
+    (states : after.blockStates = store.blockStates)
+    (holds : store.BlockStatesFromParents config allowed anchorState anchorBlock) :
+    after.BlockStatesFromParents config allowed anchorState anchorBlock := by
+  intro root block found
+  rw [blocks] at found
+  rw [states]
+  exact holds found
+
+/-- The store built from the anchor has each state from its parent. -/
+private theorem Store.BlockStatesFromParents.anchor {allowed : SignatureChecks → Prop}
+    (made : getForkchoiceStore config anchorState anchorBlock = .ok store) :
+    store.BlockStatesFromParents config allowed anchorState anchorBlock := by
+  obtain ⟨anchorRoot, -, blocks, states⟩ := getForkchoiceStore_maps made
+  intro root block found
+  rw [blocks, getElem?_insert_root] at found
+  rw [states, getElem?_insert_root]
+  by_cases same : anchorRoot = root
+  · simp only [same, ↓reduceIte, Option.some.injEq] at found
+    simp only [same, ↓reduceIte]
+    subst found
+    exact ⟨_, rfl, fun _ => rfl, fun ne => absurd rfl ne⟩
+  · simp [same] at found
+
+/-- A block handled with an allowed setting of the checks keeps the states from the parents. -/
+private theorem Store.BlockStatesFromParents.onBlock {allowed : SignatureChecks → Prop}
+    {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork} {prior after : Store preset fork}
+    (ok : allowed checks) (previous : Store.Reachable config anchorState anchorBlock prior)
+    (ih : prior.BlockStatesFromParents config allowed anchorState anchorBlock)
+    (added : prior.onBlock config checks sources signed = .ok after) :
+    after.BlockStatesFromParents config allowed anchorState anchorBlock := by
+  rcases Store.onBlock_same_or_insert added with
+    same | ⟨blockRoot, hashed, fresh, blocks, pre, state, preFound, transition, states⟩
+  · subst same
+    exact ih
+  have parentNe : ∀ {parentState : BeaconState preset fork} {parentRoot : Root},
+      prior.blockStates[parentRoot]? = some parentState → blockRoot ≠ parentRoot := by
+    rintro _ _ hasState rfl
+    have none := previous.blockState_eq_none fresh
+    rw [none] at hasState
+    cases hasState
+  intro root block found
+  rw [blocks, getElem?_insert_root] at found
+  rw [states, getElem?_insert_root]
+  by_cases same : blockRoot = root
+  · simp only [same, ↓reduceIte, Option.some.injEq] at found
+    subst found
+    simp only [same, ↓reduceIte]
+    have notAnchor : signed.message ≠ anchorBlock := by
+      intro eq
+      obtain ⟨r, h, f⟩ := previous.anchor_known
+      rw [← eq, hashed] at h
+      cases h
+      rw [fresh] at f
+      cases f
+    refine ⟨state, rfl, fun eq => absurd eq notAnchor,
+      fun _ => ⟨pre, _, _, _, ok, rfl, ?_, transition⟩⟩
+    rw [getElem?_insert_root]
+    simp only [← same, parentNe preFound, ↓reduceIte]
+    exact preFound
+  · simp only [same, ↓reduceIte] at found ⊢
+    obtain ⟨old, oldFound, rest⟩ := ih found
+    refine ⟨old, oldFound, rest.1, fun ne => ?_⟩
+    obtain ⟨p, c, e, s, hc, hs, hp, ht⟩ := rest.2 ne
+    refine ⟨p, c, e, s, hc, hs, ?_, ht⟩
+    rw [getElem?_insert_root]
+    simp only [parentNe hp, ↓reduceIte]
+    exact hp
+
 /-- In a reachable store, each known block has the state after it, from the state of its parent.
 
-A known anchor block has the anchor state instead. -/
+A known anchor block has the anchor state instead.
+
+The transitions may run with any setting of the signature checks. -/
 theorem Store.Reachable.blockStatesFromParents
     (reachable : Store.Reachable config anchorState anchorBlock store) :
-    store.BlockStatesFromParents config anchorState anchorBlock := by
+    store.BlockStatesFromParents config (fun _ => True) anchorState anchorBlock := by
   induction reachable with
-  | anchor made =>
-    obtain ⟨anchorRoot, -, blocks, states⟩ := getForkchoiceStore_maps made
-    intro root block found
-    rw [blocks, getElem?_insert_root] at found
-    rw [states, getElem?_insert_root]
-    by_cases same : anchorRoot = root
-    · simp only [same, ↓reduceIte, Option.some.injEq] at found
-      simp only [same, ↓reduceIte]
-      subst found
-      exact ⟨_, rfl, fun _ => rfl, fun ne => absurd rfl ne⟩
-    · simp [same] at found
+  | anchor made => exact .anchor made
   | tick _ ticked ih =>
     obtain ⟨-, -, blocks, states⟩ := Store.onTick_frame ticked
-    intro root block found
-    rw [blocks] at found
-    rw [states]
-    exact ih found
-  | @block prior _ _ _ signed previous added ih =>
-    rcases Store.onBlock_same_or_insert added with
-      same | ⟨blockRoot, hashed, fresh, blocks, pre, state, preFound, ok, states⟩
-    · subst same
-      exact ih
-    have parentNe : ∀ {parentState : BeaconState preset fork} {parentRoot : Root},
-        prior.blockStates[parentRoot]? = some parentState → blockRoot ≠ parentRoot := by
-      rintro _ _ hasState rfl
-      have none := previous.blockState_eq_none fresh
-      rw [none] at hasState
-      cases hasState
-    intro root block found
-    rw [blocks, getElem?_insert_root] at found
-    rw [states, getElem?_insert_root]
-    by_cases same : blockRoot = root
-    · simp only [same, ↓reduceIte, Option.some.injEq] at found
-      subst found
-      simp only [same, ↓reduceIte]
-      have notAnchor : signed.message ≠ anchorBlock := by
-        intro eq
-        obtain ⟨r, h, f⟩ := previous.anchor_known
-        rw [← eq, hashed] at h
-        cases h
-        rw [fresh] at f
-        cases f
-      refine ⟨state, rfl, fun eq => absurd eq notAnchor, fun _ => ⟨pre, _, _, _, rfl, ?_, ok⟩⟩
-      rw [getElem?_insert_root]
-      simp only [← same, parentNe preFound, ↓reduceIte]
-      exact preFound
-    · simp only [same, ↓reduceIte] at found ⊢
-      obtain ⟨old, oldFound, rest⟩ := ih found
-      refine ⟨old, oldFound, rest.1, fun ne => ?_⟩
-      obtain ⟨p, c, e, s, hs, hp, ht⟩ := rest.2 ne
-      refine ⟨p, c, e, s, hs, ?_, ht⟩
-      rw [getElem?_insert_root]
-      simp only [parentNe hp, ↓reduceIte]
-      exact hp
+    exact .of_maps blocks states ih
+  | block previous added ih => exact .onBlock trivial previous ih added
   | attestation _ attested ih =>
     obtain ⟨-, blocks, states, -⟩ := Store.onAttestation_frame attested
-    intro root block found
-    rw [blocks] at found
-    rw [states]
-    exact ih found
+    exact .of_maps blocks states ih
   | attesterSlashing _ slashed ih =>
     obtain ⟨-, blocks, states, -⟩ := Store.onAttesterSlashing_frame slashed
-    intro root block found
-    rw [blocks] at found
-    rw [states]
-    exact ih found
+    exact .of_maps blocks states ih
   | payloadAttestation _ voted ih =>
     obtain ⟨-, blocks, states⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
-    intro root block found
-    rw [blocks] at found
-    rw [states]
-    exact ih found
+    exact .of_maps blocks states ih
   | envelope _ accepted ih =>
     obtain ⟨-, blocks, states⟩ := Store.onExecutionPayloadEnvelope_frame accepted
-    intro root block found
-    rw [blocks] at found
-    rw [states]
-    exact ih found
+    exact .of_maps blocks states ih
   | inclusionList _ accepted ih =>
     obtain ⟨-, blocks, states⟩ := Store.onInclusionList_frame accepted
-    intro root block found
-    rw [blocks] at found
-    rw [states]
-    exact ih found
+    exact .of_maps blocks states ih
+
+/-- In a store built with one setting of the checks, each block state comes from its parent.
+
+Each transition runs with that setting.
+
+A known anchor block has the anchor state instead. -/
+theorem Store.ForwardReachableWith.blockStatesFromParents {checks : SignatureChecks}
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store) :
+    store.BlockStatesFromParents config (· = checks) anchorState anchorBlock := by
+  induction reached with
+  | anchor made => exact .anchor made
+  | tick _ _ ticked ih =>
+    obtain ⟨-, -, blocks, states⟩ := Store.onTick_frame ticked
+    exact .of_maps blocks states ih
+  | block previous added ih => exact .onBlock rfl previous.reachable ih added
+  | attestation _ attested ih =>
+    obtain ⟨-, blocks, states, -⟩ := Store.onAttestation_frame attested
+    exact .of_maps blocks states ih
+  | attesterSlashing _ slashed ih =>
+    obtain ⟨-, blocks, states, -⟩ := Store.onAttesterSlashing_frame slashed
+    exact .of_maps blocks states ih
+  | payloadAttestation _ voted ih =>
+    obtain ⟨-, blocks, states⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
+    exact .of_maps blocks states ih
+  | envelope _ accepted ih =>
+    obtain ⟨-, blocks, states⟩ := Store.onExecutionPayloadEnvelope_frame accepted
+    exact .of_maps blocks states ih
+  | inclusionList _ accepted ih =>
+    obtain ⟨-, blocks, states⟩ := Store.onInclusionList_frame accepted
+    exact .of_maps blocks states ih
 
 end EthLib.Consensus

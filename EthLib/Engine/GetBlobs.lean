@@ -65,6 +65,8 @@ The parameters are the array of versioned hashes, and from version 4 the bitarra
 
 Any other parameters are invalid, with code `-32602`.
 
+The consensus layer also writes the parameters as JSON.
+
 The source orders no two checks.
 
 EthLib decodes the parameters first, then checks the fork of version 1, then the request size.
@@ -199,6 +201,10 @@ def getBlobsParams (version : Nat) (params : Json) :
     return (← array "hashes" (fixed "versioned hash" 32) hashes,
       some (← fixed "indices_bitarray" CELL_BITARRAY_BYTES bits))
   | _, _ => invalid s!"params: got {params.length}, expected {count}"
+
+/-- The parameters as JSON: the versioned hashes, then the bitarray when there is one. -/
+def getBlobsParamsJson (hashes : List Bytes32) (bits : Option CellBitarray) : Json :=
+  .arr (([listJson (dataJson ·.toList) hashes] ++ bits.toList.map (dataJson ·.toList)).toArray)
 
 /-- Version 1 at the active fork of the node: a blob and its proof for each hash, or `null`.
 

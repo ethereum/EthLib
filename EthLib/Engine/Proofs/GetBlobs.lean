@@ -28,6 +28,8 @@ An entry of version 4 is `null` exactly when the pool holds none of the cells of
 Otherwise it holds the selected cells of its blob, in increasing order of index.
 
 Cell `i` is selected exactly when bit `i mod 8` of byte `i / 8` of the bitarray is set.
+
+The decoder reads back the parameters that the writer writes.
 -/
 
 public section
@@ -322,5 +324,19 @@ theorem getBlobsV4_length {pool : BlobPool} {hashes : List Bytes32} {bits : Cell
     {l : List (Option BlobCellsAndProofsV1)}
     (h : getBlobsV4 pool hashes bits = .ok (some l)) : l.length = hashes.length := by
   simp [getBlobsV4_eq_some h]
+
+/-- The decoder of the parameters reads back the hashes and the bitarray that the writer writes.
+
+A bitarray is given exactly from version 4. -/
+theorem getBlobsParams_json {version : Nat} (hashes : List Bytes32)
+    (bits : Option CellBitarray) (four : bits.isSome ↔ 4 ≤ version) :
+    getBlobsParams version (getBlobsParamsJson hashes bits) = .ok (hashes, bits) := by
+  have hl : ∀ l : List Bytes32, List.mapM (fun x => (Except.ok x : Except String _)) l =
+      .ok l := fun l => by
+    simpa using mapM_eq_ok_map (g := id) (xs := l) fun _ _ => rfl
+  cases bits <;> simp at four <;>
+    simp [getBlobsParams, getBlobsParamsJson, getBlobsParamCount, four,
+      Serialization.JsonRpc.paramsArray, pure, Except.pure, bind, Except.bind,
+      Serialization.JsonRpc.array_listJson, Serialization.JsonRpc.fixed_dataJson, hl]
 
 end EthLib.Engine

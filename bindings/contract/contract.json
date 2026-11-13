@@ -8607,6 +8607,34 @@
    "error_class": "EthWireError",
    "docstring":
    "Whether `response` is PooledTransactions that answers the GetPooledTransactions `request`.\n\nIt must repeat the request ID, and its transactions must be requested ones, in order."},
+  {"summary":
+   "The outcomes of the eth messages that a session sends and receives in turn.",
+   "signature":
+   "(version: int, schedule: bytes, number: int, timestamp: int, events: list[tuple[bool, int, bytes]]) -> list[tuple[str, int]]",
+   "operation": "EthLib.Execution.Network.Exports.ethSessionExport",
+   "method": "eth_session",
+   "errors":
+   [{"type": "EthLib.Execution.Network.EthError",
+     "codes":
+     [{"constructor": "unknownId", "code": 1},
+      {"constructor": "rlp", "code": 2},
+      {"constructor": "unequalLengths", "code": 3}]},
+    {"type": "EthLib.Execution.Network.StatusError",
+     "codes":
+     [{"constructor": "version", "code": 101},
+      {"constructor": "forkId", "code": 102},
+      {"constructor": "range", "code": 103}]},
+    {"type": "EthLib.Execution.Network.EthSessionError",
+     "codes":
+     [{"constructor": "beforeStatus", "code": 701},
+      {"constructor": "badStatus", "code": null},
+      {"constructor": "secondStatus", "code": 702},
+      {"constructor": "unsolicited", "code": 703},
+      {"constructor": "badRange", "code": 704},
+      {"constructor": "transaction", "code": 705}]}],
+   "error_class": "EthWireError",
+   "docstring":
+   "The outcomes of the eth messages that a session sends and receives in turn.\n\nThe session runs on an eth version, for a node with a schedule and a head block.\n\nEach event says whether this node sends it, then gives its message ID and its RLP data.\n\nEach outcome gives the verdict and the number of requests still pending after the event.\n\nA received message is accepted or discarded, and a sent one is sent or refused.\n\nA message that does not decode, or that the session rejects, raises its error.\n\nThe error names the index of the event."},
   {"summary": "The hash of a transaction as it crosses the wire.",
    "signature": "(tx: bytes) -> bytes",
    "operation": "EthLib.Execution.Network.wireHash",

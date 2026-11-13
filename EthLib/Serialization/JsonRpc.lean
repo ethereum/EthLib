@@ -96,8 +96,8 @@ def fixed (what : String) (n : Nat) (j : Json) (upper : Bool := false) :
 /-- An address of 20 bytes, whose hex digits may be uppercase. -/
 def address (what : String) (j : Json) : Read Address := fixed what 20 j (upper := true)
 
-/-- A number below `2^bits`, without leading zeros. -/
-def quantity (what : String) (bits : Nat) (j : Json) : Read Nat := do
+/-- A number of any size, without leading zeros. -/
+def uint (what : String) (j : Json) : Read Nat := do
   let digits ← hexDigits what j
   if digits.size = 0 then reject s!"{what}: no digits" else
   if digits.size > 1 ∧ digits[0]? = some 48 then reject s!"{what}: leading zero" else
@@ -106,6 +106,11 @@ def quantity (what : String) (bits : Nat) (j : Json) : Read Nat := do
     match hexValue false c with
     | some d => value := 16 * value + d.toNat
     | none => reject s!"{what}: not a hex digit"
+  return value
+
+/-- A number below `2^bits`, without leading zeros. -/
+def quantity (what : String) (bits : Nat) (j : Json) : Read Nat := do
+  let value ← uint what j
   if value < 2 ^ bits then pure value else reject s!"{what}: above 2^{bits}"
 
 /-- A byte string of at most `n` bytes. -/
@@ -193,6 +198,16 @@ The code and the message are those of section 5.1 of [JSON-RPC 2.0][rpc].
 [rpc]: https://www.jsonrpc.org/specification#error_object -/
 def RpcError.invalidParams (reason : String) : RpcError :=
   { code := -32602, message := "Invalid params", data := some (.str reason) }
+
+/-- The error of an invalid request object, code `-32600`, with the reason as its data.
+
+The code and the message are those of section 5.1 of [JSON-RPC 2.0][rpc].
+
+The error groups of the execution API write the message with a lowercase `r`.
+
+[rpc]: https://www.jsonrpc.org/specification#error_object -/
+def RpcError.invalidRequest (reason : String) : RpcError :=
+  { code := -32600, message := "Invalid Request", data := some (.str reason) }
 
 /-- The error object as JSON: the code, the message, and the data when it has some. -/
 def rpcErrorJson (e : RpcError) : Json :=

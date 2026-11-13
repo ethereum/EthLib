@@ -1719,6 +1719,20 @@ That check makes the nonce of the transaction equal that of its sender, and belo
 The bound on the state before the first block is a hypothesis: the genesis allocation must meet it.
 From Glamsterdam, `stateTransition_rebuild_nonce` turns the 64-bit nonces that the block access list rebuilds into the nonces after the block, with no loss.
 
+### Logs paid for by gas
+
+The weight of a log, `48 + 33 * topics + data bytes`, bounds the length of its RLP encoding, for a log whose weight is below `2^64` (`encode_log_size_le`).
+`processMessage_logsWeight` and `processCreateMessage_logsWeight` (`Execution/Proofs/Evm/Call/LogsPaid.lean`) bound the logs of a message by its gas.
+Four times the weight of its logs, plus the gas it holds, never rises above the gas it starts with plus one allowance.
+The allowance is 716 from Glamsterdam, four times the weight of an EIP-7708 transfer log, and 0 before.
+It holds at every fork and for every lawful meter.
+`processTransaction_logsWeight` (`Execution/Proofs/Transactions/LogsPaid.lean`) bounds the logs of a transaction by its gas limit plus that allowance.
+`processMessageCall_logsWeight` gives the same bound for the message of a transaction.
+It assumes that a commit of the meter raises no gas held, which both meters of the forks meet.
+`encode_makeReceipt_processTransaction` then proves that the receipt of a transaction encodes, when its gas limit and the cumulative gas it records are below `2^64`.
+No theorem yet derives those two bounds from the validity of a block.
+Both transaction theorems hold only before Hegotá: from Hegotá a transaction fails as not yet specified, so it has no receipt.
+
 ### The supply of ether
 
 `Execution/Proofs/State/Supply.lean` defines the supply of a transaction state as the sum of the balances of all its accounts.
@@ -1908,6 +1922,40 @@ It does not check the identities that the reasons `0x07`, `0x09` and `0x0a` name
 The session also rejects the data of a capability message above 16 MiB, compressed or not.
 "Message Encoding" says that messages carrying more "should be rejected by closing the connection".
 Compressed data is rejected when its Snappy header declares more, before it is decompressed.
+
+### The eth session
+
+`receiveEth` and `sendEth` (`Execution/Network/Session.lean`) follow an eth session with one peer, message by message, and `EthSession.run` follows a list of sent and received messages.
+They follow [Basic Operation](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#basic-operation), [Protocol Messages](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#protocol-messages) and [Transactions (0x02)](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#transactions-0x02) in `caps/eth.md`.
+Before the peer's Status, only a Status that passes `checkStatus` is accepted, and until both Status messages have passed, this node sends nothing but Status.
+The session keeps the requests that this node sent and that no response has answered yet, and a response must answer one of them.
+It keeps the hashes of the transactions sent, in Transactions or PooledTransactions, and received, and refuses a Transactions message that would send a transaction twice, or back to the peer that sent it.
+It also refuses an empty Transactions message, which "Transactions (0x02)" forbids.
+On the proof-of-stake networks that the session assumes, NewBlockHashes and NewBlock are discarded.
+`snapAllowed` says whether the shared capabilities meet the requirement of snap, since [Relation to eth](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#relation-to-eth) makes snap "a dependent satellite of eth".
+
+`receiveEth_beforeStatus`, `receiveEth_status_iff`, `receiveEth_response`, `receiveEth_unsolicited`, `receiveEth_discard`, `receiveEth_secondStatus`, `receiveEth_sentTxs` and `receiveEth_receivedTxs` (`Execution/Proofs/Network/Session.lean`) state the receiving steps.
+`sendEth_beforeStatus`, `sendEth_beforeOwnStatus` and `sendEth_pending` state the sending steps.
+`run_sentTxs` and `run_no_resend` state that along any run of a session, a Transactions message sends no transaction that went out before, and none that the peer sent before it.
+`snapAllowed_iff` states that the requirement holds exactly when a capability named eth is shared.
+The session pairs a response with its request; the content of the response is judged apart, by `checkHeaders`, `receiptsMatch` and the other checks.
+
+The source leaves five points open, and the session decides none of them.
+A second Status from the peer gives the error `secondStatus`, and the source fixes no reaction to it; this node may send a Status at any time.
+A response that answers no pending request gives `unsolicited`; the source fixes a reaction only for the elements of Cells, a disconnect.
+A snap message on a connection without eth has no reaction in the source, and `snapAllowed` only names the case.
+A peer that keeps sending NewBlock or NewBlockHashes "should be disconnected", with no count, so each such message is only discarded.
+A peer that sends a transaction twice, or back to this node, breaks the rule of "Transactions (0x02)", but the source fixes no reaction, so the session accepts the message.
+
+The session also leaves out "A node should never send a transaction back to a peer that it can determine already knows of it" ([Transaction Exchange](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#transaction-exchange)), which also covers announcements.
+A PooledTransactions answer is never refused for a resend in an active session, and the session counts its transactions as sent, since "must not resend the same transaction" names no message.
+The session does not track the requests of the peer, so it does not check what a sent response answers, and two answers may carry one transaction.
+The session accepts a message from the peer before this node has sent its own Status, though the peer must wait for it; the source fixes no reaction.
+It reads every message, sent or received, as one of the negotiated version, which the decoder of that version ensures.
+Two pending requests may share a request ID, and a response then removes the oldest one that it answers.
+No decoded item fails to encode, since a length must reach `2^64` for that.
+If one did, its transaction would have no hash and would reject its whole message, while [Transaction Encoding and Validity](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#transaction-encoding-and-validity) asks only to discard invalid transactions.
+The session accepts an empty Transactions message from the peer, which the source only discourages.
 
 ### The block headers of the eth protocol
 
@@ -2099,6 +2147,16 @@ The vendored fast confirmation cases in `tests/consensus/fork_choice` still pass
 From Gloas the discount for empty slots also counts the votes for the pending node of the parent, which the rule of consensus-specs `v1.7.0-beta.4` leaves out.
 No pinned vector reaches that case, so review alone checks it until the vectors move to a release with it.
 
+`Consensus/Proofs/Models/ForkChoice/HonestSupport.lean` proves Lemmas 1, 3 and 4 of Appendix A.1 of the paper on sets of validators weighed by stake.
+`lt_two_mul_honest_support_later` takes the honest ratio that Lemma 4 gives at one slot, and chains Lemmas 1 and 3 across slots.
+The honest ratio that Lemma 4 gives at one slot yields honest support above half the threshold at a later slot.
+It assumes that the later threshold grows at most in proportion to the stake of the committees.
+It also assumes that every honest supporter at the first slot still supports the block, that every honest validator that joins the committees supports it, and Assumption 2 for the later committees.
+Both slots weigh validators by the same stake.
+`lt_two_mul_honest_support_later_of_add` covers thresholds that add an amount to the stake of the committees, with committees that only grow and an amount that never grows.
+For the rule that amount is the boost less the discount, so it does not cover a discount larger than the boost.
+No theorem yet takes these sets and stakes from the stores of an execution, or shows that the amount of the rule never grows.
+
 `stake_le_computeCommitteeWeightBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean`) shows that the weight covers the stake of the active members of the committees.
 `stake_le_computeCommitteeWeightBetweenSlots_of_covered` shows that the weight of a range with a whole epoch covers the stake of every validator active in the source of balances.
 `lt_two_mul_honest_support_of_isOneConfirmed` then gives Lemmas 4 and 3 of the paper for a block that the store confirms.
@@ -2182,9 +2240,6 @@ That root and each root before it in the walk then pass `isOneConfirmed`, with t
 The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` shows that the second walk is the part of the first walk after the root where the first walk stopped.
 No theorem yet shows that the roots of a walk are in the chain of the head.
 
-`foldlM_onFastConfirmation_confirmedRoot` turns those four cases into an induction along a list of stores, one fast confirmation for each.
-A property of the confirmed block holds at the end when the three starts have it and a one-confirmed walk keeps it.
-
 These theorems prove no safety: no theorem yet shows that a start is safe, or that a one-confirmed walk keeps a block in the chain of every honest head.
 They do not record every check of the rule.
 For the start they leave out the other checks that compare the epochs and the slots of the blocks.
@@ -2192,7 +2247,19 @@ For the walks they leave out the checks on the epochs of the start and of the wa
 They also leave out the check that the head of the slot before holds each block of the first walk.
 They leave out the checks that a voting source or an unrealized justification is recent.
 They also leave out the calls to `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, whose tests `FastConfirmationIndicators.lean` states on their own.
-No theorem yet relates the list of stores to the stores of an honest validator in an execution.
+
+`Consensus/Proofs/ForkChoice/HonestConfirmations.lean` puts the store of the rule into the state of an honest validator of the network model.
+An honest validator runs the rule at the start of a slot, at most once in each slot, with a store of the fork choice that is up to date with its view and whose clock is in that slot.
+`ConfirmingMoves.fcr_eq_or` shows that every other move keeps the store of the rule and the slot of the last run.
+`Execution.confirmingInduction` is the induction along an execution of that protocol, and `Store.onFastConfirmation_confirmedRoot` splits its case of a run into four cases.
+`Execution.toForkChoice` gives, inside each such execution, an execution of the fork choice with the same views and stores.
+Synchrony carries over to it, so the duty to vote and the theorems on executions of the fork choice apply to it.
+The duty `Confirms` asks a run of the rule at the start of each slot of a set that is a parameter, and that each run succeeds.
+A safety theorem would take a set that holds every slot from the stabilisation time of the model on, and so would cover only executions where the rule never fails at those slots.
+The state of an honest validator at the start of an execution is free; a safety theorem would take the start `ConfirmingState.Initial`, with no run and the store of the rule from the finalized checkpoint, and a reachable store.
+`exists_votes_and_confirmations_execution` gives an execution where one honest validator runs the rule at slot zero and votes in that slot.
+No execution yet has a run at each slot, which needs the rule to succeed at every slot.
+No theorem yet shows that, under the duty, the runs of a validator come at consecutive slots, so that the head that the rule records for the slot before is the head of the run before.
 
 A safety argument moves ancestry facts from the store of one node to the store of another.
 `Store.getAncestor_transport_or_collision` and `Store.isAncestor_transport_or_collision` (`Consensus/Proofs/ForkChoice/SharedAncestry.lean`) do that for any two stores, at every fork.
@@ -2928,6 +2995,19 @@ A field that appears at a fork decodes exactly when it is present from that fork
 So a decoded payload takes a fork exactly when its version is that of the fork (`exists_atFork_iff_of_anyPayload`).
 Version 1 takes the forks before Shapella, version 2 takes Shapella and version 3 takes the forks from Dencun.
 
+The Engine API also writes its requests, so the specification states what a consensus node sends.
+Each writer writes the canonical form of the encoding: lowercase hex, and numbers without leading zeros.
+The decoder of the parameters of `engine_newPayload` reads back what their writer writes, for a version that takes the fork of the payload (`newPayloadParams_json`, `Proofs/NewPayload.lean`).
+The extra data must hold at most 32 bytes, and the access list and the slot must be given exactly at version 5.
+So do the decoders of `engine_getPayload`, `engine_getBlobs` and the two methods of payload bodies (`getPayloadParams_json`, `Proofs/GetPayload.lean`; `getBlobsParams_json`, `Proofs/GetBlobs.lean`; `bodiesByHashParams_json` and `bodiesByRangeParams_json`, `Proofs/PayloadBodies.lean`).
+The decoder of payloads of versions 1 to 3 reads back the JSON of every payload at its fork (`anyPayload_executionPayloadJson`, `Proofs/Json.lean`).
+The extra data must then hold at most 32 bytes.
+The decoder of version 4 does the same from Dencun on, with the block access list and the slot number (`payloadV4_executionPayloadV4Json`).
+The decoder of the forkchoice state reads back the JSON of every state (`forkchoiceStateOfJson_json`, `Proofs/ForkchoiceUpdated.lean`).
+A version of `engine_forkchoiceUpdated` reads back payload attributes whose structure it takes, and they are the attributes at their fork (`payloadAttributesOfVersion_json`).
+The decoder of its parameters reads back the state, and the JSON of the attributes or their absence (`forkchoiceUpdatedParams_json`).
+From version 4 this holds whatever custody columns follow, and the custody columns read back too (`custodyColumnsOfJson_json`).
+
 The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.lean`.
 `forkchoiceUpdated_valid` shows that a valid answer selects a valid head that the execution layer holds, with its safe and finalized blocks on its chain.
 The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalized` covers.
@@ -2953,6 +3033,32 @@ The consensus test vectors fix the answer of the execution layer, so none of the
 No payload build is specified, so `engine_getPayload` has no definition, and the export refuses payload attributes on a new valid head.
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
 
+### Execution JSON-RPC API
+
+The execution JSON-RPC API is the interface through which wallets, indexers and test suites read an execution node.
+EthLib follows commit [`3284ee8`](https://github.com/ethereum/execution-apis/tree/3284ee80c3da3e516c53782dde75157cccf1ebdc) of `ethereum/execution-apis`, which is ahead of release `v1.0.0-beta.7`.
+The definitions are in `Execution/Rpc/`, and the theorems in `Execution/Proofs/Rpc/`.
+
+Each reader of a base type reads back what its writer writes.
+A number of any size reads back from its quantity, and that quantity is the only text that reads as it (`uint_quantityJson`, `uint_eq_ok_iff`, `Serialization/Proofs/JsonRpc.lean`).
+A byte reads back from the hex digits of its value (`byte_byteJson`).
+The schema of a byte also admits a leading zero, so `0x05` reads as the byte 5 but no writer writes it.
+A decimal number reads back from its decimal digits (`uintDecimal_uintDecimalJson`).
+A 32-bit and a 256-bit number read back from their quantities (`uint32_quantityJson`, `uint256_quantityJson`).
+
+A block parameter names a block by its number, by a tag, or by its hash.
+A number or a tag reads back from the writer (`blockNumberOrTag_number`, `blockNumberOrTag_tag`), and a range reads back every number (`blockNumberOrTagForRange_number`) and every tag but `pending` (`blockNumberOrTagForRange_tag`), which it rejects (`blockNumberOrTagForRange_pending`).
+The schema for a number, a tag or a hash is an `anyOf`, so a string of 64 hex digits whose first digit is not `0` matches both a number and a hash.
+The official fixtures read such a string as a hash, so the reader tries a hash first (`blockNumberOrTagOrHash_hashString`).
+A tag, and a hash in the object of EIP-1898, read back (`blockNumberOrTagOrHash_tag`, `blockNumberOrTagOrHash_hash`).
+A number reads back when its text is no hash (`blockNumberOrTagOrHash_number`), which holds below `2^252` (`hash32_quantityJson_of_lt`).
+
+The request and the response objects of JSON-RPC 2.0 read back from their writers (`request_requestJson`, `response_responseJson`), a result of `null` included, and so does the identifier of a request (`requestId_requestIdJson`).
+The error codes of the source come in groups.
+Every code of a group that declares a range lies in that range (`code_mem_range`, `Proofs/Rpc/Errors.lean`).
+No code appears twice (`codes_nodup`), and the code `4444` of pruned history is in no group (`prunedHistoryUnavailable_not_mem`).
+The messages of the groups are not fixed: the official fixtures show other texts.
+
 ### Beacon API
 
 The Beacon API is the HTTP interface of a consensus client, as release `v5.0.0-beta.0` of `ethereum/beacon-APIs` defines it.
@@ -2968,13 +3074,20 @@ So the name that a response carries determines the fork version of its fork.
 The source names no version for Heze yet, so Hegotá has none until a release of the source names it.
 
 The data of a response is a value of the consensus layer, in the JSON mapping of SSZ.
-`ofApiJson_toApiJson` (`Consensus/Proofs/BeaconApi/Encoding.lean`) shows that the reader gives back every value that the writer writes, for every lawful type and every spelling of the byte alias.
-`toApiJson_total` shows that the writer never fails on a value of a lawful type whose spelling marks no byte alias.
-It rests on `jsonOf_opaque_ok` (`Serialization/Proofs/Ssz/Codec/JsonTotal.lean`): a well-formed SSZ type writes every value that it admits.
+`ofApiJson_toApiJson` (`Consensus/Proofs/BeaconApi/Encoding.lean`) shows that the reader gives back every value that the writer writes, for every lawful type and every spelling.
+`toApiJson_total` shows that the writer never fails on a value of a lawful type, whatever its spelling.
+It rests on `jsonOf_ok` (`Serialization/Proofs/Ssz/Codec/JsonTotal.lean`): a well-formed SSZ type writes every value that it admits, under every spelling.
+A mark of the spelling has effect only where its shape allows it, so no mark makes the writer fail.
 `ApiEnvelope.ofJson_toJson` shows that an envelope reads back as written, and `readVersioned_envelope` that a response reads as its data under its version, whatever its other metadata.
 `readVersioned_version` shows that a response read under a version carries that exact name, so data of one fork never reads as data of another.
-`ofHex_uppercase` (`Serialization/Proofs/Ssz/Codec/JsonHexCase.lean`) shows that hex reads the same in uppercase, as the patterns of the source allow.
-`ofApiJson_uppercase` lifts it to a byte vector or a byte list read alone; a statement for every hex leaf of a document remains open.
+`valueOf_sameUpToCase` (`Serialization/Proofs/Ssz/Codec/JsonHexCase.lean`) shows that a document reads the same with any hex digits of its strings in uppercase, at every shape.
+The patterns of the source allow either case.
+`ofApiJson_uppercase` lifts it to the reader of the API.
+
+Each container declares its spelling in `Consensus/BeaconApi/Spelling.lean`, and none falls back to a default.
+Before Gloas, participation flags have the SSZ type of a byte list, and their spelling writes them as a list of decimal strings, as the API does.
+From Gloas, transactions and the block access list are progressive lists of one-byte integers, and their spelling writes them as hex, as the API does.
+A container that holds one of these takes the spelling of the field that holds it.
 The error bodies read back as written (`ErrorMessage.ofJson_toJson`, `IndexedErrorMessage.ofJson_toJson`).
 
 Points that remain open:
@@ -2982,8 +3095,34 @@ Points that remain open:
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
 - The source types the codes of the error bodies as JSON numbers; EthLib reads a number whose value is a natural number.
 - The source writes each integer leaf as a string, and its pattern for `Uint8` admits leading zeros; the JSON mapping of SSZ also reads a bare number, and refuses leading zeros.
-- EthLib gives participation flags the SSZ type of a byte list, which the JSON mapping writes as hex, while the API writes them as a list of decimal strings.
-- From Gloas, transactions and the block access list are progressive lists of one-byte integers, which the API writes as hex; the JSON of their containers needs its own spelling (#2076).
+- The spelling of each container is checked against the field types of the source by review, not by a proof.
+- The API defines no inclusion list yet, so the hex form of its transactions follows the form of a transaction in the API.
+
+### Builder API
+
+The Builder API connects a proposer to the builders that bid for its payload, as `ethereum/builder-specs` defines it.
+EthLib cites commit `fce64468` of that repository.
+For Bellatrix to Fulu, its specification text matches release `v0.6.1`; the changes are formatting, `deprecated` flags and notes that point to the Gloas replacements.
+EthLib specifies the messages, their signatures, their SSZ encodings and the version names of their JSON bodies; it leaves out the transport.
+
+A JSON response names the fork of its data by the consensus version of the Beacon API, from Bellatrix on.
+`builderVersion?_isSome_iff` (`Consensus/Proofs/BuilderApi/Encoding.lean`) shows that a fork has such a version exactly from Bellatrix through Glamsterdam.
+At Glamsterdam the version names the Gloas bodies, not the bid and the blinded block of the earlier forks.
+`builderVersion?_names` shows that two forks with the same version give a bid the same top-level field names, and a blinded body too.
+It does not compare the nested containers.
+`isBuilderVersion_iff` shows that the Builder API names exactly the consensus versions from Bellatrix on.
+`versionHeaderStatus_eq_none_iff` shows that the version header passes exactly when it is the exact name of such a version.
+Any other header, or none, gets 400, as the Gloas builder document requires for every request with a body.
+Before Gloas, only the SSZ body of a signed blinded block requires the header.
+`versionHeaderStatus_builderVersion?` shows that the version of every fork from Bellatrix up to Hegotá passes.
+The body of a registration request is a list of signed registrations, bounded by the registry limit of the preset.
+
+From Deneb to Fulu, a builder reveals the payload with a blobs bundle: the blobs, their commitments and their proofs.
+`BuilderBlobsBundle.names_nodup` and `ExecutionPayloadAndBlobsBundle.names_nodup` (`Consensus/Proofs/Containers/BuilderApi.lean`) give both containers distinct field names, so they decode back from their bytes when the logs bloom has a byte.
+From Fulu the Fulu builder document bounds the proofs by `FIELD_ELEMENTS_PER_EXT_BLOB * MAX_BLOB_COMMITMENTS_PER_BLOCK`, 2^25 in the mainnet preset.
+A bundle holds at most `MAX_BLOB_COMMITMENTS_PER_BLOCK` blobs, so it needs at most `CELLS_PER_EXT_BLOB * MAX_BLOB_COMMITMENTS_PER_BLOCK` cell proofs, 2^19, and the bound is 64 times larger.
+EthLib keeps the bound as written: it admits bundles with more proofs than any blob needs, and it sets the depth of the Merkle tree of the proofs.
+Whether the builder specification intends this bound is an open point.
 
 ### What cannot be proved yet
 
@@ -3271,12 +3410,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 388 operations and 49 size constants.
-The Python extension calls 388 of the operations and 49 of the constants.
+Lean exports 389 operations and 49 size constants.
+The Python extension calls 389 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10006 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1840), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (113), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (253), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1414), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (671), `x25519.c` (21), `xmss.c` (134).
+10018 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1840), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (113), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1415), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (672), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

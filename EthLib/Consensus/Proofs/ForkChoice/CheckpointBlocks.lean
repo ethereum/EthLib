@@ -141,7 +141,7 @@ private theorem Store.Reachable.slot_le_of_blockState
   by_cases same : block = anchorBlock
   · rw [isAnchor same, same]
     exact anchorSlot
-  · obtain ⟨parentState, checks, engine, signed, message, parentFound, transition⟩ :=
+  · obtain ⟨parentState, checks, engine, signed, -, message, parentFound, transition⟩ :=
       notAnchor same
     rw [(stateTransition_slot transition).2, message]
     exact UInt64.le_refl _
@@ -159,7 +159,7 @@ private theorem Store.Reachable.header_of_zero
   obtain ⟨kept, keptFound, -, fromParent⟩ := reachable.blockStatesFromParents found
   rw [stateFound, Option.some.injEq] at keptFound
   subst keptFound
-  obtain ⟨parentState, checks, engine, signed, message, parentFound, transition⟩ :=
+  obtain ⟨parentState, checks, engine, signed, -, message, parentFound, transition⟩ :=
     fromParent notAnchor
   obtain ⟨advanced, -, -, -, blockOk, rootOk⟩ := stateTransition_ok transition
   have stateRoot := Except.ok.inj ((rootOk rfl).symm.trans zero)
@@ -204,7 +204,7 @@ theorem Store.Reachable.chainRoots (anchor : Invariant anchorState)
   by_cases same : block = anchorBlock
   · rw [isAnchor same]
     exact ChainRoots.of_invariant anchor _
-  obtain ⟨parentState, checks, engine, signed, message, parentStateFound, transition⟩ :=
+  obtain ⟨parentState, checks, engine, signed, -, message, parentStateFound, transition⟩ :=
     notAnchor same
   obtain ⟨parent, parentKnown⟩ := reachable.known_of_blockState parentStateFound
   have parentLe :=
