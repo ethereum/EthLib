@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Hash.Ripemd160
 public import EthLib.Execution.Evm.Words
 
@@ -27,7 +28,8 @@ def DIGEST_BYTES : Nat := 20
 
 /-- The output on the call data: the digest, left-padded with zero bytes to 32 bytes. -/
 def output (data : ByteArray) : ByteArray :=
-  ⟨Array.replicate (OUTPUT_BYTES - DIGEST_BYTES) 0⟩ ++ Cryptography.Hash.ripemd160 data
+  ⟨Array.replicate (OUTPUT_BYTES - DIGEST_BYTES) 0⟩ ++
+    Base.packBytes (Cryptography.Hash.ripemd160 data)
 
 /-- The price of every call, from Appendix E of the Yellow Paper. -/
 def GAS_BASE : Nat := 600
