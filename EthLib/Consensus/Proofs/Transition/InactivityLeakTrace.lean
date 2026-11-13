@@ -6,7 +6,7 @@ public import EthLib.Consensus.Proofs.Transition.InactivityLeakEpoch
 import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 
 /-!
-# Proofs: one epoch of a leak for an absent validator, in the form of the trace bound
+# Proofs: one epoch of a leak for one validator, in the form of the trace bound
 
 The trace bound of an inactivity leak follows one validator from epoch to epoch.
 
@@ -17,6 +17,14 @@ It reads its effective balance there too, and its balance at the update of the e
 This module derives one step of those traces from one epoch transition, from Altair.
 
 The step is the state after the epoch: its balance, its effective balance and its score.
+
+In a leak the balance does not rise, and the effective balance follows it, for any validator.
+
+The validator must also be eligible and lack the timely target flag.
+
+Then its balance falls by at least the inactivity penalty, and its score gains the score bias.
+
+The slot that ends an epoch runs the epoch transition, and its other steps keep these facts.
 
 The blocks and slots before the next epoch are not covered here.
 -/
@@ -63,56 +71,59 @@ theorem withdrawalMaxEffectiveBalance_of_credentials {old new : Validator}
   unfold withdrawalMaxEffectiveBalance getMaxEffectiveBalance hasCompoundingWithdrawalCredential
   rw [same]
 
-/-- One leak epoch of an absent validator, from Altair.
+/-- One leak epoch of a validator, from Altair.
 
 The epoch transition succeeds, from a state that leaks, and does not raise the finalized epoch.
 
 The registry is within its limit.
 
-The validator is eligible, and its flags of the previous epoch lack the timely target flag.
+No pending deposit carries the key of the validator, and no pending consolidation targets it.
 
-No pending deposit carries its key, and no pending consolidation targets it.
-
-After the epoch its score is the old one plus the score bias.
-
-Its balance is at most the old one less its effective balance times the new score.
-
-That product is divided by the score bias times the penalty quotient of the fork, and rounds down.
-
-The subtraction stops at zero.
+After the epoch its balance is no higher.
 
 Its new effective balance is the update of the old one from that balance.
 
 The update uses the largest effective balance of the validator before the epoch.
 
-It keeps its key and its withdrawal credentials. -/
-theorem absentEpoch_processEpoch (altair : .altair ≤ fork)
+It keeps its key and its withdrawal credentials.
+
+Suppose also that it is eligible, and that its flags of the previous epoch lack the timely target.
+
+Then its score gains the score bias.
+
+Its balance falls by at least its old effective balance times the new score.
+
+That product is divided by the score bias times the penalty quotient of the fork, and rounds down.
+
+The subtraction stops at zero. -/
+theorem leakEpoch_processEpoch (altair : .altair ≤ fork)
     (computed : processEpoch config checks state = .ok after)
     (within : state.RegistryWithinLimit) (leak : isInInactivityLeak state = .ok true)
     (stalled : after.finalizedCheckpoint.epoch ≤ state.finalizedCheckpoint.epoch)
     {index : Nat} {validator : Validator} (found : state.validators.data[index]? = some validator)
-    (eligible : isEligibleValidator (getPreviousEpoch state) validator = .ok true)
-    (untimely : ∀ flags, (state.previousEpochParticipation altair).data[index]? = some flags →
-      hasFlag flags TIMELY_TARGET_FLAG_INDEX = false)
     (unnamed : ∀ electra : .pectra ≤ fork, ∀ deposit ∈ (state.pendingDeposits electra).data,
       deposit.pubkey ≠ validator.pubkey)
     (untargeted : ∀ electra : .pectra ≤ fork,
       ∀ consolidation ∈ (state.pendingConsolidations electra).data,
         consolidation.targetIndex.toNat ≠ index) :
-    ∃ balance settled score score' effective now,
+    ∃ balance settled effective now,
       state.balances.data[index]? = some balance ∧
-      after.balances.data[index]? = some settled ∧
-      (state.inactivityScores altair).data[index]? = some score ∧
-      (after.inactivityScores altair).data[index]? = some score' ∧
-      score'.toNat = score.toNat + config.INACTIVITY_SCORE_BIAS.toNat ∧
-      settled.toNat ≤ balance.toNat - validator.effectiveBalance.toNat * score'.toNat /
-        (config.INACTIVITY_SCORE_BIAS.toNat *
-          (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) ∧
+      after.balances.data[index]? = some settled ∧ settled ≤ balance ∧
       updatedEffectiveBalance preset (withdrawalMaxEffectiveBalance preset fork validator) settled
         validator.effectiveBalance = .ok effective ∧
       after.validators.data[index]? = some now ∧ now.effectiveBalance = effective ∧
       now.pubkey = validator.pubkey ∧
-      now.withdrawalCredentials = validator.withdrawalCredentials := by
+      now.withdrawalCredentials = validator.withdrawalCredentials ∧
+      (isEligibleValidator (getPreviousEpoch state) validator = .ok true →
+        (∀ flags, (state.previousEpochParticipation altair).data[index]? = some flags →
+          hasFlag flags TIMELY_TARGET_FLAG_INDEX = false) →
+        ∃ score score',
+          (state.inactivityScores altair).data[index]? = some score ∧
+          (after.inactivityScores altair).data[index]? = some score' ∧
+          score'.toNat = score.toNat + config.INACTIVITY_SCORE_BIAS.toNat ∧
+          settled.toNat ≤ balance.toNat - validator.effectiveBalance.toNat * score'.toNat /
+            (config.INACTIVITY_SCORE_BIAS.toNat *
+              (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)) := by
   have altairRun : processEpochAltair config checks state altair = .ok after := by
     unfold processEpoch at computed
     simpa only [altair, ↓reduceDIte] using computed
@@ -147,10 +158,59 @@ theorem absentEpoch_processEpoch (altair : .altair ≤ fork)
     exact (Array.getElem?_eq_some_iff.mp foundJustified).2
   obtain ⟨total, source, target, -, -, targetOk, facts⟩ :=
     processRewardsAndPenalties_of_leak altair withinJustified leaking scoredOk rewardedOk
-  obtain ⟨isEligible, eligibleOk, -, active⟩ := facts index insideJustified
-  rw [atJustified, previousEq, eligible] at eligibleOk
-  obtain ⟨base, balance, balance', score, score', -, atBalance, atBalance', atScore, atScore',
-    scoreEq, balanceEq⟩ := active (Except.ok.inj eligibleOk).symm
+  obtain ⟨isEligible, eligibleOk, notEligible, active⟩ := facts index insideJustified
+  rw [atJustified, previousEq] at eligibleOk
+  -- The later steps raise no balance, and the update of the effective balances keeps them.
+  obtain ⟨settled, owned⟩ := balance_of_processEffectiveBalanceUpdates updatedOk
+    (Array.getElem?_eq_some_iff.mp atKept).1
+  obtain ⟨earlier, atEarlier, lower⟩ := raised settled owned
+  -- In a leak the rewards raise no balance either.
+  have rewardsLower : ∃ balance, justified.balances.data[index]? = some balance ∧
+      earlier ≤ balance := by
+    cases isEligible with
+    | false =>
+      refine ⟨earlier, ?_, UInt64.le_refl _⟩
+      rw [← (notEligible rfl).1]
+      exact atEarlier
+    | true =>
+      obtain ⟨base, balance, balance', score, score', -, atBalance, atBalance', -, -, -,
+        balanceEq⟩ := active rfl
+      rw [atBalance', Option.some.injEq] at atEarlier
+      subst atEarlier
+      refine ⟨balance, atBalance, ?_⟩
+      rw [UInt64.le_iff_toNat_le, balanceEq]
+      exact Nat.sub_le _ _
+  obtain ⟨balance, atBalance, earlierLower⟩ := rewardsLower
+  obtain ⟨effective, atUpdated, effectiveOk⟩ :=
+    processEffectiveBalanceUpdates_effectiveBalance_eq updatedOk atKept owned
+  rw [keptEffective, withdrawalMaxEffectiveBalance_of_credentials keptCredentials]
+    at effectiveOk
+  -- The key of the validator stays at its position through the epoch.
+  obtain ⟨justified'', justifiedOk'', frame⟩ := processEpoch_frame computed
+  have sameJustified' : justified'' = justified :=
+    Except.ok.inj (justifiedOk''.symm.trans justifiedOk)
+  rw [sameJustified'] at frame
+  have foundJustified := found
+  rw [← sameValidators] at foundJustified
+  obtain ⟨current, atCurrent, currentKey⟩ :=
+    validators_getElem?_of_validatorKeys_prefix frame.pubkeysPrefix foundJustified
+  rw [afterValidators, atUpdated, Option.some.injEq] at atCurrent
+  subst atCurrent
+  refine ⟨balance, settled, effective, { kept with effectiveBalance := effective }, ?_, ?_,
+    UInt64.le_trans lower earlierLower, effectiveOk, ?_, rfl, currentKey, keptCredentials, ?_⟩
+  · rw [← sameBalances]
+    exact atBalance
+  · rw [afterBalances, processEffectiveBalanceUpdates_balances updatedOk]
+    exact owned
+  · rw [afterValidators]
+    exact atUpdated
+  intro eligible untimely
+  rw [eligible] at eligibleOk
+  obtain ⟨base, balance', rewardedBalance, score, score', -, atBalance', atRewarded, atScore,
+    atScore', scoreEq, balanceEq⟩ := active (Except.ok.inj eligibleOk).symm
+  obtain rfl : balance' = balance := Option.some.inj (atBalance'.symm.trans atBalance)
+  rw [atRewarded, Option.some.injEq] at atEarlier
+  subst atEarlier
   -- The validator is not in the target set: its previous flags lack the target flag.
   have small : index < 2 ^ 64 := by
     have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
@@ -174,33 +234,7 @@ theorem absentEpoch_processEpoch (altair : .altair ≤ fork)
     exact Bool.false_ne_true set
   simp only [notTarget, ↓reduceIte] at scoreEq balanceEq
   rw [atJustified] at balanceEq
-  -- The later steps raise no balance, and the update of the effective balances keeps them.
-  obtain ⟨settled, owned⟩ := balance_of_processEffectiveBalanceUpdates updatedOk
-    (Array.getElem?_eq_some_iff.mp atKept).1
-  obtain ⟨earlier, atEarlier, lower⟩ := raised settled owned
-  rw [atBalance', Option.some.injEq] at atEarlier
-  subst atEarlier
-  obtain ⟨effective, atUpdated, effectiveOk⟩ :=
-    processEffectiveBalanceUpdates_effectiveBalance_eq updatedOk atKept owned
-  rw [keptEffective, withdrawalMaxEffectiveBalance_of_credentials keptCredentials]
-    at effectiveOk
-  -- The key of the validator stays at its position through the epoch.
-  obtain ⟨justified'', justifiedOk'', frame⟩ := processEpoch_frame computed
-  have sameJustified' : justified'' = justified :=
-    Except.ok.inj (justifiedOk''.symm.trans justifiedOk)
-  rw [sameJustified'] at frame
-  have foundJustified := found
-  rw [← sameValidators] at foundJustified
-  obtain ⟨current, atCurrent, currentKey⟩ :=
-    validators_getElem?_of_validatorKeys_prefix frame.pubkeysPrefix foundJustified
-  rw [afterValidators, atUpdated, Option.some.injEq] at atCurrent
-  subst atCurrent
-  refine ⟨balance, settled, score, score', effective, { kept with effectiveBalance := effective },
-    ?_, ?_, ?_, ?_, scoreEq, ?_, effectiveOk, ?_, rfl, currentKey, keptCredentials⟩
-  · rw [← sameBalances]
-    exact atBalance
-  · rw [afterBalances, processEffectiveBalanceUpdates_balances updatedOk]
-    exact owned
+  refine ⟨score, score', ?_, ?_, scoreEq, ?_⟩
   · have scores : justified.inactivityScores = state.inactivityScores := by
       obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok justifiedOk
       · rfl
@@ -213,7 +247,53 @@ theorem absentEpoch_processEpoch (altair : .altair ≤ fork)
   · rw [UInt64.le_iff_toNat_le, balanceEq] at lower
     exact Nat.le_trans lower
       (Nat.sub_le_sub_left (Nat.le_trans (Nat.le_add_left _ _) (Nat.le_add_left _ _)) _)
-  · rw [afterValidators]
-    exact atUpdated
+
+/-- The slot that ends an epoch of a leak, for one validator, from Altair.
+
+The slot after the state is the first of an epoch, so this slot runs the epoch transition.
+
+The conclusions of one leak epoch then hold between the states before and after the slot.
+
+The hypotheses are read on the state before the slot, and the finalized epoch on both states. -/
+theorem leakEpoch_advanceSlot (altair : .altair ≤ fork)
+    (computed : advanceSlot config checks state = .ok after)
+    (ends : (state.slot + 1) % preset.SLOTS_PER_EPOCH = 0)
+    (within : state.RegistryWithinLimit) (leak : isInInactivityLeak state = .ok true)
+    (stalled : after.finalizedCheckpoint.epoch ≤ state.finalizedCheckpoint.epoch)
+    {index : Nat} {validator : Validator} (found : state.validators.data[index]? = some validator)
+    (unnamed : ∀ electra : .pectra ≤ fork, ∀ deposit ∈ (state.pendingDeposits electra).data,
+      deposit.pubkey ≠ validator.pubkey)
+    (untargeted : ∀ electra : .pectra ≤ fork,
+      ∀ consolidation ∈ (state.pendingConsolidations electra).data,
+        consolidation.targetIndex.toNat ≠ index) :
+    ∃ balance settled effective now,
+      state.balances.data[index]? = some balance ∧
+      after.balances.data[index]? = some settled ∧ settled ≤ balance ∧
+      updatedEffectiveBalance preset (withdrawalMaxEffectiveBalance preset fork validator) settled
+        validator.effectiveBalance = .ok effective ∧
+      after.validators.data[index]? = some now ∧ now.effectiveBalance = effective ∧
+      now.pubkey = validator.pubkey ∧
+      now.withdrawalCredentials = validator.withdrawalCredentials ∧
+      (isEligibleValidator (getPreviousEpoch state) validator = .ok true →
+        (∀ flags, (state.previousEpochParticipation altair).data[index]? = some flags →
+          hasFlag flags TIMELY_TARGET_FLAG_INDEX = false) →
+        ∃ score score',
+          (state.inactivityScores altair).data[index]? = some score ∧
+          (after.inactivityScores altair).data[index]? = some score' ∧
+          score'.toNat = score.toNat + config.INACTIVITY_SCORE_BIAS.toNat ∧
+          settled.toNat ≤ balance.toNat - validator.effectiveBalance.toNat * score'.toNat /
+            (config.INACTIVITY_SCORE_BIAS.toNat *
+              (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)) := by
+  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
+  have same : next = state.slot + 1 := by
+    apply UInt64.toNat_inj.mp
+    have bound := next.toNat_lt_size
+    rw [sum, UInt64.toNat_add, UInt64.toNat_one]
+    simp only [UInt64.size] at bound
+    omega
+  unfold epochIfLast at epochedOk
+  simp only [same, ends, ↓reduceIte] at epochedOk
+  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  exact leakEpoch_processEpoch altair epochedOk within leak stalled found unnamed untargeted
 
 end EthLib.Consensus

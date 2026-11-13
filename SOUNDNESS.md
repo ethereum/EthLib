@@ -2491,7 +2491,7 @@ The Python suite checks the periods against the three tables of the rule, except
 
 `Consensus/Proofs/Transition/InactivityLeakBound.lean` bounds the number of epochs after which a leak brings the effective balance of an absent validator to a threshold.
 `InactivityLeakStake.lean` deduces that the voters then hold two thirds of the active stake.
-Both take the balance, the score and the effective balance of each epoch as given sequences, not derived from the state transition.
+Both take the balance, the score and the effective balance of each epoch as given sequences.
 
 `InactivityLeakEpoch.lean` proves one link of that derivation: the leak lasts from one slot or epoch transition to the next, unless finality advances.
 In an epoch transition from a leaking state, the state that justification returns still leaks, unless the finalized epoch rises (`processEpoch_finalized_lt_or_isInInactivityLeak`).
@@ -2504,7 +2504,10 @@ This holds when no pending deposit carries its key and no pending consolidation 
 A block raises no balance of a validator that has a balance and is not its proposer.
 From Altair the validator must sign no sync aggregate, and no deposit of the block may carry its key.
 It needs more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
-No theorem yet derives the sequences over a run.
+`InactivityLeakRun.lean` derives those sequences for one validator from a run of the chain, from Altair, and so discharges the hypotheses of the bound (`effectiveBalance_le_of_leakRun`).
+The run is a series of slots that end an epoch, each followed by slots and blocks that credit nothing to the validator.
+It assumes that every epoch leaks, that the largest effective balance of the validator stays fixed, and that the validator is eligible and misses the target while above the threshold.
+No theorem yet composes the runs of all absent validators with the two-thirds bound.
 
 ### Fast confirmation rule
 
