@@ -491,6 +491,24 @@
 #define DOC_consensus_api_payload_envelope_ssz \
   "The SSZ body of the envelope answer, as `bytes`."
 
+#define DOC_consensus_api_light_client_bootstrap \
+  "The JSON response of the bootstrap endpoint, as a `dict`."
+
+#define DOC_consensus_api_light_client_bootstrap_ssz \
+  "The SSZ body of the bootstrap answer, as `bytes`."
+
+#define DOC_consensus_api_light_client_updates \
+  "The JSON response of the updates endpoint, as a `list` of `dict`."
+
+#define DOC_consensus_api_light_client_updates_ssz \
+  "The SSZ body of the updates answer, as `bytes`."
+
+#define DOC_consensus_api_light_client_decode_updates \
+  "The fork name and the SSZ bytes of each update of the SSZ body of an updates answer."
+
+#define DOC_consensus_api_light_client_latest \
+  "The JSON response of the finality or the optimistic update endpoint, as a `dict`."
+
 #define DOC_consensus_api_attestation_data \
   "The JSON response of the attestation data endpoint, as a `dict`."
 
