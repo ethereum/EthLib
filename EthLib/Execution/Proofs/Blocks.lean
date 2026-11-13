@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Blocks.AccessListAgrees
 public import EthLib.Execution.Proofs.Blocks.AccessListBuilder
 public import EthLib.Execution.Proofs.Blocks.AccessListComplete
 public import EthLib.Execution.Proofs.Blocks.AccessListCoverage

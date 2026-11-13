@@ -531,6 +531,32 @@ theorem processTransaction_agrees (hfork : .paris ≤ fork) {env : BlockEnvironm
     rw [ite_eq_right_of_eq_false _ _ (eq_false hglam)]
     exact runTransaction_agrees hfork covers hagree hcodes h hreads
 
+/-- From Paris, a transaction that succeeds has read its sender. -/
+theorem sender_mem_processTransaction (hfork : .paris ≤ fork) {env : BlockEnvironment fork}
+    {block : BlockState} {included : Included} {tx : Transaction} {output : TransactionOutput}
+    (h : processTransaction env block included tx = .ok output) :
+    included.sender ∈ output.state.accountReads := by
+  have run : ∀ {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter] {output : TransactionOutput},
+      runTransaction Meter env block included tx = .ok output →
+        included.sender ∈ output.state.accountReads := by
+    intro Meter _ _ output h
+    unfold runTransaction at h
+    obtain ⟨target, htarget, h⟩ := bind_ok_iff.mp h
+    obtain ⟨bought, hbought, h⟩ := bind_ok_iff.mp h
+    obtain ⟨message, hmessage, h⟩ := bind_ok_iff.mp h
+    obtain ⟨out, hout, h⟩ := bind_ok_iff.mp h
+    obtain ⟨⟨settled, used⟩, hsettle, h⟩ := bind_ok_iff.mp h
+    obtain ⟨final, hfinal, h⟩ := bind_ok_iff.mp h
+    cases h
+    exact (readsLe_deleteAccounts (mapError_ok_iff.mp hfinal)).accountReads _
+      (reads_settleGas hfork (mapError_ok_iff.mp hsettle)).2.1
+  unfold processTransaction at h
+  split at h
+  · cases h
+  split at h
+  · exact run h
+  · exact run h
+
 /-- A transaction that succeeds gives the same output on a block that agrees on what it recorded.
 
 The two outputs differ only in their states, which agree on those records.
