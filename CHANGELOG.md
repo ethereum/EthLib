@@ -50,6 +50,15 @@ Not yet released.
   The keys of the record come out in byte order.
   The JSON format and the C and Python signatures are unchanged.
 
+- A checkpoint of a fork-choice store comes from the anchor, a held state or its pull-up, and lies on the chain of its source ([#1423](https://github.com/ethereum/EthLib/issues/1423)).
+  No C export or Python function changes.
+  In Lean, the new module `Consensus.Proofs.ForkChoice.CheckpointAncestry` states this for a reachable store.
+  `Store.storeTargetCheckpointState_frame`, `Store.onAttestation_frame`, `Store.onAttesterSlashing_frame`, `Store.recordBlockTimeliness_frame` and `Store.updateProposerBoostRoot_frame` end with four new conjuncts.
+  They state that the justified, finalized, unrealized justified and unrealized finalized checkpoints are unchanged.
+  A caller that destructures their result adds four patterns at the end, and a projection such as `.2.2` of the attestation frames becomes `.2.2.1`.
+  The new `Store.Reachable.linked_of_unknown` gives the links of a reachable store whose anchor parent is unknown, and `Store.Reachable.parentsBelow` keeps its statement.
+  The new `getBlockRootAtSlot_advanceSlots_cases` gives the roots that a state within a transition records.
+
 - The theorem that a block leaves its header as the latest block header holds at every fork ([#2061](https://github.com/ethereum/EthLib/issues/2061)).
   In Lean, `latestBlockHeader_processBlock` drops its `gloas` argument, and its conclusion is unchanged.
   Callers remove that argument.
