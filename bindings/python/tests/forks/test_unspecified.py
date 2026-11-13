@@ -72,6 +72,10 @@ EXPORTS = {
     "consensus_entries": lambda f: enr.consensus_entries(f, b""),
     "consensus_parameters": lambda f: consensus.parameters("mainnet", f),
     "ssz_static": lambda f: consensus.ssz_static("mainnet", f, "Checkpoint", bytes(40)),
+    "api_json": lambda f: consensus.api_json("mainnet", f, "Checkpoint", bytes(40)),
+    "api_ssz": lambda f: consensus.api_ssz(
+        "mainnet", f, "Checkpoint", {"epoch": "0", "root": "0x" + "00" * 32}
+    ),
     "check_body": lambda f: check_body(f, HEADER, rlp.encode([[], [], []])),
 }
 
@@ -111,13 +115,15 @@ AT_GLAMSTERDAM = {
     "intrinsic_gas",
     "check",
     "ssz_static",
+    "api_json",
+    "api_ssz",
     "check_body",
 }
 
 # The exports whose rules hold at Hegotá:
 # - the preset parameters of Heze
 # - the containers that Heze keeps, such as a checkpoint
-AT_HEGOTA = {"consensus_parameters", "ssz_static"}
+AT_HEGOTA = {"consensus_parameters", "ssz_static", "api_json", "api_ssz"}
 
 
 def _rejects(export: str, fork: str) -> None:
@@ -163,7 +169,7 @@ def test_glamsterdam_transaction_and_header() -> None:
 
 
 # The exports of the consensus layer, whose configuration has no epoch for BPO3 to BPO5.
-CONSENSUS = {"consensus_entries", "consensus_parameters", "ssz_static"}
+CONSENSUS = {"consensus_entries", "consensus_parameters", "ssz_static", "api_json", "api_ssz"}
 
 
 @pytest.mark.parametrize("fork", ["bpo3", "bpo4", "bpo5"])

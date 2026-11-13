@@ -561,6 +561,14 @@ def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> tuple[
     """The root of the value that the bytes encode, and the bytes of that value, as a pair."""
     ...
 
+def consensus_api_json(name: str, fork: str, type: str, data: bytes) -> Any:
+    """The JSON of the API for the value that SSZ bytes encode."""
+    ...
+
+def consensus_api_ssz(name: str, fork: str, type: str, document: Any) -> bytes:
+    """The SSZ bytes of the value that a JSON document of the API holds."""
+    ...
+
 def consensus_is_valid_builder_signature(name: str, fork: str, config: dict[str, Any] | None, type: str, data: bytes) -> bool:
     """Whether the signature of a signed message of the Builder API verifies."""
     ...

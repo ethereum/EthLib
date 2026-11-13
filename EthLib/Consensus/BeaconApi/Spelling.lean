@@ -114,6 +114,11 @@ instance : ApiSpelling (SignedExecutionPayloadEnvelope preset fork) :=
   .ofFields (SignedExecutionPayloadEnvelope preset fork)
     [("message", ApiSpelling.spelling (ExecutionPayloadEnvelope preset fork))]
 
+/-- A payload with its blobs bundle, as the Builder API returns it, holds a payload. -/
+instance : ApiSpelling (ExecutionPayloadAndBlobsBundle preset fork) :=
+  .ofFields (ExecutionPayloadAndBlobsBundle preset fork)
+    [("execution_payload", ApiSpelling.spelling (ExecutionPayload preset fork))]
+
 /-- From Heze, the transactions of an inclusion list are hex.
 
 The API defines no inclusion list yet, so this follows its form of a transaction. -/
@@ -203,6 +208,7 @@ instance : ApiSpelling (SignedBuilderBid preset fork) := .unmarked
 instance : ApiSpelling (BlindedBeaconBlockBody preset fork) := .unmarked
 instance : ApiSpelling (BlindedBeaconBlock preset fork) := .unmarked
 instance : ApiSpelling (SignedBlindedBeaconBlock preset fork) := .unmarked
+instance : ApiSpelling (BuilderBlobsBundle preset fork) := .unmarked
 instance : ApiSpelling BuilderRequestAuth := .unmarked
 instance : ApiSpelling SignedBuilderRequestAuth := .unmarked
 instance : ApiSpelling BuilderPreferences := .unmarked

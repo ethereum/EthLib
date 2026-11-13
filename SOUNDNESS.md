@@ -3121,19 +3121,28 @@ A mark of the spelling has effect only where its shape allows it, so no mark mak
 `valueOf_sameUpToCase` (`Serialization/Proofs/Ssz/Codec/JsonHexCase.lean`) shows that a document reads the same with any hex digits of its strings in uppercase, at every shape.
 The patterns of the source allow either case.
 `ofApiJson_uppercase` lifts it to the reader of the API.
+The error bodies read back as written (`ErrorMessage.ofJson_toJson`, `IndexedErrorMessage.ofJson_toJson`).
 
 Each container declares its spelling in `Consensus/BeaconApi/Spelling.lean`, and none falls back to a default.
 Before Gloas, participation flags have the SSZ type of a byte list, and their spelling writes them as a list of decimal strings, as the API does.
 From Gloas, transactions and the block access list are progressive lists of one-byte integers, and their spelling writes them as hex, as the API does.
 A container that holds one of these takes the spelling of the field that holds it.
-The error bodies read back as written (`ErrorMessage.ofJson_toJson`, `IndexedErrorMessage.ofJson_toJson`).
+
+The spellings are checked by tests, not by a proof.
+Two exports write the JSON of a container from its SSZ bytes, and read it back, by preset, fork and name.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_json.py`) writes the JSON of each static SSZ vector that the `types` files of the API define.
+It validates that JSON against the schema of the container at its fork; it checks the lengths of lists and strings only for the mainnet preset.
+It reads the JSON back to the same bytes, with its hex in lowercase and in uppercase.
+In one case of each container, it puts an example of the `types` files in place of one string of each type and shape, and reads the result.
+It skips a hex string whose fixed length the example does not have.
+It also reads the JSON examples of the builder specification to the bytes of those examples.
 
 Points that remain open:
 
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
 - The source types the codes of the error bodies as JSON numbers; EthLib reads a number whose value is a natural number.
 - The source writes each integer leaf as a string, and its pattern for `Uint8` admits leading zeros; the JSON mapping of SSZ also reads a bare number, and refuses leading zeros.
-- The spelling of each container is checked against the field types of the source by review, not by a proof.
+- The source defines no schema for Heze, or for containers such as `SigningData`, so their spellings are checked by review only.
 - The API defines no inclusion list yet, so the hex form of its transactions follows the form of a transaction in the API.
 
 ### Builder API
@@ -3468,12 +3477,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 395 operations and 49 size constants.
-The Python extension calls 395 of the operations and 49 of the constants.
+Lean exports 400 operations and 49 size constants.
+The Python extension calls 400 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10095 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1866), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (122), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (129), `module.c` (1424), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (678), `x25519.c` (21), `xmss.c` (134).
+10179 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1888), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (122), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (129), `module.c` (1432), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (45), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (687), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

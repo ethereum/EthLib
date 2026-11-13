@@ -335,6 +335,11 @@ cases = ["**"]
 generator = "not established"
 checked = "builder-specs at fce64468 holds no generator code, and the commits that added the examples (#128, #138, #165) name no tool"
 
+[[directories."tests/consensus/beacon_api"]]
+cases = ["**"]
+generator = "not established"
+checked = "beacon-APIs at 7911555e holds no program that writes the OpenAPI document or the types files, and the README names none"
+
 [[directories."tests/consensus/pq_keys"]]
 cases = ["ssz/**", "possession/*/data.yaml"]
 generator = "EthLib script on eth-ssz-specs 0.1.0"
