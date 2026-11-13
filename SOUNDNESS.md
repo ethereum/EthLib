@@ -4373,7 +4373,17 @@ The source leaves these points open, decided here:
 - Emission on other payload transitions is optional, so a head event comes only on the transition from empty to full that the source requires.
 
 The optimistic flag of each event is an input, since it depends on what the node has verified.
-The payload attributes event, the exports and their Python tests remain for #2091.
+The event of the payload attributes is in `Engine/BeaconApiEvents.lean`, since it needs the types of the Engine API.
+`payloadAttributesEvent_fields` (`Engine/Proofs/BeaconApiEvents.lean`) shows that the Engine API and the event write the fields of the attributes in one order.
+The event writes each name in snake case and each integer as decimal text, where the Engine API keeps the name and writes the integer in hexadecimal.
+`payloadAttributesEvent_spec` shows that the event names the slot of the state, the proposer that the state gives, the root of its latest block header and the head of the forkchoice update.
+The source leaves these points open, decided here:
+
+- Until Gloas, the number of the parent execution block is an input, since the execution layer holds it and the state does not before the merge.
+- From Heze, the fifth version of the attributes adds a field that the attributes of EthLib lack, so the event has the fields of the fourth version.
+- How often the event is sent depends on the node, so only its content is specified.
+
+The exports of the events and their Python tests remain for #2091.
 The light client events and the event of an available payload depend on what the node has received, and are not defined here.
 
 No definition yet says when an event of a received object fires (#2090).
