@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Transactions.Authorization
 public import EthLib.Execution.Proofs.Transactions.Burn
 public import EthLib.Execution.Proofs.Transactions.Candidate
+public import EthLib.Execution.Proofs.Transactions.CodeOrigin
 public import EthLib.Execution.Proofs.Transactions.Codes
 public import EthLib.Execution.Proofs.Transactions.Deletion
 public import EthLib.Execution.Proofs.Transactions.Envelope
