@@ -1533,6 +1533,22 @@ def yamux_session(is_client: bool, events: list[tuple[bool, bytes]]) -> tuple[li
     """One side of a yamux session after the frames it receives and sends, from no stream."""
     ...
 
+def tls_certificate_read(data: bytes) -> tuple[Any, ...]:
+    """The certificate's signed bytes, SPKI, validity and extensions."""
+    ...
+
+def tls_certificate_authenticate(policy: dict[str, Any], now: int, chain: list[bytes]) -> bytes:
+    """The authenticated peer ID of a chain of exactly one certificate."""
+    ...
+
+def tls_certificate_authenticate_peer(policy: dict[str, Any], now: int, expected: bytes, chain: list[bytes]) -> bytes:
+    """The peer ID of one authenticated certificate, checked against the intended peer ID."""
+    ...
+
+def tls_certificate_verify_p256(spki: bytes, message: bytes, signature: bytes) -> bool:
+    """Verify DER ECDSA/SHA-256 under an uncompressed P-256 SubjectPublicKeyInfo."""
+    ...
+
 def libp2p_public_key(secret: bytes) -> bytes:
     """The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n)."""
     ...

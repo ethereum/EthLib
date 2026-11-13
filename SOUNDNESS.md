@@ -708,6 +708,34 @@ No theorem relates ChaCha20-Poly1305 to an independent model of RFC 8439.
 The Python tests compare the bindings with the RFC 7748 and RFC 8439 vectors.
 The million-iteration X25519 vector requires `ETHLIB_SLOW_VECTORS=1`.
 
+### libp2p TLS certificates
+
+`authenticate` (`Networking/Libp2p/Tls.lean`) follows the "Peer Authentication" and "libp2p Public Key Extension" sections of [libp2p TLS](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/tls/tls.md) at commit `c750236`.
+It checks that the chain holds one certificate, its validity interval, its self-signature, the libp2p extension and the host-key signature.
+The caller chooses the accepted host and certificate algorithms, and whether a unique ID is rejected.
+libp2p TLS leaves these choices open, so EthLib defines no default profile.
+
+The host keys checked are secp256k1 and P-256, with an uncompressed named-curve key.
+Ed25519, RSA and other ECDSA host keys are rejected as unsupported algorithms, so vector 1 of libp2p TLS fails.
+The only self-signature algorithm checked is ECDSA on P-256 with SHA-256.
+A secp256k1 host signature must have a low s, as the peer ID rules require; a P-256 signature need not.
+Every critical extension other than the libp2p one is rejected, because no other extension is understood.
+Non-critical extensions other than the libp2p one are ignored.
+Names are checked as DER but never compared, and no certification path is validated.
+Name strings may be UTF8String, PrintableString, IA5String, BMPString or UniversalString; a TeletexString is rejected.
+The reader accepts any serial number, and either time form for any year.
+RFC 5280 §4.1.2.2 asks certificate users to handle unusual serial numbers, and §4.1.2.5 to process both time forms.
+
+`authenticate_ok_iff` and `authenticateCertificate_ok_iff` (`Networking/Proofs/Libp2p/Tls.lean`) state every check that success requires: the single chain, the validity interval, the unique-ID rule, the algorithms, the self-signature and the host key.
+`authenticate_peerId` says that the returned peer ID belongs to the host key in the libp2p extension.
+For a secp256k1 key it is the identity peer ID of the key's point, and for a P-256 key the SHA-256 peer ID of its protobuf.
+In both cases the host signature verifies over `libp2p-tls-handshake:` and the certificate's exact encoded key.
+`authenticate_single`, `authenticate_empty`, `authenticate_validity`, `authenticate_extension` and `authenticate_critical` reject a chain of another length, a time outside the interval, a missing libp2p extension and another critical extension.
+`authenticatePeer_peerId` proves that a dialer that succeeds gets the peer ID it expected.
+These are correctness properties of the checks, not an unforgeability theorem.
+No theorem relates the DER reader to an independent model of X.690, or the time conversion to a calendar.
+Nothing in Lean shows that authentication can succeed; the Python tests check vectors 1 to 4 of libp2p TLS.
+
 ### QUIC integers
 
 RFC 9000 §16 writes an integer below `2^62` in 1, 2, 4 or 8 bytes, and the two high bits of the first byte give the length.
@@ -4235,12 +4263,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 451 operations and 49 size constants.
-The Python extension calls 451 of the operations and 49 of the constants.
+Lean exports 455 operations and 49 size constants.
+The Python extension calls 455 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10875 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2204), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1520), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (740), `x25519.c` (21), `xmss.c` (134).
+10927 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2204), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (194), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (106), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1526), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (71), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (746), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
