@@ -340,78 +340,6 @@ private theorem cohorts_updateEntry (early : fork < .pectra) {i : Nat}
   · cases rest
     exact kept
 
-private theorem cohorts_withdrawal {withdrawal : Withdrawal}
-    (ok : applyWithdrawal state withdrawal = .ok after) :
-    CohortsKept (config := config) state after := by
-  unfold applyWithdrawal at ok
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, set⟩ := ok
-    obtain ⟨_, rfl⟩ := setBuilder_ok set
-    exact .of_data rfl
-  · exact .decreaseBalance ok
-
-private theorem cohorts_expectedWithdrawals (early : fork < .pectra)
-    {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals}
-    (ok : applyExpectedWithdrawals state capella expected = .ok after) :
-    CohortsKept (config := config) state after := by
-  have noElectra : ¬ Fork.pectra ≤ fork := Nat.not_le_of_lt early
-  have noGloas : ¬ Fork.glamsterdam ≤ fork := Nat.not_le_of_lt (Nat.lt_trans early (by decide))
-  simp only [applyExpectedWithdrawals, noElectra, noGloas, ↓reduceDIte,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨applied, appliedOk, indexed, indexedOk, finished, rfl, last⟩ := ok
-  have withdrawals : CohortsKept (config := config) state applied := by
-    unfold applyWithdrawals at appliedOk
-    rw [← Array.foldlM_toList] at appliedOk
-    exact .foldlM (fun _ _ _ ok => cohorts_withdrawal ok) appliedOk
-  have indices : CohortsKept (config := config) applied indexed := by
-    unfold updateNextWithdrawalIndex at indexedOk
-    split at indexedOk
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at indexedOk
-      obtain ⟨_, _, rfl⟩ := indexedOk
-      exact .of_data rfl
-    · cases indexedOk
-      exact .refl _
-  refine withdrawals.trans (indices.trans ?_)
-  simp only [updateNextWithdrawalValidatorIndex, bind_ok_iff] at last
-  obtain ⟨_, _, last⟩ := last
-  split at last
-  · cases last
-  · cases last
-    exact .of_data rfl
-
-private theorem cohorts_withdrawals (early : fork < .pectra) {capella : .shapella ≤ fork}
-    {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (ok : processWithdrawals state capella payload = .ok after) :
-    CohortsKept (config := config) state after := by
-  have noGloas : ¬ Fork.glamsterdam ≤ fork := Nat.not_le_of_lt (Nat.lt_trans early (by decide))
-  simp only [processWithdrawals, noGloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,
-    liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, applied⟩ := ok
-  exact cohorts_expectedWithdrawals early applied
-
-private theorem cohorts_execution {engine : ExecutionEngine preset fork}
-    {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam}
-    (ok : processExecutionPayload config engine state body bellatrix = .ok after) :
-    CohortsKept (config := config) state after := by
-  obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok
-  exact .of_data rfl
-
-private theorem cohorts_blockExecution (early : fork < .pectra)
-    {engine : ExecutionEngine preset fork} {body : BeaconBlockBody preset fork}
-    {bellatrix : .bellatrix ≤ fork}
-    (ok : processBlockExecution config checks engine state body bellatrix = .ok after) :
-    CohortsKept (config := config) state after := by
-  have noGloas : ¬ Fork.glamsterdam ≤ fork := Nat.not_le_of_lt (Nat.lt_trans early (by decide))
-  simp only [processBlockExecution, noGloas, ↓reduceDIte] at ok
-  split at ok
-  · obtain ⟨_, withdrawn, executed⟩ := bind_ok_iff.mp ok
-    exact (cohorts_withdrawals early withdrawn).trans (cohorts_execution executed)
-  · split at ok
-    · exact cohorts_execution ok
-    · cases ok
-      exact .refl _
-
 private theorem cohorts_sync {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
     (ok : processSyncAggregate config checks state altair aggregate = .ok after) :
     CohortsKept (config := config) state after := by
@@ -432,29 +360,6 @@ private theorem cohorts_credentials {signed : SignedBLSToExecutionChange}
   obtain ⟨_, found, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
   exact .setValidator found set rfl rfl
 
-private theorem cohorts_operations (early : fork < .pectra)
-    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
-    (ok : processOperations config checks state body parentSlot = .ok after) :
-    CohortsKept (config := config) state after := by
-  have noElectra : ¬ Fork.pectra ≤ fork := Nat.not_le_of_lt early
-  have noGloas : ¬ Fork.glamsterdam ≤ fork := Nat.not_le_of_lt (Nat.lt_trans early (by decide))
-  simp only [processOperations, noElectra, noGloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,
-    ← Array.foldlM_toList, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, _, _, _, proposers, _, attesters, _, attestations, _, deposits, exited,
-    exits, changed, changes, rfl⟩ := ok
-  have credentials : CohortsKept (config := config) exited changed := by
-    unfold processBlsToExecutionChanges at changes
-    split at changes
-    · rw [← Array.foldlM_toList] at changes
-      exact .foldlM (fun _ _ _ ok => cohorts_credentials ok) changes
-    · cases changes
-      exact .refl _
-  exact (CohortsKept.foldlM (fun _ _ _ ok => cohorts_proposerSlashing early ok) proposers).trans <|
-    (CohortsKept.foldlM (fun _ _ _ ok => cohorts_attesterSlashing early ok) attesters).trans <|
-    (CohortsKept.foldlM (fun _ _ _ ok => cohorts_attestation ok) attestations).trans <|
-    (CohortsKept.foldlM (fun _ _ _ ok => cohorts_deposit early ok) deposits).trans <|
-    (CohortsKept.foldlM (fun _ _ _ ok => cohorts_voluntaryExit early ok) exits).trans credentials
-
 private theorem cohorts_header {block : BeaconBlock preset fork}
     (ok : processBlockHeader state block = .ok after) :
     CohortsKept (config := config) state after := by
@@ -473,34 +378,44 @@ private theorem cohorts_eth1 {before : fork < .hegota} {body : BeaconBlockBody p
   obtain ⟨_, _, rest⟩ := processEth1Data_eq ok
   exact .of_data (by rw [← rest])
 
+/-- A pre-Electra block keeps the cohorts, read through master's decomposition of a block.
+
+Cohorts depend only on the validators, so every step that keeps them keeps the cohorts. -/
 private theorem cohorts_block (early : fork < .pectra) {engine : ExecutionEngine preset fork}
     {block : BeaconBlock preset fork}
     (ok : processBlock config checks engine state block = .ok after) :
     CohortsKept (config := config) state after := by
-  unfold processBlock at ok
-  split at ok
-  · have noGloas : ¬ Fork.glamsterdam ≤ fork :=
-      Nat.not_le_of_lt (Nat.lt_trans early (by decide))
-    simp only [processBlockAltair, noGloas, ↓reduceDIte, bind_ok_iff,
-      pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, rfl, headed, header, executed, execution, revealed, randao, voted,
-      vote, _, operations, sync⟩ := ok
-    have executionKept : CohortsKept (config := config) headed executed := by
-      split at execution
-      · exact cohorts_blockExecution early execution
-      · cases execution
-        exact .refl _
-    have voteKept : CohortsKept (config := config) revealed voted := by
-      split at vote
-      · exact cohorts_eth1 vote
-      · cases vote
-        exact .refl _
-    exact (cohorts_header header).trans <| executionKept.trans <| (cohorts_randao randao).trans <|
-      voteKept.trans <| (cohorts_operations early operations).trans (cohorts_sync sync)
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, header, _, randao, _, vote, operations⟩ := ok
-    exact (cohorts_header header).trans <| (cohorts_randao randao).trans <|
-      (cohorts_eth1 vote).trans (cohorts_operations early operations)
+  have noElectra : ¬ Fork.pectra ≤ fork := Nat.not_le_of_lt early
+  have noGloas : ¬ Fork.glamsterdam ≤ fork := Nat.not_le_of_lt (Nat.lt_trans early (by decide))
+  have keep {a b : BeaconState preset fork} (_ : BlockFrame a b)
+      (same : b.validators = a.validators) : CohortsKept (config := config) a b :=
+    .of_data (congrArg (·.data) same)
+  let Kept (a b : BeaconState preset fork) : Prop := CohortsKept (config := config) a b
+  have trans {a b c : BeaconState preset fork} (one : CohortsKept (config := config) a b)
+      (two : CohortsKept (config := config) b c) : CohortsKept (config := config) a c :=
+    one.trans two
+  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
+  have head : CohortsKept (config := config) state input :=
+    OperationsInput.step_of Kept .refl trans (fun gloas _ => absurd gloas noGloas) cohorts_header
+      (fun _ executed => processBlockExecution_step_of Kept .refl trans keep
+        (fun withdrawn => .of_data (congrArg (·.data) (processWithdrawals_validators withdrawn)))
+        executed)
+      cohorts_randao (fun _ voted => cohorts_eth1 voted) started
+  obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
+    processOperations_folds_of Kept .refl trans (cohorts_deposit early)
+      (cohorts_voluntaryExit early) cohorts_credentials
+      (fun {_ _ _ electra} _ => absurd electra.1 noElectra)
+      (fun {_ _ gloas} _ => absurd gloas noGloas) operated
+  have tail : CohortsKept (config := config) last after := by
+    split at synced
+    · exact cohorts_sync synced
+    · cases synced
+      exact .refl _
+  exact head.trans <|
+    (CohortsKept.foldlM (fun _ _ _ ok => cohorts_proposerSlashing early ok) proposersOk).trans <|
+    (CohortsKept.foldlM (fun _ _ _ ok => cohorts_attesterSlashing early ok) slashingsOk).trans <|
+    (CohortsKept.foldlM (fun _ _ _ ok => cohorts_attestation ok) attestedOk).trans <|
+    rest.trans tail
 
 /-- A validated pre-Electra block preserves finite activation cohorts and the exit count bound. -/
 private theorem exitCohortBound_processBlock (early : fork < .pectra)
