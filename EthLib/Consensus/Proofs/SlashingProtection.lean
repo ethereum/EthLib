@@ -44,11 +44,13 @@ A signer that also imports files signs no two headers of one slot with different
 
 Each block that it signs meets conditions 1 and 2 of its starting file.
 
-Each block that it signs is after every slot before each block of its starting file, if any.
+If that file holds a block of the key, each signed block is after any slot before all its blocks.
 
 Each block that it signs after an import is after every block of the imported file.
 
 So it meets conditions 1 and 2 of that file too.
+
+The signer without imports is the case of a run that imports no file.
 
 An interchange file reads back as itself from the document that writes it.
 -/
@@ -440,55 +442,6 @@ theorem isSlashableWith_eq_false_of_signAttestations {signingRootOf : Attestatio
   obtain ⟨record, holds, check⟩ := checked_of_signAttestations signed data member
   exact (checkAttestationSigning_eq_ok_iff.mp check).1 _ (holds _ imported)
 
-/-- Blocks that a signer signs from a record never share a slot with another signing root.
-
-Two signed block headers of one slot have the same signing root. -/
-theorem signingRoot_eq_of_signBlocks {signingRootOf : BeaconBlockHeader → Root}
-    {pubkey : BLSPubkey} {start finish : Interchange} {headers : List BeaconBlockHeader}
-    (signed : signBlocks signingRootOf pubkey start headers = .ok finish)
-    {header1 header2 : BeaconBlockHeader} (member1 : header1 ∈ headers)
-    (member2 : header2 ∈ headers) (sameSlot : header1.slot = header2.slot) :
-    signingRootOf header1 = signingRootOf header2 := by
-  induction headers generalizing start with
-  | nil => simp at member1
-  | cons first rest ih =>
-    obtain ⟨_, later⟩ := bind_unit_ok_iff.mp signed
-    -- A later block passed its check against a record that holds the first block.
-    have against : ∀ header ∈ rest, header.slot = first.slot →
-        signingRootOf first = signingRootOf header := by
-      intro header member same
-      obtain ⟨record, holds, check⟩ := checked_of_signBlocks later header member
-      have kept := holds _ (by
-        rw [blocksOf_recordBlock]
-        exact List.mem_append_right _ (List.mem_singleton_self _))
-      have passed := (checkBlockSigning_eq_ok_iff.mp check).1 _ kept
-      simpa [SignedBlockRecord.conflictsWith, same] using passed
-    rcases List.mem_cons.mp member1 with head1 | inRest1 <;>
-      rcases List.mem_cons.mp member2 with head2 | inRest2
-    · rw [head1, head2]
-    · subst head1
-      exact against header2 inRest2 sameSlot.symm
-    · subst head2
-      exact (against header1 inRest1 sameSlot).symm
-    · exact ih later inRest1 inRest2
-
-/-- If such a signer signed both headers of a valid proposer slashing, they differ and share a root.
-
-So the pair is a collision of the signing root. -/
-theorem signingRoot_eq_of_processProposerSlashing {signingRootOf : BeaconBlockHeader → Root}
-    {pubkey : BLSPubkey} {start finish : Interchange} {headers : List BeaconBlockHeader}
-    (signed : signBlocks signingRootOf pubkey start headers = .ok finish) {config : Config}
-    {checks : SignatureChecks} {state after : BeaconState preset fork}
-    {slashing : ProposerSlashing}
-    (valid : processProposerSlashing config checks state slashing = .ok after)
-    (member1 : slashing.signedHeader1.message ∈ headers)
-    (member2 : slashing.signedHeader2.message ∈ headers) :
-    slashing.signedHeader1.message ≠ slashing.signedHeader2.message ∧
-      signingRootOf slashing.signedHeader1.message =
-        signingRootOf slashing.signedHeader2.message := by
-  obtain ⟨sameSlot, -, distinct, -⟩ := processProposerSlashing_checks valid
-  exact ⟨distinct, signingRoot_eq_of_signBlocks signed member1 member2 sameSlot⟩
-
 /-! ## A file that drops older messages -/
 
 /-- The least value of a field over a list that is not empty is the field of one of its members. -/
@@ -554,54 +507,6 @@ theorem isSlashableAttestationData_eq_false_of_le_of_lt {old data : AttestationD
     UInt64.not_lt.mpr (UInt64.le_of_lt target)
   simp [isSlashableAttestationData, UInt64.ne_of_lt target, (UInt64.ne_of_lt target).symm,
     notAbove, notBelow]
-
-/-- If each block of the starting file is after a slot, so is each block that a signer signs.
-
-The file holds one or more blocks of the key. -/
-theorem lt_slot_of_signBlocks {signingRootOf : BeaconBlockHeader → Root} {pubkey : BLSPubkey}
-    {start finish : Interchange} {headers : List BeaconBlockHeader}
-    (signed : signBlocks signingRootOf pubkey start headers = .ok finish)
-    (nonempty : start.blocksOf pubkey ≠ []) {old : Slot}
-    (older : ∀ block ∈ start.blocksOf pubkey, old < block.slot) {header : BeaconBlockHeader}
-    (member : header ∈ headers) : old < header.slot := by
-  induction headers generalizing start with
-  | nil => simp at member
-  | cons first rest ih =>
-    obtain ⟨checked, later⟩ := bind_unit_ok_iff.mp signed
-    have after := lt_slot_of_checkBlockSlot nonempty older (bind_unit_ok_iff.mp checked).2
-    rcases List.mem_cons.mp member with rfl | inRest
-    · exact after
-    · -- The block just signed is after the old slot too, so the grown record keeps the bound.
-      refine ih later (by simp [blocksOf_recordBlock]) ?_ inRest
-      intro block kept
-      rw [blocksOf_recordBlock, List.mem_append, List.mem_singleton] at kept
-      rcases kept with kept | rfl
-      · exact older block kept
-      · exact after
-
-/-- No valid proposer slashing pairs a signed header with a header before each block of the file.
-
-The file holds one or more blocks of the key.
-
-The signed header may be the first or the second header of the slashing.
-
-The two headers of a valid proposer slashing have one slot. -/
-theorem processProposerSlashing_ne_ok_of_signBlocks {signingRootOf : BeaconBlockHeader → Root}
-    {pubkey : BLSPubkey} {start finish : Interchange} {headers : List BeaconBlockHeader}
-    (signed : signBlocks signingRootOf pubkey start headers = .ok finish)
-    (nonempty : start.blocksOf pubkey ≠ []) {old : BeaconBlockHeader}
-    (older : ∀ block ∈ start.blocksOf pubkey, old.slot < block.slot) {header : BeaconBlockHeader}
-    (member : header ∈ headers) {config : Config} {checks : SignatureChecks}
-    {state after : BeaconState preset fork} {slashing : ProposerSlashing}
-    (pair : slashing.signedHeader1.message = old ∧ slashing.signedHeader2.message = header ∨
-      slashing.signedHeader1.message = header ∧ slashing.signedHeader2.message = old) :
-    processProposerSlashing config checks state slashing ≠ .ok after := by
-  intro valid
-  have sameSlot := (processProposerSlashing_checks valid).1
-  have before := UInt64.ne_of_lt (lt_slot_of_signBlocks signed nonempty older member)
-  rcases pair with ⟨first, second⟩ | ⟨first, second⟩
-  · exact before (by rw [← first, ← second, sameSlot])
-  · exact before (by rw [← first, ← second, sameSlot])
 
 /-- No vote that a signer signs is slashable with a vote older than each vote of its starting file.
 
@@ -1221,7 +1126,7 @@ theorem signingRoot_eq_of_importAndSignBlocks_of_processProposerSlashing
 
 /-- If each block of the starting file is after a slot, so is each block that the signer signs.
 
-The file holds one or more blocks of the key. -/
+The starting file holds one or more blocks of the key. -/
 theorem lt_slot_of_importAndSignBlocks {signingRootOf : BeaconBlockHeader → Root}
     {pubkey : BLSPubkey} {start finish : Interchange} {steps : List BlockSignerStep}
     (signed : importAndSignBlocks signingRootOf pubkey start steps = .ok finish)
@@ -1254,9 +1159,11 @@ theorem lt_slot_of_importAndSignBlocks {signingRootOf : BeaconBlockHeader → Ro
         · exact older block kept
         · exact after
 
-/-- No valid proposer slashing pairs a signed header with a header before each block of the file.
+/-- No valid proposer slashing pairs a signed header with an older header.
 
-The file holds one or more blocks of the key.
+An older header is before each block of the starting file.
+
+The starting file holds one or more blocks of the key.
 
 The signed header may be the first or the second header of the slashing.
 
@@ -1314,35 +1221,120 @@ theorem lt_slot_of_importAndSignBlocks_of_importFile {signingRootOf : BeaconBloc
       exact lt_slot_of_underLimit (start := start.importFile file) signed
         (underLimit_importFile member) (List.singleton_sublist.mp inTail)
 
-/-- Each header that the signer signs meets conditions 1 and 2 of its starting file.
-
-It meets those of each file imported before it too. -/
+/-- Each header that the signer signs meets conditions 1 and 2 of its starting file. -/
 theorem checkBlockSigning_of_importAndSignBlocks {signingRootOf : BeaconBlockHeader → Root}
     {pubkey : BLSPubkey} {start finish : Interchange} {steps : List BlockSignerStep}
     (signed : importAndSignBlocks signingRootOf pubkey start steps = .ok finish)
-    {header : BeaconBlockHeader} (member : .signBlock header ∈ steps) {file : Interchange}
-    (input : file = start ∨ List.Sublist [.importFile file, .signBlock header] steps) :
-    checkBlockSigning (file.blocksOf pubkey) header.slot (signingRootOf header) = .ok () := by
-  rcases input with rfl | order
-  · refine checkBlockSigning_eq_ok_iff.mpr ⟨fun old kept => ?_, fun minimum computed => ?_⟩
-    · by_cases sameSlot : old.slot = header.slot
-      · simp [SignedBlockRecord.conflictsWith,
-          signingRoot_eq_some_of_importAndSignBlocks signed kept member sameSlot]
-      · simp [SignedBlockRecord.conflictsWith, sameSlot]
-    · unfold minBlockSlot at computed
-      obtain ⟨mapped, least⟩ := List.min?_eq_some_iff.mp computed
-      obtain ⟨lowest, kept, rfl⟩ := List.mem_map.mp mapped
-      by_cases after : lowest.slot < header.slot
-      · exact .inl after
-      · -- No signed header is before each block of the file, so this one is at the least slot.
-        have notBefore : ¬header.slot < lowest.slot := fun before =>
-          UInt64.lt_irrefl _ (lt_slot_of_importAndSignBlocks signed (List.ne_nil_of_mem kept)
-            (fun block inFile => UInt64.lt_of_lt_of_le before
-              (least _ (List.mem_map.mpr ⟨block, inFile, rfl⟩))) member)
-        have sameSlot := UInt64.le_antisymm (UInt64.not_lt.mp notBefore) (UInt64.not_lt.mp after)
-        refine .inr (List.any_eq_true.mpr ⟨lowest, kept, ?_⟩)
-        simp [sameSlot, signingRoot_eq_some_of_importAndSignBlocks signed kept member sameSlot]
-  · exact checkBlockSigning_of_all_lt fun old kept =>
-      lt_slot_of_importAndSignBlocks_of_importFile signed order old (List.mem_append_right _ kept)
+    {header : BeaconBlockHeader} (member : .signBlock header ∈ steps) :
+    checkBlockSigning (start.blocksOf pubkey) header.slot (signingRootOf header) = .ok () := by
+  refine checkBlockSigning_eq_ok_iff.mpr ⟨fun old kept => ?_, fun minimum computed => ?_⟩
+  · by_cases sameSlot : old.slot = header.slot
+    · simp [SignedBlockRecord.conflictsWith,
+        signingRoot_eq_some_of_importAndSignBlocks signed kept member sameSlot]
+    · simp [SignedBlockRecord.conflictsWith, sameSlot]
+  · unfold minBlockSlot at computed
+    obtain ⟨mapped, least⟩ := List.min?_eq_some_iff.mp computed
+    obtain ⟨lowest, kept, rfl⟩ := List.mem_map.mp mapped
+    by_cases after : lowest.slot < header.slot
+    · exact .inl after
+    · -- No signed header is before each block of the file, so this one is at the least slot.
+      have notBefore : ¬header.slot < lowest.slot := fun before =>
+        UInt64.lt_irrefl _ (lt_slot_of_importAndSignBlocks signed (List.ne_nil_of_mem kept)
+          (fun block inFile => UInt64.lt_of_lt_of_le before
+            (least _ (List.mem_map.mpr ⟨block, inFile, rfl⟩))) member)
+      have sameSlot := UInt64.le_antisymm (UInt64.not_lt.mp notBefore) (UInt64.not_lt.mp after)
+      refine .inr (List.any_eq_true.mpr ⟨lowest, kept, ?_⟩)
+      simp [sameSlot, signingRoot_eq_some_of_importAndSignBlocks signed kept member sameSlot]
+
+/-- Each header that the signer signs after an import meets conditions 1 and 2 of that file. -/
+theorem checkBlockSigning_of_importAndSignBlocks_of_importFile
+    {signingRootOf : BeaconBlockHeader → Root} {pubkey : BLSPubkey}
+    {start finish : Interchange} {steps : List BlockSignerStep}
+    (signed : importAndSignBlocks signingRootOf pubkey start steps = .ok finish)
+    {file : Interchange} {header : BeaconBlockHeader}
+    (order : List.Sublist [.importFile file, .signBlock header] steps) :
+    checkBlockSigning (file.blocksOf pubkey) header.slot (signingRootOf header) = .ok () :=
+  checkBlockSigning_of_all_lt fun old kept =>
+    lt_slot_of_importAndSignBlocks_of_importFile signed order old (List.mem_append_right _ kept)
+
+/-- Importing a file without entries puts the held record in its minimal form.
+
+So a signer that prunes its record with the minimal strategy imports an empty file. -/
+theorem importFile_of_data_eq_nil {held file : Interchange} (empty : file.data = []) :
+    held.importFile file = held.toMinimal := by
+  simp [Interchange.importFile, empty]
+
+/-- A signer of blocks that imports no file is the signer of blocks without imports. -/
+theorem importAndSignBlocks_map_signBlock (signingRootOf : BeaconBlockHeader → Root)
+    (pubkey : BLSPubkey) (start : Interchange) (headers : List BeaconBlockHeader) :
+    importAndSignBlocks signingRootOf pubkey start (headers.map .signBlock) =
+      signBlocks signingRootOf pubkey start headers := by
+  induction headers generalizing start with
+  | nil => rfl
+  | cons first rest ih => simp only [List.map_cons, importAndSignBlocks, signBlocks, ih]
+
+/-- Blocks that a signer signs from a record never share a slot with another signing root.
+
+Two signed block headers of one slot have the same signing root. -/
+theorem signingRoot_eq_of_signBlocks {signingRootOf : BeaconBlockHeader → Root}
+    {pubkey : BLSPubkey} {start finish : Interchange} {headers : List BeaconBlockHeader}
+    (signed : signBlocks signingRootOf pubkey start headers = .ok finish)
+    {header1 header2 : BeaconBlockHeader} (member1 : header1 ∈ headers)
+    (member2 : header2 ∈ headers) (sameSlot : header1.slot = header2.slot) :
+    signingRootOf header1 = signingRootOf header2 :=
+  signingRoot_eq_of_importAndSignBlocks
+    ((importAndSignBlocks_map_signBlock ..).trans signed)
+    (List.mem_map_of_mem member1) (List.mem_map_of_mem member2) sameSlot
+
+/-- If such a signer signed both headers of a valid proposer slashing, they differ and share a root.
+
+So the pair is a collision of the signing root. -/
+theorem signingRoot_eq_of_processProposerSlashing {signingRootOf : BeaconBlockHeader → Root}
+    {pubkey : BLSPubkey} {start finish : Interchange} {headers : List BeaconBlockHeader}
+    (signed : signBlocks signingRootOf pubkey start headers = .ok finish) {config : Config}
+    {checks : SignatureChecks} {state after : BeaconState preset fork}
+    {slashing : ProposerSlashing}
+    (valid : processProposerSlashing config checks state slashing = .ok after)
+    (member1 : slashing.signedHeader1.message ∈ headers)
+    (member2 : slashing.signedHeader2.message ∈ headers) :
+    slashing.signedHeader1.message ≠ slashing.signedHeader2.message ∧
+      signingRootOf slashing.signedHeader1.message =
+        signingRootOf slashing.signedHeader2.message :=
+  signingRoot_eq_of_importAndSignBlocks_of_processProposerSlashing
+    ((importAndSignBlocks_map_signBlock ..).trans signed) valid
+    (List.mem_map_of_mem member1) (List.mem_map_of_mem member2)
+
+/-- If each block of the starting file is after a slot, so is each block that a signer signs.
+
+The file holds one or more blocks of the key. -/
+theorem lt_slot_of_signBlocks {signingRootOf : BeaconBlockHeader → Root} {pubkey : BLSPubkey}
+    {start finish : Interchange} {headers : List BeaconBlockHeader}
+    (signed : signBlocks signingRootOf pubkey start headers = .ok finish)
+    (nonempty : start.blocksOf pubkey ≠ []) {old : Slot}
+    (older : ∀ block ∈ start.blocksOf pubkey, old < block.slot) {header : BeaconBlockHeader}
+    (member : header ∈ headers) : old < header.slot :=
+  lt_slot_of_importAndSignBlocks ((importAndSignBlocks_map_signBlock ..).trans signed) nonempty
+    older (List.mem_map_of_mem member)
+
+/-- No valid proposer slashing pairs a signed header with a header before each block of the file.
+
+The file holds one or more blocks of the key.
+
+The signed header may be the first or the second header of the slashing.
+
+The two headers of a valid proposer slashing have one slot. -/
+theorem processProposerSlashing_ne_ok_of_signBlocks {signingRootOf : BeaconBlockHeader → Root}
+    {pubkey : BLSPubkey} {start finish : Interchange} {headers : List BeaconBlockHeader}
+    (signed : signBlocks signingRootOf pubkey start headers = .ok finish)
+    (nonempty : start.blocksOf pubkey ≠ []) {old : BeaconBlockHeader}
+    (older : ∀ block ∈ start.blocksOf pubkey, old.slot < block.slot) {header : BeaconBlockHeader}
+    (member : header ∈ headers) {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork} {slashing : ProposerSlashing}
+    (pair : slashing.signedHeader1.message = old ∧ slashing.signedHeader2.message = header ∨
+      slashing.signedHeader1.message = header ∧ slashing.signedHeader2.message = old) :
+    processProposerSlashing config checks state slashing ≠ .ok after :=
+  processProposerSlashing_ne_ok_of_importAndSignBlocks
+    ((importAndSignBlocks_map_signBlock ..).trans signed) nonempty older
+    (List.mem_map_of_mem member) pair
 
 end EthLib.Consensus
