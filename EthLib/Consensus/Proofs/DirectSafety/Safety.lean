@@ -170,7 +170,8 @@ Otherwise SHA-256 collides in the root of a header of the runs, or a header or s
 
 The runs start at one genesis built from deposits, and the preset meets the parameters.
 
-After epoch 1, active stake exceeds 1.5 increments through one epoch past `j.epoch`. -/
+Each run's active stake exceeds 1.5 increments at epoch calls after epoch 1 through `j.epoch + 1`.
+-/
 theorem accountable_safety_at_calls {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
@@ -281,7 +282,9 @@ Otherwise SHA-256 collides in the root of a header of the runs, or a header or s
 
 The runs start at one genesis built from deposits, and the preset meets the parameters.
 
-After epoch 1, active stake exceeds 1.5 increments through one past the right finalized epoch. -/
+The floor covers epoch calls after epoch 1 through one epoch past the finalized epoch of `b`.
+
+Each run has active stake above 1.5 increments at each covered call. -/
 theorem accountable_safety {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
@@ -325,7 +328,8 @@ Otherwise SHA-256 collides in the root of a header of the runs, or a header or s
 
 The runs start at one genesis built from deposits, and the preset meets the parameters.
 
-After epoch 1, active stake exceeds 1.5 increments through one epoch past `j.epoch`. -/
+Each run's active stake exceeds 1.5 increments at epoch calls after epoch 1 through `j.epoch + 1`.
+-/
 theorem accountable_safety_justified {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
@@ -368,7 +372,8 @@ Otherwise SHA-256 collides in the root of a header of the runs, or a header or s
 
 The runs start at one genesis built from deposits, and the preset meets the parameters.
 
-After epoch 1, active stake exceeds 1.5 increments through one epoch past `j.epoch`. -/
+Each run's active stake exceeds 1.5 increments at epoch calls after epoch 1 through `j.epoch + 1`.
+-/
 theorem accountable_justified_unique {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a)
     (right : Run config checks x b) (parameters : Parameters preset)
