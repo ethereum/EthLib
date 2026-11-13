@@ -16,6 +16,9 @@ Properties of the consensus entries of a node record.
 - A node accepts a record exactly when each of its entries reads, and the `eth2` entry is present.
 - A node before Altair reads no sync committee subnets.
 - A node from Fulu on reads a custody group count and a next fork digest, or rejects the record.
+- The custody group count is the number that its bytes write, most significant first.
+- The next fork digest is the four bytes of its entry.
+- A node before Fulu reads neither.
 - Each entry error has its own code, and no record error has that code.
 -/
 
@@ -25,6 +28,7 @@ namespace EthLib.Networking.Proofs.Enr.Consensus
 
 open EthLib.Base (Fork bind_ok_iff)
 open EthLib.Networking.Enr
+open EthLib.Serialization
 open EthLib.Serialization.Ssz
 
 instance : LawfulSszType EnrForkId :=
@@ -111,6 +115,128 @@ theorem readEntries_fulu {count : UInt64} {fork : Fork} {r : Enr}
     {e : ConsensusEntries count}
     (h : readEntries count fork r = .ok e) (hf : .fusaka ≤ fork) : e.cgc.isSome ∧ e.nfd.isSome :=
   ⟨readRequiredAt_isSome (readEntries_ok h).2.1 hf, readRequiredAt_isSome (readEntries_ok h).2.2 hf⟩
+
+/-- A required key reads a value exactly when the fork has the key and the read gives that value. -/
+theorem readRequiredAt_eq_ok_some_iff {α : Type} {fork : Fork} {key : ConsensusKey}
+    {read : Except EntryError (Option α)} {a : α} :
+    readRequiredAt fork key read = .ok (some a) ↔ key.since ≤ fork ∧ read = .ok (some a) := by
+  by_cases hf : key.since ≤ fork
+  · simp only [readRequiredAt, hf, ite_true, true_and]
+    cases read with
+    | error e => simp [bind, Except.bind]
+    | ok v =>
+      cases v <;> simp [bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+  · simp [readRequiredAt, hf, pure, Except.pure]
+
+/--
+A record has the custody group count `n` exactly when its `cgc` bytes write `n` in base 256.
+
+The bytes come most significant first, with no leading zero byte, so zero is the empty byte string.
+-/
+theorem readCgc_eq_ok_some_iff {r : Enr} {n : UInt64} :
+    readCgc r = .ok (some n) ↔
+      ∃ b : ByteArray, lookup r .cgc = some (.bytes b) ∧ b.data.toList.head? ≠ some 0 ∧
+        Rlp.ofBigEndian b.data.toList = n.toNat := by
+  simp only [readCgc, lookupBytes]
+  cases hl : lookup r .cgc with
+  | none => simp [bind, Except.bind, pure, Except.pure]
+  | some item =>
+    cases item with
+    | list _ => simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+    | bytes b =>
+      simp only [bind, Except.bind, pure, Except.pure, Option.some.injEq, Rlp.Item.bytes.injEq,
+        exists_eq_left', Rlp.Codec.ofItem, Rlp.Item.toScalarBelow, Rlp.Item.toScalar]
+      by_cases h0 : b.data.toList.head? = some 0
+      · simp [h0, Except.mapError]
+      · simp only [h0, ite_false, ne_eq, not_false_eq_true, true_and]
+        by_cases hlt : Rlp.ofBigEndian b.data.toList < 2 ^ 64
+        · simp only [hlt, ite_true, Except.mapError, Except.ok.injEq, Option.some.injEq]
+          constructor
+          · rintro rfl
+            exact (UInt64.toNat_ofNat_of_lt' hlt).symm
+          · intro h
+            rw [h, UInt64.ofNat_toNat]
+        · simp only [hlt, ite_false, Except.mapError, reduceCtorEq, false_iff]
+          intro h
+          exact hlt (h ▸ n.toNat_lt)
+
+/-- A record has the fork digest `d` at a key exactly when the key holds the four bytes of `d`. -/
+theorem readSsz_digest_eq_ok_some_iff {r : Enr} {key : ConsensusKey} {d : Vector UInt8 4} :
+    readSsz (Vector UInt8 4) r key = .ok (some d) ↔ lookup r key = some (.bytes ⟨d.toArray⟩) := by
+  have hs : SszType.serialize d = .ok ⟨d.toArray⟩ := rfl
+  simp only [readSsz, lookupBytes]
+  cases hl : lookup r key with
+  | none => simp [bind, Except.bind, pure, Except.pure]
+  | some item =>
+    cases item with
+    | list _ => simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+    | bytes b =>
+      simp only [bind, Except.bind, pure, Except.pure, Option.some.injEq, Rlp.Item.bytes.injEq]
+      cases hd : SszType.deserialize (Vector UInt8 4) b with
+      | error e =>
+        simp only [Except.mapError, reduceCtorEq, false_iff]
+        rintro rfl
+        rw [SszType.deserialize_serialize hs] at hd
+        cases hd
+      | ok d' =>
+        simp only [Except.mapError, Except.ok.injEq, Option.some.injEq]
+        constructor
+        · rintro rfl
+          have := SszType.serialize_deserialize hd
+          rw [hs] at this
+          cases this
+          rfl
+        · rintro rfl
+          rw [SszType.deserialize_serialize hs] at hd
+          cases hd
+          rfl
+
+/--
+A node reads a custody group count exactly from Fulu on, and it is the number that `cgc` writes.
+
+The bytes come most significant first, with no leading zero byte, so zero is the empty byte string.
+-/
+theorem readEntries_cgc_eq_some_iff {count : UInt64} {fork : Fork} {r : Enr}
+    {e : ConsensusEntries count} (h : readEntries count fork r = .ok e) {n : UInt64} :
+    e.cgc = some n ↔
+      .fusaka ≤ fork ∧ ∃ b : ByteArray, lookup r .cgc = some (.bytes b) ∧
+        b.data.toList.head? ≠ some 0 ∧ Rlp.ofBigEndian b.data.toList = n.toNat := by
+  have hc := (readEntries_ok h).2.1
+  constructor
+  · intro hn
+    rw [hn] at hc
+    obtain ⟨hf, hr⟩ := readRequiredAt_eq_ok_some_iff.mp hc
+    exact ⟨hf, readCgc_eq_ok_some_iff.mp hr⟩
+  · rintro ⟨hf, hb⟩
+    have hr : readRequiredAt fork .cgc (readCgc r) = .ok (some n) :=
+      readRequiredAt_eq_ok_some_iff.mpr ⟨hf, readCgc_eq_ok_some_iff.mpr hb⟩
+    rw [hc] at hr
+    exact Except.ok.inj hr
+
+/-- A node reads a next fork digest exactly from Fulu on, and it is the four bytes of `nfd`. -/
+theorem readEntries_nfd_eq_some_iff {count : UInt64} {fork : Fork} {r : Enr}
+    {e : ConsensusEntries count} (h : readEntries count fork r = .ok e) {d : Vector UInt8 4} :
+    e.nfd = some d ↔ .fusaka ≤ fork ∧ lookup r .nfd = some (.bytes ⟨d.toArray⟩) := by
+  have hn := (readEntries_ok h).2.2
+  constructor
+  · intro hd
+    rw [hd] at hn
+    obtain ⟨hf, hr⟩ := readRequiredAt_eq_ok_some_iff.mp hn
+    exact ⟨hf, readSsz_digest_eq_ok_some_iff.mp hr⟩
+  · rintro ⟨hf, hb⟩
+    have hr : readRequiredAt fork .nfd (readSsz (Vector UInt8 4) r .nfd) = .ok (some d) :=
+      readRequiredAt_eq_ok_some_iff.mpr ⟨hf, readSsz_digest_eq_ok_some_iff.mpr hb⟩
+    rw [hn] at hr
+    exact Except.ok.inj hr
+
+/-- Before Fulu, a node reads neither a custody group count nor a next fork digest. -/
+theorem readEntries_before_fulu {count : UInt64} {fork : Fork} {r : Enr}
+    {e : ConsensusEntries count} (h : readEntries count fork r = .ok e) (hf : fork < .fusaka) :
+    e.cgc = none ∧ e.nfd = none :=
+  ⟨Option.eq_none_iff_forall_ne_some.mpr fun _ hn =>
+      absurd ((readEntries_cgc_eq_some_iff h).mp hn).1 (Nat.not_le.mpr hf),
+    Option.eq_none_iff_forall_ne_some.mpr fun _ hn =>
+      absurd ((readEntries_nfd_eq_some_iff h).mp hn).1 (Nat.not_le.mpr hf)⟩
 
 /-! ## Error codes -/
 
