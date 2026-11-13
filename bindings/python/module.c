@@ -79,6 +79,7 @@ PyObject* REQRESP_ERROR;
 PyObject* CONSENSUS_ERROR;
 PyObject* HKDF_ERROR;
 PyObject* TLS13_ERROR;
+PyObject* QUIC_PROTECTION_ERROR;
 PyObject* PBKDF2_ERROR;
 PyObject* SCRYPT_ERROR;
 PyObject* X25519_ERROR;
@@ -1156,6 +1157,9 @@ static PyMethodDef methods[] = {
   {"quic_tls_key_schedule", py_quic_tls_key_schedule, METH_VARARGS, DOC_quic_tls_key_schedule},
   {"quic_tls_derive_secret", py_quic_tls_derive_secret, METH_VARARGS, DOC_quic_tls_derive_secret},
   {"quic_tls_finished", py_quic_tls_finished, METH_VARARGS, DOC_quic_tls_finished},
+  {"quic_protect", py_quic_protect, METH_VARARGS, DOC_quic_protect},
+  {"quic_unprotect", py_quic_unprotect, METH_VARARGS, DOC_quic_unprotect},
+  {"quic_retry_tag", py_quic_retry_tag, METH_VARARGS, DOC_quic_retry_tag},
   {"quic_varint_encode", py_quic_varint_encode, METH_VARARGS, DOC_quic_varint_encode},
   {"quic_varint_decode", py_quic_varint_decode, METH_VARARGS, DOC_quic_varint_decode},
   {"quic_header_encode", py_quic_header_encode, METH_VARARGS, DOC_quic_header_encode},
@@ -1298,6 +1302,7 @@ PyInit__native(void) {
     REQRESP_ERROR = PyObject_GetAttrString(errors, "ReqRespError");
     CONSENSUS_ERROR = PyObject_GetAttrString(errors, "ConsensusError");
     HKDF_ERROR = PyObject_GetAttrString(errors, "HkdfError");
+    QUIC_PROTECTION_ERROR = PyObject_GetAttrString(errors, "QuicProtectionError");
     TLS13_ERROR = PyObject_GetAttrString(errors, "Tls13Error");
     PBKDF2_ERROR = PyObject_GetAttrString(errors, "Pbkdf2Error");
     SCRYPT_ERROR = PyObject_GetAttrString(errors, "ScryptError");

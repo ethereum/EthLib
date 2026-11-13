@@ -25,3 +25,4 @@ The specification does not import them.
 
 So a Lean project that imports `EthLib` gets no `@[export]` symbol.
 -/
+public import EthLib.Networking.Exports.QuicProtection

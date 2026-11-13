@@ -150,6 +150,7 @@ extern PyObject* REQRESP_ERROR;
 extern PyObject* CONSENSUS_ERROR;
 extern PyObject* HKDF_ERROR;
 extern PyObject* TLS13_ERROR;
+extern PyObject* QUIC_PROTECTION_ERROR;
 extern PyObject* PBKDF2_ERROR;
 extern PyObject* SCRYPT_ERROR;
 extern PyObject* X25519_ERROR;
@@ -738,3 +739,7 @@ PyObject* py_quic_packet_number_encode(PyObject* self, PyObject* args);
 PyObject* py_quic_packet_number_decode(PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */
+
+PyObject* py_quic_protect(PyObject* self, PyObject* args);
+PyObject* py_quic_unprotect(PyObject* self, PyObject* args);
+PyObject* py_quic_retry_tag(PyObject* self, PyObject* args);

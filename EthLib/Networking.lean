@@ -54,3 +54,4 @@ public import EthLib.Networking.Quic.Frame
 
 Specifications for the wire formats of Ethereum's networking layer.
 -/
+public import EthLib.Networking.Quic.Protection

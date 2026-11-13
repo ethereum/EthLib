@@ -7,6 +7,7 @@ from typing import Any, Literal, NamedTuple, TypeAlias
 from ethlib.cryptography import _native
 from ethlib.errors import (
     QuicError as QuicError,
+    QuicProtectionError as QuicProtectionError,
     QuicVarintError as QuicVarintError,
     Tls13Error as Tls13Error,
 )
@@ -111,7 +112,30 @@ def decode_packet_number(width: int, truncated: int, expected: int) -> int:
     return _native.quic_packet_number_decode(width, truncated, expected)
 
 
+def protect(
+    suite: str, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes
+) -> bytes:
+    """Protect a header and payload. Add PADDING frames if the ciphertext sample is too short."""
+    return _native.quic_protect(suite, secret, number, offset, header, plaintext)
+
+
+def unprotect(
+    suite: str, secret: bytes, expected: int, offset: int, packet: bytes
+) -> tuple[bytes, bytes]:
+    """Authenticate one isolated packet, using zero or the largest authenticated number plus one."""
+    return _native.quic_unprotect(suite, secret, expected, offset, packet)
+
+
+def retry_tag(original_dcid: bytes, retry: bytes) -> bytes:
+    """Compute the integrity tag for a QUIC v1 Retry packet without its tag."""
+    return _native.quic_retry_tag(original_dcid, retry)
+
+
 __all__ = [
+    "QuicProtectionError",
+    "protect",
+    "unprotect",
+    "retry_tag",
     "QuicError",
     "encode_header",
     "decode_header",

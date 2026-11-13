@@ -73,3 +73,4 @@ The proofs build in their own Lake library.
 
 The runtime code never imports them, so nothing here is linked into the Python extension.
 -/
+public import EthLib.Networking.Proofs.Quic.Protection
