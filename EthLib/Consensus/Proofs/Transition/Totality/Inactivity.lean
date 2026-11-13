@@ -239,4 +239,45 @@ theorem processInactivityUpdates_total (config : Config) (altair : .altair ≤ f
   rw [folded]
   rfl
 
+/-- From Altair, the update of the scores keeps every score within a bound plus the score bias.
+
+Take a bound on every score before the update.
+
+After it, every score is at most that bound plus the bias.
+
+This holds when the update succeeds.
+
+The bound carries from one epoch to the next, with the bias added once per epoch. -/
+theorem processInactivityUpdates_scoreBound {config : Config} {altair : .altair ≤ fork}
+    {after : BeaconState preset fork} {bound : Nat}
+    (computed : processInactivityUpdates config state altair = .ok after)
+    (scored : ∀ score ∈ (state.inactivityScores altair).data, score.toNat ≤ bound) :
+    ∀ score ∈ (after.inactivityScores altair).data,
+      score.toNat ≤ bound + config.INACTIVITY_SCORE_BIAS.toNat := by
+  intro score member
+  by_cases genesis : getCurrentEpoch state = GENESIS_EPOCH
+  · rw [processInactivityUpdates_genesis altair genesis, Except.ok.injEq] at computed
+    subst computed
+    exact (scored score member).trans (Nat.le_add_right _ _)
+  · obtain ⟨eligible, _, kept, changed⟩ := processInactivityUpdates_scores genesis computed
+    obtain ⟨i, hi, rfl⟩ := Array.mem_iff_getElem.mp member
+    have found : (after.inactivityScores altair).data[i]? = some (after.inactivityScores
+        altair).data[i] := Array.getElem?_eq_some_iff.mpr ⟨hi, rfl⟩
+    have memOf : ∀ {j : Nat} {x}, (state.inactivityScores altair).data[j]? = some x →
+        x.toNat ≤ bound := fun {j x} h =>
+      scored x (Array.mem_iff_getElem?.mpr ⟨j, h⟩)
+    by_cases hit : ∀ index ∈ eligible, index.toNat ≠ i
+    · have same := kept i hit
+      rw [found] at same
+      have := memOf same.symm
+      omega
+    · push Not at hit
+      obtain ⟨index, mem, rfl⟩ := hit
+      obtain ⟨hitters, leak, old, new, _, _, olds, news, value⟩ := changed index mem
+      rw [found] at news
+      rw [Option.some.inj news]
+      have oldBound := memOf olds
+      rw [value]
+      split <;> omega
+
 end EthLib.Consensus
