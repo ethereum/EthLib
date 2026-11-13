@@ -731,6 +731,11 @@ Both peers end with the same symmetric state, and each stores the static public 
 The send cipher of each peer is then the receive cipher of the other.
 The proof uses `x25519_agree` for the three tokens `ee`, `es` and `se`, so it needs no assumption on X25519.
 It says nothing about a peer that deviates from the specification, nor about secrecy.
+`libp2p_complete` (`Networking/Proofs/Noise/Libp2pHandshake.lean`) lifts it to the libp2p suite.
+It assumes that making each identity payload succeeds and that each payload fits in its message.
+Making a payload fails on the zero secret or when signing fails, so its success is a hypothesis.
+Each read of message 2 or 3 then succeeds, so, by `readLibp2p_authenticates`, it verified the signature of the other peer's identity key.
+Completion returns, on each side, the static key, the identity key and the extensions of the other peer, with swapped ciphers.
 
 No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key.
 Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
@@ -755,7 +760,8 @@ The DER signature of an identity has its own theorems (`Networking/Proofs/Libp2p
 So a positive number gets a leading zero byte exactly when its first nonzero byte is `0x80` or more, and zero is the single byte `0x00`.
 `decodeSignature_eq_ok_iff` proves that the decoder accepts exactly the encodings of r in [1, N) and s in [1, N/2], where N is the order of the secp256k1 group, and returns r and s.
 So each accepted pair r, s has exactly one byte encoding.
-No theorem relates the encoder to an independent model of X.690, and none is about ECDSA verification.
+No theorem relates the encoder to an independent model of X.690.
+`verify_sign` (`Networking/Proofs/Libp2p/PeerId.lean`) proves that a signature that a secret makes verifies under the key protobuf of that secret, since signing returns a low s that the strict decoder accepts.
 
 The bindings take explicit keys and state tuples.
 Callers must use fresh ephemeral keys and use the returned state after each successful cipher call.
