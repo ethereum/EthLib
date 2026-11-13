@@ -2940,6 +2940,9 @@ Version 1 takes the forks before Shapella, version 2 takes Shapella and version 
 
 The Engine API also writes its requests, so the specification states what a consensus node sends.
 Each writer writes the canonical form of the encoding: lowercase hex, and numbers without leading zeros.
+The decoder of the parameters of `engine_newPayload` reads back what their writer writes, for a version that takes the fork of the payload (`newPayloadParams_json`, `Proofs/NewPayload.lean`).
+The extra data must hold at most 32 bytes, and the access list and the slot must be given exactly at version 5.
+So do the decoders of `engine_getPayload`, `engine_getBlobs` and the two methods of payload bodies (`getPayloadParams_json`, `Proofs/GetPayload.lean`; `getBlobsParams_json`, `Proofs/GetBlobs.lean`; `bodiesByHashParams_json` and `bodiesByRangeParams_json`, `Proofs/PayloadBodies.lean`).
 The decoder of payloads of versions 1 to 3 reads back the JSON of every payload at its fork (`anyPayload_executionPayloadJson`, `Proofs/Json.lean`).
 The extra data must then hold at most 32 bytes.
 The decoder of version 4 does the same from Dencun on, with the block access list and the slot number (`payloadV4_executionPayloadV4Json`).
