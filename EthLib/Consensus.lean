@@ -9,6 +9,7 @@ public import EthLib.Consensus.BeaconApi.Debug
 public import EthLib.Consensus.BeaconApi.Encoding
 public import EthLib.Consensus.BeaconApi.Identifiers
 public import EthLib.Consensus.BeaconApi.LightClient
+public import EthLib.Consensus.BeaconApi.Produce
 public import EthLib.Consensus.BeaconApi.Registries
 public import EthLib.Consensus.BeaconApi.Rewards
 public import EthLib.Consensus.BeaconApi.Spelling
@@ -68,6 +69,7 @@ public import EthLib.Consensus.Gossip.Bid
 public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Gossip.InclusionList
 public import EthLib.Consensus.Gossip.LightClient
+public import EthLib.Consensus.Gossip.Message
 public import EthLib.Consensus.Gossip.Bounds
 public import EthLib.Consensus.Gossip.Operations
 public import EthLib.Consensus.Gossip.Payload

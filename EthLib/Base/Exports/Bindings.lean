@@ -698,6 +698,10 @@ def bindings : List Binding := [
     "(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, epoch: int, " ++
       "ids: list[str]) -> dict[str, Any]",
     [], some "ConsensusError"⟩,
+  ⟨"consensus_api_block_rewards", `EthLib.Consensus.Exports.apiBlockRewardsExport,
+    "(name: str, fork: str, state: bytes, block: bytes, replacements: dict[str, Any] | None) " ++
+      "-> dict[str, Any]",
+    [], some "ConsensusError"⟩,
   ⟨"consensus_api_sync_committee_rewards",
     `EthLib.Consensus.Exports.apiSyncCommitteeRewardsExport,
     "(name: str, fork: str, state: bytes, aggregate: bytes, ids: list[str]) -> dict[str, Any]",
@@ -1852,8 +1856,10 @@ def bindings : List Binding := [
     [], some "RpcError"⟩,
   ⟨"rpc_serve", `EthLib.Execution.Rpc.Exports.serveExport,
     "(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], " ++
-      "int, bool], requests: list[str]) -> list[str | None]",
+      "int, bool], numbers: list[int], requests: list[str]) -> list[str | None]",
     [`EthLib.Execution.Blocks.BlockError], some "RpcError"⟩,
+  ⟨"rpc_encode_block_access_list", `EthLib.Execution.Rpc.Exports.encodeBlockAccessListExport,
+    "(value: object) -> bytes", [], some "RpcError"⟩,
   ⟨"pyvalue_echo", `EthLib.Exports.pyValueEcho,
     "(value: object) -> object",
     [], some "BindingError"⟩

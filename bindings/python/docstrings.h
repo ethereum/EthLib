@@ -530,6 +530,9 @@
 #define DOC_consensus_api_attestation_rewards \
   "The JSON response of the attestation rewards endpoint, as a `dict`."
 
+#define DOC_consensus_api_block_rewards \
+  "The JSON response of the block rewards endpoint, as a `dict`."
+
 #define DOC_consensus_api_sync_committee_rewards \
   "The JSON response of the sync committee rewards endpoint, as a `dict`."
 
@@ -1483,6 +1486,9 @@
 
 #define DOC_rpc_serve \
   "Answer requests of the execution JSON-RPC API from the chain that the arguments build."
+
+#define DOC_rpc_encode_block_access_list \
+  "Encode a block access-list JSON value as its EIP-7928 RLP bytes."
 
 #define DOC_pyvalue_echo \
   "The value that Python passes, back to Python, with each failure tuple read as a failure."

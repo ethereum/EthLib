@@ -431,6 +431,7 @@ PyObject* py_consensus_api_aggregate_attestation (PyObject* self, PyObject* args
 PyObject* py_consensus_api_sync_committee_contribution(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_attestation_rewards(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_sync_committee_rewards(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_block_rewards(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_duties                (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_committees              (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_sync_committees         (PyObject* self, PyObject* args);
@@ -741,6 +742,7 @@ PyObject* py_rpc_read_param                              (PyObject* self, PyObje
 PyObject* py_rpc_error_groups                            (PyObject* self, PyObject* args);
 PyObject* py_rpc_pruned_history_unavailable              (PyObject* self, PyObject* args);
 PyObject* py_rpc_serve                                   (PyObject* self, PyObject* args);
+PyObject* py_rpc_encode_block_access_list                (PyObject* self, PyObject* args);
 
 /* ---- Typed values (`pyvalue.c`) --------------------------------------- */
 
