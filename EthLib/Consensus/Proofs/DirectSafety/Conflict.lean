@@ -40,7 +40,7 @@ It is also accountable when a block of either tail applied a slashing that names
 
 That slashing may be a proposer slashing.
 
-Slashings in the shared prefix do not count. -/
+A slashing in the shared prefix does not make a key accountable by itself. -/
 def Accountable {g x a b : ForkedBeaconState preset} (shared : Run config checks g x)
     (left : Run config checks x a) (right : Run config checks x b) (key : BLSPubkey) : Prop :=
   Slashable (shared.append left) (shared.append right) key ∨

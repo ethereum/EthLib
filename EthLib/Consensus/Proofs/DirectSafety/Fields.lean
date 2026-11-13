@@ -59,6 +59,17 @@ theorem EpochCall.selected_prefix {g a : ForkedBeaconState preset}
   rw [cachedEq]
   exact ⟨rfl, rfl⟩
 
+/-- The keys of the registry at an epoch call are distinct.
+
+The run starts at a genesis built from deposits. -/
+theorem EpochCall.pubkeysDistinct {g a : ForkedBeaconState preset}
+    {run : Run config checks g a} (genesis : Genesis config checks g) (call : EpochCall run) :
+    PubkeysDistinct call.cached := by
+  obtain ⟨pre, _, _, _, validators, _⟩ := call.selected_prefix
+  obtain ⟨_, _, _, initialized⟩ := genesis
+  simpa [PubkeysDistinct, validatorKeys, validators] using
+    (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized pre.chainSteps).2
+
 /-- The test of justification succeeds at a state for the attesting indices.
 
 It states only that the pure test succeeds, with the balance reads and checked arithmetic.
@@ -248,13 +259,8 @@ theorem quorum_count {g a : ForkedBeaconState preset} (run : Run config checks g
     {high : Nat} (enough : EnoughStake run high) (call : QuorumCall run)
     (within : call.target.epoch.toNat ≤ high) :
     2 * Models.stake (effectiveWeight call.cached) (activeKeys call.cached) ≤
-      3 * Models.stake (effectiveWeight call.cached) call.voters := by
-  obtain ⟨pre, _, _, _, validators, _⟩ := call.toEpochCall.selected_prefix
-  obtain ⟨_, _, _, initialized⟩ := genesis
-  have unique : PubkeysDistinct call.cached := by
-    simpa [PubkeysDistinct, validatorKeys, validators] using
-      (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized pre.chainSteps).2
-  exact call.passes.stake_le unique (enough call.toEpochCall
+      3 * Models.stake (effectiveWeight call.cached) call.voters :=
+  call.passes.stake_le (call.toEpochCall.pubkeysDistinct genesis) (enough call.toEpochCall
     (call.currentEpoch_le.trans (Nat.add_le_add_right within 1)))
 
 /-- At the state of an epoch call, the pending attestations and target flags hold votes of the run.

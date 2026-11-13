@@ -100,13 +100,9 @@ The run starts at a genesis built from deposits, and the preset meets the parame
 theorem quorum_voters_recent {g a : ForkedBeaconState preset} (run : Run config checks g a)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
     (call : QuorumCall run) :
-    call.voters ⊆ recentKeys call.cached := by
-  obtain ⟨pre, _, _, _, validators, _⟩ := call.toEpochCall.selected_prefix
-  have ⟨_, _, _, initialized⟩ := genesis
-  have unique : PubkeysDistinct call.cached := by
-    simpa [PubkeysDistinct, validatorKeys, validators] using
-      (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized pre.chainSteps).2
-  exact counted_recent (cached_participation run parameters genesis call.toEpochCall).1 unique
+    call.voters ⊆ recentKeys call.cached :=
+  counted_recent (cached_participation run parameters genesis call.toEpochCall).1
+    (call.toEpochCall.pubkeysDistinct genesis)
     call.later call.current call.target call.targetEpoch call.counted
 
 end EthLib.Consensus.DirectSafety

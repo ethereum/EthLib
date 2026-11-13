@@ -265,11 +265,11 @@ private theorem selected_call_drift_le {g x y : ForkedBeaconState preset}
   let before := call.before
   -- The budget observes the state before caching, whose slot and registry caching preserves.
   obtain ⟨_, _, _, frame, validators, _⟩ := call.toEpochCall.selected_prefix
+  have sameEpoch : getCurrentEpoch call.cached = getCurrentEpoch before.state := by
+    simp only [getCurrentEpoch, frame.slot, before]
   have epoch : (getCurrentEpoch before.state).toNat ≤ high + 1 := by
     have target := call.currentEpoch_le
-    have same : getCurrentEpoch call.cached = getCurrentEpoch before.state := by
-      simp only [getCurrentEpoch, frame.slot, before]
-    rw [same] at target
+    rw [sameEpoch] at target
     omega
   have observed {z : ForkedBeaconState preset} (run : Run config checks x z)
       (bounded : (getCurrentEpoch z.state).toNat ≤ high + 1) :
@@ -309,14 +309,12 @@ private theorem selected_call_drift_le {g x y : ForkedBeaconState preset}
       funext epoch
       unfold getActiveValidatorIndices
       rw [validators]
-    have epoch : getCurrentEpoch call.cached = getCurrentEpoch before.state := by
-      simp only [getCurrentEpoch, frame.slot, before]
     have active : activeKeys call.cached = activeKeys before.state := by
       unfold activeKeys
-      rw [keys, indices, epoch]
+      rw [keys, indices, sameEpoch]
     have recent : recentKeys call.cached = recentKeys before.state := by
       unfold recentKeys getPreviousEpoch
-      rw [slashed, active, keys, indices, epoch]
+      rw [slashed, active, keys, indices, sameEpoch]
     simp only [stateDrift, referenceLoss, referenceGain, boundaryStake]
     rw [weight, slashed, recent, active]
   rw [same]
