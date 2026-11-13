@@ -894,10 +894,6 @@ theorem _root_.EthLib.Consensus.Run.balanceEvents_prefix {x m y : ForkedBeaconSt
     · cases remaining
       exact initial
 
-def sourceTotal (events : List (BalanceEvent preset)) (source : BalanceSource)
-    (amount : BalanceEvent preset → Nat) : Nat :=
-  ((events.filter fun e => e.source == source).map amount).sum
-
 def EventsBounded (events : List (BalanceEvent preset)) : Prop :=
   ∀ event ∈ events, event.credits ≤ event.creditLimit ∧ event.debits ≤ event.debitLimit
 
@@ -1665,38 +1661,26 @@ theorem stepBalanceEvents_bounded {x y : ForkedBeaconState preset}
       simp [Step.balanceEvents, cachedOk, nextOk, last, advanceOk, crossingOk,
         pure, Except.pure, bind, Except.bind]
 
-/-- Every source is bounded separately, with no freely supplied credit or debit cap. -/
-theorem source_bounds_over_interval {g x y : ForkedBeaconState preset}
+/-- The replay of a run from genesis succeeds, and every event stays within its own limits.
+
+No caller supplies a credit or a debit cap. -/
+theorem _root_.EthLib.Consensus.Run.balanceEvents_bounded {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)
     (early : y.fork < .glamsterdam) (high : Nat) :
-    ∃ events, tail.balanceEvents high = .ok events ∧
-      ∀ source : BalanceSource,
-        sourceTotal events source BalanceEvent.credits ≤ sourceTotal events source (·.creditLimit) ∧
-        sourceTotal events source BalanceEvent.debits ≤
-          sourceTotal events source (·.debitLimit) := by
-  have replay : ∃ events, tail.balanceEvents high = .ok events ∧ EventsBounded events := by
-    induction tail with
-    | nil => exact ⟨[], rfl, by simp [EventsBounded]⟩
-    | @snoc middle last pre step ih =>
-      obtain ⟨prior, priorOk, priorBound⟩ :=
-        ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early)
-      by_cases selected : (getCurrentEpoch middle.state).toNat ≤ high + 1
-      · obtain ⟨added, addedOk, addedBound⟩ := stepBalanceEvents_bounded step
-          ((shared.append pre).invariant_of_genesis genesis).balancesMatch early
-        refine ⟨prior ++ added, ?_, eventsBounded_append priorBound addedBound⟩
-        simp [Run.balanceEvents, priorOk, selected, addedOk, pure, Except.pure, bind, Except.bind]
-      · refine ⟨prior, ?_, priorBound⟩
-        simp [Run.balanceEvents, priorOk, selected, pure, Except.pure, bind, Except.bind]
-  obtain ⟨events, replay, bounded⟩ := replay
-  refine ⟨events, replay, fun source => ?_⟩
-  have bound : ∀ event ∈ events.filter (fun e => e.source == source),
-      event.credits ≤ event.creditLimit ∧ event.debits ≤ event.debitLimit :=
-    fun event member => bounded event (List.mem_filter.mp member).1
-  unfold sourceTotal
-  constructor
-  · exact List.sum_le_sum (fun event member => (bound event member).1)
-  · exact List.sum_le_sum (fun event member => (bound event member).2)
+    ∃ events, tail.balanceEvents high = .ok events ∧ EventsBounded events := by
+  induction tail with
+  | nil => exact ⟨[], rfl, by simp [EventsBounded]⟩
+  | @snoc middle last pre step ih =>
+    obtain ⟨prior, priorOk, priorBound⟩ :=
+      ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early)
+    by_cases selected : (getCurrentEpoch middle.state).toNat ≤ high + 1
+    · obtain ⟨added, addedOk, addedBound⟩ := stepBalanceEvents_bounded step
+        ((shared.append pre).invariant_of_genesis genesis).balancesMatch early
+      refine ⟨prior ++ added, ?_, eventsBounded_append priorBound addedBound⟩
+      simp [Run.balanceEvents, priorOk, selected, addedOk, pure, Except.pure, bind, Except.bind]
+    · refine ⟨prior, ?_, priorBound⟩
+      simp [Run.balanceEvents, priorOk, selected, pure, Except.pure, bind, Except.bind]
 
 /-- The credit or the debit of validator `i` between two states. -/
 def coverageDelta (debit : Bool) (x y : ForkedBeaconState preset) (i : Nat) : Nat :=

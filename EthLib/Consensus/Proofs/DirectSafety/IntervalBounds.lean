@@ -2975,22 +2975,11 @@ private theorem intervalGain_events_bounded {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)
     (early : y.fork < .glamsterdam) (high : Nat)
-    (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (events : List (BalanceEvent preset)) (replayed : tail.balanceEvents high = .ok events) :
     EventsBounded events := by
-  induction tail generalizing events with
-  | nil => cases replayed; simp [EventsBounded]
-  | @snoc middle last pre step ih =>
-    have selected := (coverage_step_epoch step).trans endEpoch
-    simp only [Run.balanceEvents, bind_ok_iff] at replayed
-    obtain ⟨prior, priorOk, rest⟩ := replayed
-    simp only [selected, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
-    obtain ⟨added, addedOk, rfl⟩ := rest
-    have previous := ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) selected prior priorOk
-    obtain ⟨actual, actualOk, bound⟩ := stepBalanceEvents_bounded step
-      ((shared.append pre).invariant_of_genesis genesis).balancesMatch early
-    cases Except.ok.inj (actualOk.symm.trans addedOk)
-    exact eventsBounded_append previous bound
+  obtain ⟨actual, actualOk, bounded⟩ := shared.balanceEvents_bounded tail genesis early high
+  cases Except.ok.inj (actualOk.symm.trans replayed)
+  exact bounded
 
 private theorem intervalGain_crossing_of_interfaces {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
@@ -3003,7 +2992,7 @@ private theorem intervalGain_crossing_of_interfaces {g x y : ForkedBeaconState p
       (events.map (residualCredit (config := config) x high)).sum := by
   apply intervalGain_crossing_endpoint shared tail genesis twoSlots early high endEpoch
     events replayed crossing (fun e member =>
-      (intervalGain_events_bounded shared tail genesis early high endEpoch
+      (intervalGain_events_bounded shared tail genesis early high
         events replayed e member).1)
   exact (intervalGain_deposit_filter_sum y twoSlots events
     (intervalGain_deposit_sites events
@@ -3227,7 +3216,7 @@ private theorem intervalGain_active_residual {g x y : ForkedBeaconState preset}
   intro e member
   have credit := intervalGain_active_event x
     (Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early) e
-    (intervalGain_events_bounded shared tail genesis early high endEpoch events replayed e member).1
+    (intervalGain_events_bounded shared tail genesis early high events replayed e member).1
   by_cases deposit : e.source = .deposits
   · rw [intervalGain_residual_deposit x high e deposit]
     have notElectra : ¬ Fork.pectra ≤ e.before.fork := Nat.not_le.mpr (before e member deposit)
@@ -3466,9 +3455,7 @@ theorem derivedDrift_le_sources {g x y : ForkedBeaconState preset}
     ∃ events, tail.balanceEvents high = .ok events ∧
       derivedDrift high tail ≤
         sourceDrift (config := config) x high (boundaryWindow high tail) events := by
-  obtain ⟨events, replayed, bounds⟩ :=
-    source_bounds_over_interval shared tail genesis early high
-  clear bounds
+  obtain ⟨events, replayed, -⟩ := shared.balanceEvents_bounded tail genesis early high
   refine ⟨events, replayed, ?_⟩
   have atState {y : ForkedBeaconState preset} (run : Run config checks x y)
       (early : y.fork < .glamsterdam)
