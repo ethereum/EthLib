@@ -29,9 +29,9 @@ The base fee of the block is at most the maximum fee of each transaction.
 
 So the effective gas price follows the formula of the description.
 
-The run of the block reaches each transaction, and there the sender buys the gas.
+The run of the block reaches each transaction, on a state where the sender can buy the gas.
 
-Its balance falls by the gas limit of the transaction times the effective gas price of the object.
+Buying it lowers the balance by the gas limit times the effective gas price of the object.
 
 A blob transaction adds the blob gas of the object times its blob gas price.
 -/
@@ -586,9 +586,9 @@ theorem Valid.effectiveGasPrice_receiptInfos {v : ChainView} {checkSeal : Bool}
 
 The run of the block reached its transaction after those before it.
 
-There the sender bought the gas, before the transaction ran and before any refund.
+On the state that the transaction starts from, the sender can buy its gas.
 
-Its balance fell by exactly the gas limit of the transaction times a price.
+Buying it lowers its balance by exactly the gas limit of the transaction times a price.
 
 That price is the effective gas price of the object.
 
