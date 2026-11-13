@@ -32,18 +32,18 @@ noncomputable section
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
-/-- From Electra, with a withdrawal delay of two epochs, active stake fits the funded window. -/
+/-- With a withdrawal delay of two epochs, active stake fits the funded window. -/
 private theorem active_stake_le_window {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)
-    (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam)
+    (early : y.fork < .glamsterdam)
     (delay : 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (high : Nat) (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (events : List (BalanceEvent preset)) (replayed : tail.balanceEvents high = .ok events) :
     Models.stake (effectiveWeight y.state) (activeKeys y.state) ≤
       activeStakeWindow (config := config) x high events := by
   have ⟨_, _, _, initialized⟩ := genesis
-  apply funding_window_of_steps tail electra early delay
+  apply funding_window_of_steps tail early delay
     ((validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
       (shared.append tail).chainSteps).2) high endEpoch events replayed
   intro a b pre step before added addedOk
@@ -437,17 +437,17 @@ private theorem active_stake_le_window_of_prefix {g x a y : ForkedBeaconState pr
     have ordered := currentEpoch_le_of_chainSteps rest.chainSteps
     rw [UInt64.le_iff_toNat_le] at ordered
     omega
-  by_cases funded : .pectra ≤ x.fork ∧ 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat
+  by_cases funded : 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat
   · obtain ⟨prior, priorOk, initial⟩ := pre.balanceEvents_prefix rest high events replayed
-    have bound := active_stake_le_window shared pre genesis
-      funded.1 earlyA funded.2 high epochA prior priorOk
+    have bound := active_stake_le_window shared pre genesis earlyA funded high epochA prior
+      priorOk
     have credits : (prior.map fundingCredit).sum ≤ (events.map fundingCredit).sum := by
       obtain ⟨remaining, rfl⟩ := initial
       simp only [List.map_append, List.sum_append]
       omega
-    simp only [activeStakeWindow, funded.1, funded.2, and_self, ↓reduceIte] at bound ⊢
+    simp only [activeStakeWindow, funded, ↓reduceIte] at bound ⊢
     omega
-  -- Otherwise every registry entry counts with the largest effective balance.
+  -- With a shorter delay every registry entry counts with the largest effective balance.
   · have unique := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
       (shared.append pre).chainSteps).2
     have capped := (shared.append pre).effectiveBalance_capped genesis caps.activation
@@ -513,7 +513,7 @@ They add these Electra caps only if the window reaches the Electra fork epoch.
 
 The consolidation rate is computed from the active stake that the funded window allows.
 
-Before Electra at `x`, or with a delay below two epochs, that stake is the registry window.
+With a withdrawal delay below two epochs, that stake is the registry window at the Electra maximum.
 
 The window reads the balance events that the run replays up to `high`. -/
 theorem departure_charges_le_funded_window {g x y : ForkedBeaconState preset}

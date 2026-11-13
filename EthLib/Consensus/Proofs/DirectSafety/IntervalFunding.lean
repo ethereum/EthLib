@@ -1773,12 +1773,12 @@ def fundingCredit (event : BalanceEvent preset) : Nat :=
     else event.creditLimit
   | _ => event.creditLimit
 
-/-- Electra active stake is funded initially, by deposit churn, or by non-transfer credits.
+/-- Active stake is funded initially, by deposit churn, or by non-transfer credits.
 
-Before Electra, or with a withdrawal delay below two epochs, it is the registry envelope. -/
+With a withdrawal delay below two epochs, it is the registry envelope. -/
 def activeStakeWindow (x : ForkedBeaconState preset) (high : Nat)
     (events : List (BalanceEvent preset)) : Nat :=
-  if .pectra ≤ x.fork ∧ 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat then
+  if 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat then
     fundedStake x + depositWindow (config := config) x high + (events.map fundingCredit).sum
   else registryWindow x high * preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
 
@@ -2975,8 +2975,7 @@ private theorem funding_run_bound (potential : ForkedBeaconState preset → Nat)
     omega
 
 theorem funding_window_of_steps {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (electra : .pectra ≤ x.fork)
-    (early : y.fork < .glamsterdam)
+    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
     (delay : 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (unique : PubkeysDistinct y.state)
     (high : Nat) (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
@@ -3000,8 +2999,7 @@ theorem funding_window_of_steps {x y : ForkedBeaconState preset}
       driftHorizon x high := by unfold driftHorizon; omega
   have larger := Nat.mul_le_mul_right
     config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat count
-  simp only [activeStakeWindow, electra, delay, and_self, ↓reduceIte,
-    depositWindow, funding_carry] at *
+  simp only [activeStakeWindow, delay, ↓reduceIte, depositWindow, funding_carry] at *
   omega
 
 end
