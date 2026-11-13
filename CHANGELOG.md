@@ -560,6 +560,13 @@ Not yet released.
   In Lean, `resolveStep_compatibleUnion` takes the selected child and a proof of `options[slot]? = some child`, and concludes with that child.
   `union_options_share_one_tree` quantifies over that child in the same way.
   `resolveStep_compatibleUnion_of_wellFormed` gives the child for a well-formed union.
+- In Lean, the hash of a message to elements of `Fp2` has its count in its type ([#2210](https://github.com/ethereum/EthLib/pull/2210)).
+  `hashToFieldFp2` returns `Vector (Fp2 F) count`, where it returned an `Array`, so a caller that needs an array takes `.toArray`.
+  The elements, the errors and the points of the hash to `G2` are the same.
+  `map_hashToFieldFp2` maps with `Vector.map`, and `hashToFieldFp2_eq_spec` states the same equation over the vector.
+  `hashToG2` no longer takes an `Inhabited` instance.
+  `map_hashToG2` no longer takes the two instances, or the hypothesis that the map sends the default to the default.
+  No C export or Python function changes.
 
 ## 0.3.0
 

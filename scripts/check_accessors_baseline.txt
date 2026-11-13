@@ -10,7 +10,6 @@
 # So this file is always the exact list.
 # Remove or lower an entry in the pull request that removes its sites.
 # Never add one: a new site is fixed, not listed.
-GetElem?.getElem! EthLib.Cryptography.Bls.HashToCurve.hashToG2 2
 ByteArray.get! EthLib.Serialization.Rlp.decodeItem 3
 ByteArray.get! EthLib.Serialization.Rlp.readBigEndian 1
 ByteArray.get! EthLib.Serialization.Rlp.readPrefix.readLongLength 1

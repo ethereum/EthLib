@@ -54,36 +54,19 @@ theorem map_fpFromBytesL (f : Hom F G) (b : ByteArray) :
     f (fpFromBytesL b : F) = fpFromBytesL b :=
   f.map_ofNat _
 
-/-- A loop that pushes one value per index commutes with a map of the values. -/
-private theorem map_forIn_push {α β : Type} (φ : α → β) (gF : Nat → α) (gG : Nat → β)
-    (h : ∀ i, φ (gF i) = gG i) (l : List Nat) (init : Array α) :
-    Except.map (Array.map φ)
-        (forIn (m := Except BlsError) l init fun i r => pure (ForInStep.yield (r.push (gF i))))
-      = forIn l (init.map φ) fun i r => pure (ForInStep.yield (r.push (gG i))) := by
-  induction l generalizing init with
-  | nil => rfl
-  | cons i l ih =>
-    simp only [List.forIn_cons, pure_bind]
-    rw [ih, Array.map_push, h]
-
 theorem map_hashToFieldFp2 (f : Hom F G) (msg dst : ByteArray) (count : Nat) :
-    (hashToFieldFp2 msg dst count : Except BlsError (Array (Fp2 F))).map (Array.map (Fp2.map f))
-      = hashToFieldFp2 msg dst count := by
+    (hashToFieldFp2 msg dst count : Except BlsError (Vector (Fp2 F) count)).map
+      (Vector.map (Fp2.map f)) = hashToFieldFp2 msg dst count := by
   unfold hashToFieldFp2
   dsimp only
   cases expandMessageXmd msg dst (count * 2 * 64) with
   | error e => rfl
   | ok uniform =>
-    simp only [Std.Legacy.Range.forIn_eq_forIn_range', bind_pure]
-    show Except.map _ (forIn (m := Except BlsError) (List.range' 0 [:count].size)
-        (Array.mkEmpty count) _) = forIn (List.range' 0 [:count].size) (Array.mkEmpty count) _
-    have h0 : (Array.mkEmpty count : Array (Fp2 G))
-        = (Array.mkEmpty count : Array (Fp2 F)).map (Fp2.map f) := by
-      simp only [Array.mkEmpty_eq, Array.map_empty]
-    rw [h0]
-    refine map_forIn_push (Fp2.map f) _ _ ?_ _ _
-    intro i
-    simp only [Fp2.map, map_fpFromBytesL]
+    simp only [Except.map, Bind.bind, Except.bind, Pure.pure, Except.pure]
+    congr 1
+    apply Vector.ext
+    intro i hi
+    simp only [Vector.getElem_map, Vector.getElem_ofFn, Fp2.map, map_fpFromBytesL]
 
 theorem map_sgn0Fp (f : Hom F G) (x : F) : sgn0Fp (f x) = sgn0Fp x :=
   f.map_sgn0 x
@@ -194,27 +177,18 @@ theorem map_clearCofactor (f : Hom F G) (P : G2 F) :
   have hneg : ∀ p : G2 F, (G2.neg p).map f = G2.neg (p.map f) := G2.map_neg f
   simp only [clearCofactor, hadd, hneg, map_mulNegX, map_psi, map_psi2, G2.map_double]
 
-theorem map_hashToG2 [Inhabited F] [Inhabited G] (f : Hom F G) (hd : f default = default)
-    (msg dst : ByteArray) :
+theorem map_hashToG2 (f : Hom F G) (msg dst : ByteArray) :
     (hashToG2 msg dst : Except BlsError (G2 F)).map (G2.map f) = hashToG2 msg dst := by
-  have hget : ∀ (us : Array (Fp2 F)) (i : Nat), (us.map (Fp2.map f))[i]! = us[i]!.map f := by
-    intro us i
-    by_cases h : i < us.size
-    · rw [getElem!_pos us i h, getElem!_pos (us.map (Fp2.map f)) i (by simpa using h),
-        Array.getElem_map]
-    · rw [getElem!_neg us i h, getElem!_neg (us.map (Fp2.map f)) i (by simpa using h)]
-      show (⟨default, default⟩ : Fp2 G) = ⟨f default, f default⟩
-      rw [hd]
   unfold hashToG2
   rw [← map_hashToFieldFp2 f]
-  cases (hashToFieldFp2 msg dst 2 : Except BlsError (Array (Fp2 F))) with
+  cases (hashToFieldFp2 msg dst 2 : Except BlsError (Vector (Fp2 F) 2)) with
   | error e => rfl
   | ok us =>
-    simp only [Except.map, bind, Except.bind, hget, map_simpleSwu]
-    cases simpleSwu us[0]! with
+    simp only [Except.map, bind, Except.bind, Vector.getElem_map, map_simpleSwu]
+    cases simpleSwu us[0] with
     | error e => rfl
     | ok p0 =>
-      cases simpleSwu us[1]! with
+      cases simpleSwu us[1] with
       | error e => rfl
       | ok p1 =>
         obtain ⟨x0, y0⟩ := p0
