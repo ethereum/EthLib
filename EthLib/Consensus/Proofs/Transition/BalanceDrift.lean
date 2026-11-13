@@ -1924,13 +1924,16 @@ private theorem balanceDrift_join_of_sources {g x y : ForkedBeaconState preset}
   exact balanceDrift_admission_step run genesis
     (sources run (Nat.lt_of_le_of_lt step.chainStep.fork_le early)) step early i absent
 
-/-- New keys are bounded from their actual admission balance, not a fictitious zero receipt. -/
+/-- New keys are bounded from their actual admission balance, not a fictitious zero receipt.
+
+The configuration must have a positive withdrawal delay. -/
 theorem joining_growth_from_admission {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (early : y.fork < .glamsterdam)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (i : Nat) (newKey : x.state.validators.data.size ≤ i) :
     effectiveAt y i ≤ pathCredits i tail.balancePath :=
   balanceDrift_join_of_sources shared tail genesis early
-    (fun run early electra => run.pendingConsolidation_sources genesis early electra) i newKey
+    (fun run early => run.pendingConsolidation_sources genesis early delay) i newKey
 
 end EthLib.Consensus

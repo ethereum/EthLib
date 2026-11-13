@@ -22,10 +22,13 @@ Not yet released.
   Nothing breaks in Python: `rpc.serve` takes the new optional argument `pruned_access_lists` for block numbers whose lists are unavailable.
   `rpc.encode_block_access_list` encodes a JSON list as its EIP-7928 RLP bytes.
 
-- In Lean, `Frame` gains the field `slashed`, after `pubkeysDistinct`: a validator slashed before a step, at a registry position, is slashed after it at the same position.
+- In Lean, `Frame` gains the field `slashed`, after `pubkeysDistinct` ([#1451](https://github.com/ethereum/EthLib/issues/1451)).
+  A validator slashed before a step, at a registry position, is slashed after it at the same position.
   A proof that builds a `Frame` with an anonymous constructor adds that field.
   `frame_setValidatorAt_of_whole`, `frame_setValidator_of_whole` and `frame_setValidator` take a new premise `old.slashed = true → validator.slashed = true` after the proof of the key.
   A caller passes `id` when the new validator copies the flag of the old one, and `fun _ => rfl` when it is slashed.
+  `initiateValidatorExit_balances_eq_and_pendingConsolidations_eq` moves to `Consensus/Proofs/Transition/PendingConsolidations.lean`, which `BalanceDrift.lean` imports publicly.
+
 - In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
   `slashedFlag_initiateValidatorExit` takes a `position : Nat` in place of an index.

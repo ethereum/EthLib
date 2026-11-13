@@ -6,41 +6,15 @@ public import EthLib.Consensus.Proofs.DirectSafety.Safety
 /-!
 # Accountable safety with the drift bounded by its sources
 
-Two runs from a shared prefix finalize and justify conflicting checkpoints.
+Two runs from a shared prefix finalize conflicting checkpoints.
 
-Either the following bound holds, or the hashes of the runs show evidence.
+Then the hashes of the runs show evidence, or direct accountable safety holds with a new drift.
 
-The evidence is a collision of the node hash or an object whose root is zero.
+That drift is twice the larger source envelope of the two runs.
 
-The unslashed active stake at the reference state is at most three times the accountable stake.
+The envelope reads the reference state, the balance replay of the run and its largest exit cohort.
 
-The bound adds twice the larger source envelope of the two runs.
-
-The source envelope of a run replaces the observed drift of direct accountable safety.
-
-It is computed from the run's balance replay up to the right finalized epoch.
-
-A slashing in the shared prefix does not make a key accountable by itself.
-
-A key that it slashed leaves the reference set and the accountable set.
-
-The accountability predicate can still hold for such a key.
-
-But the accountable set keeps only the keys unslashed at the reference state.
-
-A prefix attester slashing can name a key without slashing it, when the key is not slashable.
-
-Such a key stays in the reference set and can still count, through double votes or tail evidence.
-
-Only forward persistence keeps a prefix-slashed key's stake out of the later drift and support.
-
-The source envelope is a conservative bound, not the weak subjectivity formula.
-
-In the bound, twice the envelope divided by three weighs exits at four thirds.
-
-It weighs activations at two thirds, the weights of exits and of activations in [EIP-8061].
-
-The bound holds for every pair of runs; nothing says that a run attains it.
+Over three, it weighs exits at four thirds and activations at two thirds, as in [EIP-8061].
 
 [EIP-8061]: https://eips.ethereum.org/EIPS/eip-8061#weak-subjectivity-period
 -/
@@ -55,16 +29,25 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 /-- Accountable safety with the drift of each run bounded by its source envelope.
 
-The envelope of a run reads the run's balance replay up to the right finalized epoch `high`.
+The unslashed active stake at the reference state is at most three times the accountable stake.
 
-Each run must end before Gloas, and the epoch of the reference state is at most `high + 1`.
+The bound adds twice the larger envelope of the two runs, or the hashes of the runs show evidence.
 
-The preset must meet the parameters, have two slots per epoch and order its caps.
+Each envelope reads the balance replay of its run up to the finalized epoch of the right run.
 
-Its largest effective balances must be whole numbers of increments. -/
+The theorem also returns those replays.
+
+Each run ends before Gloas, and the reference state is at most one epoch past that epoch.
+
+The preset meets the parameters, has at least two slots per epoch and orders its caps.
+
+Its largest effective balances are whole numbers of increments.
+
+The withdrawal delay is positive. -/
 theorem source_safety {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset)
     (earlyA : a.fork < .glamsterdam) (earlyB : b.fork < .glamsterdam)
@@ -85,10 +68,10 @@ theorem source_safety {g x a b : ForkedBeaconState preset}
             (sourceDrift (config := config) x b.state.finalizedCheckpoint.epoch.toNat
               (boundaryWindow b.state.finalizedCheckpoint.epoch.toNat right) eventsB)) ∨
         HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects)) := by
-  obtain ⟨eventsA, replayedA, driftA⟩ := derivedDrift_le_sources shared left genesis parameters
-    twoSlots caps aligned earlyA _ startEpoch
-  obtain ⟨eventsB, replayedB, driftB⟩ := derivedDrift_le_sources shared right genesis parameters
-    twoSlots caps aligned earlyB _ startEpoch
+  obtain ⟨eventsA, replayedA, driftA⟩ := derivedDrift_le_sources shared left genesis delay
+    parameters twoSlots caps aligned earlyA _ startEpoch
+  obtain ⟨eventsB, replayedB, driftB⟩ := derivedDrift_le_sources shared right genesis delay
+    parameters twoSlots caps aligned earlyB _ startEpoch
   refine ⟨eventsA, eventsB, replayedA, replayedB, ?_⟩
   rcases accountable_safety shared left right parameters genesis enoughA enoughB ordered
     conflict with bound | hashes

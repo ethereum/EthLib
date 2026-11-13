@@ -1042,14 +1042,14 @@ private theorem replayRewards_matches {fork : Fork} {pre post : BalanceReplay pr
 
 /-- Every event of an epoch replay is bounded by its recorded limits.
 
-The replay trace carries the balances match and the bounds, one replay step at a time. -/
+The replay trace carries the bounds and the equal sizes of the balances, one step at a time. -/
 private theorem epochBalanceReplay_bounded {fork : Fork} {s : BeaconState preset fork}
     {post : BalanceReplay preset fork} (initial : BalancesMatch s)
     (early : fork < .glamsterdam)
     (ok : epochBalanceReplay (config := config) (checks := checks) s = .ok post) :
     EventsBounded post.2 := by
   let Holds (pre : BalanceReplay preset fork) : Prop := BalancesMatch pre.1 ∧ EventsBounded pre.2
-  -- Carrying passes keep the events, so only the balances match needs a frame.
+  -- Carrying passes keep the events, so only the equal sizes of the balances need a frame.
   have carry {pre post : BalanceReplay preset fork}
       {action : BeaconState preset fork → Except TransitionError (BeaconState preset fork)}
       (frame : ∀ a b, action a = .ok b → BalancesMatch a → BalancesMatch b)

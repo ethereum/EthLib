@@ -967,7 +967,7 @@ private theorem new_recent_before_electra {g x y : ForkedBeaconState preset}
         preset.MAX_EFFECTIVE_BALANCE.toNat := by simp
     _ ≤ _ := Nat.mul_le_mul_right _ (cards.trans count)
 
-/-- Separate new activation cohorts from reference previous-only stake without a positive cap. -/
+/-- New activation cohorts and the previous-only reference stake bound the joining stake. -/
 theorem joining_before_electra_split {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)

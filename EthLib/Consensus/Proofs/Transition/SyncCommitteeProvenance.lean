@@ -843,7 +843,7 @@ private theorem processSyncCommitteeUpdates {altair : .altair ≤ fork}
 Every stage but the committee update keeps both committees and the key prefix of the registry. -/
 private theorem processEpoch (holds : SyncCommitteeKeys state)
     (ok : Consensus.processEpoch config checks state = .ok after) : SyncCommitteeKeys after := by
-  -- Before Altair there are no sync committees, so the provenance holds trivially.
+  -- Before Altair there are no sync committees, so the provenance holds.
   by_cases altair : Fork.altair ≤ fork
   case neg => exact fun altair' => absurd altair' altair
   refine (processEpoch_trace ok).transport (fun s t => SyncCommitteeKeys s → SyncCommitteeKeys t)
