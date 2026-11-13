@@ -208,6 +208,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
 public import EthLib.Consensus.Proofs.Transition.Totality.Justification
 public import EthLib.Consensus.Proofs.Transition.Totality.PendingDeposits
 public import EthLib.Consensus.Proofs.Transition.Totality.ProposerLookahead
+public import EthLib.Consensus.Proofs.Transition.Totality.PtcWindow
 public import EthLib.Consensus.Proofs.Transition.Totality.Registry
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryElectra
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoad
