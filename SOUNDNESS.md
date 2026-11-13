@@ -3915,6 +3915,24 @@ It checks the sync duties against the keys of the committees in the JSON of the 
 It gives the state a different block root at each place, and checks each dependent root against it.
 It checks code 400 for an empty request, a repeated PTC index, a PTC epoch before the previous one, and an attester epoch too old for the block roots; no theorem states these refusals.
 
+The answers that hand a validator its data are in `Consensus/BeaconApi/ValidatorData.lean`: attestation data, payload attestation data, aggregates and sync committee contributions.
+`produceAttestationData_head` (`Consensus/Proofs/BeaconApi/ValidatorData.lean`) shows that the attestation data votes for the head of the store, at the requested slot, and that the head is not optimistic.
+`produceAttestationData_index` shows that for a store in Electra or Fulu the index of the data is 0.
+`producePayloadAttestationData_block` shows that the payload attestation data names the block of its slot on the chain of the head, with the two flags given.
+`aggregateAttestation_matching` shows that an aggregate has the requested data root and slot, and that its block is not optimistic.
+`aggregateAttestation_construct_of_lt_electra` and `aggregateAttestation_construct_of_electra` show that an aggregate is the honest aggregate of the guide, over the messages with its data.
+`aggregateAttestation_bits_of_lt_electra` shows that before Electra a bit of an aggregate is set exactly when that bit of an attestation with its data is.
+`aggregateAttestation_attesters_of_electra` shows that from Electra the attesters of an aggregate are those of the single attestations with its data and committee.
+`aggregateAttestation_committeeBits_of_electra` shows that from Electra its committee bits mark the requested committee alone.
+`aggregateAttestation_valid_of_lt_electra` and `aggregateAttestation_valid_of_electra` show that an aggregate of distinct honest messages passes the check of an indexed attestation, when the registry holds each signer's key and the secret keys do not sum to zero.
+`produceSyncCommitteeContribution_bits` shows that a bit of a contribution is set exactly when a message of the slot and root comes from a validator with the key of that seat.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_validator_data.py`) builds stores from the pinned Gloas fork choice cases.
+It checks the attestation data at the slot of the head and after it, where the index signals the payload, and codes 400 and 503.
+It checks the payload attestation data of a slot with a block, and none for a slot without one.
+It checks the attestation data index of Deneb, Electra and Fulu stores, and code 400 for payload attestation data before Gloas.
+It checks the aggregates and contributions against bytes it builds itself, and codes 400, 404 and 503; no theorem states these error codes.
+The issue's single matching and validity theorems are split by fork; from Electra the union of bits is stated as the set of attesters.
+
 Points that remain open:
 
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
@@ -4007,6 +4025,25 @@ Points that remain open:
   The PTC request asks for distinct indices, so a repeated one gets code 400.
   The attester and sync requests do not, so a repeated index gives its duty once for each time it is named.
 - The sync duties answer for the current period or the next, since the state holds only those committees; another period gets code 400.
+- The attestation data takes the status of the head payload from the fork choice, as the guide does, since the source leaves it to the node.
+  The deprecated committee index is read before Electra only, and a request without one passes 0.
+- The source does not say which slots the attestation data accepts; EthLib takes the state of the head through the empty slots.
+  It gives code 400 for a slot before the head, or after the current slot of the store.
+  A head whose payload is not yet verified gets code 503 before the slot is checked against the current slot.
+- The payload attestation data takes its two flags as inputs, since they record what the node has seen; its 503 for a syncing node is out of scope.
+- The aggregate and contribution answers take the collected messages and the state as inputs; which messages a node keeps is its own matter.
+  The aggregate takes the data of the first matching message, and joins every message with that data, and from Electra with the requested committee.
+  Before Electra, overlapping aggregates in the pool give an aggregate whose signature does not verify.
+  Each fork reads one of the two lists of messages: the attestations before Electra, the single attestations from Electra.
+- The store of the fork choice holds one fork, so a slot of a later fork gets attestation data under the rule of the store's fork.
+- Before Electra the attestation data does not check the committee index against the count of committees of the slot.
+- The payload attestation data does not check that its block is verified.
+- The payload attestation data answers code 204 when the chain of the head has no block at the slot, even if the store holds one off that chain.
+- From Electra a committee index out of range with no matching message gets code 404, since the match comes before the range check of the aggregate.
+- The source names no code for a subcommittee index that names no subnet; EthLib gives code 400.
+- The contribution answer requires the slot of the state, and joins the messages of the sync committee of the next slot, as gossip checks them.
+  It keeps only the messages of validators with a key of the requested subcommittee, so the messages of other subcommittees do not refuse the request.
+  A message of a validator that the state does not know is left out too.
 
 ### Builder API
 
@@ -4537,12 +4574,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 483 operations and 49 size constants.
-The Python extension calls 483 of the operations and 49 of the constants.
+Lean exports 487 operations and 49 size constants.
+The Python extension calls 487 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11314 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2358), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1573), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (777), `x25519.c` (21), `xmss.c` (134).
+11370 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2402), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1581), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (781), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

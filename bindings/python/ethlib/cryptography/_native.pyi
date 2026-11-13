@@ -657,6 +657,22 @@ def consensus_api_payload_envelope_ssz(name: str, fork: str, anchor_state: bytes
     """The SSZ body of the envelope answer, as `bytes`."""
     ...
 
+def consensus_api_attestation_data(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, optimistic_roots: list[bytes], slot: int, committee_index: int) -> dict[str, Any]:
+    """The JSON response of the attestation data endpoint, as a `dict`."""
+    ...
+
+def consensus_api_payload_attestation_data(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, slot: int, payload_present: bool, blob_data_available: bool) -> dict[str, Any] | None:
+    """The JSON response of the payload attestation data endpoint, as a `dict`, or None for 204."""
+    ...
+
+def consensus_api_aggregate_attestation(name: str, fork: str, state: bytes, attestations: list[bytes], singles: list[bytes], optimistic_roots: list[bytes], data_root: bytes, slot: int, committee_index: int) -> dict[str, Any]:
+    """The JSON response of the aggregate endpoint, as a `dict`."""
+    ...
+
+def consensus_api_sync_committee_contribution(name: str, fork: str, state: bytes, messages: list[bytes], optimistic_roots: list[bytes], slot: int, subcommittee_index: int, root: bytes) -> dict[str, Any]:
+    """The JSON response of the contribution endpoint, as a `dict`."""
+    ...
+
 def consensus_api_duties(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, epoch: int, indices: list[int], genesis_root: bytes) -> dict[str, Any]:
     """The JSON response of a duties endpoint, as a `dict`."""
     ...

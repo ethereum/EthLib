@@ -491,6 +491,18 @@
 #define DOC_consensus_api_payload_envelope_ssz \
   "The SSZ body of the envelope answer, as `bytes`."
 
+#define DOC_consensus_api_attestation_data \
+  "The JSON response of the attestation data endpoint, as a `dict`."
+
+#define DOC_consensus_api_payload_attestation_data \
+  "The JSON response of the payload attestation data endpoint, as a `dict`, or None for 204."
+
+#define DOC_consensus_api_aggregate_attestation \
+  "The JSON response of the aggregate endpoint, as a `dict`."
+
+#define DOC_consensus_api_sync_committee_contribution \
+  "The JSON response of the contribution endpoint, as a `dict`."
+
 #define DOC_consensus_api_duties \
   "The JSON response of a duties endpoint, as a `dict`."
 
