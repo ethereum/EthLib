@@ -29,6 +29,10 @@ A total balance is at least one effective balance increment.
 
 The total active balance rejects an active position or a balance sum of `2^64` or more.
 
+From Electra, the pending balance of a validator is the sum of its pending partial withdrawals.
+
+A sum of `2^64` or more fails, and the balance is zero exactly when each of those amounts is.
+
 The previous epoch is the current one minus one, or the genesis epoch at genesis.
 
 On natural numbers, the current epoch is the slot over the epoch length, less one for the previous.
@@ -502,6 +506,92 @@ theorem getTotalActiveBalance_ne_indexOutOfRange {state : BeaconState preset for
         (markIndices state.validators.data.size indices)
     · simp [big, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
     · simp [big, pure, Except.pure]
+
+/-- A sum of a value where a test holds, and zero elsewhere, is its sum over the passing entries. -/
+private theorem sum_map_ite_eq_sum_filter {α : Type} (test : α → Prop) [DecidablePred test]
+    (value : α → Nat) (entries : List α) :
+    (entries.map fun entry => if test entry then value entry else 0).sum =
+      ((entries.filter fun entry => test entry).map value).sum := by
+  induction entries with
+  | nil => rfl
+  | cons entry rest ih => by_cases passes : test entry <;> simp [passes, ih]
+
+/-- From Electra, the pending balance of a validator succeeds exactly when its sum is below `2^64`.
+
+The sum runs over the amounts of the pending partial withdrawals of that validator alone.
+
+The result is then that sum. -/
+theorem getPendingBalanceToWithdraw_ok_iff {state : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : ValidatorIndex} {amount : Gwei} :
+    getPendingBalanceToWithdraw state electra index = .ok amount ↔
+      (((state.pendingPartialWithdrawals electra).data.toList.filter
+          (·.validatorIndex = index)).map (·.amount.toNat)).sum < 2 ^ 64 ∧
+        amount.toNat = (((state.pendingPartialWithdrawals electra).data.toList.filter
+          (·.validatorIndex = index)).map (·.amount.toNat)).sum := by
+  unfold getPendingBalanceToWithdraw
+  simp only [sum_map_ite_eq_sum_filter
+    fun withdrawal : PendingPartialWithdrawal => withdrawal.validatorIndex = index]
+  split
+  · rename_i small
+    simp only [Except.ok.injEq, small, true_and]
+    constructor
+    · rintro rfl
+      simp [Nat.mod_eq_of_lt small]
+    · intro sum
+      apply UInt64.toNat_inj.mp
+      simp [sum, Nat.mod_eq_of_lt small]
+  · simp only [reduceCtorEq, false_iff, not_and]
+    omega
+
+/-- From Electra, the pending balance of a validator fails exactly when its sum reaches `2^64`.
+
+It then fails with a balance overflow. -/
+theorem getPendingBalanceToWithdraw_eq_error_iff {state : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : ValidatorIndex} {error : AccessorError} :
+    getPendingBalanceToWithdraw state electra index = .error error ↔
+      2 ^ 64 ≤ (((state.pendingPartialWithdrawals electra).data.toList.filter
+          (·.validatorIndex = index)).map (·.amount.toNat)).sum ∧
+        error = .balanceOverflow := by
+  unfold getPendingBalanceToWithdraw
+  simp only [sum_map_ite_eq_sum_filter
+    fun withdrawal : PendingPartialWithdrawal => withdrawal.validatorIndex = index]
+  split
+  · simp only [reduceCtorEq, false_iff, not_and]
+    omega
+  · simp only [Except.error.injEq]
+    constructor
+    · rintro rfl
+      exact ⟨by omega, rfl⟩
+    · rintro ⟨-, rfl⟩
+      rfl
+
+/-- From Electra, the pending balance of a validator is zero exactly when each of its amounts is.
+
+The amounts are those of its pending partial withdrawals. -/
+theorem getPendingBalanceToWithdraw_eq_ok_zero_iff {state : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : ValidatorIndex} :
+    getPendingBalanceToWithdraw state electra index = .ok 0 ↔
+      ∀ withdrawal ∈ (state.pendingPartialWithdrawals electra).data.toList,
+        withdrawal.validatorIndex = index → withdrawal.amount = 0 := by
+  have zero : ∀ amounts : List Nat, amounts.sum = 0 ↔ ∀ amount ∈ amounts, amount = 0 := by
+    intro amounts
+    induction amounts with
+    | nil => simp
+    | cons amount rest ih => simp [ih]
+  rw [getPendingBalanceToWithdraw_ok_iff, UInt64.toNat_zero, eq_comm (a := 0), zero]
+  simp only [List.mem_map, List.mem_filter, decide_eq_true_eq]
+  constructor
+  · rintro ⟨-, vanish⟩ withdrawal member owned
+    exact UInt64.toNat_inj.mp (vanish _ ⟨withdrawal, ⟨member, owned⟩, rfl⟩)
+  · intro vanish
+    have each : ∀ amount, (∃ withdrawal, (withdrawal ∈ (state.pendingPartialWithdrawals
+        electra).data.toList ∧ withdrawal.validatorIndex = index) ∧
+          withdrawal.amount.toNat = amount) → amount = 0 := by
+      rintro amount ⟨withdrawal, ⟨member, owned⟩, rfl⟩
+      simp [vanish withdrawal member owned]
+    refine ⟨?_, each⟩
+    rw [(zero _).mpr (by simpa using each)]
+    omega
 
 
 /--
