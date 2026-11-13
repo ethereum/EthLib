@@ -3940,7 +3940,8 @@ The source fixes none of the contents of the result of `eth_createAccessList`.
 EthLib lists each address and storage key that the call read or wrote, as the state tracker records them, a revert included.
 It leaves out an address without a storage key that the transaction accesses from the start.
 These addresses are the sender, the recipient or the created contract, the precompiles and, from Shapella, the beneficiary.
-The list keeps the authorities and the delegate of EIP-7702 and the contracts that the code of the call creates, although EIP-2929 and EIP-7702 make these addresses warm.
+The list keeps the authorities and the delegate of EIP-7702, and the contracts that the code of the call creates.
+EIP-2929 and EIP-7702 make these addresses warm, but they stay in the list.
 
 The method then runs the call again with that list, as type 1 when the request has type 0.
 Before Berlin no transaction has an access list, so the list is empty and the call runs once.
