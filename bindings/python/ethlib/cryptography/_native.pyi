@@ -673,6 +673,10 @@ def consensus_default_auth_data(url: str) -> bytes:
     """The default data that a proposer and a builder agree, from the builder's URL."""
     ...
 
+def consensus_relay_submission_bid(name: str, fork: str, data: bytes, pubkey: bytes) -> bytes:
+    """The SSZ bytes of the bid that a relay serves from a submission, under a key."""
+    ...
+
 def consensus_builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The value of a builder's bid from its two payments and the proposer's execution payment cap."""
     ...

@@ -25,6 +25,7 @@ public import EthLib.Consensus.Exports.GossipValidation
 public import EthLib.Consensus.Exports.OptimisticSync
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Exports.PqKeys
+public import EthLib.Consensus.Exports.RelayApi
 public import EthLib.Consensus.Exports.ReqResp
 public import EthLib.Consensus.Exports.Rewards
 public import EthLib.Consensus.Exports.Shuffle
