@@ -486,23 +486,6 @@ private theorem Tracked.of_eq (tracked : store.Tracked anchorState anchorBlock)
   tracked.of_grow justified finalized unrealizedJustified unrealizedFinalized justifications
     (fun found => states ▸ found)
 
-/-- Moving the checkpoints keeps the unrealized justifications. -/
-private theorem updateCheckpoints_unrealizedJustifications (justified finalized : Checkpoint) :
-    (store.updateCheckpoints justified finalized).unrealizedJustifications =
-      store.unrealizedJustifications := by
-  unfold Store.updateCheckpoints
-  by_cases j : store.justifiedCheckpoint.epoch < justified.epoch <;>
-    by_cases f : store.finalizedCheckpoint.epoch < finalized.epoch <;> simp [j, f]
-
-/-- Moving the unrealized checkpoints keeps the unrealized justifications. -/
-private theorem updateUnrealizedCheckpoints_unrealizedJustifications
-    (justified finalized : Checkpoint) :
-    (store.updateUnrealizedCheckpoints justified finalized).unrealizedJustifications =
-      store.unrealizedJustifications := by
-  unfold Store.updateUnrealizedCheckpoints
-  by_cases j : store.unrealizedJustifiedCheckpoint.epoch < justified.epoch <;>
-    by_cases f : store.unrealizedFinalizedCheckpoint.epoch < finalized.epoch <;> simp [j, f]
-
 /-- Recording the unrealized justification of a block keeps the store tracked.
 
 It must be the current justified checkpoint of the block state after justification. -/

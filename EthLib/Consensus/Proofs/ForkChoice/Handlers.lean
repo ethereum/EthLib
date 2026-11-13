@@ -149,6 +149,23 @@ theorem EpochsLe.of_eq {a b : Store preset fork}
   by_cases j : store.justifiedCheckpoint.epoch < justified.epoch <;>
     by_cases f : store.finalizedCheckpoint.epoch < finalized.epoch <;> simp [j, f]
 
+/-- Moving the checkpoints keeps the unrealized justifications. -/
+@[simp] theorem updateCheckpoints_unrealizedJustifications (justified finalized : Checkpoint) :
+    (store.updateCheckpoints justified finalized).unrealizedJustifications =
+      store.unrealizedJustifications := by
+  unfold Store.updateCheckpoints
+  by_cases j : store.justifiedCheckpoint.epoch < justified.epoch <;>
+    by_cases f : store.finalizedCheckpoint.epoch < finalized.epoch <;> simp [j, f]
+
+/-- Moving the unrealized checkpoints keeps the unrealized justifications. -/
+@[simp] theorem updateUnrealizedCheckpoints_unrealizedJustifications
+    (justified finalized : Checkpoint) :
+    (store.updateUnrealizedCheckpoints justified finalized).unrealizedJustifications =
+      store.unrealizedJustifications := by
+  unfold Store.updateUnrealizedCheckpoints
+  by_cases j : store.unrealizedJustifiedCheckpoint.epoch < justified.epoch <;>
+    by_cases f : store.unrealizedFinalizedCheckpoint.epoch < finalized.epoch <;> simp [j, f]
+
 @[simp] theorem updateUnrealizedCheckpoints_justifiedCheckpoint (justified finalized : Checkpoint) :
     (store.updateUnrealizedCheckpoints justified finalized).justifiedCheckpoint =
       store.justifiedCheckpoint := by
