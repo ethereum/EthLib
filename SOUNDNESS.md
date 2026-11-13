@@ -2290,9 +2290,9 @@ It takes a run from genesis to a state `x`, and a run on from `x` to a state bef
 The charge of a validator is its effective balance, counted when a step of the second run first assigns its exit epoch.
 The charges whose exit epoch is at most `high + 1` fit the unspent capacity of the exit and consolidation queues at `x`, plus one cap for each epoch from the epoch of `x` to `high + 1`.
 The cap is `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` plus `consolidationCap`.
-If `x` is before Electra, the cap also adds the churn of validators for a bound on the size of the registry, times `MAX_EFFECTIVE_BALANCE`.
+If `x` is before Electra, there is no carry, and the cap also adds the churn of validators for a bound on the size of the registry, at least 1, times `MAX_EFFECTIVE_BALANCE`.
 `consolidationCap` is an assumption: it bounds the consolidation churn of the state where each step of the second run starts, from Electra.
-That churn follows the total active balance, and no theorem yet bounds how the churn changes between slots.
+That churn follows the total active balance, and no theorem yet bounds how the churn changes between slots, so the assumption keeps the bound close to the churn that the chain actually has.
 The theorem also assumes that the preset orders its caps, `MAX_EFFECTIVE_BALANCE` at most `MIN_ACTIVATION_BALANCE` at most `MAX_EFFECTIVE_BALANCE_ELECTRA`; `CapOrder.mainnet` and `CapOrder.minimal` show that both presets do.
 The bound counts exits at their assigned exit epochs, so it does not bound the exits that the blocks of one epoch initiate.
 It does not bound activations, and no theorem yet derives the change of the active set or puts this bound into `accountable_safety_of_change`.

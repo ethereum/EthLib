@@ -651,7 +651,11 @@ private theorem CapStep.run {s t : ForkedBeaconState preset}
 
 /-- Before Gloas, each validator reached from genesis has an effective balance at most its cap.
 
-The preset caps are assumed in order, `MAX_EFFECTIVE_BALANCE` up to `MAX_EFFECTIVE_BALANCE_ELECTRA`.
+The preset caps are assumed in order.
+
+`MAX_EFFECTIVE_BALANCE` is at most `MIN_ACTIVATION_BALANCE`.
+
+`MIN_ACTIVATION_BALANCE` is at most `MAX_EFFECTIVE_BALANCE_ELECTRA`.
 -/
 theorem Run.effectiveBalance_capped {g x : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)

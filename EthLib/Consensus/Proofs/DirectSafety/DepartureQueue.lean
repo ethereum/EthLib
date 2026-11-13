@@ -4242,7 +4242,11 @@ From Electra, the consolidation churn where each step starts is at most `consoli
 
 That bound on the churn is an assumption.
 
-The preset caps are assumed in order, `MAX_EFFECTIVE_BALANCE` up to `MAX_EFFECTIVE_BALANCE_ELECTRA`.
+The preset caps are assumed in order.
+
+`MAX_EFFECTIVE_BALANCE` is at most `MIN_ACTIVATION_BALANCE`.
+
+`MIN_ACTIVATION_BALANCE` is at most `MAX_EFFECTIVE_BALANCE_ELECTRA`.
 -/
 theorem departure_charges_le_window {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)

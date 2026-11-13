@@ -41,7 +41,7 @@ structure DepartureCharge where
   /-- The effective balance before the step, in Gwei. -/
   amount : Nat
 
-/-- The departure charges of one step, one for each validator whose exit epoch it assigns.
+/-- The departure charges of one step, one per validator of its input whose exit it assigns.
 
 A charge reads the effective balance before the step, not after the effective-balance updates. -/
 def _root_.EthLib.Consensus.Step.departureCharges {x y : ForkedBeaconState preset}
@@ -367,9 +367,7 @@ theorem electra_crossing_queues {pre : BeaconState preset .dencun}
     rw [same]
     exact liftAccessor_ok.mp consolidationOk
 
-/-- A run that starts before Electra and reaches it splits at one step from a fork before Electra.
-
-That step holds the epoch before the upgrade and every upgrade that it runs. -/
+/-- A run from before Electra that reaches it splits at one step from a fork before Electra. -/
 theorem split_electra_crossing {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (early : x.fork < .pectra) (late : .pectra ≤ y.fork) :
     ∃ u v, ∃ head : Run config checks x u, ∃ step : Step config checks u v,
