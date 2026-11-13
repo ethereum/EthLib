@@ -133,6 +133,18 @@ extern lean_object*
 eth_consensus_builder_api_ssz(lean_object* args);
 
 extern lean_object*
+eth_consensus_api_spec(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_fork_schedule(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_deposit_contract(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_genesis(lean_object* args);
+
+extern lean_object*
 eth_pq_keys_ssz(
   lean_object* args
 );
@@ -630,6 +642,38 @@ py_consensus_builder_api_ssz(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_builder_api_ssz, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_api_spec(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_spec, args, 2, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_fork_schedule(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_fork_schedule, args, 2, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_deposit_contract(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_deposit_contract, args, 2, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_genesis(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_genesis, args, 4, CONSENSUS_ERROR);
 }
 
 PyObject*

@@ -569,6 +569,22 @@ def consensus_api_ssz(name: str, fork: str, type: str, document: Any) -> bytes:
     """The SSZ bytes of the value that a JSON document of the API holds."""
     ...
 
+def consensus_api_spec(name: str, config: dict[str, Any] | None) -> dict[str, Any]:
+    """The spec map of a preset and a configuration, as a `dict`."""
+    ...
+
+def consensus_api_fork_schedule(name: str, config: dict[str, Any] | None) -> list[dict[str, str]]:
+    """The fork schedule of a configuration, as a `list` of `dict`."""
+    ...
+
+def consensus_api_deposit_contract(name: str, config: dict[str, Any] | None) -> dict[str, str]:
+    """The deposit contract of a configuration, as a `dict`."""
+    ...
+
+def consensus_api_genesis(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> dict[str, str]:
+    """The genesis that a genesis state gives, as a `dict`."""
+    ...
+
 def consensus_api_resolve(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, queries: list) -> list:
     """The answer to each query, against the store after the steps of a fork choice case."""
     ...

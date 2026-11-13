@@ -799,6 +799,32 @@ def api_resolve(
     )
 
 
+def api_spec(name: str, config: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The Beacon API spec map of a preset and the configuration of the same name."""
+    # A number is a str of decimal digits, bytes are a str of 0x and lowercase hex, a name is text.
+    # A schedule is a list of dicts of decimal strs.
+    # The values are `Any`, so that a caller indexes a schedule without narrowing it.
+    return _native.consensus_api_spec(name, config)
+
+
+def api_fork_schedule(name: str, config: dict[str, Any] | None = None) -> list[dict[str, str]]:
+    """The Beacon API fork schedule of a configuration, Phase 0 first."""
+    return _native.consensus_api_fork_schedule(name, config)
+
+
+def api_deposit_contract(name: str, config: dict[str, Any] | None = None) -> dict[str, str]:
+    """The Beacon API deposit contract of a configuration."""
+    return _native.consensus_api_deposit_contract(name, config)
+
+
+def api_genesis(
+    name: str, fork: str, state: bytes, config: dict[str, Any] | None = None
+) -> dict[str, str]:
+    """The Beacon API genesis of a genesis state and a configuration, or ConsensusError."""
+    # The time and the root come from the state, the version from the configuration.
+    return _native.consensus_api_genesis(name, fork, state, config)
+
+
 def gossip_validation(
     name: str,
     fork: str,
@@ -1403,6 +1429,10 @@ __all__ = [
     "api_ssz",
     "builder_api_json",
     "builder_api_ssz",
+    "api_spec",
+    "api_fork_schedule",
+    "api_deposit_contract",
+    "api_genesis",
     "is_valid_builder_signature",
     "process_registration",
     "is_eligible_for_bid",

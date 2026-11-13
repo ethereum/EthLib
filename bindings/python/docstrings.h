@@ -425,6 +425,18 @@
 #define DOC_consensus_api_ssz \
   "The SSZ bytes of the value that a JSON document of the API holds."
 
+#define DOC_consensus_api_spec \
+  "The spec map of a preset and a configuration, as a `dict`."
+
+#define DOC_consensus_api_fork_schedule \
+  "The fork schedule of a configuration, as a `list` of `dict`."
+
+#define DOC_consensus_api_deposit_contract \
+  "The deposit contract of a configuration, as a `dict`."
+
+#define DOC_consensus_api_genesis \
+  "The genesis that a genesis state gives, as a `dict`."
+
 #define DOC_consensus_api_resolve \
   "The answer to each query, against the store after the steps of a fork choice case."
 

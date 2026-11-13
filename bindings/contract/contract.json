@@ -2857,6 +2857,40 @@
    "error_class": "SszError",
    "docstring":
    "The SSZ bytes of the value that a JSON document of the API holds.\n\nThe arguments are the name of the preset, the fork, the container and the document.\n\nHex reads in either letter case, and a key that the container does not declare is refused."},
+  {"summary": "The spec map of a preset and a configuration, as a `dict`.",
+   "signature": "(name: str, config: dict[str, Any] | None) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiSpecExport",
+   "method": "consensus_api_spec",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The spec map of a preset and a configuration, as a `dict`.\n\nThe arguments are the name and a `dict` of replacements, or None.\n\nA number is a `str` of decimal digits, and bytes are a `str` of `0x` and lowercase hex."},
+  {"summary": "The fork schedule of a configuration, as a `list` of `dict`.",
+   "signature":
+   "(name: str, config: dict[str, Any] | None) -> list[dict[str, str]]",
+   "operation": "EthLib.Consensus.Exports.apiForkScheduleExport",
+   "method": "consensus_api_fork_schedule",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The fork schedule of a configuration, as a `list` of `dict`.\n\nThe arguments are the name and a `dict` of replacements, or None."},
+  {"summary": "The deposit contract of a configuration, as a `dict`.",
+   "signature": "(name: str, config: dict[str, Any] | None) -> dict[str, str]",
+   "operation": "EthLib.Consensus.Exports.apiDepositContractExport",
+   "method": "consensus_api_deposit_contract",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The deposit contract of a configuration, as a `dict`.\n\nThe arguments are the name and a `dict` of replacements, or None."},
+  {"summary": "The genesis that a genesis state gives, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> dict[str, str]",
+   "operation": "EthLib.Consensus.Exports.apiGenesisExport",
+   "method": "consensus_api_genesis",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The genesis that a genesis state gives, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state, and replacements or None.\n\nThe genesis version is the one of the configuration."},
   {"summary":
    "The answer to each query, against the store after the steps of a fork choice case.",
    "signature":
