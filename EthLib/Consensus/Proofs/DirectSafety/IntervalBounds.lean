@@ -80,6 +80,7 @@ private theorem funding_assemble {g x y : ForkedBeaconState preset}
           config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat + (events.map fundingCredit).sum) :
     Models.stake (effectiveWeight y.state) (activeKeys y.state) ≤
       activeStakeWindow (config := config) x high events := by
+  have ⟨_, _, _, initialized⟩ := genesis
   have invariant {z : ForkedBeaconState preset} (run : Run config checks g z) :
       Invariant z.state := by
     induction run with
@@ -92,7 +93,8 @@ private theorem funding_assemble {g x y : ForkedBeaconState preset}
       | block engine signed due ok =>
         exact (frame_processBlock (applySignedBlock_ok ok).2.1).invariant ih
   apply funding_window_of_steps tail electra early delay
-    ((shared.append tail).unique (genesis_unique genesis)) high endEpoch events replayed
+    ((validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      (shared.append tail).chainSteps).2) high endEpoch events replayed
   intro a b pre step before added addedOk
   have reachable := shared.append pre
   have holds := invariant reachable
@@ -1284,9 +1286,11 @@ private theorem intervalLoss_reference_indices {g x y : ForkedBeaconState preset
             w.pubkey = v.pubkey ∧ w.slashed = true then 0 else
           effectiveWeight x.state v.pubkey -
             Models.supported (recentKeys y.state) (effectiveWeight y.state) v.pubkey).sum := by
+  have ⟨_, _, _, initialized⟩ := genesis
   classical
   have within := x.state.validators.bound early
-  have unique := shared.unique (genesis_unique genesis)
+  have unique := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      shared.chainSteps).2
   have distinct : (getActiveValidatorIndices x.state (getCurrentEpoch x.state)).Nodup := by
     simpa [List.Nodup] using (getActiveValidatorIndices_sorted within _).imp UInt64.ne_of_lt
   unfold referenceLoss unslashedKeys
@@ -1945,6 +1949,7 @@ private theorem intervalLoss_retained {g x y : ForkedBeaconState preset}
     effectiveWeight x.state v.pubkey -
         Models.supported (recentKeys y.state) (effectiveWeight y.state) v.pubkey ≤
       if deficit = 0 then 0 else deficit + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1 := by
+  have ⟨_, _, _, initialized⟩ := genesis
   have supported := intervalLoss_supported_events shared tail genesis early high
     endEpoch events replayed i.toNat v w found located active recent
   have covered := intervalLoss_filtered_coverage tail early high endEpoch events replayed
@@ -1957,12 +1962,16 @@ private theorem intervalLoss_retained {g x y : ForkedBeaconState preset}
     intro unset
     rw [unset, far] at active
     omega
-  obtain ⟨last, lastFound, key⟩ := tail.key_preserved i.toNat v found
+  obtain ⟨last, lastFound, key⟩ := validators_getElem?_of_validatorKeys_prefix
+      (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 found
   have same := Option.some.inj (lastFound.symm.trans located)
   subst last
-  have unique := genesis_unique genesis
-  rw [effectiveWeight_at x.state (shared.unique unique) i.toNat v found,
-    ← key, intervalLoss_recent_supported y early ((shared.append tail).unique unique)
+  have uniqueX := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      shared.chainSteps).2
+  have uniqueY := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      (shared.append tail).chainSteps).2
+  rw [effectiveWeight_at x.state uniqueX i.toNat v found,
+    ← key, intervalLoss_recent_supported y early uniqueY
       i w located recent (by rw [key]; exact unslashed)]
   exact intervalLoss_effective_loss shared tail genesis caps aligned
     early i.toNat v found activated events covered
@@ -1986,6 +1995,7 @@ private theorem intervalLoss_departing {g x y : ForkedBeaconState preset}
       (events.map (referenceDebit i.toNat)).sum
     effectiveWeight x.state v.pubkey ≤ charge.amount +
       (if deficit = 0 then 0 else deficit + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) := by
+  have ⟨_, _, _, initialized⟩ := genesis
   obtain ⟨a, b, pre, step, post, equal, first, last, before, after, unset,
     assigned, amount, epoch⟩ := intervalLoss_charge_site tail charge member
   rw [index] at before after
@@ -2025,7 +2035,9 @@ private theorem intervalLoss_departing {g x y : ForkedBeaconState preset}
         (intervalLoss_supported_events shared pre genesis earlyA high lastEpoch
           prior priorOk i.toNat v first found before active recent)
         (slashings a pre rest decomposed prior priorOk))
-  rw [effectiveWeight_at x.state (shared.unique (genesis_unique genesis)) i.toNat v found]
+  have uniqueX := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      shared.chainSteps).2
+  rw [effectiveWeight_at x.state uniqueX i.toNat v found]
   have baseline : effectiveAt a i.toNat = charge.amount := by
     simp [effectiveAt, before, amount]
   rw [baseline] at bound
@@ -2057,6 +2069,7 @@ private theorem intervalLoss_pointwise {g x y : ForkedBeaconState preset}
       | some c => if c.epoch ≤ high + 1 then c.amount else 0
       | none => 0) +
       (if deficit = 0 then 0 else deficit + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) := by
+  have ⟨_, _, _, initialized⟩ := genesis
   obtain ⟨w, located, life⟩ := tail.registryLifecycle.validators i.toNat v found
   by_cases recent : isActiveValidator w (getCurrentEpoch y.state) = true ∨
       isActiveValidator w (getPreviousEpoch y.state) = true
@@ -2095,7 +2108,9 @@ private theorem intervalLoss_pointwise {g x y : ForkedBeaconState preset}
       have selected : (v.exitEpoch != FAR_FUTURE_EPOCH && v.exitEpoch.toNat ≤ high + 1) = true :=
         by simp [initialAssigned, within]
       simp only [selected, ↓reduceIte]
-      have weight := effectiveWeight_at x.state (shared.unique (genesis_unique genesis))
+      have uniqueX := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+        shared.chainSteps).2
+      have weight := effectiveWeight_at x.state uniqueX
         i.toNat v found
       have value : effectiveWeight x.state v.pubkey = v.effectiveBalance.toNat := by
         simpa [effectiveAt, found] using weight
@@ -2115,7 +2130,8 @@ private theorem intervalLoss_departure_bound {g x y : ForkedBeaconState preset}
   have earlyX := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
   apply intervalLoss_sum_departures shared tail genesis earlyX high events
   intro i member v found unslashed
-  obtain ⟨w, located, key⟩ := tail.key_preserved i.toNat v found
+  obtain ⟨w, located, key⟩ := validators_getElem?_of_validatorKeys_prefix
+      (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 found
   have finalFlag : w.slashed = false := by
     cases flag : w.slashed with
     | false => rfl
@@ -2207,6 +2223,7 @@ private theorem nonaccountable_losses_over_interval {g x y : ForkedBeaconState p
     (events : List (BalanceEvent preset)) (replayed : tail.balanceEvents high = .ok events) :
     referenceLoss x y ≤
       exitWindow (config := config) x high events + lossCorrection x events := by
+  have ⟨_, _, _, initialized⟩ := genesis
   have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by
     have slots := parameters.slots
     omega
@@ -2243,7 +2260,8 @@ private theorem nonaccountable_losses_over_interval {g x y : ForkedBeaconState p
       simp only [activeStakeWindow, funded.1, funded.2, and_self, ↓reduceIte] at bound ⊢
       omega
     -- The fallback also covers intervals that cross Electra and small withdrawal delays.
-    · have unique := (shared.append pre).unique (genesis_unique genesis)
+    · have unique := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+        (shared.append pre).chainSteps).2
       have capped := (shared.append pre).effectiveBalance_capped genesis caps.activation
         caps.compounding earlyA
       have inside (i : ValidatorIndex)
@@ -2527,13 +2545,17 @@ private theorem intervalGain_reference_at {g x y : ForkedBeaconState preset}
     Models.supported (activeKeys x.state) (effectiveWeight x.state) w.pubkey =
       (if (x.state.validators.data[i]?.map fun v =>
         isActiveValidator v (getCurrentEpoch x.state)).getD false then effectiveAt x i else 0) := by
-  have uniqueX := shared.unique (genesis_unique genesis)
-  have uniqueY := (shared.append tail).unique (genesis_unique genesis)
+  have ⟨_, _, _, initialized⟩ := genesis
+  have uniqueX := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      shared.chainSteps).2
+  have uniqueY := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      (shared.append tail).chainSteps).2
   have earlyX := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
   have within := x.state.validators.bound earlyX
   have sameIndex {j : Nat} {v : Validator} (before : x.state.validators.data[j]? = some v)
       (key : v.pubkey = w.pubkey) : j = i := by
-    obtain ⟨last, found, preserved⟩ := tail.key_preserved j v before
+    obtain ⟨last, found, preserved⟩ := validators_getElem?_of_validatorKeys_prefix
+      (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 before
     obtain ⟨hj, lastEq⟩ := Array.getElem?_eq_some_iff.mp found
     obtain ⟨hi, wEq⟩ := Array.getElem?_eq_some_iff.mp after
     exact uniqueY.eq_of_getElem_eq
@@ -2551,7 +2573,8 @@ private theorem intervalGain_reference_at {g x y : ForkedBeaconState preset}
       cases found
     simp [Models.supported, absent]
   | some v =>
-    obtain ⟨last, found, preserved⟩ := tail.key_preserved i v before
+    obtain ⟨last, found, preserved⟩ := validators_getElem?_of_validatorKeys_prefix
+      (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 before
     have same : last = w := Option.some.inj (found.symm.trans after)
     have key : w.pubkey = v.pubkey := same ▸ preserved
     rw [key]
@@ -2611,7 +2634,9 @@ private theorem intervalGain_reference_sum {g x y : ForkedBeaconState preset}
         (if (x.state.validators.data[i]?.map fun v =>
           isActiveValidator v (getCurrentEpoch x.state)).getD false then
             effectiveAt x i else 0)) := by
-  have unique := (shared.append tail).unique (genesis_unique genesis)
+  have ⟨_, _, _, initialized⟩ := genesis
+  have unique := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      (shared.append tail).chainSteps).2
   have inside (i) (h : i ∈ intervalGain_indices y) : i < y.state.validators.data.size :=
     Finset.mem_range.mp (Finset.mem_filter.mp h).1
   let key (i : Nat) (h : i ∈ intervalGain_indices y) :=
@@ -3158,8 +3183,11 @@ private theorem intervalGain_active_path {g x y : ForkedBeaconState preset}
     gaining x y ≤ initialExcess x +
       ((getActiveValidatorIndices x.state (getCurrentEpoch x.state)).map fun i =>
         pathCredits i.toNat tail.balancePath).sum := by
-  have uniqueX := shared.unique (genesis_unique genesis)
-  have uniqueY := (shared.append tail).unique (genesis_unique genesis)
+  have ⟨_, _, _, initialized⟩ := genesis
+  have uniqueX := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      shared.chainSteps).2
+  have uniqueY := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      (shared.append tail).chainSteps).2
   have earlyX := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
   have allKeys : gaining x y ≤ ∑ k ∈ activeKeys x.state,
       (effectiveWeight y.state k - effectiveWeight x.state k) := by
@@ -3173,7 +3201,8 @@ private theorem intervalGain_active_path {g x y : ForkedBeaconState preset}
   intro i member
   obtain ⟨v, before, _⟩ :=
     (mem_getActiveValidatorIndices (x.state.validators.bound earlyX)).mp member
-  obtain ⟨w, after, key⟩ := tail.key_preserved i.toNat v before
+  obtain ⟨w, after, key⟩ := validators_getElem?_of_validatorKeys_prefix
+      (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 before
   have first := effectiveWeight_at x.state uniqueX i.toNat v before
   have last := effectiveWeight_at y.state uniqueY i.toNat w after
   have gain := intervalGain_existing_funding tail early i.toNat
@@ -3403,6 +3432,7 @@ private theorem gains_and_activations_over_interval {g x y : ForkedBeaconState p
     referenceGain x y ≤
       activationWindow (config := config) x high + initialExcess x +
         (events.map (residualCredit (config := config) x high)).sum := by
+  have ⟨_, _, _, initialized⟩ := genesis
   by_cases crossing : config.ELECTRA_FORK_EPOCH.toNat ≤ high + 1
   · exact intervalGain_crossing_of_interfaces shared tail genesis twoSlots early high
       endEpoch events replayed crossing
@@ -3412,7 +3442,8 @@ private theorem gains_and_activations_over_interval {g x y : ForkedBeaconState p
       have scheduled := intervalGain_reachable_epoch (shared.append tail) genesis electra
       omega
     apply intervalGain_pre_electra_of_split tail parameters
-      (shared.unique (genesis_unique genesis)) before high endEpoch events
+      ((validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      shared.chainSteps).2) before high endEpoch events
       (joining_before_electra_split shared tail genesis twoSlots caps before)
     apply intervalGain_active_residual shared tail genesis early high endEpoch events replayed
     intro e member _

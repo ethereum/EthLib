@@ -281,27 +281,6 @@ theorem previous_only_iff_exit {fork : Fork} (state : BeaconState preset fork) (
     UInt64.lt_iff_toNat_lt, getPreviousEpoch_toNat]
   omega
 
-/-- A genesis state built from deposits has distinct keys. -/
-theorem genesis_unique {g : ForkedBeaconState preset}
-    (genesis : Genesis (config := config) (checks := checks) g) : PubkeysDistinct g.state := by
-  have ⟨_, _, _, initialized⟩ := genesis
-  exact (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
-    (last := g) .refl).2
-
-/-- Distinct keys stay distinct along a run. -/
-theorem _root_.EthLib.Consensus.Run.unique {g a : ForkedBeaconState preset}
-    (run : Run config checks g a) (initial : PubkeysDistinct g.state) :
-    PubkeysDistinct a.state :=
-  (validatorKeys_prefix_and_distinct_of_chainSteps run.chainSteps).2 initial
-
-/-- Along a run, each validator keeps its index and its key. -/
-theorem _root_.EthLib.Consensus.Run.key_preserved {g a : ForkedBeaconState preset}
-    (run : Run config checks g a) (i : Nat) (old : Validator)
-    (found : g.state.validators.data[i]? = some old) :
-    ∃ current, a.state.validators.data[i]? = some current ∧ current.pubkey = old.pubkey :=
-  validators_getElem?_of_validatorKeys_prefix
-    (validatorKeys_prefix_and_distinct_of_chainSteps run.chainSteps).1 found
-
 /-- A key slashed at the start of a run is slashed at its end: slashing persists forward. -/
 theorem slashedAt_forward {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) {key : Cryptography.Bls.BLSPubkey}
@@ -309,7 +288,8 @@ theorem slashedAt_forward {x y : ForkedBeaconState preset}
   obtain ⟨v, member, keyEq, flag⟩ := slashed
   obtain ⟨i, found⟩ := Array.getElem?_of_mem (by simpa using member)
   obtain ⟨w, wFound, wFlag⟩ := tail.slashedPersistence i v found flag
-  obtain ⟨u, uFound, uKey⟩ := tail.key_preserved i v found
+  obtain ⟨u, uFound, uKey⟩ := validators_getElem?_of_validatorKeys_prefix
+      (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 found
   have same : u = w := Option.some.inj (uFound.symm.trans wFound)
   exact ⟨w, by simpa using Array.mem_of_getElem? wFound, same ▸ uKey.trans keyEq, wFlag⟩
 
@@ -511,7 +491,8 @@ private theorem new_recent_key_activation {x y : ForkedBeaconState preset}
       rw [← kept]
       simp [isActiveAt, found, h]
     obtain ⟨old, oldFound, oldActive⟩ := isActiveAt_eq_true_iff.mp oldActive
-    obtain ⟨later, laterFound, same⟩ := tail.key_preserved i old oldFound
+    obtain ⟨later, laterFound, same⟩ := validators_getElem?_of_validatorKeys_prefix
+      (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 oldFound
     have equal : later = v := Option.some.inj (laterFound.symm.trans found)
     have member := (mem_keysAt_epoch (Nat.lt_trans xEarly (by decide)) e key).mpr
       ⟨i, old, oldFound, same.symm.trans (equal ▸ keyEq), oldActive⟩
@@ -537,12 +518,14 @@ private theorem carry_key_same_epoch {g x y : ForkedBeaconState preset}
     {key : Cryptography.Bls.BLSPubkey}
     (member : key ∈ (recentKeys y.state ∩ recentKeys x.state) \ activeKeys x.state) :
     getCurrentEpoch y.state = getCurrentEpoch x.state := by
+  have ⟨_, _, _, initialized⟩ := genesis
   classical
   have xEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
   obtain ⟨both, absent⟩ := Finset.mem_sdiff.mp member
   obtain ⟨⟨i, old, found, keyEq, activation, exit⟩, _⟩ :=
     (mem_boundary_iff x.state (Nat.lt_trans xEarly (by decide))
-      (shared.unique (genesis_unique genesis)) key).mp
+      ((validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      shared.chainSteps).2) key).mp
       (Finset.mem_sdiff.mpr ⟨(Finset.mem_inter.mp both).2, absent⟩)
   obtain ⟨v, current, kept⟩ := tail.registryLifecycle.validators i old found
   have assigned : old.exitEpoch ≠ FAR_FUTURE_EPOCH := by
@@ -550,13 +533,15 @@ private theorem carry_key_same_epoch {g x y : ForkedBeaconState preset}
     exact getCurrentEpoch_ne_farFuture twoSlots x.state
       ((UInt64.toNat_inj.mp exit).symm.trans h)
   have exitSame := kept.exitEpoch assigned
-  obtain ⟨w, wFound, wKey⟩ := tail.key_preserved i old found
+  obtain ⟨w, wFound, wKey⟩ := validators_getElem?_of_validatorKeys_prefix
+      (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 found
   have equal : w = v := Option.some.inj (wFound.symm.trans current)
   have vKey : v.pubkey = key := equal ▸ wKey.trans keyEq
   have active : isActiveValidator v (getCurrentEpoch y.state) = true ∨
       isActiveValidator v (getPreviousEpoch y.state) = true := by
     have recent := (Finset.mem_filter.mp (Finset.mem_inter.mp both).1).1
-    have unique := (shared.append tail).unique (genesis_unique genesis)
+    have unique := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      (shared.append tail).chainSteps).2
     have identify {j : Nat} {z : Validator} (zFound : y.state.validators.data[j]? = some z)
         (zKey : z.pubkey = key) : z = v := by
       obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp current
@@ -659,10 +644,13 @@ theorem joining_before_electra_split {g x y : ForkedBeaconState preset}
         cohortCap config y.state.validators.data.size * preset.MAX_EFFECTIVE_BALANCE.toNat ∧
     Models.stake (effectiveWeight y.state)
       ((recentKeys y.state ∩ recentKeys x.state) \ activeKeys x.state) ≤ boundaryStake x := by
+  have ⟨_, _, _, initialized⟩ := genesis
   classical
   refine ⟨new_recent_before_electra shared tail genesis twoSlots caps early, ?_⟩
-  have uniqueX := shared.unique (genesis_unique genesis)
-  have uniqueY := (shared.append tail).unique (genesis_unique genesis)
+  have uniqueX := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      shared.chainSteps).2
+  have uniqueY := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      (shared.append tail).chainSteps).2
   have xEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
   have pointwise (key : Cryptography.Bls.BLSPubkey)
       (member : key ∈ (recentKeys y.state ∩ recentKeys x.state) \ activeKeys x.state) :
@@ -672,7 +660,8 @@ theorem joining_before_electra_split {g x y : ForkedBeaconState preset}
     obtain ⟨⟨i, old, found, keyEq, _⟩, _⟩ :=
       (mem_boundary_iff x.state (Nat.lt_trans xEarly (by decide)) uniqueX key).mp
         (Finset.mem_sdiff.mpr ⟨(Finset.mem_inter.mp both).2, absent⟩)
-    obtain ⟨v, current, vKey⟩ := tail.key_preserved i old found
+    obtain ⟨v, current, vKey⟩ := validators_getElem?_of_validatorKeys_prefix
+      (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 found
     have bound := tail.effectiveAt_le_of_same_epoch early same i
       (Array.getElem?_eq_some_iff.mp found).1
     have oldWeight := effectiveWeight_of_member uniqueX
