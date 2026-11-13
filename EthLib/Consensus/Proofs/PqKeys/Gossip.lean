@@ -14,9 +14,9 @@ Its leanXMSS key is new and nonzero, its BLS signature is valid, and so is its p
 
 A beacon block passes the extra check exactly when it carries at most the preset number.
 
-Each read of the head state is stated against the registry that it reads.
+Each check that reads the head state is restated on the registry entries that it reads.
 
-So the acceptance of a validator or a builder registration needs no hypothesis on the registrant.
+So the acceptance of a validator or a builder registration is stated on the fields of its entries.
 -/
 
 @[expose] public section
@@ -89,7 +89,7 @@ theorem validatePqKeyRegistration_eq_accept {view : RegistrationView} {pubkey : 
 
 /-- The registrant of an index is the entry at its position in the registry that the index names.
 
-A builder index reads the builders, their keys and their change epochs, with its flag cleared.
+A builder index reads the builders, their keys and their change epochs, without the builder flag.
 
 Any other index reads the validators, their keys and their change epochs, at the index itself. -/
 theorem RegistrationView.registrant_eq_some_iff {view : RegistrationView}
@@ -144,16 +144,26 @@ theorem RegistrationView.keyInUse_eq_true_iff {view : RegistrationView} {key : X
         ∃ keys ∈ view.builderKeys.data, keys.xmssPublicKey = key := by
   simp only [RegistrationView.keyInUse, Bool.or_eq_true, Array.any_eq_true', beq_iff_eq]
 
+/-- A leanXMSS key is free exactly when the keys of no validator and of no builder hold it. -/
+theorem RegistrationView.keyInUse_eq_false_iff {view : RegistrationView} {key : XMSSPublicKey} :
+    view.keyInUse key = false ↔
+      (∀ keys ∈ view.validatorKeys.data, keys.xmssPublicKey ≠ key) ∧
+        ∀ keys ∈ view.builderKeys.data, keys.xmssPublicKey ≠ key := by
+  rw [← Bool.not_eq_true, RegistrationView.keyInUse_eq_true_iff]
+  simp
+
 /-- A registration for a validator with a stored entry is accepted exactly when each check passes.
 
-The checks read the validator, its keys and their change epoch, at the index itself.
+The checks read the validator, its keys and the epoch of their last change, at the index.
 
-The validator has no exit epoch yet, and the leanXMSS key is held by no validator and no builder. -/
+Among them, the exit epoch of the validator is the far future epoch.
+
+No validator and no builder holds the new leanXMSS key. -/
 theorem validatePqKeyRegistration_eq_accept_of_validator {view : RegistrationView}
     {validator : Validator} {stored : PQKeyMaterial} {changeEpoch : Epoch}
     (notBuilder : isBuilderIndex signed.message.index = false)
     (found : view.validators[signed.message.index.toNat]? = some validator)
-    (keys : view.validatorKeys.data[signed.message.index.toNat]? = some stored)
+    (storedKeys : view.validatorKeys.data[signed.message.index.toNat]? = some stored)
     (epochs : view.validatorChangeEpochs.data[signed.message.index.toNat]? = some changeEpoch) :
     validatePqKeyRegistration config preset activationEpoch clockEpoch (some view) seen signed =
         accept ↔
@@ -174,36 +184,36 @@ theorem validatePqKeyRegistration_eq_accept_of_validator {view : RegistrationVie
         signed.message.keyMaterial.xmssPublicKey signed.possession = true := by
   have registered : view.registrant signed.message.index =
       some (validator.pubkey, stored, changeEpoch) :=
-    RegistrationView.registrant_eq_some_iff.mpr (.inr ⟨notBuilder, by simp [found], keys, epochs⟩)
+    RegistrationView.registrant_eq_some_iff.mpr
+      (.inr ⟨notBuilder, by simp [found], storedKeys, epochs⟩)
   rw [validatePqKeyRegistration_eq_accept registered]
   have exiting : view.notExiting signed.message.index = true ↔
       validator.exitEpoch = FAR_FUTURE_EPOCH := by
     simp [RegistrationView.notExiting_eq_true_iff, notBuilder, found]
   have deposit : view.depositFinalized signed.message.index = true :=
     RegistrationView.depositFinalized_eq_true_iff.mpr (.inl notBuilder)
-  have used : view.keyInUse signed.message.keyMaterial.xmssPublicKey = false ↔
-      (∀ keys ∈ view.validatorKeys.data,
-        keys.xmssPublicKey ≠ signed.message.keyMaterial.xmssPublicKey) ∧
-      ∀ keys ∈ view.builderKeys.data,
-        keys.xmssPublicKey ≠ signed.message.keyMaterial.xmssPublicKey := by
-    rw [← Bool.not_eq_true, RegistrationView.keyInUse_eq_true_iff]
-    simp
-  rw [exiting, used]
+  rw [exiting, RegistrationView.keyInUse_eq_false_iff]
   simp [deposit, notBuilder, and_assoc]
 
 /-- A registration for a builder with a stored entry is accepted exactly when each check passes.
 
-The checks read the builder, its keys and their change epoch, at the index with its flag cleared.
+The checks read the builder, its keys and the epoch of their last change.
 
-The builder has no withdrawable epoch yet, and it was deposited before the finalized epoch.
+They read them at the index with the builder flag cleared.
 
-Its VRF root is zero, and the leanXMSS key is held by no validator and no builder. -/
+Among them, the withdrawable epoch of the builder is the far future epoch.
+
+Its deposit epoch is before the finalized epoch.
+
+The new keys have a zero VRF root.
+
+No validator and no builder holds the new leanXMSS key. -/
 theorem validatePqKeyRegistration_eq_accept_of_builder {view : RegistrationView}
     {builder : Builder} {stored : PQKeyMaterial} {changeEpoch : Epoch}
     (isBuilder : isBuilderIndex signed.message.index = true)
     (found : view.builders[(convertValidatorIndexToBuilderIndex signed.message.index).toNat]? =
       some builder)
-    (keys : view.builderKeys.data[(convertValidatorIndexToBuilderIndex
+    (storedKeys : view.builderKeys.data[(convertValidatorIndexToBuilderIndex
       signed.message.index).toNat]? = some stored)
     (epochs : view.builderChangeEpochs.data[(convertValidatorIndexToBuilderIndex
       signed.message.index).toNat]? = some changeEpoch) :
@@ -228,7 +238,8 @@ theorem validatePqKeyRegistration_eq_accept_of_builder {view : RegistrationView}
         signed.message.keyMaterial.xmssPublicKey signed.possession = true := by
   have registered : view.registrant signed.message.index =
       some (builder.pubkey, stored, changeEpoch) :=
-    RegistrationView.registrant_eq_some_iff.mpr (.inl ⟨isBuilder, by simp [found], keys, epochs⟩)
+    RegistrationView.registrant_eq_some_iff.mpr
+      (.inl ⟨isBuilder, by simp [found], storedKeys, epochs⟩)
   rw [validatePqKeyRegistration_eq_accept registered]
   have exiting : view.notExiting signed.message.index = true ↔
       builder.withdrawableEpoch = FAR_FUTURE_EPOCH := by
@@ -236,15 +247,10 @@ theorem validatePqKeyRegistration_eq_accept_of_builder {view : RegistrationView}
   have deposit : view.depositFinalized signed.message.index = true ↔
       builder.depositEpoch < view.finalizedEpoch := by
     simp [RegistrationView.depositFinalized_eq_true_iff, isBuilder, found]
-  have used : view.keyInUse signed.message.keyMaterial.xmssPublicKey = false ↔
-      (∀ keys ∈ view.validatorKeys.data,
-        keys.xmssPublicKey ≠ signed.message.keyMaterial.xmssPublicKey) ∧
-      ∀ keys ∈ view.builderKeys.data,
-        keys.xmssPublicKey ≠ signed.message.keyMaterial.xmssPublicKey := by
-    rw [← Bool.not_eq_true, RegistrationView.keyInUse_eq_true_iff]
-    simp
-  rw [exiting, deposit, used]
+  rw [exiting, deposit, RegistrationView.keyInUse_eq_false_iff]
   simp [isBuilder, and_assoc]
+
+/-! ## The number of registrations in a block -/
 
 /-- A block passes the extra check exactly when it carries at most the preset number. -/
 theorem verifyPqKeyRegistrationsLimit_eq_accept {preset : PqKeyPreset}
