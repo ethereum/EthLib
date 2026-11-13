@@ -2680,6 +2680,15 @@ That root and each root before it in the walk then pass `isOneConfirmed`, with t
 The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` shows that the second walk is the part of the first walk after the root where the first walk stopped.
 No theorem yet shows that the roots of a walk are in the chain of the head.
 
+`Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation.lean`) states when a block is due for finality.
+The next checkpoint is at the first epoch that starts at or after the slot of the block.
+The block is due from the first slot two epochs after that one.
+`Store.getRestartResilientConfirmedRoot_eq_ok_iff` states the confirmed block after a restart.
+The rule takes the block confirmed before the restart exactly when three conditions hold.
+That block is at a later slot than the confirmed block, is not yet due for finality, and is in the chain of the head.
+Otherwise it keeps the confirmed block.
+No theorem relates the block confirmed before a restart to a block that an earlier store confirmed.
+
 These theorems prove no safety: no theorem yet shows that a start is safe, or that a one-confirmed walk keeps a block in the chain of every honest head.
 They do not record every check of the rule.
 For the start they leave out the other checks that compare the epochs and the slots of the blocks.
