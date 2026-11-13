@@ -185,9 +185,7 @@ def FinalizationStepRule (state after : BeaconState preset fork) (checkpoint : C
     ((bits[0] = true ∧ bits[1] = true ∧ bits[2] = true ∧ checkpoint.epoch.toNat + 2 = e) ∨
       (bits[0] = true ∧ bits[1] = true ∧ checkpoint.epoch.toNat + 1 = e)))
 
-/-- Weighing the votes keeps the finalized checkpoint, or finalizes an old justified one by a rule.
-
-The rules read every bit they need. -/
+/-- Weighing the votes keeps the finalized checkpoint, or finalizes an old justified one by a rule. -/
 theorem weighJustificationAndFinalization_finalized {total previousBalance currentBalance : Gwei}
     (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
       .ok after) :

@@ -351,7 +351,7 @@ theorem JustifiedEarly.of_initializeBeaconStateFromEth1 {fork : Fork}
   rw [frame.previousJustified, frame.currentJustified]
   rfl
 
-/-- The genesis state built from deposits keeps its justified epochs separated.
+/-- The genesis state has its previous justified epoch below the previous epoch once it counts.
 
 It is at the genesis epoch, so the separation asks nothing of it. -/
 theorem JustifiedSeparated.of_initializeBeaconStateFromEth1 {fork : Fork}
