@@ -739,7 +739,15 @@ A read takes one identifier octet with a low tag number, other than 0, the lengt
 `integer_ok_iff` states that an INTEGER reads as `i` exactly when its content is `i` in two's complement on the fewest octets (X.690 §8.3).
 `natural_ok_iff` states the nonnegative case.
 `content_eq_of_integer_ok` derives that an integer has a single content.
-No theorem states the other DER types that a certificate holds, or relates the time conversion to a calendar.
+`readTime_eq_ok_iff` states exactly which certificate times read, and their value (RFC 5280 §4.1.2.5).
+A UTCTime is accepted for a year from 1950 to 2049, and a GeneralizedTime for a year from 1 to 9999.
+Both must hold a valid proleptic Gregorian date, a time of day without a leap second, and `Z`.
+The value counts 86400 seconds for each day from 1970-01-01, then adds the time of day.
+The days are counted in a calendar model of year and month lengths, not in the reader's closed form.
+`readValidity_eq_ok_iff` says that a validity reads as two such times in order.
+`readCertificate_validity` says that the endpoints of a parsed certificate are what its own validity field reads as.
+That field is located in the signed part that the input bytes encode.
+No theorem states the other DER types that a certificate holds.
 Nothing in Lean shows that authentication can succeed; the Python tests check vectors 1 to 4 of libp2p TLS.
 
 ### QUIC wire encodings
