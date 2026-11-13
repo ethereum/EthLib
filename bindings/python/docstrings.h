@@ -437,6 +437,12 @@
 #define DOC_consensus_process_bid \
   "None when a proposer accepts a signed bid, or the name of the rule that refuses it."
 
+#define DOC_consensus_is_eligible_for_bid_gloas \
+  "From Gloas: whether a builder serves a request for a bid."
+
+#define DOC_consensus_validate_bid \
+  "From Gloas: None when a proposer accepts a fetched bid, or the name of the rule that refuses it."
+
 #define DOC_consensus_unblind_signed_blinded_block \
   "The root and the bytes of the signed block that a signed blinded block and a payload give."
 

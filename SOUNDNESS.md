@@ -3237,6 +3237,21 @@ The pseudocode of the source has three defects, which EthLib reads by their evid
 - `verify_bid_signature` computes its signing root from `signed_registration.message`, a name it never binds; EthLib uses the message of the bid, as `get_bid_signature` does.
 - `process_bid` calls `verify_bid_signature` without asserting its result, so read literally it accepts any signature; EthLib refuses a bid whose signature does not verify.
 
+From Gloas, a builder checks a request for a bid with six rules, and a proposer checks a bid it fetched with eight rules and the signature.
+`isEligibleForBidGloas_ok_true_iff` (`Consensus/Proofs/BuilderApi/GloasBid.lean`) states the builder's rules.
+The slot is that of the state, and the key is that of the proposer of the slot, which is active.
+That proposer sent preferences on gossip, the parent hash is that of the parent with or without its payload, and the parent root is the root of the latest header.
+`isEligibleForBidGloas_proposer` shows that a served request names the active proposer.
+The source asserts each rule, and EthLib answers false where an assertion fails.
+
+`validateBid_ok_true_iff` states the proposer's rules, in the order of the source.
+The builder is active, and the slot, the fee recipient, the parent hash, the parent root and the RANDAO mix match.
+The gas limit moves toward the proposer's target, the builder can pay a bid of positive value, and the signature verifies.
+The source asserts the eight rules and returns the signature check, so EthLib names the first failed rule as an error and returns the signature check as the result.
+`validateBid_zero_value` shows that a bid of value zero is never refused for the funds of its builder.
+`validateBid_not_selfBuild` shows that a bid naming the index of a self-built payload is never accepted, while the registry of builders is shorter than that index.
+The cap that a proposer sets on the execution payment limits how much of it counts when a bid is valued; it is not a rule of validity.
+
 From Deneb to Fulu, a builder reveals the payload with a blobs bundle: the blobs, their commitments and their proofs.
 `BuilderBlobsBundle.names_nodup` and `ExecutionPayloadAndBlobsBundle.names_nodup` (`Consensus/Proofs/Containers/BuilderApi.lean`) give both containers distinct field names, so they decode back from their bytes when the logs bloom has a byte.
 From Fulu the Fulu builder document bounds the proofs by `FIELD_ELEMENTS_PER_EXT_BLOB * MAX_BLOB_COMMITMENTS_PER_BLOCK`, 2^25 in the mainnet preset.
@@ -3530,12 +3545,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 405 operations and 49 size constants.
-The Python extension calls 405 of the operations and 49 of the constants.
+Lean exports 407 operations and 49 size constants.
+The Python extension calls 407 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10246 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1914), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (140), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (138), `module.c` (1441), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (45), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (692), `x25519.c` (21), `xmss.c` (134).
+10278 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1940), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (140), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (138), `module.c` (1445), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (45), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (694), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

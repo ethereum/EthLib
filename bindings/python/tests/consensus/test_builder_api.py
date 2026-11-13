@@ -890,6 +890,8 @@ def test_no_bids_outside_bellatrix_to_fulu(fork: str):
 
 
 def test_is_eligible_for_bid_state_that_does_not_decode():
-    with raises(TransitionError, "state rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 10233 0") as info:
+    with raises(
+        TransitionError, "state rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 10233 0"
+    ) as info:
         consensus.is_eligible_for_bid("minimal", "bellatrix", b"", [], 0, ZERO, bytes(48))
     assert info.value.code == 0

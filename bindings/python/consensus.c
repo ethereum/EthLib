@@ -82,6 +82,16 @@ eth_consensus_process_bid(
 );
 
 extern lean_object*
+eth_consensus_is_eligible_for_bid_gloas(
+  lean_object* args
+);
+
+extern lean_object*
+eth_consensus_validate_bid(
+  lean_object* args
+);
+
+extern lean_object*
 eth_consensus_unblind_signed_blinded_block(
   lean_object* args
 );
@@ -619,6 +629,22 @@ py_consensus_process_bid(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_process_bid, args, 6, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_is_eligible_for_bid_gloas(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_is_eligible_for_bid_gloas, args, 8, TRANSITION_ERROR);
+}
+
+PyObject*
+py_consensus_validate_bid(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_validate_bid, args, 8, TRANSITION_ERROR);
 }
 
 PyObject*
