@@ -191,6 +191,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Justification
 public import EthLib.Consensus.Proofs.Transition.Totality.Registry
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoad
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadBlock
+public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadChain
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadUpgrades
 public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
