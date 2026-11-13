@@ -512,8 +512,8 @@ theorem addPaymentWeight_eq_ok_iff {before updated : EpochParticipation preset f
     · subst unflagged
       simp [pure, Except.pure, eq_comm]
     · rcases found : state.validators.data[index.toNat]? with _ | validator <;>
-        simp [unflagged, found, getValidator, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-          addChecked_ok_iff]
+        simp [unflagged, found, getValidator, bind_ok_iff, liftAccessor_ok, liftArith,
+          mapError_ok_iff, addChecked_ok_iff]
   · simp [zero, pure, Except.pure, eq_comm]
 
 /-- From Gloas, an attester that already had a flag in the epoch adds no weight to a payment.
