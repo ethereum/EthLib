@@ -15,6 +15,8 @@ Each message reads back from its ID and its RLP item, on every version that uses
 
 eth/68 rejects BlockRangeUpdate.
 
+A version rejects every ID from its count of IDs on as unknown, but not the ID just below it.
+
 Every version rejects an announcement whose lists differ in length.
 
 A response answers a request only when it repeats the request ID.
@@ -199,6 +201,30 @@ theorem ofItem_unequalLengths {version : EthVersion} {a : Announcement}
     ofItem version NEW_POOLED_TRANSACTION_HASHES_ID a.toItem
       = .error (.unequalLengths a.lists.1.size a.lists.2.1.length a.lists.2.2.length) := by
   simp [ofItem, hv, hl, Except.mapError, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
+/-- A version rejects every ID from `n` on as unknown exactly when its count of IDs is at most `n`.
+
+So the count of IDs of a version is the first ID from which every ID is unknown to it. -/
+theorem messageCount_le_iff_unknownId {version : EthVersion} {n : Nat} :
+    version.messageCount ≤ n ↔
+      ∀ id, n ≤ id → ∀ item, ofItem version id item = .error (.unknownId id) := by
+  constructor
+  · intro h id hid item
+    obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le (Nat.le_trans h hid)
+    cases version <;> simp +arith +decide [ofItem, EthVersion.messageCount]
+  · intro h
+    refine Nat.not_lt.mp fun hlt => ?_
+    have last (m : Message) (hm : m.FitsVersion version) (hid : m.id = version.messageCount - 1) :
+        False := by
+      have := h m.id (by omega) m.toItem
+      rw [ofItem_toItem hm] at this
+      cases this
+    cases version
+    · exact last (.receipts 0 none []) (by simp +decide [FitsVersion]) rfl
+    · exact last (.blockRangeUpdate ⟨0, 0, default⟩) (by simp +decide [FitsVersion]) rfl
+    · exact last (.blockRangeUpdate ⟨0, 0, default⟩) (by simp +decide [FitsVersion]) rfl
+    · exact last (.blockAccessLists 0 []) (by simp +decide [FitsVersion]) rfl
+    · exact last (.cells 0 [] [] default) (by simp +decide [FitsVersion]) rfl
 
 /-- A response that answers a request is a response with the request ID of the request. -/
 theorem requestId_of_answers {request response : Message} (h : answers request response) :

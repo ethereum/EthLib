@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Accessors.Draw
-public import EthLib.Cryptography.Proofs.EvalDistEq
+public import EthLib.Cryptography.Proofs.UniformReads
 
 import Mathlib.Logic.Equiv.Fin.Basic
 import Mathlib.Tactic.FinCases
@@ -20,6 +20,10 @@ The digest is uniform among the 32-byte values.
 The checked draw then accepts with probability `(⌊e * (2^b - 1) / M⌋ + 1) / 2^b`.
 
 This needs `0 < M`, `e ≤ M`, and `M * (2^b - 1) < 2^64`.
+
+Two draws whose numbers differ modulo the draws per digest read disjoint bytes.
+
+So the two draws are independent.
 
 The model samples one digest; it makes no claim about SHA-256 or a sequence of proposer draws.
 -/
@@ -167,5 +171,84 @@ theorem prEvent_drawAccepts_uniform_of_pectra (preset : Preset) (fork : Base.For
   rw [Fintype.card_prod]
   simp only [← FinEnum.card_eq_fintypeCard (α := UInt8), FinEnum.card_UInt8,
     Nat.cast_pow, Nat.cast_ofNat, ← pow_add]
+
+/-- Events read from two disjoint ranges of a uniform vector have the product chance. -/
+private theorem prEvent_uniformSample_vector_two_ranges_comp {R α β : Type} [Finite R]
+    [Nonempty R] [SampleableType R] {m : Nat} (a k b l : Nat) (first : a + k ≤ m)
+    (second : b + l ≤ m) (apart : a + k ≤ b ∨ b + l ≤ a) (F : Vector R k → α)
+    (G : Vector R l → β) (P : α → Prop) (Q : β → Prop) :
+    Pr{let v ← $ᵗ (Vector R m)}[P (F (Vector.ofFn fun j : Fin k => v[a + j.val])) ∧
+        Q (G (Vector.ofFn fun j : Fin l => v[b + j.val]))] =
+      Pr{let v ← $ᵗ (Vector R m)}[P (F (Vector.ofFn fun j : Fin k => v[a + j.val]))] *
+        Pr{let v ← $ᵗ (Vector R m)}[Q (G (Vector.ofFn fun j : Fin l => v[b + j.val]))] := by
+  refine (prEvent_uniformSample_vector_two_ranges a k b l first second apart
+    (P ∘ F) (Q ∘ G)).trans ?_
+  have first' := (evalDistEq_uniformSample_vector_range a k first).prEvent_eq (P ∘ F)
+  have second' := (evalDistEq_uniformSample_vector_range b l second).prEvent_eq (Q ∘ G)
+  rw [prEvent_map] at first' second'
+  rw [← first', ← second']
+  rfl
+
+/-- Before Electra, a draw depends on the digest only through the byte it reads. -/
+private theorem drawAccepts_eq_of_byte (preset : Preset) (fork : Base.Fork)
+    (before : ¬ .pectra ≤ fork) (i : Nat) (e : Gwei) (random : Bytes32) :
+    drawAccepts preset fork random i e = drawAccepts preset fork
+      (Vector.replicate 32 (Vector.ofFn fun j : Fin 1 => random[i % 32 + j.val])[0]) i e := by
+  simp only [drawAccepts, before, ↓reduceIte, Vector.getElem_replicate, Vector.getElem_ofFn]
+  rfl
+
+/-- From Electra, a draw depends on the digest only through the two bytes it reads. -/
+private theorem drawAccepts_eq_of_byte_pair (preset : Preset) (fork : Base.Fork)
+    (electra : .pectra ≤ fork) (i : Nat) (e : Gwei) (random : Bytes32) :
+    drawAccepts preset fork random i e = drawAccepts preset fork
+      (Vector.ofFn fun t : Fin 32 => if t.val = i % 16 * 2 then
+        (Vector.ofFn fun j : Fin 2 => random[i % 16 * 2 + j.val])[0] else
+        (Vector.ofFn fun j : Fin 2 => random[i % 16 * 2 + j.val])[1]) i e := by
+  simp only [drawAccepts, electra, ↓reduceIte, Vector.getElem_ofFn]
+  simp
+
+/-- Two draws at different places of one uniform digest are independent.
+
+Two draws are at different places when their numbers differ modulo the draws per digest.
+
+So an event on the first and an event on the second have the product chance. -/
+theorem prEvent_drawAccepts_pair_uniform (preset : Preset) (fork : Base.Fork) (i j : Nat)
+    (e f : Gwei) (different : i % drawsPerHash fork ≠ j % drawsPerHash fork)
+    (P Q : Except AccessorError Bool → Prop) :
+    Pr{let random ← $ᵗ Bytes32}[P (drawAccepts preset fork random i e) ∧
+        Q (drawAccepts preset fork random j f)] =
+      Pr{let random ← $ᵗ Bytes32}[P (drawAccepts preset fork random i e)] *
+        Pr{let random ← $ᵗ Bytes32}[Q (drawAccepts preset fork random j f)] := by
+  by_cases electra : .pectra ≤ fork
+  · have places : i % 16 ≠ j % 16 := by simpa [drawsPerHash, electra] using different
+    obtain ⟨F, first⟩ : ∃ F : Vector UInt8 2 → Except AccessorError Bool, ∀ random : Bytes32,
+        drawAccepts preset fork random i e =
+          F (Vector.ofFn fun t : Fin 2 => random[i % 16 * 2 + t.val]) :=
+      ⟨fun bytes => drawAccepts preset fork (Vector.ofFn fun t : Fin 32 =>
+        if t.val = i % 16 * 2 then bytes[0] else bytes[1]) i e,
+        drawAccepts_eq_of_byte_pair preset fork electra i e⟩
+    obtain ⟨G, second⟩ : ∃ G : Vector UInt8 2 → Except AccessorError Bool, ∀ random : Bytes32,
+        drawAccepts preset fork random j f =
+          G (Vector.ofFn fun t : Fin 2 => random[j % 16 * 2 + t.val]) :=
+      ⟨fun bytes => drawAccepts preset fork (Vector.ofFn fun t : Fin 32 =>
+        if t.val = j % 16 * 2 then bytes[0] else bytes[1]) j f,
+        drawAccepts_eq_of_byte_pair preset fork electra j f⟩
+    simp only [first, second]
+    exact prEvent_uniformSample_vector_two_ranges_comp _ _ _ _ (by omega) (by omega)
+      (by omega) F G P Q
+  · have places : i % 32 ≠ j % 32 := by simpa [drawsPerHash, electra] using different
+    obtain ⟨F, first⟩ : ∃ F : Vector UInt8 1 → Except AccessorError Bool, ∀ random : Bytes32,
+        drawAccepts preset fork random i e =
+          F (Vector.ofFn fun t : Fin 1 => random[i % 32 + t.val]) :=
+      ⟨fun bytes => drawAccepts preset fork (Vector.replicate 32 bytes[0]) i e,
+        drawAccepts_eq_of_byte preset fork electra i e⟩
+    obtain ⟨G, second⟩ : ∃ G : Vector UInt8 1 → Except AccessorError Bool, ∀ random : Bytes32,
+        drawAccepts preset fork random j f =
+          G (Vector.ofFn fun t : Fin 1 => random[j % 32 + t.val]) :=
+      ⟨fun bytes => drawAccepts preset fork (Vector.replicate 32 bytes[0]) j f,
+        drawAccepts_eq_of_byte preset fork electra j f⟩
+    simp only [first, second]
+    exact prEvent_uniformSample_vector_two_ranges_comp _ _ _ _ (by omega) (by omega)
+      (by omega) F G P Q
 
 end EthLib.Consensus

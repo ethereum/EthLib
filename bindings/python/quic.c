@@ -69,3 +69,93 @@ py_quic_tls_finished(
 ) {
   return call_pyvalue_export(eth_quic_tls_finished, args, 2, TLS13_ERROR);
 }
+
+extern lean_object* eth_quic_header_encode(lean_object* args);
+
+PyObject*
+py_quic_header_encode(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_header_encode, args, 1, QUIC_ERROR);
+}
+
+extern lean_object* eth_quic_header_decode(lean_object* args);
+
+PyObject*
+py_quic_header_decode(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_header_decode, args, 2, QUIC_ERROR);
+}
+
+extern lean_object* eth_quic_frame_encode(lean_object* args);
+
+PyObject*
+py_quic_frame_encode(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_frame_encode, args, 1, QUIC_ERROR);
+}
+
+extern lean_object* eth_quic_frame_decode(lean_object* args);
+
+PyObject*
+py_quic_frame_decode(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_frame_decode, args, 2, QUIC_ERROR);
+}
+
+extern lean_object* eth_quic_packet_number_encode(lean_object* args);
+
+PyObject*
+py_quic_packet_number_encode(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_packet_number_encode, args, 2, QUIC_ERROR);
+}
+
+extern lean_object* eth_quic_packet_number_decode(lean_object* args);
+
+PyObject*
+py_quic_packet_number_decode(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_packet_number_decode, args, 3, QUIC_ERROR);
+}
+
+extern lean_object* eth_quic_protect(lean_object* args);
+
+PyObject*
+py_quic_protect(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_protect, args, 6, QUIC_PROTECTION_ERROR);
+}
+
+extern lean_object* eth_quic_unprotect(lean_object* args);
+
+PyObject*
+py_quic_unprotect(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_unprotect, args, 5, QUIC_PROTECTION_ERROR);
+}
+
+extern lean_object* eth_quic_retry_tag(lean_object* args);
+
+PyObject*
+py_quic_retry_tag(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_retry_tag, args, 2, QUIC_PROTECTION_ERROR);
+}

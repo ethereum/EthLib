@@ -657,6 +657,26 @@ def consensus_api_payload_envelope_ssz(name: str, fork: str, anchor_state: bytes
     """The SSZ body of the envelope answer, as `bytes`."""
     ...
 
+def consensus_api_attestation_data(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, optimistic_roots: list[bytes], slot: int, committee_index: int) -> dict[str, Any]:
+    """The JSON response of the attestation data endpoint, as a `dict`."""
+    ...
+
+def consensus_api_payload_attestation_data(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, slot: int, payload_present: bool, blob_data_available: bool) -> dict[str, Any] | None:
+    """The JSON response of the payload attestation data endpoint, as a `dict`, or None for 204."""
+    ...
+
+def consensus_api_aggregate_attestation(name: str, fork: str, state: bytes, attestations: list[bytes], singles: list[bytes], optimistic_roots: list[bytes], data_root: bytes, slot: int, committee_index: int) -> dict[str, Any]:
+    """The JSON response of the aggregate endpoint, as a `dict`."""
+    ...
+
+def consensus_api_sync_committee_contribution(name: str, fork: str, state: bytes, messages: list[bytes], optimistic_roots: list[bytes], slot: int, subcommittee_index: int, root: bytes) -> dict[str, Any]:
+    """The JSON response of the contribution endpoint, as a `dict`."""
+    ...
+
+def consensus_api_duties(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, epoch: int, indices: list[int], genesis_root: bytes) -> dict[str, Any]:
+    """The JSON response of a duties endpoint, as a `dict`."""
+    ...
+
 def consensus_api_committees(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, slot: int | None) -> dict[str, Any]:
     """The JSON response of the committees endpoint, as a `dict`."""
     ...
@@ -735,6 +755,26 @@ def consensus_relay_submission_bid(name: str, fork: str, data: bytes, pubkey: by
 
 def consensus_relay_validators(name: str, fork: str, state: bytes, registry: list[bytes]) -> list[dict[str, Any]]:
     """At Fulu only: the list of validators that a relay serves, as a `list` of `dict`."""
+    ...
+
+def consensus_relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:
+    """A delivered payload, read from its JSON and written back as a `dict`."""
+    ...
+
+def consensus_relay_received_bid(document: dict[str, Any]) -> dict[str, Any]:
+    """A received bid, read from its JSON and written back as a `dict`."""
+    ...
+
+def consensus_relay_delivered_keeps(document: dict[str, Any], slot: int | None, block_hash: bytes | None, block_number: int | None, proposer_pubkey: bytes | None, builder_pubkey: bytes | None) -> bool:
+    """Whether the filters of a query of delivered payloads keep the payload of a JSON object."""
+    ...
+
+def consensus_relay_received_keeps(document: dict[str, Any], slot: int | None, block_hash: bytes | None, block_number: int | None, builder_pubkey: bytes | None) -> bool:
+    """Whether the filters of a query of received bids keep the bid of a JSON object."""
+    ...
+
+def consensus_relay_sort_delivered(order: str, documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Delivered payloads sorted by value in the given order, as a `list` of `dict`."""
     ...
 
 def consensus_builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
@@ -1513,12 +1553,48 @@ def quic_tls_finished(secret: bytes, transcript: bytes) -> bytes:
     """Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."""
     ...
 
+def quic_protect(suite: str, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes) -> bytes:
+    """Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4."""
+    ...
+
+def quic_unprotect(suite: str, secret: bytes, expected: int, offset: int, packet: bytes) -> tuple[bytes, bytes]:
+    """Authenticate one isolated QUIC v1 packet, RFC 9001 §§5.3 to 5.4."""
+    ...
+
+def quic_retry_tag(original_dcid: bytes, retry: bytes) -> bytes:
+    """Compute a QUIC v1 Retry tag from the original destination ID and untagged Retry, RFC 9001 §5.8."""
+    ...
+
 def quic_varint_encode(value: int) -> bytes:
     """Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."""
     ...
 
 def quic_varint_decode(data: bytes) -> tuple[int, bytes]:
     """Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."""
+    ...
+
+def quic_header_encode(header: Any) -> bytes:
+    """Encode a QUIC header, with checked lengths and packet-number bounds (RFC 9000 §17)."""
+    ...
+
+def quic_header_decode(short_connection_id_length: int, data: bytes) -> tuple[Any, bytes]:
+    """Read an authenticated header and return its fields and remaining bytes (RFC 9000 §17)."""
+    ...
+
+def quic_frame_encode(frame: Any) -> bytes:
+    """Encode one well-formed QUIC frame (RFC 9000 §19)."""
+    ...
+
+def quic_frame_decode(packet: str, data: bytes) -> tuple[Any, bytes]:
+    """Read one frame allowed in the given packet type (RFC 9000 §12.4)."""
+    ...
+
+def quic_packet_number_encode(width: int, number: int) -> bytes:
+    """Write the low packet-number bytes (RFC 9000 §17.1)."""
+    ...
+
+def quic_packet_number_decode(width: int, truncated: int, expected: int) -> int:
+    """Reconstruct a packet number from its low bytes (RFC 9000 Appendix A.3)."""
     ...
 
 def multistream_encode(message: bytes) -> bytes:
@@ -1795,6 +1871,10 @@ def engine_get_payload(config: dict, store: list[tuple[bytes, str, bytes, bytes,
 
 def engine_get_payload_bodies(store: list[tuple[bytes, int | None, str, list[bytes], list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, max_request: int, request: dict) -> list[dict | None]:
     """The answer to a payload bodies request, from a store of bodies."""
+    ...
+
+def engine_new_payload_routes(config: dict, preset: str, fork: str, request: bytes) -> tuple[list | None, str | None, int | None, bool]:
+    """The payload request of the beacon chain through the method and through its execution layer."""
     ...
 
 def engine_read_payload_status(status: dict[str, Any]) -> tuple[str, bytes | None, str | None]:
