@@ -3642,6 +3642,21 @@ So the effective gas price of each receipt object follows the formula of the des
 From Glamsterdam, EIP-7778 makes the cumulative gas of a receipt the gas that the senders paid.
 As a choice of EthLib, the object copies it, so `gasUsed` is the gas that the sender paid, while the descriptions of `receipt.yaml` read "gas used".
 
+`eth_getLogs` reads the logs that a filter of [`filter.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/filter.yaml) selects (`Execution/Rpc/Filter.lean`).
+A filter names one block by its hash, or a range of canonical blocks by its bounds, and then the addresses and the topics at each position that it takes.
+A range reads exactly the canonical blocks between its bounds, whose two bounds are in order, the first at least the lowest block and the last at most the head (`filterBlocks_range`).
+A number bound above the head makes the range invalid, whatever the other bound, as the method requires (`filterBlocks_aboveHead`).
+So do bounds that resolve above the head or out of order, whatever the pruned history (`filterBlocks_invalid`).
+A block hash reads the one block of that hash (`filterBlocks_hash`).
+The returned logs are the matching logs of the receipt objects of those blocks, in block order, then in their order in each block (`getLogs_eq_ok`).
+Every returned log matches the filter and is a log of a receipt object of a block that the filter reads (`getLogs_sound`).
+When the method answers, every such log that matches is returned, and so is every matching log of the receipts of those blocks (`getLogs_complete`, `getLogs_complete_log`).
+In a valid view, take a canonical block after the lowest.
+The logs of its receipts are its logs (`Valid.logs_receipts`), and the Bloom filter of its header is that of its logs (`Valid.logsBloom_eq`).
+So the block has no log that a filter selects when its Bloom filter has none of the addresses of a nonempty list that the filter takes, or none of the topics of a nonempty list that the filter takes at some position (`Valid.not_selects_of_bloom`).
+The source leaves several cases open: a block hash with a bound, an empty topic list at a position, an empty address list, a log with fewer topics than the filter, an omitted bound, the order of the results, a block below the lowest one (`4444` here) and an unknown block (`-32001` here).
+The module header gives the choice for each, and follows the official fixtures where they decide.
+
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 
