@@ -12,6 +12,8 @@ Not yet released.
 - In Lean, `EpochFrameLaws` now extends `EpochStepLaws`, which holds every law except those for a new validator and for the queue of pending deposits.
   The theorems that need neither law moved from the `EpochFrameLaws` namespace to the `EpochStepLaws` namespace, with the same statements, and they now take the smaller structure.
   Dot notation on a value of either structure still finds them; a full name such as `EpochFrameLaws.processSyncAggregate` becomes `EpochStepLaws.processSyncAggregate`.
+- In Lean, `processEpoch_split_of_lt_altair` moved from the `EpochFrameLaws` namespace to the `EpochStepLaws` namespace, with the same statement, and it now takes the smaller structure.
+  Dot notation on an `EpochFrameLaws` value still finds it; the full name `EpochFrameLaws.processEpoch_split_of_lt_altair` becomes `EpochStepLaws.processEpoch_split_of_lt_altair`.
 - In Lean, the JSON readers and writers of the base types moved from `EthLib.Engine.Json` to `EthLib.Serialization.JsonRpc`, with their theorems.
   They are `hexValue`, `hexDigits`, `bytesOf`, `bytes`, `fixed`, `address`, `quantity`, `bytesMax`, `uint64`, `paramsArray`, `array`, `fields`, `hasExactly`, `field`, `dataJson`, `quantityJson`, `listJson` and `optionJson`.
   Their namespace is now `EthLib.Serialization.JsonRpc`.
