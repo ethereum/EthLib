@@ -22,9 +22,9 @@ The sync committee answer gives, for each seat, the first validator that holds i
 
 Its slices, put end to end, give back that list.
 
-The PTC answer is an error exactly when the state is before Gloas.
+The PTC answer is an error exactly when one of three conditions holds.
 
-Or the epoch of the slot is before the Gloas fork epoch, or outside the window of the state.
+The state is before Gloas, the slot is before the Gloas fork epoch, or it is outside the window.
 -/
 
 @[expose] public section
