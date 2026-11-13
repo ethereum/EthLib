@@ -16,11 +16,13 @@ So the root that the API reports for a state named by its root is that same root
 
 The genesis state from deposits has its three finality checkpoints at epoch 0 with the zero root.
 
-Justification moves checkpoints or justifies epochs after epoch 0, and every other step keeps them.
+From epoch 2, justification copies checkpoints or justifies an epoch after 0; other steps keep them.
 
 So along a chain from that state, each checkpoint at epoch 0 keeps the zero root.
 
-A state before finalization then reports epoch 0 and the zero root.
+Such a state before finalization then reports epoch 0 and the zero root.
+
+A justified checkpoint at epoch 0 is reported with the zero root too.
 
 A field that a fork adds gives the error with code 400 exactly for a state before that fork.
 -/
@@ -108,15 +110,15 @@ theorem finalityCheckpoints_genesis {eth1BlockHash : Hash32} {eth1Timestamp : UI
   simp only [finalityCheckpoints, previous, current, finalized]
   rfl
 
-/-- Each checkpoint of the state at epoch 0 has the zero root. -/
+/-- Each of the three finality checkpoints of the state has the zero root when its epoch is 0. -/
 def GenesisCheckpointsZero (state : BeaconState preset fork) : Prop :=
   ∀ checkpoint ∈ [state.previousJustifiedCheckpoint, state.currentJustifiedCheckpoint,
       state.finalizedCheckpoint],
     checkpoint.epoch = 0 → checkpoint.root = Vector.replicate 32 0
 
-/-- A state keeps the zero root at epoch 0 from another state that has it.
+/-- A new state has the zero root at epoch 0 when an old state has it.
 
-It needs each checkpoint of the state to be one of the other state, or after epoch 0. -/
+Each checkpoint of the new state must be one of the old state, or be after epoch 0. -/
 private theorem GenesisCheckpointsZero.of_mem {post : Fork} {state : BeaconState preset fork}
     {after : BeaconState preset post} (holds : GenesisCheckpointsZero state)
     (among : ∀ checkpoint ∈ [after.previousJustifiedCheckpoint, after.currentJustifiedCheckpoint,
@@ -211,7 +213,7 @@ private theorem GenesisCheckpointsZero.of_chainStep {forked after : ForkedBeacon
 
 /-- Along a run of steps of a chain, each checkpoint at epoch 0 keeps the zero root.
 
-It needs the first state to have each checkpoint at epoch 0 with the zero root. -/
+It needs each checkpoint of the first state at epoch 0 to have the zero root. -/
 theorem GenesisCheckpointsZero.of_chainSteps {first last : ForkedBeaconState preset}
     (holds : GenesisCheckpointsZero first.state)
     (steps : Relation.ReflTransGen (ChainStep config checks) first last) :
@@ -220,14 +222,15 @@ theorem GenesisCheckpointsZero.of_chainSteps {first last : ForkedBeaconState pre
   | refl => exact holds
   | tail _ step more => exact more.of_chainStep step
 
-/-- The genesis state from deposits has each checkpoint at epoch 0 with the zero root. -/
+/-- In the genesis state from deposits, each checkpoint at epoch 0 has the zero root. -/
 theorem GenesisCheckpointsZero.of_initializeBeaconStateFromEth1 {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {state : BeaconState preset fork}
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
       .ok state) :
     GenesisCheckpointsZero state := by
-  obtain ⟨-, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
-  obtain ⟨-, finalized⟩ := initializeBeaconStateFromEth1_finality computed
+  have reported := finalityCheckpoints_genesis computed
+  simp only [finalityCheckpoints, FinalityCheckpoints.mk.injEq] at reported
+  obtain ⟨previous, current, finalized⟩ := reported
   intro checkpoint member _
   simp only [List.mem_cons, List.not_mem_nil, or_false] at member
   rcases member with rfl | rfl | rfl
