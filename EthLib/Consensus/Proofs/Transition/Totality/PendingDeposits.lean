@@ -288,11 +288,12 @@ private theorem passPendingConsolidations_fields {nextEpoch : Epoch} :
         result.1.currentEpochParticipation = state.currentEpochParticipation ∧
         result.1.inactivityScores = state.inactivityScores ∧
         result.1.pendingDeposits = state.pendingDeposits ∧
-        result.1.depositBalanceToConsume = state.depositBalanceToConsume
+        result.1.depositBalanceToConsume = state.depositBalanceToConsume ∧
+        result.1.historicalSummaries = state.historicalSummaries
   | [], _, _, computed => by
     simp only [passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   | consolidation :: rest, state, result, computed => by
     unfold passPendingConsolidations at computed
     simp only [bind, Except.bind, pure, Except.pure] at computed
@@ -306,7 +307,7 @@ private theorem passPendingConsolidations_fields {nextEpoch : Epoch} :
       exact (passPendingConsolidations_fields (consolidations := rest) recur :)
     split at computed
     · cases computed
-      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
     split at computed
     · cases computed
     split at computed
@@ -333,7 +334,8 @@ theorem processPendingConsolidations_fields {electra : .pectra ≤ fork}
       after.currentEpochParticipation = state.currentEpochParticipation ∧
       after.inactivityScores = state.inactivityScores ∧
       after.pendingDeposits = state.pendingDeposits ∧
-      after.depositBalanceToConsume = state.depositBalanceToConsume := by
+      after.depositBalanceToConsume = state.depositBalanceToConsume ∧
+      after.historicalSummaries = state.historicalSummaries := by
   simp only [processPendingConsolidations, bind, Except.bind, pure, Except.pure] at computed
   split at computed
   · cases computed
@@ -354,6 +356,15 @@ private theorem getValidatorFromDeposit_capped (pubkey : Cryptography.Bls.BLSPub
   simp only [getValidatorFromDeposit, withdrawalMaxEffectiveBalance, getMaxEffectiveBalance,
     hasCompoundingWithdrawalCredential]
   exact Std.min_le_right
+
+/-- A validator from a deposit has an effective balance at most the amount of the deposit. -/
+theorem getValidatorFromDeposit_effectiveBalance_le (pubkey : Cryptography.Bls.BLSPubkey)
+    (credentials : Bytes32) (amount : Gwei) :
+    (getValidatorFromDeposit preset fork pubkey credentials amount).effectiveBalance ≤ amount := by
+  have mod : amount % preset.EFFECTIVE_BALANCE_INCREMENT ≤ amount := by
+    rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
+    exact Nat.mod_le _ _
+  exact UInt64.le_trans Std.min_le_left (UInt64.sub_le mod)
 
 /-- A pending deposit keeps each effective balance at most the largest one of its validator. -/
 private theorem applyPendingDeposit_capped {config : Config} {checks : SignatureChecks}
@@ -563,7 +574,7 @@ theorem processPendingBalances_total (config : Config) (checks : SignatureChecks
         intro consolidation member
         have := inside electra consolidation member
         omega) (by rw [epoch]; exact fits)
-    obtain ⟨validators, previous, current, scores, pending, churn⟩ :=
+    obtain ⟨validators, previous, current, scores, pending, churn, -⟩ :=
       processPendingConsolidations_fields afterOk
     have summedAfter := (processPendingConsolidations_kept afterOk).2
     refine ⟨after, by simp only [depositedOk, afterOk, bind, Except.bind], ?_,

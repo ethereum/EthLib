@@ -709,6 +709,40 @@ theorem processPendingDeposits_pendingConsolidations {electra : .pectra ≤ fork
     (fun _ _ _ prior step => (applyPendingDeposit_pendingConsolidations step).trans prior) rfl
     folded
 
+/-- A new validator keeps the history summaries. -/
+theorem addValidatorToRegistry_historicalSummaries {pubkey : Cryptography.Bls.BLSPubkey}
+    {credentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey credentials amount = .ok after) :
+    after.historicalSummaries = state.historicalSummaries := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · simp only [addValidatorToRegistryAltair, bind_ok_iff, liftAccessor_ok,
+      pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    rfl
+  · split at computed <;> cases computed
+    rfl
+
+/-- A pending deposit keeps the history summaries. -/
+theorem applyPendingDeposit_historicalSummaries {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    after.historicalSummaries = state.historicalSummaries := by
+  rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+  · rfl
+  · obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp raised
+    rfl
+  · exact addValidatorToRegistry_historicalSummaries added
+
+/-- The pending deposits of an epoch keep the history summaries. -/
+theorem processPendingDeposits_historicalSummaries {electra : .pectra ≤ fork}
+    (computed : processPendingDeposits config checks state electra = .ok after) :
+    after.historicalSummaries = state.historicalSummaries := by
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, folded, rfl⟩ :=
+    processPendingDeposits_applied computed
+  exact foldlM_ok_invariant (fun b => b.historicalSummaries = state.historicalSummaries)
+    (fun _ _ _ prior step => (applyPendingDeposit_historicalSummaries step).trans prior) rfl
+    folded
+
 /-- The pending deposits of an epoch read a prefix of the queue, at most the limit per epoch.
 
 They postpone those whose validator, in the state before, exits and is not withdrawn.

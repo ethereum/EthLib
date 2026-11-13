@@ -444,6 +444,19 @@ theorem processJustificationAndFinalization_ok
   · exact .inl same
   · exact .inr ⟨total, previous, current, weighed⟩
 
+/-- Justification and finalization change only the checkpoints and their bits. -/
+theorem processJustificationAndFinalization_eq
+    (computed : processJustificationAndFinalization state = .ok after) :
+    after = { state with
+      previousJustifiedCheckpoint := after.previousJustifiedCheckpoint
+      currentJustifiedCheckpoint := after.currentJustifiedCheckpoint
+      justificationBits := after.justificationBits
+      finalizedCheckpoint := after.finalizedCheckpoint } := by
+  obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
+  · rfl
+  · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
+    rw [← rest]
+
 /-- Justification and finalization keep the slot. -/
 theorem processJustificationAndFinalization_slot
     (computed : processJustificationAndFinalization state = .ok after) :
