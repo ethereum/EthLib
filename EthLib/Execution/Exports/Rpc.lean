@@ -279,10 +279,12 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
 
 /-- The responses of the chain view that its inputs build, to the texts of requests, as text.
 
+The access lists of the named block numbers are pruned first.
+
 A notification, or a batch of notifications, gets none. -/
-def serveOf (args : ViewInputs × List String) : Result (List (Option String)) := do
-  let view ← viewOf args.1
-  return args.2.map fun text => (view.serve text).map (·.compress)
+def serveOf (args : ViewInputs × List Nat × List String) : Result (List (Option String)) := do
+  let view := (← viewOf args.1).pruneAccessLists args.2.1
+  return args.2.2.map fun text => (view.serve text).map (·.compress)
 
 /-- Answer requests of the execution JSON-RPC API from the chain that the arguments build.
 
@@ -291,6 +293,10 @@ The arguments are the configuration, the state of the lowest block, and the bloc
 Each block is the name of its fork and its RLP form, the lowest block first.
 
 Then come the head, safe and finalized hashes, the network ID, and whether to check the seal.
+
+Next come the block numbers whose access lists are pruned, while their blocks remain available.
+
+From Glamsterdam, the access-list methods report code 4444 for a pruned list.
 
 The last argument is the list of the texts of the requests.
 
@@ -309,38 +315,21 @@ Any other bad input has code 0. -/
 def serveExport (args : PyValue) : Result PyValue :=
   pyExport serveOf args
 
-/-- The responses of a chain view after pruning the access lists of the named block numbers. -/
-def servePrunedOf (args : ViewInputs × List Nat × List String) : Result (List (Option String)) := do
-  let view ← viewOf args.1
-  let view := view.pruneAccessLists args.2.1
-  return args.2.2.map fun text => (view.serve text).map (·.compress)
-
-/-- Answer requests after pruning the block access lists of the named block numbers.
-
-The first argument is the chain input of `eth_rpc_serve`.
-
-Next come the block numbers whose lists are pruned and the request texts.
-
-The blocks remain available.
-
-From Glamsterdam, the access-list methods report code 4444 for a pruned list.
-
-Input failures have the codes of `eth_rpc_serve`. -/
-@[export eth_rpc_serve_pruned]
-def servePrunedExport (args : PyValue) : Result PyValue :=
-  pyExport servePrunedOf args
-
 /-- Encode a JSON access list with the same reader and RLP codec as the query methods. -/
 def encodeBlockAccessListOf (value : PyValue) : Result ByteArray := do
   let bal ← (if containsBytes value then reject "block access list: not a JSON value"
-    else blockAccessListOfJson value.toJson).mapError fun reason => (32602, reason)
-  (Serialization.Rlp.Codec.encode bal).mapError fun _ => (32603, "cannot encode block access list")
+    else blockAccessListOfJson value.toJson).mapError fun reason =>
+      ((RpcError.invalidParams reason).code.natAbs.toUInt32, reason)
+  (Serialization.Rlp.Codec.encode bal).mapError fun _ =>
+    (internalError.code.natAbs.toUInt32, "cannot encode block access list")
 
 /-- Encode a block access-list JSON value as its EIP-7928 RLP bytes.
 
 The argument is the JSON value returned by `eth_getBlockAccessList`.
 
 The empty list encodes as `0xc0`.
+
+The order of the list is not checked, so the bytes match a header hash only for a canonical order.
 
 A value outside the JSON schema has code 32602, and an encoding failure has code 32603. -/
 @[export eth_rpc_encode_block_access_list]

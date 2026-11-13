@@ -1478,9 +1478,6 @@
 #define DOC_rpc_serve \
   "Answer requests of the execution JSON-RPC API from the chain that the arguments build."
 
-#define DOC_rpc_serve_pruned \
-  "Answer requests after pruning the block access lists of the named block numbers."
-
 #define DOC_rpc_encode_block_access_list \
   "Encode a block access-list JSON value as its EIP-7928 RLP bytes."
 

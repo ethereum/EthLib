@@ -16,7 +16,7 @@ The raw getter decodes to the retained list too.
 
 In a valid view, a retained list of a canonical block after the lowest hashes to its header field.
 
-The lowest block and side blocks are inputs.
+The lowest block, side blocks and the pending block are inputs.
 
 No transition checks their retained lists.
 -/
@@ -45,9 +45,9 @@ private theorem blockAccessFields_mkObj {pairs : List (String × Json)}
   simp only [hobj, blockAccessFields, hasExactly_of_perm hp, ↓reduceIte]
 
 /-- A storage word reads back from its 32-byte data form. -/
-theorem storageWordOfJson_storageWordJson (word : U256) :
-    storageWordOfJson (storageWordJson word) = .ok word := by
-  unfold storageWordOfJson storageWordJson hash32
+theorem storageWordOfJson_wordJson (word : U256) :
+    storageWordOfJson (wordJson word) = .ok word := by
+  unfold storageWordOfJson wordJson hash32
   rw [fixed_dataJson]
   change Except.ok (U256.fromBeBytes (U256.toBeBytes word)) = .ok word
   rw [U256.fromBeBytes_toBeBytes]
@@ -56,13 +56,13 @@ theorem storageWordOfJson_storageWordJson (word : U256) :
 theorem storageChangeOfJson_storageChangeJson (c : StorageChange) :
     storageChangeOfJson (storageChangeJson c) = .ok c := by
   let pairs : List (String × Json) := [("index", quantityJson c.index.toNat),
-    ("value", storageWordJson c.value)]
+    ("value", wordJson c.value)]
   have hd : pairs.Pairwise (fun a b => a.1 ≠ b.1) := by simp [pairs]
   obtain ⟨fs, hfs, hp⟩ := blockAccessFields_mkObj hd
   have f0 := field_of_perm (what := "block access list") hp hd
     (k := "index") (v := quantityJson c.index.toNat) (by simp [pairs])
   have f1 := field_of_perm (what := "block access list") hp hd
-    (k := "value") (v := storageWordJson c.value) (by simp [pairs])
+    (k := "value") (v := wordJson c.value) (by simp [pairs])
   unfold storageChangeOfJson storageChangeJson
   change (do
     let fs ← blockAccessFields (pairs.map Prod.fst) (Json.mkObj pairs)
@@ -73,7 +73,7 @@ theorem storageChangeOfJson_storageChangeJson (c : StorageChange) :
   rw [hfs]
   simp only [bind, Except.bind, f0, f1,
     uint32_quantityJson,
-    storageWordOfJson_storageWordJson, pure, Except.pure]
+    storageWordOfJson_wordJson, pure, Except.pure]
 
 /-- Every `BalanceChange` reads back from its JSON object. -/
 theorem balanceChangeOfJson_balanceChangeJson (c : BalanceChange) :
@@ -146,12 +146,12 @@ theorem codeChangeOfJson_codeChangeJson (c : CodeChange) :
 /-- A `SlotChanges` value reads back from its JSON object, including an empty change list. -/
 theorem slotChangesOfJson_slotChangesJson (c : SlotChanges) :
     slotChangesOfJson (slotChangesJson c) = .ok c := by
-  let pairs : List (String × Json) := [("key", storageWordJson c.slot),
+  let pairs : List (String × Json) := [("key", wordJson c.slot),
     ("changes", listJson storageChangeJson c.changes)]
   have hd : pairs.Pairwise (fun a b => a.1 ≠ b.1) := by simp [pairs]
   obtain ⟨fs, hfs, hp⟩ := blockAccessFields_mkObj hd
   have f0 := field_of_perm (what := "block access list") hp hd
-    (k := "key") (v := storageWordJson c.slot) (by simp [pairs])
+    (k := "key") (v := wordJson c.slot) (by simp [pairs])
   have f1 := field_of_perm (what := "block access list") hp hd
     (k := "changes") (v := listJson storageChangeJson c.changes) (by simp [pairs])
   unfold slotChangesOfJson slotChangesJson
@@ -163,7 +163,7 @@ theorem slotChangesOfJson_slotChangesJson (c : SlotChanges) :
     } : Read SlotChanges) = .ok c
   rw [hfs]
   simp only [bind, Except.bind, f0, f1,
-    storageWordOfJson_storageWordJson,
+    storageWordOfJson_wordJson,
     array_listJson_of _ storageChangeOfJson_storageChangeJson, pure, Except.pure]
 
 /-- An `AccountChanges` value reads back from its JSON object, including empty change lists. -/
@@ -171,7 +171,7 @@ theorem accountChangesOfJson_accountChangesJson (c : AccountChanges) :
     accountChangesOfJson (accountChangesJson c) = .ok c := by
   let pairs : List (String × Json) := [("address", dataJson c.address.toList),
     ("storageChanges", listJson slotChangesJson c.storageChanges),
-    ("storageReads", listJson storageWordJson c.storageReads),
+    ("storageReads", listJson wordJson c.storageReads),
     ("balanceChanges", listJson balanceChangeJson c.balanceChanges),
     ("nonceChanges", listJson nonceChangeJson c.nonceChanges),
     ("codeChanges", listJson codeChangeJson c.codeChanges)]
@@ -182,7 +182,7 @@ theorem accountChangesOfJson_accountChangesJson (c : AccountChanges) :
   have f1 := field_of_perm (what := "block access list") hp hd
     (k := "storageChanges") (v := listJson slotChangesJson c.storageChanges) (by simp [pairs])
   have f2 := field_of_perm (what := "block access list") hp hd
-    (k := "storageReads") (v := listJson storageWordJson c.storageReads) (by simp [pairs])
+    (k := "storageReads") (v := listJson wordJson c.storageReads) (by simp [pairs])
   have f3 := field_of_perm (what := "block access list") hp hd
     (k := "balanceChanges") (v := listJson balanceChangeJson c.balanceChanges) (by simp [pairs])
   have f4 := field_of_perm (what := "block access list") hp hd
@@ -209,7 +209,7 @@ theorem accountChangesOfJson_accountChangesJson (c : AccountChanges) :
   simp only [bind, Except.bind, f0, f1, f2, f3, f4, f5,
     address_dataJson,
     array_listJson_of _ slotChangesOfJson_slotChangesJson,
-    array_listJson_of _ storageWordOfJson_storageWordJson,
+    array_listJson_of _ storageWordOfJson_wordJson,
     array_listJson_of _ balanceChangeOfJson_balanceChangeJson,
     array_listJson_of _ nonceChangeOfJson_nonceChangeJson,
     array_listJson_of _ codeChangeOfJson_codeChangeJson, pure, Except.pure]
@@ -222,7 +222,7 @@ theorem blockAccessListOfJson_blockAccessListJson (bal : BlockAccessList) :
 namespace BlockRecord
 
 /-- A retained list is returned exactly from Glamsterdam on, when it is present. -/
-theorem retainedAccessList_eq_ok {r : BlockRecord} {bal : BlockAccessList} :
+theorem retainedAccessList_eq_ok_iff {r : BlockRecord} {bal : BlockAccessList} :
     r.retainedAccessList = .ok bal ↔ .glamsterdam ≤ r.fork ∧ r.accessList = some bal := by
   unfold retainedAccessList
   split
@@ -242,10 +242,10 @@ theorem blockAccessList_eq_ok_iff {r : BlockRecord} {j : Json} :
   rw [map_ok_iff]
   constructor
   · rintro ⟨bal, hb, hj⟩
-    exact ⟨bal, (retainedAccessList_eq_ok.mp hb).1,
-      (retainedAccessList_eq_ok.mp hb).2, hj.symm⟩
+    exact ⟨bal, (retainedAccessList_eq_ok_iff.mp hb).1,
+      (retainedAccessList_eq_ok_iff.mp hb).2, hj.symm⟩
   · rintro ⟨bal, hf, hb, hj⟩
-    exact ⟨bal, retainedAccessList_eq_ok.mpr ⟨hf, hb⟩, hj.symm⟩
+    exact ⟨bal, retainedAccessList_eq_ok_iff.mpr ⟨hf, hb⟩, hj.symm⟩
 
 /-- A raw answer is exactly an encoding of an available list from Glamsterdam. -/
 theorem rawBlockAccessList_eq_ok_iff {r : BlockRecord} {raw : ByteArray} :
@@ -255,13 +255,13 @@ theorem rawBlockAccessList_eq_ok_iff {r : BlockRecord} {raw : ByteArray} :
   rw [bind_ok_iff]
   constructor
   · rintro ⟨bal, hb, he⟩
-    exact ⟨bal, (retainedAccessList_eq_ok.mp hb).1,
-      (retainedAccessList_eq_ok.mp hb).2, mapError_ok_iff.mp he⟩
+    exact ⟨bal, (retainedAccessList_eq_ok_iff.mp hb).1,
+      (retainedAccessList_eq_ok_iff.mp hb).2, mapError_ok_iff.mp he⟩
   · rintro ⟨bal, hf, hb, he⟩
-    exact ⟨bal, retainedAccessList_eq_ok.mpr ⟨hf, hb⟩, mapError_ok_iff.mpr he⟩
+    exact ⟨bal, retainedAccessList_eq_ok_iff.mpr ⟨hf, hb⟩, mapError_ok_iff.mpr he⟩
 
 /-- Decoding a successful raw answer recovers the retained list. -/
-theorem rawBlockAccessList_eq_ok {r : BlockRecord} {raw : ByteArray}
+theorem decode_of_rawBlockAccessList_eq_ok {r : BlockRecord} {raw : ByteArray}
     (h : r.rawBlockAccessList = .ok raw) :
     ∃ bal, r.retainedAccessList = .ok bal ∧ Codec.encode bal = .ok raw ∧
       Codec.decode raw = .ok bal := by
@@ -269,16 +269,18 @@ theorem rawBlockAccessList_eq_ok {r : BlockRecord} {raw : ByteArray}
   have he := mapError_ok_iff.mp he
   exact ⟨bal, hb, he, Codec.decode_encode he⟩
 
-/-- The JSON and RLP answers describe one retained list. -/
+/-- The JSON and RLP answers both read back as the retained list of the record. -/
 theorem blockAccessList_forms {r : BlockRecord} {j : Json} {raw : ByteArray}
     (hj : r.blockAccessList = .ok j) (hr : r.rawBlockAccessList = .ok raw) :
-    ∃ bal, blockAccessListOfJson j = .ok bal ∧ Codec.decode raw = .ok bal := by
-  obtain ⟨bal, hb, -, hd⟩ := rawBlockAccessList_eq_ok hr
+    ∃ bal, r.accessList = some bal ∧ blockAccessListOfJson j = .ok bal ∧
+      Codec.decode raw = .ok bal := by
+  obtain ⟨bal, hb, -, hd⟩ := decode_of_rawBlockAccessList_eq_ok hr
   have hj : j = blockAccessListJson bal := by
     unfold blockAccessList at hj
     rw [hb] at hj
     exact (Except.ok.inj hj).symm
-  exact ⟨bal, hj ▸ blockAccessListOfJson_blockAccessListJson bal, hd⟩
+  exact ⟨bal, (retainedAccessList_eq_ok_iff.mp hb).2,
+    hj ▸ blockAccessListOfJson_blockAccessListJson bal, hd⟩
 
 /-- A block before Glamsterdam is rejected before its retained list is read. -/
 theorem retainedAccessList_of_lt {r : BlockRecord} (h : r.fork < .glamsterdam) :
@@ -353,14 +355,16 @@ theorem blockAccessList_of_resolve {v : ChainView} {p : BlockParam} {r : BlockRe
   · exact absurd rfl hp
   · simp [hr, bind, Except.bind]
 
-/-- For a non-pending query, the JSON and raw getters describe the same retained list. -/
+/-- For a non-pending query, both answers read back as the retained list of the resolved block. -/
 theorem blockAccessList_forms {v : ChainView} {p : BlockParam} {j : Json} {raw : ByteArray}
     (hp : p ≠ .tag .pending) (hj : v.blockAccessList p = .ok j)
     (hr : v.rawBlockAccessList p = .ok raw) :
-    ∃ bal, blockAccessListOfJson j = .ok bal ∧ Codec.decode raw = .ok bal := by
+    ∃ r bal, v.resolve p = .ok (some r) ∧ r.accessList = some bal ∧
+      blockAccessListOfJson j = .ok bal ∧ Codec.decode raw = .ok bal := by
   obtain ⟨r, hresolve, hraw⟩ := ofBlock_eq_ok.mp hr
   rw [blockAccessList_of_resolve hp hresolve] at hj
-  exact r.blockAccessList_forms hj hraw
+  obtain ⟨bal, hb, hjson, hd⟩ := r.blockAccessList_forms hj hraw
+  exact ⟨r, bal, hresolve, hb, hjson, hd⟩
 
 /-- In a valid view, a retained list of a canonical block after the lowest hashes to its header. -/
 theorem Valid.accessList_hash {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
@@ -410,8 +414,8 @@ theorem Valid.rawBlockAccessList_hash {v : ChainView} {checkSeal : Bool} (hv : v
     keccak256 raw = v.canonical[i + 1].block.header.blockAccessListHash hf := by
   obtain ⟨r, hresolve, hraw⟩ := ofBlock_eq_ok.mp hr
   obtain rfl : v.canonical[i + 1] = r := Option.some.inj (Except.ok.inj (hp.symm.trans hresolve))
-  obtain ⟨bal, hb, he, -⟩ := BlockRecord.rawBlockAccessList_eq_ok hraw
-  have hk := hv.accessList_hash hi hf (BlockRecord.retainedAccessList_eq_ok.mp hb).2
+  obtain ⟨bal, hb, he, -⟩ := BlockRecord.decode_of_rawBlockAccessList_eq_ok hraw
+  have hk := hv.accessList_hash hi hf (BlockRecord.retainedAccessList_eq_ok_iff.mp hb).2
   unfold BlockAccessList.hash at hk
   obtain ⟨encoded, hencoded, hhash⟩ := bind_ok_iff.mp hk
   -- The codec is deterministic, so these are the bytes that the getter returned.

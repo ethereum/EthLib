@@ -11,7 +11,8 @@ The directory `error-groups` holds the groups of error codes of the API, from `s
 
 The directory `bal` holds `block-00057.json` through `block-00060.json` from `tools/chain/bal/` of the same pin.
 They give the access lists and their hashes for the four Amsterdam blocks of the test chain.
-Their JSON uses `null` for empty lists, `slot` and `slotChanges` for storage, and `postBalance` and `postNonce` for field changes.
+Their JSON uses `null` for empty lists, `slot` and `slotChanges` for storage, `blockAccessIndex` for the index, and `postValue`, `postBalance` and `postNonce` for the new values.
+Their storage keys and values are quantities, not 32-byte words.
 The tests convert these fields to the API schema, compare the JSON answer, and check the raw answer against the pinned hash.
 The files name no generator or version, as `tests/generators.toml` records.
 

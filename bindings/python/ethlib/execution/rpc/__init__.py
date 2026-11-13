@@ -1,6 +1,6 @@
 """The execution JSON-RPC API: its parameter readers, error codes, and a chain that serves it."""
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, TypeAlias, overload
 
@@ -128,7 +128,7 @@ def serve(
     requests: list[str],
     *,
     check_seal: bool = True,
-    pruned_access_lists: Sequence[int] = (),
+    pruned_access_lists: Collection[int] = (),
 ) -> list[str | None]:
     """
     Answer the texts of JSON-RPC requests from a chain, with the text of each response.
@@ -146,16 +146,21 @@ def serve(
     When it is block zero, serve reads both from it, and any given values must match.
     A malformed, partial or mismatched value of these keys raises RpcError with code 0.
 
-    From Glamsterdam, pruned_access_lists names block numbers whose lists give code 4444.
+    pruned_access_lists names block numbers whose block access lists the node pruned.
+    From Glamsterdam, both access-list methods answer code 4444 for a block with such a number.
     """
     view = (config, state, list(blocks), forkchoice, network_id, check_seal)
-    if pruned_access_lists:
-        return _native.rpc_serve_pruned(view, list(pruned_access_lists), requests)
-    return _native.rpc_serve(view, requests)
+    return _native.rpc_serve(view, list(pruned_access_lists), requests)
 
 
 def encode_block_access_list(value: object) -> bytes:
-    """Encode a block access-list JSON value as its EIP-7928 RLP bytes."""
+    """
+    Encode a block access-list JSON value as its EIP-7928 RLP bytes.
+
+    The value is the JSON result of eth_getBlockAccessList, as json.loads gives it.
+    A value outside the schema raises RpcError with code 32602, and the reason as message.
+    An encoding failure raises RpcError with code 32603.
+    """
     return _native.rpc_encode_block_access_list(value)
 
 

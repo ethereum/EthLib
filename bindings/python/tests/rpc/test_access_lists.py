@@ -57,10 +57,10 @@ def answers() -> dict[str, dict[str, Any]]:
     ]
     calls = [(method, [block]) for method in METHODS for block in blocks]
     calls += [("eth_getHeaderByNumber", [hex(n)]) for n in range(57, 61)]
+    calls += [("eth_getBlockByNumber", [hex(n), False]) for n in range(57, 61)]
     calls += [(method, params) for method in METHODS for params, _ in BAD_PARAMS]
     requests = [_request(method, params) for method, params in calls]
     texts = chain.serve(requests)
-    assert all(text is not None for text in texts)
     parsed = {}
     for request, text in zip(requests, texts, strict=True):
         assert text is not None
@@ -80,6 +80,14 @@ def _word(value: str) -> str:
 def _account(entry: dict[str, Any]) -> dict[str, Any]:
     # The pinned tools/chain/bal files use another JSON form than the method's schema.
     # None of these four blocks changes code; the separate code-change case covers that field.
+    assert set(entry) == {
+        "address",
+        "storageChanges",
+        "storageReads",
+        "balanceChanges",
+        "nonceChanges",
+        "codeChanges",
+    }
     assert entry["codeChanges"] is None
     return {
         "address": entry["address"],
@@ -113,14 +121,28 @@ def test_pinned_access_lists(number: int, answers: dict[str, dict[str, Any]]) ->
     decoded = answers[_request(METHODS[0], [hex(number)])]["result"]
     raw = bytes.fromhex(answers[_request(METHODS[1], [hex(number)])]["result"][2:])
     header = answers[_request("eth_getHeaderByNumber", [hex(number)])]["result"]
+    block = answers[_request("eth_getBlockByNumber", [hex(number), False])]["result"]
+    assert set(pinned) == {
+        "number",
+        "hash",
+        "timestamp",
+        "blockAccessListHash",
+        "blockAccessListRootOfList",
+        "transactions",
+        "blockAccessList",
+    }
     assert decoded == [_account(entry) for entry in pinned["blockAccessList"]]
     assert (
         "0x" + keccak256(raw).hex()
         == pinned["blockAccessListHash"]
+        == pinned["blockAccessListRootOfList"]
         == header["blockAccessListHash"]
     )
     assert rpc.encode_block_access_list(decoded) == raw
     assert header["hash"] == pinned["hash"]
+    assert int(header["number"], 16) == pinned["number"] == number
+    assert int(header["timestamp"], 16) == pinned["timestamp"]
+    assert block["transactions"] == pinned["transactions"]
 
 
 @pytest.mark.parametrize("method", METHODS)
@@ -248,11 +270,11 @@ def test_pruning(answers: dict[str, dict[str, Any]]) -> None:
 
 
 def test_empty_encoding() -> None:
-    # The raw getter's example in src/debug/getters.yaml at the pin gives [] as RLP 0xc0.
+    # src/debug/getters.yaml at the pin: a block with no state access returns the RLP list 0xc0.
     assert rpc.encode_block_access_list([]) == b"\xc0"
 
 
-CODE_CHANGE: dict[str, Any] = {
+CODE_CHANGE: dict[str, object] = {
     "address": ADDRESS,
     "storageChanges": [],
     "storageReads": [],

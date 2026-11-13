@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Rpc.Account
 public import EthLib.Execution.Rpc.Raw
 public import EthLib.Execution.Rpc.Base
 
@@ -42,15 +43,14 @@ open EthLib.Serialization.JsonRpc
 open EthLib.Serialization.Rlp (Codec)
 open EthLib.Execution.Blocks
 
-/-- The required fields of an access-list object, with no other field. -/
+/-- The required fields of an access-list object, with no other field.
+
+A `null` field counts as a field, since the schema allows no `null` value. -/
 def blockAccessFields (names : List String) : Json → Read (List (String × Json))
   | .obj kvs =>
     if hasExactly kvs.toList names then .ok kvs.toList
     else reject "block access list: wrong fields"
   | _ => reject "block access list: not an object"
-
-/-- A storage word written as exactly 32 big-endian bytes. -/
-def storageWordJson (word : U256) : Json := dataJson (U256.toBeBytes word).toList
 
 /-- A storage word read from exactly 32 bytes. -/
 def storageWordOfJson (j : Json) : Read U256 :=
@@ -60,7 +60,7 @@ def storageWordOfJson (j : Json) : Read U256 :=
 def storageChangeJson (c : StorageChange) : Json :=
   Json.mkObj [
     ("index", quantityJson c.index.toNat),
-    ("value", storageWordJson c.value)]
+    ("value", wordJson c.value)]
 
 /-- Read a `StorageChange` from the fields of its JSON schema. -/
 def storageChangeOfJson (j : Json) : Read StorageChange := do
@@ -111,7 +111,7 @@ def codeChangeOfJson (j : Json) : Read CodeChange := do
 /-- The JSON object of a `SlotChanges`, with the fields of the access-list schema. -/
 def slotChangesJson (c : SlotChanges) : Json :=
   Json.mkObj [
-    ("key", storageWordJson c.slot),
+    ("key", wordJson c.slot),
     ("changes", listJson storageChangeJson c.changes)]
 
 /-- Read a `SlotChanges` from the fields of its JSON schema. -/
@@ -126,7 +126,7 @@ def accountChangesJson (c : AccountChanges) : Json :=
   Json.mkObj [
     ("address", dataJson c.address.toList),
     ("storageChanges", listJson slotChangesJson c.storageChanges),
-    ("storageReads", listJson storageWordJson c.storageReads),
+    ("storageReads", listJson wordJson c.storageReads),
     ("balanceChanges", listJson balanceChangeJson c.balanceChanges),
     ("nonceChanges", listJson nonceChangeJson c.nonceChanges),
     ("codeChanges", listJson codeChangeJson c.codeChanges)]
