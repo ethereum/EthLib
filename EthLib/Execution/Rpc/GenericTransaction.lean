@@ -35,6 +35,8 @@ An authorization list makes type 4, and blob hashes or a blob fee cap make type 
 
 A fee cap or a priority fee makes type 2, and an access list type 1.
 
+A simulation fixes type 2 by default instead, and reads a blob fee cap alone as no kind.
+
 The schema also names the blobs, their commitments and their proofs, which a call does not read.
 
 A call does not read the nonce of the request either.
