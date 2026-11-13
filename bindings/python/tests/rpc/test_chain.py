@@ -26,6 +26,10 @@ RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_getTransactionByBlockNumberAndIndex": None,
     "eth_getHeaderByHash": None,
     "eth_getHeaderByNumber": None,
+    "eth_getBlockByHash": None,
+    "eth_getBlockByNumber": None,
+    "eth_getBlockTransactionCountByHash": "uint",
+    "eth_getBlockTransactionCountByNumber": "uint",
 }
 
 # Every fixture of a method that the view serves.
@@ -154,6 +158,35 @@ def test_headers() -> None:
         assert header["number"] == hex(number)
         # The object holds the hash and one key for each field of the RLP header, none other.
         assert len(header) == len(rlp.decode(raw)[0]) + 1
+
+
+def test_blocks() -> None:
+    """A block object holds its header and lists its transaction hashes, which give its count."""
+    chain = replay_chain()
+    hashes = ["0x" + block_hash(block).hex() for block in chain.blocks]
+    calls = [
+        call
+        for number, block in enumerate(hashes)
+        for call in [
+            ("eth_getBlockByNumber", [hex(number), False]),
+            ("eth_getBlockByHash", [block, True]),
+            ("eth_getHeaderByHash", [block]),
+            ("eth_getBlockTransactionCountByNumber", [hex(number)]),
+        ]
+    ]
+    requests = [
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+        for method, params in calls
+    ]
+    texts = chain.serve(requests)
+    results = [json.loads(text)["result"] for text in texts if text is not None]
+    assert len(results) == 4 * len(hashes)
+    for number in range(len(hashes)):
+        short, full, header, count = results[4 * number : 4 * number + 4]
+        assert {key: short[key] for key in header} == header
+        assert {key: full[key] for key in header} == header
+        assert [entry["hash"] for entry in full["transactions"]] == short["transactions"]
+        assert count == hex(len(short["transactions"]))
 
 
 def test_pending_header() -> None:
