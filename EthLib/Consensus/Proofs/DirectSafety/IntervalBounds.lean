@@ -164,7 +164,9 @@ def referenceDebit (i : Nat) (event : BalanceEvent preset) : Nat :=
         actualBalanceAt event.before i - actualBalanceAt event.after i
       else 0
 
-/-- Rounding is charged only to a key with initial slack or an actual non-slashing debit.
+/-- A key is charged only when its non-slashing debits exceed its headroom.
+
+The headroom is the actual balance above the effective balance; initial slack adds to the deficit.
 
 An aligned effective balance cannot fall below its starting value without such a deficit. -/
 def lossCorrection (x : ForkedBeaconState preset) (events : List (BalanceEvent preset)) : Nat :=
@@ -172,8 +174,8 @@ def lossCorrection (x : ForkedBeaconState preset) (events : List (BalanceEvent p
     match x.state.validators.data[i.toNat]? with
     | none => 0
     | some v => if v.slashed then 0 else
-      let deficit := effectiveAt x i.toNat - actualBalanceAt x i.toNat +
-        (events.map (referenceDebit i.toNat)).sum
+      let deficit := effectiveAt x i.toNat +
+        (events.map (referenceDebit i.toNat)).sum - actualBalanceAt x i.toNat
       if deficit = 0 then 0 else deficit + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1).sum
 
 private theorem registry_fold_bound {fork : Fork} {α : Type}
@@ -1315,8 +1317,8 @@ private theorem intervalLoss_sum_bound {g x y : ForkedBeaconState preset}
       effectiveWeight x.state v.pubkey -
           Models.supported (recentKeys y.state) (effectiveWeight y.state) v.pubkey ≤
         departure i +
-          (let deficit := effectiveAt x i.toNat - actualBalanceAt x i.toNat +
-            (events.map (referenceDebit i.toNat)).sum
+          (let deficit := effectiveAt x i.toNat +
+            (events.map (referenceDebit i.toNat)).sum - actualBalanceAt x i.toNat
            if deficit = 0 then 0 else deficit + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1)) :
     referenceLoss x y ≤
       ((getActiveValidatorIndices x.state (getCurrentEpoch x.state)).map departure).sum +
@@ -1462,8 +1464,8 @@ private theorem intervalLoss_sum_departures {g x y : ForkedBeaconState preset}
         (match tail.departureCharges.find? (fun c => c.index == i.toNat) with
         | some c => if c.epoch ≤ high + 1 then c.amount else 0
         | none => 0) +
-        (let deficit := effectiveAt x i.toNat - actualBalanceAt x i.toNat +
-          (events.map (referenceDebit i.toNat)).sum
+        (let deficit := effectiveAt x i.toNat +
+          (events.map (referenceDebit i.toNat)).sum - actualBalanceAt x i.toNat
          if deficit = 0 then 0 else deficit + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1)) :
     referenceLoss x y ≤ scheduledExitCarry x high +
       ((tail.departureCharges.filter fun c => c.epoch ≤ high + 1).map (·.amount)).sum +
@@ -1826,7 +1828,7 @@ private theorem intervalLoss_effective_loss {g x y : ForkedBeaconState preset}
     (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH)
     (events : List (BalanceEvent preset))
     (covered : pathDebits i tail.balancePath ≤ (events.map (referenceDebit i)).sum) :
-    let deficit := effectiveAt x i - actualBalanceAt x i + (events.map (referenceDebit i)).sum
+    let deficit := effectiveAt x i + (events.map (referenceDebit i)).sum - actualBalanceAt x i
     effectiveAt x i - effectiveAt y i ≤
       if deficit = 0 then 0 else deficit + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1 := by
   intro deficit
@@ -1860,7 +1862,7 @@ private theorem intervalLoss_effective_loss_prefix {g x a y : ForkedBeaconState 
     (replayed : (pre.append post).balanceEvents high = .ok events)
     (covered : ∀ prior, pre.balanceEvents high = .ok prior →
       pathDebits i pre.balancePath ≤ (prior.map (referenceDebit i)).sum) :
-    let deficit := effectiveAt x i - actualBalanceAt x i + (events.map (referenceDebit i)).sum
+    let deficit := effectiveAt x i + (events.map (referenceDebit i)).sum - actualBalanceAt x i
     effectiveAt x i - effectiveAt a i ≤
       if deficit = 0 then 0 else deficit + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1 := by
   obtain ⟨prior, priorOk, initialEvents⟩ := pre.balanceEvents_prefix post high events replayed
@@ -1888,8 +1890,8 @@ private theorem intervalLoss_retained {g x y : ForkedBeaconState preset}
     (slashings : ∀ event ∈ events, event.source = .slashings →
       actualBalanceAt event.before i.toNat ≤ actualBalanceAt event.after i.toNat)
     (unslashed : ¬ SlashedAt y.state v.pubkey) :
-    let deficit := effectiveAt x i.toNat - actualBalanceAt x i.toNat +
-      (events.map (referenceDebit i.toNat)).sum
+    let deficit := effectiveAt x i.toNat +
+      (events.map (referenceDebit i.toNat)).sum - actualBalanceAt x i.toNat
     effectiveWeight x.state v.pubkey -
         Models.supported (recentKeys y.state) (effectiveWeight y.state) v.pubkey ≤
       if deficit = 0 then 0 else deficit + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1 := by
@@ -1935,8 +1937,8 @@ private theorem intervalLoss_departing {g x y : ForkedBeaconState preset}
       pre.append post = tail → ∀ prior, pre.balanceEvents high = .ok prior →
       ∀ event ∈ prior, event.source = .slashings →
         actualBalanceAt event.before i.toNat ≤ actualBalanceAt event.after i.toNat) :
-    let deficit := effectiveAt x i.toNat - actualBalanceAt x i.toNat +
-      (events.map (referenceDebit i.toNat)).sum
+    let deficit := effectiveAt x i.toNat +
+      (events.map (referenceDebit i.toNat)).sum - actualBalanceAt x i.toNat
     effectiveWeight x.state v.pubkey ≤ charge.amount +
       (if deficit = 0 then 0 else deficit + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) := by
   have ⟨_, _, _, initialized⟩ := genesis
@@ -2001,8 +2003,8 @@ private theorem intervalLoss_pointwise {g x y : ForkedBeaconState preset}
       ∀ event ∈ prior, event.source = .slashings →
         actualBalanceAt event.before i.toNat ≤ actualBalanceAt event.after i.toNat)
     (unslashed : ¬ SlashedAt y.state v.pubkey) :
-    let deficit := effectiveAt x i.toNat - actualBalanceAt x i.toNat +
-      (events.map (referenceDebit i.toNat)).sum
+    let deficit := effectiveAt x i.toNat +
+      (events.map (referenceDebit i.toNat)).sum - actualBalanceAt x i.toNat
     effectiveWeight x.state v.pubkey -
         Models.supported (recentKeys y.state) (effectiveWeight y.state) v.pubkey ≤
       (if v.exitEpoch != FAR_FUTURE_EPOCH && v.exitEpoch.toNat ≤ high + 1 then

@@ -1219,7 +1219,9 @@ private theorem balanceDrift_reference_run {x y : ForkedBeaconState preset}
         (by rwa [life.activationEpoch assigned])
       exact ⟨by rwa [kept], by omega⟩
 
-/-- An effective-balance loss is at most the initial slack, the debits and one increment. -/
+/-- An effective-balance loss is at most the debits less the initial headroom, and one increment.
+
+The headroom is the actual balance above the effective balance. -/
 theorem effective_loss_from_balance {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
@@ -1227,9 +1229,9 @@ theorem effective_loss_from_balance {g x y : ForkedBeaconState preset}
     (i : Nat) (v : Validator) (found : x.state.validators.data[i]? = some v)
     (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH) :
     effectiveAt x i - effectiveAt y i ≤
-      (effectiveAt x i - actualBalanceAt x i) + pathDebits i tail.balancePath +
+      (effectiveAt x i + pathDebits i tail.balancePath - actualBalanceAt x i) +
         (preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) := by
-  let amount := min (effectiveAt x i) (actualBalanceAt x i) - pathDebits i tail.balancePath
+  let amount := min (effectiveAt x i) (actualBalanceAt x i - pathDebits i tail.balancePath)
   let rounded := amount - amount % preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   have effective : effectiveAt x i = v.effectiveBalance.toNat := by simp [effectiveAt, found]
   have amount_le : amount ≤ v.effectiveBalance.toNat := by dsimp [amount]; omega
