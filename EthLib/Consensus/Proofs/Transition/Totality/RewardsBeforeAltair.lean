@@ -121,6 +121,35 @@ theorem rewardsFitBeforeAltair_minimal :
   · simp only [Preset.baseRewardBoundBeforeAltair, root]
     decide
 
+/-- Before Altair, a ceiling on the balances after the rewards of one epoch.
+
+It is the budget plus a bound on all the rewards that one validator can earn in the epoch.
+
+The source, target and head votes each earn at most one product.
+
+That product is the bound on the base reward of the largest cap, times the increments of the budget.
+
+The inclusion rewards earn at most the bound on the base reward of the budget. -/
+def Preset.rewardsCeilingBeforeAltair (preset : Preset) (budget : Nat) : Nat :=
+  budget + 3 * preset.baseRewardBoundBeforeAltair preset.largestEffectiveBalance *
+    preset.budgetIncrements budget + preset.baseRewardBoundBeforeAltair budget
+
+/-- On mainnet, the ceiling after the rewards of a budget of 2^57 Gwei is below 2^63. -/
+theorem rewardsCeilingBeforeAltair_mainnet :
+    Preset.mainnet.rewardsCeilingBeforeAltair (2 ^ 57) < 2 ^ 63 := by
+  have root : (Preset.mainnet.EFFECTIVE_BALANCE_INCREMENT.toNat).sqrt = 31622 :=
+    (Nat.eq_sqrt.mpr ⟨by decide, by decide⟩).symm
+  simp only [Preset.rewardsCeilingBeforeAltair, Preset.baseRewardBoundBeforeAltair, root]
+  decide
+
+/-- On minimal, the ceiling after the rewards of a budget of 2^57 Gwei is below 2^63. -/
+theorem rewardsCeilingBeforeAltair_minimal :
+    Preset.minimal.rewardsCeilingBeforeAltair (2 ^ 57) < 2 ^ 63 := by
+  have root : (Preset.minimal.EFFECTIVE_BALANCE_INCREMENT.toNat).sqrt = 31622 :=
+    (Nat.eq_sqrt.mpr ⟨by decide, by decide⟩).symm
+  simp only [Preset.rewardsCeilingBeforeAltair, Preset.baseRewardBoundBeforeAltair, root]
+  decide
+
 variable {preset : Preset} {fork : Base.Fork} {state : BeaconState preset fork}
 
 /-- Before Altair, each recent pending attestation is as inclusion in a block stored it.
@@ -818,7 +847,9 @@ The divisors of the preset must be positive.
 
 The hypotheses are read on the state that justification and finalization return.
 
-A run must show that they hold there. -/
+A run must show that they hold there.
+
+Each balance after the step is then at most the ceiling on the balances after the rewards. -/
 theorem processRewardsAndPenalties_total_of_lt_altair {config : Config} {budget epochBound : Nat}
     (before : fork < .altair) (positive : preset.DivisorsPositive)
     (roots : preset.RootsReachPreviousEpoch) (fit : RewardsFitBeforeAltair preset budget epochBound)
@@ -832,9 +863,14 @@ theorem processRewardsAndPenalties_total_of_lt_altair {config : Config} {budget 
     (funded : ∀ balance ∈ state.balances.data, balance.toNat ≤ budget)
     (finalized : FinalizedSettled state) (resolved : PendingResolved state)
     (wellFormed : PendingWellFormed state) :
-    ∃ after, processRewardsAndPenalties config state = .ok after := by
+    ∃ after, processRewardsAndPenalties config state = .ok after ∧
+      ∀ balance ∈ after.balances.data,
+        balance.toNat ≤ preset.rewardsCeilingBeforeAltair budget := by
   by_cases genesis : getCurrentEpoch state = GENESIS_EPOCH
-  · exact ⟨state, processRewardsAndPenalties_genesis config genesis⟩
+  · refine ⟨state, processRewardsAndPenalties_genesis config genesis, fun balance member => ?_⟩
+    have := funded balance member
+    unfold Preset.rewardsCeilingBeforeAltair
+    omega
   have budgetLt : budget < 2 ^ 64 := fit.budget_lt
   have rewardsFit := fit.rewards
   have penaltiesFit := fit.penalties
@@ -924,9 +960,31 @@ theorem processRewardsAndPenalties_total_of_lt_altair {config : Config} {budget 
       have := inclusionLe i
       omega
   have notAltair : ¬ .altair ≤ fork := Nat.not_le_of_lt before
-  refine ⟨after, ?_⟩
-  simp only [processRewardsAndPenalties, genesis, notAltair, ↓reduceIte, ↓reduceDIte, deltasOk,
-    bind, Except.bind]
-  exact applied
+  refine ⟨after, ?_, fun balance member => ?_⟩
+  · simp only [processRewardsAndPenalties, genesis, notAltair, ↓reduceIte, ↓reduceDIte, deltasOk,
+      bind, Except.bind]
+    exact applied
+  -- Each balance after the step is at most the old balance plus its reward.
+  obtain ⟨i, inside, rfl⟩ := Array.getElem_of_mem member
+  have each := applyAllDeltas_balances applied i
+  by_cases inRegistry : i < state.validators.data.size
+  · obtain ⟨old, found, fits, raised⟩ := each.1 inRegistry
+    rw [Array.getElem?_eq_getElem inside, Option.some.injEq] at raised
+    rw [raised, toNat_saturatingSub, toNat_add_of_lt fits]
+    have entry := sumDeltas_getD rewardsOk i
+    simp only [show i < sourceRewards.size from sizes.1 ▸ inRegistry, ↓reduceIte] at entry
+    have := funded old (Array.mem_of_getElem? found)
+    have := (sourceLe i inRegistry).1
+    have := (targetLe i inRegistry).1
+    have := (headLe i inRegistry).1
+    have := inclusionLe i
+    unfold Preset.rewardsCeilingBeforeAltair
+    rw [Nat.mul_assoc]
+    omega
+  · -- Past the registry there is no balance, as the registry has one balance for each validator.
+    have past := each.2 (Nat.le_of_not_lt inRegistry)
+    unfold BalancesMatch at matched
+    rw [Array.getElem?_eq_getElem inside, Array.getElem?_eq_none (by omega)] at past
+    exact absurd past (Option.some_ne_none _)
 
 end EthLib.Consensus

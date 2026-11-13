@@ -57,7 +57,7 @@ def isValidProposerPreferencesSignature (config : Config) (checks : SignatureChe
     Except ForkChoiceError Bool := do
   let validator ← (getValidator state signed.message.validatorIndex).mapError .accessor
   let root ← (proposerPreferencesSigningRoot config state signed.message).mapError .ssz
-  return checks.verify (packBytes validator.pubkey) (packBytes root) (packBytes signed.signature)
+  return checks.verify validator.pubkey (packBytes root) signed.signature
 
 /-! ## The lookahead -/
 

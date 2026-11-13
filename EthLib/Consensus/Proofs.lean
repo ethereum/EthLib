@@ -8,6 +8,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Encoding
 public import EthLib.Consensus.Proofs.BuilderApi
 public import EthLib.Consensus.Proofs.BuilderApi.Bid
 public import EthLib.Consensus.Proofs.BuilderApi.Encoding
+public import EthLib.Consensus.Proofs.BuilderApi.GloasBid
 public import EthLib.Consensus.Proofs.BuilderApi.Registration
 public import EthLib.Consensus.Proofs.Builders
 public import EthLib.Consensus.Proofs.Churn
@@ -189,6 +190,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Bound
 public import EthLib.Consensus.Proofs.Transition.Totality.BuilderPayments
 public import EthLib.Consensus.Proofs.Transition.Totality.Consolidations
 public import EthLib.Consensus.Proofs.Transition.Totality.EffectiveBalances
+public import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Genesis
 public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
 public import EthLib.Consensus.Proofs.Transition.Totality.Justification

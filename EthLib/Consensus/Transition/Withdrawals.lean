@@ -518,8 +518,8 @@ def processBlsToExecutionChange (config : Config) (checks : SignatureChecks)
   let domain ← liftSsz (computeDomain config DOMAIN_BLS_TO_EXECUTION_CHANGE
     (genesisValidatorsRoot := state.genesisValidatorsRoot))
   let signingRoot ← liftSsz (computeSigningRoot change domain)
-  ensure (checks.verify (packBytes change.fromBlsPubkey) (packBytes signingRoot)
-    (packBytes signed.signature) = true) .invalidBlsChangeSignature
+  ensure (checks.verify change.fromBlsPubkey (packBytes signingRoot)
+    signed.signature = true) .invalidBlsChangeSignature
   liftAccessor (state.setValidator index
     { validator with withdrawalCredentials := executionCredentials change.toExecutionAddress })
 

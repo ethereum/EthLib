@@ -30,7 +30,7 @@ The step from bytes to group elements does not use that law.
 namespace EthLib.Cryptography.Bls.Security
 
 open OracleComp ENNReal
-open EthLib.Cryptography.Bls EthLib.Cryptography.Bls.Signatures
+open EthLib.Base EthLib.Cryptography.Bls EthLib.Cryptography.Bls.Signatures
 open scoped EthLib.Cryptography.Bls.Fr
 
 /-- The scalars: the integers modulo the group order `r`. -/
@@ -266,14 +266,15 @@ theorem sign_eq (sk : SecretKey) (msg : ByteArray) :
   rfl
 
 /-- EthLib accepts exactly the signatures that decode to `sk • H(msg)`. -/
-theorem verify_iff (sk : SecretKey) (msg sig : ByteArray) :
-    verify (pkBytes sk) msg sig = true ↔
-      ∃ R, G2.uncompress sig = .ok R ∧
+theorem verify_iff (sk : SecretKey) (msg : ByteArray) (sig : BLSSignature) :
+    verify (skToPk sk) msg sig = true ↔
+      ∃ R, G2.uncompress (packBytes sig) = .ok R ∧
         G2.toPoint R = (Scalar.ofFr sk.val • hashPoint msg : G2Sub) := by
   obtain ⟨P, hP, hPrep⟩ := G1.keyValidatePoint_compress_mul sk.property
   obtain ⟨hQ, hv, hs⟩ := hashRep_spec msg
   obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hv).mp hs
-  refine (coreVerify_iff (pk := pkBytes sk) ((pkBytes_eq sk).symm ▸ hP) hPrep hQ hb).trans
+  refine (coreVerify_iff (pk := packBytes (skToPk sk)) ((packBytes_skToPk sk).symm ▸ hP) hPrep hQ
+    hb).trans
     (exists_congr fun R => and_congr_right fun hR => ?_)
   have hpt : G2.toPoint (G2.mul G2.generator (sk.val * b)) =
       (Scalar.ofFr sk.val • hashPoint msg : G2Sub) := by
@@ -286,9 +287,9 @@ theorem verify_iff (sk : SecretKey) (msg sig : ByteArray) :
 /-- EthLib's verification is the test of the scheme on the decoded point.
 
 The key is `sk • g1`, and the hash is `H(msg)`. -/
-theorem verify_iff_isDh (sk : SecretKey) (msg sig : ByteArray) :
-    verify (pkBytes sk) msg sig = true ↔
-      ∃ R, G2.uncompress sig = .ok R ∧ ∃ hR : G2.toPoint R ∈ G2Sub,
+theorem verify_iff_isDh (sk : SecretKey) (msg : ByteArray) (sig : BLSSignature) :
+    verify (skToPk sk) msg sig = true ↔
+      ∃ R, G2.uncompress (packBytes sig) = .ok R ∧ ∃ hR : G2.toPoint R ∈ G2Sub,
         blsScheme.isDh (Scalar.ofFr sk.val • g1) (hashPoint msg) ⟨_, hR⟩ = true := by
   rw [verify_iff]
   refine exists_congr fun R => and_congr_right fun _ => ⟨fun h => ?_, fun ⟨hR, hd⟩ => ?_⟩
@@ -549,10 +550,10 @@ theorem byteVerify_hashPointWith (dst pk msg sig : ByteArray) :
         (G2Sub.represents_rep (hashPointWith dst msg)).1 hv
         (G2Sub.toPoint_rep (hashPointWith dst msg))
 
-/-- Replacing the random oracle with EthLib's hash gives EthLib's byte verification. -/
-theorem byteVerify_hashPoint (pk msg sig : ByteArray) :
-    byteVerify pk sig (hashPoint msg) = verify pk msg sig :=
-  byteVerify_hashPointWith DST pk msg sig
+/-- Replacing the random oracle with EthLib's hash gives EthLib's verification. -/
+theorem byteVerify_hashPoint (pk : BLSPubkey) (msg : ByteArray) (sig : BLSSignature) :
+    byteVerify (packBytes pk) (packBytes sig) (hashPoint msg) = verify pk msg sig :=
+  byteVerify_hashPointWith DST (packBytes pk) msg (packBytes sig)
 
 /-- The byte game for the secret scalar `a`.
 

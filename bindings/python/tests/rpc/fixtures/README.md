@@ -16,7 +16,13 @@ To check the pins, run this from the directory:
 sha256sum -c SHA256SUMS
 ```
 
-The tests run these files through the readers of the parameters, without a chain.
+The files `genesis.json`, `chain.rlp`, `forkenv.json` and `headfcu.json` are the test chain of the source, from `tests/`.
+The chain is a genesis state and 60 blocks, and the forkchoice update names block 60 as head, safe and finalized.
+The tests replay it through the state transition into a chain view, and send the requests of the methods that the view serves.
+They compare a result as a JSON value, and an error by its code, and by its data where the file gives it.
+A file marked `speconly` is checked against the schema of the result only, as `docs-api/docs/tests.md` of the source says.
+
+The files of the other methods run through the readers of the parameters, without a chain.
 
 The files of the `debug_` methods and of `eth_getStorageAt` answer with an error, because a reader rejects a parameter.
 The tests compare only the code of that error, since the source fixes the code of an error and not its message.

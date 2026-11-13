@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.DirectSafety.Evidence
+public import EthLib.Consensus.Proofs.DirectSafety.Fields
 
 /-!
 # Conflicting concrete checkpoint fields expose slashable quorum pairs
@@ -73,7 +74,7 @@ def EitherCall.state {g a b : ForkedBeaconState preset} {left : Run config check
 Each common voter has a vote of the runs for each target, so it voted twice in that epoch. -/
 private theorem view_same_epoch {g a b : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     {va : TerminalView a} {vb : TerminalView b}
     (one : ViewQuorum left va) (two : ViewQuorum right vb)
     (epoch : one.target.epoch = two.target.epoch) (different : one.target ≠ two.target) :
@@ -98,7 +99,7 @@ Each common voter has a vote of the runs for each target, so it voted twice in t
 The runs start at one genesis built from deposits, and the preset meets the parameters. -/
 theorem same_epoch_histories {g a b : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     (one : QuorumCall left) (two : QuorumCall right)
     (epoch : one.target.epoch = two.target.epoch) (different : one.target ≠ two.target) :
     ∀ key ∈ one.voters ∩ two.voters, Slashable left right key :=
@@ -107,7 +108,7 @@ theorem same_epoch_histories {g a b : ForkedBeaconState preset}
 
 private theorem view_surround {g a b : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     {va : TerminalView a} {vb : TerminalView b}
     (outer : ViewQuorum left va) (inner : ViewQuorum right vb)
     (source : outer.source.epoch < inner.source.epoch)
@@ -162,7 +163,7 @@ Otherwise SHA-256 collides in the root of a header of the runs, or a header or s
 The runs start at one genesis built from deposits, and the preset meets the parameters. -/
 theorem view_conflicting_fields_quorums {g a b : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     (va : TerminalView a) (vb : TerminalView b) (j : Checkpoint)
     (field : j = vb.state.previousJustifiedCheckpoint ∨ j = vb.state.currentJustifiedCheckpoint ∨
       j = vb.state.finalizedCheckpoint)
@@ -264,7 +265,7 @@ Otherwise SHA-256 collides in the root of a header of the runs, or a header or s
 The runs start at one genesis built from deposits, and the preset meets the parameters. -/
 theorem conflicting_fields_quorums {g a b : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     (j : Checkpoint)
     (field : j = b.state.previousJustifiedCheckpoint ∨ j = b.state.currentJustifiedCheckpoint ∨
       j = b.state.finalizedCheckpoint)

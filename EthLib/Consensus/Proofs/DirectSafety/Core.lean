@@ -63,7 +63,7 @@ They are active at its current or its previous epoch.
 
 The run starts at a genesis built from deposits, and the preset meets the parameters. -/
 theorem quorum_voters_recent {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     (call : QuorumCall run) :
     call.voters ⊆ recentKeys call.cached :=
   counted_recent (cached_participation run parameters genesis call.toEpochCall).1
@@ -75,7 +75,7 @@ The quorum is a quorum call of the run, or the test of one justification step at
 
 The run starts at a genesis built from deposits, and the preset meets the parameters. -/
 theorem view_voters_recent {g a : ForkedBeaconState preset} (run : Run config checks g a)
-    (parameters : Parameters preset) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
     {view : TerminalView a} (call : ViewQuorum run view) :
     call.voters ⊆ recentKeys call.state.state := by
   cases call with

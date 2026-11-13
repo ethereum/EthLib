@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.DirectSafety.Attestations
-public import EthLib.Consensus.Proofs.DirectSafety.Fields
+public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 
@@ -207,9 +207,10 @@ private theorem processJustificationAndFinalization
 
 private theorem processEpoch (ok : Consensus.processEpoch config checks state = .ok after) :
     SlashedKept state after := by
-  unfold Consensus.processEpoch at ok
-  split at ok
-  · obtain ⟨pending, paid, rooted, pendingOk, paidOk, middle, tail⟩ :=
+  by_cases altair : .altair ≤ fork
+  · unfold Consensus.processEpoch at ok
+    simp only [altair, ↓reduceDIte] at ok
+    obtain ⟨pending, paid, rooted, pendingOk, paidOk, middle, tail⟩ :=
       slashedKeptLaws.processEpochAltair_paymentSplit ok
     obtain ⟨justified, justifiedOk, head⟩ := slashedKeptLaws.epochBeforePayments_split pendingOk
     have paidStep : SlashedKept pending paid := by
@@ -219,20 +220,9 @@ private theorem processEpoch (ok : Consensus.processEpoch config checks state = 
       · cases paidOk; exact refl _
     exact (processJustificationAndFinalization justifiedOk).trans <| head.trans <|
       paidStep.trans <| middle.trans <| (of_validators (state := rooted)).trans tail
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨justified, justifiedOk, rewarded, rewardedOk, registered, registeredOk, slashed,
-      slashedOk, reset, resetOk, balanced, balancedOk, cleared, clearedOk, mixed, mixedOk, rooted,
-      rootedOk, rotated⟩ := ok
-    exact (processJustificationAndFinalization justifiedOk).trans <|
-      (slashedKeptLaws.processRewardsAndPenalties rewardedOk).trans <|
-      (slashedKeptLaws.processRegistryUpdates registeredOk).trans <|
-      (slashedKeptLaws.processSlashings slashedOk).trans <|
-      (slashedKeptLaws.processEth1DataReset resetOk).trans <|
-      (slashedKeptLaws.processEffectiveBalanceUpdates balancedOk).trans <|
-      (slashedKeptLaws.processSlashingsReset clearedOk).trans <|
-      (slashedKeptLaws.processRandaoMixesReset mixedOk).trans <|
-      (slashedKeptLaws.processHistoricalRootsUpdate rootedOk).trans
-        (slashedKeptLaws.processParticipationRecordUpdates rotated)
+  · obtain ⟨justified, justifiedOk, tail⟩ :=
+      slashedKeptLaws.processEpoch_split_of_lt_altair (Nat.lt_of_not_le altair) ok
+    exact (processJustificationAndFinalization justifiedOk).trans tail
 
 
 private theorem advanceSlot (ok : Consensus.advanceSlot config checks state = .ok after) :
@@ -537,7 +527,7 @@ The key is read in the registry before that block.
 
 The run starts at a genesis built from deposits. -/
 theorem _root_.EthLib.Consensus.Run.slashed_evidence {g a : ForkedBeaconState preset}
-    (run : Run config checks g a) (genesis : Genesis (config := config) (checks := checks) g)
+    (run : Run config checks g a) (genesis : Genesis config checks g)
     (v : Validator) (member : v ∈ a.state.validators.data.toList) (slashed : v.slashed = true) :
     run.SlashingEvidence v.pubkey := by
   have backed : SlashedBacked run.SlashingEvidence a.state := by

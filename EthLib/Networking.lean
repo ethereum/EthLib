@@ -30,6 +30,7 @@ public import EthLib.Networking.Libp2p.MplexSession
 public import EthLib.Networking.Libp2p.Multistream
 public import EthLib.Networking.Libp2p.Upgrade
 public import EthLib.Networking.Libp2p.Yamux
+public import EthLib.Networking.Libp2p.YamuxSession
 public import EthLib.Networking.ReqResp.Bounds
 public import EthLib.Networking.ReqResp.Encoding
 public import EthLib.Networking.Rlpx.Ecies

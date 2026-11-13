@@ -180,6 +180,11 @@ def read_forkchoice_response(
     return _native.engine_read_forkchoice_response(response)
 
 
+def read_get_payload_result(method: str, fork: str, result: dict[str, Any]) -> dict[str, Any]:
+    """The result of an `engine_getPayload` method at a fork, read and written back as JSON."""
+    return _native.engine_read_get_payload_result(method, fork, result)
+
+
 def rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     # The writer writes lowercase hex and quantities without leading zeros.
@@ -282,6 +287,7 @@ __all__ = [
     "rewrite_params",
     "read_payload_status",
     "read_forkchoice_response",
+    "read_get_payload_result",
     "WithdrawalEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",

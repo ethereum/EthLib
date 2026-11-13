@@ -1,5 +1,6 @@
-"""yamux frames: a 12-byte header of version 0, type, flags, stream ID and length, then data."""
+"""yamux frames, a 12-byte header then data, and the streams of one side of a session."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 
@@ -56,4 +57,11 @@ def decode(data: bytes) -> tuple[Frame, bytes]:
     return frame, rest
 
 
-__all__ = ["Frame", "Kind", "YamuxError", "decode", "encode"]
+def session(
+    is_client: bool, events: Sequence[tuple[bool, bytes]]
+) -> tuple[list[tuple[int, str, int, int]], bool, list[bytes]]:
+    """One side after its events: each stream's ID, state and windows, Go Away received, replies."""
+    return _native.yamux_session(is_client, list(events))
+
+
+__all__ = ["Frame", "Kind", "YamuxError", "decode", "encode", "session"]

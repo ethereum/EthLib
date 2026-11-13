@@ -138,7 +138,7 @@ private theorem header_deposit {fork : Fork} {before after : BeaconState preset 
   exact (frame_applyDeposit applied).latestBlockHeader
 
 private theorem genesis_header {g : ForkedBeaconState preset}
-    (genesis : Genesis (config := config) (checks := checks) g) :
+    (genesis : Genesis config checks g) :
     g.state.latestBlockHeader.slot = 0 ∧
       g.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 := by
   obtain ⟨hash, time, deposits, initialized⟩ := genesis
@@ -315,7 +315,7 @@ private theorem HeaderState.mono {one two : List (HashObject preset)}
   · exact .inr ⟨zero, slot, fun root hashed => (pending root hashed).mono subset⟩
 
 private theorem run_header_state {g a : ForkedBeaconState preset}
-    (run : Run config checks g a) (genesis : Genesis (config := config) (checks := checks) g)
+    (run : Run config checks g a) (genesis : Genesis config checks g)
     (nonzero : ∀ object ∈ run.hashObjects, object.root ≠ some (Vector.replicate 32 0)) :
     HeaderState run.hashObjects run.headers a := by
   induction run with
@@ -389,7 +389,7 @@ private theorem run_headers_le {g a : ForkedBeaconState preset}
       exact (step_slots step).1
 
 private theorem run_root_chain {g a : ForkedBeaconState preset}
-    (run : Run config checks g a) (genesis : Genesis (config := config) (checks := checks) g)
+    (run : Run config checks g a) (genesis : Genesis config checks g)
     (nonzero : ∀ object ∈ run.hashObjects, object.root ≠ some (Vector.replicate 32 0))
     {slot : Slot} {root : Root} (read : getBlockRootAtSlot a.state slot = .ok root) :
     ∃ header : BeaconBlockHeader, .header header ∈ run.hashObjects ∧
@@ -447,7 +447,7 @@ private theorem run_root_chain {g a : ForkedBeaconState preset}
 /-- Equal checkpoint roots identify equal header prefixes, or the scan finds hash evidence. -/
 private theorem checkpoint_binding {g a b : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
-    (genesis : Genesis (config := config) (checks := checks) g)
+    (genesis : Genesis config checks g)
     (epoch : Epoch) (root : Root)
     (one : getBlockRoot a.state epoch = .ok root)
     (two : getBlockRoot b.state epoch = .ok root) :
@@ -506,7 +506,7 @@ Otherwise SHA-256 collides in the root of a header of the runs, or a header or s
 
 The runs start at one genesis built from deposits. -/
 theorem checkpoint_binding_prefixes {g a b a' b' : ForkedBeaconState preset}
-    (genesis : Genesis (config := config) (checks := checks) g)
+    (genesis : Genesis config checks g)
     (preA : Run config checks g a') (tailA : Run config checks a' a)
     (preB : Run config checks g b') (tailB : Run config checks b' b)
     (epoch : Epoch) (root : Root)
@@ -535,7 +535,7 @@ Otherwise SHA-256 collides in the root of a header of the runs, or a header or s
 The runs start at one genesis built from deposits. -/
 theorem checkpoint_binding_cached {g a b before₁ after₁ before₂ after₂ : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
-    (genesis : Genesis (config := config) (checks := checks) g)
+    (genesis : Genesis config checks g)
     (ok₁ : advanceSlotAcross config checks before₁ = .ok after₁)
     (ok₂ : advanceSlotAcross config checks before₂ = .ok after₂)
     (member₁ : left.Contains (.slot ok₁)) (member₂ : right.Contains (.slot ok₂))

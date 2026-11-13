@@ -348,7 +348,7 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
     {store : Store preset fork} {g : ForkedBeaconState preset}
     (reachable : Store.Reachable config anchorState anchorBlock store)
     (parameters : DirectSafety.Parameters preset)
-    (genesis : Genesis (config := config) (checks := checks) g)
+    (genesis : Genesis config checks g)
     (pre : Run config checks g ⟨fork, anchorState⟩)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (unknownParent : store.blocks[anchorBlock.parentRoot]? = none)

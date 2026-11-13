@@ -1,7 +1,8 @@
-"""The execution JSON-RPC API: the readers of its parameters, and its error codes."""
+"""The execution JSON-RPC API: its parameter readers, error codes, and a chain that serves it."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, TypeAlias, overload
+from typing import Any, Literal, TypeAlias, overload
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -114,11 +115,41 @@ def pruned_history_unavailable() -> ErrorCode:
     return _error_code(_native.rpc_pruned_history_unavailable())
 
 
+# A block of a chain: the name of its fork, then its RLP form.
+ChainBlock: TypeAlias = tuple[str, bytes]
+
+
+def serve(
+    config: dict[str, Any],
+    state: bytes,
+    blocks: Sequence[ChainBlock],
+    forkchoice: tuple[bytes, bytes, bytes],
+    network_id: int,
+    requests: list[str],
+    *,
+    check_seal: bool = True,
+) -> list[str | None]:
+    """
+    Answer the texts of JSON-RPC requests from a chain, with the text of each response.
+
+    A notification, or a batch of notifications, gets None.
+
+    The chain is its configuration, the state of its first block, and its blocks in order.
+    Each later block runs through the state transition, which checks the seal if check_seal is set.
+    The forkchoice is the head, safe and finalized hashes; a zero safe or finalized hash names none.
+    A block that does not decode or fails its transition raises RpcError with its block error code.
+    Any other bad input raises RpcError with code 0, such as a head that is not the last block.
+    """
+    view = (config, state, list(blocks), forkchoice, network_id, check_seal)
+    return _native.rpc_serve(view, requests)
+
+
 __all__ = [
     "BlockParam",
     "BlockSchema",
     "BlockTag",
     "BytesSchema",
+    "ChainBlock",
     "ErrorCode",
     "ErrorGroup",
     "NumberSchema",
@@ -127,4 +158,5 @@ __all__ = [
     "error_groups",
     "pruned_history_unavailable",
     "read_param",
+    "serve",
 ]

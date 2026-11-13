@@ -28,7 +28,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 /-- A genesis state built from deposits.
 
 It need not be valid for launch. -/
-def Genesis (g : ForkedBeaconState preset) : Prop :=
+def Genesis (config : Config) (checks : SignatureChecks) (g : ForkedBeaconState preset) : Prop :=
   ∃ hash time deposits,
     initializeBeaconStateFromEth1 config checks hash time deposits = .ok g.state
 

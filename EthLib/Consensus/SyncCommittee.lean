@@ -43,12 +43,8 @@ def getNextSyncCommitteeIndices (state : BeaconState preset fork) :
 /-- The aggregate of some public keys, as the public key of 48 bytes that it encodes.
 
 Each key must be valid, and there must be at least one. -/
-def aggregatePubkeys (pubkeys : Array BLSPubkey) : Except AccessorError BLSPubkey := do
-  let aggregate ← (Cryptography.Bls.Signatures.ethAggregatePubkeys
-    (pubkeys.map packBytes)).mapError fun _ => .invalidPubkeys
-  -- The aggregate is a compressed point, so it always has 48 bytes.
-  if size : aggregate.data.size = 48 then return ⟨aggregate.data, size⟩
-  else throw .invalidPubkeys
+def aggregatePubkeys (pubkeys : Array BLSPubkey) : Except AccessorError BLSPubkey :=
+  (Cryptography.Bls.Signatures.ethAggregatePubkeys pubkeys).mapError fun _ => .invalidPubkeys
 
 /-- From Altair: the sync committee of the next period, with possible repeats.
 
