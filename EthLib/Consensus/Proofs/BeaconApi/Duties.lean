@@ -435,7 +435,7 @@ theorem dependentRoot_eq {state : BeaconState preset fork} {lag : Nat} {epoch : 
     (started : computeStartSlotAtEpoch preset (epoch - lag.toUInt64) = .ok start)
     (positive : start ≠ 0) :
     dependentRoot state lag epoch genesisRoot =
-      (getBlockRootAtSlot state (start - 1)).mapError fun _ => invalidEpoch epoch := by
+      (getBlockRootAtSlot state (start - 1)).mapError (rootError epoch) := by
   simp [dependentRoot, Nat.not_lt.mpr late, started, positive, Except.mapError, bind,
     Except.bind]
 

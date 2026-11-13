@@ -281,6 +281,11 @@ def ptcDuties (config : Config) (state : BeaconState preset fork) (gloas : .glam
 
 /-! ## Dependent roots -/
 
+/-- The error body of a failed root read: code 400 for a slot out of range, else code 500. -/
+def rootError (epoch : Epoch) : AccessorError → ErrorMessage
+  | .slotOutOfRange .. => invalidEpoch epoch
+  | fault => internalError (reprStr fault)
+
 /-- The root of the block that the duties of an epoch depend on.
 
 It is the root at the last slot before the epoch that lies a lag before the given one.
@@ -289,16 +294,14 @@ On underflow, before the first epoch or slot, it is the root of the genesis bloc
 
 The state must be past that slot and still hold its root, or the error has code 400.
 
-For the epochs that the answers accept, only an epoch too old for the roots of the state fails.
-
-A start slot past 64 bits gives the error with code 500. -/
+A slot past 64 bits gives the error with code 500. -/
 def dependentRoot (state : BeaconState preset fork) (lag : Nat) (epoch : Epoch)
     (genesisRoot : Root) : Except ErrorMessage Root := do
   if epoch.toNat < lag then return genesisRoot
   let start ← (computeStartSlotAtEpoch preset (epoch - lag.toUInt64)).mapError fun fault =>
     internalError (reprStr fault)
   if start = 0 then return genesisRoot
-  (getBlockRootAtSlot state (start - 1)).mapError fun _ => invalidEpoch epoch
+  (getBlockRootAtSlot state (start - 1)).mapError (rootError epoch)
 
 /-! ## Responses -/
 

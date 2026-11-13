@@ -3856,6 +3856,7 @@ It checks the attester duties against the committees answer, and the PTC duties 
 It checks the proposer duties against the lookahead of the state from Fulu, and against the proposer of each slot before Fulu.
 It checks the sync duties against the keys of the committees in the JSON of the state.
 It gives the state a different block root at each place, and checks each dependent root against it.
+It checks code 400 for an empty request, a repeated PTC index, a PTC epoch before the previous one, and an attester epoch too old for the block roots; no theorem states these refusals.
 
 Points that remain open:
 
