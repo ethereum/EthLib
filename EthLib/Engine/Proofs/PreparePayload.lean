@@ -22,6 +22,8 @@ It fails only on a block that reaches the difficulty and whose parent the chain 
 
 A forkchoice update states its head, its time, its mix, its withdrawals and its parent root.
 
+The execution layer receives each withdrawal with its index, validator index, address and amount.
+
 Before the merge, the fork choice accepts a first payload on its head, on conditions.
 
 With a configured terminal block hash, the block must be of the slot of the state.
@@ -284,6 +286,30 @@ theorem prepareExecutionPayload_eq_ok_some {state : BeaconState preset fork}
     obtain ⟨timestamp, timed, mix, mixed, withdrawals, withdrawn, root, rooted, rfl, rfl⟩ := built
     exact ⟨headed, rfl, rfl, mapError_ok_iff.mp timed, mapError_ok_iff.mp mixed, rfl,
       payloadAttributesWithdrawals_spec withdrawn, payloadAttributesParentRoot_spec rooted⟩
+
+/-- From Capella, the execution layer receives exactly the withdrawals that the state expects.
+
+Each entry has the index, the validator index, the address and the amount of the expected one.
+
+The entries keep the order of the expected withdrawals, and there are as many of them. -/
+theorem getElem?_withdrawals_of_prepareExecutionPayload {state : BeaconState preset fork}
+    {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam} {safe finalized : Hash32}
+    {feeRecipient : ExecutionAddress} {powChain : List PowBlock} {update : ForkchoiceState}
+    {attributes : PayloadAttributes fork}
+    (prepared :
+      prepareExecutionPayload config state bellatrix safe finalized feeRecipient powChain =
+        .ok (some (update, attributes)))
+    (capella : .shapella ≤ fork) :
+    ∃ expected, getExpectedWithdrawals state capella = .ok expected ∧
+      ∀ k : Nat, (attributes.withdrawals capella)[k]? =
+        expected.withdrawals[k]?.map fun w : Consensus.Withdrawal =>
+          ({ index := w.index, validatorIndex := w.validatorIndex, address := w.address,
+             amount := w.amount } : Execution.Blocks.Withdrawal) := by
+  obtain ⟨-, -, -, -, -, -, withdrawn, -⟩ := prepareExecutionPayload_eq_ok_some prepared
+  obtain ⟨expected, found, same⟩ := withdrawn capella
+  refine ⟨expected, found, fun k => ?_⟩
+  rw [same, List.getElem?_map, Array.getElem?_toList]
+  rfl
 
 /-- The proposer asks for no update exactly when its rules give no head. -/
 theorem prepareExecutionPayload_eq_ok_none_iff {state : BeaconState preset fork}
@@ -694,6 +720,31 @@ theorem prepareExecutionPayloadGloas_eq_ok {safe finalized : Hash32}
   obtain ⟨found, foundOk, built⟩ := bind_ok_iff.mp listed
   obtain rfl := Except.ok.inj built
   exact mapError_ok_iff.mp foundOk
+
+/-- From Gloas, the execution layer receives exactly the withdrawals of the parent.
+
+Each entry has the index, the validator index, the address and the amount of that withdrawal.
+
+The entries keep the order of the withdrawals of the parent, and there are as many of them. -/
+theorem getElem?_withdrawals_of_prepareExecutionPayloadGloas {safe finalized : Hash32}
+    {feeRecipient : ExecutionAddress} {targetGasLimit : UInt64} {update : ForkchoiceState}
+    {attributes : PayloadAttributes fork}
+    {transactions : Since .hegota fork (List InclusionListTransaction)}
+    (prepared : prepareExecutionPayloadGloas config checks store head state gloas safe finalized
+      feeRecipient targetGasLimit = .ok (update, attributes, transactions))
+    (capella : .shapella ≤ fork) :
+    ∃ base withdrawals,
+      payloadParentGloas config checks store head state gloas =
+        .ok (base, withdrawals, update.headBlockHash) ∧
+      ∀ k : Nat, (attributes.withdrawals capella)[k]? =
+        withdrawals[k]?.map fun w : Consensus.Withdrawal =>
+          ({ index := w.index, validatorIndex := w.validatorIndex, address := w.address,
+             amount := w.amount } : Execution.Blocks.Withdrawal) := by
+  obtain ⟨base, withdrawals, parented, -, -, -, -, -, carried, -⟩ :=
+    prepareExecutionPayloadGloas_eq_ok prepared
+  refine ⟨base, withdrawals, parented, fun k => ?_⟩
+  rw [carried capella, List.getElem?_map, Array.getElem?_toList]
+  rfl
 
 /-- A block on the update of its proposer leaves the parent step with the state of the attributes.
 

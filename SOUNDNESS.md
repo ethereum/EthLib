@@ -2235,6 +2235,9 @@ When two blocks share a hash it finds the first, and when two blocks are termina
 `getPowBlockAtTerminalTotalDifficulty_go_eq_ok_some` shows that a block it returns reaches the terminal total difficulty, and that its parent is the zero hash or a block of the chain below that difficulty.
 `getPowBlockAtTerminalTotalDifficulty_go_eq_ok_none_iff` states exactly when it returns none, and `getPowBlockAtTerminalTotalDifficulty_go_eq_error` that it fails only on a block that reaches the difficulty with a parent the chain does not hold.
 `prepareExecutionPayload_eq_ok_some` states each field of the update, and `prepareExecutionPayload_eq_ok_none_iff` when the proposer asks for nothing.
+`getElem?_withdrawals_of_prepareExecutionPayload` states the withdrawals that the execution layer receives, entry by entry.
+Each has the index, the validator index, the address and the amount of the expected one at its position.
+There are as many entries as expected withdrawals.
 `payloadHeadBlockHash_of_merged`, `payloadHeadBlockHash_of_inactive` and `payloadHeadBlockHash_of_premerge` state the head before and after the merge.
 
 The theorems that link the update to the checks of a block are the reason for the module.
@@ -2259,6 +2262,7 @@ It then applies the payload that the store holds for the head to a copy of the s
 Otherwise it keeps the state and the withdrawals that the state records.
 From Heze it also reads the transactions of the inclusion lists of the slot before, which the payload attributes of the Engine API here do not carry.
 `prepareExecutionPayloadGloas_eq_ok` states each field of the update.
+`getElem?_withdrawals_of_prepareExecutionPayloadGloas` states the same of the withdrawals of the parent.
 `payloadParentGloas_eq_ok` states the two cases of the parent.
 
 The theorems that link the update to a block assume that the bid of the block builds on the head of the update.
