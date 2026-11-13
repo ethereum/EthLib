@@ -75,6 +75,18 @@ structure BlockEnvironment (fork : Fork) where
 
   A chain can set its own, and by default it is the schedule of the fork. -/
   blobSchedule : Since .dencun fork BlobSchedule := Fees.BlobBaseFee.blobSchedule fork
+  /-- The base fee per blob gas that a simulation sets, if any.
+
+  By default the excess blob gas gives it. -/
+  blobGasPrice : Option Nat := none
+
+/-- The base fee per blob gas of the block, from Dencun.
+
+It is the one that a simulation sets, else the one that the excess blob gas gives. -/
+def BlockEnvironment.blobBaseFee {fork : Fork} (env : BlockEnvironment fork)
+    (h : .dencun ≤ fork) : Nat :=
+  env.blobGasPrice.getD
+    (Fees.BlobBaseFee.getBaseFeePerBlobGas (env.blobSchedule h) (env.excessBlobGas h).toNat)
 
 /-- The transaction that runs the code, at fork `fork`. -/
 structure TransactionEnvironment (fork : Fork) where

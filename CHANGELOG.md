@@ -9,6 +9,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the block environment gains the field `blobGasPrice` ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
+  A simulation sets the base fee per blob gas with it, and its default `none` keeps the price of the excess blob gas.
+  Supply that field in positional constructors, or use structure notation with its default.
+  The checks and the run of a transaction, and the simulation overrides of a body, take optional lifted rules.
+  A simulation can skip the nonce check and lift the gas caps of EIP-8037 with them.
+  The sender check gains a flag for the nonce check.
+  Nothing breaks in Python.
+
 - In Lean, the transaction environment gains the field `precompiles` ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
   It gives the address of the precompile that a call to each address runs.
   Its default `some` keeps each precompile at its own address, so a real block is unchanged.
