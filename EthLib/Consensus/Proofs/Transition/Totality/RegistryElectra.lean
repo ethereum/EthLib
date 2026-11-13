@@ -6,21 +6,23 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Registry
 /-!
 # Proofs: registry updates from Electra succeed
 
-From Electra one pass over the registry queues, ejects and activates validators.
+From Electra, one pass over the registry marks validators eligible, ejects some and activates others.
 
 An ejection starts an exit, which takes its place in a queue of balance.
 
 The queue spends a churn of balance each epoch, which is at least one increment.
 
-So an exit moves the end of the queue by at most its effective balance in increments, plus one.
+The queue opens no earlier than the first epoch an exit may take, which a ceiling bounds.
 
-Only a validator that has not started to exit can start, so the moves add up to a fixed cost.
+So an exit raises that ceiling by at most its effective balance in increments, plus one.
 
-A ceiling on the end of the queue and on the exit epochs, plus that cost, then bounds them after.
+Only a validator that has not started to exit can start, and its cost then leaves the total.
 
-The churn left over is below one churn of an epoch, which a share of the effective balances bounds.
+So the end of the queue plus the cost still owed does not grow, and the same holds for each exit.
 
-Room for these bounds excludes every checked overflow.
+The churn left over stays at most the larger of its value at the start and a bound on one churn.
+
+Room for these bounds, with a positive churn, excludes every checked error.
 
 The step keeps the slot, the balances and every effective balance.
 -/
@@ -33,14 +35,16 @@ open Base Uint64
 
 variable {preset : Preset} {fork : Base.Fork}
 
-/-- The most epochs by which the exits not yet started can move the end of the exit queue.
+/-- A bound on the epochs by which the exits not yet started can move the end of the exit queue.
 
 Each validator without an exit epoch counts its effective balance in increments, plus one. -/
 def exitCost (preset : Preset) (state : BeaconState preset fork) : Nat :=
   ((state.validators.data.toList.filter (·.exitEpoch = FAR_FUTURE_EPOCH)).map fun validator =>
     validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1).sum
 
-/-- A bound on the churn of exits of an epoch: the least churn plus the effective balances. -/
+/-- A bound on the churn of exits of an epoch.
+
+It is the least churn, plus the sum of the effective balances, plus one increment. -/
 def exitChurnCeiling (config : Config) (state : BeaconState preset fork) : Nat :=
   config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat + effectiveBalanceSum state +
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -583,7 +587,7 @@ private theorem foldlM_updateRegistryEntryElectra_kept {config : Config}
 
 The registry must be within its limit, and the sum of its effective balances below `2^64`.
 
-The increment must be positive, and the least churn and the largest shared churn at least one.
+The increment must be positive, and the least churn and the largest shared churn at least one increment.
 
 A ceiling bounds the first epoch an exit may take, the end of the exit queue, and each exit epoch.
 
@@ -591,9 +595,11 @@ The ceiling plus the cost of the exits not yet started, plus the withdrawability
 
 The churn left over plus three churn bounds must fit too.
 
-The end of the queue and each exit epoch after it are then at most the ceiling plus that cost.
+After the step, the end of the queue plus the cost still owed is at most the ceiling plus the cost.
 
-The churn left over after it is at most the larger of the one before and one churn bound.
+The same holds for each exit epoch.
+
+After the step, the churn left over is at most the larger of the one before and one churn bound.
 
 The step keeps the slot, the balances and every effective balance. -/
 theorem processRegistryUpdates_total_of_electra {config : Config}
@@ -613,9 +619,10 @@ theorem processRegistryUpdates_total_of_electra {config : Config}
     (carried : (state.exitBalanceToConsume electra).toNat + 3 * exitChurnCeiling config state <
       2 ^ 64) :
     ∃ after, processRegistryUpdates config state = .ok after ∧
-      (after.earliestExitEpoch electra).toNat ≤ ceiling + exitCost preset state ∧
+      (after.earliestExitEpoch electra).toNat + exitCost preset after ≤
+        ceiling + exitCost preset state ∧
       (∀ validator ∈ after.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
-        validator.exitEpoch.toNat ≤ ceiling + exitCost preset state) ∧
+        validator.exitEpoch.toNat + exitCost preset after ≤ ceiling + exitCost preset state) ∧
       (after.exitBalanceToConsume electra).toNat ≤
         max (state.exitBalanceToConsume electra).toNat (exitChurnCeiling config state) ∧
       after.slot = state.slot ∧ after.balances = state.balances ∧
