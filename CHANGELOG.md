@@ -9,6 +9,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `slashedFlagAt state position` names the slashed flag at a position of the registry, `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+  The results that state slashed flags at positions now read it: `slashedFlag_eq_of_slashed`, `slashed_setValidatorAt`, `slashedFlag_initiateValidatorExit`, `slashValidator_slashedFlag`, `slashIfSlashable_ok`, `foldlM_slashIfSlashable`, `UpgradeFrame.slashed`, `UpgradeFrame.trans_blockFrame` and `ElectraKept`.
+  Each statement is definitionally the same, but a `rw` with one of them now matches `slashedFlagAt`, so unfold `slashedFlagAt` first where a proof rewrote the spelled-out form.
+  `slashedFlagAt_processProposerSlashing` and `slashedFlagAt_processAttesterSlashing` state that a slashing changes flags only at the positions that it names.
+  `slashedFlagAt_foldlM` states the same for a fold of such steps.
+
 - In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
   `slashedFlag_initiateValidatorExit` takes a `position : Nat` in place of an index.
