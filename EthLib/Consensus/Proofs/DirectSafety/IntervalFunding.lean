@@ -886,6 +886,45 @@ theorem _root_.EthLib.Consensus.Run.balanceEvents_prefix {x m y : ForkedBeaconSt
     · cases remaining
       exact initial
 
+/-- A property of a replay that each recorded reward and each recorded penalty keep.
+
+It then holds through the whole replay of the rewards, at every fork. -/
+theorem replayRewards_induction {fork : Fork} (P : BalanceReplay preset fork → Prop)
+    (rewarded : ∀ {pre post : BalanceReplay preset fork} {index : ValidatorIndex}
+      {reward : Gwei}, P pre →
+      recordBalance .rewards (fun _ => pure (reward.toNat, 0))
+        (fun s => liftAccessor (increaseBalance s index reward)) pre = .ok post → P post)
+    (penalized : ∀ {source : BalanceSource} {pre post : BalanceReplay preset fork}
+      {index : ValidatorIndex} {penalty : Gwei}, (source = .penalties ∨ source = .inactivity) →
+      P pre → recordBalance source (fun _ => pure (0, penalty.toNat))
+        (fun s => liftAccessor (decreaseBalance s index penalty)) pre = .ok post → P post)
+    {pre post : BalanceReplay preset fork} (initial : P pre)
+    (ok : replayRewards (config := config) pre = .ok post) : P post := by
+  -- One pass of deltas records a reward and then a penalty for each validator.
+  have deltas {source : BalanceSource} (penalty : source = .penalties ∨ source = .inactivity)
+      (amounts : Array Gwei × Array Gwei) {pre post : BalanceReplay preset fork}
+      (initial : P pre) (ok : replayDeltas source amounts pre = .ok post) : P post := by
+    refine foldlM_ok_invariant P (fun _ _ _ prior ok => ?_) initial ok
+    simp only [bind_ok_iff] at ok
+    obtain ⟨_, _, _, rewardOk, penaltyOk⟩ := ok
+    exact penalized penalty (rewarded prior rewardOk) penaltyOk
+  have passes {amounts : List (Array Gwei × Array Gwei)} {f : _ → Array Gwei × Array Gwei}
+      {pre post : BalanceReplay preset fork} (initial : P pre)
+      (ok : amounts.foldlM (fun pre p => replayDeltas .penalties (f p) pre) pre = .ok post) :
+      P post :=
+    foldlM_ok_invariant P (fun _ _ _ prior ok => deltas (.inl rfl) _ prior ok) initial ok
+  unfold replayRewards at ok
+  split at ok
+  · cases ok; exact initial
+  · simp only [bind_ok_iff] at ok
+    obtain ⟨ordinary, _, inactivity, _, ok⟩ := ok
+    split at ok
+    · obtain ⟨middle, folded, last⟩ := bind_ok_iff.mp ok
+      exact deltas (.inr rfl) _ (passes (f := id) initial folded) last
+    · simp only [bind_ok_iff] at ok
+      obtain ⟨rewards, _, rewarded, rewardOk, middle, folded, last⟩ := ok
+      exact deltas (.inr rfl) _ (passes (deltas (.inl rfl) _ initial rewardOk) folded) last
+
 def EventsBounded (events : List (BalanceEvent preset)) : Prop :=
   ∀ event ∈ events, event.credits ≤ event.creditLimit ∧ event.debits ≤ event.debitLimit
 
@@ -912,83 +951,19 @@ private theorem recordBalance_bounded {fork : Fork} (source : BalanceSource)
   subst event
   exact bound pre.1 after credit debit limitOk actionOk
 
-private theorem increase_bounds {fork : Fork} {s t : BeaconState preset fork}
-    {i : ValidatorIndex} {amount : Gwei} (ok : increaseBalance s i amount = .ok t) :
-    balanceCredits s t ≤ amount.toNat ∧ balanceDebits s t ≤ 0 := by
-  obtain ⟨inside, fits, rfl⟩ := increaseBalance_eq_ok_iff.mp ok
-  have point (j : Nat) :
-      actualBalanceAt ⟨fork, s.putBalance i.toNat inside (s.balances.data[i.toNat] + amount)⟩ j =
-        actualBalanceAt ⟨fork, s⟩ j + if j = i.toNat then amount.toNat else 0 := by
-    by_cases same : j = i.toNat
-    · subst j
-      simp [actualBalanceAt, BeaconState.putBalance, inside, Uint64.toNat_add_of_lt fits]
-    · simp [actualBalanceAt, BeaconState.putBalance, same, Ne.symm same]
-  have size := (sameSizes_increaseBalance ok).2
-  simp [balanceCredits, balanceDebits, size, point, Finset.sum_ite_eq', inside]
-
-private theorem decrease_bounds {fork : Fork} {s t : BeaconState preset fork}
-    {i : ValidatorIndex} {amount : Gwei} (ok : decreaseBalance s i amount = .ok t) :
-    balanceCredits s t ≤ 0 ∧ balanceDebits s t ≤ amount.toNat := by
-  obtain ⟨inside, rfl⟩ := decreaseBalance_eq_ok_iff.mp ok
-  have point (j : Nat) :
-      actualBalanceAt ⟨fork, s.putBalance i.toNat inside
-        (Uint64.saturatingSub s.balances.data[i.toNat] amount)⟩ j =
-        actualBalanceAt ⟨fork, s⟩ j - if j = i.toNat then amount.toNat else 0 := by
-    by_cases same : j = i.toNat
-    · subst j
-      simp [actualBalanceAt, BeaconState.putBalance, inside, Uint64.toNat_saturatingSub]
-    · simp [actualBalanceAt, BeaconState.putBalance, same, Ne.symm same]
-  constructor
-  · simp [balanceCredits, point]
-  · unfold balanceDebits
-    simp only [point]
-    calc
-      _ ≤ ∑ j ∈ Finset.range s.balances.data.size,
-          if j = i.toNat then amount.toNat else 0 := by
-        apply Finset.sum_le_sum
-        intro j _
-        omega
-      _ = amount.toNat := by simp [Finset.sum_ite_eq', inside]
-
-private theorem replayDeltas_bounded {fork : Fork} (source : BalanceSource)
-    (deltas : Array Gwei × Array Gwei) {pre post : BalanceReplay preset fork}
-    (initial : EventsBounded pre.2) (ok : replayDeltas source deltas pre = .ok post) :
-    EventsBounded post.2 := by
-  apply foldlM_ok_invariant (fun pre => EventsBounded pre.2) _ initial ok
-  intro pre i post initial ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨index, _, rewarded, rewardedOk, penalizedOk⟩ := ok
-  have rewardedBound := recordBalance_bounded .rewards _ _
-    (fun s t credit debit limits action => by
-      cases limits
-      exact increase_bounds (liftAccessor_ok.mp action)) initial rewardedOk
-  exact recordBalance_bounded source _ _
-    (fun s t credit debit limits action => by
-      cases limits
-      exact decrease_bounds (liftAccessor_ok.mp action)) rewardedBound penalizedOk
-
 /-- The rewards replay records only bounded events. -/
 theorem replayRewards_bounded {fork : Fork} {pre post : BalanceReplay preset fork}
     (initial : EventsBounded pre.2)
-    (ok : replayRewards (config := config) pre = .ok post) : EventsBounded post.2 := by
-  simp only [replayRewards] at ok
-  split at ok
-  · cases ok
-    exact initial
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨ordinary, _, inactivity, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨middle, folded, last⟩ := ok
-      exact replayDeltas_bounded _ _
-        (foldlM_ok_invariant (fun pre => EventsBounded pre.2)
-          (fun _ _ _ h ok => replayDeltas_bounded _ _ h ok) initial folded) last
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨rewards, _, rewarded, rewardOk, middle, folded, last⟩ := ok
-      exact replayDeltas_bounded _ _
-        (foldlM_ok_invariant (fun pre => EventsBounded pre.2)
-          (fun _ _ _ h ok => replayDeltas_bounded _ _ h ok)
-          (replayDeltas_bounded _ _ initial rewardOk) folded) last
+    (ok : replayRewards (config := config) pre = .ok post) : EventsBounded post.2 :=
+  replayRewards_induction (fun pre => EventsBounded pre.2)
+    (fun prior ok => recordBalance_bounded .rewards _ _ (fun _ _ _ _ limits action => by
+      cases limits
+      have bounds := credits_increase (liftAccessor_ok.mp action)
+      exact ⟨bounds.1.le, bounds.2.le⟩) prior ok)
+    (fun _ prior ok => recordBalance_bounded _ _ _ (fun _ _ _ _ limits action => by
+      cases limits
+      have bounds := debits_decrease (liftAccessor_ok.mp action)
+      exact ⟨bounds.1.le, bounds.2⟩) prior ok) initial ok
 
 private theorem deposit_bounds {fork : Fork} {s t : BeaconState preset fork}
     (matched : BalancesMatch s) (before : fork < .hegota) (deposit : Deposit)
@@ -1542,34 +1517,12 @@ private theorem coverage_record {fork : Fork} {start : BeaconState preset fork}
   obtain ⟨⟨credit, debit⟩, _, after, _, rfl⟩ := ok
   exact coverage_trans initial (by intro debit i; simp)
 
-private theorem coverage_deltas {fork : Fork} {start : BeaconState preset fork}
-    (source : BalanceSource) (deltas : Array Gwei × Array Gwei)
-    {pre post : BalanceReplay preset fork} (initial : ReplayCoverage start pre)
-    (ok : replayDeltas source deltas pre = .ok post) : ReplayCoverage start post := by
-  apply foldlM_ok_invariant (ReplayCoverage start) _ initial ok
-  intro pre i post initial ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, rewarded, rewardOk, penaltyOk⟩ := ok
-  exact coverage_record (coverage_record initial rewardOk) penaltyOk
-
 /-- The rewards replay extends the coverage. -/
 theorem coverage_rewards {fork : Fork} {start : BeaconState preset fork}
     {pre post : BalanceReplay preset fork} (initial : ReplayCoverage start pre)
-    (ok : replayRewards (config := config) pre = .ok post) : ReplayCoverage start post := by
-  unfold replayRewards at ok
-  split at ok
-  · cases ok; exact initial
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨ordinary, _, inactivity, _, ok⟩ := ok
-    split at ok
-    · obtain ⟨middle, folded, last⟩ := bind_ok_iff.mp ok
-      exact coverage_deltas _ _ (foldlM_ok_invariant (ReplayCoverage start)
-        (fun _ _ _ h ok => coverage_deltas _ _ h ok) initial folded) last
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨rewards, _, rewarded, rewardOk, middle, folded, last⟩ := ok
-      exact coverage_deltas _ _ (foldlM_ok_invariant (ReplayCoverage start)
-        (fun _ _ _ h ok => coverage_deltas _ _ h ok)
-        (coverage_deltas _ _ initial rewardOk) folded) last
+    (ok : replayRewards (config := config) pre = .ok post) : ReplayCoverage start post :=
+  replayRewards_induction (ReplayCoverage start) (fun prior ok => coverage_record prior ok)
+    (fun _ prior ok => coverage_record prior ok) initial ok
 
 /-- A voluntary exit keeps the balances. -/
 theorem coverage_voluntary {fork : Fork} {s t : BeaconState preset fork}

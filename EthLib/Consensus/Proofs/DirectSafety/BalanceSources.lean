@@ -37,7 +37,8 @@ def balanceDebits {fork : Fork} (s t : BeaconState preset fork) : Nat :=
   ∑ i ∈ Finset.range s.balances.data.size,
     (actualBalanceAt ⟨fork, s⟩ i - actualBalanceAt ⟨fork, t⟩ i)
 
-private theorem credits_increase {fork : Fork} {s t : BeaconState preset fork}
+/-- Raising one balance credits exactly the amount and debits nothing. -/
+theorem credits_increase {fork : Fork} {s t : BeaconState preset fork}
     {i : ValidatorIndex} {amount : Gwei}
     (ok : increaseBalance s i amount = .ok t) :
     balanceCredits s t = amount.toNat ∧ balanceDebits s t = 0 := by
@@ -54,7 +55,8 @@ private theorem credits_increase {fork : Fork} {s t : BeaconState preset fork}
         s.balances.data.size := by simp [BeaconState.putBalance]
   simp [balanceCredits, balanceDebits, size, point, Finset.sum_ite_eq', inside]
 
-private theorem debits_decrease {fork : Fork} {s t : BeaconState preset fork}
+/-- Lowering one balance credits nothing and debits at most the amount. -/
+theorem debits_decrease {fork : Fork} {s t : BeaconState preset fork}
     {i : ValidatorIndex} {amount : Gwei}
     (ok : decreaseBalance s i amount = .ok t) :
     balanceCredits s t = 0 ∧ balanceDebits s t ≤ amount.toNat := by

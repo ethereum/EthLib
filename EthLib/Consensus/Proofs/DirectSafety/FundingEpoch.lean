@@ -70,36 +70,13 @@ private theorem funding_ordinary_record {fork : Fork} {pre post : BalanceReplay 
   · obtain rfl := List.mem_singleton.mp new
     exact ordinary
 
-private theorem funding_ordinary_deltas {fork : Fork} (source : BalanceSource)
-    (ordinary : source ≠ .deposits ∧ source ≠ .consolidations) (deltas : Array Gwei × Array Gwei)
-    {pre post : BalanceReplay preset fork} (initial : FundingOrdinary pre.2)
-    (ok : replayDeltas source deltas pre = .ok post) : FundingOrdinary post.2 := by
-  apply foldlM_ok_invariant (fun p => FundingOrdinary p.2) _ initial ok
-  intro pre i post initial ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, rewarded, rewardOk, penaltyOk⟩ := ok
-  exact funding_ordinary_record
-    (funding_ordinary_record initial (by decide) rewardOk) ordinary penaltyOk
-
 private theorem funding_ordinary_rewards {fork : Fork} {pre post : BalanceReplay preset fork}
     (initial : FundingOrdinary pre.2)
-    (ok : replayRewards (config := config) pre = .ok post) : FundingOrdinary post.2 := by
-  unfold replayRewards at ok
-  split at ok
-  · cases ok; exact initial
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨ordinary, _, inactivity, _, ok⟩ := ok
-    split at ok
-    · obtain ⟨middle, folded, last⟩ := bind_ok_iff.mp ok
-      exact funding_ordinary_deltas _ (by decide) _
-        (foldlM_ok_invariant (fun p => FundingOrdinary p.2)
-          (fun _ _ _ h ok => funding_ordinary_deltas _ (by decide) _ h ok) initial folded) last
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨rewards, _, rewarded, rewardOk, middle, folded, last⟩ := ok
-      exact funding_ordinary_deltas _ (by decide) _
-        (foldlM_ok_invariant (fun p => FundingOrdinary p.2)
-          (fun _ _ _ h ok => funding_ordinary_deltas _ (by decide) _ h ok)
-          (funding_ordinary_deltas _ (by decide) _ initial rewardOk) folded) last
+    (ok : replayRewards (config := config) pre = .ok post) : FundingOrdinary post.2 :=
+  replayRewards_induction (fun pre => FundingOrdinary pre.2)
+    (fun prior ok => funding_ordinary_record prior (by decide) ok)
+    (fun penalty prior ok => funding_ordinary_record prior
+      (by rcases penalty with rfl | rfl <;> decide) ok) initial ok
 
 private theorem funding_rewards {fork : Fork} {s t : BeaconState preset fork}
     (ok : processRewardsAndPenalties config s = .ok t)
