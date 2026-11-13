@@ -1365,6 +1365,14 @@ def uvarint_decode(data: bytes) -> tuple[int, bytes]:
     """The value of the unsigned varint at the start of the bytes, and the bytes after it."""
     ...
 
+def quic_varint_encode(value: int) -> bytes:
+    """Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."""
+    ...
+
+def quic_varint_decode(data: bytes) -> tuple[int, bytes]:
+    """Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."""
+    ...
+
 def multistream_encode(message: bytes) -> bytes:
     """The bytes of one multistream-select message: its length, its bytes, then a newline."""
     ...
