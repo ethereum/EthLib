@@ -2909,6 +2909,24 @@
    "docstring":
    "The SSZ body of the response to a query on a state, as `bytes`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and the query.\n\nOnly the queues, the lookahead and the builder fields have one.\n\nA query on a state before the fork that adds its field has code 400."},
   {"summary":
+   "The status of a validator with a balance at an epoch, and the name of its group.",
+   "signature":
+   "(validator: dict[str, Any], balance: int, epoch: int) -> tuple[str, str]",
+   "operation": "EthLib.Consensus.Exports.apiValidatorStatusExport",
+   "method": "consensus_api_validator_status",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The status of a validator with a balance at an epoch, and the name of its group.\n\nThe arguments are the validator as the JSON of the API, its balance and the epoch."},
+  {"summary": "The status of the builder at an index of a state, as its name.",
+   "signature": "(name: str, fork: str, state: bytes, index: int) -> str",
+   "operation": "EthLib.Consensus.Exports.apiBuilderStatusExport",
+   "method": "consensus_api_builder_status",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The status of the builder at an index of a state, as its name.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and the index."},
+  {"summary":
    "The answer to each query, against the store after the steps of a fork choice case.",
    "signature":
    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, queries: list) -> list",
