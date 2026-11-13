@@ -48,6 +48,8 @@ A payload that passes them still needs its parent's state, so without it the sta
 
 With that state, the block of the payload runs, and its status is valid or invalid.
 
+The consensus layer writes the parameters of each version as JSON, in the order it takes them.
+
 The method specifications state these rules, at commit `3284ee8` of execution-apis:
 
 - [`engine_newPayloadV1`][v1], which also defines the statuses
@@ -74,6 +76,8 @@ open EthLib.Base
 open EthLib.Execution.Blocks
 open EthLib.Execution.Transactions
 open EthLib.Engine.Json
+open EthLib.Serialization.JsonRpc
+open EthLib.Execution.Rpc (withdrawal)
 
 /-- Whether a version of the method takes payloads of a fork. -/
 def acceptsFork (version : Nat) (fork : Fork) : Bool :=
@@ -110,6 +114,58 @@ def payloadParam (version : Nat) (j : Json) :
       invalid s!"payload: version {any.version} of the structure"
     return (any, none)
 
+/-- The parameters of a version of the method, each decoded.
+
+They are an array of as many values as the version takes, none of them `null`.
+
+The payload comes first, with its access list and its slot from version 5.
+
+From version 3 the expected blob versioned hashes and the parent beacon block root follow.
+
+From version 4 the execution requests follow. -/
+def newPayloadParams (version : Nat) (params : Json) :
+    Decode (AnyPayload × Option (ByteArray × UInt64) × Option (List Hash32) × Option Hash32 ×
+      Option (List ByteArray)) := do
+  -- The parameters must have the structure of the version.
+  let params ← match params with
+    | .arr items => pure items.toList
+    | _ => invalid "params: not an array"
+  unless params.length == paramCount version ∧ params.all (!·.isNull) do
+    invalid s!"params: not {paramCount version} values"
+  let param (i : Nat) : Except EngineError Json :=
+    match params[i]? with
+    | some j => pure j
+    | none => invalid s!"params: no value {i}"
+  let (any, amsterdam) ← payloadParam version (← param 0)
+  let hashes ← if version ≥ 3 then
+    some <$> array "expectedBlobVersionedHashes" (fixed "versioned hash" 32) (← param 1)
+    else pure none
+  let beaconRoot ← if version ≥ 3 then
+    some <$> fixed "parentBeaconBlockRoot" 32 (← param 2) else pure none
+  let requests ← if version ≥ 4 then
+    some <$> array "executionRequests" (bytes "request") (← param 3) else pure none
+  return (any, amsterdam, hashes, beaconRoot, requests)
+
+/-- The parameters of a version of the method as JSON, in the order that the version takes.
+
+The payload has the structure of version 4 when its access list and its slot are given.
+
+The hashes and the root are written from version 3, and the requests from version 4.
+
+A valid request gives the access list and the slot exactly from version 5.
+
+Its version must also take the fork of the payload. -/
+def newPayloadParamsJson {fork : Fork} (version : Nat) (payload : ExecutionPayload fork)
+    (amsterdam : Option (ByteArray × UInt64)) (hashes : List Hash32) (beaconRoot : Hash32)
+    (requests : List ByteArray) : Json :=
+  let payload := match amsterdam with
+    | some (accessList, slot) => executionPayloadV4Json payload accessList slot
+    | none => executionPayloadJson payload
+  .arr ([payload] ++
+    (if 3 ≤ version then [listJson (dataJson ·.toList) hashes, dataJson beaconRoot.toList]
+      else []) ++
+    (if 4 ≤ version then [listJson (dataJson ·.data.toList) requests] else [])).toArray
+
 /-- Whether request lists have more than one byte each, with strictly increasing types. -/
 def validRequests : List ByteArray → Bool
   | [] => true
@@ -135,24 +191,7 @@ An error is a JSON-RPC error.
 Otherwise the result is the invalid status with its reason, or the block of the payload. -/
 def checkNewPayload (config : ChainConfig) (version : Nat) (params : Json) :
     Except EngineError (Except (PayloadStatus × PayloadError) (CheckedBlock version)) := do
-  -- The parameters must have the structure of the version.
-  let params ← match params with
-    | .arr items => pure items.toList
-    | _ => invalid "params: not an array"
-  unless params.length == paramCount version ∧ params.all (!·.isNull) do
-    invalid s!"params: not {paramCount version} values"
-  let param (i : Nat) : Except EngineError Json :=
-    match params[i]? with
-    | some j => pure j
-    | none => invalid s!"params: no value {i}"
-  let (any, amsterdam) ← payloadParam version (← param 0)
-  let hashes ← if version ≥ 3 then
-    some <$> array "expectedBlobVersionedHashes" (fixed "versioned hash" 32) (← param 1)
-    else pure none
-  let beaconRoot ← if version ≥ 3 then
-    some <$> fixed "parentBeaconBlockRoot" 32 (← param 2) else pure none
-  let requests ← if version ≥ 4 then
-    some <$> array "executionRequests" (bytes "request") (← param 3) else pure none
+  let (any, amsterdam, hashes, beaconRoot, requests) ← newPayloadParams version params
   if let some requests := requests then
     unless validRequests requests do invalid "executionRequests: out of order or too short"
   -- The fork of the payload must be one that the version takes.

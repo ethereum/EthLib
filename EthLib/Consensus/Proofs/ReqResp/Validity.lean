@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.ReqResp.Validity
+import Mathlib.Data.List.SplitBy
 
 /-!
 # `Consensus.Proofs.ReqResp.Validity`
@@ -17,6 +18,7 @@ What the validity of a response says about its blocks or sidecars.
 - Two of its sidecars at the same slot name the same block.
 - For blobs, the indices of the sidecars of one block are 0, 1, 2 and so on.
 - For columns, each index is a requested column.
+- For columns, each block it serves has every requested column.
 - A valid response to a request for sidecars by root has at most as many sidecars as requested.
 - Each of its sidecars is one that the request names.
 - A valid response to a request for payload envelopes by range has increasing slots.
@@ -184,6 +186,18 @@ theorem blockRoot_eq_of_pairwise_before {sidecars : List ResponseSidecar}
   · exact absurd slot (UInt64.ne_of_lt lower)
   · exact ⟨root, index⟩
 
+/-- When each sidecar of a list comes before the later ones, any two at one slot name one block. -/
+private theorem blockRoot_eq_of_mem {sidecars : List ResponseSidecar}
+    (ordered : sidecars.Pairwise ResponseSidecar.Before) {a b : ResponseSidecar}
+    (memA : a ∈ sidecars) (memB : b ∈ sidecars) (slot : a.slot = b.slot) :
+    a.blockRoot = b.blockRoot := by
+  obtain ⟨i, hi, rfl⟩ := List.mem_iff_getElem.mp memA
+  obtain ⟨j, hj, rfl⟩ := List.mem_iff_getElem.mp memB
+  rcases Nat.lt_trichotomy i j with lt | rfl | gt
+  · exact (blockRoot_eq_of_pairwise_before ordered lt hj slot).1
+  · rfl
+  · exact (blockRoot_eq_of_pairwise_before ordered gt hi slot.symm).1.symm
+
 /-- The rules that a valid response to a request for blob sidecars by range meets, and no others. -/
 theorem isValidBlobSidecarsByRangeResponse_iff (config : Config) (fork : Base.Fork)
     (request : BlobSidecarsByRangeRequest) (sidecars : List ResponseSidecar) :
@@ -253,6 +267,44 @@ theorem pairwise_of_isValidDataColumnSidecarsByRangeResponse {preset : Preset} {
   rcases (nextColumn_iff a b).mp next with ⟨slot, root, index⟩ | slot
   · exact Or.inr ⟨slot, root.symm, index⟩
   · exact Or.inl slot
+
+/-- Two sidecars in one group of a response grouped by slot have one slot. -/
+private theorem slot_eq_of_mem_groupBySlot {sidecars block : List ResponseSidecar}
+    (group : block ∈ ResponseSidecar.groupBySlot sidecars) {a b : ResponseSidecar}
+    (memA : a ∈ block) (memB : b ∈ block) : a.slot = b.slot := by
+  cases block with
+  | nil => simp at memA
+  | cons first rest =>
+    have same := (List.isChain_of_mem_splitBy group).induction (fun s => s.slot = first.slot) _
+      (fun _ _ step slot => (beq_iff_eq.mp step).symm.trans slot) (fun _ => rfl)
+    rw [same a memA, same b memB]
+
+/-- A valid response to a request for column sidecars by range serves whole blocks.
+
+Each block it serves has every requested column. -/
+theorem exists_column_of_isValidDataColumnSidecarsByRangeResponse {preset : Preset}
+    {config : Config} {request : DataColumnSidecarsByRangeRequest preset}
+    {sidecars : List ResponseSidecar}
+    (valid : isValidDataColumnSidecarsByRangeResponse preset config request sidecars = true)
+    {served : ResponseSidecar} (mem : served ∈ sidecars) {column : DataAvailability.ColumnIndex}
+    (requested : column ∈ request.columns.data) :
+    ∃ sidecar ∈ sidecars, sidecar.slot = served.slot ∧ sidecar.blockRoot = served.blockRoot ∧
+      sidecar.index = column := by
+  have flat : (ResponseSidecar.groupBySlot sidecars).flatten = sidecars :=
+    List.flatten_splitBy _ sidecars
+  obtain ⟨-, -, -, -, complete⟩ :=
+    (isValidDataColumnSidecarsByRangeResponse_iff preset config request sidecars).mp valid
+  have inGroups : served ∈ (ResponseSidecar.groupBySlot sidecars).flatten := by
+    rw [flat]
+    exact mem
+  obtain ⟨block, group, inBlock⟩ := List.mem_flatten.mp inGroups
+  obtain ⟨sidecar, found, index⟩ := complete block group column requested
+  have member : sidecar ∈ sidecars := by
+    rw [← flat]
+    exact List.mem_flatten.mpr ⟨block, group, found⟩
+  have slot := slot_eq_of_mem_groupBySlot group found inBlock
+  exact ⟨sidecar, member, slot, blockRoot_eq_of_mem
+    (pairwise_of_isValidDataColumnSidecarsByRangeResponse valid) member mem slot, index⟩
 
 /-- The rules that a valid response to a request for blob sidecars by root meets, and no others. -/
 theorem isValidBlobSidecarsByRootResponse_iff {config : Config} {fork : Base.Fork}

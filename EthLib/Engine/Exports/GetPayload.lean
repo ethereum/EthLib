@@ -40,7 +40,7 @@ open EthLib.Base
 open EthLib.Base.ChainConfig.Exports (configOfJson)
 open EthLib.Execution.Blocks (Block)
 open EthLib.Execution.Transactions
-open EthLib.Engine.Json (dataJson quantityJson listJson withdrawalJson)
+open EthLib.Serialization.JsonRpc (dataJson quantityJson listJson)
 
 /-- An ID, a fork, a block, accounts, requests, a value, network forms, an override and a list. -/
 abbrev PayloadEntry := PayloadId × String × ByteArray × ByteArray × List ByteArray × Nat ×
@@ -72,30 +72,12 @@ def getPayloadVersion (method : String) : Option Nat :=
   ["engine_getPayloadV1", "engine_getPayloadV2", "engine_getPayloadV3", "engine_getPayloadV4",
     "engine_getPayloadV5", "engine_getPayloadV6"].idxOf? method |>.map (· + 1)
 
-/-- The JSON fields of the execution payload, including only fields of its fork. -/
+/-- The execution payload as JSON, with the fields of the version of its fork. -/
 def payloadJson (r : GetPayloadResponse) : Json :=
-  let p := r.payload
-  let header := r.stored.built.block.header
-  Json.mkObj (
-    [("parentHash", dataJson p.parentHash.toList),
-      ("feeRecipient", dataJson p.feeRecipient.toList), ("stateRoot", dataJson p.stateRoot.toList),
-      ("receiptsRoot", dataJson p.receiptsRoot.toList), ("logsBloom", dataJson p.logsBloom.toList),
-      ("prevRandao", dataJson p.prevRandao.toList),
-      ("blockNumber", quantityJson p.blockNumber.toNat),
-      ("gasLimit", quantityJson p.gasLimit.toNat),
-      ("gasUsed", quantityJson p.gasUsed.toNat), ("timestamp", quantityJson p.timestamp.toNat),
-      ("extraData", dataJson p.extraData.data.toList),
-      ("baseFeePerGas", quantityJson p.baseFeePerGas.toNat),
-      ("blockHash", dataJson p.blockHash.toList),
-      ("transactions", listJson (dataJson ·.data.toList) p.transactions)] ++
-    (if h : .shapella ≤ r.stored.fork then
-      [("withdrawals", listJson withdrawalJson (p.withdrawals h))] else []) ++
-    (if h : .dencun ≤ r.stored.fork then
-      [("blobGasUsed", quantityJson (p.blobGasUsed h).toNat),
-        ("excessBlobGas", quantityJson (p.excessBlobGas h).toNat)] else []) ++
-    (if h : .glamsterdam ≤ r.stored.fork then
-      [("blockAccessList", dataJson (r.stored.blockAccessList h).data.toList),
-        ("slotNumber", quantityJson (header.slotNumber h).toNat)] else []))
+  if h : .glamsterdam ≤ r.stored.fork then
+    Engine.Json.executionPayloadV4Json r.payload (r.stored.blockAccessList h)
+      (r.stored.built.block.header.slotNumber h)
+  else Engine.Json.executionPayloadJson r.payload
 
 /-- The JSON fields of the blobs bundle: its blobs, commitments and proofs, in order. -/
 def blobsBundleJson (bundle : BlobsBundle) : Json :=

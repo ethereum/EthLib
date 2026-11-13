@@ -1,0 +1,83 @@
+Altair:
+  BeaconState:
+    type: object
+    description: "The [`BeaconState`](https://github.com/ethereum/consensus-specs/blob/v1.3.0/specs/altair/beacon-chain.md#beaconstate) object from the CL Altair spec."
+    required: [genesis_time, genesis_validators_root, slot, fork, latest_block_header, block_roots, state_roots, historical_roots, eth1_data, eth1_data_votes, eth1_deposit_index, validators, balances, randao_mixes, slashings, previous_epoch_participation, current_epoch_participation, justification_bits, previous_justified_checkpoint, current_justified_checkpoint, finalized_checkpoint, inactivity_scores, current_sync_committee, next_sync_committee]
+    properties:
+      genesis_time:
+        $ref: "../primitive.yaml#/Uint64"
+      genesis_validators_root:
+        $ref: "../primitive.yaml#/Root"
+      slot:
+        $ref: "../primitive.yaml#/Uint64"
+      fork:
+        $ref: "../misc.yaml#/Fork"
+      latest_block_header:
+        $ref: "../phase0/block.yaml#/Phase0/BeaconBlockHeader"
+      block_roots:
+        type: array
+        description: "Fixed length of 8192 items"
+        items:
+          $ref: '../primitive.yaml#/Root'
+      state_roots:
+        type: array
+        description: "Fixed length of 8192 items"
+        items:
+          $ref: '../primitive.yaml#/Root'
+      historical_roots:
+        type: array
+        description: "Variable length list, maximum 16777216 items"
+        items:
+          $ref: '../primitive.yaml#/Root'
+      eth1_data:
+        $ref: "../phase0/eth1.yaml#/Phase0/Eth1Data"
+      eth1_data_votes:
+        type: array
+        description: "Variable length list, maximum 2048 items."
+        items:
+          $ref: '../phase0/eth1.yaml#/Phase0/Eth1Data'
+        maxItems: 2048
+      eth1_deposit_index:
+        $ref: "../primitive.yaml#/Uint64"
+      validators:
+        type: array
+        description: "Variable length list, maximum 1099511627776 items"
+        items:
+          $ref: '../phase0/validator.yaml#/Phase0/Validator'
+      balances:
+        type: array
+        description: "Validator balances in gwei. Variable length list, maximum 1099511627776 items"
+        items:
+          $ref: '../primitive.yaml#/Uint64'
+      randao_mixes:
+        type: array
+        description: "Fixed length of 65536 items"
+        items:
+          $ref: '../primitive.yaml#/Bytes32'
+      slashings:
+        type: array
+        description: "Per-epoch sums of slashed effective balances. Fixed length of 8192 items"
+        items:
+          $ref: '../primitive.yaml#/Uint64'
+      previous_epoch_participation:
+        $ref: './epoch_participation.yaml#/Altair/EpochParticipation'
+      current_epoch_participation:
+        $ref: './epoch_participation.yaml#/Altair/EpochParticipation'
+      justification_bits:
+        $ref: "../primitive.yaml#/Bitvector"
+        description: "Bit set for every recent justified epoch"
+      previous_justified_checkpoint:
+        $ref: "../misc.yaml#/Checkpoint"
+      current_justified_checkpoint:
+        $ref: "../misc.yaml#/Checkpoint"
+      finalized_checkpoint:
+        $ref: "../misc.yaml#/Checkpoint"
+      inactivity_scores:
+        description: "Per-validator inactivity scores. New in Altair. Variable length list, maximum 1099511627776 items"
+        type: array
+        items:
+          $ref: "../primitive.yaml#/Uint64"
+      current_sync_committee:
+        $ref: "./sync_committee.yaml#/Altair/SyncCommittee"
+      next_sync_committee:
+        $ref: './sync_committee.yaml#/Altair/SyncCommittee'

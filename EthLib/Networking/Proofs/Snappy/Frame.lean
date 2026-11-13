@@ -41,14 +41,62 @@ theorem uintToBytes_three {n : Nat} (h : n < 2 ^ 24) :
   rw [← hv, EthLib.Base.bytesToUint_uintToBytes]
   exact Nat.mod_eq_of_lt (by simpa using h)
 
+/-- A chunk that decodes is read whole, and the bytes after it are left. -/
+theorem readChunk_chunk_ok {type : UInt8} {body out : List UInt8} (rest : List UInt8)
+    (h : body.length < 2 ^ 24) (hc : decodeChunk type body = .ok out) :
+    readChunk (type :: (uintToBytes 3 body.length).toList ++ body ++ rest) = .ok (out, rest) := by
+  obtain ⟨a, b, c, habc, hv⟩ := uintToBytes_three h
+  rw [habc]
+  simp [readChunk, hv, hc, Except.map, show ¬ body.length + rest.length < body.length by omega]
+
+/-- A chunk that fails to decode makes the read fail with its error. -/
+theorem readChunk_chunk_error {type : UInt8} {body : List UInt8} {e : FrameError}
+    (rest : List UInt8) (h : body.length < 2 ^ 24) (hc : decodeChunk type body = .error e) :
+    readChunk (type :: (uintToBytes 3 body.length).toList ++ body ++ rest) = .error e := by
+  obtain ⟨a, b, c, habc, hv⟩ := uintToBytes_three h
+  rw [habc]
+  simp [readChunk, hv, hc, Except.map, show ¬ body.length + rest.length < body.length by omega]
+
+/-- A chunk that reads is a prefix of the stream, of at least its four header bytes.
+
+That prefix alone reads to the same output, with nothing left.
+
+The bytes after it follow that prefix. -/
+theorem readChunk_ok_split {bs out rest : List UInt8} (h : readChunk bs = .ok (out, rest)) :
+    ∃ chunk, bs = chunk ++ rest ∧ 4 ≤ chunk.length ∧ readChunk chunk = .ok (out, []) := by
+  match bs, h with
+  | type :: l0 :: l1 :: l2 :: r, h =>
+      simp only [readChunk] at h
+      split at h
+      · simp at h
+      · rename_i hl
+        have hlen : (r.take (bytesToUint #v[l0, l1, l2])).length = bytesToUint #v[l0, l1, l2] :=
+          List.length_take_of_le (by omega)
+        cases hc : decodeChunk type (r.take (bytesToUint #v[l0, l1, l2])) with
+        | error e => simp [hc, Except.map] at h
+        | ok o =>
+          simp only [hc, Except.map, Except.ok.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          refine ⟨type :: l0 :: l1 :: l2 :: r.take (bytesToUint #v[l0, l1, l2]), by simp, by simp,
+            ?_⟩
+          simp [readChunk, hlen, List.take_of_length_le, hc, Except.map]
+  | [], h | [_], h | [_, _], h | [_, _, _], h => simp [readChunk] at h
+
+/-- With fuel left, the loop over a non-empty stream reads its first chunk, then the rest. -/
+theorem decodeChunks_cons_succ (b : UInt8) (l : List UInt8) (fuel : Nat) :
+    decodeChunks (b :: l) (fuel + 1) = (do
+      let (out, rest) ← readChunk (b :: l)
+      (decodeChunks rest fuel).map (out ++ ·)) := rfl
+
 /-- A chunk that decodes adds its output, and the loop goes on after it. -/
 theorem decodeChunks_chunk_ok {type : UInt8} {body out : List UInt8} (rest : List UInt8)
     (fuel : Nat) (h : body.length < 2 ^ 24) (hc : decodeChunk type body = .ok out) :
     decodeChunks (type :: (uintToBytes 3 body.length).toList ++ body ++ rest) (fuel + 1) =
       (decodeChunks rest fuel).map (out ++ ·) := by
-  obtain ⟨a, b, c, habc, hv⟩ := uintToBytes_three h
-  rw [habc]
-  simp [decodeChunks, hv, hc, show ¬ body.length + rest.length < body.length by omega]
+  have := readChunk_chunk_ok rest h hc
+  simp only [List.cons_append] at this ⊢
+  rw [decodeChunks_cons_succ, this]
+  rfl
 
 /-- A chunk that fails to decode makes the loop fail with its error. -/
 theorem decodeChunks_chunk_error {type : UInt8} {body : List UInt8} {e : FrameError}
@@ -56,9 +104,10 @@ theorem decodeChunks_chunk_error {type : UInt8} {body : List UInt8} {e : FrameEr
     (hc : decodeChunk type body = .error e) :
     decodeChunks (type :: (uintToBytes 3 body.length).toList ++ body ++ rest) (fuel + 1) =
       .error e := by
-  obtain ⟨a, b, c, habc, hv⟩ := uintToBytes_three h
-  rw [habc]
-  simp [decodeChunks, hv, hc, show ¬ body.length + rest.length < body.length by omega]
+  have := readChunk_chunk_error rest h hc
+  simp only [List.cons_append] at this ⊢
+  rw [decodeChunks_cons_succ, this]
+  rfl
 
 /-- The four bytes of a 32-bit value, such as a checksum, read back as that value. -/
 private theorem foldr_uintToBytes_uint32 (c : UInt32) :
@@ -180,6 +229,40 @@ theorem decodeFrames_encodeFramesLiteral (d : ByteArray) :
 
 /-! ## Concatenated streams -/
 
+/-- When the first chunk of a stream reads, the loop decodes that chunk, then the rest. -/
+theorem decodeChunks_of_readChunk {bs out rest : List UInt8} (fuel : Nat)
+    (h : readChunk bs = .ok (out, rest)) :
+    decodeChunks bs (fuel + 1) = (decodeChunks rest fuel).map (out ++ ·) := by
+  cases bs with
+  | nil => simp [readChunk] at h
+  | cons b l => rw [decodeChunks_cons_succ, h]; rfl
+
+/-- Bytes added to the end of a stream do not change how its first chunk reads.
+
+They end up after the bytes that the chunk leaves. -/
+theorem readChunk_append {bs out rest : List UInt8} (t : List UInt8)
+    (h : readChunk bs = .ok (out, rest)) : readChunk (bs ++ t) = .ok (out, rest ++ t) := by
+  match bs, h with
+  | type :: l0 :: l1 :: l2 :: r, h =>
+      simp only [readChunk] at h
+      split at h
+      · simp at h
+      · rename_i hl
+        have hl' : ¬ (r ++ t).length < bytesToUint #v[l0, l1, l2] := by
+          simp only [List.length_append]
+          omega
+        have htake : (r ++ t).take (bytesToUint #v[l0, l1, l2]) =
+            r.take (bytesToUint #v[l0, l1, l2]) := List.take_append_of_le_length (by omega)
+        have hdrop : (r ++ t).drop (bytesToUint #v[l0, l1, l2]) =
+            r.drop (bytesToUint #v[l0, l1, l2]) ++ t := List.drop_append_of_le_length (by omega)
+        cases hc : decodeChunk type (r.take (bytesToUint #v[l0, l1, l2])) with
+        | error e => simp [hc, Except.map] at h
+        | ok o =>
+          simp only [hc, Except.map, Except.ok.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          simp only [List.cons_append, readChunk, hl', ite_false, htake, hc, hdrop, Except.map]
+  | [], h | [_], h | [_, _], h | [_, _, _], h => simp [readChunk] at h
+
 /-- A loop that decodes with some fuel decodes the same with more. -/
 theorem decodeChunks_of_le {l out : List UInt8} {f g : Nat} (h : decodeChunks l f = .ok out)
     (hfg : f ≤ g) : decodeChunks l g = .ok out := by
@@ -187,24 +270,23 @@ theorem decodeChunks_of_le {l out : List UInt8} {f g : Nat} (h : decodeChunks l 
   | zero =>
     match l with
     | [] => simpa [decodeChunks] using h
-    | [_] | [_, _] | [_, _, _] | _ :: _ :: _ :: _ :: _ => simp [decodeChunks] at h
+    | _ :: _ => simp [decodeChunks] at h
   | succ f ih =>
     obtain ⟨g, rfl⟩ : ∃ g', g = g' + 1 := ⟨g - 1, by omega⟩
     match l with
     | [] => simpa [decodeChunks] using h
-    | [_] | [_, _] | [_, _, _] => simp [decodeChunks] at h
-    | type :: l0 :: l1 :: l2 :: rest =>
-      by_cases hl : rest.length < bytesToUint #v[l0, l1, l2]
-      · simp [decodeChunks, hl] at h
-      · cases hc : decodeChunk type (rest.take (bytesToUint #v[l0, l1, l2])) with
-        | error e => simp [decodeChunks, hl, hc] at h
-        | ok o =>
-          cases hd : decodeChunks (rest.drop (bytesToUint #v[l0, l1, l2])) f with
-          | error e => simp [decodeChunks, hl, hc, hd, Except.map] at h
-          | ok v =>
-            simp only [decodeChunks, hl, hc, hd, ite_false] at h ⊢
-            rw [ih hd (by omega)]
-            exact h
+    | b :: l =>
+      rw [decodeChunks_cons_succ] at h ⊢
+      cases hr : readChunk (b :: l) with
+      | error e => simp [hr, bind, Except.bind] at h
+      | ok r =>
+        obtain ⟨o, rest⟩ := r
+        cases hd : decodeChunks rest f with
+        | error e => simp [hr, hd, Except.map, bind, Except.bind] at h
+        | ok v =>
+          simp only [hr, hd, Except.map, bind, Except.bind] at h
+          simp only [ih (g := g) hd (by omega), Except.map, bind, Except.bind]
+          exact h
 
 /-- Two runs of chunks that decode, one after the other, decode to their two outputs in turn. -/
 theorem decodeChunks_append {a b oa ob : List UInt8} {f g : Nat}
@@ -217,36 +299,27 @@ theorem decodeChunks_append {a b oa ob : List UInt8} {f g : Nat}
       simp only [decodeChunks, Except.ok.injEq] at ha
       subst ha
       simpa using decodeChunks_of_le hb (by omega)
-    | [_] | [_, _] | [_, _, _] | _ :: _ :: _ :: _ :: _ => simp [decodeChunks] at ha
+    | _ :: _ => simp [decodeChunks] at ha
   | succ f ih =>
     match a with
     | [] =>
       simp only [decodeChunks, Except.ok.injEq] at ha
       subst ha
       simpa using decodeChunks_of_le hb (by omega)
-    | [_] | [_, _] | [_, _, _] => simp [decodeChunks] at ha
-    | type :: l0 :: l1 :: l2 :: rest =>
-      by_cases hl : rest.length < bytesToUint #v[l0, l1, l2]
-      · simp [decodeChunks, hl] at ha
-      · cases hc : decodeChunk type (rest.take (bytesToUint #v[l0, l1, l2])) with
-        | error e => simp [decodeChunks, hl, hc] at ha
-        | ok o =>
-          cases hd : decodeChunks (rest.drop (bytesToUint #v[l0, l1, l2])) f with
-          | error e => simp [decodeChunks, hl, hc, hd, Except.map] at ha
-          | ok v =>
-            simp only [decodeChunks, hl, hc, hd, ite_false, Except.map, Except.ok.injEq] at ha
-            subst ha
-            have hl' : ¬ (rest ++ b).length < bytesToUint #v[l0, l1, l2] := by
-              simp only [List.length_append]
-              omega
-            have htake : (rest ++ b).take (bytesToUint #v[l0, l1, l2]) =
-                rest.take (bytesToUint #v[l0, l1, l2]) := List.take_append_of_le_length (by omega)
-            have hdrop : (rest ++ b).drop (bytesToUint #v[l0, l1, l2]) =
-                rest.drop (bytesToUint #v[l0, l1, l2]) ++ b :=
-              List.drop_append_of_le_length (by omega)
-            rw [show f + 1 + g = (f + g) + 1 by omega]
-            simp only [List.cons_append, decodeChunks, hl', ite_false, htake, hc, hdrop, ih hd,
-              Except.map, List.append_assoc]
+    | x :: l =>
+      rw [decodeChunks_cons_succ] at ha
+      cases hr : readChunk (x :: l) with
+      | error e => simp [hr, bind, Except.bind] at ha
+      | ok r =>
+        obtain ⟨o, rest⟩ := r
+        cases hd : decodeChunks rest f with
+        | error e => simp [hr, hd, Except.map, bind, Except.bind] at ha
+        | ok v =>
+          simp only [hr, hd, Except.map, bind, Except.bind, Except.ok.injEq] at ha
+          subst ha
+          rw [show f + 1 + g = (f + g) + 1 by omega, List.cons_append,
+            decodeChunks_cons_succ, ← List.cons_append, readChunk_append b hr]
+          simp only [ih hd, Except.map, bind, Except.bind, List.append_assoc]
 
 /-- Two framed streams that decode, one after the other, decode to their two outputs in turn.
 
@@ -304,40 +377,45 @@ theorem decodeFramesList_ok_prefix {bs out : List UInt8} (h : decodeFramesList b
         -- The three length bytes, read as a number.
         have hb : bytesToUint #v[l0, l1, l2] = l0.toNat + 256 * (l1.toNat + 256 * l2.toNat) := by
           simp [EthLib.Base.bytesToUint_eq_foldr]
-        simp only [List.length_cons, decodeChunks, hb] at h
-        split at h
-        · simp at h
-        · rename_i hlen
-          split at h
-          · simp at h
-          · rename_i out' hc
-            simp [decodeChunk, compressedType, uncompressedType, streamIdentifierType,
-              streamIdentifier] at hc
-            split at hc
-            · rename_i htake
-              -- The six bytes of "sNaPpY" fix the length at 6, so the header is `06 00 00`.
-              have hv : l0.toNat + 256 * (l1.toNat + 256 * l2.toNat) = 6 := by
-                have := congrArg List.length htake
-                simp at this
-                omega
-              have b0 := l0.toNat_lt
-              have b1 := l1.toNat_lt
-              have b2 := l2.toNat_lt
-              rw [hv] at htake
-              have e0 : l0 = 6 := UInt8.toNat_inj.mp (by simp; omega)
-              have e1 : l1 = 0 := UInt8.toNat_inj.mp (by simp; omega)
-              have e2 : l2 = 0 := UInt8.toNat_inj.mp (by simp; omega)
-              subst e0 e1 e2
-              have hsplit := List.take_append_drop 6 rest
-              rw [htake] at hsplit
-              exact ⟨rest.drop 6, congrArg (fun l => 255 :: 6 :: 0 :: 0 :: l) hsplit⟩
-            · simp at hc
+        rw [List.length_cons, decodeChunks_cons_succ] at h
+        cases hr : readChunk (255 :: l0 :: l1 :: l2 :: rest) with
+        | error e => simp [hr, bind, Except.bind] at h
+        | ok r =>
+          simp only [readChunk, hb] at hr
+          split at hr
+          · simp at hr
+          · rename_i hlen
+            cases hc : decodeChunk 255 (rest.take (l0.toNat + 256 * (l1.toNat + 256 * l2.toNat)))
+              with
+            | error e => simp [hc, Except.map] at hr
+            | ok out' =>
+              simp [decodeChunk, compressedType, uncompressedType, streamIdentifierType,
+                streamIdentifier] at hc
+              split at hc
+              · rename_i htake
+                -- The six bytes of "sNaPpY" fix the length at 6, so the header is `06 00 00`.
+                have hv : l0.toNat + 256 * (l1.toNat + 256 * l2.toNat) = 6 := by
+                  have := congrArg List.length htake
+                  simp at this
+                  omega
+                have b0 := l0.toNat_lt
+                have b1 := l1.toNat_lt
+                have b2 := l2.toNat_lt
+                rw [hv] at htake
+                have e0 : l0 = 6 := UInt8.toNat_inj.mp (by simp; omega)
+                have e1 : l1 = 0 := UInt8.toNat_inj.mp (by simp; omega)
+                have e2 : l2 = 0 := UInt8.toNat_inj.mp (by simp; omega)
+                subst e0 e1 e2
+                have hsplit := List.take_append_drop 6 rest
+                rw [htake] at hsplit
+                exact ⟨rest.drop 6, congrArg (fun l => 255 :: 6 :: 0 :: 0 :: l) hsplit⟩
+              · simp at hc
       · simp at h
   | [], h => simp [decodeFramesList] at h
   | [_], h | [_, _], h | [_, _, _], h =>
       revert h
-      simp only [decodeFramesList, decodeChunks]
-      split <;> simp
+      simp only [decodeFramesList]
+      split <;> simp [decodeChunks_cons_succ, readChunk, bind, Except.bind]
 
 /-- A chunk that fails to decode after the stream identifier rejects the stream with its error. -/
 theorem decodeFramesList_chunk_error {type : UInt8} {body : List UInt8} {e : FrameError}

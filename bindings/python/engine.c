@@ -37,6 +37,7 @@ extern lean_object* eth_engine_jwt_build(lean_object* args);
 extern lean_object* eth_engine_jwt_check(lean_object* args);
 
 extern lean_object* eth_engine_get_payload(lean_object* args);
+extern lean_object* eth_engine_rewrite_params(lean_object* args);
 
 /* ---- Wrappers --------------------------------------------------------- */
 
@@ -110,4 +111,12 @@ py_engine_get_payload(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_engine_get_payload, args, 3, ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_rewrite_params(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_rewrite_params, args, 2, ENGINE_ERROR);
 }

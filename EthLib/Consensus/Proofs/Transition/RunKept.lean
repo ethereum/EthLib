@@ -22,6 +22,12 @@ So it keeps the committees of each epoch up to its start plus `MIN_SEED_LOOKAHEA
 The epoch must also be within that activity, and the run must end within the ring.
 
 The run stays within one fork, as the states of a store do.
+
+Slots processed to a later slot pass through each slot between.
+
+So the state before a block, processed to a slot at or before it, runs on to the state after it.
+
+Both use one setting of the signature checks.
 -/
 
 @[expose] public section
@@ -113,6 +119,60 @@ theorem runKept_stateTransition {signed : SignedBeaconBlock preset fork} {valida
     RunKept state after := by
   obtain ⟨advanced, slotsOk, -, -, blockOk, -⟩ := stateTransition_ok computed
   exact (runKept_processSlots slotsOk).trans (runKept_processBlock blockOk)
+
+/-- Advancing by a sum of slot counts advances by the first count, then by the second. -/
+private theorem advanceSlots_add :
+    ∀ (first : Nat) {second : Nat} {state after : BeaconState preset fork},
+      advanceSlots config checks (first + second) state = .ok after →
+        ∃ mid, advanceSlots config checks first state = .ok mid ∧
+          advanceSlots config checks second mid = .ok after
+  | 0, _, state, _, computed => ⟨state, rfl, by simpa using computed⟩
+  | first + 1, second, state, after, computed => by
+    rw [Nat.add_right_comm] at computed
+    simp only [advanceSlots, bind_ok_iff] at computed ⊢
+    obtain ⟨next, nextOk, rest⟩ := computed
+    obtain ⟨mid, midOk, restOk⟩ := advanceSlots_add first rest
+    exact ⟨mid, ⟨next, nextOk, midOk⟩, restOk⟩
+
+/-- Slots processed to a later slot pass through each slot between.
+
+Both parts run with the same setting of the signature checks. -/
+theorem processSlots_split {middle slot : Slot} (low : state.slot < middle)
+    (high : middle < slot) (computed : processSlots config checks state slot = .ok after) :
+    ∃ mid, processSlots config checks state middle = .ok mid ∧
+      processSlots config checks mid slot = .ok after := by
+  simp only [processSlots, bind_ok_iff, ensure_ok_iff] at computed ⊢
+  obtain ⟨-, -, advanced⟩ := computed
+  have lowNat := UInt64.lt_iff_toNat_lt.mp low
+  have highNat := UInt64.lt_iff_toNat_lt.mp high
+  rw [show slot.toNat - state.slot.toNat =
+      (middle.toNat - state.slot.toNat) + (slot.toNat - middle.toNat) by omega] at advanced
+  obtain ⟨mid, midOk, restOk⟩ := advanceSlots_add _ advanced
+  have midSlot : mid.slot = middle := UInt64.toNat_inj.mp (by
+    rw [advanceSlots_slot _ midOk]
+    omega)
+  exact ⟨mid, ⟨(), low, midOk⟩, (), midSlot ▸ high, midSlot ▸ restOk⟩
+
+/-- Take the state before a block, with its slots processed to a slot at or before the block.
+
+That state runs on to the state after the block.
+
+The state at that slot and the block use the same setting of the signature checks. -/
+theorem runKept_of_processSlots_of_stateTransition {middle : Slot}
+    {mid : BeaconState preset fork} {signed : SignedBeaconBlock preset fork}
+    {validateResult : Bool} (midOk : processSlots config checks state middle = .ok mid)
+    (atOrAfter : middle ≤ signed.message.slot)
+    (computed : stateTransition config checks engine state signed validateResult = .ok after) :
+    RunKept mid after := by
+  obtain ⟨advanced, slotsOk, -, -, blockOk, -⟩ := stateTransition_ok computed
+  rcases UInt64.lt_or_eq_of_le atOrAfter with before | same
+  · obtain ⟨mid', midOk', restOk⟩ :=
+      processSlots_split (processSlots_slot midOk).1 before slotsOk
+    rw [midOk'.symm.trans midOk |> Except.ok.inj] at restOk
+    exact (runKept_processSlots restOk).trans (runKept_processBlock blockOk)
+  · rw [← same] at slotsOk
+    rw [Except.ok.inj (slotsOk.symm.trans midOk)] at blockOk
+    exact runKept_processBlock blockOk
 
 /-- A run keeps the committees of each epoch up to its start plus `MIN_SEED_LOOKAHEAD`.
 

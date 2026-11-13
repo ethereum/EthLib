@@ -667,8 +667,10 @@ Its exit comes no later than its withdrawal, when the exits of the state are ord
 
 Its effective balance is a whole number of increments, when the preset and the state are aligned.
 
-The other laws cover balance changes, exits, new validators with a fresh key and record updates. -/
-structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop where
+The other laws cover balance changes, exits and record updates.
+
+They leave out new validators and the queue of pending deposits, which the frame laws below add. -/
+structure EpochStepLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop where
   refl : ∀ state, R state state
   trans : ∀ {first second third}, R first second → R second third → R first third
   setValidatorAt : ∀ {state after : BeaconState preset fork} {position : Nat}
@@ -686,9 +688,6 @@ structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset for
     decreaseBalance state index delta = .ok after → R state after
   initiateValidatorExit : ∀ {config state after index},
     initiateValidatorExit config state index = .ok after → R state after
-  addValidatorToRegistry : ∀ {state after pubkey withdrawalCredentials amount},
-    addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after →
-    pubkey ∉ validatorKeys state → R state after
   eth1DataVotes : ∀ state votes, R state { state with eth1DataVotes := votes }
   inactivityScores : ∀ state scores, R state { state with inactivityScores := scores }
   slashings : ∀ state slashings, R state { state with slashings }
@@ -698,8 +697,6 @@ structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset for
   participationRecords : ∀ state, R state
     { state with previousEpochAttestations := state.currentEpochAttestations
                  currentEpochAttestations := fun _ => ⟨#[], by simp⟩ }
-  pendingDeposits : ∀ state deposits carried, R state
-    { state with pendingDeposits := deposits, depositBalanceToConsume := carried }
   pendingConsolidations : ∀ state consolidations,
     R state { state with pendingConsolidations := consolidations }
   syncCommittees : ∀ state current next,
@@ -707,7 +704,24 @@ structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset for
   proposerLookahead : ∀ state lookahead, R state { state with proposerLookahead := lookahead }
   ptcWindow : ∀ state window, R state { state with ptcWindow := window }
 
-/-- The mutator frame satisfies the laws of the epoch steps. -/
+/-- The laws that carry a reflexive, transitive relation through most steps of an epoch.
+
+They are the laws of the steps, plus two.
+
+A new validator with a key that no validator has must relate its states.
+
+So must a write of the queue of pending deposits and of the deposit balance to consume.
+
+They leave out justification, the builder payments and the rotation of the flags. -/
+structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop
+    extends EpochStepLaws R where
+  addValidatorToRegistry : ∀ {state after pubkey withdrawalCredentials amount},
+    addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after →
+    pubkey ∉ validatorKeys state → R state after
+  pendingDeposits : ∀ state deposits carried, R state
+    { state with pendingDeposits := deposits, depositBalanceToConsume := carried }
+
+/-- The mutator frame satisfies the frame laws of the epoch steps. -/
 theorem mutatorEpochFrameLaws : EpochFrameLaws (@MutatorFrame preset fork) where
   refl := MutatorFrame.refl
   trans := MutatorFrame.trans
@@ -730,7 +744,7 @@ theorem mutatorEpochFrameLaws : EpochFrameLaws (@MutatorFrame preset fork) where
   proposerLookahead _ _ := ⟨EpochFrame.of_validators ⟨rfl, rfl⟩, .of_eq rfl rfl⟩
   ptcWindow _ _ := ⟨EpochFrame.of_validators ⟨rfl, rfl⟩, .of_eq rfl rfl⟩
 
-/-- The block frame satisfies the laws of the epoch steps, since each mutator frame is one. -/
+/-- The block frame satisfies the frame laws of the epoch steps, since each mutator frame is one. -/
 theorem blockEpochFrameLaws : EpochFrameLaws (@BlockFrame preset fork) where
   refl := BlockFrame.refl
   trans := BlockFrame.trans
@@ -759,10 +773,10 @@ theorem blockEpochFrameLaws : EpochFrameLaws (@BlockFrame preset fork) where
     (mutatorEpochFrameLaws.proposerLookahead state lookahead).toBlockFrame
   ptcWindow state window := (mutatorEpochFrameLaws.ptcWindow state window).toBlockFrame
 
-namespace EpochFrameLaws
+namespace EpochStepLaws
 
 variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
-  (laws : EpochFrameLaws R)
+  (laws : EpochStepLaws R)
 
 include laws
 
@@ -822,6 +836,50 @@ theorem setValidatorAt_of_sameBalance {position : Nat} {validator old : Validato
     rw [balance]
     exact holds old (mem_of_getValidatorAt found)
 
+theorem processVoluntaryExit {signed : SignedVoluntaryExit}
+    (computed : Consensus.processVoluntaryExit config checks state signed = .ok after) :
+    R state after := by
+  unfold Consensus.processVoluntaryExit at computed
+  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := computed
+  exact laws.initiateValidatorExit exited
+
+theorem processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
+    (computed : Consensus.processBlsToExecutionChange config checks state signed = .ok after) :
+    R state after := by
+  obtain ⟨validator, found, _, _, _, set⟩ := processBlsToExecutionChange_ok computed
+  exact laws.setValidator_of_sameBalance set found rfl rfl fun ordered =>
+    ordered validator (mem_of_getValidator found)
+
+theorem applySyncReward {reward proposerReward : Gwei}
+    {proposer : Except AccessorError ValidatorIndex} {member : ValidatorIndex × Bool}
+    (computed : Consensus.applySyncReward reward proposerReward proposer state member = .ok after) :
+    R state after := by
+  unfold Consensus.applySyncReward at computed
+  split at computed
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, raised, _, _, paid⟩ := computed
+    exact laws.trans (laws.increaseBalance raised) (laws.increaseBalance paid)
+  · exact laws.decreaseBalance (liftAccessor_ok.mp computed)
+
+theorem processSyncAggregate {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
+    (computed : Consensus.processSyncAggregate config checks state altair aggregate = .ok after) :
+    R state after := by
+  unfold Consensus.processSyncAggregate at computed
+  simp only [bind_ok_iff] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := computed
+  rw [← Array.foldlM_toList] at folded
+  exact laws.foldlM (fun _ _ _ ok => laws.applySyncReward ok) folded
+
+end EpochStepLaws
+
+namespace EpochFrameLaws
+
+variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
+  (laws : EpochFrameLaws R)
+
+include laws
+
 theorem applyPendingDeposit {deposit : PendingDeposit}
     (computed : Consensus.applyPendingDeposit config checks state deposit = .ok after) :
     R state after := by
@@ -862,41 +920,6 @@ theorem applyDeposit {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
   split at computed
   · exact laws.applyDepositElectra computed
   · exact laws.applyPendingDeposit computed
-
-theorem processVoluntaryExit {signed : SignedVoluntaryExit}
-    (computed : Consensus.processVoluntaryExit config checks state signed = .ok after) :
-    R state after := by
-  unfold Consensus.processVoluntaryExit at computed
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := computed
-  exact laws.initiateValidatorExit exited
-
-theorem processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
-    (computed : Consensus.processBlsToExecutionChange config checks state signed = .ok after) :
-    R state after := by
-  obtain ⟨validator, found, _, _, _, set⟩ := processBlsToExecutionChange_ok computed
-  exact laws.setValidator_of_sameBalance set found rfl rfl fun ordered =>
-    ordered validator (mem_of_getValidator found)
-
-theorem applySyncReward {reward proposerReward : Gwei}
-    {proposer : Except AccessorError ValidatorIndex} {member : ValidatorIndex × Bool}
-    (computed : Consensus.applySyncReward reward proposerReward proposer state member = .ok after) :
-    R state after := by
-  unfold Consensus.applySyncReward at computed
-  split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, raised, _, _, paid⟩ := computed
-    exact laws.trans (laws.increaseBalance raised) (laws.increaseBalance paid)
-  · exact laws.decreaseBalance (liftAccessor_ok.mp computed)
-
-theorem processSyncAggregate {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
-    (computed : Consensus.processSyncAggregate config checks state altair aggregate = .ok after) :
-    R state after := by
-  unfold Consensus.processSyncAggregate at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := computed
-  rw [← Array.foldlM_toList] at folded
-  exact laws.foldlM (fun _ _ _ ok => laws.applySyncReward ok) folded
 
 end EpochFrameLaws
 
@@ -1771,10 +1794,10 @@ private theorem queueForActivation_pubkey {validator queued : Validator}
     queued.pubkey = validator.pubkey := by
   rcases queueForActivation_cases computed with rfl | ⟨_, rfl⟩ <;> rfl
 
-namespace EpochFrameLaws
+namespace EpochStepLaws
 
 variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
-  (laws : EpochFrameLaws R)
+  (laws : EpochStepLaws R)
 
 include laws
 
@@ -1979,6 +2002,187 @@ theorem processInactivityUpdates {altair : .altair ≤ fork}
     obtain ⟨_, _, _, _, rfl⟩ := computed
     exact (laws.inactivityScores _ _)
 
+theorem passPendingConsolidations {nextEpoch : Epoch} :
+    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
+      {result : BeaconState preset fork × Nat},
+      Consensus.passPendingConsolidations nextEpoch state consolidations = .ok result →
+      R state result.1
+  | [], _, _, computed => by
+    simp only [Consensus.passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact laws.refl _
+  | consolidation :: rest, state, result, computed => by
+    simp only [Consensus.passPendingConsolidations, bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨source, _, computed⟩ := computed
+    split at computed
+    · simp only [bind_ok_iff] at computed
+      obtain ⟨⟨passed, read⟩, passedOk, computed⟩ := computed
+      cases computed
+      exact passPendingConsolidations (result := (passed, read)) passedOk
+    split at computed
+    · cases computed
+      exact laws.refl _
+    simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, lowered, loweredOk, raised, raisedOk, ⟨passed, read⟩, passedOk, computed⟩ :=
+      computed
+    cases computed
+    exact laws.trans (laws.trans (laws.decreaseBalance loweredOk)
+      (laws.increaseBalance raisedOk))
+      (passPendingConsolidations (result := (passed, read)) passedOk)
+
+theorem processPendingConsolidations {electra : .pectra ≤ fork}
+    (computed : Consensus.processPendingConsolidations state electra = .ok after) :
+    R state after := by
+  unfold Consensus.processPendingConsolidations at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  repeat' (split at computed <;> try cases computed)
+  all_goals
+    exact laws.trans (laws.passPendingConsolidations ‹_›)
+      (laws.pendingConsolidations _ _)
+
+theorem processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
+    (computed : Consensus.processHistoricalSummariesUpdate state capella = .ok after) :
+    R state after := by
+  unfold Consensus.processHistoricalSummariesUpdate at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  repeat' (split at computed <;> try cases computed)
+  all_goals first
+    | exact laws.refl _
+    | exact (laws.historicalSummaries _ _)
+
+theorem processSyncCommitteeUpdates {altair : .altair ≤ fork}
+    (computed : Consensus.processSyncCommitteeUpdates state altair = .ok after) :
+    R state after := by
+  unfold Consensus.processSyncCommitteeUpdates at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  repeat' (split at computed <;> try cases computed)
+  all_goals first
+    | exact laws.refl _
+    | exact (laws.syncCommittees _ _ _)
+
+theorem processProposerLookahead {fulu : .fusaka ≤ fork}
+    (computed : Consensus.processProposerLookahead state fulu = .ok after) : R state after := by
+  simp only [Consensus.processProposerLookahead, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, rfl⟩ := computed
+  exact (laws.proposerLookahead _ _)
+
+theorem processPtcWindow {gloas : .glamsterdam ≤ fork}
+    (computed : Consensus.processPtcWindow state gloas = .ok after) : R state after := by
+  simp only [Consensus.processPtcWindow, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, rfl⟩ := computed
+  exact (laws.ptcWindow _ _)
+
+/-- One stage that is neither justification, the payments, the flag rotation nor the deposits.
+
+Each such stage relates its states under the laws of the steps. -/
+private theorem epochEdge {stage : EpochStage}
+    (ordinary : stage ≠ .justification ∧ stage ≠ .payments ∧ stage ≠ .participation ∧
+      stage ≠ .pendingDeposits)
+    (computed : EpochStage.action config checks stage state = .ok after) : R state after := by
+  have edge := EpochStage.action_cases.mp computed
+  cases stage <;> simp only [EpochStage.Edge] at edge
+  case justification | payments | participation | pendingDeposits => simp at ordinary
+  all_goals first
+    | exact laws.processRewardsAndPenalties edge
+    | exact laws.processRegistryUpdates edge
+    | exact laws.processSlashings edge
+    | exact laws.processEffectiveBalanceUpdates edge
+    | exact laws.processSlashingsReset edge
+    | exact laws.processRandaoMixesReset edge
+    | (split at edge
+       · first
+         | exact laws.processInactivityUpdates edge
+         | exact laws.processEth1DataReset edge
+         | exact laws.processPendingConsolidations edge
+         | exact laws.processHistoricalSummariesUpdate edge
+         | exact laws.processSyncCommitteeUpdates edge
+         | exact laws.processProposerLookahead edge
+         | exact laws.processPtcWindow edge
+       · first
+         | exact laws.processHistoricalRootsUpdate edge
+         | exact edge ▸ laws.refl _)
+
+private theorem epochTrace {stages : List EpochStage}
+    (ordinary : ∀ k ∈ stages, k ≠ .justification ∧ k ≠ .payments ∧ k ≠ .participation ∧
+      k ≠ .pendingDeposits)
+    (trace : EpochTrace (EpochStage.action config checks) stages state after) : R state after :=
+  trace.transport R laws.refl laws.trans
+    (fun k member _ _ ok => laws.epochEdge (ordinary k member) ok)
+
+/-- From Altair, the epoch transition first runs the steps before the payments.
+
+The builder payments follow, which change nothing before Gloas, then steps in the relation.
+
+The rotation of the participation flags comes next, then the last steps in the relation. -/
+theorem processEpochAltair_paymentSplit {altair : .altair ≤ fork}
+    (computed : Consensus.processEpochAltair config checks state altair = .ok after) :
+    ∃ pending paid rooted,
+      epochBeforePayments config checks state = .ok pending ∧
+      (if gloas : .glamsterdam ≤ fork then
+        liftAccessor (processBuilderPendingPayments pending gloas) else pure pending) =
+          (Except.ok paid : Except TransitionError _) ∧
+      R paid rooted ∧ R (processParticipationFlagUpdates rooted altair) after := by
+  rw [processEpochAltair_eq_run] at computed
+  have trace := EpochTrace.run_ok_iff.mp computed
+  obtain ⟨rooted, head, tail⟩ := EpochTrace.append_iff.mp trace
+  obtain ⟨pending, initial, middle⟩ := EpochTrace.append_iff.mp head
+  cases middle with
+  | cons paidOk middle =>
+    cases tail with
+    | cons rotated tail =>
+      have rotation := EpochStage.action_cases.mp rotated
+      simp only [EpochStage.Edge, altair, ↓reduceDIte] at rotation
+      subst rotation
+      refine ⟨pending, _, rooted, ?_, paidOk, laws.epochTrace (by simp) middle,
+        laws.epochTrace (by simp) tail⟩
+      rw [epochBeforePayments_eq_run]
+      exact EpochTrace.run_ok_iff.mpr initial
+
+/-- Before Altair, all stages after justification preserve the relation. -/
+theorem processEpoch_beforeAltair (before : ¬ .altair ≤ fork)
+    (computed : Consensus.processEpoch config checks state = .ok after) :
+    ∃ justified, processJustificationAndFinalization state = .ok justified ∧ R justified after := by
+  have trace := processEpoch_trace computed
+  change EpochTrace _ (.justification :: _) _ _ at trace
+  cases trace with
+  | cons first rest =>
+    refine ⟨_, first, rest.transport R laws.refl laws.trans ?_⟩
+    intro k member a b ok
+    have eq := EpochStage.action_cases.mp ok
+    -- Payments and pending deposits come later than Altair, so they are identities here.
+    by_cases payment : k = .payments
+    · subst k
+      have disabled : ¬ Fork.glamsterdam ≤ fork :=
+        fun h => before (Nat.le_trans (by decide) h)
+      simp only [EpochStage.Edge, disabled, ↓reduceDIte] at eq
+      exact eq ▸ laws.refl _
+    by_cases deposits : k = .pendingDeposits
+    · subst k
+      have disabled : ¬ Fork.pectra ≤ fork :=
+        fun h => before (Nat.le_trans (by decide) h)
+      simp only [EpochStage.Edge, disabled, ↓reduceDIte] at eq
+      exact eq ▸ laws.refl _
+    by_cases rotation : k = .participation
+    · subst k
+      simp only [EpochStage.Edge, before, ↓reduceDIte] at eq
+      exact laws.processParticipationRecordUpdates eq
+    have ordinary : k ≠ .justification := by
+      intro same
+      subst k
+      simp [EpochStage.middleStages, EpochStage.tailStages] at member
+    exact laws.epochEdge ⟨ordinary, payment, rotation, deposits⟩ ok
+
+end EpochStepLaws
+
+namespace EpochFrameLaws
+
+variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
+  (laws : EpochFrameLaws R)
+
+include laws
+
 theorem passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
     {available : Gwei} :
     ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
@@ -2036,44 +2240,6 @@ theorem processPendingDeposits {electra : .pectra ≤ fork}
     exact laws.trans (laws.passPendingDeposits ‹_›)
       (laws.pendingDeposits _ _ _)
 
-theorem passPendingConsolidations {nextEpoch : Epoch} :
-    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
-      {result : BeaconState preset fork × Nat},
-      Consensus.passPendingConsolidations nextEpoch state consolidations = .ok result →
-      R state result.1
-  | [], _, _, computed => by
-    simp only [Consensus.passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact laws.refl _
-  | consolidation :: rest, state, result, computed => by
-    simp only [Consensus.passPendingConsolidations, bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨source, _, computed⟩ := computed
-    split at computed
-    · simp only [bind_ok_iff] at computed
-      obtain ⟨⟨passed, read⟩, passedOk, computed⟩ := computed
-      cases computed
-      exact passPendingConsolidations (result := (passed, read)) passedOk
-    split at computed
-    · cases computed
-      exact laws.refl _
-    simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, lowered, loweredOk, raised, raisedOk, ⟨passed, read⟩, passedOk, computed⟩ :=
-      computed
-    cases computed
-    exact laws.trans (laws.trans (laws.decreaseBalance loweredOk)
-      (laws.increaseBalance raisedOk))
-      (passPendingConsolidations (result := (passed, read)) passedOk)
-
-theorem processPendingConsolidations {electra : .pectra ≤ fork}
-    (computed : Consensus.processPendingConsolidations state electra = .ok after) :
-    R state after := by
-  unfold Consensus.processPendingConsolidations at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' (split at computed <;> try cases computed)
-  all_goals
-    exact laws.trans (laws.passPendingConsolidations ‹_›)
-      (laws.pendingConsolidations _ _)
-
 theorem processPendingBalances
     (computed : Consensus.processPendingBalances config checks state = .ok after) :
     R state after := by
@@ -2086,73 +2252,6 @@ theorem processPendingBalances
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ laws.refl _
 
-theorem processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
-    (computed : Consensus.processHistoricalSummariesUpdate state capella = .ok after) :
-    R state after := by
-  unfold Consensus.processHistoricalSummariesUpdate at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' (split at computed <;> try cases computed)
-  all_goals first
-    | exact laws.refl _
-    | exact (laws.historicalSummaries _ _)
-
-theorem processSyncCommitteeUpdates {altair : .altair ≤ fork}
-    (computed : Consensus.processSyncCommitteeUpdates state altair = .ok after) :
-    R state after := by
-  unfold Consensus.processSyncCommitteeUpdates at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' (split at computed <;> try cases computed)
-  all_goals first
-    | exact laws.refl _
-    | exact (laws.syncCommittees _ _ _)
-
-theorem processProposerLookahead {fulu : .fusaka ≤ fork}
-    (computed : Consensus.processProposerLookahead state fulu = .ok after) : R state after := by
-  simp only [Consensus.processProposerLookahead, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, rfl⟩ := computed
-  exact (laws.proposerLookahead _ _)
-
-theorem processPtcWindow {gloas : .glamsterdam ≤ fork}
-    (computed : Consensus.processPtcWindow state gloas = .ok after) : R state after := by
-  simp only [Consensus.processPtcWindow, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, rfl⟩ := computed
-  exact (laws.ptcWindow _ _)
-
-private theorem epochEdge {stage : EpochStage}
-    (ordinary : stage ≠ .justification ∧ stage ≠ .payments ∧ stage ≠ .participation)
-    (computed : EpochStage.action config checks stage state = .ok after) : R state after := by
-  have edge := EpochStage.action_cases.mp computed
-  cases stage <;> simp only [EpochStage.Edge] at edge
-  case justification | payments | participation => simp at ordinary
-  all_goals first
-    | exact laws.processRewardsAndPenalties edge
-    | exact laws.processRegistryUpdates edge
-    | exact laws.processSlashings edge
-    | exact laws.processEffectiveBalanceUpdates edge
-    | exact laws.processSlashingsReset edge
-    | exact laws.processRandaoMixesReset edge
-    | (split at edge
-       · first
-         | exact laws.processInactivityUpdates edge
-         | exact laws.processEth1DataReset edge
-         | exact laws.processPendingDeposits edge
-         | exact laws.processPendingConsolidations edge
-         | exact laws.processHistoricalSummariesUpdate edge
-         | exact laws.processSyncCommitteeUpdates edge
-         | exact laws.processProposerLookahead edge
-         | exact laws.processPtcWindow edge
-       · first
-         | exact laws.processHistoricalRootsUpdate edge
-         | exact edge ▸ laws.refl _)
-
-private theorem epochTrace {stages : List EpochStage}
-    (ordinary : ∀ k ∈ stages, k ≠ .justification ∧ k ≠ .payments ∧ k ≠ .participation)
-    (trace : EpochTrace (EpochStage.action config checks) stages state after) : R state after :=
-  trace.transport R laws.refl laws.trans
-    (fun k member _ _ ok => laws.epochEdge (ordinary k member) ok)
-
 /-- The steps of an epoch before the payments are justification, then steps in the relation. -/
 theorem epochBeforePayments_split
     (computed : epochBeforePayments config checks state = .ok after) :
@@ -2162,36 +2261,17 @@ theorem epochBeforePayments_split
   have trace := EpochTrace.run_ok_iff.mp computed
   cases trace with
   | cons first rest =>
-    exact ⟨_, first, laws.epochTrace (by simp) rest⟩
-
-/-- From Altair, the epoch transition first runs the steps before the payments.
-
-The builder payments follow, which change nothing before Gloas, then steps in the relation.
-
-The rotation of the participation flags comes next, then the last steps in the relation. -/
-theorem processEpochAltair_paymentSplit {altair : .altair ≤ fork}
-    (computed : Consensus.processEpochAltair config checks state altair = .ok after) :
-    ∃ pending paid rooted,
-      epochBeforePayments config checks state = .ok pending ∧
-      (if gloas : .glamsterdam ≤ fork then
-        liftAccessor (processBuilderPendingPayments pending gloas) else pure pending) =
-          (Except.ok paid : Except TransitionError _) ∧
-      R paid rooted ∧ R (processParticipationFlagUpdates rooted altair) after := by
-  rw [processEpochAltair_eq_run] at computed
-  have trace := EpochTrace.run_ok_iff.mp computed
-  obtain ⟨rooted, head, tail⟩ := EpochTrace.append_iff.mp trace
-  obtain ⟨pending, initial, middle⟩ := EpochTrace.append_iff.mp head
-  cases middle with
-  | cons paidOk middle =>
-    cases tail with
-    | cons rotated tail =>
-      have rotation := EpochStage.action_cases.mp rotated
-      simp only [EpochStage.Edge, altair, ↓reduceDIte] at rotation
-      subst rotation
-      refine ⟨pending, _, rooted, ?_, paidOk, laws.epochTrace (by simp) middle,
-        laws.epochTrace (by simp) tail⟩
-      rw [epochBeforePayments_eq_run]
-      exact EpochTrace.run_ok_iff.mpr initial
+    refine ⟨_, first, rest.transport R laws.refl laws.trans ?_⟩
+    intro k member a b ok
+    by_cases deposits : k = .pendingDeposits
+    · subst k
+      have edge := EpochStage.action_cases.mp ok
+      simp only [EpochStage.Edge] at edge
+      split at edge
+      · exact laws.processPendingDeposits edge
+      · exact edge ▸ laws.refl _
+    refine laws.toEpochStepLaws.epochEdge ⟨?_, ?_, ?_, deposits⟩ ok <;> rintro rfl <;>
+      simp at member
 
 /-- The two ordinary intervals around participation rotation compose through payments. -/
 theorem processEpochAltair_rotationSplit
@@ -2210,34 +2290,6 @@ theorem processEpochAltair_rotationSplit
     · simp only [pure, Except.pure, Except.ok.injEq] at payment
       exact payment ▸ laws.refl _
   exact ⟨justified, rooted, first, laws.trans head (laws.trans paidStep middle), tail⟩
-
-/-- Before Altair, all stages after justification preserve the relation. -/
-theorem processEpoch_beforeAltair (before : ¬ .altair ≤ fork)
-    (computed : Consensus.processEpoch config checks state = .ok after) :
-    ∃ justified, processJustificationAndFinalization state = .ok justified ∧ R justified after := by
-  have trace := processEpoch_trace computed
-  change EpochTrace _ (.justification :: _) _ _ at trace
-  cases trace with
-  | cons first rest =>
-    refine ⟨_, first, rest.transport R laws.refl laws.trans ?_⟩
-    intro k member a b ok
-    by_cases payment : k = .payments
-    · subst k
-      have disabled : ¬ Fork.glamsterdam ≤ fork :=
-        fun h => before (Nat.le_trans (by decide) h)
-      have eq := EpochStage.action_cases.mp ok
-      simp only [EpochStage.Edge, disabled, ↓reduceDIte] at eq
-      exact eq ▸ laws.refl _
-    by_cases rotation : k = .participation
-    · subst k
-      have eq := EpochStage.action_cases.mp ok
-      simp only [EpochStage.Edge, before, ↓reduceDIte] at eq
-      exact laws.processParticipationRecordUpdates eq
-    have ordinary : k ≠ .justification := by
-      intro eq
-      subst k
-      simp [EpochStage.middleStages, EpochStage.tailStages] at member
-    exact laws.epochEdge ⟨ordinary, payment, rotation⟩ ok
 
 end EpochFrameLaws
 

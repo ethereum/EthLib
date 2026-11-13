@@ -14,6 +14,10 @@ The finalized ancestor, the proofs of the data and the expected proposer complet
 
 Before the header, each topic checks the seen keys, the shape or index, and the subnet.
 
+The shape check of a column sidecar passes exactly when its index names a column.
+
+Its cells, proofs and commitments must also agree in one nonzero count, within the blob limit.
+
 From the chain follows which sidecars each topic accepts, ignores and rejects.
 
 A valid sidecar records its key, and the same sidecar is then ignored.
@@ -445,6 +449,44 @@ theorem validateBlobSidecar_accept
 
 end Blob
 
+/-! ## The shape check of a column sidecar -/
+
+/-- The shape check of a sidecar passes exactly when the following hold.
+
+Its index names a column, and it answers to one or more commitments.
+
+From Gloas they are the commitments given with it, which gossip takes from the bid of its block.
+
+Before Gloas their count stays within the blob limit at the epoch of the slot of its header.
+
+It has one cell and one proof for each commitment. -/
+theorem verifyDataColumnSidecar_eq_true_iff {sidecar : DataColumnSidecar preset fork}
+    {bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)} :
+    verifyDataColumnSidecar preset config sidecar bidCommitments = true ↔
+      sidecar.index < preset.NUMBER_OF_COLUMNS ∧
+        (sidecar.commitments bidCommitments).data.size ≠ 0 ∧
+        (∀ beforeGloas : fork < .glamsterdam,
+          (sidecar.commitments bidCommitments).data.size ≤
+            (config.getBlobParameters (computeEpochAtSlot preset
+              (sidecar.signedBlockHeader beforeGloas).message.slot)).maxBlobsPerBlock.toNat) ∧
+        sidecar.column.data.size = (sidecar.commitments bidCommitments).data.size ∧
+        sidecar.kzgProofs.data.size = (sidecar.commitments bidCommitments).data.size := by
+  by_cases beforeGloas : fork < .glamsterdam
+  · simp only [verifyDataColumnSidecar, dite_eq_left beforeGloas, Bool.and_eq_true,
+      decide_eq_true_eq, bne_iff_ne, ne_eq, beq_iff_eq]
+    constructor
+    · rintro ⟨⟨⟨⟨index, nonzero⟩, limit⟩, column⟩, proofs⟩
+      exact ⟨index, nonzero, fun _ => limit, column, by omega⟩
+    · rintro ⟨index, nonzero, limit, column, proofs⟩
+      exact ⟨⟨⟨⟨index, nonzero⟩, limit beforeGloas⟩, column⟩, by omega⟩
+  · simp only [verifyDataColumnSidecar, dite_eq_right beforeGloas, Bool.and_eq_true,
+      decide_eq_true_eq, bne_iff_ne, ne_eq, beq_iff_eq, and_true]
+    constructor
+    · rintro ⟨⟨⟨index, nonzero⟩, column⟩, proofs⟩
+      exact ⟨index, nonzero, fun before => absurd before beforeGloas, column, by omega⟩
+    · rintro ⟨index, nonzero, -, column, proofs⟩
+      exact ⟨⟨⟨index, nonzero⟩, column⟩, by omega⟩
+
 /-! ## Column sidecars, from Fulu before Gloas -/
 
 section Column
@@ -681,10 +723,8 @@ theorem validateDataColumnSidecar_accept
 theorem validateDataColumnSidecar_index_lt
     (accepted : validateDataColumnSidecar config checks setup seen store columns sidecar
       currentTimeMs subnetId = .ok accept) :
-    sidecar.index < preset.NUMBER_OF_COLUMNS := by
-  have shape := (validateDataColumnSidecar_accept accepted).2.1
-  simp only [verifyDataColumnSidecar, Bool.and_eq_true, decide_eq_true_eq] at shape
-  exact shape.1.1.1.1
+    sidecar.index < preset.NUMBER_OF_COLUMNS :=
+  (verifyDataColumnSidecar_eq_true_iff.mp (validateDataColumnSidecar_accept accepted).2.1).1
 
 end Column
 

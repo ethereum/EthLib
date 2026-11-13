@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Networking.Libp2p.PeerId
 public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
+public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 
 /-!
 # Proofs: libp2p secp256k1 public keys, peer IDs and DER signatures
@@ -13,6 +14,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 - A decoded key's peer ID is the two bytes `00 25`, then the key protobuf.
 - A number below `2 ^ 256` is a DER INTEGER on the fewest bytes, the first with its top bit clear.
 - The signature decoder accepts exactly the encodings of r and low s in range, and returns them.
+- A signature that the identity secret makes verifies under the key protobuf of that secret.
 -/
 
 @[expose] public section
@@ -283,5 +285,35 @@ theorem decodeSignature_eq_ok_iff {signature : ByteArray} {r s : Nat} :
       List.drop_left' (natToBytes_length kr r), natToBytes_length,
       bytesToNat_natToBytes_of_lt hrk, bytesToNat_natToBytes_of_lt hsk]
     simp [hcond]
+
+/-- A signature that a secret makes verifies under the key protobuf of that secret.
+
+Signing returns a low s, so the strict DER decoder accepts the signature it encodes. -/
+theorem verify_sign {k : Fn} {message signature : ByteArray} (h : sign k message = .ok signature) :
+    verify (encodePublicKey (Point.mul k .generator)) message signature = true := by
+  have hk : k ≠ 0 := by
+    rintro rfl
+    simp [sign, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
+  unfold sign at h
+  simp only [hk, ite_false] at h
+  generalize hs : Ecdsa.sign k (EthLib.Cryptography.Hash.Sha256.hash32 message) = w at h
+  match w, h with
+  | .ok (r, s, odd), h =>
+    simp only [Except.mapError, bind, Except.bind, pure, Except.pure,
+      Except.ok.injEq] at h
+    subst h
+    have hv := Ecdsa.verify_sign_rfc6979 hs
+    obtain ⟨-, hr, hs0⟩ := Ecdsa.sign_ne_zero hs
+    have hlow := Ecdsa.isLowS_sign hs
+    have hcurve := Point.isOnCurve_mul k Point.isOnCurve_generator
+    have hdec := decodeSignature_eq_ok_iff (signature := encodeSignature r.val s.val)
+      (r := r.val) (s := s.val)
+    have hr0 : 0 < r.val := Nat.pos_of_ne_zero fun h0 => hr (Fin.ext h0)
+    have hs00 : 0 < s.val := Nat.pos_of_ne_zero fun h0 => hs0 (Fin.ext h0)
+    have hlow' : s.val ≤ Fn.modulus / 2 := by
+      simpa [Ecdsa.isLowS] using hlow
+    have hd := hdec.mpr ⟨hr0, r.isLt, hs00, hlow', rfl⟩
+    simp [verify, decodePublicKey_encodePublicKey hcurve (Ecdsa.mul_generator_ne_infinity hk),
+      hd, hv]
 
 end EthLib.Networking.Proofs.Libp2p.PeerId

@@ -35,6 +35,8 @@ eth_check_pooled(
   lean_object* response
 );
 
+extern lean_object* eth_session(lean_object* args);
+
 extern lean_object*
 eth_wire_hash(
   lean_object* tx
@@ -250,4 +252,12 @@ py_eth_check_partial_receipts(
   if (parse_bytes(receipts_obj, "receipts", &receipts)) { lean_dec(limits); return NULL; }
   return except_into_pybool(
     eth_check_partial_receipts(limits, block_gas_limit, receipts), ETH_WIRE_ERROR);
+}
+
+PyObject*
+py_eth_session(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_session, args, 5, ETH_WIRE_ERROR);
 }
