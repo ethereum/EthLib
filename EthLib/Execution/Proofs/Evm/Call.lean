@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Call.CodeOrigin
 public import EthLib.Execution.Proofs.Evm.Call.Codes
 public import EthLib.Execution.Proofs.Evm.Call.ContractAddress
 public import EthLib.Execution.Proofs.Evm.Call.Create
+public import EthLib.Execution.Proofs.Evm.Call.CreatedRead
 public import EthLib.Execution.Proofs.Evm.Call.Delegation
 public import EthLib.Execution.Proofs.Evm.Call.Fresh
 public import EthLib.Execution.Proofs.Evm.Call.Funded
