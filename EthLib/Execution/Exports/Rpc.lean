@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Execution.Rpc.BlockParam
 public import EthLib.Execution.Rpc.Errors
 public import EthLib.Execution.Rpc.Methods
+public import EthLib.Execution.Rpc.Simulate
 public import EthLib.Execution.Exports.Transition
 
 /-!
@@ -340,5 +341,27 @@ A value outside the JSON schema has code 32602, and an encoding failure has code
 @[export eth_rpc_encode_block_access_list]
 def encodeBlockAccessListExport (args : PyValue) : Result PyValue :=
   pyExport encodeBlockAccessListOf args
+
+/-- The state root after the account overrides of a block, or why the inputs are rejected. -/
+def applyOverridesOf (args : ByteArray × PyValue) : Result ByteArray := do
+  let (input, value) := args
+  let state ← (State.Exports.ofInput input).mapError fun e => (e.code, e.message)
+  let overrides ← (if containsBytes value then reject "stateOverrides: not a JSON value"
+    else stateOverrides value.toJson).mapError fun reason =>
+      ((RpcError.invalidParams reason).code.natAbs.toUInt32, reason)
+  State.Exports.rootOf (applyOverrides state overrides)
+
+/-- The state root after the account overrides of one block of `eth_simulateV1`.
+
+The arguments are a state in the form of the state root export, and the object `stateOverrides`.
+
+The moves are not checked here, and a move changes no state.
+
+A state that does not decode has the code of its state error.
+
+An object outside the schema has code 32602, the code of invalid parameters without its sign. -/
+@[export eth_rpc_apply_overrides]
+def applyOverridesExport (args : PyValue) : Result PyValue :=
+  pyExport applyOverridesOf args
 
 end EthLib.Execution.Rpc.Exports

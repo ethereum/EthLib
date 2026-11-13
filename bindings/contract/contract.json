@@ -14117,6 +14117,22 @@
    "docstring":
    "Encode a block access-list JSON value as its EIP-7928 RLP bytes.\n\nThe argument is the JSON value returned by `eth_getBlockAccessList`.\n\nThe empty list encodes as `0xc0`.\n\nThe order of the list is not checked, so the bytes match a header hash only for a canonical order.\n\nA value outside the JSON schema has code 32602, and an encoding failure has code 32603."},
   {"summary":
+   "The state root after the account overrides of one block of `eth_simulateV1`.",
+   "signature": "(state: bytes, overrides: object) -> bytes",
+   "operation": "EthLib.Execution.Rpc.Exports.applyOverridesExport",
+   "method": "rpc_apply_overrides",
+   "errors":
+   [{"type": "EthLib.Execution.State.StateInputError",
+     "codes":
+     [{"constructor": "notAnItem", "code": 1},
+      {"constructor": "notAList", "code": 2},
+      {"constructor": "badAccount", "code": 3},
+      {"constructor": "repeatedAddress", "code": 4},
+      {"constructor": "noRoot", "code": 5}]}],
+   "error_class": "RpcError",
+   "docstring":
+   "The state root after the account overrides of one block of `eth_simulateV1`.\n\nThe arguments are a state in the form of the state root export, and the object `stateOverrides`.\n\nThe moves are not checked here, and a move changes no state.\n\nA state that does not decode has the code of its state error.\n\nAn object outside the schema has code 32602, the code of invalid parameters without its sign."},
+  {"summary":
    "The value that Python passes, back to Python, with each failure tuple read as a failure.",
    "signature": "(value: object) -> object",
    "operation": "EthLib.Exports.pyValueEcho",

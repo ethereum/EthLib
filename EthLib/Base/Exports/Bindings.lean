@@ -1890,6 +1890,9 @@ def bindings : List Binding := [
     [`EthLib.Execution.Blocks.BlockError], some "RpcError"⟩,
   ⟨"rpc_encode_block_access_list", `EthLib.Execution.Rpc.Exports.encodeBlockAccessListExport,
     "(value: object) -> bytes", [], some "RpcError"⟩,
+  ⟨"rpc_apply_overrides", `EthLib.Execution.Rpc.Exports.applyOverridesExport,
+    "(state: bytes, overrides: object) -> bytes",
+    [`EthLib.Execution.State.StateInputError], some "RpcError"⟩,
   ⟨"pyvalue_echo", `EthLib.Exports.pyValueEcho,
     "(value: object) -> object",
     [], some "BindingError"⟩

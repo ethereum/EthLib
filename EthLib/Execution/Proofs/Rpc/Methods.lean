@@ -21,7 +21,7 @@ public section
 namespace EthLib.Execution.Rpc.ChainView
 
 open Lean (Json)
-open EthLib.Serialization.JsonRpc (optionJson)
+open EthLib.Serialization.JsonRpc (optionJson RpcError)
 
 /-- A notification gets no response. -/
 theorem answerJson_notification (v : ChainView) {j : Json} (h : isNotification j = true) :
@@ -40,7 +40,7 @@ theorem call_unknown (v : ChainView) {method : String} (params : List Json)
       "eth_getProof", "eth_call", "eth_estimateGas", "eth_createAccessList",
       "eth_feeHistory", "eth_baseFee", "eth_sendRawTransaction", "debug_getRawHeader",
       "debug_getRawBlock", "debug_getRawTransaction", "debug_getRawReceipts",
-      "eth_getBlockAccessList", "debug_getRawBlockAccessList"]) :
+      "eth_getBlockAccessList", "debug_getRawBlockAccessList", "eth_simulateV1"]) :
     v.call method params = .error (methodNotFound.toRpcError (some (.str method))) := by
   simp only [List.mem_cons, List.not_mem_nil, or_false, not_or] at h
   unfold call
@@ -75,5 +75,11 @@ theorem Valid.headerJson_eq {v : ChainView} {checkSeal : Bool} (hv : v.Valid che
   rcases hr with hr | hr
   · exact headerJson_eq_headerObject (hv.hash r hr)
   · exact headerJson_eq_headerObject (hv.pending r hr).1
+
+/-- A request that its reader rejects gets the code of invalid parameters, `-32602`. -/
+theorem call_simulate_rejected (v : ChainView) {s : Json} {rest : List Json} {reason : String}
+    (h : simulatePayload s = .error reason) :
+    v.call "eth_simulateV1" (s :: rest) = .error (RpcError.invalidParams reason) := by
+  simp [call, readParam, h, Except.mapError, bind, Except.bind]
 
 end EthLib.Execution.Rpc.ChainView
