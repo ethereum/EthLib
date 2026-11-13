@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Engine.BeaconApiEvents
+public import EthLib.Engine.Proofs.PreparePayload
 
 /-!
 # Proofs: the event of the payload attributes
@@ -15,7 +16,7 @@ The event names the slot of the state, its proposer, and the root of its latest 
 
 Its parent block hash is the head of the forkchoice update, and its attributes are those given.
 
-Before Gloas, for the update of a proposer, the event and the attributes name one parent.
+For the update of a proposer, the event and the attributes name one parent, before and from Gloas.
 -/
 
 @[expose] public section
@@ -126,5 +127,47 @@ theorem payloadAttributesEvent_prepareExecutionPayload {config : Config}
     exact hroot
   · rw [hslot]
     simpa using ht
+
+/-- From Gloas, the event of the update of a proposer and its attributes name one parent.
+
+The event reads the state of the attributes, the one on which the proposer builds.
+
+Its parent block hash is the execution block on which the proposer builds.
+
+Its safe and finalized block hashes are those given.
+
+Its parent root is the parent beacon block root of the attributes.
+
+Its slot is the slot number of the attributes, and gives their timestamp. -/
+theorem payloadAttributesEvent_prepareExecutionPayloadGloas {config : Config}
+    {checks : SignatureChecks} {store : Store preset fork} {head : ForkChoiceNode}
+    {state base : BeaconState preset fork} {gloas : .glamsterdam ≤ fork}
+    {safe finalized : Hash32} {feeRecipient : ExecutionAddress} {targetGasLimit : UInt64}
+    {update : ForkchoiceState} {attributes : PayloadAttributes fork}
+    {transactions : Since .hegota fork (List InclusionListTransaction)}
+    {withdrawals : Array Consensus.Withdrawal} {parentHash : Hash32}
+    {forks : .bellatrix ≤ fork ∧ fork < .hegota} {terminalNumber : UInt64}
+    {event : PayloadAttributesEvent fork}
+    (prepared : prepareExecutionPayloadGloas config checks store head state gloas safe finalized
+      feeRecipient targetGasLimit = .ok (update, attributes, transactions))
+    (parented : payloadParentGloas config checks store head state gloas =
+      .ok (base, withdrawals, parentHash))
+    (made : payloadAttributesEvent base forks update attributes terminalNumber = .ok event) :
+    event.parentBlockHash = parentHash ∧ event.safeBlockHash gloas = safe ∧
+      event.finalizedBlockHash gloas = finalized ∧
+      (∀ deneb, attributes.parentBeaconBlockRoot deneb = event.parentBlockRoot) ∧
+      attributes.slotNumber gloas = event.proposalSlot ∧
+      computeTimeAtSlot config base.genesisTime event.proposalSlot = .ok attributes.timestamp := by
+  obtain ⟨base', withdrawals', parented', hsafe, hfinalized, timed, -, -, -, rooted, slotted, -⟩ :=
+    prepareExecutionPayloadGloas_eq_ok prepared
+  rw [parented] at parented'
+  simp only [Except.ok.injEq, Prod.mk.injEq] at parented'
+  obtain ⟨rfl, -, hparent⟩ := parented'
+  obtain ⟨-, hroot, hslot, hhash, hsafe', hfinalized', -⟩ := payloadAttributesEvent_spec made
+  refine ⟨hhash.trans hparent.symm, (hsafe' gloas).trans hsafe,
+    (hfinalized' gloas).trans hfinalized, fun deneb => ?_, slotted.trans hslot.symm,
+    hslot ▸ timed⟩
+  have same := (rooted deneb).symm.trans hroot
+  simpa using same
 
 end EthLib.Engine
