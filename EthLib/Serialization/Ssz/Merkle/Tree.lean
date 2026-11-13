@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Serialization.Ssz.Codec.Serialize
 public import EthLib.Serialization.Ssz.Merkle.Merkleize
@@ -29,7 +30,7 @@ def combineM {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray) (l
 
 /-- Folding two nodes into their parent, with SHA-256. -/
 def combine (left right : Bytes) : Bytes :=
-  (combineM (m := Id) Cryptography.Hash.Sha256.hash left right).run
+  (Cryptography.Hash.Sha256.hash32 (ByteArray.mk (left ++ right))).toArray
 
 /-- Cache depth for common capacities, with larger trees computed on demand. -/
 abbrev maxZeroDepth : Nat :=
@@ -81,9 +82,11 @@ structure Hasher (m : Type → Type) where
   /-- The root of the all-zero perfect tree of a depth. -/
   zeroSubtree : Nat → m Bytes
 
-/-- SHA-256, with the roots of the all-zero subtrees read from the table. -/
+/-- SHA-256, with the roots of the all-zero subtrees read from the table.
+
+The generic hash callback returns byte arrays, so it packs the typed digest at that boundary. -/
 def sha256Hasher : Hasher Id :=
-  ⟨Cryptography.Hash.Sha256.hash, zeroSubtree⟩
+  ⟨fun message => Base.packBytes (Cryptography.Hash.Sha256.hash32 message), zeroSubtree⟩
 
 /-- The root of the all-zero perfect tree of a depth, hashed from the root one level below. -/
 def zeroSubtreeM {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray) : Nat → m Bytes

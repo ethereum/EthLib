@@ -96,6 +96,14 @@ theorem deriveKeys_ok (secret challengeData : ByteArray) (nodeIdA nodeIdB : Node
 
 /-! ## ID signatures -/
 
+/-- The bytes of an ID signature hash are the SHA-256 digest of its handshake inputs. -/
+theorem packBytes_idSignatureHash (challengeData ephemeralPubkey : ByteArray)
+    (nodeIdB : NodeId) :
+    Base.packBytes (idSignatureHash challengeData ephemeralPubkey nodeIdB) =
+      Cryptography.Hash.Sha256.hash
+        (asciiBytes "discovery v5 identity proof" ++ challengeData ++
+          ephemeralPubkey ++ ⟨nodeIdB.toArray⟩) := rfl
+
 /-- An ID signature from signing verifies under the signer's public key `sk G`. -/
 theorem idVerify_idSign {sk : Fn} {challengeData ephemeralPubkey signature : ByteArray}
     {nodeIdB : NodeId} (h : idSign sk challengeData ephemeralPubkey nodeIdB = .ok signature) :

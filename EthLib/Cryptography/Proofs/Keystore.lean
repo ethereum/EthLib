@@ -35,6 +35,19 @@ A store of a version other than 4 is refused before any other field is read.
 
 namespace EthLib.Cryptography.Keystore
 
+/-- The typed checksum contains the SHA-256 bytes required by password verification. -/
+theorem packBytes_passwordChecksum (key message : ByteArray) :
+    Base.packBytes (passwordChecksum key message) =
+      Hash.Sha256.hash (key.extract 16 32 ++ message) := rfl
+
+/-- Comparing typed checksums gives the same mismatch result as comparing their bytes. -/
+theorem passwordChecksum_bne_eq (key message : ByteArray) (checksum : Vector UInt8 32) :
+    (passwordChecksum key message != checksum) =
+      (Hash.Sha256.hash (key.extract 16 32 ++ message) != Base.packBytes checksum) := by
+  change (!(passwordChecksum key message == checksum)) =
+    !((passwordChecksum key message).toArray == checksum.toArray)
+  rw [Vector.toArray_beq_toArray]
+
 /-- A short intermediate key is refused before either cryptographic step reads it. -/
 theorem decryptWithKey_of_short (store : Store) (key : ByteArray) (h : key.size < 32) :
     decryptWithKey store key = .error (.shortKey key.size) := by
@@ -44,7 +57,7 @@ theorem decryptWithKey_of_short (store : Store) (key : ByteArray) (h : key.size 
 /-- A checksum mismatch prevents the AES step. -/
 theorem decryptWithKey_of_checksum_mismatch (store : Store) (key : ByteArray)
     (hsize : 32 ≤ key.size)
-    (hcheck : (passwordChecksum key store.message != ⟨store.checksum.toArray⟩) = true) :
+    (hcheck : (passwordChecksum key store.message != store.checksum) = true) :
     decryptWithKey store key = .error .checksumMismatch := by
   simp [decryptWithKey, hsize, hcheck]
   rfl
@@ -65,7 +78,7 @@ With the short-key and checksum refusals, nothing else stops the AES step of thi
 -/
 theorem exists_decryptWithKey_eq_ok (store : Store) (key : ByteArray)
     (hsize : 32 ≤ key.size)
-    (hcheck : (passwordChecksum key store.message != ⟨store.checksum.toArray⟩) = false) :
+    (hcheck : (passwordChecksum key store.message != store.checksum) = false) :
     ∃ secret, decryptWithKey store key = .ok secret := by
   simp [decryptWithKey, hsize, hcheck]
   exact ⟨_, rfl⟩
@@ -74,10 +87,10 @@ theorem exists_decryptWithKey_eq_ok (store : Store) (key : ByteArray)
 theorem decryptWithKey_ok_inv {store : Store} {key secret : ByteArray}
     (h : decryptWithKey store key = .ok secret) :
     32 ≤ key.size ∧
-      (passwordChecksum key store.message != ⟨store.checksum.toArray⟩) = false := by
+      (passwordChecksum key store.message != store.checksum) = false := by
   by_cases hsize : 32 ≤ key.size
   · refine ⟨hsize, ?_⟩
-    by_cases hcheck : (passwordChecksum key store.message != ⟨store.checksum.toArray⟩) = true
+    by_cases hcheck : (passwordChecksum key store.message != store.checksum) = true
     · rw [decryptWithKey_of_checksum_mismatch store key hsize hcheck] at h
       nomatch h
     · simpa using hcheck
@@ -88,7 +101,7 @@ theorem decryptWithKey_ok_inv {store : Store} {key secret : ByteArray}
 theorem exists_decryptWithKey_eq_ok_iff (store : Store) (key : ByteArray) :
     (∃ secret, decryptWithKey store key = .ok secret) ↔
       32 ≤ key.size ∧
-        (passwordChecksum key store.message != ⟨store.checksum.toArray⟩) = false :=
+        (passwordChecksum key store.message != store.checksum) = false :=
   ⟨fun ⟨_, h⟩ => decryptWithKey_ok_inv h,
     fun ⟨hsize, hcheck⟩ => exists_decryptWithKey_eq_ok store key hsize hcheck⟩
 
@@ -130,7 +143,7 @@ So a short-key error never reports the size of a key that derivation produced.
 theorem decryptWithKey_ne_shortKey_of_deriveKey {password key : ByteArray} {kdf : Kdf}
     (hkey : deriveKey password kdf = .ok key) (store : Store) (size : Nat) :
     decryptWithKey store key ≠ .error (.shortKey size) := by
-  by_cases hcheck : (passwordChecksum key store.message != ⟨store.checksum.toArray⟩) = true
+  by_cases hcheck : (passwordChecksum key store.message != store.checksum) = true
   · rw [decryptWithKey_of_checksum_mismatch store key (le_size_of_deriveKey hkey) hcheck]
     simp
   · obtain ⟨secret, hok⟩ :=
@@ -142,7 +155,7 @@ theorem decryptWithKey_ne_shortKey_of_deriveKey {password key : ByteArray} {kdf 
 
 /-- The checksum of a key and a message, as the 32 bytes a store holds. -/
 def checksumVector (key message : ByteArray) : Vector UInt8 32 :=
-  ⟨(passwordChecksum key message).data, Hash.Sha256.hash_size _⟩
+  passwordChecksum key message
 
 /-- Encrypting the decrypted secret again gives back the stored ciphertext.
 
@@ -156,10 +169,9 @@ theorem decryptWithKey_decryptWithKey {store : Store} {key secret : ByteArray}
       .ok store.message := by
   obtain ⟨hsize, hmatch⟩ := decryptWithKey_ok_inv h
   have hcheck : (passwordChecksum key secret !=
-      ⟨(checksumVector key secret).toArray⟩) = false := by
+      checksumVector key secret) = false := by
     show (passwordChecksum key secret != passwordChecksum key secret) = false
-    simp [bne, BEq.beq, ByteArray.beq]
-    exact Array.isEqv_self _
+    simp
   simp [decryptWithKey, hsize, hmatch] at h
   simp only [Pure.pure, Except.pure] at h
   obtain rfl := Except.ok.inj h

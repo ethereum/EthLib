@@ -27,6 +27,12 @@ namespace EthLib.Cryptography.Hash.Hmac
 @[simp] theorem hmac_size (key message : ByteArray) : (hmac key message).size = 32 :=
   Sha256.hash_size _
 
+/-- The typed tag contains the two hashes of RFC 2104 §2, without changing their bytes. -/
+theorem hmac32_toByteArray (key message : ByteArray) :
+    Base.packBytes (hmac32 key message) =
+      Sha256.hash (xorPad (blockKey key) OPAD ++
+        Sha256.hash (xorPad (blockKey key) IPAD ++ message)) := rfl
+
 /-! ## The key block -/
 
 /-- A key of at most `B` bytes is padded with zero bytes to `B` bytes. -/
@@ -37,7 +43,9 @@ theorem blockKey_of_le {key : ByteArray} (h : key.size ≤ BLOCK_SIZE) :
 /-- A key longer than `B` bytes is hashed, and its hash is padded with zero bytes to `B` bytes. -/
 theorem blockKey_of_lt {key : ByteArray} (h : BLOCK_SIZE < key.size) :
     blockKey key = Sha256.hash key ++ ⟨Array.replicate (BLOCK_SIZE - 32) 0⟩ := by
-  rw [blockKey, ite_eq_left h, Sha256.hash_size]
+  change (let short := if key.size > BLOCK_SIZE then Sha256.hash key else key
+    short ++ ⟨Array.replicate (BLOCK_SIZE - short.size) 0⟩) = _
+  simp only [ite_eq_left h, Sha256.hash_size]
 
 /-- The key block has `B = 64` bytes. -/
 theorem blockKey_size (key : ByteArray) : (blockKey key).size = BLOCK_SIZE := by
@@ -68,7 +76,7 @@ theorem blockKey_append_zeros {key : ByteArray} {n : Nat} (h : key.size + n ≤ 
 /-- Zero bytes appended to a key of at most `B` bytes leave the tag unchanged. -/
 theorem hmac_append_zeros {key : ByteArray} {n : Nat} (h : key.size + n ≤ BLOCK_SIZE)
     (message : ByteArray) : hmac (key ++ ⟨Array.replicate n 0⟩) message = hmac key message := by
-  unfold hmac
+  unfold hmac hmac32
   rw [blockKey_append_zeros h]
 
 /-! ## The pads -/

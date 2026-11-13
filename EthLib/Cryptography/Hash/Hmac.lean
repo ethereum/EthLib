@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Hash.Sha256
 
 /-!
@@ -31,7 +32,7 @@ A key longer than a block is hashed first.
 Zero bytes then fill the block.
 -/
 def blockKey (key : ByteArray) : ByteArray :=
-  let short := if key.size > BLOCK_SIZE then Sha256.hash key else key
+  let short := if key.size > BLOCK_SIZE then Base.packBytes (Sha256.hash32 key) else key
   short ++ ⟨Array.replicate (BLOCK_SIZE - short.size) 0⟩
 
 /-- Each byte of a block XORed with one pad byte. -/
@@ -39,21 +40,21 @@ def xorPad (block : ByteArray) (pad : UInt8) : ByteArray :=
   ⟨block.data.map (· ^^^ pad)⟩
 
 /--
-HMAC-SHA-256 of a message under a secret key: `H(K ^ opad, H(K ^ ipad, text))`.
-
-The key is secret, and this function makes no constant-time claim.
--/
-def hmac (key message : ByteArray) : ByteArray :=
-  let k := blockKey key
-  Sha256.hash (xorPad k OPAD ++ Sha256.hash (xorPad k IPAD ++ message))
-
-/--
 HMAC-SHA-256 of a message under a secret key, as its 32 bytes.
 
 The key is secret, and this function makes no constant-time claim.
 -/
 def hmac32 (key message : ByteArray) : Vector UInt8 32 :=
-  -- The tag is the output of SHA-256, which has 32 bytes.
-  ⟨(hmac key message).data, (Sha256.hash32 _).size_toArray⟩
+  let k := blockKey key
+  let inner := Sha256.hash32 (xorPad k IPAD ++ message)
+  Sha256.hash32 (xorPad k OPAD ++ Base.packBytes inner)
+
+/--
+HMAC-SHA-256 of a message under a secret key: `H(K ^ opad, H(K ^ ipad, text))`.
+
+The key is secret, and this function makes no constant-time claim.
+-/
+def hmac (key message : ByteArray) : ByteArray :=
+  Base.packBytes (hmac32 key message)
 
 end EthLib.Cryptography.Hash.Hmac

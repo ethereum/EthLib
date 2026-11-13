@@ -98,7 +98,8 @@ The shared data `s` is the `AUTHDATA` of the section "Notation" of `rlpx.md`.
 It is authenticated, but it is not part of the ciphertext.
 -/
 def tag (macKey : ByteArray) (iv : Aes.Block) (c sharedMac : ByteArray) : ByteArray :=
-  Hash.Hmac.hmac (Hash.Sha256.hash macKey) (⟨iv.toArray⟩ ++ c ++ sharedMac)
+  Hash.Hmac.hmac (Base.packBytes (Hash.Sha256.hash32 macKey))
+    (⟨iv.toArray⟩ ++ c ++ sharedMac)
 
 /--
 The ciphertext `R || iv || c || d` of `m` to the public key `recipient`.

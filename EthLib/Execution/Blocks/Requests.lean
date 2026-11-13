@@ -149,6 +149,7 @@ def depositRequests (depositContract : Address) (logs : List Log) :
 Each list is its type byte, then its data, and the lists come in the order of their types. -/
 def requestsHash (requests : List ByteArray) : Hash32 :=
   Cryptography.Hash.Sha256.hash32
-    ((requests.filter (·.size > 1)).foldl (fun acc r => acc ++ Cryptography.Hash.sha256 r) .empty)
+    ((requests.filter (·.size > 1)).foldl
+      (fun acc r => acc ++ packBytes (Cryptography.Hash.Sha256.hash32 r)) .empty)
 
 end EthLib.Execution.Blocks

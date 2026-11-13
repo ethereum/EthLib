@@ -53,8 +53,8 @@ def CustodyError.code : CustodyError → UInt32
   | .outOfFuel => 3
 
 /-- The integer of the first eight bytes, least significant first. -/
-def firstUInt64 (bytes : ByteArray) : UInt64 :=
-  (List.range 8).foldr (fun i acc => acc <<< 8 ||| (bytes.data.getD i 0).toUInt64) 0
+def firstUInt64 (bytes : Bytes32) : UInt64 :=
+  (List.finRange 8).foldr (fun i acc => acc <<< 8 ||| (bytes[i.val]'(by omega)).toUInt64) 0
 
 /-- The group that one ID hashes to.
 
@@ -62,7 +62,7 @@ It hashes the 32 bytes of the ID, least significant first, with SHA-256.
 
 Its first eight bytes, least significant first, give an integer modulo the number of groups. -/
 def groupOfId (config : Config) (id : NodeID) : CustodyIndex :=
-  firstUInt64 (Cryptography.Hash.Sha256.hash ⟨(U256.toBeBytes id).toArray.reverse⟩) %
+  firstUInt64 (Cryptography.Hash.Sha256.hash32 ⟨(U256.toBeBytes id).toArray.reverse⟩) %
     config.NUMBER_OF_CUSTODY_GROUPS
 
 /-- The groups of `groups`, then those of the IDs from `id` upward, until `count` are found.
