@@ -8,7 +8,7 @@ public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 
 Charge active departures and balance losses separately from recent arrivals and balance gains.
 
-Recent means active in either of the two epochs whose attestations justification may count.
+Recent means unslashed and active in either of the two epochs that justification may count.
 -/
 
 @[expose] public section
@@ -19,19 +19,25 @@ open Base Cryptography.Bls
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
-/-- Exact reference loss outside keys already slashed at this state. -/
+/-- Exact loss of the unslashed reference stake, outside keys already slashed at this state.
+
+A key slashed in the shared prefix is not in the reference set, so it is not charged here. -/
 noncomputable def referenceLoss (x y : ForkedBeaconState preset) : Nat := by
   classical
-  let unslashed := (activeKeys x.state).filter fun k =>
-    ¬ ∃ v ∈ y.state.validators.data.toList, v.pubkey = k ∧ v.slashed = true
-  exact ∑ k ∈ unslashed,
+  exact ∑ k ∈ (unslashedKeys x.state).filter (¬ SlashedAt y.state ·),
     (effectiveWeight x.state k - Models.supported (recentKeys y.state)
       (effectiveWeight y.state) k)
 
-/-- Exact gains on the voting support, without charging reference stake that just exited. -/
+/-- Exact gains on the voting support over the unslashed reference stake.
+
+Reference stake that just exited is not charged.
+
+A key slashed in the shared prefix is outside the reference set.
+
+It is absent from this sum only because a slashed flag stays set, which this file does not prove. -/
 noncomputable def referenceGain (x y : ForkedBeaconState preset) : Nat :=
   ∑ k ∈ recentKeys y.state,
-    (effectiveWeight y.state k - Models.supported (activeKeys x.state)
+    (effectiveWeight y.state k - Models.supported (unslashedKeys x.state)
       (effectiveWeight x.state) k)
 
 /-- Previous-epoch stake outside the current quorum denominator, at one boundary only. -/

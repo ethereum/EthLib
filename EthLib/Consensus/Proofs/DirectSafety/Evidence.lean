@@ -8,7 +8,7 @@ public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 /-!
 # Slashed validators come from evidence on the selected history
 
-A slashed flag in a reachable registry must originate in a slashing operation of the run.
+A slashed flag at the end of a run was set at its start or comes from a slashing of the run.
 
 The walk follows the state transition operation by operation; no abstract protocol is an input.
 
@@ -214,15 +214,6 @@ private theorem slashedKeptLaws :
 private theorem keep {after : BeaconState preset fork} (_ : BlockFrame state after)
     (same : after.validators = state.validators) : SlashedKept state after :=
   of_validators (congrArg (·.data) same)
-
-private theorem genesis {hash : Hash32} {time : UInt64} {deposits : Array Deposit}
-    (ok : initializeBeaconStateFromEth1 config checks hash time deposits = .ok after) :
-    SlashedBacked (fun _ => False) after := by
-  obtain ⟨before, genesisTime, root, deposited, activated, finalRoot, depositedOk, activatedOk,
-    rfl⟩ := initializeBeaconStateFromEth1_ok ok
-  have first := foldlM (fun _ _ _ ok => slashedKeptLaws.genesisDeposit keep ok) depositedOk
-  have second := foldlM (fun _ _ _ ok => slashedKeptLaws.activateAtGenesis ok) activatedOk
-  exact (first.trans second) (fun _ => False) (by simp [SlashedBacked, emptyGenesisState])
 
 private theorem processJustificationAndFinalization
     (ok : Consensus.processJustificationAndFinalization state = .ok after) :
@@ -462,37 +453,43 @@ private theorem block_backed {fork : Fork} {state after : BeaconState preset for
   · cases synced
     exact operatedBacked
 
-/-- A slashed validator of the last state has a slashing in a block of the run that names its key.
+/-- A validator of the state with the key is slashed. -/
+def SlashedAt {fork : Fork} (state : BeaconState preset fork) (key : BLSPubkey) : Prop :=
+  ∃ v ∈ state.validators.data.toList, v.pubkey = key ∧ v.slashed = true
+
+/-- A slashed validator of the last state has a slashed key at the first state of the run.
+
+Otherwise a block of the run carries a slashing that names its key.
 
 The key is read in the registry before that block.
 
-The run starts at a genesis built from deposits. -/
-theorem _root_.EthLib.Consensus.Run.slashed_evidence {g a : ForkedBeaconState preset}
-    (run : Run config checks g a) (genesis : Genesis config checks g)
+The run can start at any state. -/
+theorem _root_.EthLib.Consensus.Run.slashed_evidence {x a : ForkedBeaconState preset}
+    (run : Run config checks x a)
     (v : Validator) (member : v ∈ a.state.validators.data.toList) (slashed : v.slashed = true) :
-    run.SlashingEvidence v.pubkey := by
-  have backed : SlashedBacked run.SlashingEvidence a.state := by
+    SlashedAt x.state v.pubkey ∨ run.SlashingEvidence v.pubkey := by
+  have backed : SlashedBacked (fun k => SlashedAt x.state k ∨ run.SlashingEvidence k)
+      a.state := by
     clear member slashed v
     induction run with
-    | nil =>
-      obtain ⟨_, _, _, ok⟩ := genesis
-      intro current member flag
-      exact False.elim (SlashedKept.genesis ok current member flag)
+    | nil => exact fun current member flag => .inl ⟨current, member, rfl, flag⟩
     | snoc pre step ih =>
       rename_i middle last
-      have inherited : SlashedBacked (pre.snoc step).SlashingEvidence middle.state := by
+      have inherited : SlashedBacked
+          (fun k => SlashedAt x.state k ∨ (pre.snoc step).SlashingEvidence k) middle.state := by
         intro current member flag
-        obtain ⟨x, y, occurrence, contained, evidence⟩ := ih current member flag
-        exact ⟨x, y, occurrence, .earlier contained step, evidence⟩
+        refine (ih current member flag).imp_right ?_
+        rintro ⟨u, w, occurrence, contained, evidence⟩
+        exact ⟨u, w, occurrence, .earlier contained step, evidence⟩
       cases step with
       | slot ok => exact SlashedKept.advanceSlotAcross ok _ inherited
       | block engine signed due ok =>
         apply block_backed (applySignedBlock_ok ok).2.1 _ inherited
         · intro sl member old found
-          exact ⟨_, _, .block engine signed due ok, .last pre _,
+          exact .inr ⟨_, _, .block engine signed due ok, .last pre _,
             Or.inl ⟨sl, member, old, found, rfl⟩⟩
         · intro sl member i inIndices old found
-          exact ⟨_, _, .block engine signed due ok, .last pre _,
+          exact .inr ⟨_, _, .block engine signed due ok, .last pre _,
             Or.inr ⟨sl, member, i, inIndices, old, found, rfl⟩⟩
   exact backed v member slashed
 
