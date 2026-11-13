@@ -214,24 +214,6 @@ private abbrev commonOf {fork : Fork} (p : ExecutionPayload fork) : ExecutionPay
   blobGasUsed := fun h => absurd h (by decide)
   excessBlobGas := fun h => absurd h (by decide)
 
-/-- The decoder of byte strings reads back a byte string that holds its bytes as data. -/
-private theorem bytes_dataJson (what : String) (b : ByteArray) :
-    bytes what (dataJson b.data.toList) = .ok b := by
-  rw [dataJson, bytes_hexString]
-  congr 1
-  apply ByteArray.ext
-  apply Array.toList_inj.mp
-  simp
-
-/-- The decoder of lists of transactions reads back a list of transactions written as data. -/
-private theorem array_transactions (ts : List ByteArray) :
-    array "transactions" (bytes "transaction") (listJson (dataJson ·.data.toList) ts) = .ok ts := by
-  rw [array_listJson]
-  simp only [bytes_dataJson]
-  induction ts with
-  | nil => rfl
-  | cons t ts ih => simp only [List.mapM_cons, ih]; rfl
-
 /-- The decoder of numbers of 256 bits reads back a number of 256 bits written as a quantity. -/
 private theorem quantity_baseFee (what : String) (x : BitVec 256) :
     quantity what 256 (quantityJson x.toNat) = .ok x.toNat :=
@@ -306,7 +288,7 @@ private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
       rw [ite_eq_right ne1, ite_eq_right ne2, ite_eq_left hex]
       simp only [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17,
         liftM_ok, ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
-        bytesMax_dataJson _ _ _ extra, array_transactions, ge_iff_le, Nat.reduceLeDiff,
+        bytesMax_dataJson _ _ _ extra, array_bytes_listJson, ge_iff_le, Nat.reduceLeDiff,
         reduceIte, map_ok, Execution.Rpc.array_withdrawal_listJson, hbase, sinceValue, h1, h2,
         dite_true]
       rfl
@@ -325,7 +307,7 @@ private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
       rw [ite_eq_right ne1, ite_eq_left hex]
       simp only [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15,
         liftM_ok, ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
-        bytesMax_dataJson _ _ _ extra, array_transactions, ge_iff_le, Nat.reduceLeDiff,
+        bytesMax_dataJson _ _ _ extra, array_bytes_listJson, ge_iff_le, Nat.reduceLeDiff,
         reduceIte, map_ok, Execution.Rpc.array_withdrawal_listJson, hbase, sinceValue, h1, h2,
         dite_true, dite_false]
       rfl
@@ -341,7 +323,7 @@ private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
       rw [ite_eq_left hex]
       simp only [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14,
         liftM_ok, ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
-        bytesMax_dataJson _ _ _ extra, array_transactions, ge_iff_le, Nat.reduceLeDiff,
+        bytesMax_dataJson _ _ _ extra, array_bytes_listJson, ge_iff_le, Nat.reduceLeDiff,
         reduceIte, hbase, sinceValue, h1, h2, dite_false]
       rfl
   obtain ⟨v, hv⟩ := key

@@ -1214,6 +1214,12 @@
 #define DOC_engine_read_get_payload_result \
   "The result of an `engine_getPayload` method at a fork, read from its JSON and written back."
 
+#define DOC_engine_read_payload_bodies_result \
+  "The result of an `engine_getPayloadBodiesByHash` or `ByRange` method, read and written back."
+
+#define DOC_engine_read_get_blobs_result \
+  "The result of an `engine_getBlobs` method, read from its JSON and written back."
+
 #define DOC_engine_rewrite_params \
   "The parameters of an Engine API request, read by the decoder and written by the writer."
 

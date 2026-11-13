@@ -71,6 +71,14 @@ The source orders no two checks.
 
 EthLib decodes the parameters first, then checks the fork of version 1, then the request size.
 
+The answer is also written as JSON, and read back as a consensus node reads it.
+
+A blob has 131072 bytes, and a proof 48 bytes.
+
+The Engine API calls a cell a byte array and gives it no size.
+
+EthLib takes the size of the cells of its KZG cell proofs, which is 2048 bytes.
+
 The method specifications state these rules, at commit `3284ee8` of execution-apis:
 
 - [`engine_getBlobsV1`][v1], and its update by Osaka in [`osaka.md`][v1-osaka]
@@ -238,5 +246,94 @@ def getBlobsV4 (pool : BlobPool) (hashes : List Bytes32) (bits : CellBitarray) :
   if pool.serving then
     return some (hashes.map fun h => (pool.lookup h).bind (·.toV4 (selectedCells bits)))
   else return none
+
+/-! ## The answer as JSON -/
+
+/-- A blob and its proof as JSON. -/
+def blobAndProofV1Json (x : BlobAndProofV1) : Json :=
+  Json.mkObj [("blob", dataJson x.blob.toList), ("proof", dataJson x.proof.toList)]
+
+/-- A blob and the proofs of its cells as JSON. -/
+def blobAndProofV2Json (x : BlobAndProofV2) : Json :=
+  Json.mkObj [("blob", dataJson x.blob.toList),
+    ("proofs", listJson (dataJson ·.toList) x.proofs.toList)]
+
+/-- The selected cells of a blob as JSON: the cells, then their proofs, with `null` where absent.
+
+The two arrays hold `null` at the same positions. -/
+def blobCellsJson (x : BlobCellsAndProofsV1) : Json :=
+  Json.mkObj [
+    ("blob_cells", listJson (optionJson (dataJson ·.1.toList)) x.cells),
+    ("proofs", listJson (optionJson (dataJson ·.2.toList)) x.cells)]
+
+/-- A blob and its proof: exactly the two fields. -/
+def blobAndProofV1OfJson (j : Json) : Read BlobAndProofV1 := do
+  let fs ← fields "blobAndProof" j
+  unless hasExactly fs ["blob", "proof"] do reject "blobAndProof: not the fields of version 1"
+  return {
+    blob := ← fixed "blob" BYTES_PER_BLOB (← field "blobAndProof" fs "blob")
+    proof := ← fixed "proof" 48 (← field "blobAndProof" fs "proof") }
+
+/-- A blob and the proofs of its cells: exactly the two fields, with one proof per cell. -/
+def blobAndProofV2OfJson (j : Json) : Read BlobAndProofV2 := do
+  let fs ← fields "blobAndProof" j
+  unless hasExactly fs ["blob", "proofs"] do reject "blobAndProof: not the fields of version 2"
+  let blob ← fixed "blob" BYTES_PER_BLOB (← field "blobAndProof" fs "blob")
+  let proofs ← array "proofs" (fixed "proof" 48) (← field "blobAndProof" fs "proofs")
+  if h : proofs.length = CELLS_PER_EXT_BLOB then
+    return { blob, proofs := ⟨proofs.toArray, by simpa using h⟩ }
+  else reject s!"proofs: {proofs.length}, not {CELLS_PER_EXT_BLOB}"
+
+/-- A cell and its proof at one position, which must both be present or both be `null`. -/
+def cellAndProof : Option Cell × Option KZGProof → Read (Option (Cell × KZGProof))
+  | (some cell, some proof) => pure (some (cell, proof))
+  | (none, none) => pure none
+  | _ => reject "blobCells: a cell and its proof, one of them null"
+
+/-- The selected cells of a blob: two arrays of one length, with `null` at the same positions.
+
+The source asks a proof to be `null` where its cell is `null`, in step 4 of version 4.
+
+EthLib also rejects a cell whose proof is `null`, since that cell cannot be checked. -/
+def blobCellsOfJson (j : Json) : Read BlobCellsAndProofsV1 := do
+  let fs ← fields "blobCells" j
+  unless hasExactly fs ["blob_cells", "proofs"] do reject "blobCells: not the fields of version 1"
+  let cells ← array "blob_cells" (nullable (fixed "cell" BYTES_PER_CELL))
+    (← field "blobCells" fs "blob_cells")
+  let proofs ← array "proofs" (nullable (fixed "proof" 48)) (← field "blobCells" fs "proofs")
+  unless cells.length = proofs.length do reject "blobCells: arrays of two lengths"
+  return ⟨← (cells.zip proofs).mapM cellAndProof⟩
+
+/-- The answer of version 1 as JSON: a blob and its proof, or `null`, for each hash. -/
+def getBlobsV1Json (blobs : List (Option BlobAndProofV1)) : Json :=
+  listJson (optionJson blobAndProofV1Json) blobs
+
+/-- The answer of version 2 as JSON: the blobs with their cell proofs, or `null` alone. -/
+def getBlobsV2Json (blobs : Option (List BlobAndProofV2)) : Json :=
+  optionJson (listJson blobAndProofV2Json) blobs
+
+/-- The answer of version 3 as JSON: the blobs or `null` for each hash, or `null` alone. -/
+def getBlobsV3Json (blobs : Option (List (Option BlobAndProofV2))) : Json :=
+  optionJson (listJson (optionJson blobAndProofV2Json)) blobs
+
+/-- The answer of version 4 as JSON: the cells or `null` for each hash, or `null` alone. -/
+def getBlobsV4Json (blobs : Option (List (Option BlobCellsAndProofsV1))) : Json :=
+  optionJson (listJson (optionJson blobCellsJson)) blobs
+
+/-- The answer of version 1: an array whose entries are a blob and its proof, or `null`. -/
+def getBlobsV1OfJson (j : Json) : Decode (List (Option BlobAndProofV1)) :=
+  lift (array "result" (nullable blobAndProofV1OfJson) j)
+
+/-- The answer of version 2: an array of blobs with their cell proofs, or `null` alone. -/
+def getBlobsV2OfJson (j : Json) : Decode (Option (List BlobAndProofV2)) :=
+  lift (nullable (array "result" blobAndProofV2OfJson) j)
+
+/-- The answer of version 3: an array whose entries are blobs or `null`, or `null` alone. -/
+def getBlobsV3OfJson (j : Json) : Decode (Option (List (Option BlobAndProofV2))) :=
+  lift (nullable (array "result" (nullable blobAndProofV2OfJson)) j)
+
+/-- The answer of version 4: an array whose entries are cells or `null`, or `null` alone. -/
+def getBlobsV4OfJson (j : Json) : Decode (Option (List (Option BlobCellsAndProofsV1))) :=
+  lift (nullable (array "result" (nullable blobCellsOfJson)) j)
 
 end EthLib.Engine

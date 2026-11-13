@@ -221,16 +221,6 @@ theorem getPayloadParams_json (id : PayloadId) :
 
 /-! ## The result -/
 
-/-- The decoder of fixed-size byte strings reads back a list of them written as data. -/
-private theorem array_fixed_dataJson {n : Nat} (what w : String) (l : List (Vector UInt8 n)) :
-    Serialization.JsonRpc.array what (Serialization.JsonRpc.fixed w n)
-      (Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList) l) = .ok l := by
-  rw [Serialization.JsonRpc.array_listJson]
-  simp only [Serialization.JsonRpc.fixed_dataJson]
-  induction l with
-  | nil => rfl
-  | cons x xs ih => simp only [List.mapM_cons, ih]; rfl
-
 /-- A bundle that passes the length rules of a version reads back from its JSON at that version. -/
 theorem blobsBundleOfJson_json (version : Nat) (b : BlobsBundle)
     (h : b.lengthsHold version = true) :
@@ -251,8 +241,8 @@ theorem blobsBundleOfJson_json (version : Nat) (b : BlobsBundle)
     (List.mem_cons_of_mem _ (List.mem_cons_self ..))
   have r3 := Serialization.JsonRpc.field_of_perm (what := "blobsBundle") hp hd
     (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_self ..)))
-  simp only [hfs, hex, r1, r2, r3, array_fixed_dataJson, Json.liftM_ok, bind, Except.bind,
-    ite_true, h]
+  simp only [hfs, hex, r1, r2, r3, Serialization.JsonRpc.array_fixed_listJson, Json.liftM_ok,
+    bind, Except.bind, ite_true, h]
   rfl
 
 /-- A payload form of a block holds at most 32 bytes of extra data. -/
@@ -351,26 +341,6 @@ private theorem payloadJson_isNull {fork : Fork} (r : GetPayloadResult fork) :
   unfold GetPayloadResult.payloadJson Json.executionPayloadV4Json Json.executionPayloadJson
   split <;> rfl
 
-/-- The decoder of lists of requests reads back a list of byte strings written as data. -/
-private theorem array_requests (rs : List ByteArray) :
-    Serialization.JsonRpc.array "executionRequests" (Serialization.JsonRpc.bytes "request")
-      (Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.data.toList) rs) =
-        .ok rs := by
-  have hb : ∀ b : ByteArray,
-      Serialization.JsonRpc.bytes "request" (Serialization.JsonRpc.dataJson b.data.toList) =
-        .ok b := by
-    intro b
-    rw [Serialization.JsonRpc.dataJson, Serialization.JsonRpc.bytes_hexString]
-    congr 1
-    apply ByteArray.ext
-    apply Array.toList_inj.mp
-    simp
-  rw [Serialization.JsonRpc.array_listJson]
-  simp only [hb]
-  induction rs with
-  | nil => rfl
-  | cons x xs ih => simp only [List.mapM_cons, ih]; rfl
-
 /-- The result of a response, written and read back at its version and its fork, is that result.
 
 So the reader gets the payload and each field that the version returns. -/
@@ -456,11 +426,13 @@ theorem getPayloadResultOfJson_json {r : GetPayloadResponse}
         (by simp [hL, her, h4])
       have hvr : validRequests r.stored.built.requests = true := by
         simpa [requestsOfFork, hpec h4] using hreq
-      simp only [h3, h4, r3, r4, r5, hbj, array_requests, hvr, Json.liftM_ok, ite_true,
-        Functor.map, Except.map, boolOfJson, pure, Except.pure]
+      simp only [h3, h4, r3, r4, r5, hbj, Serialization.JsonRpc.array_bytes_listJson, hvr,
+        Json.liftM_ok, ite_true, Functor.map, Except.map, Json.lift, Serialization.JsonRpc.bool,
+        Except.mapError, pure, Except.pure]
       simp only [GetPayloadResponse.result, h2, h3, h4, ite_true]
     · simp only [h3, h4, r3, r4, hbj, Json.liftM_ok, ite_true, ite_false, Functor.map,
-        Except.map, boolOfJson, pure, Except.pure]
+        Except.map, Json.lift, Serialization.JsonRpc.bool, Except.mapError, pure,
+        Except.pure]
       simp only [GetPayloadResponse.result, h2, h3, h4, ite_true, ite_false]
   · have h4 : ¬4 ≤ version := by omega
     simp only [h3, h4, ite_false]

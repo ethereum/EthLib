@@ -185,6 +185,16 @@ def read_get_payload_result(method: str, fork: str, result: dict[str, Any]) -> d
     return _native.engine_read_get_payload_result(method, fork, result)
 
 
+def read_payload_bodies_result(method: str, result: Any) -> list[dict[str, Any] | None]:
+    """The result of an `engine_getPayloadBodiesByHash` or `ByRange` method, read and written."""
+    return _native.engine_read_payload_bodies_result(method, result)
+
+
+def read_get_blobs_result(method: str, result: Any) -> list[dict[str, Any] | None] | None:
+    """The result of an `engine_getBlobs` method, read and written back as JSON."""
+    return _native.engine_read_get_blobs_result(method, result)
+
+
 def rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     # The writer writes lowercase hex and quantities without leading zeros.
@@ -288,6 +298,8 @@ __all__ = [
     "read_payload_status",
     "read_forkchoice_response",
     "read_get_payload_result",
+    "read_payload_bodies_result",
+    "read_get_blobs_result",
     "WithdrawalEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",

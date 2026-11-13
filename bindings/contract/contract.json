@@ -11307,6 +11307,41 @@
    "docstring":
    "The result of an `engine_getPayload` method at a fork, read from its JSON and written back.\n\nThe arguments are the method name, the fork name and the result, as `json.loads` gives it.\n\nA result that does not decode is an invalid parameter, with code 32602.\n\nAn unknown method name, or a fork after Glamsterdam, has code 0."},
   {"summary":
+   "The result of an `engine_getPayloadBodiesByHash` or `ByRange` method, read and written back.",
+   "signature": "(method: str, result: Any) -> list[dict[str, Any] | None]",
+   "operation": "EthLib.Engine.Exports.readPayloadBodiesResultExport",
+   "method": "engine_read_payload_bodies_result",
+   "errors":
+   [{"type": "EthLib.Engine.EngineError",
+     "codes":
+     [{"constructor": "invalidParams", "code": 32602},
+      {"constructor": "unsupportedFork", "code": 38005},
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003},
+      {"constructor": "unknownPayload", "code": 38001}]}],
+   "error_class": "EngineError",
+   "docstring":
+   "The result of an `engine_getPayloadBodiesByHash` or `ByRange` method, read and written back.\n\nThe arguments are the method name and the result, as `json.loads` gives it.\n\nA result that does not decode is reported as invalid parameters, with code 32602.\n\nAn unknown method name has code 0."},
+  {"summary":
+   "The result of an `engine_getBlobs` method, read from its JSON and written back.",
+   "signature":
+   "(method: str, result: Any) -> list[dict[str, Any] | None] | None",
+   "operation": "EthLib.Engine.Exports.readGetBlobsResultExport",
+   "method": "engine_read_get_blobs_result",
+   "errors":
+   [{"type": "EthLib.Engine.EngineError",
+     "codes":
+     [{"constructor": "invalidParams", "code": 32602},
+      {"constructor": "unsupportedFork", "code": 38005},
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003},
+      {"constructor": "unknownPayload", "code": 38001}]}],
+   "error_class": "EngineError",
+   "docstring":
+   "The result of an `engine_getBlobs` method, read from its JSON and written back.\n\nThe arguments are the method name and the result, as `json.loads` gives it.\n\nA result that does not decode is reported as invalid parameters, with code 32602.\n\nAn unknown method name has code 0."},
+  {"summary":
    "The parameters of an Engine API request, read by the decoder and written by the writer.",
    "signature": "(method: str, params: list[Any]) -> list[Any]",
    "operation": "EthLib.Engine.Exports.rewriteParamsExport",

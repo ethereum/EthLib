@@ -60,7 +60,7 @@ open EthLib.Cryptography.Kzg
 open EthLib.Execution.Blocks (Block)
 open EthLib.Execution.Transactions
 open EthLib.Serialization.JsonRpc (dataJson fixed paramsArray fields hasExactly field array bytes
-  quantity quantityJson listJson)
+  quantity quantityJson listJson bool)
 
 /-- The blobs, commitments and proofs of the payload's network blob transactions, in order. -/
 structure BlobsBundle where
@@ -293,11 +293,6 @@ def getPayloadResultFields (version : Nat) : List String :=
     (if 3 ≤ version then ["blobsBundle", "shouldOverrideBuilder"] else []) ++
     (if 4 ≤ version then ["executionRequests"] else [])
 
-/-- A JSON boolean, or an invalid parameter that names the field. -/
-def boolOfJson (what : String) : Lean.Json → Json.Decode Bool
-  | .bool b => pure b
-  | _ => Json.invalid s!"{what}: not a boolean"
-
 /-- The execution payload of a result at a fork, of version 4 or of versions 1 to 3. -/
 def resultPayloadOfJson (v4 : Bool) (fork : Fork) (j : Lean.Json) :
     Json.Decode (ExecutionPayload fork × Since .glamsterdam fork ByteArray ×
@@ -340,7 +335,8 @@ def getPayloadResultOfJson (version : Nat) (fork : Fork) (j : Lean.Json) :
   let blobsBundle ← if 3 ≤ version then
     some <$> blobsBundleOfJson (blobsBundleVersion version) (← get "blobsBundle") else pure none
   let shouldOverrideBuilder ← if 3 ≤ version then
-    some <$> boolOfJson "shouldOverrideBuilder" (← get "shouldOverrideBuilder") else pure none
+    some <$> Json.lift (bool "shouldOverrideBuilder" (← get "shouldOverrideBuilder"))
+  else pure none
   let executionRequests ← if 4 ≤ version then
     some <$> array "executionRequests" (bytes "request") (← get "executionRequests")
   else pure none
