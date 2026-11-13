@@ -577,7 +577,7 @@ private theorem effectiveKept_pendingDeposits {f : Fork} {s t : BeaconState pres
 /-- An epoch stage keeps the balances, unless it is one of six stages.
 
 Those are rewards, registry updates, slashings, the two pending stages and effective balances. -/
-private theorem EpochStage.Edge.balances_eq {f : Fork} {stage : EpochStage}
+theorem EpochStage.Edge.balances_eq {f : Fork} {stage : EpochStage}
     {s t : BeaconState preset f} (edge : EpochStage.Edge config checks stage s t)
     (other : stage ≠ .rewards ∧ stage ≠ .registry ∧ stage ≠ .slashings ∧
       stage ≠ .pendingDeposits ∧ stage ≠ .pendingConsolidations ∧ stage ≠ .effectiveBalances) :
@@ -666,7 +666,7 @@ private theorem processEffectiveBalanceUpdates_balances {f : Fork} {s t : Beacon
   exact previous
 
 /-- The stages after the effective-balance update keep the validators and the balances. -/
-private theorem balanceDrift_late {f : Fork} {s t : BeaconState preset f}
+theorem balanceDrift_late {f : Fork} {s t : BeaconState preset f}
     (trace : EpochTrace (EpochStage.action config checks)
       [.slashingsReset, .randaoReset, .history, .participation, .syncCommittees,
         .proposerLookahead, .ptcWindow] s t) :
