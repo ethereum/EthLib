@@ -2330,7 +2330,8 @@ def activeStakeWindow (x : ForkedBeaconState preset) (high : Nat)
     fundedStake x + depositWindow (config := config) x high + (events.map fundingCredit).sum
   else registryWindow x high * preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
 
-private theorem funding_sum_zipIdx (vs : List Validator) (f : Validator → Nat → Nat) :
+/-- A sum over the indexed registry is a sum over the index range. -/
+theorem funding_sum_zipIdx (vs : List Validator) (f : Validator → Nat → Nat) :
     (vs.zipIdx.map fun (v, i) => f v i).sum =
       ∑ i ∈ Finset.range vs.length, (vs[i]?.map (fun v => f v i)).getD 0 := by
   let weight := fun i => (vs[i]?.map (fun v => f v i)).getD 0

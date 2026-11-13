@@ -2656,21 +2656,6 @@ private theorem intervalGain_path_bound {g x y : ForkedBeaconState preset}
   obtain ⟨w, found, recent⟩ := (Finset.mem_filter.mp member).2
   exact intervalGain_index_bound shared tail genesis twoSlots early i w found recent
 
-private theorem intervalGain_zip_sum (vs : List Validator) (f : Validator → Nat → Nat) :
-    (vs.zipIdx.map fun (v, i) => f v i).sum =
-      ∑ i ∈ Finset.range vs.length, (vs[i]?.map (fun v => f v i)).getD 0 := by
-  let weight := fun i => (vs[i]?.map (fun v => f v i)).getD 0
-  have same : vs.zipIdx.map (fun (v, i) => f v i) =
-      (vs.zipIdx.map Prod.snd).map weight := by
-    rw [List.map_map]
-    apply List.map_congr_left
-    rintro ⟨v, i⟩ member
-    have found := List.mem_zipIdx_iff_getElem?.mp member
-    simp [weight, found]
-  rw [same, List.zipIdx_map_snd]
-  rw [Finset.sum_eq_multiset_sum, Finset.range_val, ← Multiset.coe_range,
-    Multiset.map_coe, Multiset.sum_coe, List.range_eq_range']
-
 private theorem intervalGain_excess_sum (x : ForkedBeaconState preset)
     (early : x.fork < .glamsterdam) :
     initialExcess x = ∑ i ∈ Finset.range x.state.validators.data.size,
@@ -2684,7 +2669,7 @@ private theorem intervalGain_excess_sum (x : ForkedBeaconState preset)
     | cons a xs ih => cases h : f a <;> simp [h, ih]
   unfold initialExcess getActiveValidatorIndices
   rw [List.map_filterMap, filterSum]
-  have zipped := intervalGain_zip_sum x.state.validators.data.toList
+  have zipped := funding_sum_zipIdx x.state.validators.data.toList
     (fun v i => if isActiveValidator v (getCurrentEpoch x.state) then
       actualBalanceAt x i - effectiveAt x i else 0)
   simp only [Array.length_toList, Array.getElem?_toList] at zipped
@@ -2709,7 +2694,7 @@ private theorem intervalGain_initial_sum (x : ForkedBeaconState preset)
       activationCarry x + initialExcess x := by
   rw [intervalGain_excess_sum x early]
   unfold activationCarry
-  rw [intervalGain_zip_sum x.state.validators.data.toList
+  rw [funding_sum_zipIdx x.state.validators.data.toList
     (fun v i => if isActiveValidator v (getCurrentEpoch x.state) then 0
       else if isActiveValidator v (getPreviousEpoch x.state) ||
           getCurrentEpoch x.state < v.activationEpoch then
