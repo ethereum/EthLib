@@ -88,7 +88,7 @@ private theorem findSome_mem {l : List BlockRecord} {hash : Hash32} {r : BlockRe
   cases hq
   exact ⟨by simp [hl], hp⟩
 
-/-- A search of the blocks of the node finds a transaction of the hash, at its index in a block. -/
+/-- A search of the blocks of the node finds a transaction with that hash, at its index. -/
 theorem findTransaction_some {v : ChainView} {hash : Hash32} {r : BlockRecord} {tx : Transaction}
     {index : Nat} (h : v.findTransaction hash = some (r, tx, index)) :
     r ∈ v.canonical ++ v.side ∧ r.block.transactions[index]? = some tx ∧

@@ -12,13 +12,15 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
 /-!
 # Proofs: the raw getters
 
-The bytes of a transaction hash to the hash that asked for them.
+The bytes of a transaction hash to the hash that names it in the request.
 
-The raw header of a block hashes to the hash that the header and block objects report.
+In a valid view, the raw header of a block hashes to the hash that the block objects report.
 
 It decodes back to the header.
 
-The raw block decodes back to the block, when each ommer is at the fork of its own number.
+The raw block decodes back to the block, with each transaction as its item in a body.
+
+This holds when each ommer is at the fork that the decoder gives its own number.
 
 In a valid view, take a canonical block after the lowest.
 
@@ -45,7 +47,7 @@ theorem ofBlock_eq_ok {α : Type} {v : ChainView} {p : BlockParam}
   rcases v.resolve p with e | _ | r <;> simp [bind, Except.bind, throw, throwThe,
     MonadExceptOf.throw]
 
-/-- The bytes of a transaction that the getter returns hash to the hash that it was asked for. -/
+/-- The bytes of a transaction hash to the hash that names it in the request. -/
 theorem keccak256_rawTransaction {v : ChainView} {hash : Hash32} {raw : ByteArray}
     (h : v.rawTransaction hash = .ok raw) : keccak256 raw = hash := by
   unfold rawTransaction at h
@@ -67,7 +69,7 @@ end ChainView
 
 namespace BlockRecord
 
-/-- The raw header of a block whose kept hash is the hash of its header hashes to that hash.
+/-- When the kept hash of a block is the hash of its header, the raw header hashes to it.
 
 The raw header also decodes back to the header. -/
 theorem rawHeader_of_hash {r : BlockRecord} (h : r.block.header.hash = .ok r.hash) :
@@ -98,7 +100,7 @@ end BlockRecord
 
 namespace ChainView
 
-/-- In a valid view, every block that the node holds has a raw header.
+/-- In a valid view, every block that the node holds, and its pending block, has a raw header.
 
 It hashes to the hash that the node keeps for the block, and decodes back to the header. -/
 theorem Valid.rawHeader {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
@@ -108,6 +110,18 @@ theorem Valid.rawHeader {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSe
   rcases hr with hr | hr
   · exact BlockRecord.rawHeader_of_hash (hv.hash r hr)
   · exact BlockRecord.rawHeader_of_hash (hv.pending r hr).1
+
+/-- In a valid view, the raw header that the getter returns is that of the block it resolves to.
+
+It hashes to the hash that the node keeps for that block, and decodes back to its header. -/
+theorem Valid.rawHeader_eq_ok {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
+    {p : BlockParam} {raw : ByteArray} (h : v.rawHeader p = .ok raw) :
+    ∃ r, v.resolve p = .ok (some r) ∧ keccak256 raw = r.hash ∧
+      Codec.decode raw = .ok r.block.header := by
+  obtain ⟨r, hr, hraw⟩ := ofBlock_eq_ok.mp h
+  obtain ⟨raw', hraw', hk, hd⟩ := hv.rawHeader (resolve_mem hr)
+  obtain rfl : raw = raw' := Except.ok.inj (hraw.symm.trans hraw')
+  exact ⟨r, hr, hk, hd⟩
 
 /-- The roots of an output hold the receipts root of its receipts. -/
 private theorem outputRoots_receipts {fork : Fork} {transactions : List Transaction}
@@ -135,7 +149,11 @@ private theorem outputChecks_receipts {fork : Fork} {header : Header fork}
 
 /-- In a valid view, the raw receipts of a canonical block after the lowest have its receipts root.
 
-The root is that of the trie that keys each receipt by its index. -/
+The root is that of the trie that keys each receipt by its index.
+
+The receipts of the lowest block, of side blocks and of the pending block are inputs of the view.
+
+So no root binds them. -/
 theorem Valid.rawReceipts_root {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
     {i : Nat} (hi : i + 1 < v.canonical.length) :
     ∃ raws, v.canonical[i + 1].rawReceipts = .ok raws ∧
@@ -167,6 +185,20 @@ theorem Valid.rawReceipts_root {v : ChainView} {checkSeal : Bool} (hv : v.Valid 
       obtain ⟨b, rest, hb, hrest, rfl⟩ := mapM_cons_ok.mp h
       exact mapM_cons_ok.mpr ⟨b, rest, mapError_ok_iff.mpr hb, ih _ hrest, rfl⟩
   exact key _ _ hraws
+
+/-- In a valid view, take a parameter that resolves to a canonical block after the lowest.
+
+The raw receipts that the getter returns have the receipts root of that block. -/
+theorem Valid.rawReceipts_eq_ok {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
+    {p : BlockParam} {i : Nat} (hi : i + 1 < v.canonical.length)
+    (hp : v.resolve p = .ok (some v.canonical[i + 1])) {raws : List ByteArray}
+    (h : v.rawReceipts p = .ok raws) :
+    indexedRoot raws = .ok v.canonical[i + 1].block.header.receiptRoot := by
+  obtain ⟨r, hr, hraws⟩ := ofBlock_eq_ok.mp h
+  obtain rfl : v.canonical[i + 1] = r := Option.some.inj (Except.ok.inj (hp.symm.trans hr))
+  obtain ⟨raws', hraws', hroot⟩ := hv.rawReceipts_root hi
+  obtain rfl : raws = raws' := Except.ok.inj (hraws.symm.trans hraws')
+  exact hroot
 
 end ChainView
 

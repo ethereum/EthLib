@@ -9,7 +9,7 @@ from typing import Any, Final
 import pytest
 
 from ethlib.cryptography.keccak import keccak256
-from ethlib.execution import rpc
+from ethlib.execution import rpc, trie
 from ethlib.serialization import rlp
 from raising import raises
 
@@ -194,7 +194,7 @@ def test_blocks() -> None:
 
 
 def test_raw_getters() -> None:
-    """Each block reads back as its RLP form, with its header, receipts and transactions."""
+    """Each raw block is the RLP form of the block, and its parts match the hashes and roots."""
     chain = replay_chain()
     transactions = [
         "0x" + _transaction_hash(block, index).hex()
@@ -222,9 +222,19 @@ def test_raw_getters() -> None:
         _, raw = block
         assert raw_block == "0x" + raw.hex()
         assert keccak256(bytes.fromhex(raw_header[2:])) == block_hash(block)
-        # One receipt for each transaction of the block.
-        assert len(raw_receipts) == len(rlp.decode(raw)[1])
-    # The bytes of each transaction hash to the hash that asked for them.
+        # One receipt for each transaction, whose trie by index has the receipts root of the header.
+        header, transactions_of_block, *_ = rlp.decode(raw)
+        assert len(raw_receipts) == len(transactions_of_block)
+        entries = [
+            # An index is the RLP of its minimal big-endian bytes, so 0 is the empty string.
+            (
+                rlp.encode(index.to_bytes((index.bit_length() + 7) // 8, "big")),
+                bytes.fromhex(receipt[2:]),
+            )
+            for index, receipt in enumerate(raw_receipts)
+        ]
+        assert trie.root(entries) == header[5]
+    # The bytes of each transaction hash to the hash that names it in the request.
     raw_transactions = results[3 * len(chain.blocks) :]
     assert len(raw_transactions) == len(transactions) > 0
     for transaction, raw_transaction in zip(transactions, raw_transactions, strict=True):
@@ -232,11 +242,15 @@ def test_raw_getters() -> None:
 
 
 # Each raw getter asked for a block or a transaction that the view does not hold.
+# The test chain holds blocks 0 to 60, so 0x3d is the first number that it does not hold.
 UNKNOWN = [
-    pytest.param("debug_getRawHeader", ["0x3e8"], "unknown block", id="header"),
+    pytest.param("debug_getRawHeader", ["0x3d"], "unknown block", id="header"),
     pytest.param("debug_getRawBlock", ["0x3e8"], "unknown block", id="block"),
-    pytest.param("debug_getRawReceipts", ["0x" + "11" * 32], "unknown block", id="receipts"),
+    pytest.param("debug_getRawReceipts", ["0x3d"], "unknown block", id="receipts-number"),
+    pytest.param("debug_getRawReceipts", ["0x" + "11" * 32], "unknown block", id="receipts-hash"),
     pytest.param("debug_getRawTransaction", ["0x" + "11" * 32], "unknown transaction", id="tx"),
+    # The view built from the test chain has no pending block.
+    pytest.param("debug_getRawHeader", ["pending"], "unknown block", id="pending"),
 ]
 
 
@@ -246,6 +260,13 @@ def test_raw_unknown(method: str, params: list[object], data: str) -> None:
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
     answer = _error(json.dumps(request))
     assert answer["error"] == {"code": -32001, "message": "Resource not found", "data": data}
+
+
+def test_raw_tags() -> None:
+    """The tags latest and earliest name the head and the lowest block."""
+    chain = replay_chain()
+    assert _call("debug_getRawBlock", ["latest"]) == "0x" + chain.blocks[-1][1].hex()
+    assert _call("debug_getRawBlock", ["earliest"]) == "0x" + chain.blocks[0][1].hex()
 
 
 def test_pending_header() -> None:

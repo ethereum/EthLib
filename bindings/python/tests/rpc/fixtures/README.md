@@ -26,7 +26,7 @@ The view serves `eth_blockNumber`, `eth_chainId`, `net_version`, `eth_getTransac
 The files of the other methods run through the readers of the parameters, without a chain.
 
 The files of `debug_traceBlockByNumber` and `eth_getStorageAt` answer with an error, because a reader rejects a parameter.
-The tests also send the files of the raw getters that answer with an error through the readers alone.
+The files of the raw getters that answer with an error go through the view, and also through the readers alone.
 The tests compare only the code of that error, since the source fixes the code of an error and not its message.
 
 The other files name a block by an object of EIP-1898, or by a hash written as a string.

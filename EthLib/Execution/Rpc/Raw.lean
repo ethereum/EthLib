@@ -18,13 +18,21 @@ The summary of the transaction getter says that it returns an array of transacti
 
 Its result schema is one byte string, and the definition follows the schema.
 
-No result schema of the getters allows `null`, and no text says which error an unknown block gets.
+No result schema of the getters allows `null`.
+
+No text says which error an unknown block or transaction gets.
 
 Here an unknown block or transaction gets `-32001`, "Resource not found".
 
+The tag `pending` names the pending block of the view, and gets that error when there is none.
+
+A block below the lowest block that the node holds is unknown, so it gets that error too.
+
+Every getter also lists `4444` for pruned history, which the view never answers.
+
 The getter of a block access list in the same file says that an unknown block MUST get that code.
 
-An encoding fails only when a field has `2^64` bytes or more.
+An encoding fails only when a byte string or a list has a payload of `2^64` bytes or more.
 
 The getter then fails with `-32603`.
 
@@ -91,7 +99,7 @@ def rawReceipts (v : ChainView) (p : BlockParam) : Except RpcError (List ByteArr
 
 /-- The bytes of the transaction of a hash, from the first block of the node that holds one.
 
-The canonical blocks come first. -/
+The canonical blocks come first, then the blocks off the canonical chain. -/
 def rawTransaction (v : ChainView) (hash : Hash32) : Except RpcError ByteArray :=
   match v.findTransaction hash with
   | none => .error (unknown "transaction")
