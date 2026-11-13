@@ -59,36 +59,6 @@ private theorem mesh_eq (t : String) :
       if t ∈ s.topics then meshAfter p c sel rank standing now s t else [] :=
   peersOf_map _ _ t
 
-/-- The peers that a pruned mesh keeps before the outbound swap are a sublist of the sorted mesh.
-
-They number the target, or the whole mesh. -/
-private theorem kept_spec (hsel : sel.Lawful) (m : List PeerId) :
-    List.Sublist ((m.mergeSort rank).take (min c.dScore p.D) ++
-        sel (p.D - ((m.mergeSort rank).take (min c.dScore p.D)).length)
-          ((m.mergeSort rank).drop ((m.mergeSort rank).take (min c.dScore p.D)).length))
-      (m.mergeSort rank) ∧
-    ((m.mergeSort rank).take (min c.dScore p.D) ++
-        sel (p.D - ((m.mergeSort rank).take (min c.dScore p.D)).length)
-          ((m.mergeSort rank).drop
-            ((m.mergeSort rank).take (min c.dScore p.D)).length)).length =
-      min p.D m.length := by
-  have hl : (m.mergeSort rank).length = m.length := List.length_mergeSort _
-  generalize m.mergeSort rank = l at *
-  obtain ⟨h1, h2⟩ := hsel (p.D - (l.take (min c.dScore p.D)).length)
-    (l.drop (l.take (min c.dScore p.D)).length)
-  refine ⟨?_, ?_⟩
-  · have := (List.Sublist.refl (l.take (min c.dScore p.D))).append h1
-    have e : ∀ k : Nat, l.take k ++ l.drop (l.take k).length = l := by
-      intro k
-      rw [List.length_take]
-      rcases Nat.le_total k l.length with h | h
-      · rw [Nat.min_eq_left h, List.take_append_drop]
-      · rw [Nat.min_eq_right h, List.take_of_length_le h, List.drop_length, List.append_nil]
-    rwa [e] at this
-  · rw [List.length_append, h2]
-    simp only [List.length_take, List.length_drop]
-    omega
-
 /-- A list splits into the peers outside a list and the peers in it. -/
 private theorem length_filter_split (l o : List PeerId) :
     (l.filter (· ∉ o)).length + (l.filter (· ∈ o)).length = l.length := by
@@ -96,39 +66,106 @@ private theorem length_filter_split (l o : List PeerId) :
   | nil => rfl
   | cons a l ih => by_cases h : a ∈ o <;> simp [h] at ih ⊢ <;> omega
 
-/-- The peers that a pruned mesh keeps: as many as the target or the whole mesh, all from it. -/
-private theorem keepPeers_spec (hsel : sel.Lawful) (o m : List PeerId) :
-    (keepPeers p c sel rank o m).length = min p.D m.length ∧
-      ∀ q ∈ keepPeers p c sel rank o m, q ∈ m := by
-  obtain ⟨hsub, hlen⟩ := kept_spec p c sel rank hsel m
+/-- The best-ranked peers of a mesh are at most the score count and the target, all from it.
+
+They appear once each when the mesh has no repeated peer. -/
+private theorem best_spec (m : List PeerId) :
+    ((m.mergeSort rank).take (min c.dScore p.D)).length = min (min c.dScore p.D) m.length ∧
+      (∀ q ∈ (m.mergeSort rank).take (min c.dScore p.D), q ∈ m) ∧
+      (m.Nodup → ((m.mergeSort rank).take (min c.dScore p.D)).Nodup) := by
+  have hperm := List.mergeSort_perm m rank
+  refine ⟨by rw [List.length_take, hperm.length_eq], fun q hq => ?_, fun hnd => ?_⟩
+  · exact hperm.mem_iff.1 (List.mem_of_mem_take hq)
+  · exact (List.take_sublist _ _).nodup (hperm.nodup_iff.2 hnd)
+
+/-- The peers that a pruned mesh keeps before the outbound swap number at most the target.
+
+Each is a best-ranked peer or a peer of the mesh. -/
+private theorem kept_le (hsel : sel.Lawful) (m best : List PeerId) (hb : best.length ≤ p.D) :
+    (best ++ sel (p.D - best.length) (m.filter (· ∉ best))).length ≤ p.D ∧
+      ∀ q ∈ best ++ sel (p.D - best.length) (m.filter (· ∉ best)), q ∈ best ∨ q ∈ m := by
+  refine ⟨?_, fun q hq => ?_⟩
+  · rw [List.length_append, (hsel _ _).2]
+    omega
+  · rcases List.mem_append.1 hq with hq | hq
+    · exact Or.inl hq
+    · exact Or.inr (List.mem_filter.1 ((hsel _ _).1.subset hq)).1
+
+/-- Without repeated peers in the mesh, the kept peers appear once each.
+
+They number the target, or the whole mesh. -/
+private theorem kept_nodup (hsel : sel.Lawful) (m best : List PeerId) (hnd : m.Nodup)
+    (hbn : best.Nodup) (hbm : ∀ q ∈ best, q ∈ m) (hb : best.length ≤ min p.D m.length) :
+    (best ++ sel (p.D - best.length) (m.filter (· ∉ best))).Nodup ∧
+      (best ++ sel (p.D - best.length) (m.filter (· ∉ best))).length = min p.D m.length := by
+  have hsplit := length_filter_split m best
+  have hin : (m.filter (· ∈ best)).length = best.length := by
+    apply Nat.le_antisymm
+    · apply List.Nodup.length_le_of_subset (hnd.filter _)
+      intro q hq
+      exact of_decide_eq_true (List.mem_filter.1 hq).2
+    · apply hbn.length_le_of_subset
+      intro q hq
+      exact List.mem_filter.2 ⟨hbm q hq, decide_eq_true hq⟩
+  refine ⟨?_, ?_⟩
+  · rw [List.nodup_append]
+    refine ⟨hbn, (hsel _ _).1.nodup (hnd.filter _), ?_⟩
+    intro a ha b hb' hab
+    subst hab
+    have := (List.mem_filter.1 ((hsel _ _).1.subset hb')).2
+    simp only [decide_eq_true_eq] at this
+    exact this ha
+  · rw [List.length_append, (hsel _ _).2]
+    omega
+
+/-- A pruned mesh keeps at most the target number of peers, all from the mesh. -/
+private theorem keepPeers_le (hsel : sel.Lawful) (o m : List PeerId) :
+    (keepPeers p c sel rank o m).length ≤ p.D ∧ ∀ q ∈ keepPeers p c sel rank o m, q ∈ m := by
+  obtain ⟨hbl, hbm, -⟩ := best_spec p c rank m
   have hperm := List.mergeSort_perm m rank
   simp only [keepPeers]
   generalize m.mergeSort rank = sorted at *
   generalize sorted.take (min c.dScore p.D) = best at *
-  generalize best ++ sel (p.D - best.length) (sorted.drop best.length) = kept at *
+  obtain ⟨hkl, hkm⟩ := kept_le p sel hsel m best (by omega)
+  generalize best ++ sel (p.D - best.length) (m.filter (· ∉ best)) = kept at *
   have hsplit := length_filter_split kept o
+  have hk : ∀ q ∈ kept, q ∈ m := fun q hq => (hkm q hq).elim (hbm q) id
   refine ⟨?_, ?_⟩
   · simp only [List.length_append, List.length_take]
     omega
   · intro q hq
-    rw [← hperm.mem_iff]
     simp only [List.mem_append] at hq
     rcases hq with (hq | hq) | hq
-    · exact hsub.subset (List.mem_filter.1 (List.mem_of_mem_take hq)).1
-    · exact hsub.subset (List.mem_filter.1 hq).1
-    · exact (List.mem_filter.1 (List.mem_filter.1 (List.mem_of_mem_take hq)).1).1
+    · exact hk q (List.mem_filter.1 (List.mem_of_mem_take hq)).1
+    · exact hk q (List.mem_filter.1 hq).1
+    · exact hperm.mem_iff.1
+        (List.mem_filter.1 (List.mem_filter.1 (List.mem_of_mem_take hq)).1).1
+
+/-- A pruned mesh without repeated peers keeps the target number of peers, or the whole mesh. -/
+private theorem keepPeers_length (hsel : sel.Lawful) (o m : List PeerId) (hnd : m.Nodup) :
+    (keepPeers p c sel rank o m).length = min p.D m.length := by
+  obtain ⟨hbl, hbm, hbn⟩ := best_spec p c rank m
+  simp only [keepPeers]
+  generalize m.mergeSort rank = sorted at *
+  generalize sorted.take (min c.dScore p.D) = best at *
+  obtain ⟨-, hkl⟩ := kept_nodup p sel hsel m best hnd (hbn hnd) hbm (by omega)
+  generalize best ++ sel (p.D - best.length) (m.filter (· ∉ best)) = kept at *
+  have hsplit := length_filter_split kept o
+  simp only [List.length_append, List.length_take]
+  omega
 
 /-- A pruned mesh without repeated peers keeps the outbound count of outbound peers, or all. -/
 private theorem keepPeers_outbound (hsel : sel.Lawful) (o m : List PeerId) (hnd : m.Nodup)
     (hdo : c.dOut ≤ p.D) (hm : p.D ≤ m.length) :
     min c.dOut (m.filter (· ∈ o)).length ≤
       ((keepPeers p c sel rank o m).filter (· ∈ o)).length := by
-  obtain ⟨hsub, hlen⟩ := kept_spec p c sel rank hsel m
+  obtain ⟨hbl, hbm, hbn⟩ := best_spec p c rank m
   have hperm := List.mergeSort_perm m rank
   simp only [keepPeers]
   generalize m.mergeSort rank = sorted at *
   generalize sorted.take (min c.dScore p.D) = best at *
-  generalize best ++ sel (p.D - best.length) (sorted.drop best.length) = kept at *
+  obtain ⟨-, hlen⟩ := kept_nodup p sel hsel m best hnd (hbn hnd) hbm (by omega)
+  generalize best ++ sel (p.D - best.length) (m.filter (· ∉ best)) = kept at *
   have hsplit := length_filter_split kept o
   have hO : (sorted.filter (· ∈ o)).length = (m.filter (· ∈ o)).length :=
     (hperm.filter _).length_eq
@@ -178,14 +215,14 @@ private theorem graftCandidates_nodup (t : String) (m : List PeerId) :
 /-- A pruned mesh without repeated peers keeps no peer twice. -/
 private theorem keepPeers_nodup (hsel : sel.Lawful) (o m : List PeerId) (hnd : m.Nodup) :
     (keepPeers p c sel rank o m).Nodup := by
-  obtain ⟨hsub, -⟩ := kept_spec p c sel rank hsel m
+  obtain ⟨hbl, hbm, hbn⟩ := best_spec p c rank m
   have hperm := List.mergeSort_perm m rank
   simp only [keepPeers]
   generalize m.mergeSort rank = sorted at *
   generalize sorted.take (min c.dScore p.D) = best at *
-  generalize best ++ sel (p.D - best.length) (sorted.drop best.length) = kept at *
+  obtain ⟨hndk, -⟩ := kept_nodup p sel hsel m best hnd (hbn hnd) hbm (by omega)
+  generalize best ++ sel (p.D - best.length) (m.filter (· ∉ best)) = kept at *
   have hnds : sorted.Nodup := hperm.nodup_iff.2 hnd
-  have hndk : kept.Nodup := hsub.nodup hnds
   generalize min (c.dOut - (kept.filter (· ∈ o)).length) (kept.filter (· ∉ o)).length = k
   have hadd : (((sorted.filter (· ∈ o)).filter (· ∉ kept)).take k).Nodup :=
     (List.take_sublist _ _).nodup ((hnds.filter _).filter _)
@@ -209,23 +246,18 @@ private theorem keepPeers_nodup (hsel : sel.Lawful) (o m : List PeerId) (hnd : m
     simp only [decide_eq_true_eq] at h2
     exact h2 h1
 
+/-- A mesh without repeated peers that takes GRAFT candidates holds no peer twice. -/
+private theorem grown_nodup (hsel : sel.Lawful) (t : String) (m1 : List PeerId) (h1 : m1.Nodup)
+    (n : Nat) : (m1 ++ sel n (graftCandidates standing now s t m1)).Nodup := by
+  rw [List.nodup_append]
+  refine ⟨h1, (hsel _ _).1.nodup (graftCandidates_nodup standing now s t m1), ?_⟩
+  intro a ha b hb hab
+  subst hab
+  exact ((mem_graftCandidates standing now s).1 ((hsel _ _).1.subset hb)).2.2 ha
+
 /-- A maintained mesh has at most the high bound plus the outbound count of peers. -/
 private theorem meshAfter_le (hsel : sel.Lawful) (hD : p.D ≤ p.D_high) (t : String) :
     (meshAfter p c sel rank standing now s t).length ≤ p.D_high + c.dOut := by
-  have hl : ∀ n l, (sel n l).length = min n l.length := fun n l => (hsel n l).2
-  have hk : ∀ o m, (keepPeers p c sel rank o m).length = min p.D m.length :=
-    fun o m => (keepPeers_spec p c sel rank hsel o m).1
-  unfold meshAfter
-  dsimp only
-  repeat' split
-  all_goals simp only [List.length_append, hl, hk] at *
-  all_goals omega
-
-/-- A maintained mesh has at most the high bound of peers that are not outbound. -/
-private theorem meshAfter_le_inbound (hsel : sel.Lawful) (hD : p.D ≤ p.D_high) (t : String) :
-    ((meshAfter p c sel rank standing now s t).filter (· ∉ s.outbound)).length ≤ p.D_high := by
-  have hk : ∀ o m, (keepPeers p c sel rank o m).length = min p.D m.length :=
-    fun o m => (keepPeers_spec p c sel rank hsel o m).1
   unfold meshAfter
   dsimp only
   generalize nonNegativeMesh standing s t = m1
@@ -234,7 +266,27 @@ private theorem meshAfter_le_inbound (hsel : sel.Lawful) (hD : p.D ≤ p.D_high)
   have h3 : (if p.D_high < m2.length then keepPeers p c sel rank s.outbound m2 else m2).length ≤
       p.D_high := by
     split
-    · rw [hk]
+    · have := (keepPeers_le p c sel rank hsel s.outbound m2).1
+      omega
+    · omega
+  generalize (if p.D_high < m2.length then keepPeers p c sel rank s.outbound m2 else m2) = m3 at *
+  split
+  · rw [List.length_append, (hsel _ _).2]
+    omega
+  · omega
+
+/-- A maintained mesh has at most the high bound of peers that are not outbound. -/
+private theorem meshAfter_le_inbound (hsel : sel.Lawful) (hD : p.D ≤ p.D_high) (t : String) :
+    ((meshAfter p c sel rank standing now s t).filter (· ∉ s.outbound)).length ≤ p.D_high := by
+  unfold meshAfter
+  dsimp only
+  generalize nonNegativeMesh standing s t = m1
+  generalize (if m1.length < p.D_low then
+      m1 ++ sel (p.D - m1.length) (graftCandidates standing now s t m1) else m1) = m2
+  have h3 : (if p.D_high < m2.length then keepPeers p c sel rank s.outbound m2 else m2).length ≤
+      p.D_high := by
+    split
+    · have := (keepPeers_le p c sel rank hsel s.outbound m2).1
       omega
     · omega
   generalize (if p.D_high < m2.length then keepPeers p c sel rank s.outbound m2 else m2) = m3 at *
@@ -263,11 +315,7 @@ private theorem meshAfter_nodup (hsel : sel.Lawful) (t : String) :
   have h2 : (if m1.length < p.D_low then
       m1 ++ sel (p.D - m1.length) (graftCandidates standing now s t m1) else m1).Nodup := by
     split
-    · rw [List.nodup_append]
-      refine ⟨h1, (hsel _ _).1.nodup (graftCandidates_nodup standing now s t m1), ?_⟩
-      intro a ha b hb hab
-      subst hab
-      exact ((mem_graftCandidates standing now s).1 ((hsel _ _).1.subset hb)).2.2 ha
+    · exact grown_nodup sel standing now s hsel t m1 h1 _
     · exact h1
   generalize (if m1.length < p.D_low then
       m1 ++ sel (p.D - m1.length) (graftCandidates standing now s t m1) else m1) = m2 at *
@@ -291,15 +339,33 @@ private theorem meshAfter_ge (hsel : sel.Lawful) (t : String)
     min p.D ((nonNegativeMesh standing s t).length +
         (graftCandidates standing now s t (nonNegativeMesh standing s t)).length) ≤
       (meshAfter p c sel rank standing now s t).length := by
-  have hl : ∀ n l, (sel n l).length = min n l.length := fun n l => (hsel n l).2
-  have hk : ∀ o m, (keepPeers p c sel rank o m).length = min p.D m.length :=
-    fun o m => (keepPeers_spec p c sel rank hsel o m).1
+  have h1 := nonNegativeMesh_nodup standing s t
   unfold meshAfter
   dsimp only
   generalize nonNegativeMesh standing s t = m1 at *
-  repeat' split
-  all_goals simp only [List.length_append, hl, hk] at *
-  all_goals omega
+  generalize hX : min p.D (m1.length + (graftCandidates standing now s t m1).length) = X
+  have h2 : (if m1.length < p.D_low then
+      m1 ++ sel (p.D - m1.length) (graftCandidates standing now s t m1) else m1).Nodup ∧
+      X ≤ (if m1.length < p.D_low then
+        m1 ++ sel (p.D - m1.length) (graftCandidates standing now s t m1) else m1).length := by
+    simp only [hlow, ↓reduceIte]
+    refine ⟨grown_nodup sel standing now s hsel t m1 h1 _, ?_⟩
+    rw [List.length_append, (hsel _ _).2]
+    omega
+  generalize (if m1.length < p.D_low then
+      m1 ++ sel (p.D - m1.length) (graftCandidates standing now s t m1) else m1) = m2 at *
+  obtain ⟨h2n, h2l⟩ := h2
+  have h3 : X ≤
+      (if p.D_high < m2.length then keepPeers p c sel rank s.outbound m2 else m2).length := by
+    split
+    · rw [keepPeers_length p c sel rank hsel _ _ h2n]
+      omega
+    · exact h2l
+  generalize (if p.D_high < m2.length then keepPeers p c sel rank s.outbound m2 else m2) = m3 at *
+  split
+  · rw [List.length_append]
+    omega
+  · exact h3
 
 /-- Every peer of a maintained mesh is in the old mesh without negative peers, or a candidate. -/
 private theorem meshAfter_mem (hsel : sel.Lawful) (t : String) (P : PeerId → Prop)
@@ -323,7 +389,7 @@ private theorem meshAfter_mem (hsel : sel.Lawful) (t : String) (P : PeerId → P
   have h3 : ∀ q ∈ (if p.D_high < m2.length then keepPeers p c sel rank s.outbound m2 else m2),
       P q := by
     split
-    · exact fun q hq => h2 q ((keepPeers_spec p c sel rank hsel _ _).2 q hq)
+    · exact fun q hq => h2 q ((keepPeers_le p c sel rank hsel _ _).2 q hq)
     · exact h2
   generalize (if p.D_high < m2.length then keepPeers p c sel rank s.outbound m2 else m2) = m3 at *
   split

@@ -1187,6 +1187,18 @@
 #define DOC_gossip_receive_rpc \
   "What the router does with one RPC, with its client choices given as tables."
 
+#define DOC_gossip_join \
+  "The router after this node joins a topic, and the GRAFTs it sends."
+
+#define DOC_gossip_leave \
+  "The router after this node leaves a topic, and the PRUNEs it sends."
+
+#define DOC_gossip_publish \
+  "The router after this node publishes a message, and where the message goes."
+
+#define DOC_gossip_heartbeat \
+  "The router after one heartbeat, and the control messages it sends."
+
 #define DOC_receipt_reencode \
   "The bytes of a receipt, decoded at the fork and encoded again with its transaction type."
 

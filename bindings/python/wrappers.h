@@ -608,6 +608,10 @@ PyObject* py_gossip_rpc_decode                            (PyObject* self, PyObj
 PyObject* py_gossip_rpc_encode                            (PyObject* self, PyObject* args);
 PyObject* py_gossip_parameters                            (PyObject* self, PyObject* args);
 PyObject* py_gossip_receive_rpc                           (PyObject* self, PyObject* args);
+PyObject* py_gossip_join                                  (PyObject* self, PyObject* args);
+PyObject* py_gossip_leave                                 (PyObject* self, PyObject* args);
+PyObject* py_gossip_publish                               (PyObject* self, PyObject* args);
+PyObject* py_gossip_heartbeat                             (PyObject* self, PyObject* args);
 
 PyObject* py_rlpx_ecies_encrypt                           (PyObject* self, PyObject* args);
 PyObject* py_rlpx_ecies_decrypt                           (PyObject* self, PyObject* args);
