@@ -177,10 +177,8 @@ theorem map_clearCofactor (f : Hom F G) (P : G2 F) :
   have hneg : ∀ p : G2 F, (G2.neg p).map f = G2.neg (p.map f) := G2.map_neg f
   simp only [clearCofactor, hadd, hneg, map_mulNegX, map_psi, map_psi2, G2.map_double]
 
-theorem map_hashToG2 [Inhabited F] [Inhabited G] (f : Hom F G) (hd : f default = default)
-    (msg dst : ByteArray) :
+theorem map_hashToG2 (f : Hom F G) (msg dst : ByteArray) :
     (hashToG2 msg dst : Except BlsError (G2 F)).map (G2.map f) = hashToG2 msg dst := by
-  have _ := hd
   unfold hashToG2
   rw [← map_hashToFieldFp2 f]
   cases (hashToFieldFp2 msg dst 2 : Except BlsError (Vector (Fp2 F) 2)) with

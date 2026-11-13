@@ -256,7 +256,7 @@ def H_EFF_G2 : Nat :=
 /-! ## Top-level pipeline -/
 
 /-- Hash a message + DST to a G2 point on BLS12-381. -/
-def hashToG2 [Inhabited F] (msg : ByteArray) (dst : ByteArray) : Except BlsError (G2 F) := do
+def hashToG2 (msg : ByteArray) (dst : ByteArray) : Except BlsError (G2 F) := do
   let us ← hashToFieldFp2 msg dst 2
   let (x0, y0) ← simpleSwu us[0]
   let (x1, y1) ← simpleSwu us[1]
