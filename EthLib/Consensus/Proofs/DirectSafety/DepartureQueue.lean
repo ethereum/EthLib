@@ -948,18 +948,10 @@ private theorem pendingDeposit_departureQueues {fork : Fork} {s t : BeaconState 
     (electra : .pectra ≤ fork) {deposit : PendingDeposit}
     (ok : applyPendingDeposit config checks s deposit = .ok t) :
     departureQueues electra t = departureQueues electra s := by
-  unfold applyPendingDeposit at ok
-  split at ok
-  · split at ok
-    · cases ok; rfl
-    simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · exact addValidator_departureQueues electra ok
-    · cases ok; rfl
-  · simp only [liftAccessor_ok, bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact departureQueues_increase electra ok
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+  · rfl
+  · exact departureQueues_increase electra raised
+  · exact addValidator_departureQueues electra added
 
 private theorem passPendingDeposits_departureQueues {fork : Fork}
     (electra : .pectra ≤ fork) {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
@@ -1188,19 +1180,11 @@ private theorem effectiveBalances_coverage {fork : Fork} {s t : BeaconState pres
 private theorem pendingDeposit_coverage {fork : Fork} {s t : BeaconState preset fork}
     {deposit : PendingDeposit}
     (ok : applyPendingDeposit config checks s deposit = .ok t) : DepartureCoverage s t [] := by
-  unfold applyPendingDeposit at ok
-  split at ok
-  · split at ok
-    · cases ok; exact DepartureCoverage.of_data rfl
-    simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · apply DepartureCoverage.of_append
-      simpa only [Array.push_eq_append] using addValidatorToRegistry_validators_eq_push ok
-    · cases ok; exact DepartureCoverage.of_data rfl
-  · simp only [liftAccessor_ok, bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact DepartureCoverage.of_data (congrArg (·.data) (increaseBalance_validators ok))
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+  · exact DepartureCoverage.of_data rfl
+  · exact DepartureCoverage.of_data (congrArg (·.data) (increaseBalance_validators raised))
+  · apply DepartureCoverage.of_append
+    simpa only [Array.push_eq_append] using addValidatorToRegistry_validators_eq_push added
 
 /-- Pending deposits assign no exits, independently of pending-source provenance. -/
 private theorem pendingDeposits_coverage {fork : Fork} {s t : BeaconState preset fork}
@@ -3228,18 +3212,10 @@ private theorem CountCohortStep.deposit {f : Fork} {s t : BeaconState preset f}
     (bound : Nat) {deposit : PendingDeposit}
     (ok : applyPendingDeposit config checks s deposit = .ok t) :
     CountCohortStep config bound s t := by
-  unfold applyPendingDeposit at ok
-  split at ok
-  · split at ok
-    · cases ok; exact .refl _ bound
-    simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · exact .add bound ok
-    · cases ok; exact .refl _ bound
-  · simp only [liftAccessor_ok, bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact .increase bound ok
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+  · exact .refl _ bound
+  · exact .increase bound raised
+  · exact .add bound added
 
 private theorem CountCohortStep.processDeposit {f : Fork} {s t : BeaconState preset f}
     (early : f < .pectra) (bound : Nat) {before : f < .hegota} {deposit : Deposit}
