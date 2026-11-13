@@ -617,6 +617,62 @@ def consensus_api_validator_balances_ssz(name: str, fork: str, state: bytes, ids
     """The SSZ body of the balances answer, as `bytes`."""
     ...
 
+def consensus_api_block_query(name: str, fork: str, block: bytes, query: str) -> dict[str, Any]:
+    """The JSON response to a query on a signed block, as a `dict`."""
+    ...
+
+def consensus_api_blobs(name: str, fork: str, block: bytes, blobs: list[bytes], hashes: list[bytes] | None) -> dict[str, Any]:
+    """The JSON response of the blobs endpoint, as a `dict`."""
+    ...
+
+def consensus_api_blobs_ssz(name: str, fork: str, block: bytes, blobs: list[bytes], hashes: list[bytes] | None) -> bytes:
+    """The SSZ body of the blobs answer, as `bytes`."""
+    ...
+
+def consensus_api_block_query_ssz(name: str, fork: str, block: bytes, query: str) -> bytes:
+    """The SSZ body of the answer to a query on a signed block, as `bytes`."""
+    ...
+
+def consensus_api_header(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, block: bytes) -> dict[str, Any]:
+    """The JSON response of the header endpoint for a signed block, as a `dict`."""
+    ...
+
+def consensus_api_headers(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, headers: list[bytes], slot: int | None, parent_root: bytes | None) -> dict[str, Any]:
+    """The JSON response of the headers endpoint, as a `dict`."""
+    ...
+
+def consensus_api_columns(name: str, fork: str, sidecars: list[bytes], indices: list[int] | None) -> dict[str, Any]:
+    """The JSON response of the columns endpoint, as a `dict`."""
+    ...
+
+def consensus_api_columns_ssz(name: str, fork: str, sidecars: list[bytes], indices: list[int] | None) -> bytes:
+    """The SSZ body of the columns answer, as `bytes`."""
+    ...
+
+def consensus_api_payload_envelope(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, root: bytes, envelope: bytes) -> dict[str, Any]:
+    """The JSON response of the envelope endpoint, as a `dict`."""
+    ...
+
+def consensus_api_payload_envelope_ssz(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, root: bytes, envelope: bytes) -> bytes:
+    """The SSZ body of the envelope answer, as `bytes`."""
+    ...
+
+def consensus_api_committees(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, slot: int | None) -> dict[str, Any]:
+    """The JSON response of the committees endpoint, as a `dict`."""
+    ...
+
+def consensus_api_sync_committees(name: str, fork: str, state: bytes, epoch: int | None) -> dict[str, Any]:
+    """The JSON response of the sync committees endpoint, as a `dict`."""
+    ...
+
+def consensus_api_ptc(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int | None) -> dict[str, Any]:
+    """The JSON response of the PTC endpoint, as a `dict`."""
+    ...
+
+def consensus_api_ptc_ssz(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int | None) -> bytes:
+    """The SSZ body of the PTC answer, as `bytes`."""
+    ...
+
 def consensus_api_resolve(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, queries: list) -> list:
     """The answer to each query, against the store after the steps of a fork choice case."""
     ...
@@ -675,6 +731,30 @@ def consensus_default_auth_data(url: str) -> bytes:
 
 def consensus_relay_submission_bid(name: str, fork: str, data: bytes, pubkey: bytes) -> bytes:
     """The SSZ bytes of the bid that a relay serves from a submission, under a key."""
+    ...
+
+def consensus_relay_validators(name: str, fork: str, state: bytes, registry: list[bytes]) -> list[dict[str, Any]]:
+    """At Fulu only: the list of validators that a relay serves, as a `list` of `dict`."""
+    ...
+
+def consensus_relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:
+    """A delivered payload, read from its JSON and written back as a `dict`."""
+    ...
+
+def consensus_relay_received_bid(document: dict[str, Any]) -> dict[str, Any]:
+    """A received bid, read from its JSON and written back as a `dict`."""
+    ...
+
+def consensus_relay_delivered_keeps(document: dict[str, Any], slot: int | None, block_hash: bytes | None, block_number: int | None, proposer_pubkey: bytes | None, builder_pubkey: bytes | None) -> bool:
+    """Whether the filters of a query of delivered payloads keep the payload of a JSON object."""
+    ...
+
+def consensus_relay_received_keeps(document: dict[str, Any], slot: int | None, block_hash: bytes | None, block_number: int | None, builder_pubkey: bytes | None) -> bool:
+    """Whether the filters of a query of received bids keep the bid of a JSON object."""
+    ...
+
+def consensus_relay_sort_delivered(order: str, documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Delivered payloads sorted by value in the given order, as a `list` of `dict`."""
     ...
 
 def consensus_builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
@@ -1529,6 +1609,22 @@ def yamux_session(is_client: bool, events: list[tuple[bool, bytes]]) -> tuple[li
     """One side of a yamux session after the frames it receives and sends, from no stream."""
     ...
 
+def tls_certificate_read(data: bytes) -> tuple[Any, ...]:
+    """The certificate's signed bytes, SPKI, validity and extensions."""
+    ...
+
+def tls_certificate_authenticate(policy: dict[str, Any], now: int, chain: list[bytes]) -> bytes:
+    """The authenticated peer ID of a chain of exactly one certificate."""
+    ...
+
+def tls_certificate_authenticate_peer(policy: dict[str, Any], now: int, expected: bytes, chain: list[bytes]) -> bytes:
+    """The peer ID of one authenticated certificate, checked against the intended peer ID."""
+    ...
+
+def tls_certificate_verify_p256(spki: bytes, message: bytes, signature: bytes) -> bool:
+    """Verify DER ECDSA/SHA-256 under an uncompressed P-256 SubjectPublicKeyInfo."""
+    ...
+
 def libp2p_public_key(secret: bytes) -> bytes:
     """The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n)."""
     ...
@@ -1563,6 +1659,22 @@ def gossip_parameters(slot_duration_ms: int, slots_per_epoch: int) -> dict[str, 
 
 def gossip_receive_rpc(fork: str, params: dict[str, Any], backoff_ms: int, prune_backoff_ms: int, standing: list[tuple[bytes, dict[str, Any]]], validation: list[tuple[bytes, str | tuple[str, str]]], now: int, src: bytes, rpc: dict[str, Any], state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     """What the router does with one RPC, with its client choices given as tables."""
+    ...
+
+def gossip_join(params: dict[str, Any], standing: list[tuple[bytes, dict[str, Any]]], now: int, topic: str, state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The router after this node joins a topic, and the GRAFTs it sends."""
+    ...
+
+def gossip_leave(params: dict[str, Any], choices: dict[str, Any], now: int, topic: str, state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The router after this node leaves a topic, and the PRUNEs it sends."""
+    ...
+
+def gossip_publish(fork: str, params: dict[str, Any], choices: dict[str, Any], standing: list[tuple[bytes, dict[str, Any]]], now: int, message: dict[str, Any], state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The router after this node publishes a message, and where the message goes."""
+    ...
+
+def gossip_heartbeat(params: dict[str, Any], choices: dict[str, Any], ranking: list[bytes], standing: list[tuple[bytes, dict[str, Any]]], now: int, state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The router after one heartbeat, and the control messages it sends."""
     ...
 
 def receipt_reencode(fork: str, receipt: bytes) -> bytes:

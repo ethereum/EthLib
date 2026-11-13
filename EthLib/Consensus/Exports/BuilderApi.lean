@@ -127,7 +127,7 @@ def processRegistrationOf
   let config ← configWithValue name replacements
   let state ← runSsz "state rejected" (SszType.deserialize (BeaconState preset fork) state)
   let entries ← kept.mapM fun bytes =>
-    runSsz "registry rejected" (SszType.deserialize ValidatorRegistrationV1 bytes)
+    runSsz "registry rejected" (SszType.deserialize SignedValidatorRegistrationV1 bytes)
   let signed ← runSsz "input rejected" (SszType.deserialize SignedValidatorRegistrationV1 data)
   match BuilderApi.processRegistration config .bls state ⟨entries⟩ signed now with
   | .ok () => return none
@@ -138,7 +138,7 @@ def processRegistrationOf
 
 The arguments are the name of the preset and of the configuration, the fork and replacements.
 
-Then come the state, the registrations the builder keeps, the signed registration and the time.
+Then come the state, the signed registrations the builder keeps, the one to check and the time.
 
 The time is that of the builder's clock, in seconds. -/
 @[export eth_consensus_process_registration]
@@ -158,14 +158,14 @@ def isEligibleForBidOf
   let fork ← forkOf fork.toUTF8
   if range : HasBuilderApi fork then
     let state ← decodeRejected (BeaconState preset fork) "state" state
-    let entries ← kept.mapM (decodeRejected ValidatorRegistrationV1 "registry")
+    let entries ← kept.mapM (decodeRejected SignedValidatorRegistrationV1 "registry")
     (liftAccessor (BuilderApi.isEligibleForBid state range ⟨entries⟩ slot parentHash
       pubkey)).mapError fun e => (e.code, reprStr e)
   else throw (0, s!"no Builder API messages at {fork.name}")
 
 /-- Whether a builder serves a request for a bid.
 
-The arguments are the name of the preset, the fork, the state and the registrations kept.
+The arguments are the name of the preset, the fork, the state and the signed registrations kept.
 
 Then come the slot, the parent hash and the key of the request.
 
