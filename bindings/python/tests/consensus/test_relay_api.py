@@ -473,3 +473,47 @@ def test_two_consolidations(version: str):
     )
     with raises(SszError, message):
         _ssz(version, "ExecutionRequests", three)
+
+
+# The key under which the tests serve a bid: the relay source does not fix it.
+RELAY_KEY = bytes(range(48))
+# The fields of a payload that its header holds as roots, with the type of the list.
+ROOTED = {
+    "transactions": "List[Transaction, MAX_TRANSACTIONS_PER_PAYLOAD]",
+    "withdrawals": "List[Withdrawal, MAX_WITHDRAWALS_PER_PAYLOAD]",
+}
+
+
+def _served(version: str, submission: dict[str, Any]) -> dict[str, Any]:
+    """The JSON of the bid that EthLib serves from a submission under the key of the tests."""
+    data = _ssz(version, "SubmitBlockRequest", submission)
+    bid = consensus.relay_submission_bid("mainnet", _fork(version), data, RELAY_KEY)
+    return _json(version, "BuilderBid", bid)
+
+
+@pytest.mark.parametrize("version", VERSIONS)
+def test_served_bid(version: str):
+    relay = _with_preset_bound(_relay(version))
+    for submission in (_completed(version), _distinct(relay, "SubmitBlockRequest", count(1))):
+        served = _served(version, submission)
+        payload = submission["execution_payload"]
+        header = {key: value for key, value in payload.items() if key not in ROOTED}
+        for key in ROOTED.keys() & payload.keys():
+            header[f"{key}_root"] = "0x" + _root(relay, ROOTED[key], payload[key]).hex()
+        assert served["header"] == header
+        assert served["value"] == submission["message"]["value"]
+        assert served["pubkey"] == "0x" + RELAY_KEY.hex()
+        expected = {"header", "value", "pubkey"}
+        if "blobs_bundle" in submission:
+            assert served["blob_kzg_commitments"] == submission["blobs_bundle"]["commitments"]
+            expected.add("blob_kzg_commitments")
+        if "execution_requests" in submission:
+            assert served["execution_requests"] == submission["execution_requests"]
+            expected.add("execution_requests")
+        assert set(served) == expected
+
+
+@pytest.mark.parametrize("fork", ["altair", "glamsterdam"])
+def test_served_bid_outside_relay_forks(fork: str):
+    with raises(SszError, f"no Relay API submissions at {fork}"):
+        consensus.relay_submission_bid("mainnet", fork, b"", RELAY_KEY)

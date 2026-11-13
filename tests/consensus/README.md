@@ -276,3 +276,6 @@ They agree with the roots of EthLib, except for the requests.
 The Electra document bounds the consolidation requests of a payload by 1, and Fulu keeps that bound.
 The mainnet preset bounds them by 2, so the trees of the two lists have different depths.
 The test checks that the roots differ, and that they agree when the bound of the preset replaces that of the documents.
+Another test builds the bid that a relay serves from each completed example, and from a generated submission.
+It checks the header against the payload, with the roots of its lists computed in Python.
+It also checks the value, the key, and from Deneb the commitments and from Electra the requests.

@@ -225,6 +225,11 @@ def default_auth_data(url: str) -> bytes:
     return _native.consensus_default_auth_data(url)
 
 
+def relay_submission_bid(name: str, fork: str, data: bytes, pubkey: bytes) -> bytes:
+    """The SSZ bytes of the bid that a relay serves from an SSZ block submission, with the key."""
+    return _native.consensus_relay_submission_bid(name, fork, data, pubkey)
+
+
 def builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The bid's value in Gwei, with its execution payment capped, not reduced to 64 bits."""
     return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
@@ -1551,6 +1556,7 @@ __all__ = [
     "builder_request_auth_failures",
     "builder_preferences_failures",
     "default_auth_data",
+    "relay_submission_bid",
     "builder_bid_value",
     "consensus_version",
     "consensus_version_fork",
