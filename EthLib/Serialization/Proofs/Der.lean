@@ -16,6 +16,10 @@ The reader is stated against X.690 itself, in terms of octets and numbers.
 - An INTEGER reads as `i` exactly when its content is `i` in two's complement on the fewest octets.
 - So an integer has a single content.
 - A nonnegative one is its big-endian octets, at least one, after a zero if the top bit is set.
+- A BOOLEAN is one octet, FF for TRUE and 00 for FALSE.
+- The BIT STRING reader accepts only an octet-aligned value: the octet 0, then its octets.
+- BIT STRING contents count at most 7 unused bits, all zero, and none when no octet follows.
+- BMPString and UniversalString pass when they write Unicode scalar values, two or four octets each.
 -/
 
 @[expose] public section
@@ -511,5 +515,314 @@ theorem natural_ok_iff {value : Value} {n : Nat} :
     refine ⟨by omega, by omega, fun j hj => .inr (by have := hmin j hj; omega), ?_⟩
     rw [hc, Int.emod_eq_of_lt (by omega) (by rw [Nat.pow_succ]; omega)]
     rfl
+
+/-! ## BOOLEAN and BIT STRING -/
+
+/-- A BOOLEAN reads as `b` exactly when its tag is 1 and its content is the one octet of `b`.
+
+TRUE is the octet FF and FALSE the octet 00, so every other content is rejected.
+
+That is X.690 §§8.2.1 and 8.2.2, with the DER rule for TRUE of §11.1. -/
+theorem boolean_ok_iff {value : Value} {b : Bool} :
+    boolean value = .ok b ↔
+      value.tag = 1 ∧ value.content.data.toList = [if b then 0xFF else 0x00] := by
+  unfold boolean
+  generalize value.content.data.toList = c
+  by_cases ht : value.tag = 1
+  · simp only [ht, bne_self_eq_false, Bool.false_eq_true, ite_false, true_and]
+    rcases c with _ | ⟨x, _ | ⟨y, rest⟩⟩
+    · simp [throw, throwThe, MonadExceptOf.throw]
+    · by_cases h0 : x = 0
+      · subst h0
+        cases b <;> simp [pure, Except.pure]
+      · by_cases h1 : x = 255
+        · subst h1
+          cases b <;> simp [pure, Except.pure]
+        · cases b <;> simp [h0, h1, throw, throwThe, MonadExceptOf.throw]
+    · simp [throw, throwThe, MonadExceptOf.throw]
+  · simp [ht, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- A BIT STRING reads as `bytes` exactly when its tag is 3 and its content is 0, then `bytes`.
+
+The initial octet 0 says that no bit of the final octet is unused (X.690 §8.6.2.2). -/
+theorem bitString_ok_iff {value : Value} {bytes : ByteArray} :
+    bitString value = .ok bytes ↔
+      value.tag = 3 ∧ value.content.data.toList = 0 :: bytes.data.toList := by
+  unfold bitString
+  generalize value.content.data.toList = c
+  by_cases ht : value.tag = 3
+  · simp only [ht, bne_self_eq_false, Bool.false_eq_true, ite_false, true_and]
+    rcases c with _ | ⟨x, rest⟩
+    · simp [throw, throwThe, MonadExceptOf.throw]
+    · by_cases h0 : x = 0
+      · subst h0
+        simp only [pure, Except.pure, Except.ok.injEq, List.cons.injEq, true_and]
+        constructor
+        · rintro rfl
+          rfl
+        · intro h
+          apply byteArray_eq_of_toList
+          simp [h]
+      · simp [h0, throw, throwThe, MonadExceptOf.throw]
+  · simp [ht, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- The low `u` bits of `n` are zero exactly when `2 ^ u` divides it with no remainder. -/
+private theorem mod_two_pow_eq_zero_iff (n u : Nat) :
+    n % 2 ^ u = 0 ↔ ∀ i < u, n.testBit i = false := by
+  constructor
+  · intro h i hi
+    have := Nat.testBit_mod_two_pow n u i
+    rw [h, Nat.zero_testBit] at this
+    simpa [hi] using this.symm
+  · intro h
+    apply Nat.eq_of_testBit_eq
+    intro i
+    rw [Nat.testBit_mod_two_pow, Nat.zero_testBit]
+    by_cases hi : i < u
+    · simp [hi, h i hi]
+    · simp [hi]
+
+/-- BIT STRING contents pass exactly when the initial octet counts at most 7 unused bits, all zero.
+
+The initial octet is 0 when no octet follows it (X.690 §8.6.2.3).
+
+Otherwise the unused bits are the low bits of the final octet (X.690 §§8.6.2.1, 8.6.2.2).
+
+Each of them is zero (X.690 §11.2.1).
+
+The reader does not know the type, so it does not drop the trailing zero bits of §11.2.2. -/
+theorem validBits_ok_iff {content : ByteArray} :
+    validBits content = .ok () ↔ content.data.toList = [0] ∨
+      ∃ unused init last, content.data.toList = unused :: (init ++ [last]) ∧
+        unused.toNat ≤ 7 ∧ ∀ i < unused.toNat, last.toNat.testBit i = false := by
+  unfold validBits
+  generalize content.data.toList = c
+  rcases c with _ | ⟨unused, bytes⟩
+  · simp [throw, throwThe, MonadExceptOf.throw]
+  rcases List.eq_nil_or_concat bytes with rfl | ⟨init, last, rfl⟩
+  · by_cases h0 : unused = 0
+    · subst h0
+      simp [pure, Except.pure]
+    · have : unused.toNat ≠ 0 := fun h => h0 (UInt8.toNat_inj.mp h)
+      simp [h0, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  · simp only [List.concat_eq_append, List.getLast?_append, List.getLast?_singleton,
+      Option.some_or]
+    have hr : (unused :: (init ++ [last]) = [0] ∨ ∃ u i l, unused :: (init ++ [last]) =
+        u :: (i ++ [l]) ∧ u.toNat ≤ 7 ∧ ∀ j < u.toNat, l.toNat.testBit j = false) ↔
+        unused.toNat ≤ 7 ∧ last.toNat % 2 ^ unused.toNat = 0 := by
+      constructor
+      · rintro (h | ⟨u, i, l, h, h7, hb⟩)
+        · simp at h
+        · simp only [List.cons.injEq] at h
+          obtain ⟨rfl, h⟩ := h
+          obtain ⟨-, hl⟩ := List.append_inj' h rfl
+          simp only [List.cons.injEq, and_true] at hl
+          subst hl
+          exact ⟨h7, (mod_two_pow_eq_zero_iff _ _).mpr hb⟩
+      · rintro ⟨h7, hb⟩
+        exact .inr ⟨unused, init, last, rfl, h7, (mod_two_pow_eq_zero_iff _ _).mp hb⟩
+    rw [hr]
+    by_cases h7 : 7 < unused.toNat
+    · simp [h7, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+      omega
+    · by_cases hm : last.toNat % 2 ^ unused.toNat = 0
+      · simp [h7, hm, pure, Except.pure]
+        omega
+      · simp [h7, hm, throw, throwThe, MonadExceptOf.throw]
+
+/-! ## BMPString and UniversalString -/
+
+/-- One step of the code-unit reader: the octets of the current unit, their value, the verdict. -/
+private def step (width : Nat) (state : Nat × Nat × Bool) (byte : UInt8) : Nat × Nat × Bool :=
+  let n := state.2.1 * 256 + byte.toNat
+  if state.1 + 1 = width then (0, 0, state.2.2 && unicodeScalar n)
+  else (state.1 + 1, n, state.2.2)
+
+/-- The verdict at the end: no partial code unit, and every code unit a scalar. -/
+private def finish (state : Nat × Nat × Bool) : Bool := state.1 == 0 && state.2.2
+
+/-- The code-unit reader is the fold of one step. -/
+private theorem fixedString_eq (width : Nat) (bytes : List UInt8) :
+    fixedString width bytes = finish (bytes.foldl (step width) (0, 0, true)) := rfl
+
+/-- Octets that do not complete a code unit are counted and read big-endian. -/
+private theorem foldl_step_partial {width : Nat} (bytes : List UInt8) (i acc : Nat) (ok : Bool)
+    (h : i + bytes.length < width) :
+    bytes.foldl (step width) (i, acc, ok) =
+      (i + bytes.length, acc * 256 ^ bytes.length + bytesToNat bytes, ok) := by
+  induction bytes generalizing i acc with
+  | nil => simp [bytesToNat]
+  | cons x xs ih =>
+    simp only [List.length_cons] at h
+    have hne : ¬ i + 1 = width := by omega
+    simp only [List.foldl_cons, step, hne, ite_false]
+    rw [ih (i + 1) (acc * 256 + x.toNat) (by omega), bytesToNat_cons]
+    simp only [List.length_cons, Prod.mk.injEq, and_true]
+    refine ⟨by omega, ?_⟩
+    rw [Nat.pow_succ, Nat.add_mul, Nat.mul_assoc, Nat.mul_comm 256, Nat.add_assoc]
+
+/-- A complete code unit resets the count and adds its scalar check to the verdict. -/
+private theorem foldl_step_chunk {width : Nat} (chunk : List UInt8) (ok : Bool)
+    (pos : 0 < width) (h : chunk.length = width) :
+    chunk.foldl (step width) (0, 0, ok) = (0, 0, ok && unicodeScalar (bytesToNat chunk)) := by
+  rcases List.eq_nil_or_concat chunk with rfl | ⟨init, last, rfl⟩
+  · simp at h
+    omega
+  · simp only [List.concat_eq_append, List.length_append, List.length_singleton] at h ⊢
+    rw [List.foldl_append, foldl_step_partial init 0 0 ok (by omega)]
+    simp [step, h, bytesToNat]
+
+/-- A Unicode scalar value is at most 10FFFF and is not a surrogate, D800 to DFFF. -/
+private theorem unicodeScalar_iff (n : Nat) :
+    unicodeScalar n = true ↔ n ≤ 0x10FFFF ∧ (n < 0xD800 ∨ 0xDFFF < n) := by
+  simp only [unicodeScalar, Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_eq_eq_not,
+    Bool.not_true, Bool.and_eq_false_iff, decide_eq_false_iff_not]
+  omega
+
+/-- The fold accepts from a verdict `ok` exactly when `ok` holds and the octets write scalars.
+
+Each scalar takes `width` octets, big-endian. -/
+private theorem finish_foldl_iff {width : Nat} (pos : 0 < width) (bytes : List UInt8)
+    (ok : Bool) :
+    finish (bytes.foldl (step width) (0, 0, ok)) = true ↔ ok = true ∧ ∃ chars : List Nat,
+      (∀ c ∈ chars, c < 256 ^ width ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
+      bytes = chars.flatMap (natToBytes width) := by
+  induction h : bytes.length using Nat.strongRecOn generalizing bytes ok with
+  | _ n ih =>
+    by_cases hw : width ≤ bytes.length
+    · -- The first code unit is the first `width` octets.
+      rw [← List.take_append_drop width bytes, List.foldl_append,
+        foldl_step_chunk _ ok pos (by simp; omega),
+        ih (bytes.drop width).length (by simp; omega) _ _ rfl]
+      constructor
+      · rintro ⟨hok, chars, hc, he⟩
+        rw [Bool.and_eq_true, unicodeScalar_iff] at hok
+        refine ⟨hok.1, bytesToNat (bytes.take width) :: chars, ?_, ?_⟩
+        · intro c hc'
+          rcases List.mem_cons.mp hc' with rfl | hc'
+          · refine ⟨?_, hok.2⟩
+            have := bytesToNat_lt (bytes.take width)
+            simpa [Nat.min_eq_left hw] using this
+          · exact hc c hc'
+        · have hl : (bytes.take width).length = width := by simp; omega
+          rw [List.flatMap_cons, ← he]
+          conv => lhs; rw [← natToBytes_bytesToNat (bytes.take width)]
+          rw [hl]
+      · rintro ⟨hok, chars, hc, he⟩
+        rcases chars with _ | ⟨c, chars⟩
+        · simp only [List.flatMap_nil, List.take_append_drop] at he
+          rw [he] at hw
+          simp at hw
+          omega
+        · rw [List.take_append_drop, List.flatMap_cons] at he
+          have hc0 := hc c (by simp)
+          have ht : bytes.take width = natToBytes width c := by
+            rw [he, List.take_left' (natToBytes_length width c)]
+          have hd : bytes.drop width = chars.flatMap (natToBytes width) := by
+            rw [he, List.drop_left' (natToBytes_length width c)]
+          rw [Bool.and_eq_true, unicodeScalar_iff, ht, bytesToNat_natToBytes_of_lt hc0.1]
+          exact ⟨⟨hok, hc0.2⟩, chars, fun c' h' => hc c' (by simp [h']), hd⟩
+    · -- Fewer than `width` octets pass only when there are none.
+      rw [foldl_step_partial bytes 0 0 ok (by omega)]
+      rcases bytes with _ | ⟨x, xs⟩
+      · simp only [finish]
+        simp
+        intro _
+        exact ⟨[], by simp, by simp⟩
+      · have hz : (0 + (x :: xs).length == 0) = false := by simp
+        simp only [finish, hz, Bool.false_and, Bool.false_eq_true, false_iff, not_and,
+          not_exists]
+        intro _ chars _ he
+        rcases chars with _ | ⟨c, chars⟩
+        · simp at he
+        · have := congrArg List.length he
+          simp [natToBytes_length] at this
+          simp at hw
+          omega
+
+/-- Code units of `width` octets pass exactly when they write a list of Unicode scalar values.
+
+The reader takes a scalar value to be at most 10FFFF and outside the surrogates D800 to DFFF.
+
+Each is written big-endian on `width` octets, so it is below `256 ^ width`.
+
+A UniversalString has four octets per character and a BMPString two (X.690 §§8.23.7, 8.23.8). -/
+theorem fixedString_eq_true_iff {width : Nat} (pos : 0 < width) {bytes : List UInt8} :
+    fixedString width bytes = true ↔ ∃ chars : List Nat,
+      (∀ c ∈ chars, c < 256 ^ width ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
+      bytes = chars.flatMap (natToBytes width) := by
+  rw [fixedString_eq, finish_foldl_iff pos]
+  simp
+
+/-! ## The certificate subset -/
+
+/-- With positive fuel, a value of tag 1 passes validation exactly when its content is 00 or FF. -/
+theorem validate_go_boolean_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 1) :
+    validate.go (fuel + 1) value = .ok () ↔
+      value.content.data.toList = [0x00] ∨ value.content.data.toList = [0xFF] := by
+  have hb : (∃ b, boolean value = .ok b) ↔
+      value.content.data.toList = [0x00] ∨ value.content.data.toList = [0xFF] := by
+    simp only [boolean_ok_iff, tag, true_and]
+    constructor
+    · rintro ⟨b, h⟩
+      cases b <;> simp_all
+    · rintro (h | h)
+      · exact ⟨false, by simp [h]⟩
+      · exact ⟨true, by simp [h]⟩
+  rw [← hb, validate.go, tag]
+  cases boolean value <;> simp [bind, Except.bind, pure, Except.pure]
+
+/-- With positive fuel, a value of tag 3 passes validation exactly when its contents do. -/
+theorem validate_go_bitString {value : Value} (fuel : Nat) (tag : value.tag = 3) :
+    validate.go (fuel + 1) value = validBits value.content := by
+  rw [validate.go, tag]
+  rfl
+
+/-- With positive fuel, a value of tag 30 passes validation exactly when it writes scalar values.
+
+Each takes two octets. -/
+theorem validate_go_bmpString_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 30) :
+    validate.go (fuel + 1) value = .ok () ↔ ∃ chars : List Nat,
+      (∀ c ∈ chars, c < 256 ^ 2 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
+      value.content.data.toList = chars.flatMap (natToBytes 2) := by
+  rw [← fixedString_eq_true_iff (by decide), validate.go, tag]
+  dsimp only
+  split <;> simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+
+/-- With positive fuel, a value of tag 28 passes validation exactly when it writes scalar values.
+
+Each takes four octets. -/
+theorem validate_go_universalString_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 28) :
+    validate.go (fuel + 1) value = .ok () ↔ ∃ chars : List Nat,
+      (∀ c ∈ chars, c < 256 ^ 4 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
+      value.content.data.toList = chars.flatMap (natToBytes 4) := by
+  rw [← fixedString_eq_true_iff (by decide), validate.go, tag]
+  dsimp only
+  split <;> simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+
+/-- A value of tag 1 passes validation exactly when its content is the octet 00 or the octet FF. -/
+theorem validate_boolean_ok_iff {value : Value} (tag : value.tag = 1) :
+    validate value = .ok () ↔
+      value.content.data.toList = [0x00] ∨ value.content.data.toList = [0xFF] :=
+  validate_go_boolean_ok_iff _ tag
+
+/-- A value of tag 3 passes validation exactly when its contents are those of a BIT STRING. -/
+theorem validate_bitString {value : Value} (tag : value.tag = 3) :
+    validate value = validBits value.content :=
+  validate_go_bitString _ tag
+
+/-- A BMPString passes validation exactly when it writes Unicode scalar values, two octets each. -/
+theorem validate_bmpString_ok_iff {value : Value} (tag : value.tag = 30) :
+    validate value = .ok () ↔ ∃ chars : List Nat,
+      (∀ c ∈ chars, c < 256 ^ 2 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
+      value.content.data.toList = chars.flatMap (natToBytes 2) :=
+  validate_go_bmpString_ok_iff _ tag
+
+/-- A UniversalString passes validation exactly when it writes scalar values, four octets each. -/
+theorem validate_universalString_ok_iff {value : Value} (tag : value.tag = 28) :
+    validate value = .ok () ↔ ∃ chars : List Nat,
+      (∀ c ∈ chars, c < 256 ^ 4 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
+      value.content.data.toList = chars.flatMap (natToBytes 4) :=
+  validate_go_universalString_ok_iff _ tag
 
 end EthLib.Serialization.Proofs.Der
