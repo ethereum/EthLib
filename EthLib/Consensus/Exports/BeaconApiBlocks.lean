@@ -9,7 +9,7 @@ public import EthLib.Consensus.Exports.Column
 
 C-ABI exports of the answers of the Beacon API that read one signed block.
 
-A query is named as the last segment of the path of its endpoint, such as `attestations`.
+A query is named after its endpoint, such as `attestations` or `blinded_block`.
 
 The JSON answer is the response without the two flags that come from the store.
 

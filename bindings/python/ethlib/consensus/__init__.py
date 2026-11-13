@@ -923,6 +923,7 @@ def api_block_query(name: str, fork: str, block: bytes, query: str) -> dict[str,
     """The Beacon API response to a query on a signed block, or ConsensusError."""
     # The query is "block", "root", "attestations" or "blinded_block".
     # From Gloas, "blinded_block" raises code 400, since such a block has no blinded form.
+    # The flags execution_optimistic and finalized come from the store and are absent.
     return _native.consensus_api_block_query(name, fork, block, query)
 
 
@@ -937,6 +938,8 @@ def api_blobs(
     """The Beacon API blobs of a signed block, in commitment order, or ConsensusError."""
     # The blobs are those of the commitments of the block, one each, in order; else code 500.
     # With hashes, only the blobs whose commitment has one of these versioned hashes remain.
+    # An empty list of hashes is a request for no blob, unlike None.
+    # The flags execution_optimistic and finalized come from the store and are absent.
     chosen = None if hashes is None else list(hashes)
     return _native.consensus_api_blobs(name, fork, block, list(blobs), chosen)
 

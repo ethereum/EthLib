@@ -81,7 +81,7 @@ def blindedBlockResponse (block : SignedBeaconBlock preset fork) :
     let blinded ← (blindedBlock block range).mapError fun fault => internalError (reprStr fault)
     versioned fork (.ok blinded)
   else if fork < .bellatrix then versioned fork (.ok block)
-  else .error { code := 400, message := "Gloas blocks do not have a blinded form" }
+  else .error { code := 400, message := "Blocks from Gloas on do not have a blinded form" }
 
 /-! ## Blobs -/
 
@@ -107,7 +107,7 @@ def blockBlobs (blobs : List Blob) (commitments : List KZGCommitment)
 
 /-- The blobs of a signed block that the blobs endpoint gives, from the blobs of its commitments.
 
-The node gives one blob for each commitment of the block, in order.
+The input holds one blob for each commitment of the block, in order.
 
 Another count of blobs gives the error with code 500. -/
 def blobsOf (block : SignedBeaconBlock preset fork) (blobs : List Blob)
