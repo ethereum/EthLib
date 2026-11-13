@@ -665,6 +665,15 @@
 #define DOC_consensus_compute_fork_digest \
   "The fork digest at an epoch, on the chain with the given root of the genesis validators."
 
+#define DOC_consensus_digest_epochs \
+  "The epochs at which the fork digest can change, in increasing order and without repeats."
+
+#define DOC_consensus_fork_of_digest \
+  "The first epoch with the given digest, among those at which it can change, with its fork."
+
+#define DOC_consensus_digests_identify \
+  "Whether the digest of each epoch at which it can change reads back the fork at that epoch."
+
 #define DOC_pq_keys_ssz \
   "The root of the value that the bytes encode, and the bytes of that value, as a pair."
 

@@ -468,6 +468,9 @@ extern lean_object* eth_consensus_light_client_update_as(lean_object* args);
 extern lean_object* eth_consensus_light_client_gossip_full_node(lean_object* args);
 extern lean_object* eth_consensus_light_client_gossip_light_client(lean_object* args);
 extern lean_object* eth_consensus_compute_fork_digest(lean_object* args);
+extern lean_object* eth_consensus_digest_epochs(lean_object* args);
+extern lean_object* eth_consensus_fork_of_digest(lean_object* args);
+extern lean_object* eth_consensus_digests_identify(lean_object* args);
 
 /* ---- Wrappers --------------------------------------------------------- */
 
@@ -1086,6 +1089,30 @@ py_consensus_compute_fork_digest(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_compute_fork_digest, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_digest_epochs(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_digest_epochs, args, 2, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_fork_of_digest(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_fork_of_digest, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_digests_identify(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_digests_identify, args, 3, CONSENSUS_ERROR);
 }
 
 PyObject*
