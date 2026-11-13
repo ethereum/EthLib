@@ -17,13 +17,20 @@ It then asks for logs from some addresses, with some topics at each position.
 - A topic list of `null` takes any topics.
 - At each position of the list, `null` takes any topic, and a list takes each topic in it.
 
-A log matches when its address and its topic at each position of the list are taken.
+A log matches when its address is taken, and it has a topic at each position of the list.
+
+That topic must be taken at its position.
 
 The source leaves several cases open, and each choice here follows the fixtures where they decide:
 
 - An empty list at a position takes any topic, as `topic-wildcard.io` expects.
 - An empty list of addresses takes any address, as an empty list of topics does.
-- A log with no topic at a position matches only when that position takes any topic.
+- A log with fewer topics than the list has positions does not match.
+  This holds even when each extra position takes any topic.
+  No fixture filter ends with a position that takes any topic.
+  No text of the source decides the case.
+- A list of more than four positions is no error.
+  It takes no log of the EVM, which has at most four topics.
 - A filter with a block hash and a bound is invalid, though the schema allows it.
   The fixture `filter-error-invalid-blockHash-and-range.io` expects that.
 - An omitted bound is the head.
@@ -81,19 +88,20 @@ structure Filter where
 
 namespace Filter
 
-/-- Whether a position of the topic list takes a topic, or the absence of one. -/
-def takesTopic : Option (List Hash32) → Option Hash32 → Bool
+/-- Whether a position of the topic list takes a topic. -/
+def takesTopic : Option (List Hash32) → Hash32 → Bool
   | none, _ => true
-  | some [], _ => true
-  | some ts, some t => ts.contains t
-  | some (_ :: _), none => false
+  | some ts, t => ts.isEmpty || ts.contains t
 
-/-- Whether a filter selects a log, by its address and its topic at each position of the list. -/
+/-- Whether a filter selects a log, by its address and its topic at each position of the list.
+
+The log needs a topic at each position of the list. -/
 def selects (f : Filter) (log : Log) : Bool :=
   (match f.address with
     | none => true
     | some addresses => addresses.isEmpty || addresses.contains log.address) &&
-  f.topics.zipIdx.all fun (taken, k) => takesTopic taken log.topics[k]?
+  decide (f.topics.length ≤ log.topics.length) &&
+  (f.topics.zip log.topics).all fun (taken, t) => takesTopic taken t
 
 end Filter
 
