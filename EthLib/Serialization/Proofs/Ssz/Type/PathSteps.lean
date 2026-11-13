@@ -106,10 +106,37 @@ theorem resolveStep_progressiveContainer (active : List Bool) (names : List Stri
 
 /-- Every declared union option selects the contents child opposite the selector word. -/
 theorem resolveStep_compatibleUnion (selectors : List Nat) (options : List Desc)
-    (selector slot : Nat) (selected : selectors.idxOf? selector = some slot) :
+    (selector slot : Nat) (child : Desc) (selected : selectors.idxOf? selector = some slot)
+    (chosen : options[slot]? = some child) :
     (Desc.compatibleUnion selectors options).resolveStep (.position selector) =
-      .ok (2, some options[slot]!) := by
+      .ok (2, some child) := by
   -- EIP-8016 keeps the option's own tree under the left child regardless of its selector.
-  simp [Desc.resolveStep, selected, Pure.pure, Except.pure]
+  simp [Desc.resolveStep, selected, chosen, Pure.pure, Except.pure]
+
+/-- A selector absent from a union cannot select a child. -/
+theorem resolveStep_compatibleUnion_of_unknown_selector (selectors : List Nat)
+    (options : List Desc) (selector : Nat) (selected : selectors.idxOf? selector = none) :
+    (Desc.compatibleUnion selectors options).resolveStep (.position selector) =
+      .error (.noSuchOption selector) := by
+  simp [Desc.resolveStep, selected, throw, throwThe, MonadExceptOf.throw]
+
+/-- A declared selector without a corresponding option is a malformed declaration. -/
+theorem resolveStep_compatibleUnion_of_missing_option (selectors : List Nat)
+    (options : List Desc) (selector slot : Nat)
+    (selected : selectors.idxOf? selector = some slot) (missing : options[slot]? = none) :
+    (Desc.compatibleUnion selectors options).resolveStep (.position selector) =
+      .error .badDeclaration := by
+  simp [Desc.resolveStep, selected, missing, throw, throwThe, MonadExceptOf.throw]
+
+/-- A type path cannot continue through a declared selector whose option is missing. -/
+theorem getGeneralizedIndex_compatibleUnion_of_missing_option (selectors : List Nat)
+    (options : List Desc) (selector slot : Nat) (rest : List PathStep)
+    (selected : selectors.idxOf? selector = some slot) (missing : options[slot]? = none) :
+    getGeneralizedIndex (.compatibleUnion selectors options) (.position selector :: rest) =
+      .error .badDeclaration := by
+  -- The failed first step prevents both a terminal success and any descent into a default type.
+  simp [getGeneralizedIndex,
+    resolveStep_compatibleUnion_of_missing_option selectors options selector slot selected missing,
+    Bind.bind, Except.bind]
 
 end EthLib.Serialization.Ssz

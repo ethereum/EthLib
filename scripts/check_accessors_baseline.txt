@@ -23,4 +23,3 @@ ByteArray.set! EthLib.Cryptography.Bls.size_set! 1
 ByteArray.get! EthLib.Serialization.Rlp.decodeItem 3
 ByteArray.get! EthLib.Serialization.Rlp.readBigEndian 1
 ByteArray.get! EthLib.Serialization.Rlp.readPrefix.readLongLength 1
-GetElem?.getElem! EthLib.Serialization.Ssz.Desc.resolveStep 1
