@@ -4090,10 +4090,14 @@ Before Altair they assume that the balance plus the reward covers the penalty, a
 From Altair the assumption bounds the sum of the penalties of the epoch, since the flags apply one after the other; it is sufficient, not necessary.
 `idealAttestationRewards_sorted` shows that the ideal rewards list distinct effective balances in increasing order.
 `attestationRewards_ideal_of_altair` shows that from Altair an eligible validator that set every flag earns the ideal parts of its effective balance.
-No theorem describes the ideal rewards before Altair.
+`idealRewardsOf_parts_of_lt_altair` shows that before Altair each ideal part is what the transition gives a validator that voted right.
+Each vote earns the reward of a matching vote, and the inclusion earns the base reward less the proposer share.
+In a leak the inactivity part is the penalty of a validator with a timely target.
+`attestationRewards_ideal_of_lt_altair` shows that before Altair an eligible validator whose three votes matched, first included one slot after its vote, earns those ideal parts.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_rewards.py`) reads the states of the pinned rewards vectors, at every fork from phase 0.
 It takes each state to the last slot of its epoch, and checks each part of each validator against EthLib's deltas of its kind, which the rewards vectors check, on the state after justification and the inactivity scores.
 It checks that a validator that earned a reward for every vote gets the ideal parts of its effective balance, and code 400 and 404, including a state that is not at the last slot of its epoch.
+Before Altair it checks the inclusion part only as at most the ideal one, so the ideal inclusion part rests on `idealRewardsOf_parts_of_lt_altair`.
 
 The sync committee rewards of a block are in the same module, read from the state that the sync aggregate step of the block reads.
 `syncCommitteeRewards_reward` shows that the reward of a member is the sum over its seats of the participant reward that the transition computes, counted for a seat that signed and against a seat that did not.

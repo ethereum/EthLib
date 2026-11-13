@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.BeaconApi.Rewards
+public import EthLib.Base.Proofs.FilterM
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
@@ -25,6 +26,12 @@ The parts add up to what the epoch transition applies to the balance, with the p
 When the penalties do not exhaust the balance, the balance moves by exactly that sum.
 
 The answer reads the state that the rewards step of the epoch transition reads.
+
+Before Altair, the ideal rewards of a balance are the parts of a validator that voted right.
+
+Its vote is included one slot after it.
+
+An eligible validator that voted right, with such an inclusion, earns exactly those parts.
 
 The sync committee rewards name each requested member once, in order of index.
 
@@ -595,6 +602,368 @@ theorem attestationRewards_ideal_of_altair {config : Config} (altair : .altair �
   · rw [part _ sourceOk, sourced]; rfl
   · rw [inactive]
     simp [netDelta, noPenalty, noReward]
+
+/-- Before Altair, the attester part of the inclusion rewards of each validator.
+
+An unslashed signer of the matching source attestations has an earliest inclusion.
+
+Its part is its base reward less the proposer share, divided by the delay of that inclusion.
+
+Any other validator has no part. -/
+private theorem attesterInclusionRewards_getD (before : fork < .altair) {parts : Array Gwei}
+    (own : attesterInclusionRewards state before = .ok parts) :
+    ∃ attestations signers attesters total,
+      getMatchingSourceAttestations state before (getPreviousEpoch state) = .ok attestations ∧
+      attestations.toList.mapM (getPendingAttestingIndices state) = .ok signers ∧
+      unslashedAmong state signers = .ok attesters ∧
+      getTotalActiveBalance state = .ok total ∧
+      ∀ index : ValidatorIndex, (index ∉ attesters → parts.getD index.toNat 0 = 0) ∧
+        (index ∈ attesters → ∃ earliest base,
+          (earliestInclusions state.validators.data.size
+            (attestations.zip signers.toArray)).getD index.toNat none = some earliest ∧
+          getBaseReward state total index = .ok base ∧ earliest.inclusionDelay ≠ 0 ∧
+          (parts.getD index.toNat 0).toNat =
+            (base.toNat - base.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat) /
+              earliest.inclusionDelay.toNat) := by
+  simp only [attesterInclusionRewards, bind_ok_iff, liftAccessor_ok] at own
+  obtain ⟨attestations, attestationsOk, signers, signersOk, attesters, attestersOk,
+    total, totalOk, folded⟩ := own
+  have filtered := attestersOk
+  unfold unslashedAmong at filtered
+  -- The attesters are distinct, since they come in increasing order.
+  have distinct : (attesters.map UInt64.toNat).Nodup :=
+    List.pairwise_map.mpr (((sortedSet_sorted _).sublist (sublist_of_filterM_ok filtered)).imp
+      fun lt => Nat.ne_of_lt (UInt64.lt_iff_toNat_lt.mp lt))
+  refine ⟨attestations, signers, attesters, total, attestationsOk, signersOk, attestersOk,
+    totalOk, fun index => ?_⟩
+  -- Only the step of the validator itself changes its entry, and it starts at zero.
+  have entry := foldlM_entry (entry := fun rewards : Array Gwei => rewards.getD index.toNat 0)
+    (j := index.toNat) (fun rewards other next stepped differs => by
+      split at stepped
+      · simp only [bind_ok_iff] at stepped
+        obtain ⟨_, _, _, _, added⟩ := stepped
+        exact addDelta_getD_of_ne added (Ne.symm differs)
+      · cases stepped) distinct folded
+  refine ⟨fun absent => ?_, fun present => ?_⟩
+  · rw [entry.1 fun other member same => absent (UInt64.toNat_inj.mp same ▸ member)]
+    exact replicate_getD_zero _ _
+  · obtain ⟨last, next, start, stepped, result⟩ := entry.2 index present rfl
+    split at stepped
+    · rename_i earliest found
+      simp only [bind_ok_iff, liftAccessor_ok] at stepped
+      obtain ⟨base, baseOk, reward, rewardOk, added⟩ := stepped
+      obtain ⟨nonzero, rfl⟩ := inclusionAttesterReward_ok_iff.mp rewardOk
+      have shareLe : (proposerReward preset base).toNat ≤ base.toNat := by
+        rw [proposerReward, UInt64.toNat_div]; exact Nat.div_le_self _ _
+      refine ⟨earliest, base, found, baseOk, nonzero, ?_⟩
+      rw [result, addDelta_getD_self added, start, replicate_getD_zero, UInt64.toNat_zero,
+        Nat.zero_add, UInt64.toNat_div,
+        UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr shareLe), proposerReward,
+        UInt64.toNat_div]
+    · cases stepped
+
+/-- Before Altair, an eligible validator whose vote matched earns the ideal reward of its balance.
+
+The ideal reward may be read at any validator of the registry with the same effective balance. -/
+private theorem idealComponentReward_eq_netDelta
+    {attestations : Array (PendingAttestation preset)} {deltas : Array Gwei × Array Gwei}
+    (within : state.RegistryWithinLimit)
+    (computed : getAttestationComponentDeltas state attestations = .ok deltas)
+    {eligible : List ValidatorIndex} (listed : getEligibleValidatorIndices state = .ok eligible)
+    {index first : ValidatorIndex} (eligibleMember : index ∈ eligible)
+    {validator firstValidator : Validator} (read : getValidator state index = .ok validator)
+    (firstRead : getValidator state first = .ok firstValidator)
+    (same : firstValidator.effectiveBalance = validator.effectiveBalance)
+    (present : ∀ attesters, getUnslashedAttestingIndices state attestations = .ok attesters →
+      index ∈ attesters)
+    {reward : Gwei} (idealed : idealComponentReward state attestations first = .ok reward) :
+    (reward.toNat : Int) = netDelta deltas index.toNat := by
+  obtain ⟨rewards, penalties⟩ := deltas
+  have inside := (Array.getElem?_eq_some_iff.mp (getValidator_eq_ok_iff.mp read)).1
+  have named : index.toNat.toUInt64 = index :=
+    UInt64.toNat_inj.mp (toNat_toUInt64_of_lt within inside)
+  obtain ⟨total, attesters, attestingTotal, totalOk, attestersOk, balanceOk, entries⟩ :=
+    getAttestationComponentDeltas_getD within computed
+  obtain ⟨decided, decidedOk, -, eligibleCase⟩ := entries index.toNat inside
+  obtain ⟨decided', decidedOk', isEligible⟩ := (getEligibleValidatorIndices_ok listed).2
+    index.toNat inside
+  obtain rfl := Except.ok.inj (decidedOk.symm.trans decidedOk')
+  obtain ⟨base, baseOk, matched, -⟩ := eligibleCase (isEligible.mp ⟨index, eligibleMember, rfl⟩)
+  rw [named] at baseOk matched
+  obtain ⟨leak, leakOk, rewardSum, penaltyZero⟩ := matched (present attesters attestersOk)
+  simp only [idealComponentReward, attestingBalance, bind_ok_iff, liftAccessor_ok, pure,
+    Except.pure, Except.ok.injEq] at idealed
+  obtain ⟨total', totalOk', base', baseOk', attestingTotal', ⟨attesters', attestersOk',
+    balanceOk'⟩, ⟨reward', penalty'⟩, delta, rfl⟩ := idealed
+  obtain rfl := Except.ok.inj (totalOk.symm.trans totalOk')
+  obtain rfl := Except.ok.inj (attestersOk.symm.trans attestersOk')
+  obtain rfl := Except.ok.inj (balanceOk.symm.trans balanceOk')
+  rw [getBaseReward_congr firstRead read same, baseOk, Except.ok.injEq] at baseOk'
+  subst baseOk'
+  obtain ⟨leak', leakOk', -, value⟩ := componentDelta_matched delta
+  obtain rfl := Except.ok.inj (leakOk.symm.trans leakOk')
+  simp only [netDelta, penaltyZero, UInt64.toNat_zero, Int.natCast_zero, Int.sub_zero]
+  rw [value, rewardSum]
+
+/-- Before Altair, an eligible validator with a timely target pays the ideal inactivity penalty.
+
+The ideal penalty may be read at any validator of the registry with the same effective balance. -/
+private theorem idealInactivityPenalty_eq_netDelta {config : Config} (before : fork < .altair)
+    (within : state.RegistryWithinLimit) {deltas : Array Gwei × Array Gwei}
+    (penalized : getInactivityPenaltyDeltas config state = .ok deltas)
+    {eligible : List ValidatorIndex} (listed : getEligibleValidatorIndices state = .ok eligible)
+    {index first : ValidatorIndex} (eligibleMember : index ∈ eligible)
+    {validator firstValidator : Validator} (read : getValidator state index = .ok validator)
+    (firstRead : getValidator state first = .ok firstValidator)
+    (same : firstValidator.effectiveBalance = validator.effectiveBalance)
+    (present : ∀ attestations attesters,
+      getMatchingTargetAttestations state before (getPreviousEpoch state) = .ok attestations →
+      getUnslashedAttestingIndices state attestations = .ok attesters → index ∈ attesters)
+    {penalty : Gwei} (idealed : idealInactivityPenalty state first = .ok penalty) :
+    -(penalty.toNat : Int) = netDelta deltas index.toNat := by
+  obtain ⟨rewards, penalties⟩ := deltas
+  have inside := (Array.getElem?_eq_some_iff.mp (getValidator_eq_ok_iff.mp read)).1
+  have firstInside := (Array.getElem?_eq_some_iff.mp (getValidator_eq_ok_iff.mp firstRead)).1
+  have named : index.toNat.toUInt64 = index :=
+    UInt64.toNat_inj.mp (toNat_toUInt64_of_lt within inside)
+  obtain ⟨noReward, leak, leakOk, calm, leaking⟩ :=
+    getInactivityPenaltyDeltas_getD_of_lt_altair before within penalized
+  simp only [idealInactivityPenalty, bind_ok_iff, leakOk] at idealed
+  obtain ⟨leak', leakOk', idealed⟩ := idealed
+  obtain rfl := Except.ok.inj leakOk'
+  cases leak
+  · simp only [Bool.false_eq_true, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at idealed
+    subst idealed
+    simp [netDelta, noReward, calm rfl]
+  · obtain ⟨attestations, attesters, total, delay, attestationsOk, attestersOk, totalOk, delayOk,
+      entries⟩ := leaking rfl
+    obtain ⟨decided, decidedOk, -, eligibleCase⟩ := entries index.toNat inside
+    obtain ⟨decided', decidedOk', isEligible⟩ := (getEligibleValidatorIndices_ok listed).2
+      index.toNat inside
+    obtain rfl := Except.ok.inj (decidedOk.symm.trans decidedOk')
+    obtain ⟨base, baseOk, value⟩ := eligibleCase (isEligible.mp ⟨index, eligibleMember, rfl⟩)
+    rw [named] at baseOk value
+    simp only [present attestations attesters attestationsOk attestersOk, ↓reduceIte,
+      Nat.add_zero] at value
+    simp only [↓reduceIte, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+      Except.ok.injEq] at idealed
+    obtain ⟨total', totalOk', delay', delayOk', penalties', added, rfl⟩ := idealed
+    obtain rfl := Except.ok.inj (totalOk.symm.trans totalOk')
+    obtain ⟨base', baseOk', timely, -⟩ := addInactivityPenalty_getD_self added
+    rw [getBaseReward_congr firstRead read same, baseOk, Except.ok.injEq] at baseOk'
+    subst baseOk'
+    have set : (Array.replicate state.validators.data.size true).getD first.toNat false =
+        true := by
+      simp [Array.getD_eq_getD_getElem?, firstInside]
+    rw [timely set, replicate_getD_zero, UInt64.toNat_zero, Nat.zero_add] at *
+    simp only [netDelta, noReward, UInt64.toNat_zero, Int.natCast_zero, Int.zero_sub, value]
+
+/-- Before Altair, the ideal rewards of an effective balance, read at a validator of the registry.
+
+Each vote earns the reward of a validator whose vote matched.
+
+In a leak that is the base reward of the validator.
+
+Otherwise it is the base reward times the increments of the unslashed balance that matched.
+
+That product is divided by the active increments, rounding down.
+
+The inclusion earns the base reward less the proposer share, as an inclusion one slot after does.
+
+In a leak the validator pays four base rewards less the proposer share, and otherwise nothing. -/
+theorem idealRewardsOf_parts_of_lt_altair (before : fork < .altair) {balance : Gwei}
+    {index : ValidatorIndex} {rates : IdealAttestationRewards}
+    (computed : idealRewardsOf state balance index = .ok rates) :
+    ∃ total base leak, getTotalActiveBalance state = .ok total ∧
+      getBaseReward state total index = .ok base ∧ isInInactivityLeak state = .ok leak ∧
+      rates.effectiveBalance = balance ∧
+      (∀ vote ∈ [(getMatchingSourceAttestations state before, rates.source),
+          (getMatchingTargetAttestations state before, rates.target),
+          (getMatchingHeadAttestations state before, rates.head)],
+        ∃ attestations matched, vote.1 (getPreviousEpoch state) = .ok attestations ∧
+          getAttestingBalance state attestations = .ok matched ∧
+          vote.2 = ((if leak then base.toNat else
+            base.toNat * (matched.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) /
+              (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) : Nat) : Int)) ∧
+      rates.inclusionDelay.map UInt64.toNat =
+        some (base.toNat - base.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat) ∧
+      rates.inactivity = -((if leak then BASE_REWARDS_PER_EPOCH.toNat * base.toNat -
+        base.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat else 0 : Nat) : Int) := by
+  have notAltair : ¬ .altair ≤ fork := Nat.not_le_of_lt before
+  simp only [idealRewardsOf, notAltair, ↓reduceDIte, bind_ok_iff, liftAccessor_ok, pure,
+    Except.pure, Except.ok.injEq] at computed
+  obtain ⟨total, totalOk, base, baseOk, inclusion, inclusionOk, headAttestations, headListed, _,
+    ⟨headReward, headIdeal, rfl⟩, targetAttestations, targetListed, _,
+    ⟨targetReward, targetIdeal, rfl⟩, sourceAttestations, sourceListed, _,
+    ⟨sourceReward, sourceIdeal, rfl⟩, penalty, penaltyIdeal, rfl⟩ := computed
+  have inside : index.toNat < state.validators.data.size := by
+    have read := baseOk
+    simp only [getBaseReward, bind_ok_iff] at read
+    obtain ⟨validator, read, -⟩ := read
+    exact (Array.getElem?_eq_some_iff.mp (getValidator_eq_ok_iff.mp read)).1
+  obtain ⟨leak, leakOk⟩ : ∃ leak, isInInactivityLeak state = .ok leak := by
+    simp only [idealInactivityPenalty, bind_ok_iff] at penaltyIdeal
+    obtain ⟨leak, leakOk, -⟩ := penaltyIdeal
+    exact ⟨leak, leakOk⟩
+  -- Each vote reads the component reward of its matching attestations.
+  have part {attestations : Array (PendingAttestation preset)} {reward : Gwei}
+      (idealOk : idealComponentReward state attestations index = .ok reward) :
+      ∃ matched, getAttestingBalance state attestations = .ok matched ∧
+        ((reward.toNat : Nat) : Int) = ((if leak then base.toNat else
+          base.toNat * (matched.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) /
+            (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) : Nat) : Int) := by
+    simp only [idealComponentReward, attestingBalance, bind_ok_iff, liftAccessor_ok, pure,
+      Except.pure, Except.ok.injEq] at idealOk
+    obtain ⟨total', totalOk', base', baseOk', matched, ⟨attesters, attestersOk, matchedOk⟩,
+      ⟨reward', penalty'⟩, delta, rfl⟩ := idealOk
+    obtain rfl := Except.ok.inj (totalOk.symm.trans totalOk')
+    obtain rfl := Except.ok.inj (baseOk.symm.trans baseOk')
+    obtain ⟨leak', leakOk', -, value⟩ := componentDelta_matched delta
+    obtain rfl := Except.ok.inj (leakOk.symm.trans leakOk')
+    refine ⟨matched, ?_, by rw [value]⟩
+    simp only [getAttestingBalance, attestersOk, bind, Except.bind]
+    exact matchedOk
+  refine ⟨total, base, leak, totalOk, baseOk, leakOk, rfl, ?_, ?_, ?_⟩
+  · intro vote member
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at member
+    rcases member with rfl | rfl | rfl
+    · obtain ⟨matched, matchedOk, value⟩ := part sourceIdeal
+      exact ⟨sourceAttestations, matched, sourceListed, matchedOk, value⟩
+    · obtain ⟨matched, matchedOk, value⟩ := part targetIdeal
+      exact ⟨targetAttestations, matched, targetListed, matchedOk, value⟩
+    · obtain ⟨matched, matchedOk, value⟩ := part headIdeal
+      exact ⟨headAttestations, matched, headListed, matchedOk, value⟩
+  · obtain ⟨-, rfl⟩ := inclusionAttesterReward_ok_iff.mp inclusionOk
+    have shareLe : (proposerReward preset base).toNat ≤ base.toNat := by
+      rw [proposerReward, UInt64.toNat_div]; exact Nat.div_le_self _ _
+    rw [Option.map_some, UInt64.toNat_div, UInt64.toNat_one, Nat.div_one,
+      UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr shareLe), proposerReward,
+      UInt64.toNat_div]
+  · simp only [idealInactivityPenalty, bind_ok_iff, leakOk] at penaltyIdeal
+    obtain ⟨leak', leakOk', penaltyIdeal⟩ := penaltyIdeal
+    obtain rfl := Except.ok.inj leakOk'
+    cases leak
+    · simp only [Bool.false_eq_true, ↓reduceIte, pure, Except.pure, Except.ok.injEq]
+        at penaltyIdeal
+      subst penaltyIdeal
+      simp
+    · simp only [↓reduceIte, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+        Except.ok.injEq] at penaltyIdeal
+      obtain ⟨total', totalOk', delay, -, penalties, added, rfl⟩ := penaltyIdeal
+      obtain rfl := Except.ok.inj (totalOk.symm.trans totalOk')
+      obtain ⟨base', baseOk', timely, -⟩ := addInactivityPenalty_getD_self added
+      obtain rfl := Except.ok.inj (baseOk.symm.trans baseOk')
+      have set : (Array.replicate state.validators.data.size true).getD index.toNat false =
+          true := by
+        simp [Array.getD_eq_getD_getElem?, inside]
+      rw [timely set, replicate_getD_zero, UInt64.toNat_zero, Nat.zero_add]
+      simp
+
+/-- Before Altair, a validator that voted right and in time earns the ideal rewards of its balance.
+
+It must be eligible.
+
+The unslashed signers of each of the matching source, target and head attestations include it.
+
+The earliest inclusion of its vote comes one slot after the vote. -/
+theorem attestationRewards_ideal_of_lt_altair {config : Config} (before : fork < .altair)
+    {ids : List ValidatorId} {entries : List AttestationRewards}
+    {ideal : List IdealAttestationRewards} {eligible : List ValidatorIndex}
+    (answered : attestationRewards config state ids = .ok entries)
+    (idealed : idealAttestationRewards state = .ok ideal)
+    {entry : AttestationRewards} (member : entry ∈ entries)
+    (listed : getEligibleValidatorIndices state = .ok eligible)
+    (eligibleMember : entry.validatorIndex ∈ eligible)
+    (matched : ∀ matching ∈ [getMatchingSourceAttestations state before,
+        getMatchingTargetAttestations state before, getMatchingHeadAttestations state before],
+      ∀ attestations attesters, matching (getPreviousEpoch state) = .ok attestations →
+        getUnslashedAttestingIndices state attestations = .ok attesters →
+        entry.validatorIndex ∈ attesters)
+    (prompt : ∀ attestations signers earliest,
+      getMatchingSourceAttestations state before (getPreviousEpoch state) = .ok attestations →
+      attestations.toList.mapM (getPendingAttestingIndices state) = .ok signers →
+      (earliestInclusions state.validators.data.size (attestations.zip signers.toArray)).getD
+        entry.validatorIndex.toNat none = some earliest →
+      earliest.inclusionDelay = 1) :
+    ∃ rates ∈ ideal, (state.validators.data[entry.validatorIndex.toNat]?.map
+        (·.effectiveBalance)) = some rates.effectiveBalance ∧
+      rates.head = entry.head ∧ rates.target = entry.target ∧ rates.source = entry.source ∧
+      rates.inclusionDelay = entry.inclusionDelay ∧ rates.inactivity = entry.inactivity := by
+  have notAltair : ¬ .altair ≤ fork := Nat.not_le_of_lt before
+  -- Before Gloas the type of the registry keeps it within its limit.
+  have within : state.RegistryWithinLimit :=
+    state.validators.bound (Nat.lt_trans before (by decide))
+  have answered' := answered
+  simp only [attestationRewards, notAltair, ↓reduceDIte, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at answered'
+  obtain ⟨inactivity, penalized, source, sourceOk, target, targetOk, head, headOk, parts,
+    partsOk, -⟩ := answered'
+  obtain ⟨sourced, targeted, headed, included, inactive⟩ :=
+    attestationRewards_parts_of_lt_altair before answered sourceOk targetOk headOk partsOk
+      penalized member
+  obtain ⟨validator, found, -⟩ := (mem_getEligibleValidatorIndices_iff listed).mp eligibleMember
+  have read := getValidator_eq_ok_iff.mpr found
+  simp only [idealAttestationRewards, bind_ok_iff] at idealed
+  obtain ⟨balances, balanced, mapped⟩ := idealed
+  obtain ⟨first, firstValidator, pairMember, firstRead, same⟩ :=
+    idealBalances_mem balanced listed eligibleMember read
+  obtain ⟨rates, ratesMember, ratesOk⟩ := exists_mem_of_mapM_ok mapped pairMember
+  simp only [idealRewardsOf, notAltair, ↓reduceDIte, bind_ok_iff, liftAccessor_ok, pure,
+    Except.pure, Except.ok.injEq] at ratesOk
+  obtain ⟨total, totalOk, base, baseOk, inclusion, inclusionOk, headAttestations, headListed, _,
+    ⟨headReward, headIdeal, rfl⟩, targetAttestations, targetListed, _,
+    ⟨targetReward, targetIdeal, rfl⟩, sourceAttestations, sourceListed, _,
+    ⟨sourceReward, sourceIdeal, rfl⟩, penalty, penaltyIdeal, rfl⟩ := ratesOk
+  -- Each kind of vote reads the deltas of its matching attestations.
+  simp only [getHeadDeltas, bind_ok_iff] at headOk
+  simp only [getTargetDeltas, bind_ok_iff] at targetOk
+  simp only [getSourceDeltas, bind_ok_iff] at sourceOk
+  obtain ⟨_, headListed', headOk⟩ := headOk
+  obtain ⟨_, targetListed', targetOk⟩ := targetOk
+  obtain ⟨_, sourceListed', sourceOk⟩ := sourceOk
+  obtain rfl := Except.ok.inj (headListed.symm.trans headListed')
+  obtain rfl := Except.ok.inj (targetListed.symm.trans targetListed')
+  obtain rfl := Except.ok.inj (sourceListed.symm.trans sourceListed')
+  have part {attestations : Array (PendingAttestation preset)} {deltas : Array Gwei × Array Gwei}
+      {reward : Gwei}
+      (matching : Epoch → Except TransitionError (Array (PendingAttestation preset)))
+      (listedMatching : matching ∈ [getMatchingSourceAttestations state before,
+        getMatchingTargetAttestations state before, getMatchingHeadAttestations state before])
+      (attested : matching (getPreviousEpoch state) = .ok attestations)
+      (computed : getAttestationComponentDeltas state attestations = .ok deltas)
+      (idealOk : idealComponentReward state attestations first = .ok reward) :=
+    idealComponentReward_eq_netDelta within computed listed eligibleMember read firstRead same
+      (fun attesters signed => matched matching listedMatching attestations attesters attested
+        signed) idealOk
+  -- The attester part of its inclusion reward is that of an inclusion one slot after the vote.
+  obtain ⟨attestations, signers, attesters, total', sourceListed'', signersOk, amongOk, totalOk',
+    parted⟩ := attesterInclusionRewards_getD before partsOk
+  obtain rfl := Except.ok.inj (totalOk.symm.trans totalOk')
+  have signed : getUnslashedAttestingIndices state attestations = .ok attesters := by
+    unfold getUnslashedAttestingIndices
+    rw [signersOk]
+    exact amongOk
+  obtain ⟨earliest, base', found', baseOk', -, partValue⟩ := (parted entry.validatorIndex).2
+    (matched _ (by simp) attestations attesters sourceListed'' signed)
+  have delay := prompt attestations signers earliest sourceListed'' signersOk found'
+  rw [getBaseReward_congr firstRead read same, baseOk', Except.ok.injEq] at baseOk
+  subst baseOk
+  obtain ⟨-, rfl⟩ := inclusionAttesterReward_ok_iff.mp inclusionOk
+  have shareLe : (proposerReward preset base').toNat ≤ base'.toNat := by
+    rw [proposerReward, UInt64.toNat_div]; exact Nat.div_le_self _ _
+  refine ⟨_, ratesMember, by rw [found, Option.map_some], ?_, ?_, ?_, ?_, ?_⟩
+  · rw [part _ (by simp) headListed headOk headIdeal, headed]
+  · rw [part _ (by simp) targetListed targetOk targetIdeal, targeted]
+  · rw [part _ (by simp) sourceListed sourceOk sourceIdeal, sourced]
+  · rw [included, Option.some.injEq]
+    apply UInt64.toNat_inj.mp
+    rw [partValue, delay, UInt64.toNat_div, UInt64.toNat_one, Nat.div_one, Nat.div_one,
+      UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr shareLe), proposerReward,
+      UInt64.toNat_div]
+  · rw [inactive]
+    exact idealInactivityPenalty_eq_netDelta before within penalized listed eligibleMember read
+      firstRead same (fun attestations attesters attested signed =>
+        matched _ (by simp) attestations attesters attested signed) penaltyIdeal
 
 /-! ## Sums -/
 
