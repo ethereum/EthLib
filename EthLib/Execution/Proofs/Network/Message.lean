@@ -15,7 +15,7 @@ Each message reads back from its ID and its RLP item, on every version that uses
 
 eth/68 rejects BlockRangeUpdate.
 
-A version reads no message from its count of IDs on, and reads one at the last ID below it.
+A version rejects every ID from its count of IDs on as unknown, but not the ID just below it.
 
 Every version rejects an announcement whose lists differ in length.
 
@@ -202,10 +202,10 @@ theorem ofItem_unequalLengths {version : EthVersion} {a : Announcement}
       = .error (.unequalLengths a.lists.1.size a.lists.2.1.length a.lists.2.2.length) := by
   simp [ofItem, hv, hl, Except.mapError, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
-/-- A version reads no message from the ID `n` on exactly when its count of IDs is at most `n`.
+/-- A version rejects every ID from `n` on as unknown exactly when its count of IDs is at most `n`.
 
-So the count of IDs of a version is the highest message ID that the version reads, plus one. -/
-theorem messageCount_le_iff {version : EthVersion} {n : Nat} :
+So the count of IDs of a version is the first ID from which every ID is unknown to it. -/
+theorem messageCount_le_iff_unknownId {version : EthVersion} {n : Nat} :
     version.messageCount ≤ n ↔
       ∀ id, n ≤ id → ∀ item, ofItem version id item = .error (.unknownId id) := by
   constructor
