@@ -387,6 +387,8 @@ PyObject* py_consensus_ssz_static                         (PyObject* self, PyObj
 PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_builder_request_auth_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_bid_value (PyObject* self, PyObject* args);
+PyObject* py_consensus_consensus_version (PyObject* self, PyObject* args);
+PyObject* py_consensus_consensus_version_fork (PyObject* self, PyObject* args);
 PyObject* py_consensus_merkle_proof                       (PyObject* self, PyObject* args);
 PyObject* py_consensus_upgrade_operation (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_blob_sidecar_inclusion_proof (PyObject* self, PyObject* args);
@@ -474,6 +476,9 @@ PyObject* py_consensus_light_client_gossip_light_client (PyObject* self, PyObjec
 PyObject* py_consensus_block_to_light_client_header      (PyObject* self, PyObject* args);
 PyObject* py_consensus_light_client_update_proofs        (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_fork_digest               (PyObject* self, PyObject* args);
+PyObject* py_consensus_digest_epochs (PyObject* self, PyObject* args);
+PyObject* py_consensus_fork_of_digest (PyObject* self, PyObject* args);
+PyObject* py_consensus_digests_identify (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_data_column_sidecars_from_block(PyObject* self, PyObject* args);
 PyObject* py_consensus_get_data_column_sidecars_from_column_sidecar(PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_shuffled_permutation      (PyObject* self, PyObject* args);

@@ -46,6 +46,7 @@ namespace EthLib.Engine
 
 open EthLib.Base
 open EthLib.Execution.Blocks (BlockChain RecentBlock stateTransition)
+open EthLib.Serialization.JsonRpc (fields hasExactly)
 
 /-- Two errors with one code come from one constructor. -/
 theorem EngineError.code_injective (e₁ e₂ : EngineError) (h : e₁.code = e₂.code) :
@@ -85,15 +86,15 @@ theorem acceptsFork_five_iff (fork : Fork) : acceptsFork 5 fork = true ↔ fork 
 
 The error is an invalid parameter, as step 2 of `engine_newPayloadV5` asks. -/
 theorem payloadParam_five_of_not_mem {j : Lean.Json} {fs : List (String × Lean.Json)}
-    (hfs : Json.fields "payload" j = .ok fs) (hmiss : "blockAccessList" ∉ fs.map Prod.fst) :
+    (hfs : fields "payload" j = .ok fs) (hmiss : "blockAccessList" ∉ fs.map Prod.fst) :
     payloadParam 5 j = .error (.invalidParams "payload: not the fields of version 4") := by
   -- No field has the name of the list, so the payload does not have the fields of version 4.
   have hany : (fs.any fun field => field.1 == "blockAccessList") = false := by
     rw [List.any_eq_false]
     intro field hmem heq
     exact hmiss (List.mem_map.mpr ⟨field, hmem, by simpa using heq⟩)
-  have hfields : Json.hasExactly fs Json.payloadFieldsV4 = false := by
-    simp [Json.hasExactly, Json.payloadFieldsV4, Json.amsterdamFields, hany]
+  have hfields : hasExactly fs Json.payloadFieldsV4 = false := by
+    simp [hasExactly, Json.payloadFieldsV4, Json.amsterdamFields, hany]
   simp [payloadParam, Json.payloadV4, hfs, hfields, bind, Except.bind]
 
 /-- Below version 5, the payload decodes exactly as a structure of a version that the method takes.

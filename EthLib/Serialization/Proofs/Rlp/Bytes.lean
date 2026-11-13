@@ -1,5 +1,6 @@
 module
 
+import EthLib.Base.Proofs.Bytes
 public import EthLib.Serialization.Rlp.Decode
 
 /-!
@@ -13,6 +14,8 @@ The theorems below see those bytes as a list, which the other proofs split and j
 @[expose] public section
 
 namespace EthLib.Serialization.Rlp
+
+open EthLib.Base (byteArray_getElem_eq_get!)
 
 /-- Two byte arrays with the same bytes are equal. -/
 theorem byteArray_eq_of_toList (a b : ByteArray) (h : a.data.toList = b.data.toList) : a = b := by
@@ -87,6 +90,7 @@ theorem readBigEndian_eq (input : ByteArray) (pos k acc : Nat) (hStop : pos + k 
     rw [readBigEndian, ih (pos + 1) _ (by omega),
       extract_toList_cons input pos (pos + (k + 1)) (by omega) hStop, List.foldl_cons,
       show pos + 1 + k = pos + (k + 1) by omega]
+    rw [byteArray_getElem_eq_get!]
 
 /-- Reading `k` bytes in base 256 from zero is the number they write. -/
 theorem readBigEndian_zero (input : ByteArray) (pos k : Nat) (hStop : pos + k ≤ input.size) :

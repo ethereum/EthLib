@@ -20,7 +20,7 @@ The ladder ignores every scalar bit above bit 254, and bit 0 of a clamped scalar
 
 These are statements about the definitions alone.
 
-No theorem here says that the ladder computes a scalar multiple of a curve point.
+The files under `Proofs/X25519/` prove that the ladder computes a scalar multiple on the curve.
 
 [rfc]: https://www.rfc-editor.org/rfc/rfc7748#section-5
 -/

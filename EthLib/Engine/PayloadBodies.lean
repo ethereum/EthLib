@@ -85,6 +85,8 @@ open Lean (Json)
 open EthLib.Base
 open EthLib.Execution.Blocks (Withdrawal)
 open EthLib.Engine.Json
+open EthLib.Serialization.JsonRpc
+open EthLib.Execution.Rpc (withdrawal)
 
 /-- The fewest bodies that every node must take in one request. -/
 def MIN_BODIES_REQUEST_LIMIT : Nat := 32

@@ -40,7 +40,9 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.Fits
 public import EthLib.Serialization.Proofs.Ssz.Codec.Layout
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHex
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
+public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHexCase
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonRoundTrip
+public import EthLib.Serialization.Proofs.Ssz.Codec.JsonTotal
 public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutLaws
 public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutMixin
 public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutProofTree

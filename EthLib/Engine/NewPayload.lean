@@ -74,6 +74,8 @@ open EthLib.Base
 open EthLib.Execution.Blocks
 open EthLib.Execution.Transactions
 open EthLib.Engine.Json
+open EthLib.Serialization.JsonRpc
+open EthLib.Execution.Rpc (withdrawal)
 
 /-- Whether a version of the method takes payloads of a fork. -/
 def acceptsFork (version : Nat) (fork : Fork) : Bool :=

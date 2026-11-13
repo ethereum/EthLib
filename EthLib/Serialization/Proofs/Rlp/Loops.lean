@@ -57,7 +57,8 @@ theorem joinEncodings_cons (item : Item) (rest : List Item) :
     cases joinEncodingsFrom rest .empty <;> rfl
 
 /-- The loop from some items read is the loop from none, after them. -/
-theorem decodeItemsFrom_eq (input : ByteArray) (pos stop : Nat) (done : List Item) :
+theorem decodeItemsFrom_eq (input : ByteArray) (pos stop : Nat) (done : List Item)
+    (bounded : stop ≤ input.size := by omega) :
     decodeItemsFrom input pos stop done =
       (decodeItemsFrom input pos stop []).map (done.reverse ++ ·) := by
   rw [decodeItemsFrom, decodeItemsFrom]
@@ -76,7 +77,8 @@ termination_by stop - pos
 decreasing_by all_goals omega
 
 /-- The items from `pos` to `stop`: none if no byte is left, else the first item, then the rest. -/
-theorem decodeItems_eq (input : ByteArray) (pos stop : Nat) :
+theorem decodeItems_eq (input : ByteArray) (pos stop : Nat)
+    (bounded : stop ≤ input.size := by omega) :
     decodeItems input pos stop =
       (if pos < stop then do
         let (item, ⟨next, _⟩) ← decodeItem input pos stop
@@ -92,7 +94,7 @@ theorem decodeItems_eq (input : ByteArray) (pos stop : Nat) :
       obtain ⟨item, ⟨next, _⟩⟩ := r
       show decodeItemsFrom input next stop [item] =
         (do let items ← decodeItems input next stop; Except.ok (item :: items))
-      rw [decodeItemsFrom_eq, decodeItems]
+      rw [decodeItemsFrom_eq input next stop [item] bounded, decodeItems]
       cases decodeItemsFrom input next stop [] <;> rfl
   · rfl
 

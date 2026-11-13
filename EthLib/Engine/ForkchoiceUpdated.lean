@@ -158,6 +158,8 @@ namespace EthLib.Engine
 open EthLib.Base
 open EthLib.Execution.Blocks (Withdrawal)
 open EthLib.Engine.Json
+open EthLib.Serialization.JsonRpc
+open EthLib.Execution.Rpc (withdrawal)
 open Lean (Json)
 
 /-- The attributes of a payload that the consensus layer asks the execution layer to build. -/
@@ -286,7 +288,7 @@ def attributesFork : Nat → Fork
 
 /-- The value of a field of an object, decoded by `f`, or none when the object lacks it. -/
 def optionalField {α : Type} (fs : List (String × Json)) (name : String)
-    (f : Json → Decode α) : Decode (Option α) :=
+    (f : Json → Read α) : Read (Option α) :=
   match fs.lookup name with
   | some v => some <$> f v
   | none => pure none

@@ -70,17 +70,31 @@ def _root_.EthLib.Consensus.Run.hashObjects {first last : ForkedBeaconState pres
 def findZeroRoot (objects : List (HashObject preset)) : Option (HashObject preset) :=
   objects.find? fun object => decide (object.root = some (Vector.replicate 32 0))
 
+/-- An object that the zero search returns is one of the objects, and its root is zero. -/
+theorem findZeroRoot_valid {objects : List (HashObject preset)} {object : HashObject preset}
+    (found : findZeroRoot objects = some object) :
+    object ∈ objects ∧ object.root = some (Vector.replicate 32 0) :=
+  ⟨List.mem_of_find?_eq_some found, by simpa using List.find?_some found⟩
+
+/-- The zero search fails exactly when no object has root zero. -/
+theorem findZeroRoot_eq_none_iff {objects : List (HashObject preset)} :
+    findZeroRoot objects = none ↔
+      ∀ object ∈ objects, object.root ≠ some (Vector.replicate 32 0) := by
+  simp [findZeroRoot, List.find?_eq_none]
+
 /-- Two different inputs of the SHA-256 node hash with one digest, or an object whose root is zero.
 
 Both are read among the given objects.
 
-The searches `findMessageCollision` and `findZeroRoot` find them. -/
+Each alternative says that a search over those objects returns one. -/
 def HashEvidence (objects : List (HashObject preset)) : Prop :=
   (∃ x y, findMessageCollision (objects.flatMap HashObject.messages)
       (objects.flatMap HashObject.messages) = some (x, y)) ∨
     ∃ object, findZeroRoot objects = some object
 
-/-- The searches find evidence exactly when two messages collide or an object has root zero. -/
+/-- The searches find evidence exactly when that evidence exists.
+
+Two different inputs of the node hash share a digest, or an object has root zero. -/
 theorem hashEvidence_iff {objects : List (HashObject preset)} :
     HashEvidence objects ↔
       (∃ x ∈ objects.flatMap HashObject.messages, ∃ y ∈ objects.flatMap HashObject.messages,
@@ -90,12 +104,11 @@ theorem hashEvidence_iff {objects : List (HashObject preset)} :
   · rintro (⟨x, y, found⟩ | ⟨object, found⟩)
     · obtain ⟨xMember, yMember, collision⟩ := findMessageCollision_valid found
       exact .inl ⟨x, xMember, y, yMember, collision⟩
-    · unfold findZeroRoot at found
-      exact .inr ⟨object, List.mem_of_find?_eq_some found, by simpa using List.find?_some found⟩
+    · exact .inr ⟨object, findZeroRoot_valid found⟩
   · rintro (⟨x, xMember, y, yMember, collision⟩ | ⟨object, member, zero⟩)
     · exact .inl (findMessageCollision_of_collision xMember yMember collision)
-    · exact .inr (Option.isSome_iff_exists.mp
-        (List.find?_isSome.mpr ⟨object, member, decide_eq_true zero⟩))
+    · refine .inr (Option.isSome_iff_exists.mp (Option.isSome_iff_ne_none.mpr fun none => ?_))
+      exact findZeroRoot_eq_none_iff.mp none object member zero
 
 private theorem header_binding (objects : List (HashObject preset)) (a b : BeaconBlockHeader)
     (one : .header a ∈ objects) (two : .header b ∈ objects) (root : Root)

@@ -248,6 +248,10 @@ An account missing from a state reads as the empty account, so an empty account 
 
 The nonce is in 64 bits, as the list holds it, which loses nothing below 2^64.
 
+A state whose nonces are at most 2^64 - 1 keeps that bound through the block.
+
+So on such a state the 64-bit nonces equal the nonces after the block, as a corollary shows.
+
 The calls of the body keep a property of block states that the state before the block has.
 
 That excludes storage at an account that is empty or missing, since deleting it wipes its storage.

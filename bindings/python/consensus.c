@@ -77,6 +77,12 @@ eth_consensus_builder_bid_value(
 );
 
 extern lean_object*
+eth_consensus_consensus_version(lean_object* args);
+
+extern lean_object*
+eth_consensus_consensus_version_fork(lean_object* args);
+
+extern lean_object*
 eth_consensus_ssz_static(
   lean_object* args
 );
@@ -462,6 +468,9 @@ extern lean_object* eth_consensus_light_client_update_as(lean_object* args);
 extern lean_object* eth_consensus_light_client_gossip_full_node(lean_object* args);
 extern lean_object* eth_consensus_light_client_gossip_light_client(lean_object* args);
 extern lean_object* eth_consensus_compute_fork_digest(lean_object* args);
+extern lean_object* eth_consensus_digest_epochs(lean_object* args);
+extern lean_object* eth_consensus_fork_of_digest(lean_object* args);
+extern lean_object* eth_consensus_digests_identify(lean_object* args);
 
 /* ---- Wrappers --------------------------------------------------------- */
 
@@ -560,6 +569,22 @@ py_consensus_builder_bid_value(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_builder_bid_value, args, 3, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_consensus_version(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_consensus_version, args, 1, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_consensus_version_fork(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_consensus_version_fork, args, 1, CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -1064,6 +1089,30 @@ py_consensus_compute_fork_digest(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_compute_fork_digest, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_digest_epochs(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_digest_epochs, args, 2, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_fork_of_digest(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_fork_of_digest, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_digests_identify(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_digests_identify, args, 3, CONSENSUS_ERROR);
 }
 
 PyObject*

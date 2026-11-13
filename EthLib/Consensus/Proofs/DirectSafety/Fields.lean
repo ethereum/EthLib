@@ -128,7 +128,7 @@ private theorem currentEpoch_le_target {fork : Fork} {state : BeaconState preset
   cases current <;> simp [getPreviousEpoch_toNat]
   omega
 
-/-- A quorum call targets its current epoch or the epoch before. -/
+/-- The current epoch of a quorum call is at most one past its target epoch. -/
 theorem QuorumCall.currentEpoch_le {g a : ForkedBeaconState preset}
     {run : Run config checks g a} (call : QuorumCall run) :
     (getCurrentEpoch call.cached).toNat ≤ call.target.epoch.toNat + 1 :=

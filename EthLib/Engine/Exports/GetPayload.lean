@@ -40,7 +40,8 @@ open EthLib.Base
 open EthLib.Base.ChainConfig.Exports (configOfJson)
 open EthLib.Execution.Blocks (Block)
 open EthLib.Execution.Transactions
-open EthLib.Engine.Json (dataJson quantityJson listJson withdrawalJson)
+open EthLib.Serialization.JsonRpc (dataJson quantityJson listJson)
+open EthLib.Execution.Rpc (withdrawalJson)
 
 /-- An ID, a fork, a block, accounts, requests, a value, network forms, an override and a list. -/
 abbrev PayloadEntry := PayloadId × String × ByteArray × ByteArray × List ByteArray × Nat ×
