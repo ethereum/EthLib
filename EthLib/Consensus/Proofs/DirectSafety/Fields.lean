@@ -134,7 +134,7 @@ theorem QuorumCall.currentEpoch_le {g a : ForkedBeaconState preset}
     (getCurrentEpoch call.cached).toNat ≤ call.target.epoch.toNat + 1 :=
   currentEpoch_le_target call.targetEpoch
 
-/-- Through the epoch after `high`, epoch calls after epoch 1 have stake above 1.5 increments.
+/-- Epoch calls after epoch 1 through the epoch after `high` have active stake above 1.5 increments.
 
 Below that, a test can pass with no vote, since a total balance is at least one increment.
 
@@ -250,7 +250,9 @@ The keys stay distinct along the run, so each counts once.
 
 The run starts at a genesis built from deposits.
 
-The stake floor covers epoch calls through the epoch after `high`, which bounds the target. -/
+The target is at most `high`.
+
+The stake floor covers epoch calls through the epoch after `high`. -/
 theorem quorum_count {g a : ForkedBeaconState preset} (run : Run config checks g a)
     (genesis : Genesis (config := config) (checks := checks) g)
     {high : Nat} (enough : EnoughStake run high) (call : QuorumCall run)
