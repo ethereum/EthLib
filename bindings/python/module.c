@@ -1126,6 +1126,7 @@ static PyMethodDef methods[] = {
   {"mplex_session", py_mplex_session, METH_VARARGS, DOC_mplex_session},
   {"yamux_encode", py_yamux_encode, METH_VARARGS, DOC_yamux_encode},
   {"yamux_decode", py_yamux_decode, METH_VARARGS, DOC_yamux_decode},
+  {"yamux_session", py_yamux_session, METH_VARARGS, DOC_yamux_session},
   {"libp2p_public_key", py_libp2p_public_key, METH_VARARGS, DOC_libp2p_public_key},
   {"libp2p_peer_id", py_libp2p_peer_id, METH_VARARGS, DOC_libp2p_peer_id},
   {"libp2p_decode_peer_id", py_libp2p_decode_peer_id, METH_VARARGS, DOC_libp2p_decode_peer_id},

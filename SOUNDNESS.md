@@ -2009,6 +2009,37 @@ The export decodes every frame first, and the decoder refuses data over 1 MiB an
 So the table does not check them again.
 The stream name of a NewStream is not read, since the source says that the protocol does not consider it.
 
+### The streams of a yamux session
+
+`step`, `receive` and `send` (`Networking/Libp2p/YamuxSession.lean`) check each yamux frame against the streams of one side, and `run` checks a list of frames in turn.
+They follow [yamux, "Message Flow"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#message-flow), with the flags of ["Flag Field"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#flag-field) and the IDs of ["StreamID Field"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#streamid-field).
+A Data or Window Update frame with SYN opens a stream with a new nonzero ID of its writer's parity: odd for the client, even for the server.
+Data may follow SYN before the ACK, and the ACK must come from the side that did not open the stream.
+The source says that this side "must then reply" with ACK to accept or RST to reject, so its frames on the stream carry one of them until it has sent ACK; any other is `missingAck`.
+FIN closes the direction of its writer, and RST closes the stream at once.
+Data spends the window of its direction, which starts at 256 KiB by ["Flow Control"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#flow-control), and a Window Update adds its length to the window of the other direction.
+A Ping with SYN gets a Ping with ACK and the same value, and a Go Away from the peer marks the session.
+`receive_ping` (`Networking/Proofs/Libp2p/YamuxSession.lean`) proves the reply to a Ping.
+`run_parity` proves that every stream has a nonzero ID of its opener's parity.
+`send_window` proves that the data sent on a stream is at most 256 KiB plus the deltas of the Window Updates received on it.
+`closed_iff` proves that a stream is closed iff each side sent FIN on it and no frame on it carried RST.
+
+The source leaves several cases open, and each refused one gets its own error.
+Data beyond the window of the receiver is `windowExceeded`, though the source says only to track the window and names no reaction.
+A frame from this side after either RST is `afterReset`, and so is a frame from the peer after its own RST, if this side has not reset the stream.
+Frames that the peer wrote before it learned of a RST by this side may still arrive, so once this side has reset a stream, it accepts and drops every later frame of the peer on it without SYN, a RST included; a SYN on its ID is still `reusedId`.
+Nonempty data or FIN after its writer's FIN is `afterFin`, since FIN says "the sender will send no further data"; a Window Update after FIN is accepted, since the other direction may still be open.
+A second ACK is `unexpectedAck`, and so is an ACK from the side that opened the stream.
+A frame without SYN on a stream not in the table is `unknownStream`, and a closed or reset stream stays in the table, so its ID cannot open a stream again.
+A Data or Window Update frame on stream 0 is `sessionStream`, since the source reserves 0 for the session.
+The source says that SYN "should" be set to open a stream; a frame without SYN on a new ID is refused as `unknownStream`, a stricter reading.
+The windows are unbounded naturals, since the source fixes no maximum window.
+A Ping with both SYN and ACK is answered like a Ping with SYN.
+The source says only that Ping and Go Away "should" use stream 0, so they are read the same on any stream.
+Neither side is stopped from opening streams after a Go Away, since the source fixes no rule.
+The ACK backlog of 256 streams is a SHOULD under [yamux, "ACK backlog & backpressure"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#ack-backlog--backpressure), and is left out.
+The export decodes every frame first, so the table does not check the size of the data again.
+
 ### The block headers of the eth protocol
 
 `checkHeaders` (`Execution/Network/Blocks.lean`) checks an answer to a GetBlockHeaders request of the eth protocol.
@@ -3576,12 +3607,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 409 operations and 49 size constants.
-The Python extension calls 409 of the operations and 49 of the constants.
+Lean exports 410 operations and 49 size constants.
+The Python extension calls 410 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10305 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1940), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (149), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (138), `module.c` (1448), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (696), `x25519.c` (21), `xmss.c` (134).
+10316 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1940), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (149), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1449), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (697), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

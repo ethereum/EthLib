@@ -562,6 +562,7 @@ PyObject* py_mplex_decode                                 (PyObject* self, PyObj
 PyObject* py_mplex_session                                (PyObject* self, PyObject* args);
 PyObject* py_yamux_encode                                 (PyObject* self, PyObject* args);
 PyObject* py_yamux_decode                                 (PyObject* self, PyObject* args);
+PyObject* py_yamux_session                                (PyObject* self, PyObject* args);
 PyObject* py_libp2p_public_key                            (PyObject* self, PyObject* args);
 PyObject* py_libp2p_peer_id                               (PyObject* self, PyObject* args);
 PyObject* py_libp2p_decode_peer_id                        (PyObject* self, PyObject* args);
