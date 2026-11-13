@@ -138,13 +138,17 @@ namespace ChainView
 def invalidRange (reason : String) : RpcError :=
   RpcError.invalidParams s!"block range: {reason}"
 
+/-- Whether a bound of a range is a number above the head. -/
+def aboveHead (v : ChainView) : Option BlockParam → Bool
+  | some (.number n) => v.head.block.header.number < n
+  | _ => false
+
 /-- The number of the block that a bound of a range names, the head for an omitted bound.
 
-A number above the head is an invalid range, and a tag that names no block is an unknown block. -/
+A tag that names no block is an unknown block. -/
 def boundNumber (v : ChainView) : Option BlockParam → Except RpcError Nat
   | none => .ok v.head.block.header.number
-  | some (.number n) =>
-    if v.head.block.header.number < n then .error (invalidRange "beyond the head") else .ok n
+  | some (.number n) => .ok n
   | some p => do
     match ← v.resolve p with
     | some r => return r.block.header.number
@@ -154,15 +158,21 @@ def boundNumber (v : ChainView) : Option BlockParam → Except RpcError Nat
 
 For a range, they are the canonical blocks from its first bound to its last.
 
-A range is checked against the head and for its order before it is checked for pruned blocks. -/
+A number bound above the head is an invalid range, before any tag resolves.
+
+A bound that resolves above the head, or a first bound above the last, is an invalid range too.
+
+Those checks come before the check for pruned blocks. -/
 def filterBlocks (v : ChainView) : FilterBlocks → Except RpcError (List BlockRecord)
   | .hash h =>
     match v.byHash h with
     | some r => .ok [r]
     | none => .error (unknown "block")
   | .range fromBlock toBlock => do
+    if v.aboveHead fromBlock || v.aboveHead toBlock then throw (invalidRange "beyond the head")
     let first ← v.boundNumber fromBlock
     let last ← v.boundNumber toBlock
+    if v.head.block.header.number < last then throw (invalidRange "beyond the head")
     if last < first then throw (invalidRange "the first bound is above the last")
     if first < v.lowest.block.header.number then
       throw (prunedHistoryUnavailable.toRpcError (some (.str s!"block {first}")))

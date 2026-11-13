@@ -328,6 +328,7 @@ def test_logs_of_whole_chain() -> None:
 BAD_FILTERS = [
     pytest.param({"fromBlock": "0x3d"}, -32602, id="from-above-head"),
     pytest.param({"fromBlock": "0x5", "toBlock": "0x4"}, -32602, id="reversed"),
+    pytest.param({"fromBlock": "safe", "toBlock": "0x3d"}, -32602, id="tag-to-above-head"),
     pytest.param({"fromBlock": "pending"}, -32602, id="pending"),
     pytest.param({"blockHash": "0x" + "11" * 32}, -32001, id="unknown-hash"),
 ]
