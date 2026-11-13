@@ -19,7 +19,7 @@ A fresh node has seen no bits, and in the minimal preset every selection proof s
 
 So the checks of the seen bits and of the selection can pass, as the iffs need for an accept.
 
-The members come from the next committee of the head state when the next slot starts a period.
+The keys a topic checks come from the next committee of a state when the next slot starts a period.
 
 Otherwise they come from its current committee.
 -/
@@ -85,7 +85,7 @@ theorem mem_syncSubnetsOfPubkey {committee : SyncCommittee preset} {pubkey : BLS
 
 /-- A slot and the slot after it share a period exactly when the slot after does not start one.
 
-A period is a fixed number of slots: the slots of an epoch times the epochs of a period. -/
+A period is the slots of a fixed number of epochs. -/
 private theorem period_eq_iff {slot : Slot} (fits : slot.toNat + 1 < 2 ^ 64) :
     computeSyncCommitteePeriod preset (computeEpochAtSlot preset slot) =
         computeSyncCommitteePeriodAtSlot preset (slot + 1) ↔
@@ -100,7 +100,7 @@ private theorem period_eq_iff {slot : Slot} (fits : slot.toNat + 1 < 2 ^ 64) :
   · rw [Nat.succ_div, Ne, ← Nat.dvd_iff_mod_eq_zero]
     split <;> simp_all
 
-/-- The sync committee of the slot after a state, for every state.
+/-- The sync committee of the slot after a state.
 
 When that slot starts a period, it is the next committee of the state.
 
@@ -127,19 +127,16 @@ theorem syncCommitteeAtNextSlot_eq :
   · rename_i over
     simp [addChecked, over, bind, Except.bind]
 
-/-- The keys of a subcommittee of a subnet, for a state whose slot is below the largest.
+/-- The keys of a subcommittee whose index is below the number of subnets.
 
-They are the slice of the sync committee of the next slot at that subcommittee. -/
+They are its slice of the sync committee of the slot after the state.
+
+They fail exactly when that committee does. -/
 theorem getSyncSubcommitteePubkeys_eq {subcommitteeIndex : UInt64}
-    (fits : state.slot.toNat + 1 < 2 ^ 64)
     (inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT) :
     getSyncSubcommitteePubkeys state altair subcommitteeIndex =
-      .ok (syncSubcommitteePubkeys
-        (if (state.slot.toNat + 1) %
-            (preset.SLOTS_PER_EPOCH.toNat * preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) = 0
-          then (state.nextSyncCommittee altair).value
-          else (state.currentSyncCommittee altair).value)
-        subcommitteeIndex.toNat) := by
+      (syncCommitteeAtNextSlot state altair).map
+        (syncSubcommitteePubkeys · subcommitteeIndex.toNat) := by
   have below : subcommitteeIndex.toNat < 4 := by
     simpa [SYNC_COMMITTEE_SUBNET_COUNT, Networking.Enr.SYNC_COMMITTEE_SUBNET_COUNT,
       UInt64.lt_iff_toNat_lt] using inRange
@@ -156,8 +153,8 @@ theorem getSyncSubcommitteePubkeys_eq {subcommitteeIndex : UInt64}
       (show subcommitteeIndex.toNat ≤ 3 by omega)
     omega
   unfold getSyncSubcommitteePubkeys
-  simp only [syncCommitteeAtNextSlot_eq, fits, ↓reduceIte, mulChecked_of_lt product, bind,
-    Except.bind, pure, Except.pure]
+  cases syncCommitteeAtNextSlot state altair <;>
+    simp [mulChecked_of_lt product, bind, Except.bind, pure, Except.pure, Except.map]
 
 /-! ## Sync committee messages -/
 
