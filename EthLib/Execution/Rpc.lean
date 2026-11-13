@@ -10,6 +10,7 @@ public import EthLib.Execution.Rpc.Block
 public import EthLib.Execution.Rpc.View
 public import EthLib.Execution.Rpc.Transaction
 public import EthLib.Execution.Rpc.TransactionInfo
+public import EthLib.Execution.Rpc.Raw
 public import EthLib.Execution.Rpc.Methods
 
 /-!

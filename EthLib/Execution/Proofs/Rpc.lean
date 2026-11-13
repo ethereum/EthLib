@@ -9,6 +9,7 @@ public import EthLib.Execution.Proofs.Rpc.Header
 public import EthLib.Execution.Proofs.Rpc.Block
 public import EthLib.Execution.Proofs.Rpc.View
 public import EthLib.Execution.Proofs.Rpc.Methods
+public import EthLib.Execution.Proofs.Rpc.Raw
 public import EthLib.Execution.Proofs.Rpc.Transaction
 public import EthLib.Execution.Proofs.Rpc.TransactionInfo
 

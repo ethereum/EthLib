@@ -3464,6 +3464,17 @@ For the tag `pending`, the header method answers `null`.
 The block and count methods read the pending block of the view instead, since only the header methods of [`block.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/block.yaml) answer `null` for `pending`.
 The schema gives `size` only the title "Block size"; here it is the length of the RLP form of the block, which the fixtures pin.
 
+The raw getters of [`getters.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/debug/getters.yaml) return the consensus encodings of a header, a block, a transaction and the receipts of a block (`Execution/Rpc/Raw.lean`).
+The bytes of a transaction hash to the hash that names it in the request (`keccak256_rawTransaction`, `Proofs/Rpc/Raw.lean`).
+In a valid view, the raw header that the getter returns hashes to the hash that the node keeps for its block, and decodes back to the header (`Valid.rawHeader_eq_ok`, `Valid.rawHeader`).
+The header and block objects report that hash (`getObjVal_hash_headerObject`, `getObjVal_blockJson`), so the raw header hashes to the hash of the block object (`Valid.hash_blockByNumber_rawHeader`).
+The raw block decodes back to the block, with each transaction as its item in a body, when each ommer is at the fork that the decoder gives its own number (`decode_rawBlock`).
+A valid view does not check the fork of an ommer against the schedule of the chain, so that condition is a hypothesis.
+In a valid view, the raw receipts of a canonical block after the lowest have the receipts root of its header (`Valid.rawReceipts_eq_ok`, `Valid.rawReceipts_root`).
+The receipts of the lowest block, of side blocks and of the pending block are inputs of the view, so no theorem ties them to a header.
+No result schema of the getters allows `null`.
+Here an unknown block or transaction gets `-32001`, the code that the getter of a block access list in the same file requires for an unknown block.
+
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 
