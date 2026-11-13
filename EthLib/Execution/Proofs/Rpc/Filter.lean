@@ -269,7 +269,7 @@ theorem getLogs_complete_log {v : ChainView} {f : Filter} {logs : List LogInfo}
 theorem Valid.logs_receipts {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal) {i : Nat}
     (hi : i + 1 < v.canonical.length) :
     v.canonical[i + 1].receipts.flatMap (·.2.logs) = v.canonical[i + 1].logs := by
-  obtain ⟨-, result, hrun, hrec, hlog⟩ := hv.follows i hi
+  obtain ⟨-, result, hrun, hrec, hlog, -⟩ := hv.follows i hi
   obtain ⟨hashes, -, happly, -⟩ := Blocks.runBody_eq_ok.mp hrun
   obtain ⟨body, txs, htxs, hr, hl⟩ := applyBody_run happly
   rw [← hrec, ← hlog, hr, hl]
@@ -279,7 +279,7 @@ theorem Valid.logs_receipts {v : ChainView} {checkSeal : Bool} (hv : v.Valid che
 theorem Valid.logsBloom_eq {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal) {i : Nat}
     (hi : i + 1 < v.canonical.length) :
     logsBloom v.canonical[i + 1].logs = v.canonical[i + 1].block.header.bloom := by
-  obtain ⟨hst, result, hbody, -, hlog⟩ := hv.follows i hi
+  obtain ⟨hst, result, hbody, -, hlog, -⟩ := hv.follows i hi
   obtain ⟨-, -, -, hashes, output, roots, hh, hout, hroots, hchecks, -⟩ :=
     stateTransition_eq_ok hst
   obtain ⟨hashes', hh', hout', -⟩ := runBody_eq_ok.mp hbody

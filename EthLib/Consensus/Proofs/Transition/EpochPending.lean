@@ -43,6 +43,8 @@ In Electra, while deposits of the old mechanism remain, it reads no request eith
 So only such deposits leave the queue.
 
 From Gloas, the churn of deposits is the churn of activations alone.
+
+The pending deposits keep the pending consolidations.
 -/
 
 @[expose] public section
@@ -654,6 +656,40 @@ theorem processPendingDeposits_applied {electra : .pectra ≤ fork}
     exact ⟨read, _, applied, postponed, _, _, _, facts.split, by simpa using facts.pushed,
       by simpa using facts.bounded, facts.appliedSublist, facts.movedSublist, facts.perm,
       facts.applies, rfl⟩
+
+/-- A new validator keeps the pending consolidations. -/
+theorem addValidatorToRegistry_pendingConsolidations {pubkey : Cryptography.Bls.BLSPubkey}
+    {credentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey credentials amount = .ok after) :
+    after.pendingConsolidations = state.pendingConsolidations := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · simp only [addValidatorToRegistryAltair, bind_ok_iff, liftAccessor_ok,
+      pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    rfl
+  · split at computed <;> cases computed
+    rfl
+
+/-- A pending deposit keeps the pending consolidations. -/
+theorem applyPendingDeposit_pendingConsolidations {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    after.pendingConsolidations = state.pendingConsolidations := by
+  rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+  · rfl
+  · obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp raised
+    rfl
+  · exact addValidatorToRegistry_pendingConsolidations added
+
+/-- The pending deposits of an epoch keep the pending consolidations. -/
+theorem processPendingDeposits_pendingConsolidations {electra : .pectra ≤ fork}
+    (computed : processPendingDeposits config checks state electra = .ok after) :
+    after.pendingConsolidations = state.pendingConsolidations := by
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, folded, rfl⟩ :=
+    processPendingDeposits_applied computed
+  exact foldlM_ok_invariant (fun b => b.pendingConsolidations = state.pendingConsolidations)
+    (fun _ _ _ prior step => (applyPendingDeposit_pendingConsolidations step).trans prior) rfl
+    folded
 
 /-- The pending deposits of an epoch read a prefix of the queue, at most the limit per epoch.
 

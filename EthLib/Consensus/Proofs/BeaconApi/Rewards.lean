@@ -4,9 +4,12 @@ public import EthLib.Consensus.BeaconApi.Rewards
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
+public import EthLib.Consensus.Proofs.Transition.Invariants
+public import EthLib.Consensus.Proofs.Transition.ProposerBalance
 public import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Transition.StateTransition
+import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 
 /-!
 # Proofs: the rewards answers of the Beacon API
@@ -32,6 +35,16 @@ That reward counts for a seat that signed, and against a seat that did not.
 When the balance covers each seat of the member, it moves by that sum.
 
 The proposer also earns a share of the reward of each seat that signed.
+
+The block rewards start from the state that the operations of the block read.
+
+Their total is the sum of their parts, and from Altair the sync part is the share of the step.
+
+The operations and the sync aggregate raise the proposer's balance by exactly that total.
+
+That needs a block that does not slash the proposer, pay it a deposit or switch its credentials.
+
+It also needs a proposer without a seat in the sync committee.
 -/
 
 @[expose] public section
@@ -1086,5 +1099,300 @@ theorem syncCommitteeRewardsResponse_of_lt_altair (before : fork < .altair)
   have not : ¬.altair ≤ fork := Nat.not_le_of_lt before
   simp [syncCommitteeRewardsResponse, not]
   rfl
+
+/-! ## Block rewards -/
+
+/-- The state that the operations of a block read, as the steps before them give it. -/
+theorem stateBeforeOperations_ok_iff {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
+    {input : BeaconState preset fork} :
+    stateBeforeOperations config checks engine state block = .ok input ↔
+      OperationsInput config checks engine state block input := by
+  simp only [stateBeforeOperations, OperationsInput, bind_ok_iff]
+  constructor
+  · rintro ⟨parented, paid, headed, header, executed, execution, revealed, randao, eth1⟩
+    exact ⟨parented, headed, executed, revealed, paid, header, execution, randao, eth1⟩
+  · rintro ⟨parented, headed, executed, revealed, paid, header, execution, randao, eth1⟩
+    exact ⟨parented, paid, headed, header, executed, execution, revealed, randao, eth1⟩
+
+/-- A block runs its operations on the state that the block rewards start from. -/
+theorem processBlock_stateBeforeOperations {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
+    {after : BeaconState preset fork}
+    (applied : processBlock config checks engine state block = .ok after) :
+    ∃ start operated, stateBeforeOperations config checks engine state block = .ok start ∧
+      processOperations config checks start block.body state.latestBlockHeader.slot =
+        .ok operated ∧
+      (if altair : .altair ≤ fork then
+          processSyncAggregate config checks operated altair (block.body.syncAggregate altair)
+        else pure operated) = .ok after := by
+  obtain ⟨start, operated, started, operatedOk, -, synced⟩ :=
+    processBlock_operationsInput applied
+  exact ⟨start, operated, stateBeforeOperations_ok_iff.mpr started, operatedOk, synced⟩
+
+/-- The steps that the block rewards run, named, with the parts they give. -/
+private theorem blockRewards_ok {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
+    {rewards : BlockRewards}
+    (answered : blockRewards config checks engine state block = .ok rewards) :
+    ∃ start slashed caught attested sync total,
+      stateBeforeOperations config checks engine state block = .ok start ∧
+      block.body.proposerSlashings.data.foldlM (processProposerSlashing config checks) start =
+        .ok slashed ∧
+      block.body.attesterSlashings.data.foldlM (processAttesterSlashing config checks) slashed =
+        .ok caught ∧
+      block.body.attestations.data.foldlM
+        (processAttestation config checks · state.latestBlockHeader.slot ·) caught =
+        .ok attested ∧
+      (if altair : .altair ≤ fork then do
+          let operated ← processOperations config checks start block.body
+            state.latestBlockHeader.slot
+          let share ← syncProposerReward (← syncParticipantReward operated)
+          let signed := (block.body.syncAggregate altair).syncCommitteeBits.bits.toArray.countP id
+          liftAccessor (liftArith (Uint64.mulChecked share signed.toUInt64))
+        else pure (0 : Gwei)) = .ok sync ∧
+      (∃ first second,
+        Uint64.addChecked (balanceRise block.proposerIndex caught attested) sync = .ok first ∧
+        Uint64.addChecked first (balanceRise block.proposerIndex start slashed) = .ok second ∧
+        Uint64.addChecked second (balanceRise block.proposerIndex slashed caught) = .ok total) ∧
+      rewards = ⟨block.proposerIndex, total, balanceRise block.proposerIndex caught attested, sync,
+        balanceRise block.proposerIndex start slashed,
+        balanceRise block.proposerIndex slashed caught⟩ := by
+  simp only [blockRewards, bind_ok_iff] at answered
+  obtain ⟨start, startOk, slashed, slashedOk, caught, caughtOk, attested, attestedOk, rest⟩ :=
+    answered
+  refine ⟨start, slashed, caught, attested, ?_⟩
+  by_cases altair : Fork.altair ≤ fork
+  · simp only [altair, ↓reduceDIte, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+      pure, Except.pure, Except.ok.injEq] at rest ⊢
+    obtain ⟨operated, operatedOk, reward, rewardOk, share, shareOk, sync, syncOk, total,
+      ⟨first, firstOk, second, secondOk, totalOk⟩, rfl⟩ := rest
+    exact ⟨sync, total, startOk, slashedOk, caughtOk, attestedOk,
+      ⟨operated, operatedOk, reward, rewardOk, share, shareOk, syncOk⟩,
+      ⟨first, second, firstOk, secondOk, totalOk⟩, rfl⟩
+  · simp only [altair, ↓reduceDIte, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+      pure, Except.pure, Except.ok.injEq] at rest ⊢
+    obtain ⟨_, rfl, total, ⟨first, firstOk, second, secondOk, totalOk⟩, rfl⟩ := rest
+    exact ⟨0, total, startOk, slashedOk, caughtOk, attestedOk, rfl,
+      ⟨first, second, firstOk, secondOk, totalOk⟩, rfl⟩
+
+/-- The block rewards name the proposer of the block, and their total is the sum of the parts. -/
+theorem blockRewards_total {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
+    {rewards : BlockRewards}
+    (answered : blockRewards config checks engine state block = .ok rewards) :
+    rewards.proposerIndex = block.proposerIndex ∧
+      rewards.total.toNat = rewards.attestations.toNat + rewards.syncAggregate.toNat +
+        rewards.proposerSlashings.toNat + rewards.attesterSlashings.toNat := by
+  obtain ⟨_, _, _, _, _, _, -, -, -, -, -, ⟨first, second, firstOk, secondOk, totalOk⟩, rfl⟩ :=
+    blockRewards_ok answered
+  rw [Uint64.addChecked_ok_iff] at firstOk secondOk totalOk
+  refine ⟨rfl, ?_⟩
+  dsimp only
+  omega
+
+/-- From Altair the sync part is the share of the sync aggregate step, once per signature.
+
+The step reads the state after the operations, and computes the share from its reward. -/
+theorem blockRewards_syncAggregate {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
+    {rewards : BlockRewards} (altair : .altair ≤ fork)
+    (answered : blockRewards config checks engine state block = .ok rewards) :
+    ∃ start operated reward share,
+      stateBeforeOperations config checks engine state block = .ok start ∧
+      processOperations config checks start block.body state.latestBlockHeader.slot =
+        .ok operated ∧
+      syncParticipantReward operated = .ok reward ∧ syncProposerReward reward = .ok share ∧
+      rewards.syncAggregate.toNat = share.toNat *
+        (block.body.syncAggregate altair).syncCommitteeBits.bits.toArray.countP id := by
+  obtain ⟨start, _, _, _, sync, _, startOk, -, -, -, syncOk, -, rfl⟩ := blockRewards_ok answered
+  simp only [altair, ↓reduceDIte, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff] at syncOk
+  obtain ⟨operated, operatedOk, reward, rewardOk, share, shareOk, syncOk⟩ := syncOk
+  rw [Uint64.mulChecked_ok_iff] at syncOk
+  refine ⟨start, operated, reward, share, startOk, operatedOk, rewardOk, shareOk, ?_⟩
+  -- The count of signatures is at most the committee size, which fits in 64 bits.
+  have small := Array.countP_le_size (p := id)
+    (xs := (block.body.syncAggregate altair).syncCommitteeBits.bits.toArray)
+  have fits := preset.SYNC_COMMITTEE_SIZE.toNat_lt
+  rw [Vector.size_toArray] at small
+  rw [syncOk.2]
+  simp only [Nat.toUInt64, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt small fits)]
+
+/-- Before Altair a block has no sync aggregate, and its attestations pay the proposer nothing. -/
+theorem blockRewards_of_lt_altair {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
+    {rewards : BlockRewards} (before : fork < .altair)
+    (answered : blockRewards config checks engine state block = .ok rewards) :
+    rewards.syncAggregate = 0 ∧ rewards.attestations = 0 := by
+  have not : ¬.altair ≤ fork := Nat.not_le_of_lt before
+  obtain ⟨_, _, caught, attested, sync, _, -, -, -, attestedOk, syncOk, -, rfl⟩ :=
+    blockRewards_ok answered
+  simp only [not, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at syncOk
+  refine ⟨syncOk.symm, ?_⟩
+  -- Before Altair an attestation only records itself, so no balance moves.
+  have same : attested.balances = caught.balances := by
+    rw [← Array.foldlM_toList] at attestedOk
+    refine (foldlM_ok_steps (fun u v : BeaconState preset fork => v.balances = u.balances)
+      (fun _ => rfl) (fun one two => two.trans one) (fun u attestation v ok => ?_)
+      attestedOk).1
+    unfold processAttestation at ok
+    simp only [not, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure,
+      Except.pure, Except.ok.injEq] at ok
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+      _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := ok
+    have kept := recordPendingAttestation_ok recorded
+    split at kept <;>
+    · obtain ⟨_, rest⟩ := kept
+      exact congrArg (·.balances) rest
+  simp [balanceRise, same, Uint64.saturatingSub]
+
+/-- The rise of a balance that does not fall is the difference of the two balances. -/
+private theorem balanceRise_toNat {index : ValidatorIndex} {first second : BeaconState preset fork}
+    {earlier later : Gwei} (atFirst : first.balances.data[index.toNat]? = some earlier)
+    (atSecond : second.balances.data[index.toNat]? = some later) (low : earlier ≤ later) :
+    (balanceRise index first second).toNat = later.toNat - earlier.toNat := by
+  simp only [balanceRise, Array.getD_eq_getD_getElem?, atFirst, atSecond, Option.getD_some,
+    Uint64.saturatingSub]
+  rw [UInt64.le_iff_toNat_le] at low
+  split
+  · rename_i less
+    rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_of_lt less)]
+  · rename_i notLess
+    rw [UInt64.lt_iff_toNat_lt] at notLess
+    simp only [UInt64.toNat_zero]
+    omega
+
+/-- The share of the proposer is the participant reward times its weight, over the rest. -/
+private theorem syncProposerReward_toNat {reward share : Gwei}
+    (computed : syncProposerReward reward = .ok share) :
+    share.toNat =
+      reward.toNat * PROPOSER_WEIGHT.toNat /
+        (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) := by
+  simp only [syncProposerReward, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff] at computed
+  obtain ⟨scaled, scaledOk, computed⟩ := computed
+  rw [Uint64.mulChecked_ok_iff] at scaledOk
+  rw [Uint64.divChecked_ok_iff] at computed
+  rw [computed.2, scaledOk.2]
+  rfl
+
+/-- The operations and the sync aggregate of a block raise the proposer's balance by the total.
+
+The proposer must have a balance.
+
+The block must not slash the proposer.
+
+Before Electra, no deposit of the block may carry its key.
+
+From Electra to Fulu, no consolidation request of the block may come from its key.
+
+From Altair, its key must hold no seat in the sync committee.
+
+The mixes must span more than the seed lookahead plus two epochs, as on mainnet and minimal. -/
+theorem blockRewards_balance {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
+    {rewards : BlockRewards} {after : BeaconState preset fork} {validator : Validator}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (applied : processBlock config checks engine state block = .ok after)
+    (answered : blockRewards config checks engine state block = .ok rewards)
+    (found : state.validators.data[block.proposerIndex.toNat]? = some validator)
+    (held : block.proposerIndex.toNat < state.balances.data.size)
+    (unslashedByProposers : ∀ slashing ∈ block.body.proposerSlashings.data,
+      slashing.signedHeader1.message.proposerIndex ≠ block.proposerIndex)
+    (unslashedByAttesters : ∀ slashing ∈ block.body.attesterSlashings.data,
+      block.proposerIndex ∉ slashingIndices slashing)
+    (undeposited : ∀ before : fork < .pectra,
+      ∀ deposit ∈ (block.body.deposits (Nat.lt_trans before (by decide))).data,
+        deposit.data.pubkey ≠ validator.pubkey)
+    (unswitched : ∀ electra : .pectra ≤ fork ∧ fork < .glamsterdam,
+      ∀ request ∈ (block.body.executionRequests electra).consolidations.data,
+        request.sourcePubkey ≠ validator.pubkey)
+    (unseated : ∀ altair : .altair ≤ fork,
+      validator.pubkey ∉ (state.currentSyncCommittee altair).value.pubkeys.toList) :
+    ∃ start balance final, stateBeforeOperations config checks engine state block = .ok start ∧
+      start.balances.data[block.proposerIndex.toNat]? = some balance ∧
+      after.balances.data[block.proposerIndex.toNat]? = some final ∧
+      final.toNat = balance.toNat + rewards.total.toNat := by
+  obtain ⟨start, operated, startOk, operatedOk, synced⟩ :=
+    processBlock_stateBeforeOperations applied
+  obtain ⟨start', slashed, caught, attested, sync, total, startOk', slashedOk, caughtOk,
+    attestedOk, -, ⟨first, second, firstOk, secondOk, totalOk⟩, rfl⟩ := blockRewards_ok answered
+  rw [startOk, Except.ok.injEq] at startOk'
+  subst startOk'
+  -- The operations start from a state with the proposer of the block and its balance.
+  have started := stateBeforeOperations_ok_iff.mp startOk
+  obtain ⟨readStart, committeeStart, downStart⟩ := operationsInput_proposer apart started
+  obtain ⟨now, atNow, sameKey⟩ :=
+    validators_getElem?_of_validatorKeys_prefix (frame_operationsInput started).pubkeysPrefix found
+  obtain ⟨balance, atBalance, -⟩ := downStart _ _ (Array.getElem?_eq_getElem held)
+  -- The slashings and the attestations raise it, and the later operations keep it.
+  obtain ⟨slashed', caught', attested', slashedOk', caughtOk', attestedOk', proposers, attesters,
+    attestations, stays⟩ := processOperations_balance operatedOk atNow
+      (fun slashing member same =>
+        unslashedByProposers slashing member (UInt64.toNat_inj.mp same))
+      (fun slashing member slashedIndex inside same =>
+        unslashedByAttesters slashing member (UInt64.toNat_inj.mp same ▸ inside))
+      (by rw [sameKey]; exact undeposited) (by rw [sameKey]; exact unswitched)
+  rw [slashedOk, Except.ok.injEq] at slashedOk'
+  subst slashedOk'
+  rw [caughtOk, Except.ok.injEq] at caughtOk'
+  subst caughtOk'
+  rw [attestedOk, Except.ok.injEq] at attestedOk'
+  subst attestedOk'
+  obtain ⟨one, atOne, lowOne⟩ := proposers balance atBalance
+  obtain ⟨two, atTwo, lowTwo⟩ := attesters one atOne
+  obtain ⟨three, atThree, lowThree⟩ := attestations two atTwo
+  have atOperated := stays three atThree
+  have riseOne := balanceRise_toNat atBalance atOne lowOne
+  have riseTwo := balanceRise_toNat atOne atTwo lowTwo
+  have riseThree := balanceRise_toNat atTwo atThree lowThree
+  rw [UInt64.le_iff_toNat_le] at lowOne lowTwo lowThree
+  rw [Uint64.addChecked_ok_iff] at firstOk secondOk totalOk
+  refine ⟨start, balance, ?_⟩
+  by_cases altair : Fork.altair ≤ fork
+  · simp only [altair, ↓reduceDIte] at synced
+    -- The sync aggregate reads the proposer of the block, which holds no seat.
+    obtain ⟨proposerSame, committeeSame⟩ := processOperations_proposer apart operatedOk
+    obtain ⟨later, atLater, laterKey⟩ := validators_getElem?_of_validatorKeys_prefix
+      (frame_processOperations operatedOk).pubkeysPrefix atNow
+    obtain ⟨reward, proposerReward, final, rewardOk, proposerRewardValue, atFinal, finalValue⟩ :=
+      processSyncAggregate_proposer synced (proposerSame.trans readStart) atLater
+        (by rw [committeeSame, committeeStart, laterKey, sameKey]; exact unseated altair)
+        atOperated
+    obtain ⟨start', operated', reward', share, startOk', operatedOk', rewardOk', shareOk,
+      syncValue⟩ := blockRewards_syncAggregate altair answered
+    rw [startOk, Except.ok.injEq] at startOk'
+    subst startOk'
+    rw [operatedOk, Except.ok.injEq] at operatedOk'
+    subst operatedOk'
+    rw [rewardOk, Except.ok.injEq] at rewardOk'
+    subst rewardOk'
+    have shareValue := syncProposerReward_toNat shareOk
+    refine ⟨final, startOk, atBalance, atFinal, ?_⟩
+    dsimp only at syncValue riseOne riseTwo riseThree ⊢
+    rw [finalValue, totalOk.2, secondOk.2, firstOk.2, syncValue, shareValue,
+      ← proposerRewardValue, riseOne, riseTwo, riseThree]
+    omega
+  · simp only [altair, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at synced
+    subst synced
+    have none := (blockRewards_of_lt_altair (Nat.lt_of_not_le altair) answered).1
+    refine ⟨three, startOk, atBalance, atOperated, ?_⟩
+    dsimp only at none riseOne riseTwo riseThree ⊢
+    rw [totalOk.2, secondOk.2, firstOk.2, none, riseOne, riseTwo, riseThree]
+    simp only [UInt64.toNat_zero]
+    omega
+
+/-- An answer is the JSON of the block rewards. -/
+theorem blockRewardsResponse_ok {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
+    {envelope : ApiEnvelope}
+    (answered : blockRewardsResponse config checks engine state block = .ok envelope) :
+    ∃ rewards, blockRewards config checks engine state block = .ok rewards ∧
+      envelope = { data := rewards.toJson } := by
+  simp only [blockRewardsResponse, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at answered
+  obtain ⟨rewards, rewardsOk, rfl⟩ := answered
+  exact ⟨rewards, rewardsOk, rfl⟩
 
 end EthLib.Consensus.BeaconApi

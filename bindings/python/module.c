@@ -865,6 +865,8 @@ static PyMethodDef methods[] = {
    DOC_consensus_api_attestation_rewards},
   {"consensus_api_sync_committee_rewards", py_consensus_api_sync_committee_rewards, METH_VARARGS,
    DOC_consensus_api_sync_committee_rewards},
+  {"consensus_api_block_rewards", py_consensus_api_block_rewards, METH_VARARGS,
+   DOC_consensus_api_block_rewards},
   {"consensus_api_duties", py_consensus_api_duties, METH_VARARGS,
    DOC_consensus_api_duties},
   {"consensus_api_committees", py_consensus_api_committees, METH_VARARGS,
@@ -1346,6 +1348,8 @@ static PyMethodDef methods[] = {
   {"rpc_pruned_history_unavailable", py_rpc_pruned_history_unavailable, METH_VARARGS,
    DOC_rpc_pruned_history_unavailable},
   {"rpc_serve", py_rpc_serve, METH_VARARGS, DOC_rpc_serve},
+  {"rpc_encode_block_access_list", py_rpc_encode_block_access_list, METH_VARARGS,
+   DOC_rpc_encode_block_access_list},
   {"pyvalue_echo", py_pyvalue_echo, METH_VARARGS, DOC_pyvalue_echo},
   {NULL, NULL, 0, NULL},
 };

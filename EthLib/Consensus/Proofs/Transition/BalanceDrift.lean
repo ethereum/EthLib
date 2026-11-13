@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.Requests
+import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 
 /-!
 # Effective balances kept by block operations
@@ -10,6 +11,12 @@ import EthLib.Consensus.Proofs.Transition.Requests
 A block operation keeps the effective balance of every validator that existed before it.
 
 A whole block keeps them, at every fork.
+
+Registry updates keep them as well.
+
+Only rewards, slashings and the two pending stages can change the balances.
+
+An effective-balance update never raises the larger of the effective and the actual balance.
 -/
 
 @[expose] public section
@@ -23,6 +30,10 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 /-- The effective balance at a registry position, or zero past the end of the registry. -/
 def effectiveAt (s : ForkedBeaconState preset) (i : Nat) : Nat :=
   ((s.state.validators.data[i]?).map (·.effectiveBalance.toNat)).getD 0
+
+/-- The balance at a registry position, or zero past the end of the balances. -/
+def actualBalanceAt (s : ForkedBeaconState preset) (i : Nat) : Nat :=
+  ((s.state.balances.data[i]?).map (·.toNat)).getD 0
 
 /-- The ordering of the effective-balance caps that the departure bound assumes. -/
 structure CapOrder (preset : Preset) : Prop where
@@ -188,6 +199,14 @@ theorem effectiveKept_registryElectra {f : Fork} {s t : BeaconState preset f}
   split at ok
   · exact effectiveKept_setValidatorAt found (liftAccessor_ok.mp ok) rfl
   · cases ok; exact effectiveKept_refl _
+
+/-- Registry updates keep the effective balance of every validator. -/
+theorem effectiveKept_registry {f : Fork} {s t : BeaconState preset f}
+    (ok : processRegistryUpdates config s = .ok t) : EffectiveKept s t := by
+  intro i inside
+  obtain ⟨_, found, _, same, _⟩ :=
+    (processRegistryUpdates_kept ok).1 i _ (Array.getElem?_eq_getElem inside)
+  simp [effectiveAt, found, same, Array.getElem?_eq_getElem inside]
 
 private theorem effectiveKept_excess {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {index : ValidatorIndex}
@@ -394,6 +413,70 @@ theorem effectiveKept_processBlock {f : Fork} {s t : BeaconState preset f}
         (by rw [(processAttestation_registry attested).1]),
       (frame_processAttestation attested).registryGrows⟩) attestedOk) <|
     trans rest tail).1
+
+/-- Starting an exit writes one validator and the exit queue only.
+
+So it keeps the balances and the pending consolidations. -/
+theorem initiateValidatorExit_balances_eq_and_pendingConsolidations_eq {f : Fork}
+    {s t : BeaconState preset f} {index : ValidatorIndex}
+    (ok : initiateValidatorExit config s index = .ok t) :
+    t.balances = s.balances ∧ t.pendingConsolidations = s.pendingConsolidations := by
+  obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok ok
+  · exact ⟨rfl, rfl⟩
+  · obtain ⟨_, _, rfl⟩ := exitQueue_eq queue
+    obtain ⟨_, rfl⟩ := setValidator_ok set
+    exact ⟨rfl, rfl⟩
+
+/-- The stages after the effective-balance update keep the validators and the balances. -/
+theorem balanceDrift_late {f : Fork} {s t : BeaconState preset f}
+    (trace : EpochTrace (EpochStage.action config checks)
+      [.slashingsReset, .randaoReset, .history, .participation, .syncCommittees,
+        .proposerLookahead, .ptcWindow] s t) :
+    t.validators = s.validators ∧ t.balances = s.balances := by
+  refine EpochTrace.transport
+    (R := fun a b : BeaconState preset f => b.validators = a.validators ∧ b.balances = a.balances)
+    (fun _ => ⟨rfl, rfl⟩) (fun one two => ⟨two.1.trans one.1, two.2.trans one.2⟩) ?_ trace
+  intro k member a b computed
+  have edge := EpochStage.action_cases.mp computed
+  cases k
+  case rewards | registry | slashings | pendingDeposits | pendingConsolidations
+    | effectiveBalances => simp at member
+  all_goals
+    have kept := edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
+    exact ⟨kept.1, kept.2.1⟩
+
+/-- An effective-balance update cannot increase the funding held at any registry position. -/
+private theorem updateEffectiveBalance_funding {fork : Fork} {s t : BeaconState preset fork}
+    {index : Nat} (ok : updateEffectiveBalance s index = .ok t) (i : Nat) :
+    max (effectiveAt ⟨fork, t⟩ i) (actualBalanceAt ⟨fork, t⟩ i) ≤
+      max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i) := by
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨validator, found, balance, read, effective, updated, set⟩ := ok
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
+  have old : s.validators.data[index]? = some validator := by
+    simpa [getValidatorAt, inside] using found
+  by_cases same : i = index
+  · subst i
+    have actual : actualBalanceAt ⟨fork, s⟩ index = balance.toNat := by
+      simp [actualBalanceAt, getBalanceAt_eq_ok_iff.mp read]
+    have bound := updatedEffectiveBalance_le_max updated
+    simpa [effectiveAt, actualBalanceAt, BeaconState.putValidator,
+      Serialization.Ssz.RootedForkList.data_set, old, ← actual] using
+      (Nat.max_le.mpr ⟨bound, Nat.le_max_right validator.effectiveBalance.toNat balance.toNat⟩)
+  · simp [effectiveAt, actualBalanceAt, BeaconState.putValidator,
+      Serialization.Ssz.RootedForkList.data_set, Ne.symm same]
+
+/-- The full effective-balance pass cannot mint funding, including at inactive positions. -/
+theorem processEffectiveBalanceUpdates_max_le {fork : Fork} {s t : BeaconState preset fork}
+    (ok : processEffectiveBalanceUpdates s = .ok t) (i : Nat) :
+    max (effectiveAt ⟨fork, t⟩ i) (actualBalanceAt ⟨fork, t⟩ i) ≤
+      max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i) := by
+  unfold processEffectiveBalanceUpdates at ok
+  exact foldlM_ok_invariant
+    (fun t => max (effectiveAt ⟨fork, t⟩ i) (actualBalanceAt ⟨fork, t⟩ i) ≤
+      max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i))
+    (fun _ _ _ previous step => Nat.le_trans (updateEffectiveBalance_funding step i) previous)
+    (Nat.le_refl _) ok
 
 /-- A block keeps the effective balance of every existing validator.
 

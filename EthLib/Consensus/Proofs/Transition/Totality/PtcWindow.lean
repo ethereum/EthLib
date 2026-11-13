@@ -45,6 +45,44 @@ structure PtcDrawable (state : BeaconState preset fork) (epoch : Epoch) : Prop w
   committeeRoom : state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
     preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64
 
+/-- Two states with the same registry and mixes have the same beacon committee members in a slot. -/
+theorem slotCommitteeMembers_eq_of_eq {fork' : Fork}
+    {state : BeaconState preset fork} {other : BeaconState preset fork'}
+    (validators : other.validators.data = state.validators.data)
+    (mixes : other.randaoMixes.elements = state.randaoMixes.elements) (slot : Slot) :
+    slotCommitteeMembers other slot = slotCommitteeMembers state slot := by
+  unfold slotCommitteeMembers attesterShuffle getCommitteeCountPerSlot getActiveValidatorIndices
+    getActiveValidatorIndicesChecked getSeed getRandaoMix
+  simp only [validators, mixes]
+
+/-- The committees of an epoch stay drawable on a state with the same registry and mixes.
+
+The cap of the draw must agree. -/
+theorem PtcDrawable.of_eq {fork' : Fork}
+    {state : BeaconState preset fork} {other : BeaconState preset fork'} {epoch : Epoch}
+    (validators : other.validators.data = state.validators.data)
+    (mixes : other.randaoMixes.elements = state.randaoMixes.elements)
+    (cap : drawCap preset fork' = drawCap preset fork)
+    (drawable : PtcDrawable state epoch) : PtcDrawable other epoch := by
+  obtain ⟨capped, full, few, room, committeeRoom⟩ := drawable
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · intro validator member
+    rw [cap]
+    exact capped validator (validators ▸ member)
+  · intro slot inEpoch members computed
+    rw [slotCommitteeMembers_eq_of_eq validators mixes] at computed
+    obtain ⟨index, member, validator, got, atCap⟩ := full slot inEpoch members computed
+    refine ⟨index, member, validator, ?_, cap ▸ atCap⟩
+    unfold getValidator at got ⊢
+    rw [validators]
+    exact got
+  · rw [validators]
+    exact few
+  · rw [validators]
+    exact room
+  · rw [validators]
+    exact committeeRoom
+
 /-- A committee that is cut has a nonzero count and the size of its range of positions. -/
 private theorem size_of_shuffledCommittee {indices : Array ValidatorIndex}
     {shuffled : Array UInt64} {index count : UInt64} {committee : Array ValidatorIndex}
