@@ -1138,13 +1138,11 @@ theorem lt_slot_of_importAndSignBlocks {signingRootOf : BeaconBlockHeader → Ro
   | cons step rest ih =>
     cases step with
     | importFile file =>
-      -- The import leaves one limit, at least the slot of a held block, so after the old slot.
+      -- The import puts a held block under a limit, so each later header is after its slot.
       obtain ⟨block, kept⟩ := List.exists_mem_of_ne_nil _ nonempty
-      obtain ⟨limit, inside, above, least⟩ :=
-        underLimit_importFile (file := file) (List.mem_append_left _ kept)
-      refine ih (start := start.importFile file) signed (List.ne_nil_of_mem inside)
-        (fun other inLimit => ?_) (by simpa using member)
-      exact UInt64.lt_of_lt_of_le (older block kept) (UInt64.le_trans above (least other inLimit))
+      exact UInt64.lt_trans (older block kept)
+        (lt_slot_of_underLimit (start := start.importFile file) signed
+          (underLimit_importFile (List.mem_append_left _ kept)) (by simpa using member))
     | signBlock first =>
       obtain ⟨checked, later⟩ := bind_unit_ok_iff.mp signed
       have after := lt_slot_of_checkBlockSlot nonempty older (bind_unit_ok_iff.mp checked).2
@@ -1263,6 +1261,8 @@ So a signer that prunes its record with the minimal strategy imports an empty fi
 theorem importFile_of_data_eq_nil {held file : Interchange} (empty : file.data = []) :
     held.importFile file = held.toMinimal := by
   simp [Interchange.importFile, empty]
+
+/-! ## A signer of blocks without imports -/
 
 /-- A signer of blocks that imports no file is the signer of blocks without imports. -/
 theorem importAndSignBlocks_map_signBlock (signingRootOf : BeaconBlockHeader → Root)
