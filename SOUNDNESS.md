@@ -668,7 +668,21 @@ The X25519 proofs cover the clamp of RFC 7748 §5 and the decoding of a coordina
 `ladder_mod_two_pow` proves that the bits of the scalar above bit 254 do not change the ladder.
 So no run of the ladder can observe the cleared bit 255; only the clamp theorems record it.
 `swap_ladder_decodeScalar` proves that a clamped scalar leaves no swap pending at the end of the ladder.
-No theorem relates the ladder to the curve, so it is not proved to compute a scalar multiple.
+
+The ladder computes a scalar multiple on Curve25519, and X25519 is a key agreement (`Proofs/MontgomeryCurve.lean`, `Proofs/X25519/`).
+The curve `v ^ 2 = u ^ 3 + 486662 u ^ 2 + u` is the Weierstrass curve with `a₂ = 486662` and `a₄ = 1`, so the group law that Mathlib proves applies to it.
+`Represents.double` and `Represents.diffAdd` prove the doubling and the differential addition of RFC 7748 §5 on projective u-coordinates.
+They hold for every point, the point at infinity and the points of order 2 included, over any field in which `2 ≠ 0`.
+The differential addition needs the u-coordinate of the difference of its two points, and that coordinate must not be `0`.
+`ladder_represents` takes a point `P` whose u-coordinate is not `0` and a scalar `k` below `2 ^ 255`.
+After the pending swap, the ladder ends with projective u-coordinates of `[k] P` and `[k + 1] P`.
+`x25519_encodeUCoordinate` follows: X25519 of the encoded u-coordinate of such a point encodes the u-coordinate of `[k] P` for the clamped scalar `k`, and `0` when `[k] P` is the point at infinity.
+`modulus_prime` and `order_prime` prove, by Pratt certificates that the kernel checks, that `2 ^ 255 - 19` and the order `ℓ` of RFC 7748 §4.1 are prime.
+`addOrderOf_basePoint` proves that the base point `(9, v)` has order `ℓ`, from one run of the ladder that the kernel evaluates.
+`uCoord_decodeScalar_smul_ne_zero` proves that `[k] B` has a u-coordinate other than `0` for every clamped scalar `k`, since `k` is a multiple of 8 with `2 ^ 254 ≤ k < 2 ^ 255 < 8 ℓ`.
+`x25519_agree` proves the agreement of RFC 7748 §6.1: X25519 of the key `a` on the public key of `b` equals X25519 of `b` on the public key of `a`, for every pair of keys.
+No theorem covers an input u-coordinate of `0`, a noncanonical encoding, or a u-coordinate on the quadratic twist of the curve, though X25519 accepts all three.
+No theorem assumes or bounds the hardness of the Diffie-Hellman problem on the curve.
 
 The ChaCha20-Poly1305 proofs cover output length, counter exhaustion, rejection of a wrong tag and the round trip (`Proofs/ChaCha20Poly1305.lean`).
 `crypt_crypt` proves that the cipher, run twice under one key, counter and nonce, gives back its input.
