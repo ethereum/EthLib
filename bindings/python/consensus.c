@@ -77,6 +77,12 @@ eth_consensus_builder_bid_value(
 );
 
 extern lean_object*
+eth_consensus_consensus_version(lean_object* args);
+
+extern lean_object*
+eth_consensus_consensus_version_fork(lean_object* args);
+
+extern lean_object*
 eth_consensus_ssz_static(
   lean_object* args
 );
@@ -560,6 +566,22 @@ py_consensus_builder_bid_value(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_builder_bid_value, args, 3, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_consensus_version(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_consensus_version, args, 1, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_consensus_version_fork(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_consensus_version_fork, args, 1, CONSENSUS_ERROR);
 }
 
 PyObject*

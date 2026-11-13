@@ -14,6 +14,7 @@ public import EthLib.Consensus.Proofs.Participation
 public import EthLib.Consensus.Proofs.PayloadTimeliness
 public import EthLib.Consensus.Proofs.Proposers
 public import EthLib.Consensus.Proofs.SyncCommittee
+public import EthLib.Consensus.Proofs.ConsensusVersion
 public import EthLib.Consensus.Proofs.Constants
 public import EthLib.Consensus.Proofs.Containers.Attestation
 public import EthLib.Consensus.Proofs.Containers.Bid

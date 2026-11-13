@@ -428,6 +428,12 @@
 #define DOC_consensus_builder_bid_value \
   "The value of a builder's bid from its two payments and the proposer's execution payment cap."
 
+#define DOC_consensus_consensus_version \
+  "The name of the consensus version of a fork, or none before Phase 0 and at Hegotá."
+
+#define DOC_consensus_consensus_version_fork \
+  "The name of the first fork of a consensus version, read from its exact name."
+
 #define DOC_consensus_merkle_proof \
   "The node at a generalized index of the value that the bytes encode, and its branch, as a pair."
 

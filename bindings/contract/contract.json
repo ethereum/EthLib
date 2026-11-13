@@ -2872,6 +2872,24 @@
    "docstring":
    "The value of a builder's bid from its two payments and the proposer's execution payment cap."},
   {"summary":
+   "The name of the consensus version of a fork, or none before Phase 0 and at Hegotá.",
+   "signature": "(fork: str) -> str | None",
+   "operation": "EthLib.Consensus.Exports.consensusVersionExport",
+   "method": "consensus_consensus_version",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The name of the consensus version of a fork, or none before Phase 0 and at Hegotá."},
+  {"summary":
+   "The name of the first fork of a consensus version, read from its exact name.",
+   "signature": "(name: str) -> str",
+   "operation": "EthLib.Consensus.Exports.consensusVersionForkExport",
+   "method": "consensus_consensus_version_fork",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The name of the first fork of a consensus version, read from its exact name."},
+  {"summary":
    "The node at a generalized index of the value that the bytes encode, and its branch, as a pair.",
    "signature":
    "(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]",

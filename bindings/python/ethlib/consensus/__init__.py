@@ -84,6 +84,16 @@ def builder_bid_value(value: int, execution_payment: int, max_execution_payment:
     return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
 
 
+def consensus_version(fork: str) -> str | None:
+    """The Beacon API name of a fork's consensus version, or None before Phase 0 and at Hegotá."""
+    return _native.consensus_consensus_version(fork)
+
+
+def consensus_version_fork(name: str) -> str:
+    """The first fork of the consensus version with this exact Beacon API name."""
+    return _native.consensus_consensus_version_fork(name)
+
+
 def upgrade_operation(name: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
     """The Gloas root and bytes of a Fulu attestation, indexed attestation or attester slashing."""
     return _native.consensus_upgrade_operation(name, type_name, data)
@@ -1240,6 +1250,8 @@ __all__ = [
     "is_valid_builder_signature",
     "verify_builder_request_auth_signature",
     "builder_bid_value",
+    "consensus_version",
+    "consensus_version_fork",
     "upgrade_operation",
     "pq_keys_ssz",
     "pq_keys_possession_signing_root",
