@@ -585,6 +585,14 @@ def consensus_api_genesis(name: str, fork: str, state: bytes, config: dict[str, 
     """The genesis that a genesis state gives, as a `dict`."""
     ...
 
+def consensus_api_state_query(name: str, fork: str, state: bytes, query: str, epoch: int | None) -> dict[str, Any]:
+    """The JSON response to a query on a state, as a `dict`."""
+    ...
+
+def consensus_api_state_query_ssz(name: str, fork: str, state: bytes, query: str) -> bytes:
+    """The SSZ body of the response to a query on a state, as `bytes`."""
+    ...
+
 def consensus_api_resolve(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, queries: list) -> list:
     """The answer to each query, against the store after the steps of a fork choice case."""
     ...

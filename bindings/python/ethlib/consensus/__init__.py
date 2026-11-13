@@ -860,6 +860,25 @@ def api_genesis(
     return _native.consensus_api_genesis(name, fork, state, config)
 
 
+def api_state_query(
+    name: str, fork: str, state: bytes, query: str, epoch: int | None = None
+) -> dict[str, Any]:
+    """The Beacon API response to a query that reads one field of a state, or ConsensusError."""
+    # The query is the last segment of the endpoint path, such as "finality_checkpoints".
+    # The response holds the data, and the version where the endpoint names one.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    # The values are `Any`, since the data differs by query.
+    # Only "randao" takes an epoch; an epoch on another query, or an unknown query, has code 0.
+    # A state before the fork that adds the field raises ConsensusError with code 400.
+    return _native.consensus_api_state_query(name, fork, state, query, epoch)
+
+
+def api_state_query_ssz(name: str, fork: str, state: bytes, query: str) -> bytes:
+    """The Beacon API SSZ body of a query that reads one field of a state, or ConsensusError."""
+    # Only the queues, the proposer lookahead and the builder fields have an SSZ body.
+    return _native.consensus_api_state_query_ssz(name, fork, state, query)
+
+
 def gossip_validation(
     name: str,
     fork: str,
@@ -1468,6 +1487,8 @@ __all__ = [
     "api_fork_schedule",
     "api_deposit_contract",
     "api_genesis",
+    "api_state_query",
+    "api_state_query_ssz",
     "is_valid_builder_signature",
     "process_registration",
     "is_eligible_for_bid",

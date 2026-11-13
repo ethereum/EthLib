@@ -3434,6 +3434,15 @@ Without that order it fails: with Altair at epoch 10 and Bellatrix at epoch 5, a
 The genesis answer takes its time and its root from the genesis state, and its version from the configuration.
 `genesisInfo_version` shows that the genesis state that deposits build holds that version.
 
+The answers that read one field of a state are in `Consensus/BeaconApi/StateQueries.lean`.
+They are the root, the fork, the finality checkpoints, the RANDAO mix, the three pending queues, the proposer lookahead, and the pending payments and withdrawals of builders.
+`stateRoot_blockStates` (`Consensus/Proofs/BeaconApi/StateQueries.lean`) shows that, in a store that the handlers reach, the root of the state kept for a known block is the state root of that block.
+`stateRoot_resolveStateId_root` follows from it: a state named by its root has that root, as the source requires.
+`finalityCheckpoints_genesis` shows that the genesis state that deposits build, which exists only at Phase 0, has its three checkpoints at epoch 0 with the zero root.
+`pendingDeposits_error_iff` and the five theorems beside it show that each field that a fork adds gives the error with code 400 exactly when the state is before that fork.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_state_queries.py`) checks the root against the hash tree root of the state.
+It checks each other answer against the JSON of the whole state, on one state of the minimal preset per fork, with a distinct value in each field that a query reads.
+
 Points that remain open:
 
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
@@ -3451,6 +3460,15 @@ Points that remain open:
 - The source does not say whether the genesis fork version is the one of the configuration or the one that the genesis state holds; EthLib reads the configuration, which the domain of a deposit uses, so a chain that starts at a later fork reports a version that its genesis state does not hold.
 - `forkSchedule_upgrade` assumes that the state before the upgrade holds the version of its own fork; no theorem yet shows this for every state that the transition reaches.
 - The format rule of the spec map names hex, numbers and arrays only; EthLib writes the names of the preset and of the configuration as text, as the files do.
+- The source has the `randao` query answer "Invalid state ID or epoch" with code 400, and its example message is "Epoch is out of range for the `randao_mixes` of the state", but it names no range.
+  EthLib reads the circular buffer at the epoch modulo its length and refuses no epoch.
+  So an epoch outside the window that the buffer holds gives the mix of another epoch.
+- The source says that a state before finalization reports epoch 0 and the zero root; `finalityCheckpoints_genesis` covers only the genesis state, and no theorem yet covers the later states before finalization.
+- The source puts the `Eth-Consensus-Version` header on the SSZ answers too; the SSZ export gives the bytes only, and the version is the one of the JSON answer.
+- The source fixes the proposer lookahead at 64 items, the mainnet value; EthLib follows the preset, as the SSZ type of the source does, so the minimal preset gives 16.
+- The source names no consensus version for Heze, so the answers on a Heze state carry no version, although the schemas list it as required.
+- A value that the node cannot encode or compute has no error of its own in the source.
+  EthLib gives code 500, the code of the source for an internal error.
 
 ### Builder API
 
@@ -3837,12 +3855,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 425 operations and 49 size constants.
-The Python extension calls 425 of the operations and 49 of the constants.
+Lean exports 427 operations and 49 size constants.
+The Python extension calls 427 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10524 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2039), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (176), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1475), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (21), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (713), `x25519.c` (21), `xmss.c` (134).
+10552 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2061), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (176), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (147), `module.c` (1479), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (21), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (715), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

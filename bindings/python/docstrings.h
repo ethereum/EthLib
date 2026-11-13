@@ -437,6 +437,12 @@
 #define DOC_consensus_api_genesis \
   "The genesis that a genesis state gives, as a `dict`."
 
+#define DOC_consensus_api_state_query \
+  "The JSON response to a query on a state, as a `dict`."
+
+#define DOC_consensus_api_state_query_ssz \
+  "The SSZ body of the response to a query on a state, as `bytes`."
+
 #define DOC_consensus_api_resolve \
   "The answer to each query, against the store after the steps of a fork choice case."
 

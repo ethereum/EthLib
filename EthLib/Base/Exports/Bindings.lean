@@ -570,6 +570,12 @@ def bindings : List Binding := [
   ⟨"consensus_api_genesis", `EthLib.Consensus.Exports.apiGenesisExport,
     "(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> dict[str, str]",
     [], some "ConsensusError"⟩,
+  ⟨"consensus_api_state_query", `EthLib.Consensus.Exports.apiStateQueryExport,
+    "(name: str, fork: str, state: bytes, query: str, epoch: int | None) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_state_query_ssz", `EthLib.Consensus.Exports.apiStateQuerySszExport,
+    "(name: str, fork: str, state: bytes, query: str) -> bytes",
+    [], some "ConsensusError"⟩,
   ⟨"consensus_api_resolve", `EthLib.Consensus.Exports.apiResolveExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, queries: list) -> list",
