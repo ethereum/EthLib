@@ -1083,15 +1083,6 @@ private theorem withdrawals_departureQueues {fork : Fork} {s t : BeaconState pre
     ((withdrawalIndex_departureQueues electra moved).trans
       (applyWithdrawals_departureQueues electra early paid))
 
-/-- The execution part of a block keeps the validators. -/
-private theorem blockExecution_validators {fork : Fork} {engine : ExecutionEngine preset fork}
-    {s t : BeaconState preset fork} {body : BeaconBlockBody preset fork}
-    {bellatrix : .bellatrix ≤ fork}
-    (ok : processBlockExecution config checks engine s body bellatrix = .ok t) :
-    t.validators = s.validators :=
-  processBlockExecution_step_of (fun a b => b.validators = a.validators) (fun _ => rfl)
-    (fun one two => two.trans one) (fun _ same => same) processWithdrawals_validators ok
-
 /-- From Electra and before Gloas, the execution part of a block keeps both departure queues.
 
 The payload step is read here: the shared block lemma gives only its frame and validators. -/
@@ -2555,43 +2546,6 @@ def blockConsolidationSites {fork : Fork} (config : Config) (checks : SignatureC
       requests.consolidations.data.toList).2
   else return []
 
-/-- Successful block processing cannot lose its consolidation sites through a replay error. -/
-private theorem blockConsolidationSites_result {fork : Fork}
-    {engine : ExecutionEngine preset fork} {s t : BeaconState preset fork}
-    {block : BeaconBlock preset fork}
-    (ok : processBlock config checks engine s block = .ok t) :
-    ∃ sites, blockConsolidationSites config checks engine s block = .ok sites := by
-  by_cases electra : .pectra ≤ fork ∧ fork < .glamsterdam
-  · have altair : .altair ≤ fork := Nat.le_trans (by decide) electra.1
-    have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) electra.1
-    have before : fork < .hegota := Nat.lt_trans electra.2 (by decide)
-    have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt electra.2
-    obtain ⟨voted, operated, started, operatedOk, -, -⟩ := processBlock_operationsInput ok
-    obtain ⟨parented, headed, executed, revealed, paidOk, headedOk, executedOk, revealedOk,
-      votedOk⟩ := started
-    simp only [notGloas, bellatrix, before, ↓reduceDIte, pure, Except.pure,
-      Except.ok.injEq] at paidOk executedOk votedOk
-    subst paidOk
-    simp only [processOperations, notGloas, electra.1, ↓reduceDIte,
-      bind_ok_iff, ensure_ok_iff] at operatedOk
-    obtain ⟨expected, expectedOk, _, count, proposed, proposedOk, attested, attestedOk,
-      votedAtt, votedAttOk, deposited, depositedOk, exited, exitedOk, changed, changedOk,
-      requestsOk⟩ := operatedOk
-    simp only [processExecutionRequests, bind_ok_iff] at requestsOk
-    obtain ⟨requested, requestedOk, withdrawn, withdrawnOk, consolidated⟩ := requestsOk
-    obtain ⟨sites, replayed⟩ := consolidationRequestsSites_result
-      (by simpa only [← Array.foldlM_toList] using consolidated)
-    have ensured : ensure ((block.body.deposits before).data.size = expected)
-        (TransitionError.wrongDepositCount (block.body.deposits before).data.size expected) =
-          .ok () := ensure_ok_iff.mpr count
-    refine ⟨sites, ?_⟩
-    rw [blockConsolidationSites, dite_eq_left electra]
-    simp only [headedOk, executedOk,
-      revealedOk, votedOk, expectedOk, ensured, proposedOk, attestedOk,
-      votedAttOk, depositedOk, exitedOk, changedOk, requestedOk, withdrawnOk,
-      replayed, pure, Except.pure, bind, Except.bind]
-  · exact ⟨[], by simp only [blockConsolidationSites, electra, ↓reduceDIte]; rfl⟩
-
 private theorem sync_registry {fork : Fork} {s t : BeaconState preset fork}
     {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
     (ok : processSyncAggregate config checks s altair aggregate = .ok t) :
@@ -2713,12 +2667,11 @@ private theorem epoch_consolidationFrame {fork : Fork} {s t : BeaconState preset
 private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fork)
     (early : fork < .glamsterdam) {engine : ExecutionEngine preset fork}
     {s t : BeaconState preset fork} {block : BeaconBlock preset fork}
-    {sites : List (ForkedBeaconState preset)}
-    (ok : processBlock config checks engine s block = .ok t)
-    (recorded : blockConsolidationSites config checks engine s block = .ok sites)
-    (cap : Nat)
-    (rates : ∀ site ∈ sites, ∀ (_h : .pectra ≤ site.fork) (rate : Gwei),
-      getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap) :
+    (ok : processBlock config checks engine s block = .ok t) (cap : Nat)
+    (rates : ∀ sites, blockConsolidationSites config checks engine s block = .ok sites →
+      ∀ site ∈ sites, ∀ (_h : .pectra ≤ site.fork) (rate : Gwei),
+        getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap) :
+    ∃ sites, blockConsolidationSites config checks engine s block = .ok sites ∧
     ∃ exits consolidations : List IndexedDepartureCall,
       DepartureCallsFrom (getCurrentEpoch s).toNat (exits ++ consolidations) ∧
       DepartureCoverage s t (exits ++ consolidations) ∧
@@ -2737,6 +2690,7 @@ private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fo
   have before : fork < .hegota := Nat.lt_trans early (by decide)
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
   obtain ⟨voted, operated, started, operatedOk, -, syncedOk⟩ := processBlock_operationsInput ok
+  have headData := started.validators_eq early
   obtain ⟨parented, headed, executed, revealed, paidOk, headedOk, executedOk, revealedOk,
     votedOk⟩ := started
   simp only [notGloas, bellatrix, before, altair, ↓reduceDIte, pure, Except.pure,
@@ -2750,20 +2704,17 @@ private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fo
   have requestsLife := registryLifecycle_processExecutionRequests requestsOk
   simp only [processExecutionRequests, bind_ok_iff] at requestsOk
   obtain ⟨requested, requestedOk, withdrawn, withdrawnOk, consolidatedOk⟩ := requestsOk
-  obtain ⟨actualSites, replayed⟩ := consolidationRequestsSites_result
+  obtain ⟨sites, replayed⟩ := consolidationRequestsSites_result
     (by simpa only [← Array.foldlM_toList] using consolidatedOk)
   have ensured : ensure ((block.body.deposits before).data.size = expected)
       (TransitionError.wrongDepositCount (block.body.deposits before).data.size expected) =
         .ok () := ensure_ok_iff.mpr count
-  -- Both traversals reach the same withdrawal output before recording consolidation sites.
-  have same : actualSites = sites := by
-    rw [blockConsolidationSites, dite_eq_left ⟨electra, early⟩] at recorded
+  -- The replay reaches the same withdrawal output before recording consolidation sites.
+  have recorded : blockConsolidationSites config checks engine s block = .ok sites := by
+    rw [blockConsolidationSites, dite_eq_left ⟨electra, early⟩]
     simp only [headedOk, executedOk, revealedOk, votedOk, expectedOk, ensured,
       proposedOk, attestedOk, votedAttOk, depositedOk, exitedOk, changedOk,
-      requestedOk, withdrawnOk, replayed, pure, Except.pure, bind, Except.bind,
-      Except.ok.injEq] at recorded
-    exact recorded
-  subst actualSites
+      requestedOk, withdrawnOk, replayed, pure, Except.pure, bind, Except.bind]
   rw [← Array.foldlM_toList] at proposedOk attestedOk votedAttOk depositedOk exitedOk
   rw [← Array.foldlM_toList] at requestedOk withdrawnOk consolidatedOk
   obtain ⟨first, firstFrom, firstCoverage, firstTrace, firstRates, firstLife, firstBalances⟩ :=
@@ -2772,7 +2723,7 @@ private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fo
   obtain ⟨exits, consolidations, requestsFrom, covered, exitTrace, consolidationTrace,
     exitRates, consolidationRates, consolidationSites⟩ :=
     executionRequests_coverage_sites electra early requestedOk withdrawnOk consolidatedOk
-      replayed cap rates
+      replayed cap (rates sites recorded)
   have headSlot : voted.slot = s.slot :=
     (frame_processEth1Data votedOk).slot.trans
       ((frame_processRandao revealedOk).slot.trans
@@ -2862,18 +2813,8 @@ private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fo
       ((first ++ exits) ++ consolidations) := by
     simpa only [List.append_assoc] using
       firstCoverage.append_of_effectiveKept covered firstLife requestsLife firstBalances
-  have headData : voted.validators = s.validators := by
-    have voteData : voted.validators = revealed.validators := by
-      have eq := congrArg (·.validators) (processEth1Data_eq votedOk).2.2
-      exact eq
-    rw [voteData]
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
-    change executed.validators = s.validators
-    rw [blockExecution_validators executedOk]
-    obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
-    rfl
   have tailData := sync_registry syncedOk
-  refine ⟨first ++ exits, consolidations, ?_, ?_, ?_, ?_, ?_, consolidationRates,
+  refine ⟨sites, recorded, first ++ exits, consolidations, ?_, ?_, ?_, ?_, ?_, consolidationRates,
     consolidationSites⟩
   · simpa only [List.append_assoc] using firstFrom.append requestsFrom
   · intro i old next a b
@@ -3001,14 +2942,13 @@ private theorem step_indexedTrace_sites {x y : ForkedBeaconState preset}
       exact .nil _ _
   | block engine signed due ok =>
     have processed := (applySignedBlock_ok ok).2.1
-    obtain ⟨sites, recorded⟩ := blockConsolidationSites_result processed
-    have bounded : ∀ site ∈ sites, ∀ (h : .pectra ≤ site.fork) (rate : Gwei),
-        getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap := by
-      intro site member h rate computed
-      apply rates site ?_ h rate computed
-      simpa only [Step.consolidationSites, recorded, Except.toOption, Option.getD_some] using member
-    simpa only [Step.consolidationSites, recorded, Except.toOption, Option.getD_some] using
-      block_indexedTrace_sites electra early processed recorded cap bounded
+    obtain ⟨sites, recorded, traced⟩ := block_indexedTrace_sites electra early processed cap
+      (by
+        intro sites recorded site member h rate computed
+        apply rates site ?_ h rate computed
+        simpa only [Step.consolidationSites, recorded, Except.toOption, Option.getD_some] using
+          member)
+    simpa only [Step.consolidationSites, recorded, Except.toOption, Option.getD_some] using traced
 
 private theorem run_indexedTrace_sites {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork)
@@ -4009,7 +3949,9 @@ private theorem blockConsolidationSites_prefix {fork : Fork}
     have execution : SitePrefix headed executed := by
       refine ⟨(frame_processBlockExecution executedOk).registryGrows,
         activeStep_processBlockExecution executedOk, ?_⟩
-      exact effectiveKept_data (congrArg (·.data) (blockExecution_validators executedOk))
+      exact effectiveKept_data (congrArg (·.data) (processBlockExecution_step_of
+        (fun a b => b.validators = a.validators) (fun _ => rfl) (fun one two => two.trans one)
+        (fun _ same => same) processWithdrawals_validators executedOk))
     have randao : SitePrefix executed revealed := by
       refine ⟨(frame_processRandao revealedOk).registryGrows,
         activeStep_processRandao revealedOk, ?_⟩
