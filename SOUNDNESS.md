@@ -3807,9 +3807,15 @@ On each name of the header, the block object of a block holds what its header ob
 The block object lists the transactions by their hashes, or by their objects when they are hydrated (`transactions_blockJson_false`, `transactions_blockJson_true`).
 The objects carry those hashes in the same order (`transactionHashes_of_transactionInfos`).
 Each list has one entry per transaction of the block (`length_transactionInfos`, `length_transactionHashes`), and the transaction count methods return that length by definition.
+The `size` of the block object is the length of the RLP form of the block, in bytes, which the raw block method returns for the same block (`size_blockJson`).
+Its `uncles` lists the hashes of the headers of its ommers, in order (`uncles_blockJson`).
 These properties hold whenever the writer gives an object.
 The writer fails with `-32603` when the node cannot compute the RLP form of the block, the hash of an ommer or a transaction, or a sender in it.
-No theorem yet shows that it succeeds on the blocks of a valid view.
+In a valid view, the writer gives the object of a canonical block after the lowest exactly when that block has an RLP form (`Valid.exists_blockJson_eq_ok_iff`).
+Before Fusaka no check bounds the length of the RLP form of a block, and the RLP encoder fails on a payload of `2^64` bytes or more, so that form stays a hypothesis.
+From Fusaka the size check of the block gives that form, of at most `8 * 2^20` bytes (`Valid.exists_rawBlock_of_fusaka_le`, `Valid.exists_blockJson_of_fusaka_le`).
+A valid view does not run the lowest block, a block off the canonical chain or the pending block through the state transition.
+So no theorem says that the writer succeeds on them.
 For the tag `pending`, the header method answers `null`.
 The block and count methods read the pending block of the view instead, since only the header methods of [`block.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/block.yaml) answer `null` for `pending`.
 The schema gives `size` only the title "Block size"; here it is the length of the RLP form of the block, which the fixtures pin.
@@ -3930,27 +3936,34 @@ A revert has the message `"execution reverted"`, the only text that the source g
 A halt that is not a revert has code 801 for a lack of gas, 4 for an invalid opcode, and `-32000` otherwise.
 The error groups of the source define these codes, but no text assigns them to `eth_call`.
 
-`eth_estimateGas` and `eth_createAccessList` run the same call, with the same choices (`Execution/Rpc/Estimate.lean`).
-Their block parameter is `latest` by default, as for `eth_call`, though of the three the source states that default only for `eth_call`.
+`eth_estimateGas` and `eth_createAccessList` run the same call as `eth_call`, with the same choices (`Execution/Rpc/Estimate.lean`).
+Their block parameter is `latest` by default, as for `eth_call`.
+Of the three methods, the source states that default only for `eth_call`.
+
 The source asks `eth_estimateGas` only for "an estimate of how much gas is necessary to allow the transaction to complete".
-EthLib answers a gas limit with which the call completes: it prepares, and its message neither reverts nor halts (`Completes`).
-It fails exactly when `eth_call` fails, with the same error, the revert of code 3 included (`estimateGas_eq_error_iff`).
-Otherwise it searches by halves below that limit.
-The answer completes and is at most that limit (`estimateGas_completes`, `Proofs/Rpc/Estimate.lean`).
-Without the interval hypothesis, the call still does not complete with one gas less, unless the answer is at most 1 (`estimateGas_pred_not_completes`).
+EthLib answers a gas limit with which the call completes, which means that the call prepares and its message neither reverts nor halts (`Completes`).
+The method fails exactly when `eth_call` fails, with the same error, and this includes the revert of code 3 (`estimateGas_eq_error_iff`).
+Otherwise it runs a binary search below the gas limit of the request, or below the default one.
+The estimate has no cap from EIP-7825.
+When the request names a fee, the sender must hold the fee of its whole gas limit.
+
+The answer completes and is at most the gas limit of the request, or the default one (`estimateGas_completes`, `Proofs/Rpc/Estimate.lean`).
 It is the least positive limit that completes when the limits that complete form an interval (`estimateGas_least`).
 Code that reads the gas left can break that hypothesis, and the answer may then not be the least.
+Even without the hypothesis, the call does not complete with one gas less, unless the answer is at most 1 (`estimateGas_pred_not_completes`).
 A call completes with a gas limit exactly when `eth_call` answers data at that limit (`completes_iff`).
 
 The source fixes none of the contents of the result of `eth_createAccessList`.
 EthLib lists each address and storage key that the call read or wrote, as the state tracker records them, a revert included.
-It leaves out an address without a storage key that the transaction accesses from the start: the sender, the recipient or the created contract, the precompiles and, from Shapella, the beneficiary.
-The authorities and the delegate of EIP-7702 and the contracts that the call creates stay in, though EIP-2929 and EIP-7702 make them warm.
-It runs the call again with that list, as type 1 when the request has type 0.
+It leaves out an address without a storage key that the transaction accesses from the start.
+These addresses are the sender, the recipient or the created contract, the precompiles and, from Shapella, the beneficiary.
+The list keeps the authorities and the delegate of EIP-7702, and the contracts that the code of the call creates.
+EIP-2929 and EIP-7702 make these addresses warm, but they stay in the list.
+
+The method then runs the call again with that list, as type 1 when the request has type 0.
 Before Berlin no transaction has an access list, so the list is empty and the call runs once.
 The result reports the gas used and the error message of that second call (`createAccessList_eq_ok`).
 A rejection of the second call, such as a gas limit that no longer covers the list, is the error of the method.
-The estimate has no cap from EIP-7825, and with a fee named the sender must hold the fee of the whole gas limit of the request.
 The list is not iterated to a fixed point, so a call whose accesses change with its access list can report a list that the second call does not match.
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
@@ -3976,6 +3989,38 @@ The tip at a percentile is that of the first transaction, by ascending tip, at w
 The comparison is exact.
 Before London the base fee is 0, so a tip is the whole gas price.
 A ratio is written with at most 18 decimal places, rounded down, and the rewards are left out when the request names no percentile.
+
+`eth_sendRawTransaction` of [`submit.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/submit.yaml) submits a signed transaction in its raw form (`Execution/Rpc/Submit.lean`).
+A blob transaction must come in its network form at the fork of the next block.
+Before Fusaka that form has one proof per blob, and from Fusaka it has cell proofs.
+The hash of an accepted submission is the hash of the transaction that the raw form holds, without blobs, commitments or proofs (`ChainView.sendRawTransaction_hash`, `Proofs/Rpc/Submit.lean`).
+When the first byte is not 3, it is the Keccak-256 hash of the raw bytes (`ChainView.sendRawTransaction_keccak`).
+The dispatcher reads the raw bytes and answers with that hash (`ChainView.call_sendRawTransaction`).
+Each code that `rpcCode` gives is in a group that the method lists, within the range of that group (`rpcCode_mem`).
+Two errors with one code are of one kind (`rpcCode_injective`).
+The mapping is: `insufficientGas` to 800, `gasAllowanceExceeded` to 803, `priorityFeeGreaterThanMaxFee` to 804, `insufficientMaxFeePerGas` to 806, `insufficientBalance` to 809, `nonceTooLow` to 1, `nonceTooHigh` to 2, and `invalidSignature` to 1001.
+Two conditions are wider than their messages.
+The code 800 also covers a gas limit below the floor of EIP-7623.
+The cost behind 809 also counts the blob gas at its fee cap.
+The method checks a transaction with no gas used before it, so the allowance of the block is exceeded exactly when the gas limit is above the block's, the condition of 803.
+
+Which transactions a pool keeps is the choice of the node, and EthLib fixes one simple rule.
+The rule accepts a transaction whose raw form decodes, whose blob counts and versioned hashes match, and which passes the inclusion checks in the next block against the state of the head.
+That next block is one second after the head, its earliest time, as in the fee history.
+It takes the fork, the base fees and the blob schedule of the fee history, and the gas limit of the head.
+Its base fee is the last base fee of the fee history (`ChainView.baseFeeOf_nextEnvironment`).
+A nonce above that of the sender is a future transaction, which the rule accepts.
+The checks then read the head with the nonce of the sender raised to that of the transaction (`withFutureNonce_nonce`), so the code 2 never arises.
+The rule does not verify the KZG proofs yet.
+From Fusaka, the source lets a node accept proofs per blob and convert them to cell proofs; the rule takes the choice that this "may" leaves, and rejects that form.
+A raw form that does not decode, or whose blobs do not match its counts or versioned hashes, gets `-32000`.
+A failed inclusion check without a code gets `-32003`.
+The errors of EthLib without a code are `emptyTransaction`, `unsupportedType`, `decoding`, `encoding`, `initCodeTooLarge`, `gasLimitExceeded`, `nonceOverflow`, `wrongChainId`, `noBlobData`, `blobCountExceeded`, `invalidBlobVersionedHash`, `emptyAuthorizationList`, `blobGasLimitExceeded`, `insufficientMaxFeePerBlobGas`, `senderNotEoa` and `missingCode`.
+`intrinsicGasAboveLimit` also has none.
+The message of 800 is "Intrinsic gas too low / Intrinsic gas exceeds gas limit", and the cap of EIP-7825 is not a gas limit.
+The code 802 names a minimum that the node configures.
+The codes 805, 807 and 808 name values that the decoder already rejects.
+The code 1000 names a transaction that the node already knows, and the codes `-32000` to `-32006` name no single condition.
 
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.

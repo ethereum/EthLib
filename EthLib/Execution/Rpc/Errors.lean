@@ -68,6 +68,9 @@ def invalidInput : ErrorCode := ⟨-32000, "Invalid input"⟩
 /-- The code of a resource that the node does not find, such as an unknown block. -/
 def resourceNotFound : ErrorCode := ⟨-32001, "Resource not found"⟩
 
+/-- The code of a transaction that the node rejects for a reason that no other code names. -/
+def transactionRejected : ErrorCode := ⟨-32003, "Transaction rejected"⟩
+
 /-- The code of a method that the node does not support, or not for the request's state. -/
 def methodNotSupported : ErrorCode := ⟨-32004, "Method not supported"⟩
 
@@ -76,9 +79,15 @@ def rpcNonStandardErrors : ErrorGroup where
   name := "JSONRPCNonStandardErrors"
   range := none
   errors := [invalidInput, resourceNotFound,
-    ⟨-32002, "Resource unavailable"⟩, ⟨-32003, "Transaction rejected"⟩,
+    ⟨-32002, "Resource unavailable"⟩, transactionRejected,
     methodNotSupported, ⟨-32005, "Limit exceeded"⟩,
     ⟨-32006, "JSON-RPC version not supported"⟩]
+
+/-- The code of a nonce below that of the sender. -/
+def nonceTooLow : ErrorCode := ⟨1, "Nonce too low"⟩
+
+/-- The code of a nonce above that of the sender. -/
+def nonceTooHigh : ErrorCode := ⟨2, "Nonce too high"⟩
 
 /-- The code of an execution that ends with REVERT. -/
 def executionReverted : ErrorCode := ⟨3, "Execution reverted"⟩
@@ -90,7 +99,7 @@ def invalidOpcode : ErrorCode := ⟨4, "Invalid opcode"⟩
 def executionErrors : ErrorGroup where
   name := "ExecutionErrors"
   range := some (1, 199)
-  errors := [⟨1, "Nonce too low"⟩, ⟨2, "Nonce too high"⟩, executionReverted, invalidOpcode]
+  errors := [nonceTooLow, nonceTooHigh, executionReverted, invalidOpcode]
 
 /-- The code of a gas limit below the intrinsic gas of its transaction. -/
 def intrinsicGasTooLow : ErrorCode :=
@@ -98,6 +107,9 @@ def intrinsicGasTooLow : ErrorCode :=
 
 /-- The code of an execution that runs out of gas. -/
 def ranOutOfGas : ErrorCode := ⟨801, "Transaction ran out of gas"⟩
+
+/-- The code of a gas limit of a transaction above the gas limit of its block. -/
+def gasLimitAboveBlock : ErrorCode := ⟨803, "Tx gas limit exceeds max block gas limit"⟩
 
 /-- The code of a priority fee above the fee cap. -/
 def priorityFeeAboveCap : ErrorCode := ⟨804, "Max priority fee per gas higher than max fee per gas"⟩
@@ -114,16 +126,19 @@ def gasErrors : ErrorGroup where
   range := some (800, 999)
   errors := [intrinsicGasTooLow, ranOutOfGas,
     ⟨802, "Gas price too low / Gas price below configured minimum"⟩,
-    ⟨803, "Tx gas limit exceeds max block gas limit"⟩, priorityFeeAboveCap,
+    gasLimitAboveBlock, priorityFeeAboveCap,
     ⟨805, "Gas uint64 overflow"⟩, feeCapBelowBaseFee,
     ⟨807, "Max priority fee per gas higher than 2^256-1"⟩,
     ⟨808, "Max fee per gas higher than 2^256-1"⟩, insufficientFunds]
+
+/-- The code of a transaction whose signature names no sender. -/
+def invalidSender : ErrorCode := ⟨1001, "Invalid sender"⟩
 
 /-- The codes of the transaction pool. -/
 def txPoolErrors : ErrorGroup where
   name := "TxPoolErrors"
   range := some (1000, 1199)
-  errors := [⟨1000, "Already known transaction"⟩, ⟨1001, "Invalid sender"⟩]
+  errors := [⟨1000, "Already known transaction"⟩, invalidSender]
 
 /-- The codes of execution in a zero-knowledge prover. -/
 def zkExecutionErrors : ErrorGroup where
