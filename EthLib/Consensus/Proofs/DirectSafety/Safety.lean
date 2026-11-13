@@ -47,7 +47,7 @@ It assumes nothing about the signature checks.
 
 A third form reads one justification step on the last state of each run, as fork choice runs it.
 
-That step counts at the last state, so its drift is charged at that state.
+That step counts at the last state, which lies within the horizon of the drift.
 
 [Casper FFG]: https://arxiv.org/abs/1710.09437
 [Gasper]: https://arxiv.org/abs/2003.03052v3
@@ -202,13 +202,19 @@ theorem accountable_safety_at_calls {g x a b : ForkedBeaconState preset}
     ⟨one, two, lowerOne, upperOne, lowerTwo, upperTwo, overlap⟩ | hashes
   · have bound := view_pair_bound shared left right parameters genesis enoughA enoughB
       (va := .realized) (vb := .realized) trivial trivial one two upperOne upperTwo overlap
-    -- A realized view has no step, so both quorums are quorum calls.
-    rcases one with one | step
-    · rcases two with two | step
-      · exact .inl ⟨.inl one, .inr two, lowerOne, upperOne, lowerTwo, upperTwo, bound⟩
-      · exact nomatch step.selected
-    · exact nomatch step.selected
+    obtain ⟨one, rfl⟩ := one.eq_inl_of_realized
+    obtain ⟨two, rfl⟩ := two.eq_inl_of_realized
+    exact .inl ⟨.inl one, .inr two, lowerOne, upperOne, lowerTwo, upperTwo, bound⟩
   · exact .inr hashes
+
+/-- The drift of a tail observes its last state when that state is within the horizon. -/
+private theorem stateDrift_le_derivedDrift {x z : ForkedBeaconState preset} {high : Nat}
+    (run : Run config checks x z) (bounded : (getCurrentEpoch z.state).toNat ≤ high + 1) :
+    stateDrift x z ≤ derivedDrift high run := by
+  cases run with
+  | nil => exact Nat.le_refl _
+  | snoc pre step =>
+    simp only [derivedDrift, ite_eq_left bounded]; exact Nat.le_max_right _ _
 
 private theorem selected_call_drift_le {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
@@ -228,13 +234,6 @@ private theorem selected_call_drift_le {g x y : ForkedBeaconState preset}
       simp only [getCurrentEpoch, frame.slot, before]
     rw [same] at target
     omega
-  have observed {z : ForkedBeaconState preset} (run : Run config checks x z)
-      (bounded : (getCurrentEpoch z.state).toNat ≤ high + 1) :
-      stateDrift x z ≤ derivedDrift high run := by
-    cases run with
-    | nil => exact Nat.le_refl _
-    | snoc pre step =>
-      simp only [derivedDrift, ite_eq_left bounded]; exact Nat.le_max_right _ _
   have mono {u v : ForkedBeaconState preset} (pre : Run config checks x u)
       (post : Run config checks u v) :
       derivedDrift high pre ≤ derivedDrift high (pre.append post) := by
@@ -259,7 +258,7 @@ private theorem selected_call_drift_le {g x y : ForkedBeaconState preset}
       getCurrentEpoch, validators, frame.slot, before]
     rfl
   rw [same]
-  have result := (observed pre epoch).trans (next.trans (mono _ post))
+  have result := (stateDrift_le_derivedDrift pre epoch).trans (next.trans (mono _ post))
   simpa only [← split] using result
 
 /-- The drift at the state of a call of either run is at most the larger drift of the tails.
@@ -324,37 +323,23 @@ theorem accountable_safety {g x a b : ForkedBeaconState preset}
     exact .inl (by omega)
   · exact .inr hashes
 
-/-- The drift of a tail, and for a view with a step, also the drift at the last state.
+/-- The drift at the state of a quorum of the view is at most the drift of the tail.
 
-The step counts at the last state, which can lie past the horizon of the tail. -/
-noncomputable def terminalDrift {x a : ForkedBeaconState preset}
-    (high : Nat) (tail : Run config checks x a) (view : TerminalView a) : Nat :=
-  match view with
-  | .realized => derivedDrift high tail
-  | .pulled _ _ => max (derivedDrift high tail) (stateDrift x a)
+The quorum targets an epoch from `low` to `high`, and `x` is no later than the first slot of `low`.
 
-/-- The drift at the state of a quorum of the view is at most the terminal drift of the tail.
-
-A quorum call of the run targets an epoch from `low` to `high`, and `x` is no later than `low`.
-
-The test of the step is charged at the last state. -/
+The test of the step counts at the last state, at most one epoch past `high`. -/
 private theorem view_drift {g x a : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x a)
     (parameters : Parameters preset) (low high : Nat)
     (starts : x.state.slot.toNat ≤ low * preset.SLOTS_PER_EPOCH.toNat)
     {view : TerminalView a} (call : ViewQuorum (shared.append tail) view)
     (lower : low ≤ call.target.epoch.toNat) (upper : call.target.epoch.toNat ≤ high) :
-    stateDrift x call.state ≤ terminalDrift high tail view := by
+    stateDrift x call.state ≤ derivedDrift high tail := by
   cases call with
-  | inl c =>
-    have bound := selected_call_drift_le shared tail parameters low high starts c lower upper
-    cases view with
-    | realized => exact bound
-    | pulled after ok => exact bound.trans (Nat.le_max_left _ _)
+  | inl c => exact selected_call_drift_le shared tail parameters low high starts c lower upper
   | inr c =>
-    change stateDrift x a ≤ terminalDrift high tail view
-    rw [c.selected]
-    exact Nat.le_max_right _ _
+    exact stateDrift_le_derivedDrift tail
+      (c.currentEpoch_le.trans (Nat.add_le_add_right upper 1))
 
 /-- A finalized field of the left view conflicts with a justified field of the right view.
 
@@ -364,11 +349,11 @@ The justified field is at the finalized epoch or later.
 
 Then the active stake at `x` is at most three times the accountable stake at `x`.
 
-Twice the larger terminal drift of the two tails is added.
+Twice the larger drift of the two tails is added.
 
 The drift of a tail is the largest over its states up to one epoch past the justified epoch.
 
-For a view with a step, it also includes the drift at the last state.
+It covers the test of a step, which counts at the last state within that horizon.
 
 Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
 
@@ -392,7 +377,7 @@ theorem accountable_safety_justified_terminal {g x a b : ForkedBeaconState prese
     Models.stake (effectiveWeight x.state) (activeKeys x.state) ≤
         3 * Models.stake (effectiveWeight x.state)
           (accountableKeys (shared.append left) (shared.append right) x) +
-        2 * max (terminalDrift j.epoch.toNat left va) (terminalDrift j.epoch.toNat right vb) ∨
+        2 * max (derivedDrift j.epoch.toNat left) (derivedDrift j.epoch.toNat right) ∨
       HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects) := by
   rcases view_conflicting_fields_quorums (shared.append left) (shared.append right)
       parameters genesis va vb j (field.imp_right Or.inl) ordered conflict with

@@ -425,6 +425,15 @@ private def StepReads.test {fork : Fork} {state after : BeaconState preset fork}
     weighted, reads.totalOk, by cases now <;> [exact reads.previousBalanceOk;
       exact reads.currentBalanceOk], thresholdOk, weightedOk, passes⟩
 
+/-- After epoch 1, the previous epoch is the epoch just before the current one. -/
+private theorem previousEpoch_add_one {fork : Fork} {state : BeaconState preset fork}
+    (later : GENESIS_EPOCH + 1 < getCurrentEpoch state) :
+    (getPreviousEpoch state).toNat + 1 = (getCurrentEpoch state).toNat := by
+  have previousEpoch := getPreviousEpoch_toNat state
+  have late := UInt64.lt_iff_toNat_lt.mp later
+  simp only [GENESIS_EPOCH, UInt64.reduceAdd, UInt64.reduceToNat] at late
+  omega
+
 private theorem step_bits {fork : Fork} {state after : BeaconState preset fork}
     (reads : StepReads state after) (later : GENESIS_EPOCH + 1 < getCurrentEpoch state)
     (i : Fin 4) (set : after.justificationBits.bits[i] = true) :
@@ -437,12 +446,8 @@ private theorem step_bits {fork : Fork} {state after : BeaconState preset fork}
   · obtain ⟨passes, root, rootOk, _⟩ := zero set
     exact .inl ⟨reads.test true ⟨_, root⟩ rfl rootOk thresholdOk cwOk passes, rfl⟩
   · rcases one set with ⟨passes, root, rootOk⟩ | old
-    · refine .inl ⟨reads.test false ⟨_, root⟩ rfl rootOk thresholdOk pwOk passes, ?_⟩
-      have previousEpoch := getPreviousEpoch_toNat state
-      have late := UInt64.lt_iff_toNat_lt.mp later
-      simp only [GENESIS_EPOCH, UInt64.reduceAdd, UInt64.reduceToNat] at late
-      change (getPreviousEpoch state).toNat + 1 = _
-      omega
+    · exact .inl ⟨reads.test false ⟨_, root⟩ rfl rootOk thresholdOk pwOk passes,
+        previousEpoch_add_one later⟩
     · exact .inr ⟨0, rfl, old⟩
   · exact .inr ⟨1, rfl, two ▸ set⟩
   · right
@@ -455,7 +460,7 @@ private theorem step_bits {fork : Fork} {state after : BeaconState preset fork}
     simpa [shiftJustificationBits] using set
 
 private theorem step_new_bits {fork : Fork} {state after : BeaconState preset fork}
-    (reads : StepReads state after) :
+    (reads : StepReads state after) (later : GENESIS_EPOCH + 1 < getCurrentEpoch state) :
     (after.justificationBits.bits[0] = true →
       ∃ test : PassingTest state,
         test.source = state.currentJustifiedCheckpoint ∧
@@ -464,7 +469,7 @@ private theorem step_new_bits {fork : Fork} {state after : BeaconState preset fo
     (after.justificationBits.bits[1] = true →
       (∃ test : PassingTest state,
         test.source = state.previousJustifiedCheckpoint ∧
-        test.target.epoch = getPreviousEpoch state) ∨
+        test.target.epoch.toNat + 1 = (getCurrentEpoch state).toNat) ∨
       state.justificationBits.bits[0] = true) := by
   obtain ⟨threshold, pw, cw, thresholdOk, pwOk, cwOk, zero, one, _⟩ :=
     weighJustificationAndFinalization_bits reads.weighed
@@ -474,7 +479,8 @@ private theorem step_new_bits {fork : Fork} {state after : BeaconState preset fo
     exact ⟨reads.test true ⟨_, root⟩ rfl rootOk thresholdOk cwOk passes, rfl, target.symm, rfl⟩
   · intro set
     rcases one set with ⟨passes, root, rootOk⟩ | old
-    · exact .inl ⟨reads.test false ⟨_, root⟩ rfl rootOk thresholdOk pwOk passes, rfl, rfl⟩
+    · exact .inl ⟨reads.test false ⟨_, root⟩ rfl rootOk thresholdOk pwOk passes, rfl,
+        previousEpoch_add_one later⟩
     · exact .inr old
 
 private theorem step_current {fork : Fork} {state after : BeaconState preset fork}
@@ -707,7 +713,7 @@ private theorem run_zero {g a : ForkedBeaconState preset} (run : Run config chec
         split at target <;> simp only [Fin.val_zero] at date <;> omega
       · let call := EpochCall.ofSlot pre ok boundary cachedOk weighedOk later
         obtain ⟨reads⟩ := call_reads call
-        obtain ⟨test, source, target, date⟩ := (step_new_bits reads).1 weighedSet
+        obtain ⟨test, source, target, date⟩ := (step_new_bits reads call.later).1 weighedSet
         have rotated := (weighJustificationAndFinalization_checkpoints reads.weighed).1
         refine ⟨.ofTest call test, source.trans (rotated.symm.trans previous.symm),
           target.trans current.symm, ?_⟩
@@ -959,21 +965,15 @@ theorem finalization_rule_quorums {g a : ForkedBeaconState preset} (run : Run co
       ∃ outgoing : QuorumCall run,
         outgoing.source = call.cached.currentJustifiedCheckpoint ∧
         outgoing.target.epoch = getCurrentEpoch call.cached := by
-    obtain ⟨test, source, -, date⟩ := (step_new_bits reads).1 set
+    obtain ⟨test, source, -, date⟩ := (step_new_bits reads call.later).1 set
     exact ⟨.ofTest call test, source, date⟩
   have previous (set : call.weighed.justificationBits.bits[1] = true) :
       ∃ outgoing : QuorumCall run,
         outgoing.source = call.cached.previousJustifiedCheckpoint ∧
         outgoing.target.epoch.toNat + 1 = (getCurrentEpoch call.cached).toNat := by
     -- Bit one is either a fresh previous-target quorum or the retained current-target call.
-    rcases (step_new_bits reads).2 set with ⟨test, source, epoch⟩ | old
-    · have prev := getPreviousEpoch_toNat call.cached
-      have late := UInt64.lt_iff_toNat_lt.mp call.later
-      simp only [GENESIS_EPOCH, UInt64.reduceAdd, UInt64.reduceToNat] at late
-      refine ⟨.ofTest call test, source, ?_⟩
-      change test.target.epoch.toNat + 1 = _
-      rw [epoch]
-      omega
+    rcases (step_new_bits reads call.later).2 set with ⟨test, source, epoch⟩ | old
+    · exact ⟨.ofTest call test, source, epoch⟩
     · obtain ⟨pre, tail, same, frame, _⟩ := call.selected_prefix
       obtain ⟨quorum, source, _, date⟩ := run_zero pre genesis
         (by simpa [frame.justificationBits] using old)
@@ -1115,10 +1115,18 @@ def ViewQuorum.state {g a : ForkedBeaconState preset} {run : Run config checks g
   | .inr _ => a
 
 /-- The step counts at most one epoch past the epoch of its target. -/
-private theorem TerminalQuorum.currentEpoch_le {a : ForkedBeaconState preset}
+theorem TerminalQuorum.currentEpoch_le {a : ForkedBeaconState preset}
     {view : TerminalView a} (call : TerminalQuorum view) :
     (getCurrentEpoch a.state).toNat ≤ call.target.epoch.toNat + 1 :=
   currentEpoch_le_target call.targetEpoch
+
+/-- At a view without a step, each quorum is a quorum call of the run. -/
+theorem ViewQuorum.eq_inl_of_realized {g a : ForkedBeaconState preset}
+    {run : Run config checks g a} (call : ViewQuorum run .realized) :
+    ∃ c : QuorumCall run, call = .inl c := by
+  rcases call with c | step
+  · exact ⟨c, rfl⟩
+  · exact nomatch step.selected
 
 /-- The quorum of a step whose test passed at the last state. -/
 private def TerminalQuorum.ofTest {a : ForkedBeaconState preset}
@@ -1422,17 +1430,11 @@ theorem view_finalized_quorums {g a : ForkedBeaconState preset} (run : Run confi
       rule_quorums (Q := ViewQuorum run (.pulled after ok)) ViewQuorum.source ViewQuorum.target
         (fun m => ∃ incoming : ViewQuorum run (.pulled after ok), incoming.target = m) rule
         (fun set => by
-          obtain ⟨test, source, -, date⟩ := (step_new_bits reads).1 set
+          obtain ⟨test, source, -, date⟩ := (step_new_bits reads later).1 set
           exact ⟨.inr (.ofTest ok later test), source, date⟩)
         (fun set => by
-          rcases (step_new_bits reads).2 set with ⟨test, source, epoch⟩ | old
-          · refine ⟨.inr (.ofTest ok later test), source, ?_⟩
-            have prev := getPreviousEpoch_toNat a.state
-            have late := UInt64.lt_iff_toNat_lt.mp later
-            simp only [GENESIS_EPOCH, UInt64.reduceAdd, UInt64.reduceToNat] at late
-            change test.target.epoch.toNat + 1 = _
-            rw [epoch]
-            omega
+          rcases (step_new_bits reads later).2 set with ⟨test, source, epoch⟩ | old
+          · exact ⟨.inr (.ofTest ok later test), source, epoch⟩
           · obtain ⟨quorum, source, _, date⟩ := run_zero run genesis old
             exact ⟨.inl quorum, source, date⟩)
         (fun i set => by

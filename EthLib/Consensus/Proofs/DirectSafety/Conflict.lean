@@ -277,12 +277,9 @@ theorem conflicting_fields_quorums {g a b : ForkedBeaconState preset}
       HashEvidence (left.hashObjects ++ right.hashObjects) := by
   rcases view_conflicting_fields_quorums left right parameters genesis .realized .realized j field
       ordered conflict with ⟨one, two, lowerOne, upperOne, lowerTwo, upperTwo, overlap⟩ | hashes
-  · -- A realized view has no step, so both quorums are quorum calls.
-    rcases one with one | step
-    · rcases two with two | step
-      · exact .inl ⟨.inl one, .inr two, lowerOne, upperOne, lowerTwo, upperTwo, overlap⟩
-      · exact nomatch step.selected
-    · exact nomatch step.selected
+  · obtain ⟨one, rfl⟩ := one.eq_inl_of_realized
+    obtain ⟨two, rfl⟩ := two.eq_inl_of_realized
+    exact .inl ⟨.inl one, .inr two, lowerOne, upperOne, lowerTwo, upperTwo, overlap⟩
   · exact .inr hashes
 
 end EthLib.Consensus.DirectSafety

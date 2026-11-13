@@ -69,8 +69,6 @@ Not yet released.
 - A checkpoint of a fork-choice store comes from the anchor, a held state or its pull-up ([#1423](https://github.com/ethereum/EthLib/issues/1423)).
   After the anchor epoch, a checkpoint of a held state or its pull-up lies on the chain of that state's block.
   The one exception is a held state on that chain that hashes to the zero root.
-  `Store.Reachable.checkpoint_source_ancestor` states that chain as the block of the checkpoint only, without an ancestor conjunct.
-  The ancestor relation between the finalized and the justified checkpoint stays in `Store.Reachable.postState_finalized_ancestor`.
   No C export or Python function changes.
   In Lean, the new module `Consensus.Proofs.ForkChoice.CheckpointAncestry` states this for a reachable store.
   Its `Store.Reachable.finalized_ancestor_or_accountable` gives three cases for the finalized checkpoint of the store.
@@ -80,7 +78,7 @@ Not yet released.
   `DirectSafety.TerminalView` reads the checkpoints of the last state of a run, or of one justification step on it, as fork choice runs it.
   `DirectSafety.accountable_safety_justified_terminal` states direct accountable safety for two such views, with no bound on the fork.
   `DirectSafety.accountable_safety_justified` is its case without a step, and its statement is unchanged.
-  The other new Lean declarations are `TerminalView.state`, `TerminalView.enough`, `TerminalQuorum`, `ViewQuorum`, `terminalDrift`, `view_field_crossing`, `view_finalized_quorums`, `view_quorum_attestations`, `view_quorum_count`, `view_quorum_target_binding`, `view_conflicting_fields_quorums`, `view_voters_recent` and `checkpoint_binding_prefixes`, all in `DirectSafety`.
+  The other new Lean declarations are `TerminalView.state`, `TerminalView.enough`, `TerminalQuorum`, `TerminalQuorum.currentEpoch_le`, `ViewQuorum`, `ViewQuorum.eq_inl_of_realized`, `view_field_crossing`, `view_finalized_quorums`, `view_quorum_attestations`, `view_quorum_count`, `view_quorum_target_binding`, `view_conflicting_fields_quorums`, `view_voters_recent` and `checkpoint_binding_prefixes`, all in `DirectSafety`.
   `Store.storeTargetCheckpointState_frame`, `Store.onAttestation_frame`, `Store.onAttesterSlashing_frame`, `Store.recordBlockTimeliness_frame` and `Store.updateProposerBoostRoot_frame` end with four new conjuncts.
   They state that the justified, finalized, unrealized justified and unrealized finalized checkpoints are unchanged.
   `Store.onTickPerSlot_frame` ends with a new conjunct: the four checkpoints are those of the store, or those of `updateCheckpoints` with its unrealized checkpoints.

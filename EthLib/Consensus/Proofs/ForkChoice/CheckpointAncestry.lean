@@ -1,7 +1,7 @@
 module
 
-public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 public import EthLib.Consensus.Proofs.DirectSafety.Safety
+public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.Transition.RootLinks
 
@@ -27,8 +27,6 @@ An earlier checkpoint can name a block that the store never held.
 The other exception is a held state on the source chain that hashes to the zero root.
 
 Such a state leaves the latest block header unfilled, and its next slot records the stale root.
-
-So in one held state or its pull-up, the finalized checkpoint is on the chain of the justified one.
 
 The finalized checkpoint of the store is on the chain of its justified checkpoint in the same way.
 
@@ -787,62 +785,6 @@ theorem Store.Reachable.checkpoint_source_ancestor {config : Config}
   · exact .inr (.inl (Store.getCheckpointBlock_ok_iff.mpr ⟨start, startOk, walk⟩))
   · exact .inr (.inr bad)
 
-/-- In one held state or its pull-up, the finalized checkpoint is on the chain of the justified one.
-
-It is the ancestor of the current justified block at the first slot of the finalized epoch.
-
-Checkpoints at or before the anchor epoch and a zero-hashing state are explicit alternatives. -/
-theorem Store.Reachable.postState_finalized_ancestor {config : Config}
-    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
-    {store : Store preset fork}
-    (reachable : Store.Reachable config anchorState anchorBlock store)
-    (sound : Invariant anchorState)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
-    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
-    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (unknownParent : store.blocks[anchorBlock.parentRoot]? = none)
-    {root : Root} {state view : BeaconState preset fork}
-    (held : store.blockStates[root]? = some state)
-    (selected : view = state ∨ processJustificationAndFinalization state = .ok view) :
-    view.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState ∨
-    (store.isAncestor ⟨view.currentJustifiedCheckpoint.root, .pending⟩
-        ⟨view.finalizedCheckpoint.root, .pending⟩ = .ok true ∧
-      store.getCheckpointBlock view.currentJustifiedCheckpoint.root
-        view.finalizedCheckpoint.epoch = .ok view.finalizedCheckpoint.root) ∨
-    ∃ (badRoot : Root) (badState : BeaconState preset fork),
-      store.blockStates[badRoot]? = some badState ∧
-      SszType.hashTreeRoot badState = .ok (Vector.replicate 32 0) ∧
-      store.isAncestor ⟨root, .pending⟩ ⟨badRoot, .pending⟩ = .ok true := by
-  by_cases early : view.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState
-  · exact .inl early
-  right
-  have afterF : getCurrentEpoch anchorState < view.finalizedCheckpoint.epoch :=
-    UInt64.not_le.mp early
-  -- The view keeps its checkpoints ordered, whether it is the held state or its pull-up.
-  have holds : Invariant state := (Store.Reachable.ordered sound reachable).2 held
-  have ordered : CheckpointsOrdered view := by
-    rcases selected with rfl | pulled
-    · exact holds.ordered
-    · exact (processJustificationAndFinalization_invariant holds.ordered holds.settled pulled).1
-  obtain ⟨finalizedLe, previousLe⟩ := ordered
-  have epochLe : view.finalizedCheckpoint.epoch ≤ view.currentJustifiedCheckpoint.epoch :=
-    UInt64.le_trans finalizedLe previousLe
-  have afterJ : getCurrentEpoch anchorState < view.currentJustifiedCheckpoint.epoch := by
-    have := UInt64.lt_iff_toNat_lt.mp afterF
-    have := UInt64.le_iff_toNat_le.mp epochLe
-    exact UInt64.lt_iff_toNat_lt.mpr (by omega)
-  -- Both checkpoints lie on the chain of the same source block, or a zero-hashing state does.
-  rcases reachable.checkpoint_source_ancestor sound positive window anchorSlot unknownParent held
-      selected (checkpoint := view.finalizedCheckpoint) (.inr (.inr rfl)) afterF with
-    blockF | bad
-  · rcases reachable.checkpoint_source_ancestor sound positive window anchorSlot unknownParent
-        held selected (checkpoint := view.currentJustifiedCheckpoint) (.inr (.inl rfl)) afterJ with
-      blockJ | bad
-    · exact .inl (Store.getCheckpointBlock_of_le (reachable.parentsBelow anchorSlot unknownParent)
-        epochLe blockF blockJ)
-    · exact .inr bad
-  · exact .inr bad
-
 /-! ## Runs of the held states -/
 
 /-- The last state of a run is one of its hashed objects. -/
@@ -1119,7 +1061,6 @@ decreasing_by
   rw [bounds.2]
   exact UInt64.lt_iff_toNat_lt.mp bounds.1
 
-
 /-- The finalized checkpoint of a store is on the chain of its justified checkpoint, or it is early.
 
 Otherwise two runs to held states of the store bound the accountable stake, or show hash evidence.
@@ -1198,8 +1139,8 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
         3 * Models.stake (DirectSafety.effectiveWeight anchorState)
           (DirectSafety.accountableKeys (pre.append left) (pre.append right)
             ⟨fork, anchorState⟩) +
-        2 * max (DirectSafety.terminalDrift store.justifiedCheckpoint.epoch.toNat left va)
-          (DirectSafety.terminalDrift store.justifiedCheckpoint.epoch.toNat right vb) ∨
+        2 * max (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat left)
+          (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat right) ∨
       DirectSafety.HashEvidence ((pre.append left).hashObjects ++
         (pre.append right).hashObjects)) := by
   -- The run from genesis gives the anchor its invariant, and the parameters give the window.
