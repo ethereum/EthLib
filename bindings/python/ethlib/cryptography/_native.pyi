@@ -1333,6 +1333,18 @@ def multistream_decode(data: bytes) -> tuple[bytes, bytes]:
     """The multistream-select message at the start of the bytes, and the bytes after it."""
     ...
 
+def multistream_listen(supported: list[bytes], data: bytes) -> tuple[str, bytes, bytes, bytes]:
+    """What a listener does with the bytes it receives, from its start."""
+    ...
+
+def multistream_dial(proposals: list[bytes], data: bytes) -> tuple[str, bytes, bytes, bytes]:
+    """What a dialer does with the bytes it receives, from its start."""
+    ...
+
+def libp2p_upgrade(dialer_yamux: bool, listener_yamux: bool) -> tuple[bytes, bytes]:
+    """The security protocol and the multiplexer of a TCP connection between consensus nodes."""
+    ...
+
 def mplex_encode(frame: dict[str, Any]) -> bytes:
     """The bytes of a valid mplex frame."""
     ...

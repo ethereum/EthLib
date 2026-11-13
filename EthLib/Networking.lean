@@ -27,6 +27,7 @@ public import EthLib.Networking.Gossip.Topic
 public import EthLib.Networking.Gossip.Validation
 public import EthLib.Networking.Libp2p.Mplex
 public import EthLib.Networking.Libp2p.Multistream
+public import EthLib.Networking.Libp2p.Upgrade
 public import EthLib.Networking.Libp2p.Yamux
 public import EthLib.Networking.ReqResp.Bounds
 public import EthLib.Networking.ReqResp.Encoding

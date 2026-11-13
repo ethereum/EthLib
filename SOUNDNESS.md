@@ -1957,6 +1957,34 @@ No decoded item fails to encode, since a length must reach `2^64` for that.
 If one did, its transaction would have no hash and would reject its whole message, while [Transaction Encoding and Validity](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#transaction-encoding-and-validity) asks only to discard invalid transactions.
 The session accepts an empty Transactions message from the peer, which the source only discourages.
 
+### multistream-select negotiation and the TCP upgrade
+
+`listen` and `dial` (`Networking/Libp2p/Multistream.lean`) are the two peers of a multistream-select negotiation, and `run` lets them read each other's messages until both stop.
+They follow [libp2p connections, "multistream-select"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/connections/README.md#multistream-select) and the [multistream-select README](https://github.com/multiformats/multistream-select/blob/9a1fbe8edadebea223f47102f1913b8026c23a1c/README.md#protocol).
+Each peer sends its header at the start, and aborts when its first message is not the header of the other.
+A dialer with no proposal sends nothing and fails, a case the sources leave open.
+The dialer sends its first proposal with its header, and its next proposal after each `na`.
+The listener echoes a proposal it supports, compared byte for byte, and answers `na` to any other.
+`negotiate_eq_find` (`Networking/Proofs/Libp2p/Multistream.lean`) proves that the agreed protocol is the first proposal that the listener supports.
+`negotiate_agree`, `run_of_find_some` and `run_of_find_none` prove that the listener then agrees on it too, or still waits when there is none.
+Each of them assumes that no proposal is `na`: a dialer that proposes `na` cannot tell an echo from a refusal.
+
+`upgrade` (`Networking/Libp2p/Upgrade.lean`) negotiates the security protocol, then the multiplexer, of a TCP connection between consensus nodes, as in [Upgrading Connections](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/connections/README.md#upgrading-connections).
+Each node proposes and supports `/noise` alone, the protocol ID of [noise-libp2p](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/noise/README.md#negotiation), and then `/yamux/1.0.0` if it supports yamux, then `/mplex/6.7.0`.
+That follows the phase 0 networking specification of the consensus layer.
+On TCP, it requires Noise and mplex, allows yamux, and puts yamux first when a node supports it.
+`upgrade_eq` (`Networking/Proofs/Libp2p/Upgrade.lean`) proves that any two such nodes agree on Noise, then on yamux exactly when both support it, and on mplex otherwise.
+The Noise handshake that runs between the two negotiations is not run here.
+The multiplexer always has its own negotiation: the inlined muxer negotiation of the same document is optional and is left out.
+
+The sources leave five points open, and the model takes the narrowest reading of each.
+A dialer that gets an answer that is neither its proposal nor `na` stops in the state `unexpected`, since no source fixes a reaction.
+Listing with `ls` is optional, and the listener leaves it out, so it treats `ls` as an ordinary proposal, refused unless supported.
+Simultaneous open serves hole punching, while the consensus layer requires endpoints that peers can dial, so it is left out.
+The consensus layer names only Noise for TCP, and does not say whether a node may propose another security protocol first.
+The profile proposes Noise alone.
+Which messages share a packet is not modelled; the recommendation to send the header with the first proposal or answer changes no message.
+
 ### The block headers of the eth protocol
 
 `checkHeaders` (`Execution/Network/Blocks.lean`) checks an answer to a GetBlockHeaders request of the eth protocol.
@@ -3423,12 +3451,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 391 operations and 49 size constants.
-The Python extension calls 391 of the operations and 49 of the constants.
+Lean exports 394 operations and 49 size constants.
+The Python extension calls 394 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10046 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1853), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (122), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1419), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (674), `x25519.c` (21), `xmss.c` (134).
+10079 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1853), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (122), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (129), `module.c` (1422), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (677), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

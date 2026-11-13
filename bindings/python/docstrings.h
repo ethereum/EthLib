@@ -998,6 +998,15 @@
 #define DOC_multistream_decode \
   "The multistream-select message at the start of the bytes, and the bytes after it."
 
+#define DOC_multistream_listen \
+  "What a listener does with the bytes it receives, from its start."
+
+#define DOC_multistream_dial \
+  "What a dialer does with the bytes it receives, from its start."
+
+#define DOC_libp2p_upgrade \
+  "The security protocol and the multiplexer of a TCP connection between consensus nodes."
+
 #define DOC_mplex_encode \
   "The bytes of a valid mplex frame."
 
