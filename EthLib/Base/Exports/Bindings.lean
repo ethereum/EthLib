@@ -1560,7 +1560,8 @@ def bindings : List Binding := [
     [`EthLib.Engine.EngineError, `EthLib.Engine.PayloadError,
       `EthLib.Execution.Blocks.BlockError], some "EngineError"⟩,
   ⟨"engine_forkchoice_updated", `EthLib.Engine.Exports.forkchoiceUpdatedExport,
-    "(config: dict, tree: list, finalized: str | None, request: dict) -> dict",
+    "(config: dict, tree: list, finalized: str | None, terminal_total_difficulty: int, " ++
+      "request: dict) -> dict",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_get_blobs", `EthLib.Engine.Exports.getBlobsExport,
     "(pool: list[tuple[bytes, bytes | None, bytes | None, " ++

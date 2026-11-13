@@ -1263,7 +1263,7 @@
   "Build a payload on a chain, from attributes, the builder's choices and transactions."
 
 #define DOC_engine_forkchoice_updated \
-  "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."
+  "The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks."
 
 #define DOC_engine_get_blobs \
   "The answer to an `engine_getBlobs` request, from a blob pool."

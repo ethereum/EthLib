@@ -27,7 +27,8 @@ namespace EthLib.Engine
 open EthLib.Base
 open EthLib.Execution.Rpc (ChainView)
 
-variable {tree : PayloadTree} {finalized : Option Hash32} {state : ForkchoiceState}
+variable {transition : TransitionConfiguration} {tree : PayloadTree} {finalized : Option Hash32}
+  {state : ForkchoiceState}
   {status : PayloadStatus} {v : ChainView}
 
 /-- A nonzero hash on the chain of the head names a canonical block of a view of that chain. -/
@@ -46,7 +47,8 @@ private theorem exists_canonical {hash : Hash32}
 
 /-- After an update that sets a new head, the head of a view of its chain is that head. -/
 theorem head_hash_of_forkchoiceUpdated
-    (fcu : forkchoiceUpdated tree finalized state = .ok (status, some state.headBlockHash))
+    (fcu : forkchoiceUpdated transition tree finalized state =
+      .ok (status, some state.headBlockHash))
     (hcanon : (v.canonical.map (·.hash)).reverse = chainOf tree state.headBlockHash) :
     v.head.hash = state.headBlockHash := by
   obtain ⟨p, hp⟩ := exists_lookup_of_forkchoiceUpdated fcu
@@ -61,7 +63,8 @@ theorem head_hash_of_forkchoiceUpdated
 
 The view holds the chain of the head and the update's safe hash, which must not be zero. -/
 theorem resolve_safe_of_forkchoiceUpdated
-    (fcu : forkchoiceUpdated tree finalized state = .ok (status, some state.headBlockHash))
+    (fcu : forkchoiceUpdated transition tree finalized state =
+      .ok (status, some state.headBlockHash))
     (hcanon : (v.canonical.map (·.hash)).reverse = chainOf tree state.headBlockHash)
     (hsafe : v.safe = some state.safeBlockHash) (nonzero : state.safeBlockHash ≠ ZERO_HASH) :
     ∃ r, v.resolve (.tag .safe) = .ok (some r) ∧ r.hash = state.safeBlockHash := by
@@ -75,7 +78,8 @@ theorem resolve_safe_of_forkchoiceUpdated
 
 The view holds the chain of the head and the update's finalized hash, which must not be zero. -/
 theorem resolve_finalized_of_forkchoiceUpdated
-    (fcu : forkchoiceUpdated tree finalized state = .ok (status, some state.headBlockHash))
+    (fcu : forkchoiceUpdated transition tree finalized state =
+      .ok (status, some state.headBlockHash))
     (hcanon : (v.canonical.map (·.hash)).reverse = chainOf tree state.headBlockHash)
     (hfinalized : v.finalized = some state.finalizedBlockHash)
     (nonzero : state.finalizedBlockHash ≠ ZERO_HASH) :
