@@ -1380,7 +1380,8 @@ Each such call runs the code that `to` holds in `S`, along its route, with any d
 
 `StepRules fork R` (`Execution/Proofs/Evm/Call/StepRules.lean`) lists the rules for a transitive relation `R` of two frames.
 `R` must hold of each step that keeps the state up to the records of reads.
-It must also hold of each write of storage, transient storage, a log or SELFDESTRUCT, of the rise of a nonce, and of a child taken in by its caller.
+It must also hold of each write of storage, transient storage, a log or SELFDESTRUCT.
+It must hold of the rise of a nonce below `2^64 - 1`, and of a child taken in by its caller.
 `StepRules.step` proves that such a relation holds of every successful step, given it for the frame that ends each message sent.
 `StepRules.runFrame` proves the relation for a successful run of a frame.
 `StepRules.processMessage` turns it into a fact of every call and creation, by induction on the gas of the message.
@@ -1672,6 +1673,19 @@ From Hegotá a run fails as not yet specified, so there is no gas used to state.
 `prepareFirstFrame_of_applyAuthorizations` gives the first frame of a call that moves no ether, after its authorizations.
 `prepareFirstFrame_of_applyAuthorizations_error` proves that an error of the authorizations is the error of the first frame.
 `prepareFirstFrame_of_value_eq_zero` gives the first frame of a call that moves no ether and applies no authorization.
+
+### Nonces within 64 bits
+
+EIP-2681 limits every nonce to `2^64 - 1`, and a nonce in EthLib is a natural number.
+`TransactionState.NoncesFit`, `BlockState.NoncesFit` and `State.NoncesFit` say that every account has a nonce of at most that bound; an absent account reads as nonce 0.
+`noncesFit_processMessage` and `noncesFit_processCreateMessage` (`Execution/Proofs/Evm/Call/NoncesFit.lean`) prove that every call and creation keeps the bound, at every fork.
+A creation needs its new address to start with a nonce below the bound.
+The new address of a creation sent by CREATE or CREATE2 has a nonce of at most 1, so it meets that condition.
+`noncesFit_processTransaction` (`Execution/Proofs/Transactions/NoncesFit.lean`) proves it for a transaction that passes its inclusion check.
+That check makes the nonce of the transaction equal that of its sender, and below the bound.
+`stateTransition_noncesFit` (`Execution/Proofs/Blocks/NoncesFit.lean`) proves that a block that passes its transition keeps the bound of the state before it.
+The bound on the state before the first block is a hypothesis: the genesis allocation must meet it.
+From Glamsterdam, `stateTransition_rebuild_nonce` turns the 64-bit nonces that the block access list rebuilds into the nonces after the block, with no loss.
 
 ### The supply of ether
 
