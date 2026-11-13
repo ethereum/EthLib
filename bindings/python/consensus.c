@@ -108,6 +108,9 @@ extern lean_object*
 eth_consensus_builder_preferences_failures(lean_object* args);
 
 extern lean_object*
+eth_consensus_default_auth_data(lean_object* args);
+
+extern lean_object*
 eth_consensus_builder_bid_value(
   lean_object* args
 );
@@ -804,6 +807,14 @@ py_consensus_builder_preferences_failures(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_builder_preferences_failures, args, 8, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_default_auth_data(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_default_auth_data, args, 1, CONSENSUS_ERROR);
 }
 
 PyObject*

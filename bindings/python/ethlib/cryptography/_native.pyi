@@ -661,6 +661,10 @@ def consensus_builder_preferences_failures(name: str, fork: str, config: dict[st
     """From Gloas: the failed checks of a request that submits preferences, by name, in order."""
     ...
 
+def consensus_default_auth_data(url: str) -> bytes:
+    """The default data that a proposer and a builder agree, from the builder's URL."""
+    ...
+
 def consensus_builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The value of a builder's bid from its two payments and the proposer's execution payment cap."""
     ...

@@ -494,6 +494,9 @@
 #define DOC_consensus_builder_preferences_failures \
   "From Gloas: the failed checks of a request that submits preferences, by name, in order."
 
+#define DOC_consensus_default_auth_data \
+  "The default data that a proposer and a builder agree, from the builder's URL."
+
 #define DOC_consensus_builder_bid_value \
   "The value of a builder's bid from its two payments and the proposer's execution payment cap."
 

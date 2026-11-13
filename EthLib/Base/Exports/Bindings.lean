@@ -639,6 +639,8 @@ def bindings : List Binding := [
     "(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, current_slot: int, " ++
       "pubkey: bytes, version_header: str | None, data: bytes) -> list[str]",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_default_auth_data", `EthLib.Consensus.BuilderApi.defaultAuthData,
+    "(url: str) -> bytes", [`EthLib.Consensus.BuilderApi.AuthDataError], some "ConsensusError"⟩,
   ⟨"consensus_builder_bid_value", `EthLib.Consensus.Exports.builderBidValueExport,
     "(value: int, execution_payment: int, max_execution_payment: int) -> int",
     [], some "ConsensusError"⟩,
