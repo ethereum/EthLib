@@ -245,43 +245,26 @@ theorem Produced.complete_authenticates {s : Libp2pState} {remote : Remote}
   obtain ⟨h1, h2, h3⟩ := hs.remote_ok hrem
   exact ⟨ht, h1, h2, h3⟩
 
-
 /-! ## The handshake payload
 
-The payload of noise-libp2p "The libp2p Handshake Payload" is a protobuf message.
+The payload of [noise-libp2p, "The libp2p Handshake Payload"][payload] is a protobuf message.
 
-Field 1 holds the identity key, field 2 its signature, and field 4 the extension message.
+Field 1 holds the identity key, field 2 its signature of the static key, and field 4 the extensions.
 
 A reader keeps the last value of a singular field, and merges an embedded message by concatenation.
 
+A value of fields 1, 2 or 4 with another wire type is skipped, like an unknown field.
+
 So the reader is not strict: many byte strings decode to one payload.
+
+[payload]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/noise/README.md#the-libp2p-handshake-payload
 -/
 
 open EthLib.Networking.Encoding.Protobuf (Record Value valuesOf records)
-open EthLib.Networking.Proofs.Encoding.Protobuf (valuesOf_append records_serialize)
+open EthLib.Networking.Proofs.Encoding.Protobuf (lenValues lenValues_append
+  lenValues_singleton_self lenValues_singleton_of_ne records_serialize)
 
-/-- The length-delimited values of one field, in the order of the records. -/
-def lenValues (rs : List Record) (field : Nat) : List ByteArray :=
-  (valuesOf rs field).filterMap fun
-    | .len bytes => some bytes
-    | _ => none
-
-/-- A record added at the end adds its values at the end. -/
-private theorem lenValues_append_singleton (rs : List Record) (r : Record) (field : Nat) :
-    lenValues (rs ++ [r]) field = lenValues rs field ++ lenValues [r] field := by
-  simp [lenValues, valuesOf_append]
-
-/-- A length-delimited record of the field has its one value. -/
-private theorem lenValues_singleton_self (n : Nat) (b : ByteArray) :
-    lenValues [⟨n, .len b⟩] n = [b] := by
-  simp [lenValues, valuesOf]
-
-/-- A record of another field has no value. -/
-private theorem lenValues_singleton_of_ne {f n : Nat} (v : Value) (h : f ≠ n) :
-    lenValues [⟨f, v⟩] n = [] := by
-  simp [lenValues, valuesOf, h]
-
-/-- The fold of the decoder keeps the last key and signature and joins the extensions. -/
+/-- The fold of the decoder keeps the last identity key and signature, and joins the extensions. -/
 private theorem foldl_payload (rs : List Record) :
     rs.foldl (init := ({} : Payload)) (fun payload record =>
       match record with
@@ -296,7 +279,7 @@ private theorem foldl_payload (rs : List Record) :
   | nil => rfl
   | append_singleton rs r ih =>
     rw [List.foldl_append, ih]
-    simp only [List.foldl_cons, List.foldl_nil, lenValues_append_singleton]
+    simp only [List.foldl_cons, List.foldl_nil, lenValues_append]
     have hgetD : (if lenValues rs 4 = [] then none
         else some ((lenValues rs 4).foldl (· ++ ·) ByteArray.empty)).getD ByteArray.empty =
         (lenValues rs 4).foldl (· ++ ·) ByteArray.empty := by
@@ -347,9 +330,9 @@ theorem decodePayload_eq_ok_iff {bytes : ByteArray} {p : Payload} :
       · intro h; cases h; exact ⟨by omega, rs, rfl, rfl⟩
       · rintro ⟨-, rs', h, rfl⟩; cases h; rfl
 
-/-- The encoding is the three fields in field order: key, length and bytes for each.
+/-- Each field is written as its protobuf tag byte, its length as a varint, then its bytes.
 
-Fields 1 and 2 are always written, and field 4 only when there are extensions.
+Fields 1 and 2 are always written, in that order, and field 4 only when there are extensions.
 
 An encoding longer than 65535 bytes is refused. -/
 theorem encodePayload_eq_ok_iff {p : Payload} {bytes : ByteArray} :
