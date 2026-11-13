@@ -61,6 +61,25 @@ theorem EpochCall.selected_prefix {g a : ForkedBeaconState preset}
   rw [cachedEq]
   exact ⟨rfl, rfl⟩
 
+/-- The keys of the registry at the end of a run are distinct.
+
+The run starts at a genesis built from deposits. -/
+theorem _root_.EthLib.Consensus.Run.pubkeysDistinct {g a : ForkedBeaconState preset}
+    (run : Run config checks g a) (genesis : Genesis config checks g) :
+    PubkeysDistinct a.state := by
+  obtain ⟨_, _, _, initialized⟩ := genesis
+  simpa [PubkeysDistinct, validatorKeys] using
+    (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized run.chainSteps).2
+
+/-- The keys of the registry at an epoch call are distinct.
+
+The run starts at a genesis built from deposits. -/
+theorem EpochCall.pubkeysDistinct {g a : ForkedBeaconState preset}
+    {run : Run config checks g a} (genesis : Genesis config checks g) (call : EpochCall run) :
+    PubkeysDistinct call.cached := by
+  obtain ⟨pre, _, _, _, validators, _⟩ := call.selected_prefix
+  simpa [PubkeysDistinct, validatorKeys, validators] using pre.pubkeysDistinct genesis
+
 /-- The test of justification succeeds at a state for the attesting indices.
 
 It states only that the pure test succeeds, with the balance reads and checked arithmetic.
@@ -258,13 +277,8 @@ theorem quorum_count {g a : ForkedBeaconState preset} (run : Run config checks g
     {high : Nat} (enough : EnoughStake run high) (call : QuorumCall run)
     (within : call.target.epoch.toNat ≤ high) :
     2 * Models.stake (effectiveWeight call.cached) (activeKeys call.cached) ≤
-      3 * Models.stake (effectiveWeight call.cached) call.voters := by
-  obtain ⟨pre, _, _, _, validators, _⟩ := call.toEpochCall.selected_prefix
-  obtain ⟨_, _, _, initialized⟩ := genesis
-  have unique : PubkeysDistinct call.cached := by
-    simpa [PubkeysDistinct, validatorKeys, validators] using
-      (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized pre.chainSteps).2
-  exact call.passes.stake_le unique (enough call.toEpochCall
+      3 * Models.stake (effectiveWeight call.cached) call.voters :=
+  call.passes.stake_le (call.toEpochCall.pubkeysDistinct genesis) (enough call.toEpochCall
     (call.currentEpoch_le.trans (Nat.add_le_add_right within 1)))
 
 /-- At the state of an epoch call, the pending attestations and target flags hold votes of the run.
@@ -1443,15 +1457,11 @@ theorem view_quorum_count {g a : ForkedBeaconState preset} (run : Run config che
   cases call with
   | inl c => exact quorum_count run genesis enough c within
   | inr c =>
-    obtain ⟨_, _, _, initialized⟩ := genesis
-    have unique : PubkeysDistinct a.state := by
-      simpa [PubkeysDistinct, validatorKeys] using
-        (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized run.chainSteps).2
     rw [c.selected] at terminal
     -- The step counts at most one epoch past its target, so within the horizon of the floor.
     have horizon : (getCurrentEpoch a.state).toNat ≤ high + 1 :=
       c.currentEpoch_le.trans (Nat.add_le_add_right within 1)
-    exact c.passes.stake_le unique (terminal horizon c.later)
+    exact c.passes.stake_le (run.pubkeysDistinct genesis) (terminal horizon c.later)
 
 /-- A quorum's target root is read at the end of a prefix of its run, after the epoch starts. -/
 private theorem view_target_prefix {g a : ForkedBeaconState preset}
