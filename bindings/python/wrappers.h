@@ -744,6 +744,8 @@ PyObject* py_engine_get_client_version                   (PyObject* self, PyObje
 PyObject* py_engine_rewrite_params                       (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
+PyObject* py_engine_payload_attributes_event          (PyObject* self, PyObject* args);
+PyObject* py_engine_payload_attributes_event_gloas    (PyObject* self, PyObject* args);
 PyObject* py_engine_finalized_execution_block_hash       (PyObject* self, PyObject* args);
 
 /* ---- Execution JSON-RPC API (`rpc.c`) --------------------------------- */

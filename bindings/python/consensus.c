@@ -17,6 +17,12 @@ extern lean_object*
 eth_engine_finalized_execution_block_hash(lean_object* args);
 
 extern lean_object*
+eth_engine_payload_attributes_event(lean_object* args);
+
+extern lean_object*
+eth_engine_payload_attributes_event_gloas(lean_object* args);
+
+extern lean_object*
 eth_consensus_get_custody_column_bits(lean_object* args);
 
 extern lean_object*
@@ -2568,6 +2574,22 @@ py_engine_prepare_execution_payload_gloas(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_engine_prepare_execution_payload_gloas, args, 14, PROPOSER_ERROR);
+}
+
+PyObject*
+py_engine_payload_attributes_event(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_payload_attributes_event, args, 9, PROPOSER_ERROR);
+}
+
+PyObject*
+py_engine_payload_attributes_event_gloas(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_payload_attributes_event_gloas, args, 13, PROPOSER_ERROR);
 }
 
 PyObject*
