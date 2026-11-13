@@ -1037,6 +1037,15 @@
 #define DOC_uvarint_decode \
   "The value of the unsigned varint at the start of the bytes, and the bytes after it."
 
+#define DOC_quic_tls_key_schedule \
+  "Return early, handshake, master, client/server handshake and client/server application secrets."
+
+#define DOC_quic_tls_derive_secret \
+  "Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1."
+
+#define DOC_quic_tls_finished \
+  "Compute Finished verify_data over the transcript before that message, RFC 8446 §4.4.4."
+
 #define DOC_tls13_hkdf_label \
   "Serialize the checked TLS 1.3 HKDF label, RFC 8446 §7.1."
 

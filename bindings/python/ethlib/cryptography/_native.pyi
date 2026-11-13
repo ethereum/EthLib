@@ -1385,6 +1385,18 @@ def uvarint_decode(data: bytes) -> tuple[int, bytes]:
     """The value of the unsigned varint at the start of the bytes, and the bytes after it."""
     ...
 
+def quic_tls_key_schedule(shared: bytes, hello_transcript: bytes, server_transcript: bytes) -> tuple[bytes, bytes, bytes, bytes, bytes, bytes, bytes]:
+    """Return early, handshake, master, client/server handshake and client/server application secrets."""
+    ...
+
+def quic_tls_derive_secret(secret: bytes, label: bytes, messages: bytes) -> bytes:
+    """Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1."""
+    ...
+
+def quic_tls_finished(secret: bytes, transcript: bytes) -> bytes:
+    """Compute Finished verify_data over the transcript before that message, RFC 8446 §4.4.4."""
+    ...
+
 def tls13_hkdf_label(label: bytes, context: bytes, length: int) -> bytes:
     """Serialize the checked TLS 1.3 HKDF label, RFC 8446 §7.1."""
     ...

@@ -9995,6 +9995,52 @@
    "error_class": "UvarintError",
    "docstring":
    "The value of the unsigned varint at the start of the bytes, and the bytes after it."},
+  {"summary":
+   "Return early, handshake, master, client/server handshake and client/server application secrets.",
+   "signature":
+   "(shared: bytes, hello_transcript: bytes, server_transcript: bytes) -> tuple[bytes, bytes, bytes, bytes, bytes, bytes, bytes]",
+   "operation": "EthLib.Networking.Quic.TlsExports.scheduleExport",
+   "method": "quic_tls_key_schedule",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Return early, handshake, master, client/server handshake and client/server application secrets.\n\nThe no-PSK schedule and transcript boundaries are those of RFC 8446 §7.1."},
+  {"summary":
+   "Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1.",
+   "signature": "(secret: bytes, label: bytes, messages: bytes) -> bytes",
+   "operation": "EthLib.Networking.Quic.TlsExports.deriveExport",
+   "method": "quic_tls_derive_secret",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1."},
+  {"summary":
+   "Compute Finished verify_data over the transcript before that message, RFC 8446 §4.4.4.",
+   "signature": "(secret: bytes, transcript: bytes) -> bytes",
+   "operation": "EthLib.Networking.Quic.TlsExports.finishedExport",
+   "method": "quic_tls_finished",
+   "errors":
+   [{"type": "EthLib.Cryptography.Hash.Tls13.Error",
+     "codes":
+     [{"constructor": "labelLength", "code": 1},
+      {"constructor": "contextLength", "code": 2},
+      {"constructor": "lengthOverflow", "code": 3},
+      {"constructor": "hkdf", "code": 4}]}],
+   "error_class": "Tls13Error",
+   "docstring":
+   "Compute Finished verify_data over the transcript before that message, RFC 8446 §4.4.4."},
   {"summary": "Serialize the checked TLS 1.3 HKDF label, RFC 8446 §7.1.",
    "signature": "(label: bytes, context: bytes, length: int) -> bytes",
    "operation": "EthLib.Networking.Quic.KeysExports.labelExport",

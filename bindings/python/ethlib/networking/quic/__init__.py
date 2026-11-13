@@ -25,6 +25,9 @@ __all__ = [
     "expand_label",
     "initial_secrets",
     "packet_keys",
+    "tls_key_schedule",
+    "tls_derive_secret",
+    "tls_finished",
 ]
 
 
@@ -46,3 +49,26 @@ def initial_secrets(dcid: bytes) -> tuple[bytes, bytes]:
 def packet_keys(suite: str, secret: bytes) -> tuple[bytes, bytes, bytes]:
     """Derive a QUIC payload key, initialization vector and header-protection key."""
     return _native.quic_packet_keys(suite, secret)
+
+
+def tls_key_schedule(
+    shared: bytes, hello_transcript: bytes, server_transcript: bytes
+) -> tuple[bytes, bytes, bytes, bytes, bytes, bytes, bytes]:
+    """
+    Return early, handshake, master, client/server handshake and client/server application secrets.
+
+    The hello transcript ends at ServerHello.
+    The server transcript includes server Finished.
+    Both include handshake headers and exclude record headers.
+    """
+    return _native.quic_tls_key_schedule(shared, hello_transcript, server_transcript)
+
+
+def tls_derive_secret(secret: bytes, label: bytes, messages: bytes) -> bytes:
+    """Derive a SHA-256 secret from encoded handshake messages."""
+    return _native.quic_tls_derive_secret(secret, label, messages)
+
+
+def tls_finished(secret: bytes, transcript: bytes) -> bytes:
+    """Compute Finished verify_data over the transcript before that message."""
+    return _native.quic_tls_finished(secret, transcript)

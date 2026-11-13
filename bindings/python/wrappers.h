@@ -561,6 +561,9 @@ PyObject* py_varint_encode                                (PyObject* self, PyObj
 PyObject* py_varint_decode                                (PyObject* self, PyObject* args);
 PyObject* py_uvarint_encode                               (PyObject* self, PyObject* args);
 PyObject* py_uvarint_decode                               (PyObject* self, PyObject* args);
+PyObject* py_quic_tls_key_schedule(PyObject* self, PyObject* args);
+PyObject* py_quic_tls_derive_secret(PyObject* self, PyObject* args);
+PyObject* py_quic_tls_finished(PyObject* self, PyObject* args);
 PyObject* py_tls13_hkdf_label(PyObject* self, PyObject* args);
 PyObject* py_tls13_expand_label(PyObject* self, PyObject* args);
 PyObject* py_quic_initial_secrets(PyObject* self, PyObject* args);

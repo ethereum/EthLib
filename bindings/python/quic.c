@@ -59,3 +59,33 @@ py_quic_packet_keys(
 ) {
   return call_pyvalue_export(eth_quic_packet_keys, args, 2, TLS13_ERROR);
 }
+
+extern lean_object* eth_quic_tls_key_schedule(lean_object* args);
+
+PyObject*
+py_quic_tls_key_schedule(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_tls_key_schedule, args, 3, TLS13_ERROR);
+}
+
+extern lean_object* eth_quic_tls_derive_secret(lean_object* args);
+
+PyObject*
+py_quic_tls_derive_secret(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_tls_derive_secret, args, 3, TLS13_ERROR);
+}
+
+extern lean_object* eth_quic_tls_finished(lean_object* args);
+
+PyObject*
+py_quic_tls_finished(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_tls_finished, args, 2, TLS13_ERROR);
+}
