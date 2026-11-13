@@ -23,6 +23,8 @@ This needs the block state before the call to be rebuildable.
 
 Its code matches its hash, and no empty account holds storage.
 
+It also assumes that no account with nonce 0 has the code hash of a delegation indicator.
+
 [eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
 -/
 
@@ -135,7 +137,9 @@ private theorem processMessageCall_systemMessage {fork : Fork} {Meter : Type} [G
     rw [hframe_state]
     exact vended
 
-/-- From Spurious Dragon, a system call keeps the rebuild property of its block state. -/
+/-- From Spurious Dragon, a system call keeps the rebuild property of its block state.
+
+It assumes that no account with nonce 0 in the block has the hash of a delegation indicator. -/
 theorem systemCall_rebuildState {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
     {out : SystemCallOutput} (valid : Rebuildable block)
@@ -148,7 +152,9 @@ theorem systemCall_rebuildState {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     cases hpure
     exact processMessageCall_systemMessage hfork valid delegations hcall
 
-/-- From Spurious Dragon, the access-list builder follows each system call. -/
+/-- From Spurious Dragon, the access-list builder follows each system call.
+
+It assumes that no account with nonce 0 in the block has the hash of a delegation indicator. -/
 theorem systemCall_followable {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
     {out : SystemCallOutput} (valid : Rebuildable block)
@@ -157,7 +163,9 @@ theorem systemCall_followable {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     Followable block out.state :=
   (systemCall_rebuildState hfork valid delegations h).followable
 
-/-- From Spurious Dragon, after a system call, the block state can still be rebuilt. -/
+/-- From Spurious Dragon, after a system call, the block state can still be rebuilt.
+
+It assumes that no account with nonce 0 in the block has the hash of a delegation indicator. -/
 theorem systemCall_rebuildable {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
     {out : SystemCallOutput} (valid : Rebuildable block)
@@ -225,7 +233,9 @@ theorem exists_rebuildable_systemCall {fork : Fork} (hfork : .paris ≤ fork)
     systemCall_followable hsd hvalid hdeleg hcall,
     systemCall_rebuildable hsd hvalid hdeleg hcall⟩
 
-/-- From Spurious Dragon, after a system call, no account with nonce 0 holds a delegation. -/
+/-- From Spurious Dragon, a system call keeps the delegation property.
+
+No account with nonce 0 has the code hash of a delegation indicator. -/
 theorem systemCall_delegationsHaveNonce {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
     {out : SystemCallOutput} (valid : Rebuildable block)

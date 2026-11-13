@@ -33,9 +33,9 @@ It also had nonce 0 and no code in the block state, and has no storage write in 
 
 Every account that the transaction created held no nonzero word in the block state.
 
-No account with nonce 0 has the code hash of a delegation indicator of [EIP-7702][eip7702].
-
 That ties the storage of a call to the storage of the block state at every key not written.
+
+No account with nonce 0 has the code hash of a delegation indicator of [EIP-7702][eip7702].
 
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
 [eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
@@ -91,11 +91,19 @@ theorem KeepsNonceOrCode.trans {a b c : TransactionState}
 
 /-- No account with nonce 0 has the code hash of a delegation indicator.
 
-The hash of empty code is left out, since every account without code has it.
+Accounts without code are left out.
+
+Their hash is the hash of empty code, and ruling out an indicator with that hash needs a collision.
 
 An authorization sets an indicator and then raises the nonce of its authority.
 
-From Spurious Dragon, a creation raises the nonce of its address before it deposits code. -/
+From Spurious Dragon, a creation raises the nonce of its address before it deposits code.
+
+So only a contract created before Spurious Dragon could break it, with an indicator as its code.
+
+No contract on mainnet started with the byte 0xef in May 2021, by [EIP-3541][eip3541].
+
+[eip3541]: https://eips.ethereum.org/EIPS/eip-3541#rationale -/
 def DelegationsHaveNonce (tx : TransactionState) : Prop :=
   ∀ address code, (tx.getAccount address).nonce = 0 →
     (tx.getAccount address).codeHash ≠ EMPTY_CODE_HASH → isValidDelegation code = true →
@@ -121,7 +129,7 @@ private theorem DelegationsHaveNonce.congr {tx tx' : TransactionState}
     DelegationsHaveNonce tx' :=
   h.of_unchanged fun address hn _ => ⟨hacc address ▸ hn, by rw [hacc address]⟩
 
-/-- Incorporating a transaction into its block keeps every account with nonce 0 off delegations. -/
+/-- Incorporating a transaction into its block keeps the delegation property. -/
 theorem DelegationsHaveNonce.ofBlock_incorporateTxIntoBlock {tx : TransactionState}
     (h : DelegationsHaveNonce tx) :
     DelegationsHaveNonce (.ofBlock tx.incorporateTxIntoBlock.parent) :=
@@ -147,7 +155,7 @@ structure RebuildState (block : BlockState) (tx : TransactionState) : Prop where
       ((TransactionState.ofBlock block).getAccount address).balance ≤
         (tx.getAccount address).balance ∧
       ∀ key, tx.storageWrites.slot address key = none
-  /-- Every account that the transaction created held no nonzero storage word in `block`. -/
+  /-- Every account that the transaction created held no nonzero storage word in the block state. -/
   created : ∀ address, address ∈ tx.createdAccounts →
     ∀ key, (TransactionState.ofBlock block).getStorage address key = 0
   /-- No account with nonce 0 has the code hash of a delegation indicator. -/
@@ -179,7 +187,7 @@ theorem SameWrites.keepsNonceOrCode {tx snapshot : TransactionState}
     exact Nat.le_refl _
   · exact (HasNonceOrCode.congr (h.getAccount hp address)).mpr hnc
 
-/-- Same writes on the same block keep the rebuild property, given the created accounts. -/
+/-- Same writes on the same block keep the rebuild property, if no created account held storage. -/
 private theorem RebuildState.of_sameWrites_of_created {block : BlockState}
     {tx tx' : TransactionState} (valid : RebuildState block tx) (h : SameWrites tx' tx)
     (hp : tx'.parent = tx.parent)
