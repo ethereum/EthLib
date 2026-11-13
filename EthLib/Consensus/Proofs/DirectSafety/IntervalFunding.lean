@@ -472,6 +472,22 @@ private theorem delayedSlashingLimit_result {fork : Fork} {s t : BeaconState pre
     Except.ok.injEq, pure, Except.pure]
   exact ⟨_, total, rfl, sum, rfl, rfl⟩
 
+/-- Justification, inactivity, registry updates and the eth1 reset record nothing. -/
+private theorem epochReplayAction_carried {fork : Fork} {k : EpochStage}
+    (member : k ∈ [EpochStage.justification, .inactivity, .registry, .eth1Reset])
+    {s t : BeaconState preset fork} (edge : EpochStage.Edge config checks k s t)
+    (events : List (BalanceEvent preset)) :
+    epochReplayAction (config := config) (checks := checks) k (s, events) = .ok (t, events) := by
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
+  rcases member with rfl | rfl | rfl | rfl <;> simp only [EpochStage.Edge] at edge <;>
+    simp only [epochReplayAction]
+  case inl | inr.inr.inl => exact carryBalance_result edge events
+  all_goals
+    split at edge <;> rename_i h <;> simp only [h, ↓reduceDIte]
+    · exact carryBalance_result edge events
+    · subst edge
+      rfl
+
 /-- Each stage before the payments has a replay step that reaches the same state. -/
 private theorem epochReplayAction_of_action {fork : Fork} {k : EpochStage}
     (member : k ∈ EpochStage.prefixStages) {s t : BeaconState preset fork}
@@ -479,18 +495,15 @@ private theorem epochReplayAction_of_action {fork : Fork} {k : EpochStage}
     ∃ recorded, epochReplayAction (config := config) (checks := checks) k (s, events) =
       .ok (t, recorded) := by
   have edge := EpochStage.action_cases.mp ok
-  cases k <;> simp only [EpochStage.Edge] at edge <;> simp only [epochReplayAction]
-  case justification => exact ⟨events, carryBalance_result edge events⟩
+  cases k
+  case justification | inactivity | registry | eth1Reset =>
+    exact ⟨events, epochReplayAction_carried (by simp) edge events⟩
+  all_goals simp only [EpochStage.Edge] at edge
+  all_goals simp only [epochReplayAction]
   case rewards => exact replayRewards_result s t events edge
-  case registry => exact ⟨events, carryBalance_result edge events⟩
   case slashings =>
     obtain ⟨limit, computed⟩ := delayedSlashingLimit_result edge
     exact recordBalance_result edge ⟨(0, limit), by rw [computed]; rfl⟩ .slashings events
-  case inactivity | eth1Reset =>
-    split at edge <;> rename_i h <;> simp only [h, ↓reduceDIte]
-    · exact ⟨events, carryBalance_result edge events⟩
-    · subst edge
-      exact ⟨events, rfl⟩
   case pendingDeposits | pendingConsolidations =>
     split at edge <;> rename_i h <;> simp only [h, ↓reduceDIte]
     · simp only [edge, bind, Except.bind, pure, Except.pure]
@@ -2657,112 +2670,35 @@ theorem funding_pending_balances {fork : Fork} {s t : BeaconState preset fork}
 def funding_carry (x : ForkedBeaconState preset) : Nat :=
   if h : .pectra ≤ x.fork then (x.state.depositBalanceToConsume h).toNat else 0
 
-/-- From Electra, the stages before the payments and the events of their replay.
-
-The stage equations come from the epoch schedule.
+/-- Before Gloas, the stages before the payments and the events of their replay.
 
 The replay records the rewards and the slashings.
 
-It then records the pending deposits and the pending consolidations. -/
+From Electra it then records the pending deposits and the pending consolidations. -/
 theorem funding_epoch_site {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     (ok : epochBeforePayments config checks s = .ok t)
     {events : List (BalanceEvent preset)}
-    (replayed : epochBalanceReplay (config := config) (checks := checks) s = .ok (t, events))
-    (matched : BalancesMatch s) :
-    ∃ (justified scored rewarded registered slashed reset deposited : BeaconState preset fork)
-      (altair : .altair ≤ fork) (before : fork < .hegota)
-      (rewardEvents : List (BalanceEvent preset)) (limit : Nat),
-      processJustificationAndFinalization s = .ok justified ∧
-      processInactivityUpdates config justified altair = .ok scored ∧
-      processRewardsAndPenalties config scored = .ok rewarded ∧
-      processRegistryUpdates config rewarded = .ok registered ∧
-      processSlashings registered = .ok slashed ∧
-      processEth1DataReset before slashed = .ok reset ∧
-      processPendingDeposits config checks reset electra = .ok deposited ∧
-      processPendingConsolidations deposited electra = .ok t ∧
-      BalancesMatch reset ∧
-      replayRewards (config := config) (scored, []) = .ok (rewarded, rewardEvents) ∧
-      events = rewardEvents ++
-        [⟨.slashings, ⟨fork, registered⟩, ⟨fork, slashed⟩, 0, limit⟩] ++
-        [⟨.deposits, ⟨fork, reset⟩, ⟨fork, deposited⟩,
-          consumedDeposits reset deposited electra, 0⟩] ++
-        [⟨.consolidations, ⟨fork, deposited⟩, ⟨fork, t⟩,
-          consumedConsolidations deposited t electra,
-          consumedConsolidations deposited t electra⟩] := by
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
-  have before : fork < .hegota := Nat.lt_trans early (by decide)
-  have trace :=
-    EpochTrace.run_ok_iff.mp ((epochBeforePayments_eq_run config checks s).symm.trans ok)
-  unfold EpochStage.prefixStages at trace
-  cases trace; rename_i justified justifiedOk trace
-  cases trace; rename_i scored scoredOk trace
-  cases trace; rename_i rewarded rewardedOk trace
-  cases trace; rename_i registered registeredOk trace
-  cases trace; rename_i slashed slashedOk trace
-  cases trace; rename_i reset resetOk trace
-  cases trace; rename_i deposited depositedOk trace
-  cases trace; rename_i consolidatedOk trace
-  cases trace
-  replace justifiedOk := EpochStage.action_cases.mp justifiedOk
-  replace scoredOk := EpochStage.action_cases.mp scoredOk
-  replace rewardedOk := EpochStage.action_cases.mp rewardedOk
-  replace registeredOk := EpochStage.action_cases.mp registeredOk
-  replace slashedOk := EpochStage.action_cases.mp slashedOk
-  replace resetOk := EpochStage.action_cases.mp resetOk
-  replace depositedOk := EpochStage.action_cases.mp depositedOk
-  replace consolidatedOk := EpochStage.action_cases.mp consolidatedOk
-  simp only [EpochStage.Edge] at justifiedOk rewardedOk registeredOk slashedOk
-  simp only [EpochStage.Edge, altair, before, ↓reduceDIte] at scoredOk resetOk
-  simp only [EpochStage.Edge, electra, ↓reduceDIte] at depositedOk consolidatedOk
-  have resetMatch : BalancesMatch reset :=
-    (frame_processEth1DataReset resetOk).balancesMatch <|
-    (frame_processSlashings slashedOk).balancesMatch <|
-    (frame_processRegistryUpdates registeredOk).balancesMatch <|
-    (frame_processRewardsAndPenalties rewardedOk).balancesMatch <|
-    (frame_processInactivityUpdates scoredOk).balancesMatch <|
-    balancesMatch_of_sameSizes (sameSizes_processJustificationAndFinalization justifiedOk) matched
-  obtain ⟨rewardEvents, rewardReplay⟩ := replayRewards_result scored rewarded [] rewardedOk
-  obtain ⟨limit, limitOk⟩ := delayedSlashingLimit_result slashedOk
-  have slashReplay : recordBalance .slashings
-      (fun s => return (0, ← delayedSlashingLimit s)) processSlashings
-      (registered, rewardEvents) = .ok
-        (slashed, rewardEvents ++
-          [⟨.slashings, ⟨fork, registered⟩, ⟨fork, slashed⟩, 0, limit⟩]) := by
-    simp [recordBalance, limitOk, slashedOk, bind, Except.bind, pure, Except.pure]
-  simp only [bind, Except.bind, pure, Except.pure] at slashReplay
-  refine ⟨justified, scored, rewarded, registered, slashed, reset, deposited, altair, before,
-    rewardEvents, limit, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk,
-    depositedOk, consolidatedOk, resetMatch, rewardReplay, ?_⟩
-  simp only [epochBalanceReplay, EpochTrace.run, EpochStage.prefixStages, List.foldlM_cons,
-    List.foldlM_nil, epochReplayAction, altair, before, electra, ↓reduceDIte,
-    carryBalance_result justifiedOk [],
-    carryBalance_result (action := fun s => processInactivityUpdates config s altair) scoredOk [],
-    rewardReplay, carryBalance_result registeredOk rewardEvents, slashReplay,
-    carryBalance_result resetOk _, depositedOk, consolidatedOk,
-    bind, Except.bind, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at replayed
-  exact replayed.2.symm
-
-/-- Before Electra, the stages before the payments and the events of their replay.
-
-The pending stages are absent, so the replay records only the rewards and the slashings. -/
-theorem funding_epoch_site_before_electra {fork : Fork} {s t : BeaconState preset fork}
-    (before : fork < .pectra) (ok : epochBeforePayments config checks s = .ok t)
-    {events : List (BalanceEvent preset)}
     (replayed : epochBalanceReplay (config := config) (checks := checks) s = .ok (t, events)) :
-    ∃ (justified scored rewarded registered slashed : BeaconState preset fork)
+    ∃ (justified scored rewarded registered slashed reset deposited : BeaconState preset fork)
       (rewardEvents : List (BalanceEvent preset)) (limit : Nat),
       EpochStage.Edge config checks .justification s justified ∧
       EpochStage.Edge config checks .inactivity justified scored ∧
       processRewardsAndPenalties config scored = .ok rewarded ∧
       processRegistryUpdates config rewarded = .ok registered ∧
       processSlashings registered = .ok slashed ∧
-      EpochStage.Edge config checks .eth1Reset slashed t ∧
+      EpochStage.Edge config checks .eth1Reset slashed reset ∧
+      EpochStage.Edge config checks .pendingDeposits reset deposited ∧
+      EpochStage.Edge config checks .pendingConsolidations deposited t ∧
       replayRewards (config := config) (scored, []) = .ok (rewarded, rewardEvents) ∧
       events = rewardEvents ++
-        [⟨.slashings, ⟨fork, registered⟩, ⟨fork, slashed⟩, 0, limit⟩] := by
-  have notElectra : ¬ .pectra ≤ fork := Nat.not_le_of_lt before
-  have heze : fork < .hegota := Nat.lt_trans before (by decide)
+        [⟨.slashings, ⟨fork, registered⟩, ⟨fork, slashed⟩, 0, limit⟩] ++
+        if electra : .pectra ≤ fork then
+          [⟨.deposits, ⟨fork, reset⟩, ⟨fork, deposited⟩,
+            consumedDeposits reset deposited electra, 0⟩,
+          ⟨.consolidations, ⟨fork, deposited⟩, ⟨fork, t⟩,
+            consumedConsolidations deposited t electra,
+            consumedConsolidations deposited t electra⟩]
+        else [] := by
   have trace :=
     EpochTrace.run_ok_iff.mp ((epochBeforePayments_eq_run config checks s).symm.trans ok)
   unfold EpochStage.prefixStages at trace
@@ -2783,49 +2719,37 @@ theorem funding_epoch_site_before_electra {fork : Fork} {s t : BeaconState prese
   replace resetOk := EpochStage.action_cases.mp resetOk
   replace depositedOk := EpochStage.action_cases.mp depositedOk
   replace consolidatedOk := EpochStage.action_cases.mp consolidatedOk
-  -- Before Electra the two pending stages are the identity.
-  simp only [EpochStage.Edge, notElectra, ↓reduceDIte] at depositedOk consolidatedOk
-  subst depositedOk consolidatedOk
+  simp only [EpochStage.Edge] at rewardedOk registeredOk slashedOk
   obtain ⟨rewardEvents, rewardReplay⟩ := replayRewards_result scored rewarded [] rewardedOk
   obtain ⟨limit, limitOk⟩ := delayedSlashingLimit_result slashedOk
-  refine ⟨justified, scored, rewarded, registered, slashed, rewardEvents, limit, justifiedOk,
-    scoredOk, rewardedOk, registeredOk, slashedOk, resetOk, rewardReplay, ?_⟩
-  have carried {k : EpochStage} {a b : BeaconState preset fork}
-      (member : k ∈ [EpochStage.justification, .inactivity, .registry, .eth1Reset])
-      (edge : EpochStage.Edge config checks k a b) (recorded : List (BalanceEvent preset)) :
-      epochReplayAction (config := config) (checks := checks) k (a, recorded) =
-        .ok (b, recorded) := by
-    simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-    rcases member with rfl | rfl | rfl | rfl <;> simp only [EpochStage.Edge] at edge <;>
-      simp only [epochReplayAction]
-    · exact carryBalance_result edge recorded
-    · split at edge <;> rename_i h <;> simp only [h, ↓reduceDIte]
-      · exact carryBalance_result edge recorded
-      · subst edge
-        rfl
-    · exact carryBalance_result edge recorded
-    · simp only [heze, ↓reduceDIte] at edge ⊢
-      exact carryBalance_result edge recorded
-  simp only [EpochStage.Edge] at rewardedOk slashedOk
+  refine ⟨justified, scored, rewarded, registered, slashed, reset, deposited, rewardEvents, limit,
+    justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk, depositedOk,
+    consolidatedOk, rewardReplay, ?_⟩
   have slashReplay : epochReplayAction (config := config) (checks := checks) .slashings
       (registered, rewardEvents) = .ok
         (slashed, rewardEvents ++
           [⟨.slashings, ⟨fork, registered⟩, ⟨fork, slashed⟩, 0, limit⟩]) := by
     simp [epochReplayAction, recordBalance, limitOk, slashedOk, bind, Except.bind, pure,
       Except.pure]
-  have absent {k : EpochStage} (member : k ∈ [EpochStage.pendingDeposits, .pendingConsolidations])
-      (pair : BalanceReplay preset fork) :
-      epochReplayAction (config := config) (checks := checks) k pair = .ok pair := by
-    simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-    rcases member with rfl | rfl <;> simp [epochReplayAction, notElectra, pure, Except.pure]
   simp only [epochBalanceReplay, EpochTrace.run, EpochStage.prefixStages, List.foldlM_cons,
-    List.foldlM_nil, carried (by simp) justifiedOk, carried (by simp) scoredOk,
+    List.foldlM_nil, epochReplayAction_carried (by simp) justifiedOk,
+    epochReplayAction_carried (by simp) scoredOk,
     show epochReplayAction (config := config) (checks := checks) .rewards (scored, []) =
       .ok (rewarded, rewardEvents) from rewardReplay,
-    carried (by simp) registeredOk, slashReplay, carried (by simp) resetOk,
-    absent (k := .pendingDeposits) (by simp), absent (k := .pendingConsolidations) (by simp),
-    bind, Except.bind, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at replayed
-  exact replayed.2.symm
+    epochReplayAction_carried (k := .registry) (by simp) registeredOk, slashReplay,
+    epochReplayAction_carried (by simp) resetOk, bind, Except.bind] at replayed
+  simp only [EpochStage.Edge] at depositedOk consolidatedOk
+  by_cases electra : .pectra ≤ fork
+  · simp only [electra, ↓reduceDIte] at depositedOk consolidatedOk ⊢
+    simp only [epochReplayAction, electra, ↓reduceDIte, depositedOk, consolidatedOk, bind,
+      Except.bind, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at replayed
+    rw [← replayed.2]
+    simp
+  · simp only [electra, ↓reduceDIte] at depositedOk consolidatedOk ⊢
+    subst depositedOk consolidatedOk
+    simp only [epochReplayAction, electra, ↓reduceDIte, pure, Except.pure, Except.ok.injEq,
+      Prod.mk.injEq] at replayed
+    simp [← replayed.2]
 
 /-- A potential grows along a run by at most the churn per epoch plus the event credits. -/
 private theorem funding_run_bound (potential : ForkedBeaconState preset → Nat)

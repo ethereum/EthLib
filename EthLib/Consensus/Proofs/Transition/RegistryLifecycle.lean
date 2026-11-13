@@ -162,11 +162,11 @@ theorem decreaseBalance {index : ValidatorIndex} {delta : Gwei}
 
 end RegistryLifecycle
 
-/-- An epoch stage keeps the validators, the balances and the pending consolidations, unless it
-is one of six stages.
+/-- Most epoch stages keep the validators, the balances and the pending consolidations.
 
-Those are rewards, registry updates, slashings, the two pending stages and effective-balance
-updates. -/
+The exceptions are rewards, registry updates, slashings and effective-balance updates.
+
+The two pending stages are exceptions too. -/
 theorem EpochStage.Edge.validators_balances_pendingConsolidations_eq {stage : EpochStage}
     {s t : BeaconState preset fork} (edge : EpochStage.Edge config checks stage s t)
     (other : stage ≠ .rewards ∧ stage ≠ .registry ∧ stage ≠ .slashings ∧

@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.Transition.Trace
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Genesis
 import EthLib.Consensus.Proofs.Transition.BalanceDrift
+import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.EpochPending
 import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 
@@ -108,14 +109,6 @@ private theorem SamePendingQueue.slashings {f : Fork} {s t : BeaconState preset 
     (ok : processSlashings s = .ok t) : SamePendingQueue s t := by
   show t.pendingConsolidations = s.pendingConsolidations
   rw [processSlashings_frame ok]
-
-private theorem SamePendingQueue.justification {f : Fork} {s t : BeaconState preset f}
-    (ok : processJustificationAndFinalization s = .ok t) : SamePendingQueue s t := by
-  obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok ok
-  · rfl
-  · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
-    unfold SamePendingQueue
-    rw [← rest]
 
 theorem SamePendingQueue.compounding {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {index : ValidatorIndex}
@@ -744,31 +737,7 @@ private theorem kept {s t : BeaconState preset fork}
     exact Nat.le_trans ordered (UInt64.le_iff_toNat_le.mp bound)
   · rw [later.exitEpoch assigned]; exact assigned
 
-theorem justification (holds : PendingConsolidationInvariant config state)
-    (ok : processJustificationAndFinalization state = .ok after) :
-    PendingConsolidationInvariant config after := by
-  obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok ok
-  · exact holds
-  · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
-    apply holds.kept (SamePendingQueue.justification ok) (.of_data (by rw [← rest]))
-    · exact WithdrawalKept.of_data (by rw [← rest])
-    · rw [show getCurrentEpoch after = getCurrentEpoch state from by
-        unfold getCurrentEpoch; rw [← rest]]
-      exact UInt64.le_refl _
-
-theorem inactivity (holds : PendingConsolidationInvariant config state) {altair : .altair ≤ fork}
-    (ok : processInactivityUpdates config state altair = .ok after) :
-    PendingConsolidationInvariant config after := by
-  rw [processInactivityUpdates_frame ok]
-  exact holds
-
-theorem rewards (holds : PendingConsolidationInvariant config state)
-    (ok : processRewardsAndPenalties config state = .ok after) :
-    PendingConsolidationInvariant config after := by
-  rw [processRewardsAndPenalties_frame ok]
-  exact holds
-
-theorem registry (holds : PendingConsolidationInvariant config state)
+private theorem registry (holds : PendingConsolidationInvariant config state)
     (ok : processRegistryUpdates config state = .ok after) :
     PendingConsolidationInvariant config after := by
   by_cases electra : .pectra ≤ fork
@@ -778,17 +747,6 @@ theorem registry (holds : PendingConsolidationInvariant config state)
       congrArg (computeEpochAtSlot preset) (frame_processRegistryUpdates ok).slot]
     exact UInt64.le_refl _
   · intro h; exact False.elim (electra h)
-
-theorem slashings (holds : PendingConsolidationInvariant config state)
-    (ok : processSlashings state = .ok after) : PendingConsolidationInvariant config after := by
-  rw [processSlashings_frame ok]
-  exact holds
-
-theorem eth1Reset (holds : PendingConsolidationInvariant config state) {before : fork < .hegota}
-    (ok : processEth1DataReset before state = .ok after) :
-    PendingConsolidationInvariant config after := by
-  rw [processEth1DataReset_frame ok]
-  exact holds
 
 theorem pendingDeposits (holds : PendingConsolidationInvariant config state)
     {electra : .pectra ≤ fork}
@@ -913,49 +871,45 @@ private theorem framed (holds : PendingConsolidationInvariant config state)
     congrArg (computeEpochAtSlot preset) slot]
   exact UInt64.le_refl _
 
-/-- An epoch keeps the invariant, stage by stage of the epoch schedule.
+/-- Every epoch stage keeps the invariant.
 
-The first eight stages have their own lemmas above.
+Registry updates, pending deposits and pending consolidations have their own lemmas above.
 
 Effective-balance updates keep the queue and the slot, and no withdrawal epoch decreases.
 
-Each later stage keeps the queue, the validators and the slot. -/
-private theorem epoch (holds : PendingConsolidationInvariant config state)
-    (ok : processEpoch config checks state = .ok after) :
+Each other stage keeps the queue, the validators and the slot. -/
+theorem _root_.EthLib.Consensus.EpochStage.Edge.pendingConsolidationInvariant
+    {stage : EpochStage} (edge : EpochStage.Edge config checks stage state after)
+    (holds : PendingConsolidationInvariant config state) :
     PendingConsolidationInvariant config after := by
-  refine (processEpoch_trace ok).transport
-    (fun a b => PendingConsolidationInvariant config a → PendingConsolidationInvariant config b)
-    (fun _ => id) (fun one two => two ∘ one) ?_ holds
-  intro k _ a b computed held
-  have edge := EpochStage.action_cases.mp computed
-  cases k
-  case justification => exact held.justification edge
-  case rewards => exact held.rewards edge
-  case registry => exact held.registry edge
-  case slashings => exact held.slashings edge
-  case inactivity | eth1Reset | pendingDeposits | pendingConsolidations =>
+  cases stage
+  case registry => exact holds.registry edge
+  case pendingDeposits | pendingConsolidations =>
     simp only [EpochStage.Edge] at edge
     split at edge
     · first
-      | exact held.inactivity edge
-      | exact held.eth1Reset edge
-      | exact held.pendingDeposits edge
-      | exact held.consolidations edge
-    · exact edge ▸ held
+      | exact holds.pendingDeposits edge
+      | exact holds.consolidations edge
+    · exact edge ▸ holds
   case effectiveBalances =>
-    exact held.framed (edge.samePendingQueue nofun)
+    exact holds.framed (edge.samePendingQueue nofun)
       (registryLifecycle_processEffectiveBalanceUpdates edge)
       (WithdrawalKept.effectiveUpdates edge) (frame_processEffectiveBalanceUpdates edge).slot
   all_goals
     have same := congrArg (·.data) (edge.validators_eq ⟨nofun, nofun, nofun⟩)
-    refine held.framed (edge.samePendingQueue nofun) (.of_data same)
+    refine holds.framed (edge.samePendingQueue nofun) (.of_data same)
       (WithdrawalKept.of_data same) ?_
     simp only [EpochStage.Edge] at edge
     first
+      | exact (randaoMixes_slot_processJustificationAndFinalization edge).2
+      | exact (frame_processRewardsAndPenalties edge).slot
+      | exact (frame_processSlashings edge).slot
       | exact (frame_processSlashingsReset edge).slot
       | exact (frame_processRandaoMixesReset edge).slot
       | split at edge
         · first
+          | exact (frame_processInactivityUpdates edge).slot
+          | exact (frame_processEth1DataReset edge).slot
           | exact (frame_processBuilderPendingPayments edge).slot
           | exact (frame_processHistoricalSummariesUpdate edge).slot
           | exact (frame_processSyncCommitteeUpdates edge).slot
@@ -966,6 +920,15 @@ private theorem epoch (holds : PendingConsolidationInvariant config state)
           | exact (frame_processHistoricalRootsUpdate edge).slot
           | exact (frame_processParticipationRecordUpdates edge).slot
           | exact edge ▸ rfl
+
+private theorem epoch (holds : PendingConsolidationInvariant config state)
+    (ok : processEpoch config checks state = .ok after) :
+    PendingConsolidationInvariant config after :=
+  (processEpoch_trace ok).transport
+    (fun a b => PendingConsolidationInvariant config a → PendingConsolidationInvariant config b)
+    (fun _ => id) (fun one two => two ∘ one)
+    (fun _ _ _ _ computed held =>
+      (EpochStage.action_cases.mp computed).pendingConsolidationInvariant held) holds
 
 private theorem fold {α ε : Type}
     {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)} {xs : List α}

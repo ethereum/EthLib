@@ -121,22 +121,6 @@ theorem EpochStage.Edge.depositCarry {stage : EpochStage}
   case pendingDeposits => exact absurd rfl other
   all_goals exact absurd ⟨nofun, nofun, nofun, nofun⟩ ordinary
 
-/-- The six stages before the pending deposits keep the deposit balance to consume. -/
-theorem depositCarry_beforePending {altair : .altair ≤ fork} {before : fork < .hegota}
-    {justified scored rewarded registered slashed reset : BeaconState preset fork}
-    (justifiedOk : processJustificationAndFinalization s = .ok justified)
-    (scoredOk : processInactivityUpdates config justified altair = .ok scored)
-    (rewardedOk : processRewardsAndPenalties config scored = .ok rewarded)
-    (registeredOk : processRegistryUpdates config rewarded = .ok registered)
-    (slashedOk : processSlashings registered = .ok slashed)
-    (resetOk : processEth1DataReset before slashed = .ok reset) :
-    reset.depositBalanceToConsume = s.depositBalanceToConsume := by
-  have laws := depositCarryLaws (preset := preset) (fork := fork)
-  rw [laws.processEth1DataReset resetOk, laws.processSlashings slashedOk,
-    laws.processRegistryUpdates registeredOk, laws.processRewardsAndPenalties rewardedOk,
-    laws.processInactivityUpdates scoredOk]
-  exact kept_justification justifiedOk
-
 private theorem kept_excess {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (ok : queueExcessActiveBalance s electra index = .ok t) : Kept s t := by
   simp only [queueExcessActiveBalance, bind_ok_iff] at ok
