@@ -126,10 +126,18 @@ private theorem active_stake_le_window {g x y : ForkedBeaconState preset}
 
 /-- Before Electra exits spend count churn; afterwards they spend exit and consolidation churn.
 
+It carries the exit and consolidation balance that the queues hold for the window.
+
 The Electra churn is charged only when the window reaches the Electra fork epoch. -/
 def exitWindow (x : ForkedBeaconState preset) (high : Nat)
     (events : List (BalanceEvent preset)) : Nat :=
-  scheduledExitCarry x high + queueCarry x high +
+  scheduledExitCarry x high +
+    (if electra : .pectra ≤ x.fork then
+      (if (x.state.earliestExitEpoch electra).toNat ≤ high + 1 then
+        (x.state.exitBalanceToConsume electra).toNat else 0) +
+      (if (x.state.earliestConsolidationEpoch electra).toNat ≤ high + 1 then
+        (x.state.consolidationBalanceToConsume electra).toNat else 0)
+    else 0) +
     driftHorizon x high *
       ((if x.fork < .pectra then max 1 (cohortCap config (registryWindow x high)) *
         preset.MAX_EFFECTIVE_BALANCE.toNat else 0) +
@@ -2306,7 +2314,7 @@ private theorem nonaccountable_losses_over_interval {g x y : ForkedBeaconState p
     have after : config.ELECTRA_FORK_EPOCH.toNat ≤ high + 1 := Nat.le_of_not_lt preFork
     simp only [after, ↓reduceIte,
       ← Nat.add_assoc (_ : Nat) config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat]
-    change _ ≤ queueCarry x high + driftHorizon x high * _ at charges
+    change _ ≤ _ + driftHorizon x high * _ at charges
     omega
 
 private theorem intervalGain_existing_funding {x y : ForkedBeaconState preset}

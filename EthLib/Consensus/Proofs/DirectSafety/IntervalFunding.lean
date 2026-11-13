@@ -2240,14 +2240,6 @@ def scheduledExitCarry (x : ForkedBeaconState preset) (high : Nat) : Nat :=
       v.exitEpoch.toNat ≤ high + 1).foldl
       (fun total v => total + v.effectiveBalance.toNat) 0
 
-def queueCarry (x : ForkedBeaconState preset) (high : Nat) : Nat :=
-  if electra : .pectra ≤ x.fork then
-    (if (x.state.earliestExitEpoch electra).toNat ≤ high + 1 then
-      (x.state.exitBalanceToConsume electra).toNat else 0) +
-    (if (x.state.earliestConsolidationEpoch electra).toNat ≤ high + 1 then
-      (x.state.consolidationBalanceToConsume electra).toNat else 0)
-  else 0
-
 /-- Pre-Gloas consolidation churn is the whole balance churn less the activation/exit cap. -/
 def consolidationRate (stake : Nat) : Nat :=
   max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
