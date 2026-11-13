@@ -46,13 +46,6 @@ variable {fork : Fork}
 
 section Reads
 
-/-- A state with fewer reads than one whose reads are in the sets has its reads in the sets. -/
-private theorem readsIn_of_readsLe {account : Address → Prop} {slot : Address → Bytes32 → Prop}
-    {tx tx' : TransactionState} (h : tx.ReadsLe tx') (hr : ReadsIn account slot tx') :
-    ReadsIn account slot tx :=
-  ⟨fun a ha => hr.account a (h.accountReads a ha),
-    fun a k hk => hr.slot a k (h.storageReads a k hk)⟩
-
 /-- A wipe of the storage of an account keeps every read. -/
 private theorem readsLe_destroyStorage (tx : TransactionState) (address : Address) :
     tx.ReadsLe (tx.destroyStorage address) :=
@@ -62,19 +55,6 @@ private theorem readsLe_destroyStorage (tx : TransactionState) (address : Addres
 private theorem readsLe_destroyAccount (tx : TransactionState) (address : Address) :
     tx.ReadsLe (tx.destroyAccount address) :=
   ⟨fun _ h => h, fun _ _ h => TransactionState.mem_storageReads_destroyStorage_of_mem h⟩
-
-/-- A change of one account keeps every read. -/
-private theorem readsLe_modifyState {tx tx' : TransactionState} {address : Address}
-    {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
-    tx.ReadsLe tx' := by
-  obtain ⟨_, _, hacc, hst⟩ := TransactionState.reads_modifyState h
-  refine ⟨fun x hx => ?_, fun x k hk => ?_⟩
-  · rw [hacc]
-    exact Std.ExtTreeSet.mem_insert.mpr (.inr hx)
-  · rw [hst]
-    split
-    · exact TransactionState.mem_storageReads_destroyStorage_of_mem hk
-    · exact hk
 
 /-- A credit of ether keeps every read. -/
 private theorem readsLe_creditEther {tx tx' : TransactionState} {address : Address}
@@ -434,9 +414,9 @@ theorem runTransaction_agrees {Meter : Type} [GasMeter Meter] [LawfulGasMeter Me
   have hsettle := mapError_ok_iff.mp hsettle
   have hfinal := mapError_ok_iff.mp hfinal
   -- The reads of the settled state and of the message are in the sets.
-  have hreadsSettled := readsIn_of_readsLe (readsLe_deleteAccounts hfinal) hreads
+  have hreadsSettled := ReadsIn.of_readsLe (readsLe_deleteAccounts hfinal) hreads
   obtain ⟨hleSettle, hsender, hcoinbase⟩ := reads_settleGas hfork hsettle
-  have hreadsOut := readsIn_of_readsLe hleSettle hreadsSettled
+  have hreadsOut := ReadsIn.of_readsLe hleSettle hreadsSettled
   have hs := hreadsSettled.account _ hsender
   have hc := hreadsSettled.account _ hcoinbase
   -- The target and the purchase of gas.

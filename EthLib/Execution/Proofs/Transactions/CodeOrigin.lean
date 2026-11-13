@@ -51,7 +51,7 @@ theorem keepsCodeOrigin_buyGas {env : BlockEnvironment fork}
   · cases hupd
 
 /-- An authorization that sets the code of its authority keeps the origin of the code hashes. -/
-private theorem keepsCodeOrigin_delegate {state state' : TransactionState}
+theorem keepsCodeOrigin_delegate {state state' : TransactionState}
     {authority : Address} {auth : Authorization} {refund : Nat}
     (h : delegate fork state authority auth = .ok (state', refund)) :
     KeepsCodeOrigin state state' := by
@@ -61,7 +61,7 @@ private theorem keepsCodeOrigin_delegate {state state' : TransactionState}
   exact (KeepsCodeOrigin.setCode hcode).trans (KeepsCodeOrigin.incrementNonce hnonce)
 
 /-- One authorization keeps the origin of the code hashes. -/
-private theorem keepsCodeOrigin_applyAuthorization {chainId : Nat}
+theorem keepsCodeOrigin_applyAuthorization {chainId : Nat}
     {done done' : Delegations Meter} {auth : Authorization}
     (h : applyAuthorization fork chainId done auth = .ok done') :
     KeepsCodeOrigin done.state done'.state := by
