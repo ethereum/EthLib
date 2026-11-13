@@ -87,7 +87,9 @@ Let the largest effective balances of the preset be whole numbers of increments.
 
 When each effective balance is a whole number of increments before it, the same holds after it.
 
-From Altair, a target flag after it was a target flag at its position before. -/
+From Altair, a target flag after it was a target flag at its position before.
+
+It keeps the slashed flag at each position of the registry. -/
 structure UpgradeFrame (config : Config) {fork post : Fork} (pre : BeaconState preset fork)
     (after : BeaconState preset post) : Prop where
   forward : fork ≤ post
@@ -110,6 +112,8 @@ structure UpgradeFrame (config : Config) {fork post : Fork} (pre : BeaconState p
   flags : ∀ (altair : .altair ≤ fork) (current : Bool) (position : Nat),
     TargetFlagAt (recentParticipation after (Nat.le_trans altair forward) current) position →
       TargetFlagAt (recentParticipation pre altair current) position
+  slashed : ∀ position : Nat, (after.validators.data[position]?).map (·.slashed) =
+    (pre.validators.data[position]?).map (·.slashed)
 
 /-- An upgrade that carries the registry and both lists of flags as the same sequences.
 
@@ -158,11 +162,17 @@ theorem UpgradeFrame.of_carried {fork post : Fork} {pre : BeaconState preset for
   flags altair current position flagged := by
     obtain ⟨flags, found, set⟩ := flagged
     exact ⟨flags, by rw [← participation altair current]; exact found, set⟩
+  slashed _ := by rw [validators]
 
-/-- An upgrade frame followed by a block frame of the new fork is an upgrade frame. -/
+/-- An upgrade frame followed by a block frame of the new fork is an upgrade frame.
+
+The block frame may set a slashed flag, so the steps after the upgrade must keep each one. -/
 theorem UpgradeFrame.trans_blockFrame {fork post : Fork} {pre : BeaconState preset fork}
     {middle after : BeaconState preset post} (one : UpgradeFrame config pre middle)
-    (two : BlockFrame middle after) : UpgradeFrame config pre after where
+    (two : BlockFrame middle after)
+    (flags : ∀ position : Nat, (after.validators.data[position]?).map (·.slashed) =
+      (middle.validators.data[position]?).map (·.slashed)) :
+    UpgradeFrame config pre after where
   forward := one.forward
   slot := two.slot.trans one.slot
   finalized := two.finalized.trans one.finalized
@@ -181,6 +191,7 @@ theorem UpgradeFrame.trans_blockFrame {fork post : Fork} {pre : BeaconState pres
   aligned maxAligned := two.aligned maxAligned ∘ one.aligned maxAligned
   flags altair current position flagged :=
     one.flags altair current position (flagged.of_flagsKeptOrZero two.flags)
+  slashed position := (flags position).trans (one.slashed position)
 
 /-- An upgrade frame carries the invariant from the state before to the state after. -/
 theorem UpgradeFrame.invariant {fork post : Fork} {pre : BeaconState preset fork}
@@ -328,27 +339,34 @@ theorem upgradeToAltair_spec {pre : BeaconState preset .phase0}
 /-- What each step of the Electra upgrade keeps.
 
 It keeps the number of validators and of balances, the fork versions and the deposit start index.
+
+It also keeps the slashed flag at each position of the registry.
 -/
 def ElectraKept {fork : Fork} (state after : BeaconState preset fork) : Prop :=
   SameSizes state after ∧ after.forkVersions = state.forkVersions ∧
-    after.depositRequestsStartIndex = state.depositRequestsStartIndex
+    after.depositRequestsStartIndex = state.depositRequestsStartIndex ∧
+    ∀ position : Nat, (after.validators.data[position]?).map (·.slashed) =
+      (state.validators.data[position]?).map (·.slashed)
 
 theorem ElectraKept.trans {fork : Fork} {first second third : BeaconState preset fork}
     (one : ElectraKept first second) (two : ElectraKept second third) :
     ElectraKept first third :=
-  ⟨one.1.trans two.1, two.2.1.trans one.2.1, two.2.2.trans one.2.2⟩
+  ⟨one.1.trans two.1, two.2.1.trans one.2.1, two.2.2.1.trans one.2.2.1,
+    fun position => (two.2.2.2 position).trans (one.2.2.2 position)⟩
 
 theorem electraKept_queuePreActivation {fork : Fork} {state after : BeaconState preset fork}
     {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (computed : queuePreActivation state electra index = .ok after) : ElectraKept state after := by
   simp only [queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at computed
-  obtain ⟨_, -, _, -, _, -, _, set₁, _, set₂, rfl⟩ := computed
+  obtain ⟨validator, found, _, -, _, -, _, set₁, _, set₂, rfl⟩ := computed
   have sizes₁ := sameSizes_setBalance set₁
   have sizes₂ := sameSizes_setValidator set₂
   obtain ⟨_, rfl⟩ := setBalance_ok set₁
+  -- The balance write keeps the registry, so the read of the validator holds after it.
+  have flags := slashed_setValidator (old := validator) (by exact found) set₂ rfl
   obtain ⟨_, rfl⟩ := setValidator_ok set₂
-  exact ⟨sizes₁.trans (sizes₂.trans ⟨rfl, rfl⟩), rfl, rfl⟩
+  exact ⟨sizes₁.trans (sizes₂.trans ⟨rfl, rfl⟩), rfl, rfl, flags⟩
 
 theorem electraKept_queueCompoundingExcess {fork : Fork} {state after : BeaconState preset fork}
     {electra : .pectra ≤ fork} {index : Nat}
@@ -365,13 +383,13 @@ theorem electraKept_queueCompoundingExcess {fork : Fork} {state after : BeaconSt
       · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at queued
         obtain ⟨_, _, _, _, _, set, rfl⟩ := queued
         obtain ⟨_, rfl⟩ := setBalance_ok set
-        exact ⟨rfl, rfl⟩
+        exact ⟨rfl, rfl, fun _ => rfl⟩
       · cases queued
-        exact ⟨rfl, rfl⟩
+        exact ⟨rfl, rfl, fun _ => rfl⟩
     · cases computed
-      exact ⟨SameSizes.refl _, rfl, rfl⟩
+      exact ⟨SameSizes.refl _, rfl, rfl, fun _ => rfl⟩
   · cases computed
-    exact ⟨SameSizes.refl _, rfl, rfl⟩
+    exact ⟨SameSizes.refl _, rfl, rfl, fun _ => rfl⟩
 
 /-- Queueing a validator that is not yet active keeps its key and its flag.
 
@@ -436,21 +454,22 @@ private theorem upgradeToElectra_frame_spec {pre : BeaconState preset .dencun}
         ⟨pre.forkVersions.currentVersion, config.ELECTRA_FORK_VERSION, getCurrentEpoch pre⟩ := by
   simp only [upgradeToElectra, bind_ok_iff] at computed
   obtain ⟨_, -, _, -, _, -, _, -, middle, queued, compounded⟩ := computed
+  have first := foldlM_ok_invariant (ElectraKept _)
+    (fun _ _ _ before step => before.trans (electraKept_queuePreActivation step))
+    ⟨SameSizes.refl _, rfl, rfl, fun _ => rfl⟩ queued
+  have kept := foldlM_ok_invariant (ElectraKept _)
+    (fun _ _ _ before step => before.trans (electraKept_queueCompoundingExcess step))
+    first compounded
+  obtain ⟨⟨validators, balances⟩, versions, start, flags⟩ := kept
+  -- The two folds form one block frame, and they keep every slashed flag of the carried state.
   have frame : UpgradeFrame config pre after := by
-    refine ((UpgradeFrame.trans_blockFrame ?_
-      (BlockFrame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued)).trans_blockFrame
-      (BlockFrame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok) compounded))
+    refine UpgradeFrame.trans_blockFrame ?_
+      ((BlockFrame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued).trans
+        (BlockFrame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok) compounded)) flags
     have altair : Fork.altair ≤ Fork.dencun := by decide
     exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
       fun _ current => by cases current <;>
         simp [recentParticipation, carryFields, carryList, altair]
-  have first := foldlM_ok_invariant (ElectraKept _)
-    (fun _ _ _ before step => before.trans (electraKept_queuePreActivation step))
-    ⟨SameSizes.refl _, rfl, rfl⟩ queued
-  have kept := foldlM_ok_invariant (ElectraKept _)
-    (fun _ _ _ before step => before.trans (electraKept_queueCompoundingExcess step))
-    first compounded
-  obtain ⟨⟨validators, balances⟩, versions, start⟩ := kept
   exact ⟨frame, validators, balances, congrFun start _, versions⟩
 
 /-- The upgrade to Electra keeps the number of validators and of balances.

@@ -569,27 +569,44 @@ theorem balance_decreaseBalance {state after : BeaconState preset fork}
       by simp [toNat_saturatingSub]⟩
   · exact ⟨balance, by simp [BeaconState.putBalance, same, found], by simp [same]⟩
 
-/-- Starting an exit changes no slashed flag. -/
+/-- A write that keeps the slashed flag of its validator keeps the slashed flag at each position.
+-/
+theorem slashed_setValidator {state after : BeaconState preset fork} {index : ValidatorIndex}
+    {old validator : Validator} (found : getValidator state index = .ok old)
+    (set : state.setValidator index validator = .ok after) (flag : validator.slashed = old.slashed)
+    (position : Nat) :
+    (after.validators.data[position]?).map (·.slashed) =
+      (state.validators.data[position]?).map (·.slashed) := by
+  obtain ⟨_, rfl⟩ := setValidator_ok set
+  rw [getValidator_eq_ok_iff] at found
+  simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
+    Array.getElem?_set]
+  split
+  · rename_i equal
+    rw [← equal, found, Option.map_some, Option.map_some, flag]
+  · rfl
+
+/-- Starting an exit changes no slashed flag, at any position of the registry. -/
 theorem slashedFlag_initiateValidatorExit {config : Config}
     {state after : BeaconState preset fork} {index : ValidatorIndex}
-    (computed : initiateValidatorExit config state index = .ok after) (other : ValidatorIndex) :
-    slashedFlag after other = slashedFlag state other := by
+    (computed : initiateValidatorExit config state index = .ok after) (position : Nat) :
+    (after.validators.data[position]?).map (·.slashed) =
+      (state.validators.data[position]?).map (·.slashed) := by
   obtain ⟨validator, found, ⟨_, rfl⟩ | ⟨_, queued, _, _, queue, _, set⟩⟩ :=
     initiateValidatorExit_ok computed
   · rfl
-  have same := getValidator_of_validators_eq (exitQueue_validators queue).1
-  by_cases equal : other = index
-  · subst equal
-    have foundQueued : getValidator queued other = .ok validator := (same other).trans found
-    simp [slashedFlag, getValidator_setValidator_self set, found, Except.map]
-  · simp [slashedFlag, getValidator_setValidator_of_ne set equal, same]
+  have same := (exitQueue_validators queue).1
+  rw [← getValidator_of_validators_eq same] at found
+  rw [slashed_setValidator found set rfl, same]
 
-/-- Slashing a validator sets its slashed flag, and changes no other flag. -/
+/-- Slashing a validator sets its slashed flag, and changes no flag at another position. -/
 theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState preset fork}
     {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     slashedFlag after slashedIndex = .ok true ∧
-      ∀ other, other ≠ slashedIndex → slashedFlag after other = slashedFlag state other := by
+      ∀ position, position ≠ slashedIndex.toNat →
+        (after.validators.data[position]?).map (·.slashed) =
+          (state.validators.data[position]?).map (·.slashed) := by
   obtain ⟨exited, validator, withdrawable, slashedState, _, _, _, _, _, _, _, last, exitedOk, -, -,
     markedOk, -, -, -, lowered, -, -, raised, final, done⟩ := slashValidator_ok computed
   -- The balance steps keep the registry in which the validator is marked slashed.
@@ -600,12 +617,13 @@ theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState 
     (by subst done; rfl)).1.trans ((increaseBalance_validators final).trans
     ((increaseBalance_validators raised).trans (decreaseBalance_validators lowered)))
   replace same : after.validators = slashedState.validators := same
-  refine ⟨?_, fun other distinct => ?_⟩
+  refine ⟨?_, fun position distinct => ?_⟩
   · simp [slashedFlag, getValidator_of_validators_eq same,
       getValidator_setValidator_self markedOk, Except.map]
-  · rw [slashedFlag, getValidator_of_validators_eq same,
-      getValidator_setValidator_of_ne markedOk distinct]
-    exact slashedFlag_initiateValidatorExit exitedOk other
+  · obtain ⟨_, rfl⟩ := setValidator_ok markedOk
+    rw [same, BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
+      Array.getElem?_set_ne _ (Ne.symm distinct)]
+    exact slashedFlag_initiateValidatorExit exitedOk position
 
 /-! ## The builder payments of a slashing -/
 

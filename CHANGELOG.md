@@ -9,6 +9,19 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)`.
+  From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
+  `slashedFlag_initiateValidatorExit` takes a `position : Nat` in place of an index.
+  The second conjunct of `slashValidator_slashedFlag` holds at each position other than `slashedIndex.toNat`.
+  A caller that read either at an index `i` reads it at `i.toNat`, and `getValidator_eq_ok_iff` converts the result.
+  `slashIfSlashable_ok` and `foldlM_slashIfSlashable` gain a last conjunct: no flag changes at a position that none of their indices names.
+  An `obtain` of their three parts binds a fourth.
+  `UpgradeFrame` gains the field `slashed`, since each upgrade keeps every slashed flag, and `ElectraKept` gains the same conjunct.
+  `UpgradeFrame.trans_blockFrame` takes the new premise `flags`: the steps after the upgrade keep every slashed flag.
+  A block frame alone may slash, so it cannot give the field.
+  Compose the block frames of the steps first, and pass their flags once.
+  `Run.slashed_evidence` reads these results instead of walking the slashings and the upgrades again.
+
 - In Lean, `DirectSafety.EnoughStake run high` requires the stake floor only at epoch calls whose current epoch is at most `high + 1`.
   The floor reaches one epoch past the finalized epoch of `b` in `accountable_safety`, and one epoch past `j.epoch` in the other three direct safety endpoints.
   Move `j` (and `k` for `accountable_justified_unique`) before the stake premises.
