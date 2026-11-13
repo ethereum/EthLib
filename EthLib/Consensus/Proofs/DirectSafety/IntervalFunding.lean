@@ -107,7 +107,7 @@ The rewards and the slashings record their protocol-computed limits.
 Pending deposits and pending consolidations record their consumed amounts.
 
 A stage that is absent at the fork, or that runs after the payments, leaves the pair unchanged. -/
-private def epochReplayAction {fork : Fork} (stage : EpochStage) (pre : BalanceReplay preset fork) :
+def epochReplayAction {fork : Fork} (stage : EpochStage) (pre : BalanceReplay preset fork) :
     Except TransitionError (BalanceReplay preset fork) :=
   match stage with
   | .justification => carryBalance processJustificationAndFinalization pre
@@ -473,7 +473,7 @@ private theorem delayedSlashingLimit_result {fork : Fork} {s t : BeaconState pre
   exact ⟨_, total, rfl, sum, rfl, rfl⟩
 
 /-- A successful replay is a trace of the replay over the stages before the payments. -/
-private theorem epochBalanceReplay_trace {fork : Fork} {s : BeaconState preset fork}
+theorem epochBalanceReplay_trace {fork : Fork} {s : BeaconState preset fork}
     {post : BalanceReplay preset fork}
     (ok : epochBalanceReplay (config := config) (checks := checks) s = .ok post) :
     EpochTrace (epochReplayAction (config := config) (checks := checks))
@@ -901,7 +901,7 @@ def sourceTotal (events : List (BalanceEvent preset)) (source : BalanceSource)
 def EventsBounded (events : List (BalanceEvent preset)) : Prop :=
   ∀ event ∈ events, event.credits ≤ event.creditLimit ∧ event.debits ≤ event.debitLimit
 
-private theorem eventsBounded_append {left right : List (BalanceEvent preset)}
+theorem eventsBounded_append {left right : List (BalanceEvent preset)}
     (first : EventsBounded left) (last : EventsBounded right) :
     EventsBounded (left ++ right) := by
   intro event member
@@ -1635,7 +1635,7 @@ theorem upgradeBalanceReplay_bounded {s t : ForkedBeaconState preset}
     rw [upgradeBalanceReplay]
     simp [due, pure, Except.pure]
 
-private theorem stepBalanceEvents_bounded {x y : ForkedBeaconState preset}
+theorem stepBalanceEvents_bounded {x y : ForkedBeaconState preset}
     (step : Step config checks x y) (matched : BalancesMatch x.state)
     (early : y.fork < .glamsterdam) :
     ∃ events, step.balanceEvents = .ok events ∧ EventsBounded events := by
@@ -1806,7 +1806,7 @@ private theorem coverage_setAt {fork : Fork} {s t : BeaconState preset fork}
     obtain ⟨_, _, impossible⟩ := ok
     cases impossible
 
-private theorem coverage_exit {fork : Fork} {s t : BeaconState preset fork}
+theorem coverage_exit {fork : Fork} {s t : BeaconState preset fork}
     {i : ValidatorIndex} (ok : initiateValidatorExit config s i = .ok t) :
     t.balances = s.balances := by
   obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, queued, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok ok
@@ -2109,7 +2109,7 @@ private theorem coverage_upgrades {s t : ForkedBeaconState preset}
     subst events
     exact coverage_refl _
 
-private def coveragePath (debit : Bool) (i : Nat) (path : List (ForkedBeaconState preset)) : Nat :=
+def coveragePath (debit : Bool) (i : Nat) (path : List (ForkedBeaconState preset)) : Nat :=
   if debit then pathDebits i path else pathCredits i path
 
 private theorem coverage_step {x y : ForkedBeaconState preset} (step : Step config checks x y)
@@ -2197,7 +2197,7 @@ private theorem coverage_path_last {x y : ForkedBeaconState preset}
       exact ⟨pre.balancePath ++ [middle, ⟨middle.fork, advanced⟩], by
         simp [Run.balancePath, Step.balancePath, advanceOk, Except.toOption, List.append_assoc]⟩
 
-private theorem coverage_step_epoch {x y : ForkedBeaconState preset}
+theorem coverage_step_epoch {x y : ForkedBeaconState preset}
     (step : Step config checks x y) :
     (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat := by
   have slots : x.state.slot.toNat ≤ y.state.slot.toNat := by
@@ -2213,7 +2213,7 @@ private theorem coverage_step_epoch {x y : ForkedBeaconState preset}
   rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat]
   exact Nat.div_le_div_right slots
 
-private theorem coverage_run {x y : ForkedBeaconState preset} (run : Run config checks x y)
+theorem coverage_run {x y : ForkedBeaconState preset} (run : Run config checks x y)
     (early : y.fork < .glamsterdam) (high : Nat)
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : run.balanceEvents high = .ok events) :
@@ -3518,7 +3518,7 @@ private theorem funding_upgrade_credit {s : ForkedBeaconState preset}
     all_goals cases last; simpa [funding_deposit_credit] using priorZero
   | case2 => cases ok; rfl
 
-private def funding_no_deposits (events : List (BalanceEvent preset)) : Prop :=
+def funding_no_deposits (events : List (BalanceEvent preset)) : Prop :=
   ∀ e ∈ events, e.source = .deposits → .pectra ≤ e.before.fork → e.creditLimit = 0
 
 private theorem funding_carry_events {fork : Fork}
@@ -3544,7 +3544,7 @@ private theorem funding_record_events {fork : Fork} {source : BalanceSource}
   · obtain rfl := List.mem_singleton.mp new
     exact zero credit debit limitOk sourceEq electra
 
-private theorem funding_block_events {fork : Fork} {s : BeaconState preset fork}
+theorem funding_block_events {fork : Fork} {s : BeaconState preset fork}
     (early : fork < .glamsterdam) (engine : ExecutionEngine preset fork)
     (block : BeaconBlock preset fork) {post : BalanceReplay preset fork}
     (ok : blockBalanceReplay (config := config) (checks := checks)
@@ -4029,7 +4029,7 @@ private theorem funding_run_funded {x y : ForkedBeaconState preset}
     rw [count, Nat.add_mul, List.map_append, List.sum_append]
     omega
 
-private theorem funding_window_of_steps {x y : ForkedBeaconState preset}
+theorem funding_window_of_steps {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork)
     (early : y.fork < .glamsterdam)
     (delay : 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
