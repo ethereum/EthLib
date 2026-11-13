@@ -1068,7 +1068,7 @@ theorem forkchoiceUpdatedCall_status {version : Nat} {params : Lean.Json}
 
 /-- The response of a call names a build exactly when the call starts one.
 
-That is when the update applies a head, the parameters hold attributes, and they pass their checks.
+That is when the update applies a head that the tree holds, and attributes that pass their checks.
 
 The ID is then that of the head and the attributes at their fork. -/
 theorem forkchoiceUpdatedResponse_payloadId {version : Nat} {params : Lean.Json}

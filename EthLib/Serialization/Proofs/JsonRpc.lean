@@ -1228,7 +1228,7 @@ theorem lookup_of_perm {fs pairs : List (String × Lean.Json)} (h : fs.Perm pair
     exact lookup_of_mem ((h.pairwise_iff fun hab => Ne.symm hab).mpr distinct)
       (h.mem_iff.mpr (by simp))
 
-/-- Fields that are the pairs without `null` of a list with distinct names read a name as it reads.
+/-- Fields that hold the pairs not `null` of a list with distinct names read each name as the list.
 
 A name whose value is `null` reads as absent. -/
 theorem lookup_of_perm_filter {fs pairs : List (String × Lean.Json)}

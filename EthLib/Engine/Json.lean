@@ -200,9 +200,12 @@ def statusOfName (name : String) : Option Status :=
 
 The latest valid hash and the validation error are `null` when absent.
 
-The text of the validation error is free: a client may give it, by step 5 of payload validation.
+By step 5 of [payload validation][validation], a client may give the text of the validation error.
 
-[status]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payloadstatusv1 -/
+That step gives it for an invalid payload; the writer leaves the pairing to its caller.
+
+[status]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payloadstatusv1
+[validation]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-validation -/
 def payloadStatusJson (s : PayloadStatus) (validationError : Option String) : Json :=
   Json.mkObj [("status", .str s.status.name),
     ("latestValidHash", optionJson (dataJson ·.toList) s.latestValidHash),
@@ -215,11 +218,20 @@ def payloadStatusFields : List String := ["status", "latestValidHash", "validati
 
 The status is one of the five names, the hash 32 bytes, and the validation error a string.
 
-The markdown lists three fields; the OpenRPC schema `PayloadStatusV1` requires only the status.
+[`paris.md`][status] lists three fields.
+
+The OpenRPC schema `PayloadStatusV1` in [`payload.yaml`][schema] requires only the status.
 
 So, as for the parameters, a field whose value is `null` counts as absent.
 
-Any field other than the three is invalid. -/
+Any other field with a value other than `null` is invalid, a rule stricter than the schema states.
+
+The decoder checks the form only, not which hash or error goes with which status.
+
+A status that does not decode is an invalid parameter, code `-32602`, as for a request.
+
+[status]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payloadstatusv1
+[schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/openrpc/schemas/payload.yaml -/
 def payloadStatusOfJson (j : Json) : Decode (PayloadStatus × Option String) := do
   let fs ← fields "payloadStatus" j
   unless fs.all (payloadStatusFields.contains ·.1) do invalid "payloadStatus: unknown field"
@@ -247,7 +259,7 @@ def checkRequestSize (maxRequest count : Nat) : Except EngineError Unit :=
 
 /-- The message of an error, from the table of [Errors][errors] in `common.md`.
 
-Other APIs give some codes other messages, so each API keeps its own table.
+The execution API gives `-32000` another message, so each API keeps its own table.
 
 [errors]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/common.md#errors -/
 def EngineError.message : EngineError → String
@@ -260,7 +272,9 @@ def EngineError.message : EngineError → String
 
 /-- The error object of an error: the negative of its code, its message, and `null` data.
 
-The source gives every error `null` data, except `-32000`, which no definition of EthLib raises. -/
+The source gives every error `null` data, except `-32000`, which no Engine error has.
+
+So the reason of invalid parameters is dropped, while the shared JSON-RPC error keeps it as data. -/
 def EngineError.toRpcError (e : EngineError) : Serialization.JsonRpc.RpcError :=
   { code := -(e.code.toNat : Int), message := e.message, data := some .null }
 

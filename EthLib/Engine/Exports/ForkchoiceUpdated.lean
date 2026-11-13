@@ -89,9 +89,9 @@ def forkchoiceUpdatedOf (args : PyValue × PyValue × PyValue × PyValue) : Resu
   let (status, id) := forkchoiceUpdatedResponse result
   return .ofJson (forkchoiceUpdatedResponseJson status none id)
 
-/-- A forkchoice response read from its JSON: the status name, the hash, the error and the ID.
+/-- A forkchoice response read from its JSON: the status name, the hash, the error, the ID.
 
-Each but the name is `None` in Python when the JSON has no value for it. -/
+The hash, the error and the ID are `None` in Python when the JSON has no value for them. -/
 def readForkchoiceResponseOf (response : PyValue) :
     Result (String × Option ByteArray × Option String × Option ByteArray) := do
   let (s, e, id) ← (forkchoiceUpdatedResponseOfJson response.toJson).mapError

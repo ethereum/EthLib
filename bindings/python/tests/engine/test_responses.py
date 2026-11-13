@@ -57,7 +57,7 @@ def _status_id(case: dict) -> str:
 
 @pytest.mark.parametrize("case", [c for c in PAYLOADS if c["errorCode"] is None], ids=_status_id)
 def test_new_payload_status(case: dict) -> None:
-    """The status that engine_newPayload answers for a request of the fixtures reads back."""
+    """The status of each fixture request of engine_newPayload without an error reads back."""
     status = engine.new_payload(config(case["network"]), case["method"], case["params"])
     assert engine.read_payload_status(status) == _fields(status)
 
@@ -120,7 +120,7 @@ def test_absent_fields() -> None:
     ],
 )
 def test_malformed_status(status: dict, message: str) -> None:
-    """A status with an unknown name, a missing status, a wrong field or a wrong type is invalid."""
+    """An unknown name or field, no status, a short hash or a non-string error is invalid."""
     with raises(engine.EngineError, message) as error:
         engine.read_payload_status(status)
     assert error.value.code == 32602
@@ -128,7 +128,7 @@ def test_malformed_status(status: dict, message: str) -> None:
 
 @pytest.mark.parametrize("name", ["ACCEPTED", "INVALID_BLOCK_HASH"])
 def test_unrestricted_status(name: str) -> None:
-    """A forkchoice response never has a status that only engine_newPayload answers."""
+    """A status may be ACCEPTED or INVALID_BLOCK_HASH, but a forkchoice response may not."""
     assert engine.read_payload_status({"status": name}) == (name, None, None)
     with raises(engine.EngineError, _INVALID + '"payloadStatus: not a status of the method"'):
         engine.read_forkchoice_response({"payloadStatus": {"status": name}, "payloadId": None})
