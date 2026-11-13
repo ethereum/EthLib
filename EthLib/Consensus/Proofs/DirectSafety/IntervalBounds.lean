@@ -81,23 +81,12 @@ private theorem funding_assemble {g x y : ForkedBeaconState preset}
     Models.stake (effectiveWeight y.state) (activeKeys y.state) ≤
       activeStakeWindow (config := config) x high events := by
   have ⟨_, _, _, initialized⟩ := genesis
-  have invariant {z : ForkedBeaconState preset} (run : Run config checks g z) :
-      Invariant z.state := by
-    induction run with
-    | nil =>
-      obtain ⟨_, _, _, ok⟩ := genesis
-      exact (initializeBeaconStateFromEth1_invariant ok).2
-    | snoc pre step ih =>
-      cases step with
-      | slot ok => exact (advanceSlotAcross_invariant ih ok).1
-      | block engine signed due ok =>
-        exact (frame_processBlock (applySignedBlock_ok ok).2.1).invariant ih
   apply funding_window_of_steps tail electra early delay
     ((validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
       (shared.append tail).chainSteps).2) high endEpoch events replayed
   intro a b pre step before added addedOk
   have reachable := shared.append pre
-  have holds := invariant reachable
+  have holds := reachable.invariant_of_genesis genesis
   have forkOrder : x.fork ≤ a.fork := by
     have monotone {u v : ForkedBeaconState preset} (run : Run config checks u v) :
         u.fork ≤ v.fork := by
@@ -1002,19 +991,6 @@ private theorem intervalLoss_step_sites {x y : ForkedBeaconState preset}
       rw [eventEq]
       exact crossingBound
 
-private theorem intervalLoss_run_invariant {g y : ForkedBeaconState preset}
-    (run : Run config checks g y) (genesis : Genesis (config := config) (checks := checks) g) :
-    Invariant y.state := by
-  induction run with
-  | nil =>
-    obtain ⟨_, _, _, ok⟩ := genesis
-    exact (initializeBeaconStateFromEth1_invariant ok).2
-  | snoc pre step ih =>
-    cases step with
-    | slot ok => exact (advanceSlotAcross_invariant ih ok).1
-    | block engine signed due ok =>
-      exact (frame_processBlock (applySignedBlock_ok ok).2.1).invariant ih
-
 private theorem replay_event_provenance {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)
@@ -1047,7 +1023,7 @@ private theorem replay_event_provenance {g x y : ForkedBeaconState preset}
       exact ⟨first, during, final.trans (RegistryLifecycle.chainStep step.chainStep),
         ordered, matched, lo, hi.trans (coverage_step_epoch step)⟩
     · obtain ⟨first, during, final, ordered, matched, lo, hi, _⟩ :=
-        intervalLoss_step_sites step early (intervalLoss_run_invariant (shared.append pre) genesis)
+        intervalLoss_step_sites step early ((shared.append pre).invariant_of_genesis genesis)
           addedOk event added
       exact ⟨pre.registryLifecycle.trans first, during, final, ordered, matched,
         (runEpoch pre).trans lo, hi⟩
@@ -1077,7 +1053,7 @@ private theorem intervalLoss_event_slashed {g x y : ForkedBeaconState preset}
         ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) selected prior priorOk old
       exact ⟨before, during, final.trans step.slashedPersistence, source⟩
     · obtain ⟨_, _, _, _, _, _, _, before, during, final, source, _⟩ :=
-        intervalLoss_step_sites step early (intervalLoss_run_invariant (shared.append pre) genesis)
+        intervalLoss_step_sites step early ((shared.append pre).invariant_of_genesis genesis)
           addedOk event added
       exact ⟨before, during, final, source⟩
 
@@ -1101,7 +1077,7 @@ private theorem replay_event_fork_le {g x y : ForkedBeaconState preset}
         (ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) selected prior priorOk old)
         step.chainStep.fork_le
     · obtain ⟨_, _, _, _, _, _, _, _, _, _, _, bound⟩ :=
-        intervalLoss_step_sites step early (intervalLoss_run_invariant (shared.append pre) genesis)
+        intervalLoss_step_sites step early ((shared.append pre).invariant_of_genesis genesis)
           addedOk event added
       exact bound
 
@@ -1209,7 +1185,7 @@ private theorem replay_electra_deposit_epoch {g x y : ForkedBeaconState preset}
       · exact Or.inl zero
       · exact Or.inr (strict.trans_le (coverage_step_epoch step))
     · exact intervalLoss_step_deposit_epoch step early
-        (intervalLoss_run_invariant (shared.append pre) genesis) addedOk event added deposit electra
+        ((shared.append pre).invariant_of_genesis genesis) addedOk event added deposit electra
 
 private theorem intervalLoss_charge_site {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (charge : DepartureCharge)
@@ -3016,17 +2992,6 @@ private theorem intervalGain_events_bounded {g x y : ForkedBeaconState preset}
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (events : List (BalanceEvent preset)) (replayed : tail.balanceEvents high = .ok events) :
     EventsBounded events := by
-  have invariant {z : ForkedBeaconState preset} (run : Run config checks g z) :
-      Invariant z.state := by
-    induction run with
-    | nil =>
-      obtain ⟨_, _, _, ok⟩ := genesis
-      exact (initializeBeaconStateFromEth1_invariant ok).2
-    | snoc pre step ih =>
-      cases step with
-      | slot ok => exact (advanceSlotAcross_invariant ih ok).1
-      | block engine signed due ok =>
-        exact (frame_processBlock (applySignedBlock_ok ok).2.1).invariant ih
   induction tail generalizing events with
   | nil => cases replayed; simp [EventsBounded]
   | @snoc middle last pre step ih =>
@@ -3037,7 +3002,7 @@ private theorem intervalGain_events_bounded {g x y : ForkedBeaconState preset}
     obtain ⟨added, addedOk, rfl⟩ := rest
     have previous := ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) selected prior priorOk
     obtain ⟨actual, actualOk, bound⟩ := stepBalanceEvents_bounded step
-      (invariant (shared.append pre)).balancesMatch early
+      ((shared.append pre).invariant_of_genesis genesis).balancesMatch early
     cases Except.ok.inj (actualOk.symm.trans addedOk)
     exact eventsBounded_append previous bound
 

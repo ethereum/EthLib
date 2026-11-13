@@ -1675,17 +1675,6 @@ theorem source_bounds_over_interval {g x y : ForkedBeaconState preset}
         sourceTotal events source BalanceEvent.credits ≤ sourceTotal events source (·.creditLimit) ∧
         sourceTotal events source BalanceEvent.debits ≤
           sourceTotal events source (·.debitLimit) := by
-  have invariant {z : ForkedBeaconState preset} (run : Run config checks g z) :
-      Invariant z.state := by
-    induction run with
-    | nil =>
-      obtain ⟨_, _, _, ok⟩ := genesis
-      exact (initializeBeaconStateFromEth1_invariant ok).2
-    | snoc pre step ih =>
-      cases step with
-      | slot ok => exact (advanceSlotAcross_invariant ih ok).1
-      | block engine signed due ok =>
-        exact (frame_processBlock (applySignedBlock_ok ok).2.1).invariant ih
   have replay : ∃ events, tail.balanceEvents high = .ok events ∧ EventsBounded events := by
     induction tail with
     | nil => exact ⟨[], rfl, by simp [EventsBounded]⟩
@@ -1694,7 +1683,7 @@ theorem source_bounds_over_interval {g x y : ForkedBeaconState preset}
         ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early)
       by_cases selected : (getCurrentEpoch middle.state).toNat ≤ high + 1
       · obtain ⟨added, addedOk, addedBound⟩ := stepBalanceEvents_bounded step
-          (invariant (shared.append pre)).balancesMatch early
+          ((shared.append pre).invariant_of_genesis genesis).balancesMatch early
         refine ⟨prior ++ added, ?_, eventsBounded_append priorBound addedBound⟩
         simp [Run.balanceEvents, priorOk, selected, addedOk, pure, Except.pure, bind, Except.bind]
       · refine ⟨prior, ?_, priorBound⟩
@@ -4069,20 +4058,10 @@ theorem funding_deposit_capacity {g x y : ForkedBeaconState preset}
             decide (v.withdrawableEpoch.toNat ≤ (getCurrentEpoch e.before.state).toNat))).getD
             false then 0 else actualBalanceAt e.after i - actualBalanceAt e.before i
       else 0).sum ≤ depositWindow (config := config) x high := by
-  have invariant {z : ForkedBeaconState preset} (run : Run config checks g z) :
-      Invariant z.state := by
-    induction run with
-    | nil =>
-      obtain ⟨_, _, _, ok⟩ := genesis
-      exact (initializeBeaconStateFromEth1_invariant ok).2
-    | snoc pre step ih =>
-      cases step with
-      | slot ok => exact (advanceSlotAcross_invariant ih ok).1
-      | block engine signed due ok =>
-        exact (frame_processBlock (applySignedBlock_ok ok).2.1).invariant ih
   have bound := funding_run_capacity tail early high endEpoch events replayed
     (fun pre step early added ok =>
-      funding_step_capacity step (invariant (shared.append pre)).balancesMatch early ok)
+      funding_step_capacity step
+        ((shared.append pre).invariant_of_genesis genesis).balancesMatch early ok)
   have count : (getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat ≤
       driftHorizon x high := by unfold driftHorizon; omega
   have larger := Nat.mul_le_mul_right

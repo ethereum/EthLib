@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Genesis
 import EthLib.Consensus.Proofs.Transition.ActiveKept
+import EthLib.Consensus.Proofs.Transition.ChainRoots
 import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.Requests
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
@@ -72,6 +73,13 @@ structure CapOrder (preset : Preset) : Prop where
   activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE
   compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA
 
+/-- A run from a genesis built from deposits ends in a state that satisfies the invariant. -/
+theorem Run.invariant_of_genesis {g x : ForkedBeaconState preset}
+    (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g) :
+    Invariant x.state := by
+  obtain ⟨_, _, _, ok⟩ := genesis
+  exact run.invariant (initializeBeaconStateFromEth1_invariant ok).2
+
 /-- Every effective balance of a reachable state is a whole number of increments.
 
 This holds when the largest effective balances of the preset are whole numbers of increments. -/
@@ -80,18 +88,7 @@ theorem reachable_effective_alignment {g x : ForkedBeaconState preset}
     (aligned : MaxEffectiveBalancesAligned preset) (v : Validator)
     (found : v ∈ x.state.validators.data.toList) :
     v.effectiveBalance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
-  have invariant {y : ForkedBeaconState preset} (trace : Run config checks g y) :
-      Invariant y.state := by
-    induction trace with
-    | nil =>
-      obtain ⟨_, _, _, ok⟩ := genesis
-      exact (initializeBeaconStateFromEth1_invariant ok).2
-    | snoc pre step ih =>
-      cases step with
-      | slot ok => exact (advanceSlotAcross_invariant ih ok).1
-      | block engine signed due ok =>
-        exact (frame_processBlock (applySignedBlock_ok ok).2.1).invariant ih
-  have whole := (invariant run).aligned aligned v (by simpa using found)
+  have whole := (run.invariant_of_genesis genesis).aligned aligned v (by simpa using found)
   have numeric := congrArg UInt64.toNat whole
   simpa only [UInt64.toNat_mod, UInt64.reduceToNat] using numeric
 
@@ -1992,18 +1989,7 @@ private theorem balanceDrift_join_of_admission {g x y : ForkedBeaconState preset
 private theorem balanceDrift_reachable_matches {g x : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g) :
     BalancesMatch x.state := by
-  have invariant {y : ForkedBeaconState preset} (trace : Run config checks g y) :
-      Invariant y.state := by
-    induction trace with
-    | nil =>
-      obtain ⟨_, _, _, ok⟩ := genesis
-      exact (initializeBeaconStateFromEth1_invariant ok).2
-    | snoc pre step ih =>
-      cases step with
-      | slot ok => exact (advanceSlotAcross_invariant ih ok).1
-      | block engine signed due ok =>
-        exact (frame_processBlock (applySignedBlock_ok ok).2.1).invariant ih
-  exact (invariant run).balancesMatch
+  exact (run.invariant_of_genesis genesis).balancesMatch
 
 private theorem balanceDrift_admission_step {g x y : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
