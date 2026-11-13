@@ -8,6 +8,7 @@ public import EthLib.Networking.Exports.Enr
 public import EthLib.Networking.Exports.Noise
 public import EthLib.Networking.Exports.Gossip
 public import EthLib.Networking.Exports.Libp2p
+public import EthLib.Networking.Exports.TlsCertificate
 public import EthLib.Networking.Exports.Quic
 public import EthLib.Networking.Exports.ReqResp
 public import EthLib.Networking.Exports.Rlpx

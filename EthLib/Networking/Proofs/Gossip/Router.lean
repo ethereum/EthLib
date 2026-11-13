@@ -91,6 +91,34 @@ theorem backoffEnd_setBackoff (b : List ((String × PeerId) × Nat)) (t t' : Str
   · have : ((t', p') == (t, p)) = false := by simpa [Prod.ext_iff] using h
     simp [List.lookup, h, key b h, this]
 
+/-- Extending the backoffs of a list of peers on one topic never lowers any end. -/
+theorem backoffEnd_fold_mono (t' : String) (ends : Nat) (l : List PeerId) (t : String)
+    (q : PeerId) (b : List ((String × PeerId) × Nat)) :
+    backoffEnd b t q ≤ backoffEnd (l.foldl (fun b q => extendBackoff b t' q ends) b) t q := by
+  induction l generalizing b with
+  | nil => exact Nat.le_refl _
+  | cons x l ih =>
+    refine Nat.le_trans ?_ (ih _)
+    simp only [extendBackoff, backoffEnd_setBackoff]
+    split
+    · rename_i h
+      obtain ⟨rfl, rfl⟩ := h
+      exact Nat.le_max_left _ _
+    · exact Nat.le_refl _
+
+/-- Extending the backoffs of a list of peers on a topic makes each end at least the given end. -/
+theorem backoffEnd_fold_mem (t : String) (ends : Nat) (l : List PeerId) (q : PeerId)
+    (hq : q ∈ l) (b : List ((String × PeerId) × Nat)) :
+    ends ≤ backoffEnd (l.foldl (fun b q => extendBackoff b t q ends) b) t q := by
+  induction l generalizing b with
+  | nil => simp at hq
+  | cons x l ih =>
+    rcases List.mem_cons.mp hq with rfl | hq'
+    · refine Nat.le_trans ?_ (backoffEnd_fold_mono t ends l t q _)
+      simp only [extendBackoff, backoffEnd_setBackoff, true_and, ↓reduceIte]
+      exact Nat.le_max_right _ _
+    · exact ih hq' _
+
 /-- Inserting an ID into the seen cache keeps every ID that it held. -/
 private theorem contains_insert_mono (c : SeenCache) (now ttl : Nat) (id id' : MessageId)
     (h : c.contains now ttl id' = true) : (c.insert now id).contains now ttl id' = true := by
