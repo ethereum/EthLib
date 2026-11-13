@@ -21,7 +21,7 @@ Then BLOCKHASH puts the hash of the block in place of the number.
 
 BLOBHASH puts the versioned hash in place of the index.
 
-CHAINID pays the base price and pushes the chain id of the block, from Istanbul on.
+CHAINID pays the base price and pushes the chain id, from Istanbul on.
 
 SLOTNUM pays the base price and pushes the slot of the block, from Glamsterdam on.
 
