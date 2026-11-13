@@ -7,6 +7,8 @@ public import EthLib.Networking.Proofs.Quic.Packet
 # Proofs: QUIC frames
 
 The wire readers recover frame fields without consuming the following frame.
+
+An ACK frame is well formed exactly when no packet number it acknowledges is negative.
 -/
 
 @[expose] public section
@@ -175,6 +177,71 @@ theorem valid_of_decode {packet : Packet.PacketType} {input rest : List UInt8}
           exact valid_of_validate hv
         · simp only [require, allowed] at h
           contradiction
+
+/-- The ACK ranges after the first one, each as its largest and smallest packet number.
+
+The largest packet number of a range is the gap plus two below the smallest one before it.
+
+Its smallest packet number is the range length below its largest, RFC 9000 §19.3.1.
+-/
+def ackedRangesFrom : Int → List AckRange → List (Int × Int)
+  | _, [] => []
+  | smallest, (gap, length) :: rest =>
+    (smallest - gap.val - 2, smallest - gap.val - 2 - length.val) ::
+      ackedRangesFrom (smallest - gap.val - 2 - length.val) rest
+
+/-- The ranges an ACK frame acknowledges, each as its largest and smallest packet number.
+
+The first range runs from Largest Acknowledged down by First ACK Range, RFC 9000 §19.3.1.
+-/
+def ackedRanges (a : Ack) : List (Int × Int) :=
+  (a.largest.val, a.largest.val - a.firstRange.val) ::
+    ackedRangesFrom (a.largest.val - a.firstRange.val) a.ranges
+
+private theorem ackRangesValid_iff (previous : Nat) (ranges : List AckRange) :
+    ackRangesValid previous ranges ↔
+      ∀ range ∈ ackedRangesFrom previous ranges, 0 ≤ range.2 := by
+  induction ranges generalizing previous with
+  | nil => simp [ackRangesValid, ackedRangesFrom]
+  | cons head rest ih =>
+    rcases head with ⟨gap, count⟩
+    simp only [ackRangesValid, ackedRangesFrom, List.mem_cons, forall_eq_or_imp]
+    by_cases fits : gap.val + 2 + count.val ≤ previous
+    · have cast : (previous : Int) - gap.val - 2 - count.val =
+          ((previous - gap.val - 2 - count.val : Nat) : Int) := by omega
+      rw [cast, ← ih]
+      exact ⟨fun ⟨_, h⟩ => ⟨by omega, h⟩, fun ⟨_, h⟩ => ⟨fits, h⟩⟩
+    · constructor
+      · intro h
+        omega
+      · intro h
+        omega
+
+/-- An ACK frame is well formed exactly when no acknowledged packet number is negative.
+
+It must also hold fewer than `2^62` additional ranges, so that their count is a QUIC integer.
+-/
+theorem valid_ack_iff (a : Ack) :
+    (Frame.ack a).Valid ↔
+      a.ranges.length < 2 ^ 62 ∧ ∀ range ∈ ackedRanges a, 0 ≤ range.2 := by
+  simp only [Frame.Valid, ackedRanges, List.mem_cons, forall_eq_or_imp]
+  by_cases fits : a.firstRange.val ≤ a.largest.val
+  · have cast : (a.largest.val : Int) - a.firstRange.val =
+        ((a.largest.val - a.firstRange.val : Nat) : Int) := by omega
+    rw [cast, ← ackRangesValid_iff]
+    exact ⟨fun ⟨l, _, h⟩ => ⟨l, by omega, h⟩, fun ⟨l, _, h⟩ => ⟨l, fits, h⟩⟩
+  · constructor
+    · intro h
+      omega
+    · intro h
+      omega
+
+/-- A decoded ACK frame acknowledges no negative packet number, RFC 9000 §19.3.1. -/
+theorem ackedRanges_nonneg_of_decode {packet : Packet.PacketType} {input rest : List UInt8}
+    {a : Ack} (h : decode packet input = .ok (.ack a, rest)) :
+    ∀ range ∈ ackedRanges a, 0 ≤ range.2 :=
+  ((valid_ack_iff a).mp (valid_of_decode h)).2
+
 
 /-- Decoding a permitted encoded frame recovers that frame and the following bytes.
 
