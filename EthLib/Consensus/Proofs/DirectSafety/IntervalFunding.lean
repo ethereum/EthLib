@@ -603,7 +603,12 @@ private theorem attesterLimits_result {fork : Fork} {s t : BeaconState preset fo
   intro i member
   rw [slashingIndices, mem_sortedSet, List.mem_filter, decide_eq_true_iff] at member
   rw [Array.mapM_eq_mapM_toList] at pubkeys
-  obtain ⟨keys, mapped, _⟩ := map_ok_iff.mp pubkeys
+  change (do
+    let keys ← sl.attestation1.attestingIndices.data.toList.mapM
+      (fun index => do return (← liftAccessor (getValidator s index)).pubkey)
+    pure keys.toArray) = .ok _ at pubkeys
+  rw [bind_ok_iff] at pubkeys
+  obtain ⟨keys, mapped, _⟩ := pubkeys
   obtain ⟨key, computed⟩ := mapM_ok_of_mem mapped i (by simpa using member.1)
   simp only [bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨v, found, _⟩ := computed
@@ -2756,11 +2761,11 @@ private theorem funding_deposit_selection {fork : Fork} {s t : BeaconState prese
     have := nextEpoch.toNat_lt
     change ¬ (2 ^ 64 - 1 < nextEpoch.toNat)
     omega
-  rcases applyPendingDeposit_cases ok with rfl | ⟨_, ok⟩ | ⟨_, ok⟩
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, raised⟩ | ⟨_, added⟩
   · exact selected v found
-  · rw [increaseBalance_validators ok] at found
+  · rw [increaseBalance_validators raised] at found
     exact selected v found
-  · rcases addValidatorToRegistry_validator ok found with old | rfl
+  · rcases addValidatorToRegistry_validator added found with old | rfl
     · exact selected v old
     · exact fresh _ rfl
 
@@ -2917,10 +2922,7 @@ private theorem funding_withdrawn_change {fork : Fork} {s t : BeaconState preset
     · exact ⟨_, by assumption⟩
     · cases status
   obtain ⟨position, found⟩ := known
-  have registry : t.validators = s.validators := by
-    simp only [applyPendingDeposit, found, liftAccessor_ok, bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact increaseBalance_validators ok
+  have registry : t.validators = s.validators := (applyPendingDeposit_known found ok).2
   apply (funding_balance_selection queue registry (frame_applyPendingDeposit ok).slot
     ordered activation).trans
   apply Nat.add_le_add_left
