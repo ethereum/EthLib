@@ -243,13 +243,6 @@ theorem processUpgrades_justificationBits {forked after : ForkedBeaconState pres
     (fun same stepOk => (upgradeFrame_upgradeNext stepOk).justificationBits.trans same) rfl
     computed
 
-/-- The upgrades due at a slot keep the slot. -/
-theorem processUpgrades_slot {forked after : ForkedBeaconState preset}
-    (computed : processUpgrades config checks forked = .ok after) :
-    after.state.slot = forked.state.slot :=
-  processUpgrades_induction (property := fun state => state.state.slot = forked.state.slot)
-    (fun same stepOk => (upgradeFrame_upgradeNext stepOk).slot.trans same) rfl computed
-
 /-- The upgrades due at a slot keep the buffer of block roots. -/
 theorem processUpgrades_blockRoots {forked after : ForkedBeaconState preset}
     (computed : processUpgrades config checks forked = .ok after) :
