@@ -402,6 +402,8 @@ PyObject* py_consensus_api_state_query                    (PyObject* self, PyObj
 PyObject* py_consensus_api_state_query_ssz                (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_validator_status               (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_builder_status                 (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_registry_query                 (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_validator_balances_ssz         (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_registration (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_eligible_for_bid (PyObject* self, PyObject* args);
