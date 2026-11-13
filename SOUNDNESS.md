@@ -1008,6 +1008,9 @@ Let each column have at most `n` cells, and let the adversary make at most `q` q
 `columnCodeBindingAdvantage_le` bounds code-binding by the advantages of a BSDH reduction and an ARSDH reduction plus the same term.
 Before Gloas, the type of the commitments of a sidecar allows at most `MAX_BLOB_COMMITMENTS_PER_BLOCK` of them.
 So `n` equal to that limit covers every sidecar whose column the check accepts.
+`verifyDataColumnSidecar_eq_true_iff` (`Consensus/Proofs/Gossip/Sidecar.lean`) states exactly when a sidecar passes its shape check.
+A passing sidecar has one cell and one proof for each commitment it answers to, which from Gloas are those of the bid.
+Before Gloas it also answers to no more commitments than the blob limit at the epoch of its header.
 The term bounds the event that the challenge of some column is a root of a nonzero error polynomial (`prEvent_batchesRomRoot_le`).
 Otherwise every opening that a column holds verifies alone, and the games of single cells apply.
 The verifier accepts a column of cells and proofs of blobs with every challenge (`ColumnBatch.acceptsAt_computeCellsAndKzgProofs`).
@@ -1024,9 +1027,6 @@ That theorem is informal in the paper.
 Its §3.2 explains how it follows from the two lemmas.
 The steps are §3.2 of ePrint 2024/1362, for many blobs, and the framework of Hall-Andersen, Simkin and Wagner, ePrint 2023/1079.
 2025/1683 does not prove these steps again, and EthLib does not formalize them.
-
-`verifyDataColumnSidecar_eq_true_iff` (`Consensus/Proofs/DataAvailability/Column.lean`) states exactly when a sidecar passes its shape check.
-A passing sidecar has one cell and one proof for each commitment, and before Gloas no more commitments than the blob limit of its epoch.
 
 `findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.
 Let the check accept one commitment at one point with two different values.
