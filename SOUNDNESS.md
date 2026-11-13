@@ -1719,6 +1719,20 @@ That check makes the nonce of the transaction equal that of its sender, and belo
 The bound on the state before the first block is a hypothesis: the genesis allocation must meet it.
 From Glamsterdam, `stateTransition_rebuild_nonce` turns the 64-bit nonces that the block access list rebuilds into the nonces after the block, with no loss.
 
+### Logs paid for by gas
+
+The weight of a log, `48 + 33 * topics + data bytes`, bounds the length of its RLP encoding, for a log whose weight is below `2^64` (`encode_log_size_le`).
+`processMessage_logsWeight` and `processCreateMessage_logsWeight` (`Execution/Proofs/Evm/Call/LogsPaid.lean`) bound the logs of a message by its gas.
+Four times the weight of its logs, plus the gas it holds, never rises above the gas it starts with plus one allowance.
+The allowance is 716 from Glamsterdam, four times the weight of an EIP-7708 transfer log, and 0 before.
+It holds at every fork and for every lawful meter.
+`processTransaction_logsWeight` (`Execution/Proofs/Transactions/LogsPaid.lean`) bounds the logs of a transaction by its gas limit plus that allowance.
+`processMessageCall_logsWeight` gives the same bound for the message of a transaction.
+It assumes that a commit of the meter raises no gas held, which both meters of the forks meet.
+`encode_makeReceipt_processTransaction` then proves that the receipt of a transaction encodes, when its gas limit and the cumulative gas it records are below `2^64`.
+No theorem yet derives those two bounds from the validity of a block.
+Both transaction theorems hold only before Hegotá: from Hegotá a transaction fails as not yet specified, so it has no receipt.
+
 ### The supply of ether
 
 `Execution/Proofs/State/Supply.lean` defines the supply of a transaction state as the sum of the balances of all its accounts.
