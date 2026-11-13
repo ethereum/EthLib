@@ -160,7 +160,7 @@ private theorem advanceSlots_latestBlockHeader_of_ne :
 /-- A header that the filling leaves with a zero state root was filled with the zero root.
 
 So the filling changed nothing. -/
-private theorem unfilled_of_filled {header filled : BeaconBlockHeader} {stateRoot : Root}
+theorem unfilled_of_filled {header filled : BeaconBlockHeader} {stateRoot : Root}
     (equation : filled = if header.stateRoot = Vector.replicate 32 0 then
       { header with stateRoot := stateRoot } else header)
     (unfilled : filled.stateRoot = Vector.replicate 32 0) :
@@ -178,7 +178,7 @@ private theorem unfilled_of_filled {header filled : BeaconBlockHeader} {stateRoo
 The header before counts only when the slot leaves it unfilled.
 
 Then the state before hashes to zero. -/
-private theorem hashTreeRoot_latestBlockHeader_advanceSlots {count : Nat}
+theorem hashTreeRoot_latestBlockHeader_advanceSlots {count : Nat}
     {next last : BeaconState preset fork}
     (step : advanceSlot config checks state = .ok next)
     (rest : advanceSlots config checks count next = .ok last) {root : Root}
@@ -296,7 +296,7 @@ It moves the slot on by one, and writes the root of the new header at the slot b
 A root that it makes readable was readable before it, or is that root.
 
 The new header is the one before, with its state root filled by the root of the state before. -/
-private theorem advanceSlotAcross_cases {forked after : ForkedBeaconState preset}
+theorem advanceSlotAcross_cases {forked after : ForkedBeaconState preset}
     (computed : advanceSlotAcross config checks forked = .ok after) :
     after.state.slot.toNat = forked.state.slot.toNat + 1 ∧
       (∃ root, hashTreeRoot after.state.latestBlockHeader = .ok root ∧
