@@ -6,6 +6,9 @@ public import EthLib.Consensus.Proofs.BuilderApi.Bid
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
 public import EthLib.Consensus.Proofs.Proposers
 public import EthLib.Consensus.Proofs.Transition.PayloadInputs
+public import Std.Data.String.ToInt
+-- The received bid proofs unfold how Lean builds a JSON object.
+import all Lean.Data.Json.Basic
 
 /-!
 # Proofs: what a relay keeps from a submission, and the bid it serves
@@ -19,6 +22,8 @@ The served bid holds the header, the value, the key and, from Deneb, the commitm
 A blinded body that carries the header of that bid unblinds with the payload of the submission.
 
 The JSON that the writer gives for a delivered payload reads back as that payload.
+
+So does the JSON of a received bid, whose reader takes the two timestamps out first.
 
 A filter with no field keeps every entry.
 
@@ -90,6 +95,109 @@ theorem BidTraceV2.ofApiJson_toApiJson {entry : BidTraceV2} {document : Lean.Jso
     (wrote : BeaconApi.toApiJson entry = .ok document) :
     BeaconApi.ofApiJson BidTraceV2 document = .ok entry :=
   BeaconApi.ofApiJson_toApiJson wrote
+
+/-- The document of a bid is a well-formed object whose names are all among the declared ones. -/
+private theorem toApiJson_bid_obj (x : BidTraceV2) {document : Lean.Json}
+    (wrote : BeaconApi.toApiJson x = .ok document) :
+    ∃ m, document = .obj m ∧ m.WF ∧ ∀ name ∈ objectNames document,
+      name ∈ BidTrace.names ++ ["block_number", "num_tx"] := by
+  unfold BeaconApi.toApiJson at wrote
+  simp only [SszType.desc, SszType.toValue, jsonOf] at wrote
+  generalize jsonOfFields _ _ 0 _ = written at wrote
+  cases written with
+  | error err => simp [Bind.bind, Except.bind] at wrote
+  | ok parts =>
+    simp only [Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at wrote
+    subst wrote
+    refine ⟨Std.TreeMap.Raw.ofList ((BidTrace.names ++ ["block_number", "num_tx"]).zip parts)
+      (cmp := compare), by simp only [Lean.Json.mkObj], Std.TreeMap.Raw.WF.ofList,
+      fun name member => ?_⟩
+    obtain ⟨pair, mem, rfl⟩ := List.mem_map.mp (objectNames_mkObj member)
+    exact (List.of_mem_zip mem).1
+
+namespace BidTraceV2WithTimestamp
+
+/-- A signed integer of 64 bits reads back from its JSON. -/
+theorem readInt64_int64Json (x : Int64) : readInt64 (int64Json x) = .ok x := by
+  have low := Int64.le_toInt x
+  have high := Int64.toInt_lt x
+  simp only [readInt64, int64Json, toString, Int.toInt?_repr]
+  have inside : -2 ^ 63 ≤ x.toInt ∧ x.toInt < 2 ^ 63 := ⟨low, high⟩
+  simp only [true_and, Int64.ofInt_toInt, inside, ite_true]
+
+/-- A string that the reader accepts is the one that the writer gives for its value. -/
+theorem int64Json_of_readInt64 {document : Lean.Json} {x : Int64}
+    (read : readInt64 document = .ok x) : document = int64Json x := by
+  unfold readInt64 at read
+  split at read
+  · split at read
+    · rename_i text i _
+      split at read
+      · rename_i canonical
+        obtain ⟨spelled, low, high⟩ := canonical
+        cases read
+        simp only [int64Json, Int64.toInt_ofInt_of_le low high, spelled]
+      · cases read
+    · cases read
+  · cases read
+
+/-- The writer never fails on a received bid. -/
+theorem toJson_total (entry : BidTraceV2WithTimestamp) :
+    ∃ document, entry.toJson = .ok document := by
+  obtain ⟨document, wrote⟩ := BeaconApi.toApiJson_total entry.bid
+  obtain ⟨m, rfl, -, -⟩ := toApiJson_bid_obj entry.bid wrote
+  refine ⟨.obj ((m.insert "timestamp" (int64Json entry.timestamp)).insert "timestamp_ms"
+    (int64Json entry.timestampMs)), ?_⟩
+  simp only [toJson, wrote, Bind.bind, Except.bind]
+  rfl
+
+/-- The JSON reader gives back every received bid that the writer writes. -/
+theorem ofJson_toJson {entry : BidTraceV2WithTimestamp} {document : Lean.Json}
+    (wrote : entry.toJson = .ok document) : ofJson document = .ok entry := by
+  have bid := BeaconApi.toApiJson_total entry.bid
+  obtain ⟨written, hb⟩ := bid
+  obtain ⟨m, rfl, wf, names⟩ := toApiJson_bid_obj entry.bid hb
+  have absent : ∀ name, name ∉ BidTrace.names ++ ["block_number", "num_tx"] → name ∉ m :=
+    fun name out member => out (names name (mem_objectNames wf member))
+  have noTs : "timestamp" ∉ m := absent _ (by decide)
+  have noMs : "timestamp_ms" ∉ m := absent _ (by decide)
+  simp only [toJson, hb, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at wrote
+  subst wrote
+  have wf₁ : (m.insert "timestamp" (int64Json entry.timestamp)).WF := wf.insert
+  have wf₂ : ((m.insert "timestamp" (int64Json entry.timestamp)).insert "timestamp_ms"
+      (int64Json entry.timestampMs)).WF := wf₁.insert
+  have noMs₁ : "timestamp_ms" ∉ m.insert "timestamp" (int64Json entry.timestamp) := by
+    rw [Std.TreeMap.Raw.mem_insert wf]
+    simpa using noMs
+  have first := erase_insert_equiv wf₁ noMs₁ (value := int64Json entry.timestampMs)
+  have second :=
+    Std.TreeMap.Raw.Equiv.erase (wf₂.erase (a := "timestamp_ms")) wf₁ first "timestamp"
+  have third := erase_insert_equiv wf noTs (value := int64Json entry.timestamp)
+  have same := second.trans third
+  have gMs : (Lean.Json.obj ((m.insert "timestamp" (int64Json entry.timestamp)).insert
+      "timestamp_ms" (int64Json entry.timestampMs))).getObjVal? "timestamp_ms"
+        = .ok (int64Json entry.timestampMs) := by
+    simp [Lean.Json.getObjVal?, Std.TreeMap.Raw.get?_eq_getElem?,
+      Std.TreeMap.Raw.getElem?_insert_self wf₁]
+    rfl
+  have gTs : (Lean.Json.obj ((m.insert "timestamp" (int64Json entry.timestamp)).insert
+      "timestamp_ms" (int64Json entry.timestampMs))).getObjVal? "timestamp"
+        = .ok (int64Json entry.timestamp) := by
+    simp [Lean.Json.getObjVal?, Std.TreeMap.Raw.get?_eq_getElem?,
+      Std.TreeMap.Raw.getElem?_insert wf₁, Std.TreeMap.Raw.getElem?_insert_self wf]
+    rfl
+  have wfe := (wf₂.erase (a := "timestamp_ms")).erase (a := "timestamp")
+  have back : BeaconApi.ofApiJson BidTraceV2 (.obj ((((m.insert "timestamp"
+      (int64Json entry.timestamp)).insert "timestamp_ms" (int64Json entry.timestampMs)).erase
+      "timestamp_ms").erase "timestamp")) = .ok entry.bid := by
+    unfold BeaconApi.ofApiJson
+    rw [valueOf_obj_of_equiv wfe wf same]
+    exact BidTraceV2.ofApiJson_toApiJson hb
+  unfold ofJson
+  simp only [gTs, gMs, Except.toOption, back, readInt64_int64Json, Bind.bind, Except.bind,
+    pure, Except.pure]
+
+end BidTraceV2WithTimestamp
 
 /-- The string of an order names that order. -/
 theorem OrderBy.ofName?_name (order : OrderBy) : OrderBy.ofName? order.name = some order := by
