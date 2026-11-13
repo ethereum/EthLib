@@ -11,11 +11,11 @@ A successful typed read has the requested tag and a complete read consumes its i
 
 The reader is stated against X.690 itself, in terms of octets and numbers.
 
-- A read is exactly a tag octet, the length on the fewest octets, the content and the rest.
+- A read is exactly a low-number tag octet other than 0, the shortest length, the content, the rest.
 - So a tag and a content have a single encoding.
 - An INTEGER reads as `i` exactly when its content is `i` in two's complement on the fewest octets.
 - So an integer has a single content.
-- A nonnegative one is its big-endian octets, after a zero octet when the top bit is set.
+- A nonnegative one is its big-endian octets, at least one, after a zero if the top bit is set.
 -/
 
 @[expose] public section
@@ -476,7 +476,7 @@ theorem content_eq_of_integer_ok {v w : Value} {i : Int} (hv : integer v = .ok i
 
 /-- A nonnegative INTEGER reads as `n` exactly when its tag is 2 and its content is `n` big-endian.
 
-The content has the fewest octets that leave the top bit of the first clear (X.690 §8.3.2).
+The content has the fewest octets that leave the top bit of the first clear (X.690 §§8.3.2, 8.3.3).
 
 The content has `k + 1` octets, and `n` is below `128 * 256 ^ k`.
 
