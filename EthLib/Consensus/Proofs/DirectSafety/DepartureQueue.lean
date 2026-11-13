@@ -3,9 +3,9 @@ module
 public import EthLib.Consensus.Proofs.DirectSafety.ChurnBounds
 public import EthLib.Consensus.Proofs.DirectSafety.Execution
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
+import EthLib.Consensus.Proofs.DirectSafety.Hashes
 import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.FfgStake
-import EthLib.Consensus.Proofs.Transition.RegistryIdentity
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 import Mathlib.Algebra.BigOperators.Fin
 import Mathlib.Algebra.Order.BigOperators.Group.Finset
@@ -228,6 +228,38 @@ private theorem departureCharges_le_calls {charges : List DepartureCharge}
     sums calls (fun c => c.call.epoch.toNat) (fun c => c.call.amount.toNat)] at bound
   exact bound
 
+/-- A first call that opens a fresh queue epoch spends at most the cap per epoch from `start`. -/
+private theorem DepartureQueueTrace.window_le_of_reset {call : DepartureQueueCall}
+    {rest : List DepartureQueueCall} {epoch : Epoch} {left : Gwei}
+    (tail : DepartureQueueTrace call.epoch call.left rest epoch left) (start high cap : Nat)
+    (rates : ∀ c ∈ call :: rest, c.rate.toNat ≤ cap)
+    (reset : call.earliest < max call.earliest call.first)
+    (opened : start ≤ max call.earliest.toNat call.first.toNat) :
+    (((call :: rest).filter fun c => c.epoch.toNat ≤ high).map fun c => c.amount.toNat).sum ≤
+      (high + 1 - start) * cap := by
+  have later := tail.window_le high cap (fun c member => rates c (List.mem_cons_of_mem _ member))
+  by_cases inside : call.epoch.toNat ≤ high
+  · obtain ⟨placed, spent, _⟩ := churnQueue_spend call.computed
+    have placed := UInt64.le_iff_toNat_le.mp placed
+    rw [ite_eq_left reset, Uint64.toNat_max] at spent
+    rw [Uint64.toNat_max] at placed
+    have one : call.left.toNat + call.amount.toNat ≤ (call.epoch.toNat + 1 - start) * cap := by
+      calc
+        _ = (call.epoch.toNat - max call.earliest.toNat call.first.toNat + 1) *
+            call.rate.toNat := by rw [spent, Nat.add_mul, Nat.one_mul]; omega
+        _ ≤ _ := Nat.mul_le_mul (by omega) (rates call (by simp))
+    have distance : (call.epoch.toNat + 1 - start) + (high - call.epoch.toNat) =
+        high + 1 - start := by omega
+    have combined := Nat.add_le_add_right one ((high - call.epoch.toNat) * cap)
+    rw [← Nat.add_mul, distance] at combined
+    simp only [departureQueuePotential, inside, ↓reduceIte] at later
+    simp only [List.filter_cons, decide_eq_true inside, ↓reduceIte,
+      List.map_cons, List.sum_cons]
+    omega
+  · simp only [departureQueuePotential, inside, ↓reduceIte] at later
+    simp only [List.filter_cons, decide_eq_false inside, Bool.false_eq_true, ↓reduceIte]
+    omega
+
 /-- A first-epoch bound discards capacity in idle epochs before the chosen window. -/
 private theorem DepartureQueueTrace.window_le_from {earliest epoch : Epoch} {available left : Gwei}
     {calls : List DepartureQueueCall}
@@ -239,10 +271,10 @@ private theorem DepartureQueueTrace.window_le_from {earliest epoch : Epoch} {ava
   cases trace with
   | nil => simp
   | cons call tail =>
-    have rest := tail.window_le high cap
-      (fun c member => rates c (List.mem_cons_of_mem _ member))
-    by_cases inside : call.epoch.toNat ≤ high
-    · by_cases before : start ≤ call.earliest.toNat
+    by_cases before : start ≤ call.earliest.toNat
+    · have rest := tail.window_le high cap
+        (fun c member => rates c (List.mem_cons_of_mem _ member))
+      by_cases inside : call.epoch.toNat ≤ high
       · have initialInside := call.epoch_mono.trans inside
         have bound := (DepartureQueueTrace.cons call tail).window_le high cap rates
         have initial : departureQueuePotential high cap call.earliest call.available ≤
@@ -251,33 +283,15 @@ private theorem DepartureQueueTrace.window_le_from {earliest epoch : Epoch} {ava
           simp only [departureQueuePotential, initialInside, ↓reduceIte]
           exact Nat.add_le_add_left (Nat.mul_le_mul_right cap (by omega)) _
         exact (Nat.le_add_right _ _).trans (bound.trans initial)
-      · have first := firsts call (by simp)
-        obtain ⟨placed, spent, _⟩ := churnQueue_spend call.computed
-        have placed := UInt64.le_iff_toNat_le.mp placed
-        rw [Uint64.toNat_max] at placed
-        have reset : call.earliest < max call.earliest call.first := by
-          rw [UInt64.lt_iff_toNat_lt, Uint64.toNat_max]
-          omega
-        rw [ite_eq_left reset, Uint64.toNat_max] at spent
-        have one : call.left.toNat + call.amount.toNat ≤
-            (call.epoch.toNat + 1 - start) * cap := by
-          calc
-            call.left.toNat + call.amount.toNat =
-                (call.epoch.toNat - max call.earliest.toNat call.first.toNat + 1) *
-                  call.rate.toNat := by rw [spent, Nat.add_mul, Nat.one_mul]; omega
-            _ ≤ (call.epoch.toNat + 1 - start) * cap :=
-              Nat.mul_le_mul (by omega) (rates call (by simp))
-        have distance : (call.epoch.toNat + 1 - start) + (high - call.epoch.toNat) =
-            high + 1 - start := by omega
-        have combined := Nat.add_le_add_right one ((high - call.epoch.toNat) * cap)
-        rw [← Nat.add_mul, distance] at combined
-        simp only [departureQueuePotential, inside, ↓reduceIte] at rest
-        simp only [List.filter_cons, decide_eq_true inside, ↓reduceIte,
-          List.map_cons, List.sum_cons]
+      · simp only [departureQueuePotential, inside, ↓reduceIte] at rest
+        simp only [List.filter_cons, decide_eq_false inside, Bool.false_eq_true, ↓reduceIte]
         omega
-    · simp only [departureQueuePotential, inside, ↓reduceIte] at rest
-      simp only [List.filter_cons, decide_eq_false inside, Bool.false_eq_true, ↓reduceIte]
-      omega
+    · have first := firsts call (by simp)
+      have reset : call.earliest < max call.earliest call.first := by
+        rw [UInt64.lt_iff_toNat_lt, Uint64.toNat_max]
+        omega
+      exact (tail.window_le_of_reset start high cap rates reset (by omega)).trans
+        (Nat.le_add_left _ _)
 
 /-- Tagged calls cover all newly assigned exits of existing registry entries. -/
 private def DepartureCoverage {f h : Fork} (s : BeaconState preset f) (t : BeaconState preset h)
@@ -1052,12 +1066,14 @@ private theorem withdrawalValidatorIndex_departureQueues {fork : Fork}
   · cases ok
   · cases ok; rfl
 
-/-- Paying withdrawals removes balances and pending entries without resetting churn. -/
+/-- Paying withdrawals removes balances and pending entries without resetting churn.
+
+It also keeps the validators. -/
 private theorem withdrawals_departureQueues {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (ok : processWithdrawals s capella payload = .ok t) :
-    departureQueues electra t = departureQueues electra s := by
+    departureQueues electra t = departureQueues electra s ∧ t.validators = s.validators := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
   simp only [processWithdrawals, notGloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,
     liftAccessor_ok] at ok
@@ -1065,9 +1081,30 @@ private theorem withdrawals_departureQueues {fork : Fork} {s t : BeaconState pre
   simp only [applyExpectedWithdrawals, notGloas, electra, ↓reduceDIte, bind_ok_iff,
     pure, Except.pure, Except.ok.injEq, exists_eq_left'] at applied
   obtain ⟨withdrawn, paid, indexed, moved, swept⟩ := applied
-  have last := withdrawalValidatorIndex_departureQueues electra swept
-  exact last.trans ((withdrawalIndex_departureQueues electra moved).trans
-    (applyWithdrawals_departureQueues electra early paid))
+  refine ⟨(withdrawalValidatorIndex_departureQueues electra swept).trans
+    ((withdrawalIndex_departureQueues electra moved).trans
+      (applyWithdrawals_departureQueues electra early paid)), ?_⟩
+  have paidData : withdrawn.validators = s.validators := by
+    unfold applyWithdrawals at paid
+    rw [← Array.foldlM_toList] at paid
+    refine foldlM_ok_invariant (fun t => t.validators = s.validators) ?_ rfl paid
+    intro a withdrawal b kept stepped
+    simp only [applyWithdrawal, notGloas, false_and, ↓reduceDIte] at stepped
+    exact (decreaseBalance_validators stepped).trans kept
+  have movedData : indexed.validators = withdrawn.validators := by
+    unfold updateNextWithdrawalIndex at moved
+    split at moved
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at moved
+      obtain ⟨_, _, rfl⟩ := moved
+      rfl
+    · cases moved; rfl
+  have sweptData : t.validators = indexed.validators := by
+    simp only [updateNextWithdrawalValidatorIndex, bind_ok_iff] at swept
+    obtain ⟨_, _, swept⟩ := swept
+    split at swept
+    · cases swept
+    · cases swept; rfl
+  exact sweptData.trans (movedData.trans paidData)
 
 /-- A slashing changes the departure queues only in its initial exit scheduling call. -/
 private theorem slashValidator_departureQueues {fork : Fork} {s t : BeaconState preset fork}
@@ -1861,19 +1898,21 @@ private theorem slot_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
   · cases advance
     exact ⟨[], by simp [DepartureCallsFrom], .nil _ _, .of_data rfl, by simp⟩
 
-/-- After Electra and before Gloas, upgrades carry both departure queues unchanged. -/
+/-- After Electra and before Gloas, upgrades carry both departure queues and the registry.
+
+The only such upgrade is the one to Fulu. -/
 private theorem upgrades_departureQueues {s t : ForkedBeaconState preset}
     (electra : .pectra ≤ s.fork) (early : t.fork < .glamsterdam)
     (ok : processUpgrades config checks s = .ok t) (targetElectra : .pectra ≤ t.fork) :
-    departureQueues targetElectra t.state =
-      departureQueues electra s.state := by
+    departureQueues targetElectra t.state = departureQueues electra s.state ∧
+      t.state.validators.data = s.state.validators.data := by
   fun_induction processUpgrades config checks s generalizing t with
   | case1 s due ih =>
     obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
     have nextElectra := Nat.le_trans electra (Nat.le_of_lt next.property)
     have nextEarly := Nat.lt_of_le_of_lt (processUpgrades_fork_le rest) early
-    have later := ih next nextElectra early rest targetElectra
-    rw [later]
+    obtain ⟨queues, registry⟩ := ih next nextElectra early rest targetElectra
+    rw [queues, registry]
     obtain ⟨fork, state⟩ := s
     have sourceEarly := Nat.lt_trans next.property nextEarly
     have forkCases : fork = .pectra ∨ fork = .fusaka := by
@@ -1884,13 +1923,14 @@ private theorem upgrades_departureQueues {s t : ForkedBeaconState preset}
     rcases forkCases with rfl | rfl
     · simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at nextOk
       obtain ⟨_, upgraded, rfl⟩ := nextOk
+      refine ⟨?_, (upgradeToFulu_spec upgraded).1⟩
       simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at upgraded
       obtain ⟨_, _, rfl⟩ := upgraded
       rfl
     · simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at nextOk
       obtain ⟨_, _, rfl⟩ := nextOk
       exact False.elim (Nat.lt_irrefl _ nextEarly)
-  | case2 s notDue => cases ok; rfl
+  | case2 s notDue => cases ok; exact ⟨rfl, rfl⟩
 
 /-- Withdrawal requests cover full departures while retaining unmatched partial calls. -/
 private theorem withdrawalRequest_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
@@ -2547,39 +2587,6 @@ private theorem blockConsolidationSites_result {fork : Fork}
       replayed, pure, Except.pure, bind, Except.bind]
   · exact ⟨[], by simp only [blockConsolidationSites, electra, ↓reduceDIte]; rfl⟩
 
-private theorem withdrawals_registry {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (ok : processWithdrawals s capella payload = .ok t) : t.validators = s.validators := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
-  simp only [processWithdrawals, notGloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,
-    liftAccessor_ok] at ok
-  obtain ⟨expected, _, _, _, applied⟩ := ok
-  simp only [applyExpectedWithdrawals, notGloas, electra, ↓reduceDIte, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq, exists_eq_left'] at applied
-  obtain ⟨withdrawn, paid, indexed, moved, swept⟩ := applied
-  have paidData : withdrawn.validators = s.validators := by
-    unfold applyWithdrawals at paid
-    rw [← Array.foldlM_toList] at paid
-    refine foldlM_ok_invariant (fun t => t.validators = s.validators) ?_ rfl paid
-    intro a withdrawal b kept stepped
-    simp only [applyWithdrawal, notGloas, false_and, ↓reduceDIte] at stepped
-    exact (decreaseBalance_validators stepped).trans kept
-  have movedData : indexed.validators = withdrawn.validators := by
-    unfold updateNextWithdrawalIndex at moved
-    split at moved
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at moved
-      obtain ⟨_, _, rfl⟩ := moved
-      rfl
-    · cases moved; rfl
-  have sweptData : t.validators = indexed.validators := by
-    simp only [updateNextWithdrawalValidatorIndex, bind_ok_iff] at swept
-    obtain ⟨_, _, swept⟩ := swept
-    split at swept
-    · cases swept
-    · cases swept; rfl
-  exact sweptData.trans (movedData.trans paidData)
-
 private theorem sync_registry {fork : Fork} {s t : BeaconState preset fork}
     {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
     (ok : processSyncAggregate config checks s altair aggregate = .ok t) :
@@ -2844,7 +2851,7 @@ private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fo
     obtain ⟨middle, withdrawn, payload⟩ := executedOk
     obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok payload
     change departureQueues electra middle = departureQueues electra s
-    rw [withdrawals_departureQueues electra early withdrawn]
+    rw [(withdrawals_departureQueues electra early withdrawn).1]
     obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
     rfl
   have tailFrame := sync_departureQueues electra syncedOk
@@ -2863,7 +2870,7 @@ private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fo
     obtain ⟨middle, withdrawn, payload⟩ := executedOk
     obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok payload
     change middle.validators = s.validators
-    rw [withdrawals_registry electra early withdrawn]
+    rw [(withdrawals_departureQueues electra early withdrawn).2]
     obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
     rfl
   have tailData := sync_registry syncedOk
@@ -2942,32 +2949,6 @@ private theorem slot_consolidationFrame {fork : Fork} {s t : BeaconState preset 
   · exact (epoch_consolidationFrame electra early advance).trans cachedFrame
   · cases advance; exact cachedFrame
 
-private theorem upgrades_registry {s t : ForkedBeaconState preset}
-    (electra : .pectra ≤ s.fork) (early : t.fork < .glamsterdam)
-    (ok : processUpgrades config checks s = .ok t) :
-    t.state.validators.data = s.state.validators.data := by
-  fun_induction processUpgrades config checks s generalizing t with
-  | case1 s due ih =>
-    obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
-    have nextElectra := Nat.le_trans electra (Nat.le_of_lt next.property)
-    have nextEarly := Nat.lt_of_le_of_lt (processUpgrades_fork_le rest) early
-    rw [ih next nextElectra early rest]
-    obtain ⟨fork, state⟩ := s
-    have sourceEarly := Nat.lt_trans next.property nextEarly
-    have forkCases : fork = .pectra ∨ fork = .fusaka := by
-      change Fork.pectra ≤ fork at electra
-      change fork < Fork.glamsterdam at sourceEarly
-      cases fork <;> simp_all (config := { decide := true })
-      all_goals cases nextOk
-    rcases forkCases with rfl | rfl
-    · simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at nextOk
-      obtain ⟨_, upgraded, rfl⟩ := nextOk
-      exact (upgradeToFulu_spec upgraded).1
-    · simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at nextOk
-      obtain ⟨_, _, rfl⟩ := nextOk
-      exact False.elim (Nat.lt_irrefl _ nextEarly)
-  | case2 s notDue => cases ok; rfl
-
 private theorem step_indexedTrace_sites {x y : ForkedBeaconState preset}
     (step : Step config checks x y) (electra : .pectra ≤ x.fork)
     (early : y.fork < .glamsterdam) (targetElectra : .pectra ≤ y.fork) (cap : Nat)
@@ -2992,9 +2973,8 @@ private theorem step_indexedTrace_sites {x y : ForkedBeaconState preset}
   cases step with
   | slot ok =>
     obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
-    have frame := upgrades_departureQueues (s := ⟨x.fork, advanced⟩)
+    obtain ⟨frame, data⟩ := upgrades_departureQueues (s := ⟨x.fork, advanced⟩)
       electra early upgraded targetElectra
-    have data := upgrades_registry (s := ⟨x.fork, advanced⟩) electra early upgraded
     obtain ⟨calls, firsts, trace, covered, exitRates⟩ :=
       slot_indexedTrace electra sourceEarly advancedOk
     have consolidationFrame := slot_consolidationFrame electra sourceEarly advancedOk
@@ -4018,8 +3998,10 @@ private theorem step_same_epoch_effective {x y : ForkedBeaconState preset}
     have slot := processUpgrades_slot upgraded
     have intermediateEpoch : getCurrentEpoch advanced = getCurrentEpoch x.state := by
       simpa only [getCurrentEpoch, slot] using epoch
-    have data := (upgrades_registry (s := ⟨x.fork, advanced⟩) electra early upgraded).trans
-      (slot_same_epoch_registry advancedOk intermediateEpoch)
+    have targetElectra : .pectra ≤ y.fork :=
+      Nat.le_trans electra (processUpgrades_fork_le (forked := ⟨x.fork, advanced⟩) upgraded)
+    have data := (upgrades_departureQueues (s := ⟨x.fork, advanced⟩) electra early upgraded
+      targetElectra).2.trans (slot_same_epoch_registry advancedOk intermediateEpoch)
     intro i _
     simp only [effectiveAt, data]
 
@@ -4087,18 +4069,17 @@ private theorem total_active_congr {f h : Fork} {s : BeaconState preset f}
   simp only [getTotalBalance, sourceNone, targetNone, sumMarked_markIndices_eq_stake, sum]
 
 private structure SitePrefix {fork : Fork} (s t : BeaconState preset fork) : Prop where
-  identity : RegistryIdentity s t
+  grows : s.validators.data.size ≤ t.validators.data.size
   active : ActiveStep s t
   effective : EffectiveKept s t
 
 private theorem SitePrefix.refl {fork : Fork} (s : BeaconState preset fork) : SitePrefix s s :=
-  ⟨.refl _, .refl _, effectiveKept_refl _⟩
+  ⟨Nat.le_refl _, .refl _, effectiveKept_refl _⟩
 
 private theorem SitePrefix.trans {fork : Fork} {s t u : BeaconState preset fork}
     (one : SitePrefix s t) (two : SitePrefix t u) : SitePrefix s u :=
-  ⟨one.identity.trans two.identity, one.active.trans two.active,
-    effectiveKept_trans one.effective two.effective
-      (by simpa [validatorKeys] using one.identity.kept.length_le)⟩
+  ⟨Nat.le_trans one.grows two.grows, one.active.trans two.active,
+    effectiveKept_trans one.effective two.effective one.grows⟩
 
 private theorem SitePrefix.fold {fork : Fork} {α : Type}
     {action : BeaconState preset fork → α → Except TransitionError (BeaconState preset fork)}
@@ -4135,7 +4116,7 @@ private theorem consolidationRequestsSites_prefix {fork : Fork}
     · exact ⟨s, consolidationRequestSites_input recorded site first, .refl s⟩
     · obtain ⟨u, same, kept⟩ := ih replayed tail
       exact ⟨u, same, (SitePrefix.mk
-        (frame_processConsolidationRequest stepped).toFrame.registryIdentity
+        (frame_processConsolidationRequest stepped).registryGrows
         (activeStep_processConsolidationRequest stepped)
         (effectiveKept_consolidationRequest stepped)).trans kept⟩
 
@@ -4155,12 +4136,12 @@ private theorem blockConsolidationSites_prefix {fork : Fork}
       votedAtt, votedAttOk, deposited, depositedOk, exited, exitedOk, changed, changedOk,
       requested, requestedOk, withdrawn, withdrawnOk, ⟨last, recorded⟩, replayed, rfl⟩ := ok
     have head : SitePrefix s headed := by
-      refine ⟨(frame_processBlockHeader headedOk).toFrame.registryIdentity,
+      refine ⟨(frame_processBlockHeader headedOk).registryGrows,
         activeStep_processBlockHeader headedOk, ?_⟩
       obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
       exact effectiveKept_refl _
     have execution : SitePrefix headed executed := by
-      refine ⟨(frame_processBlockExecution executedOk).toFrame.registryIdentity,
+      refine ⟨(frame_processBlockExecution executedOk).registryGrows,
         activeStep_processBlockExecution executedOk, ?_⟩
       have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt electra.2
       have capella : .shapella ≤ fork := Nat.le_trans (by decide) electra.1
@@ -4170,44 +4151,44 @@ private theorem blockConsolidationSites_prefix {fork : Fork}
       obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok payload
       simpa only [EffectiveKept, effectiveAt] using effectiveKept_withdrawals withdrawn
     have randao : SitePrefix executed revealed := by
-      refine ⟨(frame_processRandao revealedOk).toFrame.registryIdentity,
+      refine ⟨(frame_processRandao revealedOk).registryGrows,
         activeStep_processRandao revealedOk, ?_⟩
       obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
       exact effectiveKept_refl _
     have vote : SitePrefix revealed voted := by
-      refine ⟨(frame_processEth1Data votedOk).toFrame.registryIdentity,
+      refine ⟨(frame_processEth1Data votedOk).registryGrows,
         activeStep_processEth1Data votedOk, ?_⟩
       obtain ⟨_, _, rest⟩ := processEth1Data_eq votedOk
       exact effectiveKept_data (congrArg (·.validators.data) rest)
     have proposers : SitePrefix voted proposed := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processProposerSlashing h).toFrame.registryIdentity,
+      (fun _ _ _ h => ⟨(frame_processProposerSlashing h).registryGrows,
         activeStep_processProposerSlashing h, effectiveKept_proposerSlashing h⟩) proposedOk
     have attesters : SitePrefix proposed attested := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processAttesterSlashing h).toFrame.registryIdentity,
+      (fun _ _ _ h => ⟨(frame_processAttesterSlashing h).registryGrows,
         activeStep_processAttesterSlashing h, effectiveKept_attesterSlashing h⟩) attestedOk
     have attestations : SitePrefix attested votedAtt := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processAttestation h).registryIdentity,
+      (fun _ _ _ h => ⟨(frame_processAttestation h).registryGrows,
         activeStep_processAttestation h,
         effectiveKept_data (by rw [(processAttestation_registry h).1])⟩) votedAttOk
     have deposits : SitePrefix votedAtt deposited := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processDeposit h).toFrame.registryIdentity,
+      (fun _ _ _ h => ⟨(frame_processDeposit h).registryGrows,
         activeStep_processDeposit h, effectiveKept_processDeposit h⟩) depositedOk
     have exits : SitePrefix deposited exited := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processVoluntaryExit h).toFrame.registryIdentity,
+      (fun _ _ _ h => ⟨(frame_processVoluntaryExit h).registryGrows,
         activeStep_processVoluntaryExit h, effectiveKept_voluntaryExit h⟩) exitedOk
     have changes : SitePrefix exited changed := by
       unfold processBlsToExecutionChanges at changedOk
       split at changedOk
       · rw [← Array.foldlM_toList] at changedOk
         exact SitePrefix.fold (fun _ _ _ h =>
-          ⟨(frame_processBlsToExecutionChange h).toFrame.registryIdentity,
+          ⟨(frame_processBlsToExecutionChange h).registryGrows,
           activeStep_processBlsToExecutionChange h, effectiveKept_blsChange h⟩) changedOk
       · cases changedOk; exact .refl _
     have requests : SitePrefix changed requested := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processDepositRequest h).toFrame.registryIdentity,
+      (fun _ _ _ h => ⟨(frame_processDepositRequest h).registryGrows,
         activeStep_processDepositRequest h, effectiveKept_depositRequest h⟩) requestedOk
     have withdrawals : SitePrefix requested withdrawn := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processWithdrawalRequest h).toFrame.registryIdentity,
+      (fun _ _ _ h => ⟨(frame_processWithdrawalRequest h).registryGrows,
         activeStep_processWithdrawalRequest h, effectiveKept_withdrawalRequest h⟩) withdrawnOk
     obtain ⟨u, same, kept⟩ := consolidationRequestsSites_prefix replayed site member
     exact ⟨u, same, head.trans (execution.trans (randao.trans (vote.trans (proposers.trans
@@ -4280,33 +4261,11 @@ private theorem DepartureQueueTrace.window_le_initialized
             _ ≤ _ := Nat.mul_le_mul_right cap (by omega)
         · exact Nat.zero_le _
       exact (Nat.le_add_right _ _).trans (budget.trans initial)
-    · have rest := tail.window_le high cap
-        (fun c member => rates c (List.mem_cons_of_mem _ member))
-      by_cases inside : call.epoch.toNat ≤ high
-      · obtain ⟨placed, spent, _⟩ := churnQueue_spend call.computed
-        have placed := UInt64.le_iff_toNat_le.mp placed
-        have reset' : call.earliest < max call.earliest call.first := by
+    · exact tail.window_le_of_reset start high cap rates
+        (by
           rw [UInt64.lt_iff_toNat_lt, Uint64.toNat_max]
-          exact Nat.lt_of_lt_of_le (UInt64.lt_iff_toNat_lt.mp reset) (Nat.le_max_right _ _)
-        rw [ite_eq_left reset', Uint64.toNat_max] at spent
-        rw [Uint64.toNat_max] at placed
-        have one : call.left.toNat + call.amount.toNat ≤
-            (call.epoch.toNat + 1 - start) * cap := by
-          calc
-            _ = (call.epoch.toNat - max call.earliest.toNat call.first.toNat + 1) *
-                call.rate.toNat := by rw [spent, Nat.add_mul, Nat.one_mul]; omega
-            _ ≤ _ := Nat.mul_le_mul (by omega) (rates call (by simp))
-        have distance : (call.epoch.toNat + 1 - start) + (high - call.epoch.toNat) =
-            high + 1 - start := by omega
-        have combined := Nat.add_le_add_right one ((high - call.epoch.toNat) * cap)
-        rw [← Nat.add_mul, distance] at combined
-        simp only [departureQueuePotential, inside, ↓reduceIte] at rest
-        simp only [List.filter_cons, decide_eq_true inside, ↓reduceIte,
-          List.map_cons, List.sum_cons]
-        omega
-      · simp only [departureQueuePotential, inside, ↓reduceIte] at rest
-        simp only [List.filter_cons, decide_eq_false inside, Bool.false_eq_true, ↓reduceIte]
-        omega
+          exact Nat.lt_of_lt_of_le (UInt64.lt_iff_toNat_lt.mp reset) (Nat.le_max_right _ _))
+        (by omega)
 
 private structure InitializedDepartureQueues (s : ForkedBeaconState preset)
     (electra : .pectra ≤ s.fork) : Prop where
@@ -4338,8 +4297,7 @@ private theorem initialized_upgrades {s t : ForkedBeaconState preset}
     (ok : processUpgrades config checks s = .ok t) (targetElectra : .pectra ≤ t.fork)
     (initial : InitializedDepartureQueues (config := config) s electra) :
     InitializedDepartureQueues (config := config) t targetElectra := by
-  have fields := upgrades_departureQueues electra early ok targetElectra
-  have data := upgrades_registry electra early ok
+  obtain ⟨fields, data⟩ := upgrades_departureQueues electra early ok targetElectra
   have epoch : getCurrentEpoch t.state = getCurrentEpoch s.state := by
     simp only [getCurrentEpoch, processUpgrades_slot ok]
   have sourceEarly := Nat.lt_of_le_of_lt (processUpgrades_fork_le ok) early
@@ -4551,20 +4509,6 @@ theorem departure_charges_le_window {g x y : ForkedBeaconState preset}
       have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by
         have slots := parameters.slots
         omega
-      have slotMono : ∀ {a b : ForkedBeaconState preset} (run : Run config checks a b),
-          a.state.slot.toNat ≤ b.state.slot.toNat := by
-        intro a b run
-        induction run with
-        | nil => exact Nat.le_refl _
-        | @snoc middle last head step ih =>
-          apply ih.trans
-          cases step with
-          | slot ok =>
-            obtain ⟨advanced, slotOk, upgraded⟩ := bind_ok_iff.mp ok
-            rw [processUpgrades_slot upgraded, advanceSlot_slot slotOk]
-            exact Nat.le_succ _
-          | block engine signed due ok =>
-            rw [(frame_processBlock (applySignedBlock_ok ok).2.1).slot]
       have horizon : y.state.slot.toNat <
           (high + 2) * preset.SLOTS_PER_EPOCH.toNat := by
         apply (Nat.div_lt_iff_lt_mul positive).mp
@@ -4572,7 +4516,7 @@ theorem departure_charges_le_window {g x y : ForkedBeaconState preset}
       have startWindow : (getCurrentEpoch x.state).toNat < high + 2 := by
         rw [getCurrentEpoch_toNat]
         exact (Nat.div_lt_iff_lt_mul positive).mpr
-          ((slotMono ((pre.snoc crossing).append post)).trans_lt horizon)
+          (((pre.snoc crossing).append post).slot_le.trans_lt horizon)
       have ordered := UInt64.le_iff_toNat_le.mp
         (currentEpoch_le_of_chainSteps (pre.snoc crossing).chainSteps)
       have length : high + 2 = (getCurrentEpoch x.state).toNat +
@@ -4597,4 +4541,3 @@ theorem departure_charges_le_window {g x y : ForkedBeaconState preset}
       exact Nat.add_le_add legacy balance
 
 end EthLib.Consensus.DirectSafety
-
