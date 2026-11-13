@@ -57,6 +57,8 @@ The parameters are an array of 32-byte block hashes, or `start` and `count` as 6
 
 Any other parameters are invalid, with code `-32602`.
 
+The consensus layer also writes the parameters of both requests as JSON.
+
 The source orders no two checks.
 
 EthLib decodes the parameters first, then checks `start` and `count`, then the request size.
@@ -85,6 +87,8 @@ open Lean (Json)
 open EthLib.Base
 open EthLib.Execution.Blocks (Withdrawal)
 open EthLib.Engine.Json
+open EthLib.Serialization.JsonRpc
+open EthLib.Execution.Rpc (withdrawal)
 
 /-- The fewest bodies that every node must take in one request. -/
 def MIN_BODIES_REQUEST_LIMIT : Nat := 32
@@ -190,11 +194,19 @@ def bodiesByHashParams (params : Json) : Decode (List Hash32) := do
   | [hashes] => array "hashes" (fixed "block hash" 32) hashes
   | _ => invalid s!"params: got {params.length}, expected 1"
 
+/-- The parameters of a request by hash as JSON: one array of block hashes. -/
+def bodiesByHashParamsJson (hashes : List Hash32) : Json :=
+  .arr #[listJson (dataJson ·.toList) hashes]
+
 /-- The parameters of a request by range: `start` and `count`, two 64-bit numbers. -/
 def bodiesByRangeParams (params : Json) : Decode (UInt64 × UInt64) := do
   let params ← paramsArray params
   match params with
   | [start, count] => return (← uint64 "start" start, ← uint64 "count" count)
   | _ => invalid s!"params: got {params.length}, expected 2"
+
+/-- The parameters of a request by range as JSON: `start` and `count`, as quantities. -/
+def bodiesByRangeParamsJson (start count : UInt64) : Json :=
+  .arr #[quantityJson start.toNat, quantityJson count.toNat]
 
 end EthLib.Engine

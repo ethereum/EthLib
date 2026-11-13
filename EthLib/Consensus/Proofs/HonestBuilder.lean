@@ -23,8 +23,6 @@ From Gloas, take a block that passes its steps, with a bid that a builder built 
 
 The block must also commit to the root of the state after it.
 
-The vectors whose length the preset sets must have a positive length, for the root of the block.
-
 The envelope of that payload then passes the checks of the block root and the parent root.
 
 It also passes the checks of the builder, the mix, the gas limit and the block hash.
@@ -138,10 +136,6 @@ theorem getExecutionPayloadEnvelope_eq_ok_iff {block : BeaconBlock preset fork}
     rintro ⟨rooted, rfl, rfl, rfl, rfl⟩
     exact ⟨_, rooted, rfl⟩
 
-variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
-  [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
-  [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
-
 /-- The envelope of a payload passes most checks against the state after the block of its bid.
 
 The block carries a bid that a builder built from the payload and its requests.
@@ -156,9 +150,7 @@ It also agrees with that bid on the root of the requests.
 
 The slot of the bid is the slot of the state, so a payload for that slot passes the slot check.
 
-The payload also builds on the latest block hash of the state.
-
-The lengths of the vectors that the preset sets must be positive, for the root of the block. -/
+The payload also builds on the latest block hash of the state. -/
 theorem getExecutionPayloadEnvelope_checks {config : Config} {checks : SignatureChecks}
     {engine : ExecutionEngine preset fork} {pre post : BeaconState preset fork}
     (gloas : .glamsterdam ≤ fork) {block : BeaconBlock preset fork} {slot : Slot}

@@ -422,11 +422,23 @@
 #define DOC_consensus_is_valid_builder_signature \
   "Whether the signature of a signed message of the Builder API verifies."
 
+#define DOC_consensus_process_registration \
+  "None when a builder keeps a signed registration, or the name of the rule that refuses it."
+
+#define DOC_consensus_unblind_signed_blinded_block \
+  "The root and the bytes of the signed block that a signed blinded block and a payload give."
+
 #define DOC_consensus_verify_builder_request_auth_signature \
   "Whether a proposer key signed a Gloas request authentication given in SSZ."
 
 #define DOC_consensus_builder_bid_value \
   "The value of a builder's bid from its two payments and the proposer's execution payment cap."
+
+#define DOC_consensus_consensus_version \
+  "The name of the consensus version of a fork, or none before Phase 0 and at Hegotá."
+
+#define DOC_consensus_consensus_version_fork \
+  "The name of the first fork of a consensus version, read from its exact name."
 
 #define DOC_consensus_merkle_proof \
   "The node at a generalized index of the value that the bytes encode, and its branch, as a pair."
@@ -659,6 +671,15 @@
 #define DOC_consensus_compute_fork_digest \
   "The fork digest at an epoch, on the chain with the given root of the genesis validators."
 
+#define DOC_consensus_digest_epochs \
+  "The epochs at which the fork digest can change, in increasing order and without repeats."
+
+#define DOC_consensus_fork_of_digest \
+  "The first epoch with the given digest, among those at which it can change, with its fork."
+
+#define DOC_consensus_digests_identify \
+  "Whether the digest of each epoch at which it can change reads back the fork at that epoch."
+
 #define DOC_pq_keys_ssz \
   "The root of the value that the bytes encode, and the bytes of that value, as a pair."
 
@@ -860,6 +881,12 @@
 #define DOC_devp2p_encode_message \
   "The frame data of the message in the uncompressed frame data `plain`."
 
+#define DOC_devp2p_route \
+  "The shared capability that holds a message ID, given both lists of capabilities."
+
+#define DOC_devp2p_session \
+  "The outcomes of the frames a session receives in turn, from before the peer's Hello."
+
 #define DOC_discv4_decode \
   "The hash, the sender's key and the content of the packet in the bytes `packet`."
 
@@ -895,6 +922,9 @@
 
 #define DOC_eth_check_pooled \
   "Whether `response` is PooledTransactions that answers the GetPooledTransactions `request`."
+
+#define DOC_eth_session \
+  "The outcomes of the eth messages that a session sends and receives in turn."
 
 #define DOC_eth_wire_hash \
   "The hash of a transaction as it crosses the wire."
@@ -970,6 +1000,15 @@
 
 #define DOC_multistream_decode \
   "The multistream-select message at the start of the bytes, and the bytes after it."
+
+#define DOC_multistream_listen \
+  "What a listener does with the bytes it receives, from its start."
+
+#define DOC_multistream_dial \
+  "What a dialer does with the bytes it receives, from its start."
+
+#define DOC_libp2p_upgrade \
+  "The security protocol and the multiplexer of a TCP connection between consensus nodes."
 
 #define DOC_mplex_encode \
   "The bytes of a valid mplex frame."
@@ -1127,6 +1166,9 @@
 #define DOC_engine_get_payload_bodies \
   "The answer to a payload bodies request, from a store of bodies."
 
+#define DOC_engine_rewrite_params \
+  "The parameters of an Engine API request, read by the decoder and written by the writer."
+
 #define DOC_engine_prepare_execution_payload \
   "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."
 
@@ -1135,6 +1177,15 @@
 
 #define DOC_engine_finalized_execution_block_hash \
   "From Bellatrix: the 32 bytes of the finalized block hash of a store."
+
+#define DOC_rpc_read_param \
+  "Read a parameter of the execution JSON-RPC API under the schema of the given name."
+
+#define DOC_rpc_error_groups \
+  "The groups of error codes of the execution JSON-RPC API, in the order of the source."
+
+#define DOC_rpc_pruned_history_unavailable \
+  "The code of history that the node pruned, with its message."
 
 #define DOC_pyvalue_echo \
   "The value that Python passes, back to Python, with each failure tuple read as a failure."

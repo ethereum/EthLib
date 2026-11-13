@@ -233,26 +233,27 @@ theorem spec_set (hfork : .shapella ≤ fork)
 /-! ## A call that gets a root -/
 
 /-- PUSH0, PUSH0 and REVERT, at byte 33, 57 or 74, revert with no output. -/
-private theorem get_revert {pc : Nat} {stack : List U256} (hfork : .shapella ≤ fork)
+private theorem get_revertG {pc : Nat} {stack : List U256} (hfork : .shapella ≤ fork)
     (hpc : pc = 33 ∨ pc = 57 ∨ pc = 74) (hstack : stack.length ≤ 4) (hgas : 10 ≤ gas) :
-    Spec fork (At CODE message pc stack .empty gas state substate returnData)
+    SpecG fork (At CODE message pc stack .empty gas state substate returnData)
       (Answer state none) := by
   rcases hpc with rfl | rfl | rfl <;>
-  · exact revertEmpty hfork (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
+  · exact revertEmptyG hfork (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
       (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
       (by simp only [STACK_LIMIT]; omega) (by omega)
 
 /-- From byte 60, the code reads the slot 8191 above `idx` and returns its word. -/
-private theorem get_return {idx : U256} (hfork : .shapella ≤ fork) (hgas : 2200 ≤ gas) :
-    Spec fork (At CODE message 60 [idx] .empty gas state substate returnData)
+private theorem get_returnG {idx : U256} (hfork : .shapella ≤ fork)
+    (hgas : 2200 ≤ gas) :
+    SpecG fork (At CODE message 60 [idx] .empty gas state substate returnData)
       (Answer state (some (state.getStorage message.currentTarget
         (U256.toBeBytes (add 8191#256 idx))))) := by
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  refine Triple.seq (sload (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER])
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  refine SpecG.seq (sloadG (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) rfl (Nat.le_trans (sloadPrice_le _) (by omega))) ?_
-  refine Spec.consequence (returnWord hfork (by evm_code [CODE, CODE_NUMBER])
+  refine SpecG.consequence (returnWordG hfork (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
@@ -262,64 +263,65 @@ private theorem get_return {idx : U256} (hfork : .shapella ≤ fork) (hgas : 220
 /-- From byte 53, the code returns the root when the word `v` of the slot is the timestamp `t`.
 
 It reverts otherwise. -/
-private theorem get_compare {v t idx : U256} (hfork : .shapella ≤ fork) (hgas : 2300 ≤ gas) :
-    Spec fork (At CODE message 53 [v, t, idx] .empty gas state substate returnData)
+private theorem get_compareG {v t idx : U256} (hfork : .shapella ≤ fork)
+    (hgas : 2300 ≤ gas) :
+    SpecG fork (At CODE message 53 [v, t, idx] .empty gas state substate returnData)
       (Answer state (if v = t then some (state.getStorage message.currentTarget
         (U256.toBeBytes (add 8191#256 idx))) else none)) := by
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
   by_cases h : v = t
   · have hc : equal v t ≠ 0 := by simp [equal, h]
-    evm_step [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
     simp only [h, ite_true]
-    exact get_return hfork (by omega)
+    exact get_returnG hfork (by omega)
   · have hc : equal v t = 0 := by simp [equal, h]
-    evm_step [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
     simp only [h, ite_false]
-    exact get_revert hfork (by decide) (by simp) (by omega)
+    exact get_revertG hfork (by decide) (by simp) (by omega)
 
 /-- From byte 36, the code reads the word `t` of the input, and reverts when it is 0.
 
 It then compares the word in the slot of `t` with `t`, and returns the root of `t` when equal.
 
 It reverts otherwise. -/
-private theorem get_lookup (hfork : .shapella ≤ fork) (hgas : 5000 ≤ gas) :
-    Spec fork (At CODE message 36 [] .empty gas state substate returnData)
+private theorem get_lookupG (hfork : .shapella ≤ fork) (hgas : 5000 ≤ gas) :
+    SpecG fork (At CODE message 36 [] .empty gas state substate returnData)
       (Answer state (if inputWord message.data = 0 then none
         else if storageOf state message.currentTarget (timestampSlot (inputWord message.data)) =
           inputWord message.data then
           some (storageOf state message.currentTarget (rootSlot (inputWord message.data)))
         else none)) := by
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
   by_cases h : inputWord message.data = 0
   · have h' : loadWord message.data 0 32 = 0 := h
     have hc : isZero (loadWord message.data 0 32) ≠ 0 := by simp [isZero, h']
-    evm_step [CODE, CODE_NUMBER]
-    evm_step [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
     simp only [h, ite_true]
-    exact get_revert hfork (by decide) (by simp) (by omega)
+    exact get_revertG hfork (by decide) (by simp) (by omega)
   · have h' : loadWord message.data 0 32 ≠ 0 := h
     have hc : isZero (loadWord message.data 0 32) = 0 := by
       rw [isZero, ite_eq_right_iff]
       exact fun e => absurd e h'
-    evm_step [CODE, CODE_NUMBER]
-    evm_step [CODE, CODE_NUMBER]
-    evm_step [CODE, CODE_NUMBER]
-    evm_step [CODE, CODE_NUMBER]
-    evm_step [CODE, CODE_NUMBER]
-    evm_step [CODE, CODE_NUMBER]
-    refine Triple.seq (sload (code := CODE) (pc := 52) (gas := gas - 42)
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    refine SpecG.seq (sloadG (code := CODE) (pc := 52) (gas := gas - 42)
       (key := mod (loadWord message.data 0 32) 8191#256)
       (rest := [loadWord message.data 0 32, mod (loadWord message.data 0 32) 8191#256])
       (Nat.le_trans (by decide) hfork)
       (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER]) rfl
       (Nat.le_trans (sloadPrice_le _) (by omega))) ?_
-    refine Spec.consequence (get_compare hfork (Nat.le_trans (by omega)
+    refine SpecG.consequence (get_compareG hfork (Nat.le_trans (by omega)
       (Nat.sub_le_sub_left (sloadPrice_le _) _))) (fun _ h => h) ?_
     intro evm hans
     have hans := hans.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _)
@@ -339,6 +341,50 @@ theorem getRoot_eq (read : U256 → U256) (input : ByteArray) :
   by_cases h1 : input.size = 32 <;> by_cases h2 : inputWord input = 0 <;>
     by_cases h3 : read (timestampSlot (inputWord input)) = inputWord input <;> simp [h1, h2, h3]
 
+/-- A call from an address other than the system address gets a root.
+
+It holds over the steps that are monotone in gas.
+
+It holds from Shapella, with at least 5,100 gas and fewer than `2^256` bytes of input.
+
+The frame returns the root that the storage holds for the input, or reverts with no output.
+
+Its state reads as the state it starts from. -/
+theorem specG_get (hfork : .shapella ≤ fork)
+    (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hsize : message.data.size < 2 ^ 256)
+    (hgas : 5100 ≤ gas) :
+    SpecG fork (At CODE message 0 [] .empty gas state substate returnData)
+      (Answer state (getRoot (storageOf state message.currentTarget)
+        message.data)) := by
+  have hc : equal (BitVec.ofNat 256 0xfffffffffffffffffffffffffffffffffffffffe)
+      message.caller.toU256 = 0 := by
+    rw [equal, ite_eq_right_iff]
+    exact fun e => absurd e.symm (toU256_ne_of_ne_SYSTEM_ADDRESS hcaller)
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  rw [getRoot_eq]
+  by_cases h : message.data.size = 32
+  · have hs : equal (BitVec.ofNat 256 message.data.size) 32#256 ≠ 0 := by simp [equal, h]
+    evm_stepG [CODE, CODE_NUMBER]
+    simp only [h, ite_true]
+    exact get_lookupG hfork (by omega)
+  · have hs : equal (BitVec.ofNat 256 message.data.size) 32#256 = 0 := by
+      rw [equal, ite_eq_right_iff]
+      intro e
+      have := congrArg BitVec.toNat e
+      simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hsize] at this
+      exact absurd this h
+    evm_stepG [CODE, CODE_NUMBER]
+    simp only [h, ite_false]
+    exact get_revertG hfork (by decide) (by simp) (by omega)
+
 /-- A call from an address other than the system address gets a root, as EIP-4788 describes.
 
 It holds from Shapella up to BPO5, the forks whose frames count gas as one number.
@@ -354,35 +400,8 @@ theorem spec_get (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS)
     (hsize : message.data.size < 2 ^ 256) (hgas : 5100 ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate returnData)
-      (Answer state (getRoot (storageOf state message.currentTarget) message.data)) := by
-  have hc : equal (BitVec.ofNat 256 0xfffffffffffffffffffffffffffffffffffffffe)
-      message.caller.toU256 = 0 := by
-    rw [equal, ite_eq_right_iff]
-    exact fun e => absurd e.symm (toU256_ne_of_ne_SYSTEM_ADDRESS hcaller)
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  rw [getRoot_eq]
-  by_cases h : message.data.size = 32
-  · have hs : equal (BitVec.ofNat 256 message.data.size) 32#256 ≠ 0 := by simp [equal, h]
-    evm_step [CODE, CODE_NUMBER]
-    simp only [h, ite_true]
-    exact get_lookup hfork (by omega)
-  · have hs : equal (BitVec.ofNat 256 message.data.size) 32#256 = 0 := by
-      rw [equal, ite_eq_right_iff]
-      intro e
-      have := congrArg BitVec.toNat e
-      simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hsize] at this
-      exact absurd this h
-    evm_step [CODE, CODE_NUMBER]
-    simp only [h, ite_false]
-    exact get_revert hfork (by decide) (by simp) (by omega)
+      (Answer state (getRoot (storageOf state message.currentTarget) message.data)) :=
+  (specG_get hfork hcaller hsize hgas).toSpec
 
 /-! ## The system call -/
 

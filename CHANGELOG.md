@@ -9,6 +9,34 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `EpochFrameLaws` now extends `EpochStepLaws`, which holds every law except those for a new validator and for the queue of pending deposits.
+  The theorems that need neither law moved from the `EpochFrameLaws` namespace to the `EpochStepLaws` namespace, with the same statements, and they now take the smaller structure.
+  Dot notation on a value of either structure still finds them; a full name such as `EpochFrameLaws.processSyncAggregate` becomes `EpochStepLaws.processSyncAggregate`.
+- In Lean, the JSON readers and writers of the base types moved from `EthLib.Engine.Json` to `EthLib.Serialization.JsonRpc`, with their theorems.
+  They are `hexValue`, `hexDigits`, `bytesOf`, `bytes`, `fixed`, `address`, `quantity`, `bytesMax`, `uint64`, `paramsArray`, `array`, `fields`, `hasExactly`, `field`, `dataJson`, `quantityJson`, `listJson` and `optionJson`.
+  Their namespace is now `EthLib.Serialization.JsonRpc`.
+  The readers among them return `Read`, an alias of `Except String`, in place of `Except EngineError`, and reject an input with a reason.
+  An Engine decoding lifts that reason to `EngineError.invalidParams`, through `Engine.Json.lift` and its `MonadLift` instance, so every Engine decoder returns what it returned before.
+  `withdrawal` and `withdrawalJson`, with their theorems, moved to `EthLib.Execution.Rpc`.
+  The Python bindings are unchanged.
+
+- In Lean, `DirectSafety.EnoughStake run high` requires the stake floor only at epoch calls whose current epoch is at most `high + 1`.
+  The floor reaches one epoch past the finalized epoch of `b` in `accountable_safety`, and one epoch past `j.epoch` in the other three direct safety endpoints.
+  Move `j` (and `k` for `accountable_justified_unique`) before the stake premises.
+  An existing unbounded floor proof adapts as `fun call _ => oldEnough call`.
+  Pass a target-epoch bound as the new `within` argument of `quorum_count`.
+  Remove the `starts` argument from `accountable_safety` and `accountable_safety_justified`, but keep it for `accountable_justified_unique`.
+  `conflict` and `ordered` imply the removed bound on the slot of `x`, so the theorems cover the same runs as before.
+  The drift horizon in the conclusion of `accountable_safety` is the finalized epoch of `b`, not the larger of the two finalized epochs; `ordered` makes them equal.
+
+- In Lean, `DirectSafety.HashEvidence objects` is stated through the searches `findMessageCollision` and the new `findZeroRoot`, in place of a bounded existential ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+  No C export or Python function changes, and every theorem that mentions `HashEvidence` keeps its statement.
+  `hashEvidence_iff` proves that the new body is equivalent to the old one, for every list of objects and with no hypothesis.
+  `findZeroRoot_valid` and `findZeroRoot_eq_none_iff` say what the new search returns and when it fails.
+  The two bodies are not definitionally equal.
+  A proof that unfolds `HashEvidence` to take it apart first rewrites with `hashEvidence_iff`, or applies `hashEvidence_iff.mp`.
+  A proof that builds the evidence as an `Or` of the old form applies `hashEvidence_iff.mpr`.
+
 - `verify_kzg_proof` checks its inputs in the order of EIP-4844: the commitment, `z`, `y`, then the proof.
   When more than one input is invalid, the first in that order gives the error.
   Before, it checked the proof second, so an input with an invalid `z` and an invalid proof raised the error of the proof.
@@ -560,6 +588,20 @@ Not yet released.
   In Lean, `resolveStep_compatibleUnion` takes the selected child and a proof of `options[slot]? = some child`, and concludes with that child.
   `union_options_share_one_tree` quantifies over that child in the same way.
   `resolveStep_compatibleUnion_of_wellFormed` gives the child for a well-formed union.
+- In Lean, the hash of a message to elements of `Fp2` has its count in its type ([#2210](https://github.com/ethereum/EthLib/pull/2210)).
+  `hashToFieldFp2` returns `Vector (Fp2 F) count`, where it returned an `Array`, so a caller that needs an array takes `.toArray`.
+  The elements, the errors and the points of the hash to `G2` are the same.
+  `map_hashToFieldFp2` maps with `Vector.map`, and `hashToFieldFp2_eq_spec` states the same equation over the vector.
+  `hashToG2` no longer takes an `Inhabited` instance.
+  `map_hashToG2` no longer takes the two instances, or the hypothesis that the map sends the default to the default.
+  No C export or Python function changes.
+- In Lean, the RLP decoder reads only bytes inside its input ([#2211](https://github.com/ethereum/EthLib/pull/2211)).
+  `readPrefix`, `decodeItem`, `decodeItems` and `decodeItemsFrom` take a proof of `stop ≤ input.size`, which `omega` supplies by default.
+  `readBigEndian` takes a proof of `pos + k ≤ input.size`.
+  The proof helper `readItem` takes the same bound as `decodeItem`, also supplied by `omega` by default.
+  `readPrefix_short`, `decodeItemsFrom_eq` and `decodeItems_eq` take the same bound, and `decodeItem_of_readItem` takes it as an implicit argument.
+  `decode` keeps its type, the inputs it accepts, its values and its errors.
+  No C export or Python function changes.
 
 ## 0.3.0
 

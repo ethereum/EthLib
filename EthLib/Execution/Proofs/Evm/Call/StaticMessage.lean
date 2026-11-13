@@ -647,7 +647,7 @@ theorem staticTouchStep_runFrame
     (fun hf ⟨_, hab⟩ => StaticFrame.of_touchStep hab hf)
     (fun _ _ _ => ⟨[], .of_staticStep (staticStep_exceptionalHalt _ _)⟩) ?_
     (fun _ _ _ _ hf hrun hmsg => runs hf hmsg hrun) hf h
-  intro evm' result hf' hstep
+  intro evm' result hf' _ hstep
   cases result with
   | next after' => exact ⟨[], .of_staticStep (next hf' hstep)⟩
   | child caller message resume =>

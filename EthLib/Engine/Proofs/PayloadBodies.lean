@@ -31,6 +31,8 @@ When the range reaches the latest known block, the last entry is that block's en
 The store holds the body of that block, so the entry is not `null`.
 
 A range that starts past the latest known block has an empty answer.
+
+The decoders read back the parameters that the writers write.
 -/
 
 public section
@@ -302,5 +304,19 @@ theorem getPayloadBodiesByRangeV2_eq_ok_iff (store : BodyStore) (start count : U
   | ok bodies =>
     obtain ⟨hs, hc, hle, rfl⟩ := (bodiesByRange_eq_ok_iff store start count bodies).1 hb
     simp [Functor.map, Except.map, hs, hc, hle, eq_comm, Function.comp_def]
+
+/-- The decoder of a request by hash reads back the hashes that the writer writes. -/
+theorem bodiesByHashParams_json (hashes : List Hash32) :
+    bodiesByHashParams (bodiesByHashParamsJson hashes) = .ok hashes := by
+  simp [bodiesByHashParams, bodiesByHashParamsJson, Serialization.JsonRpc.paramsArray,
+    pure, Except.pure, bind, Except.bind, Serialization.JsonRpc.array_listJson,
+    Serialization.JsonRpc.fixed_dataJson]
+  simpa using mapM_eq_ok_map (g := id) (xs := hashes) fun _ _ => rfl
+
+/-- The decoder of a request by range reads back the start and the count that the writer writes. -/
+theorem bodiesByRangeParams_json (start count : UInt64) :
+    bodiesByRangeParams (bodiesByRangeParamsJson start count) = .ok (start, count) := by
+  simp [bodiesByRangeParams, bodiesByRangeParamsJson, Serialization.JsonRpc.paramsArray,
+    pure, Except.pure, bind, Except.bind, Serialization.JsonRpc.uint64_toDigits]
 
 end EthLib.Engine

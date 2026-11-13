@@ -196,6 +196,11 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
     if HasBuilderApi fork then some ⟨BlindedBeaconBlock preset fork⟩ else none
   | "SignedBlindedBeaconBlock" =>
     if HasBuilderApi fork then some ⟨SignedBlindedBeaconBlock preset fork⟩ else none
+  | "BlobsBundle" =>
+    if .dencun ≤ fork ∧ fork < .glamsterdam then some ⟨BuilderBlobsBundle preset fork⟩ else none
+  | "ExecutionPayloadAndBlobsBundle" =>
+    if .dencun ≤ fork ∧ fork < .glamsterdam then some ⟨ExecutionPayloadAndBlobsBundle preset fork⟩
+    else none
   | "BuilderRequestAuth" => if .glamsterdam ≤ fork then some ⟨BuilderRequestAuth⟩ else none
   | "SignedBuilderRequestAuth" =>
     if .glamsterdam ≤ fork then some ⟨SignedBuilderRequestAuth⟩ else none

@@ -1,4 +1,6 @@
-"""multistream-select 1.0 messages: a length, the bytes, then a newline that the length counts."""
+"""multistream-select 1.0: the framing of a message, and the two peers of a negotiation."""
+
+from collections.abc import Sequence
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -16,4 +18,14 @@ def decode(data: bytes) -> tuple[bytes, bytes]:
     return _native.multistream_decode(data)
 
 
-__all__ = ["MultistreamError", "decode", "encode"]
+def listen(supported: Sequence[bytes], data: bytes) -> tuple[str, bytes, bytes, bytes]:
+    """State, agreed protocol, sent and unread bytes of a listener reading `data` from its start."""
+    return _native.multistream_listen(list(supported), data)
+
+
+def dial(proposals: Sequence[bytes], data: bytes) -> tuple[str, bytes, bytes, bytes]:
+    """State, agreed or unexpected protocol, sent and unread bytes of a dialer reading `data`."""
+    return _native.multistream_dial(list(proposals), data)
+
+
+__all__ = ["MultistreamError", "decode", "dial", "encode", "listen"]

@@ -109,16 +109,36 @@ theorem valueOf_jsonOf_byteVector {spelling : Spelling} {length : Nat} {data : B
   rw [valueOf]
   simp [collectionHex, ofHex_toHex, fitted, Bind.bind, Except.bind, pure, Except.pure]
 
+/-- Reading decimal strings appends the bytes that they hold to the bytes so far. -/
+theorem byteDigitsFrom_map : ∀ (bytes : List UInt8) (out : Bytes),
+    byteDigitsFrom (bytes.map fun byte => decimal byte.toNat) out = .ok (out ++ bytes.toArray)
+  | [], out => by simp [byteDigitsFrom]
+  | byte :: rest, out => by
+    have small : ¬ byte.toNat ≥ 256 := by have := byte.toNat_lt; omega
+    simp only [List.map_cons, byteDigitsFrom, readNat_decimal, Bind.bind, Except.bind, small,
+      ite_false, UInt8.ofNat_toNat, byteDigitsFrom_map rest]
+    simp
+
 /-- A byte list document reads back as the bytes it was written from. -/
 theorem valueOf_jsonOf_byteList {spelling : Spelling} {limit : Nat} {data : Bytes}
     {document : Json} (fitted : data.size ≤ limit)
     (written : jsonOf (.byteList limit) spelling (.bytes data) = .ok document) :
     valueOf (.byteList limit) spelling document = .ok (.bytes data) := by
-  simp only [jsonOf, fitted, ↓reduceIte, Except.ok.injEq] at written
-  subst written
-  rw [valueOf]
-  simp [collectionHex, ofHex_toHex, Nat.not_lt.mpr fitted, Bind.bind, Except.bind,
-    pure, Except.pure]
+  simp only [jsonOf, fitted, ↓reduceIte, Except.ok.injEq, byteListJson] at written
+  by_cases digits : spelling.isDigits = true
+  · simp only [digits, ↓reduceIte] at written
+    subst written
+    rw [valueOf]
+    simp [digits, Array.toList_map, byteDigitsFrom_map, Nat.not_lt.mpr fitted, Bind.bind,
+      Except.bind, pure, Except.pure]
+  · rw [Bool.not_eq_true] at digits
+    simp only [digits, Bool.false_eq_true, ↓reduceIte] at written
+    subst written
+    rw [valueOf]
+    simp [digits, collectionHex, ofHex_toHex, Nat.not_lt.mpr fitted, Bind.bind, Except.bind,
+      pure, Except.pure]
+    intro _ same
+    cases same
 
 /--
 A bitfield document reads back as the bits it was written from.

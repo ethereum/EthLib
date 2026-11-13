@@ -13,6 +13,7 @@ public import EthLib.Execution.Proofs.Blocks.Burn
 public import EthLib.Execution.Proofs.Blocks.DaoFork
 public import EthLib.Execution.Proofs.Blocks.Difficulty
 public import EthLib.Execution.Proofs.Blocks.Genesis
+public import EthLib.Execution.Proofs.Blocks.NoncesFit
 public import EthLib.Execution.Proofs.Blocks.ProofOfWork
 public import EthLib.Execution.Proofs.Blocks.Header
 public import EthLib.Execution.Proofs.Blocks.History
@@ -28,6 +29,7 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.BeaconRoots
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Blocks.SystemCall.ConsolidationRequests
 public import EthLib.Execution.Proofs.Blocks.SystemCall.HistoryStorage
+public import EthLib.Execution.Proofs.Blocks.SystemCall.LowGas
 public import EthLib.Execution.Proofs.Blocks.SystemCall.RequestQueue
 public import EthLib.Execution.Proofs.Blocks.SystemCall.WithdrawalRequests
 public import EthLib.Execution.Proofs.Blocks.SystemCallFollow

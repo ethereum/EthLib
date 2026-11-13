@@ -238,6 +238,17 @@ computes = "rpctestgen of execution-apis, recording the replies of a go-ethereum
 version = "last regenerated at execution-apis ba884e7d with go-ethereum 8a8efd332457, and CI requires no change at the pin"
 source = "https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tools/README.md"
 
+[generators."Engine API OpenRPC examples"]
+computes = "nothing: request examples written by the authors of the Engine API specification in its OpenRPC method files"
+version = "execution-apis 3284ee80, read with PyYAML 6.0.2"
+source = "https://github.com/ethereum/execution-apis/tree/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/openrpc/methods"
+imports = ["yaml"]
+
+[generators."execution-apis error groups"]
+computes = "nothing: the error groups of execution-apis, written by its authors"
+version = "execution-apis 3284ee80c3da3e516c53782dde75157cccf1ebdc"
+source = "https://github.com/ethereum/execution-apis/tree/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/error-groups"
+
 [generators."EIP-779 text"]
 computes = "nothing: the list of accounts in the text of EIP-779, copied by its author"
 version = "EIP-779 at EIPs 46976b2a"
@@ -498,8 +509,12 @@ generator = "ethlib"
 # The execution layer.
 
 [[directories."tests/engine"]]
-cases = ["**"]
+cases = ["new_payload.json", "forkchoice.json"]
 generator = "EELS 2.19.0"
+
+[[directories."tests/engine"]]
+cases = ["openrpc.json"]
+generator = "Engine API OpenRPC examples"
 
 [[directories."tests/execution/blocks"]]
 cases = ["**"]
@@ -594,6 +609,14 @@ checked = "the file has no _info, and ethereum/tests bd21d174 (2015) names no to
 cases = ["**"]
 generator = "not established"
 checked = "the files have no _info, and ethereum/tests 3930ca3a (2014) names no tool"
+
+[[directories."bindings/python/tests/rpc/fixtures"]]
+cases = ["*/*.io"]
+generator = "rpctestgen on go-ethereum"
+
+[[directories."bindings/python/tests/rpc/fixtures"]]
+cases = ["error-groups/*.yaml"]
+generator = "execution-apis error groups"
 
 [[directories."bindings/python/tests/trie/getproof"]]
 cases = ["**"]
@@ -704,6 +727,11 @@ generator = "Lighthouse test generator, earlier"
 cases = ["**"]
 generator = "not established"
 checked = "the file holds mainnet blocks 0 to 8191 with receipts and total difficulty, and records no exporting tool"
+
+[[archives."eth-clients/mainnet@8cad4805/genesis.ssz"]]
+cases = ["**"]
+generator = "not established"
+checked = "the file is the SSZ genesis state of mainnet; the tests read only its genesis validators root, and it records no generating tool"
 
 # The modules that the Python tests run.
 

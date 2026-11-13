@@ -13,7 +13,7 @@ namespace EthLib.Serialization.Ssz
 open Lean
 
 /--
-Where a declaration spells a one-byte unsigned integer as the byte alias.
+Where a declaration spells a one-byte unsigned integer as the byte alias, or a byte list as digits.
 
 SSZ gives the alias and the one-byte integer the same type, and the JSON mapping does not.
 
@@ -25,10 +25,19 @@ A spelling travels beside a declaration and holds one node for each node of it:
 - `Byte`, spelled as a byte, is `"0xff"`.
 - `Vector[Uint8, 2]`, spelled plain, is `["1", "2"]`.
 - `Vector[Byte, 2]`, with bytes as elements, is `"0x0102"`.
+- `List[Uint8, 4]`, held as a byte list and spelled as digits, is `["1", "2"]`.
+
+A mark has effect only where its shape allows it, and is ignored anywhere else.
 -/
 inductive Spelling where
-  /-- The byte alias, written as hex where a plain integer is written as digits. -/
+  /-- The byte alias, written as hex where a plain integer is written as digits.
+
+  It applies to a one-byte integer, and to a sequence of them, which it writes as one string. -/
   | byte
+  /-- A byte list written as one decimal string per byte, as a list of one-byte integers is.
+
+  SSZ gives that list and a byte list the same type, and the JSON mapping does not. -/
+  | digits
   /-- Anything else, with one spelling for each declaration the shape holds. -/
   | plain (parts : List Spelling)
   deriving Inhabited
@@ -39,12 +48,22 @@ def Spelling.opaque : Spelling := .plain []
 /-- The spelling recorded for the declaration at one position. -/
 def Spelling.part : Spelling → Nat → Spelling
   | .plain parts, position => parts.getD position .opaque
-  | .byte, _ => .opaque
+  | .byte, _ | .digits, _ => .opaque
 
 /-- Whether a one-byte integer here is the byte alias. -/
 def Spelling.isByte : Spelling → Bool
   | .byte => true
-  | .plain _ => false
+  | .digits | .plain _ => false
+
+/-- Whether a byte list here is written as decimal digits. -/
+def Spelling.isDigits : Spelling → Bool
+  | .digits => true
+  | .byte | .plain _ => false
+
+/-- Whether a declaration is a one-byte integer, the only one that the byte alias can mark. -/
+def Desc.isOneByte : Desc → Bool
+  | .uint 1 => true
+  | _ => false
 
 /-- Bytes as the mapping writes them: lowercase hex behind a two-character marker. -/
 def toHex (data : Bytes) : String :=
@@ -102,6 +121,11 @@ def byteElements (data : Bytes) : List Value :=
 /-- Digits in a string, which is how the mapping writes an integer. -/
 def decimal (n : Nat) : Json := .str (toString n)
 
+/-- The document of a byte list: one hex string, or one decimal string per byte. -/
+def byteListJson (spelling : Spelling) (data : Bytes) : Json :=
+  if spelling.isDigits then .arr (data.map fun byte => decimal byte.toNat)
+  else .str (toHex data)
+
 /--
 The number a document holds.
 
@@ -122,6 +146,18 @@ def readNat (document : Json) : Except Err Nat :=
     if value.exponent == 0 && value.mantissa ≥ 0 then .ok value.mantissa.toNat
     else .error .typeMismatch
   | _ => .error .typeMismatch
+
+/-- The bytes so far, then the byte that each decimal string of a list holds, in order.
+
+A string that holds 256 or more is refused.
+
+The loop runs in constant stack for any length. -/
+def byteDigitsFrom : List Json → Bytes → Except Err Bytes
+  | [], out => .ok out
+  | entry :: rest, out => do
+    let n ← readNat entry
+    if n ≥ 256 then throw (.uintRange 256 n)
+    byteDigitsFrom rest (out.push (UInt8.ofNat n))
 
 /--
 The hex a collection is written as.
@@ -175,7 +211,8 @@ def jsonOf (shape : Desc) (spelling : Spelling) (value : Value) : Except Err Jso
   | .byteVector length, .bytes data =>
     if data.size == length then .ok (.str (toHex data)) else .error (.scope length data.size)
   | .byteList limit, .bytes data =>
-    if data.size ≤ limit then .ok (.str (toHex data)) else .error (.overLimit limit data.size)
+    if data.size ≤ limit then .ok (byteListJson spelling data)
+    else .error (.overLimit limit data.size)
   | .bitVector _, .bits _ | .bitList _, .bits _ | .progressiveBitList _, .bits _ => do
     return .str (toHex (← serialize shape value))
   | .vector element length, .seq elements =>
@@ -197,10 +234,12 @@ def jsonOf (shape : Desc) (spelling : Spelling) (value : Value) : Except Err Jso
   | _, _ => .error .typeMismatch
 termination_by (sizeOf value, 2)
 
-/-- The document a sequence is written as, which the byte alias collapses into one hex string. -/
+/-- The document a sequence is written as, which the byte alias collapses into one hex string.
+
+The alias collapses only a sequence of one-byte integers. -/
 def jsonOfSequence (element : Desc) (spelling : Spelling) (elements : List Value) :
     Except Err Json := do
-  if spelling.isByte then return .str (toHex (← byteRun elements))
+  if spelling.isByte && element.isOneByte then return .str (toHex (← byteRun elements))
   return .arr (← jsonOfEach element spelling elements).toArray
 termination_by (sizeOf elements, 1)
 
@@ -251,7 +290,10 @@ def valueOf (shape : Desc) (spelling : Spelling) (document : Json) : Except Err 
     if data.size != length then throw (.hexLength length data.size)
     return .bytes data
   | .byteList limit => do
-    let data ← ofHex (← collectionHex document)
+    let data ← if spelling.isDigits then
+        let .arr entries := document | throw .typeMismatch
+        byteDigitsFrom entries.toList #[]
+      else ofHex (← collectionHex document)
     if data.size > limit then throw (.documentOverLimit limit data.size)
     return .bytes data
   | .bitVector _ | .bitList _ | .progressiveBitList _ => readBitfield shape document
@@ -287,10 +329,12 @@ def valueOf (shape : Desc) (spelling : Spelling) (document : Json) : Except Err 
     valueOfOption selectors options spelling 0 (← readNat selectorField) payload
 termination_by (sizeOf shape, 0, 0)
 
-/-- The elements a sequence document holds, which the byte alias writes as one hex string. -/
+/-- The elements a sequence document holds, which the byte alias writes as one hex string.
+
+The alias collapses only a sequence of one-byte integers. -/
 def valueOfSequence (element : Desc) (spelling : Spelling) (document : Json) :
     Except Err (List Value) := do
-  if spelling.isByte then
+  if spelling.isByte && element.isOneByte then
     return byteElements (← ofHex (← collectionHex document))
   let .arr entries := document | throw .typeMismatch
   valueOfEntries element spelling entries.toList

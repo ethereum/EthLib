@@ -116,12 +116,24 @@ noncomputable def QuorumCall.voters {g a : ForkedBeaconState preset}
     {run : Run config checks g a} (call : QuorumCall run) : Finset BLSPubkey :=
   keysAt call.cached call.indices
 
-/-- At each epoch call of the run after epoch 1, the active stake is above 1.5 increments.
+/-- The current epoch of a quorum call is at most one past its target epoch. -/
+theorem QuorumCall.currentEpoch_le {g a : ForkedBeaconState preset}
+    {run : Run config checks g a} (call : QuorumCall run) :
+    (getCurrentEpoch call.cached).toNat ≤ call.target.epoch.toNat + 1 := by
+  rw [call.targetEpoch]
+  cases call.current <;> simp [getPreviousEpoch_toNat]
+  omega
 
-Below that, a test can pass with no vote, since a total balance is at least one increment. -/
-def EnoughStake {g a : ForkedBeaconState preset} (run : Run config checks g a) : Prop :=
-  ∀ call : EpochCall run, 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
-    2 * Models.stake (effectiveWeight call.cached) (activeKeys call.cached)
+/-- Epoch calls after epoch 1 through the epoch after `high` have active stake above 1.5 increments.
+
+Below that, a test can pass with no vote, since a total balance is at least one increment.
+
+A call at the epoch after `high` can count votes for a target at `high`. -/
+def EnoughStake {g a : ForkedBeaconState preset} (run : Run config checks g a)
+    (high : Nat) : Prop :=
+  ∀ call : EpochCall run, (getCurrentEpoch call.cached).toNat ≤ high + 1 →
+    3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+      2 * Models.stake (effectiveWeight call.cached) (activeKeys call.cached)
 
 /-- A chain of quorum calls of the run that justifies `checkpoint` from genesis.
 
@@ -228,10 +240,13 @@ The keys stay distinct along the run, so each counts once.
 
 The run starts at a genesis built from deposits.
 
-At each epoch call after epoch 1, its active stake is above one and a half increments. -/
+The target is at most `high`.
+
+The stake floor covers epoch calls through the epoch after `high`. -/
 theorem quorum_count {g a : ForkedBeaconState preset} (run : Run config checks g a)
     (genesis : Genesis (config := config) (checks := checks) g)
-    (enough : EnoughStake run) (call : QuorumCall run) :
+    {high : Nat} (enough : EnoughStake run high) (call : QuorumCall run)
+    (within : call.target.epoch.toNat ≤ high) :
     2 * Models.stake (effectiveWeight call.cached) (activeKeys call.cached) ≤
       3 * Models.stake (effectiveWeight call.cached) call.voters := by
   obtain ⟨pre, _, _, _, validators, _⟩ := call.toEpochCall.selected_prefix
@@ -239,7 +254,8 @@ theorem quorum_count {g a : ForkedBeaconState preset} (run : Run config checks g
   have unique : PubkeysDistinct call.cached := by
     simpa [PubkeysDistinct, validatorKeys, validators] using
       (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized pre.chainSteps).2
-  exact call.passes.stake_le unique (enough call.toEpochCall)
+  exact call.passes.stake_le unique (enough call.toEpochCall
+    (call.currentEpoch_le.trans (Nat.add_le_add_right within 1)))
 
 /-- At the state of an epoch call, the pending attestations and target flags hold votes of the run.
 

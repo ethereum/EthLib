@@ -59,33 +59,13 @@ open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Consensus
 open EthLib.Consensus.Exports
-open EthLib.Engine.Json (dataJson quantityJson withdrawalJson)
+open EthLib.Serialization.JsonRpc (dataJson)
 
 /-- The forkchoice update of a proposer as JSON, with the fields of its fork and some others. -/
 def updateJson {fork : Fork} (update : ForkchoiceState) (attributes : PayloadAttributes fork)
     (others : List (String × Json) := []) : Json :=
-  let withdrawals := match sinceValue attributes.withdrawals with
-    | some list => [("withdrawals", Json.arr (list.map withdrawalJson).toArray)]
-    | none => []
-  let parentRoot := match sinceValue attributes.parentBeaconBlockRoot with
-    | some root => [("parentBeaconBlockRoot", dataJson root.toList)]
-    | none => []
-  let slotNumber := match sinceValue attributes.slotNumber with
-    | some slot => [("slotNumber", quantityJson slot.toNat)]
-    | none => []
-  let targetGasLimit := match sinceValue attributes.targetGasLimit with
-    | some limit => [("targetGasLimit", quantityJson limit.toNat)]
-    | none => []
-  Json.mkObj ([
-    ("forkchoiceState", Json.mkObj [
-      ("headBlockHash", dataJson update.headBlockHash.toList),
-      ("safeBlockHash", dataJson update.safeBlockHash.toList),
-      ("finalizedBlockHash", dataJson update.finalizedBlockHash.toList)]),
-    ("payloadAttributes", Json.mkObj ([
-      ("timestamp", quantityJson attributes.timestamp.toNat),
-      ("prevRandao", dataJson attributes.prevRandao.toList),
-      ("suggestedFeeRecipient", dataJson attributes.suggestedFeeRecipient.toList)] ++
-      withdrawals ++ parentRoot ++ slotNumber ++ targetGasLimit))] ++ others)
+  Json.mkObj ([("forkchoiceState", forkchoiceStateJson update),
+    ("payloadAttributes", payloadAttributesJson attributes)] ++ others)
 
 /-- The arguments of the payload preparation of a proposer, from Bellatrix to Fulu.
 
