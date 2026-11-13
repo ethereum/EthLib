@@ -44,16 +44,31 @@ open EthLib.Cryptography.Kzg.Constants
 def runKzg {α : Type} (act : Except KzgError α) : Result α :=
   act.mapError fun e => (e.code, e.message)
 
-/-- The embedded trusted setup, decoded.
+/-- The embedded trusted setup, decoded on its first read.
 
-A constant of compiled Lean is evaluated once, when its module is initialized.
+A thunk computes its value once, when it is first read, and keeps it.
 
-So the 8257 points are decoded once, and every export reuses them. -/
-def embeddedSetup : Except KzgError TrustedSetup := TrustedSetup.ofHex
+So the 8257 points are decoded once, by the first export that reads them, and never at import.
+
+The definition below must stay its only reader, so that one cached copy holds the setup. -/
+private def embeddedSetupThunk : Thunk (Except KzgError TrustedSetup) :=
+  Thunk.mk fun _ => TrustedSetup.ofHex
+
+/-- The embedded trusted setup, read from its thunk.
+
+Every export reads the setup here, so no other code reaches the thunk.
+
+The attributes stop each caller from caching the setup in a constant of its own.
+
+So exactly one cached copy holds the setup, and it is persistent before any thread reads it.
+
+A second copy would mark the setup persistent while another thread may still change its counts. -/
+@[never_extract, noinline]
+def embeddedSetup (_ : Unit) : Except KzgError TrustedSetup := embeddedSetupThunk.get
 
 /-- Run a KZG computation that reads the embedded trusted setup. -/
 def runKzgWithSetup {α : Type} (act : TrustedSetup → Except KzgError α) : Result α :=
-  runKzg (embeddedSetup >>= act)
+  runKzg (embeddedSetup () >>= act)
 
 /-! ## Parsing
 
