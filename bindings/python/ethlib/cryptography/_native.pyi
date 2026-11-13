@@ -1541,6 +1541,10 @@ def engine_get_payload_bodies(store: list[tuple[bytes, int | None, str, list[byt
     """The answer to a payload bodies request, from a store of bodies."""
     ...
 
+def engine_rewrite_params(method: str, params: list[Any]) -> list[Any]:
+    """The parameters of an Engine API request, read by the decoder and written back by the writer."""
+    ...
+
 def engine_prepare_execution_payload(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) -> dict | None:
     """From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."""
     ...

@@ -1428,6 +1428,9 @@ def bindings : List Binding := [
       "list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, " ++
       "max_request: int, request: dict) -> list[dict | None]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_rewrite_params", `EthLib.Engine.Exports.rewriteParamsExport,
+    "(method: str, params: list[Any]) -> list[Any]",
+    [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_prepare_execution_payload", `EthLib.Engine.Exports.prepareExecutionPayloadExport,
     "(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, " ++
       "finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes]) " ++

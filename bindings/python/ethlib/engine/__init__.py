@@ -168,6 +168,12 @@ def get_payload(
     return _native.engine_get_payload(config, entries, request)
 
 
+def rewrite_params(method: str, params: list[Any]) -> list[Any]:
+    """The parameters of an Engine API call, read by its decoder and written back by its writer."""
+    # The writer writes lowercase hex, quantities without leading zeros, and every optional value.
+    return _native.engine_rewrite_params(method, params)
+
+
 def prepare_execution_payload(
     name: str,
     fork: str,
@@ -260,6 +266,7 @@ __all__ = [
     "PayloadEntry",
     "get_payload_bodies",
     "BodyEntry",
+    "rewrite_params",
     "WithdrawalEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",

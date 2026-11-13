@@ -1154,6 +1154,9 @@
 #define DOC_engine_get_payload_bodies \
   "The answer to a payload bodies request, from a store of bodies."
 
+#define DOC_engine_rewrite_params \
+  "The parameters of an Engine API request, read by the decoder and written back by the writer."
+
 #define DOC_engine_prepare_execution_payload \
   "From Bellatrix to Fulu: the forkchoice update of a proposer, as the value of its JSON."
 
