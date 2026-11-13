@@ -522,7 +522,7 @@ private theorem epochReplay_of_trace {fork : Fork} {ks : List EpochStage}
     exact ⟨recorded, .cons step tail⟩
 
 /-- The stages before the payments have a replay with the same end state. -/
-private theorem epochBalanceReplay_before {fork : Fork} {s t : BeaconState preset fork}
+theorem epochBalanceReplay_before {fork : Fork} {s t : BeaconState preset fork}
     (ok : epochBeforePayments config checks s = .ok t) :
     ∃ events, epochBalanceReplay (config := config) (checks := checks) s = .ok (t, events) := by
   rw [epochBeforePayments_eq_run] at ok
@@ -980,7 +980,7 @@ private theorem replayDeltas_bounded {fork : Fork} (source : BalanceSource)
       exact decrease_bounds (liftAccessor_ok.mp action)) rewardedBound penalizedOk
 
 /-- The rewards replay records only bounded events. -/
-private theorem replayRewards_bounded {fork : Fork} {pre post : BalanceReplay preset fork}
+theorem replayRewards_bounded {fork : Fork} {pre post : BalanceReplay preset fork}
     (initial : EventsBounded pre.2)
     (ok : replayRewards (config := config) pre = .ok post) : EventsBounded post.2 := by
   simp only [replayRewards] at ok
@@ -1710,18 +1710,18 @@ theorem source_bounds_over_interval {g x y : ForkedBeaconState preset}
   · exact List.sum_le_sum (fun event member => (bound event member).2)
 
 /-- The credit or the debit of validator `i` between two states. -/
-private def coverageDelta (debit : Bool) (x y : ForkedBeaconState preset) (i : Nat) : Nat :=
+def coverageDelta (debit : Bool) (x y : ForkedBeaconState preset) (i : Nat) : Nat :=
   if debit then actualBalanceAt x i - actualBalanceAt y i
   else actualBalanceAt y i - actualBalanceAt x i
 
 /-- The events cover each credit and each debit between two states, per validator. -/
-private def Coverage (x y : ForkedBeaconState preset)
+def Coverage (x y : ForkedBeaconState preset)
     (events : List (BalanceEvent preset)) : Prop :=
   ∀ debit i, coverageDelta debit x y i ≤
     (events.map fun e => coverageDelta debit e.before e.after i).sum
 
 /-- No events cover a state to itself. -/
-private theorem coverage_refl (x : ForkedBeaconState preset) : Coverage x x [] := by
+theorem coverage_refl (x : ForkedBeaconState preset) : Coverage x x [] := by
   intro debit i
   cases debit <;> simp [coverageDelta]
 
@@ -1745,7 +1745,7 @@ private theorem coverage_same {fork : Fork} {s t : BeaconState preset fork}
   cases debit <;> simp [coverageDelta, actualBalanceAt, same]
 
 /-- The events of a replay cover the balance changes from its start. -/
-private abbrev ReplayCoverage {fork : Fork} (start : BeaconState preset fork)
+abbrev ReplayCoverage {fork : Fork} (start : BeaconState preset fork)
     (pre : BalanceReplay preset fork) : Prop := Coverage ⟨fork, start⟩ ⟨fork, pre.1⟩ pre.2
 
 private theorem coverage_record {fork : Fork} {start : BeaconState preset fork}
@@ -1778,7 +1778,7 @@ private theorem coverage_deltas {fork : Fork} {start : BeaconState preset fork}
   exact coverage_record (coverage_record initial rewardOk) penaltyOk
 
 /-- The rewards replay extends the coverage. -/
-private theorem coverage_rewards {fork : Fork} {start : BeaconState preset fork}
+theorem coverage_rewards {fork : Fork} {start : BeaconState preset fork}
     {pre post : BalanceReplay preset fork} (initial : ReplayCoverage start pre)
     (ok : replayRewards (config := config) pre = .ok post) : ReplayCoverage start post := by
   unfold replayRewards at ok
@@ -1823,7 +1823,7 @@ private theorem coverage_fold_keeps {fork : Fork} {α ε : Type}
     (fun a b c previous step => (keeps a b c step).trans previous) rfl ok
 
 /-- Registry updates keep the balances. -/
-private theorem coverage_registry {fork : Fork} {s t : BeaconState preset fork}
+theorem coverage_registry {fork : Fork} {s t : BeaconState preset fork}
     (ok : processRegistryUpdates config s = .ok t) : t.balances = s.balances := by
   have electra (epoch : Epoch) (s t : BeaconState preset fork) (i : Nat)
       (ok : updateRegistryEntryElectra config epoch s i = .ok t) :
@@ -2257,7 +2257,7 @@ private theorem coverage_run {x y : ForkedBeaconState preset} (run : Run config 
     exact Nat.add_le_add (priorCover debit i) (addedCover debit i)
 
 /-- The coverage of one event, summed over validators, is at most its credits or debits. -/
-private theorem coverage_event_sum (event : BalanceEvent preset) (n : Nat) (debit : Bool) :
+theorem coverage_event_sum (event : BalanceEvent preset) (n : Nat) (debit : Bool) :
     (∑ i ∈ Finset.range n, coverageDelta debit event.before event.after i) ≤
       if debit then event.debits else event.credits := by
   have bound (a b : ForkedBeaconState preset) :
@@ -2276,7 +2276,7 @@ private theorem coverage_event_sum (event : BalanceEvent preset) (n : Nat) (debi
   cases debit <;> exact bound _ _
 
 /-- The coverage of a list of events, summed over validators, is at most its totals. -/
-private theorem coverage_sum_events (events : List (BalanceEvent preset)) (n : Nat) (debit : Bool) :
+theorem coverage_sum_events (events : List (BalanceEvent preset)) (n : Nat) (debit : Bool) :
     (∑ i ∈ Finset.range n,
       (events.map fun e => coverageDelta debit e.before e.after i).sum) ≤
       (events.map fun e => if debit then e.debits else e.credits).sum := by
@@ -2491,7 +2491,7 @@ private theorem funding_source_inactive (v : Validator) (current next : Epoch)
 /-- The funded stake with an explicit queue of pending consolidations.
 
 During the pass, only the unprocessed suffix supplies pending-source support. -/
-private def funding_potential {fork : Fork} (s : BeaconState preset fork)
+def funding_potential {fork : Fork} (s : BeaconState preset fork)
     (queue : List PendingConsolidation) : Nat :=
   ∑ i ∈ Finset.range s.validators.data.size,
     (s.validators.data[i]?.map fun v =>
@@ -2502,7 +2502,7 @@ private def funding_potential {fork : Fork} (s : BeaconState preset fork)
       else 0).getD 0
 
 /-- With the state's own queue, the potential is the funded stake. -/
-private theorem funding_potential_eq {fork : Fork} (s : BeaconState preset fork)
+theorem funding_potential_eq {fork : Fork} (s : BeaconState preset fork)
     (electra : .pectra ≤ fork) :
     funding_potential s (s.pendingConsolidations electra).data.toList = fundedStake ⟨fork, s⟩ := by
   unfold fundedStake
@@ -2538,7 +2538,7 @@ private theorem funding_potential_mono {fork : Fork} (s : BeaconState preset for
 The epoch must not decrease, and each validator's funding must rise by at most its credit.
 
 Each pending source in the later queue is pending, active or not yet activated before the step. -/
-private theorem funding_potential_change {fork : Fork} {s t : BeaconState preset fork}
+theorem funding_potential_change {fork : Fork} {s t : BeaconState preset fork}
     (queue beforeQueue : List PendingConsolidation) (credits : Nat → Nat)
     (size : t.validators.data.size = s.validators.data.size)
     (life : RegistryLifecycle s t)
@@ -2651,7 +2651,7 @@ private theorem funding_registration {fork : Fork} {s t : BeaconState preset for
     funding_append queue _ amount registry balances matched (addValidatorToRegistry_slot ok)
 
 /-- Effective-balance updates do not raise the potential. -/
-private theorem funding_effective_updates {fork : Fork} {s t : BeaconState preset fork}
+theorem funding_effective_updates {fork : Fork} {s t : BeaconState preset fork}
     (queue : List PendingConsolidation) (ok : processEffectiveBalanceUpdates s = .ok t) :
     funding_potential t queue ≤ funding_potential s queue := by
   have slot := (frame_processEffectiveBalanceUpdates ok).slot
@@ -3342,7 +3342,7 @@ private theorem funding_pending_funded {fork : Fork} {s t : BeaconState preset f
 /-- The pending deposits and consolidations raise the funding by at most one epoch of churn.
 
 The deposit credit of withdrawn validators is the only other credit. -/
-private theorem funding_pending_balances {fork : Fork} {s t : BeaconState preset fork}
+theorem funding_pending_balances {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     (delay : 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (matched : BalancesMatch s) (ordered : ExitsOrdered s)
@@ -3717,7 +3717,7 @@ The stage equations come from the epoch schedule.
 The replay records the rewards and the slashings.
 
 It then records the pending deposits and the pending consolidations. -/
-private theorem funding_epoch_site {fork : Fork} {s t : BeaconState preset fork}
+theorem funding_epoch_site {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     (ok : epochBeforePayments config checks s = .ok t)
     {events : List (BalanceEvent preset)}

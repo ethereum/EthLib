@@ -370,7 +370,7 @@ theorem processEth1DataReset_pendingConsolidations
     t.pendingConsolidations = s.pendingConsolidations := SamePendingQueue.eth1Reset ok
 
 /-- An epoch stage keeps the pending consolidations, unless it is the stage that processes them. -/
-private theorem EpochStage.Edge.samePendingQueue {f : Fork} {stage : EpochStage}
+theorem EpochStage.Edge.samePendingQueue {f : Fork} {stage : EpochStage}
     {s t : BeaconState preset f} (edge : EpochStage.Edge config checks stage s t)
     (other : stage ≠ .pendingConsolidations) : SamePendingQueue s t := by
   cases stage <;> simp only [EpochStage.Edge] at edge
