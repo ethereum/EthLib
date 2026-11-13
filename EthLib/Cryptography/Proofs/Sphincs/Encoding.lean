@@ -93,7 +93,7 @@ theorem digits_getElem_val_bytesToUint (d : Digest) (i : Nat) (hi : i < V) :
   -- Byte `j` of a little-endian number is its digit `j` in base 256.
   have hbyte : Base.bytesToUint d / 256 ^ (i / 4) % 256 = (d[i / 4]'hj).toNat := by
     have h := congrArg (fun v : Digest => (v[i / 4]'hj).toNat) (Base.uintToBytes_bytesToUint d)
-    simp only [Base.uintToBytes, Vector.getElem_ofFn] at h
+    simp only [Base.uintToBytes_eq_div, Vector.getElem_ofFn] at h
     exact h
   have hpow : (2 : Nat) ^ (8 * (i / 4) + 6 - 2 * (i % 4))
       = 256 ^ (i / 4) * 2 ^ (6 - 2 * (i % 4)) := by

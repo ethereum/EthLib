@@ -155,7 +155,9 @@ private theorem setValidatorAt {position : Nat} {v old : Validator}
     (le : ExitsOrdered state → v.exitEpoch ≤ v.withdrawableEpoch)
     (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       v.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) : SlashedKept state after :=
-  SlashedKept.of_flags (frame_setValidatorAt_of_whole set found key le whole).pubkeysPrefix
+  SlashedKept.of_flags
+    (frame_setValidatorAt_of_whole set found key (fun marked => flag.trans marked) le
+      whole).pubkeysPrefix
     (slashed_setValidatorAt found set flag)
 
 private theorem increaseBalance {index : ValidatorIndex} {amount : Gwei}

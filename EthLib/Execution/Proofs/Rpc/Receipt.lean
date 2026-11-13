@@ -643,7 +643,7 @@ theorem Valid.buyGas_receiptInfos {v : ChainView} {checkSeal : Bool}
     rw [hprice, hbase, hblob]
     rcases tx with t | t | t | t | t <;>
       simp [Fees.BlobBaseFee.calculateTotalBlobGas, Fees.BlobBaseFee.GAS_PER_BLOB,
-        blobGasPriceOf, blockEnvironment]
+        blobGasPriceOf, blockEnvironment, Evm.BlockEnvironment.blobBaseFee]
   obtain ⟨hle, hbal, -⟩ := buyGas_sender hfee hbought
   omega
 

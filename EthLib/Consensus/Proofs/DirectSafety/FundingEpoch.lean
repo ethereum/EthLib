@@ -195,31 +195,17 @@ private theorem funding_before {fork : Fork} {s t : BeaconState preset fork}
   simp only [List.map_append, List.sum_append, List.map_cons, List.map_nil, List.sum_cons,
     List.sum_nil, fundingCredit, Nat.add_zero]
   by_cases electra : .pectra ≤ fork
-  · have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
-    have before : fork < .hegota := Nat.lt_trans early (by decide)
-    have kept {P : BeaconState preset fork → Prop}
+  · have kept {P : BeaconState preset fork → Prop}
         (step : ∀ {k : EpochStage} {a b : BeaconState preset fork},
           EpochStage.Edge config checks k a b → P a → P b) (start : P s) : P reset :=
       trace.transport (fun a b => P a → P b) (fun _ => id) (fun one two => two ∘ one)
         (fun _ _ _ _ computed => step (EpochStage.action_cases.mp computed)) start
     have resetActivation := kept (fun edge => edge.activationExitOrder) activation
     have resetPending := kept (fun edge => edge.pendingConsolidationInvariant) pending
-    have carry : reset.depositBalanceToConsume = s.depositBalanceToConsume :=
-      trace.transport (fun a b => b.depositBalanceToConsume = a.depositBalanceToConsume)
-        (fun _ => rfl) (by intro _ _ _ one two; exact two.trans one)
-        (fun _ member _ _ computed => (EpochStage.action_cases.mp computed).depositCarry
-          (by simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-              rcases member with rfl | rfl | rfl | rfl | rfl | rfl <;> exact nofun))
-    simp only [EpochStage.Edge, altair, before, ↓reduceDIte] at scoredOk resetOk
-    simp only [EpochStage.Edge, electra, ↓reduceDIte] at depositedOk consolidatedOk
     -- After justification, the stages up to the eth1 reset are mutator frames.
-    have frame := (frame_processInactivityUpdates scoredOk).trans <|
-      (frame_processRewardsAndPenalties rewardedOk).trans <|
-      (frame_processRegistryUpdates registeredOk).trans <|
-      (frame_processSlashings slashedOk).trans (frame_processEth1DataReset resetOk)
-    have resetMatch : BalancesMatch reset := frame.balancesMatch <|
-      balancesMatch_of_sameSizes (sameSizes_processJustificationAndFinalization justifiedOk)
-        matched
+    obtain ⟨carry, frame, resetMatch⟩ := funding_epoch_prefix electra early trace justifiedOk
+      scoredOk rewardedOk registeredOk slashedOk resetOk matched
+    simp only [EpochStage.Edge, electra, ↓reduceDIte] at depositedOk consolidatedOk
     have resetOrder : ExitsOrdered reset := frame.exitsOrdered <| by
       simpa only [ExitsOrdered, (processJustificationAndFinalization_keeps
         justifiedOk).2.2.2.2.2.1] using ordered

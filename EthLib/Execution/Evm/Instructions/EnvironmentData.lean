@@ -128,8 +128,7 @@ def environmentStep (fork : Fork) : Op → Option (Evm fork Meter → Except Evm
   | .blobbasefee =>
     if h : .dencun ≤ fork then
       some (readFrame OPCODE_BLOBBASEFEE fun evm =>
-        BitVec.ofNat 256 (getBaseFeePerBlobGas (evm.message.blockEnv.blobSchedule h)
-          (evm.message.blockEnv.excessBlobGas h).toNat))
+        BitVec.ofNat 256 (evm.message.blockEnv.blobBaseFee h))
     else none
   | .slotnum =>
     if h : .glamsterdam ≤ fork then
