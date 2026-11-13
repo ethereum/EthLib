@@ -227,7 +227,7 @@ It runs justification and finalization on the held state of the tip.
 
 The result updates the unrealized checkpoints of the store.
 
-For a block of an earlier epoch than the store's, it updates the realized checkpoints too. -/
+When the block's epoch is before the store's current epoch, it updates the realized ones too. -/
 theorem computePulledUpTip_frame {root : Root} {after : Store preset fork}
     (pulled : store.computePulledUpTip config root = .ok after) :
     store.EpochsLe after ∧ after.blocks = store.blocks ∧ after.blockStates = store.blockStates ∧
