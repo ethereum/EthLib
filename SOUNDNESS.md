@@ -2735,7 +2735,7 @@ The other case is that the state before the transition hashes to the zero root, 
 From an anchor slot on, each root that the state records is a root of the chain at its slot, and each checkpoint whose epoch starts above the anchor names a root of the chain at that start.
 A state with the invariant agrees with every chain from its own slot on (`ChainRoots.of_invariant`).
 A block keeps the agreement for the chain extended by its parent root, or, when the state before hashes to the zero root, by the root of its latest header (`ChainRoots.of_stateTransition`); slots with their upgrades keep it for the chain extended by the root of the header of the last state, and in the same zero case by the root of the first header (`ChainRoots.of_advanceSlotsAcross`).
-The theorems on blocks and slots assume that the buffer of roots covers two epochs.
+These theorems on blocks and slots, and those on runs below, assume that the buffer of roots covers two epochs.
 Along a run, the chain is the roots that the states of the run record (`ChainRoots.of_run`).
 `Run.finalized_le_currentJustified` then puts the finalized block at or before the current justified block, for a map from roots that orders the links of each state of the run, when the first state has the invariant and the finalized epoch starts after the first slot of the run.
 `Run.zeroPreimage_or_finalized_le_currentJustified` takes that order from `zeroPreimage_or_rootLinks_le_of_chainSteps`, so its only other case is a state between the first and the last state, by chain steps, that hashes to the zero root.
