@@ -2823,6 +2823,7 @@ An address decodes exactly from `0x` and two hex digits for each byte, in either
 A 64-bit number decodes to `x` exactly when the number read with the bound `2^64` is `x` (`uint64_eq_ok_iff`).
 The encoder of numbers writes the only text that decodes to the number, at any bound `2^bits` above it (`quantity_eq_ok_iff`).
 So two numbers never share an encoding (`quantityJson_inj`).
+The error object of JSON-RPC 2.0 reads back from what its writer writes, whatever its data, `null` included (`rpcErrorOfJson_json`).
 A withdrawal, and a list of withdrawals, decode back from their encodings (`withdrawal_withdrawalJson`, `array_withdrawal_listJson`, `Execution/Proofs/Rpc/Json.lean`).
 An input that a shared reader rejects is an invalid parameter of the Engine API, for the same reason (`liftM_error`, `liftM_eq_ok_iff`, `Engine/Proofs/Json.lean`).
 A payload of version 4 decodes exactly when it holds the fields of version 4 and each part decodes (`payloadV4_eq_ok_iff`).

@@ -19,7 +19,7 @@ A number is lowercase hex behind `0x`, without leading zeros, and `0x0` for zero
 
 The base types state the patterns in [`base-types.yaml`][types].
 
-Readers of objects require exactly the named fields, as step 1 of [`engine_newPayloadV3`][v3] asks.
+Object readers require exactly the named fields, as step 1 of [`engine_newPayloadV3`][v3] asks.
 
 They count a field whose value is `null` as absent, as that step also asks.
 
@@ -29,7 +29,14 @@ A caller turns that reason into its own error, such as an invalid parameter of t
 
 The writers write the canonical form: lowercase hex, and numbers without leading zeros.
 
+A failed request answers with an error object of [JSON-RPC 2.0][rpc]: a code, a message and data.
+
+Its data is optional, and a member `data` set to `null` holds the data `null`.
+
+JSON-RPC 2.0 reserves the codes from `-32768` to `-32000`; each API keeps its own table of the rest.
+
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#specification
+[rpc]: https://www.jsonrpc.org/specification#error_object
 [types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
 -/
 
@@ -150,5 +157,65 @@ def listJson {α : Type} (f : α → Json) (items : List α) : Json := .arr (ite
 /-- A number as a quantity: `0x`, then its hex digits without leading zeros. -/
 def quantityJson (n : Nat) : Json :=
   .str ("0x" ++ String.ofList (Nat.toDigits 16 n))
+
+/-! ## The error object -/
+
+/-- An integer: a JSON number whose value is an integer, such as `-32602`, `1e3` or `1.0`. -/
+def integer (what : String) : Json → Read Int
+  | .num ⟨m, e⟩ =>
+    if m % 10 ^ e = 0 then pure (m / 10 ^ e) else reject s!"{what}: not an integer"
+  | _ => reject s!"{what}: not an integer"
+
+/-- A JSON string. -/
+def string (what : String) : Json → Read String
+  | .str s => pure s
+  | _ => reject s!"{what}: not a string"
+
+/-- The error object of a JSON-RPC response.
+
+It holds an integer code, a message, and optional data.
+
+Section 5.1 of [JSON-RPC 2.0][rpc] defines it.
+
+[rpc]: https://www.jsonrpc.org/specification#error_object -/
+structure RpcError where
+  /-- The code: the kind of the error. -/
+  code : Int
+  /-- A short description of the error. -/
+  message : String
+  /-- More about the error, absent when the error has nothing to add. -/
+  data : Option Json := none
+
+/-- The error of invalid parameters, code `-32602`, with the reason as its data.
+
+The code and the message are those of section 5.1 of [JSON-RPC 2.0][rpc].
+
+[rpc]: https://www.jsonrpc.org/specification#error_object -/
+def RpcError.invalidParams (reason : String) : RpcError :=
+  { code := -32602, message := "Invalid params", data := some (.str reason) }
+
+/-- The error object as JSON: the code, the message, and the data when it has some. -/
+def rpcErrorJson (e : RpcError) : Json :=
+  Json.mkObj ([("code", .num (.fromInt e.code)), ("message", .str e.message)] ++
+    match e.data with
+    | some d => [("data", d)]
+    | none => [])
+
+/-- An error object: a code, a message and optional data.
+
+It rejects any other member, a stricter rule than section 5.1 of [JSON-RPC 2.0][rpc] states.
+
+A member `data` set to `null` reads as the data `null`, not as absent data.
+
+[rpc]: https://www.jsonrpc.org/specification#error_object -/
+def rpcErrorOfJson : Json → Read RpcError
+  | .obj kvs => do
+    let members := kvs.toList
+    unless members.all fun (name, _) => name == "code" || name == "message" || name == "data" do
+      reject "error: a member other than code, message and data"
+    let code ← integer "code" (← field "error" members "code")
+    let message ← string "message" (← field "error" members "message")
+    return ⟨code, message, members.lookup "data"⟩
+  | _ => reject "error: not an object"
 
 end EthLib.Serialization.JsonRpc
