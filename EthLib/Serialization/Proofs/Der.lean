@@ -17,9 +17,9 @@ The reader is stated against X.690 itself, in terms of octets and numbers.
 - So an integer has a single content.
 - A nonnegative one is its big-endian octets, at least one, after a zero if the top bit is set.
 - A BOOLEAN is one octet, FF for TRUE and 00 for FALSE.
-- An octet-aligned BIT STRING is the octet 0, then its octets.
+- The BIT STRING reader accepts only an octet-aligned value: the octet 0, then its octets.
 - BIT STRING contents count at most 7 unused bits, all zero, and none when no octet follows.
-- BMPString and UniversalString write Unicode scalar values big-endian, on two or four octets.
+- BMPString and UniversalString pass when they write Unicode scalar values, two or four octets each.
 -/
 
 @[expose] public section
@@ -516,12 +516,13 @@ theorem natural_ok_iff {value : Value} {n : Nat} :
     rw [hc, Int.emod_eq_of_lt (by omega) (by rw [Nat.pow_succ]; omega)]
     rfl
 
-
 /-! ## BOOLEAN and BIT STRING -/
 
 /-- A BOOLEAN reads as `b` exactly when its tag is 1 and its content is the one octet of `b`.
 
-TRUE is the octet FF and FALSE the octet 00, so every other content is rejected (X.690 §11.1). -/
+TRUE is the octet FF and FALSE the octet 00, so every other content is rejected.
+
+That is X.690 §§8.2.1 and 8.2.2, with the DER rule for TRUE of §11.1. -/
 theorem boolean_ok_iff {value : Value} {b : Bool} :
     boolean value = .ok b ↔
       value.tag = 1 ∧ value.content.data.toList = [if b then 0xFF else 0x00] := by
@@ -585,9 +586,11 @@ private theorem mod_two_pow_eq_zero_iff (n u : Nat) :
 
 The initial octet is 0 when no octet follows it (X.690 §8.6.2.3).
 
-Otherwise the unused bits are the low bits of the final octet (X.690 §8.6.2.2).
+Otherwise the unused bits are the low bits of the final octet (X.690 §§8.6.2.1, 8.6.2.2).
 
-Each of them is zero (X.690 §11.2.1). -/
+Each of them is zero (X.690 §11.2.1).
+
+The reader does not know the type, so it does not drop the trailing zero bits of §11.2.2. -/
 theorem validBits_ok_iff {content : ByteArray} :
     validBits content = .ok () ↔ content.data.toList = [0] ∨
       ∃ unused init last, content.data.toList = unused :: (init ++ [last]) ∧
@@ -629,7 +632,7 @@ theorem validBits_ok_iff {content : ByteArray} :
 
 /-! ## BMPString and UniversalString -/
 
-/-- One step of the code-unit reader: the octets read so far, their value, and the verdict. -/
+/-- One step of the code-unit reader: the octets of the current unit, their value, the verdict. -/
 private def step (width : Nat) (state : Nat × Nat × Bool) (byte : UInt8) : Nat × Nat × Bool :=
   let n := state.2.1 * 256 + byte.toNat
   if state.1 + 1 = width then (0, 0, state.2.2 && unicodeScalar n)
@@ -676,7 +679,9 @@ private theorem unicodeScalar_iff (n : Nat) :
     Bool.not_true, Bool.and_eq_false_iff, decide_eq_false_iff_not]
   omega
 
-/-- The fold accepts from any verdict `ok` exactly when `ok` holds and the octets are scalars. -/
+/-- The fold accepts from a verdict `ok` exactly when `ok` holds and the octets write scalars.
+
+Each scalar takes `width` octets, big-endian. -/
 private theorem finish_foldl_iff {width : Nat} (pos : 0 < width) (bytes : List UInt8)
     (ok : Bool) :
     finish (bytes.foldl (step width) (0, 0, ok)) = true ↔ ok = true ∧ ∃ chars : List Nat,
@@ -737,11 +742,11 @@ private theorem finish_foldl_iff {width : Nat} (pos : 0 < width) (bytes : List U
 
 /-- Code units of `width` octets pass exactly when they write a list of Unicode scalar values.
 
-A Unicode scalar value is at most 10FFFF and outside the surrogates D800 to DFFF.
+The reader takes a scalar value to be at most 10FFFF and outside the surrogates D800 to DFFF.
 
 Each is written big-endian on `width` octets, so it is below `256 ^ width`.
 
-A BMPString has two octets per character and a UniversalString four (X.690 §8.23). -/
+A UniversalString has four octets per character and a BMPString two (X.690 §§8.23.7, 8.23.8). -/
 theorem fixedString_eq_true_iff {width : Nat} (pos : 0 < width) {bytes : List UInt8} :
     fixedString width bytes = true ↔ ∃ chars : List Nat,
       (∀ c ∈ chars, c < 256 ^ width ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
@@ -751,9 +756,9 @@ theorem fixedString_eq_true_iff {width : Nat} (pos : 0 < width) {bytes : List UI
 
 /-! ## The certificate subset -/
 
-/-- A value of tag 1 passes validation exactly when its content is the octet 00 or the octet FF. -/
-theorem validate_boolean_ok_iff {value : Value} (tag : value.tag = 1) :
-    validate value = .ok () ↔
+/-- At any depth, a value of tag 1 passes validation exactly when its content is 00 or FF. -/
+theorem validate_go_boolean_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 1) :
+    validate.go (fuel + 1) value = .ok () ↔
       value.content.data.toList = [0x00] ∨ value.content.data.toList = [0xFF] := by
   have hb : (∃ b, boolean value = .ok b) ↔
       value.content.data.toList = [0x00] ∨ value.content.data.toList = [0xFF] := by
@@ -764,29 +769,52 @@ theorem validate_boolean_ok_iff {value : Value} (tag : value.tag = 1) :
     · rintro (h | h)
       · exact ⟨false, by simp [h]⟩
       · exact ⟨true, by simp [h]⟩
-  rw [← hb, validate, validate.go, tag]
+  rw [← hb, validate.go, tag]
   cases boolean value <;> simp [bind, Except.bind, pure, Except.pure]
 
-/-- A value of tag 3 passes validation exactly when its contents are those of a BIT STRING.
-
-The initial octet is 0 alone, or at most 7 before octets that end with that many zero bits. -/
-theorem validate_bitString_ok_iff {value : Value} (tag : value.tag = 3) :
-    validate value = .ok () ↔ value.content.data.toList = [0] ∨
-      ∃ unused init last, value.content.data.toList = unused :: (init ++ [last]) ∧
-        unused.toNat ≤ 7 ∧ ∀ i < unused.toNat, last.toNat.testBit i = false := by
-  rw [← validBits_ok_iff, validate, validate.go, tag]
+/-- At any depth, a value of tag 3 passes validation exactly when its BIT STRING contents do. -/
+theorem validate_go_bitString {value : Value} (fuel : Nat) (tag : value.tag = 3) :
+    validate.go (fuel + 1) value = validBits value.content := by
+  rw [validate.go, tag]
   rfl
 
-/-- A BMPString passes validation exactly when it writes Unicode scalar values, two octets each.
+/-- At any depth, a value of tag 30 passes validation exactly when its two-octet code units pass. -/
+theorem validate_go_bmpString_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 30) :
+    validate.go (fuel + 1) value = .ok () ↔ fixedString 2 value.content.data.toList = true := by
+  rw [validate.go, tag]
+  dsimp only
+  split <;> simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
 
-A UniversalString does the same with four octets each. -/
-theorem validate_fixedString_ok_iff {value : Value} {width : Nat}
-    (tag : value.tag = 30 ∧ width = 2 ∨ value.tag = 28 ∧ width = 4) :
+/-- At any depth, a value of tag 28 passes validation exactly when its four-octet code units do. -/
+theorem validate_go_universalString_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 28) :
+    validate.go (fuel + 1) value = .ok () ↔ fixedString 4 value.content.data.toList = true := by
+  rw [validate.go, tag]
+  dsimp only
+  split <;> simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+
+/-- A value of tag 1 passes validation exactly when its content is the octet 00 or the octet FF. -/
+theorem validate_boolean_ok_iff {value : Value} (tag : value.tag = 1) :
+    validate value = .ok () ↔
+      value.content.data.toList = [0x00] ∨ value.content.data.toList = [0xFF] :=
+  validate_go_boolean_ok_iff _ tag
+
+/-- A value of tag 3 passes validation exactly when its contents are those of a BIT STRING. -/
+theorem validate_bitString {value : Value} (tag : value.tag = 3) :
+    validate value = validBits value.content :=
+  validate_go_bitString _ tag
+
+/-- A BMPString passes validation exactly when it writes Unicode scalar values, two octets each. -/
+theorem validate_bmpString_ok_iff {value : Value} (tag : value.tag = 30) :
     validate value = .ok () ↔ ∃ chars : List Nat,
-      (∀ c ∈ chars, c < 256 ^ width ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
-      value.content.data.toList = chars.flatMap (natToBytes width) := by
-  rw [← fixedString_eq_true_iff (by omega), validate, validate.go]
-  rcases tag with ⟨tag, rfl⟩ | ⟨tag, rfl⟩ <;> rw [tag] <;> dsimp only <;> split <;>
-    simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+      (∀ c ∈ chars, c < 256 ^ 2 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
+      value.content.data.toList = chars.flatMap (natToBytes 2) := by
+  rw [validate, validate_go_bmpString_ok_iff _ tag, fixedString_eq_true_iff (by decide)]
+
+/-- A UniversalString passes validation exactly when it writes scalar values, four octets each. -/
+theorem validate_universalString_ok_iff {value : Value} (tag : value.tag = 28) :
+    validate value = .ok () ↔ ∃ chars : List Nat,
+      (∀ c ∈ chars, c < 256 ^ 4 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
+      value.content.data.toList = chars.flatMap (natToBytes 4) := by
+  rw [validate, validate_go_universalString_ok_iff _ tag, fixedString_eq_true_iff (by decide)]
 
 end EthLib.Serialization.Proofs.Der
