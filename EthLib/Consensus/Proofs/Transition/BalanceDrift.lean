@@ -14,7 +14,7 @@ A whole block keeps them, at every fork.
 
 Registry updates keep them as well.
 
-Six epoch stages can change the balances, and every other stage keeps them.
+Only rewards, slashings and the two pending stages can change the balances.
 
 An effective-balance update never raises the larger of the effective and the actual balance.
 -/
@@ -444,7 +444,6 @@ theorem balanceDrift_late {f : Fork} {s t : BeaconState preset f}
   all_goals
     have kept := edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
     exact ⟨kept.1, kept.2.1⟩
-
 
 /-- An effective-balance update cannot increase the funding held at any registry position. -/
 private theorem updateEffectiveBalance_funding {fork : Fork} {s t : BeaconState preset fork}

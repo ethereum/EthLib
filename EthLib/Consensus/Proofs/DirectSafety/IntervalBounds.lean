@@ -521,7 +521,7 @@ With a withdrawal delay below two epochs, that stake is instead a registry bound
 
 It is the registry window times `MAX_EFFECTIVE_BALANCE_ELECTRA`.
 
-The window reads the balance events that the run replays up to `high`.
+The window reads the balance events of the steps that start by epoch `high + 1`.
 
 That replay succeeds for every run that ends before Gloas.
 

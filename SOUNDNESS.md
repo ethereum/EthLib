@@ -2527,7 +2527,7 @@ These events record each change of balance with the limit that the transition co
 The recorded credits are the rewards, including those of proposers, whistleblowers and sync committees, and the deposits that the deposit churn does not limit.
 Those are the deposits before Electra and, from Electra, the deposits to withdrawn sources of pending consolidations.
 They raise the bound, so it is only as tight as the credits of the run.
-The theorem charges `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` and the consolidation churn only if the window reaches `ELECTRA_FORK_EPOCH`, so it also covers a window that crosses the fork.
+The theorem charges `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` and the consolidation rate only if the window reaches `ELECTRA_FORK_EPOCH`, so it also covers a window that crosses the fork.
 With a withdrawal delay below two epochs, the theorem uses the registry window times `MAX_EFFECTIVE_BALANCE_ELECTRA` instead.
 The mainnet delay of 256 epochs never reaches that case.
 The theorem also assumes the order of the caps and that the divisors of the preset are positive.
