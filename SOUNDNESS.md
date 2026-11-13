@@ -2099,6 +2099,16 @@ The vendored fast confirmation cases in `tests/consensus/fork_choice` still pass
 From Gloas the discount for empty slots also counts the votes for the pending node of the parent, which the rule of consensus-specs `v1.7.0-beta.4` leaves out.
 No pinned vector reaches that case, so review alone checks it until the vectors move to a release with it.
 
+`Consensus/Proofs/Models/ForkChoice/HonestSupport.lean` proves Lemmas 1, 3 and 4 of Appendix A.1 of the paper on sets of validators weighed by stake.
+`lt_two_mul_honest_support_later` takes the honest ratio that Lemma 4 gives at one slot, and chains Lemmas 1 and 3 across slots.
+The honest ratio that Lemma 4 gives at one slot yields honest support above half the threshold at a later slot.
+It assumes that the later threshold grows at most in proportion to the stake of the committees.
+It also assumes that every honest supporter at the first slot still supports the block, that every honest validator that joins the committees supports it, and Assumption 2 for the later committees.
+Both slots weigh validators by the same stake.
+`lt_two_mul_honest_support_later_of_add` covers thresholds that add an amount to the stake of the committees, with committees that only grow and an amount that never grows.
+For the rule that amount is the boost less the discount, so it does not cover a discount larger than the boost.
+No theorem yet takes these sets and stakes from the stores of an execution, or shows that the amount of the rule never grows.
+
 `stake_le_computeCommitteeWeightBetweenSlots` (`Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean`) shows that the weight covers the stake of the active members of the committees.
 `stake_le_computeCommitteeWeightBetweenSlots_of_covered` shows that the weight of a range with a whole epoch covers the stake of every validator active in the source of balances.
 `lt_two_mul_honest_support_of_isOneConfirmed` then gives Lemmas 4 and 3 of the paper for a block that the store confirms.
