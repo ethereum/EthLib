@@ -22,6 +22,7 @@ public import EthLib.Networking.Gossip.Cache
 public import EthLib.Networking.Gossip.MessageId
 public import EthLib.Networking.Gossip.Parameters
 public import EthLib.Networking.Gossip.Payload
+public import EthLib.Networking.Gossip.Router
 public import EthLib.Networking.Gossip.Rpc
 public import EthLib.Networking.Gossip.Subnet
 public import EthLib.Networking.Gossip.Topic

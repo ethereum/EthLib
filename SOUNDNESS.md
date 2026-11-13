@@ -2015,6 +2015,54 @@ The source calls the seen cache "a timed least-recently-used cache", and does no
 Here an entry keeps the time when it was inserted, and a lookup changes nothing.
 The source gives no bound on the size of either cache, so none is modelled.
 The caches take the 20-byte message IDs of the consensus layer, where gossipsub allows any bytes.
+`MessageId.toBytes` and `MessageId.ofBytes?` convert between these IDs and the bytes of IHAVE and IWANT, and `ofBytes?_toBytes` and `toBytes_of_ofBytes?` prove that they are inverse.
+
+### The gossipsub router on a received RPC
+
+`receiveRpc` (`Networking/Gossip/Router.lean`) is what a router does with one RPC from a peer, after [gossipsub v1.0, "Message Processing"](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.0.md#message-processing) and the rules of [gossipsub v1.1](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.1.md).
+It is a pure function of the router state, the time in milliseconds and its inputs.
+The standing of each peer is an input: four flags, for the zero, gossip, publish and graylist thresholds of v1.1, that the client computes.
+The consensus layer fixes no score, so a client without scoring passes every flag false.
+The message ID and the validation are inputs too; the consensus layer provides both.
+The caller also passes two durations that v1.1 leaves open: the extension of a backoff after an early GRAFT, and the backoff of a PRUNE that carries none.
+So every theorem in `Networking/Proofs/Gossip/Router.lean` holds for every standing, message ID, validation and duration.
+The theorems state these properties.
+
+- Only a message of the RPC, on a joined topic, unseen before the RPC and accepted, is forwarded or delivered.
+- A peer joins a mesh only by a GRAFT for a joined topic, when it is not explicit, its backoff has ended, and the outbound quota allows it.
+- So a peer within its backoff never joins a mesh.
+- Every IWANT goes to the sender, for unseen IDs that an IHAVE on a joined topic named.
+- A peer below the gossip threshold that is not explicit gets no IWANT and no IWANT answer.
+- A GRAFT from an explicit peer, or within the backoff for a joined topic, gets a PRUNE.
+- No explicit peer enters a mesh.
+- An IWANT is answered only with messages that it named and that the message cache holds after the RPC.
+- A graylisted peer that is not explicit changes nothing.
+
+The sources leave these points open, and the router takes one reading of each.
+
+- v1.1 ignores a GRAFT for "unknown topics", while v1.0 answers a topic the router left with a PRUNE.
+  Here an unknown topic is one the router has not joined, and the GRAFT gets no answer; it could also mean a topic that no peer announced.
+- A message on a topic the router has not joined is dropped before the seen cache, so it is neither delivered nor forwarded.
+  An IHAVE for such a topic is ignored too, so that no IWANT asks for a message that would be dropped.
+  A PRUNE for such a topic is ignored, so that PRUNEs for arbitrary topics cannot grow the backoff table.
+  The cost is that a router that rejoins a topic within such a backoff may GRAFT that peer too early.
+- A GRAFT from an explicit peer gets a PRUNE whatever its topic, since v1.1 rejects it with a PRUNE.
+- A GRAFT within the backoff also removes its sender from the mesh, since v1.1 prunes it at once.
+- A message goes to every peer in the mesh, the sender included, as v1.0 says.
+- v1.0 does not forward a message that the router published itself.
+  Under `StrictNoSign` a message names no sender, so the router knows its own messages only by the seen cache, which a publish must fill.
+- The ID of a message that fails validation stays in the seen cache.
+- A GRAFT declined under the outbound quota gets no answer.
+- v1.1 says to extend the backoff on an early GRAFT, with no amount, so the caller passes it.
+- A received PRUNE without a backoff sets the backoff that the caller passes; v1.1 recommends one minute for `PruneBackoff`.
+- A received PRUNE never shortens a backoff, and the peers it offers are not recorded: connecting to them is a client choice.
+- The PRUNE that answers an early GRAFT carries the whole seconds that remain of the backoff, rounded up, and the PRUNE to an explicit peer carries none; neither offers peers.
+- v1.1 ignores "gossip" from a peer below the gossip threshold; here that is both IHAVE and IWANT, and never from an explicit peer.
+- IDONTWANT, from gossipsub v1.2, is ignored.
+- A message goes to the mesh, then to the explicit peers; `receiveRpc_explicit` keeps the two lists from overlapping, and no theorem rules out a repeated peer within one list.
+- The v1.1 limits on IWANT answers and on IHAVE messages per heartbeat fix no count, so none is modelled.
+- The `peers.floodsub` set of v1.0 is left out: the consensus layer fixes `/meshsub/1.1.0` and names no floodsub peer.
+- A message ID that is not 20 bytes is never requested and never answered, since no consensus message has one.
 
 ### The streams of an mplex connection
 
