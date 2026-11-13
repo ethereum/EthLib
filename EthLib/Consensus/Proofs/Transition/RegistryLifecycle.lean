@@ -1343,41 +1343,28 @@ private theorem processExecutionRequests {body : BeaconBlockBody preset fork}
 
 end UnassignedKept
 
+/-- Block operations append validators with no assigned epoch.
+
+The three folds before the deposits keep the registry size, so the suffix is empty after them.
+
+The remaining operations, read through master's folds, keep that suffix unassigned. -/
 private theorem newUnassigned_processOperations {body : BeaconBlockBody preset fork}
     {parentSlot : Slot} (ok : processOperations config checks state body parentSlot = .ok after) :
     UnassignedFrom state.validators.data.size after := by
-  unfold processOperations at ok
-  split at ok
-  -- Gloas block requests enqueue deposits; they do not admit validators in this step.
-  · have sizes := (sameSizes_processOperationsGloas ok).1
-    rw [← sizes]
-    exact unassignedFrom_size after
-  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at ok
-  obtain ⟨_, _, _, _, _, proposers, _, attesters, attested, attestations, _, deposited,
-    exited, exits, changed, changes, requests⟩ := ok
+  obtain ⟨_, _, attested, proposersOk, slashingsOk, attestedOk, rest⟩ :=
+    processOperations_folds_of UnassignedKept UnassignedKept.refl (fun one two => one.trans two)
+      UnassignedKept.processDeposit UnassignedKept.processVoluntaryExit
+      UnassignedKept.processBlsToExecutionChange UnassignedKept.processExecutionRequests
+      (fun paid => by rw [processPayloadAttestation_eq paid]; exact UnassignedKept.refl _) ok
   have sizes {α : Type} {step : BeaconState preset fork → α → Except TransitionError _}
       (keeps : ∀ a b c, step a b = .ok c → SameSizes a c) {xs : List α}
       {a b : BeaconState preset fork} (ok : xs.foldlM step a = .ok b) : SameSizes a b :=
     foldlM_ok_invariant (SameSizes a)
       (fun _ _ _ prior ok => prior.trans (keeps _ _ _ ok)) (SameSizes.refl _) ok
-  have before := (sizes (fun _ _ _ => sameSizes_processProposerSlashing) proposers).trans
-    ((sizes (fun _ _ _ => sameSizes_processAttesterSlashing) attesters).trans
-      (sizes (fun _ _ _ => sameSizes_processAttestation) attestations))
-  have changesKept : UnassignedKept exited changed := by
-    unfold processBlsToExecutionChanges at changes
-    split at changes
-    · rw [← Array.foldlM_toList] at changes
-      exact UnassignedKept.foldlM
-        (fun _ _ _ ok => UnassignedKept.processBlsToExecutionChange ok) changes
-    · cases changes; exact UnassignedKept.refl _
-  have requestsKept : UnassignedKept changed after := by
-    split at requests
-    · exact UnassignedKept.processExecutionRequests requests
-    · cases requests; exact UnassignedKept.refl _
-  apply ((UnassignedKept.foldlM (fun _ _ _ ok => UnassignedKept.processDeposit ok)
-    deposited).trans <|
-    (UnassignedKept.foldlM (fun _ _ _ ok => UnassignedKept.processVoluntaryExit ok) exits).trans <|
-    changesKept.trans requestsKept) _
+  have before := (sizes (fun _ _ _ => sameSizes_processProposerSlashing) proposersOk).trans
+    ((sizes (fun _ _ _ => sameSizes_processAttesterSlashing) slashingsOk).trans
+      (sizes (fun _ _ _ => sameSizes_processAttestation) attestedOk))
+  apply rest
   rw [← before.1]
   exact unassignedFrom_size attested
 
