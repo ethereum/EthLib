@@ -2245,6 +2245,11 @@ The theorems in `Networking/Proofs/Gossip/Heartbeat.lean` state these properties
 - After a heartbeat, every mesh has at most `D_high + D_out` peers, at most `D_high` of them not outbound, and none twice.
   The two bounds need `D ≤ D_high`, as the consensus layer sets it.
 - A mesh of a joined topic below `D_low`, once its negative peers leave, fills up to `D`, or takes every peer that it may GRAFT.
+- `heartbeat_mesh_eq` states the mesh of a joined topic between `D_low` and `D_high`, once its negative peers leave.
+  It keeps those peers, then takes outbound peers that it may GRAFT until it holds `D_out` outbound peers.
+  So a mesh at `D_low` gets no peer to reach `D`, and still takes outbound peers.
+  `heartbeat_mesh_stable` derives that such a mesh with `D_out` outbound peers is unchanged.
+  `heartbeat_outbound_ge` derives that it reaches `D_out` outbound peers, or takes every outbound peer that it may GRAFT.
 - No mesh holds a peer with a negative score.
 - A mesh of a joined topic pruned for oversubscription keeps `D_out` outbound peers, or all the outbound peers it held once its negative peers left.
   This needs `D ≤ D_high` and `D_out ≤ D`.

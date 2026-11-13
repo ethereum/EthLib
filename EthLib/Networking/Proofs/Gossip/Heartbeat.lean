@@ -13,6 +13,8 @@ For every lawful choice of peers, and every rank and standing that a client pass
   At most the high bound of them are not outbound, and none appears twice.
 - A joined topic whose mesh is below the low bound, once negative peers leave, fills it.
   It reaches the target, or stops early only when it runs out of peers that it may GRAFT.
+- A joined topic whose mesh is between the bounds, once negative peers leave, keeps that mesh.
+  It takes only outbound peers that it may GRAFT, up to the outbound count.
 - No mesh holds a peer with a negative score.
 - A mesh of a joined topic pruned for oversubscription has the outbound count of outbound peers.
   It has fewer only when it held fewer once its negative peers left.
@@ -531,6 +533,69 @@ theorem heartbeat_outbound (hsel : sel.Lawful) (hD : p.D ≤ p.D_high) (hc : c.d
   rw [mesh_eq]
   simp only [ht, ↓reduceIte]
   exact meshAfter_outbound p c sel rank standing now s hsel hD hc t hhigh
+
+/-- The mesh of a joined topic between the bounds, once negative peers leave, after a heartbeat.
+
+It keeps those peers in their order, then takes outbound peers that it may GRAFT.
+
+It takes them up to the outbound count, counting the outbound peers it holds.
+
+So a mesh at the low bound or at the high bound takes no peer that is not outbound. -/
+theorem heartbeat_mesh_eq (hsel : sel.Lawful) {t : String} (ht : t ∈ s.topics)
+    (hlow : p.D_low ≤ (nonNegativeMesh standing s t).length)
+    (hhigh : (nonNegativeMesh standing s t).length ≤ p.D_high) :
+    peersOf (heartbeat p c sel rank standing now s).1.mesh t =
+      nonNegativeMesh standing s t ++
+        sel (c.dOut - ((nonNegativeMesh standing s t).filter (· ∈ s.outbound)).length)
+          ((graftCandidates standing now s t (nonNegativeMesh standing s t)).filter
+            (· ∈ s.outbound)) := by
+  rw [mesh_eq]
+  simp only [ht, ↓reduceIte]
+  unfold meshAfter
+  dsimp only
+  generalize nonNegativeMesh standing s t = m1 at *
+  have h2 : ¬m1.length < p.D_low := by omega
+  have h3 : ¬p.D_high < m1.length := by omega
+  simp only [h2, h3, ↓reduceIte]
+  split
+  · rfl
+  · have h0 : c.dOut - (m1.filter (· ∈ s.outbound)).length = 0 := by omega
+    have hn := (hsel 0 ((graftCandidates standing now s t m1).filter (· ∈ s.outbound))).2
+    rw [h0, List.length_eq_zero_iff.1 (hn.trans (Nat.zero_min _)), List.append_nil]
+
+/-- A joined topic between the bounds with the outbound count of outbound peers keeps its mesh.
+
+Only its negative peers leave. -/
+theorem heartbeat_mesh_stable (hsel : sel.Lawful) {t : String} (ht : t ∈ s.topics)
+    (hlow : p.D_low ≤ (nonNegativeMesh standing s t).length)
+    (hhigh : (nonNegativeMesh standing s t).length ≤ p.D_high)
+    (hout : c.dOut ≤ ((nonNegativeMesh standing s t).filter (· ∈ s.outbound)).length) :
+    peersOf (heartbeat p c sel rank standing now s).1.mesh t = nonNegativeMesh standing s t := by
+  rw [heartbeat_mesh_eq p c sel rank standing now s hsel ht hlow hhigh, Nat.sub_eq_zero_of_le hout]
+  have hn := (hsel 0 ((graftCandidates standing now s t (nonNegativeMesh standing s t)).filter
+    (· ∈ s.outbound))).2
+  rw [List.length_eq_zero_iff.1 (hn.trans (Nat.zero_min _)), List.append_nil]
+
+/-- A mesh of a joined topic between the bounds reaches the outbound count of outbound peers.
+
+It reaches fewer only when it and its outbound peers that it may GRAFT number fewer. -/
+theorem heartbeat_outbound_ge (hsel : sel.Lawful) {t : String} (ht : t ∈ s.topics)
+    (hlow : p.D_low ≤ (nonNegativeMesh standing s t).length)
+    (hhigh : (nonNegativeMesh standing s t).length ≤ p.D_high) :
+    min c.dOut (((nonNegativeMesh standing s t).filter (· ∈ s.outbound)).length +
+        ((graftCandidates standing now s t (nonNegativeMesh standing s t)).filter
+          (· ∈ s.outbound)).length) ≤
+      ((peersOf (heartbeat p c sel rank standing now s).1.mesh t).filter
+        (· ∈ s.outbound)).length := by
+  rw [heartbeat_mesh_eq p c sel rank standing now s hsel ht hlow hhigh, List.filter_append,
+    List.length_append]
+  generalize nonNegativeMesh standing s t = m1
+  have hg : ∀ q ∈ (graftCandidates standing now s t m1).filter (· ∈ s.outbound),
+      q ∈ s.outbound := fun q hq => by simpa using (List.mem_filter.1 hq).2
+  generalize (graftCandidates standing now s t m1).filter (· ∈ s.outbound) = g at hg ⊢
+  have hk := (hsel (c.dOut - (m1.filter (· ∈ s.outbound)).length) g).2
+  rw [List.filter_eq_self.2 fun q hq => decide_eq_true (hg q ((hsel _ _).1.subset hq)), hk]
+  omega
 
 /-- Every peer that a heartbeat adds to a mesh gets a GRAFT for its topic. -/
 theorem heartbeat_graft {t : String} {q : PeerId}
