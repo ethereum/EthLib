@@ -25,7 +25,7 @@ The store of each honest validator stays reachable from the anchor along every e
 
 Along an execution of the network model, an honest store that starts with a forward clock keeps one.
 
-All honest stores run every handler with the one setting of the signature checks of the model.
+An honest store built with the signature checks of the model stays built that way.
 -/
 
 @[expose] public section

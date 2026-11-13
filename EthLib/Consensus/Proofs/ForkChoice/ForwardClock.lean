@@ -13,11 +13,11 @@ A store is reachable with a forward clock when the handlers build it and no tick
 
 Such a store is reachable, so every result on reachable stores applies to it.
 
+A tick to a time no earlier than that of the store does not lower its current slot.
+
 An honest node also runs every handler with one setting of the signature checks.
 
-A store built that way, with a forward clock, is reachable with a forward clock.
-
-A tick to a time no earlier than that of the store does not lower its current slot.
+A store built that way is also reachable with a forward clock.
 -/
 
 @[expose] public section
@@ -87,7 +87,9 @@ No tick sets its time back, as for a store with a forward clock.
 
 Every handler runs with the same setting, as on an honest node.
 
-From Electra the epoch step reads that setting, so it fixes the states of the store. -/
+A block reads that setting: it skips a deposit for a new key with a bad signature.
+
+From Electra the epoch step reads it too, so the setting can change the states of the store. -/
 inductive ForwardReachableWith (config : Config) (checks : SignatureChecks)
     (anchorState : BeaconState preset fork) (anchorBlock : BeaconBlock preset fork) :
     Store preset fork → Prop where
