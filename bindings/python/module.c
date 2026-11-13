@@ -1183,6 +1183,8 @@ static PyMethodDef methods[] = {
    DOC_engine_read_payload_status},
   {"engine_read_forkchoice_response", py_engine_read_forkchoice_response, METH_VARARGS,
    DOC_engine_read_forkchoice_response},
+  {"engine_read_get_payload_result", py_engine_read_get_payload_result, METH_VARARGS,
+   DOC_engine_read_get_payload_result},
   {"engine_rewrite_params", py_engine_rewrite_params, METH_VARARGS,
    DOC_engine_rewrite_params},
   {"engine_prepare_execution_payload", py_engine_prepare_execution_payload, METH_VARARGS,

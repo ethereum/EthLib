@@ -1593,6 +1593,10 @@ def engine_read_forkchoice_response(response: dict[str, Any]) -> tuple[str, byte
     """A forkchoice response read from its JSON, as `json.loads` gives it."""
     ...
 
+def engine_read_get_payload_result(method: str, fork: str, result: dict[str, Any]) -> dict[str, Any]:
+    """The result of an `engine_getPayload` method at a fork, read from its JSON and written back."""
+    ...
+
 def engine_rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     ...

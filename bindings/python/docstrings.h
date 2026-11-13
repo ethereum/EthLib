@@ -1193,6 +1193,9 @@
 #define DOC_engine_read_forkchoice_response \
   "A forkchoice response read from its JSON, as `json.loads` gives it."
 
+#define DOC_engine_read_get_payload_result \
+  "The result of an `engine_getPayload` method at a fork, read from its JSON and written back."
+
 #define DOC_engine_rewrite_params \
   "The parameters of an Engine API request, read by the decoder and written by the writer."
 

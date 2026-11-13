@@ -3067,7 +3067,7 @@ They do it for the 239 requests of `tests/engine/new_payload.json` that decode, 
 They also do it for a forkchoice state with each payload of `tests/engine/forkchoice.json` as the head, and no attributes.
 The other 11 are among the 75 whose fixtures expect invalid parameters, and the decoder rejects them.
 The 64 others of those 75 decode, and a later check rejects them.
-Six of the OpenRPC examples do not follow the specification, and the tests check that the decoder rejects them.
+Six of the OpenRPC request examples do not follow the specification, and the tests check that the decoder rejects them.
 The other two examples are of methods that EthLib does not specify, and the tests check that they fail as unknown methods.
 
 The answers have a JSON form too, written and read back.
@@ -3079,6 +3079,22 @@ Its response names a build exactly when the update applies a head and the attrib
 The ID is then that of the head and the attributes.
 The Python tests read the status examples of `engine_newPayload` and the response examples of `engine_forkchoiceUpdated` in the OpenRPC method files.
 They also read back the status that EthLib answers to each request of `new_payload.json` that expects no error, and each response to the chains of `forkchoice.json`.
+
+The result of `engine_getPayload` is read at a version of the method and the fork of its payload.
+A blobs bundle reads back from its JSON exactly when it passes the length rules of its version (`blobsBundleOfJson_json_iff`, `Proofs/GetPayload.lean`).
+Every bundle that decodes passes them (`blobsBundleOfJson_lengths`).
+Versions 3 and 4 of the method return a bundle of version 1, and versions 5 and 6 a bundle of version 2.
+Both versions of the bundle ask for one commitment per blob.
+Version 1 of the bundle asks for one proof per blob, and version 2 for `CELLS_PER_EXT_BLOB`, which is 128, per blob.
+From version 3, the bundle of every response passes the length rules of the bundle that the method returns (`getPayloadResultJson_bundle`).
+The result of every response reads back at its version and its fork (`getPayloadResultOfJson_json`).
+It holds the payload and each field of its version: the block value, the bundle, the override flag and the requests.
+The method returns no payload with more than 32 bytes of extra data, the bound of the Engine API.
+So `getPayloadResultOfJson_json` needs no hypothesis other than a successful call.
+Hence what the execution layer writes is what the consensus layer reads.
+The Python tests read back the result examples of versions 1 to 5 in the OpenRPC method files, and check each length rule.
+At the pinned commit, the example of version 6 has no slot number in its payload, so the decoder rejects it.
+The tests read back a result of version 6 built from the example of version 5 with an access list and a slot.
 
 The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.lean`.
 `forkchoiceUpdated_valid` shows that a valid answer selects a valid head that the execution layer holds, with its safe and finalized blocks on its chain.
@@ -3103,7 +3119,6 @@ From Deneb, the block of the payload reads the parent root of the latest block h
 From Deneb, the blob transactions must carry the versioned hashes of the commitments of the block, in the order of the commitments.
 The consensus test vectors fix the answer of the execution layer, so none of them checks the versioned hashes or the parent root that a block puts in its request.
 
-No payload build is specified, so `engine_getPayload` has no definition, and the export refuses payload attributes on a new valid head.
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
 
 ### Execution JSON-RPC API
@@ -3545,12 +3560,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 407 operations and 49 size constants.
-The Python extension calls 407 of the operations and 49 of the constants.
+Lean exports 408 operations and 49 size constants.
+The Python extension calls 408 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-10278 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1940), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (140), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (138), `module.c` (1445), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (45), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (694), `x25519.c` (21), `xmss.c` (134).
+10290 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1940), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (149), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (138), `module.c` (1447), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (45), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (695), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

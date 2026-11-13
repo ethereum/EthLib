@@ -31,6 +31,8 @@ Its proofs are checked, with one per blob before Fusaka and 128 cell proofs per 
 
 The consensus layer also writes the parameters as JSON: the payload ID alone.
 
+It also reads the result of a version as JSON, at the fork of the payload, and writes it back.
+
 The method follows [version 1][v1], [2][v2], [3][v3], [4][v4], [5][v5] and [6][v6].
 
 The upper bounds of versions 2 to 5 come from the updates of later forks.
@@ -57,7 +59,8 @@ open EthLib.Base
 open EthLib.Cryptography.Kzg
 open EthLib.Execution.Blocks (Block)
 open EthLib.Execution.Transactions
-open EthLib.Serialization.JsonRpc (dataJson fixed paramsArray)
+open EthLib.Serialization.JsonRpc (dataJson fixed paramsArray fields hasExactly field array bytes
+  quantity quantityJson listJson)
 
 /-- The blobs, commitments and proofs of the payload's network blob transactions, in order. -/
 structure BlobsBundle where
@@ -106,7 +109,9 @@ inductive GetPayloadError where
   | requests
   /-- The stored block value does not fit in 256 bits. -/
   | blockValue
-  /-- The block has no payload form, since a field does not fit or has no encoding. -/
+  /-- The block has no payload form: a field does not fit, has no encoding, or is too long.
+
+  The extra data, at most 32 bytes in the Engine API, is the field that can be too long. -/
   | noPayload
   /-- A transaction does not decode, or the payload does not give the stored block hash. -/
   | header (error : PayloadError)
@@ -128,10 +133,16 @@ def acceptsGetPayloadFork (version : Nat) (fork : Fork) : Bool :=
 def requestsOfFork (fork : Fork) (requests : List ByteArray) : Bool :=
   if .pectra ≤ fork then validRequests requests else requests.isEmpty
 
-/-- The payload form of a block, which exists only from Paris. -/
+/-- The payload form of a block, which exists only from Paris.
+
+Its extra data must hold at most 32 bytes, the bound of [its type][p] in the Engine API.
+
+[p]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#executionpayloadv1 -/
 def payloadOfBlock {fork : Fork} (block : Block fork Transaction) :
     Option (ExecutionPayload fork) :=
-  if h : .paris ≤ fork then ExecutionPayload.ofBlock h block else none
+  if h : .paris ≤ fork then
+    (ExecutionPayload.ofBlock h block).filter (·.extraData.size ≤ 32)
+  else none
 
 /-- The block that a payload gives back, with the stored requests and access list.
 
@@ -176,5 +187,166 @@ def getPayloadParams (params : Lean.Json) : Json.Decode PayloadId := do
 
 /-- The parameters of the request as JSON: the payload ID alone. -/
 def getPayloadParamsJson (id : PayloadId) : Lean.Json := .arr #[dataJson id.toList]
+
+/-! ## The result -/
+
+/-- The version of the bundle, 1 or 2, that a version of the method returns: 2 from version 5. -/
+def blobsBundleVersion (version : Nat) : Nat := if 5 ≤ version then 2 else 1
+
+/-- The proofs per blob in a bundle of a version, 1 or 2: one, or one per cell in version 2. -/
+def BlobsBundle.proofsPerBlob (version : Nat) : Nat :=
+  if version < 2 then 1 else Constants.CELLS_PER_EXT_BLOB
+
+/-- The length rules of a bundle of a version, 1 or 2: one commitment and its proofs per blob.
+
+[BlobsBundleV1][v1] asks for three arrays of one length.
+
+[BlobsBundleV2][v2] asks for as many commitments as blobs, and `CELLS_PER_EXT_BLOB` proofs per blob.
+
+[v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#blobsbundlev1
+[v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/osaka.md#blobsbundlev2 -/
+def BlobsBundle.lengthsHold (version : Nat) (b : BlobsBundle) : Bool :=
+  b.commitments.length == b.blobs.length &&
+    b.proofs.length == BlobsBundle.proofsPerBlob version * b.blobs.length
+
+/-- A blobs bundle as JSON: its blobs, commitments and proofs, in order. -/
+def blobsBundleJson (b : BlobsBundle) : Lean.Json :=
+  Lean.Json.mkObj [("blobs", listJson (dataJson ·.toList) b.blobs),
+    ("commitments", listJson (dataJson ·.toList) b.commitments),
+    ("proofs", listJson (dataJson ·.toList) b.proofs)]
+
+/-- The three fields of a blobs bundle. -/
+def blobsBundleFields : List String := ["blobs", "commitments", "proofs"]
+
+/-- A blobs bundle of a version, 1 or 2, which must pass the length rules of that version.
+
+A blob has 131072 bytes, and a commitment and a proof 48 bytes each. -/
+def blobsBundleOfJson (version : Nat) (j : Lean.Json) : Json.Decode BlobsBundle := do
+  let fs ← fields "blobsBundle" j
+  unless hasExactly fs blobsBundleFields do Json.invalid "blobsBundle: not the fields of a bundle"
+  let get := field "blobsBundle" fs
+  let bundle : BlobsBundle := {
+    blobs := ← array "blobs" (fixed "blob" _) (← get "blobs")
+    commitments := ← array "commitments" (fixed "commitment" 48) (← get "commitments")
+    proofs := ← array "proofs" (fixed "proof" 48) (← get "proofs") }
+  unless bundle.lengthsHold version do Json.invalid "blobsBundle: lengths do not match"
+  return bundle
+
+/-- What a consensus node reads from the result of the method, at the fork of the payload.
+
+The access list and the slot are those of a payload from Glamsterdam.
+
+The block value is present from version 2, the bundle and the override flag from version 3.
+
+The execution requests are present from version 4.
+
+The writer writes the options that are present, so they must follow the version. -/
+structure GetPayloadResult (fork : Fork) where
+  /-- The execution payload. -/
+  payload : ExecutionPayload fork
+  /-- The block access list, from Glamsterdam. -/
+  blockAccessList : Since .glamsterdam fork ByteArray
+  /-- The slot number, from Glamsterdam. -/
+  slotNumber : Since .glamsterdam fork UInt64
+  /-- The value of the block to its proposer, in wei. -/
+  blockValue : Option Nat
+  /-- The blobs, commitments and proofs of the blob transactions of the payload. -/
+  blobsBundle : Option BlobsBundle
+  /-- Whether the execution layer suggests its own payload over one of an external builder. -/
+  shouldOverrideBuilder : Option Bool
+  /-- The execution requests of the payload. -/
+  executionRequests : Option (List ByteArray)
+
+/-- What a response holds at a version of the method: the fields of that version. -/
+def GetPayloadResponse.result (version : Nat) (r : GetPayloadResponse) :
+    GetPayloadResult r.stored.fork where
+  payload := r.payload
+  blockAccessList := r.stored.blockAccessList
+  slotNumber := r.stored.built.block.header.slotNumber
+  blockValue := if 2 ≤ version then some r.stored.built.blockValue else none
+  blobsBundle := if 3 ≤ version then some r.stored.bundle else none
+  shouldOverrideBuilder := if 3 ≤ version then some r.stored.shouldOverrideBuilder else none
+  executionRequests := if 4 ≤ version then some r.stored.built.requests else none
+
+/-- The execution payload of a result as JSON: of version 4 from Glamsterdam. -/
+def GetPayloadResult.payloadJson {fork : Fork} (r : GetPayloadResult fork) : Lean.Json :=
+  if h : .glamsterdam ≤ fork then
+    Json.executionPayloadV4Json r.payload (r.blockAccessList h) (r.slotNumber h)
+  else Json.executionPayloadJson r.payload
+
+/-- A result as JSON: the bare payload without a block value, else an object of its fields.
+
+So the result of version 1 is the payload, and later versions write the fields they hold. -/
+def getPayloadResultJson {fork : Fork} (r : GetPayloadResult fork) : Lean.Json :=
+  match r.blockValue with
+  | none => r.payloadJson
+  | some value => Lean.Json.mkObj ([("executionPayload", r.payloadJson),
+      ("blockValue", quantityJson value)] ++
+      (r.blobsBundle.map fun b => ("blobsBundle", blobsBundleJson b)).toList ++
+      (r.shouldOverrideBuilder.map fun o => ("shouldOverrideBuilder", Lean.Json.bool o)).toList ++
+      (r.executionRequests.map fun rs =>
+        ("executionRequests", listJson (dataJson ·.data.toList) rs)).toList)
+
+/-- The field names of the result object, for a version from 2 on. -/
+def getPayloadResultFields (version : Nat) : List String :=
+  ["executionPayload", "blockValue"] ++
+    (if 3 ≤ version then ["blobsBundle", "shouldOverrideBuilder"] else []) ++
+    (if 4 ≤ version then ["executionRequests"] else [])
+
+/-- A JSON boolean, or an invalid parameter that names the field. -/
+def boolOfJson (what : String) : Lean.Json → Json.Decode Bool
+  | .bool b => pure b
+  | _ => Json.invalid s!"{what}: not a boolean"
+
+/-- The execution payload of a result at a fork, of version 4 or of versions 1 to 3. -/
+def resultPayloadOfJson (v4 : Bool) (fork : Fork) (j : Lean.Json) :
+    Json.Decode (ExecutionPayload fork × Since .glamsterdam fork ByteArray ×
+      Since .glamsterdam fork UInt64) := do
+  let (any, amsterdam) ← if v4 then
+      (fun (any, list, slot) => (any, some (list, slot))) <$> Json.payloadV4 j
+    else (·, none) <$> Json.anyPayload j
+  return (← any.atFork fork, ← Json.since "blockAccessList" (amsterdam.map (·.1)),
+    ← Json.since "slotNumber" (amsterdam.map (·.2)))
+
+/-- The result of a version of the method, for a payload of a fork that the version serves.
+
+The fields are exactly those of the version, and each decodes as its type says.
+
+Version 1 returns the payload, as [`engine_getPayloadV1`][v1] says.
+
+Later versions return an object, whose payload is of version 4 only in [version 6][v6].
+
+The bundle is of version 1 in versions 3 and 4, and of version 2 from version 5.
+
+Execution requests must have increasing types and hold data, as [`engine_getPayloadV4`][v4] asks.
+
+[v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_getpayloadv1
+[v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#engine_getpayloadv4
+[v6]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_getpayloadv6 -/
+def getPayloadResultOfJson (version : Nat) (fork : Fork) (j : Lean.Json) :
+    Json.Decode (GetPayloadResult fork) := do
+  unless acceptsGetPayloadFork version fork do
+    Json.invalid s!"result: version {version} does not serve the fork"
+  if version = 1 then
+    let (payload, blockAccessList, slotNumber) ← resultPayloadOfJson false fork j
+    return ⟨payload, blockAccessList, slotNumber, none, none, none, none⟩
+  let fs ← fields "result" j
+  unless hasExactly fs (getPayloadResultFields version) do
+    Json.invalid "result: not the fields of its version"
+  let get := field "result" fs
+  let (payload, blockAccessList, slotNumber) ←
+    resultPayloadOfJson (version = 6) fork (← get "executionPayload")
+  let blockValue ← quantity "blockValue" 256 (← get "blockValue")
+  let blobsBundle ← if 3 ≤ version then
+    some <$> blobsBundleOfJson (blobsBundleVersion version) (← get "blobsBundle") else pure none
+  let shouldOverrideBuilder ← if 3 ≤ version then
+    some <$> boolOfJson "shouldOverrideBuilder" (← get "shouldOverrideBuilder") else pure none
+  let executionRequests ← if 4 ≤ version then
+    some <$> array "executionRequests" (bytes "request") (← get "executionRequests")
+  else pure none
+  if let some requests := executionRequests then
+    unless validRequests requests do Json.invalid "executionRequests: out of order or too short"
+  return ⟨payload, blockAccessList, slotNumber, some blockValue, blobsBundle,
+    shouldOverrideBuilder, executionRequests⟩
 
 end EthLib.Engine

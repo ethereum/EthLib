@@ -11005,6 +11005,24 @@
    "docstring":
    "A forkchoice response read from its JSON, as `json.loads` gives it.\n\nThe result is the status name, the latest valid hash, the validation error and the payload ID.\n\nA response that does not decode is an invalid parameter, with code 32602."},
   {"summary":
+   "The result of an `engine_getPayload` method at a fork, read from its JSON and written back.",
+   "signature":
+   "(method: str, fork: str, result: dict[str, Any]) -> dict[str, Any]",
+   "operation": "EthLib.Engine.Exports.readGetPayloadResultExport",
+   "method": "engine_read_get_payload_result",
+   "errors":
+   [{"type": "EthLib.Engine.EngineError",
+     "codes":
+     [{"constructor": "invalidParams", "code": 32602},
+      {"constructor": "unsupportedFork", "code": 38005},
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003},
+      {"constructor": "unknownPayload", "code": 38001}]}],
+   "error_class": "EngineError",
+   "docstring":
+   "The result of an `engine_getPayload` method at a fork, read from its JSON and written back.\n\nThe arguments are the method name, the fork name and the result, as `json.loads` gives it.\n\nA result that does not decode is an invalid parameter, with code 32602.\n\nAn unknown method name, or a fork after Glamsterdam, has code 0."},
+  {"summary":
    "The parameters of an Engine API request, read by the decoder and written by the writer.",
    "signature": "(method: str, params: list[Any]) -> list[Any]",
    "operation": "EthLib.Engine.Exports.rewriteParamsExport",
