@@ -9,6 +9,7 @@ public import EthLib.Execution.Proofs.Evm.Call.ContractAddress
 public import EthLib.Execution.Proofs.Evm.Call.Create
 public import EthLib.Execution.Proofs.Evm.Call.Delegation
 public import EthLib.Execution.Proofs.Evm.Call.Fresh
+public import EthLib.Execution.Proofs.Evm.Call.Funded
 public import EthLib.Execution.Proofs.Evm.Call.Instructions
 public import EthLib.Execution.Proofs.Evm.Call.LogWeight
 public import EthLib.Execution.Proofs.Evm.Call.LogsPaid
@@ -28,6 +29,7 @@ public import EthLib.Execution.Proofs.Evm.Call.ReadsGrow
 public import EthLib.Execution.Proofs.Evm.Call.Rebuild
 public import EthLib.Execution.Proofs.Evm.Call.Run
 public import EthLib.Execution.Proofs.Evm.Call.StateAborts
+public import EthLib.Execution.Proofs.Evm.Call.StateErrors
 public import EthLib.Execution.Proofs.Evm.Call.StaticMessage
 public import EthLib.Execution.Proofs.Evm.Call.StaticStep
 public import EthLib.Execution.Proofs.Evm.Call.StepRules
