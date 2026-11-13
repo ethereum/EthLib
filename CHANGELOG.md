@@ -9,6 +9,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Desc.resolveStep` rejects a compatible union with more selectors than options, with `.badDeclaration`, as `lookupOption` does.
+  Before, it gave the selector of no option a default type, and `getGeneralizedIndex` went on below it.
+  A union that `Desc.wellFormed` accepts resolves as before.
+  `resolveStep_compatibleUnion` takes the option and a proof that `options[slot]? = some option`.
+  `union_options_share_one_tree` states the same for each option at its slot.
+  No C export or Python function changes.
+
 - `verify_kzg_proof` checks its inputs in the order of EIP-4844: the commitment, `z`, `y`, then the proof.
   When more than one input is invalid, the first in that order gives the error.
   Before, it checked the proof second, so an input with an invalid `z` and an invalid proof raised the error of the proof.

@@ -106,10 +106,11 @@ theorem resolveStep_progressiveContainer (active : List Bool) (names : List Stri
 
 /-- Every declared union option selects the contents child opposite the selector word. -/
 theorem resolveStep_compatibleUnion (selectors : List Nat) (options : List Desc)
-    (selector slot : Nat) (selected : selectors.idxOf? selector = some slot) :
+    (selector slot : Nat) (option : Desc) (selected : selectors.idxOf? selector = some slot)
+    (found : options[slot]? = some option) :
     (Desc.compatibleUnion selectors options).resolveStep (.position selector) =
-      .ok (2, some options[slot]!) := by
+      .ok (2, some option) := by
   -- EIP-8016 keeps the option's own tree under the left child regardless of its selector.
-  simp [Desc.resolveStep, selected, Pure.pure, Except.pure]
+  simp [Desc.resolveStep, selected, found, Pure.pure, Except.pure]
 
 end EthLib.Serialization.Ssz

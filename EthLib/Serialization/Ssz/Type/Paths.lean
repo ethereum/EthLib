@@ -175,8 +175,11 @@ def Desc.resolveStep (shape : Desc) (step : PathStep) : Except Err (Nat × Optio
       match selectors.idxOf? ordinal with
       | none => throw (.noSuchOption ordinal)
       | some slot =>
+        match options[slot]? with
+        -- Selectors and options that do not pair up name no union, as in `lookupOption`.
+        | none => throw .badDeclaration
         -- Every selected option occupies the contents child, opposite the selector word.
-        return (2, some options[slot]!)
+        | some option => return (2, some option)
     | .progressiveContainer _ _ _ | .progressiveList _ _ | .progressiveBitList _ =>
       -- Progressive chunks retain their positions as the right-hand spine grows.
       let placed ← shape.chunkPosition step

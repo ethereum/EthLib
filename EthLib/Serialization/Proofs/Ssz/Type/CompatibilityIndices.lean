@@ -50,11 +50,13 @@ Together with the pairwise check, that is what EIP-8016 asks: one tree shape ser
 theorem union_options_share_one_tree {selectors : List Nat} {options : List Desc}
     (checked : Desc.optionsCompatible selectors options = .ok ()) :
     (∀ left ∈ options, ∀ right ∈ options, isCompatible left right = true) ∧
-      ∀ selector slot, selectors.idxOf? selector = some slot →
+      ∀ selector slot option, selectors.idxOf? selector = some slot →
+        options[slot]? = some option →
         Desc.resolveStep (.compatibleUnion selectors options) (.position selector)
-          = .ok (2, some options[slot]!) :=
+          = .ok (2, some option) :=
   ⟨optionsCompatible_pairwise selectors options checked,
-    fun selector slot found => resolveStep_compatibleUnion selectors options selector slot found⟩
+    fun selector slot option selected found =>
+      resolveStep_compatibleUnion selectors options selector slot option selected found⟩
 
 /-- Positions the set bits of a layout occupy, in declaration order. -/
 def activeSlots (active : List Bool) (start : Nat) : List Nat :=
