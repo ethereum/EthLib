@@ -30,13 +30,13 @@ namespace EthLib.Consensus.BeaconApi
 
 open Lean Serialization.Ssz
 
-/-- Where the JSON of a type writes a one-byte integer as the byte alias.
+/-- How the JSON of a type writes its bytes: where it uses the byte alias, and where digits.
 
 Each type of the API declares its own, so no type falls back to a spelling that writes it wrong.
 
-A participation flag, for one, is written as decimal digits, though its SSZ type is a byte list. -/
+Before Gloas, participation flags are a byte list, and they are written as decimal digits. -/
 class ApiSpelling (α : Type) where
-  /-- Where the type writes a one-byte integer as the byte alias. -/
+  /-- How the type writes its bytes and its one-byte integers. -/
   spelling : Spelling
 
 /-- The JSON document of a value, as the API writes its data. -/

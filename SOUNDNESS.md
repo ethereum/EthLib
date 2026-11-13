@@ -2988,13 +2988,20 @@ So the name that a response carries determines the fork version of its fork.
 The source names no version for Heze yet, so Hegotá has none until a release of the source names it.
 
 The data of a response is a value of the consensus layer, in the JSON mapping of SSZ.
-`ofApiJson_toApiJson` (`Consensus/Proofs/BeaconApi/Encoding.lean`) shows that the reader gives back every value that the writer writes, for every lawful type and every spelling of the byte alias.
-`toApiJson_total` shows that the writer never fails on a value of a lawful type whose spelling marks no byte alias.
-It rests on `jsonOf_opaque_ok` (`Serialization/Proofs/Ssz/Codec/JsonTotal.lean`): a well-formed SSZ type writes every value that it admits.
+`ofApiJson_toApiJson` (`Consensus/Proofs/BeaconApi/Encoding.lean`) shows that the reader gives back every value that the writer writes, for every lawful type and every spelling.
+`toApiJson_total` shows that the writer never fails on a value of a lawful type, whatever its spelling.
+It rests on `jsonOf_ok` (`Serialization/Proofs/Ssz/Codec/JsonTotal.lean`): a well-formed SSZ type writes every value that it admits, under every spelling.
+A mark of the spelling has effect only where its shape allows it, so no mark makes the writer fail.
 `ApiEnvelope.ofJson_toJson` shows that an envelope reads back as written, and `readVersioned_envelope` that a response reads as its data under its version, whatever its other metadata.
 `readVersioned_version` shows that a response read under a version carries that exact name, so data of one fork never reads as data of another.
-`ofHex_uppercase` (`Serialization/Proofs/Ssz/Codec/JsonHexCase.lean`) shows that hex reads the same in uppercase, as the patterns of the source allow.
-`ofApiJson_uppercase` lifts it to a byte vector or a byte list read alone; a statement for every hex leaf of a document remains open.
+`valueOf_sameUpToCase` (`Serialization/Proofs/Ssz/Codec/JsonHexCase.lean`) shows that a document reads the same with any hex digits of its strings in uppercase, at every shape.
+The patterns of the source allow either case.
+`ofApiJson_uppercase` lifts it to the reader of the API.
+
+Each container declares its spelling in `Consensus/BeaconApi/Spelling.lean`, and none falls back to a default.
+Before Gloas, participation flags have the SSZ type of a byte list, and their spelling writes them as a list of decimal strings, as the API does.
+From Gloas, transactions and the block access list are progressive lists of one-byte integers, and their spelling writes them as hex, as the API does.
+A container that holds one of these takes the spelling of the field that holds it.
 The error bodies read back as written (`ErrorMessage.ofJson_toJson`, `IndexedErrorMessage.ofJson_toJson`).
 
 Points that remain open:
@@ -3002,8 +3009,8 @@ Points that remain open:
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
 - The source types the codes of the error bodies as JSON numbers; EthLib reads a number whose value is a natural number.
 - The source writes each integer leaf as a string, and its pattern for `Uint8` admits leading zeros; the JSON mapping of SSZ also reads a bare number, and refuses leading zeros.
-- EthLib gives participation flags the SSZ type of a byte list, which the JSON mapping writes as hex, while the API writes them as a list of decimal strings.
-- From Gloas, transactions and the block access list are progressive lists of one-byte integers, which the API writes as hex; the JSON of their containers needs its own spelling (#2076).
+- The spelling of each container is checked against the field types of the source by review, not by a proof.
+- The API defines no inclusion list yet, so the hex form of its transactions follows the form of a transaction in the API.
 
 ### Builder API
 
