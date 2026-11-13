@@ -3005,6 +3005,25 @@ Points that remain open:
 - EthLib gives participation flags the SSZ type of a byte list, which the JSON mapping writes as hex, while the API writes them as a list of decimal strings.
 - From Gloas, transactions and the block access list are progressive lists of one-byte integers, which the API writes as hex; the JSON of their containers needs its own spelling (#2076).
 
+### Builder API
+
+The Builder API connects a proposer to the builders that bid for its payload, as `ethereum/builder-specs` defines it.
+EthLib cites commit `fce64468` of that repository.
+For Bellatrix to Fulu, its specification text matches release `v0.6.1`; the changes are formatting, `deprecated` flags and notes that point to the Gloas replacements.
+EthLib specifies the messages, their signatures, their SSZ encodings and the version names of their JSON bodies; it leaves out the transport.
+
+A JSON response names the fork of its data by the consensus version of the Beacon API, from Bellatrix on.
+`builderVersion?_isSome_iff` (`Consensus/Proofs/BuilderApi/Encoding.lean`) shows that a fork has such a version exactly from Bellatrix through Glamsterdam.
+At Glamsterdam the version names the Gloas bodies, not the bid and the blinded block of the earlier forks.
+`builderVersion?_names` shows that two forks with the same version give a bid the same top-level field names, and a blinded body too.
+It does not compare the nested containers.
+`isBuilderVersion_iff` shows that the Builder API names exactly the consensus versions from Bellatrix on.
+`versionHeaderStatus_eq_none_iff` shows that the version header passes exactly when it is the exact name of such a version.
+Any other header, or none, gets 400, as the Gloas builder document requires for every request with a body.
+Before Gloas, only the SSZ body of a signed blinded block requires the header.
+`versionHeaderStatus_builderVersion?` shows that the version of every fork from Bellatrix up to Hegotá passes.
+The body of a registration request is a list of signed registrations, bounded by the registry limit of the preset.
+
 ### What cannot be proved yet
 
 Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.
