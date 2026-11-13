@@ -242,7 +242,9 @@ def selectColumns (sidecars : List (DataColumnSidecar preset fork))
     (indices : Option (List DataAvailability.ColumnIndex)) : List (DataColumnSidecar preset fork) :=
   sidecars.filter fun sidecar => indices.all (·.contains sidecar.index)
 
-/-- Whether a list of sidecars is a valid answer: the requested sidecars, in any order.
+/-- Whether a list of sidecars is valid data for the answer: the requested sidecars, in any order.
+
+It describes the data of the answer from Fulu on; before Fulu the answer is an error.
 
 The source gives no guarantee on the order of the sidecars. -/
 def IsColumnsAnswer (sidecars : List (DataColumnSidecar preset fork))
@@ -286,6 +288,8 @@ def envelopeNotFound : ErrorMessage :=
 /-- From Gloas: the signed envelope of a block, when the store holds its message.
 
 The store keeps envelopes without their signatures, so the signed envelope is an input.
+
+Its signature is not checked; the caller vouches for it.
 
 Its message must have the root of the envelope that the store holds for the block.
 

@@ -22,7 +22,7 @@ A known head is canonical, and a block that the store does not hold is not.
 
 Each header of the headers answer matches the requested slot and parent root.
 
-A columns answer holds exactly the requested sidecars of the block, in any order.
+A columns answer holds exactly the requested sidecars that the node holds, in any order.
 
 From Gloas, the envelope answer is the given envelope when its message matches the stored one.
 -/
@@ -223,6 +223,50 @@ theorem selectHeaders_mem {headers : List SignedBeaconBlockHeader} {slot : Optio
   · rintro parent rfl
     exact (by simpa using parentOk : parent = header.message.parentRoot).symm
 
+/-- Each output of a successful map comes from an input. -/
+private theorem exists_of_mapM_ok {α β ε : Type} {f : α → Except ε β} :
+    ∀ {xs : List α} {ys : List β}, xs.mapM f = .ok ys → ∀ y ∈ ys, ∃ x ∈ xs, f x = .ok y
+  | [], ys, computed, y, mem => by
+    simp [List.mapM_nil, pure, Except.pure] at computed
+    subst computed
+    simp at mem
+  | x :: xs, ys, computed, y, mem => by
+    rw [List.mapM_cons] at computed
+    cases fx : f x with
+    | error e => simp [fx, bind, Except.bind] at computed
+    | ok b =>
+      cases rest : xs.mapM f with
+      | error e => simp [fx, rest, bind, Except.bind] at computed
+      | ok bs =>
+        simp [fx, rest, bind, Except.bind, pure, Except.pure] at computed
+        subst computed
+        rcases List.mem_cons.1 mem with rfl | inRest
+        · exact ⟨x, List.mem_cons_self .., fx⟩
+        · obtain ⟨x', inXs, found⟩ := exists_of_mapM_ok rest y inRest
+          exact ⟨x', List.mem_cons_of_mem _ inXs, found⟩
+
+/-- Each entry of the headers answer is the answer for a held header that matches the filters. -/
+theorem headersOf_mem {config : Config} {store : Store preset fork}
+    {headers : List SignedBeaconBlockHeader} {slot : Option Slot} {parentRoot : Option Root}
+    {answers : List HeaderResponse}
+    (computed : headersOf config store headers slot parentRoot = .ok answers)
+    {response : HeaderResponse} (mem : response ∈ answers) :
+    ∃ header ∈ headers, headerOf config store header = .ok response ∧
+      (∀ s ∈ slot, header.message.slot = s) ∧
+      ∀ parent ∈ parentRoot, header.message.parentRoot = parent := by
+  unfold headersOf at computed
+  cases chosen : headersSlot config store slot parentRoot with
+  | error e => simp [chosen, bind, Except.bind] at computed
+  | ok slot' =>
+    simp only [chosen, bind, Except.bind] at computed
+    obtain ⟨header, selected, answered⟩ := exists_of_mapM_ok computed response mem
+    obtain ⟨held, slotOk, parentOk⟩ := selectHeaders_mem selected
+    refine ⟨header, held, answered, ?_, parentOk⟩
+    rintro s rfl
+    have kept : slot' = some s := by
+      cases parentRoot <;> simpa [headersSlot] using chosen.symm
+    exact slotOk s kept
+
 /-- Without a slot and a parent root, the headers endpoint filters on the slot of the head. -/
 theorem headersSlot_default {config : Config} {store : Store preset fork} {head : Root}
     {block : BeaconBlock preset fork} (headIs : headRoot config store = some head)
@@ -241,7 +285,7 @@ theorem selectColumns_none (sidecars : List (DataColumnSidecar preset fork)) :
     selectColumns sidecars none = sidecars := by
   simp [selectColumns]
 
-/-- A sidecar is in an answer exactly when the block has it and its index is requested. -/
+/-- A sidecar is in an answer exactly when the node holds it and its index is requested. -/
 theorem IsColumnsAnswer.mem_iff {sidecars : List (DataColumnSidecar preset fork)}
     {indices : Option (List DataAvailability.ColumnIndex)}
     {answer : List (DataColumnSidecar preset fork)}

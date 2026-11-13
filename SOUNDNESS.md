@@ -3808,10 +3808,10 @@ The same module gives the headers, the data column sidecars and the payload enve
 `headers_canonical_head` shows that the header answer of the head block says that the block is canonical; it rests on `isCanonical_head`.
 `isCanonical_of_unknown` shows that a block the store does not hold is not canonical.
 `headerOf_ok` shows that a header answer carries its header and the root of its message, and `headerOf_blockRoot` that this root is the root of the block.
-`selectHeaders_mem` shows that each header of the headers answer is at the requested slot, with the requested parent root.
+`headersOf_mem` shows that each entry of the headers answer is the answer for a held header at the requested slot, with the requested parent root.
 `headersSlot_default` shows that without filters the headers answer reads the slot of the head.
 `IsColumnsAnswer` accepts any order of the requested sidecars, so the selection in input order is one answer by definition.
-`IsColumnsAnswer.mem_iff` shows that a sidecar is in an answer exactly when the block has it and its index is requested.
+`IsColumnsAnswer.mem_iff` shows that a sidecar is in an answer exactly when the node holds it and its index is requested.
 `selectColumns_none` shows that without indices all are kept, and `selectColumns_some_nil` that an empty list keeps none.
 `columnsResponse_before_fulu` shows that before Fulu the columns answer gets code 400.
 `payloadEnvelopeOf_ok` shows that the envelope answer is the given signed envelope, from Gloas, and that its message has the root of the envelope that the store holds for the block.
@@ -3890,6 +3890,7 @@ Points that remain open:
 - The columns answer takes the sidecars that the node holds for the block as an input, and names the consensus version of the fork.
   It gives the order of the input, which the source leaves free.
   An empty list of indices requests no sidecar, since the parameter is then specified.
+  The input is assumed to hold at most one sidecar for each index, the sidecars of one block.
   The source lists the versions Fulu and Gloas only; EthLib gives code 400 before Fulu.
 - The envelope answer takes the signed envelope as an input, since the store keeps envelopes without their signatures.
   It compares the hash tree roots of the two messages, and gets code 404 when they differ.
