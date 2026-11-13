@@ -4201,13 +4201,14 @@ The source of delivered payloads says so ("Query arguments are used as filters")
 A query may sort delivered payloads by value, lowest or highest first ([`misc.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/misc.yaml)).
 `sortBy_descending` shows that a sort by `-value` gives the payloads with values that never increase, and keeps every payload.
 `sortBy_ascending` shows the same for `value`, with values that never decrease.
+`sortBy_stable` shows that, in either order, payloads of equal value keep their input order.
 
 The source leaves three points about the data API open, and EthLib specifies none of them:
 
 - What `cursor` means, beyond "A starting slot for multiple results", and in which direction it reads.
   EthLib models neither the cursor nor the limit of a query.
 - The order of the results without `order_by`, and the order of payloads of equal value with it.
-  EthLib's sort keeps payloads of equal value in their input order, as a merge sort does; no theorem states this yet.
+  EthLib's sort keeps payloads of equal value in their input order, as a merge sort does.
 - Which field of a payload `block_number` and `num_tx` come from.
   Their names suggest the number of the block and the count of its transactions, but the source does not say so.
   So they are fields of the entry, not values computed from the payload.
