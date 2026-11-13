@@ -190,6 +190,7 @@ public import EthLib.Consensus.Proofs.Transition.Requests
 public import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.RootLinks
 public import EthLib.Consensus.Proofs.Transition.RunKept
+public import EthLib.Consensus.Proofs.Transition.SlashedPersistence
 public import EthLib.Consensus.Proofs.Transition.Slot
 public import EthLib.Consensus.Proofs.Transition.StateTransition
 public import EthLib.Consensus.Proofs.Transition.SyncAggregate
