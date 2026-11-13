@@ -279,3 +279,7 @@ The test checks that the roots differ, and that they agree when the bound of the
 Another test builds the bid that a relay serves from each completed example, and from a generated submission.
 It checks the header against the payload, with the roots of its lists computed in Python.
 It also checks the value, the key, and from Deneb the commitments and from Electra the requests.
+Two more tests build the list of validators that a relay serves from the minimal Fulu state of `light_client/minimal/fulu/light_client/single_merkle_proof/BeaconState/current_sync_committee_merkle_proof`.
+The first registers every validator and compares the list with the proposer lookahead of the state, read from its JSON; with no registration the list is empty.
+The second moves the state inside an epoch, replaces the lookahead, registers one validator, and checks that only the slots of that validator have entries.
+A last test checks that the list is refused at the forks before and after Fulu.

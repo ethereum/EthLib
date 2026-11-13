@@ -273,4 +273,66 @@ theorem valueOf_progressiveContainer_missing_field {active : List Bool} {names :
   · exact ⟨_, rfl⟩
   · simp [failed, Bind.bind, Except.bind]
 
+/-! ## Objects with the same fields -/
+
+/-- A name that an object holds is among the names that it carries. -/
+theorem mem_objectNames {fields : TreeMap.Raw String Json} (wf : fields.WF) {name : String}
+    (member : name ∈ fields) : name ∈ objectNames (.obj fields) := by
+  simp only [objectNames]
+  rw [Std.TreeMap.Raw.map_fst_toList_eq_keys]
+  exact (Std.TreeMap.Raw.mem_keys wf).mpr member
+
+/-- Erasing a name just written into an object that did not hold it gives the same fields back. -/
+theorem erase_insert_equiv {fields : TreeMap.Raw String Json} (wf : fields.WF) {name : String}
+    {value : Json} (absent : name ∉ fields) :
+    ((fields.insert name value).erase name).Equiv fields := by
+  have wfi := wf.insert (a := name) (b := value)
+  refine Std.TreeMap.Raw.Equiv.of_forall_getElem?_eq (wfi.erase) wf fun key => ?_
+  rw [Std.TreeMap.Raw.getElem?_erase wfi, Std.TreeMap.Raw.getElem?_insert wf]
+  by_cases same : compare name key = .eq
+  · have : name = key := compare_eq_iff_eq.mp same
+    subst this
+    simpa [same] using (Std.TreeMap.Raw.getElem?_eq_none wf absent).symm
+  · simp [same]
+
+/-- Two objects with the same fields give the same value under each name. -/
+theorem getObjVal?_obj_of_equiv {first second : TreeMap.Raw String Json} (wf₁ : first.WF)
+    (wf₂ : second.WF) (same : first.Equiv second) (name : String) :
+    (Json.obj first).getObjVal? name = (Json.obj second).getObjVal? name := by
+  simp only [Json.getObjVal?, Std.TreeMap.Raw.get?_eq_getElem?]
+  rw [Std.TreeMap.Raw.Equiv.getElem?_eq wf₁ wf₂ same]
+
+/-- Two objects with the same fields carry the same names, in the same order. -/
+theorem objectNames_obj_of_equiv {first second : TreeMap.Raw String Json} (wf₁ : first.WF)
+    (wf₂ : second.WF) (same : first.Equiv second) :
+    objectNames (.obj first) = objectNames (.obj second) := by
+  have := (Std.TreeMap.Raw.equiv_iff_toList_eq wf₁ wf₂).mp same
+  simp [objectNames, this]
+
+/-- A struct's fields are read alike out of two objects with the same fields. -/
+theorem valueOfFields_obj_of_equiv {first second : TreeMap.Raw String Json} (wf₁ : first.WF)
+    (wf₂ : second.WF) (same : first.Equiv second) :
+    ∀ (fields : List Desc) (names : List String) (spelling : Spelling) (start : Nat),
+      valueOfFields fields names spelling start (.obj first)
+        = valueOfFields fields names spelling start (.obj second) := by
+  intro fields
+  induction fields with
+  | nil => intro names spelling start; simp [valueOfFields]
+  | cons field rest ih =>
+    intro names spelling start
+    rw [valueOfFields, valueOfFields, getObjVal?_obj_of_equiv wf₁ wf₂ same, ih]
+
+/-- Two objects with the same fields read alike against any declaration.
+
+It holds for a refusal as well as a value. -/
+theorem valueOf_obj_of_equiv {shape : Desc} {spelling : Spelling}
+    {first second : TreeMap.Raw String Json} (wf₁ : first.WF) (wf₂ : second.WF)
+    (same : first.Equiv second) :
+    valueOf shape spelling (.obj first) = valueOf shape spelling (.obj second) := by
+  have names := objectNames_obj_of_equiv wf₁ wf₂ same
+  have read := getObjVal?_obj_of_equiv wf₁ wf₂ same
+  have fieldsOf := valueOfFields_obj_of_equiv wf₁ wf₂ same
+  cases shape <;>
+    simp [valueOf, valueOfSequence, readBitfield, readNat, collectionHex, names, read, fieldsOf]
+
 end EthLib.Serialization.Ssz

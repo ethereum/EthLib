@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Evm.Call.Burn
 public import EthLib.Execution.Proofs.Evm.Call.BurnRun
 public import EthLib.Execution.Proofs.Evm.Call.Candidate
+public import EthLib.Execution.Proofs.Evm.Call.CodeOrigin
 public import EthLib.Execution.Proofs.Evm.Call.Codes
 public import EthLib.Execution.Proofs.Evm.Call.ContractAddress
 public import EthLib.Execution.Proofs.Evm.Call.Create
@@ -24,6 +25,7 @@ public import EthLib.Execution.Proofs.Evm.Call.Reads
 public import EthLib.Execution.Proofs.Evm.Call.ReadsGrow
 public import EthLib.Execution.Proofs.Evm.Call.Rebuild
 public import EthLib.Execution.Proofs.Evm.Call.Run
+public import EthLib.Execution.Proofs.Evm.Call.StateAborts
 public import EthLib.Execution.Proofs.Evm.Call.StaticMessage
 public import EthLib.Execution.Proofs.Evm.Call.StaticStep
 public import EthLib.Execution.Proofs.Evm.Call.StepRules

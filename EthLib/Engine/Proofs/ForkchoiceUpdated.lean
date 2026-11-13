@@ -78,6 +78,8 @@ A fork that the version does not take, or no fork at all, gives `-38005`.
 A structure that is not that of the fork, or a timestamp not above the head's, gives `-38003`.
 
 The decoders read back the state, the attributes and the parameters that the writers write.
+
+Attributes sent with a head that the update applies come back at the fork of the next block.
 -/
 
 public section
@@ -1374,5 +1376,96 @@ theorem forkchoiceUpdatedResponseOfJson_call {version : Nat} {params : Lean.Json
   forkchoiceUpdatedResponseOfJson_json _ _ _ (by
     rcases forkchoiceUpdatedCall_status h with hs | hs | hs <;>
       simp [forkchoiceUpdatedResponse, hs, Status.restricted])
+
+/-! ## The attributes that the consensus layer sends -/
+
+/-- A fork that a version of the method takes has the structure of a version that it takes. -/
+theorem exists_attributesVersions_of_attributesTakeFork {version : Nat} {fork : Fork}
+    (h : attributesTakeFork version fork = true) :
+    ∃ v ∈ attributesVersions version, attributesFork v = attributesForkAt fork := by
+  rcases version with _ | _ | _ | _ | v
+  any_goals (revert h; cases fork <;> decide)
+  -- From version 4 the fork is Glamsterdam, whose structure is that of version 4.
+  have hf : fork = .glamsterdam := by simpa [attributesTakeFork] using h
+  exact ⟨v + 4, by simp [attributesVersions], by subst hf; simp only [attributesFork]; decide⟩
+
+/-- Attributes sent with a head that the update applies come back at the fork of the next block.
+
+The tree must hold the head.
+
+That fork is the active fork at the number after the head and at the timestamp of the attributes.
+
+The version of the method must take it, and its structure must be that of the attributes.
+
+The timestamp must be above that of the head.
+
+The custody columns, from version 4, do not matter.
+
+The attributes at that fork carry every value of the attributes sent. -/
+theorem forkchoiceUpdatedCall_payloadAttributesJson {version : Nat} {fork e : Fork}
+    {s : ForkchoiceState} {status : PayloadStatus} {known : KnownPayload}
+    (a : PayloadAttributes fork) (custody : Option (Vector UInt8 16))
+    (hUpdate : forkchoiceUpdated transition tree finalized s = .ok (status, some s.headBlockHash))
+    (hKnown : tree.lookup s.headBlockHash = some known)
+    (hTime : known.timestamp < a.timestamp)
+    (hFork : config.activeFork (known.number.toNat + 1) a.timestamp.toNat = some e)
+    (hTakes : attributesTakeFork version e = true)
+    (hShape : attributesForkAt e = attributesForkAt fork) :
+    ∃ a' : PayloadAttributes e,
+      forkchoiceUpdatedCall config transition version tree finalized
+          (forkchoiceUpdatedParamsJson version s (some a) custody) =
+        .ok (status, some s.headBlockHash, some ⟨e, a'⟩) ∧
+      a'.timestamp = a.timestamp ∧ a'.prevRandao = a.prevRandao ∧
+      a'.suggestedFeeRecipient = a.suggestedFeeRecipient ∧
+      sinceValue a'.withdrawals = sinceValue a.withdrawals ∧
+      sinceValue a'.parentBeaconBlockRoot = sinceValue a.parentBeaconBlockRoot ∧
+      sinceValue a'.slotNumber = sinceValue a.slotNumber ∧
+      sinceValue a'.targetGasLimit = sinceValue a.targetGasLimit := by
+  -- The attributes read back at a structure that the version takes, which is that of their fork.
+  have takes := exists_attributesVersions_of_attributesTakeFork hTakes
+  rw [hShape] at takes
+  obtain ⟨b, hb, hat⟩ := payloadAttributesOfVersion_json a takes
+  have hstruct : attributesForkAt fork = b.1 :=
+    PayloadAttributes.atFork_isSome_iff.mp (by simp [hat])
+  obtain ⟨t1, t2, t3, t4, t5, t6, t7⟩ := PayloadAttributes.atFork_fields hat
+  -- At the fork of the payload they have the same structure, so they move there.
+  obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp
+    (PayloadAttributes.atFork_isSome_iff.mpr (hShape.trans hstruct))
+  obtain ⟨u1, u2, u3, u4, u5, u6, u7⟩ := PayloadAttributes.atFork_fields ha'
+  have hcheck : checkAttributes config version known b = .ok ⟨e, a'⟩ :=
+    checkAttributes_eq_ok_iff.mpr ⟨t1 ▸ hFork, hTakes, ha', t1 ▸ hTime⟩
+  refine ⟨a', ?_, u1.trans t1.symm, u2.trans t2.symm, u3.trans t3.symm, u4.trans t4.symm,
+    u5.trans t5.symm, u6.trans t6.symm, u7.trans t7.symm⟩
+  unfold forkchoiceUpdatedCall
+  rw [forkchoiceUpdatedParams_json]
+  simp [hUpdate, hKnown, hb, hcheck, bind, Except.bind, pure, Except.pure]
+
+/-- From Glamsterdam, attributes sent with an applied head come back at Glamsterdam, at version 4.
+
+The tree must hold the head.
+
+The block after the head must be of Glamsterdam, and the timestamp above that of the head.
+
+The attributes at that fork carry every value of the attributes sent. -/
+theorem forkchoiceUpdatedCall_payloadAttributesJson_of_gloas {fork : Fork}
+    (gloas : .glamsterdam ≤ fork) {s : ForkchoiceState} {status : PayloadStatus}
+    {known : KnownPayload} (a : PayloadAttributes fork) (custody : Option (Vector UInt8 16))
+    (hUpdate : forkchoiceUpdated transition tree finalized s = .ok (status, some s.headBlockHash))
+    (hKnown : tree.lookup s.headBlockHash = some known)
+    (hTime : known.timestamp < a.timestamp)
+    (hFork : config.activeFork (known.number.toNat + 1) a.timestamp.toNat = some .glamsterdam) :
+    ∃ a' : PayloadAttributes .glamsterdam,
+      forkchoiceUpdatedCall config transition 4 tree finalized
+          (forkchoiceUpdatedParamsJson 4 s (some a) custody) =
+        .ok (status, some s.headBlockHash, some ⟨.glamsterdam, a'⟩) ∧
+      a'.timestamp = a.timestamp ∧ a'.prevRandao = a.prevRandao ∧
+      a'.suggestedFeeRecipient = a.suggestedFeeRecipient ∧
+      sinceValue a'.withdrawals = sinceValue a.withdrawals ∧
+      sinceValue a'.parentBeaconBlockRoot = sinceValue a.parentBeaconBlockRoot ∧
+      sinceValue a'.slotNumber = sinceValue a.slotNumber ∧
+      sinceValue a'.targetGasLimit = sinceValue a.targetGasLimit := by
+  have hShape : attributesForkAt .glamsterdam = attributesForkAt fork := by
+    cases fork <;> first | rfl | exact absurd gloas (by decide)
+  exact forkchoiceUpdatedCall_payloadAttributesJson a custody hUpdate hKnown hTime hFork rfl hShape
 
 end EthLib.Engine

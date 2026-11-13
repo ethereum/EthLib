@@ -1,4 +1,4 @@
-"""The Relay API block submissions against the examples and documents of the relay specification."""
+"""The Relay API: submissions against the relay specification, and the list of validators."""
 
 import hashlib
 import json
@@ -14,6 +14,7 @@ import pytest
 
 from ethlib import consensus
 from ethlib.errors import SszError
+from ethlib.networking import snappy
 from raising import raises
 
 # The examples and the fork documents of the relay specification, pinned in tests/sources.toml.
@@ -517,3 +518,233 @@ def test_served_bid(version: str):
 def test_served_bid_outside_relay_forks(fork: str):
     with raises(SszError, f"no Relay API submissions at {fork}"):
         consensus.relay_submission_bid("mainnet", fork, b"", RELAY_KEY)
+
+
+# The pinned minimal Fulu state, whose lookahead names the proposers of two epochs.
+FULU_STATE = (
+    Path(__file__).resolve().parents[4]
+    / "tests/consensus/light_client/minimal/fulu/light_client/single_merkle_proof"
+    / "BeaconState/current_sync_committee_merkle_proof/object.ssz_snappy"
+)
+# Two validators of that state: one that registers, one that does not.
+REGISTERED = 7
+UNREGISTERED = 9
+# The slots of an epoch in the minimal preset.
+SLOTS_PER_EPOCH = 8
+# A slot inside an epoch, neither its first slot nor slot 0.
+INNER_SLOT = 3 * SLOTS_PER_EPOCH + 2
+
+
+@cache
+def _fulu_state() -> bytes:
+    """The SSZ bytes of the pinned Fulu state."""
+    return snappy.decompress(FULU_STATE.read_bytes())
+
+
+def _state_json(state: bytes) -> dict[str, Any]:
+    """The JSON of a minimal Fulu state."""
+    return consensus.api_json("minimal", _fork("fulu"), "BeaconState", state)
+
+
+def _registration(pubkey: str) -> dict[str, Any]:
+    """The JSON of a signed registration of a key; the list does not check the signature."""
+    message = {
+        "fee_recipient": "0x" + "11" * 20,
+        "gas_limit": "30000000",
+        "timestamp": "100",
+        "pubkey": pubkey,
+    }
+    return {"message": message, "signature": "0x" + "cd" * 96}
+
+
+def _listed(state: bytes, registrations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The entries that a relay lists from a minimal Fulu state and signed registrations."""
+    fork = _fork("fulu")
+    registry = [
+        consensus.api_ssz("minimal", fork, "SignedValidatorRegistrationV1", registration)
+        for registration in registrations
+    ]
+    return consensus.relay_validators("minimal", fork, state, registry)
+
+
+def _first_slot(document: dict[str, Any]) -> int:
+    """The first slot of the current epoch of a state."""
+    return int(document["slot"]) // SLOTS_PER_EPOCH * SLOTS_PER_EPOCH
+
+
+def test_relay_validators_follow_the_lookahead():
+    state = _fulu_state()
+    document = _state_json(state)
+    lookahead = [int(index) for index in document["proposer_lookahead"]]
+    assert len(lookahead) == 2 * SLOTS_PER_EPOCH
+    registrations = [_registration(validator["pubkey"]) for validator in document["validators"]]
+    first = _first_slot(document)
+    # With every validator registered, each slot of the two epochs lists its proposer.
+    assert _listed(state, registrations) == [
+        {"slot": str(first + offset), "validator_index": str(index), "entry": registrations[index]}
+        for offset, index in enumerate(lookahead)
+    ]
+    # With no registration, the list is empty.
+    assert _listed(state, []) == []
+
+
+def test_relay_validators_omit_unregistered_slots():
+    document = _state_json(_fulu_state())
+    per_epoch = SLOTS_PER_EPOCH
+    # One validator proposes every slot, except the second slot of each epoch.
+    lookahead = [UNREGISTERED] * (2 * per_epoch)
+    lookahead[1] = lookahead[per_epoch + 1] = REGISTERED
+    # An index with no validator names no key, so its slot has no entry either.
+    lookahead[3] = len(document["validators"])
+    document["proposer_lookahead"] = [str(index) for index in lookahead]
+    # Inside an epoch, so the list starts at the first slot of that epoch, not at the state's.
+    document["slot"] = str(INNER_SLOT)
+    state = consensus.api_ssz("minimal", _fork("fulu"), "BeaconState", document)
+    registration = _registration(document["validators"][REGISTERED]["pubkey"])
+    first = _first_slot(document)
+    # Only the slots of the registered validator have an entry, both within the two epochs.
+    assert _listed(state, [registration]) == [
+        {"slot": str(slot), "validator_index": str(REGISTERED), "entry": registration}
+        for slot in (first + 1, first + per_epoch + 1)
+    ]
+
+
+@pytest.mark.parametrize("fork", ["pectra", "glamsterdam"])
+def test_relay_validators_outside_fulu(fork: str):
+    with raises(SszError, f"no Relay API list of validators at {fork}"):
+        consensus.relay_validators("minimal", fork, b"", [])
+
+
+# The two numbers that a delivered payload adds to a bid trace, and the two timestamps of a bid.
+NUMBERS = {"block_number": "7", "num_tx": "1"}
+TIMESTAMPS = {"timestamp": "1700000000", "timestamp_ms": "1700000000123"}
+
+
+def _delivered(version: str, **changes: str) -> dict[str, Any]:
+    """A delivered payload: the completed bid trace of an example, with the two numbers."""
+    return {**_completed(version)["message"], **NUMBERS, **changes}
+
+
+def _received(version: str, **changes: str) -> dict[str, Any]:
+    """A received bid: a delivered payload of an example, with the two timestamps."""
+    return {**_delivered(version), **TIMESTAMPS, **changes}
+
+
+@pytest.mark.parametrize("version", VERSIONS)
+def test_delivered_payload_round_trip(version: str):
+    document = _delivered(version)
+    assert consensus.relay_delivered_payload(document) == document
+
+
+@pytest.mark.parametrize("version", VERSIONS)
+@pytest.mark.parametrize("timestamp", ["0", "-5", "9223372036854775807", "-9223372036854775808"])
+def test_received_bid_round_trip(version: str, timestamp: str):
+    document = _received(version, timestamp=timestamp)
+    assert consensus.relay_received_bid(document) == document
+
+
+def test_delivered_payload_refuses_a_timestamp():
+    message = 'document rejected: EthLib.Serialization.Ssz.Err.undeclaredField "timestamp"'
+    with raises(SszError, message):
+        consensus.relay_delivered_payload(_received("fulu"))
+
+
+@pytest.mark.parametrize("missing", ["timestamp", "timestamp_ms"])
+def test_received_bid_needs_both_timestamps(missing: str):
+    document = _received("fulu")
+    del document[missing]
+    message = f'document rejected: EthLib.Serialization.Ssz.Err.missingField "{missing}"'
+    with raises(SszError, message):
+        consensus.relay_received_bid(document)
+
+
+@pytest.mark.parametrize("key", ["timestamp", "timestamp_ms"])
+@pytest.mark.parametrize(
+    "timestamp", ["+1", "01", "-0", "1_000", "", "9223372036854775808", "-9223372036854775809", 5]
+)
+def test_received_bid_refuses_other_spellings(key: str, timestamp: str | int):
+    document: dict[str, Any] = _received("fulu")
+    document[key] = timestamp
+    with raises(SszError, "document rejected: EthLib.Serialization.Ssz.Err.typeMismatch"):
+        consensus.relay_received_bid(document)
+
+
+# A parent hash that differs from the block hash, which the examples set equal.
+PARENT = "0x" + "11" * 32
+
+
+def test_delivered_filters():
+    # The slot differs from the block number 7, so a filter that reads the wrong field fails.
+    document = _delivered("fulu", slot="5", parent_hash=PARENT)
+    builder = _hex(document["builder_pubkey"])
+    assert consensus.relay_delivered_keeps(document)
+    assert consensus.relay_delivered_keeps(document, slot=5)
+    assert not consensus.relay_delivered_keeps(document, slot=6)
+    assert not consensus.relay_delivered_keeps(document, slot=7)
+    assert consensus.relay_delivered_keeps(document, slot=5, builder_pubkey=builder, block_number=7)
+    assert not consensus.relay_delivered_keeps(document, slot=5, block_number=8)
+    assert consensus.relay_delivered_keeps(document, proposer_pubkey=_hex(PROPOSER))
+    assert not consensus.relay_delivered_keeps(document, proposer_pubkey=builder)
+    assert not consensus.relay_delivered_keeps(document, builder_pubkey=_hex(PROPOSER))
+    assert consensus.relay_delivered_keeps(document, block_hash=_hex(document["block_hash"]))
+    assert not consensus.relay_delivered_keeps(document, block_hash=_hex(PARENT))
+
+
+def test_received_filters():
+    document = _received("fulu", slot="5", parent_hash=PARENT)
+    builder = _hex(document["builder_pubkey"])
+    assert consensus.relay_received_keeps(document)
+    assert consensus.relay_received_keeps(document, slot=5, block_number=7)
+    assert not consensus.relay_received_keeps(document, slot=6)
+    assert not consensus.relay_received_keeps(document, block_number=8)
+    assert consensus.relay_received_keeps(document, builder_pubkey=builder)
+    assert not consensus.relay_received_keeps(document, builder_pubkey=_hex(PROPOSER))
+    assert consensus.relay_received_keeps(document, block_hash=_hex(document["block_hash"]))
+    assert not consensus.relay_received_keeps(document, block_hash=_hex(PARENT))
+
+
+def test_filters_read_the_entry():
+    missing = 'document rejected: EthLib.Serialization.Ssz.Err.missingField "slot"'
+    with raises(SszError, missing):
+        consensus.relay_delivered_keeps({})
+    # A received bid is not a delivered payload, so the delivered filters refuse it.
+    undeclared = 'document rejected: EthLib.Serialization.Ssz.Err.undeclaredField "timestamp"'
+    with raises(SszError, undeclared):
+        consensus.relay_delivered_keeps(_received("fulu"))
+
+
+def test_filters_check_their_widths():
+    document = _delivered("fulu")
+    with raises(SszError, "expected 32 bytes, got 31"):
+        consensus.relay_delivered_keeps(document, block_hash=bytes(31))
+    with raises(SszError, "expected 48 bytes, got 47"):
+        consensus.relay_received_keeps(_received("fulu"), builder_pubkey=bytes(47))
+    with raises(SszError, f"expected an int below {2**64}, got {2**64}"):
+        consensus.relay_delivered_keeps(document, slot=2**64)
+
+
+def test_sort_delivered():
+    low = _delivered("fulu", value="1")
+    high = _delivered("fulu", value="3")
+    tie = _delivered("fulu", value="3", slot="9")
+    assert consensus.relay_sort_delivered("-value", [low, high]) == [high, low]
+    assert consensus.relay_sort_delivered("value", [high, low]) == [low, high]
+    # Payloads of equal value keep their order, in both orders.
+    assert consensus.relay_sort_delivered("-value", [low, tie, high]) == [tie, high, low]
+    assert consensus.relay_sort_delivered("value", [tie, high]) == [tie, high]
+    assert consensus.relay_sort_delivered("value", []) == []
+
+
+def test_sort_delivered_compares_numbers():
+    # Values that sort another way as text, and one past 64 bits.
+    nine, ten, huge = (_delivered("fulu", value=str(v)) for v in (9, 10, 2**200))
+    assert consensus.relay_sort_delivered("value", [huge, ten, nine]) == [nine, ten, huge]
+    assert consensus.relay_sort_delivered("-value", [nine, huge, ten]) == [huge, ten, nine]
+
+
+def test_sort_delivered_refuses_another_order():
+    with raises(SszError, "unknown order VALUE"):
+        consensus.relay_sort_delivered("VALUE", [])  # ty: ignore[invalid-argument-type]
+    missing = 'document rejected: EthLib.Serialization.Ssz.Err.missingField "slot"'
+    with raises(SszError, missing):
+        consensus.relay_sort_delivered("value", [{}])

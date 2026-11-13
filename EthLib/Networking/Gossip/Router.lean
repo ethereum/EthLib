@@ -353,6 +353,9 @@ Any choice of a set of candidates can be listed in their order, so the order los
 def Select.Lawful (sel : Select) : Prop :=
   ∀ n l, (sel n l).Sublist l ∧ (sel n l).length = min n l.length
 
+/-- The choice of the first candidates, in their order: a fixed choice, for replays. -/
+def Select.first : Select := fun n l => l.take n
+
 /-- The values that gossipsub v1.1 leaves to the client, and the consensus layer does not fix.
 
 Backoffs are in seconds, as a PRUNE carries them. -/
@@ -506,7 +509,9 @@ def lastPublished (s : RouterState) (topic : String) : Nat :=
 
 First come the best-ranked peers, up to the score count and the target.
 
-Then come peers chosen among the others, up to the target.
+Then come peers chosen among the others, in the order of the mesh, up to the target.
+
+Gossipsub v1.1 chooses them at random, not by score.
 
 If too few of them are outbound, the last ones that are not outbound give way.
 
@@ -515,7 +520,7 @@ def keepPeers (p : GossipsubParameters) (c : ClientChoices) (sel : Select) (rank
     (outbound mesh : List PeerId) : List PeerId :=
   let sorted := mesh.mergeSort rank
   let best := sorted.take (min c.dScore p.D)
-  let kept := best ++ sel (p.D - best.length) (sorted.drop best.length)
+  let kept := best ++ sel (p.D - best.length) (mesh.filter (· ∉ best))
   let keptIn := kept.filter (· ∉ outbound)
   let keptOut := kept.filter (· ∈ outbound)
   let add := ((sorted.filter (· ∈ outbound)).filter (· ∉ kept)).take
