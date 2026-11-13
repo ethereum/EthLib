@@ -1107,7 +1107,7 @@ private theorem epochBalanceReplay_bounded {fork : Fork} {s : BeaconState preset
       obtain ⟨consolidated, consolidatedOk, rfl⟩ := step
       have bounds := consolidation_transfer_bound pre.1 consolidated electra consolidatedOk
       exact ⟨(frame_processPendingConsolidations consolidatedOk).balancesMatch held.1,
-        eventsBounded_append held.2 (single _ bounds.2.1 bounds.2.2)⟩
+        eventsBounded_append held.2 (single _ bounds.1 bounds.2)⟩
     · cases step; exact held
   all_goals simp [EpochStage.prefixStages] at member
 

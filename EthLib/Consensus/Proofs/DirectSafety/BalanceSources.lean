@@ -27,12 +27,6 @@ open Base Cryptography.Bls Uint64
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
-/-- The sum of a list of amounts, as a natural number. -/
-def sumAmounts (values : Array Gwei) : Nat := (values.toList.map (·.toNat)).sum
-
-/-- The sum of all balances of a state. -/
-def totalBalance {fork : Fork} (s : BeaconState preset fork) : Nat := sumAmounts s.balances.data
-
 /-- Positive changes are summed per index, so a transfer cannot cancel a loss elsewhere. -/
 def balanceCredits {fork : Fork} (s t : BeaconState preset fork) : Nat :=
   ∑ i ∈ Finset.range t.balances.data.size,
@@ -498,10 +492,11 @@ def consumedConsolidations {fork : Fork} (s t : BeaconState preset fork)
         | none => 0
         | some v => if v.slashed then 0 else v.effectiveBalance.toNat).sum
 
-/-- Consolidations cannot mint balance, but a target can gain all the source's moved balance. -/
+/-- The pass moves at most the effective balance of each consumed, unslashed source.
+
+Its credits and its debits are each at most that amount. -/
 theorem consolidation_transfer_bound {fork : Fork} (s t : BeaconState preset fork)
     (electra : .pectra ≤ fork) (ok : processPendingConsolidations s electra = .ok t) :
-    totalBalance t = totalBalance s ∧
     balanceCredits s t ≤ consumedConsolidations s t electra ∧
     balanceDebits s t ≤ consumedConsolidations s t electra := by
   let cost (s : BeaconState preset fork) (c : PendingConsolidation) : Nat :=
@@ -572,7 +567,7 @@ theorem consolidation_transfer_bound {fork : Fork} (s t : BeaconState preset for
     have le := facts.1
     simp only [Array.length_toList] at le
     omega
-  refine ⟨(processPendingConsolidations_kept ok).2, ?_, ?_⟩
+  refine ⟨?_, ?_⟩
   · simpa only [consumedConsolidations, count, balanceCredits, actualBalanceAt, balances]
       using facts.2.2.1
   · simpa only [consumedConsolidations, count, balanceDebits, actualBalanceAt, balances]
