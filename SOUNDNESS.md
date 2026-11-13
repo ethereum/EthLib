@@ -4187,7 +4187,31 @@ It checks the total, the sync part against a share computed from the active bala
 The consensus value of a produced block is in `Consensus/BeaconApi/Produce.lean`: the total of its block rewards, at 10^9 Wei per Gwei, as the source describes the value "in Wei paid to the proposer".
 `consensusBlockValue_ok_iff` (`Consensus/Proofs/BeaconApi/Produce.lean`) shows that it is that total, and `consensusBlockValue_balance` that, under the hypotheses of `blockRewards_balance`, it is the rise of the proposer's balance over the operations and the sync aggregate, in Wei.
 One Gwei is 10^9 Wei through one constant that the execution layer shares, in `Base/Denominations.lean`.
-No export or Python test covers it yet; the selection between the local payload and builder bids of #2086 remains.
+Its export is tested against the block rewards of the pinned random, finality and sanity blocks.
+
+The choice between the local payload and a builder's payload is in the same module.
+Through Fulu, `preferLocalV3` is the rule of the v3 endpoint, and `preferLocalV3_zero` shows that a factor of zero keeps the local payload.
+From Gloas, the containers of the builder configuration of the v4 endpoint are in `Consensus/Containers/BuilderConfig.lean`, with the terms that each gives to a bid.
+`selectPayload` drops the bids that their terms refuse, keeps the first one of largest weight, and commits to it only when its weight beats 100 times the local value.
+`selectPayload_accepted`, `selectPayload_max` and `selectPayload_beats_local` show that a chosen bid is accepted, weighs the most and beats the local payload.
+`selectPayload_eq_none_iff` shows that the local payload is kept exactly when no accepted bid beats it, so it wins a tie.
+`selectPayload_map` shows that a change of bids that keeps their signers, terms and values keeps the choice.
+`selectPayload_cap` shows that changing an execution payment at or above its cap to another at or above it keeps the choice, and `bidWeight_lt` that a weight fits in 128 bits.
+The Python tests check the factors 0, 100 and 2^64 - 1 that the source names, and the saturation of a bid's value at 2^64 - 1.
+Four points of the source are decided here, and a reviewer may question them:
+
+- The v4 rule compares a bid in Gwei with the local value that the Engine API gives in Wei; the comparison multiplies the bid's weight by 10^9, so no value is rounded.
+- A bid received on gossip has no cap in the source, so its terms count the whole execution payment, up to the saturation at 2^64 - 1.
+- The source does not order two bids of the same weight; the first one in the list wins, which the Python tests check.
+- What makes a builder payload safe in v3 is the node's choice, so the rule takes the two values once both are valid.
+
+The JSON codec of the API has no form for a URL string, so a builder entry is given only in its SSZ form.
+An entry with an empty URL or empty authentication data, or whose authentication names another slot, gives no bid.
+The other entries and the gossip terms still apply, since the source says that one bad entry never fails the request.
+The source forbids two entries with one URL and one authentication data, and EthLib keeps the first of them.
+A candidate bid takes its signer from the registry, for the builder that the bid names, so its signature must have been checked first.
+The source limits a URL to 2048 characters in JSON and to 2048 bytes in SSZ, and EthLib follows the bytes.
+A URL is checked only to be non-empty, not to be a valid URI.
 
 The topics and the messages of the event stream are in `Consensus/BeaconApi/Events.lean`, shared by the events of received objects (#2090) and of the fork choice (#2091).
 `EventTopic.ofName?_name` and `EventTopic.name_injective` (`Consensus/Proofs/BeaconApi/Events.lean`) show that each of the 24 topics of the source has its own name, which gives it back.
@@ -4920,12 +4944,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 500 operations and 49 size constants.
-The Python extension calls 500 of the operations and 49 of the constants.
+Lean exports 506 operations and 49 size constants.
+The Python extension calls 506 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11552 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2532), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1607), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (71), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (794), `x25519.c` (21), `xmss.c` (134).
+11636 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2598), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1619), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (71), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (800), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
