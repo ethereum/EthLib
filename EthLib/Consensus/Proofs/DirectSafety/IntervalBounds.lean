@@ -1295,22 +1295,8 @@ private theorem effectiveWeight_at {fork : Fork} (s : BeaconState preset fork)
     (unique : PubkeysDistinct s) (i : Nat) (v : Validator)
     (found : s.validators.data[i]? = some v) :
     effectiveWeight s v.pubkey = effectiveAt ⟨fork, s⟩ i := by
-  have lookup (vs : List Validator) (distinct : (vs.map (·.pubkey)).Nodup)
-      (v : Validator) (member : v ∈ vs) :
-      vs.find? (fun w => w.pubkey == v.pubkey) = some v := by
-    induction vs with
-    | nil => simp at member
-    | cons w ws ih =>
-      simp only [List.map_cons, List.nodup_cons] at distinct
-      rcases List.mem_cons.mp member with rfl | member
-      · simp
-      · have different : w.pubkey ≠ v.pubkey := by
-          intro same
-          exact distinct.1 (List.mem_map.mpr ⟨v, member, same.symm⟩)
-        simp [different, ih distinct.2 member]
-  have member : v ∈ s.validators.data.toList := by
-    simpa using Array.mem_of_getElem? found
-  simp [effectiveWeight, effectiveAt, found, lookup _ unique v member]
+  rw [effectiveWeight_of_member unique (by simpa using Array.mem_of_getElem? found)]
+  simp [effectiveAt, found]
 
 private theorem intervalLoss_recent_supported (y : ForkedBeaconState preset)
     (early : y.fork < .glamsterdam) (unique : PubkeysDistinct y.state)

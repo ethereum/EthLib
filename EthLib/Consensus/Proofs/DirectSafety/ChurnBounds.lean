@@ -307,7 +307,8 @@ private theorem mem_keysAt_epoch {fork : Fork} {state : BeaconState preset fork}
       ⟨v, by simpa [numeric] using found, active⟩, ?_⟩
     simp [numeric, found, same]
 
-private theorem effectiveWeight_of_member {fork : Fork} {state : BeaconState preset fork}
+/-- With distinct registry keys, the weight of a member's key is its effective balance. -/
+theorem effectiveWeight_of_member {fork : Fork} {state : BeaconState preset fork}
     (unique : PubkeysDistinct state) {v : Validator} (member : v ∈ state.validators.data.toList) :
     effectiveWeight state v.pubkey = v.effectiveBalance.toNat := by
   have lookup (vs : List Validator) (distinct : (vs.map (·.pubkey)).Nodup)
