@@ -66,7 +66,7 @@ private theorem mod_div_mod (z a b c : Nat) (h : a + c ≤ b) :
 theorem ofBV_ofNat (n z : Nat) : ofBV n (BitVec.ofNat (8 * n) z) = uintToBytes n z := by
   apply Vector.ext
   intro i hi
-  simp only [getElem_ofBV, uintToBytes, Vector.getElem_ofFn]
+  simp only [getElem_ofBV, Base.uintToBytes_eq_div, Vector.getElem_ofFn]
   apply UInt8.toNat.inj
   simp only [UInt8.toNat_ofBitVec, BitVec.extractLsb'_toNat, BitVec.toNat_ofNat,
     Nat.shiftRight_eq_div_pow]
@@ -80,7 +80,7 @@ theorem ofBV_eq_uintToBytes (n : Nat) {w : Nat} (y : BitVec w) :
     ofBV n y = uintToBytes n y.toNat := by
   apply Vector.ext
   intro i hi
-  simp only [getElem_ofBV, uintToBytes, Vector.getElem_ofFn]
+  simp only [getElem_ofBV, Base.uintToBytes_eq_div, Vector.getElem_ofFn]
   apply UInt8.toNat.inj
   simp only [UInt8.toNat_ofBitVec, BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow]
   rw [show (256 : Nat) ^ i = 2 ^ (8 * i) by rw [pow_mul]; norm_num]
