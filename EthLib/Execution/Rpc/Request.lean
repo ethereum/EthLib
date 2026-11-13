@@ -33,7 +33,7 @@ A request that is not a valid request object has the error `-32600`, as section 
 
 A parameter that breaks its schema has the error `-32602`.
 
-[rpc]: https://www.jsonrpc.org/specification#error_object
+[rpc]: https://www.jsonrpc.org/specification#request_object
 -/
 
 @[expose] public section

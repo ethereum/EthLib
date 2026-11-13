@@ -83,9 +83,11 @@ def notFound : Json := .null
 
 /-- The ratio `num / den` as a JSON number, rounded down to `places` decimal places.
 
-It lies from 0 to 1 when `num` is at most `den`; a denominator of 0 gives 0. -/
+A numerator above the denominator counts as the denominator, so the number lies from 0 to 1.
+
+A denominator of 0 gives 0. -/
 def ratioJson (places num den : Nat) : Json :=
-  .num ⟨(num * 10 ^ places / den : Nat), places⟩
+  .num ⟨(min num den * 10 ^ places / den : Nat), places⟩
 
 /-- Four bytes. -/
 def bytes4 (what : String) (j : Json) : Read (Vector UInt8 4) := fixed what 4 j

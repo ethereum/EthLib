@@ -219,4 +219,13 @@ theorem blockNumberOrTagOrHash_number (what : String) {n : Nat}
   · rw [e] at hn
     cases hn
 
+/-- A hash written as a bare string reads as that hash, without the flag. -/
+theorem blockNumberOrTagOrHash_hashString (what : String) (h : Hash32) :
+    blockNumberOrTagOrHash what (dataJson h.toList) = .ok (.hash h false) := by
+  have hx : hash32 what (.str (hexString h.toList)) = .ok h := fixed_hexString what 32 h false
+  unfold blockNumberOrTagOrHash
+  simp only [dataJson]
+  rw [hx]
+  split <;> simp_all [pure, Except.pure]
+
 end EthLib.Execution.Rpc

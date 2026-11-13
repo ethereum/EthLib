@@ -2999,13 +2999,13 @@ A decimal number reads back from its decimal digits (`uintDecimal_uintDecimalJso
 A 32-bit and a 256-bit number read back from their quantities (`uint32_quantityJson`, `uint256_quantityJson`).
 
 A block parameter names a block by its number, by a tag, or by its hash.
-A number or a tag reads back from the writer (`blockNumberOrTag_number`, `blockNumberOrTag_tag`), and a range reads back every tag but `pending` (`blockNumberOrTagForRange_tag`), which it rejects (`blockNumberOrTagForRange_pending`).
+A number or a tag reads back from the writer (`blockNumberOrTag_number`, `blockNumberOrTag_tag`), and a range reads back every number (`blockNumberOrTagForRange_number`) and every tag but `pending` (`blockNumberOrTagForRange_tag`), which it rejects (`blockNumberOrTagForRange_pending`).
 The schema for a number, a tag or a hash is an `anyOf`, so a string of 64 hex digits whose first digit is not `0` matches both a number and a hash.
-The official fixtures read such a string as a hash, so the reader tries a hash first.
+The official fixtures read such a string as a hash, so the reader tries a hash first (`blockNumberOrTagOrHash_hashString`).
 A tag, and a hash in the object of EIP-1898, read back (`blockNumberOrTagOrHash_tag`, `blockNumberOrTagOrHash_hash`).
 A number reads back when its text is no hash (`blockNumberOrTagOrHash_number`), which holds below `2^252` (`hash32_quantityJson_of_lt`).
 
-The request and the response objects of JSON-RPC 2.0 read back from their writers (`request_requestJson`, `response_responseJson`), a result of `null` included.
+The request and the response objects of JSON-RPC 2.0 read back from their writers (`request_requestJson`, `response_responseJson`), a result of `null` included, and so does the identifier of a request (`requestId_requestIdJson`).
 The error codes of the source come in groups.
 Every code of a group that declares a range lies in that range (`code_mem_range`, `Proofs/Rpc/Errors.lean`).
 No code appears twice (`codes_nodup`), and the code `4444` of pruned history is in no group (`prunedHistoryUnavailable_not_mem`).
