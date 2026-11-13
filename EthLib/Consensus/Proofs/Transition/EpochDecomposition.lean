@@ -247,21 +247,34 @@ theorem processEpoch_trace {config : Config} {checks : SignatureChecks}
     EpochTrace (action config checks) epochStages state after :=
   run_ok_iff.mp ((processEpoch_eq_run config checks state).symm.trans computed)
 
-/-- The RANDAO reset separates the balance updates from history and rotation. -/
+/-- The RANDAO reset separates the balance updates from history and rotation.
+
+After the reset, the equations of history, rotation and the three committee stages follow. -/
 theorem processEpoch_randaoCut {config : Config} {checks : SignatureChecks}
     {state after : BeaconState preset fork}
     (computed : processEpoch config checks state = .ok after) :
-    ∃ cleared mixed,
+    ∃ cleared mixed rooted rotated synced looked,
       EpochTrace (action config checks)
         (prefixStages ++ [.payments, .effectiveBalances, .slashingsReset]) state cleared ∧
       processRandaoMixesReset cleared = .ok mixed ∧
-      EpochTrace (action config checks) (.history :: tailStages) mixed after := by
+      Edge config checks .history mixed rooted ∧
+      Edge config checks .participation rooted rotated ∧
+      Edge config checks .syncCommittees rotated synced ∧
+      Edge config checks .proposerLookahead synced looked ∧
+      Edge config checks .ptcWindow looked after := by
   have trace := processEpoch_trace computed
   change EpochTrace _ ((prefixStages ++ [.payments, .effectiveBalances, .slashingsReset]) ++
     (.randaoReset :: .history :: tailStages)) _ _ at trace
   obtain ⟨cleared, head, tail⟩ := append_iff.mp trace
-  cases tail with
-  | cons reset rest => exact ⟨cleared, _, head, reset, rest⟩
+  cases tail; rename_i reset tail
+  cases tail; rename_i history tail
+  cases tail; rename_i rotation tail
+  cases tail; rename_i sync tail
+  cases tail; rename_i lookahead tail
+  cases tail; rename_i window tail
+  cases tail
+  exact ⟨cleared, _, _, _, _, _, head, reset, action_cases.mp history, action_cases.mp rotation,
+    action_cases.mp sync, action_cases.mp lookahead, action_cases.mp window⟩
 
 /-- From Altair, the epoch transition first runs the steps that come before the payments.
 

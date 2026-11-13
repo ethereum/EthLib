@@ -233,10 +233,10 @@ private theorem kept_epochTail {altair : .altair ≤ fork}
     {rooted synced looked : BeaconState preset fork}
     (syncedOk : processSyncCommitteeUpdates (processParticipationFlagUpdates rooted altair)
       altair = .ok synced)
-    (lookedOk : (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead synced fulu)
-      else pure synced) = .ok looked)
-    (windowed : (if gloas : .glamsterdam ≤ fork then liftAccessor (processPtcWindow looked gloas)
-      else pure looked) = .ok after) : Kept rooted after := by
+    (lookedOk : if fulu : .fusaka ≤ fork then processProposerLookahead synced fulu = .ok looked
+      else synced = looked)
+    (windowed : if gloas : .glamsterdam ≤ fork then processPtcWindow looked gloas = .ok after
+      else looked = after) : Kept rooted after := by
   have flags : Kept rooted (processParticipationFlagUpdates rooted altair) := ⟨rfl, rfl⟩
   have syncedKept : Kept (processParticipationFlagUpdates rooted altair) synced := by
     unfold processSyncCommitteeUpdates at syncedOk
@@ -245,20 +245,17 @@ private theorem kept_epochTail {altair : .altair ≤ fork}
     all_goals exact ⟨rfl, rfl⟩
   have lookedKept : Kept synced looked := by
     split at lookedOk
-    · simp only [processProposerLookahead, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
+    · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
         Except.ok.injEq] at lookedOk
       obtain ⟨_, _, _, _, rfl⟩ := lookedOk
       exact ⟨rfl, rfl⟩
-    · simp only [pure, Except.pure, Except.ok.injEq] at lookedOk
-      exact lookedOk ▸ Kept.refl _
+    · exact lookedOk ▸ Kept.refl _
   have windowedKept : Kept looked after := by
     split at windowed
-    · simp only [processPtcWindow, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at windowed
+    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at windowed
       obtain ⟨_, _, _, _, rfl⟩ := windowed
       exact ⟨rfl, rfl⟩
-    · simp only [pure, Except.pure, Except.ok.injEq] at windowed
-      exact windowed ▸ Kept.refl _
+    · exact windowed ▸ Kept.refl _
   exact flags.trans <| syncedKept.trans <| lookedKept.trans windowedKept
 
 /-- An epoch one above another, as natural numbers, is its successor. -/
@@ -275,7 +272,8 @@ private theorem processEpochAltair_mixesKeptBut {altair : .altair ≤ fork}
     MixesKeptBut (getCurrentEpoch state + 1) state after := by
   have epochOk : processEpoch config checks state = .ok after := by
     simpa only [processEpoch, altair, ↓reduceDIte] using computed
-  obtain ⟨cleared, mixed, initial, mixedOk, final⟩ := processEpoch_randaoCut epochOk
+  obtain ⟨cleared, mixed, rooted, rotated, synced, looked, initial, mixedOk, rootedOk, rotation,
+    syncedOk, lookedOk, windowed⟩ := processEpoch_randaoCut epochOk
   have head : Kept state cleared := by
     apply initial.transport Kept Kept.refl (fun a b => a.trans b)
     intro k member a b ok
@@ -310,21 +308,7 @@ private theorem processEpochAltair_mixesKeptBut {altair : .altair ≤ fork}
       exact ⟨rfl, rfl⟩
     all_goals simp [EpochStage.prefixStages] at member
   have tail : Kept mixed after := by
-    cases final
-    rename_i rooted rootedOk final
-    cases final
-    rename_i rotatedState rotated final
-    cases final
-    rename_i synced syncedOk final
-    cases final
-    rename_i looked lookedOk final
-    cases final
-    rename_i windowedState windowed final
-    cases final
-    have rootedOk := EpochStage.action_cases.mp rootedOk
-    have rotation := EpochStage.action_cases.mp rotated
-    have syncedOk := EpochStage.action_cases.mp syncedOk
-    simp only [EpochStage.Edge, altair, ↓reduceDIte] at rootedOk rotation syncedOk
+    simp only [EpochStage.Edge, altair, ↓reduceDIte] at rootedOk rotation syncedOk lookedOk windowed
     subst rotation
     split at rootedOk
     · exact (kept_processHistoricalSummariesUpdate rootedOk).trans
