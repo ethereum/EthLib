@@ -3642,6 +3642,16 @@ So the effective gas price of each receipt object follows the formula of the des
 From Glamsterdam, EIP-7778 makes the cumulative gas of a receipt the gas that the senders paid.
 As a choice of EthLib, the object copies it, so `gasUsed` is the gas that the sender paid, while the descriptions of `receipt.yaml` read "gas used".
 
+`eth_getLogs` reads the logs that a filter of [`filter.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/filter.yaml) selects (`Execution/Rpc/Filter.lean`).
+A filter names one block by its hash, or a range of canonical blocks by its bounds, and then the addresses and the topics at each position that it takes.
+A range reads exactly the canonical blocks between its bounds, which are in order (`filterBlocks_range`), and a number bound lies between the lowest block and the head (`boundNumber_number`); a block hash reads the one block of that hash (`filterBlocks_hash`).
+Every returned log matches the filter and is a log of a receipt object of a block that the filter reads (`getLogs_sound`).
+Every such log that matches is returned (`getLogs_complete`).
+In a valid view, take a canonical block after the lowest.
+The logs of its receipts are its logs (`Valid.logs_receipts`), and the Bloom filter of its header is that of its logs (`Valid.logsBloom_eq`).
+So when the Bloom filter has none of the addresses that a filter takes, or none of the topics that it takes at some position, the block has no log that the filter selects (`Valid.not_selects_of_bloom`).
+The source leaves open a block hash with a bound, an empty topic list at a position, a log with fewer topics than the filter, an omitted bound and the order of the results; the module header gives each choice, after the fixtures where they decide.
+
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 

@@ -32,6 +32,7 @@ RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_getBlockTransactionCountByNumber": "uint",
     "eth_getTransactionReceipt": None,
     "eth_getBlockReceipts": None,
+    "eth_getLogs": None,
     "debug_getRawHeader": "bytes",
     "debug_getRawBlock": "bytes",
     "debug_getRawTransaction": "bytes",
@@ -298,6 +299,42 @@ def test_receipts() -> None:
         assert [log["logIndex"] for log in logs] == [hex(index) for index in range(len(logs))]
         gas = sum(int(receipt["gasUsed"], 16) for receipt in receipts)
         assert gas == (int(receipts[-1]["cumulativeGasUsed"], 16) if receipts else 0)
+
+
+def test_logs_of_whole_chain() -> None:
+    """A filter over the whole chain returns every log of every receipt, in block order."""
+    chain = replay_chain()
+    calls: list[tuple[str, list[object]]] = [
+        ("eth_getBlockReceipts", [hex(number)]) for number in range(len(chain.blocks))
+    ]
+    calls.append(("eth_getLogs", [{"fromBlock": "earliest", "toBlock": "latest"}]))
+    requests = [
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+        for method, params in calls
+    ]
+    results = [json.loads(text)["result"] for text in chain.serve(requests) if text is not None]
+    assert len(results) == len(calls)
+    *blocks, logs = results
+    expected = [log for receipts in blocks for receipt in receipts for log in receipt["logs"]]
+    assert expected
+    assert logs == expected
+
+
+# Each filter that the method rejects, with the code of its error.
+# The test chain holds blocks 0 to 60.
+BAD_FILTERS = [
+    pytest.param({"fromBlock": "0x3d"}, -32602, id="from-above-head"),
+    pytest.param({"fromBlock": "0x5", "toBlock": "0x4"}, -32602, id="reversed"),
+    pytest.param({"fromBlock": "pending"}, -32602, id="pending"),
+    pytest.param({"blockHash": "0x" + "11" * 32}, -32001, id="unknown-hash"),
+]
+
+
+@pytest.mark.parametrize(("log_filter", "code"), BAD_FILTERS)
+def test_bad_filter(log_filter: dict[str, str], code: int) -> None:
+    """A filter that the method rejects has the code of its error."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": "eth_getLogs", "params": [log_filter]}
+    assert _error(json.dumps(request))["error"]["code"] == code
 
 
 def test_pending_header() -> None:
