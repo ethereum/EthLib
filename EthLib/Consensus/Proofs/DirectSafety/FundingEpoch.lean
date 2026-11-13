@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
+import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 
 /-!
 # Funding across an epoch
@@ -151,7 +152,7 @@ private theorem funding_registry {fork : Fork} {s t : BeaconState preset fork}
   have bound := funding_kept_prefix electra 0 (sameSizes_processRegistryUpdates ok).1
     (registryLifecycle_processRegistryUpdates ok) (frame_processRegistryUpdates ok).slot
     queue (effectiveKept_registry ok)
-    (by simp only [actualBalanceAt, coverage_registry ok, Nat.sub_self, Finset.sum_const_zero]
+    (by simp only [actualBalanceAt, processRegistryUpdates_balances ok, Nat.sub_self, Finset.sum_const_zero]
         exact Nat.le_refl _)
   simpa using bound
 
