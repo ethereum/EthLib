@@ -3792,9 +3792,16 @@ On each name of the header, the block object of a block holds what its header ob
 The block object lists the transactions by their hashes, or by their objects when they are hydrated (`transactions_blockJson_false`, `transactions_blockJson_true`).
 The objects carry those hashes in the same order (`transactionHashes_of_transactionInfos`).
 Each list has one entry per transaction of the block (`length_transactionInfos`, `length_transactionHashes`), and the transaction count methods return that length by definition.
+The `size` of the block object is the length of the raw block that the getter returns (`size_blockJson`).
+Its `uncles` lists the hashes of the headers of its ommers, in order (`uncles_blockJson`).
 These properties hold whenever the writer gives an object.
 The writer fails with `-32603` when the node cannot compute the RLP form of the block, the hash of an ommer or a transaction, or a sender in it.
-No theorem yet shows that it succeeds on the blocks of a valid view.
+In a valid view, the writer gives the object of a canonical block after the lowest exactly when that block has an RLP form (`Valid.blockJson_exists_ok_iff`).
+Each hash in such a block then exists, and each sender exists because the run of the block recovered it.
+Before Fusaka no check bounds the RLP form of a block, which fails from `2^64` bytes on, so that form stays a hypothesis.
+From Fusaka the size check of the block gives that form, of at most `8 * 2^20` bytes (`Valid.rawBlock_of_fusaka_le`, `Valid.blockJson_of_fusaka_le`).
+The lowest block, the blocks off the canonical chain and the pending block do not run.
+So no theorem says that the writer succeeds on them.
 For the tag `pending`, the header method answers `null`.
 The block and count methods read the pending block of the view instead, since only the header methods of [`block.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/block.yaml) answer `null` for `pending`.
 The schema gives `size` only the title "Block size"; here it is the length of the RLP form of the block, which the fixtures pin.
