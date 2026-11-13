@@ -33,9 +33,11 @@ In such a registry, the eligible indices increase strictly.
 
 A validator is eligible for an epoch when it is active in it.
 
-It is also eligible when it is slashed and withdrawable after the epoch that follows.
+It is also eligible when it is slashed and not yet withdrawable in the epoch that follows.
 
 That check fails only for an inactive slashed validator in the epoch `2^64 - 1`.
+
+The previous epoch is never that epoch, so the check never fails there.
 
 So the eligible indices are the positions of the validators eligible for the previous epoch.
 
@@ -450,25 +452,13 @@ theorem getEligibleValidatorIndices_sorted {eligible : List ValidatorIndex}
     | .ok passes => passes
     | .error _ => false) fits
 
-/-- Each validator active in the previous epoch is eligible for the rewards of that epoch. -/
-theorem mem_getEligibleValidatorIndices_of_active {eligible : List ValidatorIndex}
-    (computed : getEligibleValidatorIndices state = .ok eligible) {index : ValidatorIndex}
-    {validator : Validator} (found : state.validators.data[index.toNat]? = some validator)
-    (active : isActiveValidator validator (getPreviousEpoch state) = true) :
-    index ∈ eligible := by
-  rw [getEligibleValidatorIndices_eq computed, List.mem_filterMap]
-  refine ⟨(validator, index.toNat), ?_, ?_⟩
-  · rw [List.mem_zipIdx_iff_getElem?]
-    simpa using found
-  · simp [isEligibleValidator, active, pure, Except.pure]
+/-- The eligibility of a validator for an epoch is decided unless the computation overflows.
 
-/-- The eligibility of a validator for an epoch is decided unless one past the epoch overflows.
+It computes one past the epoch only for a validator that is inactive and slashed.
 
-That overflow is reached only for a validator that is inactive and slashed.
+The validator is eligible when it is active in the epoch.
 
-The validator is eligible exactly when it is active in the epoch.
-
-It is also eligible when it is slashed and withdrawable after the epoch that follows. -/
+It is also eligible when it is slashed and not yet withdrawable in the epoch that follows. -/
 theorem isEligibleValidator_eq_ok_iff {epoch : Epoch} {validator : Validator} {decided : Bool} :
     isEligibleValidator epoch validator = .ok decided ↔
       (isActiveValidator validator epoch = true ∨ validator.slashed = false ∨
@@ -496,9 +486,9 @@ theorem isEligibleValidator_eq_ok_iff {epoch : Epoch} {validator : Validator} {d
       Except.ok.injEq, Bool.false_or, Bool.false_and, or_true, true_or, true_and]
     exact eq_comm
 
-/-- The eligibility of a validator fails exactly when it is inactive and slashed in the last epoch.
+/-- The eligibility of a validator fails only for the epoch `2^64 - 1`.
 
-That epoch is `2^64 - 1`.
+It fails there exactly when the validator is inactive and slashed.
 
 It then fails with an overflow. -/
 theorem isEligibleValidator_eq_error_iff {epoch : Epoch} {validator : Validator}
@@ -524,9 +514,11 @@ theorem isEligibleValidator_eq_error_iff {epoch : Epoch} {validator : Validator}
 
 /-- In the previous epoch of a state, the eligibility of a validator is decided without an error.
 
-The validator is eligible exactly when it is active in that epoch.
+The previous epoch is at most `2^64 - 2`, so one past it does not overflow.
 
-It is also eligible when it is slashed and withdrawable after the epoch that follows. -/
+The validator is eligible when it is active in that epoch.
+
+It is also eligible when it is slashed and not yet withdrawable in the epoch that follows. -/
 theorem isEligibleValidator_getPreviousEpoch (validator : Validator) :
     isEligibleValidator (getPreviousEpoch state) validator =
       .ok (isActiveValidator validator (getPreviousEpoch state) || (validator.slashed &&
@@ -535,11 +527,13 @@ theorem isEligibleValidator_getPreviousEpoch (validator : Validator) :
   have below := (getCurrentEpoch state).toNat_lt
   exact isEligibleValidator_eq_ok_iff.mpr ⟨.inr (.inr (by omega)), rfl⟩
 
-/-- A position is among the eligible indices exactly when it holds an eligible validator.
+/-- Take the eligible indices of a state, computed without an error.
+
+A position is among them exactly when it holds an eligible validator.
 
 The validator is eligible when it is active in the previous epoch.
 
-It is also eligible when it is slashed and withdrawable after the epoch that follows. -/
+It is also eligible when it is slashed and not yet withdrawable in the epoch that follows. -/
 theorem mem_getEligibleValidatorIndices_iff {eligible : List ValidatorIndex}
     (computed : getEligibleValidatorIndices state = .ok eligible) {index : ValidatorIndex} :
     index ∈ eligible ↔ ∃ validator, state.validators.data[index.toNat]? = some validator ∧
@@ -565,6 +559,14 @@ theorem mem_getEligibleValidatorIndices_iff {eligible : List ValidatorIndex}
     · rcases passes with active | ⟨slashed, late⟩
       · simp [active]
       · simp [slashed, late]
+
+/-- Each validator active in the previous epoch is eligible for the rewards of that epoch. -/
+theorem mem_getEligibleValidatorIndices_of_active {eligible : List ValidatorIndex}
+    (computed : getEligibleValidatorIndices state = .ok eligible) {index : ValidatorIndex}
+    {validator : Validator} (found : state.validators.data[index.toNat]? = some validator)
+    (active : isActiveValidator validator (getPreviousEpoch state) = true) :
+    index ∈ eligible :=
+  (mem_getEligibleValidatorIndices_iff computed).mpr ⟨validator, found, .inl active⟩
 
 /-- From Altair, take a validator active and unslashed in the previous epoch that set a flag in it.
 
