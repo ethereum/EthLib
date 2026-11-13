@@ -3796,14 +3796,13 @@ On each name of the header, the block object of a block holds what its header ob
 The block object lists the transactions by their hashes, or by their objects when they are hydrated (`transactions_blockJson_false`, `transactions_blockJson_true`).
 The objects carry those hashes in the same order (`transactionHashes_of_transactionInfos`).
 Each list has one entry per transaction of the block (`length_transactionInfos`, `length_transactionHashes`), and the transaction count methods return that length by definition.
-The `size` of the block object is the length of the raw block that the getter returns (`size_blockJson`).
+The `size` of the block object is the length of the RLP form of the block, in bytes, which the raw block method returns for the same block (`size_blockJson`).
 Its `uncles` lists the hashes of the headers of its ommers, in order (`uncles_blockJson`).
 These properties hold whenever the writer gives an object.
 The writer fails with `-32603` when the node cannot compute the RLP form of the block, the hash of an ommer or a transaction, or a sender in it.
-In a valid view, the writer gives the object of a canonical block after the lowest exactly when that block has an RLP form (`Valid.blockJson_exists_ok_iff`).
-Each hash in such a block then exists, and each sender exists because the run of the block recovered it.
-Before Fusaka no check bounds the RLP form of a block, which fails from `2^64` bytes on, so that form stays a hypothesis.
-From Fusaka the size check of the block gives that form, of at most `8 * 2^20` bytes (`Valid.rawBlock_of_fusaka_le`, `Valid.blockJson_of_fusaka_le`).
+In a valid view, the writer gives the object of a canonical block after the lowest exactly when that block has an RLP form (`Valid.exists_blockJson_eq_ok_iff`).
+Before Fusaka no check bounds the size of a block, and the RLP encoder fails on a payload of `2^64` bytes or more, so that form stays a hypothesis.
+From Fusaka the size check of the block gives that form, of at most `8 * 2^20` bytes (`Valid.exists_rawBlock_of_fusaka_le`, `Valid.exists_blockJson_of_fusaka_le`).
 The lowest block, the blocks off the canonical chain and the pending block do not run.
 So no theorem says that the writer succeeds on them.
 For the tag `pending`, the header method answers `null`.

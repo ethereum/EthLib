@@ -22,11 +22,13 @@ Its transactions are their hashes, or their objects, which carry the same hashes
 
 Each list has one entry for each transaction of the block.
 
-Its size is the length of the RLP form of the block, and it lists the hashes of the ommers.
+The size of the object is the length of the RLP form of the block, in bytes.
+
+The object lists the hashes of the headers of the ommers, in order.
 
 In a valid view, a canonical block after the lowest has an object exactly when it has an RLP form.
 
-From Fusaka, the size check of the block gives that form.
+From Fusaka, the size check gives that form, of at most 8 MiB, so the object exists.
 -/
 
 public section
@@ -187,7 +189,7 @@ theorem size_blockJson {r : BlockRecord} {full : Bool} {j : Lean.Json}
     (names_distinct_block r.hash r.block.header _ _ _ _) ?_⟩
   simp [blockFields]
 
-/-- When the writer gives an object, it lists the hashes of the headers of the ommers, in order. -/
+/-- When the writer gives an object, its uncles are the hashes of the ommer headers, in order. -/
 theorem uncles_blockJson {r : BlockRecord} {full : Bool} {j : Lean.Json}
     (h : r.blockJson full = .ok j) :
     ∃ hashes, r.block.ommers.mapM (fun o => o.2.hash) = .ok hashes ∧
@@ -289,28 +291,23 @@ private theorem blockJson_of_rawBlock {r : BlockRecord} (full : Bool) {raw : Byt
 namespace ChainView
 
 /-- In a valid view, each signature of a canonical block after the lowest names a sender. -/
-private theorem Valid.recoverSender {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
-    {i : Nat} (hi : i + 1 < v.canonical.length) :
+private theorem Valid.exists_recoverSender {v : ChainView} {checkSeal : Bool}
+    (hv : v.Valid checkSeal) {i : Nat} (hi : i + 1 < v.canonical.length) :
     ∀ tx ∈ v.canonical[i + 1].block.transactions,
       ∃ sender, recoverSender v.canonical[i + 1].fork tx = .ok sender := by
   intro tx htx
   obtain ⟨index, hlt, hget⟩ := List.getElem_of_mem htx
-  obtain ⟨-, result, hrun, -⟩ := hv.follows i hi
-  obtain ⟨hashes, -, happly, -⟩ := Blocks.runBody_eq_ok.mp hrun
-  obtain ⟨state, body, txs, -, -, -, -, htxs, -⟩ := Blocks.applyBody_eq_ok happly
-  obtain ⟨-, hsteps⟩ := Blocks.applyTransactions_steps (fun _ _ => True) (fun _ => trivial)
-    (fun _ _ => trivial) (fun _ => trivial) htxs
-  obtain ⟨before, next, -, hnext, -⟩ := hsteps index hlt
-  rw [hget] at hnext
+  obtain ⟨_, _, _, _, _, -, -, -, -, hnext⟩ :=
+    hv.applyTransaction_at hi (index := index) (by rw [List.getElem?_eq_getElem hlt, hget])
   obtain ⟨inc, -, hinc, -⟩ := Blocks.applyTransaction_eq_ok hnext
   exact ⟨inc.sender, (checkInclusion_ok hinc).1⟩
 
-/-- In a valid view, the writer gives the object of a canonical block after the lowest.
+/-- In a valid view, take a canonical block after the lowest.
 
-It does so exactly when the block has an RLP form, whether or not the transactions are hydrated.
+The writer gives its object exactly when the block has an RLP form.
 
-Each sender and each hash in the block then exists. -/
-theorem Valid.blockJson_exists_ok_iff {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
+This holds whether or not the transactions are hydrated. -/
+theorem Valid.exists_blockJson_eq_ok_iff {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
     {i : Nat} (hi : i + 1 < v.canonical.length) (full : Bool) :
     (∃ j, v.canonical[i + 1].blockJson full = .ok j) ↔
       ∃ raw, v.canonical[i + 1].rawBlock = .ok raw := by
@@ -319,14 +316,15 @@ theorem Valid.blockJson_exists_ok_iff {v : ChainView} {checkSeal : Bool} (hv : v
     obtain ⟨raw, hraw, -⟩ := size_blockJson hj
     exact ⟨raw, hraw⟩
   · rintro ⟨raw, hraw⟩
-    exact blockJson_of_rawBlock full hraw (Valid.recoverSender hv hi)
+    exact blockJson_of_rawBlock full hraw (Valid.exists_recoverSender hv hi)
 
 /-- In a valid view, from Fusaka, a canonical block after the lowest has an RLP form.
 
 That form has at most 8 MiB, that is `8 * 2 ^ 20` bytes. -/
-theorem Valid.rawBlock_of_fusaka_le {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
-    {i : Nat} (hi : i + 1 < v.canonical.length) (hf : .fusaka ≤ v.canonical[i + 1].fork) :
-    ∃ raw, v.canonical[i + 1].rawBlock = .ok raw ∧ raw.size ≤ 8 * 2 ^ 20 := by
+theorem Valid.exists_rawBlock_of_fusaka_le {v : ChainView} {checkSeal : Bool}
+    (hv : v.Valid checkSeal) {i : Nat} (hi : i + 1 < v.canonical.length)
+    (hf : .fusaka ≤ v.canonical[i + 1].fork) :
+    ∃ raw, v.canonical[i + 1].rawBlock = .ok raw ∧ raw.size ≤ Blocks.MAX_RLP_BLOCK_SIZE := by
   obtain ⟨hst, -⟩ := hv.follows i hi
   obtain ⟨-, -, hcheck, -⟩ := Blocks.stateTransition_eq_ok hst
   unfold Blocks.checkBlock at hcheck
@@ -334,19 +332,20 @@ theorem Valid.rawBlock_of_fusaka_le {v : ChainView} {checkSeal : Bool} (hv : v.V
   obtain ⟨_, hsize, -⟩ := EthLib.Base.bind_ok_iff.mp hcheck
   rcases (Blocks.validateBlockSize_eq_ok_iff items).mp hsize with hlt | ⟨bytes, hbytes, hle⟩
   · exact absurd hf (Nat.not_le_of_lt hlt)
-  · refine ⟨bytes, ?_, by simpa [Blocks.MAX_RLP_BLOCK_SIZE] using hle⟩
+  · refine ⟨bytes, ?_, hle⟩
     simp [BlockRecord.rawBlock, hitems, hbytes, Except.mapError, bind, Except.bind]
 
 /-- In a valid view, from Fusaka, the writer gives the object of a canonical block after the lowest.
 
-Its size is at most `8 * 2 ^ 20` bytes. -/
-theorem Valid.blockJson_of_fusaka_le {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
-    {i : Nat} (hi : i + 1 < v.canonical.length) (hf : .fusaka ≤ v.canonical[i + 1].fork)
-    (full : Bool) :
+Its size is the length of the RLP form of the block, at most 8 MiB. -/
+theorem Valid.exists_blockJson_of_fusaka_le {v : ChainView} {checkSeal : Bool}
+    (hv : v.Valid checkSeal) {i : Nat} (hi : i + 1 < v.canonical.length)
+    (hf : .fusaka ≤ v.canonical[i + 1].fork) (full : Bool) :
     ∃ j raw, v.canonical[i + 1].blockJson full = .ok j ∧ v.canonical[i + 1].rawBlock = .ok raw ∧
-      j.getObjVal? "size" = .ok (quantityJson raw.size) ∧ raw.size ≤ 8 * 2 ^ 20 := by
-  obtain ⟨raw, hraw, hle⟩ := Valid.rawBlock_of_fusaka_le hv hi hf
-  obtain ⟨j, hj⟩ := (Valid.blockJson_exists_ok_iff hv hi full).mpr ⟨raw, hraw⟩
+      j.getObjVal? "size" = .ok (quantityJson raw.size) ∧
+        raw.size ≤ Blocks.MAX_RLP_BLOCK_SIZE := by
+  obtain ⟨raw, hraw, hle⟩ := Valid.exists_rawBlock_of_fusaka_le hv hi hf
+  obtain ⟨j, hj⟩ := (Valid.exists_blockJson_eq_ok_iff hv hi full).mpr ⟨raw, hraw⟩
   obtain ⟨raw', hraw', hs⟩ := size_blockJson hj
   cases hraw.symm.trans hraw'
   exact ⟨j, raw, hj, hraw, hs, hle⟩
