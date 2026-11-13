@@ -2,6 +2,8 @@ module
 
 public import Lean.Data.Json
 public import EthLib.Base.Hex
+public import EthLib.Serialization.JsonRpc
+public import EthLib.Execution.Rpc.Json
 public import EthLib.Engine.Payload
 
 /-!
@@ -11,17 +13,9 @@ The JSON form of the parameters of the Engine API.
 
 The Engine API is a JSON-RPC interface, with the encodings of the Ethereum JSON-RPC API.
 
-A byte string is lowercase hex behind `0x`, two digits for each byte.
+It reads the base types with the readers that it shares with the execution JSON-RPC API.
 
-An address may also use uppercase digits.
-
-A number is lowercase hex behind `0x`, without leading zeros, and `0x0` for zero.
-
-An object must hold exactly the fields of its structure.
-
-A field whose value is `null` counts as absent.
-
-Any other input is an invalid parameter, with JSON-RPC code `-32602`.
+An input that such a reader rejects is an invalid parameter, with JSON-RPC code `-32602`.
 
 The base types state the patterns in [`base-types.yaml`][types].
 
@@ -46,6 +40,8 @@ namespace EthLib.Engine.Json
 
 open Lean (Json)
 open EthLib.Base
+open EthLib.Serialization.JsonRpc
+open EthLib.Execution.Rpc (withdrawal)
 open EthLib.Execution.Blocks (Withdrawal)
 
 /-- A decoding that fails with an invalid parameter. -/
@@ -54,105 +50,11 @@ abbrev Decode := Except EngineError
 /-- Fail with an invalid parameter, for a reason. -/
 def invalid {α : Type} (reason : String) : Decode α := throw (.invalidParams reason)
 
-/-- The value of a hex digit, given as its ASCII byte; uppercase only when `upper` allows it. -/
-def hexValue (upper : Bool) (c : UInt8) : Option UInt8 :=
-  if 48 ≤ c ∧ c ≤ 57 then some (c - 48)
-  else if 97 ≤ c ∧ c ≤ 102 then some (c - 87)
-  else if upper ∧ 65 ≤ c ∧ c ≤ 70 then some (c - 55)
-  else none
+/-- A shared reader as a decoding: a rejected input is an invalid parameter, for that reason. -/
+def lift {α : Type} (r : Read α) : Decode α := r.mapError .invalidParams
 
-/-- The ASCII bytes of a JSON string after its `0x` marker. -/
-def hexDigits (what : String) : Json → Decode ByteArray
-  | .str s =>
-    let b := s.toUTF8
-    if b[0]? = some 48 ∧ b[1]? = some 120 then pure (b.extract 2 b.size)
-    else invalid s!"{what}: no 0x marker"
-  | _ => invalid s!"{what}: not a string"
-
-/-- The bytes of a byte string, with uppercase digits only when `upper` allows them. -/
-def bytesOf (what : String) (upper : Bool) (j : Json) : Decode ByteArray := do
-  let digits ← hexDigits what j
-  if digits.size % 2 ≠ 0 then invalid s!"{what}: odd number of hex digits" else
-  let mut out := ByteArray.emptyWithCapacity (digits.size / 2)
-  for i in [0:digits.size / 2] do
-    match digits[2 * i]?, digits[2 * i + 1]? with
-    | some c, some d =>
-      match hexValue upper c, hexValue upper d with
-      | some high, some low => out := out.push (16 * high + low)
-      | _, _ => invalid s!"{what}: not a hex digit"
-    -- The count is even, so both digits of each byte exist and this case never happens.
-    | _, _ => invalid s!"{what}: odd number of hex digits"
-  return out
-
-/-- A byte string of any length. -/
-def bytes (what : String) (j : Json) : Decode ByteArray := bytesOf what false j
-
-/-- A byte string of exactly `n` bytes. -/
-def fixed (what : String) (n : Nat) (j : Json) (upper : Bool := false) :
-    Decode (Vector UInt8 n) := do
-  let b ← bytesOf what upper j
-  if h : b.data.size = n then pure ⟨b.data, h⟩
-  else invalid s!"{what}: {b.size} bytes, not {n}"
-
-/-- An address of 20 bytes, whose hex digits may be uppercase. -/
-def address (what : String) (j : Json) : Decode Address := fixed what 20 j (upper := true)
-
-/-- A number below `2^bits`, without leading zeros. -/
-def quantity (what : String) (bits : Nat) (j : Json) : Decode Nat := do
-  let digits ← hexDigits what j
-  if digits.size = 0 then invalid s!"{what}: no digits" else
-  if digits.size > 1 ∧ digits[0]? = some 48 then invalid s!"{what}: leading zero" else
-  let mut value := 0
-  for c in digits do
-    match hexValue false c with
-    | some d => value := 16 * value + d.toNat
-    | none => invalid s!"{what}: not a hex digit"
-  if value < 2 ^ bits then pure value else invalid s!"{what}: above 2^{bits}"
-
-/-- A byte string of at most `n` bytes. -/
-def bytesMax (what : String) (n : Nat) (j : Json) : Decode ByteArray := do
-  let b ← bytes what j
-  if b.size ≤ n then pure b else invalid s!"{what}: {b.size} bytes, more than {n}"
-
-/-- A 64-bit number. -/
-def uint64 (what : String) (j : Json) : Decode UInt64 :=
-  return (← quantity what 64 j).toUInt64
-
-/-- The parameters of a request, which must be a JSON array. -/
-def paramsArray : Json → Decode (List Json)
-  | .arr items => pure items.toList
-  | _ => invalid "params: not an array"
-
-/-- A list of values, each decoded by `f`. -/
-def array {α : Type} (what : String) (f : Json → Decode α) : Json → Decode (List α)
-  | .arr items => items.toList.mapM f
-  | _ => invalid s!"{what}: not an array"
-
-/-- The fields of an object with a value other than `null`, by name. -/
-def fields (what : String) : Json → Decode (List (String × Json))
-  | .obj kvs => pure (kvs.toList.filter fun (_, v) => !v.isNull)
-  | _ => invalid s!"{what}: not an object"
-
-/-- Whether an object has exactly the named fields, ignoring those whose value is `null`. -/
-def hasExactly (fs : List (String × Json)) (names : List String) : Bool :=
-  fs.length == names.length && names.all fun name => fs.any (·.1 == name)
-
-/-- The value of a field that an object holds. -/
-def field (what : String) (fs : List (String × Json)) (name : String) : Decode Json :=
-  match fs.lookup name with
-  | some v => pure v
-  | none => invalid s!"{what}: no field {name}"
-
-/-- A withdrawal, with exactly its four fields. -/
-def withdrawal (j : Json) : Decode Withdrawal := do
-  let fs ← fields "withdrawal" j
-  unless hasExactly fs ["index", "validatorIndex", "address", "amount"] do
-    invalid "withdrawal: wrong fields"
-  return {
-    index := ← uint64 "index" (← field "withdrawal" fs "index")
-    validatorIndex := ← uint64 "validatorIndex" (← field "withdrawal" fs "validatorIndex")
-    address := ← address "address" (← field "withdrawal" fs "address")
-    amount := ← uint64 "amount" (← field "withdrawal" fs "amount") }
+/-- Each shared reader runs in a decoding, where it rejects with an invalid parameter. -/
+instance : MonadLift Read Decode := ⟨lift⟩
 
 /-- The fields of version 1 of an execution payload. -/
 def payloadFieldsV1 : List String :=
@@ -230,28 +132,6 @@ def payloadV4 (j : Json) : Decode (AnyPayload × ByteArray × UInt64) := do
   let blockAccessList ← bytes "blockAccessList" (← field "payload" fs "blockAccessList")
   let slotNumber ← uint64 "slotNumber" (← field "payload" fs "slotNumber")
   return (any, blockAccessList, slotNumber)
-
-/-- Bytes as Engine API data: `0x`, then two hex digits per byte. -/
-def dataJson (bytes : List UInt8) : Json :=
-  .str (hexString bytes)
-
-/-- The JSON of a value, or `null`. -/
-def optionJson {α : Type} (f : α → Json) : Option α → Json
-  | some a => f a
-  | none => .null
-
-/-- The JSON of a list. -/
-def listJson {α : Type} (f : α → Json) (items : List α) : Json := .arr (items.toArray.map f)
-
-/-- A number as an Engine API quantity: `0x`, then its hex digits without leading zeros. -/
-def quantityJson (n : Nat) : Json :=
-  .str ("0x" ++ String.ofList (Nat.toDigits 16 n))
-
-/-- A withdrawal as the Engine API writes it. -/
-def withdrawalJson (w : Withdrawal) : Json :=
-  Json.mkObj [("index", quantityJson w.index.toNat),
-    ("validatorIndex", quantityJson w.validatorIndex.toNat),
-    ("address", dataJson w.address.toList), ("amount", quantityJson w.amount.toNat)]
 
 /-- A field from fork `f`, which must be present exactly when the fork has it. -/
 def since {α : Type} {f fork : Fork} (what : String) : Option α → Decode (Since f fork α)

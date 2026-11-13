@@ -59,7 +59,8 @@ open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Consensus
 open EthLib.Consensus.Exports
-open EthLib.Engine.Json (dataJson quantityJson withdrawalJson)
+open EthLib.Serialization.JsonRpc (dataJson quantityJson)
+open EthLib.Execution.Rpc (withdrawalJson)
 
 /-- The forkchoice update of a proposer as JSON, with the fields of its fork and some others. -/
 def updateJson {fork : Fork} (update : ForkchoiceState) (attributes : PayloadAttributes fork)

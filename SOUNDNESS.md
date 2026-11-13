@@ -2777,12 +2777,15 @@ With the state of a chain, `valid_iff_of_newPayloadOnChain` shows that the answe
 `of_newPayloadOnChain_some` adds that such a block passed the checks and the state transition, to that state.
 `newPayloadOnChain_of_stateTransition_ok` shows the converse for a block whose parent is the last block of the chain.
 
-The JSON decoders read back the hex encoding of any bytes (`bytesOf_hexString`, `Proofs/Json.lean`).
+The Engine API reads its base types with the readers that it shares with the execution JSON-RPC API.
+They and their round trips live below the Execution layer, in `Serialization/JsonRpc.lean` and `Serialization/Proofs/JsonRpc.lean`.
+The readers read back the hex encoding of any bytes (`bytesOf_hexString`).
 An address decodes exactly from `0x` and two hex digits for each byte, in either case, whose lowercase forms encode the address (`address_eq_ok_iff_map_toLower`).
 A 64-bit number decodes to `x` exactly when the number read with the bound `2^64` is `x` (`uint64_eq_ok_iff`).
 The encoder of numbers writes the only text that decodes to the number, at any bound `2^bits` above it (`quantity_eq_ok_iff`).
 So two numbers never share an encoding (`quantityJson_inj`).
-A withdrawal, and a list of withdrawals, decode back from their encodings (`withdrawal_withdrawalJson`, `array_withdrawal_listJson`).
+A withdrawal, and a list of withdrawals, decode back from their encodings (`withdrawal_withdrawalJson`, `array_withdrawal_listJson`, `Execution/Proofs/Rpc/Json.lean`).
+An input that a shared reader rejects is an invalid parameter of the Engine API, for the same reason (`liftM_error`, `liftM_eq_ok_iff`, `Proofs/Json.lean`).
 A payload of version 4 decodes exactly when it holds the fields of version 4 and each part decodes (`payloadV4_eq_ok_iff`).
 A field that appears at a fork decodes exactly when it is present from that fork on and absent before (`exists_since_iff`, `Proofs/ExecutionEngine.lean`).
 So a decoded payload takes a fork exactly when its version is that of the fork (`exists_atFork_iff_of_anyPayload`).
