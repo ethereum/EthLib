@@ -79,7 +79,7 @@ theorem BeaconState.spelling_hasText {preset : Preset} {fork : Base.Fork} :
 
 It holds for a type that writes no text, for a refusal as well as a value.
 
-A builder entry and a builder configuration are left out, since the case of a URL is part of it. -/
+Builder entries and configurations are left out, since the case of a URL is part of the URL. -/
 theorem ofApiJson_uppercase {α : Type} [SszType α] [ApiSpelling α]
     (plain : (ApiSpelling.spelling α).hasText = false) {left right : Json}
     (same : SameUpToCase left right) : ofApiJson α left = ofApiJson α right := by

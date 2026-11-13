@@ -9,7 +9,7 @@ A hex digit reads the same in uppercase, so a hex string does too.
 
 A document reads the same with any hex digits of its strings in uppercase, at every shape.
 
-A spelling that writes a byte list as text is left out, since the case of a text is part of it.
+A spelling that carries the text mark is left out, since the case of a text is part of it.
 -/
 
 @[expose] public section

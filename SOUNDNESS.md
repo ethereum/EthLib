@@ -4129,7 +4129,7 @@ A mark of the spelling has effect only where its shape allows it, so no mark mak
 `valueOf_sameUpToCase` (`Serialization/Proofs/Ssz/Codec/JsonHexCase.lean`) shows that a document reads the same with any hex digits of its strings in uppercase, at every shape.
 The patterns of the source allow either case.
 `valueOf_sameUpToCase` holds for every spelling that writes no text, since the case of a URL is part of the URL.
-`ofApiJson_uppercase` lifts it to the reader of the API, and `fieldSpelling_hasText` shows that every container whose marks carry no text mark meets its hypothesis.
+`ofApiJson_uppercase` lifts it to the reader of the API, and `fieldSpelling_hasText` shows that every container spelled from its field marks, with no text mark among them, meets its hypothesis.
 The error bodies read back as written (`ErrorMessage.ofJson_toJson`, `IndexedErrorMessage.ofJson_toJson`).
 
 Each container declares its spelling in `Consensus/BeaconApi/Spelling.lean`, and none falls back to a default.
@@ -4421,7 +4421,7 @@ The JSON codec writes it with the text spelling, so a URL such as `"0x12"` is ne
 So the type is not lawful, and `BuilderEntry.ofApiJson_toApiJson`, `BuilderConfig.ofApiJson_toApiJson` and the two `toApiJson_total` theorems (`Consensus/Proofs/BeaconApi/BuilderConfig.lean`) stand in for the general ones.
 `jsonOf_ok` and `valueOf_jsonOf` hold for every value.
 Bytes that are not UTF-8 have no text, so the codec writes them as one decimal string per byte.
-It reads such an array only when its bytes are not UTF-8, which `valueOf_text_digits` (`Serialization/Proofs/Ssz/Codec/JsonLaws.lean`) shows.
+It reads such an array only when its bytes are not UTF-8, which `valueOf_text_digits` (`Serialization/Proofs/Ssz/Codec/JsonLaws.lean`) shows for the decimal strings that the codec writes; the reader accepts no others.
 A typed URL never has such bytes, so the reader of a builder entry accepts only a string.
 The Python tests check that the example configuration of the source reads back from JSON and from SSZ.
 An entry with an empty URL or empty authentication data, or whose authentication names another slot, gives no bid.
