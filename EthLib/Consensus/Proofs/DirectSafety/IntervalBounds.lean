@@ -179,7 +179,7 @@ Each key active at the reference is charged its deposits, up to its room below t
 
 Before Electra no effective balance exceeds the cap, so the deposits raise a key by at most this.
 
-Other keys join through the activation cohorts, which the activation window charges. -/
+Other keys are charged by the activation window when they join, or by the boundary stake. -/
 def depositHeadroom (x : ForkedBeaconState preset) (high : Nat)
     (events : List (BalanceEvent preset)) : Nat :=
   if high + 1 < config.ELECTRA_FORK_EPOCH.toNat then
