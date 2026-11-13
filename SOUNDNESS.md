@@ -2840,6 +2840,7 @@ The evidence is what two searches find among the objects of the runs.
 `findMessageCollision` returns two different inputs of the SHA-256 node hash with one digest, read in the roots of the headers of the runs.
 `findZeroRoot` returns a header or a state of the runs whose root is zero.
 `hashEvidence_iff` says that the searches find something exactly when such inputs exist or such an object exists.
+`findZeroRoot_valid` and `findZeroRoot_eq_none_iff` show that the zero search returns only such an object, and fails on runs that have none.
 The drift of a tail is the largest over its states up to one epoch past the later finalized epoch.
 At a state, it charges twice the stake at `x` that the state no longer supports, outside the keys slashed by then.
 It charges once the recent stake of the state that `x` did not hold, and twice the stake active at the previous epoch of the state but not at its current epoch.

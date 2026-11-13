@@ -29,9 +29,10 @@ Not yet released.
 - In Lean, `DirectSafety.HashEvidence objects` is stated through the searches `findMessageCollision` and the new `findZeroRoot`, in place of a bounded existential ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   No C export or Python function changes, and every theorem that mentions `HashEvidence` keeps its statement.
   `hashEvidence_iff` proves that the new body is equivalent to the old one, for every list of objects and with no hypothesis.
+  `findZeroRoot_valid` and `findZeroRoot_eq_none_iff` say what the new search returns and when it fails.
   The two bodies are not definitionally equal.
   A proof that unfolds `HashEvidence` to take it apart first rewrites with `hashEvidence_iff`, or applies `hashEvidence_iff.mp`.
-  A proof that builds the evidence as an `Or` of the old form applies `hashEvidence_iff.mpr`, as the proofs in `DirectSafety/Hashes.lean` do.
+  A proof that builds the evidence as an `Or` of the old form applies `hashEvidence_iff.mpr`.
 
 - `verify_kzg_proof` checks its inputs in the order of EIP-4844: the commitment, `z`, `y`, then the proof.
   When more than one input is invalid, the first in that order gives the error.
