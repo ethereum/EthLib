@@ -171,7 +171,8 @@ theorem validateTransaction_eq_ok_iff {fork : Fork} {sender : Address} {tx : Tra
   by_cases hg : fork ≥ .glamsterdam
   · have hlt : ¬ fork < .glamsterdam := Nat.not_lt.mpr hg
     simp only [hg, ↓reduceIte, bind_unit_ok_iff, ensure_ok_iff, pure, Except.pure,
-      Except.ok.injEq, hlt, false_implies, implies_true, forall_const, true_and]
+      Except.ok.injEq, hlt, false_implies, implies_true, forall_const, true_and,
+      Bool.false_eq_true]
     constructor
     · rintro ⟨hType, hNonce, hInit, hTotal, hFees, hContents, hMin, hBound, rfl⟩
       exact ⟨rfl, hMin, hNonce, hInit, ⟨hTotal, hBound, hContents⟩, hFees, hType⟩

@@ -4016,11 +4016,18 @@ The overrides of a block keep every account that they do not name (`applyOverrid
 A call fills its defaults: its type, its nonce, its gas and the zero address as sender.
 Filling them keeps every field that the call gives, and changes no other field (`GenericTransaction.withDefaults_type` and the lemmas after it).
 The nonce is that of the sender after the earlier calls, and the gas is what the block has left.
-The execution core takes two exceptions of a simulated block as optional overrides, whose defaults leave a real block unchanged.
-They are a sender given in place of the signature, and the precompile that a call to each address runs.
+The execution core takes four exceptions of a simulated block as optional overrides, whose defaults leave a real block unchanged.
+They are a sender given in place of the signature, the precompile that a call to each address runs, a base fee per blob gas that the block sets, and rules of a transaction that the simulation lifts.
+The lifted rules are the nonce check, the caps at `2^24` of EIP-8037, and its cap at `2^32 - 1` on the gas limit.
 A known sender that the signature names, and that passes the rule on its code, gives the same check of the transaction (`checkInclusion_of_knownSender`, `Proofs/Transactions/Overrides.lean`).
 With the default map, a call runs the precompile at the address of its code (`precompileAddress_of_default`).
 A move leaves the addresses that are warm at the start of a transaction unchanged, as the notes say.
+Without a price that the block sets, the excess blob gas gives the base fee per blob gas (`blobBaseFee_of_none`).
+Without the gas caps lifted, the gas that must fit in the block and the execution gas keep their caps (`executionCapacity_default`, `allocateGas_default`).
+With the nonce check skipped, a sender whose nonce is `2^64 - 1` still fails, as the notes say (`checkSender_of_skipNonce`).
+The nonce of the call itself stays below `2^64 - 1` in both modes, a rule the notes do not lift.
+With the caps lifted, all the gas past the intrinsic gas is execution gas (`allocateGas_of_gasCap`).
+The whole gas limit must then fit in the execution gas that the block has left (`executionCapacity_of_gasCap`).
 
 Where the source is silent or conflicts with itself, EthLib follows the fixtures, else decides:
 

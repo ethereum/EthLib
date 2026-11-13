@@ -201,7 +201,9 @@ theorem allocateGas_add (fork : Fork) (tx : Transaction) (intrinsic : Nat) :
     (allocateGas fork tx intrinsic).execution + (allocateGas fork tx intrinsic).reservoir =
       tx.gas.toNat - intrinsic := by
   unfold allocateGas
-  split <;> simp only <;> omega
+  split
+  · split <;> simp only <;> omega
+  · simp only; omega
 
 /-- Before Glamsterdam, all the gas past the intrinsic gas is execution gas. -/
 theorem allocateGas_of_lt {fork : Fork} (hFork : fork < .glamsterdam) (tx : Transaction)
@@ -213,7 +215,7 @@ theorem allocateGas_of_lt {fork : Fork} (hFork : fork < .glamsterdam) (tx : Tran
 theorem allocateGas_execution_le {fork : Fork} (hFork : fork ≥ .glamsterdam) (tx : Transaction)
     (intrinsic : Nat) :
     (allocateGas fork tx intrinsic).execution ≤ Evm.GasCosts.TX_MAX_GAS_LIMIT - intrinsic := by
-  simp only [allocateGas, hFork, ↓reduceIte]
+  simp only [allocateGas, hFork, Bool.false_eq_true, ↓reduceIte]
   exact Nat.min_le_left _ _
 
 /-- From Glamsterdam, the reservoir is the gas limit past `2^24`.
@@ -223,7 +225,7 @@ theorem allocateGas_reservoir {fork : Fork} (hFork : fork ≥ .glamsterdam) {tx 
     {intrinsic : Nat} (hMax : intrinsic ≤ Evm.GasCosts.TX_MAX_GAS_LIMIT)
     (hGas : intrinsic ≤ tx.gas.toNat) :
     (allocateGas fork tx intrinsic).reservoir = tx.gas.toNat - Evm.GasCosts.TX_MAX_GAS_LIMIT := by
-  simp only [allocateGas, hFork, ↓reduceIte]
+  simp only [allocateGas, hFork, Bool.false_eq_true, ↓reduceIte]
   omega
 
 /-! ## The gas of the block -/
