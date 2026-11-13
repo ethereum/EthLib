@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Rpc.Account
 public import EthLib.Execution.Rpc.Block
+public import EthLib.Execution.Rpc.Call
 public import EthLib.Execution.Rpc.Config
 public import EthLib.Execution.Rpc.AccessList
 public import EthLib.Execution.Rpc.Filter
@@ -210,6 +211,11 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
   | "debug_getRawBlockAccessList" => oneParam params fun b => do
     (dataJson ·.data.toList) <$>
       v.rawBlockAccessList (← readParam (blockNumberOrTagOrHash "block") b)
+  | "eth_call" => match params with
+    | t :: rest => do
+      let tx ← readParam genericTransaction t
+      (dataJson ·.toList) <$> v.ethCall tx (← optionalBlock rest) {}
+    | [] => .error (RpcError.invalidParams "missing parameter")
   | "debug_getRawHeader" => oneParam params fun b => do
     (dataJson ·.toList) <$> v.rawHeader (← readParam (blockNumberOrTag "block") b)
   | "debug_getRawBlock" => oneParam params fun b => do

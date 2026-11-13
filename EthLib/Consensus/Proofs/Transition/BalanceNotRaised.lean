@@ -154,6 +154,17 @@ theorem ValidatorsKept.of_eq (same : after.validators = state.validators) :
   intro i old found
   exact ⟨old, by rw [same]; exact found, rfl, rfl, rfl, rfl⟩
 
+/-- If a step keeps each validator and adds none, each validator after it matches one before it. -/
+theorem ValidatorsKept.exists_of_mem (kept : ValidatorsKept state after)
+    (size : after.validators.data.size ≤ state.validators.data.size) {validator : Validator}
+    (member : validator ∈ after.validators.data) :
+    ∃ old ∈ state.validators.data, ValidatorSame old validator := by
+  obtain ⟨i, inside, rfl⟩ := Array.getElem_of_mem member
+  have insideOld : i < state.validators.data.size := Nat.lt_of_lt_of_le inside size
+  obtain ⟨new, read, same⟩ := kept i _ (Array.getElem?_eq_getElem insideOld)
+  rw [Array.getElem?_eq_getElem inside, Option.some.injEq] at read
+  exact ⟨_, Array.getElem_mem insideOld, read ▸ same⟩
+
 /-- A step that keeps each validator, the balances, both pending queues and the scores. -/
 private def Kept (state after : BeaconState preset fork) : Prop :=
   ValidatorsKept state after ∧ after.balances = state.balances ∧

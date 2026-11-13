@@ -10,6 +10,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Duties
 public import EthLib.Consensus.Proofs.BeaconApi.Config
 public import EthLib.Consensus.Proofs.BeaconApi.Debug
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
+public import EthLib.Consensus.Proofs.BeaconApi.Events
 public import EthLib.Consensus.Proofs.BeaconApi.Identifiers
 public import EthLib.Consensus.Proofs.BeaconApi.LightClient
 public import EthLib.Consensus.Proofs.BeaconApi.LightClientBootstrap
@@ -17,6 +18,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Produce
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
 public import EthLib.Consensus.Proofs.BeaconApi.Rewards
 public import EthLib.Consensus.Proofs.BeaconApi.StateQueries
+public import EthLib.Consensus.Proofs.BeaconApi.Submit
 public import EthLib.Consensus.Proofs.BeaconApi.Validators
 public import EthLib.Consensus.Proofs.BeaconApi.ValidatorData
 public import EthLib.Consensus.Proofs.BuilderApi
