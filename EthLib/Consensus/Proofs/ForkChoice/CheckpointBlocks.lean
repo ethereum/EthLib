@@ -7,7 +7,7 @@ public import EthLib.Consensus.Proofs.Transition.ChainRoots
 /-!
 # Proofs: the checkpoints of each block state name ancestors of that block
 
-The chain of a known block holds, at each slot, the root of its ancestor at that slot.
+The chain of a known block holds, at each slot, the root of its latest ancestor up to that slot.
 
 In a reachable store, the state of each known block agrees with that chain from the anchor slot on.
 
@@ -17,9 +17,9 @@ The state of a new block comes from the state of its parent, which the block ext
 
 So each checkpoint of a block state with an epoch after the anchor epoch names an ancestor.
 
-That ancestor is at the start of the epoch of the checkpoint, and the store knows it.
+That ancestor is the latest one at or before the first slot of the epoch, and the store knows it.
 
-The same holds after justification and finalization, as the pulled-up tip runs them.
+The same holds after justification and finalization, which the store runs to pull up each new tip.
 
 So each checkpoint of the store is that of the anchor, or names a known block.
 
@@ -82,7 +82,7 @@ theorem ChainRoots.of_processJustificationAndFinalization {anchor : Slot}
 
 namespace Store
 
-/-- The chain of a block: at each slot, the root of its ancestor at that slot. -/
+/-- The chain of a block: at each slot, the root of its latest ancestor up to that slot. -/
 def ancestorRoots (store : Store preset fork) (root : Root) (slot : Slot) (ancestor : Root) :
     Prop :=
   ∃ node, store.getAncestor ⟨root, .pending⟩ slot = .ok node ∧ node.root = ancestor
@@ -113,7 +113,9 @@ private theorem Store.ancestorRoots_of_parent {root : Root}
     simp only [Functor.map, Except.map, Except.ok.injEq] at same
     exact ⟨other, rfl, same ▸ rooted⟩
 
-/-- From the slot of its parent up to its own, the chain of a block holds its parent root. -/
+/-- Take the slots from the slot of the parent of a block to the slot before the block.
+
+At each of them, the chain of the block holds its parent root. -/
 private theorem Store.ancestorRoots_parentRoot {root : Root}
     {block parent : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
     (parentFound : store.blocks[block.parentRoot]? = some parent)
@@ -140,7 +142,7 @@ private theorem Store.Reachable.slot_le_of_blockState
     rw [(stateTransition_slot transition).2, message]
     exact UInt64.le_refl _
 
-/-- In a reachable store, the state of a block other than the anchor may hash to zero.
+/-- In a reachable store, take a block other than the anchor, whose state hashes to the zero root.
 
 Its latest header then has the root of that block. -/
 private theorem Store.Reachable.header_of_zero
@@ -234,9 +236,11 @@ theorem Store.Reachable.chainRoots (anchor : Invariant anchorState)
 
 /-- A state that agrees with the chain of a block from the anchor slot on names its ancestors.
 
-Each of its checkpoints after the anchor epoch is the checkpoint block of that block at its epoch.
+Each of its checkpoints after the anchor epoch has the checkpoint block of that block as root.
 
-The store knows it. -/
+The store knows it.
+
+An epoch must have at least one slot. -/
 private theorem Store.getCheckpointBlock_of_chainRoots
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) {root : Root} {state : BeaconState preset fork}
     (holds : ChainRoots anchorState.slot (store.ancestorRoots root) state) {checkpoint : Checkpoint}
@@ -273,6 +277,8 @@ The store knows it.
 The checkpoint is one of the three of the state, or of that state after justification.
 
 The other case is an anchor state that hashes to the zero root.
+
+The anchor state needs the invariant of valid blocks, and the anchor block must not be after it.
 
 An epoch must have at least one slot, and the buffer of roots must cover two epochs. -/
 theorem Store.Reachable.getCheckpointBlock_of_blockState (anchor : Invariant anchorState)
@@ -318,9 +324,11 @@ private def Traced (store : Store preset fork) (anchorState : BeaconState preset
       hashTreeRoot anchorBlock = .ok checkpoint.root) ∨
     (getCurrentEpoch anchorState < checkpoint.epoch ∧ store.FromState checkpoint)
 
-/-- The four checkpoints of the store are traced.
+/-- A store whose four checkpoints are each the anchor checkpoint or come from a block state.
 
-Each unrealized justification has the anchor epoch, or comes from the state of its block. -/
+Each unrealized justification has the anchor epoch.
+
+Otherwise it is the current justified checkpoint of its block state after justification. -/
 private structure Tracked (store : Store preset fork) (anchorState : BeaconState preset fork)
     (anchorBlock : BeaconBlock preset fork) : Prop where
   justified : store.Traced anchorState anchorBlock store.justifiedCheckpoint
@@ -363,7 +371,9 @@ private theorem Traced.epoch_le {checkpoint : Checkpoint}
     exact UInt64.le_refl _
   · exact UInt64.le_of_lt later
 
-/-- A checkpoint that replaces a traced one at a later epoch is traced, if it is a candidate. -/
+/-- A checkpoint that replaces a traced one at a later epoch is traced.
+
+It must be a checkpoint that is traced or comes from a block state. -/
 private theorem Traced.adopt {old new : Checkpoint}
     (traced : store.Traced anchorState anchorBlock old)
     (candidate : store.Traced anchorState anchorBlock new ∨ store.FromState new)
@@ -393,7 +403,9 @@ private theorem Tracked.of_grow (tracked : store.Tracked anchorState anchorBlock
   · exact .inl same
   · exact .inr ⟨state, pulled, grow kept, rest⟩
 
-/-- Replacing the checkpoints by candidates at later epochs keeps the store tracked. -/
+/-- Replacing the checkpoints at later epochs keeps the store tracked.
+
+Each new one must be a checkpoint that is traced or comes from a block state. -/
 private theorem Tracked.updateCheckpoints {justified finalized : Checkpoint}
     (tracked : store.Tracked anchorState anchorBlock)
     (justifiedSource : store.Traced anchorState anchorBlock justified ∨ store.FromState justified)
@@ -411,7 +423,9 @@ private theorem Tracked.updateCheckpoints {justified finalized : Checkpoint}
       tracked.unrealizedJustified, tracked.unrealizedFinalized, tracked.justifications⟩
   · exact tracked
 
-/-- Replacing the unrealized checkpoints by candidates at later epochs keeps the store tracked. -/
+/-- Replacing the unrealized checkpoints at later epochs keeps the store tracked.
+
+Each new one must be a checkpoint that is traced or comes from a block state. -/
 private theorem Tracked.updateUnrealizedCheckpoints {justified finalized : Checkpoint}
     (tracked : store.Tracked anchorState anchorBlock)
     (justifiedSource : store.Traced anchorState anchorBlock justified ∨ store.FromState justified)
@@ -533,7 +547,7 @@ private theorem Tracked.onTick {config : Config} {timeMs : UInt64}
 
 end Store
 
-/-- A new store holds the anchor checkpoint as the justification of the anchor block. -/
+/-- A new store holds one unrealized justification: the anchor checkpoint, for the anchor block. -/
 private theorem getForkchoiceStore_unrealizedJustifications {config : Config}
     (made : getForkchoiceStore config anchorState anchorBlock = .ok store) :
     ∃ anchorRoot, hashTreeRoot anchorBlock = .ok anchorRoot ∧
@@ -731,6 +745,8 @@ The ancestor is the checkpoint block of the block at the epoch of the checkpoint
 
 The other case is an anchor state that hashes to the zero root.
 
+The anchor state needs the invariant of valid blocks, and the anchor block must not be after it.
+
 An epoch must have at least one slot, and the buffer of roots must cover two epochs. -/
 theorem Store.Reachable.getCheckpointBlock_of_unrealizedJustification
     (anchor : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
@@ -753,9 +769,13 @@ theorem Store.Reachable.getCheckpointBlock_of_unrealizedJustification
 
 The anchor checkpoint has the epoch of the anchor state and the root of the anchor block.
 
+The store knows that block.
+
 Any other checkpoint has a later epoch, and the store knows its root.
 
 The other case is an anchor state that hashes to the zero root.
+
+The anchor state needs the invariant of valid blocks, and the anchor block must not be after it.
 
 An epoch must have at least one slot, and the buffer of roots must cover two epochs. -/
 theorem Store.Reachable.checkpoints_known (anchor : Invariant anchorState)
@@ -766,7 +786,7 @@ theorem Store.Reachable.checkpoints_known (anchor : Invariant anchorState)
     (member : checkpoint ∈ [store.justifiedCheckpoint, store.finalizedCheckpoint,
       store.unrealizedJustifiedCheckpoint, store.unrealizedFinalizedCheckpoint]) :
     (checkpoint.epoch = getCurrentEpoch anchorState ∧
-        hashTreeRoot anchorBlock = .ok checkpoint.root) ∨
+        hashTreeRoot anchorBlock = .ok checkpoint.root ∧ store.blocks.contains checkpoint.root) ∨
       (getCurrentEpoch anchorState < checkpoint.epoch ∧ store.blocks.contains checkpoint.root) ∨
       hashTreeRoot anchorState = .ok (Vector.replicate 32 0) := by
   have tracked := reachable.tracked
@@ -777,8 +797,14 @@ theorem Store.Reachable.checkpoints_known (anchor : Invariant anchorState)
     · exact tracked.finalized
     · exact tracked.unrealizedJustified
     · exact tracked.unrealizedFinalized
-  rcases traced with anchored | ⟨later, root, state, stateFound, source⟩
-  · exact .inl anchored
+  rcases traced with ⟨epoch, hashed⟩ | ⟨later, root, state, stateFound, source⟩
+  · -- The store knows the anchor block at its own root.
+    obtain ⟨anchorRoot, anchorHashed, anchorFound⟩ := reachable.anchor_known
+    rw [hashed, Except.ok.injEq] at anchorHashed
+    rw [← anchorHashed] at anchorFound
+    refine .inl ⟨epoch, hashed, ?_⟩
+    rw [Std.TreeMap.contains_eq_isSome_getElem?, anchorFound]
+    rfl
   rcases reachable.getCheckpointBlock_of_blockState anchor anchorSlot positive window stateFound
       source later with ⟨-, known⟩ | zero
   · exact .inr (.inl ⟨later, known⟩)

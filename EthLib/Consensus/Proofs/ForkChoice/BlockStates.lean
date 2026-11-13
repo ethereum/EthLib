@@ -54,7 +54,7 @@ variable {config : Config} {anchorState : BeaconState preset fork}
   {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
 
 /-- A reachable store knows the anchor block, at its own root. -/
-private theorem Store.Reachable.anchor_known
+theorem Store.Reachable.anchor_known
     (reachable : Store.Reachable config anchorState anchorBlock store) :
     ∃ root, SszType.hashTreeRoot anchorBlock = .ok root ∧
       store.blocks[root]? = some anchorBlock := by

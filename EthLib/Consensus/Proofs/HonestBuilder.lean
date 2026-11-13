@@ -23,8 +23,6 @@ From Gloas, take a block that passes its steps, with a bid that a builder built 
 
 The block must also commit to the root of the state after it.
 
-The vectors whose length the preset sets must have a positive length, for the root of the block.
-
 The envelope of that payload then passes the checks of the block root and the parent root.
 
 It also passes the checks of the builder, the mix, the gas limit and the block hash.
