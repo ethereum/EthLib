@@ -97,7 +97,7 @@ namespace ChainView
 
 /-- The logs that the method returns are the matching ones among the receipt objects of the blocks.
 
-They come in the order of the blocks, then of the logs in each block, with no log twice. -/
+They come in the order of the blocks, then of the logs in each block. -/
 theorem getLogs_eq_ok {v : ChainView} {f : Filter} {logs : List LogInfo}
     (h : v.getLogs f = .ok logs) :
     ∃ blocks infos, v.filterBlocks f.blocks = .ok blocks ∧
@@ -144,7 +144,7 @@ theorem filterBlocks_aboveHead {v : ChainView} {fromBlock toBlock : Option Block
 
 /-- A range whose bounds resolve above the head or out of order is invalid.
 
-No tag that names no block, and no pruned block, changes that error. -/
+A pruned block does not change that error. -/
 theorem filterBlocks_invalid {v : ChainView} {fromBlock toBlock : Option BlockParam}
     {first last : Nat} (h1 : v.boundNumber fromBlock = .ok first)
     (h2 : v.boundNumber toBlock = .ok last)
