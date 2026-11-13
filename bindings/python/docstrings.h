@@ -1172,6 +1172,12 @@
 #define DOC_engine_get_payload_bodies \
   "The answer to a payload bodies request, from a store of bodies."
 
+#define DOC_engine_read_payload_status \
+  "A payload status read from its JSON, as `json.loads` gives it."
+
+#define DOC_engine_read_forkchoice_response \
+  "A forkchoice response read from its JSON, as `json.loads` gives it."
+
 #define DOC_engine_rewrite_params \
   "The parameters of an Engine API request, read by the decoder and written by the writer."
 

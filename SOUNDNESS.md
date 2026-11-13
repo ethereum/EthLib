@@ -3044,6 +3044,15 @@ The 64 others of those 75 decode, and a later check rejects them.
 Six of the OpenRPC examples do not follow the specification, and the tests check that the decoder rejects them.
 The other two examples are of methods that EthLib does not specify, and the tests check that they fail as unknown methods.
 
+The answers have a JSON form too, written and read back.
+The decoder of a payload status reads back what its writer writes, for every status and validation error (`payloadStatusOfJson_json`, `Proofs/Json.lean`).
+The decoder of the response of `engine_forkchoiceUpdated` does the same for each status that the method answers (`forkchoiceUpdatedResponseOfJson_json`, `Proofs/ForkchoiceUpdated.lean`).
+Every answer of that method is `VALID`, `INVALID` or `SYNCING`, the restriction of step 9 of the method (`forkchoiceUpdatedCall_status`).
+Its response names a build exactly when the update applies a head and the attributes pass their checks (`forkchoiceUpdatedResponse_payloadId`).
+The ID is then that of the head and the attributes.
+The Python tests read the status examples of `engine_newPayload` and the response examples of `engine_forkchoiceUpdated` in the OpenRPC method files.
+They also read back each answer that EthLib gives to the requests of `new_payload.json` and to the chains of `forkchoice.json`.
+
 The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.lean`.
 `forkchoiceUpdated_valid` shows that a valid answer selects a valid head that the execution layer holds, with its safe and finalized blocks on its chain.
 The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalized` covers.

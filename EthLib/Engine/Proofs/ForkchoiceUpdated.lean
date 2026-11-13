@@ -991,4 +991,147 @@ theorem forkchoiceUpdatedParams_json {fork : Fork} (version : Nat) (state : Fork
   · exact ⟨forkchoiceStateJson state, optionJson payloadAttributesJson attributes, .null, state,
       Or.inl ⟨by simp [h4], rfl⟩, forkchoiceStateOfJson_json state, ⟨none, rfl⟩, hlast⟩
 
+/-- The status of every answer of an update is valid, invalid or syncing. -/
+private theorem forkchoiceUpdated_status {result : PayloadStatus × Option Hash32}
+    (h : forkchoiceUpdated tree finalized state = .ok result) :
+    result.1.status = .valid ∨ result.1.status = .invalid ∨ result.1.status = .syncing := by
+  unfold forkchoiceUpdated at h
+  split at h
+  · cases h
+    simp
+  · split at h
+    · cases h
+      simp
+    · split at h
+      · cases h
+        simp
+      · split at h
+        · cases h
+          simp
+        · cases h
+
+/-- An answer of a call comes from its update, and names a build only with attributes that pass. -/
+private theorem forkchoiceUpdatedCall_ok_cases {version : Nat} {params : Lean.Json}
+    {r : PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)}
+    (h : forkchoiceUpdatedCall config version tree finalized params = .ok r) :
+    ∃ state attributes status head,
+      forkchoiceUpdatedParams version params = .ok (state, attributes) ∧
+      forkchoiceUpdated tree finalized state = .ok (status, head) ∧ r.1 = status ∧
+      (r.2 = (head, none) ∨
+        ∃ j h' known decoded a, attributes = some j ∧ head = some h' ∧
+          payloadAttributesOfVersion version j = .ok decoded ∧ tree.lookup h' = some known ∧
+          checkAttributes config version known decoded = .ok a ∧
+          r = (status, some h', some a)) := by
+  unfold forkchoiceUpdatedCall at h
+  cases hp : forkchoiceUpdatedParams version params with
+  | error e => simp [hp, bind, Except.bind] at h
+  | ok pr =>
+    obtain ⟨state, attributes⟩ := pr
+    cases hf : forkchoiceUpdated tree finalized state with
+    | error e => simp [hp, hf, bind, Except.bind] at h
+    | ok pr2 =>
+      obtain ⟨status, head⟩ := pr2
+      simp only [hp, hf, bind, Except.bind] at h
+      refine ⟨state, attributes, status, head, rfl, hf, ?_⟩
+      rcases attributes with _ | j
+      · simp only [pure, Except.pure, Except.ok.injEq] at h
+        subst h
+        simp
+      rcases head with _ | h'
+      · simp only [pure, Except.pure, Except.ok.injEq] at h
+        subst h
+        simp
+      cases hd : payloadAttributesOfVersion version j with
+      | error e => simp [hd] at h
+      | ok v =>
+        cases hk : List.lookup h' tree with
+        | none =>
+          simp only [hd, hk, pure, Except.pure, Except.ok.injEq] at h
+          subst h
+          simp
+        | some known =>
+          cases hc : checkAttributes config version known v with
+          | error e => simp [hd, hk, hc] at h
+          | ok a =>
+            simp only [hd, hk, hc, pure, Except.pure, Except.ok.injEq] at h
+            subst h
+            exact ⟨rfl, Or.inr ⟨j, h', known, v, a, rfl, rfl, hd, hk, hc, rfl⟩⟩
+
+/-- Every answer of a call has a status of the three that step 9 allows. -/
+theorem forkchoiceUpdatedCall_status {version : Nat} {params : Lean.Json}
+    {r : PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)}
+    (h : forkchoiceUpdatedCall config version tree finalized params = .ok r) :
+    r.1.status = .valid ∨ r.1.status = .invalid ∨ r.1.status = .syncing := by
+  obtain ⟨_, _, status, head, -, hf, h1, -⟩ := forkchoiceUpdatedCall_ok_cases h
+  rw [h1]
+  exact forkchoiceUpdated_status hf
+
+/-- The response of a call names a build exactly when the call starts one.
+
+That is when the update applies a head, the parameters hold attributes, and they pass their checks.
+
+The ID is then that of the head and the attributes at their fork. -/
+theorem forkchoiceUpdatedResponse_payloadId {version : Nat} {params : Lean.Json}
+    {r : PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)}
+    {id : PayloadId} (h : forkchoiceUpdatedCall config version tree finalized params = .ok r) :
+    (forkchoiceUpdatedResponse r).2 = some id ↔
+      ∃ state j status head known decoded a,
+        forkchoiceUpdatedParams version params = .ok (state, some j) ∧
+        forkchoiceUpdated tree finalized state = .ok (status, some head) ∧
+        tree.lookup head = some known ∧
+        payloadAttributesOfVersion version j = .ok decoded ∧
+        checkAttributes config version known decoded = .ok a ∧
+        id = payloadId head a.2 := by
+  constructor
+  · intro hid
+    obtain ⟨state, attributes, status, head, hp, hf, h1, h2 | ⟨j, h', known, decoded, a, rfl, rfl,
+      hd, hk, hc, rfl⟩⟩ := forkchoiceUpdatedCall_ok_cases h
+    · obtain ⟨r1, r2⟩ := r
+      obtain ⟨r2a, r2b⟩ := r2
+      simp only [Prod.mk.injEq] at h2
+      obtain ⟨rfl, rfl⟩ := h2
+      simp [forkchoiceUpdatedResponse] at hid
+    · simp only [forkchoiceUpdatedResponse, Option.bind_some, Option.map_some, Option.some.injEq]
+        at hid
+      exact ⟨state, j, status, h', known, decoded, a, hp, hf, hk, hd, hc, hid.symm⟩
+  · rintro ⟨state, j, status, head, known, decoded, a, hp, hf, hk, hd, hc, rfl⟩
+    simp only [forkchoiceUpdatedCall, hp, hf, hk, hd, hc, bind, Except.bind, pure,
+      Except.pure] at h
+    cases h
+    rfl
+
+/-- The decoder of a forkchoice response reads back the JSON of every response it allows.
+
+The status must be valid, invalid or syncing. -/
+theorem forkchoiceUpdatedResponseOfJson_json (s : PayloadStatus) (e : Option String)
+    (id : Option PayloadId) (h : s.status.restricted = true) :
+    forkchoiceUpdatedResponseOfJson (forkchoiceUpdatedResponseJson s e id) = .ok (s, e, id) := by
+  have hd : [("payloadStatus", Json.payloadStatusJson s e),
+      ("payloadId", optionJson (dataJson ·.toList) id)].Pairwise fun a b => a.1 ≠ b.1 := by simp
+  obtain ⟨fs, hfs, hp⟩ := EthLib.Serialization.JsonRpc.fields_mkObj_filter
+    "forkchoiceUpdatedResponse" hd
+  have look := EthLib.Serialization.JsonRpc.lookup_of_perm_filter hp hd
+  have k1 : ∀ a b : Lean.Json,
+      [("payloadStatus", a), ("payloadId", b)].lookup "payloadStatus" = some a :=
+    fun _ _ => rfl
+  have k2 : ∀ a b : Lean.Json,
+      [("payloadStatus", a), ("payloadId", b)].lookup "payloadId" = some b :=
+    fun _ _ => rfl
+  have l1 : fs.lookup "payloadStatus" = some (Json.payloadStatusJson s e) := by
+    rw [look, k1]; rfl
+  have l2 : fs.lookup "payloadId" = id.map (dataJson ·.toList) := by
+    rw [look, k2]; cases id <;> rfl
+  have hall : (fs.all (["payloadStatus", "payloadId"].contains ·.1)) = true := by
+    rw [List.all_eq_true]
+    intro p hm
+    obtain ⟨hm, -⟩ := List.mem_filter.mp (hp.mem_iff.mp hm)
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
+    rcases hm with rfl | rfl <;> simp
+  have hf : field "forkchoiceUpdatedResponse" fs "payloadStatus" =
+      .ok (Json.payloadStatusJson s e) := by
+    simp [field, l1]; rfl
+  unfold forkchoiceUpdatedResponseOfJson forkchoiceUpdatedResponseJson
+  simp only [hfs, liftM_ok, ok_bind, hall, ite_true, hf, l2, Json.payloadStatusOfJson_json, h]
+  cases id <;> simp [Json.lift, fixed_dataJson, Option.mapM] <;> rfl
+
 end EthLib.Engine

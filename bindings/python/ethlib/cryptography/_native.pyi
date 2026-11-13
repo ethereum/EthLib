@@ -1565,6 +1565,14 @@ def engine_get_payload_bodies(store: list[tuple[bytes, int | None, str, list[byt
     """The answer to a payload bodies request, from a store of bodies."""
     ...
 
+def engine_read_payload_status(status: dict[str, Any]) -> tuple[str, bytes | None, str | None]:
+    """A payload status read from its JSON, as `json.loads` gives it."""
+    ...
+
+def engine_read_forkchoice_response(response: dict[str, Any]) -> tuple[str, bytes | None, str | None, bytes | None]:
+    """A forkchoice response read from its JSON, as `json.loads` gives it."""
+    ...
+
 def engine_rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     ...
