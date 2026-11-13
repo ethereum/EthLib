@@ -3625,6 +3625,16 @@
    "error_class": "ConsensusError",
    "docstring":
    "The JSON response of the contribution endpoint, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and of the collected messages.\n\nThen come the roots not yet verified, the slot, the subcommittee index and the block root."},
+  {"summary":
+   "The JSON response of the attestation rewards endpoint, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, epoch: int, ids: list[str]) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiAttestationRewardsExport",
+   "method": "consensus_api_attestation_rewards",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response of the attestation rewards endpoint, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and replacements or None.\n\nThen come the epoch and the identifiers of the validators."},
   {"summary": "The JSON response of a duties endpoint, as a `dict`.",
    "signature":
    "(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, epoch: int, indices: list[int], genesis_root: bytes) -> dict[str, Any]",

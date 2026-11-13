@@ -315,6 +315,17 @@ py_consensus_api_sync_committee_contribution(
 }
 
 extern lean_object*
+eth_consensus_api_attestation_rewards(lean_object* args);
+
+PyObject*
+py_consensus_api_attestation_rewards(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_attestation_rewards, args, 6, CONSENSUS_ERROR);
+}
+
+extern lean_object*
 eth_consensus_api_duties(lean_object* args);
 
 extern lean_object*
