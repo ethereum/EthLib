@@ -365,7 +365,7 @@ private theorem processPendingConsolidations_fields {electra : .pectra ≤ fork}
 
 The validators plus the pending deposits must be within the limit of the registry.
 
-The registry has one balance for each validator.
+The registry has one balance for each validator, and each effective balance is within its cap.
 
 From Altair, each list of scores and of participation flags has one entry for each validator.
 
@@ -387,12 +387,16 @@ The registry does not shrink, and the pending consolidations and the current epo
 
 From Altair each list of scores and of flags still has one entry for each validator.
 
-The churn carried to the next epoch is at most the churn carried before plus the cap. -/
+The churn carried to the next epoch is at most the churn carried before plus the cap.
+
+Each effective balance stays at most the largest one of its validator. -/
 theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (electra : .pectra ≤ fork)
     (loaded : registryLoad state ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat)
     (matched : BalancesMatch state) (sized : ParticipationMatches state)
     (scored : InactivityScoresMatch state)
+    (capped : ∀ validator ∈ state.validators.data,
+      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator)
     (funded : balanceSum state + pendingDepositSum state < 2 ^ 64)
     (summed : effectiveBalanceSum state < 2 ^ 64)
     (churned : (state.depositBalanceToConsume electra).toNat + depositChurnCap config fork < 2 ^ 64)
@@ -407,7 +411,9 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
       getCurrentEpoch after = getCurrentEpoch state ∧
       ParticipationMatches after ∧ InactivityScoresMatch after ∧
       (after.depositBalanceToConsume electra).toNat ≤
-        (state.depositBalanceToConsume electra).toNat + depositChurnCap config fork := by
+        (state.depositBalanceToConsume electra).toNat + depositChurnCap config fork ∧
+      ∀ validator ∈ after.validators.data,
+        validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator := by
   have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   have load := loaded
   unfold registryLoad at load
@@ -500,12 +506,18 @@ The state after it keeps the registry within its limit and one balance for each 
 
 From Altair each list of scores and of flags keeps one entry for each validator.
 
-The sum of the balances plus the amounts in the queue does not grow. -/
+The sum of the balances plus the amounts in the queue does not grow.
+
+The churn carried to the next epoch is at most the churn carried before plus the cap.
+
+Each effective balance stays at most the largest one of its validator. -/
 theorem processPendingBalances_total (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork)
     (loaded : registryLoad state ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat)
     (matched : BalancesMatch state) (sized : ParticipationMatches state)
     (scored : InactivityScoresMatch state)
+    (capped : ∀ validator ∈ state.validators.data,
+      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator)
     (funded : balanceSum state + pendingDepositSum state < 2 ^ 64)
     (summed : effectiveBalanceSum state < 2 ^ 64)
     (churned : ∀ electra : .pectra ≤ fork,
@@ -519,7 +531,11 @@ theorem processPendingBalances_total (config : Config) (checks : SignatureChecks
     ∃ after, processPendingBalances config checks state = .ok after ∧
       registryLoad after ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat ∧ BalancesMatch after ∧
       ParticipationMatches after ∧ InactivityScoresMatch after ∧
-      balanceSum after + pendingDepositSum after ≤ balanceSum state + pendingDepositSum state := by
+      balanceSum after + pendingDepositSum after ≤ balanceSum state + pendingDepositSum state ∧
+      (∀ electra : .pectra ≤ fork, (after.depositBalanceToConsume electra).toNat ≤
+        (state.depositBalanceToConsume electra).toNat + depositChurnCap config fork) ∧
+      ∀ validator ∈ after.validators.data,
+        validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator := by
   unfold processPendingBalances
   split
   · rename_i electra
