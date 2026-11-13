@@ -402,6 +402,15 @@ PyObject* py_consensus_api_state_query                    (PyObject* self, PyObj
 PyObject* py_consensus_api_state_query_ssz                (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_validator_status               (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_builder_status                 (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_registry_query                 (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_validator_balances_ssz         (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_block_query             (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_blobs                   (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_blobs_ssz               (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_committees              (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_sync_committees         (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_ptc                     (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_ptc_ssz                 (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_registration (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_eligible_for_bid (PyObject* self, PyObject* args);
@@ -413,6 +422,7 @@ PyObject* py_consensus_verify_builder_request_auth_signature (PyObject* self, Py
 PyObject* py_consensus_builder_request_auth_failures (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_preferences_failures (PyObject* self, PyObject* args);
 PyObject* py_consensus_default_auth_data (PyObject* self, PyObject* args);
+PyObject* py_consensus_relay_submission_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_bid_value (PyObject* self, PyObject* args);
 PyObject* py_consensus_consensus_version (PyObject* self, PyObject* args);
 PyObject* py_consensus_consensus_version_fork (PyObject* self, PyObject* args);

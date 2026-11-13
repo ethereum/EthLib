@@ -455,6 +455,33 @@
 #define DOC_consensus_api_builder_status \
   "The status of the builder at an index of a state, as its name."
 
+#define DOC_consensus_api_registry_query \
+  "The JSON response to a query on the registries of a state, as a `dict`."
+
+#define DOC_consensus_api_validator_balances_ssz \
+  "The SSZ body of the balances answer, as `bytes`."
+
+#define DOC_consensus_api_block_query \
+  "The JSON response to a query on a signed block, as a `dict`."
+
+#define DOC_consensus_api_blobs \
+  "The JSON response of the blobs endpoint, as a `dict`."
+
+#define DOC_consensus_api_blobs_ssz \
+  "The SSZ body of the blobs answer, as `bytes`."
+
+#define DOC_consensus_api_committees \
+  "The JSON response of the committees endpoint, as a `dict`."
+
+#define DOC_consensus_api_sync_committees \
+  "The JSON response of the sync committees endpoint, as a `dict`."
+
+#define DOC_consensus_api_ptc \
+  "The JSON response of the PTC endpoint, as a `dict`."
+
+#define DOC_consensus_api_ptc_ssz \
+  "The SSZ body of the PTC answer, as `bytes`."
+
 #define DOC_consensus_api_resolve \
   "The answer to each query, against the store after the steps of a fork choice case."
 
@@ -496,6 +523,9 @@
 
 #define DOC_consensus_default_auth_data \
   "The default data that a proposer and a builder agree, from the builder's URL."
+
+#define DOC_consensus_relay_submission_bid \
+  "The SSZ bytes of the bid that a relay serves from a submission, under a key."
 
 #define DOC_consensus_builder_bid_value \
   "The value of a builder's bid from its two payments and the proposer's execution payment cap."
@@ -1257,7 +1287,7 @@
   "Build a payload on a chain, from attributes, the builder's choices and transactions."
 
 #define DOC_engine_forkchoice_updated \
-  "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."
+  "The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks."
 
 #define DOC_engine_get_blobs \
   "The answer to an `engine_getBlobs` request, from a blob pool."

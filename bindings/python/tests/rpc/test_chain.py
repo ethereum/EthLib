@@ -30,6 +30,8 @@ RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_getBlockByNumber": None,
     "eth_getBlockTransactionCountByHash": "uint",
     "eth_getBlockTransactionCountByNumber": "uint",
+    "eth_getTransactionReceipt": None,
+    "eth_getBlockReceipts": None,
     "debug_getRawHeader": "bytes",
     "debug_getRawBlock": "bytes",
     "debug_getRawTransaction": "bytes",
@@ -267,6 +269,35 @@ def test_raw_tags() -> None:
     chain = replay_chain()
     assert _call("debug_getRawBlock", ["latest"]) == "0x" + chain.blocks[-1][1].hex()
     assert _call("debug_getRawBlock", ["earliest"]) == "0x" + chain.blocks[0][1].hex()
+
+
+def test_receipts() -> None:
+    """The receipts of each block number their logs, add up their gas, and match each lookup."""
+    chain = replay_chain()
+    hashes = [
+        "0x" + _transaction_hash(block, index).hex()
+        for block in chain.blocks
+        for index in range(len(rlp.decode(block[1])[1]))
+    ]
+    calls = [("eth_getBlockReceipts", [hex(number)]) for number in range(len(chain.blocks))]
+    calls += [("eth_getTransactionReceipt", [transaction]) for transaction in hashes]
+    requests = [
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+        for method, params in calls
+    ]
+    texts = chain.serve(requests)
+    results = [json.loads(text)["result"] for text in texts if text is not None]
+    assert len(results) == len(calls)
+    blocks, singles = results[: len(chain.blocks)], results[len(chain.blocks) :]
+    flat = [receipt for receipts in blocks for receipt in receipts]
+    # Each lookup by hash returns the object that the receipts of its block hold.
+    assert singles == flat
+    assert [receipt["transactionHash"] for receipt in flat] == hashes
+    for receipts in blocks:
+        logs = [log for receipt in receipts for log in receipt["logs"]]
+        assert [log["logIndex"] for log in logs] == [hex(index) for index in range(len(logs))]
+        gas = sum(int(receipt["gasUsed"], 16) for receipt in receipts)
+        assert gas == (int(receipts[-1]["cumulativeGasUsed"], 16) if receipts else 0)
 
 
 def test_pending_header() -> None:

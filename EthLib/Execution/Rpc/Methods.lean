@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Rpc.Block
+public import EthLib.Execution.Rpc.Receipt
 public import EthLib.Execution.Rpc.Request
 public import EthLib.Execution.Rpc.TransactionInfo
 
@@ -158,6 +159,11 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
     return v.transactionCountByHash (← readParam (hash32 "block hash") h)
   | "eth_getBlockTransactionCountByNumber" => oneParam params fun b => do
     v.transactionCountByNumber (← readParam (blockNumberOrTag "block") b)
+  | "eth_getTransactionReceipt" => oneParam params fun h => do
+    optionJson receiptInfoJson <$> v.transactionReceipt (← readParam (hash32 "transaction hash") h)
+  | "eth_getBlockReceipts" => oneParam params fun b => do
+    let block ← readParam (blockNumberOrTagOrHash "block") b
+    optionJson (listJson receiptInfoJson) <$> v.blockReceipts block
   | "debug_getRawHeader" => oneParam params fun b => do
     (dataJson ·.toList) <$> v.rawHeader (← readParam (blockNumberOrTag "block") b)
   | "debug_getRawBlock" => oneParam params fun b => do

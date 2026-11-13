@@ -2958,6 +2958,88 @@
    "docstring":
    "The status of the builder at an index of a state, as its name.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and the index."},
   {"summary":
+   "The JSON response to a query on the registries of a state, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, query: str, ids: list[str] | None, statuses: list[str] | None, in_query: bool) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiRegistryQueryExport",
+   "method": "consensus_api_registry_query",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response to a query on the registries of a state, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and the query.\n\nThen come the identifiers, the statuses, and whether the identifiers come in a query string.\n\nThe queries are the validators, one validator, the balances, the identities and the builders."},
+  {"summary": "The SSZ body of the balances answer, as `bytes`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, ids: list[str] | None, in_query: bool) -> bytes",
+   "operation": "EthLib.Consensus.Exports.apiValidatorBalancesSszExport",
+   "method": "consensus_api_validator_balances_ssz",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The SSZ body of the balances answer, as `bytes`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and the identifiers.\n\nThe last argument says whether the identifiers come in a query string."},
+  {"summary": "The JSON response to a query on a signed block, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, block: bytes, query: str) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiBlockQueryExport",
+   "method": "consensus_api_block_query",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response to a query on a signed block, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the signed block and the query.\n\nThe queries are the block, its root, its attestations and its blinded form."},
+  {"summary": "The JSON response of the blobs endpoint, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, block: bytes, blobs: list[bytes], hashes: list[bytes] | None) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiBlobsExport",
+   "method": "consensus_api_blobs",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response of the blobs endpoint, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the signed block and its blobs.\n\nThe last argument is the requested versioned hashes, or None for every blob."},
+  {"summary": "The SSZ body of the blobs answer, as `bytes`.",
+   "signature":
+   "(name: str, fork: str, block: bytes, blobs: list[bytes], hashes: list[bytes] | None) -> bytes",
+   "operation": "EthLib.Consensus.Exports.apiBlobsSszExport",
+   "method": "consensus_api_blobs_ssz",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The SSZ body of the blobs answer, as `bytes`.\n\nThe arguments are those of the JSON answer."},
+  {"summary": "The JSON response of the committees endpoint, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, slot: int | None) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiCommitteesExport",
+   "method": "consensus_api_committees",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response of the committees endpoint, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state, then the epoch, index and slot.\n\nEach of the last three is an `int` or None."},
+  {"summary": "The JSON response of the sync committees endpoint, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, epoch: int | None) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiSyncCommitteesExport",
+   "method": "consensus_api_sync_committees",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response of the sync committees endpoint, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state, and an epoch or None."},
+  {"summary": "The JSON response of the PTC endpoint, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int | None) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiPtcExport",
+   "method": "consensus_api_ptc",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response of the PTC endpoint, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and replacements or None.\n\nThe last argument is a slot or None."},
+  {"summary": "The SSZ body of the PTC answer, as `bytes`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int | None) -> bytes",
+   "operation": "EthLib.Consensus.Exports.apiPtcSszExport",
+   "method": "consensus_api_ptc_ssz",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The SSZ body of the PTC answer, as `bytes`.\n\nThe arguments are those of the JSON answer."},
+  {"summary":
    "The answer to each query, against the store after the steps of a fork choice case.",
    "signature":
    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, queries: list) -> list",
@@ -3367,7 +3449,7 @@
       {"constructor": "undeclaredSelector", "code": 75}]}],
    "error_class": "SszError",
    "docstring":
-   "None when a builder keeps a signed registration, or the name of the rule that refuses it.\n\nThe arguments are the name of the preset and of the configuration, the fork and replacements.\n\nThen come the state, the registrations the builder keeps, the signed registration and the time.\n\nThe time is that of the builder's clock, in seconds."},
+   "None when a builder keeps a signed registration, or the name of the rule that refuses it.\n\nThe arguments are the name of the preset and of the configuration, the fork and replacements.\n\nThen come the state, the signed registrations the builder keeps, the one to check and the time.\n\nThe time is that of the builder's clock, in seconds."},
   {"summary": "Whether a builder serves a request for a bid.",
    "signature":
    "(name: str, fork: str, state: bytes, registry: list[bytes], slot: int, parent_hash: bytes, pubkey: bytes) -> bool",
@@ -3462,7 +3544,7 @@
       {"constructor": "wrongPayloadSlot", "code": 89}]}],
    "error_class": "TransitionError",
    "docstring":
-   "Whether a builder serves a request for a bid.\n\nThe arguments are the name of the preset, the fork, the state and the registrations kept.\n\nThen come the slot, the parent hash and the key of the request.\n\nThe state is the builder's state, transitioned to the slot.\n\nBytes that do not decode have code 0, and a state with no proposer keeps the code of its error."},
+   "Whether a builder serves a request for a bid.\n\nThe arguments are the name of the preset, the fork, the state and the signed registrations kept.\n\nThen come the slot, the parent hash and the key of the request.\n\nThe state is the builder's state, transitioned to the slot.\n\nBytes that do not decode have code 0, and a state with no proposer keeps the code of its error."},
   {"summary":
    "None when a proposer accepts a signed bid, or the name of the rule that refuses it.",
    "signature":
@@ -4107,6 +4189,92 @@
    "error_class": "ConsensusError",
    "docstring":
    "The default data that a proposer and a builder agree, from the builder's URL.\n\nIt is the host as ASCII bytes, with an IPv6 address compressed and in brackets.\n\nA host that is not ASCII gives an error, so an internationalized name must be in punycode."},
+  {"summary":
+   "The SSZ bytes of the bid that a relay serves from a submission, under a key.",
+   "signature": "(name: str, fork: str, data: bytes, pubkey: bytes) -> bytes",
+   "operation": "EthLib.Consensus.Exports.relaySubmissionBidExport",
+   "method": "consensus_relay_submission_bid",
+   "errors":
+   [{"type": "EthLib.Serialization.Ssz.Err",
+     "codes":
+     [{"constructor": "typeMismatch", "code": 1},
+      {"constructor": "overLimit", "code": 2},
+      {"constructor": "scope", "code": 3},
+      {"constructor": "scopeTooSmall", "code": 4},
+      {"constructor": "scopeUndivided", "code": 5},
+      {"constructor": "scopeWidthless", "code": 6},
+      {"constructor": "firstOffset", "code": 7},
+      {"constructor": "offsetUnordered", "code": 8},
+      {"constructor": "offsetPastScope", "code": 9},
+      {"constructor": "offsetUnaligned", "code": 10},
+      {"constructor": "offsetBelowTable", "code": 11},
+      {"constructor": "truncated", "code": 12},
+      {"constructor": "notABit", "code": 13},
+      {"constructor": "count", "code": 14},
+      {"constructor": "paddingBits", "code": 15},
+      {"constructor": "emptyEncoding", "code": 16},
+      {"constructor": "noDelimiter", "code": 17},
+      {"constructor": "trailingZeros", "code": 18},
+      {"constructor": "noSelector", "code": 19},
+      {"constructor": "unknownSelector", "code": 20},
+      {"constructor": "badDeclaration", "code": 21},
+      {"constructor": "notAPosition", "code": 22},
+      {"constructor": "notEntitled", "code": 23},
+      {"constructor": "undeclared", "code": 24},
+      {"constructor": "capacityNegative", "code": 25},
+      {"constructor": "layoutNotBits", "code": 26},
+      {"constructor": "notAGindex", "code": 27},
+      {"constructor": "rootHasNoBranch", "code": 28},
+      {"constructor": "emptyRequest", "code": 29},
+      {"constructor": "repeatedIndex", "code": 30},
+      {"constructor": "nestedIndex", "code": 31},
+      {"constructor": "branchLength", "code": 32},
+      {"constructor": "leafCount", "code": 33},
+      {"constructor": "proofLength", "code": 34},
+      {"constructor": "proofIncomplete", "code": 35},
+      {"constructor": "pathIntoMixin", "code": 36},
+      {"constructor": "pathIntoPacked", "code": 37},
+      {"constructor": "pathIntoGap", "code": 38},
+      {"constructor": "pathPastSpine", "code": 39},
+      {"constructor": "noParts", "code": 40},
+      {"constructor": "noPartsMixin", "code": 41},
+      {"constructor": "noMixin", "code": 42},
+      {"constructor": "noChunkCount", "code": 43},
+      {"constructor": "notSteppable", "code": 44},
+      {"constructor": "noSuchField", "code": 45},
+      {"constructor": "noSuchOption", "code": 46},
+      {"constructor": "noSuchPosition", "code": 47},
+      {"constructor": "merkleizeLimit", "code": 48},
+      {"constructor": "zeroTreeWidth", "code": 49},
+      {"constructor": "vectorEmpty", "code": 50},
+      {"constructor": "layoutWidth", "code": 51},
+      {"constructor": "layoutTrailingGap", "code": 52},
+      {"constructor": "layoutTooWide", "code": 53},
+      {"constructor": "layoutFieldCount", "code": 54},
+      {"constructor": "unionEmpty", "code": 55},
+      {"constructor": "unionSelectorRange", "code": 56},
+      {"constructor": "unionIncompatible", "code": 57},
+      {"constructor": "unionSelectorRepeated", "code": 58},
+      {"constructor": "uintWidth", "code": 59},
+      {"constructor": "offsetOverflow", "code": 60},
+      {"constructor": "containerEmpty", "code": 61},
+      {"constructor": "hexPrefix", "code": 62},
+      {"constructor": "hexDigits", "code": 63},
+      {"constructor": "hexLength", "code": 64},
+      {"constructor": "bitfieldPadding", "code": 65},
+      {"constructor": "bitfieldDelimiter", "code": 66},
+      {"constructor": "bitfieldTrailingZeros", "code": 67},
+      {"constructor": "uintRange", "code": 68},
+      {"constructor": "documentOverLimit", "code": 69},
+      {"constructor": "elementKind", "code": 70},
+      {"constructor": "noDefault", "code": 71},
+      {"constructor": "undeclaredField", "code": 72},
+      {"constructor": "missingField", "code": 73},
+      {"constructor": "structNotAnObject", "code": 74},
+      {"constructor": "undeclaredSelector", "code": 75}]}],
+   "error_class": "SszError",
+   "docstring":
+   "The SSZ bytes of the bid that a relay serves from a submission, under a key.\n\nThe arguments are the name of the preset, the fork, the SSZ bytes of the submission and the key."},
   {"summary":
    "The value of a builder's bid from its two payments and the proposer's execution payment cap.",
    "signature":
@@ -11597,9 +11765,9 @@
    "docstring":
    "Build a payload on a chain, from attributes, the builder's choices and transactions.\n\nThe arguments are the configuration, the state, the recent blocks, the method and the attributes.\n\nThen come the fee recipient, the extra data, the target gas limit and the transactions.\n\nIt returns the block and the accounts after it in RLP form, the requests and the block value."},
   {"summary":
-   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.",
+   "The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks.",
    "signature":
-   "(config: dict, tree: list, finalized: str | None, request: dict) -> dict",
+   "(config: dict, tree: list, finalized: str | None, terminal_total_difficulty: int, request: dict) -> dict",
    "operation": "EthLib.Engine.Exports.forkchoiceUpdatedExport",
    "method": "engine_forkchoice_updated",
    "errors":
@@ -11613,7 +11781,7 @@
       {"constructor": "unknownPayload", "code": 38001}]}],
    "error_class": "EngineError",
    "docstring":
-   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe arguments are the configuration, the tree, the known finalized block and the request."},
+   "The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks.\n\nThe arguments are the configuration, the tree and the known finalized block.\n\nThe terminal total difficulty and the request follow.\n\nThe terminal total difficulty must be below `2^256`, or the export raises with code 0."},
   {"summary": "The answer to an `engine_getBlobs` request, from a blob pool.",
    "signature":
    "(pool: list[tuple[bytes, bytes | None, bytes | None, list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, fork: str, request: dict) -> list | None",
