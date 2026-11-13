@@ -219,26 +219,6 @@ private theorem kept_passPendingConsolidations {nextEpoch : Epoch} :
       (Kept.of_payloadInputs (payloadInputs_increaseBalance raisedOk))).trans
       (kept_passPendingConsolidations (result := (passed, read)) passedOk)
 
-/-- The pending deposits and consolidations keep the mixes and the slot. -/
-private theorem kept_processPendingBalances
-    (computed : processPendingBalances config checks state = .ok after) : Kept state after := by
-  unfold processPendingBalances at computed
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨middle, deposited, consolidated⟩ := computed
-    have deposits : Kept state middle := by
-      unfold processPendingDeposits at deposited
-      simp only [bind, Except.bind, pure, Except.pure] at deposited
-      repeat' (split at deposited <;> try cases deposited)
-      all_goals exact (kept_passPendingDeposits ‹_›).trans ⟨rfl, rfl⟩
-    refine deposits.trans ?_
-    unfold processPendingConsolidations at consolidated
-    simp only [bind, Except.bind, pure, Except.pure] at consolidated
-    repeat' (split at consolidated <;> try cases consolidated)
-    all_goals exact (kept_passPendingConsolidations ‹_›).trans ⟨rfl, rfl⟩
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ Kept.refl _
-
 /-- The historical summaries update keeps the mixes and the slot. -/
 private theorem kept_processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
     (computed : processHistoricalSummariesUpdate state capella = .ok after) :
@@ -293,36 +273,49 @@ private theorem eq_add_one_of_toNat {next epoch : Epoch}
 private theorem processEpochAltair_mixesKeptBut {altair : .altair ≤ fork}
     (computed : processEpochAltair config checks state altair = .ok after) :
     MixesKeptBut (getCurrentEpoch state + 1) state after := by
-  unfold processEpochAltair at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨justified, justifiedOk, scored, scoredOk, rewarded, rewardedOk, registered,
-    registeredOk, slashed, slashedOk, reset, resetOk, pending, pendingOk, paid, paidOk, balanced,
-    balancedOk, cleared, clearedOk, mixed, mixedOk, computed⟩ := computed
-  have resetKept : Kept slashed reset := by
-    split at resetOk
-    · exact Kept.of_eq (randaoMixes_slot_processEth1DataReset resetOk)
-    · simp only [pure, Except.pure, Except.ok.injEq] at resetOk
-      exact resetOk ▸ Kept.refl _
-  have paidKept : Kept pending paid := by
-    split at paidOk
-    · rw [processBuilderPendingPayments_eq (liftAccessor_ok.mp paidOk)]
+  have epochOk : processEpoch config checks state = .ok after := by
+    simpa only [processEpoch, altair, ↓reduceDIte] using computed
+  obtain ⟨cleared, mixed, initial, mixedOk, final⟩ := processEpoch_randaoCut epochOk
+  have head : Kept state cleared := by
+    apply initial.transport Kept Kept.refl (fun a b => a.trans b)
+    intro k member a b ok
+    have edge := EpochStage.action_cases.mp ok
+    cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
+    · exact Kept.of_eq (randaoMixes_slot_processJustificationAndFinalization edge)
+    · exact kept_processInactivityUpdates edge
+    · exact Kept.of_eq (randaoMixes_slot_processRewardsAndPenalties edge)
+    · exact kept_processRegistryUpdates edge
+    · exact Kept.of_eq (randaoMixes_slot_processSlashings edge)
+    · split at edge
+      · exact Kept.of_eq (randaoMixes_slot_processEth1DataReset edge)
+      · exact edge ▸ Kept.refl _
+    · split at edge
+      · unfold processPendingDeposits at edge
+        simp only [bind, Except.bind, pure, Except.pure] at edge
+        repeat' (split at edge <;> try cases edge)
+        all_goals exact (kept_passPendingDeposits ‹_›).trans ⟨rfl, rfl⟩
+      · exact edge ▸ Kept.refl _
+    · split at edge
+      · unfold processPendingConsolidations at edge
+        simp only [bind, Except.bind, pure, Except.pure] at edge
+        repeat' (split at edge <;> try cases edge)
+        all_goals exact (kept_passPendingConsolidations ‹_›).trans ⟨rfl, rfl⟩
+      · exact edge ▸ Kept.refl _
+    · split at edge
+      · rw [processBuilderPendingPayments_eq edge]
+        exact ⟨rfl, rfl⟩
+      · exact edge ▸ Kept.refl _
+    · exact Kept.of_eq (randaoMixes_slot_processEffectiveBalanceUpdates edge)
+    · obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
       exact ⟨rfl, rfl⟩
-    · simp only [pure, Except.pure, Except.ok.injEq] at paidOk
-      exact paidOk ▸ Kept.refl _
-  have clearedKept : Kept balanced cleared := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq clearedOk
-    exact ⟨rfl, rfl⟩
-  have head : Kept state cleared :=
-    (Kept.of_eq (randaoMixes_slot_processJustificationAndFinalization justifiedOk)).trans <|
-    (kept_processInactivityUpdates scoredOk).trans <|
-    (Kept.of_eq (randaoMixes_slot_processRewardsAndPenalties rewardedOk)).trans <|
-    (kept_processRegistryUpdates registeredOk).trans <|
-    (Kept.of_eq (randaoMixes_slot_processSlashings slashedOk)).trans <| resetKept.trans <|
-    (kept_processPendingBalances pendingOk).trans <| paidKept.trans <|
-    (Kept.of_eq (randaoMixes_slot_processEffectiveBalanceUpdates balancedOk)).trans clearedKept
+    all_goals simp [EpochStage.prefixStages] at member
   have tail : Kept mixed after := by
-    split at computed <;> simp only [bind_ok_iff] at computed <;>
-      obtain ⟨rooted, rootedOk, synced, syncedOk, looked, lookedOk, windowed⟩ := computed
+    have tailRun := EpochTrace.run_ok_iff.mpr final
+    simp only [EpochTrace.run, EpochStage.tailStages, List.foldlM_cons,
+      List.foldlM_nil, EpochStage.action, altair, ↓reduceDIte, pure_bind,
+      bind_pure, bind_ok_iff] at tailRun
+    obtain ⟨rooted, rootedOk, synced, syncedOk, looked, lookedOk, windowed⟩ := tailRun
+    split at rootedOk
     · exact (kept_processHistoricalSummariesUpdate rootedOk).trans
         (kept_epochTail syncedOk lookedOk windowed)
     · exact (Kept.of_eq (randaoMixes_slot_processHistoricalRootsUpdate rootedOk)).trans

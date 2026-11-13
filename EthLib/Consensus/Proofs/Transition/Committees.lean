@@ -1202,18 +1202,38 @@ private theorem processEpoch_kept (before : fork < .altair)
       after.previousEpochAttestations before = state.currentEpochAttestations before ∧
       (after.currentEpochAttestations before).data = #[] := by
   have notAltair : ¬Fork.altair ≤ fork := Nat.not_le_of_lt before
-  unfold processEpoch at computed
-  simp only [notAltair, ↓reduceDIte, bind_ok_iff] at computed
-  obtain ⟨_, justifiedOk, _, rewardedOk, _, registeredOk, _, slashedOk, _, resetOk, _,
-    balancedOk, cleared, clearedOk, _, mixedOk, rooted, rootedOk, rotated⟩ := computed
-  have head : Keeps state cleared :=
-    (keeps_processJustificationAndFinalization justifiedOk).trans <|
-    (keeps_processRewardsAndPenalties rewardedOk).trans <|
-    (keeps_processRegistryUpdates (Nat.lt_trans before (by decide)) registeredOk).trans <|
-    (keeps_processSlashings slashedOk).trans <|
-    (keeps_processEth1DataReset resetOk).trans <|
-    (keeps_processEffectiveBalanceUpdates balancedOk).trans <|
-    keeps_processSlashingsReset clearedOk
+  have notElectra : ¬Fork.pectra ≤ fork :=
+    fun h => notAltair (Nat.le_trans (by decide) h)
+  have notGloas : ¬Fork.glamsterdam ≤ fork :=
+    fun h => notAltair (Nat.le_trans (by decide) h)
+  have notFulu : ¬Fork.fusaka ≤ fork :=
+    fun h => notAltair (Nat.le_trans (by decide) h)
+  have notCapella : ¬Fork.shapella ≤ fork :=
+    fun h => notAltair (Nat.le_trans (by decide) h)
+  have preHeze : fork < .hegota := Nat.lt_trans before (by decide)
+  obtain ⟨cleared, mixed, initial, mixedOk, final⟩ := processEpoch_randaoCut computed
+  have head : Keeps state cleared := by
+    apply initial.transport Keeps Keeps.refl (fun a b => a.trans b)
+    intro k member a b ok
+    have edge := EpochStage.action_cases.mp ok
+    cases k <;>
+      simp only [EpochStage.Edge, notAltair, notElectra, notGloas, preHeze,
+        ↓reduceDIte] at edge
+    all_goals first
+      | exact keeps_processJustificationAndFinalization edge
+      | exact keeps_processRewardsAndPenalties edge
+      | exact keeps_processRegistryUpdates (Nat.lt_trans before (by decide)) edge
+      | exact keeps_processSlashings edge
+      | exact keeps_processEth1DataReset edge
+      | exact keeps_processEffectiveBalanceUpdates edge
+      | exact keeps_processSlashingsReset edge
+      | exact edge ▸ Keeps.refl _
+      | simp [EpochStage.prefixStages] at member
+  have tailRun := EpochTrace.run_ok_iff.mpr final
+  simp only [EpochTrace.run, EpochStage.tailStages, List.foldlM_cons,
+    List.foldlM_nil, EpochStage.action, notAltair, notGloas, notFulu, notCapella,
+    ↓reduceDIte, bind_pure, bind_ok_iff] at tailRun
+  obtain ⟨rooted, rootedOk, rotated⟩ := tailRun
   have epoch : getCurrentEpoch cleared = getCurrentEpoch state := by
     simp only [getCurrentEpoch, head.2.2]
   obtain ⟨next, mix, randaoMixes, nextEq, -, written, rfl⟩ := processRandaoMixesReset_eq mixedOk
