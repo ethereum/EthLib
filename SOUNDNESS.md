@@ -3179,7 +3179,7 @@ This covers one chain; `accountable_safety` (`Consensus/Proofs/DirectSafety/Safe
 These theorems have one other case, an anchor state that hashes to the zero root.
 `Store.Reachable.finalized_ancestor_or_accountable` (`Consensus/Proofs/ForkChoice/CheckpointAncestry.lean`) ties together the two checkpoints of the store, which may come from the states of different blocks.
 The finalized epoch is at or before the anchor epoch, or the finalized checkpoint is on the chain of the justified checkpoint at the first slot of its epoch.
-Otherwise two runs from the anchor to the held states behind the two checkpoints bound the accountable stake at the anchor state, or show hash evidence.
+Otherwise two runs from the anchor to the held states behind the two checkpoints bound the unslashed active stake at the anchor state by the accountable stake, or show hash evidence.
 A checkpoint may come from one justification and finalization step on a held state, as fork choice runs it; `accountable_safety_justified_terminal` (`Safety.lean`) states direct accountable safety for such views.
 The drift of that bound is counted from the anchor, so the bound loosens as the justified epoch moves away from the anchor epoch.
 The theorem assumes that every block was imported with the setting of the signature checks of the run from genesis, and that no upgrade is due at a held slot.
