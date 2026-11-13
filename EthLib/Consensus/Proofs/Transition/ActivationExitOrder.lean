@@ -553,7 +553,7 @@ private theorem eth1Data {before : fork < .hegota} {body : BeaconBlockBody prese
   obtain ⟨_, _, rest⟩ := processEth1Data_eq ok
   exact of_data (by rw [← rest])
 
-/-- A block keeps the order: master's decomposition of a block reaches every step of it.
+/-- A block keeps the order, step by step of the block.
 
 Each step that keeps the validators keeps the order, and so does each validator write. -/
 private theorem processBlock {block : BeaconBlock preset fork}

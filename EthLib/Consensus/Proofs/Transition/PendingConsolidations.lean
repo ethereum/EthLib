@@ -903,7 +903,7 @@ private theorem executionRequests {body : BeaconBlockBody preset fork}
     (frame_processWithdrawalRequest ok).slot) first withdrawals
   exact fold (fun _ _ _ h ok => h.request delay ok) second consolidations
 
-/-- A block keeps the invariant, read through master's decomposition of a block.
+/-- A block keeps the invariant, step by step of the block.
 
 A block frame does not carry the queue, so each step reads its own queue lemma. -/
 private theorem block (early : fork < .glamsterdam)

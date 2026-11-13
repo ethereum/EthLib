@@ -363,7 +363,7 @@ private theorem kept_withdrawals {capella : .shapella ≤ fork}
 
 /-- Before Gloas, a block keeps the deposit carry.
 
-The block is read through master's decomposition.
+The block is read step by step.
 
 A block frame does not carry the deposit carry.
 
