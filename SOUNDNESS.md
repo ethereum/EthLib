@@ -773,6 +773,10 @@ A STREAM frame without LEN consumes the remaining packet, so its round trip has 
 `Frame.valid_of_decode` proves that a decoded frame meets the format checks.
 They cover ACK range underflow, offset limits, stream-count limits, token lengths, connection-ID lengths and the retirement order of §19.15.
 A frame body that ends early or breaks one of these checks is FRAME_ENCODING_ERROR (§20.1).
+`Frame.valid_ack_iff` states the ACK check against the ranges that RFC 9000 §19.3.1 computes from Largest Acknowledged, First ACK Range, Gap and ACK Range Length.
+An ACK frame passes it exactly when none of those ranges reaches below packet number 0.
+Each additional range lowers the packet number by at least two, so that also keeps their count a QUIC integer.
+`Frame.ackedRanges_nonneg_of_decode` applies it to a decoded ACK frame.
 
 The Python cases include the RFC 9000 Appendix A.3 packet number and the header bytes of RFC 9001 Appendices A.2, A.4 and A.5, alongside hand-derived layouts of every frame type.
 The header decoder expects its caller to remove header protection and authenticate the payload first, so a reserved-bit error comes only after authentication (RFC 9000 §17.2).
