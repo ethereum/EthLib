@@ -22,16 +22,16 @@ The tests replay it through the state transition into a chain view, and send the
 They compare a result as a JSON value, and an error by its code, and by its data where the file gives it.
 A file marked `speconly` is checked against the schema of the result only, as `docs-api/docs/tests.md` of the source says.
 
-The view serves `eth_blockNumber`, `eth_chainId`, `net_version`, `eth_getTransactionByHash`, `eth_getTransactionByBlockHashAndIndex`, `eth_getTransactionByBlockNumberAndIndex`, `eth_getHeaderByHash`, `eth_getHeaderByNumber`, `eth_getBlockByHash`, `eth_getBlockByNumber`, `eth_getBlockTransactionCountByHash`, `eth_getBlockTransactionCountByNumber`, and the four raw getters `debug_getRawHeader`, `debug_getRawBlock`, `debug_getRawTransaction` and `debug_getRawReceipts`.
+The view serves `eth_blockNumber`, `eth_chainId`, `eth_config`, `net_version`, `eth_getTransactionByHash`, `eth_getTransactionByBlockHashAndIndex`, `eth_getTransactionByBlockNumberAndIndex`, `eth_getHeaderByHash`, `eth_getHeaderByNumber`, `eth_getBlockByHash`, `eth_getBlockByNumber`, `eth_getBlockTransactionCountByHash`, `eth_getBlockTransactionCountByNumber`, `eth_getTransactionReceipt`, `eth_getBlockReceipts`, `eth_getLogs`, the account queries `eth_getBalance`, `eth_getTransactionCount`, `eth_getCode`, `eth_getStorageAt` and `eth_getStorageValues`, and the four raw getters `debug_getRawHeader`, `debug_getRawBlock`, `debug_getRawTransaction` and `debug_getRawReceipts`.
 The files of the other methods run through the readers of the parameters, without a chain.
 
-The files of `debug_traceBlockByNumber` and `eth_getStorageAt` answer with an error, because a reader rejects a parameter.
-The files of the raw getters that answer with an error go through the view, and also through the readers alone.
+Two files of `eth_getStorageAt` and one of `debug_traceBlockByNumber` answer with an error, because a reader rejects a parameter.
+The files of `eth_getStorageAt` and of the raw getters that answer with an error go through the view, and also through the readers alone.
 The tests compare only the code of that error, since the source fixes the code of an error and not its message.
 
-The other files name a block by an object of EIP-1898, or by a hash written as a string.
-The tests check how the reader reads that block parameter.
-They do not check the result of the request, which needs the chain of the source.
+Some files name a block by an object of EIP-1898, or by a hash written as a string.
+The tests also check how the reader reads that block parameter.
+For a method that the view does not serve, they do not check the result of the request.
 
 The tests compare the error codes of the bindings with these groups.
 They take the order of the groups from the table of reserved ranges in `src/error-groups/README.md` of the source.

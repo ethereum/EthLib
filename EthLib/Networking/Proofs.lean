@@ -24,6 +24,8 @@ public import EthLib.Networking.Proofs.Enr.Record
 public import EthLib.Networking.Proofs.Enr.Security
 public import EthLib.Networking.Proofs.Enr.V4
 public import EthLib.Networking.Proofs.Gossip.Cache
+public import EthLib.Networking.Proofs.Gossip.Heartbeat
+public import EthLib.Networking.Proofs.Gossip.Membership
 public import EthLib.Networking.Proofs.Gossip.MessageId
 public import EthLib.Networking.Proofs.Gossip.Payload
 public import EthLib.Networking.Proofs.Gossip.Router
@@ -36,9 +38,11 @@ public import EthLib.Networking.Proofs.Libp2p.MplexSession
 public import EthLib.Networking.Proofs.Libp2p.Multistream
 public import EthLib.Networking.Proofs.Libp2p.Upgrade
 public import EthLib.Networking.Proofs.Libp2p.PeerId
+public import EthLib.Networking.Proofs.Libp2p.Tls
 public import EthLib.Networking.Proofs.Libp2p.Yamux
 public import EthLib.Networking.Proofs.Libp2p.YamuxSession
 public import EthLib.Networking.Proofs.Quic.Keys
+public import EthLib.Networking.Proofs.Quic.Protection
 public import EthLib.Networking.Proofs.Quic.Tls
 public import EthLib.Networking.Proofs.Quic.Varint
 public import EthLib.Networking.Proofs.ReqResp.Bounds
@@ -53,6 +57,8 @@ public import EthLib.Networking.Proofs.Snappy.Encode
 public import EthLib.Networking.Proofs.Snappy.Frame
 public import EthLib.Networking.Proofs.Snappy.FrameEncode
 public import EthLib.Networking.Proofs.Snappy.Read
+
+public import EthLib.Networking.Proofs.Quic.Frame
 
 /-!
 # `EthLib.Networking.Proofs`

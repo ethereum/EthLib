@@ -35,7 +35,7 @@ namespace EthLib.Networking.Proofs.Gossip.Router
 open EthLib.Networking.Gossip
 
 /-- A property of a left fold holds at the end when each step preserves it. -/
-private theorem foldl_inv {α β : Type} (l : List α) (P : β → Prop) (f : β → α → β)
+theorem foldl_inv {α β : Type} (l : List α) (P : β → Prop) (f : β → α → β)
     (h : ∀ b a, a ∈ l → P b → P (f b a)) {b : β} (hb : P b) : P (l.foldl f b) := by
   induction l generalizing b with
   | nil => exact hb
@@ -43,7 +43,7 @@ private theorem foldl_inv {α β : Type} (l : List α) (P : β → Prop) (f : β
     exact ih (fun b a ha => h b a (List.mem_cons_of_mem _ ha)) (h b x List.mem_cons_self hb)
 
 /-- Looking a topic up after its peers are replaced. -/
-private theorem peersOf_setPeers (m : List (String × List PeerId)) (t t' : String)
+theorem peersOf_setPeers (m : List (String × List PeerId)) (t t' : String)
     (ps : List PeerId) :
     peersOf (setPeers m t ps) t' = if t' = t then ps else peersOf m t' := by
   have key : ∀ m : List (String × List PeerId), t' ≠ t →
@@ -69,7 +69,7 @@ private theorem peersOf_setPeers (m : List (String × List PeerId)) (t t' : Stri
     simp [List.lookup, h, key m h, this]
 
 /-- Looking a backoff up after one end is replaced. -/
-private theorem backoffEnd_setBackoff (b : List ((String × PeerId) × Nat)) (t t' : String)
+theorem backoffEnd_setBackoff (b : List ((String × PeerId) × Nat)) (t t' : String)
     (p p' : PeerId) (e : Nat) :
     backoffEnd (setBackoff b t p e) t' p' = if t' = t ∧ p' = p then e else backoffEnd b t' p' := by
   have key : ∀ b : List ((String × PeerId) × Nat), ¬ (t' = t ∧ p' = p) →
@@ -90,6 +90,34 @@ private theorem backoffEnd_setBackoff (b : List ((String × PeerId) × Nat)) (t 
   · obtain ⟨rfl, rfl⟩ := h; simp [List.lookup]
   · have : ((t', p') == (t, p)) = false := by simpa [Prod.ext_iff] using h
     simp [List.lookup, h, key b h, this]
+
+/-- Extending the backoffs of a list of peers on one topic never lowers any end. -/
+theorem backoffEnd_fold_mono (t' : String) (ends : Nat) (l : List PeerId) (t : String)
+    (q : PeerId) (b : List ((String × PeerId) × Nat)) :
+    backoffEnd b t q ≤ backoffEnd (l.foldl (fun b q => extendBackoff b t' q ends) b) t q := by
+  induction l generalizing b with
+  | nil => exact Nat.le_refl _
+  | cons x l ih =>
+    refine Nat.le_trans ?_ (ih _)
+    simp only [extendBackoff, backoffEnd_setBackoff]
+    split
+    · rename_i h
+      obtain ⟨rfl, rfl⟩ := h
+      exact Nat.le_max_left _ _
+    · exact Nat.le_refl _
+
+/-- Extending the backoffs of a list of peers on a topic makes each end at least the given end. -/
+theorem backoffEnd_fold_mem (t : String) (ends : Nat) (l : List PeerId) (q : PeerId)
+    (hq : q ∈ l) (b : List ((String × PeerId) × Nat)) :
+    ends ≤ backoffEnd (l.foldl (fun b q => extendBackoff b t q ends) b) t q := by
+  induction l generalizing b with
+  | nil => simp at hq
+  | cons x l ih =>
+    rcases List.mem_cons.mp hq with rfl | hq'
+    · refine Nat.le_trans ?_ (backoffEnd_fold_mono t ends l t q _)
+      simp only [extendBackoff, backoffEnd_setBackoff, true_and, ↓reduceIte]
+      exact Nat.le_max_right _ _
+    · exact ih hq' _
 
 /-- Inserting an ID into the seen cache keeps every ID that it held. -/
 private theorem contains_insert_mono (c : SeenCache) (now ttl : Nat) (id id' : MessageId)

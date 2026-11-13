@@ -14,6 +14,11 @@ eth_engine_new_payload_on_chain(
 );
 
 extern lean_object*
+eth_engine_new_payload_routes(
+  lean_object* args
+);
+
+extern lean_object*
 eth_engine_build_payload(
   lean_object* args
 );
@@ -70,7 +75,7 @@ py_engine_forkchoice_updated(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_engine_forkchoice_updated, args, 4, ENGINE_ERROR);
+  return call_pyvalue_export(eth_engine_forkchoice_updated, args, 5, ENGINE_ERROR);
 }
 
 PyObject*
@@ -127,6 +132,14 @@ py_engine_rewrite_params(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_engine_rewrite_params, args, 2, ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_new_payload_routes(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_new_payload_routes, args, 4, ENGINE_ERROR);
 }
 
 PyObject*

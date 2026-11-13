@@ -910,6 +910,23 @@ theorem earliestInclusions_getD {size : Nat}
   simp only [attestationsListing, List.map_eq_nil_iff, List.filter_eq_nil_iff, List.any_eq_true,
     beq_iff_eq, not_exists, not_and]
 
+/-- The attester part of an inclusion reward succeeds exactly when the delay is not zero.
+
+It is then the base reward less the proposer share, divided by the delay. -/
+theorem inclusionAttesterReward_ok_iff {base reward : Gwei} {inclusionDelay : Slot} :
+    inclusionAttesterReward preset base inclusionDelay = .ok reward ↔
+      inclusionDelay ≠ 0 ∧ reward = (base - proposerReward preset base) / inclusionDelay := by
+  have shareLe : proposerReward preset base ≤ base :=
+    UInt64.le_iff_toNat_le.mpr (by rw [proposerReward, UInt64.toNat_div]; exact Nat.div_le_self _ _)
+  have subOk : subChecked base (proposerReward preset base) =
+      .ok (base - proposerReward preset base) := by
+    simp only [subChecked, shareLe, ↓reduceIte]
+  unfold inclusionAttesterReward
+  by_cases zero : inclusionDelay = 0
+  · simp [zero, liftAccessor, liftArith, subOk, ensure, Except.mapError, bind, Except.bind]
+  · simp [zero, liftAccessor, liftArith, subOk, ensure, Except.mapError, bind, Except.bind,
+      pure, Except.pure, eq_comm]
+
 /-- One step of the inclusion rewards, for one attester.
 
 The attester has an earliest inclusion, with a nonzero inclusion delay.
@@ -934,12 +951,14 @@ theorem addInclusionReward_getD {total : Gwei}
   unfold addInclusionReward at computed
   split at computed
   · rename_i attestation found
-    simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff] at computed
-    obtain ⟨base, baseOk, raised, raisedOk, rest, restOk, _, checked, added⟩ := computed
-    have nonzero := ensure_ok_iff.mp checked
-    rw [subChecked_ok_iff] at restOk
+    simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨base, baseOk, raised, raisedOk, rest, restOk, added⟩ := computed
+    obtain ⟨nonzero, rfl⟩ := inclusionAttesterReward_ok_iff.mp restOk
+    have shareLe : (proposerReward preset base).toNat ≤ base.toNat := by
+      rw [proposerReward, UInt64.toNat_div]; exact Nat.div_le_self _ _
     refine ⟨attestation, base, found, baseOk, nonzero, fun j => ?_⟩
-    rw [addDelta_getD added, addDelta_getD raisedOk, UInt64.toNat_div, restOk.2, proposerReward,
+    rw [addDelta_getD added, addDelta_getD raisedOk, UInt64.toNat_div,
+      UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr shareLe), proposerReward,
       UInt64.toNat_div, Nat.add_assoc]
   · cases computed
 

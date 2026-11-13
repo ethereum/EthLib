@@ -1,10 +1,17 @@
 module
 
 public import EthLib.Consensus.Exports.BeaconApi
+public import EthLib.Consensus.Exports.BeaconApiBlocks
+public import EthLib.Consensus.Exports.BeaconApiCommittees
+public import EthLib.Consensus.Exports.BeaconApiDuties
 public import EthLib.Consensus.Exports.BeaconApiConfig
 public import EthLib.Consensus.Exports.BeaconApiIdentifiers
+public import EthLib.Consensus.Exports.BeaconApiLightClient
+public import EthLib.Consensus.Exports.BeaconApiRegistries
+public import EthLib.Consensus.Exports.BeaconApiRewards
 public import EthLib.Consensus.Exports.BeaconApiStateQueries
 public import EthLib.Consensus.Exports.BeaconApiValidators
+public import EthLib.Consensus.Exports.BeaconApiValidatorData
 public import EthLib.Consensus.Exports.BuilderApi
 public import EthLib.Consensus.Exports.Column
 public import EthLib.Consensus.Exports.ConsensusVersion
@@ -24,6 +31,7 @@ public import EthLib.Consensus.Exports.GossipValidation
 public import EthLib.Consensus.Exports.OptimisticSync
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Exports.PqKeys
+public import EthLib.Consensus.Exports.RelayApi
 public import EthLib.Consensus.Exports.ReqResp
 public import EthLib.Consensus.Exports.Rewards
 public import EthLib.Consensus.Exports.Shuffle

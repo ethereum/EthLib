@@ -139,6 +139,11 @@ def serve(
     The forkchoice is the head, safe and finalized hashes; a zero safe or finalized hash names none.
     A block that does not decode or fails its transition raises RpcError with its block error code.
     Any other bad input raises RpcError with code 0, such as a head that is not the last block.
+
+    For eth_config, config may give mergeForkBlock, the FORK_NEXT_VALUE of EIP-3675.
+    When the first block is not block zero, eth_config needs genesisHash and genesisTime in config.
+    When it is block zero, serve reads both from it, and any given values must match.
+    A malformed, partial or mismatched value of these keys raises RpcError with code 0.
     """
     view = (config, state, list(blocks), forkchoice, network_id, check_seal)
     return _native.rpc_serve(view, requests)

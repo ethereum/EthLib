@@ -26,6 +26,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - Two functions that agree on every entry of a vector map it to one result.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
+- A fold whose steps fail only with errors of a property fails only with them.
 - A fold succeeds when each step succeeds and keeps an invariant that holds at the start.
 - A successful fold reads only inputs that its steps accept.
 - A fold over distinct keys changes the view of a key only in the step of that key.
@@ -34,6 +35,8 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - A fold that appends each output returns its start, then the outputs of the map, flattened.
 
 A mapped error leaves a success unchanged.
+
+A mapped computation fails exactly when the computation fails, with the map of its error.
 
 A map in `Option` that succeeds has one output per input, each the image of its input.
 
@@ -438,6 +441,18 @@ theorem mapError_ok_iff {ε' : Type} {g : ε → ε'} {result : Except ε α} {v
     result.mapError g = .ok value ↔ result = .ok value := by
   cases result <;> simp [Except.mapError]
 
+/-- A computation with its error mapped fails exactly when the computation fails.
+
+The error it gives is the map of the error of the computation. -/
+theorem mapError_eq_error_iff {ε' : Type} {g : ε → ε'} {result : Except ε α} {error : ε'} :
+    result.mapError g = .error error ↔ ∃ e, result = .error e ∧ g e = error := by
+  cases result <;> simp [Except.mapError]
+
+/-- A computation with its error mapped fails only with the map of an error of the computation. -/
+theorem mapError_eq_error {ε' : Type} {g : ε → ε'} {result : Except ε α} {error : ε'}
+    (h : result.mapError g = .error error) : ∃ e, result = .error e ∧ g e = error :=
+  mapError_eq_error_iff.mp h
+
 /-- A property that each successful step keeps holds after a successful fold. -/
 theorem foldlM_ok_invariant {g : β → α → Except ε β} (P : β → Prop)
     (step : ∀ b x b', P b → g b x = .ok b' → P b') :
@@ -449,6 +464,20 @@ theorem foldlM_ok_invariant {g : β → α → Except ε β} (P : β → Prop)
     rw [List.foldlM_cons, bind_ok_iff] at computed
     obtain ⟨middle, first, rest⟩ := computed
     exact foldlM_ok_invariant P step (step b x middle holds first) rest
+
+/-- A fold whose steps fail only with errors of a property fails only with them.
+
+The steps need only do so from an accumulator that holds an invariant. -/
+theorem foldlM_error_of_step {g : β → α → Except ε β} (I : β → Prop) (Q : ε → Prop)
+    (keep : ∀ b x b', I b → g b x = .ok b' → I b')
+    (step : ∀ b x e, I b → g b x = .error e → Q e) :
+    ∀ {xs : List α} {b : β} {e : ε}, I b → xs.foldlM g b = .error e → Q e
+  | [], _, _, _, h => by cases h
+  | x :: _, b, e, hb, h => by
+    rw [List.foldlM_cons] at h
+    rcases bind_eq_error h with h | ⟨b', hb', h⟩
+    · exact step b x e hb h
+    · exact foldlM_error_of_step I Q keep step (keep b x b' hb hb') h
 
 /-- A fold succeeds when each step succeeds and keeps an invariant that holds at the start. -/
 theorem foldlM_exists_ok_of_invariant {σ : Type} {g : σ → α → Except ε σ}

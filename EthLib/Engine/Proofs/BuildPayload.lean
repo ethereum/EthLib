@@ -216,7 +216,7 @@ theorem buildPayload_of_buildPayloadOnChain {version : Nat}
       chain.recent.getLast? = some parent ∧
       checkAttributes chain.config version
         ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-          UInt64.ofNat parent.header.timestamp.toNat⟩ decoded = .ok ⟨fork, attributes⟩ ∧
+          UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩ ∧
       decodeTransactions fork 0 encoded = .ok transactions ∧
       buildPayload chain attributes choices transactions = .ok built := by
   unfold buildPayloadOnChain at h
@@ -315,7 +315,7 @@ theorem buildPayloadOnChain_eq_error_of_checkAttributes_eq_error {version : Nat}
     {error : EngineError} (hp : chain.recent.getLast? = some parent)
     (ha : checkAttributes chain.config version
       ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-        UInt64.ofNat parent.header.timestamp.toNat⟩ decoded = .error error) :
+        UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .error error) :
     buildPayloadOnChain chain version decoded choices encoded = .error (.attributes error) := by
   simp [buildPayloadOnChain, hp, ha, bind, Except.bind, Except.mapError]
 
@@ -325,7 +325,7 @@ theorem buildPayloadOnChain_eq_error_of_decodeTransactions_eq_error {version : N
     {error : PayloadError} (hp : chain.recent.getLast? = some parent)
     (ha : checkAttributes chain.config version
       ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-        UInt64.ofNat parent.header.timestamp.toNat⟩ decoded = .ok ⟨fork, attributes⟩)
+        UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩)
     (ht : decodeTransactions fork 0 encoded = .error error) :
     buildPayloadOnChain chain version decoded choices encoded = .error (.transaction error) := by
   simp [buildPayloadOnChain, hp, ha, ht, bind, Except.bind, Except.mapError]
@@ -336,7 +336,7 @@ theorem buildPayloadOnChain_eq_error_of_buildPayload_eq_error {version : Nat}
     {error : BlockError} (hp : chain.recent.getLast? = some parent)
     (ha : checkAttributes chain.config version
       ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-        UInt64.ofNat parent.header.timestamp.toNat⟩ decoded = .ok ⟨fork, attributes⟩)
+        UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩)
     (ht : decodeTransactions fork 0 encoded = .ok transactions)
     (hb : buildPayload chain attributes choices transactions = .error error) :
     buildPayloadOnChain chain version decoded choices encoded = .error (.block error) := by

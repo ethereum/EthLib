@@ -908,9 +908,18 @@ def test_registration_lookahead(now: int, expected: str | None):
 
 
 def test_registration_older_than_kept():
-    kept = _signed_registration(101)[:MESSAGE_SIZE]
+    kept = _signed_registration(101)
     assert _register(_signed_registration(100), 100, kept=[kept]) == "older_than_previous"
     assert _register(_signed_registration(101), 100, kept=[kept]) is None
+
+
+def test_registry_keeps_signed_registrations():
+    # A message without its signature is too short for an entry of the registry.
+    message = _signed_registration(101)[:MESSAGE_SIZE]
+    with raises(ERROR, "registry rejected: EthLib.Serialization.Ssz.Err.scope 180 84") as info:
+        _register(_signed_registration(100), 100, kept=[message])
+    # The code is that of the size error.
+    assert info.value.code == 3
 
 
 def test_registration_of_unknown_key():
@@ -1045,9 +1054,8 @@ def _proposer(source: str, state: bytes) -> int:
 
 
 def _registered(index: int) -> bytes:
-    """A registration message of a validator of the pinned states, whose secret key is index + 1."""
-    pubkey = G2ProofOfPossession.SkToPk(index + 1)
-    return bytes(20) + struct.pack("<QQ", 30_000_000, 100) + pubkey
+    """A signed registration of a validator of the pinned states, whose secret key is index + 1."""
+    return _signed_registration(100, key=index + 1)
 
 
 def _eligible(

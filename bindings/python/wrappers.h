@@ -150,6 +150,7 @@ extern PyObject* REQRESP_ERROR;
 extern PyObject* CONSENSUS_ERROR;
 extern PyObject* HKDF_ERROR;
 extern PyObject* TLS13_ERROR;
+extern PyObject* QUIC_PROTECTION_ERROR;
 extern PyObject* PBKDF2_ERROR;
 extern PyObject* SCRYPT_ERROR;
 extern PyObject* X25519_ERROR;
@@ -164,10 +165,12 @@ extern PyObject* SNAPPY_ERROR;
 extern PyObject* VARINT_ERROR;
 extern PyObject* UVARINT_ERROR;
 extern PyObject* QUIC_VARINT_ERROR;
+extern PyObject* QUIC_ERROR;
 extern PyObject* MULTISTREAM_ERROR;
 extern PyObject* MPLEX_ERROR;
 extern PyObject* YAMUX_ERROR;
 extern PyObject* LIBP2P_IDENTITY_ERROR;
+extern PyObject* TLS_CERTIFICATE_ERROR;
 extern PyObject* GOSSIP_ERROR;
 extern PyObject* DISCV5_ERROR;
 extern PyObject* RLPX_ERROR;
@@ -402,6 +405,34 @@ PyObject* py_consensus_api_state_query                    (PyObject* self, PyObj
 PyObject* py_consensus_api_state_query_ssz                (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_validator_status               (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_builder_status                 (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_registry_query                 (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_validator_balances_ssz         (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_block_query             (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_blobs                   (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_blobs_ssz               (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_block_query_ssz       (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_header                (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_headers               (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_columns               (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_columns_ssz           (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_payload_envelope      (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_payload_envelope_ssz  (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_light_client_bootstrap(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_light_client_bootstrap_ssz(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_light_client_updates(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_light_client_updates_ssz(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_light_client_decode_updates(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_light_client_latest(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_attestation_data      (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_payload_attestation_data(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_aggregate_attestation (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_sync_committee_contribution(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_attestation_rewards(PyObject* self, PyObject* args);
+PyObject* py_consensus_api_duties                (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_committees              (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_sync_committees         (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_ptc                     (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_ptc_ssz                 (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_registration (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_eligible_for_bid (PyObject* self, PyObject* args);
@@ -413,6 +444,13 @@ PyObject* py_consensus_verify_builder_request_auth_signature (PyObject* self, Py
 PyObject* py_consensus_builder_request_auth_failures (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_preferences_failures (PyObject* self, PyObject* args);
 PyObject* py_consensus_default_auth_data (PyObject* self, PyObject* args);
+PyObject* py_consensus_relay_submission_bid (PyObject* self, PyObject* args);
+PyObject* py_consensus_relay_validators (PyObject* self, PyObject* args);
+PyObject* py_consensus_relay_delivered_payload (PyObject* self, PyObject* args);
+PyObject* py_consensus_relay_received_bid (PyObject* self, PyObject* args);
+PyObject* py_consensus_relay_delivered_keeps (PyObject* self, PyObject* args);
+PyObject* py_consensus_relay_received_keeps (PyObject* self, PyObject* args);
+PyObject* py_consensus_relay_sort_delivered (PyObject* self, PyObject* args);
 PyObject* py_consensus_builder_bid_value (PyObject* self, PyObject* args);
 PyObject* py_consensus_consensus_version (PyObject* self, PyObject* args);
 PyObject* py_consensus_consensus_version_fork (PyObject* self, PyObject* args);
@@ -597,6 +635,10 @@ PyObject* py_gossip_rpc_decode                            (PyObject* self, PyObj
 PyObject* py_gossip_rpc_encode                            (PyObject* self, PyObject* args);
 PyObject* py_gossip_parameters                            (PyObject* self, PyObject* args);
 PyObject* py_gossip_receive_rpc                           (PyObject* self, PyObject* args);
+PyObject* py_gossip_join                                  (PyObject* self, PyObject* args);
+PyObject* py_gossip_leave                                 (PyObject* self, PyObject* args);
+PyObject* py_gossip_publish                               (PyObject* self, PyObject* args);
+PyObject* py_gossip_heartbeat                             (PyObject* self, PyObject* args);
 
 PyObject* py_rlpx_ecies_encrypt                           (PyObject* self, PyObject* args);
 PyObject* py_rlpx_ecies_decrypt                           (PyObject* self, PyObject* args);
@@ -676,6 +718,7 @@ PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObje
 PyObject* py_engine_get_blobs                            (PyObject* self, PyObject* args);
 PyObject* py_engine_get_payload_bodies                   (PyObject* self, PyObject* args);
 PyObject* py_engine_get_payload                          (PyObject* self, PyObject* args);
+PyObject* py_engine_new_payload_routes                   (PyObject* self, PyObject* args);
 PyObject* py_engine_read_payload_status                  (PyObject* self, PyObject* args);
 PyObject* py_engine_read_forkchoice_response             (PyObject* self, PyObject* args);
 PyObject* py_engine_read_get_payload_result              (PyObject* self, PyObject* args);
@@ -726,5 +769,20 @@ call_pyvalue_export(
 );
 
 PyObject* py_pyvalue_echo                                 (PyObject* self, PyObject* args);
+
+PyObject* py_quic_header_encode(PyObject* self, PyObject* args);
+PyObject* py_quic_header_decode(PyObject* self, PyObject* args);
+PyObject* py_quic_frame_encode(PyObject* self, PyObject* args);
+PyObject* py_quic_frame_decode(PyObject* self, PyObject* args);
+PyObject* py_quic_packet_number_encode(PyObject* self, PyObject* args);
+PyObject* py_quic_packet_number_decode(PyObject* self, PyObject* args);
+PyObject* py_tls_certificate_read(PyObject* self, PyObject* args);
+PyObject* py_tls_certificate_authenticate(PyObject* self, PyObject* args);
+PyObject* py_tls_certificate_authenticate_peer(PyObject* self, PyObject* args);
+PyObject* py_tls_certificate_verify_p256(PyObject* self, PyObject* args);
+
+PyObject* py_quic_protect(PyObject* self, PyObject* args);
+PyObject* py_quic_unprotect(PyObject* self, PyObject* args);
+PyObject* py_quic_retry_tag(PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

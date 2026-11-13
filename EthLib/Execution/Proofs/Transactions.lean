@@ -3,14 +3,18 @@ module
 public import EthLib.Execution.Proofs.Transactions.Authorization
 public import EthLib.Execution.Proofs.Transactions.Burn
 public import EthLib.Execution.Proofs.Transactions.Candidate
+public import EthLib.Execution.Proofs.Transactions.CodeOrigin
 public import EthLib.Execution.Proofs.Transactions.Codes
 public import EthLib.Execution.Proofs.Transactions.Deletion
 public import EthLib.Execution.Proofs.Transactions.Envelope
 public import EthLib.Execution.Proofs.Transactions.Failed
+public import EthLib.Execution.Proofs.Transactions.Funded
 public import EthLib.Execution.Proofs.Transactions.Inclusion
 public import EthLib.Execution.Proofs.Transactions.LogsPaid
 public import EthLib.Execution.Proofs.Transactions.Network
+public import EthLib.Execution.Proofs.Transactions.NoAccount
 public import EthLib.Execution.Proofs.Transactions.NoncesFit
+public import EthLib.Execution.Proofs.Transactions.Noninterference
 public import EthLib.Execution.Proofs.Transactions.Process
 public import EthLib.Execution.Proofs.Transactions.Rebuild
 public import EthLib.Execution.Proofs.Transactions.Replay
@@ -18,6 +22,7 @@ public import EthLib.Execution.Proofs.Transactions.Settlement
 public import EthLib.Execution.Proofs.Transactions.SettlementRebuild
 public import EthLib.Execution.Proofs.Transactions.Types
 public import EthLib.Execution.Proofs.Transactions.Signature
+public import EthLib.Execution.Proofs.Transactions.StateAborts
 public import EthLib.Execution.Proofs.Transactions.StateGas
 public import EthLib.Execution.Proofs.Transactions.Supply
 public import EthLib.Execution.Proofs.Transactions.Validity

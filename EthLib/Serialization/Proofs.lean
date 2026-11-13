@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Der
 public import EthLib.Serialization.Proofs.E2store
 public import EthLib.Serialization.Proofs.JsonRpc
 public import EthLib.Serialization.Proofs.Rlp

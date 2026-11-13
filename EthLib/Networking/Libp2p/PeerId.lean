@@ -98,23 +98,34 @@ def encodeSignature (r s : Nat) : ByteArray :=
   let integers := derInteger r ++ derInteger s
   ⟨([0x30, UInt8.ofNat integers.length] ++ integers).toArray⟩
 
-/-- Decode a strict DER sequence and require the secp256k1 low-s scalar ranges, BIP 62. -/
-def decodeSignature (signature : ByteArray) : Except IdentityError (Nat × Nat) := do
+/-- The two positive scalars below `2 ^ 256` of a strict DER ECDSA signature (RFC 3279 §2.2.3).
+
+It serves every curve whose group order is at most `2 ^ 256`.
+
+Each curve checks its own scalar ranges after this read. -/
+def decodeScalars (signature : ByteArray) : Option (Nat × Nat) :=
   match signature.data.toList with
   | 0x30 :: total :: 0x02 :: rLength :: rest =>
-    if total.toNat + 2 != signature.size then throw .signature
-    let rBytes := rest.take rLength.toNat
-    match rest.drop rLength.toNat with
-    | 0x02 :: sLength :: sBytes =>
-      if sLength.toNat != sBytes.length then throw .signature
-      let r := EthLib.Base.bytesToNat rBytes
-      let s := EthLib.Base.bytesToNat sBytes
-      if 0 < r ∧ r < Fn.modulus ∧ 0 < s ∧ s ≤ Fn.modulus / 2 ∧
-          encodeSignature r s = signature then
-        return (r, s)
-      else throw .signature
-    | _ => throw .signature
-  | _ => throw .signature
+    if total.toNat + 2 != signature.size then none
+    else
+      match rest.drop rLength.toNat with
+      | 0x02 :: sLength :: sBytes =>
+        if sLength.toNat != sBytes.length then none
+        else
+          let r := EthLib.Base.bytesToNat (rest.take rLength.toNat)
+          let s := EthLib.Base.bytesToNat sBytes
+          if 0 < r ∧ r < 2 ^ 256 ∧ 0 < s ∧ s < 2 ^ 256 ∧ encodeSignature r s = signature then
+            some (r, s)
+          else none
+      | _ => none
+  | _ => none
+
+/-- Decode a strict DER sequence and require the secp256k1 low-s scalar ranges, BIP 62. -/
+def decodeSignature (signature : ByteArray) : Except IdentityError (Nat × Nat) :=
+  match decodeScalars signature with
+  | some (r, s) =>
+    if r < Fn.modulus ∧ s ≤ Fn.modulus / 2 then .ok (r, s) else .error .signature
+  | none => .error .signature
 
 /-- Sign SHA-256 of the message, then write its low-s signature in DER, peer-IDs "Secp256k1".
 
