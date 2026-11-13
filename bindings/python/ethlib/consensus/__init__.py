@@ -84,6 +84,16 @@ def builder_bid_value(value: int, execution_payment: int, max_execution_payment:
     return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
 
 
+def consensus_version(fork: str) -> str | None:
+    """The Beacon API name of a fork's consensus version, or None before Phase 0 and at Hegotá."""
+    return _native.consensus_consensus_version(fork)
+
+
+def consensus_version_fork(name: str) -> str:
+    """The first fork of the consensus version with this exact Beacon API name."""
+    return _native.consensus_consensus_version_fork(name)
+
+
 def upgrade_operation(name: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
     """The Gloas root and bytes of a Fulu attestation, indexed attestation or attester slashing."""
     return _native.consensus_upgrade_operation(name, type_name, data)
@@ -440,6 +450,25 @@ def compute_fork_digest(
 ) -> bytes:
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
     return _native.consensus_compute_fork_digest(name, config, genesis_validators_root, epoch)
+
+
+def digest_epochs(name: str, config: dict[str, Any] | None = None) -> list[int]:
+    """The epochs at which the fork digest can change, in increasing order and without repeats."""
+    return _native.consensus_digest_epochs(name, config)
+
+
+def fork_of_digest(
+    name: str, genesis_validators_root: bytes, digest: bytes, config: dict[str, Any] | None = None
+) -> tuple[int, str] | None:
+    """The first epoch with the given digest, among those at which it can change, with its fork."""
+    return _native.consensus_fork_of_digest(name, config, genesis_validators_root, digest)
+
+
+def digests_identify(
+    name: str, genesis_validators_root: bytes, config: dict[str, Any] | None = None
+) -> bool:
+    """Whether the digest of each epoch at which it can change reads back the fork at that epoch."""
+    return _native.consensus_digests_identify(name, config, genesis_validators_root)
 
 
 def compute_matrix(blobs: Sequence[bytes]) -> list[bytes]:
@@ -1240,6 +1269,8 @@ __all__ = [
     "is_valid_builder_signature",
     "verify_builder_request_auth_signature",
     "builder_bid_value",
+    "consensus_version",
+    "consensus_version_fork",
     "upgrade_operation",
     "pq_keys_ssz",
     "pq_keys_possession_signing_root",
@@ -1307,6 +1338,9 @@ __all__ = [
     "light_client_gossip_full_node",
     "light_client_gossip_light_client",
     "compute_fork_digest",
+    "digest_epochs",
+    "fork_of_digest",
+    "digests_identify",
     "process_epoch",
     "rewards_deltas",
     "rewards_deltas_batch",

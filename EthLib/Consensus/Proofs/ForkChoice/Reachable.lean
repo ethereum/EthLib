@@ -45,6 +45,12 @@ All the states of a reachable store have one genesis time.
 From Gloas each state has the block hash of the bid of its block.
 
 Otherwise its latest block hash is the block hash of its latest bid.
+
+Each known block has its unrealized justification.
+
+It has its timeliness too, except the anchor before Gloas.
+
+From Gloas it also has a timeliness for the payload committee and the two votes of that committee.
 -/
 
 @[expose] public section

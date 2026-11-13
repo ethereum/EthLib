@@ -573,6 +573,14 @@ def consensus_builder_bid_value(value: int, execution_payment: int, max_executio
     """The value of a builder's bid from its two payments and the proposer's execution payment cap."""
     ...
 
+def consensus_consensus_version(fork: str) -> str | None:
+    """The name of the consensus version of a fork, or none before Phase 0 and at Hegotá."""
+    ...
+
+def consensus_consensus_version_fork(name: str) -> str:
+    """The name of the first fork of a consensus version, read from its exact name."""
+    ...
+
 def consensus_merkle_proof(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]:
     """The node at a generalized index of the value that the bytes encode, and its branch, as a pair."""
     ...
@@ -879,6 +887,18 @@ def consensus_light_client_gossip_light_client(name: str, fork: str, config: dic
 
 def consensus_compute_fork_digest(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int) -> bytes:
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
+    ...
+
+def consensus_digest_epochs(name: str, config: dict[str, Any] | None) -> list[int]:
+    """The epochs at which the fork digest can change, in increasing order and without repeats."""
+    ...
+
+def consensus_fork_of_digest(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, digest: bytes) -> tuple[int, str] | None:
+    """The first epoch with the given digest, among those at which it can change, with its fork."""
+    ...
+
+def consensus_digests_identify(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes) -> bool:
+    """Whether the digest of each epoch at which it can change reads back the fork at that epoch."""
     ...
 
 def pq_keys_ssz(type: str, data: bytes) -> tuple[bytes, bytes]:

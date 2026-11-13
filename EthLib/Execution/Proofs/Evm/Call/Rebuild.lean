@@ -1253,36 +1253,6 @@ private theorem rebuildStep_step {block : BlockState} {evm : Evm fork Meter}
     exact ⟨RebuildStep.of_sameContext (controlFlowStep_sameContext (op := .stop) rfl rfl),
       fun _ _ _ hc => by cases hc⟩
 
-private theorem callStep_target_ne {kind : CallKind} {evm caller : Evm fork Meter}
-    {message : Message fork} {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (h : callStep kind evm = .ok (.child caller message resume)) : message.target ≠ none := by
-  unfold Evm.callStep at h
-  obtain ⟨⟨call, e1⟩, -, h⟩ := Base.bind_ok_iff.mp h
-  dsimp only at h
-  split at h
-  · simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h; cases h
-  rcases hacc : accessAddress e1 call.address with ⟨cold, e2⟩
-  simp only [hacc] at h
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  rcases keepReads_eq_ok h with h | ⟨_, hc⟩
-  · obtain ⟨⟨callee, e4⟩, -, h⟩ := Base.bind_ok_iff.mp h
-    dsimp only at h
-    rcases keepReads_eq_ok h with h | ⟨_, hc⟩
-    · obtain ⟨⟨subCall, e5⟩, -, h⟩ := Base.bind_ok_iff.mp h
-      unfold Evm.finishCall at h
-      split at h
-      · cases h
-      dsimp only at h
-      split at h
-      · obtain ⟨_, -, hc⟩ := Base.map_ok_iff.mp h; cases hc
-      · unfold Evm.genericCall at h
-        dsimp only at h
-        split at h
-        · obtain ⟨_, -, hc⟩ := Base.map_ok_iff.mp h; cases hc
-        · cases h; simp
-    · cases hc
-  · cases hc
-
 private theorem accountDeployable_of_create_step {evm caller : Evm fork Meter}
     {message : Message fork} {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hnc : HasNonceOrCode evm.state evm.message.currentTarget)

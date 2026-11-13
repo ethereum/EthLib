@@ -58,7 +58,7 @@ theorem stepRules_toDeleteLe : StepRules fork (ToDeleteLe (fork := fork) (Meter 
       split
       · exact Std.ExtTreeSet.mem_insert.mpr (.inr hx)
       · exact hx
-  incrementNonce _ _ _ _ _ hx := hx
+  incrementNonce _ _ _ _ _ _ hx := hx
   incorporate _ _ hx := mem_accountsToDelete_incorporateChild.mpr (.inl hx)
 
 /-- Every call and creation that returns a frame keeps the accounts to delete of its start.

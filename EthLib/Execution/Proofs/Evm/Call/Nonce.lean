@@ -202,7 +202,7 @@ theorem stepRules_nonceLe :
   tstore _ _ _ _ := NonceLe.of_getAccountOptional fun _ => rfl
   log _ hs _ _ _ := by rw [hs]; exact NonceLe.refl _
   selfdestruct _ _ h := nonceLe_finishSelfdestruct h
-  incrementNonce _ _ _ h := nonceLe_incrementNonce h
+  incrementNonce _ _ _ _ h := nonceLe_incrementNonce h
   incorporate h := by rw [state_incorporateChild]; exact h
 
 /-- A result of a step from `evm` that keeps or raises every nonce.

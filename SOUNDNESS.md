@@ -668,7 +668,21 @@ The X25519 proofs cover the clamp of RFC 7748 §5 and the decoding of a coordina
 `ladder_mod_two_pow` proves that the bits of the scalar above bit 254 do not change the ladder.
 So no run of the ladder can observe the cleared bit 255; only the clamp theorems record it.
 `swap_ladder_decodeScalar` proves that a clamped scalar leaves no swap pending at the end of the ladder.
-No theorem relates the ladder to the curve, so it is not proved to compute a scalar multiple.
+
+The ladder computes a scalar multiple on Curve25519, and X25519 is a key agreement (`Proofs/MontgomeryCurve.lean`, `Proofs/X25519/`).
+The curve `v ^ 2 = u ^ 3 + 486662 u ^ 2 + u` is the Weierstrass curve with `a₂ = 486662` and `a₄ = 1`, so the group law that Mathlib proves applies to it.
+`Represents.double` and `Represents.diffAdd` prove the doubling and the differential addition of RFC 7748 §5 on projective u-coordinates.
+They hold for every point, the point at infinity and the points of order 2 included, over any field in which `2 ≠ 0`.
+The differential addition needs the u-coordinate of the difference of its two points, and that coordinate must not be `0`.
+`ladder_represents` takes a point `P` whose u-coordinate is not `0` and a scalar `k` below `2 ^ 255`.
+After the pending swap, the ladder ends with projective u-coordinates of `[k] P` and `[k + 1] P`.
+`x25519_encodeUCoordinate` follows: X25519 of the encoded u-coordinate of such a point encodes the u-coordinate of `[k] P` for the clamped scalar `k`, and `0` when `[k] P` is the point at infinity.
+`modulus_prime` and `order_prime` prove, by Pratt certificates that the kernel checks, that `2 ^ 255 - 19` and the order `ℓ` of RFC 7748 §4.1 are prime.
+`addOrderOf_basePoint` proves that the base point `(9, v)` has order `ℓ`, from one run of the ladder that the kernel evaluates.
+`uCoord_decodeScalar_smul_ne_zero` proves that `[k] B` has a u-coordinate other than `0` for every clamped scalar `k`, since `k` is a multiple of 8 with `2 ^ 254 ≤ k < 2 ^ 255 < 8 ℓ`.
+`x25519_agree` proves the agreement of RFC 7748 §6.1: X25519 of the key `a` on the public key of `b` equals X25519 of `b` on the public key of `a`, for every pair of keys.
+No theorem covers an input u-coordinate of `0`, a noncanonical encoding, or a u-coordinate on the quadratic twist of the curve, though X25519 accepts all three.
+No theorem assumes or bounds the hardness of the Diffie-Hellman problem on the curve.
 
 The ChaCha20-Poly1305 proofs cover output length, counter exhaustion, rejection of a wrong tag and the round trip (`Proofs/ChaCha20Poly1305.lean`).
 `crypt_crypt` proves that the cipher, run twice under one key, counter and nonce, gives back its input.
@@ -709,6 +723,15 @@ The transcript of Noise §5.2 has its own theorems (`Networking/Proofs/Noise.lea
 `eq_or_collision_of_hash_mixHash_eq` proves that two mixes that end at one handshake hash started at one handshake hash and mixed the same bytes, or else names the two different SHA-256 inputs that hash alike.
 No theorem assumes or bounds the collision resistance of SHA-256, and none binds the whole transcript of a handshake.
 `unframe_frame` proves that reading back a written frame of the noise-libp2p "Wire Format" returns its message.
+
+`handshake_complete` (`Networking/Proofs/Noise/Handshake.lean`) is the correctness theorem of the raw XX handshake.
+Two honest peers, with any static and ephemeral secrets and one prologue that both use, complete the three messages when each payload fits in its message.
+Each read returns the payload that the other peer wrote.
+Both peers end with the same symmetric state, and each stores the static public key of the other.
+The send cipher of each peer is then the receive cipher of the other.
+The proof uses `x25519_agree` for the three tokens `ee`, `es` and `se`, so it needs no assumption on X25519.
+It says nothing about a peer that deviates from the specification, nor about secrecy.
+
 No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key.
 Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
 The raw transport split of an XX state checks neither.
@@ -1383,7 +1406,8 @@ Each such call runs the code that `to` holds in `S`, along its route, with any d
 
 `StepRules fork R` (`Execution/Proofs/Evm/Call/StepRules.lean`) lists the rules for a transitive relation `R` of two frames.
 `R` must hold of each step that keeps the state up to the records of reads.
-It must also hold of each write of storage, transient storage, a log or SELFDESTRUCT, of the rise of a nonce, and of a child taken in by its caller.
+It must also hold of each write of storage, transient storage, a log or SELFDESTRUCT.
+It must hold of the rise of a nonce below `2^64 - 1`, and of a child taken in by its caller.
 `StepRules.step` proves that such a relation holds of every successful step, given it for the frame that ends each message sent.
 `StepRules.runFrame` proves the relation for a successful run of a frame.
 `StepRules.processMessage` turns it into a fact of every call and creation, by induction on the gas of the message.
@@ -1676,6 +1700,19 @@ From Hegotá a run fails as not yet specified, so there is no gas used to state.
 `prepareFirstFrame_of_applyAuthorizations_error` proves that an error of the authorizations is the error of the first frame.
 `prepareFirstFrame_of_value_eq_zero` gives the first frame of a call that moves no ether and applies no authorization.
 
+### Nonces within 64 bits
+
+EIP-2681 limits every nonce to `2^64 - 1`, and a nonce in EthLib is a natural number.
+`TransactionState.NoncesFit`, `BlockState.NoncesFit` and `State.NoncesFit` say that every account has a nonce of at most that bound; an absent account reads as nonce 0.
+`noncesFit_processMessage` and `noncesFit_processCreateMessage` (`Execution/Proofs/Evm/Call/NoncesFit.lean`) prove that every call and creation keeps the bound, at every fork.
+A creation needs its new address to start with a nonce below the bound.
+The new address of a creation sent by CREATE or CREATE2 has a nonce of at most 1, so it meets that condition.
+`noncesFit_processTransaction` (`Execution/Proofs/Transactions/NoncesFit.lean`) proves it for a transaction that passes its inclusion check.
+That check makes the nonce of the transaction equal that of its sender, and below the bound.
+`stateTransition_noncesFit` (`Execution/Proofs/Blocks/NoncesFit.lean`) proves that a block that passes its transition keeps the bound of the state before it.
+The bound on the state before the first block is a hypothesis: the genesis allocation must meet it.
+From Glamsterdam, `stateTransition_rebuild_nonce` turns the 64-bit nonces that the block access list rebuilds into the nonces after the block, with no loss.
+
 ### The supply of ether
 
 `Execution/Proofs/State/Supply.lean` defines the supply of a transaction state as the sum of the balances of all its accounts.
@@ -1920,6 +1957,28 @@ The caller gives the number of blobs of each transaction, and the check trusts i
 Together, `checkCells_eq_ok_iff` and `CellMask.count_le_count_of_subset` give that a response that passes has no more cells for each blob than the request asks for.
 No export calls the cells check, so no test of the bindings runs it.
 
+### Fork digests
+
+A peer names the fork of a response chunk, and of a gossip topic, by a fork digest of four bytes.
+`forkOfDigest` (`Consensus/ForkDigest.lean`) finds an epoch with the digest, and the receiver takes the fork at it.
+It searches the epochs at which the digest can change.
+These are epoch 0, the first epoch of each consensus fork, and, from Fulu, the first epoch of each blob schedule entry.
+
+`computeForkDigest_digestStart` and `Config.forkAtEpoch_digestStart` (`Consensus/Proofs/ForkDigest.lean`) state that the digest and the fork at each epoch are those at the latest of these epochs at or before it.
+`forkOfDigest_sound` states that an epoch that the search finds has the digest, with no hypothesis.
+`forkOfDigest_recovers` states that the search reads back the fork at which a digest was computed, at every epoch.
+It needs `digestsIdentify`, a check of the chain's configuration and genesis validators root.
+A digest is four bytes of a hash, so two forks of one chain could share one, and nothing rules this out in general.
+`digestsIdentify_sharedVersion` shows that the hypothesis is needed: on mainnet with Altair given the version of genesis, the check fails.
+There `forkOfDigest_sharedVersion_altair` shows that the search reads Phase 0 from the digest of Altair.
+The check depends only on the configuration and the genesis validators root, so a chain runs it once.
+It reads at most nine epochs, plus one for each entry of the blob schedule.
+It also reads the epoch of a fork left at the far future, which no message carries, so it can ask more than recovery needs.
+`bindings/python/tests/consensus/test_fork_digest.py` runs it on mainnet, Sepolia and Hoodi, with their configurations and genesis validators roots from pinned sources, and it holds on each.
+There the digest in a bootnode record of each chain reads back the fork that the record's next fork version implies.
+On mainnet the check reads the root from the pinned genesis state, so it runs only with the archives.
+`decodeResponseChunk_forkOfDigest` (`Consensus/Proofs/ReqResp/ResponseBounds.lean`) draws the consequence for req/resp: on a chain that passes the check, the receiver reads a chunk at the type of the sender's fork.
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
@@ -2043,10 +2102,28 @@ Otherwise it implies Assumption 2 when the validators that have left the committ
 With an honest one gone the two bounds are incomparable.
 The tally of the source still counts the votes of validators that have left the committees, so the proof bounds their stake.
 For a range with part of an epoch the assumption on the supporters stays.
-Like the paper, the theorem takes a static set of validators, Assumption 1.
+The paper assumes a static set of validators, Assumption 1.
+`StaticPair` (`Consensus/Proofs/ForkChoice/StaticValidators.lean`) states the part of it that the proofs use.
+It relates a reference state to each state that a store holds.
+No effective balance is above that of the reference, and each honest validator is active and not slashed in both states, with one effective balance.
+A Byzantine validator that is active and not slashed in the state is so in the reference too.
+`Models.Network.Execution.Static` asks it of every block state and checkpoint state of each honest store.
+No safety theorem takes it as a hypothesis yet.
+Under it the honest supporters of a node weigh the same in any two states that a store holds, such as those of the head and of the rule.
+The supporters of a node in such a state weigh at most its supporters in the reference.
+Both results need the registries of the states to stay within the limit of the preset.
+`StaticPair` does not cover the pulled-up state of the head, which the store does not hold, and it gives only an inclusion of the active Byzantine validators.
+So the agreement of shufflings and the total active balance need more than it.
 The honest support of the target of the current epoch takes the total active balance less the weight of the committees so far as the weight still to vote.
 No theorem proves that, which rests on the shuffling of the head and its pulled-up state agreeing on the active validators of the epoch.
 Each member of the committees must also be in the source of balances, or the rule fails; no theorem bounds the epochs between that source and the range.
+
+`Execution.equivocatingIndices_honest` (`Consensus/Proofs/ForkChoice/HonestEquivocators.lean`) proves, for the store of each honest validator in an execution of the network model, that no known equivocator is honest.
+It needs slots that last a positive time, and honest stores that start with no honest equivocator.
+A store built from an anchor starts with none, by `Store.getForkchoiceStore_equivocatingIndices`.
+In the model an honest validator signs a vote only after checking it against its own votes in its view.
+Each of its votes in a sent message stays in its view, so no two of them can be slashed together.
+`Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` restates `Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed` for such a store, without that assumption.
 
 `Store.parentVotersOf` in `Consensus/Proofs/ForkChoice/FastConfirmationSets.lean` names the committee members whose recorded votes the discount for empty slots counts.
 They are active and not slashed in the source of balances, are not known equivocators, and vote for the pending parent node or the parent payload node that the child builds on.
@@ -2055,6 +2132,7 @@ If the parent sits at an earlier slot than the child, both counted nodes are anc
 The ancestry needs only the two block reads and that local slot order, not `Reachable` or `ParentsBelow`.
 `le_honest_parentVotersOf_of_computeEmptySlotSupportDiscount` shows that the discount takes off at most the honest stake of these voters.
 It assumes Assumption 2 on the active members of the empty-slot committees, no honest known equivocator, aligned effective balances, and an increment divisible by 100 Gwei.
+In an execution of the network model, `Execution.equivocatingIndices_honest` gives the assumption on known equivocators for the store of an honest validator.
 These are store-local facts: no theorem here shows that a recorded honest vote is its voter's latest actual vote, or that it remains the recorded vote at a later store.
 
 `Consensus/Proofs/ForkChoice/FastConfirmationIndicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
@@ -2086,6 +2164,15 @@ They also leave out the check that the head of the slot before holds each block 
 They leave out the checks that a voting source or an unrealized justification is recent.
 They also leave out the calls to `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, whose tests `FastConfirmationIndicators.lean` states on their own.
 No theorem yet relates the list of stores to the stores of an honest validator in an execution.
+
+A safety argument moves ancestry facts from the store of one node to the store of another.
+`Store.getAncestor_transport_or_collision` and `Store.isAncestor_transport_or_collision` (`Consensus/Proofs/ForkChoice/SharedAncestry.lean`) do that for any two stores, at every fork.
+The second store must hold a block at each root that the walk of the first visits.
+For ancestry, the second store must also hold the root of the ancestor.
+The walk then gives the same result in both stores, or `Store.findBlockCollision`, run over a list of roots that holds the walk, names a root where the two stores hold different blocks.
+For two reachable stores, `Store.findBlockCollision_valid` shows that those two blocks differ and both have that root as their hash tree root.
+So the alternative is a collision of the hash tree root of blocks.
+No theorem yet shows that the store of an honest node holds those blocks.
 
 ### Balance-weighted draws
 
@@ -2706,6 +2793,17 @@ For one transition, `getBlockRootAtSlot_stateTransition_cases` shows that each r
 The other case is that the state before the transition hashes to the zero root, and the root is that of the latest header as it was.
 `getBlockRootAtSlot_stateTransition_of_lt` shows that the roots of older slots are those of the state before.
 
+`ChainRoots` (`Consensus/Proofs/Transition/ChainRoots.lean`) says where the checkpoints of a state point, for a chain given as a predicate on slots and roots.
+From an anchor slot on, each root that the state records is a root of the chain at its slot, and each checkpoint whose epoch starts above the anchor names a root of the chain at that start.
+A state with the invariant agrees with every chain from its own slot on (`ChainRoots.of_invariant`).
+A block keeps the agreement for the chain extended by its parent root, or, when the state before hashes to the zero root, by the root of its latest header (`ChainRoots.of_stateTransition`); slots with their upgrades keep it for the chain extended by the root of the header of the last state, and in the same zero case by the root of the first header (`ChainRoots.of_advanceSlotsAcross`).
+These theorems on blocks and slots, and those on runs below, assume that the buffer of roots covers two epochs.
+Along a run, the chain is the roots that the states of the run record (`ChainRoots.of_run`).
+`Run.finalized_le_currentJustified` then puts the finalized block at or before the current justified block, for a map from roots that orders the links of each state of the run, when the first state has the invariant and the finalized epoch starts after the first slot of the run.
+`Run.zeroPreimage_or_finalized_le_currentJustified` takes that order from `zeroPreimage_or_rootLinks_le_of_chainSteps`, so its only other case is a state between the first and the last state, by chain steps, that hashes to the zero root.
+Its order on block steps covers every path of chain steps between those states, not only the blocks of the run.
+This covers one chain; `accountable_safety` (`Consensus/Proofs/DirectSafety/Safety.lean`) treats two chains, and no theorem yet places the checkpoints of a fork-choice store.
+
 Without a collision of header roots, the pairs of consecutive slots order the roots by ancestry.
 `RootsAbove.of_chainStep` then keeps each justified checkpoint below every root that the state records from its epoch on, which gives the source block of each recent link in the chain of its target block.
 `slackJustifiedCheckpoints_chainRoot_of_chainSteps` (`FfgSlackActive.lean`) takes the roots themselves as the blocks of the model, ordered by the links of every state that genesis reaches (`ChainRoot`), so the order holds by construction and the step asks only the active stake.
@@ -2780,12 +2878,16 @@ With the state of a chain, `valid_iff_of_newPayloadOnChain` shows that the answe
 `of_newPayloadOnChain_some` adds that such a block passed the checks and the state transition, to that state.
 `newPayloadOnChain_of_stateTransition_ok` shows the converse for a block whose parent is the last block of the chain.
 
-The JSON decoders read back the hex encoding of any bytes (`bytesOf_hexString`, `Proofs/Json.lean`).
+The Engine API reads its base types with the readers that it shares with the execution JSON-RPC API.
+The readers live below the Execution layer, in `Serialization/JsonRpc.lean`, and their proofs in `Serialization/Proofs/JsonRpc.lean`.
+The readers read back the hex encoding of any bytes (`bytesOf_hexString`).
 An address decodes exactly from `0x` and two hex digits for each byte, in either case, whose lowercase forms encode the address (`address_eq_ok_iff_map_toLower`).
 A 64-bit number decodes to `x` exactly when the number read with the bound `2^64` is `x` (`uint64_eq_ok_iff`).
 The encoder of numbers writes the only text that decodes to the number, at any bound `2^bits` above it (`quantity_eq_ok_iff`).
 So two numbers never share an encoding (`quantityJson_inj`).
-A withdrawal, and a list of withdrawals, decode back from their encodings (`withdrawal_withdrawalJson`, `array_withdrawal_listJson`).
+The error object of JSON-RPC 2.0 reads back from what its writer writes, whatever its data, `null` included (`rpcErrorOfJson_json`).
+A withdrawal, and a list of withdrawals, decode back from their encodings (`withdrawal_withdrawalJson`, `array_withdrawal_listJson`, `Execution/Proofs/Rpc/Json.lean`).
+An input that a shared reader rejects is an invalid parameter of the Engine API, for the same reason (`liftM_error`, `liftM_eq_ok_iff`, `Engine/Proofs/Json.lean`).
 A payload of version 4 decodes exactly when it holds the fields of version 4 and each part decodes (`payloadV4_eq_ok_iff`).
 A field that appears at a fork decodes exactly when it is present from that fork on and absent before (`exists_since_iff`, `Proofs/ExecutionEngine.lean`).
 So a decoded payload takes a fork exactly when its version is that of the fork (`exists_atFork_iff_of_anyPayload`).
@@ -2815,6 +2917,38 @@ The consensus test vectors fix the answer of the execution layer, so none of the
 
 No payload build is specified, so `engine_getPayload` has no definition, and the export refuses payload attributes on a new valid head.
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
+
+### Beacon API
+
+The Beacon API is the HTTP interface of a consensus client, as release `v5.0.0-beta.0` of `ethereum/beacon-APIs` defines it.
+EthLib specifies the consensus version that its responses carry and their JSON encodings; it leaves out the transport.
+
+A response names the fork of its data by a consensus version, one name for each fork of the consensus layer.
+`ConsensusVersion.ofName?_name` and `ConsensusVersion.name_of_ofName?` (`Consensus/Proofs/ConsensusVersion.lean`) show that the reader accepts exactly the eight names of the schema, spelled exactly.
+`Fork.consensusVersion?_isSome_iff` shows that a fork has a version exactly from Phase 0 through Glamsterdam.
+`Fork.fork_le_of_consensusVersion?` and `Fork.le_consensusVersion?_of_fork_le` show that a fork of the execution layer or of the blob schedule has the version of the latest consensus fork before it.
+`Fork.consensusVersion?_forkVersion` shows that the version names the fork version of the fork, under every configuration.
+So the name that a response carries determines the fork version of its fork.
+`Fork.consensusVersion?_mono` shows that versions never move back along the timeline.
+The source names no version for Heze yet, so Hegotá has none until a release of the source names it.
+
+The data of a response is a value of the consensus layer, in the JSON mapping of SSZ.
+`ofApiJson_toApiJson` (`Consensus/Proofs/BeaconApi/Encoding.lean`) shows that the reader gives back every value that the writer writes, for every lawful type and every spelling of the byte alias.
+`toApiJson_total` shows that the writer never fails on a value of a lawful type whose spelling marks no byte alias.
+It rests on `jsonOf_opaque_ok` (`Serialization/Proofs/Ssz/Codec/JsonTotal.lean`): a well-formed SSZ type writes every value that it admits.
+`ApiEnvelope.ofJson_toJson` shows that an envelope reads back as written, and `readVersioned_envelope` that a response reads as its data under its version, whatever its other metadata.
+`readVersioned_version` shows that a response read under a version carries that exact name, so data of one fork never reads as data of another.
+`ofHex_uppercase` (`Serialization/Proofs/Ssz/Codec/JsonHexCase.lean`) shows that hex reads the same in uppercase, as the patterns of the source allow.
+`ofApiJson_uppercase` lifts it to a byte vector or a byte list read alone; a statement for every hex leaf of a document remains open.
+The error bodies read back as written (`ErrorMessage.ofJson_toJson`, `IndexedErrorMessage.ofJson_toJson`).
+
+Points that remain open:
+
+- The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
+- The source types the codes of the error bodies as JSON numbers; EthLib reads a number whose value is a natural number.
+- The source writes each integer leaf as a string, and its pattern for `Uint8` admits leading zeros; the JSON mapping of SSZ also reads a bare number, and refuses leading zeros.
+- EthLib gives participation flags the SSZ type of a byte list, which the JSON mapping writes as hex, while the API writes them as a list of decimal strings.
+- From Gloas, transactions and the block access list are progressive lists of one-byte integers, which the API writes as hex; the JSON of their containers needs its own spelling (#2076).
 
 ### What cannot be proved yet
 
@@ -3102,12 +3236,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 381 operations and 49 size constants.
-The Python extension calls 381 of the operations and 49 of the constants.
+Lean exports 386 operations and 49 size constants.
+The Python extension calls 386 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-9918 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1791), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (113), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (253), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1402), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (664), `x25519.c` (21), `xmss.c` (134).
+9982 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (1840), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (303), `engine.c` (113), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (253), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (80), `hmac.c` (102), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (102), `module.c` (1412), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (140), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (669), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

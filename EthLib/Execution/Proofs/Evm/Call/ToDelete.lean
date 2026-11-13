@@ -144,7 +144,7 @@ theorem stepRules_deletesCreated (hfork : .dencun ≤ fork) :
   tstore _ _ _ _ := .of_eq rfl rfl
   log _ hs hsub _ _ := .of_eq (by rw [hs]) (by rw [hsub])
   selfdestruct _ _ h := deletesCreated_finishSelfdestruct hfork h
-  incrementNonce _ _ _ h := .of_eq (TransactionState.createdAccounts_modifyState h) rfl
+  incrementNonce _ _ _ _ h := .of_eq (TransactionState.createdAccounts_modifyState h) rfl
   incorporate h := deletesCreated_incorporateChild h
 
 /-- From Cancun, every successful step of every frame keeps the relation.

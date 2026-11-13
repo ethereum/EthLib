@@ -141,7 +141,7 @@ theorem stepRules_noNewCode :
   tstore _ _ _ _ := ⟨rfl, fun _ h => h⟩
   log _ hs _ _ _ := by rw [hs]; exact NoNewCode.refl _
   selfdestruct _ _ h := noNewCode_finishSelfdestruct h
-  incrementNonce _ _ _ h := noNewCode_modifyState (fun _ _ hf => by cases hf; rfl) h
+  incrementNonce _ _ _ _ h := noNewCode_modifyState (fun _ _ hf => by cases hf; rfl) h
   incorporate h := by rw [state_incorporateChild]; exact h
 
 /-! ## The relation -/
@@ -218,7 +218,8 @@ theorem stepRules_createsFresh :
     tstore := fun evm address key value => conv (T.tstore evm address key value)
     log := fun log hs hsub hm hc => conv (T.log log hs hsub hm hc)
     selfdestruct := fun beneficiary refund h => conv (T.selfdestruct beneficiary refund h)
-    incrementNonce := fun evm address state h => conv (T.incrementNonce evm address state h)
+    incrementNonce := fun evm address state hn h =>
+      conv (T.incrementNonce evm address state hn h)
     incorporate := fun h => by rw [state_incorporateChild]; exact h }
 
 /-! ## Messages -/

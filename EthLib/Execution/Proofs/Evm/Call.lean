@@ -7,11 +7,13 @@ public import EthLib.Execution.Proofs.Evm.Call.Create
 public import EthLib.Execution.Proofs.Evm.Call.Delegation
 public import EthLib.Execution.Proofs.Evm.Call.Fresh
 public import EthLib.Execution.Proofs.Evm.Call.Instructions
+public import EthLib.Execution.Proofs.Evm.Call.LogWeight
 public import EthLib.Execution.Proofs.Evm.Call.Marks
 public import EthLib.Execution.Proofs.Evm.Call.MessageCall
 public import EthLib.Execution.Proofs.Evm.Call.MeterRules
 public import EthLib.Execution.Proofs.Evm.Call.MeterSteps
 public import EthLib.Execution.Proofs.Evm.Call.Nonce
+public import EthLib.Execution.Proofs.Evm.Call.NoncesFit
 public import EthLib.Execution.Proofs.Evm.Call.Parent
 public import EthLib.Execution.Proofs.Evm.Call.Reads
 public import EthLib.Execution.Proofs.Evm.Call.Rebuild

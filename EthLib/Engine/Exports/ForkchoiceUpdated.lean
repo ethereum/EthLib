@@ -45,14 +45,17 @@ open Lean (Json)
 open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Base.ChainConfig.Exports (configOfJson)
+open EthLib.Serialization.JsonRpc (dataJson fixed uint64)
 
 /-- One payload of the tree: its block hash, parent hash, validity, number and timestamp. -/
 def knownOfJson (j : Json) : Result (Hash32 × KnownPayload) := do
   let some valid := (j.getObjValAs? Bool "valid").toOption | throw (0, "tree: no validity")
   let hash (name : String) : Result Hash32 :=
-    (Json.fixed name 32 (j.getObjValD name)).mapError fun e => (0, s!"tree: {reprStr e}")
+    (fixed name 32 (j.getObjValD name)).mapError fun e =>
+      (0, s!"tree: {reprStr (EngineError.invalidParams e)}")
   let number (name : String) : Result UInt64 :=
-    (Json.uint64 name (j.getObjValD name)).mapError fun e => (0, s!"tree: {reprStr e}")
+    (uint64 name (j.getObjValD name)).mapError fun e =>
+      (0, s!"tree: {reprStr (EngineError.invalidParams e)}")
   return (← hash "blockHash",
     ⟨← hash "parentHash", valid, ← number "number", ← number "timestamp"⟩)
 
@@ -74,7 +77,8 @@ def forkchoiceUpdatedOf (args : PyValue × PyValue × PyValue × PyValue) : Resu
   let finalized := finalized.toJson
   -- The known finalized block is an input that the export reads itself, so its errors have code 0.
   let finalized : Option Hash32 ← if finalized.isNull then pure none else
-    some <$> (Json.fixed "finalized" 32 finalized).mapError fun e => (0, s!"finalized: {reprStr e}")
+    some <$> (fixed "finalized" 32 finalized).mapError fun e =>
+      (0, s!"finalized: {reprStr (EngineError.invalidParams e)}")
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
     | throw (0, "request: no method")
@@ -84,7 +88,7 @@ def forkchoiceUpdatedOf (args : PyValue × PyValue × PyValue × PyValue) : Resu
     answer.mapError fun e => (e.code, s!"engine error: {reprStr e}")
   -- Step 8: valid attributes on an applied valid head start a build, named by its ID.
   let id := match head, attributes with
-    | some h, some a => Engine.Json.dataJson (payloadId h a.2).toList
+    | some h, some a => dataJson (payloadId h a.2).toList
     | _, _ => .null
   let response := Json.mkObj [
     ("payloadStatus", statusJson status none),

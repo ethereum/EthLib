@@ -85,7 +85,7 @@ theorem stepRules_unmarked (address : Address) :
         · exact hne (Std.LawfulEqCmp.eq_of_compare heq)
         · exact hx hin
       · exact hx
-  incrementNonce _ _ _ _ := ⟨id, fun _ hx => hx⟩
+  incrementNonce _ _ _ _ _ := ⟨id, fun _ hx => hx⟩
   incorporate h := ⟨fun hne => by rw [message_incorporateChild]; exact hne,
     fun hne hx => unmarked_incorporateChild hx (h.2 hne hx)⟩
 

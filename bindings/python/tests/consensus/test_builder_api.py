@@ -16,14 +16,8 @@ from raising import raises
 ERROR = SszError
 # The examples of the builder specification, pinned in tests/sources.toml.
 EXAMPLES = Path(__file__).resolve().parents[4] / "tests/consensus/builder_api"
-# Each fork of the examples, with its name in Lean.
-FORKS = {
-    "bellatrix": "bellatrix",
-    "capella": "shapella",
-    "deneb": "dencun",
-    "electra": "pectra",
-    "fulu": "fusaka",
-}
+# The forks of the examples, by their consensus version names.
+VERSIONS = ["bellatrix", "capella", "deneb", "electra", "fulu"]
 # The offset of the value in a bid: 4 bytes per variable-size field before it.
 VALUE_AT = {"bellatrix": 4, "capella": 4, "deneb": 8, "electra": 12, "fulu": 12}
 ZERO = bytes(32)
@@ -100,7 +94,7 @@ def _sign(message_root: bytes, domain: bytes) -> bytes:
     return G2ProofOfPossession.Sign(SECRET_KEY, _sha(message_root + domain))
 
 
-@pytest.mark.parametrize("source", FORKS)
+@pytest.mark.parametrize("source", VERSIONS)
 @pytest.mark.parametrize(
     ("example", "name", "message"),
     [
@@ -110,25 +104,27 @@ def _sign(message_root: bytes, domain: bytes) -> bytes:
     ids=["bid", "blinded block"],
 )
 def test_example(source: str, example: str, name: str, message: str):
+    fork = consensus.consensus_version_fork(source)
     data = _example(source, example)
-    root, again = consensus.ssz_static("mainnet", FORKS[source], name, data)
+    root, again = consensus.ssz_static("mainnet", fork, name, data)
     assert again == data
     body, signature = _split(data)
-    assert root == _sha(_message_root(message, FORKS[source], body) + _signature_root(signature))
+    assert root == _sha(_message_root(message, fork, body) + _signature_root(signature))
 
 
 @pytest.mark.parametrize("source", ["bellatrix", "capella"])
 def test_bid_root(source: str):
     # Before Deneb a bid has three fields: the header, the value and the key.
     message, _ = _split(_example(source, "signed_builder_bid"))
+    fork = consensus.consensus_version_fork(source)
     (offset,) = struct.unpack_from("<I", message, 0)
-    header = _message_root("ExecutionPayloadHeader", FORKS[source], message[offset:])
+    header = _message_root("ExecutionPayloadHeader", fork, message[offset:])
     value, pubkey = message[4:36], message[36:84]
     expected = _merkleize([header, value, _pubkey_root(pubkey)])
-    assert _message_root("BuilderBid", FORKS[source], message) == expected
+    assert _message_root("BuilderBid", fork, message) == expected
 
 
-@pytest.mark.parametrize("source", FORKS)
+@pytest.mark.parametrize("source", VERSIONS)
 def test_bid_fields(source: str):
     # The fixture bytes agree with the JSON form, so the offsets of the helpers are right.
     message, _ = _split(_example(source, "signed_builder_bid"))
@@ -138,7 +134,7 @@ def test_bid_fields(source: str):
     assert "0x" + message[at + 32 : at + 80].hex() == expected["pubkey"]
 
 
-@pytest.mark.parametrize("source", FORKS)
+@pytest.mark.parametrize("source", VERSIONS)
 def test_blinded_block_fields(source: str):
     # The fixture bytes agree with the JSON form; the root test reads the same bytes in Lean.
     message, _ = _split(_example(source, "signed_blinded_beacon_block"))
@@ -178,8 +174,9 @@ def _registration(gas_limit: int = 36_000_000, version: bytes | None = None) -> 
     return message + _sign(_registration_root(message), _builder_domain(version))
 
 
-@pytest.mark.parametrize("fork", FORKS.values())
-def test_registration_signature(fork: str):
+@pytest.mark.parametrize("source", VERSIONS)
+def test_registration_signature(source: str):
+    fork = consensus.consensus_version_fork(source)
     # The domain reads only the genesis fork version, so one signature holds at every fork.
     assert consensus.is_valid_builder_signature(
         "mainnet", fork, "SignedValidatorRegistrationV1", _registration()
@@ -228,23 +225,23 @@ def _bid(source: str, pubkey: bytes = PUBKEY) -> bytes:
     message, _ = _split(_example(source, "signed_builder_bid"))
     at = VALUE_AT[source] + 32
     message = message[:at] + pubkey + message[at + 48 :]
-    root = _message_root("BuilderBid", FORKS[source], message)
+    root = _message_root("BuilderBid", consensus.consensus_version_fork(source), message)
     return struct.pack("<I", 4 + 96) + _sign(root, _builder_domain()) + message
 
 
-@pytest.mark.parametrize("source", FORKS)
+@pytest.mark.parametrize("source", VERSIONS)
 def test_bid_signature(source: str):
     assert consensus.is_valid_builder_signature(
-        "mainnet", FORKS[source], "SignedBuilderBid", _bid(source)
+        "mainnet", consensus.consensus_version_fork(source), "SignedBuilderBid", _bid(source)
     )
 
 
-@pytest.mark.parametrize("source", FORKS)
+@pytest.mark.parametrize("source", VERSIONS)
 def test_bid_signature_of_another_builder(source: str):
     # The message names another key than the one that signed it.
     other = G2ProofOfPossession.SkToPk(SECRET_KEY + 1)
     assert not consensus.is_valid_builder_signature(
-        "mainnet", FORKS[source], "SignedBuilderBid", _bid(source, other)
+        "mainnet", consensus.consensus_version_fork(source), "SignedBuilderBid", _bid(source, other)
     )
 
 
