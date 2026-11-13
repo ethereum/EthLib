@@ -66,21 +66,6 @@ private theorem capped_setValidatorAt {f : Fork} {s t : BeaconState preset f}
   · exact capped w old
   · exact bound
 
-private theorem processEffectiveBalanceUpdates_capped {f : Fork} {s t : BeaconState preset f}
-    (capped : ∀ v ∈ s.validators.data,
-      v.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset f v)
-    (ok : processEffectiveBalanceUpdates s = .ok t) :
-    ∀ v ∈ t.validators.data,
-      v.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset f v := by
-  unfold processEffectiveBalanceUpdates at ok
-  refine foldlM_ok_invariant (fun s => ∀ v ∈ s.validators.data,
-    v.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset f v) ?_ capped ok
-  intro before index after previous updated
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at updated
-  obtain ⟨v, found, balance, read, next, changed, set⟩ := updated
-  apply capped_setValidatorAt previous (v := { v with effectiveBalance := next }) _ set
-  exact updatedEffectiveBalance_le_largest (previous v (mem_of_getValidatorAt found)) changed
-
 private structure CapStep {f h : Fork} (s : BeaconState preset f)
     (t : BeaconState preset h) : Prop where
   capped : (∀ v ∈ s.validators.data,
@@ -830,25 +815,5 @@ theorem Run.effectiveBalance_capped {g x : ForkedBeaconState preset}
     ∀ v ∈ x.state.validators.data,
       v.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset x.fork v :=
   (CapStep.run run activation compounding early).capped genesis.effectiveBalance_capped
-
-/-- An existing validator's cap cannot decrease along a pre-Gloas run. -/
-theorem Run.validatorCap_mono {x y : ForkedBeaconState preset}
-    (run : Run config checks x y)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
-    (early : y.fork < .glamsterdam) (i : Nat) (v : Validator)
-    (found : x.state.validators.data[i]? = some v) :
-    ∃ w, y.state.validators.data[i]? = some w ∧
-      withdrawalMaxEffectiveBalance preset x.fork v ≤
-        withdrawalMaxEffectiveBalance preset y.fork w :=
-  (CapStep.run run activation compounding early).monotone i v found
-
-/-- The cap at an existing index cannot decrease during an epoch. -/
-theorem processEpoch_validatorCap_mono {f : Fork} {s t : BeaconState preset f}
-    (ok : processEpoch config checks s = .ok t)
-    (i : Nat) (v : Validator) (found : s.validators.data[i]? = some v) :
-    ∃ w, t.validators.data[i]? = some w ∧
-      withdrawalMaxEffectiveBalance preset f v ≤ withdrawalMaxEffectiveBalance preset f w :=
-  (CapStep.epoch ok).monotone i v found
 
 end EthLib.Consensus
