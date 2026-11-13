@@ -37,7 +37,7 @@ private theorem cohortCap_mono {n m : Nat} (le : n ≤ m) :
     Nat.le_trans (Nat.div_le_div_right le) (Nat.le_max_right _ _)⟩
 
 /-- Count validators whose selected epoch equals a finite cohort epoch. -/
-def validatorCohort (field : Validator → Epoch) (state : BeaconState preset fork)
+private def validatorCohort (field : Validator → Epoch) (state : BeaconState preset fork)
     (epoch : Epoch) : Nat :=
   state.validators.data.toList.countP fun v => field v == epoch
 
@@ -297,7 +297,7 @@ private theorem cohorts_effective (ok : processEffectiveBalanceUpdates state = .
   exact .setValidatorAt found set rfl
 
 /-- The next registry pass can only assign this activation epoch. -/
-def scheduledActivationEpoch (state : BeaconState preset fork) : Nat :=
+private def scheduledActivationEpoch (state : BeaconState preset fork) : Nat :=
   (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat
 
 /-- Non-genesis activation cohorts are bounded and precede the next registry pass. -/
