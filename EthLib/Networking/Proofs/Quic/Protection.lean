@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Quic.Protection
 public import EthLib.Cryptography.Proofs.Aes.Gcm
 public import EthLib.Cryptography.Proofs.ChaCha20Poly1305
+import EthLib.Base.Proofs.MapM
 
 /-!
 # Proofs: QUIC packet protection
@@ -305,11 +306,6 @@ theorem unprotect_protect (suite : CipherSuite) (keys : PacketKeys suite)
             rw [htext, htag, checkReservedBits_of_checkHeader hcheck, hcheck]
             rfl
 
-/-- An error map keeps success and its value. -/
-private theorem mapError_eq_ok {ε ε' α : Type} (f : ε → ε') (x : Except ε α) (a : α) :
-    x.mapError f = .ok a ↔ x = .ok a := by
-  cases x <;> simp [Except.mapError]
-
 /-- An AEAD failure comes before any header check, so reserved bits are read after it (§17.2). -/
 theorem unprotect_eq_error_of_decryptPayload (suite : CipherSuite) (keys : PacketKeys suite)
     (expected offset : Nat) (packet : ByteArray) (recovered : Unmasked) (number : PacketNumber)
@@ -338,7 +334,7 @@ theorem unprotect_ok_iff (suite : CipherSuite) (keys : PacketKeys suite)
         checkHeader suite recovered.header (recovered.ciphertext.size + recovered.tag.size) =
           .ok () ∧
         recovered.header = header := by
-  simp only [unprotect, bind_ok_iff, mapError_eq_ok]
+  simp only [unprotect, bind_ok_iff, mapError_ok_iff]
   constructor
   · rintro ⟨recovered, hr, number, hn, output, ho, u, hres, v, hu, hf⟩
     have hp : (recovered.header, output) = (header, plaintext) := Except.ok.inj hf
@@ -352,15 +348,6 @@ theorem unprotect_ok_iff (suite : CipherSuite) (keys : PacketKeys suite)
 theorem sample_eq_error_of_short (packet : ByteArray) (offset : Nat)
     (h : packet.size < offset + 20) : sample packet offset = .error .sample := by
   simp [sample, show ¬offset + 4 + 16 ≤ packet.size by omega]
-
-/-- An error map can only return a mapped error. -/
-private theorem mapError_eq_error {ε ε' α : Type} {f : ε → ε'} {x : Except ε α} {e : ε'}
-    (h : x.mapError f = .error e) : ∃ e', e = f e' := by
-  cases x with
-  | error a =>
-    simp only [Except.mapError, Except.error.injEq] at h
-    exact ⟨a, h.symm⟩
-  | ok a => simp [Except.mapError] at h
 
 private theorem ensure_eq_error {ε : Type} {c : Prop} [Decidable c] {e e' : ε}
     (h : ensure c e = .error e') : e' = e := by
@@ -407,10 +394,10 @@ private theorem decryptPayload_ne (suite : CipherSuite) (keys : PacketKeys suite
   intro h
   unfold decryptPayload at h
   split at h
-  · obtain ⟨e, he⟩ := mapError_eq_error h
+  · obtain ⟨e, -, he⟩ := Base.mapError_eq_error h
     cases he
   · split at h
-    · obtain ⟨e, he⟩ := mapError_eq_error h
+    · obtain ⟨e, -, he⟩ := Base.mapError_eq_error h
       cases he
     · cases h
 

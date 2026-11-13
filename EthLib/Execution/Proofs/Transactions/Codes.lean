@@ -302,13 +302,6 @@ private def NoMiss {α : Type} (r : Except EvmError α) : Prop :=
 private def NoMissRead {α : Type} (r : Except (EvmError × TransactionState) α) : Prop :=
   ∀ c read, r ≠ .error (.state (.missingCode c), read)
 
-/-- A failure after a change of error comes from a failure before it. -/
-private theorem mapError_eq_error {ε ε' α : Type} {f : ε → ε'} {x : Except ε α} {e : ε'}
-    (h : x.mapError f = .error e) : ∃ e', x = .error e' ∧ f e' = e := by
-  cases x with
-  | error e' => exact ⟨e', rfl, by cases h; rfl⟩
-  | ok a => cases h
-
 /-- The charge of an authorization on a state that holds every code has no missing code. -/
 private theorem noMiss_chargeAuthorization [LawfulGasMeter Meter] {done : Delegations Meter}
     {authority : Address} {auth : Authorization} (available : HasPreCodes done.state) :
@@ -360,12 +353,12 @@ private theorem noMissRead_applyAuthorization [LawfulGasMeter Meter] {chainId : 
         · cases h
         split at h
         · rcases Base.bind_eq_error h with h | ⟨d, -, h⟩
-          · obtain ⟨e, he, hee⟩ := mapError_eq_error h
+          · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
             cases hee
             refine noMiss_payAuthorization ?_ c he
             exact v
           · rcases Base.bind_eq_error h with h | ⟨⟨s, r⟩, -, h⟩
-            · obtain ⟨e, he, hee⟩ := mapError_eq_error h
+            · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
               cases hee
               unfold delegate at he
               rcases Base.bind_eq_error he with he | ⟨s1, -, he⟩
@@ -403,7 +396,7 @@ private theorem noMissRead_prepareFirstFrame [LawfulGasMeter Meter] {chainId : N
     split at h
     · split at h
       · rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
-        · obtain ⟨e, he, hee⟩ := mapError_eq_error h
+        · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
           cases hee
           cases LawfulGasMeter.chargeState_error he
         · cases h
@@ -428,7 +421,7 @@ private theorem noMissRead_prepareFirstFrame [LawfulGasMeter Meter] {chainId : N
       rcases Base.bind_eq_error h with h | ⟨m, -, h⟩
       · first
           | cases h
-          | (obtain ⟨e, he, hee⟩ := mapError_eq_error h
+          | (obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
              cases hee
              cases LawfulGasMeter.chargeState_error he)
       try dsimp only at h
@@ -445,7 +438,7 @@ private theorem noMissRead_prepareFirstFrame [LawfulGasMeter Meter] {chainId : N
           rcases Base.bind_eq_error h with h | ⟨m', -, h⟩
           · first
               | cases h
-              | (obtain ⟨e, he, hee⟩ := mapError_eq_error h
+              | (obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
                  cases hee
                  cases LawfulGasMeter.charge_error he)
           try dsimp only at h
@@ -524,10 +517,10 @@ private theorem noMiss_runTransaction [LawfulGasMeter Meter] {env : BlockEnviron
   · unfold messageTarget at h
     split at h
     · cases h
-    · obtain ⟨e, -, he⟩ := mapError_eq_error h
+    · obtain ⟨e, -, he⟩ := Base.mapError_eq_error h
       cases he
   rcases Base.bind_eq_error h with h | ⟨bought, hBought, h⟩
-  · obtain ⟨e, he, hee⟩ := mapError_eq_error h
+  · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
     unfold buyGas at he
     rcases Base.bind_eq_error he with he | ⟨mid, -, he⟩
@@ -546,7 +539,7 @@ private theorem noMiss_runTransaction [LawfulGasMeter Meter] {env : BlockEnviron
   rcases Base.bind_eq_error h with h | ⟨output, hOutput, h⟩
   · exact noMiss_processMessageCall vb c h
   rcases Base.bind_eq_error h with h | ⟨⟨settled, used⟩, -, h⟩
-  · obtain ⟨e, he, hee⟩ := mapError_eq_error h
+  · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
     unfold settleGas at he
     rcases Base.bind_eq_error he with he | ⟨mid, -, he⟩
@@ -558,7 +551,7 @@ private theorem noMiss_runTransaction [LawfulGasMeter Meter] {env : BlockEnviron
       · exact creditEther_ne_missingCode _ _ _ c he
     · cases he
   rcases Base.bind_eq_error h with h | ⟨deleted, -, h⟩
-  · obtain ⟨e, he, hee⟩ := mapError_eq_error h
+  · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
     exact deleteAccounts_ne_missingCode _ _ c he
   · cases h

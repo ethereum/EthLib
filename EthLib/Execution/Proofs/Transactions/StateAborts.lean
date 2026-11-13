@@ -36,13 +36,6 @@ variable {fork : Fork}
 private def Calm (e : EvmError) : Prop :=
   e.aborts = true → ∃ error, e = .state error
 
-/-- A failure after a change of error comes from a failure before it. -/
-private theorem mapError_eq_error {ε ε' α : Type} {f : ε → ε'} {x : Except ε α} {e : ε'}
-    (h : x.mapError f = .error e) : ∃ e', x = .error e' ∧ f e' = e := by
-  cases x with
-  | error e' => exact ⟨e', rfl, by cases h; rfl⟩
-  | ok a => cases h
-
 section Meter
 
 variable {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
@@ -73,7 +66,7 @@ private theorem calm_applyAuthorization {chainId : Nat} {done : Delegations Mete
     | split at h
   all_goals first
     | cases h
-    | (obtain ⟨e', he', hee⟩ := mapError_eq_error h
+    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
        simp only [Function.comp_apply, Prod.mk.injEq] at hee
        first
          | exact fun _ => ⟨e', hee.1.symm⟩
@@ -111,7 +104,7 @@ private theorem calm_prepareFirstFrame {chainId : Nat} {message : Message fork}
     | (cases h; done)
     | (cases h; nofun)
     | exact calm_foldlM_applyAuthorization h
-    | (obtain ⟨e', he', hee⟩ := mapError_eq_error h
+    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
        simp only [Prod.mk.injEq] at hee
        rw [← hee.1]
        first
