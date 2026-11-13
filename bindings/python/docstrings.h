@@ -839,8 +839,8 @@
 #define DOC_consensus_gossip_validation \
   "Validate the messages of a topic in turn, against the store of an anchor and later blocks."
 
-#define DOC_consensus_api_pool \
-  "Answer the requests to pool endpoints in turn, against the store of an anchor and later blocks."
+#define DOC_consensus_api_post \
+  "Answer the requests to pool and publish endpoints in turn."
 
 #define DOC_consensus_light_client_sync \
   "The headers of a sync, step by step, from a bootstrap for a trusted block root."

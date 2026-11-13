@@ -8857,12 +8857,11 @@
    "error_class": "ForkChoiceError",
    "docstring":
    "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nThe arguments are the names of the preset and the fork, the anchor state and the anchor block.\n\nThen come the later blocks, the finalized checkpoint or none, the topic and the messages.\n\nThen come replacements of values of the configuration, and whether the signature checks run.\n\nEvery topic is specified here up to Heze."},
-  {"summary":
-   "Answer the requests to pool endpoints in turn, against the store of an anchor and later blocks.",
+  {"summary": "Answer the requests to pool and publish endpoints in turn.",
    "signature":
-   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, requests: list[tuple[int, str, list[bytes]]], config: dict[str, Any] | None, verify: bool) -> list[list[tuple[int, str]]]",
-   "operation": "EthLib.Consensus.Exports.apiPoolExport",
-   "method": "consensus_api_pool",
+   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, requests: list[tuple[int, str, list[bytes]] | tuple[int, str, list[bytes], str | None]], config: dict[str, Any] | None, verify: bool) -> list[tuple[int, list[tuple[int, str]]]]",
+   "operation": "EthLib.Consensus.Exports.apiPostExport",
+   "method": "consensus_api_post",
    "errors":
    [{"type": "EthLib.Consensus.ForkChoiceError",
      "codes":
@@ -8921,7 +8920,7 @@
       {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "Answer the requests to pool endpoints in turn, against the store of an anchor and later blocks.\n\nThe arguments are the names of the preset and the fork, the anchor state and the anchor block.\n\nThen come the later blocks, the finalized checkpoint or none, and the requests.\n\nThen come replacements of values of the configuration, and whether the signature checks run.\n\nEach answer lists the position and the message of each item that failed."},
+   "Answer the requests to pool and publish endpoints in turn.\n\nThe arguments are the names of the preset and the fork, the anchor state and the anchor block.\n\nThen come the later blocks, the finalized checkpoint or none, and the requests.\n\nThen come replacements of values of the configuration, and whether the signature checks run.\n\nEach answer gives its status code, and the position and the message of each item that failed."},
   {"summary":
    "The headers of a sync, step by step, from a bootstrap for a trusted block root.",
    "signature":
