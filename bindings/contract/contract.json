@@ -2891,6 +2891,23 @@
    "error_class": "ConsensusError",
    "docstring":
    "The genesis that a genesis state gives, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state, and replacements or None.\n\nThe genesis version is the one of the configuration."},
+  {"summary": "The JSON response to a query on a state, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, state: bytes, query: str, epoch: int | None) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiStateQueryExport",
+   "method": "consensus_api_state_query",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response to a query on a state, as a `dict`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state, the query, and an epoch or None.\n\nThe response has the data, and the version where the endpoint gives one.\n\nA query on a state before the fork that adds its field has code 400."},
+  {"summary": "The SSZ body of the response to a query on a state, as `bytes`.",
+   "signature": "(name: str, fork: str, state: bytes, query: str) -> bytes",
+   "operation": "EthLib.Consensus.Exports.apiStateQuerySszExport",
+   "method": "consensus_api_state_query_ssz",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The SSZ body of the response to a query on a state, as `bytes`.\n\nThe arguments are the name, the fork, the SSZ bytes of the state and the query.\n\nOnly the queues, the lookahead and the builder fields have one.\n\nA query on a state before the fork that adds its field has code 400."},
   {"summary":
    "The answer to each query, against the store after the steps of a fork choice case.",
    "signature":
