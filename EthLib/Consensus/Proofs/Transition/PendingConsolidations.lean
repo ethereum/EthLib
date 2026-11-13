@@ -4,9 +4,9 @@ public import EthLib.Consensus.Proofs.Transition.Trace
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Genesis
 import EthLib.Consensus.Proofs.Transition.BalanceDrift
+import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.EpochPending
-import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 
 /-!
 # Pending consolidation sources and lifecycle
@@ -24,39 +24,6 @@ An assigned exit prevents a source from being queued twice, and slashing only de
 namespace EthLib.Consensus
 open Base
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
-
-/-- A new validator leaves the pending consolidations as they were. -/
-private theorem addValidatorToRegistry_pendingConsolidations {f : Fork}
-    {s t : BeaconState preset f} {pubkey : Cryptography.Bls.BLSPubkey} {credentials : Bytes32}
-    {amount : Gwei}
-    (ok : addValidatorToRegistry s pubkey credentials amount = .ok t) :
-    t.pendingConsolidations = s.pendingConsolidations := by
-  unfold addValidatorToRegistry at ok
-  split at ok
-  · simp only [addValidatorToRegistryAltair, bind_ok_iff, liftAccessor_ok,
-      pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := ok
-    rfl
-  · split at ok <;> cases ok
-    rfl
-
-/-- The pending deposits of an epoch leave the pending consolidations as they were. -/
-theorem processPendingDeposits_pendingConsolidations {f : Fork} {s t : BeaconState preset f}
-    {electra : .pectra ≤ f}
-    (ok : processPendingDeposits config checks s electra = .ok t) :
-    t.pendingConsolidations = s.pendingConsolidations := by
-  have deposit {a b : BeaconState preset f} {d : PendingDeposit}
-      (ok : applyPendingDeposit config checks a d = .ok b) :
-      b.pendingConsolidations = a.pendingConsolidations := by
-    rcases applyPendingDeposit_cases ok with rfl | ⟨_, raised⟩ | ⟨_, added⟩
-    · rfl
-    · obtain ⟨_, set⟩ := increaseBalance_ok raised
-      obtain ⟨_, rfl⟩ := setBalance_ok set
-      rfl
-    · exact addValidatorToRegistry_pendingConsolidations added
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, folded, rfl⟩ := processPendingDeposits_applied ok
-  exact foldlM_ok_invariant (fun b => b.pendingConsolidations = s.pendingConsolidations)
-    (fun _ _ _ prior step => (deposit step).trans prior) rfl folded
 
 def SamePendingQueue {f : Fork} (s t : BeaconState preset f) : Prop :=
   t.pendingConsolidations = s.pendingConsolidations
@@ -138,7 +105,7 @@ theorem EpochStage.Edge.samePendingQueue {f : Fork} {stage : EpochStage}
     · exact processPendingDeposits_pendingConsolidations edge
     · exact edge ▸ rfl
   case pendingConsolidations => exact absurd rfl other
-  case registry => exact (processRegistryUpdates_balances_eq_and_pendingConsolidations_eq edge).2
+  case registry => exact (processRegistryUpdates_kept edge).2
   case effectiveBalances =>
     show t.pendingConsolidations = s.pendingConsolidations
     rw [processEffectiveBalanceUpdates_frame edge]
@@ -687,7 +654,7 @@ private theorem registry (holds : PendingConsolidationInvariant config state)
     (ok : processRegistryUpdates config state = .ok after) :
     PendingConsolidationInvariant config after := by
   by_cases electra : .pectra ≤ fork
-  · apply holds.kept (processRegistryUpdates_balances_eq_and_pendingConsolidations_eq ok).2
+  · apply holds.kept (processRegistryUpdates_kept ok).2
       (registryLifecycle_processRegistryUpdates ok) (WithdrawalKept.registry electra ok)
     rw [show getCurrentEpoch after = getCurrentEpoch state from
       congrArg (computeEpochAtSlot preset) (frame_processRegistryUpdates ok).slot]

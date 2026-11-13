@@ -4,7 +4,6 @@ public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.Genesis
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 import EthLib.Consensus.Proofs.Transition.EpochPending
-import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 
 /-!
 # Activation before exit

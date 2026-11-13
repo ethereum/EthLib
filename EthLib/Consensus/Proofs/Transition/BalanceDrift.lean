@@ -3,7 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.Requests
-import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
+import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 
 /-!
 # Effective balances kept by block operations
@@ -200,50 +200,13 @@ theorem effectiveKept_registryElectra {f : Fork} {s t : BeaconState preset f}
   · exact effectiveKept_setValidatorAt found (liftAccessor_ok.mp ok) rfl
   · cases ok; exact effectiveKept_refl _
 
-private theorem effectiveKept_registryEntry {f : Fork} {s t : BeaconState preset f}
-    {index : Nat} (ok : updateRegistryEntry config s index = .ok t) : EffectiveKept s t := by
-  simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨v, found, queued, queue, marked, set, ok⟩ := ok
-  have same : queued.effectiveBalance = v.effectiveBalance := by
-    unfold queueForActivation at queue
-    split at queue
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at queue
-      obtain ⟨_, _, rfl⟩ := queue
-      rfl
-    · cases queue; rfl
-  have first := effectiveKept_setValidatorAt found set same
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, exited⟩ := ok
-    exact effectiveKept_trans first (effectiveKept_exit exited)
-      (Nat.le_of_eq (sameSizes_setValidatorAt set).1.symm)
-  · cases ok; exact first
-
-private theorem effectiveKept_activate {f : Fork} {s t : BeaconState preset f}
-    {index : ValidatorIndex} (ok : activateValidator s index = .ok t) : EffectiveKept s t := by
-  simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, found, _, _, set⟩ := ok
-  exact effectiveKept_setValidator found set rfl
-
 /-- Registry updates keep the effective balance of every validator. -/
 theorem effectiveKept_registry {f : Fork} {s t : BeaconState preset f}
     (ok : processRegistryUpdates config s = .ok t) : EffectiveKept s t := by
-  unfold processRegistryUpdates at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact effectiveKept_fold (fun _ _ _ => effectiveKept_registryElectra)
-      (fun _ _ _ ok => (frame_updateRegistryEntryElectra ok).registryGrows) ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, updated, activated⟩ := ok
-    exact effectiveKept_trans
-      (effectiveKept_fold (fun _ _ _ => effectiveKept_registryEntry)
-        (fun _ _ _ ok => (frame_updateRegistryEntry ok).registryGrows) updated)
-      (effectiveKept_fold (fun _ _ _ => effectiveKept_activate)
-        (fun _ _ _ ok => (frame_activateValidator ok).registryGrows) activated)
-      (foldlM_ok_invariant (fun t => s.validators.data.size ≤ t.validators.data.size)
-        (fun _ _ _ previous ok => previous.trans (frame_updateRegistryEntry ok).registryGrows)
-        (Nat.le_refl _) updated)
+  intro i inside
+  obtain ⟨_, found, _, same, _⟩ :=
+    (processRegistryUpdates_kept ok).1 i _ (Array.getElem?_eq_getElem inside)
+  simp [effectiveAt, found, same, Array.getElem?_eq_getElem inside]
 
 private theorem effectiveKept_excess {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {index : ValidatorIndex}
@@ -464,61 +427,6 @@ theorem initiateValidatorExit_balances_eq_and_pendingConsolidations_eq {f : Fork
     obtain ⟨_, rfl⟩ := setValidator_ok set
     exact ⟨rfl, rfl⟩
 
-/-- The registry updates write validators and the exit queue only.
-
-So they keep the balances and the pending consolidations. -/
-theorem processRegistryUpdates_balances_eq_and_pendingConsolidations_eq {f : Fork}
-    {s t : BeaconState preset f} (edge : processRegistryUpdates config s = .ok t) :
-    t.balances = s.balances ∧ t.pendingConsolidations = s.pendingConsolidations := by
-  let Kept (a b : BeaconState preset f) : Prop :=
-    b.balances = a.balances ∧ b.pendingConsolidations = a.pendingConsolidations
-  have trans {a b c : BeaconState preset f} (one : Kept a b) (two : Kept b c) : Kept a c :=
-    ⟨two.1.trans one.1, two.2.trans one.2⟩
-  have fold {α : Type} {step : BeaconState preset f → α → Except TransitionError _}
-      {xs : List α} {a b : BeaconState preset f}
-      (each : ∀ a x b, step a x = .ok b → Kept a b) (ok : xs.foldlM step a = .ok b) :
-      Kept a b :=
-    foldlM_ok_invariant (Kept a) (fun _ _ _ prior ok => trans prior (each _ _ _ ok)) ⟨rfl, rfl⟩ ok
-  have written {a b : BeaconState preset f} {position : Nat} {v : Validator}
-      (ok : a.setValidatorAt position v = .ok b) : Kept a b := by
-    obtain ⟨_, rfl⟩ := setValidatorAt_ok ok
-    exact ⟨rfl, rfl⟩
-  have exit {a b : BeaconState preset f} {index : ValidatorIndex}
-      (ok : initiateValidatorExit config a index = .ok b) : Kept a b :=
-    initiateValidatorExit_balances_eq_and_pendingConsolidations_eq ok
-  unfold processRegistryUpdates at edge
-  split at edge
-  · simp only [bind_ok_iff, liftAccessor_ok] at edge
-    obtain ⟨_, _, edge⟩ := edge
-    refine fold (fun _ _ _ ok => ?_) edge
-    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, set⟩ := ok
-      exact written set
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact exit exited
-    split at ok
-    · exact written (liftAccessor_ok.mp ok)
-    · cases ok; exact ⟨rfl, rfl⟩
-  simp only [bind_ok_iff] at edge
-  obtain ⟨_, updated, activated⟩ := edge
-  refine trans (fold (fun _ _ _ ok => ?_) updated) (fold (fun _ _ _ ok => ?_) activated)
-  · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, marked, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact trans (written marked) (exit exited)
-    · cases ok; exact written marked
-  · simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, set⟩ := ok
-    obtain ⟨_, rfl⟩ := setValidator_ok set
-    exact ⟨rfl, rfl⟩
-
 /-- The stages after the effective-balance update keep the validators and the balances. -/
 theorem balanceDrift_late {f : Fork} {s t : BeaconState preset f}
     (trace : EpochTrace (EpochStage.action config checks)
@@ -555,7 +463,7 @@ private theorem updateEffectiveBalance_funding {fork : Fork} {s t : BeaconState 
     have bound := updatedEffectiveBalance_le_max updated
     simpa [effectiveAt, actualBalanceAt, BeaconState.putValidator,
       Serialization.Ssz.RootedForkList.data_set, old, ← actual] using
-      (max_le bound (Nat.le_max_right validator.effectiveBalance.toNat balance.toNat))
+      (Nat.max_le.mpr ⟨bound, Nat.le_max_right validator.effectiveBalance.toNat balance.toNat⟩)
   · simp [effectiveAt, actualBalanceAt, BeaconState.putValidator,
       Serialization.Ssz.RootedForkList.data_set, Ne.symm same]
 
@@ -568,7 +476,7 @@ theorem processEffectiveBalanceUpdates_max_le {fork : Fork} {s t : BeaconState p
   exact foldlM_ok_invariant
     (fun t => max (effectiveAt ⟨fork, t⟩ i) (actualBalanceAt ⟨fork, t⟩ i) ≤
       max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i))
-    (fun _ _ _ previous step => (updateEffectiveBalance_funding step i).trans previous)
+    (fun _ _ _ previous step => Nat.le_trans (updateEffectiveBalance_funding step i) previous)
     (Nat.le_refl _) ok
 
 /-- A block keeps the effective balance of every existing validator.

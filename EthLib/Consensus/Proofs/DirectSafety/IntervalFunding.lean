@@ -1007,23 +1007,6 @@ private theorem deposit_bounds {fork : Fork} {s t : BeaconState preset fork}
     simpa only [early, ↓reduceIte, balanceCredits, balanceDebits, actualBalanceAt, site]
       using And.intro bounds.2 bounds.1.le
 
-private theorem balance_triangle {fork : Fork} (s u t : BeaconState preset fork)
-    (first : s.balances.data.size = u.balances.data.size)
-    (last : t.balances.data.size = u.balances.data.size) :
-    balanceCredits s t ≤ balanceCredits s u + balanceCredits u t ∧
-      balanceDebits s t ≤ balanceDebits s u + balanceDebits u t := by
-  constructor
-  · unfold balanceCredits
-    rw [last, ← Finset.sum_add_distrib]
-    apply Finset.sum_le_sum
-    intro i _
-    omega
-  · unfold balanceDebits
-    rw [first, ← Finset.sum_add_distrib]
-    apply Finset.sum_le_sum
-    intro i _
-    omega
-
 private theorem sync_bounds {fork : Fork} {s t : BeaconState preset fork}
     (altair : .altair ≤ fork) (aggregate : SyncAggregate preset)
     (ok : processSyncAggregate config checks s altair aggregate = .ok t) :
@@ -1058,7 +1041,7 @@ private theorem sync_bounds {fork : Fork} {s t : BeaconState preset fork}
           exact (sameSizes_increaseBalance last).2.trans (sameSizes_increaseBalance first).2
         · exact (sameSizes_decreaseBalance (liftAccessor_ok.mp one)).2
       have tail := ih u rest
-      have triangle := balance_triangle s u t sizes.symm tail.1
+      have triangle := And.intro (credits_triangle s u t tail.1) (debits_triangle s u t sizes.symm)
       refine ⟨tail.1.trans sizes, ?_, ?_⟩ <;>
         simp only [List.length_cons, Nat.add_mul, Nat.one_mul] <;>
         split_ifs at bounds <;> omega
@@ -1087,39 +1070,19 @@ private theorem slash_effective {fork : Fork} {s t : BeaconState preset fork}
     (ok : slashValidator config s index whistleblower = .ok t) :
     ∀ j, (getValidator t j).map Validator.effectiveBalance =
       (getValidator s j).map Validator.effectiveBalance := by
-  have set {s t : BeaconState preset fork} {i : ValidatorIndex} {v w : Validator}
-      (read : getValidator s i = .ok v) (ok : s.setValidator i w = .ok t)
-      (same : w.effectiveBalance = v.effectiveBalance) (j : ValidatorIndex) :
-      (getValidator t j).map Validator.effectiveBalance =
-        (getValidator s j).map Validator.effectiveBalance := by
-    by_cases h : j = i
-    · subst j
-      rw [getValidator_setValidator_self ok, read]
-      exact congrArg Except.ok same
-    · rw [getValidator_setValidator_of_ne ok h]
-  have exit {s t : BeaconState preset fork}
-      (ok : initiateValidatorExit config s index = .ok t) (j : ValidatorIndex) :
-      (getValidator t j).map Validator.effectiveBalance =
-        (getValidator s j).map Validator.effectiveBalance := by
-    obtain ⟨v, read, unchanged | ⟨_, queued, epoch, withdrawal, queue, _, changed⟩⟩ :=
-      initiateValidatorExit_ok ok
-    · rw [unchanged.2]
-    · have same := (exitQueue_validators queue).1
-      rw [set (v := v) (by rw [getValidator_of_validators_eq same]; exact read) changed rfl,
-        getValidator_of_validators_eq same]
-  obtain ⟨_, _, _, marked, _, _, slashings, _, _, _, _, last, exited, found, _, changed,
-    _, _, _, lowered, _, _, raised, paid, rfl⟩ := slashValidator_ok ok
   intro j
-  have middle := set found changed rfl
-  have endpoint : ∀ j, (getValidator last j).map Validator.effectiveBalance =
-      (getValidator s j).map Validator.effectiveBalance := by
-    intro j
-    rw [getValidator_of_validators_eq (increaseBalance_validators paid),
-      getValidator_of_validators_eq (increaseBalance_validators raised),
-      getValidator_of_validators_eq (decreaseBalance_validators lowered)]
-    change (getValidator marked j).map Validator.effectiveBalance = _
-    rw [middle j, exit exited j]
-  split <;> exact endpoint j
+  have size := (sameSizes_slashValidator ok).1
+  unfold getValidator
+  by_cases inside : j.toNat < s.validators.data.size
+  · have inside' : j.toNat < t.validators.data.size := size ▸ inside
+    have kept := effectiveKept_slash ok j.toNat inside
+    simp only [effectiveAt, Array.getElem?_eq_getElem inside, Array.getElem?_eq_getElem inside',
+      Option.map_some, Option.getD_some] at kept
+    simp only [Array.getElem?_eq_getElem inside, Array.getElem?_eq_getElem inside', Except.map,
+      UInt64.toNat_inj.mp kept]
+  · have outside : ¬j.toNat < t.validators.data.size := size ▸ inside
+    simp only [Array.getElem?_eq_none (Nat.le_of_not_gt inside),
+      Array.getElem?_eq_none (Nat.le_of_not_gt outside), Except.map]
 
 private theorem attester_slashing_bounds {fork : Fork} {s t : BeaconState preset fork}
     (sl : AttesterSlashing preset fork)
@@ -1159,7 +1122,8 @@ private theorem attester_slashing_bounds {fork : Fork} {s t : BeaconState preset
         · cases one
           exact ⟨by simp [balanceCredits], by simp [balanceDebits], rfl, fun _ => rfl⟩
       obtain ⟨credit, debit, limits, credits, debits, sizes⟩ := ih u flag' rest
-      have triangle := balance_triangle s u t oneFacts.2.2.1.symm sizes
+      have triangle :=
+        And.intro (credits_triangle s u t sizes) (debits_triangle s u t oneFacts.2.2.1.symm)
       refine ⟨v.effectiveBalance.toNat /
           (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat + credit,
         v.effectiveBalance.toNat /

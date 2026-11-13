@@ -3,7 +3,6 @@ module
 public import EthLib.Consensus.Proofs.Transition.EpochParticipation
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.Trace
-import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 import EthLib.Consensus.Proofs.Transition.Withdrawals
 
 /-!

@@ -2,7 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
-import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
+import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 
 /-!
 # Funding across an epoch
@@ -126,11 +126,11 @@ private theorem funding_same {fork : Fork} {s t : BeaconState preset fork}
 private theorem funding_registry {fork : Fork} {s t : BeaconState preset fork}
     (ok : processRegistryUpdates config s = .ok t) :
     fundedStake ⟨fork, t⟩ ≤ fundedStake ⟨fork, s⟩ := by
-  have kept := processRegistryUpdates_balances_eq_and_pendingConsolidations_eq ok
   have bound := funding_kept_prefix 0 (sameSizes_processRegistryUpdates ok).1
     (registryLifecycle_processRegistryUpdates ok) (frame_processRegistryUpdates ok).slot
-    kept.2 (effectiveKept_registry ok)
-    (by simp only [actualBalanceAt, kept.1, Nat.sub_self, Finset.sum_const_zero]
+    (processRegistryUpdates_kept ok).2 (effectiveKept_registry ok)
+    (by simp only [actualBalanceAt, processRegistryUpdates_balances ok, Nat.sub_self,
+          Finset.sum_const_zero]
         exact Nat.le_refl _)
   simpa using bound
 

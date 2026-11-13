@@ -84,7 +84,8 @@ theorem debits_decrease {fork : Fork} {s t : BeaconState preset fork}
         omega
       _ = amount.toNat := by simp [Finset.sum_ite_eq', inside]
 
-private theorem credits_triangle {fork : Fork} (s u t : BeaconState preset fork)
+/-- The credits from a first state to a third are at most those through a second state. -/
+theorem credits_triangle {fork : Fork} (s u t : BeaconState preset fork)
     (size : t.balances.data.size = u.balances.data.size) :
     balanceCredits s t ≤ balanceCredits s u + balanceCredits u t := by
   unfold balanceCredits
@@ -93,7 +94,8 @@ private theorem credits_triangle {fork : Fork} (s u t : BeaconState preset fork)
   intro i _
   omega
 
-private theorem debits_triangle {fork : Fork} (s u t : BeaconState preset fork)
+/-- The debits from a first state to a third are at most those through a second state. -/
+theorem debits_triangle {fork : Fork} (s u t : BeaconState preset fork)
     (size : s.balances.data.size = u.balances.data.size) :
     balanceDebits s t ≤ balanceDebits s u + balanceDebits u t := by
   unfold balanceDebits
