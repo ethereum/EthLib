@@ -310,7 +310,7 @@ private theorem mapError_eq_ok {ε ε' α : Type} (f : ε → ε') (x : Except �
     x.mapError f = .ok a ↔ x = .ok a := by
   cases x <;> simp [Except.mapError]
 
-/-- An AEAD failure is the result, before the checks of the authenticated header, RFC 9000 §17.2. -/
+/-- An AEAD failure comes before any header check, so reserved bits are read after it (§17.2). -/
 theorem unprotect_eq_error_of_decryptPayload (suite : CipherSuite) (keys : PacketKeys suite)
     (expected offset : Nat) (packet : ByteArray) (recovered : Unmasked) (number : PacketNumber)
     (error : Error) (hr : removeHeaderProtection suite keys.hp offset packet = .ok recovered)

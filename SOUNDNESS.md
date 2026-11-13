@@ -796,7 +796,8 @@ RFC 9001 §5.5 notes that a long delay can break that reconstruction, and authen
 
 The decoder checks reserved bits only after authentication, and checks a long header's Length against the isolated payload.
 `unprotect_eq_error_of_decryptPayload` proves that an AEAD failure is reported before the checks of the authenticated header.
-Nonzero reserved bits in an authenticated header give their own error, since RFC 9000 §§17.2 and 17.3.1 make them a connection error; the other failures are discards.
+Nonzero reserved bits in an authenticated header give their own error, since RFC 9000 §§17.2 and 17.3.1 make them a connection error.
+The other failures reject only this packet.
 `unprotect_eq_reservedBits_iff` proves that this error comes only from a packet whose payload authenticates.
 Initial packets require AES-128-GCM, as RFC 9001 §5 specifies.
 The Python suite compares complete packets and Retry tags with RFC 9001 Appendices A.2 to A.5.

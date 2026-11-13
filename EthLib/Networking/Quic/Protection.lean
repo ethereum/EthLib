@@ -161,9 +161,9 @@ def checkAuthenticatedHeader (header : ByteArray) : Except Error Unit :=
     ensure (first &&& 0x40 != 0 ∧ first &&& reserved = 0) .header
   else .error .header
 
-/-- Reject nonzero reserved bits in an authenticated version 1 header, RFC 9000 §§17.2, 17.3.1.
+/-- Reject reserved bits, mask 0x0c long or 0x18 short, in an authenticated header (§§17.2, 17.3.1).
 
-A header without the fixed bit is not a version 1 packet, and the header checks discard it. -/
+The header checks then reject a header that is not a protected version 1 packet. -/
 def checkReservedBits (header : ByteArray) : Except Error Unit :=
   if h : 0 < header.size then
     let first := header[0]
@@ -233,7 +233,9 @@ The expected number is one greater than the largest authenticated number, or zer
 
 Nonzero reserved bits in an authenticated header give their own error, before the other checks.
 
-RFC 9000 §§17.2 and 17.3.1 make them a connection error, while the other failures are discards. -/
+RFC 9000 §§17.2 and 17.3.1 make nonzero reserved bits a connection error.
+
+The other failures reject only this packet. -/
 def unprotect (suite : CipherSuite) (keys : PacketKeys suite) (expected : Nat)
     (offset : Nat) (packet : ByteArray) : Except Error (ByteArray × ByteArray) := do
   let recovered ← removeHeaderProtection suite keys.hp offset packet
@@ -241,6 +243,7 @@ def unprotect (suite : CipherSuite) (keys : PacketKeys suite) (expected : Nat)
   let plaintext ← decryptPayload suite keys number recovered.header
     recovered.ciphertext recovered.tag
   checkReservedBits recovered.header
+  -- Only the reserved-bit check may report its own error after authentication.
   (checkHeader suite recovered.header (recovered.ciphertext.size + recovered.tag.size)).mapError
     fun _ => .header
   return (recovered.header, plaintext)
