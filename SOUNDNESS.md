@@ -3387,6 +3387,9 @@ The cap that a proposer sets on the execution payment limits how much of it coun
 
 From Deneb to Fulu, a builder reveals the payload with a blobs bundle: the blobs, their commitments and their proofs.
 `BuilderBlobsBundle.names_nodup` and `ExecutionPayloadAndBlobsBundle.names_nodup` (`Consensus/Proofs/Containers/BuilderApi.lean`) give both containers distinct field names, so they decode back from their bytes when the logs bloom has a byte.
+The response is the payload alone before Deneb and the payload with its bundle from Deneb, one type that the fork chooses.
+`RevealedPayload.deserialize_of_deneb` and `RevealedPayload.deserialize_of_not_deneb` (`Consensus/Proofs/Containers/BuilderApi.lean`) show that its bytes decode as the form of the fork.
+`RevealedPayload.executionPayload_ofBundle` and `RevealedPayload.executionPayload_ofPayload` show that the payload taken from a decoded form is the payload of that form.
 From Fulu the Fulu builder document bounds the proofs by `FIELD_ELEMENTS_PER_EXT_BLOB * MAX_BLOB_COMMITMENTS_PER_BLOCK`, 2^25 in the mainnet preset.
 A bundle holds at most `MAX_BLOB_COMMITMENTS_PER_BLOCK` blobs, so it needs at most `CELLS_PER_EXT_BLOB * MAX_BLOB_COMMITMENTS_PER_BLOCK` cell proofs, 2^19, and the bound is 64 times larger.
 EthLib keeps the bound as written: it admits bundles with more proofs than any blob needs, and it sets the depth of the Merkle tree of the proofs.

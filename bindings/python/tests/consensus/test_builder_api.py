@@ -451,6 +451,24 @@ def test_unblind_example_pair(source: str):
     assert consensus.unblind_signed_blinded_block("mainnet", fork, blinded, revealed) is None
 
 
+@pytest.mark.parametrize(
+    ("source", "other", "message"),
+    [
+        ("deneb", "capella", "firstOffset 8 1309511375"),
+        ("capella", "deneb", "firstOffset 512 1"),
+    ],
+    ids=["payload alone at deneb", "bundle at capella"],
+)
+def test_unblind_payload_of_another_form(source: str, other: str, message: str):
+    # The fork chooses the form of the payload, and the other form does not decode.
+    fork = consensus.consensus_version_fork(source)
+    blinded = _example(source, "signed_blinded_beacon_block")
+    revealed = _example(other, REVEALED[other])
+    with raises(ERROR, f"payload rejected: EthLib.Serialization.Ssz.Err.{message}") as info:
+        consensus.unblind_signed_blinded_block("mainnet", fork, blinded, revealed)
+    assert info.value.code == 7
+
+
 def test_unblind_changed_payload():
     # One bit of the block hash changes the header, so the payload no longer matches.
     blinded = _matching_blinded("deneb")

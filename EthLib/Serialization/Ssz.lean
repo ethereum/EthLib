@@ -21,6 +21,7 @@ public import EthLib.Serialization.Ssz.Merkle.Verify
 public import EthLib.Serialization.Ssz.Merkle.Branch
 public import EthLib.Serialization.Ssz.Typed.Class
 public import EthLib.Serialization.Ssz.Typed.Basic
+public import EthLib.Serialization.Ssz.Typed.Choice
 public import EthLib.Serialization.Ssz.Typed.Collections
 public import EthLib.Serialization.Ssz.Typed.Container
 public import EthLib.Serialization.Ssz.Typed.ForkKind
