@@ -130,7 +130,7 @@ private theorem applyDeposit {key : BLSPubkey} {credentials : Bytes32} {amount :
     {signature : BLSSignature}
     (ok : Consensus.applyDeposit config checks state key credentials amount signature =
       .ok after) : SameSyncCommittees state after := by
-  rcases applyDeposit_fork_cases ok with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨_, ok⟩
+  rcases applyDeposit_cases ok with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, ok⟩
   · exact .refl _
   · exact ⟨rfl, rfl⟩
   · exact (addValidatorToRegistry added).trans ⟨rfl, rfl⟩

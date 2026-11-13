@@ -465,9 +465,6 @@ private theorem addInclusionReward_exists_le {total : Gwei}
   obtain ⟨raised, raisedOk⟩ := addDelta_exists_ok (amount := proposerReward preset base) proposer
     (by have := fits attestation.proposerIndex.toNat; omega)
   have raisedEntry := addDelta_getD raisedOk
-  have subOk : subChecked base (proposerReward preset base) =
-      .ok (base - proposerReward preset base) := by
-    simp only [subChecked, shareLe, ↓reduceIte]
   have rest : ((base - proposerReward preset base) / attestation.inclusionDelay).toNat ≤
       base.toNat - (proposerReward preset base).toNat := by
     rw [UInt64.toNat_div, UInt64.toNat_sub_of_le _ _ shareLe]
@@ -480,11 +477,12 @@ private theorem addInclusionReward_exists_le {total : Gwei}
       have := fits index.toNat
       by_cases same : attestation.proposerIndex.toNat = index.toNat <;>
         simp only [same, ↓reduceIte] <;> omega)
-  have ensured : ensure (attestation.inclusionDelay ≠ 0) TransitionError.zeroInclusionDelay =
-      .ok () := ensure_ok_iff.mpr delayed
+  have attesterOk : inclusionAttesterReward preset base attestation.inclusionDelay =
+      .ok ((base - proposerReward preset base) / attestation.inclusionDelay) :=
+    inclusionAttesterReward_ok_iff.mpr ⟨delayed, rfl⟩
   refine ⟨next, ?_, by rw [addDelta_size nextOk, addDelta_size raisedOk], fun j => ?_⟩
-  · simp only [addInclusionReward, found, liftAccessor, based, raisedOk, liftArith, subOk,
-      ensured, nextOk, Except.mapError, bind, Except.bind]
+  · simp only [addInclusionReward, found, liftAccessor, based, raisedOk, attesterOk, nextOk,
+      Except.mapError, bind, Except.bind]
   · rw [addDelta_getD nextOk, raisedEntry]
     by_cases first : attestation.proposerIndex.toNat = j <;>
       by_cases second : index.toNat = j <;> simp only [first, second, ↓reduceIte] <;> omega

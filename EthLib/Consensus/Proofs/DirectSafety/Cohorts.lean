@@ -213,7 +213,10 @@ private theorem cohorts_deposit (early : fork < .pectra) {before : fork < .hegot
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok ok
   refine (CohortsKept.of_data (s := state)
     (t := { state with eth1DepositIndex := fun _ => next }) rfl).trans ?_
-  rcases applyDeposit_cases early applied with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+  rcases applyDeposit_cases applied with rfl | ⟨electra, _⟩ | ⟨_, applied⟩
+  · exact .refl _
+  · exact absurd electra (Nat.not_le_of_lt early)
+  rcases applyPendingDeposit_cases applied with rfl | ⟨_, raised⟩ | ⟨_, added⟩
   · exact .refl _
   · exact .increaseBalance raised
   · exact cohorts_admit added

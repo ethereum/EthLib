@@ -72,18 +72,6 @@ private theorem kept_exit {index : ValidatorIndex}
   · rfl
   · exact (kept_setValidator set).trans (kept_exitQueue queue)
 
-theorem depositCarry_processSlot (ok : processSlot s = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok ok
-  rfl
-
-private theorem kept_justification {u : BeaconState preset fork}
-    (ok : processJustificationAndFinalization s = .ok u) : Kept s u := by
-  obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok ok
-  · rfl
-  · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
-    rw [← rest]
-
 /-- The epoch steps keep the deposit balance to consume. -/
 theorem depositCarryLaws : EpochStepLaws (fork := fork) (preset := preset)
     fun s t => t.depositBalanceToConsume = s.depositBalanceToConsume where
@@ -109,35 +97,15 @@ theorem depositCarryLaws : EpochStepLaws (fork := fork) (preset := preset)
 theorem EpochStage.Edge.depositCarry {stage : EpochStage}
     (edge : EpochStage.Edge config checks stage s t) (other : stage ≠ .pendingDeposits) :
     t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  have laws := depositCarryLaws (preset := preset) (fork := fork)
+  by_cases ordinary : stage ≠ .justification ∧ stage ≠ .payments ∧ stage ≠ .participation ∧
+      stage ≠ .pendingDeposits
+  · exact depositCarryLaws.epochEdge ordinary (EpochStage.action_cases.mpr edge)
+  -- The laws leave out justification, the payments and the rotation of the flags.
   cases stage
+  case justification | payments | participation =>
+    exact (edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩).2.2.2.1
   case pendingDeposits => exact absurd rfl other
-  case rewards => exact laws.processRewardsAndPenalties edge
-  case registry => exact laws.processRegistryUpdates edge
-  case slashings => exact laws.processSlashings edge
-  case effectiveBalances => exact laws.processEffectiveBalanceUpdates edge
-  case pendingConsolidations =>
-    simp only [EpochStage.Edge] at edge
-    split at edge
-    · exact laws.processPendingConsolidations edge
-    · exact edge ▸ rfl
-  all_goals exact (edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩).2.2.2.1
-
-/-- The six stages before the pending deposits keep the deposit balance to consume. -/
-theorem depositCarry_beforePending {altair : .altair ≤ fork} {before : fork < .hegota}
-    {justified scored rewarded registered slashed reset : BeaconState preset fork}
-    (justifiedOk : processJustificationAndFinalization s = .ok justified)
-    (scoredOk : processInactivityUpdates config justified altair = .ok scored)
-    (rewardedOk : processRewardsAndPenalties config scored = .ok rewarded)
-    (registeredOk : processRegistryUpdates config rewarded = .ok registered)
-    (slashedOk : processSlashings registered = .ok slashed)
-    (resetOk : processEth1DataReset before slashed = .ok reset) :
-    reset.depositBalanceToConsume = s.depositBalanceToConsume := by
-  have laws := depositCarryLaws (preset := preset) (fork := fork)
-  rw [laws.processEth1DataReset resetOk, laws.processSlashings slashedOk,
-    laws.processRegistryUpdates registeredOk, laws.processRewardsAndPenalties rewardedOk,
-    laws.processInactivityUpdates scoredOk]
-  exact kept_justification justifiedOk
+  all_goals exact absurd ⟨nofun, nofun, nofun, nofun⟩ ordinary
 
 private theorem kept_excess {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (ok : queueExcessActiveBalance s electra index = .ok t) : Kept s t := by
@@ -200,13 +168,13 @@ private theorem kept_upgradeNext {s : ForkedBeaconState preset}
 theorem depositCarry_processUpgrades {s t : ForkedBeaconState preset}
     (ok : processUpgrades config checks s = .ok t) (early : t.fork < .glamsterdam) :
     (if h : .pectra ≤ t.fork then (t.state.depositBalanceToConsume h).toNat else 0) =
-      (if h : .pectra ≤ s.fork then (s.state.depositBalanceToConsume h).toNat else 0) := by
-  fun_induction processUpgrades config checks s generalizing t with
-  | case1 s due ih =>
-    obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
-    exact (ih next rest early).trans (kept_upgradeNext nextOk
-      (Nat.lt_of_le_of_lt (processUpgrades_fork_le rest) early))
-  | case2 s notDue => cases ok; rfl
+      (if h : .pectra ≤ s.fork then (s.state.depositBalanceToConsume h).toNat else 0) :=
+  processUpgrades_induction (property := fun u => u.fork < .glamsterdam →
+      (if h : .pectra ≤ u.fork then (u.state.depositBalanceToConsume h).toNat else 0) =
+        (if h : .pectra ≤ s.fork then (s.state.depositBalanceToConsume h).toNat else 0))
+    (fun {_ post} held nextOk later =>
+      (kept_upgradeNext nextOk later).trans (held (Nat.lt_trans post.property later)))
+    (fun _ => rfl) ok early
 
 private theorem kept_slash {index : ValidatorIndex} {whistleblower : Option ValidatorIndex}
     (ok : slashValidator config s index whistleblower = .ok t) : Kept s t := by
@@ -283,7 +251,7 @@ private theorem kept_applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {
     {signature : BLSSignature}
     (ok : applyDeposit config checks s pubkey credentials amount signature = .ok t) :
     Kept s t := by
-  rcases applyDeposit_fork_cases ok with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨_, ok⟩
+  rcases applyDeposit_cases ok with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, ok⟩
   · rfl
   · rfl
   · have same := kept_addValidator added
@@ -295,29 +263,10 @@ private theorem kept_applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {
 
 private theorem kept_withdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) : Kept s t := by
-  have partialWithdrawal {s t : BeaconState preset fork} {index : ValidatorIndex} {v : Validator}
-      {amount owed : Gwei}
-      (ok : requestPartialWithdrawal config s electra index v amount owed = .ok t) :
-      Kept s t := by
-    simp only [requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at ok
-    obtain ⟨_, _, _, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok, Except.ok.injEq] at ok
-      obtain ⟨⟨_, _⟩, churned, _, _, _, _, rfl⟩ := ok
-      simp only [computeExitEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at churned
-      obtain ⟨_, _, _, _, _, _, churned⟩ := churned
-      cases churned
-      rfl
-    · cases ok; rfl
-  unfold processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; rfl)
-    | exact kept_exit (liftAccessor_ok.mp ok)
-    | exact partialWithdrawal ok
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · rfl
+  · exact kept_exit exited
+  · exact (requestPartialWithdrawal_kept withdrawn).2.2.2
 
 private theorem kept_consolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
@@ -400,7 +349,7 @@ private theorem kept_withdrawals {capella : .shapella ≤ fork}
 
 /-- Before Gloas, a block keeps the deposit carry.
 
-The block is read through master's decomposition.
+The block is read step by step.
 
 A block frame does not carry the deposit carry.
 

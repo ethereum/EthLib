@@ -1123,6 +1123,89 @@ def api_payload_envelope_ssz(
     )
 
 
+# A light client update that a node knows: its period, the name of its fork and its SSZ bytes.
+KnownUpdate: TypeAlias = tuple[int, str, bytes]
+
+
+def api_light_client_bootstrap(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    root: bytes,
+    config: dict[str, Any] | None = None,
+    *,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API light client bootstrap of a block of the store, or ForkChoiceError."""
+    # The configuration replaces values of the named one for the bootstrap, not the fork choice.
+    # A block that the store lacks, or whose bootstrap cannot be built, raises code 404.
+    return _native.consensus_api_light_client_bootstrap(
+        name, fork, anchor_state, anchor_block, steps, verify, config, root
+    )
+
+
+def api_light_client_bootstrap_ssz(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    root: bytes,
+    config: dict[str, Any] | None = None,
+    *,
+    verify: bool = True,
+) -> bytes:
+    """The Beacon API SSZ body of the light client bootstrap of a block, or ForkChoiceError."""
+    return _native.consensus_api_light_client_bootstrap_ssz(
+        name, fork, anchor_state, anchor_block, steps, verify, config, root
+    )
+
+
+def api_light_client_updates(
+    name: str,
+    known: Sequence[KnownUpdate],
+    start_period: int,
+    count: int,
+    config: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """The Beacon API light client updates of a range of periods, as JSON, or ConsensusError."""
+    return _native.consensus_api_light_client_updates(
+        name, config, list(known), start_period, count
+    )
+
+
+def api_light_client_updates_ssz(
+    name: str,
+    genesis_validators_root: bytes,
+    known: Sequence[KnownUpdate],
+    start_period: int,
+    count: int,
+    config: dict[str, Any] | None = None,
+) -> bytes:
+    """The Beacon API SSZ body of the light client updates of a range, or ConsensusError."""
+    return _native.consensus_api_light_client_updates_ssz(
+        name, config, genesis_validators_root, list(known), start_period, count
+    )
+
+
+def api_light_client_decode_updates(
+    name: str, genesis_validators_root: bytes, data: bytes, config: dict[str, Any] | None = None
+) -> list[tuple[str, bytes]]:
+    """The fork name and the SSZ bytes of each update of an SSZ updates body, or ConsensusError."""
+    return _native.consensus_api_light_client_decode_updates(
+        name, config, genesis_validators_root, data
+    )
+
+
+def api_light_client_latest(
+    name: str, fork: str, kind: Literal["finality", "optimistic"], update: bytes | None
+) -> dict[str, Any]:
+    """The Beacon API latest finality or optimistic update, or ConsensusError with code 404."""
+    return _native.consensus_api_light_client_latest(name, fork, kind, update)
+
+
 def api_attestation_data(
     name: str,
     fork: str,
@@ -1182,6 +1265,45 @@ def api_payload_attestation_data(
     )
 
 
+def api_fork_choice(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    *,
+    optimistic_roots: Sequence[bytes] = (),
+    config: dict[str, Any] | None = None,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API fork choice debug response of a store, or ForkChoiceError."""
+    # The store is built from the steps of a fork choice case, with its own config if it has one.
+    # The response has one node per block and payload status; before Gloas each node is "full".
+    # A store whose tree cannot be read raises code 500.
+    return _native.consensus_api_fork_choice(
+        name, fork, anchor_state, anchor_block, steps, verify, list(optimistic_roots), config
+    )
+
+
+def api_chain_heads(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    *,
+    optimistic_roots: Sequence[bytes] = (),
+    config: dict[str, Any] | None = None,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API chain heads: the leaves of the fork choice tree, or ForkChoiceError."""
+    # The store is built from the steps of a fork choice case, with its own config if it has one.
+    # Each leaf appears once by its block root; a store that cannot be read raises code 500.
+    return _native.consensus_api_chain_heads(
+        name, fork, anchor_state, anchor_block, steps, verify, list(optimistic_roots), config
+    )
+
+
 def api_aggregate_attestation(
     name: str,
     fork: str,
@@ -1229,6 +1351,51 @@ def api_sync_committee_contribution(
     return _native.consensus_api_sync_committee_contribution(
         name, fork, state, list(messages), list(optimistic_roots), slot, subcommittee_index, root
     )
+
+
+def api_attestation_rewards(
+    name: str,
+    fork: str,
+    state: bytes,
+    epoch: int,
+    *,
+    ids: Sequence[str] = (),
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The Beacon API attestation rewards of an epoch, read from a state, or ConsensusError."""
+    # The state answers for its previous epoch; another epoch, or the first one, raises code 404.
+    # The identifiers are indices or public keys as the API writes them; none names every validator.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    return _native.consensus_api_attestation_rewards(name, fork, state, config, epoch, list(ids))
+
+
+def api_sync_committee_rewards(
+    name: str,
+    fork: str,
+    state: bytes,
+    aggregate: bytes,
+    *,
+    ids: Sequence[str] = (),
+) -> dict[str, Any]:
+    """The Beacon API sync committee rewards of a block, or ConsensusError."""
+    # The state is the one the sync aggregate step reads; a state before Altair raises code 400.
+    # The identifiers are indices or public keys as the API writes them; none names every member.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    return _native.consensus_api_sync_committee_rewards(name, fork, state, aggregate, list(ids))
+
+
+def api_block_rewards(
+    name: str,
+    fork: str,
+    state: bytes,
+    block: bytes,
+    *,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The Beacon API rewards of the proposer of a signed block, or ConsensusError."""
+    # The state is the one at the slot of the block, before it; a failure raises code 500.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    return _native.consensus_api_block_rewards(name, fork, state, block, config)
 
 
 def api_duties(
@@ -1938,10 +2105,22 @@ __all__ = [
     "api_columns_ssz",
     "api_payload_envelope",
     "api_payload_envelope_ssz",
+    "api_light_client_bootstrap",
+    "api_light_client_bootstrap_ssz",
+    "api_light_client_decode_updates",
+    "api_light_client_latest",
+    "api_light_client_updates",
+    "api_light_client_updates_ssz",
+    "KnownUpdate",
     "api_attestation_data",
     "api_payload_attestation_data",
+    "api_fork_choice",
+    "api_chain_heads",
     "api_aggregate_attestation",
     "api_sync_committee_contribution",
+    "api_attestation_rewards",
+    "api_sync_committee_rewards",
+    "api_block_rewards",
     "api_duties",
     "api_committees",
     "api_sync_committees",

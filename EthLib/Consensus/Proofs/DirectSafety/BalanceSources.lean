@@ -43,7 +43,8 @@ def balanceDebits {fork : Fork} (s t : BeaconState preset fork) : Nat :=
   ∑ i ∈ Finset.range s.balances.data.size,
     (actualBalanceAt ⟨fork, s⟩ i - actualBalanceAt ⟨fork, t⟩ i)
 
-private theorem credits_increase {fork : Fork} {s t : BeaconState preset fork}
+/-- Raising one balance credits exactly the amount and debits nothing. -/
+theorem credits_increase {fork : Fork} {s t : BeaconState preset fork}
     {i : ValidatorIndex} {amount : Gwei}
     (ok : increaseBalance s i amount = .ok t) :
     balanceCredits s t = amount.toNat ∧ balanceDebits s t = 0 := by
@@ -60,7 +61,8 @@ private theorem credits_increase {fork : Fork} {s t : BeaconState preset fork}
         s.balances.data.size := by simp [BeaconState.putBalance]
   simp [balanceCredits, balanceDebits, size, point, Finset.sum_ite_eq', inside]
 
-private theorem debits_decrease {fork : Fork} {s t : BeaconState preset fork}
+/-- Lowering one balance credits nothing and debits at most the amount. -/
+theorem debits_decrease {fork : Fork} {s t : BeaconState preset fork}
     {i : ValidatorIndex} {amount : Gwei}
     (ok : decreaseBalance s i amount = .ok t) :
     balanceCredits s t = 0 ∧ balanceDebits s t ≤ amount.toNat := by
@@ -88,7 +90,8 @@ private theorem debits_decrease {fork : Fork} {s t : BeaconState preset fork}
         omega
       _ = amount.toNat := by simp [Finset.sum_ite_eq', inside]
 
-private theorem credits_triangle {fork : Fork} (s u t : BeaconState preset fork)
+/-- The credits from a first state to a third are at most those through a second state. -/
+theorem credits_triangle {fork : Fork} (s u t : BeaconState preset fork)
     (size : t.balances.data.size = u.balances.data.size) :
     balanceCredits s t ≤ balanceCredits s u + balanceCredits u t := by
   unfold balanceCredits
@@ -97,7 +100,8 @@ private theorem credits_triangle {fork : Fork} (s u t : BeaconState preset fork)
   intro i _
   omega
 
-private theorem debits_triangle {fork : Fork} (s u t : BeaconState preset fork)
+/-- The debits from a first state to a third are at most those through a second state. -/
+theorem debits_triangle {fork : Fork} (s u t : BeaconState preset fork)
     (size : s.balances.data.size = u.balances.data.size) :
     balanceDebits s t ≤ balanceDebits s u + balanceDebits u t := by
   unfold balanceDebits

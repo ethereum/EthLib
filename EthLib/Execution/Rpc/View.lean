@@ -62,6 +62,8 @@ structure BlockRecord where
   receipts : List (UInt8 × Receipt fork)
   /-- The logs of its transactions, in order. -/
   logs : List Log
+  /-- The retained block access list, or none when it is unavailable or pruned. -/
+  accessList : Option BlockAccessList := none
 
 /-- The block as a recent block of a chain: its fork, its header and its ommers. -/
 def BlockRecord.recent (r : BlockRecord) : RecentBlock :=
@@ -89,6 +91,10 @@ structure ChainView where
   pending : Option BlockRecord := none
   /-- The network ID of the node. -/
   networkId : Nat
+  /-- The genesis hash and timestamp, when the node has that fork-ID context. -/
+  genesis : Option (Hash32 × Nat) := none
+  /-- `FORK_NEXT_VALUE` of EIP-3675, the block that stands for Paris in the fork ID, if set. -/
+  mergeForkBlock : Option Nat := none
 
 namespace ChainView
 
@@ -110,13 +116,14 @@ def chainAt (v : ChainView) (i : Nat) (h : i < v.canonical.length) : BlockChain 
 
 /-- A record that the state transition gives: its block, run on a chain, gives its state.
 
-The body gives its receipts and its logs.
+The body gives its receipts, its logs and any retained block access list.
 
 When the seal is not checked, the proof of work is left out. -/
 def Follows (chain : BlockChain) (checkSeal : Bool) (r : BlockRecord) : Prop :=
   stateTransition chain r.block checkSeal = .ok r.state ∧
     ∃ result, runBody chain r.block = .ok result ∧
-      result.output.receipts = r.receipts ∧ result.output.logs = r.logs
+      result.output.receipts = r.receipts ∧ result.output.logs = r.logs ∧
+      ∀ bal, r.accessList = some bal → bal = result.output.body.builder.build
 
 /-- A view that the state transition gives, from its lowest block on.
 

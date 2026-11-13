@@ -68,7 +68,7 @@ inductive QuietStep (config : Config) (checks : SignatureChecks) (index : Nat)
       QuietStep config checks index key state after
 
 /-- A slot that ends no epoch keeps the registry, the balances and the scores. -/
-private theorem advanceSlot_quiet (ok : advanceSlot config checks state = .ok after)
+theorem advanceSlot_quiet (ok : advanceSlot config checks state = .ok after)
     (inside : (state.slot + 1) % preset.SLOTS_PER_EPOCH ≠ 0) :
     after.validators = state.validators ∧ after.balances = state.balances ∧
       after.inactivityScores = state.inactivityScores := by

@@ -6,7 +6,7 @@ public import EthLib.Consensus.Proofs.Transition.SyncAggregate
 /-!
 # Funding across a block
 
-Before Gloas and from Electra, a block conserves the funded stake and the deposit carry.
+Before Gloas, a block conserves the funded stake and the deposit carry.
 
 The exception is the credits recorded by its replay.
 -/
@@ -22,19 +22,16 @@ noncomputable section
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 private theorem funding_block_change {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (life : RegistryLifecycle s t)
+    (life : RegistryLifecycle s t)
     (size : t.validators.data.size = s.validators.data.size) (matched : BalancesMatch t)
     (slot : t.slot = s.slot) (effective : EffectiveKept s t)
-    (pending : ∀ i, (t.pendingConsolidations electra).data.toList.any
-      (fun c => c.sourceIndex.toNat == i) = true →
-      (s.pendingConsolidations electra).data.toList.any
-        (fun c => c.sourceIndex.toNat == i) = true ∨
+    (pending : ∀ i, (fundingSources t).any (fun c => c.sourceIndex.toNat == i) = true →
+      (fundingSources s).any (fun c => c.sourceIndex.toNat == i) = true ∨
       ∃ v, s.validators.data[i]? = some v ∧
         (isActiveValidator v (getCurrentEpoch s) = true ∨ getCurrentEpoch s < v.activationEpoch)) :
     fundedStake ⟨fork, t⟩ ≤ fundedStake ⟨fork, s⟩ + balanceCredits s t := by
-  rw [← funding_potential_eq t electra, ← funding_potential_eq s electra]
-  have bound := funding_potential_change (t.pendingConsolidations electra).data.toList
-    (s.pendingConsolidations electra).data.toList
+  rw [← fundingPotential_eq t, ← fundingPotential_eq s]
+  have bound := fundingPotential_change (fundingSources t) (fundingSources s)
     (fun i => actualBalanceAt ⟨fork, t⟩ i - actualBalanceAt ⟨fork, s⟩ i)
     size life (by simp [getCurrentEpoch, slot]) pending (fun i => by
       by_cases inside : i < s.validators.data.size
@@ -53,17 +50,24 @@ private theorem funding_block_change {fork : Fork} {s t : BeaconState preset for
   · intros; exact Nat.zero_le _
 
 private theorem funding_block_kept {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (life : RegistryLifecycle s t)
+    (life : RegistryLifecycle s t)
     (size : t.validators.data.size = s.validators.data.size) (matched : BalancesMatch t)
     (slot : t.slot = s.slot) (effective : EffectiveKept s t)
-    (queue : SamePendingQueue s t) :
+    (sources : fundingSources t = fundingSources s) :
     fundedStake ⟨fork, t⟩ ≤ fundedStake ⟨fork, s⟩ + balanceCredits s t := by
-  apply funding_block_change electra life size matched slot effective
+  apply funding_block_change life size matched slot effective
   intro i pending
-  exact Or.inl (by simpa only [show t.pendingConsolidations = s.pendingConsolidations from
-    queue] using pending)
+  exact Or.inl (sources ▸ pending)
 
--- A validated request adds only an already active source to pending support.
+/-- A step that keeps the pending consolidations from Electra keeps the funding sources. -/
+private theorem funding_sources_kept {fork : Fork} {s t : BeaconState preset fork}
+    (queue : .pectra ≤ fork → SamePendingQueue s t) : fundingSources t = fundingSources s := by
+  unfold fundingSources
+  split
+  · rename_i electra
+    rw [show t.pendingConsolidations = s.pendingConsolidations from queue electra]
+  · rfl
+
 private theorem funding_request_support {fork : Fork} {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : ConsolidationRequest}
     (ok : processConsolidationRequest config s electra request = .ok t) :
@@ -121,25 +125,60 @@ private theorem funding_request_support {fork : Fork} {s t : BeaconState preset 
     | exact queued (getElem?_toNat_of_ofNatChecked (by assumption))
         (by clear ok; simp_all) ok
 
+/-- From Electra a block deposit only queues, so it keeps the funding.
+
+Before Electra it raises the funding by at most the balance it credits. -/
 private theorem funding_block_deposit {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (matched : BalancesMatch s)
-    {before : fork < .hegota} {deposit : Deposit}
+    (matched : BalancesMatch s) {before : fork < .hegota} {deposit : Deposit}
     (ok : processDeposit config checks before s deposit = .ok t) :
-    fundedStake ⟨fork, t⟩ ≤ fundedStake ⟨fork, s⟩ := by
-  rw [← funding_potential_eq t electra, ← funding_potential_eq s electra]
-  rw [SamePendingQueue.deposit electra ok]
+    fundedStake ⟨fork, t⟩ ≤ fundedStake ⟨fork, s⟩ +
+      if .pectra ≤ fork then 0 else balanceCredits s t := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok ok
-  rcases applyDeposit_fork_cases applied with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨early, _⟩
-  · exact Nat.le_refl _
-  · exact Nat.le_refl _
-  · have bound := funding_registration (s.pendingConsolidations electra).data.toList
-      (s := {s with eth1DepositIndex := fun _ => next}) matched added
-    convert bound using 1 <;>
-      simp [funding_potential, getCurrentEpoch, effectiveAt, actualBalanceAt] <;> rfl
-  · exact absurd electra (Nat.not_le_of_lt early)
+  let site := { s with eth1DepositIndex := fun _ => next }
+  have siteMatched : BalancesMatch site := matched
+  change applyDeposit config checks site _ _ _ _ = .ok t at applied
+  change fundedStake ⟨fork, t⟩ ≤ fundedStake ⟨fork, site⟩ +
+    if .pectra ≤ fork then 0 else balanceCredits site t
+  rcases applyDeposit_cases applied with rfl | ⟨electra, _, _, rfl | added, rfl⟩ | ⟨early, applied⟩
+  · exact Nat.le_add_right _ _
+  · exact Nat.le_add_right _ _
+  · have queue := SamePendingQueue.deposit electra ok
+    rw [← fundingPotential_eq, ← fundingPotential_eq, funding_sources_kept (fun _ => queue)]
+    simp only [electra, ↓reduceIte, Nat.add_zero]
+    exact funding_registration (fundingSources s) siteMatched added
+  have notElectra : ¬ .pectra ≤ fork := Nat.not_le_of_lt early
+  simp only [notElectra, ↓reduceIte]
+  rcases applyPendingDeposit_cases applied with rfl | ⟨index, raised⟩ | ⟨_, added⟩
+  · exact Nat.le_add_right _ _
+  · have registry := increaseBalance_validators raised
+    exact funding_block_kept (.increaseBalance raised) (congrArg (·.data.size) registry)
+      ((frame_increaseBalance raised).balancesMatch siteMatched) (frame_increaseBalance raised).slot
+      (effectiveKept_data (congrArg (·.data) registry))
+      (funding_sources_kept fun electra => absurd electra notElectra)
+  · -- A new validator adds its balance, which is the last term of the credits.
+    obtain ⟨_, balances⟩ := addValidatorToRegistry_push added siteMatched
+    have bound := funding_registration [] siteMatched added
+    have empty (u : BeaconState preset fork) : fundingSources u = [] := by
+      simp [fundingSources, notElectra]
+    rw [← fundingPotential_eq, ← fundingPotential_eq, empty, empty]
+    apply bound.trans
+    apply Nat.add_le_add_left
+    have size : site.balances.data.size < t.balances.data.size := by simp [balances]
+    have last : actualBalanceAt ⟨fork, t⟩ site.balances.data.size = deposit.data.amount.toNat := by
+      simp [actualBalanceAt, balances]
+    have absent : actualBalanceAt ⟨fork, site⟩ site.balances.data.size = 0 := by
+      simp [actualBalanceAt]
+    unfold balanceCredits
+    calc deposit.data.amount.toNat
+        = actualBalanceAt ⟨fork, t⟩ site.balances.data.size -
+            actualBalanceAt ⟨fork, site⟩ site.balances.data.size := by omega
+      _ ≤ _ := Finset.single_le_sum
+        (f := fun i => actualBalanceAt ⟨fork, t⟩ i - actualBalanceAt ⟨fork, site⟩ i)
+        (fun _ _ => Nat.zero_le _) (Finset.mem_range.mpr size)
 
 private def funding_block_cost (event : BalanceEvent preset) : Nat :=
-  if event.source = .deposits ∨ event.source = .consolidations then 0 else event.credits
+  if (event.source = .deposits ∧ .pectra ≤ event.before.fork) ∨ event.source = .consolidations
+  then 0 else event.credits
 
 private theorem funding_block_cost_le {events : List (BalanceEvent preset)}
     (bounded : EventsBounded events) :
@@ -149,19 +188,20 @@ private theorem funding_block_cost_le {events : List (BalanceEvent preset)}
   | cons e rest ih =>
     have bound := (bounded e (by simp)).1
     have one : funding_block_cost e ≤ fundingCredit e := by
-      cases source : e.source <;> simp_all [funding_block_cost, fundingCredit]
+      cases source : e.source <;> simp only [funding_block_cost, fundingCredit, source] <;>
+        split <;> simp_all
     simpa only [List.map_cons, List.sum_cons] using Nat.add_le_add one
       (ih (fun x h => bounded x (by simp [h])))
 
 private theorem funding_block_same {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (matched : BalancesMatch t)
+    (matched : BalancesMatch t)
     (life : RegistryLifecycle s t) (size : t.validators.data.size = s.validators.data.size)
     (slot : t.slot = s.slot) (effective : EffectiveKept s t)
-    (queue : SamePendingQueue s t) (balances : t.balances = s.balances) :
+    (queue : .pectra ≤ fork → SamePendingQueue s t) (balances : t.balances = s.balances) :
     fundedStake ⟨fork, t⟩ ≤ fundedStake ⟨fork, s⟩ := by
   simpa only [balanceCredits, actualBalanceAt, balances, Nat.sub_self,
     Finset.sum_const_zero, Nat.add_zero] using
-    funding_block_kept electra life size matched slot effective queue
+    funding_block_kept life size matched slot effective (funding_sources_kept queue)
 
 private def FundingReplay {fork : Fork} (s : BeaconState preset fork)
     (post : BalanceReplay preset fork) : Prop :=
@@ -175,7 +215,8 @@ private theorem funding_block_record {fork : Fork} {s : BeaconState preset fork}
     (preserves : ∀ a b, action a = .ok b → BalancesMatch a → BalancesMatch b)
     (bound : ∀ a b, BalancesMatch a → action a = .ok b →
       fundedStake ⟨fork, b⟩ ≤ fundedStake ⟨fork, a⟩ +
-        if source = .deposits ∨ source = .consolidations then 0 else balanceCredits a b)
+        if (source = .deposits ∧ .pectra ≤ fork) ∨ source = .consolidations then 0
+        else balanceCredits a b)
     (initial : FundingReplay s pre)
     (ok : recordBalance source limits action pre = .ok post) : FundingReplay s post := by
   simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
@@ -200,13 +241,11 @@ private theorem funding_block_carry {fork : Fork} {s : BeaconState preset fork}
   exact ⟨preserves _ _ actionOk initial.1, (bound _ _ initial.1 actionOk).trans initial.2⟩
 
 private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (early : fork < .glamsterdam)
     (matched : BalancesMatch s) (engine : ExecutionEngine preset fork)
     (block : BeaconBlock preset fork) {post : BalanceReplay preset fork}
     (ok : blockBalanceReplay (config := config) (checks := checks)
       early engine s block = .ok post) : FundingReplay s post := by
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
-  have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) electra
   have record {pre post : BalanceReplay preset fork} {source : BalanceSource}
       {limits : BeaconState preset fork → Except TransitionError (Nat × Nat)}
       {action : BeaconState preset fork → Except TransitionError (BeaconState preset fork)}
@@ -215,50 +254,70 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
       (life : ∀ a b, action a = .ok b → RegistryLifecycle a b)
       (size : ∀ a b, action a = .ok b → b.validators.data.size = a.validators.data.size)
       (effective : ∀ a b, action a = .ok b → EffectiveKept a b)
-      (queue : ∀ a b, action a = .ok b → SamePendingQueue a b)
+      (queue : ∀ a b, action a = .ok b → .pectra ≤ fork → SamePendingQueue a b)
       (initial : FundingReplay s pre)
       (ok : recordBalance source limits action pre = .ok post) : FundingReplay s post := by
     apply funding_block_record (fun a b ok => (frame a b ok).balancesMatch) _ initial ok
     intro a b matched ok
-    simp only [notDeposit, notTransfer, or_self, ↓reduceIte]
-    exact funding_block_kept electra (life a b ok) (size a b ok)
+    simp only [notDeposit, notTransfer, false_and, or_self, ↓reduceIte]
+    exact funding_block_kept (life a b ok) (size a b ok)
       ((frame a b ok).balancesMatch matched) (frame a b ok).slot
-      (effective a b ok) (queue a b ok)
+      (effective a b ok) (funding_sources_kept (queue a b ok))
   have carry {pre post : BalanceReplay preset fork}
       {action : BeaconState preset fork → Except TransitionError (BeaconState preset fork)}
       (frame : ∀ a b, action a = .ok b → Frame a b)
       (life : ∀ a b, action a = .ok b → RegistryLifecycle a b)
       (size : ∀ a b, action a = .ok b → b.validators.data.size = a.validators.data.size)
       (effective : ∀ a b, action a = .ok b → EffectiveKept a b)
-      (queue : ∀ a b, action a = .ok b → SamePendingQueue a b)
+      (queue : ∀ a b, action a = .ok b → .pectra ≤ fork → SamePendingQueue a b)
       (balances : ∀ a b, action a = .ok b → b.balances = a.balances)
       (initial : FundingReplay s pre) (ok : carryBalance action pre = .ok post) :
       FundingReplay s post := by
     apply funding_block_carry (fun a b ok => (frame a b ok).balancesMatch) _ initial ok
     intro a b matched ok
-    exact funding_block_same electra ((frame a b ok).balancesMatch matched)
+    exact funding_block_same ((frame a b ok).balancesMatch matched)
       (life a b ok) (size a b ok) (frame a b ok).slot
       (effective a b ok) (queue a b ok) (balances a b ok)
+  -- A pass that runs only from some fork binds its result, or the input before that fork.
+  have passOk {c : Prop} [Decidable c] {α : Type} {a : c → Except TransitionError α}
+      {b : ¬c → Except TransitionError α}
+      {f : α → Except TransitionError (BalanceReplay preset fork)}
+      (ok : (if h : c then a h >>= f else b h >>= f) = .ok post) :
+      ∃ x, (if h : c then a h else b h) = .ok x ∧ f x = .ok post := by
+    split at ok
+    · rename_i h
+      obtain ⟨x, first, rest⟩ := bind_ok_iff.mp ok
+      exact ⟨x, by simpa only [h, ↓reduceDIte] using first, rest⟩
+    · rename_i h
+      obtain ⟨x, first, rest⟩ := bind_ok_iff.mp ok
+      exact ⟨x, by simpa only [h, ↓reduceDIte] using first, rest⟩
   unfold blockBalanceReplay at ok
-  simp only [bellatrix, electra, altair, ↓reduceDIte, bind_ok_iff] at ok
-  obtain ⟨headed, headerOk, executed, executionOk, randao, randaoOk, voted, votedOk,
-    expected, _, _, _, proposed, proposedOk, attested, attestedOk, rewarded, rewardedOk,
-    deposited, depositOk, exited, exitOk, changed, changedOk, deposits, depositRequestOk,
-    withdrawals, withdrawalOk, requested, consolidations, synced⟩ := ok
+  obtain ⟨headed, headerOk, ok⟩ := bind_ok_iff.mp ok
+  obtain ⟨executed, executionOk, ok⟩ := passOk ok
+  simp only [bind_ok_iff] at ok
+  obtain ⟨randao, randaoOk, voted, votedOk, expected, _, _, _, proposed, proposedOk, attested,
+    attestedOk, rewarded, rewardedOk, deposited, depositOk, exited, exitOk, changed, changedOk,
+    ok⟩ := ok
   have headedBound : FundingReplay s headed := by
     apply carry (fun _ _ ok => (frame_processBlockHeader ok).toFrame)
       (fun _ _ ok => registryLifecycle_processBlockHeader ok)
       (fun _ _ ok => (sameSizes_processBlockHeader ok).1)
       (fun _ _ ok => by obtain ⟨_, _, rfl⟩ := processBlockHeader_eq ok; exact effectiveKept_refl _)
-      (fun _ _ ok => by obtain ⟨_, _, rfl⟩ := processBlockHeader_eq ok; rfl)
+      (fun _ _ ok _ => by obtain ⟨_, _, rfl⟩ := processBlockHeader_eq ok; rfl)
       (fun _ _ ok => by obtain ⟨_, _, rfl⟩ := processBlockHeader_eq ok; rfl)
       ⟨matched, by simp⟩ headerOk
-  have executedBound := record (by decide) (by decide)
-    (fun _ _ ok => (frame_processBlockExecution ok).toFrame)
-    (fun _ _ ok => .of_data (congrArg (·.data) (processBlockExecution_validators ok)))
-    (fun _ _ ok => congrArg (·.data.size) (processBlockExecution_validators ok))
-    (fun _ _ ok => effectiveKept_data (congrArg (·.data) (processBlockExecution_validators ok)))
-    (fun _ _ ok => SamePendingQueue.blockExecution early ok) headedBound executionOk
+  -- The execution part runs from Bellatrix on.
+  have executedBound : FundingReplay s executed := by
+    split at executionOk
+    · exact record (by decide) (by decide)
+        (fun _ _ ok => (frame_processBlockExecution ok).toFrame)
+        (fun _ _ ok => .of_data (congrArg (·.data) (processBlockExecution_validators ok)))
+        (fun _ _ ok => congrArg (·.data.size) (processBlockExecution_validators ok))
+        (fun _ _ ok => effectiveKept_data
+          (congrArg (·.data) (processBlockExecution_validators ok)))
+        (fun _ _ ok _ => SamePendingQueue.blockExecution early ok) headedBound executionOk
+    · cases executionOk
+      exact headedBound
   have randaoBound : FundingReplay s randao := by
     apply carry (fun _ _ ok => (frame_processRandao ok).toFrame)
       (fun _ _ ok => registryLifecycle_processRandao ok)
@@ -266,8 +325,9 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
         processRandao_eq ok; rfl)
       (fun _ _ ok => by obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ :=
         processRandao_eq ok; exact effectiveKept_refl _)
-      (fun _ _ ok => by obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ :=
-        processRandao_eq ok; rfl)
+      (fun _ _ ok _ => by
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq ok
+        rfl)
       (fun _ _ ok => by obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ :=
         processRandao_eq ok; rfl) executedBound randaoOk
   have votedBound : FundingReplay s voted := by
@@ -277,7 +337,7 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
       (fun _ _ ok => by
         obtain ⟨_, _, eq⟩ := processEth1Data_eq ok
         rw [← eq]; exact effectiveKept_refl _)
-      (fun _ _ ok => by obtain ⟨_, _, eq⟩ := processEth1Data_eq ok; rw [← eq]; rfl)
+      (fun _ _ ok _ => by obtain ⟨_, _, eq⟩ := processEth1Data_eq ok; rw [← eq]; rfl)
       (fun _ _ ok => by obtain ⟨_, _, eq⟩ := processEth1Data_eq ok; rw [← eq])
       randaoBound votedOk
   have proposedBound := foldlM_ok_invariant (FundingReplay s)
@@ -286,34 +346,37 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
       (fun _ _ ok => registryLifecycle_processProposerSlashing ok)
       (fun _ _ ok => (sameSizes_processProposerSlashing ok).1)
       (fun _ _ ok => effectiveKept_proposerSlashing ok)
-      (fun _ _ ok => SamePendingQueue.proposer ok) h ok) votedBound proposedOk
+      (fun _ _ ok _ => SamePendingQueue.proposer ok) h ok) votedBound proposedOk
   have attestedBound := foldlM_ok_invariant (FundingReplay s)
     (fun _ sl _ h ok => record (by decide) (by decide)
       (fun _ _ ok => (frame_processAttesterSlashing ok).toFrame)
       (fun _ _ ok => registryLifecycle_processAttesterSlashing ok)
       (fun _ _ ok => (sameSizes_processAttesterSlashing ok).1)
       (fun _ _ ok => effectiveKept_attesterSlashing ok)
-      (fun _ _ ok => SamePendingQueue.attester ok) h ok) proposedBound attestedOk
+      (fun _ _ ok _ => SamePendingQueue.attester ok) h ok) proposedBound attestedOk
   have rewardedBound := foldlM_ok_invariant (FundingReplay s)
     (fun _ att _ h ok => record (by decide) (by decide)
       (fun _ _ ok => frame_processAttestation ok)
       (fun _ _ ok => registryLifecycle_processAttestation ok)
       (fun _ _ ok => (sameSizes_processAttestation ok).1)
       (fun _ _ ok => effectiveKept_data (by rw [(processAttestation_registry ok).1]))
-      (fun _ _ ok => SamePendingQueue.attestation electra ok) h ok) attestedBound rewardedOk
+      (fun _ _ ok electra => SamePendingQueue.attestation electra ok) h ok) attestedBound
+      rewardedOk
   have depositedBound := foldlM_ok_invariant (FundingReplay s)
     (fun _ dep _ h ok => funding_block_record
       (fun _ _ ok => balancesMatch_processDeposit ok)
-      (fun _ _ h ok => by simpa using funding_block_deposit electra h ok) h ok)
+      (fun _ _ h ok => by simpa using funding_block_deposit h ok) h ok)
     rewardedBound depositOk
   have exitOne {a b : BeaconState preset fork} {signed : SignedVoluntaryExit}
       (h : BalancesMatch a) (ok : processVoluntaryExit config checks a signed = .ok b) :
       BalancesMatch b ∧ fundedStake ⟨fork, b⟩ ≤ fundedStake ⟨fork, a⟩ := by
     exact ⟨(frame_processVoluntaryExit ok).balancesMatch h,
-      funding_block_same electra ((frame_processVoluntaryExit ok).balancesMatch h)
+      funding_block_same ((frame_processVoluntaryExit ok).balancesMatch h)
         (registryLifecycle_processVoluntaryExit ok) (sameSizes_processVoluntaryExit ok).1
         (frame_processVoluntaryExit ok).slot (effectiveKept_voluntaryExit ok)
-        (SamePendingQueue.voluntary ok) (coverage_voluntary ok)⟩
+        (fun _ => SamePendingQueue.voluntary ok)
+        (initiateValidatorExit_balances_eq_and_pendingConsolidations_eq
+          (processVoluntaryExit_initiates ok)).1⟩
   have exitedBound := funding_block_carry
     (fun a _ ok h => (foldlM_ok_invariant (fun b => BalancesMatch b ∧
       fundedStake ⟨fork, b⟩ ≤ fundedStake ⟨fork, a⟩)
@@ -329,11 +392,11 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
       (h : BalancesMatch a) (ok : processBlsToExecutionChange config checks a signed = .ok b) :
       BalancesMatch b ∧ fundedStake ⟨fork, b⟩ ≤ fundedStake ⟨fork, a⟩ := by
     exact ⟨(frame_processBlsToExecutionChange ok).balancesMatch h,
-      funding_block_same electra ((frame_processBlsToExecutionChange ok).balancesMatch h)
+      funding_block_same ((frame_processBlsToExecutionChange ok).balancesMatch h)
         (registryLifecycle_processBlsToExecutionChange ok)
         (sameSizes_processBlsToExecutionChange ok).1
         (frame_processBlsToExecutionChange ok).slot (effectiveKept_blsChange ok)
-        (SamePendingQueue.bls ok) (coverage_bls ok)⟩
+        (fun _ => SamePendingQueue.bls ok) (coverage_bls ok)⟩
   have changedBound : FundingReplay s changed := by
     apply funding_block_carry _ _ exitedBound changedOk
     all_goals intro a b
@@ -356,85 +419,109 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
               (blsOne prior.1 ok).2.trans prior.2⟩) ⟨matched, Nat.le_refl _⟩
             (by simpa only [← Array.foldlM_toList] using action)).2
         · cases action; exact Nat.le_refl _
-  have requestOne {a b : BeaconState preset fork} {request : DepositRequest}
-      (ok : processDepositRequest a electra request = .ok b) :
-      b.validators = a.validators ∧ b.balances = a.balances := by
-    obtain ⟨_, recorded⟩ := recordDepositRequestsStart_eq (state := a) (index := request.index)
-    simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-      bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, rfl⟩ := ok
-    exact ⟨rfl, rfl⟩
-  have depositsBound : FundingReplay s deposits := by
-    apply funding_block_carry _ _ changedBound depositRequestOk
-    · intro a b ok h
-      exact (foldlM_ok_invariant BalancesMatch
-        (fun _ _ _ h ok => (frame_processDepositRequest ok).balancesMatch h) h
-        (by simpa only [← Array.foldlM_toList] using ok))
-    · intro a b h ok
-      exact (foldlM_ok_invariant (fun b => BalancesMatch b ∧
-        fundedStake ⟨fork, b⟩ ≤ fundedStake ⟨fork, a⟩)
-        (fun _ _ _ prior ok => ⟨(frame_processDepositRequest ok).balancesMatch prior.1,
-          (funding_block_same electra ((frame_processDepositRequest ok).balancesMatch prior.1)
-            (registryLifecycle_processDepositRequest ok)
-            (congrArg (·.data.size) (requestOne ok).1) (frame_processDepositRequest ok).slot
-            (effectiveKept_data (congrArg (·.data) (requestOne ok).1))
-            (SamePendingQueue.depositRequest ok) (requestOne ok).2).trans prior.2⟩)
-        ⟨h, Nat.le_refl _⟩ (by simpa only [← Array.foldlM_toList] using ok)).2
-  have withdrawalsBound : FundingReplay s withdrawals := by
-    apply funding_block_carry _ _ depositsBound withdrawalOk
-    · intro a b ok h
-      exact foldlM_ok_invariant BalancesMatch
-        (fun _ _ _ h ok => (frame_processWithdrawalRequest ok).balancesMatch h) h
-        (by simpa only [← Array.foldlM_toList] using ok)
-    · intro a b h ok
-      exact (foldlM_ok_invariant (fun b => BalancesMatch b ∧
-        fundedStake ⟨fork, b⟩ ≤ fundedStake ⟨fork, a⟩)
-        (fun _ _ _ prior ok => ⟨(frame_processWithdrawalRequest ok).balancesMatch prior.1,
-          (funding_block_same electra ((frame_processWithdrawalRequest ok).balancesMatch prior.1)
-            (registryLifecycle_processWithdrawalRequest ok)
-            (sameSizes_processWithdrawalRequest ok).1
-            (frame_processWithdrawalRequest ok).slot (effectiveKept_withdrawalRequest ok)
-            (SamePendingQueue.withdrawalRequest ok)
-            (coverage_withdrawal_request ok)).trans prior.2⟩)
-        ⟨h, Nat.le_refl _⟩ (by simpa only [← Array.foldlM_toList] using ok)).2
-  have requestedBound := foldlM_ok_invariant (FundingReplay s)
-    (fun _ request _ h ok => funding_block_record
-      (fun _ _ ok => (frame_processConsolidationRequest ok).balancesMatch)
-      (fun a b h ok => by
-        simpa using funding_block_change electra (registryLifecycle_processConsolidationRequest ok)
-          (sameSizes_processConsolidationRequest ok).1
-          ((frame_processConsolidationRequest ok).balancesMatch h)
-          (frame_processConsolidationRequest ok).slot (effectiveKept_consolidationRequest ok)
-          (funding_request_support ok)) h ok) withdrawalsBound consolidations
-  exact record (by decide) (by decide)
-    (fun _ _ ok => (frame_processSyncAggregate ok).toFrame)
-    (fun _ _ ok => by obtain ⟨_, rfl⟩ := processSyncAggregate_eq ok; exact .of_data rfl)
-    (fun _ _ ok => (sameSizes_processSyncAggregate ok).1)
-    (fun _ _ ok => by obtain ⟨_, rfl⟩ := processSyncAggregate_eq ok; exact effectiveKept_data)
-    (fun _ _ ok => by obtain ⟨_, rfl⟩ := processSyncAggregate_eq ok; rfl) requestedBound synced
+  -- The sync aggregate, which runs from Altair on, ends the replay.
+  have synced {requested : BalanceReplay preset fork} (initial : FundingReplay s requested)
+      (ok : (if altair : .altair ≤ fork then
+        recordBalance .sync (fun s => do
+          let reward ← syncParticipantReward s
+          let proposer ← liftAccessor (liftArith do
+            Uint64.divChecked (← Uint64.mulChecked reward PROPOSER_WEIGHT)
+              (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT))
+          return (preset.SYNC_COMMITTEE_SIZE.toNat * (reward.toNat + proposer.toNat),
+            preset.SYNC_COMMITTEE_SIZE.toNat * reward.toNat))
+          (processSyncAggregate config checks · altair (block.body.syncAggregate altair)) requested
+        else pure requested) = .ok post) : FundingReplay s post := by
+    split at ok
+    · exact record (by decide) (by decide)
+        (fun _ _ ok => (frame_processSyncAggregate ok).toFrame)
+        (fun _ _ ok => by obtain ⟨_, rfl⟩ := processSyncAggregate_eq ok; exact .of_data rfl)
+        (fun _ _ ok => (sameSizes_processSyncAggregate ok).1)
+        (fun _ _ ok => by obtain ⟨_, rfl⟩ := processSyncAggregate_eq ok; exact effectiveKept_data)
+        (fun _ _ ok _ => by obtain ⟨_, rfl⟩ := processSyncAggregate_eq ok; rfl) initial ok
+    · cases ok
+      exact initial
+  -- The execution requests run from Electra on.
+  split at ok
+  · rename_i electra
+    simp only [bind_ok_iff] at ok
+    obtain ⟨deposits, depositRequestOk, withdrawals, withdrawalOk, requested, consolidations,
+      ok⟩ := ok
+    have requestOne {a b : BeaconState preset fork} {request : DepositRequest}
+        (ok : processDepositRequest a electra request = .ok b) :
+        b.validators = a.validators ∧ b.balances = a.balances := by
+      obtain ⟨_, recorded⟩ := recordDepositRequestsStart_eq (state := a) (index := request.index)
+      simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
+        bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+      obtain ⟨_, _, rfl⟩ := ok
+      exact ⟨rfl, rfl⟩
+    have depositsBound : FundingReplay s deposits := by
+      apply funding_block_carry _ _ changedBound depositRequestOk
+      · intro a b ok h
+        exact (foldlM_ok_invariant BalancesMatch
+          (fun _ _ _ h ok => (frame_processDepositRequest ok).balancesMatch h) h
+          (by simpa only [← Array.foldlM_toList] using ok))
+      · intro a b h ok
+        exact (foldlM_ok_invariant (fun b => BalancesMatch b ∧
+          fundedStake ⟨fork, b⟩ ≤ fundedStake ⟨fork, a⟩)
+          (fun _ _ _ prior ok => ⟨(frame_processDepositRequest ok).balancesMatch prior.1,
+            (funding_block_same ((frame_processDepositRequest ok).balancesMatch prior.1)
+              (registryLifecycle_processDepositRequest ok)
+              (congrArg (·.data.size) (requestOne ok).1) (frame_processDepositRequest ok).slot
+              (effectiveKept_data (congrArg (·.data) (requestOne ok).1))
+              (fun _ => SamePendingQueue.depositRequest ok) (requestOne ok).2).trans prior.2⟩)
+          ⟨h, Nat.le_refl _⟩ (by simpa only [← Array.foldlM_toList] using ok)).2
+    have withdrawalsBound : FundingReplay s withdrawals := by
+      apply funding_block_carry _ _ depositsBound withdrawalOk
+      · intro a b ok h
+        exact foldlM_ok_invariant BalancesMatch
+          (fun _ _ _ h ok => (frame_processWithdrawalRequest ok).balancesMatch h) h
+          (by simpa only [← Array.foldlM_toList] using ok)
+      · intro a b h ok
+        exact (foldlM_ok_invariant (fun b => BalancesMatch b ∧
+          fundedStake ⟨fork, b⟩ ≤ fundedStake ⟨fork, a⟩)
+          (fun _ _ _ prior ok => ⟨(frame_processWithdrawalRequest ok).balancesMatch prior.1,
+            (funding_block_same ((frame_processWithdrawalRequest ok).balancesMatch prior.1)
+              (registryLifecycle_processWithdrawalRequest ok)
+              (sameSizes_processWithdrawalRequest ok).1
+              (frame_processWithdrawalRequest ok).slot (effectiveKept_withdrawalRequest ok)
+              (fun _ => SamePendingQueue.withdrawalRequest ok)
+              (coverage_withdrawal_request ok)).trans prior.2⟩)
+          ⟨h, Nat.le_refl _⟩ (by simpa only [← Array.foldlM_toList] using ok)).2
+    have requestedBound := foldlM_ok_invariant (FundingReplay s)
+      (fun _ request _ h ok => funding_block_record
+        (fun _ _ ok => (frame_processConsolidationRequest ok).balancesMatch)
+        (fun a b h ok => by
+          simpa using funding_block_change (registryLifecycle_processConsolidationRequest ok)
+            (sameSizes_processConsolidationRequest ok).1
+            ((frame_processConsolidationRequest ok).balancesMatch h)
+            (frame_processConsolidationRequest ok).slot (effectiveKept_consolidationRequest ok)
+            (by simpa only [fundingSources, electra, ↓reduceDIte] using
+              funding_request_support ok)) h ok) withdrawalsBound consolidations
+    exact synced requestedBound ok
+  · exact synced changedBound (by simpa using ok)
 
 /-- A block preserves funding except for its recorded external credits.
 
 Validated consolidation requests retain support without issuing additional funding. -/
 theorem funding_block {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (early : fork < .glamsterdam)
     (matched : BalancesMatch s)
     (engine : ExecutionEngine preset fork) (block : BeaconBlock preset fork)
     (ok : processBlock config checks engine s block = .ok t)
     (events : List (BalanceEvent preset))
     (replayed : blockBalanceReplay (config := config) (checks := checks)
       early engine s block = .ok (t, events)) :
-    fundedStake ⟨fork, t⟩ + funding_carry ⟨fork, t⟩ ≤
-      fundedStake ⟨fork, s⟩ + funding_carry ⟨fork, s⟩ + (events.map fundingCredit).sum := by
-  have bound := (funding_block_replay electra early matched engine block replayed).2
+    fundedStake ⟨fork, t⟩ + fundingCarry ⟨fork, t⟩ ≤
+      fundedStake ⟨fork, s⟩ + fundingCarry ⟨fork, s⟩ + (events.map fundingCredit).sum := by
+  have bound := (funding_block_replay early matched engine block replayed).2
   change fundedStake ⟨fork, t⟩ ≤
     fundedStake ⟨fork, s⟩ + (events.map funding_block_cost).sum at bound
   have costs := funding_block_cost_le
     (blockBalanceReplay_bounded early engine block matched replayed)
   change (events.map funding_block_cost).sum ≤ (events.map fundingCredit).sum at costs
   have carry := depositCarry_processBlock early ok
-  have same : funding_carry ⟨fork, t⟩ = funding_carry ⟨fork, s⟩ := by
-    simp only [funding_carry, electra, ↓reduceDIte, carry]
+  have same : fundingCarry ⟨fork, t⟩ = fundingCarry ⟨fork, s⟩ := by
+    simp only [fundingCarry, carry]
   rw [same]
   omega
 

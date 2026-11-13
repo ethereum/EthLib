@@ -20,6 +20,10 @@ It moves the whole balance of its account, so it never lacks the amount.
 
 So a step fails with an error of the state only for missing code, an absent account or an overflow.
 
+An overflow comes only from that credit, at the account of the frame.
+
+It runs from a state that reads as the state of the frame.
+
 In particular no step fails for a balance below the amount it takes.
 -/
 
@@ -36,48 +40,50 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- The error of the state is one of the three with which a step may fail.
 
-The account at the target must be absent for its error to count. -/
-private def Allowed (target : Address) (account : Option State.Account) (e : StateError) :
-    Prop :=
+The account at the target must be absent for its error to count.
+
+An overflow counts only at an address that satisfies `over`. -/
+private def Allowed (target : Address) (account : Option State.Account)
+    (over : Address → Prop) (e : StateError) : Prop :=
   (∃ codeHash, e = .missingCode codeHash) ∨ (e = .noAccount target ∧ account = none) ∨
-    ∃ address, e = .balanceOverflow address
+    ∃ address, e = .balanceOverflow address ∧ over address
 
 /-- The result fails with an error of the state only in one of the three allowed ways. -/
-private def Cls (target : Address) (account : Option State.Account) {α : Type}
-    (r : Except EvmError α) : Prop :=
-  ∀ e, r = .error (.state e) → Allowed target account e
+private def Cls (target : Address) (account : Option State.Account)
+    (over : Address → Prop) {α : Type} (r : Except EvmError α) : Prop :=
+  ∀ e, r = .error (.state e) → Allowed target account over e
 
-variable {t : Address} {o : Option State.Account}
+variable {t : Address} {o : Option State.Account} {v : Address → Prop}
 
 /-- A success is allowed. -/
-private theorem Cls.ok {α : Type} (a : α) : Cls t o (.ok a : Except EvmError α) :=
+private theorem Cls.ok {α : Type} (a : α) : Cls t o v (.ok a : Except EvmError α) :=
   fun _ h => by cases h
 
 /-- A pure result is allowed. -/
-private theorem Cls.pure {α : Type} (a : α) : Cls t o (Pure.pure a : Except EvmError α) :=
+private theorem Cls.pure {α : Type} (a : α) : Cls t o v (Pure.pure a : Except EvmError α) :=
   fun _ h => by cases h
 
 /-- A throw of an error that is not of the state is allowed. -/
 private theorem Cls.throw {α : Type} {e : EvmError} (h : ∀ s, e ≠ .state s) :
-    Cls t o (MonadExcept.throw e : Except EvmError α) :=
+    Cls t o v (MonadExcept.throw e : Except EvmError α) :=
   fun s he => (h s (by cases he; rfl)).elim
 
 /-- A failure with an error that is not of the state is allowed. -/
 private theorem Cls.error {α : Type} {e : EvmError} (h : ∀ s, e ≠ .state s) :
-    Cls t o (.error e : Except EvmError α) :=
+    Cls t o v (.error e : Except EvmError α) :=
   fun s he => (h s (by cases he; rfl)).elim
 
 /-- A sequence is allowed when its first part is, and its rest after it. -/
 private theorem Cls.bind {α β : Type} {x : Except EvmError α} {f : α → Except EvmError β}
-    (hx : Cls t o x) (hf : ∀ a, x = .ok a → Cls t o (f a)) : Cls t o (x >>= f) := by
+    (hx : Cls t o v x) (hf : ∀ a, x = .ok a → Cls t o v (f a)) : Cls t o v (x >>= f) := by
   intro e h
   rcases Base.bind_eq_error h with h | ⟨a, ha, h⟩
   · exact hx e h
   · exact hf a ha e h
 
 /-- A map of an allowed result is allowed. -/
-private theorem Cls.map {α β : Type} {x : Except EvmError α} (f : α → β) (hx : Cls t o x) :
-    Cls t o (f <$> x) := by
+private theorem Cls.map {α β : Type} {x : Except EvmError α} (f : α → β) (hx : Cls t o v x) :
+    Cls t o v (f <$> x) := by
   intro e h
   cases hx' : x with
   | error e' => rw [hx'] at h; cases h; exact hx _ hx'
@@ -85,7 +91,7 @@ private theorem Cls.map {α β : Type} {x : Except EvmError α} (f : α → β) 
 
 /-- A write of the state is allowed when each of its failures is allowed. -/
 private theorem Cls.mapError_state {α : Type} {x : Except StateError α}
-    (h : ∀ s, x = .error s → Allowed t o s) : Cls t o (x.mapError EvmError.state) := by
+    (h : ∀ s, x = .error s → Allowed t o v s) : Cls t o v (x.mapError EvmError.state) := by
   intro e he
   cases hx : x with
   | error e' => rw [hx] at he; cases he; exact h _ hx
@@ -93,7 +99,7 @@ private theorem Cls.mapError_state {α : Type} {x : Except StateError α}
 
 /-- A failure of encoding is allowed. -/
 private theorem Cls.mapError_encoding {α : Type} (x : Except Serialization.Rlp.RlpError α) :
-    Cls t o (x.mapError EvmError.encoding) := by
+    Cls t o v (x.mapError EvmError.encoding) := by
   intro e he
   cases hx : x with
   | error e' => rw [hx] at he; cases he
@@ -101,43 +107,43 @@ private theorem Cls.mapError_encoding {α : Type} (x : Except Serialization.Rlp.
 
 /-- The rest of an instruction that keeps its reads is allowed when the rest is. -/
 private theorem Cls.keepReads {α : Type} {evm : Evm fork Meter} {halted : Evm fork Meter → α}
-    {rest : Except EvmError α} (h : Cls t o rest) : Cls t o (keepReads evm halted rest) :=
+    {rest : Except EvmError α} (h : Cls t o v rest) : Cls t o v (keepReads evm halted rest) :=
   fun e he => h e (keepReads_eq_error.mp he).1
 
 omit [GasMeter Meter] in
 /-- A pop is allowed. -/
-private theorem cls_popWord (evm : Evm fork Meter) : Cls t o (popWord evm) := by
+private theorem cls_popWord (evm : Evm fork Meter) : Cls t o v (popWord evm) := by
   refine Cls.bind (fun e h => ?_) fun _ _ => Cls.pure _
   cases (Stack.pop_eq_error_iff.mp h).2
 
 omit [GasMeter Meter] in
 /-- A push is allowed. -/
 private theorem cls_pushWord (evm : Evm fork Meter) (x : Base.U256) :
-    Cls t o (pushWord evm x) := by
+    Cls t o v (pushWord evm x) := by
   refine Cls.bind (fun e h => ?_) fun _ _ => Cls.pure _
   cases (Stack.push_eq_error_iff.mp h).2
 
 /-- A charge of gas is allowed. -/
 private theorem cls_chargeGas [LawfulGasMeter Meter] (evm : Evm fork Meter) (amount : Nat) :
-    Cls t o (chargeGas evm amount) := by
+    Cls t o v (chargeGas evm amount) := by
   refine Cls.bind (fun e h => ?_) fun _ _ => Cls.pure _
   cases LawfulGasMeter.charge_error h
 
 /-- A charge of state gas is allowed. -/
 private theorem cls_chargeStateGas [LawfulGasMeter Meter] (evm : Evm fork Meter)
-    (amount : Nat) : Cls t o (chargeStateGas evm amount) := by
+    (amount : Nat) : Cls t o v (chargeStateGas evm amount) := by
   refine Cls.bind (fun e h => ?_) fun _ _ => Cls.pure _
   cases LawfulGasMeter.chargeState_error h
 
 /-- A charge of gas and of memory is allowed. -/
 private theorem cls_chargeGasAndMemory [LawfulGasMeter Meter] (evm : Evm fork Meter)
     (cost : Nat) (ranges : List (Base.U256 × Base.U256)) :
-    Cls t o (chargeGasAndMemory evm cost ranges) :=
+    Cls t o v (chargeGasAndMemory evm cost ranges) :=
   Cls.bind (cls_chargeGas _ _) fun _ _ => Cls.pure _
 
 /-- A check of gas is allowed. -/
 private theorem cls_checkGas (evm : Evm fork Meter) (amount : Nat) :
-    Cls t o (checkGas evm amount) := by
+    Cls t o v (checkGas evm amount) := by
   unfold checkGas
   split
   · exact Cls.throw nofun
@@ -145,7 +151,7 @@ private theorem cls_checkGas (evm : Evm fork Meter) (amount : Nat) :
 
 omit [GasMeter Meter] in
 /-- The pops of the topics of a log are allowed. -/
-private theorem cls_popTopics (n : Nat) : ∀ evm : Evm fork Meter, Cls t o (popTopics evm n) := by
+private theorem cls_popTopics (n : Nat) : ∀ evm : Evm fork Meter, Cls t o v (popTopics evm n) := by
   induction n with
   | zero => exact fun _ => Cls.pure _
   | succ n ih =>
@@ -155,7 +161,7 @@ private theorem cls_popTopics (n : Nat) : ∀ evm : Evm fork Meter, Cls t o (pop
 omit [GasMeter Meter] in
 /-- A read of code fails only for a missing code. -/
 private theorem cls_accountCode (evm : Evm fork Meter) (address : Address) :
-    Cls t o (accountCode evm address) := by
+    Cls t o v (accountCode evm address) := by
   refine Cls.mapError_state fun s h => .inl ?_
   unfold State.TransactionState.getCode at h
   split at h
@@ -174,7 +180,7 @@ private theorem cls_accountCode (evm : Evm fork Meter) (address : Address) :
 
 /-- A rise of a nonce never fails. -/
 private theorem cls_incrementNonce (tx : TransactionState) (address : Address) :
-    Cls t o ((tx.incrementNonce fork address).mapError EvmError.state) := by
+    Cls t o v ((tx.incrementNonce fork address).mapError EvmError.state) := by
   refine Cls.mapError_state fun s h => ?_
   obtain ⟨_, h'⟩ := State.TransactionState.incrementNonce_isOk fork tx address
   rw [h'] at h
@@ -209,11 +215,28 @@ private theorem selfdestructTransfer_eq_error (tx : TransactionState)
         exact ⟨_, rfl⟩
     · cases State.TransactionState.modifyState_eq_error.mp h
 
-/-- A move of the balance of a destroyed account is allowed. -/
-private theorem cls_selfdestructTransfer (tx : TransactionState)
-    (originator beneficiary : Address) :
-    Cls t o ((selfdestructTransfer fork tx originator beneficiary).mapError EvmError.state) :=
-  Cls.mapError_state fun _ h => .inr (.inr (selfdestructTransfer_eq_error _ _ _ h))
+/-- Whether SELFDESTRUCT overflows the balance at an address.
+
+It runs at the target of the frame, from a state that reads as the state of the frame. -/
+private def Overflows (evm : Evm fork Meter) (address : Address) : Prop :=
+  ∃ tx beneficiary, TransactionState.SameOutside [] evm.state tx ∧
+    selfdestructTransfer fork tx evm.message.currentTarget beneficiary =
+      .error (.balanceOverflow address)
+
+omit [GasMeter Meter] in
+/-- The end of SELFDESTRUCT overflows only as it would from an earlier frame.
+
+That frame differs from it only by reads. -/
+private theorem cls_finishSelfdestruct {evm after : Evm fork Meter} (static : StaticStep evm after)
+    (beneficiary : Address) (refund : Nat) :
+    Cls t o (Overflows evm) (finishSelfdestruct fork beneficiary refund after) := by
+  unfold finishSelfdestruct
+  split
+  · exact Cls.error nofun
+  refine Cls.bind (Cls.mapError_state fun s h => ?_) fun _ _ => Cls.pure _
+  obtain ⟨address, rfl⟩ := selfdestructTransfer_eq_error _ _ _ h
+  rw [static.message] at h
+  exact .inr (.inr ⟨address, rfl, _, _, static.state, h⟩)
 
 /-- Walk a sequence of allowed parts. -/
 local macro "cls" : tactic =>
@@ -229,7 +252,6 @@ local macro "cls" : tactic =>
     | exact cls_popTopics _ _
     | exact cls_accountCode _ _
     | exact cls_incrementNonce _ _
-    | exact cls_selfdestructTransfer _ _ _
     | exact Cls.mapError_encoding _
     | exact Cls.throw nofun
     | exact Cls.error nofun
@@ -244,7 +266,7 @@ local macro "cls" : tactic =>
 
 The pops, the access, the read and the charges before the write keep that account. -/
 private theorem cls_sstoreStep [LawfulGasMeter Meter] (evm : Evm fork Meter) :
-    Cls evm.message.currentTarget (evm.state.getAccountOptional evm.message.currentTarget)
+    Cls evm.message.currentTarget (evm.state.getAccountOptional evm.message.currentTarget) v
       (sstoreStep evm) := by
   intro s h
   unfold Evm.sstoreStep at h
@@ -296,7 +318,7 @@ private theorem cls_sstoreStep [LawfulGasMeter Meter] (evm : Evm fork Meter) :
 /-- Each instruction that only touches the stack is allowed. -/
 private theorem cls_stackOnlyStep [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : stackOnlyStep fork op = some run) (evm : Evm fork Meter) : Cls t o (run evm) := by
+    (hstep : stackOnlyStep fork op = some run) (evm : Evm fork Meter) : Cls t o v (run evm) := by
   cases op <;> simp only [stackOnlyStep, Option.some.injEq, reduceCtorEq] at hstep
   all_goals (try split at hstep) <;> (try simp only [Option.some.injEq, reduceCtorEq] at hstep) <;>
     (try subst hstep)
@@ -309,14 +331,14 @@ private theorem cls_stackOnlyStep [LawfulGasMeter Meter] {op : Op}
 /-- Each instruction of control flow is allowed. -/
 private theorem cls_controlFlowStep [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : controlFlowStep op = some run) (evm : Evm fork Meter) : Cls t o (run evm) := by
+    (hstep : controlFlowStep op = some run) (evm : Evm fork Meter) : Cls t o v (run evm) := by
   cases op <;> simp only [controlFlowStep, Option.some.injEq, reduceCtorEq] at hstep <;>
     subst hstep <;> simp only [stopStep, jumpStep, jumpiStep, readFrame, jumpdestStep] <;> cls
 
 /-- Each instruction of memory and of the input data is allowed. -/
 private theorem cls_memoryDataStep [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : memoryDataStep op = some run) (evm : Evm fork Meter) : Cls t o (run evm) := by
+    (hstep : memoryDataStep op = some run) (evm : Evm fork Meter) : Cls t o v (run evm) := by
   cases op <;> simp only [memoryDataStep, Option.some.injEq, reduceCtorEq] at hstep <;>
     subst hstep <;>
     simp only [mloadStep, mstoreStep, mstore8Step, mcopyStep, calldataloadStep, copyToMemory,
@@ -325,7 +347,7 @@ private theorem cls_memoryDataStep [LawfulGasMeter Meter] {op : Op}
 /-- Each instruction that returns is allowed. -/
 private theorem cls_returnOpStep [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : returnOpStep fork op = some run) (evm : Evm fork Meter) : Cls t o (run evm) := by
+    (hstep : returnOpStep fork op = some run) (evm : Evm fork Meter) : Cls t o v (run evm) := by
   cases op <;> simp only [returnOpStep, Option.some.injEq, reduceCtorEq] at hstep
   all_goals (try split at hstep) <;> (try simp only [Option.some.injEq, reduceCtorEq] at hstep) <;>
     (try subst hstep)
@@ -336,7 +358,7 @@ private theorem cls_returnOpStep [LawfulGasMeter Meter] {op : Op}
 /-- Each instruction of the environment is allowed. -/
 private theorem cls_environmentStep [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : environmentStep fork op = some run) (evm : Evm fork Meter) : Cls t o (run evm) := by
+    (hstep : environmentStep fork op = some run) (evm : Evm fork Meter) : Cls t o v (run evm) := by
   cases op <;> simp only [environmentStep, Option.some.injEq, reduceCtorEq] at hstep
   all_goals (try split at hstep) <;> (try simp only [Option.some.injEq, reduceCtorEq] at hstep) <;>
     (try subst hstep)
@@ -347,7 +369,7 @@ private theorem cls_environmentStep [LawfulGasMeter Meter] {op : Op}
 /-- Each instruction that reads another account is allowed. -/
 private theorem cls_accountStep [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : accountStep fork op = some run) (evm : Evm fork Meter) : Cls t o (run evm) := by
+    (hstep : accountStep fork op = some run) (evm : Evm fork Meter) : Cls t o v (run evm) := by
   cases op <;> simp only [accountStep, Option.some.injEq, reduceCtorEq] at hstep
   all_goals (try split at hstep) <;> (try simp only [Option.some.injEq, reduceCtorEq] at hstep) <;>
     (try subst hstep)
@@ -358,7 +380,7 @@ private theorem cls_accountStep [LawfulGasMeter Meter] {op : Op}
 /-- Each instruction of a log is allowed. -/
 private theorem cls_logOpStep [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : logOpStep op = some run) (evm : Evm fork Meter) : Cls t o (run evm) := by
+    (hstep : logOpStep op = some run) (evm : Evm fork Meter) : Cls t o v (run evm) := by
   cases op <;> simp only [logOpStep, Option.some.injEq, reduceCtorEq] at hstep
   subst hstep
   simp only [logStep]
@@ -368,7 +390,7 @@ private theorem cls_logOpStep [LawfulGasMeter Meter] {op : Op}
 private theorem cls_transientStorageStep [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hstep : transientStorageStep fork op = some run) (evm : Evm fork Meter) :
-    Cls t o (run evm) := by
+    Cls t o v (run evm) := by
   cases op <;> simp only [transientStorageStep, reduceCtorEq] at hstep <;> split at hstep <;>
     simp only [Option.some.injEq, reduceCtorEq] at hstep <;> subst hstep <;>
     simp only [tloadStep, tstoreStep] <;> cls
@@ -377,7 +399,7 @@ private theorem cls_transientStorageStep [LawfulGasMeter Meter] {op : Op}
 private theorem cls_storageStep [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hstep : storageStep op = some run) (evm : Evm fork Meter) :
-    Cls evm.message.currentTarget (evm.state.getAccountOptional evm.message.currentTarget)
+    Cls evm.message.currentTarget (evm.state.getAccountOptional evm.message.currentTarget) v
       (run evm) := by
   cases op <;> simp only [storageStep, Option.some.injEq, reduceCtorEq] at hstep <;>
     subst hstep
@@ -385,22 +407,33 @@ private theorem cls_storageStep [LawfulGasMeter Meter] {op : Op}
     cls
   · exact cls_sstoreStep evm
 
-/-- SELFDESTRUCT is allowed. -/
+/-- SELFDESTRUCT overflows only from a state that reads as the state of its frame. -/
 private theorem cls_selfdestructOpStep [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hstep : selfdestructOpStep fork op = some run) (evm : Evm fork Meter) :
-    Cls t o (run evm) := by
+    Cls t o (Overflows evm) (run evm) := by
   cases op <;> simp only [selfdestructOpStep, Option.some.injEq, reduceCtorEq] at hstep
   subst hstep
-  simp only [selfdestructStep, finishSelfdestruct]
-  cls
+  unfold selfdestructStep
+  split
+  · exact Cls.bind (Cls.throw nofun) fun _ h => by cases h
+  dsimp only
+  refine Cls.bind (cls_popWord _) fun ⟨word, e1⟩ h1 => ?_
+  have c1 : StaticStep evm (accessAddress e1 (Base.toAddressMasked word)).2 :=
+    (StaticStep.of_sameContext (popWord_sameContext h1)).trans (staticStep_accessAddress _ _)
+  refine Cls.bind (cls_checkGas _ _) fun _ _ => Cls.keepReads ?_
+  have c2 := c1.trans (staticStep_recordAccountRead _ (Base.toAddressMasked word))
+  refine Cls.bind (cls_chargeGas _ _) fun e3 h3 => ?_
+  refine Cls.bind (cls_chargeStateGas _ _) fun e4 h4 => ?_
+  exact cls_finishSelfdestruct (c2.trans (.of_sameContext
+    ((chargeGas_sameContext h3).trans (chargeStateGas_sameContext h4)))) _ _
 
 /-- An instruction that gives the next frame is allowed at the target of its frame. -/
 private theorem cls_instruction [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hrun : instruction fork op = some run) (evm : Evm fork Meter) :
     Cls evm.message.currentTarget (evm.state.getAccountOptional evm.message.currentTarget)
-      (run evm) := by
+      (Overflows evm) (run evm) := by
   unfold Evm.instruction at hrun
   rcases orElse_eq_some hrun with hf | hrun
   · exact cls_stackOnlyStep hf evm
@@ -426,14 +459,14 @@ private theorem cls_instruction [LawfulGasMeter Meter] {op : Op}
 
 /-- A step of a call instruction is allowed. -/
 private theorem cls_callStep [LawfulGasMeter Meter] {kind : CallKind} (evm : Evm fork Meter) :
-    Cls t o (callStep kind evm) := by
+    Cls t o v (callStep kind evm) := by
   simp only [callStep, popCallOperands, popCallValue, accessDelegation, payCall, finishCall,
     genericCall, skipCall]
   cls
 
 /-- A step of CREATE or CREATE2 is allowed. -/
 private theorem cls_createStep [LawfulGasMeter Meter] {create2 : Bool} (evm : Evm fork Meter) :
-    Cls t o (createStep create2 evm) := by
+    Cls t o v (createStep create2 evm) := by
   simp only [createStep, popSalt, genericCreate, launchCreate, creationAddress, skipCall]
   cls
 
@@ -441,7 +474,7 @@ private theorem cls_createStep [LawfulGasMeter Meter] {create2 : Bool} (evm : Ev
 private theorem cls_messageInstruction [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (StepResult fork Meter)}
     (hrun : messageInstruction fork op = some run) (evm : Evm fork Meter) :
-    Cls t o (run evm) := by
+    Cls t o v (run evm) := by
   unfold Evm.messageInstruction at hrun
   rcases orElse_eq_some hrun with hc | hc
   · cases op <;> simp only [callInstruction, Option.some.injEq, reduceCtorEq] at hc
@@ -459,6 +492,22 @@ private theorem cls_messageInstruction [LawfulGasMeter Meter] {op : Op}
 
 /-! ## A step -/
 
+/-- A step is allowed at the target of its frame, with the overflows of SELFDESTRUCT. -/
+private theorem cls_step [LawfulGasMeter Meter] (evm : Evm fork Meter) :
+    Cls evm.message.currentTarget (evm.state.getAccountOptional evm.message.currentTarget)
+      (Overflows evm) (step fork evm) := by
+  unfold step
+  split
+  · dsimp only
+    split
+    · exact Cls.throw nofun
+    · split
+      · exact Cls.map _ (cls_instruction (by assumption) evm)
+      · split
+        · exact cls_messageInstruction (by assumption) evm
+        · exact Cls.throw nofun
+  · exact Cls.map _ (Cls.ok _)
+
 /-- A step fails with an error of the state only in three ways.
 
 It fails for a missing code.
@@ -471,20 +520,22 @@ theorem step_eq_error_state [LawfulGasMeter Meter] {evm : Evm fork Meter} {e : S
     (∃ codeHash, e = .missingCode codeHash) ∨
       (e = .noAccount evm.message.currentTarget ∧
         evm.state.getAccountOptional evm.message.currentTarget = none) ∨
-      ∃ address, e = .balanceOverflow address := by
-  refine (show Cls evm.message.currentTarget
-    (evm.state.getAccountOptional evm.message.currentTarget) (step fork evm) from ?_) e h
-  unfold step
-  split
-  · dsimp only
-    split
-    · exact Cls.throw nofun
-    · split
-      · exact Cls.map _ (cls_instruction (by assumption) evm)
-      · split
-        · exact cls_messageInstruction (by assumption) evm
-        · exact Cls.throw nofun
-  · exact Cls.map _ (Cls.ok _)
+      ∃ address, e = .balanceOverflow address :=
+  (cls_step evm e h).imp_right (Or.imp_right fun ⟨address, he, _⟩ => ⟨address, he⟩)
+
+/-- A step overflows a balance only in the transfer of the balance of SELFDESTRUCT.
+
+That move runs at the target of the frame, from a state that reads as the state of the frame. -/
+theorem step_eq_balanceOverflow [LawfulGasMeter Meter] {evm : Evm fork Meter}
+    {address : Address} (h : step fork evm = .error (.state (.balanceOverflow address))) :
+    ∃ tx beneficiary, TransactionState.SameOutside [] evm.state tx ∧
+      selfdestructTransfer fork tx evm.message.currentTarget beneficiary =
+        .error (.balanceOverflow address) := by
+  rcases cls_step evm _ h with ⟨_, he⟩ | ⟨he, -⟩ | ⟨_, he, over⟩
+  · cases he
+  · cases he
+  · cases he
+    exact over
 
 /-- No step fails for a balance below the amount that it takes. -/
 theorem step_ne_insufficientBalance [LawfulGasMeter Meter] (evm : Evm fork Meter)

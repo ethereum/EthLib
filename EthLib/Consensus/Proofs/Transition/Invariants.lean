@@ -1735,31 +1735,25 @@ theorem processBlock_operationsInput {block : BeaconBlock preset fork}
         else pure last) = .ok after := by
   unfold processBlock at computed
   split at computed
-  · unfold processBlockAltair at computed
+  · rename_i altair
+    unfold processBlockAltair at computed
     simp only [bind_ok_iff] at computed
-    obtain ⟨_, paidOk, _, headedOk, _, executedOk, _, revealedOk, _, votedOk, _, operatedOk,
-      synced⟩ := computed
+    obtain ⟨_, startedOk, _, operatedOk, synced⟩ := computed
+    simp only [stateBeforeOperations, bind_ok_iff] at startedOk
+    obtain ⟨_, paidOk, _, headedOk, _, executedOk, _, revealedOk, votedOk⟩ := startedOk
     refine ⟨_, _, ⟨_, _, _, _, paidOk, headedOk, executedOk, revealedOk, votedOk⟩, operatedOk,
       frame_processSyncAggregate synced, ?_⟩
-    simp only [‹Fork.altair ≤ fork›, ↓reduceDIte]
+    simp only [altair, ↓reduceDIte]
     exact synced
   · rename_i altair
     simp only [bind_ok_iff] at computed
-    obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
-    -- Before Altair neither the payload of the parent nor the execution part runs.
-    have gloas : ¬ Fork.glamsterdam ≤ fork := fun h => altair (Nat.le_trans (by decide) h)
-    have bellatrix : ¬ Fork.bellatrix ≤ fork := fun h => altair (Nat.le_trans (by decide) h)
-    have early : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le altair) (by decide)
-    refine ⟨_, _, ⟨state, _, _, _, ?_, headerOk, ?_, randaoOk, ?_⟩, operationsOk,
+    obtain ⟨_, startedOk, operationsOk⟩ := computed
+    simp only [stateBeforeOperations, bind_ok_iff] at startedOk
+    obtain ⟨_, paidOk, _, headedOk, _, executedOk, _, revealedOk, votedOk⟩ := startedOk
+    refine ⟨_, _, ⟨_, _, _, _, paidOk, headedOk, executedOk, revealedOk, votedOk⟩, operationsOk,
       BlockFrame.refl _, ?_⟩
-    · simp only [gloas, ↓reduceDIte]
-      rfl
-    · simp only [bellatrix, ↓reduceDIte]
-      rfl
-    · simp only [early, ↓reduceDIte]
-      exact eth1Ok
-    · simp only [altair, ↓reduceDIte]
-      rfl
+    simp only [altair, ↓reduceDIte]
+    rfl
 
 /-- A block runs the steps of its operations input, then three folds, then a block frame.
 
@@ -2128,7 +2122,7 @@ theorem processPtcWindow {gloas : .glamsterdam ≤ fork}
 /-- One stage that is neither justification, the payments, the flag rotation nor the deposits.
 
 Each such stage relates its states under the laws of the steps. -/
-private theorem epochEdge {stage : EpochStage}
+theorem epochEdge {stage : EpochStage}
     (ordinary : stage ≠ .justification ∧ stage ≠ .payments ∧ stage ≠ .participation ∧
       stage ≠ .pendingDeposits)
     (computed : EpochStage.action config checks stage state = .ok after) : R state after := by

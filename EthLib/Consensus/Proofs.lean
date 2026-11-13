@@ -8,9 +8,13 @@ public import EthLib.Consensus.Proofs.BeaconApi.Blocks
 public import EthLib.Consensus.Proofs.BeaconApi.Committees
 public import EthLib.Consensus.Proofs.BeaconApi.Duties
 public import EthLib.Consensus.Proofs.BeaconApi.Config
+public import EthLib.Consensus.Proofs.BeaconApi.Debug
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
 public import EthLib.Consensus.Proofs.BeaconApi.Identifiers
+public import EthLib.Consensus.Proofs.BeaconApi.LightClient
+public import EthLib.Consensus.Proofs.BeaconApi.LightClientBootstrap
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
+public import EthLib.Consensus.Proofs.BeaconApi.Rewards
 public import EthLib.Consensus.Proofs.BeaconApi.StateQueries
 public import EthLib.Consensus.Proofs.BeaconApi.Validators
 public import EthLib.Consensus.Proofs.BeaconApi.ValidatorData
@@ -107,6 +111,7 @@ public import EthLib.Consensus.Proofs.Gossip.BlockHandler
 public import EthLib.Consensus.Proofs.Gossip.InclusionList
 public import EthLib.Consensus.Proofs.Gossip.LightClient
 public import EthLib.Consensus.Proofs.Gossip.Bounds
+public import EthLib.Consensus.Proofs.Gossip.Message
 public import EthLib.Consensus.Proofs.Gossip.Operations
 public import EthLib.Consensus.Proofs.Gossip.Payload
 public import EthLib.Consensus.Proofs.Gossip.ProposerPreferences
@@ -151,6 +156,8 @@ public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
+public import EthLib.Consensus.Proofs.Transition.BalanceCappedBlock
+public import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaisedBlock
@@ -195,6 +202,8 @@ public import EthLib.Consensus.Proofs.Transition.InactivityLeakEpoch
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakRun
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakStake
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakTrace
+public import EthLib.Consensus.Proofs.Transition.InactivityLeakVoter
+public import EthLib.Consensus.Proofs.Transition.InactivityLeakVoterRun
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.MixesKept
 public import EthLib.Consensus.Proofs.Transition.Operations
@@ -207,6 +216,7 @@ public import EthLib.Consensus.Proofs.Transition.PaymentReleaseInvariants
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseRun
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseWithdrawals
 public import EthLib.Consensus.Proofs.Transition.PendingConsolidations
+public import EthLib.Consensus.Proofs.Transition.ProposerBalance
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Requests
 public import EthLib.Consensus.Proofs.Transition.RewardDeltas
@@ -226,6 +236,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Bound
 public import EthLib.Consensus.Proofs.Transition.Totality.BuilderPayments
 public import EthLib.Consensus.Proofs.Transition.Totality.Consolidations
 public import EthLib.Consensus.Proofs.Transition.Totality.EffectiveBalances
+public import EthLib.Consensus.Proofs.Transition.Totality.EpochAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Genesis
 public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
@@ -244,6 +255,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot
 public import EthLib.Consensus.Proofs.Transition.Totality.SyncCommittee
+public import EthLib.Consensus.Proofs.Transition.Totality.Upgrades
 public import EthLib.Consensus.Proofs.Transition.Upgrade
 public import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 public import EthLib.Consensus.Proofs.Transition.ValidatorKeys

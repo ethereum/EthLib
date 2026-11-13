@@ -8,9 +8,13 @@ public import EthLib.Execution.Rpc.Errors
 public import EthLib.Execution.Rpc.Header
 public import EthLib.Execution.Rpc.Block
 public import EthLib.Execution.Rpc.View
+public import EthLib.Execution.Rpc.Config
 public import EthLib.Execution.Rpc.Transaction
 public import EthLib.Execution.Rpc.TransactionInfo
 public import EthLib.Execution.Rpc.Raw
+public import EthLib.Execution.Rpc.Account
+public import EthLib.Execution.Rpc.Proof
+public import EthLib.Execution.Rpc.AccessList
 public import EthLib.Execution.Rpc.Receipt
 public import EthLib.Execution.Rpc.Filter
 public import EthLib.Execution.Rpc.Methods

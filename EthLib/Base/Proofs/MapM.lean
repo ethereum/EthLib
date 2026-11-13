@@ -36,6 +36,8 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 
 A mapped error leaves a success unchanged.
 
+A mapped computation fails exactly when the computation fails, with the map of its error.
+
 A map in `Option` that succeeds has one output per input, each the image of its input.
 
 It succeeds exactly when the function succeeds on every input.
@@ -438,6 +440,18 @@ theorem mapM_error {xs : List α} {e : ε} (h : xs.mapM f = .error e) :
 theorem mapError_ok_iff {ε' : Type} {g : ε → ε'} {result : Except ε α} {value : α} :
     result.mapError g = .ok value ↔ result = .ok value := by
   cases result <;> simp [Except.mapError]
+
+/-- A computation with its error mapped fails exactly when the computation fails.
+
+The error it gives is the map of the error of the computation. -/
+theorem mapError_eq_error_iff {ε' : Type} {g : ε → ε'} {result : Except ε α} {error : ε'} :
+    result.mapError g = .error error ↔ ∃ e, result = .error e ∧ g e = error := by
+  cases result <;> simp [Except.mapError]
+
+/-- A computation with its error mapped fails only with the map of an error of the computation. -/
+theorem mapError_eq_error {ε' : Type} {g : ε → ε'} {result : Except ε α} {error : ε'}
+    (h : result.mapError g = .error error) : ∃ e, result = .error e ∧ g e = error :=
+  mapError_eq_error_iff.mp h
 
 /-- A property that each successful step keeps holds after a successful fold. -/
 theorem foldlM_ok_invariant {g : β → α → Except ε β} (P : β → Prop)

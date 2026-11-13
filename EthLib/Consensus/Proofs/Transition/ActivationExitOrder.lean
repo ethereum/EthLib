@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.Genesis
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
+import EthLib.Consensus.Proofs.Transition.EpochPending
 
 /-!
 # Activation before exit
@@ -202,7 +203,7 @@ private theorem applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {amoun
     {signature : BLSSignature}
     (ok : Consensus.applyDeposit config checks state pubkey credentials amount signature =
       .ok after) : Kept state after := by
-  rcases applyDeposit_fork_cases ok with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨_, ok⟩
+  rcases applyDeposit_cases ok with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, ok⟩
   · exact refl _
   · exact of_data
   · exact (append (addValidatorToRegistry_validators_eq_push added) rfl).trans of_data
@@ -240,19 +241,6 @@ private theorem switchToCompoundingValidator {electra : .pectra ≤ fork} {index
   obtain ⟨_, found, _, set, queued⟩ := ok
   exact (setValidator found set id).trans (queueExcessActiveBalance queued)
 
-private theorem requestPartialWithdrawal {electra : .pectra ≤ fork}
-    {index : ValidatorIndex} {validator : Validator} {amount owed : Gwei}
-    (ok : Consensus.requestPartialWithdrawal config state electra index validator amount owed =
-      .ok after) : Kept state after := by
-  simp only [Consensus.requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure,
-    Except.pure] at ok
-  obtain ⟨_, _, _, _, ok⟩ := ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok, Except.ok.injEq] at ok
-    obtain ⟨⟨_, _⟩, churned, _, _, _, _, rfl⟩ := ok
-    exact (of_data (by rw [(computeExitEpochAndUpdateChurn_earliest churned).2.1])).trans of_data
-  · cases ok; exact refl _
-
 private theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : Consensus.processWithdrawalRequest config state electra request = .ok after) :
     Kept state after := by
@@ -262,7 +250,7 @@ private theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request :
   all_goals first
     | (cases ok; done)
     | (cases ok; exact refl _)
-    | exact requestPartialWithdrawal ok
+    | exact of_data (congrArg (·.data) (requestPartialWithdrawal_kept ok).1)
     | (apply initiateValidatorExit (config := config)
          (by rw [getValidator, getElem?_toNat_of_ofNatChecked (by assumption)])
          ?_ (liftAccessor_ok.mp ok)
@@ -462,52 +450,11 @@ private theorem processRegistryUpdates
     rw [← equal, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' bound]
   simp [getValidator, exact, found]
 
-private theorem passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
-    {available : Gwei} :
-    ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
-      {count : Nat} {postponed : Array PendingDeposit} {pass},
-      Consensus.passPendingDeposits config checks stop nextEpoch available state processed count
-        postponed deposits = .ok pass → Kept state pass.1.state
-  | [], _, _, _, _, _, ok => by cases ok; exact refl _
-  | deposit :: rest, state, processed, count, postponed, pass, ok => by
-    unfold Consensus.passPendingDeposits at ok
-    simp only [bind, Except.bind, pure, Except.pure] at ok
-    split at ok
-    · cases ok; exact refl _
-    split at ok
-    · cases ok
-    split at ok
-    · split at ok
-      · cases ok
-      rename_i credited
-      split at ok
-      · cases ok
-      cases ok
-      exact (applyPendingDeposit credited).trans (passPendingDeposits (deposits := rest) ‹_›)
-    split at ok
-    · split at ok
-      · cases ok
-      cases ok
-      exact passPendingDeposits (deposits := rest) ‹_›
-    split at ok
-    · cases ok
-    split at ok
-    · cases ok; exact refl _
-    split at ok
-    · cases ok
-    rename_i credited
-    split at ok
-    · cases ok
-    cases ok
-    exact (applyPendingDeposit credited).trans (passPendingDeposits (deposits := rest) ‹_›)
-
 private theorem processPendingDeposits {electra : .pectra ≤ fork}
     (ok : Consensus.processPendingDeposits config checks state electra = .ok after) :
     Kept state after := by
-  unfold Consensus.processPendingDeposits at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' (split at ok <;> try cases ok)
-  all_goals exact (passPendingDeposits ‹_›).trans of_data
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, folded, rfl⟩ := processPendingDeposits_applied ok
+  exact (foldlM (fun _ _ _ => applyPendingDeposit) folded).trans of_data
 
 private theorem queuePreActivation {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (ok : Consensus.queuePreActivation state electra index = .ok after) :
@@ -560,10 +507,10 @@ private theorem processEffectiveBalanceUpdates
   obtain ⟨_, found, _, _, _, _, set⟩ := ok
   exact setValidatorAt found set id
 
-/-- Every epoch stage keeps the order; only three of them change the validators. -/
-private theorem stage {k : EpochStage} {s t : BeaconState preset fork}
-    (edge : EpochStage.Edge config checks k s t) : Kept s t := by
-  cases k
+/-- Only three epoch stages change the validators, and each of them keeps the order. -/
+private theorem edge {stage : EpochStage}
+    (edge : EpochStage.Edge config checks stage state after) : Kept state after := by
+  cases stage
   case registry => exact processRegistryUpdates edge
   case pendingDeposits =>
     simp only [EpochStage.Edge] at edge
@@ -573,12 +520,10 @@ private theorem stage {k : EpochStage} {s t : BeaconState preset fork}
   case effectiveBalances => exact processEffectiveBalanceUpdates edge
   all_goals exact of_data (congrArg (·.data) (edge.validators_eq ⟨nofun, nofun, nofun⟩))
 
-/-- An epoch keeps the order, stage by stage of the epoch schedule. -/
 private theorem processEpoch (ok : Consensus.processEpoch config checks state = .ok after) :
-    Kept state after := by
-  apply (processEpoch_trace ok).transport Kept refl (fun a b => a.trans b)
-  intro k _ a b computed
-  exact stage (EpochStage.action_cases.mp computed)
+    Kept state after :=
+  (processEpoch_trace ok).transport Kept refl (fun a b => a.trans b)
+    (fun _ _ _ _ computed => edge (EpochStage.action_cases.mp computed))
 
 private theorem advanceSlot (ok : Consensus.advanceSlot config checks state = .ok after) :
     Kept state after := by
@@ -607,7 +552,7 @@ private theorem eth1Data {before : fork < .hegota} {body : BeaconBlockBody prese
   obtain ⟨_, _, rest⟩ := processEth1Data_eq ok
   exact of_data (by rw [← rest])
 
-/-- A block keeps the order: master's decomposition of a block reaches every step of it.
+/-- A block keeps the order, step by step of the block.
 
 Each step that keeps the validators keeps the order, and so does each validator write. -/
 private theorem processBlock {block : BeaconBlock preset fork}
@@ -665,16 +610,16 @@ private theorem chainStep {first last : ForkedBeaconState preset}
   | block engine signed validate ok =>
     exact Kept.processBlock (applySignedBlock_ok ok).2.1 holds
 
-theorem applyPendingDeposit {deposit : PendingDeposit} (holds : ActivationExitOrder state)
-    (ok : Consensus.applyPendingDeposit config checks state deposit = .ok after) :
-    ActivationExitOrder after :=
-  Kept.applyPendingDeposit ok holds
-
 /-- Every epoch stage keeps the order. -/
 theorem _root_.EthLib.Consensus.EpochStage.Edge.activationExitOrder {k : EpochStage}
     {s t : BeaconState preset fork} (edge : EpochStage.Edge config checks k s t)
     (holds : ActivationExitOrder s) : ActivationExitOrder t :=
-  Kept.stage edge holds
+  Kept.edge edge holds
+
+theorem applyPendingDeposit {deposit : PendingDeposit} (holds : ActivationExitOrder state)
+    (ok : Consensus.applyPendingDeposit config checks state deposit = .ok after) :
+    ActivationExitOrder after :=
+  Kept.applyPendingDeposit ok holds
 
 end ActivationExitOrder
 

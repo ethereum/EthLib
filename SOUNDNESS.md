@@ -733,7 +733,13 @@ In both cases the host signature verifies over `libp2p-tls-handshake:` and the c
 `authenticate_single`, `authenticate_empty`, `authenticate_validity`, `authenticate_extension` and `authenticate_critical` reject a chain of another length, a time outside the interval, a missing libp2p extension and another critical extension.
 `authenticatePeer_peerId` proves that a dialer that succeeds gets the peer ID it expected.
 These are correctness properties of the checks, not an unforgeability theorem.
-No theorem relates the DER reader to an independent model of X.690, or the time conversion to a calendar.
+`read_ok_iff` (`Serialization/Proofs/Der.lean`) states the DER reader in the terms of X.690 §§8.1.2, 8.1.3, 8.1.5 and 10.1.
+A read takes one identifier octet with a low tag number, other than 0, the length on the fewest octets, the content and the rest.
+`encoded_eq_of_read_ok` derives that a tag and a content have a single encoding.
+`integer_ok_iff` states that an INTEGER reads as `i` exactly when its content is `i` in two's complement on the fewest octets (X.690 §8.3).
+`natural_ok_iff` states the nonnegative case.
+`content_eq_of_integer_ok` derives that an integer has a single content.
+No theorem states the other DER types that a certificate holds, or relates the time conversion to a calendar.
 Nothing in Lean shows that authentication can succeed; the Python tests check vectors 1 to 4 of libp2p TLS.
 
 ### QUIC wire encodings
@@ -1995,6 +2001,21 @@ The storage value of a slot that is not set is 0, so the answer must give that w
 EIP-1186 does not say which fields the answer holds for an address without an account.
 So the check judges no field of an absent account, and reports the absence.
 
+The node's side is `AccountProof.ofState`: the answer that a state gives, with the proofs of its own tries.
+For an address with no account it gives the fields of the empty account and the root of the empty trie, one of the two readings that the check accepts.
+`ChainView.accountProof` (`Execution/Rpc/Proof.lean`) serves it as `eth_getProof` at the block that the parameter names.
+`verify_ofState` (`Execution/Proofs/State/AccountProofOfState.lean`) proves completeness: the answer passes the check against the state root.
+It reports the account present exactly when the state has it, and, for a present account, each slot set exactly when its word is not zero.
+The theorem does not assume distinct key hashes.
+When the answer does not pass, the search `findAnswerCollision` returns two keys with one hash.
+It reads the address, the addresses of the state, the slots asked for and the storage keys of the address.
+It assumes that an address with no account has the word zero at each slot asked for.
+No theorem shows that the state transition keeps that property, though the fixtures expect the word zero there.
+`Valid.verify_accountProof` applies it to a canonical block of a valid view, against the state root of its header.
+An answer at the pending block or at a block off the canonical chain is not covered, since the view does not check their states.
+`accountProof_agree` proves that the balance, the nonce and the words of the answer are those of `eth_getBalance`, `eth_getTransactionCount` and `eth_getStorageAt` at the same block.
+`accountProofOfJson_accountProofJson` proves that the reader reads back what the writer writes, for a nonce below `2^64`.
+
 ### The RLPx session
 
 `receive` (`Networking/Devp2p/Session.lean`) follows an RLPx session after the handshake, frame by frame.
@@ -2485,10 +2506,32 @@ The charges whose exit epoch is at most `high + 1` fit the unspent capacity of t
 The cap is `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` plus `consolidationCap`.
 If `x` is before Electra, there is no carry, and the cap also adds the churn of validators for a bound on the size of the registry, at least 1, times `MAX_EFFECTIVE_BALANCE`.
 `consolidationCap` is an assumption: it bounds the consolidation churn of the state where each step of the second run starts, from Electra.
-That churn follows the total active balance, and no theorem yet bounds how the churn changes between slots, so the assumption keeps the bound close to the churn that the chain actually has.
+That churn follows the total active balance, so the assumption keeps the bound close to the churn that the chain actually has.
 The theorem also assumes that the preset orders its caps, `MAX_EFFECTIVE_BALANCE` at most `MIN_ACTIVATION_BALANCE` at most `MAX_EFFECTIVE_BALANCE_ELECTRA`; `CapOrder.mainnet` and `CapOrder.minimal` show that both presets do.
 The bound counts exits at their assigned exit epochs, so it does not bound the exits that the blocks of one epoch initiate.
 It does not bound activations, and no theorem yet derives the change of the active set or puts this bound into `accountable_safety_of_change`.
+
+`departure_charges_le_funded_window` (`Consensus/Proofs/DirectSafety/IntervalBounds.lean`) derives `consolidationCap` instead of assuming it.
+It applies `departure_charges_le_window` with a cap computed from the funded window, a bound on the active balance.
+A window that ends before `ELECTRA_FORK_EPOCH` reads `departure_charges_le_window_before_fork` instead.
+The funded window starts from the funded stake at `x`.
+That stake counts the larger of the effective and the actual balance of each validator that is active, not yet active, or the source of a pending consolidation.
+The window adds the deposit balance left to consume at `x` and `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` for each epoch of the window.
+It also adds the credits that the second run records.
+The window bounds the active balance at the state where each step of the second run starts, from Electra.
+So the derived cap is at least the consolidation churn of each of those states.
+It assumes that the second run ends at an epoch of at most `high + 1`, and that `tail.balanceEvents high` replays the balance events of the run.
+`Run.balanceEvents_ok` shows that this replay succeeds for every run that ends before Gloas, so the second assumption always holds for some events.
+The first assumption is a real restriction: no theorem yet cuts a longer run at `high + 1`, so for such a run `departure_charges_le_window` with its assumed cap is still the bound.
+These events record each change of balance with the limit that the transition computes for it.
+The recorded credits are the rewards, including those of proposers, whistleblowers and sync committees, and the deposits that the deposit churn does not limit.
+Those are the deposits before Electra and, from Electra, the deposits to withdrawn sources of pending consolidations.
+They raise the bound, so it is only as tight as the credits of the run.
+The theorem charges `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT` and the consolidation rate only if the window reaches `ELECTRA_FORK_EPOCH`, so it also covers a window that crosses the fork.
+With a withdrawal delay below two epochs, the theorem uses the registry window times `MAX_EFFECTIVE_BALANCE_ELECTRA` instead.
+The mainnet delay of 256 epochs never reaches that case.
+The theorem also assumes the order of the caps and that the divisors of the preset are positive.
+`Preset.divisorsPositive_mainnet` and `Preset.divisorsPositive_minimal` show the second for both presets.
 
 From Phase 0 to Deneb, `accountable_safety_of_weakSubjectivityPeriod_of_lt_electra` covers the period in part.
 The rule counts `N` active validators of average balance `t` ether, rounded down, a largest effective balance `T` ether, a churn of `delta` validators and `Delta` top-ups per epoch.
@@ -2930,9 +2973,10 @@ An older vote has a source at most, and a target before, those of each vote of t
 Each of these theorems needs the file to hold one or more messages of its kind for the key.
 A vote with the target of a kept vote is not older, so the theorem on votes says nothing about it.
 The signer of these theorems records every message it signs, so a signer that prunes as it goes is not covered here.
-A signer of blocks that prunes is covered below, but no theorem covers a signer of votes that prunes.
+A signer of blocks or votes that prunes is covered below.
 `mem_blocksOf` and `mem_attestationsOf` show that the messages of a key are those of its own entries.
-The proofs read only conditions 2, 4 and 5, through `lt_slot_of_checkBlockSlot`, `le_sourceEpoch_of_checkSourceEpoch` and `lt_targetEpoch_of_checkTargetEpoch`.
+The proofs read conditions 2, 4 and 5 through `lt_slot_of_checkBlockSlot`, `le_sourceEpoch_of_checkSourceEpoch` and `lt_targetEpoch_of_checkTargetEpoch`.
+Through the import steps of `importAndSignBlocks` and `importAndSignAttestations`, they also read the clause of conditions 1 and 3 that refuses each message at the slot or target of a record without a signing root.
 
 Import follows the [minimal strategy](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#advice-for-minimal-databases) of the EIP, for the held record and for the file.
 For each key it keeps one block limit, the greatest slot, and one vote limit, the greatest source epoch and the greatest target epoch, without signing roots.
@@ -2958,7 +3002,21 @@ So the signer signs nothing at the slot of a block of that file without a signin
 `checkBlockSigning_of_importAndSignBlocks_of_importFile` concludes the same for each file imported before the header.
 `importFile_of_data_eq_nil` shows that importing a file without entries puts the record in its minimal form, which prunes it.
 So these theorems also cover a signer of blocks that prunes its record with the minimal strategy as it goes.
-No theorem chains imports with votes recorded between them.
+
+`importAndSignAttestations` models a signer of votes that also imports files, from any starting file.
+`importAndSignAttestations_map_signAttestation` shows that a run without imports is `signAttestations`.
+`signingRoot_eq_of_importAndSignAttestations`, `isSlashableWith_eq_false_of_importAndSignAttestations` and `isSlashableAttestationData_eq_false_of_importAndSignAttestations` state the three theorems on `signAttestations` for it, and the theorems on `signAttestations` follow from them.
+Each holds whatever files the signer imports.
+
+`checkAttestationSigning_of_importAndSignAttestations` shows that each vote that the signer signs meets conditions 3, 4 and 5 of the starting file.
+`le_sourceEpoch_of_importAndSignAttestations` follows from it: if each vote of that file has a source at least an epoch, so does each signed vote.
+`lt_targetEpoch_of_importAndSignAttestations` does the same for a target after an epoch.
+Both need that file to hold one or more votes of the key.
+
+`le_sourceEpoch_of_importAndSignAttestations_of_importFile` shows that a vote signed after an import has a source at least each source of the file and of the starting file.
+`lt_targetEpoch_of_importAndSignAttestations_of_importFile` shows that the target of such a vote is after each target of both files.
+`checkAttestationSigning_of_importAndSignAttestations_of_importFile` concludes that such a vote meets conditions 3, 4 and 5 of each file imported before it.
+Since `importFile_of_data_eq_nil` makes a prune the import of an empty file, the theorems on `importAndSignAttestations` also cover a signer of votes that prunes its record with the minimal strategy as it goes.
 
 `readUInt64_uint64Json` and `readBytes_bytesJson` show that each integer and each byte string of a file reads back as written.
 `ofJson_toJson` shows that a whole file reads back as itself from the document that `toJson` writes, whatever its records.
@@ -3451,6 +3509,12 @@ Step 2 also says that every descendant of an invalid terminal block must be `INV
 The model keeps no invalid block, so a child of a payload rejected by the check is `SYNCING` instead.
 A chain whose last block is from Paris on is taken as valid, its terminal block included.
 
+Payload attributes of `engine_forkchoiceUpdated` answer by the version of the method and the fork of their timestamp.
+`exists_attributesTakeFork_iff` (`Proofs/ForkchoiceUpdated.lean`) shows that some version takes a fork exactly when the fork is from Paris to Glamsterdam.
+`attributesTakeFork_eq_true_iff` shows that a version takes such a fork exactly when it decodes the structure of the attributes at that fork.
+So version 1 takes Paris, version 2 Paris and Shapella, version 3 the forks from Dencun before Glamsterdam, and version 4 Glamsterdam.
+Version 0 reads as version 1, and a version above 4 as version 4.
+
 The Engine API reads its base types with the readers that it shares with the execution JSON-RPC API.
 The readers live below the Execution layer, in `Serialization/JsonRpc.lean`, and their proofs in `Serialization/Proofs/JsonRpc.lean`.
 The readers read back the hex encoding of any bytes (`bytesOf_hexString`).
@@ -3655,6 +3719,30 @@ The head of the view is the head of the update (`head_hash_of_forkchoiceUpdated`
 The view resolves `safe` and `finalized` to the blocks that the update named, when their hashes are not zero (`resolve_safe_of_forkchoiceUpdated`, `resolve_finalized_of_forkchoiceUpdated`).
 A notification gets no response (`answerJson_notification`).
 
+`eth_config` reports the current, next and last scheduled configurations of EIP-7910 (`Execution/Rpc/Config.lean`).
+The current configuration is the last one the head has reached.
+The next and last are those of the first and last fork times after the head whose forks the node supports, or both null when there is none (`ChainView.configReport_eq_ok`, `mem_configFutureTimes`, `ChainView.configReport_next_eq_none_iff`, `ChainView.configReport_current_le`, `ChainView.configReport_next_after`, `ChainView.configReport_last_after`).
+The reported fork ID is the EIP-6122 `FORK_HASH` that the node announces at that configuration's activation (`configObject_forkId`, `Proofs/Rpc/Config.lean`).
+The block that represents the Merge in the fork ID is an explicit input, distinct from the actual Paris activation block.
+The report's precompile addresses are exactly those that transaction processing warms (`configObject_precompiles`).
+Its blob schedule is `chainBlobSchedule` at the configuration's activation (`configObject_blobSchedule`).
+The named BPO forks keep Osaka's precompile names and system contracts (`configPrecompiles_bpo`, `configSystemContracts_bpo`).
+
+The precompile names through Osaka and the system-contract sets through Prague follow EIP-7910 at the pinned EIPs commit.
+The Amsterdam set also lists the builder deposit and exit contracts of EIP-8282, whose constants name both addresses.
+No meta-EIP at that pin lists the system-contract set after Prague.
+
+The method declines reports before Cancun, and fails when the head is after Amsterdam, since no meta-EIP defines that report.
+A fork scheduled after Amsterdam is one that the node does not support, so the report leaves it out.
+When no supported fork remains, `next` and `last` are null, as EIP-7910 says.
+It rejects a chain ID of zero.
+A fork from Cancun on that activates at a block after genesis has no known time, so it is never a next or last configuration, as EIP-7910 says.
+The method fails when such a fork is the current one, which cannot be left out, or when the head has not reached its block, on which the fork IDs depend.
+It requires each chain blob schedule to start at genesis or at a fork time, as EIP-7892 ties each schedule to a fork.
+It requires the head to have passed every fork block, so that each reported fork ID is the one of its activation.
+It requires genesis context, which the export infers from block zero or reads as an input for a pruned chain.
+For a pruned chain that context is trusted, and no theorem ties it to the retained blocks.
+
 A signed transaction of every kind reads back from its JSON form (`transactionOfJson_transactionJson`, `Proofs/Rpc/Transaction.lean`).
 A typed transaction holds its parity as a 256-bit number, while the schema types it as a byte, so the round trip asks that parity to be below 256.
 That bound holds for every transaction whose signature names a sender (`parityIsByte_of_recoverSender`).
@@ -3703,6 +3791,29 @@ The receipts of the lowest block, of side blocks and of the pending block are in
 No result schema of the getters allows `null`.
 Here an unknown block or transaction gets `-32001`, the code that the getter of a block access list in the same file requires for an unknown block.
 
+The block access-list methods of those same API files return the JSON list or its EIP-7928 RLP bytes (`Execution/Rpc/AccessList.lean`).
+The JSON writer keeps all six account fields, including empty arrays, and writes storage keys and values as 32-byte data.
+Every list reads back from its JSON form (`blockAccessListOfJson_blockAccessListJson`, `Proofs/Rpc/AccessList.lean`).
+`ChainView.blockAccessList_eq_ok_iff` identifies the resolved record and its retained list for every successful non-pending JSON query, or the unknown block that gives `null`.
+`ChainView.rawBlockAccessList_eq_ok_iff` identifies the resolved record, its retained list and its RLP encoding for every successful raw query.
+For a non-pending query, successful JSON and raw answers both read back as the retained list of the resolved block (`ChainView.blockAccessList_forms`).
+In a valid view, the raw answer for a canonical block after the lowest hashes to the `blockAccessListHash` of its header (`Valid.rawBlockAccessList_hash`).
+The proof uses the list built by execution and the state transition's check of its hash.
+`Valid.blockAccessList_answers` proves that both methods succeed when a non-pending query resolves to such a block with a retained list.
+`Valid.check_accessList` derives the retained list's order, uniqueness and gas-limit checks from execution.
+`call_blockAccessList` and `call_rawBlockAccessList` connect the public RPC method names to the view methods after parameter decoding.
+`Valid.call_blockAccessList_answers` proves that both dispatched replies recover the checked retained list and that the raw bytes hash to its header.
+The lowest block, side blocks and the pending block are inputs, so that hash guarantee does not cover their retained lists.
+
+An unknown block gives `null` to `eth_getBlockAccessList` and `-32001` to `debug_getRawBlockAccessList`.
+Both reject a block before Glamsterdam with `-32001`, and a missing retained list from that fork with `4444` (`retainedAccessList_of_lt`, `retainedAccessList_pruned`).
+The JSON method always gives `null` for `pending` (`blockAccessList_pending`).
+The source leaves `pending` open for the raw getter; it reads the pending record, as the other raw getters do.
+The binding retains the list of each block it executes; the lowest block has no retained list.
+Its `pruned_access_lists` argument removes lists at named block numbers while keeping the blocks.
+`encode_block_access_list` reads a JSON list under the same schema and returns its RLP bytes, so callers can check a JSON answer against a header hash.
+It does not check the order of the list, so only a list in canonical order gives the hash of the header.
+
 The receipt methods return the object `ReceiptInfo` of [`receipt.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/receipt.yaml), with its logs as objects `Log` (`Execution/Rpc/Receipt.lean`).
 The receipt objects of a block are one for each receipt, in order, each built from its transaction and its receipt (`receiptInfos_eq_ok`, `receiptInfo_eq_ok`, `Proofs/Rpc/Receipt.lean`).
 Their logs are numbered `0, 1, 2, …` across the block (`logIndex_receiptInfos`), and the lookup of one receipt returns the object at its index among those of its block (`transactionReceipt_eq_ok`).
@@ -3738,6 +3849,10 @@ The source leaves several cases open: a block hash with a bound, an empty topic 
 The module header gives the choice for each, and follows the official fixtures where they decide.
 A log with fewer topics than the filter has positions does not match, even when each extra position takes any topic (`Filter.selects_eq_false_of_length_lt`).
 No fixture filter ends with a position that takes any topic, and no text of the source decides the case.
+
+The account queries of [`state.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/state.yaml) read the state after the block that their parameter names, `latest` by default (`Execution/Rpc/Account.lean`).
+`eth_getStorageValues` gives, for each key of each address of its request, the word that `eth_getStorageAt` gives for the same block (`storageValues_agree`).
+An address with no account has balance and nonce zero and empty code (`balance_of_none`, `nonce_of_none`, `code_of_none`), as the fixtures expect, though no text states it.
 
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
@@ -3943,6 +4058,79 @@ It checks the attestation data index of Deneb, Electra and Fulu stores, and code
 It checks the aggregates and contributions against bytes it builds itself, and codes 400, 404 and 503; no theorem states these error codes.
 The issue's single matching and validity theorems are split by fork; from Electra the union of bits is stated as the set of attesters.
 
+The light client answers are in `Consensus/BeaconApi/LightClient.lean`: the bootstrap of a block, the updates of a range of periods, and the latest finality and optimistic updates.
+`bootstrapFor_valid` (`Consensus/Proofs/BeaconApi/LightClientBootstrap.lean`) shows that a bootstrap the node serves for a block starts a light client that trusts that block.
+It assumes that the store holds the block under its root and the post state that the block names.
+These two facts are what the store checks when it takes a block, but no theorem on the fork choice proves them yet.
+It also assumes that the schedule puts the forks from Capella to Heze in order.
+It assumes a lawful state type and a preset whose sizes in the block and the state are nonzero.
+The answer itself refuses a block whose fork is not the fork that the schedule gives at its slot.
+`IsUpdatesAnswer` is the rule of the source for the updates answer: known updates of the range, in increasing period order, starting with the earliest known one, at most `min(128, count)` of them.
+`updatesInRange_answer` (`Consensus/Proofs/BeaconApi/LightClient.lean`) shows that the known updates of the range, cut to that limit, form such an answer.
+`IsUpdatesAnswer.length_le` shows that no accepted answer holds more updates, and `IsUpdatesAnswer.length_le_limit` gives the limit itself.
+`decodeUpdateChunks_encode` shows that the SSZ chunks of updates decode back to the updates, each with its fork, on a chain that passes the check of fork digests.
+It assumes a preset with a nonempty logs bloom and sync committee, as the round trip of SSZ for these containers does.
+The decoder also refuses a chunk whose digest is not the digest of the epoch of its update.
+`encodeUpdateChunks_decode` shows the converse under the same assumptions: bytes that decode are the chunks of the updates they give.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_light_client.py`) reads the pinned data collection cases of the light client.
+It checks that the chunks of the best updates of each case carry the digests and the bytes that the case serves, and decode back to them.
+It checks the start, the count and the limit of 128 of a range, the versions of the JSON answer, and the refusal of an update of another fork than its epoch.
+It builds the store of a Gloas fork choice case, checks the bootstrap of the head and of the anchor, and starts a light client from each.
+It checks code 404 for an unknown block, for a schedule before Altair, and for a missing finality or optimistic update; no theorem states these codes.
+
+The answers that split the rewards of validators are in `Consensus/BeaconApi/Rewards.lean`: the attestation rewards of an epoch, and the ideal rewards of each effective balance.
+`attestationRewardsResponse_ok` (`Consensus/Proofs/BeaconApi/Rewards.lean`) shows that an answer comes from a state at the last slot of an epoch past the first, for the epoch before, and that both lists are read from the state that the rewards step of the epoch transition reads.
+`processEpoch_stateBeforeRewards` shows that the epoch transition runs its rewards step on that state, after justification and, from Altair, the inactivity scores.
+`attestationRewards_indices` shows that the answer names the requested validators, once each and in order of index, and `attestationRewards_ok` that the total rewards exist whenever the rewards step succeeds; no theorem says the same of the ideal rewards.
+`attestationRewards_parts_of_altair` and `attestationRewards_parts_of_lt_altair` show that each part is the reward minus the penalty of the deltas of its kind.
+Before Altair the inclusion part is the attester's own reward; `attesterInclusionRewards_split` shows that the inclusion deltas are those parts plus the proposer shares, and `attestationRewards_inclusionDelay_le_of_lt_altair` that the part is at most the deltas.
+`attestationRewards_sum_of_altair` and `attestationRewards_sum_of_lt_altair` show that the parts add up to what the transition applies; before Altair the inclusion deltas take the place of the inclusion part.
+`attestationRewards_balance_of_lt_altair` and `attestationRewards_balance_of_altair` show that the rewards step moves the balance of the validator by exactly that sum.
+Before Altair they assume that the balance plus the reward covers the penalty, and from Altair that the penalties do not exceed the balance: a balance stops at zero, so a larger penalty moves it by less.
+From Altair the assumption bounds the sum of the penalties of the epoch, since the flags apply one after the other; it is sufficient, not necessary.
+`idealAttestationRewards_sorted` shows that the ideal rewards list distinct effective balances in increasing order.
+`attestationRewards_ideal_of_altair` shows that from Altair an eligible validator that set every flag earns the ideal parts of its effective balance.
+No theorem describes the ideal rewards before Altair.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_rewards.py`) reads the states of the pinned rewards vectors, at every fork from phase 0.
+It takes each state to the last slot of its epoch, and checks each part of each validator against EthLib's deltas of its kind, which the rewards vectors check, on the state after justification and the inactivity scores.
+It checks that a validator that earned a reward for every vote gets the ideal parts of its effective balance, and code 400 and 404, including a state that is not at the last slot of its epoch.
+
+The sync committee rewards of a block are in the same module, read from the state that the sync aggregate step of the block reads.
+`syncCommitteeRewards_reward` shows that the reward of a member is the sum over its seats of the participant reward that the transition computes, counted for a seat that signed and against a seat that did not.
+`syncCommitteeRewards_indices` shows that the answer names each requested member once, in increasing order of index.
+`syncCommitteeRewards_balance` shows that the sync aggregate step moves the balance of a member that is not the proposer by exactly its reward.
+`syncCommitteeRewards_balance_of_proposer` shows that the proposer moves by its reward plus its share of the reward of each seat that signed.
+Both assume that the balance covers the participant reward once per seat of the member, since a balance stops at zero.
+`syncCommitteeRewardsResponse_ok` shows that an answer comes only from a state of Altair or later, and lists the rewards of the request; `syncCommitteeRewardsResponse_of_lt_altair` shows code 400 before Altair.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_sync_rewards.py`) checks each reward against the balances of the pinned sync aggregate vectors, the proposer with its share.
+It checks the selection of named members once each, by index or key, and code 400 for an invalid identifier and for a state before Altair.
+
+The block rewards are in the same module, read from the state at the slot of the block, before it.
+`blockRewards` runs the steps of the block before its operations, then the proposer slashings, the attester slashings and the attestations, as the block does.
+Each of these three parts is the rise of the proposer's balance over its step; from Altair the sync aggregate part is the share of the proposer that the sync aggregate step computes, times the number of signatures.
+`processBlock` itself runs these steps through `stateBeforeOperations`; `processBlock_stateBeforeOperations` shows that it then runs its operations and its sync aggregate on that state.
+`stateBeforeOperations_ok_iff` shows that this state is the input that `processBlock` gives its operations, and `blockRewardsResponse_ok` that an answer is the JSON of `blockRewards`.
+`blockRewards_total` shows that the total is the sum of the four parts and that the answer names the proposer of the block, as the source says.
+`blockRewards_syncAggregate` shows that from Altair the sync part is the share of the step times the number of signatures, and `blockRewards_of_lt_altair` that before Altair the sync and attestation parts are zero.
+`blockRewards_balance` shows that the operations and the sync aggregate raise the proposer's balance by exactly the total.
+It assumes that the proposer has a balance, and that the block does not slash it, holds no deposit to its key before Electra and, from Electra to Fulu, no consolidation request from its key; the last three change the balance by other amounts.
+It also assumes that the proposer holds no seat in the sync committee, whose reward or penalty its balance would add, and that the mixes span more than the seed lookahead plus two epochs, so that every step reads the same proposer.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_block_rewards.py`) runs the blocks of the pinned random, finality and sanity vectors.
+It checks the total, the sync part against a share computed from the active balance, and, up to Fulu, the change of the proposer's balance less its withdrawals under the hypotheses above.
+
+The debug answers show the tree of the fork choice and its leaves (`Consensus/BeaconApi/Debug.lean`).
+`mem_treeNodes` (`Consensus/Proofs/BeaconApi/Debug.lean`) shows that the listed nodes are exactly the nodes of the tree, and `nodeViews_nodes` shows that the views follow that list, by root and status as the API names them: one per block before Gloas, and from Gloas the pending and empty nodes of each block, with the full node once its payload is verified.
+`treeParent_eq_some_iff` shows that a node of the tree names another as its parent exactly when that node is in the tree and the store gives the first as one of its children.
+`nodeView_parent` shows that a view reports that parent, by root and by status.
+`nodeViews_preGloas_full` shows that before Gloas the views are one per block, and that each has the status full, as the source says.
+`chainHeads_head` shows that when some leaf below the justified block is viable, the block of the head is among the chain heads.
+`mem_chainHeads_iff` describes the list exactly: a root is listed exactly when one of its nodes is a leaf of the tree, and `chainHeads_nodup` that each root is listed once.
+`nodeView_ptcCounts` shows that the three counts of the payload committee in a view are those of its block, so every node of one block has the same counts.
+`ptcCounts_le` bounds each count by the size of the committee, and puts the votes for on time among the recorded votes; `ptcCounts_preGloas` gives zero before Gloas.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_debug.py`) builds the stores of pinned fork choice cases of Capella, Deneb and Gloas.
+It checks the blocks, slots and parent roots against the bytes of the cases, the checkpoints, the full nodes and the committee counts against their steps and checks, the heads before Gloas against the blocks without children, and the validity of an optimistic block.
+It checks that the weights before Gloas lead from the justified block to the head of the case.
+
 Points that remain open:
 
 - The reader refuses a key that a container does not declare, while the source says that a field may be added to the data without a new version.
@@ -3957,6 +4145,25 @@ Points that remain open:
 - A store anchored after genesis names no block at genesis, or below its anchor; a head that cannot be computed makes the head, genesis and slot identifiers name nothing.
 - The source says that the spec map should include the constants of each known fork, and its example has a domain; EthLib gives only the configuration and the presets, and leaves the choice of constants to the maintainers.
 - The source does not say whether a fork scheduled at the farthest epoch is one that the node "is aware" of; EthLib lists it.
+- The source does not say which state answers a query for the attestation rewards of an epoch; EthLib takes the state at the last slot of the next epoch, before its slot step and its epoch transition, since the slot step changes no root that the rewards read, and refuses a state of the first epoch, whose transition applies no rewards, with code 404.
+- The source defines the ideal rewards only as "Ideal rewards info"; EthLib gives, for each effective balance of the eligible validators, the parts of a validator that voted right, included one slot after its vote before Altair, and leaves the definition to the maintainers.
+- Before Altair, the inclusion deltas also hold the shares a validator earned as the proposer that included votes; the source calls the part the attester's inclusion reward, so EthLib leaves those shares out of it.
+- The request body of the attestation rewards and of the sync committee rewards is a set of identifiers; EthLib accepts a repeated identifier and answers for it once, and an identifier that names no validator, or no member, gets no entry.
+- The ideal rewards cover only the effective balances of the eligible validators, whichever validators the request names.
+- The source does not say which state answers a query for the sync committee rewards of a block; EthLib takes the state that the sync aggregate step of the block reads.
+  It does not check the signature of the aggregate, which the block passed.
+- The source does not say whether the reward of a member whose balance a penalty takes to zero is the nominal penalty or the change of the balance; EthLib reports the nominal amount, so the penalty in the entry of such a member can exceed what its balance lost.
+- The source answers for every member when no array is provided; EthLib cannot tell an absent body from an empty array, and answers both for every member.
+- The source does not say which state answers a query for the block rewards; EthLib takes the state at the slot of the block, before it, and does not check the signatures of the block, which was imported.
+- The source does not say what the attestations of a block before Altair pay; their proposer earns its share at the end of the epoch, so EthLib reports zero for them.
+- A slashing part is the rise of the proposer's balance; for a block that slashes its own proposer that rise can be less than the whistleblower reward, or zero.
+- The proposer is the whistleblower of the slashings of its block, so a slashing part holds the whole whistleblower reward, not only the share that the transition calls the proposer reward.
+- The source lists codes 400, 404 and 500 for the block rewards; EthLib answers a block that fails its steps with code 500, since the block was imported.
+- The block rewards run the block only up to its attestations, and from Altair its other operations; they do not run the sync aggregate step, so an aggregate that the step would refuse still gets a sync part.
+- From Gloas the block also records a payment to a builder; the source does not say whether the total includes it, and EthLib leaves it out, since it does not change the proposer's balance in the block.
+- The reward of a member that is also the proposer leaves out the proposer share of each signature, which the block rewards count.
+- The source does not say what a block before Altair, which has no sync aggregate, gives; EthLib answers with code 400 and the example message of the source.
+- The source does not order the entries of the sync committee rewards; EthLib lists them in increasing order of index.
 - The source does not say whether the genesis fork version is the one of the configuration or the one that the genesis state holds; EthLib reads the configuration, which the domain of a deposit uses, so a chain that starts at a later fork reports a version that its genesis state does not hold.
 - `forkSchedule_upgrade` assumes that the state before the upgrade holds the version of its own fork; no theorem yet shows this for every state that the transition reaches.
 - The format rule of the spec map names hex, numbers and arrays only; EthLib writes the names of the preset and of the configuration as text, as the files do.
@@ -3968,6 +4175,11 @@ Points that remain open:
 - The source fixes the proposer lookahead at 64 items, the mainnet value; EthLib follows the preset, as the SSZ type of the source does, so the minimal preset gives 16.
 - The schema describes the nine validator statuses in words only.
   EthLib takes their conditions from the validator status document that the schema links, which is not a pinned file.
+- The source asks for updates "in consecutive order (by period)", which may mean increasing periods or periods with no gap; `IsUpdatesAnswer` asks only for increasing periods.
+- The source writes the context of an updates chunk as the digest of a fork version and the genesis validators root, the form before Fulu.
+  EthLib takes the digest of the epoch of the attested header, which from Fulu also depends on the blob schedule.
+- The source bounds the range of the updates answer by the period of the head; the answer leaves that bound to the updates that the caller gives.
+- Which update is the best of a period, and which update is the latest, depend on what the node has seen; the answers take them as input.
 - The source names no consensus version for Heze, so the answers on a Heze state carry no version, although the schemas list it as required.
 - A value that the node cannot encode or compute has no error of its own in the source.
   EthLib gives code 500, the code of the source for an internal error.
@@ -4054,6 +4266,22 @@ Points that remain open:
 - The contribution answer requires the slot of the state, and joins the messages of the sync committee of the next slot, as gossip checks them.
   It keeps only the messages of validators with a key of the requested subcommittee, so the messages of other subcommittees do not refuse the request.
   A message of a validator that the state does not know is left out too.
+- The weight of a view is "the raw stored weight" of the node; EthLib gives the weight of the head computation, with the votes of the justified state and the proposer boost.
+  From Gloas that weight is zero for the empty and full nodes of a block of the previous slot.
+- The checkpoints "recorded for this fork choice node" are read as those of the state after the block, not the unrealized ones that the store keeps.
+- A view never has the validity `invalid`, since the store drops the blocks that build on an invalid payload.
+  A pending or empty node from Gloas reads the payload that its block builds on, as its block hash does; a payload before the anchor counts as valid.
+- The attester count reads the votes on time: a vote of the committee records both of its answers.
+- The chain heads are the nodes without a child, each block once; from Gloas the leaf can be the empty or the full node of the block.
+  So from Gloas a block whose children all build on its full node is listed, through its empty node, although it has children.
+  The source gives the heads as the "leaves of fork choice tree" and names no payload status, so EthLib keeps that literal reading.
+  The flag of a head is set when a leaf of its block ends at an optimistic payload, as the validity of that leaf in the fork choice answer.
+- The execution block hash is zero before Bellatrix, where a block has no payload.
+- The fork choice answer fails with code 500 when the store lacks a state after a block, the justified checkpoint state, or another input of the weights of the head computation.
+  The heads answer fails only when the optimistic store cannot read the payload chain of a block; the exports build that store from the blocks of the store.
+- The store holds the blocks of one fork, so a store at the Gloas transition, with a full node for each block before Gloas, is out of reach.
+- The extra data "may differ between clients"; EthLib gives an empty object.
+- The debug state endpoint gives the state that a state identifier names, in the encoding of every other state answer, so it needs no answer of its own.
 
 ### Builder API
 
@@ -4584,12 +4812,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 487 operations and 49 size constants.
-The Python extension calls 487 of the operations and 49 of the constants.
+Lean exports 499 operations and 49 size constants.
+The Python extension calls 499 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11370 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2402), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1581), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (58), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (781), `x25519.c` (21), `xmss.c` (134).
+11540 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2523), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1605), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (71), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (793), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

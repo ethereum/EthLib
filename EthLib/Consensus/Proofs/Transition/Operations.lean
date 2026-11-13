@@ -5,7 +5,6 @@ public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.Withdrawals
-public import EthLib.Consensus.Transition.EpochUpdates
 public import EthLib.Consensus.Transition.Operations
 
 /-!
@@ -1165,94 +1164,40 @@ theorem applyPendingDeposit_cases {deposit : PendingDeposit}
     obtain ⟨index, _, computed⟩ := computed
     exact .inr (.inl ⟨index, computed⟩)
 
-/-- Before Electra a deposit leaves the state unchanged, raises one balance or adds one validator.
+/-- A block deposit changes nothing, queues a pending deposit, or applies at once.
 
-The second case is a deposit to a known key.
+The first case covers a new key with an invalid signature.
 
-The third case adds a validator at the end of the registry, and no other validator has its key. -/
-theorem applyDeposit_cases {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
-    {amount : Gwei} {signature : BLSSignature} (before : fork < .pectra)
-    (computed :
-      applyDeposit config checks state pubkey withdrawalCredentials amount signature = .ok after) :
-    after = state ∨
-    (∃ index : ValidatorIndex, increaseBalance state index amount = .ok after) ∨
-    (pubkey ∉ validatorKeys state ∧
-      addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) := by
-  have notElectra : ¬ .pectra ≤ fork := Nat.not_le_of_lt before
-  simp only [applyDeposit, notElectra, ↓reduceDIte] at computed
-  exact applyPendingDeposit_cases computed
+The second case is from Electra: it queues the deposit, after it adds a new key with no balance.
 
-/-- From Electra a deposit leaves the state unchanged or queues a pending deposit.
-
-For a new key it first adds a validator with no balance.
-
-Before Electra the deposit applies as a pending deposit. -/
-theorem applyDeposit_fork_cases {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
+The third case is before Electra: the deposit applies as a pending deposit. -/
+theorem applyDeposit_cases {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
     {signature : BLSSignature}
-    (ok : applyDeposit config checks state pubkey credentials amount signature = .ok after) :
-    (.pectra ≤ fork ∧ (after = state ∨ ∃ middle pending,
+    (computed : applyDeposit config checks state pubkey credentials amount signature = .ok after) :
+    after = state ∨
+    (.pectra ≤ fork ∧ ∃ middle pending,
       (middle = state ∨ addValidatorToRegistry state pubkey credentials 0 = .ok middle) ∧
-        after = { middle with pendingDeposits := fun _ => pending })) ∨
+        after = { middle with pendingDeposits := fun _ => pending }) ∨
     (fork < .pectra ∧ applyPendingDeposit config checks state
       ⟨pubkey, credentials, amount, signature, GENESIS_SLOT⟩ = .ok after) := by
-  unfold applyDeposit at ok
-  split at ok
+  unfold applyDeposit at computed
+  split at computed
   · rename_i electra
-    refine .inl ⟨electra, ?_⟩
-    unfold applyDepositElectra at ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨middle, added, queued⟩ := ok
+    unfold applyDepositElectra at computed
+    split at computed
+    · simp only [bind_ok_iff] at computed
+      obtain ⟨_, _, computed⟩ := computed
+      split at computed
+      · simp only [bind_ok_iff, liftAccessor_ok] at computed
+        obtain ⟨middle, added, queued⟩ := computed
         obtain ⟨pending, rfl⟩ := addPendingDeposit_eq queued
-        exact .inr ⟨middle, pending, .inr added, rfl⟩
-      · cases ok; exact .inl rfl
-    · obtain ⟨pending, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
-      exact .inr ⟨state, pending, .inl rfl, rfl⟩
+        exact .inr (.inl ⟨electra, middle, pending, .inr added, rfl⟩)
+      · cases computed
+        exact .inl rfl
+    · obtain ⟨pending, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
+      exact .inr (.inl ⟨electra, state, pending, .inl rfl, rfl⟩)
   · rename_i early
-    exact .inr ⟨Nat.lt_of_not_le early, ok⟩
-
-/-- Slashing penalties change only the balances. -/
-theorem processSlashings_eq {s t : BeaconState preset fork}
-    (ok : processSlashings s = .ok t) : ∃ balances, t = { s with balances } := by
-  have fold {step : BeaconState preset fork → Nat → Except TransitionError _} {xs : List Nat}
-      (kept : ∀ a i b, step a i = .ok b → ∃ balances, b = { a with balances })
-      (ok : xs.foldlM step s = .ok t) : ∃ balances, t = { s with balances } := by
-    refine foldlM_ok_invariant (fun t => ∃ balances, t = { s with balances }) ?_ ⟨_, rfl⟩ ok
-    rintro _ _ _ ⟨_, rfl⟩ stepped
-    obtain ⟨_, rfl⟩ := kept _ _ _ stepped
-    exact ⟨_, rfl⟩
-  unfold processSlashings at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, ok⟩ := ok
-  split at ok
-  · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp ok
-    refine fold (fun _ _ _ ok => ?_) applied
-    simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, lowered⟩ := ok
-        obtain ⟨_, _, rfl⟩ := decreaseBalance_eq_ok_iff.mp lowered
-        exact ⟨_, rfl⟩
-      · cases ok; exact ⟨_, rfl⟩
-    · cases ok; exact ⟨_, rfl⟩
-  · refine fold (fun _ _ _ ok => ?_) ok
-    simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
-        obtain ⟨_, _, rfl⟩ := decreaseBalance_eq_ok_iff.mp lowered
-        exact ⟨_, rfl⟩
-      · cases ok; exact ⟨_, rfl⟩
-    · cases ok; exact ⟨_, rfl⟩
+    exact .inr (.inr ⟨Nat.lt_of_not_le early, computed⟩)
 
 /-- A deposit adds at most one entry to the registry, and keeps each validator there. -/
 theorem applyPendingDeposit_validators_size_le_and_mem {deposit : PendingDeposit}

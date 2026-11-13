@@ -1489,22 +1489,6 @@ private theorem exitChurnLimit_le_cap {fork : Fork} {s : BeaconState preset fork
   obtain ⟨whole, _, rfl⟩ := ok
   exact UInt64.le_iff_toNat_le.mp Std.min_le_left
 
-/-- Withdrawal requests either do nothing, initiate an exit, or spend partial-withdrawal churn. -/
-private theorem withdrawalRequest_cases {fork : Fork} {s t : BeaconState preset fork}
-    {electra : .pectra ≤ fork} {request : WithdrawalRequest}
-    (ok : processWithdrawalRequest config s electra request = .ok t) :
-    t = s ∨ (∃ index, initiateValidatorExit config s index = .ok t) ∨
-      ∃ index v owed,
-        requestPartialWithdrawal config s electra index v request.amount owed = .ok t := by
-  unfold processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; exact .inl rfl)
-    | (cases ok)
-    | exact .inr (.inl ⟨_, liftAccessor_ok.mp ok⟩)
-    | exact .inr (.inr ⟨_, _, _, ok⟩)
-
 /-- An exit trace tags its call and covers every newly assigned validator exit. -/
 private theorem initiateExit_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {index : ValidatorIndex}
@@ -3822,19 +3806,17 @@ private theorem total_active_congr {f h : Fork} {s : BeaconState preset f}
   simp only [getTotalBalance, sourceNone, targetNone, sumMarked_markIndices_eq_stake, sum]
 
 private structure SitePrefix {fork : Fork} (s t : BeaconState preset fork) : Prop where
-  keys : validatorKeys s <+: validatorKeys t
-  distinct : PubkeysDistinct s → PubkeysDistinct t
+  grows : s.validators.data.size ≤ t.validators.data.size
   active : ActiveStep s t
   effective : EffectiveKept s t
 
 private theorem SitePrefix.refl {fork : Fork} (s : BeaconState preset fork) : SitePrefix s s :=
-  ⟨List.prefix_refl _, id, .refl _, effectiveKept_refl _⟩
+  ⟨Nat.le_refl _, .refl _, effectiveKept_refl _⟩
 
 private theorem SitePrefix.trans {fork : Fork} {s t u : BeaconState preset fork}
     (one : SitePrefix s t) (two : SitePrefix t u) : SitePrefix s u :=
-  ⟨one.keys.trans two.keys, two.distinct ∘ one.distinct, one.active.trans two.active,
-    effectiveKept_trans one.effective two.effective
-      (by simpa [validatorKeys] using one.keys.length_le)⟩
+  ⟨Nat.le_trans one.grows two.grows, one.active.trans two.active,
+    effectiveKept_trans one.effective two.effective one.grows⟩
 
 private theorem SitePrefix.fold {fork : Fork} {α : Type}
     {action : BeaconState preset fork → α → Except TransitionError (BeaconState preset fork)}
@@ -3871,8 +3853,7 @@ private theorem consolidationRequestsSites_prefix {fork : Fork}
     · exact ⟨s, consolidationRequestSites_input recorded site first, .refl s⟩
     · obtain ⟨u, same, kept⟩ := ih replayed tail
       exact ⟨u, same, (SitePrefix.mk
-        (frame_processConsolidationRequest stepped).pubkeysPrefix
-        (frame_processConsolidationRequest stepped).pubkeysDistinct
+        (frame_processConsolidationRequest stepped).registryGrows
         (activeStep_processConsolidationRequest stepped)
         (effectiveKept_consolidationRequest stepped)).trans kept⟩
 
@@ -3892,105 +3873,59 @@ private theorem blockConsolidationSites_prefix {fork : Fork}
       votedAtt, votedAttOk, deposited, depositedOk, exited, exitedOk, changed, changedOk,
       requested, requestedOk, withdrawn, withdrawnOk, ⟨last, recorded⟩, replayed, rfl⟩ := ok
     have head : SitePrefix s headed := by
-      refine ⟨(frame_processBlockHeader headedOk).pubkeysPrefix,
-        (frame_processBlockHeader headedOk).pubkeysDistinct,
+      refine ⟨(frame_processBlockHeader headedOk).registryGrows,
         activeStep_processBlockHeader headedOk, ?_⟩
       obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
       exact effectiveKept_refl _
     have execution : SitePrefix headed executed := by
-      refine ⟨(frame_processBlockExecution executedOk).pubkeysPrefix,
-        (frame_processBlockExecution executedOk).pubkeysDistinct,
+      refine ⟨(frame_processBlockExecution executedOk).registryGrows,
         activeStep_processBlockExecution executedOk, ?_⟩
       exact effectiveKept_data (congrArg (·.data) (processBlockExecution_validators executedOk))
     have randao : SitePrefix executed revealed := by
-      refine ⟨(frame_processRandao revealedOk).pubkeysPrefix,
-        (frame_processRandao revealedOk).pubkeysDistinct,
+      refine ⟨(frame_processRandao revealedOk).registryGrows,
         activeStep_processRandao revealedOk, ?_⟩
       obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
       exact effectiveKept_refl _
     have vote : SitePrefix revealed voted := by
-      refine ⟨(frame_processEth1Data votedOk).pubkeysPrefix,
-        (frame_processEth1Data votedOk).pubkeysDistinct,
+      refine ⟨(frame_processEth1Data votedOk).registryGrows,
         activeStep_processEth1Data votedOk, ?_⟩
       obtain ⟨_, _, rest⟩ := processEth1Data_eq votedOk
       exact effectiveKept_data (congrArg (·.validators.data) rest)
     have proposers : SitePrefix voted proposed := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processProposerSlashing h).pubkeysPrefix,
-        (frame_processProposerSlashing h).pubkeysDistinct,
+      (fun _ _ _ h => ⟨(frame_processProposerSlashing h).registryGrows,
         activeStep_processProposerSlashing h, effectiveKept_proposerSlashing h⟩) proposedOk
     have attesters : SitePrefix proposed attested := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processAttesterSlashing h).pubkeysPrefix,
-        (frame_processAttesterSlashing h).pubkeysDistinct,
+      (fun _ _ _ h => ⟨(frame_processAttesterSlashing h).registryGrows,
         activeStep_processAttesterSlashing h, effectiveKept_attesterSlashing h⟩) attestedOk
     have attestations : SitePrefix attested votedAtt := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processAttestation h).pubkeysPrefix,
-        (frame_processAttestation h).pubkeysDistinct,
+      (fun _ _ _ h => ⟨(frame_processAttestation h).registryGrows,
         activeStep_processAttestation h,
         effectiveKept_data (by rw [(processAttestation_registry h).1])⟩) votedAttOk
     have deposits : SitePrefix votedAtt deposited := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processDeposit h).pubkeysPrefix,
-        (frame_processDeposit h).pubkeysDistinct,
+      (fun _ _ _ h => ⟨(frame_processDeposit h).registryGrows,
         activeStep_processDeposit h, effectiveKept_processDeposit h⟩) depositedOk
     have exits : SitePrefix deposited exited := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processVoluntaryExit h).pubkeysPrefix,
-        (frame_processVoluntaryExit h).pubkeysDistinct,
+      (fun _ _ _ h => ⟨(frame_processVoluntaryExit h).registryGrows,
         activeStep_processVoluntaryExit h, effectiveKept_voluntaryExit h⟩) exitedOk
     have changes : SitePrefix exited changed := by
       unfold processBlsToExecutionChanges at changedOk
       split at changedOk
       · rw [← Array.foldlM_toList] at changedOk
         exact SitePrefix.fold (fun _ _ _ h =>
-          ⟨(frame_processBlsToExecutionChange h).pubkeysPrefix,
-          (frame_processBlsToExecutionChange h).pubkeysDistinct,
+          ⟨(frame_processBlsToExecutionChange h).registryGrows,
           activeStep_processBlsToExecutionChange h, effectiveKept_blsChange h⟩) changedOk
       · cases changedOk; exact .refl _
     have requests : SitePrefix changed requested := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processDepositRequest h).pubkeysPrefix,
-        (frame_processDepositRequest h).pubkeysDistinct,
+      (fun _ _ _ h => ⟨(frame_processDepositRequest h).registryGrows,
         activeStep_processDepositRequest h, effectiveKept_depositRequest h⟩) requestedOk
     have withdrawals : SitePrefix requested withdrawn := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processWithdrawalRequest h).pubkeysPrefix,
-        (frame_processWithdrawalRequest h).pubkeysDistinct,
+      (fun _ _ _ h => ⟨(frame_processWithdrawalRequest h).registryGrows,
         activeStep_processWithdrawalRequest h, effectiveKept_withdrawalRequest h⟩) withdrawnOk
     obtain ⟨u, same, kept⟩ := consolidationRequestsSites_prefix replayed site member
     exact ⟨u, same, head.trans (execution.trans (randao.trans (vote.trans (proposers.trans
       (attesters.trans (attestations.trans (deposits.trans (exits.trans (changes.trans
         (requests.trans (withdrawals.trans kept)))))))))))⟩
   · cases ok; simp at member
-
-/-- A site within a block has the active stake of the block's input state. -/
-private theorem SitePrefix.weight {fork : Fork} {s t : BeaconState preset fork}
-    (kept : SitePrefix s t) (unique : PubkeysDistinct s)
-    (bound : t.validators.data.size < 2 ^ 64) :
-    Models.stake (effectiveWeight t) (activeKeys t) =
-      Models.stake (effectiveWeight s) (activeKeys s) := by
-  classical
-  have epoch : getCurrentEpoch t = getCurrentEpoch s := by
-    simp only [getCurrentEpoch, kept.active.1]
-  have indices : getActiveValidatorIndices t (getCurrentEpoch t) =
-      getActiveValidatorIndices s (getCurrentEpoch s) := by
-    rw [epoch]
-    exact kept.active.2.getActiveValidatorIndices_eq (getCurrentEpoch_le_activityFixedEpoch s)
-  have grows : s.validators.data.size ≤ t.validators.data.size := by
-    simpa [validatorKeys] using kept.keys.length_le
-  have inside (u : BeaconState preset fork) (_small : u.validators.data.size < 2 ^ 64)
-      (i : ValidatorIndex) (member : i ∈ getActiveValidatorIndices u (getCurrentEpoch u)) :
-      i.toNat < u.validators.data.size := by
-    simp only [getActiveValidatorIndices, List.mem_filterMap, List.mem_zipIdx_iff_getElem?,
-      Prod.exists] at member
-    obtain ⟨v, index, found, chosen⟩ := member
-    split at chosen
-    · cases Option.some.inj chosen
-      have inside := (List.getElem?_eq_some_iff.mp found).1
-      simp only [Array.length_toList] at inside
-      exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) inside
-    · cases chosen
-  rw [activeKeys, keys_weight t _ (kept.distinct unique) (inside t bound),
-    activeKeys, keys_weight s _ unique (inside s (Nat.lt_of_le_of_lt grows bound)), indices]
-  apply Finset.sum_congr rfl
-  intro i member
-  exact kept.effective i.toNat (inside s (Nat.lt_of_le_of_lt grows bound) i
-    (List.mem_toFinset.mp member))
 
 private theorem consolidationSite_epoch_total {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork)
@@ -4321,6 +4256,46 @@ theorem reachable_electra_epoch {g y : ForkedBeaconState preset}
       have slot := (frame_processBlock (applySignedBlock_ok ok).2.1).slot
       simpa only [getCurrentEpoch, slot] using previous
 
+/-- A run that crosses into Electra charges the count churn before the crossing.
+
+After it, the run charges the Electra caps from the first Electra state `v` on. -/
+private theorem crossing_charges_split {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (caps : CapOrder preset)
+    (early : y.fork < .glamsterdam) (high registryBound cap : Nat)
+    (registryBounded : y.state.validators.data.size ≤ registryBound)
+    (rates : ∀ site ∈ tail.consolidationSites, .pectra ≤ site.fork → ∀ (rate : Gwei),
+      getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap)
+    (before : x.fork < .pectra) (targetElectra : .pectra ≤ y.fork) :
+    ∃ v : ForkedBeaconState preset, Nonempty (Run config checks g v) ∧ .pectra ≤ v.fork ∧
+      (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch v.state).toNat ∧
+      ((tail.departureCharges.filter fun c => c.epoch ≤ high + 1).map (·.amount)).sum ≤
+        (high + 2 - (getCurrentEpoch x.state).toNat) *
+          (max 1 (cohortCap config registryBound) * preset.MAX_EFFECTIVE_BALANCE.toNat) +
+        (high + 2 - (getCurrentEpoch v.state).toNat) *
+          (config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat + cap) := by
+  obtain ⟨u, v, pre, crossing, post, uBefore, vElectra, same⟩ :=
+    split_electra_crossing tail before targetElectra
+  subst tail
+  have vEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) early
+  have legacy := crossing_charges_le_window shared pre crossing genesis caps uBefore
+    vEarly (high + 1) registryBound
+    ((registryGrows_of_chainSteps post.chainSteps).trans registryBounded)
+  have balance := initialized_charges_le_window post vElectra early (high + 1)
+    cap (crossing_initialized crossing uBefore vElectra vEarly)
+    (by
+      intro site member h rate computed
+      apply rates site _ h rate computed
+      rw [Run.consolidationSites_append]
+      exact List.mem_append_right _ member)
+  have ordered := UInt64.le_iff_toNat_le.mp
+    (currentEpoch_le_of_chainSteps (pre.snoc crossing).chainSteps)
+  refine ⟨v, ⟨shared.append (pre.snoc crossing)⟩, vElectra, ordered, ?_⟩
+  rw [Run.departureCharges_append, List.filter_append, List.map_append, List.sum_append]
+  simp only [Nat.add_assoc, Nat.reduceAdd] at legacy balance
+  exact Nat.add_le_add legacy balance
+
 /-- Before Gloas, the departure charges of a run fit the queue capacity of a window of epochs.
 
 The run starts at a state `x` reached from genesis and ends at a state `y` before Gloas.
@@ -4398,74 +4373,58 @@ theorem departure_charges_le_window {g x y : ForkedBeaconState preset}
       apply bound.trans
       apply Nat.mul_le_mul_left
       omega
-    · obtain ⟨u, v, pre, crossing, post, uBefore, vElectra, same⟩ :=
-        split_electra_crossing tail before (Nat.le_of_not_lt targetBefore)
-      subst tail
-      have vEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) early
-      have legacy := crossing_charges_le_window shared pre crossing genesis caps uBefore
-        vEarly (high + 1) registryBound
-        ((registryGrows_of_chainSteps post.chainSteps).trans registryBounded)
-      have balance := initialized_charges_le_window post vElectra early (high + 1)
-        consolidationCap (crossing_initialized crossing uBefore vElectra vEarly)
-        (by
-          intro site member h rate computed
-          apply rates site _ h rate computed
-          rw [Run.consolidationSites_append]
-          exact List.mem_append_right _ member)
-      have ordered := UInt64.le_iff_toNat_le.mp
-        (currentEpoch_le_of_chainSteps (pre.snoc crossing).chainSteps)
+    · obtain ⟨v, _, _, ordered, bound⟩ := crossing_charges_split shared tail genesis caps early
+        high registryBound consolidationCap registryBounded rates before
+        (Nat.le_of_not_lt targetBefore)
       have suffix : high + 2 - (getCurrentEpoch v.state).toNat ≤
           high + 2 - (getCurrentEpoch x.state).toNat := Nat.sub_le_sub_left ordered _
-      have balance := balance.trans (Nat.mul_le_mul_right
-        (config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat + consolidationCap) suffix)
-      rw [Run.departureCharges_append, List.filter_append, List.map_append, List.sum_append]
-      simp only [Nat.add_assoc, Nat.reduceAdd] at legacy balance
       rw [Nat.add_assoc, Nat.mul_add]
-      exact Nat.add_le_add legacy balance
-
+      exact bound.trans (Nat.add_le_add_left (Nat.mul_le_mul_right _ suffix) _)
 
 /-- A window that ends before the Electra fork epoch is charged only the count churn.
 
-The Electra part of a run that crosses the fork starts at the fork epoch, after the window. -/
+The run starts at a state `x` before Electra, reached from genesis, and ends before Gloas.
+
+The bound is `H` times the cap `L * MAX_EFFECTIVE_BALANCE`, where `H = high + 2 - e`.
+
+Here `e` is the current epoch of `x`.
+
+`L` is the larger of 1 and the pre-Electra churn limit of `registryBound` validators.
+
+An Electra part of the run starts at the fork epoch, after the window, so it adds nothing. -/
 theorem departure_charges_le_window_before_fork {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)
     (caps : CapOrder preset)
-    (early : y.fork < .glamsterdam) (high registryBound consolidationCap : Nat)
+    (early : y.fork < .glamsterdam) (high registryBound : Nat)
     (registryBounded : y.state.validators.data.size ≤ registryBound)
-    (rates : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
-      tail.Contains step → .pectra ≤ u.fork → ∀ rate : Gwei,
-        getConsolidationChurnLimit config u.state = .ok rate → rate.toNat ≤ consolidationCap)
     (before : x.fork < .pectra) (preFork : high + 1 < config.ELECTRA_FORK_EPOCH.toNat) :
     ((tail.departureCharges.filter fun c => c.epoch ≤ high + 1).map (·.amount)).sum ≤
       (high + 2 - (getCurrentEpoch x.state).toNat) *
         (max 1 (cohortCap config registryBound) * preset.MAX_EFFECTIVE_BALANCE.toNat) := by
-  replace rates : ∀ site ∈ tail.consolidationSites, .pectra ≤ site.fork → ∀ (rate : Gwei),
-      getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ consolidationCap := by
-    intro site member electra rate computed
-    obtain ⟨_, _, step, contained, forks, same⟩ := consolidationSite_rate tail early site member
-    exact rates step contained (forks electra) rate (same rate computed)
   by_cases targetBefore : y.fork < .pectra
   · simpa only [Nat.add_assoc, Nat.reduceAdd] using
       pre_electra_charges_le_window shared tail genesis caps targetBefore (high + 1)
         registryBound registryBounded
-  · obtain ⟨u, v, pre, crossing, post, uBefore, vElectra, same⟩ :=
-      split_electra_crossing tail before (Nat.le_of_not_lt targetBefore)
-    subst tail
-    have vEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) early
-    have legacy := crossing_charges_le_window shared pre crossing genesis caps uBefore
-      vEarly (high + 1) registryBound
-      ((registryGrows_of_chainSteps post.chainSteps).trans registryBounded)
-    have balance := initialized_charges_le_window post vElectra early (high + 1)
-      consolidationCap (crossing_initialized crossing uBefore vElectra vEarly)
-      (fun site member h rate computed => rates site
-        (by rw [Run.consolidationSites_append]; exact List.mem_append_right _ member)
-        h rate computed)
-    -- The Electra state starts at the fork epoch, so the window leaves it no epochs.
-    have late := reachable_electra_epoch (shared.append (pre.snoc crossing)) genesis vElectra
-    have empty : high + 1 + 1 - (getCurrentEpoch v.state).toNat = 0 := by omega
-    rw [empty, Nat.zero_mul] at balance
-    rw [Run.departureCharges_append, List.filter_append, List.map_append, List.sum_append]
-    simp only [Nat.add_assoc, Nat.reduceAdd] at legacy
-    omega
+  -- The Electra part has no epoch in the window, so any bound on its rates serves.
+  let cap := (tail.consolidationSites.map fun site =>
+    match getConsolidationChurnLimit config site.state with
+    | .ok rate => rate.toNat
+    | .error _ => 0).sum
+  have rates : ∀ site ∈ tail.consolidationSites, .pectra ≤ site.fork → ∀ (rate : Gwei),
+      getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap := by
+    intro site member _ rate computed
+    have listed := List.mem_map_of_mem (f := fun site : ForkedBeaconState preset =>
+      match getConsolidationChurnLimit config site.state with
+      | .ok rate => rate.toNat
+      | .error _ => 0) member
+    simp only [computed] at listed
+    exact List.le_sum_of_mem listed
+  obtain ⟨v, ⟨reached⟩, vElectra, _, bound⟩ := crossing_charges_split shared tail genesis caps
+    early high registryBound cap registryBounded rates before (Nat.le_of_not_lt targetBefore)
+  have late := reachable_electra_epoch reached genesis vElectra
+  have empty : high + 2 - (getCurrentEpoch v.state).toNat = 0 := by omega
+  rw [empty, Nat.zero_mul, Nat.add_zero] at bound
+  exact bound
+
 end EthLib.Consensus.DirectSafety

@@ -172,9 +172,10 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 /-- The record of a block, with its hash, from the state after it and the body that it ran. -/
 def recordOf {fork : Fork} (block : Block fork Execution.Transactions.Transaction)
     (state : Execution.State.State) (receipts : List (UInt8 × Receipt fork))
-    (logs : List Log) : Result BlockRecord := do
+    (logs : List Log) (accessList : Option Blocks.BlockAccessList := none) :
+    Result BlockRecord := do
   let hash ← block.header.hash.mapError fun e => (0, s!"block hash: {reprStr e}")
-  return ⟨fork, block, hash, state, receipts, logs⟩
+  return ⟨fork, block, hash, state, receipts, logs, accessList⟩
 
 /-- The record of a block after the last record of a chain, by the state transition. -/
 def nextRecord (config : ChainConfig) (checkSeal : Bool) (records : List BlockRecord)
@@ -185,7 +186,8 @@ def nextRecord (config : ChainConfig) (checkSeal : Bool) (records : List BlockRe
     (e.code, s!"block {block.header.number}: {blockErrorMessage e}")
   let state ← (stateTransition chain block checkSeal).mapError failed
   let result ← (runBody chain block).mapError failed
-  recordOf block state result.output.receipts result.output.logs
+  let accessList := result.output.accessListHash.map fun _ => result.output.body.builder.build
+  recordOf block state result.output.receipts result.output.logs accessList
 
 /-- The hash of thirty-two zero bytes, which a forkchoice state gives for no block. -/
 def zeroHash : Hash32 := Vector.replicate 32 (0 : UInt8)
@@ -195,6 +197,27 @@ def zeroHash : Hash32 := Vector.replicate 32 (0 : UInt8)
 Then come the head, safe and finalized hashes, the network ID and whether to check the seal. -/
 abbrev ViewInputs :=
   PyValue × ByteArray × List (String × ByteArray) × (Hash32 × Hash32 × Hash32) × Nat × Bool
+
+/-- An optional numeric field of the chain configuration, below 2^64 as EIP-6122 requires. -/
+def configNat (j : Json) (name : String) : Result (Option Nat) := do
+  match j.getObjVal? name with
+  | .error _ => return none
+  | .ok value =>
+    let some n := value.getNat?.toOption | throw (0, s!"config: {name} is not a number")
+    unless n < 2 ^ 64 do throw (0, s!"config: {name} is not below 2^64")
+    return some n
+
+/-- Explicit genesis context for a pruned view, or none when neither field is given.
+
+The hash and timestamp must be given together; a partial or malformed context is rejected. -/
+def configGenesis (j : Json) : Result (Option (Hash32 × Nat)) := do
+  let time ← configNat j "genesisTime"
+  match j.getObjVal? "genesisHash", time with
+  | .error _, none => return none
+  | .ok hash, some time =>
+    let hash ← (hash32 "genesisHash" hash).mapError fun reason => (0, reason)
+    return some (hash, time)
+  | _, _ => throw (0, "config: genesisHash and genesisTime must be given together")
 
 /-- The chain view that its inputs build, or why they build none.
 
@@ -206,10 +229,15 @@ It must hold no transaction, since its receipts are not given.
 
 Each block after it runs on the chain before it, without the history before the lowest block.
 
-The head must be the last block, and a zero safe or finalized hash names no block. -/
+The head must be the last block, and a zero safe or finalized hash names no block.
+
+When the lowest block is block zero, any given genesis hash and timestamp must match it. -/
 def viewOf (inputs : ViewInputs) : Result ChainView := do
   let (config, state, blocks, (head, safeHash, finalizedHash), networkId, checkSeal) := inputs
-  let config ← ChainConfig.Exports.configOfJson config.toJson
+  let configJson := config.toJson
+  let genesis ← configGenesis configJson
+  let mergeForkBlock ← configNat configJson "mergeForkBlock"
+  let config ← ChainConfig.Exports.configOfJson configJson
   let state ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
   let (first, rest) ← match blocks with
     | [] => .error (0, "no block")
@@ -223,6 +251,14 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
   unless lowest.transactions.isEmpty do
     .error (0, "the lowest block has transactions, whose receipts are not given")
   let lowest ← recordOf lowest state [] []
+  let genesis ← if lowest.block.header.number = 0 then do
+      let actual := (lowest.hash, lowest.block.header.timestamp.toNat)
+      match genesis with
+      | some given =>
+        unless given = actual do throw (0, "config: genesis context disagrees with block zero")
+        pure (some actual)
+      | none => pure (some actual)
+    else pure genesis
   let records ← rest.foldlM (init := [lowest]) fun records block => do
     let prev := records.getLast?.getD lowest
     return records ++ [← nextRecord config checkSeal records prev block]
@@ -236,15 +272,19 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
       nonempty := h
       safe := named safeHash
       finalized := named finalizedHash
-      networkId := networkId }
+      networkId := networkId
+      genesis := genesis
+      mergeForkBlock := mergeForkBlock }
     return view
 
 /-- The responses of the chain view that its inputs build, to the texts of requests, as text.
 
+The access lists of the named block numbers are pruned first.
+
 A notification, or a batch of notifications, gets none. -/
-def serveOf (args : ViewInputs × List String) : Result (List (Option String)) := do
-  let view ← viewOf args.1
-  return args.2.map fun text => (view.serve text).map (·.compress)
+def serveOf (args : ViewInputs × List Nat × List String) : Result (List (Option String)) := do
+  let view := (← viewOf args.1).pruneAccessLists args.2.1
+  return args.2.2.map fun text => (view.serve text).map (·.compress)
 
 /-- Answer requests of the execution JSON-RPC API from the chain that the arguments build.
 
@@ -254,7 +294,17 @@ Each block is the name of its fork and its RLP form, the lowest block first.
 
 Then come the head, safe and finalized hashes, the network ID, and whether to check the seal.
 
+Next come the block numbers whose access lists are pruned, while their blocks remain available.
+
+From Glamsterdam, the access-list methods report code 4444 for a pruned list.
+
 The last argument is the list of the texts of the requests.
+
+The configuration may give `mergeForkBlock`, the `FORK_NEXT_VALUE` of EIP-3675.
+
+When the lowest block is not block zero, `eth_config` needs `genesisHash` and `genesisTime` there.
+
+When it is block zero, both are read from it, and any given values must match.
 
 It returns the text of the response to each request, in order, or none for a notification.
 
@@ -264,5 +314,26 @@ Any other bad input has code 0. -/
 @[export eth_rpc_serve]
 def serveExport (args : PyValue) : Result PyValue :=
   pyExport serveOf args
+
+/-- Encode a JSON access list with the same reader and RLP codec as the query methods. -/
+def encodeBlockAccessListOf (value : PyValue) : Result ByteArray := do
+  let bal ← (if containsBytes value then reject "block access list: not a JSON value"
+    else blockAccessListOfJson value.toJson).mapError fun reason =>
+      ((RpcError.invalidParams reason).code.natAbs.toUInt32, reason)
+  (Serialization.Rlp.Codec.encode bal).mapError fun _ =>
+    (internalError.code.natAbs.toUInt32, "cannot encode block access list")
+
+/-- Encode a block access-list JSON value as its EIP-7928 RLP bytes.
+
+The argument is the JSON value returned by `eth_getBlockAccessList`.
+
+The empty list encodes as `0xc0`.
+
+The order of the list is not checked, so the bytes match a header hash only for a canonical order.
+
+A value outside the JSON schema has code 32602, and an encoding failure has code 32603. -/
+@[export eth_rpc_encode_block_access_list]
+def encodeBlockAccessListExport (args : PyValue) : Result PyValue :=
+  pyExport encodeBlockAccessListOf args
 
 end EthLib.Execution.Rpc.Exports
