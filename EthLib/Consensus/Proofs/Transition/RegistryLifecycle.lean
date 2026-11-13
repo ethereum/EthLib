@@ -599,7 +599,7 @@ theorem registryLifecycle_processExecutionRequests {body : BeaconBlockBody prese
 /-! ## Withdrawals -/
 
 /-- Withdrawals change balances and withdrawal bookkeeping, never the validators. -/
-theorem processWithdrawals_validators {capella : .shapella ≤ fork}
+private theorem processWithdrawals_validators {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after) :
     after.validators = state.validators := by
