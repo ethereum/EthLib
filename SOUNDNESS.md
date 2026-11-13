@@ -4253,7 +4253,27 @@ A URL is checked only to be non-empty, not to be a valid URI.
 The topics and the messages of the event stream are in `Consensus/BeaconApi/Events.lean`, shared by the events of received objects (#2090) and of the fork choice (#2091).
 `EventTopic.ofName?_name` and `EventTopic.name_injective` (`Consensus/Proofs/BeaconApi/Events.lean`) show that each of the 24 topics of the source has its own name, which gives it back.
 `readEventTopics_names` and `readEventTopics_map_name` show that a request is read exactly as the topics that it names, and `eventStream_cons` that the stream is the message of the first event, if its topic was chosen, followed by the stream of the rest.
-No definition yet says when an event fires; the two issues add them.
+
+The events of the fork choice are in `Consensus/BeaconApi/ChainEvents.lean` (#2091).
+`chainEvents` compares two stores: a head event comes when the head block changes, or when it stays and its payload moves from empty to full; a reorganization comes when the old head block is not an ancestor of the new head; a finalized event comes when the finalized checkpoint changes.
+`chainEvents_head_iff` and `chainEvents_reorg_iff` (`Consensus/Proofs/BeaconApi/ChainEvents.lean`) show when a head event and a reorganization come.
+`chainEvents_head` shows that a head event names the head of the later store, and `chainEvents_dependent_roots_duties` that its two dependent roots are those of the attester duties of its epoch and of the next one, read from the head state; the second needs the next epoch to fit in 64 bits.
+`fastConfirmationEvent_block` shows that the event of a run of the fast confirmation rule names its confirmed block and that block's slot.
+The source leaves these points open, decided here:
+
+- `epoch_transition` is given only by example; it is true when the new head is in another epoch than the old head, later or earlier.
+- The `depth` of a reorganization is given only by example; it is the slot of the old head less the slot of the latest common ancestor of the two heads.
+- The `epoch` of a reorganization is given only by example; it is the epoch of the new head.
+- From Gloas, a reorganization compares blocks, not payloads: a new head built on the old head block without its payload is no reorganization.
+- The `state` of a finalized event is the state root of the checkpoint block, not the state of the checkpoint.
+- From Gloas, the `state` of a head event is the state root of the block, also when its payload is full.
+- Emission on other payload transitions is optional, so a head event comes only on the transition from empty to full that the source requires.
+
+The optimistic flag of each event is an input, since it depends on what the node has verified.
+The theorem that a finalized event raises the finalized epoch, the payload attributes event, the exports and their Python tests remain for #2091.
+The light client events and the event of an available payload depend on what the node has received, and are not defined here.
+
+No definition yet says when an event of a received object fires (#2090).
 
 The debug answers show the tree of the fork choice and its leaves (`Consensus/BeaconApi/Debug.lean`).
 `mem_treeNodes` (`Consensus/Proofs/BeaconApi/Debug.lean`) shows that the listed nodes are exactly the nodes of the tree, and `nodeViews_nodes` shows that the views follow that list, by root and status as the API names them: one per block before Gloas, and from Gloas the pending and empty nodes of each block, with the full node once its payload is verified.
