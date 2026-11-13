@@ -2,7 +2,12 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Churn
+public import EthLib.Consensus.Proofs.DirectSafety.Drift
+public import EthLib.Consensus.Proofs.Transition.BalanceDrift
+import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.Committees
+import EthLib.Consensus.Proofs.Transition.SlashedPersistence
+import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 
 /-!
 # Departure charges and the Electra crossing
@@ -14,6 +19,10 @@ It is counted when the validator's unset exit epoch becomes assigned.
 Electra exits spend balance churn, and consolidations spend their own queue's churn.
 
 The Electra upgrade starts both queues with the churn of the upgraded state.
+
+Before Electra, the validator-count churn bounds the stake that joins a window.
+
+The boundary support is the unslashed cohort that exits at the current epoch.
 
 The balance queues are specified by [EIP-7251].
 
@@ -66,6 +75,36 @@ theorem _root_.EthLib.Consensus.Run.departureCharges_append {a b c : ForkedBeaco
   induction two with
   | nil => simp [Run.append, Run.departureCharges]
   | snoc two step ih => simp only [Run.append, Run.departureCharges, ih, List.append_assoc]
+
+/-- An existing validator whose exit becomes assigned has a charge at that exit epoch. -/
+private theorem _root_.EthLib.Consensus.Run.departure_charge_of_assigned
+    {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (i : Nat) (old current : Validator)
+    (before : x.state.validators.data[i]? = some old)
+    (after : y.state.validators.data[i]? = some current)
+    (unset : old.exitEpoch = FAR_FUTURE_EPOCH)
+    (assigned : current.exitEpoch ≠ FAR_FUTURE_EPOCH) :
+    ∃ charge ∈ tail.departureCharges,
+      charge.index = i ∧ charge.epoch = current.exitEpoch.toNat := by
+  induction tail generalizing current with
+  | nil =>
+    have same : old = current := Option.some.inj (before.symm.trans after)
+    exact False.elim (assigned (same ▸ unset))
+  | snoc pre step ih =>
+    obtain ⟨middle, found, _⟩ := pre.registryLifecycle.validators i old before
+    by_cases pending : middle.exitEpoch = FAR_FUTURE_EPOCH
+    · refine ⟨⟨i, current.exitEpoch.toNat, middle.effectiveBalance.toNat⟩,
+        List.mem_append_right _ ?_, rfl, rfl⟩
+      apply List.mem_filterMap.mpr
+      refine ⟨(middle, i), ?_, ?_⟩
+      · simpa only [List.mem_zipIdx_iff_getElem?, Array.getElem?_toList] using found
+      · simp [after, pending, assigned]
+    · obtain ⟨charge, member, index, epoch⟩ := ih middle found pending
+      obtain ⟨last, lastFound, kept⟩ :=
+        (RegistryLifecycle.chainStep step.chainStep).validators i middle found
+      have same : last = current := Option.some.inj (lastFound.symm.trans after)
+      refine ⟨charge, List.mem_append_left _ member, index, ?_⟩
+      rw [epoch, ← kept.exitEpoch pending, same]
 
 /-- Every recorded charge names an exit that remains assigned at the interval endpoint. -/
 theorem _root_.EthLib.Consensus.Run.departure_charge_exit
@@ -124,6 +163,187 @@ theorem _root_.EthLib.Consensus.Run.departure_charge_ne_of_assigned
           simp only [Bool.and_eq_true, beq_iff_eq, bne_iff_ne] at pending
           exact assigned ((kept.exitEpoch assigned).symm.trans (same ▸ pending.1))
         · cases added
+
+/-- Every assigned exit of a validator present at the start was inherited or charged. -/
+private theorem _root_.EthLib.Consensus.Run.departure_origin
+    {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (i : Nat) (inside : i < x.state.validators.data.size)
+    (v : Validator) (found : y.state.validators.data[i]? = some v)
+    (assigned : v.exitEpoch ≠ FAR_FUTURE_EPOCH) :
+    (∃ old, x.state.validators.data[i]? = some old ∧ old.exitEpoch = v.exitEpoch) ∨
+      ∃ charge ∈ tail.departureCharges, charge.index = i ∧ charge.epoch = v.exitEpoch.toNat := by
+  induction tail generalizing v with
+  | nil => exact Or.inl ⟨v, found, rfl⟩
+  | @snoc middle last pre step ih =>
+    -- The registry never shrinks, so the validator is present before the last step too.
+    have present : i < middle.state.validators.data.size :=
+      Nat.lt_of_lt_of_le inside pre.registryLifecycle.size_le
+    let old := middle.state.validators.data[i]
+    have oldFound : middle.state.validators.data[i]? = some old := by simp [old, present]
+    by_cases pending : old.exitEpoch = FAR_FUTURE_EPOCH
+    · obtain ⟨charge, member, index, epoch⟩ :=
+        (Run.nil.snoc step).departure_charge_of_assigned i old v oldFound found pending assigned
+      exact Or.inr ⟨charge, List.mem_append_right _ member, index, epoch⟩
+    · obtain ⟨w, current, kept⟩ :=
+        (RegistryLifecycle.chainStep step.chainStep).validators i old oldFound
+      have same : w = v := Option.some.inj (current.symm.trans found)
+      have exit : v.exitEpoch = old.exitEpoch := same ▸ kept.exitEpoch pending
+      rcases ih old oldFound pending with inherited | charged
+      · obtain ⟨initial, initialFound, epoch⟩ := inherited
+        exact Or.inl ⟨initial, initialFound, epoch.trans exit.symm⟩
+      · obtain ⟨charge, member, index, epoch⟩ := charged
+        exact Or.inr ⟨charge, List.mem_append_left _ member, index, by simpa [exit] using epoch⟩
+
+/-- The baseline lookup either selects this exit's charge or falls back to an inherited exit.
+
+The validator must be present at the start of the run. -/
+theorem _root_.EthLib.Consensus.Run.departure_baseline
+    {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (i : Nat) (inside : i < x.state.validators.data.size) (v : Validator)
+    (found : y.state.validators.data[i]? = some v)
+    (assigned : v.exitEpoch ≠ FAR_FUTURE_EPOCH) :
+    match tail.departureCharges.find? (fun c => c.index == i) with
+    | some charge => charge.index = i ∧ charge.epoch = v.exitEpoch.toNat
+    | none => ∃ old, x.state.validators.data[i]? = some old ∧ old.exitEpoch = v.exitEpoch := by
+  cases selected : tail.departureCharges.find? (fun c => c.index == i) with
+  | some charge =>
+    have index : charge.index = i := by simpa using List.find?_some selected
+    obtain ⟨w, present, _, epoch⟩ :=
+      tail.departure_charge_exit charge (List.mem_of_find?_eq_some selected)
+    rw [index] at present
+    have same : w = v := Option.some.inj (present.symm.trans found)
+    exact ⟨index, by simpa [same] using epoch.symm⟩
+  | none =>
+    rcases tail.departure_origin i inside v found assigned with inherited | charged
+    · exact inherited
+    · obtain ⟨charge, member, index, _⟩ := charged
+      exact False.elim ((List.find?_eq_none.mp selected charge member) (by simp [index]))
+
+/-! ## The boundary and the joining stake before Electra -/
+
+/-- Reference weights of the one inherited cohort, including the initial boundary. -/
+def inheritedCohort (x : ForkedBeaconState preset) (epoch : Nat) : Nat :=
+  (x.state.validators.data.toList.filter fun v =>
+    v.activationEpoch.toNat < epoch && v.exitEpoch.toNat == epoch).foldl
+      (fun n v => n + v.effectiveBalance.toNat) 0
+
+/-- Previous-only voting support consists exactly of the cohort exiting at the current epoch. -/
+theorem previous_only_iff_exit {fork : Fork} (state : BeaconState preset fork) (v : Validator) :
+    (isActiveValidator v (getPreviousEpoch state) = true ∧
+      isActiveValidator v (getCurrentEpoch state) = false) ↔
+    v.activationEpoch.toNat < (getCurrentEpoch state).toNat ∧
+      v.exitEpoch.toNat = (getCurrentEpoch state).toNat := by
+  simp only [isActiveValidator, Bool.and_eq_true, Bool.and_eq_false_iff,
+    decide_eq_true_eq, decide_eq_false_iff_not, UInt64.le_iff_toNat_le,
+    UInt64.lt_iff_toNat_lt, getPreviousEpoch_toNat]
+  omega
+
+/-- A key slashed at the start of a run is slashed at its end: slashing persists forward. -/
+theorem slashedAt_forward {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) {key : Cryptography.Bls.BLSPubkey}
+    (slashed : SlashedAt x.state key) : SlashedAt y.state key := by
+  obtain ⟨v, member, keyEq, flag⟩ := slashed
+  obtain ⟨i, found⟩ := Array.getElem?_of_mem (by simpa using member)
+  obtain ⟨w, wFound, wFlag⟩ := tail.slashedPersistence i v found flag
+  obtain ⟨u, uFound, uKey⟩ := validators_getElem?_of_validatorKeys_prefix
+      (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 found
+  have same : u = w := Option.some.inj (uFound.symm.trans wFound)
+  exact ⟨w, by simpa using Array.mem_of_getElem? wFound, same ▸ uKey.trans keyEq, wFlag⟩
+
+/-- A key of an epoch is the key of a validator active at that epoch. -/
+theorem mem_keysAt_epoch {fork : Fork} {state : BeaconState preset fork}
+    (early : fork < .glamsterdam) (epoch : Epoch) (key : Cryptography.Bls.BLSPubkey) :
+    key ∈ keysAt state (getActiveValidatorIndices state epoch) ↔
+      ∃ (i : Nat) (v : Validator), state.validators.data[i]? = some v ∧ v.pubkey = key ∧
+        isActiveValidator v epoch = true := by
+  have within := state.validators.bound early
+  simp only [keysAt, List.mem_toFinset, List.mem_filterMap]
+  constructor
+  · rintro ⟨index, active, read⟩
+    obtain ⟨v, found, active⟩ := (mem_getActiveValidatorIndices within).mp active
+    exact ⟨index.toNat, v, found, by simpa [found] using read, active⟩
+  · rintro ⟨i, v, found, same, active⟩
+    have inside := (Array.getElem?_eq_some_iff.mp found).1
+    have numeric := toNat_toUInt64_of_lt within inside
+    refine ⟨i.toUInt64, (mem_getActiveValidatorIndices within).mpr
+      ⟨v, by simpa [numeric] using found, active⟩, ?_⟩
+    simp [numeric, found, same]
+
+/-- Distinct registry keys identify the boundary support with this epoch's exiting cohort.
+
+The boundary support is unslashed, so the exiting validator is unslashed too. -/
+theorem mem_boundary_iff {fork : Fork} (state : BeaconState preset fork)
+    (early : fork < .glamsterdam) (unique : PubkeysDistinct state)
+    (key : Cryptography.Bls.BLSPubkey) :
+    key ∈ recentKeys state \ activeKeys state ↔
+      (∃ (i : Nat) (v : Validator), state.validators.data[i]? = some v ∧ v.pubkey = key ∧
+        v.activationEpoch.toNat < (getCurrentEpoch state).toNat ∧
+        v.exitEpoch.toNat = (getCurrentEpoch state).toNat) ∧ ¬ SlashedAt state key := by
+  classical
+  have sameValidator {i j : Nat} {v w : Validator}
+      (one : state.validators.data[i]? = some v)
+      (two : state.validators.data[j]? = some w)
+      (keys : v.pubkey = w.pubkey) : v = w := by
+    obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp one
+    obtain ⟨hj, rfl⟩ := Array.getElem?_eq_some_iff.mp two
+    have same : i = j := unique.eq_of_getElem_eq
+      (by simpa [validatorKeys] using hi) (by simpa [validatorKeys] using hj)
+      (by simpa [validatorKeys] using keys)
+    subst j
+    rfl
+  have member := mem_keysAt_epoch (state := state) early
+  simp only [Finset.mem_sdiff, recentKeys, Finset.mem_filter, Finset.mem_union, activeKeys]
+  constructor
+  · rintro ⟨⟨current | previous, unslashed⟩, absent⟩
+    · exact False.elim (absent current)
+    · obtain ⟨i, v, found, same, active⟩ := (member _ key).mp previous
+      have inactive : isActiveValidator v (getCurrentEpoch state) = false := by
+        cases h : isActiveValidator v (getCurrentEpoch state) with
+        | false => rfl
+        | true => exact False.elim (absent ((member _ key).mpr ⟨i, v, found, same, h⟩))
+      exact ⟨⟨i, v, found, same, (previous_only_iff_exit state v).mp ⟨active, inactive⟩⟩,
+        unslashed⟩
+  · rintro ⟨⟨i, v, found, same, cohort⟩, unslashed⟩
+    obtain ⟨previous, inactive⟩ := (previous_only_iff_exit state v).mpr cohort
+    refine ⟨⟨Or.inr ((member _ key).mpr ⟨i, v, found, same, previous⟩), unslashed⟩, ?_⟩
+    intro active
+    obtain ⟨j, w, other, keySame, active⟩ := (member _ key).mp active
+    have equal := sameValidator found other (same.trans keySame.symm)
+    rw [← equal, inactive] at active
+    cases active
+
+/-- Boundary weight is at most the effective stake of the cohort exiting at this epoch.
+
+The boundary support is unslashed, so slashed members of the cohort are not counted. -/
+theorem boundaryStake_le_cohort (y : ForkedBeaconState preset)
+    (early : y.fork < .glamsterdam) (unique : PubkeysDistinct y.state) :
+    boundaryStake y ≤ inheritedCohort y (getCurrentEpoch y.state).toNat := by
+  classical
+  let cohort := y.state.validators.data.toList.filter fun v =>
+    v.activationEpoch.toNat < (getCurrentEpoch y.state).toNat &&
+      v.exitEpoch.toNat == (getCurrentEpoch y.state).toNat
+  have selected : recentKeys y.state \ activeKeys y.state ⊆
+      (cohort.map (·.pubkey)).toFinset := by
+    intro key member
+    obtain ⟨⟨i, v, found, same, active, exited⟩, _⟩ :=
+      (mem_boundary_iff y.state early unique key).mp member
+    simp only [cohort, List.mem_toFinset, List.mem_map, List.mem_filter,
+      Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq]
+    exact ⟨v, ⟨by simpa using Array.mem_of_getElem? found, active, exited⟩, same⟩
+  have distinct : (cohort.map (·.pubkey)).Nodup :=
+    unique.sublist ((List.filter_sublist).map _)
+  have weights : (cohort.map fun v => effectiveWeight y.state v.pubkey).sum =
+      (cohort.map fun v => v.effectiveBalance.toNat).sum := by
+    congr 1
+    apply List.map_congr_left
+    intro v member
+    exact effectiveWeight_of_member unique (List.mem_filter.mp member).1
+  unfold boundaryStake Models.stake
+  refine (Finset.sum_le_sum_of_subset_of_nonneg selected (fun _ _ _ => Nat.zero_le _)).trans ?_
+  rw [List.sum_toFinset _ distinct, List.map_map]
+  change (cohort.map fun v => effectiveWeight y.state v.pubkey).sum ≤ _
+  rw [weights, List.sum_eq_foldl, List.foldl_map]
+  exact Nat.le_refl _
 
 /-- Queueing deposits keeps the queue fields and the effective balances of activated validators. -/
 private structure ElectraQueuesKept (a b : BeaconState preset .pectra) : Prop where

@@ -104,6 +104,44 @@ theorem debits_triangle {fork : Fork} (s u t : BeaconState preset fork)
   intro i _
   omega
 
+private theorem credits_triangle_growing {fork : Fork} (s u t : BeaconState preset fork)
+    (size : u.balances.data.size ≤ t.balances.data.size) :
+    balanceCredits s t ≤ balanceCredits s u + balanceCredits u t := by
+  -- Indices beyond the intermediate array contribute zero to its credits.
+  have extend : (∑ i ∈ Finset.range t.balances.data.size,
+      (actualBalanceAt ⟨fork, u⟩ i - actualBalanceAt ⟨fork, s⟩ i)) = balanceCredits s u := by
+    symm
+    apply Finset.sum_subset (Finset.range_mono size)
+    intro i _ outside
+    simp only [Finset.mem_range, not_lt] at outside
+    simp [actualBalanceAt, Array.getElem?_eq_none outside]
+  unfold balanceCredits at *
+  rw [← extend, ← Finset.sum_add_distrib]
+  apply Finset.sum_le_sum
+  intro i _
+  omega
+
+private theorem debits_triangle_growing {fork : Fork} (s u t : BeaconState preset fork)
+    (size : s.balances.data.size ≤ u.balances.data.size) :
+    balanceDebits s t ≤ balanceDebits s u + balanceDebits u t := by
+  have upper : (∑ i ∈ Finset.range s.balances.data.size,
+      (actualBalanceAt ⟨fork, u⟩ i - actualBalanceAt ⟨fork, t⟩ i)) ≤ balanceDebits u t := by
+    apply Finset.sum_le_sum_of_subset_of_nonneg (Finset.range_mono size)
+    intros
+    omega
+  unfold balanceDebits at *
+  have point : (∑ i ∈ Finset.range s.balances.data.size,
+      (actualBalanceAt ⟨fork, s⟩ i - actualBalanceAt ⟨fork, t⟩ i)) ≤
+        (∑ i ∈ Finset.range s.balances.data.size,
+          (actualBalanceAt ⟨fork, s⟩ i - actualBalanceAt ⟨fork, u⟩ i)) +
+        (∑ i ∈ Finset.range s.balances.data.size,
+          (actualBalanceAt ⟨fork, u⟩ i - actualBalanceAt ⟨fork, t⟩ i)) := by
+    rw [← Finset.sum_add_distrib]
+    apply Finset.sum_le_sum
+    intro i _
+    omega
+  omega
+
 /-- Rewards and ordinary penalties are kept separate from the inactivity pass. -/
 def rewardPasses {fork : Fork} (s : BeaconState preset fork) :
     Except TransitionError (List (Array Gwei × Array Gwei)) := do
@@ -374,6 +412,57 @@ def consumedDeposits {fork : Fork} (s t : BeaconState preset fork) (electra : .p
   ((s.pendingDeposits electra).data.toList.map fun d => d.amount.toNat).sum -
     ((t.pendingDeposits electra).data.toList.map fun d => d.amount.toNat).sum
 
+/-- This covers top-ups and withdrawn-key exceptions without charging an unprocessed queue. -/
+theorem pending_deposit_bound {fork : Fork} (s t : BeaconState preset fork)
+    («matches» : BalancesMatch s)
+    (electra : .pectra ≤ fork)
+    (ok : processPendingDeposits config checks s electra = .ok t) :
+    balanceDebits s t = 0 ∧ balanceCredits s t ≤ consumedDeposits s t electra := by
+  have fold (ds : List PendingDeposit) (s t : BeaconState preset fork)
+      (hm : BalancesMatch s)
+      (ok : ds.foldlM (applyPendingDeposit config checks) s = .ok t) :
+      balanceDebits s t = 0 ∧
+        balanceCredits s t ≤ (ds.map fun d => d.amount.toNat).sum ∧
+        s.balances.data.size ≤ t.balances.data.size := by
+    induction ds generalizing s with
+    | nil =>
+      cases ok
+      simp [balanceCredits, balanceDebits]
+    | cons d ds ih =>
+      simp only [List.foldlM_cons, bind_ok_iff] at ok
+      obtain ⟨u, first, last⟩ := ok
+      have hu := (applyPendingDeposit_kept first).1 hm
+      have sizes : s.balances.data.size ≤ u.balances.data.size := by
+        rcases applyPendingDeposit_cases first with rfl | ⟨_, first⟩ | ⟨_, first⟩
+        · exact Nat.le_refl _
+        · exact (sameSizes_increaseBalance first).2.ge
+        · rw [(addValidatorToRegistry_push first hm).2, Array.size_push]
+          omega
+      have a := deposit_credit_bound s u hm d first
+      have b := ih u hu last
+      have credits := credits_triangle_growing s u t b.2.2
+      have debits := debits_triangle_growing s u t sizes
+      simp only [List.map_cons, List.sum_cons]
+      exact ⟨by omega, by omega, sizes.trans b.2.2⟩
+  obtain ⟨read, rest, applied, postponed, next, pending, carried, queue, kept, _, _, _,
+    perm, steps, rfl⟩ := processPendingDeposits_applied ok
+  have bounds := fold applied s next «matches» steps
+  have amounts := (perm.map (fun d => d.amount.toNat)).sum_eq
+  -- Postponed deposits return to the queue, so only applied amounts are consumed.
+  have consumed : consumedDeposits s
+      { next with
+        pendingDeposits := fun _ => pending
+        depositBalanceToConsume := fun _ => carried } electra =
+      (applied.map fun d => d.amount.toNat).sum := by
+    unfold consumedDeposits
+    rw [queue]
+    change _ - (pending.data.toList.map _).sum = _
+    rw [kept]
+    simp only [List.map_append, List.sum_append] at amounts ⊢
+    omega
+  rw [consumed]
+  exact ⟨bounds.1, bounds.2.1⟩
+
 /-- The real pass removes a prefix; slashed entries are dropped without a transfer. -/
 def consumedConsolidations {fork : Fork} (s t : BeaconState preset fork)
     (electra : .pectra ≤ fork) : Nat :=
@@ -382,6 +471,87 @@ def consumedConsolidations {fork : Fork} (s t : BeaconState preset fork)
       fun c => match s.validators.data[c.sourceIndex.toNat]? with
         | none => 0
         | some v => if v.slashed then 0 else v.effectiveBalance.toNat).sum
+
+/-- The pass moves at most the effective balance of each consumed, unslashed source.
+
+Its credits and its debits are each at most that amount. -/
+theorem consolidation_transfer_bound {fork : Fork} (s t : BeaconState preset fork)
+    (electra : .pectra ≤ fork) (ok : processPendingConsolidations s electra = .ok t) :
+    balanceCredits s t ≤ consumedConsolidations s t electra ∧
+    balanceDebits s t ≤ consumedConsolidations s t electra := by
+  let cost (s : BeaconState preset fork) (c : PendingConsolidation) : Nat :=
+    match s.validators.data[c.sourceIndex.toNat]? with
+    | none => 0
+    | some v => if v.slashed then 0 else v.effectiveBalance.toNat
+  have pass (cs : List PendingConsolidation) (epoch : Epoch)
+      (s t : BeaconState preset fork) (read : Nat)
+      (ok : passPendingConsolidations epoch s cs = .ok (t, read)) :
+      read ≤ cs.length ∧ t.balances.data.size = s.balances.data.size ∧
+      balanceCredits s t ≤ ((cs.take read).map (cost s)).sum ∧
+      balanceDebits s t ≤ ((cs.take read).map (cost s)).sum := by
+    induction cs generalizing s read with
+    | nil =>
+      cases ok
+      simp [balanceCredits, balanceDebits]
+    | cons c cs ih =>
+      simp only [passPendingConsolidations, bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨v, found, ok⟩ := ok
+      have found' : s.validators.data[c.sourceIndex.toNat]? = some v := by
+        unfold getValidator at found
+        split at found <;> cases found
+        assumption
+      split at ok
+      · rename_i slashed
+        simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at ok
+        obtain ⟨⟨u, n⟩, rest, rfl, rfl⟩ := ok
+        have later := ih s n rest
+        have head : cost s c = 0 := by simp [cost, found', slashed]
+        simp only [List.take_succ_cons, List.map_cons, List.sum_cons, head, Nat.zero_add]
+        exact ⟨Nat.succ_le_succ later.1, later.2⟩
+      · rename_i notSlashed
+        split at ok
+        · cases ok
+          simp [balanceCredits, balanceDebits]
+        · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+            Except.ok.injEq, Prod.mk.injEq] at ok
+          obtain ⟨balance, readBalance, lowered, lower, raised, raise,
+            ⟨u, n⟩, rest, rfl, rfl⟩ := ok
+          have later := ih raised n rest
+          dsimp only at later
+          have kept := (increaseBalance_validators raise).trans (decreaseBalance_validators lower)
+          -- Transfers keep the registry, so every later cost uses the original effective balance.
+          have costs : cost raised = cost s := by simp only [cost, kept]
+          rw [costs] at later
+          have lo := debits_decrease lower
+          have up := credits_increase raise
+          have size1 := (sameSizes_decreaseBalance lower).2
+          have size2 := (sameSizes_increaseBalance raise).2
+          have firstCredits := credits_triangle s lowered raised size2
+          have firstDebits := debits_triangle s lowered raised size1.symm
+          have nextCredits := credits_triangle s raised u later.2.1
+          have nextDebits := debits_triangle s raised u (size2.trans size1).symm
+          have cap : (min balance v.effectiveBalance).toNat ≤ v.effectiveBalance.toNat := by
+            rw [toNat_min]
+            exact Nat.min_le_right _ _
+          have head : cost s c = v.effectiveBalance.toNat := by
+            simp [cost, found', notSlashed]
+          simp only [List.take_succ_cons, List.map_cons, List.sum_cons, head]
+          exact ⟨by simpa using Nat.succ_le_succ later.1,
+            later.2.1.trans (size2.trans size1), by omega, by omega⟩
+  obtain ⟨⟨u, n⟩, processed, balances, queue⟩ := processPendingConsolidations_pass ok
+  have facts := pass _ _ s u n processed
+  have count : (s.pendingConsolidations electra).data.size -
+      (t.pendingConsolidations electra).data.size = n := by
+    have lengths := congrArg List.length queue
+    simp only [Array.length_toList, List.length_drop] at lengths
+    have le := facts.1
+    simp only [Array.length_toList] at le
+    omega
+  refine ⟨?_, ?_⟩
+  · simpa only [consumedConsolidations, count, balanceCredits, actualBalanceAt, balances]
+      using facts.2.2.1
+  · simpa only [consumedConsolidations, count, balanceDebits, actualBalanceAt, balances]
+      using facts.2.2.2
 
 theorem withdrawal_debit_bound {fork : Fork} (s t : BeaconState preset fork)
     (withdrawals : Array Withdrawal) (ok : applyWithdrawals s withdrawals = .ok t) :

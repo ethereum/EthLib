@@ -3487,6 +3487,7 @@ A prefix attester slashing can name a key without slashing it, because `slashIfS
 Such a key can stay in the reference set, and it can still count through double votes or through evidence in a tail.
 The stake of a prefix-slashed key is absent from the later drift and support only while its slashed flag stays set.
 These theorems do not need that fact, because the drift is observed.
+The flag does stay set: each step keeps every slashed flag at its position (`Frame`, `SlashedPersistence`), and the bound by sources below reads that.
 Recent keys are unslashed too, and justification counts only unslashed voters, so the voters of each quorum stay inside the support (`quorum_voters_recent`, `DirectSafety/Core.lean`).
 A key slashed at a call and unslashed at `x` has evidence in the tail of the call (`Run.slashed_evidence`, `DirectSafety/Evidence.lean`).
 Two checkpoints conflict when the runs applied different block headers up to the first slot of the earlier of their two epochs (`Conflict`, `DirectSafety/Execution.lean`).
@@ -3507,7 +3508,7 @@ The drift of a tail is the largest over its states up to one epoch past the late
 At a state, it charges twice the unslashed stake at `x` that the state no longer supports, outside the keys slashed by then.
 It charges once the recent stake of the state that the unslashed keys at `x` did not hold.
 It charges twice the recent stake that is not active at the current epoch of the state.
-It is observed, not bounded in closed form.
+It is observed, and the bound by sources below bounds it from what the run did.
 The theorems need at least one slot per epoch, a buffer of roots of four epochs and more than `MIN_SEED_LOOKAHEAD + 2` epochs of RANDAO mixes.
 Each run also needs an active stake above one and a half increments at epoch calls after epoch 1 through one epoch past the target horizon (`EnoughStake run high`).
 The horizon is the finalized epoch of `b` for `accountable_safety`, which `ordered` makes the later one.
@@ -3518,6 +3519,29 @@ The theorems take no bound on the fork, so a run may cross every upgrade that th
 `verifiedConflict_of_accountable` gives, for each accountable key, two checks of its conflicting messages.
 Each is a call of `isValidIndexedAttestation` or `checkHeaderSignature` that a block of a run executed, and that accepted.
 It assumes nothing about the signature checks, so it does not say who signed.
+
+`source_safety` (`DirectSafety/SourceSafety.lean`) replaces the observed drift of `accountable_safety` by a source envelope for each tail (`sourceDrift`, `DirectSafety/IntervalBounds.lean`).
+`derivedDrift_le_sources` shows that the drift of a tail is at most its envelope.
+The envelope reads the reference state `x`, the balance replay of the tail up to the finalized epoch of `b`, and the largest exit cohort along the tail.
+It charges twice the exits already scheduled at `x` and the unspent exit and consolidation balances.
+If the window reaches Electra, it adds twice one exit churn and one consolidation rate per epoch.
+From a state before Electra, it adds twice one count churn per epoch.
+It charges once the validators that activate after `x` or were active only at its previous epoch, at the larger of their effective and actual balances.
+If the window reaches Electra, it adds once the deposit balance left to consume at `x` and one deposit churn per epoch.
+From a state before Electra, it adds once one count churn per epoch.
+It charges twice the deficits of the unslashed keys active at `x`.
+A deficit is the debits other than slashings beyond the balance above the effective balance, plus about one increment of rounding.
+It charges once the credits of the replay that no churn limits, and twice the largest exit cohort.
+For a window that reaches Electra, it charges once the balance above the effective balance at `x`.
+For a window that ends before Electra, it charges each key active at `x` its excess and its deposits, at most its room below the cap.
+Each tail must end before Gloas, `x` at most one epoch past the finalized epoch of `b`, and the withdrawal delay positive.
+The preset must meet the parameters of `accountable_safety`, have at least two slots per epoch, order its caps and keep its largest effective balances whole numbers of increments; both presets do.
+The envelope is an upper bound, and nothing says that a run attains it.
+Withdrawals are debits, so a key that the withdrawal sweep reaches inside the window has a deficit of about its rewards since `x`, and is charged its rounding increment.
+A payload withdraws from at most 16 keys, so over 225 epochs, about a day, at most about 115,000 keys are withdrawn from.
+Then this rounding alone adds up to about 1.3% of a stake of 36 million ether to the bound, and a tighter deficit is open.
+The premise on the withdrawal delay comes from the proof, which reads the invariant of pending consolidations, not from the bound.
+The envelope is not yet put into the weak subjectivity margin of `accountable_safety_of_weakSubjectivityPeriod`.
 
 ### Engine API
 

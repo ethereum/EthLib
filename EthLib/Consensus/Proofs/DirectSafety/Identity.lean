@@ -69,16 +69,10 @@ theorem selected_vote_key {g a : ForkedBeaconState preset} (run : Run config che
   have equal : current = v := Option.some.inj (currentFound.symm.trans found)
   exact ⟨before, after, step, member, i, old, vote, oldFound, by simpa [equal] using same.symm⟩
 
-/-- The stake of the keys at some indices is the sum of the effective balances at those indices.
-
-The keys of the registry must be distinct, and the indices inside it. -/
-theorem keys_weight {fork : Fork} (state : BeaconState preset fork)
-    (indices : List ValidatorIndex) (unique : PubkeysDistinct state)
-    (inside : ∀ i ∈ indices, i.toNat < state.validators.data.size) :
-    Models.stake (effectiveWeight state) (keysAt state indices) =
-      ∑ i ∈ indices.toFinset,
-        ((state.validators.data[i.toNat]?).map (·.effectiveBalance.toNat)).getD 0 := by
-  classical
+/-- With distinct registry keys, the weight of a member's key is its effective balance. -/
+theorem effectiveWeight_of_member {fork : Fork} {state : BeaconState preset fork}
+    (unique : PubkeysDistinct state) {v : Validator} (member : v ∈ state.validators.data.toList) :
+    effectiveWeight state v.pubkey = v.effectiveBalance.toNat := by
   have lookup (vs : List Validator) (distinct : (vs.map (·.pubkey)).Nodup)
       (v : Validator) (member : v ∈ vs) :
       vs.find? (fun w => w.pubkey == v.pubkey) = some v := by
@@ -92,16 +86,26 @@ theorem keys_weight {fork : Fork} (state : BeaconState preset fork)
           intro same
           exact distinct.1 (List.mem_map.mpr ⟨v, member, same.symm⟩)
         simp [different, ih distinct.2 member]
+  simp [effectiveWeight, lookup _ unique v member]
+
+/-- A sum over the keys at some indices is a sum over the indices, each weighing its key.
+
+The keys of the registry must be distinct, and the indices inside it. -/
+theorem keys_sum {fork : Fork} (state : BeaconState preset fork)
+    (indices : List ValidatorIndex) (unique : PubkeysDistinct state)
+    (inside : ∀ i ∈ indices, i.toNat < state.validators.data.size) (weight : BLSPubkey → Nat) :
+    ∑ k ∈ keysAt state indices, weight k =
+      ∑ i ∈ indices.toFinset,
+        ((state.validators.data[i.toNat]?).map (fun v => weight v.pubkey)).getD 0 := by
+  classical
   let key (i : ValidatorIndex) (hi : i ∈ indices.toFinset) : BLSPubkey :=
     (state.validators.data[i.toNat]'(inside i (List.mem_toFinset.mp hi))).pubkey
   -- Distinct registry keys make the index-to-key map a bijection on the selected set.
-  unfold Models.stake
   symm
   apply Finset.sum_bij key
   · intro i hi
     simp only [keysAt, List.mem_toFinset, List.mem_filterMap]
-    exact ⟨i, List.mem_toFinset.mp hi, by simp [key,
-      inside i (List.mem_toFinset.mp hi)]⟩
+    exact ⟨i, List.mem_toFinset.mp hi, by simp [key, inside i (List.mem_toFinset.mp hi)]⟩
   · intro i hi j hj same
     apply UInt64.toNat_inj.mp
     apply unique.eq_of_getElem_eq
@@ -114,10 +118,24 @@ theorem keys_weight {fork : Fork} (state : BeaconState preset fork)
     exact ⟨i, List.mem_toFinset.mpr hi, by
       simpa [key, Array.getElem?_eq_getElem, inside i hi] using found⟩
   · intro i hi
-    have member : state.validators.data[i.toNat]'(inside i (List.mem_toFinset.mp hi)) ∈
-        state.validators.data.toList := by
-      simp
-    simp [effectiveWeight, key, lookup _ unique _ member,
-      inside i (List.mem_toFinset.mp hi)]
+    simp [key, inside i (List.mem_toFinset.mp hi)]
+
+/-- The stake of the keys at some indices is the sum of the effective balances at those indices.
+
+The keys of the registry must be distinct, and the indices inside it. -/
+theorem keys_weight {fork : Fork} (state : BeaconState preset fork)
+    (indices : List ValidatorIndex) (unique : PubkeysDistinct state)
+    (inside : ∀ i ∈ indices, i.toNat < state.validators.data.size) :
+    Models.stake (effectiveWeight state) (keysAt state indices) =
+      ∑ i ∈ indices.toFinset,
+        ((state.validators.data[i.toNat]?).map (·.effectiveBalance.toNat)).getD 0 := by
+  unfold Models.stake
+  rw [keys_sum state indices unique inside]
+  apply Finset.sum_congr rfl
+  intro i hi
+  have member : state.validators.data[i.toNat]'(inside i (List.mem_toFinset.mp hi)) ∈
+      state.validators.data.toList := by
+    simp
+  simp [inside i (List.mem_toFinset.mp hi), effectiveWeight_of_member unique member]
 
 end EthLib.Consensus.DirectSafety
