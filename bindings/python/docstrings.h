@@ -491,6 +491,9 @@
 #define DOC_consensus_api_payload_envelope_ssz \
   "The SSZ body of the envelope answer, as `bytes`."
 
+#define DOC_consensus_api_duties \
+  "The JSON response of a duties endpoint, as a `dict`."
+
 #define DOC_consensus_api_committees \
   "The JSON response of the committees endpoint, as a `dict`."
 

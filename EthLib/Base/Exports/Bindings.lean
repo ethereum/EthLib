@@ -633,6 +633,10 @@ def bindings : List Binding := [
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, root: bytes, envelope: bytes) -> bytes",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_duties", `EthLib.Consensus.Exports.apiDutiesExport,
+    "(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, " ++
+      "epoch: int, indices: list[int], genesis_root: bytes) -> dict[str, Any]",
+    [], some "ConsensusError"⟩,
   ⟨"consensus_api_committees", `EthLib.Consensus.Exports.apiCommitteesExport,
     "(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, " ++
       "slot: int | None) -> dict[str, Any]",

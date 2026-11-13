@@ -657,6 +657,10 @@ def consensus_api_payload_envelope_ssz(name: str, fork: str, anchor_state: bytes
     """The SSZ body of the envelope answer, as `bytes`."""
     ...
 
+def consensus_api_duties(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, epoch: int, indices: list[int], genesis_root: bytes) -> dict[str, Any]:
+    """The JSON response of a duties endpoint, as a `dict`."""
+    ...
+
 def consensus_api_committees(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, slot: int | None) -> dict[str, Any]:
     """The JSON response of the committees endpoint, as a `dict`."""
     ...
