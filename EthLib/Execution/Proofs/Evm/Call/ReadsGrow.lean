@@ -150,7 +150,7 @@ theorem readsLe_runFrame [LawfulGasMeter Meter] {bound : Nat}
 /-! ## Messages -/
 
 /-- A rollback keeps every read of the frame that it undoes. -/
-private theorem readsLe_rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) :
+theorem readsLe_rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) :
     evm.state.ReadsLe (rollbackOnError snapshot evm).state := by
   unfold rollbackOnError
   split
@@ -158,7 +158,7 @@ private theorem readsLe_rollbackOnError (snapshot : TransactionState) (evm : Evm
   · exact .refl _
 
 /-- The state that a message enters holds every read of the state it is sent from. -/
-private theorem readsLe_entered {message : Message fork} {state entry : TransactionState}
+theorem readsLe_entered {message : Message fork} {state entry : TransactionState}
     {substate entrySubstate : Substate}
     (h : Entered fork message state substate entry entrySubstate) : state.ReadsLe entry := by
   have start : state.ReadsLe (startState fork message state) := by
@@ -172,7 +172,7 @@ private theorem readsLe_entered {message : Message fork} {state entry : Transact
   · exact start.trans (readsLe_moveEther moved)
 
 /-- A successful preparation of a creation keeps every read. -/
-private theorem readsLe_prepareCreation {tx tx' : TransactionState} {address : Address}
+theorem readsLe_prepareCreation {tx tx' : TransactionState} {address : Address}
     (h : prepareCreation fork tx address = .ok tx') : tx.ReadsLe tx' := by
   have wiped : tx.ReadsLe ((tx.destroyStorage address).markAccountCreated address) :=
     ⟨fun _ h => h, fun _ _ h => TransactionState.mem_storageReads_destroyStorage_of_mem h⟩
@@ -183,7 +183,7 @@ private theorem readsLe_prepareCreation {tx tx' : TransactionState} {address : A
     exact wiped
 
 /-- A successful deposit of code keeps every read of the frame that ends the init code. -/
-private theorem readsLe_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}
+theorem readsLe_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}
     (h : depositCode fork snapshot evm = .ok after) : evm.state.ReadsLe after.state := by
   rcases (depositCode_cases h).2.2 with hs | hs | hs
   · rw [hs]

@@ -75,10 +75,11 @@ Not yet released.
   The drift horizon in the conclusion of `accountable_safety` is the finalized epoch of `b`, not the larger of the two finalized epochs; `ordered` makes them equal.
 
 - In Lean, the direct safety endpoints bound the unslashed active stake at `x`, `unslashedKeys x.state`, in place of `activeKeys x.state` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
-  `Accountable` and `accountableKeys` take the shared prefix and the two tails, `shared left right`, in place of the two full runs and the reference state.
+  `Accountable` takes the shared prefix and the two tails, `shared left right`, in place of the two full runs, and `accountableKeys` takes them in place of the two full runs and the reference state.
   Slashing evidence counts only in the tails; double votes still count over the full runs, and proposer slashings in the tails still count.
   `accountableKeys` keeps only the unslashed keys active at `x`.
   `recentKeys` keeps only unslashed keys, `referenceLoss` sums over `unslashedKeys x`, and `referenceGain` subtracts the support of `unslashedKeys x`.
+  So `boundaryStake`, and through it `stateDrift` and `derivedDrift`, count only unslashed recent stake.
   `Run.slashed_evidence` holds for a run from any state, with no `genesis` argument, and concludes `SlashedAt x.state v.pubkey ∨ run.SlashingEvidence v.pubkey`.
   `SlashedAt` names the predicate that `referenceLoss` stated inline before.
   `verifiedConflict_of_accountable` takes `shared left right` and concludes `VerifiedConflict (shared.append left) (shared.append right) key`.

@@ -137,28 +137,32 @@ private def StateFree (run : Evm fork Meter → Except EvmError (Evm fork Meter)
     (fun after => { after with state := other }) <$> run evm
 
 omit [GasMeter Meter] in
-private theorem popWord_withState (evm : Evm fork Meter) (other : State.TransactionState) :
+/-- A pop moves a replaced state through unchanged. -/
+theorem popWord_withState (evm : Evm fork Meter) (other : State.TransactionState) :
     popWord { evm with state := other } =
       (fun p => (p.1, { p.2 with state := other })) <$> popWord evm := by
   simp only [popWord]
   cases evm.stack.pop <;> rfl
 
 omit [GasMeter Meter] in
-private theorem pushWord_withState (evm : Evm fork Meter) (other : State.TransactionState)
+/-- A push moves a replaced state through unchanged. -/
+theorem pushWord_withState (evm : Evm fork Meter) (other : State.TransactionState)
     (x : U256) :
     pushWord { evm with state := other } x =
       (fun after => { after with state := other }) <$> pushWord evm x := by
   simp only [pushWord]
   cases evm.stack.push x <;> rfl
 
-private theorem chargeGas_withState (evm : Evm fork Meter) (other : State.TransactionState)
+/-- A charge moves a replaced state through unchanged. -/
+theorem chargeGas_withState (evm : Evm fork Meter) (other : State.TransactionState)
     (amount : Nat) :
     chargeGas { evm with state := other } amount =
       (fun after => { after with state := other }) <$> chargeGas evm amount := by
   simp only [chargeGas]
   cases GasMeter.charge evm.gas amount <;> rfl
 
-private theorem chargeGasAndMemory_withState (evm : Evm fork Meter)
+/-- A charge with memory moves a replaced state through unchanged. -/
+theorem chargeGasAndMemory_withState (evm : Evm fork Meter)
     (other : State.TransactionState) (cost : Nat) (ranges : List (U256 × U256)) :
     chargeGasAndMemory { evm with state := other } cost ranges =
       (fun after => { after with state := other }) <$> chargeGasAndMemory evm cost ranges := by
@@ -806,7 +810,8 @@ private theorem popWord_cons {evm : Evm fork Meter} {x : U256} {rest : List U256
     omega
   · simp [popWord, hstack, Stack.pop, bind, Except.bind, pure, Except.pure]
 
-private theorem chargeStateGas_withState (evm : Evm fork Meter) (other : State.TransactionState)
+/-- A charge of state gas moves a replaced state through unchanged. -/
+theorem chargeStateGas_withState (evm : Evm fork Meter) (other : State.TransactionState)
     (amount : Nat) :
     chargeStateGas { evm with state := other } amount =
       (fun after => { after with state := other }) <$> chargeStateGas evm amount := by
@@ -1067,7 +1072,8 @@ private theorem selfdestructWrite_keeps {beneficiary : Address} {cold : Bool}
   exact finishSelfdestruct_keeps (by rw [c5.state]; exact hag) (by rw [c5.message]; exact ho) hb
 
 omit [GasMeter Meter] in
-private theorem accessAddress_withState (evm : Evm fork Meter)
+/-- An access to an address moves a replaced state through unchanged. -/
+theorem accessAddress_withState (evm : Evm fork Meter)
     (other : State.TransactionState) (address : Address) :
     accessAddress { evm with state := other } address =
       ((accessAddress evm address).1, { (accessAddress evm address).2 with state := other }) := by

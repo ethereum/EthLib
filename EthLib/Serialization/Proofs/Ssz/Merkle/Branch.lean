@@ -306,17 +306,6 @@ private theorem calculateMerkleRootUnchecked_of_length {leaf : Bytes} {proof : L
   simp [calculateMerkleRootUnchecked, gindexLength, gindexDepth, positive, length,
     show ¬ index < 1 by omega, Bind.bind, Except.bind, pure, Except.pure]
 
-/-- Climbing a joined branch climbs the front, then the back from where the front ends. -/
-private theorem climbBranch_append_front (index : Nat) :
-    ∀ (level : Nat) (node : Bytes) (front back : List Bytes),
-    climbBranch index level node (front ++ back)
-      = climbBranch index (level + front.length) (climbBranch index level node front) back
-  | level, node, [], back => by simp
-  | level, node, sibling :: rest, back => by
-    rw [List.cons_append, climbBranch_cons, climbBranch_cons,
-      climbBranch_append_front index (level + 1),
-      show level + 1 + rest.length = level + (sibling :: rest).length by simp; omega]
-
 /-- Climbing from a raised level reads the index with its bottom turns dropped. -/
 private theorem climbBranch_shift (index shift : Nat) :
     ∀ (level : Nat) (node : Bytes) (branch : List Bytes),
@@ -381,7 +370,7 @@ theorem verifyMerkleProof_append {leaf middle root : Bytes} {inner outer : List 
     · exact outerWidths _ outside
   · have length : (inner ++ outer).length = Nat.log2 index := by
       rw [List.length_append, innerLength, outerLength, indexDepth, Nat.add_comm]
-    rw [calculateMerkleRootUnchecked_of_length indexTwo length, climbBranch_append_front,
+    rw [calculateMerkleRootUnchecked_of_length indexTwo length, climbBranch_append,
       climbBranch_congr bits, innerRoot, innerLength, climbBranch_shift, high, outerRoot]
 
 end EthLib.Serialization.Ssz

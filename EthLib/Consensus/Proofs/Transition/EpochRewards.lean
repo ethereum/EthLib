@@ -31,6 +31,16 @@ That needs a registry within its limit.
 
 In such a registry, the eligible indices increase strictly.
 
+A validator is eligible for an epoch when it is active in it.
+
+It is also eligible when it is slashed and not yet withdrawable in the epoch that follows.
+
+That check fails only for an inactive slashed validator in the epoch `2^64 - 1`.
+
+The previous epoch is never that epoch, so the check never fails there.
+
+So the eligible indices are the positions of the validators eligible for the previous epoch.
+
 The inactivity deltas hold no reward.
 
 From Altair, a validator with a timely target pays no inactivity penalty.
@@ -442,17 +452,121 @@ theorem getEligibleValidatorIndices_sorted {eligible : List ValidatorIndex}
     | .ok passes => passes
     | .error _ => false) fits
 
+/-- The eligibility of a validator for an epoch is decided unless the computation overflows.
+
+It computes one past the epoch only for a validator that is inactive and slashed.
+
+The validator is eligible when it is active in the epoch.
+
+It is also eligible when it is slashed and not yet withdrawable in the epoch that follows. -/
+theorem isEligibleValidator_eq_ok_iff {epoch : Epoch} {validator : Validator} {decided : Bool} :
+    isEligibleValidator epoch validator = .ok decided ↔
+      (isActiveValidator validator epoch = true ∨ validator.slashed = false ∨
+          epoch.toNat + 1 < 2 ^ 64) ∧
+        decided = (isActiveValidator validator epoch || (validator.slashed &&
+          decide (epoch.toNat + 1 < validator.withdrawableEpoch.toNat))) := by
+  unfold isEligibleValidator
+  by_cases active : isActiveValidator validator epoch = true
+  · simp only [active, ↓reduceIte, pure, Except.pure, Except.ok.injEq, Bool.true_or, true_or,
+      true_and]
+    exact eq_comm
+  by_cases slashed : validator.slashed = true
+  · by_cases small : epoch.toNat + 1 < 2 ^ 64
+    · have sum : epoch.toNat + (1 : UInt64).toNat < 2 ^ 64 := by simpa using small
+      simp only [active, slashed, Bool.false_eq_true, ↓reduceIte, liftArith, addChecked_of_lt sum,
+        liftAccessor, Except.mapError, bind, Except.bind, pure, Except.pure, Except.ok.injEq,
+        Bool.false_or, Bool.true_and, small, or_true, true_and]
+      have bound : epoch + 1 < validator.withdrawableEpoch ↔
+          epoch.toNat + 1 < validator.withdrawableEpoch.toNat := by
+        rw [UInt64.lt_iff_toNat_lt, toNat_add_of_lt sum, UInt64.toNat_one]
+      constructor <;> rintro rfl <;> exact decide_eq_decide.mpr bound
+    · simp [active, slashed, liftArith, addChecked, liftAccessor, Except.mapError, bind,
+        Except.bind, small]
+  · simp only [active, slashed, Bool.false_eq_true, ↓reduceIte, pure, Except.pure,
+      Except.ok.injEq, Bool.false_or, Bool.false_and, or_true, true_or, true_and]
+    exact eq_comm
+
+/-- The eligibility of a validator fails only for the epoch `2^64 - 1`.
+
+It fails there exactly when the validator is inactive and slashed.
+
+It then fails with an overflow. -/
+theorem isEligibleValidator_eq_error_iff {epoch : Epoch} {validator : Validator}
+    {error : TransitionError} :
+    isEligibleValidator epoch validator = .error error ↔
+      isActiveValidator validator epoch = false ∧ validator.slashed = true ∧
+        epoch.toNat = 2 ^ 64 - 1 ∧ error = .accessor (.arith .overflow) := by
+  have below := epoch.toNat_lt
+  unfold isEligibleValidator
+  by_cases active : isActiveValidator validator epoch = true
+  · simp [active, pure, Except.pure]
+  by_cases slashed : validator.slashed = true
+  · by_cases small : epoch.toNat + 1 < 2 ^ 64
+    · have sum : epoch.toNat + (1 : UInt64).toNat < 2 ^ 64 := by simpa using small
+      simp only [active, slashed, Bool.false_eq_true, ↓reduceIte, liftArith, addChecked_of_lt sum,
+        liftAccessor, Except.mapError, bind, Except.bind, pure, Except.pure, reduceCtorEq,
+        false_iff, not_and]
+      omega
+    · have top : epoch.toNat = 2 ^ 64 - 1 := by omega
+      simp [active, slashed, liftArith, addChecked, liftAccessor, Except.mapError, bind,
+        Except.bind, top, eq_comm]
+  · simp [active, slashed, pure, Except.pure]
+
+/-- In the previous epoch of a state, the eligibility of a validator is decided without an error.
+
+The previous epoch is at most `2^64 - 2`, so one past it does not overflow.
+
+The validator is eligible when it is active in that epoch.
+
+It is also eligible when it is slashed and not yet withdrawable in the epoch that follows. -/
+theorem isEligibleValidator_getPreviousEpoch (validator : Validator) :
+    isEligibleValidator (getPreviousEpoch state) validator =
+      .ok (isActiveValidator validator (getPreviousEpoch state) || (validator.slashed &&
+        decide ((getPreviousEpoch state).toNat + 1 < validator.withdrawableEpoch.toNat))) := by
+  have previous := getPreviousEpoch_toNat state
+  have below := (getCurrentEpoch state).toNat_lt
+  exact isEligibleValidator_eq_ok_iff.mpr ⟨.inr (.inr (by omega)), rfl⟩
+
+/-- Take the eligible indices of a state, computed without an error.
+
+A position is among them exactly when it holds an eligible validator.
+
+The validator is eligible when it is active in the previous epoch.
+
+It is also eligible when it is slashed and not yet withdrawable in the epoch that follows. -/
+theorem mem_getEligibleValidatorIndices_iff {eligible : List ValidatorIndex}
+    (computed : getEligibleValidatorIndices state = .ok eligible) {index : ValidatorIndex} :
+    index ∈ eligible ↔ ∃ validator, state.validators.data[index.toNat]? = some validator ∧
+      (isActiveValidator validator (getPreviousEpoch state) = true ∨ validator.slashed = true ∧
+        (getPreviousEpoch state).toNat + 1 < validator.withdrawableEpoch.toNat) := by
+  have fits := getEligibleValidatorIndices_fits computed
+  rw [getEligibleValidatorIndices_eq computed, List.mem_filterMap]
+  simp only [isEligibleValidator_getPreviousEpoch] at fits ⊢
+  constructor
+  · rintro ⟨⟨validator, position⟩, member, image⟩
+    obtain ⟨passes, picked⟩ := Option.ite_none_right_eq_some.mp image
+    have small := fits _ member passes
+    obtain rfl := Option.some.inj picked
+    rw [List.mem_zipIdx_iff_getElem?] at member
+    refine ⟨validator, ?_, ?_⟩
+    · rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
+      simpa using member
+    · simpa using passes
+  · rintro ⟨validator, found, passes⟩
+    refine ⟨(validator, index.toNat), ?_, ?_⟩
+    · rw [List.mem_zipIdx_iff_getElem?]
+      simpa using found
+    · rcases passes with active | ⟨slashed, late⟩
+      · simp [active]
+      · simp [slashed, late]
+
 /-- Each validator active in the previous epoch is eligible for the rewards of that epoch. -/
 theorem mem_getEligibleValidatorIndices_of_active {eligible : List ValidatorIndex}
     (computed : getEligibleValidatorIndices state = .ok eligible) {index : ValidatorIndex}
     {validator : Validator} (found : state.validators.data[index.toNat]? = some validator)
     (active : isActiveValidator validator (getPreviousEpoch state) = true) :
-    index ∈ eligible := by
-  rw [getEligibleValidatorIndices_eq computed, List.mem_filterMap]
-  refine ⟨(validator, index.toNat), ?_, ?_⟩
-  · rw [List.mem_zipIdx_iff_getElem?]
-    simpa using found
-  · simp [isEligibleValidator, active, pure, Except.pure]
+    index ∈ eligible :=
+  (mem_getEligibleValidatorIndices_iff computed).mpr ⟨validator, found, .inl active⟩
 
 /-- From Altair, take a validator active and unslashed in the previous epoch that set a flag in it.
 
