@@ -13,68 +13,7 @@ The block parameter is optional, and `latest` by default.
 
 Of the three methods, only `eth_call` states that default, and the other two follow it.
 
-A call completes when it prepares and its message ends without an error.
-
-The source asks `eth_estimateGas` for an estimate, and nothing more.
-
-Its text reads "an estimate of how much gas is necessary to allow the transaction to complete".
-
-Here the answer is a gas limit with which the call completes.
-
-The method first runs the call at the gas limit of the request, or the default one.
-
-If that call fails, the method fails with the same error as `eth_call`.
-
-That includes the revert of code 3.
-
-Otherwise it searches by halves, between 0 and that limit, for a limit that completes.
-
-The answer always completes.
-
-It is the least positive limit that completes when those limits form an interval.
-
-Code that reads the gas left can break that, and the answer may then not be the least.
-
-The answer of `eth_createAccessList` is an object with an access list, the gas used, and an error.
-
-The schema makes all three optional, and the source fixes none of their contents.
-
-Here the access list holds each address and storage key that the call read or wrote.
-
-An address without a storage key is left out when its transaction accesses it from the start.
-
-Those are the sender, the recipient or the created contract, and the precompiles of the fork.
-
-From Shapella, the beneficiary is one of them.
-
-The authorities and the delegate of EIP-7702, and the contracts that the call creates, stay in.
-
-The reads are those of the state tracker, which a revert keeps.
-
-The fixture [`create-al-abi-revert.io`][abi-revert] asks for them when the call fails.
-
-Its text reads "The server should return the accessed slots regardless of failure".
-
-The method then runs the call again with that access list, and reports its gas used and its error.
-
-A request of type 0 runs again as type 1, the first type with an access list.
-
-Before Berlin no transaction has an access list, so the list is empty and the call runs once.
-
-The gas used is the gas that the transaction would use, after its refund.
-
-The error is absent when that call completes, and else the message of the error of `eth_call`.
-
-A request that the call rejects before its message runs gets that error, as for `eth_call`.
-
-So does a request whose second call is rejected, such as one whose gas no longer covers the list.
-
-The estimate has no cap from EIP-7825, as the call has none.
-
-With a fee named, the first call buys its whole gas limit, so the sender must hold that fee.
-
 [execute]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/execute.yaml
-[abi-revert]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_createAccessList/create-al-abi-revert.io
 -/
 
 @[expose] public section
@@ -89,8 +28,9 @@ open EthLib.Execution.Transactions
 
 namespace ChainView
 
-/-- The call with gas limit `g` completes: it prepares, and its message neither reverts nor halts.
--/
+/-- The call completes with gas limit `g`.
+
+It prepares, and its message neither reverts nor halts. -/
 def Completes (v : ChainView) (tx : GenericTransaction) (p : BlockParam) (c : CallChoices)
     (g : Nat) : Prop :=
   ∃ s o, v.runCall { tx with gas := some g } p c = .ok (s, o) ∧ o.error = none
@@ -106,7 +46,7 @@ instance (v : ChainView) (tx : GenericTransaction) (p : BlockParam) (c : CallCho
       exact he he'
   | .error _ => isFalse fun ⟨_, _, h', _⟩ => by rw [h] at h'; cases h'
 
-/-- A gas limit up to `hi`, found by halves above `lo`.
+/-- A gas limit up to `hi`, found by binary search above `lo`.
 
 The answer is `hi` or a limit with which the call completes.
 
@@ -121,7 +61,25 @@ termination_by hi - lo
 
 /-- The answer of `eth_estimateGas`: a gas limit with which the call completes.
 
-It fails with the error of the call at the gas limit of the request, or at the default one. -/
+The source asks for an estimate, and nothing more.
+
+Its text reads "an estimate of how much gas is necessary to allow the transaction to complete".
+
+The method first runs the call at the gas limit of the request, or at the default one.
+
+If that call fails, the method fails with the error of `eth_call`, the revert of code 3 included.
+
+Otherwise it runs a binary search between 0 and that limit.
+
+If the limits that complete form an interval, the answer is the least positive one.
+
+Code that reads the gas left can break that property, and the answer may then not be the least.
+
+The estimate has no cap from EIP-7825, as the call has none.
+
+When the request names a fee, the first call buys its whole gas limit.
+
+The sender must then hold that fee. -/
 def estimateGas (v : ChainView) (tx : GenericTransaction) (p : BlockParam) (c : CallChoices) :
     Except RpcError Nat := do
   let s ← v.prepareCall tx p c
@@ -132,23 +90,42 @@ def estimateGas (v : ChainView) (tx : GenericTransaction) (p : BlockParam) (c : 
 
 end ChainView
 
-/-- The answer of `eth_createAccessList`: an access list, the gas used, and an error. -/
+/-- The answer of `eth_createAccessList`: an access list, the gas used, and an error.
+
+The schema makes all three optional, and the source fixes none of their contents. -/
 structure AccessListResult where
   /-- The addresses and storage keys that the call accessed. -/
   accessList : List Access
   /-- The gas that the call with that access list uses, after its refund. -/
   gasUsed : Nat
-  /-- The message of the error of that call, if it fails. -/
+  /-- The message of the error of `eth_call` for that call, absent when it completes. -/
   error : Option String
 
-/-- The result of `eth_createAccessList` as JSON, without `error` when there is none. -/
+/-- The result of `eth_createAccessList` as JSON, without an error member when there is none. -/
 def accessListResultJson (r : AccessListResult) : Json :=
   Json.mkObj <| [("accessList", accessListJson r.accessList), ("gasUsed", quantityJson r.gasUsed)]
     ++ (r.error.map fun e => ("error", Json.str e)).toList
 
 /-- The addresses and storage keys that the call `s` read or wrote, with the output `o`.
 
-An address without a storage key is left out when the transaction accesses it anyway. -/
+The reads are those of the state tracker, which a revert keeps.
+
+The fixture [`create-al-abi-revert.io`][abi-revert] asks for them when the call fails.
+
+Its text reads "The server should return the accessed slots regardless of failure".
+
+An address without a storage key is left out when the transaction accesses it from the start.
+
+Those are the sender, the recipient or the created contract, and the precompiles of the fork.
+
+From Shapella, the beneficiary is one of them.
+
+The authorities and the delegate of EIP-7702 stay in.
+
+So do the contracts that the code of the call creates.
+
+[abi-revert]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_createAccessList/create-al-abi-revert.io
+-/
 def accessedList (s : CallSetup) (o : CallOutput) : List Access :=
   let state := o.state
   let keys := state.storageWrites.foldl
@@ -175,7 +152,19 @@ def callErrorMessage (o : CallOutput) : Option String :=
 
 namespace ChainView
 
-/-- The answer of `eth_createAccessList` for a request on the state after the block `p` names. -/
+/-- The answer of `eth_createAccessList` for a request on the state after the block `p` names.
+
+It runs the call, then from Berlin runs it again with the addresses and keys it accessed.
+
+A request of type 0 runs again as type 1, the first type with an access list.
+
+Before Berlin no transaction has an access list, so the list is empty.
+
+The gas used and the error are those of the last call.
+
+When the call rejects the request before its message runs, the method fails with that rejection.
+
+It also fails when the second call is rejected, such as when the gas no longer covers the list. -/
 def createAccessList (v : ChainView) (tx : GenericTransaction) (p : BlockParam)
     (c : CallChoices) : Except RpcError AccessListResult := do
   let (s, o) ← v.runCall tx p c

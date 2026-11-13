@@ -17,7 +17,7 @@ from .chain import FIXTURES, ReplayChain, block_hash, read_fixture, replay_chain
 
 # Each method that the view serves, with the schema of its result in `src/eth` of the source.
 # A result that is an object has no reader of its schema, so it maps to None.
-# `RESULT_CHECKS` checks the schema of some of those results.
+# Some of those objects have their own check of the schema, further below.
 RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "eth_blockNumber": "uint",
     "eth_chainId": "uint",
