@@ -1,9 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.DirectSafety.Safety
-public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
-public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
-public import EthLib.Consensus.Proofs.Transition.RootLinks
+public import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
 
 /-!
 # Proofs: the origin and the ancestry of the checkpoints of a store
@@ -16,17 +14,11 @@ A pull-up runs justification and finalization on a held state, and the store doe
 
 The root and the epoch of the checkpoint come together from that one place.
 
-A checkpoint of a held state, or of its pull-up, names a block on the chain of that state's block.
+After the anchor epoch, such a checkpoint names an ancestor of the block of the held state.
 
-That block is the ancestor of the source block at the first slot of the checkpoint's epoch.
+It is the latest block of that chain at or before the first slot of the checkpoint's epoch.
 
-This holds for each checkpoint after the epoch of the anchor state.
-
-An earlier checkpoint can name a block that the store never held.
-
-The other exception is a held state on the source chain that hashes to the zero root.
-
-Such a state leaves the latest block header unfilled, and its next slot records the stale root.
+The one exception is an anchor state that hashes to the zero root.
 
 The store's finalized checkpoint is on its justified chain at the first slot of the finalized epoch.
 
@@ -34,7 +26,7 @@ Otherwise the runs to the two held states of those checkpoints bound the account
 
 Or their hashes show a collision or a zero root.
 
-[Gasper] §4.1 pairs a block with an epoch, and §8.5 gives the four finalization cases.
+[Gasper] §4.1 pairs a block with an epoch.
 
 [Gasper]: https://arxiv.org/abs/2003.03052v3
 -/
@@ -340,7 +332,7 @@ theorem Store.Reachable.finalized_origins {config : Config}
         checkpoint = pulled.finalizedCheckpoint :=
   fun checkpoint selected => reachable.checkpoint_origins _ checkpoint (.inr ⟨rfl, selected⟩)
 
-/-! ## The ancestry of the checkpoints of a held state -/
+/-! ## Checkpoint blocks on one chain -/
 
 namespace Store
 
@@ -423,198 +415,7 @@ private theorem getCheckpointBlock_of_le (lower : store.ParentsBelow)
   exact ⟨isAncestor_of_getAncestor_root lower walk,
     getCheckpointBlock_ok_iff.mpr ⟨startEarly, startedEarly, walk⟩⟩
 
-/-- A zero preimage on the chain of a parent is on the chain of its child. -/
-private theorem zeroPreimage_of_parent {root : Root} {block parent : BeaconBlock preset fork}
-    (found : store.blocks[root]? = some block)
-    (parentFound : store.blocks[block.parentRoot]? = some parent)
-    (lower : parent.slot < block.slot)
-    (zero : ∃ (badRoot : Root) (badState : BeaconState preset fork) (slot : Slot),
-      store.blockStates[badRoot]? = some badState ∧
-      SszType.hashTreeRoot badState = .ok (Vector.replicate 32 0) ∧
-      (·.root) <$> store.getAncestor ⟨block.parentRoot, .pending⟩ slot = .ok badRoot) :
-    ∃ (badRoot : Root) (badState : BeaconState preset fork) (slot : Slot),
-      store.blockStates[badRoot]? = some badState ∧
-      SszType.hashTreeRoot badState = .ok (Vector.replicate 32 0) ∧
-      (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok badRoot := by
-  obtain ⟨badRoot, badState, slot, badHeld, hashed, walk⟩ := zero
-  by_cases below : slot < block.slot
-  · exact ⟨badRoot, badState, slot, badHeld, hashed,
-      (getAncestor_root_of_parent found parentFound lower below).trans walk⟩
-  · -- A walk from the parent to a slot at or above the block stays at the parent.
-    rw [getAncestor_of_le parentFound
-      (UInt64.le_trans (UInt64.le_of_lt lower) (UInt64.not_lt.mp below))] at walk
-    simp only [Functor.map, Except.map, Except.ok.injEq] at walk
-    subst walk
-    refine ⟨_, badState, parent.slot, badHeld, hashed, ?_⟩
-    rw [getAncestor_root_of_parent found parentFound lower lower,
-      getAncestor_of_le parentFound (UInt64.le_refl _)]
-    rfl
-
-/-- A root read in a transition from a held parent state is on the chain of the new block.
-
-The read follows the cases of the recorded roots of the transition.
-
-An older root is read in the parent state, whose own reads are on the chain of the parent.
-
-Otherwise the root is that of the parent, or the parent state hashes to zero. -/
-private theorem Linked.getAncestor_root_of_cases {orphanParent : Root}
-    (linked : store.Linked orphanParent)
-    {root readRoot : Root} {block : BeaconBlock preset fork} {parent : BeaconState preset fork}
-    {slot : Slot} (found : store.blocks[root]? = some block)
-    (parentHeld : store.blockStates[block.parentRoot]? = some parent)
-    (history : getBlockRootAtSlot parent slot = .ok readRoot →
-      (·.root) <$> store.getAncestor ⟨block.parentRoot, .pending⟩ slot = .ok readRoot ∨
-      ∃ (badRoot : Root) (badState : BeaconState preset fork) (slot : Slot),
-        store.blockStates[badRoot]? = some badState ∧
-        SszType.hashTreeRoot badState = .ok (Vector.replicate 32 0) ∧
-        (·.root) <$> store.getAncestor ⟨block.parentRoot, .pending⟩ slot = .ok badRoot)
-    (below : slot < block.slot)
-    (cases : (slot < parent.slot ∧ getBlockRootAtSlot parent slot = .ok readRoot) ∨
-      (parent.slot ≤ slot ∧ (readRoot = block.parentRoot ∨
-        (SszType.hashTreeRoot parent = .ok (Vector.replicate 32 0) ∧
-          SszType.hashTreeRoot parent.latestBlockHeader = .ok readRoot)))) :
-    (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok readRoot ∨
-      ∃ (badRoot : Root) (badState : BeaconState preset fork) (slot : Slot),
-        store.blockStates[badRoot]? = some badState ∧
-        SszType.hashTreeRoot badState = .ok (Vector.replicate 32 0) ∧
-        (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok badRoot := by
-  obtain ⟨parentBlock, parentFound, parentLe⟩ := linked.stateAfter _ _ parentHeld
-  have lower := linked.parentsBelow _ _ _ found parentFound
-  rcases cases with ⟨-, read⟩ | ⟨atLeast, parentRoot | ⟨zero, -⟩⟩
-  · rcases history read with walk | bad
-    · exact .inl ((getAncestor_root_of_parent found parentFound lower below).trans walk)
-    · exact .inr (zeroPreimage_of_parent found parentFound lower bad)
-  · left
-    rw [getAncestor_root_of_parent found parentFound lower below,
-      getAncestor_of_le parentFound (UInt64.le_trans parentLe atLeast), parentRoot]
-    rfl
-  · right
-    refine ⟨block.parentRoot, parent, parentBlock.slot, parentHeld, zero, ?_⟩
-    rw [getAncestor_root_of_parent found parentFound lower lower,
-      getAncestor_of_le parentFound (UInt64.le_refl _)]
-    rfl
-
 end Store
-
-/-- A root that a held state reads after the anchor state is on the chain of its block.
-
-Otherwise a held state on that chain hashes to zero. -/
-private theorem Store.Reachable.getAncestor_root_of_blockState {config : Config}
-    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
-    {store : Store preset fork}
-    (reachable : Store.Reachable config anchorState anchorBlock store)
-    (linked : store.Linked anchorBlock.parentRoot)
-    {root readRoot : Root} {state : BeaconState preset fork} {slot : Slot}
-    (held : store.blockStates[root]? = some state)
-    (read : getBlockRootAtSlot state slot = .ok readRoot) (later : anchorState.slot ≤ slot) :
-    (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok readRoot ∨
-      ∃ (badRoot : Root) (badState : BeaconState preset fork) (slot : Slot),
-        store.blockStates[badRoot]? = some badState ∧
-        SszType.hashTreeRoot badState = .ok (Vector.replicate 32 0) ∧
-        (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok badRoot := by
-  obtain ⟨block, found⟩ := reachable.known_of_blockState held
-  obtain ⟨post, postOk, anchored, produced⟩ := reachable.blockStatesFromParents found
-  rw [held, Option.some.injEq] at postOk
-  subst post
-  by_cases same : block = anchorBlock
-  · -- The anchor state reads no slot from its own on.
-    rw [anchored same] at read
-    exact absurd later (UInt64.not_le.mpr (getBlockRootAtSlot_read read).1)
-  obtain ⟨parent, checks, engine, signed, message, parentHeld, transitioned⟩ := produced same
-  have below : slot < block.slot := by
-    rw [← message, ← (stateTransition_slot transitioned).2]
-    exact (getBlockRootAtSlot_read read).1
-  refine linked.getAncestor_root_of_cases found parentHeld
-    (fun parentRead => reachable.getAncestor_root_of_blockState linked parentHeld parentRead later)
-    below ?_
-  by_cases old : slot < parent.slot
-  · exact .inl ⟨old, getBlockRootAtSlot_stateTransition_of_lt transitioned old read⟩
-  · refine .inr ⟨UInt64.not_lt.mp old, ?_⟩
-    rw [← message]
-    exact getBlockRootAtSlot_stateTransition_cases transitioned (UInt64.not_lt.mp old) read
-termination_by state.slot.toNat
-decreasing_by
-  have bounds := stateTransition_slot transitioned
-  rw [bounds.2]
-  exact UInt64.lt_iff_toNat_lt.mp bounds.1
-
-/-- The three checkpoints of a state satisfy a predicate. -/
-private def CheckpointsSatisfy (p : Checkpoint → Prop) (state : BeaconState preset fork) : Prop :=
-  p state.previousJustifiedCheckpoint ∧ p state.currentJustifiedCheckpoint ∧
-    p state.finalizedCheckpoint
-
-/-- A frame keeps the three checkpoints. -/
-private theorem CheckpointsSatisfy.of_frame {p : Checkpoint → Prop}
-    {state after : BeaconState preset fork} (holds : CheckpointsSatisfy p state)
-    (frame : Frame state after) : CheckpointsSatisfy p after := by
-  simpa only [CheckpointsSatisfy, frame.previousJustified, frame.currentJustified,
-    frame.finalized] using holds
-
-/-- Justification keeps old checkpoints or selects one read from the history of the state.
-
-A new finalized checkpoint is an old justified one, as in the four cases of [Gasper] §8.5.
-
-[Gasper]: https://arxiv.org/abs/2003.03052v3 -/
-private theorem CheckpointsSatisfy.of_processJustificationAndFinalization
-    {p : Checkpoint → Prop} {state after : BeaconState preset fork}
-    (holds : CheckpointsSatisfy p state)
-    (reads : ∀ checkpoint,
-      (checkpoint.epoch = getPreviousEpoch state ∨ checkpoint.epoch = getCurrentEpoch state) →
-      getBlockRoot state checkpoint.epoch = .ok checkpoint.root → p checkpoint)
-    (computed : processJustificationAndFinalization state = .ok after) :
-    CheckpointsSatisfy p after := by
-  have current : p after.currentJustifiedCheckpoint := by
-    rcases processJustificationAndFinalization_currentJustified computed with same | ⟨recent, read⟩
-    · exact same ▸ holds.2.1
-    · exact reads _ recent read
-  rcases processJustificationAndFinalization_ok computed with rfl | ⟨_, _, _, weighed⟩
-  · exact holds
-  · obtain ⟨previous, -, final, -⟩ := weighJustificationAndFinalization_checkpoints weighed
-    refine ⟨previous ▸ holds.2.1, current, ?_⟩
-    rcases final with same | same | same
-    · exact same ▸ holds.2.2
-    · exact same ▸ holds.1
-    · exact same ▸ holds.2.1
-
-/-- A slot run selects checkpoints only by reads at its intermediate states.
-
-Each read comes with the slots before and after its state. -/
-private theorem CheckpointsSatisfy.of_advanceSlots {config : Config} {p : Checkpoint → Prop}
-    {state after : BeaconState preset fork} {checks : SignatureChecks} {count : ℕ}
-    (holds : CheckpointsSatisfy p state)
-    (reads : ∀ i, i < count → ∀ middle cached,
-      advanceSlots config checks i state = .ok middle →
-      advanceSlots config checks (count - i) middle = .ok after →
-      processSlot middle = .ok cached → ∀ checkpoint,
-      (checkpoint.epoch = getPreviousEpoch cached ∨ checkpoint.epoch = getCurrentEpoch cached) →
-      getBlockRoot cached checkpoint.epoch = .ok checkpoint.root → p checkpoint)
-    (computed : advanceSlots config checks count state = .ok after) :
-    CheckpointsSatisfy p after := by
-  induction count generalizing state after with
-  | zero =>
-    cases Except.ok.inj computed
-    exact holds
-  | succ count ih =>
-    have whole := computed
-    simp only [EthLib.Consensus.advanceSlots, bind_ok_iff] at computed
-    obtain ⟨next, step, rest⟩ := computed
-    have nextHolds : CheckpointsSatisfy p next := by
-      obtain ⟨slot, cached, epoched, _, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok step
-      have cachedHolds := holds.of_frame (frame_processSlot cachedOk)
-      have epochedHolds : CheckpointsSatisfy p epoched := by
-        unfold epochIfLast at epochedOk
-        split at epochedOk
-        · obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
-          exact (cachedHolds.of_processJustificationAndFinalization
-            (reads 0 (Nat.zero_lt_succ _) state cached rfl (by simpa using whole) cachedOk)
-              justifiedOk).of_frame frame.toFrame
-        · cases Except.ok.inj epochedOk
-          exact cachedHolds
-      exact epochedHolds
-    apply ih nextHolds (fun i hi middle cached run more cachedOk => ?_) rest
-    refine reads (i + 1) (by omega) middle cached ?_ (by rwa [Nat.add_sub_add_right]) cachedOk
-    simp only [EthLib.Consensus.advanceSlots, step, bind, Except.bind]
-    exact run
 
 /-- An epoch after the current epoch of a state starts after the slot of that state. -/
 private theorem slot_le_of_getCurrentEpoch_lt {state : BeaconState preset fork} {epoch : Epoch}
@@ -627,178 +428,24 @@ private theorem slot_le_of_getCurrentEpoch_lt {state : BeaconState preset fork} 
   have eq := (mulChecked_ok_iff.mp startOk).2
   exact UInt64.le_iff_toNat_le.mpr (by omega)
 
-/-- After the anchor epoch, each checkpoint of a held state is on the chain of its block.
-
-Otherwise a held state on that chain hashes to zero. -/
-private theorem Store.Reachable.checkpointsSatisfy_of_blockState {config : Config}
-    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
-    {store : Store preset fork}
-    (reachable : Store.Reachable config anchorState anchorBlock store)
-    (sound : Invariant anchorState)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
-    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
-    (linked : store.Linked anchorBlock.parentRoot)
-    {root : Root} {state : BeaconState preset fork}
-    (held : store.blockStates[root]? = some state) :
-    CheckpointsSatisfy (fun checkpoint => checkpoint.epoch ≤ getCurrentEpoch anchorState ∨
-      store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root ∨
-      ∃ (badRoot : Root) (badState : BeaconState preset fork) (slot : Slot),
-        store.blockStates[badRoot]? = some badState ∧
-        SszType.hashTreeRoot badState = .ok (Vector.replicate 32 0) ∧
-        (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok badRoot) state := by
-  obtain ⟨block, found⟩ := reachable.known_of_blockState held
-  obtain ⟨post, postOk, anchored, produced⟩ := reachable.blockStatesFromParents found
-  rw [held, Option.some.injEq] at postOk
-  subst post
-  by_cases same : block = anchorBlock
-  · -- The anchor state has no checkpoint after its own epoch.
-    rw [anchored same]
-    have bound := UInt64.le_trans sound.settled (getPreviousEpoch_le anchorState)
-    exact ⟨.inl (UInt64.le_trans sound.ordered.2 bound), .inl bound,
-      .inl (UInt64.le_trans sound.ordered.1 (UInt64.le_trans sound.ordered.2 bound))⟩
-  obtain ⟨parent, checks, engine, signed, message, parentHeld, transitioned⟩ := produced same
-  obtain ⟨parentBlock, parentFound, -⟩ := linked.stateAfter _ _ parentHeld
-  have lower := linked.parentsBelow _ _ _ found parentFound
-  have bounds := stateTransition_slot transitioned
-  rw [message] at bounds
-  -- A checkpoint of the parent state starts no later than that state, so below the block.
-  have lift : ∀ checkpoint : Checkpoint, checkpoint.epoch ≤ getCurrentEpoch parent →
-      (checkpoint.epoch ≤ getCurrentEpoch anchorState ∨
-        store.getCheckpointBlock block.parentRoot checkpoint.epoch = .ok checkpoint.root ∨
-        ∃ (badRoot : Root) (badState : BeaconState preset fork) (slot : Slot),
-          store.blockStates[badRoot]? = some badState ∧
-          SszType.hashTreeRoot badState = .ok (Vector.replicate 32 0) ∧
-          (·.root) <$> store.getAncestor ⟨block.parentRoot, .pending⟩ slot = .ok badRoot) →
-      checkpoint.epoch ≤ getCurrentEpoch anchorState ∨
-        store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root ∨
-        ∃ (badRoot : Root) (badState : BeaconState preset fork) (slot : Slot),
-          store.blockStates[badRoot]? = some badState ∧
-          SszType.hashTreeRoot badState = .ok (Vector.replicate 32 0) ∧
-          (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok badRoot := by
-    intro checkpoint early holds
-    rcases holds with old | path | bad
-    · exact .inl old
-    · obtain ⟨start, startOk, walk⟩ := Store.getCheckpointBlock_ok_iff.mp path
-      have below : start < block.slot := by
-        have eq := (mulChecked_ok_iff.mp startOk).2
-        have epochLe := UInt64.le_iff_toNat_le.mp early
-        rw [getCurrentEpoch_toNat] at epochLe
-        have scaled := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat epochLe
-        have floor := Nat.div_mul_le_self parent.slot.toNat preset.SLOTS_PER_EPOCH.toNat
-        have earlier := UInt64.lt_iff_toNat_lt.mp bounds.1
-        exact UInt64.lt_iff_toNat_lt.mpr (by omega)
-      exact .inr (.inl (Store.getCheckpointBlock_ok_iff.mpr ⟨start, startOk,
-        (Store.getAncestor_root_of_parent found parentFound lower below).trans walk⟩))
-    · exact .inr (.inr (Store.zeroPreimage_of_parent found parentFound lower bad))
-  have parentHolds :=
-    reachable.checkpointsSatisfy_of_blockState sound positive window linked parentHeld
-  have invariant := (reachable.ordered sound).2 parentHeld
-  have currentLe := UInt64.le_trans invariant.settled (getPreviousEpoch_le parent)
-  obtain ⟨advanced, slotsOk, advancedSlot, -, blockOk, -⟩ := stateTransition_ok transitioned
-  rw [message] at blockOk advancedSlot
-  simp only [processSlots, bind_ok_iff, ensure_ok_iff] at slotsOk
-  obtain ⟨_, _, run⟩ := slotsOk
-  refine CheckpointsSatisfy.of_frame (CheckpointsSatisfy.of_advanceSlots
-    ⟨lift _ (UInt64.le_trans invariant.ordered.2 currentLe) parentHolds.1,
-      lift _ currentLe parentHolds.2.1,
-      lift _ (UInt64.le_trans invariant.ordered.1 (UInt64.le_trans invariant.ordered.2 currentLe))
-        parentHolds.2.2⟩ ?_ run) (frame_processBlock blockOk)
-  intro i _ middle cached first rest cachedOk checkpoint recent read
-  by_cases old : checkpoint.epoch ≤ getCurrentEpoch anchorState
-  · exact .inl old
-  -- A new checkpoint is read at an intermediate state of the transition.
-  have recent' : checkpoint.epoch = getCurrentEpoch middle ∨
-      checkpoint.epoch = getPreviousEpoch middle := by
-    simpa only [getPreviousEpoch, getCurrentEpoch, processSlot_slot cachedOk] using recent.symm
-  rw [getBlockRoot_processSlot cachedOk (slot_lt_epoch_add_historical positive window recent')]
-    at read
-  obtain ⟨start, startOk, read⟩ := getBlockRoot_ok_iff.mp read
-  have later := slot_le_of_getCurrentEpoch_lt positive (UInt64.not_le.mp old) startOk
-  have below : start < block.slot := by
-    have before := UInt64.lt_iff_toNat_lt.mp (getBlockRootAtSlot_read read).1
-    have moved := advanceSlots_slot _ rest
-    rw [advancedSlot] at moved
-    exact UInt64.lt_iff_toNat_lt.mpr (by omega)
-  rcases linked.getAncestor_root_of_cases found parentHeld
-      (fun parentRead =>
-        reachable.getAncestor_root_of_blockState linked parentHeld parentRead later)
-      below (getBlockRootAtSlot_advanceSlots_cases first rest blockOk read) with walk | bad
-  · exact .inr (.inl (Store.getCheckpointBlock_ok_iff.mpr ⟨start, startOk, walk⟩))
-  · exact .inr (.inr bad)
-termination_by state.slot.toNat
-decreasing_by
-  have bounds := stateTransition_slot transitioned
-  rw [bounds.2]
-  exact UInt64.lt_iff_toNat_lt.mp bounds.1
-
-/-- After the anchor epoch, a state checkpoint names its epoch boundary on the source chain.
-
-The alternative exposes a held state on that chain whose hash is the zero sentinel. -/
-theorem Store.Reachable.checkpoint_source_ancestor {config : Config}
-    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
-    {store : Store preset fork}
-    (reachable : Store.Reachable config anchorState anchorBlock store)
-    (sound : Invariant anchorState)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
-    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
-    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (unknownParent : store.blocks[anchorBlock.parentRoot]? = none)
-    {root : Root} {state view : BeaconState preset fork} {checkpoint : Checkpoint}
-    (held : store.blockStates[root]? = some state)
-    (selected : view = state ∨ processJustificationAndFinalization state = .ok view)
-    (field : checkpoint = view.previousJustifiedCheckpoint ∨
-      checkpoint = view.currentJustifiedCheckpoint ∨ checkpoint = view.finalizedCheckpoint)
-    (afterAnchor : getCurrentEpoch anchorState < checkpoint.epoch) :
-    store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root ∨
-    ∃ (badRoot : Root) (badState : BeaconState preset fork),
-      store.blockStates[badRoot]? = some badState ∧
-      SszType.hashTreeRoot badState = .ok (Vector.replicate 32 0) ∧
-      store.isAncestor ⟨root, .pending⟩ ⟨badRoot, .pending⟩ = .ok true := by
-  -- The anchor parent is unknown, so the store keeps its blocks and states linked.
-  have linked := reachable.linked_of_unknown anchorSlot unknownParent
-  suffices viewHolds : CheckpointsSatisfy (fun checkpoint =>
-      checkpoint.epoch ≤ getCurrentEpoch anchorState ∨
-        store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root ∨
-        ∃ (badRoot : Root) (badState : BeaconState preset fork) (slot : Slot),
-          store.blockStates[badRoot]? = some badState ∧
-          SszType.hashTreeRoot badState = .ok (Vector.replicate 32 0) ∧
-          (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok badRoot) view by
-    have fieldHolds : ∀ p : Checkpoint → Prop, CheckpointsSatisfy p view → p checkpoint := by
-      intro p holds
-      rcases field with rfl | rfl | rfl
-      exacts [holds.1, holds.2.1, holds.2.2]
-    rcases fieldHolds _ viewHolds with old | path | ⟨badRoot, badState, slot, badHeld, zero, walk⟩
-    · exact absurd afterAnchor (UInt64.not_lt.mpr old)
-    · exact .inl path
-    · exact .inr ⟨badRoot, badState, badHeld, zero,
-        Store.isAncestor_of_getAncestor_root linked.parentsBelow walk⟩
-  have holds := reachable.checkpointsSatisfy_of_blockState sound positive window linked held
-  rcases selected with rfl | pulled
-  · exact holds
-  -- A pull-up reads the new checkpoint in the held state itself.
-  refine holds.of_processJustificationAndFinalization (fun checkpoint _ read => ?_) pulled
-  by_cases old : checkpoint.epoch ≤ getCurrentEpoch anchorState
-  · exact .inl old
-  obtain ⟨start, startOk, read⟩ := getBlockRoot_ok_iff.mp read
-  rcases reachable.getAncestor_root_of_blockState linked held read
-      (slot_le_of_getCurrentEpoch_lt positive (UInt64.not_le.mp old) startOk) with walk | bad
-  · exact .inr (.inl (Store.getCheckpointBlock_ok_iff.mpr ⟨start, startOk, walk⟩))
-  · exact .inr (.inr bad)
-
 /-! ## Runs of the held states -/
 
-/-- The last state of a run is one of its hashed objects. -/
-private theorem state_mem_hashObjects {config : Config} {checks : SignatureChecks}
-    {first last : ForkedBeaconState preset} (run : Run config checks first last) :
-    DirectSafety.HashObject.state last ∈ run.hashObjects := by
-  cases run with
-  | nil => simp [Run.hashObjects]
-  | snoc pre step =>
-    exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inl (by simp))))
+/-- A run that extends another hashes the last state of the one it extends. -/
+private theorem state_mem_hashObjects_append {config : Config} {checks : SignatureChecks}
+    {g x y : ForkedBeaconState preset} (pre : Run config checks g x)
+    (tail : Run config checks x y) :
+    DirectSafety.HashObject.state x ∈ (pre.append tail).hashObjects := by
+  induction tail with
+  | nil =>
+    cases pre with
+    | nil => simp [Run.append, Run.hashObjects]
+    | snoc pre step =>
+      exact List.mem_append.mpr (.inr (List.mem_append.mpr (.inl (by simp))))
+  | snoc tail step ih => exact List.mem_append_left _ ih
 
 /-- Slots of one fork before its next fork extend a run with slot steps.
 
-They add no header and keep every hashed object of the run. -/
+They add no header. -/
 private theorem exists_run_of_advanceSlots {config : Config} {checks : SignatureChecks}
     {g x : ForkedBeaconState preset} {bound : Nat} (pre : Run config checks g x)
     (early : ∀ next ∈ config.nextFork fork,
@@ -807,12 +454,11 @@ private theorem exists_run_of_advanceSlots {config : Config} {checks : Signature
       (tail : Run config checks x ⟨fork, state⟩),
       advanceSlots config checks count state = .ok after → state.slot.toNat + count ≤ bound →
       ∃ next : Run config checks x ⟨fork, after⟩,
-        (pre.append next).headers = (pre.append tail).headers ∧
-        (pre.append tail).hashObjects ⊆ (pre.append next).hashObjects
+        (pre.append next).headers = (pre.append tail).headers
   | 0, state, after, tail, computed, _ => by
     simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
-    exact ⟨tail, rfl, List.Subset.refl _⟩
+    exact ⟨tail, rfl⟩
   | count + 1, state, after, tail, computed, within => by
     simp only [advanceSlots, bind_ok_iff] at computed
     obtain ⟨middle, stepOk, rest⟩ := computed
@@ -822,41 +468,9 @@ private theorem exists_run_of_advanceSlots {config : Config} {checks : Signature
         have := early next scheduled
         omega, stepOk]
       rfl
-    obtain ⟨next, headers, objects⟩ :=
+    obtain ⟨next, headers⟩ :=
       exists_run_of_advanceSlots pre early count (tail.snoc (.slot across)) rest (by omega)
-    refine ⟨next, headers.trans ?_, fun object member => objects ?_⟩
-    · simp [Run.append, Run.headers, Step.headers]
-    · simp [Run.append, Run.hashObjects, member]
-
-/-- A held state on the chain of a held block is hashed by the run of that block.
-
-The run hashes the state of each block that a walk from the held block reaches. -/
-private theorem state_mem_hashObjects_of_isAncestor {config : Config}
-    {checks : SignatureChecks} {store : Store preset fork} {g a : ForkedBeaconState preset}
-    {run : Run config checks g a} {root bad : Root} {badState : BeaconState preset fork}
-    (reachedHeld : ∀ (slot : Slot) (reached : Root),
-      (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok reached →
-      ∃ reachedState : BeaconState preset fork, store.blockStates[reached]? = some reachedState ∧
-        DirectSafety.HashObject.state ⟨fork, reachedState⟩ ∈ run.hashObjects)
-    (badHeld : store.blockStates[bad]? = some badState)
-    (descends : store.isAncestor ⟨root, .pending⟩ ⟨bad, .pending⟩ = .ok true) :
-    DirectSafety.HashObject.state ⟨fork, badState⟩ ∈ run.hashObjects := by
-  -- A pending ancestor is the root that the walk reaches at the slot of its block.
-  obtain ⟨slot, walk⟩ : ∃ slot : Slot,
-      (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok bad := by
-    unfold Store.isAncestor at descends
-    cases known : store.block bad with
-    | error e => simp [known, bind, Except.bind] at descends
-    | ok badBlock =>
-      cases walk : store.getAncestor ⟨root, .pending⟩ badBlock.slot with
-      | error e => simp [known, walk, bind, Except.bind] at descends
-      | ok node =>
-        refine ⟨badBlock.slot, ?_⟩
-        by_cases gloas : .glamsterdam ≤ fork <;>
-          simp_all [bind, Except.bind, pure, Except.pure, Functor.map, Except.map]
-  obtain ⟨reachedState, reachedHeld', member⟩ := reachedHeld slot bad walk
-  rw [badHeld, Option.some.injEq] at reachedHeld'
-  exact reachedHeld' ▸ member
+    exact ⟨next, headers.trans (by simp [Run.append, Run.headers, Step.headers])⟩
 
 /-- Two held blocks whose runs share their headers up to an epoch share its checkpoint block.
 
@@ -914,12 +528,6 @@ private theorem getCheckpointBlock_eq_of_checkpointPath {config : Config}
     subst lastRight
     exact Except.ok.inj (hashRight.symm.trans hashLeft)
 
-section StoreRuns
-
-variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
-  [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
-  [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
-
 /-- A held state follows from the anchor state by a run whose blocks are those of its chain.
 
 Every block of the store was imported with one set of signature checks.
@@ -927,8 +535,6 @@ Every block of the store was imported with one set of signature checks.
 No upgrade is due at any held slot, so the in-fork transition of the store is a run of steps.
 
 The run adds the headers of the blocks on the chain to the headers of the run to the anchor.
-
-A walk from the held block reaches a held state whose state the run hashes.
 
 From the slot of the anchor block on, it reaches the last block of the chain at or below the slot.
 
@@ -939,7 +545,6 @@ private theorem Store.Reachable.exists_run_of_blockState {config : Config}
     {g : ForkedBeaconState preset}
     (reachable : Store.Reachable config anchorState anchorBlock store)
     (linked : store.Linked anchorBlock.parentRoot)
-    (unknownParent : store.blocks[anchorBlock.parentRoot]? = none)
     (imported : ∀ ⦃root : Root⦄ ⦃block : BeaconBlock preset fork⦄
       ⦃state : BeaconState preset fork⦄, store.blocks[root]? = some block →
       store.blockStates[root]? = some state → block ≠ anchorBlock →
@@ -956,10 +561,6 @@ private theorem Store.Reachable.exists_run_of_blockState {config : Config}
     ∃ (tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩)
       (extra : List BeaconBlockHeader),
       (pre.append tail).headers = pre.headers ++ extra ∧
-      (∀ (slot : Slot) (reached : Root),
-        (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok reached →
-        ∃ reachedState : BeaconState preset fork, store.blockStates[reached]? = some reachedState ∧
-          DirectSafety.HashObject.state ⟨fork, reachedState⟩ ∈ (pre.append tail).hashObjects) ∧
       ∀ slot : Slot, anchorBlock.slot ≤ slot → ∃ reached : Root,
         (·.root) <$> store.getAncestor ⟨root, .pending⟩ slot = .ok reached ∧
         (((extra.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? = none ∧
@@ -971,42 +572,20 @@ private theorem Store.Reachable.exists_run_of_blockState {config : Config}
   rw [held, Option.some.injEq] at postOk
   subst post
   by_cases same : block = anchorBlock
-  · -- The anchor state ends the run to the anchor, and every walk from it stays at its block.
+  · -- The anchor state ends the run to the anchor, and every later walk stays at its block.
     obtain rfl := anchored same
     subst same
-    refine ⟨.nil, [], by simp [Run.append], fun slot reached walk => ?_, fun slot later =>
+    refine ⟨.nil, [], by simp [Run.append], fun slot later =>
       ⟨root, ?_, .inl ⟨by simp, reachable.root found⟩⟩⟩
-    · refine ⟨state, ?_, state_mem_hashObjects (pre.append .nil)⟩
-      by_cases below : block.slot ≤ slot
-      · rw [Store.getAncestor_of_le found below] at walk
-        cases walk
-        exact held
-      · -- Below the anchor block the walk needs the parent of the anchor, which the store lacks.
-        obtain ⟨node, walkNode, -⟩ : ∃ node, store.getAncestor ⟨root, .pending⟩ slot = .ok node ∧
-            node.root = reached := by
-          cases reaching : store.getAncestor ⟨root, .pending⟩ slot <;>
-            simp_all [Functor.map, Except.map]
-        rw [Store.getAncestor] at walkNode
-        split at walkNode
-        · simp_all
-        · rename_i known same
-          rw [found, Option.some.injEq] at same
-          subst same
-          simp only [below, ↓reduceIte] at walkNode
-          split at walkNode
-          · simp [throw, throwThe, MonadExceptOf.throw] at walkNode
-          · rename_i parentKnown
-            rw [unknownParent] at parentKnown
-            cases parentKnown
-    · rw [Store.getAncestor_of_le found later]
-      rfl
+    rw [Store.getAncestor_of_le found later]
+    rfl
   obtain ⟨parent, engine, signed, message, parentHeld, transitioned⟩ :=
     imported found held same
   subst message
   obtain ⟨parentBlock, parentFound, -⟩ := linked.stateAfter _ _ parentHeld
   have lower := linked.parentsBelow _ _ _ found parentFound
-  obtain ⟨tailP, extraP, headersP, reachedP, lastP⟩ :=
-    reachable.exists_run_of_blockState linked unknownParent imported early pre parentHeld
+  obtain ⟨tailP, extraP, headersP, lastP⟩ :=
+    reachable.exists_run_of_blockState linked imported early pre parentHeld
   have bounds := stateTransition_slot transitioned
   obtain ⟨_, _, _, _, blockOk, _⟩ := stateTransition_ok transitioned
   obtain ⟨bodyRoot, bodyHashed, -⟩ := latestBlockHeader_processBlock blockOk
@@ -1020,7 +599,7 @@ private theorem Store.Reachable.exists_run_of_blockState {config : Config}
       signed.message.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat :=
     fun next scheduled => bounds.2 ▸ early next scheduled held
   -- The slots up to the block extend the run of the parent, and the block step follows.
-  obtain ⟨tailA, headersA, objectsA⟩ := exists_run_of_advanceSlots pre bound _ tailP run
+  obtain ⟨tailA, headersA⟩ := exists_run_of_advanceSlots pre bound _ tailP run
     (by have := UInt64.lt_iff_toNat_lt.mp bounds.1; omega)
   have due : upgradeDue config ⟨fork, advanced⟩ = false :=
     upgradeDue_of_before fun next scheduled => advancedSlot ▸ bound next scheduled
@@ -1030,21 +609,11 @@ private theorem Store.Reachable.exists_run_of_blockState {config : Config}
     simp [DirectSafety.blockHeader, bodyHashed, Except.toOption, header]
   have headerRoot : SszType.hashTreeRoot header = .ok root :=
     (BeaconBlock.hashTreeRoot_header bodyHashed).trans (reachable.root found)
-  let tail := tailA.snoc (.block engine signed due applied)
-  have objects : (pre.append tailP).hashObjects ⊆ (pre.append tail).hashObjects :=
-    fun object member => List.mem_append.mpr (.inl (objectsA member))
-  refine ⟨tail, extraP ++ [header], ?_, fun slot reached walk => ?_, fun slot later => ?_⟩
+  refine ⟨tailA.snoc (.block engine signed due applied), extraP ++ [header], ?_,
+    fun slot later => ?_⟩
   · show (pre.append tailA).headers ++ (DirectSafety.blockHeader signed.message).toList = _
     rw [headersA, headersP, headerOk]
     simp
-  · by_cases above : signed.message.slot ≤ slot
-    · rw [Store.getAncestor_of_le found above] at walk
-      cases walk
-      exact ⟨state, held, state_mem_hashObjects (pre.append tail)⟩
-    · rw [Store.getAncestor_root_of_parent found parentFound lower (UInt64.not_le.mp above)]
-        at walk
-      obtain ⟨reachedState, reachedHeld, member⟩ := reachedP slot reached walk
-      exact ⟨reachedState, reachedHeld, objects member⟩
   · by_cases above : signed.message.slot ≤ slot
     · refine ⟨root, by rw [Store.getAncestor_of_le found above]; rfl, .inr ⟨header, ?_, headerRoot⟩⟩
       have : header.slot.toNat ≤ slot.toNat := UInt64.le_iff_toNat_le.mp above
@@ -1186,28 +755,38 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
   obtain ⟨rootB, stateB, vb, heldB, fieldB, selectedB, terminalB⟩ :=
     source (·.currentJustifiedCheckpoint) _ afterJ (reachable.justified_origins _ (.inl rfl))
   -- The runs from the anchor to the two held states.
-  obtain ⟨left, extraA, headersA, reachedA, lastA⟩ :=
-    reachable.exists_run_of_blockState linked unknownParent imported early pre heldA
-  obtain ⟨right, extraB, headersB, reachedB, lastB⟩ :=
-    reachable.exists_run_of_blockState linked unknownParent imported early pre heldB
-  -- A held state on a source chain that hashes to zero is hash evidence of that chain's run.
-  have evidence {state : BeaconState preset fork}
-      (member : DirectSafety.HashObject.state ⟨fork, state⟩ ∈
-        (pre.append left).hashObjects ++ (pre.append right).hashObjects)
-      (hashed : SszType.hashTreeRoot state = .ok (Vector.replicate 32 0)) :
+  obtain ⟨left, extraA, headersA, lastA⟩ :=
+    reachable.exists_run_of_blockState linked imported early pre heldA
+  obtain ⟨right, extraB, headersB, lastB⟩ :=
+    reachable.exists_run_of_blockState linked imported early pre heldB
+  -- Each field of a view is one of the three checkpoints of its held state or of the step on it.
+  have member {state : BeaconState preset fork} {view : BeaconState preset fork}
+      {checkpoint : Checkpoint}
+      (selected : view = state ∨ processJustificationAndFinalization state = .ok view)
+      (field : checkpoint = view.currentJustifiedCheckpoint ∨
+        checkpoint = view.finalizedCheckpoint) :
+      checkpoint ∈ [state.currentJustifiedCheckpoint, state.previousJustifiedCheckpoint,
+          state.finalizedCheckpoint] ∨
+        ∃ pulled, processJustificationAndFinalization state = .ok pulled ∧
+          checkpoint ∈ [pulled.currentJustifiedCheckpoint, pulled.previousJustifiedCheckpoint,
+            pulled.finalizedCheckpoint] := by
+    rcases selected with rfl | ok
+    · exact .inl (by rcases field with rfl | rfl <;> simp)
+    · exact .inr ⟨view, ok, by rcases field with rfl | rfl <;> simp⟩
+  -- An anchor state that hashes to zero is hash evidence of the run through it.
+  have evidence (zero : SszType.hashTreeRoot anchorState = .ok (Vector.replicate 32 0)) :
       DirectSafety.HashEvidence ((pre.append left).hashObjects ++
         (pre.append right).hashObjects) :=
-    DirectSafety.hashEvidence_iff.mpr
-      (.inr ⟨_, member, by simp [DirectSafety.HashObject.root, hashed, Except.toOption]⟩)
+    DirectSafety.hashEvidence_iff.mpr (.inr ⟨_,
+      List.mem_append_left _ (state_mem_hashObjects_append pre left),
+      by simp [DirectSafety.HashObject.root, zero, Except.toOption]⟩)
   by_cases paths : (pre.append left).checkpointPath store.finalizedCheckpoint.epoch =
       (pre.append right).checkpointPath store.finalizedCheckpoint.epoch
   · -- Equal paths put the finalized block of the left chain on the justified chain.
-    rcases reachable.checkpoint_source_ancestor sound positive window anchorSlot unknownParent
-        heldA selectedA (.inr (.inr fieldA)) afterF with blockA | ⟨bad, badState, badHeld, hashed,
-        descends⟩
-    · rcases reachable.checkpoint_source_ancestor sound positive window anchorSlot unknownParent
-          heldB selectedB (.inr (.inl fieldB)) afterJ with blockB | ⟨bad, badState, badHeld,
-          hashed, descends⟩
+    rcases reachable.getCheckpointBlock_of_blockState sound anchorSlot positive window heldA
+        (member selectedA (.inr fieldA)) afterF with ⟨blockA, -⟩ | zero
+    · rcases reachable.getCheckpointBlock_of_blockState sound anchorSlot positive window heldB
+          (member selectedB (.inl fieldB)) afterJ with ⟨blockB, -⟩ | zero
       · obtain ⟨start, startOk, -⟩ := Store.getCheckpointBlock_ok_iff.mp blockA
         have later : anchorBlock.slot ≤ start :=
           UInt64.le_trans anchorSlot (slot_le_of_getCurrentEpoch_lt positive afterF startOk)
@@ -1215,11 +794,9 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
           startOk later paths blockA
         exact .inr (.inl (Store.getCheckpointBlock_of_le lower ordered blockBF blockB))
       · exact .inr (.inr ⟨stateA, stateB, left, right, va, vb, ⟨rootA, heldA⟩, ⟨rootB, heldB⟩,
-          fieldA.symm, fieldB.symm, .inr (evidence (List.mem_append_right _
-            (state_mem_hashObjects_of_isAncestor reachedB badHeld descends)) hashed)⟩)
+          fieldA.symm, fieldB.symm, .inr (evidence zero)⟩)
     · exact .inr (.inr ⟨stateA, stateB, left, right, va, vb, ⟨rootA, heldA⟩, ⟨rootB, heldB⟩,
-        fieldA.symm, fieldB.symm, .inr (evidence (List.mem_append_left _
-          (state_mem_hashObjects_of_isAncestor reachedA badHeld descends)) hashed)⟩)
+        fieldA.symm, fieldB.symm, .inr (evidence zero)⟩)
   · -- Different paths conflict, and direct accountable safety covers the two views.
     have conflict : DirectSafety.Conflict (pre.append left) (pre.append right)
         va.state.finalizedCheckpoint store.justifiedCheckpoint := by
@@ -1229,7 +806,5 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
       fieldA.symm, fieldB.symm, DirectSafety.accountable_safety_justified_terminal pre left right
         va vb parameters genesis store.justifiedCheckpoint (enough heldA left)
         (enough heldB right) terminalA terminalB (.inr fieldB) (fieldA ▸ ordered) conflict⟩)
-
-end StoreRuns
 
 end EthLib.Consensus

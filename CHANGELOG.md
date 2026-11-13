@@ -76,8 +76,6 @@ Not yet released.
   The JSON format and the C and Python signatures are unchanged.
 
 - A checkpoint of a fork-choice store comes from the anchor, a held state or its pull-up ([#1423](https://github.com/ethereum/EthLib/issues/1423)).
-  After the anchor epoch, a checkpoint of a held state or its pull-up lies on the chain of that state's block.
-  The one exception is a held state on that chain that hashes to the zero root.
   No C export or Python function changes.
   In Lean, the new module `Consensus.Proofs.ForkChoice.CheckpointAncestry` states this for a reachable store.
   Its `Store.Reachable.finalized_ancestor_or_accountable` gives three cases for the finalized checkpoint of the store.
@@ -104,7 +102,6 @@ Not yet released.
   The new `Store.onTick_ok` splits a tick into the slot of its time, the catch-up to that slot and one tick within it.
   `Store.onTick_frame`, `Store.getCurrentSlot_onTick`, `Store.onTick_ordered`, `Store.onTick_checkpointStates_latestMessages` and `Store.exists_getCurrentSlot_onTick_ge` now read it, with unchanged statements.
   The new `Store.Reachable.linked_of_unknown` gives the links of a reachable store whose anchor parent is unknown, and `Store.Reachable.parentsBelow` keeps its statement.
-  The new `getBlockRootAtSlot_advanceSlots_cases` gives the roots that a state within a transition records.
 
 - The theorem that a block leaves its header as the latest block header holds at every fork ([#2061](https://github.com/ethereum/EthLib/issues/2061)).
   In Lean, `latestBlockHeader_processBlock` drops its `gloas` argument, and its conclusion is unchanged.
