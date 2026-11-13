@@ -11,6 +11,7 @@ public import EthLib.Consensus.BeaconApi.Encoding
 public import EthLib.Consensus.BeaconApi.Events
 public import EthLib.Consensus.BeaconApi.Identifiers
 public import EthLib.Consensus.BeaconApi.LightClient
+public import EthLib.Consensus.BeaconApi.ObjectEvents
 public import EthLib.Consensus.BeaconApi.Produce
 public import EthLib.Consensus.BeaconApi.Publish
 public import EthLib.Consensus.BeaconApi.Registries

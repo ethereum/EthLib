@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Engine.Proofs.BeaconApiEvents
 public import EthLib.Engine.Proofs.Block
 public import EthLib.Engine.Proofs.BuildPayload
 public import EthLib.Engine.Proofs.Capabilities

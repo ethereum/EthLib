@@ -747,7 +747,18 @@ The days are counted in a calendar model of year and month lengths, not in the r
 `readValidity_eq_ok_iff` says that a validity reads as two such times in order.
 `readCertificate_validity` says that the endpoints of a parsed certificate are what its own validity field reads as.
 That field is located in the signed part that the input bytes encode.
-No theorem states the other DER types that a certificate holds.
+`boolean_ok_iff` states that a BOOLEAN is one octet, FF for TRUE and 00 for FALSE (X.690 §§8.2, 11.1).
+`bitString_ok_iff` states that the BIT STRING reader accepts exactly the octet 0, then the octets it returns.
+`validBits_ok_iff` states that BIT STRING contents count at most 7 unused bits, all zero (X.690 §§8.6.2, 11.2.1).
+The trailing zero bits of a named bit list (X.690 §11.2.2) are not checked, since the reader does not know the type.
+`fixedString_eq_true_iff` states that code units of a fixed width pass exactly when they write Unicode scalar values big-endian.
+The reader takes a scalar value to be at most 10FFFF and outside D800 to DFFF.
+X.690 also forbids a leading signature and some control functions (§§8.23.7 to 8.23.9), which the reader does not check.
+A BMPString may also hold FFFE or FFFF, which X.680 §41.15 leaves out of its character set.
+`validate_go_boolean_ok_iff`, `validate_go_bitString`, `validate_go_bmpString_ok_iff` and `validate_go_universalString_ok_iff` state what validation accepts for one value of these tags, for any positive fuel; no theorem shows that each nested value receives it.
+`validate_boolean_ok_iff`, `validate_bitString`, `validate_bmpString_ok_iff` and `validate_universalString_ok_iff` give the same at the top, as the certificate reader validates each Name attribute value and each algorithm parameter.
+No theorem states the validation of INTEGER, OCTET STRING, OBJECT IDENTIFIER, NULL, UTF8String, PrintableString or IA5String, nor the rejection of every other tag.
+No theorem states the validation of a SEQUENCE or a SET OF, its order or its children.
 Nothing in Lean shows that authentication can succeed; the Python tests check vectors 1 to 4 of libp2p TLS.
 
 ### QUIC wire encodings
@@ -850,7 +861,13 @@ Making a payload fails on the zero secret or when signing fails, so its success 
 Each read of message 2 or 3 then succeeds, so, by `readLibp2p_authenticates`, it verified the signature of the other peer's identity key.
 Completion returns, on each side, the static key, the identity key and the extensions of the other peer, with swapped ciphers.
 
-No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key.
+The chaining key of each peer has its own theorems (`Networking/Proofs/Noise/Handshake.lean`).
+For each message of XX, one theorem for writing it and one for reading it name the X25519 outputs that the chaining key mixes, in order; message 1 mixes none.
+`chainingKey_writeMessage_readMessage_writeMessage` and `chainingKey_readMessage_writeMessage_readMessage` compose them for the initiator and the responder.
+After message 3, each chaining key starts from the one that the protocol name sets, then mixes `ee`, `es` and `se` in that order.
+Each token takes the local key that Noise §5.3 assigns to its role, and each remote key is the one that the final state stores.
+If both peers computed `es` or `se` from their two ephemeral keys, they would still agree and `handshake_complete` would still hold, but these theorems would not.
+No theorem ties a stored remote ephemeral key to the bytes of the message that carried it, and none states the cipher key that each mix sets.
 Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
 The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.
@@ -3796,9 +3813,15 @@ On each name of the header, the block object of a block holds what its header ob
 The block object lists the transactions by their hashes, or by their objects when they are hydrated (`transactions_blockJson_false`, `transactions_blockJson_true`).
 The objects carry those hashes in the same order (`transactionHashes_of_transactionInfos`).
 Each list has one entry per transaction of the block (`length_transactionInfos`, `length_transactionHashes`), and the transaction count methods return that length by definition.
+The `size` of the block object is the length of the RLP form of the block, in bytes, which the raw block method returns for the same block (`size_blockJson`).
+Its `uncles` lists the hashes of the headers of its ommers, in order (`uncles_blockJson`).
 These properties hold whenever the writer gives an object.
 The writer fails with `-32603` when the node cannot compute the RLP form of the block, the hash of an ommer or a transaction, or a sender in it.
-No theorem yet shows that it succeeds on the blocks of a valid view.
+In a valid view, the writer gives the object of a canonical block after the lowest exactly when that block has an RLP form (`Valid.exists_blockJson_eq_ok_iff`).
+Before Fusaka no check bounds the length of the RLP form of a block, and the RLP encoder fails on a payload of `2^64` bytes or more, so that form stays a hypothesis.
+From Fusaka the size check of the block gives that form, of at most `8 * 2^20` bytes (`Valid.exists_rawBlock_of_fusaka_le`, `Valid.exists_blockJson_of_fusaka_le`).
+A valid view does not run the lowest block, a block off the canonical chain or the pending block through the state transition.
+So no theorem says that the writer succeeds on them.
 For the tag `pending`, the header method answers `null`.
 The block and count methods read the pending block of the view instead, since only the header methods of [`block.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/block.yaml) answer `null` for `pending`.
 The schema gives `size` only the title "Block size"; here it is the length of the RLP form of the block, which the fixtures pin.
@@ -3919,28 +3942,62 @@ A revert has the message `"execution reverted"`, the only text that the source g
 A halt that is not a revert has code 801 for a lack of gas, 4 for an invalid opcode, and `-32000` otherwise.
 The error groups of the source define these codes, but no text assigns them to `eth_call`.
 
-`eth_estimateGas` and `eth_createAccessList` run the same call, with the same choices (`Execution/Rpc/Estimate.lean`).
-Their block parameter is `latest` by default, as for `eth_call`, though of the three the source states that default only for `eth_call`.
+`eth_estimateGas` and `eth_createAccessList` run the same call as `eth_call`, with the same choices (`Execution/Rpc/Estimate.lean`).
+Their block parameter is `latest` by default, as for `eth_call`.
+Of the three methods, the source states that default only for `eth_call`.
+
 The source asks `eth_estimateGas` only for "an estimate of how much gas is necessary to allow the transaction to complete".
-EthLib answers a gas limit with which the call completes: it prepares, and its message neither reverts nor halts (`Completes`).
-It fails exactly when `eth_call` fails, with the same error, the revert of code 3 included (`estimateGas_eq_error_iff`).
-Otherwise it searches by halves below that limit.
-The answer completes and is at most that limit (`estimateGas_completes`, `Proofs/Rpc/Estimate.lean`).
-Without the interval hypothesis, the call still does not complete with one gas less, unless the answer is at most 1 (`estimateGas_pred_not_completes`).
+EthLib answers a gas limit with which the call completes, which means that the call prepares and its message neither reverts nor halts (`Completes`).
+The method fails exactly when `eth_call` fails, with the same error, and this includes the revert of code 3 (`estimateGas_eq_error_iff`).
+Otherwise it runs a binary search below the gas limit of the request, or below the default one.
+The estimate has no cap from EIP-7825.
+When the request names a fee, the sender must hold the fee of its whole gas limit.
+
+The answer completes and is at most the gas limit of the request, or the default one (`estimateGas_completes`, `Proofs/Rpc/Estimate.lean`).
 It is the least positive limit that completes when the limits that complete form an interval (`estimateGas_least`).
 Code that reads the gas left can break that hypothesis, and the answer may then not be the least.
+Even without the hypothesis, the call does not complete with one gas less, unless the answer is at most 1 (`estimateGas_pred_not_completes`).
 A call completes with a gas limit exactly when `eth_call` answers data at that limit (`completes_iff`).
 
 The source fixes none of the contents of the result of `eth_createAccessList`.
 EthLib lists each address and storage key that the call read or wrote, as the state tracker records them, a revert included.
-It leaves out an address without a storage key that the transaction accesses from the start: the sender, the recipient or the created contract, the precompiles and, from Shapella, the beneficiary.
-The authorities and the delegate of EIP-7702 and the contracts that the call creates stay in, though EIP-2929 and EIP-7702 make them warm.
-It runs the call again with that list, as type 1 when the request has type 0.
+It leaves out an address without a storage key that the transaction accesses from the start.
+These addresses are the sender, the recipient or the created contract, the precompiles and, from Shapella, the beneficiary.
+The list keeps the authorities and the delegate of EIP-7702, and the contracts that the code of the call creates.
+EIP-2929 and EIP-7702 make these addresses warm, but they stay in the list.
+
+The method then runs the call again with that list, as type 1 when the request has type 0.
 Before Berlin no transaction has an access list, so the list is empty and the call runs once.
 The result reports the gas used and the error message of that second call (`createAccessList_eq_ok`).
 A rejection of the second call, such as a gas limit that no longer covers the list, is the error of the method.
-The estimate has no cap from EIP-7825, and with a fee named the sender must hold the fee of the whole gas limit of the request.
 The list is not iterated to a fixed point, so a call whose accesses change with its access list can report a list that the second call does not match.
+
+`eth_simulateV1` of [`execute.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/execute.yaml) runs calls in a sequence of blocks on top of a base block (`Execution/Rpc/Simulate.lean`).
+EthLib specifies its request and the checks before the execution.
+The simulated blocks are not yet specified, so a request that passes the checks gets `-32603`.
+The reader rejects a key outside the schema of block or account overrides (`blockOverrides_unknown_key`, `accountOverride_unknown_key`, `Proofs/Rpc/Simulate.lean`).
+It rejects an account override with both `state` and `stateDiff`, even when one is `null` (`accountOverride_state_and_stateDiff`).
+A rejected override rejects the whole request (`simulatePayload_rejects` and the lemmas before it), with code `-32602` (`call_simulate_rejected`).
+Each block keeps the number and the time that the request gives it (`planBlocks_number`, `planBlocks_time`).
+Without these overrides, the order check passes (`checkOrder_planBlocks_of_none`).
+It passes exactly when the numbers and the times strictly increase from the base block, gap blocks included (`checkOrder_planBlocks_iff`).
+An account override sets each field that it gives, and keeps the others (`applyAccountOverride_nonce` and the lemmas after it).
+`stateDiff` keeps the slots that it does not name, and `state` clears them (`applyAccountOverride_stateDiff`, `applyAccountOverride_state`).
+The overrides of a block keep every account that they do not name (`applyOverrides_not_mem`), and act on each account they name as its override alone (`applyOverrides_mem`).
+The defaults of a call come with the simulated blocks.
+
+Where the source is silent or conflicts with itself, EthLib follows the fixtures:
+
+- times strictly increase, as the notes say, though the schema lets a time stay the same;
+- a block without a time comes 12 seconds after the block before it, as the notes say, though the schema says one second;
+- a gap block comes a block time after the block before it, 12 seconds by default, and counts toward the limit of 256 blocks;
+- an unknown base block, and a move of an address that is not a precompile, get `-32000`;
+- a precompile moved to its own address gets `-38022`;
+- the text of `-38023` is ambiguous, and the fixtures move two precompiles to one address without an error, so EthLib never gives it;
+- `state` with `stateDiff` gets `-32602`, for which the source gives no code;
+- an address or a slot given twice, in hex digits of another case, gets `-32602`;
+- block and account overrides support no key beyond their schema, `difficulty` included, nor a key that differs from one only in case;
+- the payload and each block ignore a key outside their schema, as the schema allows.
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
@@ -3965,6 +4022,39 @@ The tip at a percentile is that of the first transaction, by ascending tip, at w
 The comparison is exact.
 Before London the base fee is 0, so a tip is the whole gas price.
 A ratio is written with at most 18 decimal places, rounded down, and the rewards are left out when the request names no percentile.
+
+`eth_sendRawTransaction` of [`submit.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/submit.yaml) submits a signed transaction in its raw form (`Execution/Rpc/Submit.lean`).
+A blob transaction must come in its network form at the fork of the next block.
+Before Fusaka that form has one proof per blob, and from Fusaka it has cell proofs.
+The hash of an accepted submission is the hash of the transaction that the raw form holds, without blobs, commitments or proofs (`ChainView.sendRawTransaction_hash`, `Proofs/Rpc/Submit.lean`).
+When the first byte is not 3, it is the Keccak-256 hash of the raw bytes (`ChainView.sendRawTransaction_keccak`).
+The dispatcher reads the raw bytes and answers with that hash (`ChainView.call_sendRawTransaction`).
+A network form is accepted only when its KZG proofs verify against the trusted setup of the view (`ChainView.proofsVerify_of_sendRawTransaction`).
+Each code that `rpcCode` gives is in a group that the method lists, within the range of that group (`rpcCode_mem`).
+Two errors with one code are of one kind (`rpcCode_injective`).
+The mapping is: `insufficientGas` to 800, `gasAllowanceExceeded` to 803, `priorityFeeGreaterThanMaxFee` to 804, `insufficientMaxFeePerGas` to 806, `insufficientBalance` to 809, `nonceTooLow` to 1, `nonceTooHigh` to 2, and `invalidSignature` to 1001.
+Two conditions are wider than their messages.
+The code 800 also covers a gas limit below the floor of EIP-7623.
+The cost behind 809 also counts the blob gas at its fee cap.
+The method checks a transaction with no gas used before it, so the allowance of the block is exceeded exactly when the gas limit is above the block's, the condition of 803.
+
+Which transactions a pool keeps is the choice of the node, and EthLib fixes one simple rule.
+The rule accepts a transaction whose raw form decodes and whose blob counts, versioned hashes and KZG proofs are valid (`ChainView.validateNetwork_of_sendRawTransaction`).
+The transaction must also pass the inclusion checks in the next block, against the state of the head.
+That next block is one second after the head, its earliest time, as in the fee history.
+It takes the fork, the base fees and the blob schedule of the fee history, and the gas limit of the head.
+Its base fee is the last base fee of the fee history (`ChainView.baseFeeOf_nextEnvironment`).
+A nonce above that of the sender is a future transaction, which the rule accepts.
+The checks then read the head with the nonce of the sender raised to that of the transaction (`withFutureNonce_nonce`), so the code 2 never arises.
+From Fusaka, the source lets a node accept proofs per blob and convert them to cell proofs; the rule takes the choice that this "may" leaves, and rejects that form.
+A raw form that does not decode, or whose blobs fail their counts, their versioned hashes or their proofs, gets `-32000`.
+A failed inclusion check without a code gets `-32003`.
+The errors of EthLib without a code are `emptyTransaction`, `unsupportedType`, `decoding`, `encoding`, `initCodeTooLarge`, `gasLimitExceeded`, `nonceOverflow`, `wrongChainId`, `noBlobData`, `blobCountExceeded`, `invalidBlobVersionedHash`, `emptyAuthorizationList`, `blobGasLimitExceeded`, `insufficientMaxFeePerBlobGas`, `senderNotEoa` and `missingCode`.
+`intrinsicGasAboveLimit` also has none.
+The message of 800 is "Intrinsic gas too low / Intrinsic gas exceeds gas limit", and the cap of EIP-7825 is not a gas limit.
+The code 802 names a minimum that the node configures.
+The codes 805, 807 and 808 name values that the decoder already rejects.
+The code 1000 names a transaction that the node already knows, and the codes `-32000` to `-32006` name no single condition.
 
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
@@ -4040,6 +4130,16 @@ They are the root, the fork, the finality checkpoints, the RANDAO mix, the three
 `stateRoot_blockStates` (`Consensus/Proofs/BeaconApi/StateQueries.lean`) shows that, in a store that the handlers reach, the root of the state kept for a known block is the state root of that block.
 `stateRoot_resolveStateId_root` follows from it: a state named by its root has that root, as the source requires.
 `finalityCheckpoints_genesis` shows that the genesis state that deposits build, which exists only at Phase 0, has its three checkpoints at epoch 0 with the zero root.
+`finalityCheckpoints_of_genesis_chainSteps` shows, for each state that a chain from that genesis state reaches across forks, that each checkpoint at epoch 0 is reported with the zero root.
+`GenesisCheckpointsZero.of_initializeBeaconStateFromEth1` is a corollary of `finalityCheckpoints_genesis`.
+A state before finalization, whose finalized epoch is still 0, reports a finalized checkpoint of epoch 0 and the zero root, as the source says it should.
+A justified checkpoint at epoch 0 is reported with the zero root too.
+Both follow from `GenesisCheckpointsZero.of_chainSteps`, which shows that along a chain each checkpoint at epoch 0 keeps the zero root.
+Justification returns the state unchanged when `getCurrentEpoch state ≤ GENESIS_EPOCH + 1`, as `processJustificationAndFinalization_reads` states.
+Later it justifies only the previous or the current epoch, and copies the other checkpoints, by `weighJustificationAndFinalization_checkpoints`.
+The current epoch is then at least 2, so both epochs are after epoch 0, by `getPreviousEpoch_toNat`.
+The slot step, the rest of the epoch transition, each block and each upgrade copy the three checkpoints.
+Their frames say so: `frame_processSlot`, `processEpoch_frame`, `frame_processBlock` and `upgradeFrame_upgradeNext`.
 `pendingDeposits_error_iff` and the five theorems beside it show that each field that a fork adds gives the error with code 400 exactly when the state is before that fork.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_state_queries.py`) checks the root against the hash tree root of the state.
 It checks each other answer against the JSON of the whole state, on one state of the minimal preset per fork, with a distinct value in each field that a query reads.
@@ -4281,6 +4381,14 @@ The events of the fork choice are in `Consensus/BeaconApi/ChainEvents.lean` (#20
 `chainEvents` compares two stores: a head event comes when the head block changes, or when it stays and its payload moves from empty to full; a reorganization comes when the old head block is not an ancestor of the new head; a finalized event comes when the finalized checkpoint changes.
 `chainEvents_head_iff` and `chainEvents_reorg_iff` (`Consensus/Proofs/BeaconApi/ChainEvents.lean`) show when a head event and a reorganization come.
 `chainEvents_head` shows that a head event names the head of the later store, and `chainEvents_dependent_roots_duties` that its two dependent roots are those of the attester duties of its epoch and of the next one, read from the head state; the second needs the next epoch to fit in 64 bits.
+`computeEpochAtSlot_succ_lt` shows that it does for every slot when an epoch has at least two slots.
+`chainEvents_finalized_iff` shows that a finalized event comes exactly when the finalized checkpoint changes, and `chainEvents_finalized` that it names the block and the epoch of the new checkpoint.
+`chainEvents_finalized_epoch` shows that the epoch of a finalized event is above the finalized epoch of the earlier store, when the finalized checkpoint advances from one store to the other.
+`Store.CheckpointsAdvance` (`Consensus/Proofs/ForkChoice/Handlers.lean`) says that each of the justified and finalized checkpoints stays as it was or moves to one at a greater epoch.
+A checkpoint is replaced only by one at a greater epoch.
+So the tick, the block, the attestation, the attester slashing, the envelope and the inclusion list each relate the store before to the store after, by their frame theorems.
+A vote of the payload committee changes only the votes (`onPayloadAttestationMessage_onlyPtcVotes`), so it relates them too.
+`Handles.checkpointsAdvance` (`Consensus/Proofs/ForkChoice/Network.lean`) gathers these for every move of a store, and `chainEvents_finalized_epoch_of_handles` states the result after one move.
 `fastConfirmationEvent_block` shows that the event of a run of the fast confirmation rule names its confirmed block and that block's slot.
 The source leaves these points open, decided here:
 
@@ -4293,10 +4401,54 @@ The source leaves these points open, decided here:
 - Emission on other payload transitions is optional, so a head event comes only on the transition from empty to full that the source requires.
 
 The optimistic flag of each event is an input, since it depends on what the node has verified.
-The theorem that a finalized event raises the finalized epoch, the payload attributes event, the exports and their Python tests remain for #2091.
+The event of the payload attributes is in `Engine/BeaconApiEvents.lean`, since it needs the types of the Engine API.
+`payloadAttributesEvent_fields` (`Engine/Proofs/BeaconApiEvents.lean`) shows that the Engine API and the event write the fields of the attributes from one list.
+The event writes each name in snake case and each integer as decimal text, where the Engine API keeps the name and writes the integer in hexadecimal.
+`payloadAttributesEvent_spec` shows that the event names the slot of the state, the proposer that the state gives, the root of its latest block header and the head of the forkchoice update.
+`payloadAttributesEvent_prepareExecutionPayload` shows that before Gloas, for the update of a proposer, the event names the head that the proposer chose, from Deneb the parent root of the attributes, and the slot that gives their timestamp.
+`payloadAttributesEvent_prepareExecutionPayloadGloas` shows the same from Gloas, for the event of the state that the attributes read: it names the parent on which the proposer builds, the safe and finalized blocks given, the parent root of the attributes, and their slot number, which gives their timestamp.
+Until Gloas, the number of the parent execution block is that of the latest payload header of the state.
+Before the merge the parent is a block of proof of work, which the state does not describe, so the caller gives its number.
+The event covers Bellatrix to Gloas (the forks before Heze), and these gaps remain:
+
+- From Heze, the fifth version of the attributes adds the transactions of the inclusion lists, which the attributes of EthLib lack, and the pinned API names no consensus version for Heze, so the event is not defined there.
+- The parent root is the root of the latest block header of the state, which is right only for a state at the slot of the proposal, after its empty slots; the event takes that state as given.
+- How often the event is sent may depend on the node, so only its content is specified.
+
+The exports of the events and their Python tests remain for #2091.
 The light client events and the event of an available payload depend on what the node has received, and are not defined here.
 
-No definition yet says when an event of a received object fires (#2090).
+The events of received objects are in `Consensus/BeaconApi/ObjectEvents.lean` (#2090).
+An object from a peer and one from a client take the same path: the gossip dispatch, then, for a block or an envelope, the handler of the fork choice.
+`eventsOfGossip_accept` (`Consensus/Proofs/BeaconApi/ObjectEvents.lean`) shows that an object whose topic has an event gives it exactly when gossip accepts the object.
+`receiveGossip_accept` shows that any event of a received message means that the dispatch accepted it.
+`receiveGossip_of_pass` and `publish_receiveGossip` show that a message which passes the gossip check of an endpoint, or which a publish endpoint does not refuse, gives the events that it gives from a peer.
+`itemEvents_singleton_of_pass` and `itemEvents_singleton_of_fail` show that the gossip event of an item of one message follows the same check.
+`eventsOfBlockImport_block` shows that a block event names a block that is new to the store and that the store then holds, and `eventsOfBlockImport_new` that such a block gives it.
+`blockEvent_gloas` shows that from Gloas a block event names the builder and the block hash of the bid of its block, and none before.
+`eventsOfEnvelopeImport_ok` and `eventsOfEnvelopeImport_of_accepted` show that an envelope is imported exactly when the envelope handler accepts it, and that the store then counts its payload as verified.
+`envelopeEvent?_eq_some` shows that it gives a payload event exactly when its payload is new to the store.
+`publishBlock_eventsOfBlockImport` and `publishEnvelope_eventsOfEnvelopeImport` show that an object that a publish endpoint integrates gives the store and the events of an import.
+`publishBlockEvents_integrated` and `publishEnvelopeEvents_integrated` show that such an object gives its gossip event, then its import event; `publishBlockEvents_of_fail` and `publishEnvelopeEvents_of_fail` show that an object that fails gossip gives none.
+The source leaves these points open, decided here:
+
+- The payloads are fixed only by examples; the field names and kinds come from them, and an object that an event carries is written whole in the JSON of the API.
+- The source does not say whether an object gives two events when it arrives twice. Each acceptance by gossip gives one gossip event; the rules of a topic ignore a copy whose keys they have seen. A block that the store already holds gives no block event, since the block handler then leaves the store as it was; an envelope whose payload the store already holds gives no payload event.
+- An object that passes gossip at a publish endpoint gives its gossip event even when a later check of its level refuses it, since the source names only the rules of the topic.
+- The example of the `attestation` event has the form of Electra, with committee bits, but from Electra the attestation subnets carry single attestations. Turning one into an attestation needs its committee, which the source does not specify for the event. So the `attestation` event comes before Electra, and the `single_attestation` event from Electra.
+- The source lists only the network as the origin of the payload attestation event, unlike the other gossip events. Here a payload vote submitted through the API gives it too, since it passes the same rules.
+- The aggregate, sync committee message and inclusion list topics have no event in the source, so they give none. The release removed the blob sidecar event, so blob sidecars give none at Deneb and Electra.
+- The slot of a payload event is the slot number of its payload, which gossip and the envelope handler check to equal the slot of its block.
+- The bid, payload vote and proposer preferences events name the consensus version of the fork, as their examples do. The source names no version for Heze, so from Heze these events carry none.
+
+The optimistic flag of a block is an input, as for the events of the fork choice.
+The pool and publish export gives the events of each request, and another export gives the event of one object that gossip accepts.
+The Python tests check that each example of an object that an event carries whole is the event of that object.
+They check the block, payload and column events against the gossip vectors, with block roots that the SSZ export computes where the object holds none.
+The pool tests check that a request gives the event of its topic exactly for the objects that gossip accepts, and the publish tests check the events of blocks and envelopes.
+The import events come only through the publish endpoints; the fork choice and gossip exports give no events.
+The execution layer of the export accepts every payload, so no event there is optimistic.
+The `attestation` example is checked without its committee bits, before Electra.
 
 The debug answers show the tree of the fork choice and its leaves (`Consensus/BeaconApi/Debug.lean`).
 `mem_treeNodes` (`Consensus/Proofs/BeaconApi/Debug.lean`) shows that the listed nodes are exactly the nodes of the tree, and `nodeViews_nodes` shows that the views follow that list, by root and status as the API names them: one per block before Gloas, and from Gloas the pending and empty nodes of each block, with the full node once its payload is verified.
@@ -4324,7 +4476,7 @@ They call the same dispatch as gossip, `validateGossipMessage` (`Consensus/Gossi
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_pool.py`) submits each object of the pinned gossip cases of the pool topics to its endpoint.
 It checks that the object fails exactly when gossip does not accept it, with the reason of the case.
 It leaves out the cases whose reason is a wrong subnet, since the node picks the subnet itself, and the cases that send objects of another topic.
-Every case of the bid topic also sends the envelopes of payloads, so no vector reaches the bid endpoint yet.
+Every case of the bid topic also sends the envelopes of payloads, so those cases run in the suite of the publish endpoints.
 
 The publish endpoints of blocks and of payload envelopes check an object at the level that the client asks, before the node broadcasts it (`Consensus/BeaconApi/Publish.lean`).
 The gossip checks of its topic run at every level, through the same dispatch as gossip.
@@ -4341,6 +4493,13 @@ The highest level also checks that the store holds no other block of the same sl
 `publishBlock_of_pass` shows the converse: a block that gossip accepts and that passes its level is broadcast, and integrated exactly when the handler succeeds.
 The envelope endpoint has the same theorems, from `publishEnvelope_refused_store` to `publishEnvelope_of_pass`, against the gossip checks and the handler of envelopes.
 `levelFailure_eq_none_iff` shows that an object passes its level exactly when its gossip checks pass and, above the gossip level, the later checks of its level pass.
+The Python suite (`bindings/python/tests/consensus/test_beacon_api_publish.py`) sends each object of the pinned gossip cases of blocks, envelopes and bids to its endpoint, in turn, against one store.
+It checks that a block or an envelope is refused exactly when gossip does not accept it, with the reason of the case, and that a bid fails exactly then.
+It checks that a valid block and a valid envelope get 200 at every level, and that a second copy is then refused as already seen.
+It checks that the consensus levels refuse a block with a wrong state root that gossip accepts, and that the default level is the gossip level.
+It checks that the highest level refuses a valid block whose rival the store holds, and that the consensus level does not.
+The export behind it (`Consensus/Exports/BeaconApiPost.lean`) runs a node whose clock reaches the time of each request, which holds no blobs, and whose execution layer accepts every payload.
+So a block with blobs before Fulu gets 202, while from Fulu the node takes the data on trust; it never integrates the block of the merge, and from Heze every payload satisfies the inclusion lists.
 
 Points that remain open:
 
@@ -4383,7 +4542,9 @@ Points that remain open:
 - The source has the `randao` query answer "Invalid state ID or epoch" with code 400, and its example message is "Epoch is out of range for the `randao_mixes` of the state", but it names no range.
   EthLib reads the circular buffer at the epoch modulo its length and refuses no epoch.
   So an epoch outside the window that the buffer holds gives the mix of another epoch.
-- The source says that a state before finalization reports epoch 0 and the zero root; `finalityCheckpoints_genesis` covers only the genesis state, and no theorem yet covers the later states before finalization.
+- The source says that a state before finalization reports epoch 0 and the zero root.
+  `finalityCheckpoints_of_genesis_chainSteps` covers each state that a chain from the Phase 0 genesis state of deposits reaches.
+  No theorem yet ties the states that a store keeps, from any anchor, to such a chain, so the answers of the API are not covered.
 - The source puts the `Eth-Consensus-Version` header on the SSZ answers too; the SSZ export gives the bytes only, and the version is the one of the JSON answer.
 - The source fixes the proposer lookahead at 64 items, the mainnet value; EthLib follows the preset, as the SSZ type of the source does, so the minimal preset gives 16.
 - The schema describes the nine validator statuses in words only.
@@ -5055,12 +5216,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 506 operations and 49 size constants.
-The Python extension calls 506 of the operations and 49 of the constants.
+Lean exports 508 operations and 49 size constants.
+The Python extension calls 508 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11636 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2598), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1619), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (71), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (800), `x25519.c` (21), `xmss.c` (134).
+11666 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2607), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1625), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (802), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

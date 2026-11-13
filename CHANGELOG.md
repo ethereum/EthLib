@@ -9,6 +9,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- The execution RPC checks the requests of `eth_simulateV1` before their blocks run ([#2107](https://github.com/ethereum/EthLib/issues/2107)).
+  A request that passes the checks gets `-32603` until the simulated blocks are specified.
+  In Lean, `call_unknown` requires the method name to differ from `eth_simulateV1`.
+  Nothing breaks in Python: `rpc.apply_overrides` gives the state root after the account overrides of one block.
+
 - The execution RPC serves `eth_getBlockAccessList` and `debug_getRawBlockAccessList` ([#2106](https://github.com/ethereum/EthLib/issues/2106)).
   In Lean, `BlockRecord` gains the optional field `accessList` for the retained list.
   Supply that field in positional constructors, or use structure notation with its `none` default.

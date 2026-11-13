@@ -2,9 +2,11 @@ module
 
 public import EthLib.Base.Exports.PyDerive
 public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Execution.Rpc.BlockParam
 public import EthLib.Execution.Rpc.Errors
 public import EthLib.Execution.Rpc.Methods
+public import EthLib.Execution.Rpc.Simulate
 public import EthLib.Execution.Exports.Transition
 
 /-!
@@ -33,6 +35,8 @@ A chain view crosses as the inputs that build it, and answers a list of requests
 Its blocks are the lowest block and the blocks after it, each with the name of its fork.
 
 Each block after the lowest runs through the state transition, as a valid view asks.
+
+A chain view reads the embedded KZG trusted setup, which the KZG exports decode once.
 
 An unknown schema, or an argument that Lean cannot read, has code 0.
 
@@ -238,6 +242,7 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
   let genesis ← configGenesis configJson
   let mergeForkBlock ← configNat configJson "mergeForkBlock"
   let config ← ChainConfig.Exports.configOfJson configJson
+  let setup ← Cryptography.Kzg.Exports.runKzg (Cryptography.Kzg.Exports.embeddedSetup ())
   let state ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
   let (first, rest) ← match blocks with
     | [] => .error (0, "no block")
@@ -274,7 +279,8 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
       finalized := named finalizedHash
       networkId := networkId
       genesis := genesis
-      mergeForkBlock := mergeForkBlock }
+      mergeForkBlock := mergeForkBlock
+      setup := setup }
     return view
 
 /-- The responses of the chain view that its inputs build, to the texts of requests, as text.
@@ -335,5 +341,27 @@ A value outside the JSON schema has code 32602, and an encoding failure has code
 @[export eth_rpc_encode_block_access_list]
 def encodeBlockAccessListExport (args : PyValue) : Result PyValue :=
   pyExport encodeBlockAccessListOf args
+
+/-- The state root after the account overrides of a block, or why the inputs are rejected. -/
+def applyOverridesOf (args : ByteArray × PyValue) : Result ByteArray := do
+  let (input, value) := args
+  let state ← (State.Exports.ofInput input).mapError fun e => (e.code, e.message)
+  let overrides ← (if containsBytes value then reject "stateOverrides: not a JSON value"
+    else stateOverrides value.toJson).mapError fun reason =>
+      ((RpcError.invalidParams reason).code.natAbs.toUInt32, reason)
+  State.Exports.rootOf (applyOverrides state overrides)
+
+/-- The state root after the account overrides of one block of `eth_simulateV1`.
+
+The arguments are a state in the form of the state root export, and the object `stateOverrides`.
+
+The moves are not checked here, and a move changes no state.
+
+A state that does not decode has the code of its state error.
+
+An object outside the schema has code 32602, the code of invalid parameters without its sign. -/
+@[export eth_rpc_apply_overrides]
+def applyOverridesExport (args : PyValue) : Result PyValue :=
+  pyExport applyOverridesOf args
 
 end EthLib.Execution.Rpc.Exports

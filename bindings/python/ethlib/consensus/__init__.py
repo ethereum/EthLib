@@ -1,5 +1,6 @@
 """The consensus layer: presets, configurations, containers, the shuffle, custody and networking."""
 
+import json
 from collections.abc import Sequence
 from typing import Any, Literal, TypeAlias
 
@@ -1564,34 +1565,66 @@ def gossip_validation(
     )
 
 
-def api_pool(
+# A request to a Beacon API endpoint; a publish request may add its level of checks.
+# The levels are "gossip", "consensus" and "consensus_and_equivocation".
+PostRequest: TypeAlias = (
+    tuple[int, str, Sequence[bytes]] | tuple[int, str, Sequence[bytes], str | None]
+)
+
+
+def api_post(
     name: str,
     fork: str,
     anchor_state: bytes,
     anchor_block: bytes,
-    requests: Sequence[tuple[int, str, Sequence[bytes]]],
+    requests: Sequence[PostRequest],
     verify: bool = True,
     config: dict[str, Any] | None = None,
     blocks: Sequence[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]]
     | None = None,
     finalized: tuple[int, bytes] | None = None,
-) -> list[list[tuple[int, str]]]:
-    """The failed items of each request to a Beacon API pool endpoint, with their messages."""
+) -> list[tuple[int, list[tuple[int, str]], list[tuple[str, dict[str, Any]]]]]:
+    """The status, the failed items and the events of each request to a pool or publish endpoint."""
     # The store is built as for gossip_validation, from the anchor and the later blocks.
     # A request is (time in milliseconds, endpoint name such as "attestations", SSZ items).
+    # A request to "blocks" or "execution_payload_envelopes" may add its level; None is gossip.
     # The requests share the keys of the messages seen, which each accepted item extends.
-    # An item that gossip ignores or rejects fails, with the reason of gossip.
-    return _native.consensus_api_pool(
+    # They also share the store, which each integrated block or envelope extends.
+    # A pool answer is 200, or 400 with the failed items and the reasons of gossip.
+    # A publish answer is 200 if integrated, 202 if broadcast only, 400 if refused at position 0.
+    # Each event is the name of its event stream topic and its JSON data.
+    answers = _native.consensus_api_post(
         name,
         fork,
         anchor_state,
         anchor_block,
         list(blocks or []),
         finalized,
-        [(time, endpoint, list(items)) for time, endpoint, items in requests],
+        [
+            (request[0], request[1], list(request[2]))
+            if len(request) == 3
+            else (request[0], request[1], list(request[2]), request[3])
+            for request in requests
+        ],
         config,
         verify,
     )
+    return [
+        (status, failures, [(topic, json.loads(data)) for topic, data in events])
+        for status, failures, events in answers
+    ]
+
+
+def api_gossip_event(
+    name: str, fork: str, topic: str, data: bytes
+) -> tuple[str, dict[str, Any]] | None:
+    """The event stream topic and JSON data that an object gives if gossip accepts it, or None."""
+    # The topic is a gossip topic without its subnet, such as "beacon_attestation".
+    # No gossip validation runs; a gossip topic without an event gives None.
+    event = _native.consensus_api_gossip_event(name, fork, topic, data)
+    if event is None:
+        return None
+    return event[0], json.loads(event[1])
 
 
 def initialize_genesis(
@@ -2284,7 +2317,9 @@ __all__ = [
     "LightClientError",
     "ForkChoiceError",
     "fork_choice",
-    "api_pool",
+    "api_post",
+    "api_gossip_event",
+    "PostRequest",
     "gossip_validation",
     "light_client_sync",
     "SyncStep",
