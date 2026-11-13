@@ -135,7 +135,7 @@ private theorem funding_rewards {fork : Fork} {s t : BeaconState preset fork}
     rw [processRewardsAndPenalties_frame ok]
   exact funding_kept_prefix _ (congrArg (·.data.size) registry)
     (.of_data (congrArg (·.data) registry)) (frame_processRewardsAndPenalties ok).slot
-    (processRewardsAndPenalties_pendingConsolidations ok)
+    (by rw [processRewardsAndPenalties_frame ok])
     (fun i _ => by simp only [effectiveAt, registry]) balanceBound
 
 private theorem funding_same {fork : Fork} {s t : BeaconState preset fork}
@@ -149,10 +149,13 @@ private theorem funding_same {fork : Fork} {s t : BeaconState preset fork}
 private theorem funding_registry {fork : Fork} {s t : BeaconState preset fork}
     (ok : processRegistryUpdates config s = .ok t) :
     fundedStake ⟨fork, t⟩ ≤ fundedStake ⟨fork, s⟩ := by
+  -- The registry stage reads no signature checks, so any of them gives its edge.
+  have kept := EpochStage.Edge.balances_eq_and_pendingConsolidations_eq (stage := .registry)
+    (checks := .bls) ok ⟨nofun, nofun, nofun, nofun⟩
   have bound := funding_kept_prefix 0 (sameSizes_processRegistryUpdates ok).1
     (registryLifecycle_processRegistryUpdates ok) (frame_processRegistryUpdates ok).slot
-    (processRegistryUpdates_pendingConsolidations ok) (effectiveKept_registry ok)
-    (by simp only [actualBalanceAt, coverage_registry ok, Nat.sub_self, Finset.sum_const_zero]
+    kept.2 (effectiveKept_registry ok)
+    (by simp only [actualBalanceAt, kept.1, Nat.sub_self, Finset.sum_const_zero]
         exact Nat.le_refl _)
   simpa using bound
 
@@ -163,7 +166,7 @@ private theorem funding_slashings {fork : Fork} {s t : BeaconState preset fork}
   have registry : t.validators = s.validators := by rw [processSlashings_frame ok]
   have bound := funding_kept_prefix 0 (sameSizes_processSlashings ok).1
     (.of_data (congrArg (·.data) registry)) (frame_processSlashings ok).slot
-    (processSlashings_pendingConsolidations ok)
+    (by rw [processSlashings_frame ok])
     (fun i _ => by simp only [effectiveAt, registry]) ?_
   · simpa using bound
   · have covered := coverage_event_sum
@@ -179,8 +182,9 @@ private theorem funding_stage {fork : Fork} {k : EpochStage} {s t : BeaconState 
     (other : k ≠ .rewards ∧ k ≠ .registry ∧ k ≠ .slashings ∧ k ≠ .pendingDeposits ∧
       k ≠ .pendingConsolidations ∧ k ≠ .effectiveBalances) (slot : t.slot = s.slot) :
     fundedStake ⟨fork, t⟩ = fundedStake ⟨fork, s⟩ :=
-  funding_same (edge.validators_eq ⟨other.2.1, other.2.2.2.1, other.2.2.2.2.2⟩)
-    (edge.balances_eq other) slot (edge.samePendingQueue other.2.2.2.2.1)
+  have kept := edge.balances_eq_and_pendingConsolidations_eq
+    ⟨other.1, other.2.2.1, other.2.2.2.1, other.2.2.2.2.1⟩
+  funding_same (edge.validators_eq ⟨other.2.1, other.2.2.2.1, other.2.2.2.2.2⟩) kept.1 slot kept.2
 
 /-- The stages before the payments, from Electra.
 

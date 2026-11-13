@@ -1571,77 +1571,12 @@ theorem coverage_rewards {fork : Fork} {start : BeaconState preset fork}
         (fun _ _ _ h ok => coverage_deltas _ _ h ok)
         (coverage_deltas _ _ initial rewardOk) folded) last
 
-private theorem coverage_setAt {fork : Fork} {s t : BeaconState preset fork}
-    {i : Nat} {v : Validator} (ok : s.setValidatorAt i v = .ok t) :
-    t.balances = s.balances := by
-  unfold BeaconState.setValidatorAt at ok
-  split at ok
-  · cases ok; rfl
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, impossible⟩ := ok
-    cases impossible
-
-private theorem coverage_exit {fork : Fork} {s t : BeaconState preset fork}
-    {i : ValidatorIndex} (ok : initiateValidatorExit config s i = .ok t) :
-    t.balances = s.balances := by
-  obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, queued, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok ok
-  · rfl
-  · obtain ⟨_, rfl⟩ := setValidator_ok set
-    exact (exitQueue_validators queue).2
-
-private theorem coverage_fold_keeps {fork : Fork} {α ε : Type}
-    {action : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
-    (keeps : ∀ s a t, action s a = .ok t → t.balances = s.balances)
-    {s t : BeaconState preset fork} {xs : List α} (ok : xs.foldlM action s = .ok t) :
-    t.balances = s.balances :=
-  foldlM_ok_invariant (fun t => t.balances = s.balances)
-    (fun a b c previous step => (keeps a b c step).trans previous) rfl ok
-
-/-- Registry updates keep the balances. -/
-theorem coverage_registry {fork : Fork} {s t : BeaconState preset fork}
-    (ok : processRegistryUpdates config s = .ok t) : t.balances = s.balances := by
-  have electra (epoch : Epoch) (s t : BeaconState preset fork) (i : Nat)
-      (ok : updateRegistryEntryElectra config epoch s i = .ok t) :
-      t.balances = s.balances := by
-    simp only [updateRegistryEntryElectra, bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · obtain ⟨_, _, set⟩ := bind_ok_iff.mp ok
-      exact coverage_setAt (liftAccessor_ok.mp set)
-    · split at ok
-      · obtain ⟨_, _, exited⟩ := bind_ok_iff.mp ok
-        exact coverage_exit (liftAccessor_ok.mp exited)
-      · split at ok
-        · exact coverage_setAt (liftAccessor_ok.mp ok)
-        · cases ok; rfl
-  have ordinary (s t : BeaconState preset fork) (i : Nat)
-      (ok : updateRegistryEntry config s i = .ok t) : t.balances = s.balances := by
-    simp only [updateRegistryEntry, bind_ok_iff] at ok
-    obtain ⟨_, _, _, _, u, set, rest⟩ := ok
-    have same := coverage_setAt (liftAccessor_ok.mp set)
-    split at rest
-    · obtain ⟨_, _, exited⟩ := bind_ok_iff.mp rest
-      exact (coverage_exit (liftAccessor_ok.mp exited)).trans same
-    · cases rest; exact same
-  have activate (s t : BeaconState preset fork) (i : ValidatorIndex)
-      (ok : activateValidator s i = .ok t) : t.balances = s.balances := by
-    simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, set⟩ := ok
-    obtain ⟨_, rfl⟩ := setValidator_ok set
-    rfl
-  unfold processRegistryUpdates at ok
-  split at ok
-  · obtain ⟨epoch, _, folded⟩ := bind_ok_iff.mp ok
-    exact coverage_fold_keeps (fun s i t => electra epoch s t i) folded
-  · obtain ⟨u, first, last⟩ := bind_ok_iff.mp ok
-    exact (coverage_fold_keeps (fun s i t => activate s t i) last).trans
-      (coverage_fold_keeps (fun s i t => ordinary s t i) first)
-
 /-- A voluntary exit keeps the balances. -/
 theorem coverage_voluntary {fork : Fork} {s t : BeaconState preset fork}
     {signed : SignedVoluntaryExit} (ok : processVoluntaryExit config checks s signed = .ok t) :
     t.balances = s.balances :=
-  coverage_exit (processVoluntaryExit_initiates ok)
+  (initiateValidatorExit_balances_eq_and_pendingConsolidations_eq
+    (processVoluntaryExit_initiates ok)).1
 
 /-- A BLS-to-execution change keeps the balances. -/
 theorem coverage_bls {fork : Fork} {s t : BeaconState preset fork}
@@ -1672,7 +1607,8 @@ theorem coverage_withdrawal_request {fork : Fork} {s t : BeaconState preset fork
   simp only [processWithdrawalRequest] at ok
   repeat' first
     | (exact partialRequest _ _ _ _ _ _ ok)
-    | (exact coverage_exit (liftAccessor_ok.mp ok))
+    | (exact (initiateValidatorExit_balances_eq_and_pendingConsolidations_eq
+        (liftAccessor_ok.mp ok)).1)
     | (cases ok; rfl)
     | (split at ok)
     | (rcases bind_ok_iff.mp ok with ⟨_, _, ok⟩)

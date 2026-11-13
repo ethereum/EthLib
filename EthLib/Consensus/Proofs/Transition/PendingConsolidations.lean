@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.Trace
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Genesis
+import EthLib.Consensus.Proofs.Transition.BalanceDrift
 import EthLib.Consensus.Proofs.Transition.EpochPending
 import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 
@@ -95,72 +96,18 @@ private theorem SamePendingQueue.decrease {f : Fork} {s t : BeaconState preset f
 
 private theorem SamePendingQueue.exit {f : Fork} {s t : BeaconState preset f}
     {i : ValidatorIndex} (ok : initiateValidatorExit config s i = .ok t) :
-    SamePendingQueue s t := by
-  obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok ok
-  · rfl
-  · obtain ⟨_, _, rfl⟩ := exitQueue_eq queue
-    have kept := setValidator set
-    exact kept
+    SamePendingQueue s t :=
+  (initiateValidatorExit_balances_eq_and_pendingConsolidations_eq ok).2
 
 private theorem SamePendingQueue.rewards {f : Fork} {s t : BeaconState preset f}
     (ok : processRewardsAndPenalties config s = .ok t) : SamePendingQueue s t := by
   show t.pendingConsolidations = s.pendingConsolidations
   rw [processRewardsAndPenalties_frame ok]
 
-private theorem SamePendingQueue.registry {f : Fork} {s t : BeaconState preset f}
-    (ok : processRegistryUpdates config s = .ok t) : SamePendingQueue s t := by
-  have entry {a b : BeaconState preset f} {i : Nat}
-      (ok : updateRegistryEntry config a i = .ok b) : SamePendingQueue a b := by
-    simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, marked, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact (setValidatorAt marked).trans (exit exited)
-    · cases ok; exact setValidatorAt marked
-  have electra {a b : BeaconState preset f} {i : Nat} {epoch : Epoch}
-      (ok : updateRegistryEntryElectra config epoch a i = .ok b) : SamePendingQueue a b := by
-    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, set⟩ := ok
-      exact setValidatorAt set
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact exit exited
-    split at ok
-    · exact setValidatorAt (liftAccessor_ok.mp ok)
-    · cases ok; rfl
-  unfold processRegistryUpdates at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact fold (fun _ _ _ => electra) ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, updated, activated⟩ := ok
-  apply (fold (fun _ _ _ => entry) updated).trans
-  apply fold (fun _ _ _ ok => ?_) activated
-  simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, set⟩ := ok
-  exact setValidator set
-
 private theorem SamePendingQueue.slashings {f : Fork} {s t : BeaconState preset f}
     (ok : processSlashings s = .ok t) : SamePendingQueue s t := by
   show t.pendingConsolidations = s.pendingConsolidations
   rw [processSlashings_frame ok]
-
-private theorem SamePendingQueue.effectiveUpdates {f : Fork} {s t : BeaconState preset f}
-    (ok : processEffectiveBalanceUpdates s = .ok t) : SamePendingQueue s t := by
-  show t.pendingConsolidations = s.pendingConsolidations
-  rw [processEffectiveBalanceUpdates_frame ok]
-
-private theorem SamePendingQueue.inactivity {f : Fork} {s t : BeaconState preset f}
-    {altair : .altair ≤ f} (ok : processInactivityUpdates config s altair = .ok t) :
-    SamePendingQueue s t := by
-  show t.pendingConsolidations = s.pendingConsolidations
-  rw [processInactivityUpdates_frame ok]
 
 private theorem SamePendingQueue.justification {f : Fork} {s t : BeaconState preset f}
     (ok : processJustificationAndFinalization s = .ok t) : SamePendingQueue s t := by
@@ -169,12 +116,6 @@ private theorem SamePendingQueue.justification {f : Fork} {s t : BeaconState pre
   · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
     unfold SamePendingQueue
     rw [← rest]
-
-private theorem SamePendingQueue.eth1Reset {f : Fork} {s t : BeaconState preset f}
-    {before : f < .hegota} (ok : processEth1DataReset before s = .ok t) :
-    SamePendingQueue s t := by
-  show t.pendingConsolidations = s.pendingConsolidations
-  rw [processEth1DataReset_frame ok]
 
 theorem SamePendingQueue.compounding {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {index : ValidatorIndex}
@@ -191,83 +132,20 @@ theorem SamePendingQueue.compounding {f : Fork} {s t : BeaconState preset f}
     rfl
   · cases queued; rfl
 
-theorem processRewardsAndPenalties_pendingConsolidations
-    {f : Fork} {s t : BeaconState preset f}
-    (ok : processRewardsAndPenalties config s = .ok t) :
-    t.pendingConsolidations = s.pendingConsolidations := SamePendingQueue.rewards ok
-
-theorem processRegistryUpdates_pendingConsolidations
-    {f : Fork} {s t : BeaconState preset f}
-    (ok : processRegistryUpdates config s = .ok t) :
-    t.pendingConsolidations = s.pendingConsolidations := SamePendingQueue.registry ok
-
-theorem processSlashings_pendingConsolidations {f : Fork} {s t : BeaconState preset f}
-    (ok : processSlashings s = .ok t) :
-    t.pendingConsolidations = s.pendingConsolidations := SamePendingQueue.slashings ok
-
 /-- An epoch stage keeps the pending consolidations, unless it is the stage that processes them. -/
 theorem EpochStage.Edge.samePendingQueue {f : Fork} {stage : EpochStage}
     {s t : BeaconState preset f} (edge : EpochStage.Edge config checks stage s t)
     (other : stage ≠ .pendingConsolidations) : SamePendingQueue s t := by
-  cases stage <;> simp only [EpochStage.Edge] at edge
-  case pendingConsolidations => exact absurd rfl other
-  case justification => exact SamePendingQueue.justification edge
+  cases stage
   case rewards => exact SamePendingQueue.rewards edge
-  case registry => exact SamePendingQueue.registry edge
   case slashings => exact SamePendingQueue.slashings edge
-  case effectiveBalances => exact SamePendingQueue.effectiveUpdates edge
-  case slashingsReset =>
-    obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
-    rfl
-  case randaoReset =>
-    obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq edge
-    rfl
-  case history =>
+  case pendingDeposits =>
+    simp only [EpochStage.Edge] at edge
     split at edge
-    · unfold processHistoricalSummariesUpdate at edge
-      simp only [bind, Except.bind, pure, Except.pure] at edge
-      repeat' (split at edge <;> try cases edge)
-      all_goals rfl
-    · unfold processHistoricalRootsUpdate at edge
-      split at edge
-      · cases edge
-      simp only [bind_ok_iff, liftAccessor_ok] at edge
-      obtain ⟨_, _, edge⟩ := edge
-      split at edge
-      · simp only [bind_ok_iff, liftSsz_ok, pure, Except.pure, Except.ok.injEq] at edge
-        obtain ⟨_, _, _, _, rfl⟩ := edge
-        rfl
-      · cases edge; rfl
-  case participation =>
-    split at edge
-    · subst edge
-      rfl
-    · unfold processParticipationRecordUpdates at edge
-      split at edge
-      · cases edge
-      · cases edge; rfl
-  case syncCommittees =>
-    split at edge
-    · unfold processSyncCommitteeUpdates at edge
-      simp only [bind, Except.bind, pure, Except.pure] at edge
-      repeat' (split at edge <;> try cases edge)
-      all_goals rfl
+    · exact processPendingDeposits_pendingConsolidations edge
     · exact edge ▸ rfl
-  all_goals
-    split at edge
-    · first
-      | exact SamePendingQueue.inactivity edge
-      | exact SamePendingQueue.eth1Reset edge
-      | exact processPendingDeposits_pendingConsolidations edge
-      | exact (processBuilderPendingPayments_eq edge) ▸ rfl
-      | (simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
-          Except.ok.injEq] at edge
-         obtain ⟨_, _, _, _, rfl⟩ := edge
-         rfl)
-      | (simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
-         obtain ⟨_, _, _, _, rfl⟩ := edge
-         rfl)
-    · exact edge ▸ rfl
+  case pendingConsolidations => exact absurd rfl other
+  all_goals exact (edge.balances_eq_and_pendingConsolidations_eq ⟨nofun, nofun, nofun, nofun⟩).2
 
 variable {fork : Fork} {state after : BeaconState preset fork}
   {engine : ExecutionEngine preset fork}
@@ -889,7 +767,9 @@ theorem registry (holds : PendingConsolidationInvariant config state)
     (ok : processRegistryUpdates config state = .ok after) :
     PendingConsolidationInvariant config after := by
   by_cases electra : .pectra ≤ fork
-  · apply holds.kept (SamePendingQueue.registry ok)
+  · -- The registry stage reads no signature checks, so any of them gives its edge.
+    apply holds.kept (EpochStage.Edge.balances_eq_and_pendingConsolidations_eq
+      (stage := .registry) (checks := .bls) ok ⟨nofun, nofun, nofun, nofun⟩).2
       (registryLifecycle_processRegistryUpdates ok) (WithdrawalKept.registry electra ok)
     rw [show getCurrentEpoch after = getCurrentEpoch state from
       congrArg (computeEpochAtSlot preset) (frame_processRegistryUpdates ok).slot]
