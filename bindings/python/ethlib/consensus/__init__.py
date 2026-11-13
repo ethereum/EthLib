@@ -230,6 +230,13 @@ def relay_submission_bid(name: str, fork: str, data: bytes, pubkey: bytes) -> by
     return _native.consensus_relay_submission_bid(name, fork, data, pubkey)
 
 
+def relay_validators(
+    name: str, fork: str, state: bytes, registry: list[bytes]
+) -> list[dict[str, Any]]:
+    """At Fulu only: the JSON entries of the validators that a relay lists, from SSZ bytes."""
+    return _native.consensus_relay_validators(name, fork, state, registry)
+
+
 def builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The bid's value in Gwei, with its execution payment capped, not reduced to 64 bits."""
     return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
@@ -957,6 +964,119 @@ def api_blobs_ssz(
     return _native.consensus_api_blobs_ssz(name, fork, block, list(blobs), chosen)
 
 
+def api_block_query_ssz(name: str, fork: str, block: bytes, query: str) -> bytes:
+    """The Beacon API SSZ body of a query on a signed block, or ConsensusError."""
+    # The query is "block" or "blinded_block"; the others have no SSZ body.
+    # From Gloas, "blinded_block" raises code 400, since such a block has no blinded form.
+    return _native.consensus_api_block_query_ssz(name, fork, block, query)
+
+
+def api_header(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    block: bytes,
+    *,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API header of a signed block against a fork choice store, or ForkChoiceError."""
+    # The steps are those of `fork_choice`; the block is the SSZ of a signed block.
+    # The data holds the root, whether the block is on the chain of the head, and the header.
+    # The flags execution_optimistic and finalized are not computed, so they are absent.
+    # An API error carries its HTTP code in `.code`.
+    return _native.consensus_api_header(
+        name, fork, anchor_state, anchor_block, steps, verify, block
+    )
+
+
+def api_headers(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    headers: Sequence[bytes],
+    *,
+    slot: int | None = None,
+    parent_root: bytes | None = None,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API headers that match the filters, or ForkChoiceError."""
+    # The headers are the SSZ of the signed headers that the node holds, kept in their order.
+    # With neither filter, the slot is that of the head; with only a parent root, any slot.
+    # The store is built from the steps of a fork choice case.
+    # An API error carries its HTTP code in `.code`; a store without a head gives 500.
+    return _native.consensus_api_headers(
+        name, fork, anchor_state, anchor_block, steps, verify, list(headers), slot, parent_root
+    )
+
+
+def api_columns(
+    name: str,
+    fork: str,
+    sidecars: Sequence[bytes],
+    *,
+    indices: Sequence[int] | None = None,
+) -> dict[str, Any]:
+    """The Beacon API data column sidecars with the requested indices, or ConsensusError."""
+    # The sidecars are the SSZ of those that the node holds for the block, kept in their order.
+    # The source allows any order; this answer keeps the order of the input.
+    # Before Fulu it raises code 400.
+    chosen = None if indices is None else list(indices)
+    return _native.consensus_api_columns(name, fork, list(sidecars), chosen)
+
+
+def api_columns_ssz(
+    name: str,
+    fork: str,
+    sidecars: Sequence[bytes],
+    *,
+    indices: Sequence[int] | None = None,
+) -> bytes:
+    """The Beacon API SSZ body of the requested data column sidecars, or ConsensusError."""
+    chosen = None if indices is None else list(indices)
+    return _native.consensus_api_columns_ssz(name, fork, list(sidecars), chosen)
+
+
+def api_payload_envelope(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    root: bytes,
+    envelope: bytes,
+    *,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API signed payload envelope of a block, or ForkChoiceError."""
+    # The store keeps envelopes without signatures, so the signed envelope is an input.
+    # It is answered when its message has the root of the envelope stored for the block.
+    # Otherwise, and before Gloas, it raises ForkChoiceError with code 404.
+    return _native.consensus_api_payload_envelope(
+        name, fork, anchor_state, anchor_block, steps, verify, root, envelope
+    )
+
+
+def api_payload_envelope_ssz(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    root: bytes,
+    envelope: bytes,
+    *,
+    verify: bool = True,
+) -> bytes:
+    """The Beacon API SSZ body of the signed payload envelope of a block, or ForkChoiceError."""
+    return _native.consensus_api_payload_envelope_ssz(
+        name, fork, anchor_state, anchor_block, steps, verify, root, envelope
+    )
+
+
 def api_committees(
     name: str,
     fork: str,
@@ -1634,6 +1754,13 @@ __all__ = [
     "api_block_query",
     "api_blobs",
     "api_blobs_ssz",
+    "api_block_query_ssz",
+    "api_header",
+    "api_headers",
+    "api_columns",
+    "api_columns_ssz",
+    "api_payload_envelope",
+    "api_payload_envelope_ssz",
     "api_committees",
     "api_sync_committees",
     "api_ptc",
@@ -1652,6 +1779,7 @@ __all__ = [
     "builder_preferences_failures",
     "default_auth_data",
     "relay_submission_bid",
+    "relay_validators",
     "builder_bid_value",
     "consensus_version",
     "consensus_version_fork",

@@ -11,6 +11,7 @@ public import EthLib.Execution.Proofs.Rpc.View
 public import EthLib.Execution.Proofs.Rpc.Methods
 public import EthLib.Execution.Proofs.Rpc.Raw
 public import EthLib.Execution.Proofs.Rpc.Receipt
+public import EthLib.Execution.Proofs.Rpc.Filter
 public import EthLib.Execution.Proofs.Rpc.Transaction
 public import EthLib.Execution.Proofs.Rpc.TransactionInfo
 

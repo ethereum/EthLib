@@ -470,6 +470,27 @@
 #define DOC_consensus_api_blobs_ssz \
   "The SSZ body of the blobs answer, as `bytes`."
 
+#define DOC_consensus_api_block_query_ssz \
+  "The SSZ body of the answer to a query on a signed block, as `bytes`."
+
+#define DOC_consensus_api_header \
+  "The JSON response of the header endpoint for a signed block, as a `dict`."
+
+#define DOC_consensus_api_headers \
+  "The JSON response of the headers endpoint, as a `dict`."
+
+#define DOC_consensus_api_columns \
+  "The JSON response of the columns endpoint, as a `dict`."
+
+#define DOC_consensus_api_columns_ssz \
+  "The SSZ body of the columns answer, as `bytes`."
+
+#define DOC_consensus_api_payload_envelope \
+  "The JSON response of the envelope endpoint, as a `dict`."
+
+#define DOC_consensus_api_payload_envelope_ssz \
+  "The SSZ body of the envelope answer, as `bytes`."
+
 #define DOC_consensus_api_committees \
   "The JSON response of the committees endpoint, as a `dict`."
 
@@ -526,6 +547,9 @@
 
 #define DOC_consensus_relay_submission_bid \
   "The SSZ bytes of the bid that a relay serves from a submission, under a key."
+
+#define DOC_consensus_relay_validators \
+  "At Fulu only: the list of validators that a relay serves, as a `list` of `dict`."
 
 #define DOC_consensus_builder_bid_value \
   "The value of a builder's bid from its two payments and the proposer's execution payment cap."
@@ -1148,6 +1172,18 @@
 #define DOC_yamux_session \
   "One side of a yamux session after the frames it receives and sends, from no stream."
 
+#define DOC_tls_certificate_read \
+  "The certificate's signed bytes, SPKI, validity and extensions."
+
+#define DOC_tls_certificate_authenticate \
+  "The authenticated peer ID of a chain of exactly one certificate."
+
+#define DOC_tls_certificate_authenticate_peer \
+  "The peer ID of one authenticated certificate, checked against the intended peer ID."
+
+#define DOC_tls_certificate_verify_p256 \
+  "Verify DER ECDSA/SHA-256 under an uncompressed P-256 SubjectPublicKeyInfo."
+
 #define DOC_libp2p_public_key \
   "The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n)."
 
@@ -1174,6 +1210,18 @@
 
 #define DOC_gossip_receive_rpc \
   "What the router does with one RPC, with its client choices given as tables."
+
+#define DOC_gossip_join \
+  "The router after this node joins a topic, and the GRAFTs it sends."
+
+#define DOC_gossip_leave \
+  "The router after this node leaves a topic, and the PRUNEs it sends."
+
+#define DOC_gossip_publish \
+  "The router after this node publishes a message, and where the message goes."
+
+#define DOC_gossip_heartbeat \
+  "The router after one heartbeat, and the control messages it sends."
 
 #define DOC_receipt_reencode \
   "The bytes of a receipt, decoded at the fork and encoded again with its transaction type."
