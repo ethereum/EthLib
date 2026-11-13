@@ -676,6 +676,14 @@ theorem processWithdrawals_validators {capella : .shapella ≤ fork}
     obtain ⟨_, _, _, _, applied⟩ := computed
     exact expected applied
 
+/-- The execution part of a block keeps the validators, at every fork. -/
+theorem processBlockExecution_validators {body : BeaconBlockBody preset fork}
+    {bellatrix : .bellatrix ≤ fork}
+    (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
+    after.validators = state.validators :=
+  processBlockExecution_step_of (fun a b => b.validators = a.validators) (fun _ => rfl)
+    (fun one two => two.trans one) (fun _ same => same) processWithdrawals_validators computed
+
 /-- The sync aggregate changes only the balances. -/
 theorem processSyncAggregate_eq {altair : .altair ≤ fork}
     {aggregate : SyncAggregate preset}
@@ -710,9 +718,7 @@ theorem OperationsInput.validators_eq {block : BeaconBlock preset fork}
     (fun headed => by
       obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
       rfl)
-    (fun _ executed => processBlockExecution_step_of (fun a b => b.validators = a.validators)
-      (fun _ => rfl) (fun one two => two.trans one) (fun _ same => same)
-      processWithdrawals_validators executed)
+    (fun _ executed => processBlockExecution_validators executed)
     (fun revealed => by
       obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
       rfl)
@@ -727,19 +733,6 @@ theorem registryLifecycle_processBlsToExecutionChange {signed : SignedBLSToExecu
   obtain ⟨validator, found, _, _, _, set⟩ := processBlsToExecutionChange_ok computed
   exact .setValidator found set ⟨fun _ => rfl, fun _ => rfl⟩
 
-/-! ## The execution part of a block -/
-
-/-- The execution part of a block changes the registry only through withdrawals. -/
-private theorem registryLifecycle_processBlockExecution {body : BeaconBlockBody preset fork}
-    {bellatrix : .bellatrix ≤ fork}
-    (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
-    RegistryLifecycle state after :=
-  processBlockExecution_step_of RegistryLifecycle .refl (fun one two => one.trans two)
-    (fun _ same => .of_data (congrArg (·.data) same))
-    (fun ok => .of_data (congrArg (·.data) (processWithdrawals_validators ok))) computed
-
-/-! ## The sync aggregate -/
-
 /-! ## Blocks -/
 
 private theorem registryLifecycle_processBlock {block : BeaconBlock preset fork}
@@ -753,7 +746,8 @@ private theorem registryLifecycle_processBlock {block : BeaconBlock preset fork}
         (fun one two => one.trans two) (fun _ same => .of_data (congrArg (·.data) same))
         (fun ok => registryLifecycle_processWithdrawalRequest ok)
         (fun ok => registryLifecycle_processConsolidationRequest ok) ok)
-      registryLifecycle_processBlockHeader (fun _ ok => registryLifecycle_processBlockExecution ok)
+      registryLifecycle_processBlockHeader
+      (fun _ ok => .of_data (congrArg (·.data) (processBlockExecution_validators ok)))
       registryLifecycle_processRandao (fun _ ok => registryLifecycle_processEth1Data ok) started
   obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
     processOperations_folds_of RegistryLifecycle .refl (fun one two => one.trans two)

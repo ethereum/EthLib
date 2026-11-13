@@ -3904,9 +3904,7 @@ private theorem blockConsolidationSites_prefix {fork : Fork}
     have execution : SitePrefix headed executed := by
       refine ⟨(frame_processBlockExecution executedOk).registryGrows,
         activeStep_processBlockExecution executedOk, ?_⟩
-      exact effectiveKept_data (congrArg (·.data) (processBlockExecution_step_of
-        (fun a b => b.validators = a.validators) (fun _ => rfl) (fun one two => two.trans one)
-        (fun _ same => same) processWithdrawals_validators executedOk))
+      exact effectiveKept_data (congrArg (·.data) (processBlockExecution_validators executedOk))
     have randao : SitePrefix executed revealed := by
       refine ⟨(frame_processRandao revealedOk).registryGrows,
         activeStep_processRandao revealedOk, ?_⟩
