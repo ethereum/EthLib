@@ -271,7 +271,7 @@ theorem finishCall (rules : OrdinaryStepRules fork R) {kind : CallKind} {call : 
   dsimp only at h
   have pre : StaticStep evm (recordAccountRead { evm with
       memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-      evm.message.currentTarget) := ⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      evm.message.currentTarget) := ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl⟩
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
     exact (rules.static ((pre.trans (.of_sameContext (sameContext_refillStateGas _ _))).trans
@@ -593,7 +593,7 @@ private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
   dsimp only at h
   have pre : StaticStep evm (recordAccountRead { evm with
       memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-      evm.message.currentTarget) := ⟨StateKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      evm.message.currentTarget) := ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl⟩
   split at h
   · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
     trivial
