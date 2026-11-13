@@ -9,6 +9,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `hashToFieldFp2 msg dst count` returns a `Vector (Fp2 F) count` in place of an `Array`, since `hash_to_field` of RFC 9380 §5.2 returns `count` elements.
+  The elements, and so every hash to `G2`, are unchanged.
+  `hashToG2` no longer needs `Inhabited F`.
+  `map_hashToG2` drops its hypotheses `[Inhabited F]`, `[Inhabited G]` and `f default = default`.
+  `hashToFieldFp2_eq_spec` and `map_hashToFieldFp2` state the same facts over the vector.
+  No C export or Python function changes.
+
 - `verify_kzg_proof` checks its inputs in the order of EIP-4844: the commitment, `z`, `y`, then the proof.
   When more than one input is invalid, the first in that order gives the error.
   Before, it checked the proof second, so an input with an invalid `z` and an invalid proof raised the error of the proof.

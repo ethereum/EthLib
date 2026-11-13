@@ -318,17 +318,6 @@ theorem fieldBytes_eq : Spec.fieldBytes = 64 := by
   rw [Spec.fieldBytes, hlog, Spec.securityLevel]
   exact_mod_cast h
 
-/-- A loop that pushes one value per index builds the list of the values. -/
-private theorem foldl_push_toList {α : Type} (g : Nat → α) (n : Nat) (acc : Array α) :
-    ((List.range' 0 n).foldl (fun a i => a.push (g i)) acc).toList
-      = acc.toList ++ (List.range n).map g := by
-  induction n with
-  | zero => simp
-  | succ n ih =>
-    rw [List.range'_concat, List.foldl_append, List.foldl_cons, List.foldl_nil, Array.toList_push,
-      ih, List.range_succ, List.map_append, List.append_assoc]
-    simp
-
 /-- An element read by the code is OS2IP of its bytes, reduced modulo `p`. -/
 private theorem toZMod_fpFromBytesL (uniform : ByteArray) (off : Nat) :
     Fp.toZMod (fpFromBytesL (uniform.extract off (off + 64)) : Fp)
@@ -346,7 +335,7 @@ Each element is mapped to the pair of its coordinates in `ZMod p`.
 -/
 theorem hashToFieldFp2_eq_spec (msg dst : ByteArray) (count : Nat)
     (hmsg : msg.size + 323 < 2 ^ 61) (hdst : dst.size + 17 < 2 ^ 61) :
-    (hashToFieldFp2 msg dst count : Except BlsError (Array Fp2)).toOption.map
+    (hashToFieldFp2 msg dst count : Except BlsError (Vector Fp2 count)).toOption.map
         (fun us => us.toList.map fun u => (Fp.toZMod u.c0, Fp.toZMod u.c1))
       = Spec.hashToField msg.data.toList dst.data.toList count := by
   rw [Spec.hashToField, fieldBytes_eq, ← expandMessageXmd_eq_spec msg dst _ hmsg hdst]
@@ -355,14 +344,12 @@ theorem hashToFieldFp2_eq_spec (msg dst : ByteArray) (count : Nat)
   cases expandMessageXmd msg dst (count * 2 * 64) with
   | error e => rfl
   | ok uniform =>
-    simp only [bind, Except.bind, Std.Legacy.Range.forIn_eq_forIn_range',
-      List.forIn_pure_yield_eq_foldl, Std.Legacy.Range.size]
-    simp only [pure, Except.pure, Except.toOption, Option.map_some, Nat.sub_zero,
-      Nat.add_sub_cancel, Nat.div_one, foldl_push_toList, Array.mkEmpty_eq, List.map_map,
-      List.nil_append]
+    simp only [bind, Except.bind, pure, Except.pure, Except.toOption, Option.map_some,
+      Vector.toList_ofFn, List.map_ofFn]
     congr 1
-    apply List.map_congr_left
-    intro i _
-    simp only [Function.comp_apply, toZMod_fpFromBytesL, Nat.zero_add, Nat.add_comm 1]
+    apply List.ext_getElem (by simp)
+    intro i _ _
+    simp only [List.getElem_ofFn, Function.comp_apply, List.getElem_map, List.getElem_range,
+      toZMod_fpFromBytesL, Nat.zero_add, Nat.add_comm 1]
 
 end EthLib.Cryptography.Bls.HashToCurve
