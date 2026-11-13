@@ -573,6 +573,14 @@ def consensus_builder_bid_value(value: int, execution_payment: int, max_executio
     """The value of a builder's bid from its two payments and the proposer's execution payment cap."""
     ...
 
+def consensus_consensus_version(fork: str) -> str | None:
+    """The name of the consensus version of a fork, or none before Phase 0 and at Hegotá."""
+    ...
+
+def consensus_consensus_version_fork(name: str) -> str:
+    """The name of the first fork of a consensus version, read from its exact name."""
+    ...
+
 def consensus_merkle_proof(name: str, fork: str, type: str, data: bytes, gindex: int) -> tuple[bytes, list[bytes]]:
     """The node at a generalized index of the value that the bytes encode, and its branch, as a pair."""
     ...

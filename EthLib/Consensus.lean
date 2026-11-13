@@ -8,6 +8,7 @@ public import EthLib.Consensus.Mutators
 public import EthLib.Consensus.Participation
 public import EthLib.Consensus.PayloadTimeliness
 public import EthLib.Consensus.Config
+public import EthLib.Consensus.ConsensusVersion
 public import EthLib.Consensus.Constants
 public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Bid
