@@ -694,7 +694,7 @@ private theorem block (early : fork < .glamsterdam) (holds : PendingSources stat
     OperationsInput.step_of Kept (fun _ => id) trans (fun gloas _ => absurd gloas noGloas)
       (fun headed => by obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed; exact id)
       (fun _ executed h => h.kept (SamePendingQueue.blockExecution early executed)
-        (registryLifecycle_processBlockExecution executed).size_le)
+        (Nat.le_of_eq (congrArg (·.data.size) (processBlockExecution_validators executed)).symm))
       (fun revealed => by
         obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
         exact id)
@@ -715,8 +715,8 @@ private theorem block (early : fork < .glamsterdam) (holds : PendingSources stat
       (fun {_ _ gloas} _ => absurd gloas noGloas) operated
   have tail : Kept last after := by
     split at synced
-    · exact fun h => h.kept (SamePendingQueue.syncAggregate synced)
-        (Nat.le_of_eq (congrArg (·.data.size) (processSyncAggregate_validators synced)).symm)
+    · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+      exact fun h => h.kept (SamePendingQueue.syncAggregate synced) (Nat.le_refl _)
     · cases synced
       exact id
   have p := fold (fun _ _ _ h ok => h.kept (SamePendingQueue.proposer ok)
@@ -1217,9 +1217,7 @@ private theorem withdrawalRequest {electra : .pectra ≤ fork} {request : Withdr
 private theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
     (ok : processBlockExecution config checks engine state body bellatrix = .ok after) :
     WithdrawalKept state after :=
-  of_data (congrArg (·.data) (processBlockExecution_step_of (fun a b => b.validators = a.validators)
-    (fun _ => rfl) (fun one two => two.trans one) (fun _ same => same)
-    processWithdrawals_validators ok))
+  of_data (congrArg (·.data) (processBlockExecution_validators ok))
 
 end WithdrawalKept
 
@@ -1545,7 +1543,8 @@ private theorem block (early : fork < .glamsterdam)
     OperationsInput.step_of Kept (fun _ => id) trans (fun gloas _ => absurd gloas noGloas)
       (fun headed => by obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed; exact id)
       (fun _ executed h => h.framed (SamePendingQueue.blockExecution early executed)
-        (registryLifecycle_processBlockExecution executed) (WithdrawalKept.blockExecution executed)
+        (.of_data (congrArg (·.data) (processBlockExecution_validators executed)))
+        (WithdrawalKept.blockExecution executed)
         (frame_processBlockExecution executed).slot)
       (fun revealed => by
         obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
@@ -1571,9 +1570,9 @@ private theorem block (early : fork < .glamsterdam)
       (fun {_ _ gloas} _ => absurd gloas noGloas) operated
   have tail : Kept last after := by
     split at synced
-    · have same := congrArg (·.data) (processSyncAggregate_validators synced)
-      exact fun h => h.framed (SamePendingQueue.syncAggregate synced) (.of_data same)
-        (.of_data same) (frame_processSyncAggregate synced).slot
+    · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+      exact fun h => h.framed (SamePendingQueue.syncAggregate synced) (.of_data rfl) .of_data
+        (frame_processSyncAggregate synced).slot
     · cases synced
       exact id
   have p := fold (fun _ _ _ h ok => h.framed (SamePendingQueue.proposer ok)

@@ -460,7 +460,8 @@ private theorem CapStep.block {f : Fork} {s t : BeaconState preset f}
       (fun attested => same (by rw [processPayloadAttestation_eq attested])) operated
   have tail : CapStep last t := by
     split at synced
-    · exact same (processSyncAggregate_validators synced)
+    · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+      exact same rfl
     · cases synced
       exact CapStep.refl _
   exact head.trans <|

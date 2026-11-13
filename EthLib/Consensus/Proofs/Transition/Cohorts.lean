@@ -364,7 +364,8 @@ private theorem cohorts_block (early : fork < .pectra) {engine : ExecutionEngine
       (fun {_ _ gloas} _ => absurd gloas noGloas) operated
   have tail : CohortsKept (config := config) last after := by
     split at synced
-    · exact .of_data (congrArg (·.data) (processSyncAggregate_validators synced))
+    · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+      exact .of_data rfl
     · cases synced
       exact .refl _
   exact head.trans <|

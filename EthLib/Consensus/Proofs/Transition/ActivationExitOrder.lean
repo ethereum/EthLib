@@ -666,9 +666,7 @@ private theorem processBlock {block : BeaconBlock preset fork}
       (fun _ paid => processParentExecutionPayload_step_of Kept refl (fun one two => one.trans two)
         keep processWithdrawalRequest processConsolidationRequest paid)
       blockHeader
-      (fun _ executed => processBlockExecution_step_of Kept refl (fun one two => one.trans two)
-        keep (fun withdrawn =>
-          of_data (congrArg (·.data) (processWithdrawals_validators withdrawn))) executed)
+      (fun _ executed => of_data (congrArg (·.data) (processBlockExecution_validators executed)))
       randao (fun _ voted => eth1Data voted) started
   obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
     processOperations_folds_of Kept refl (fun one two => one.trans two) processDeposit
@@ -676,7 +674,8 @@ private theorem processBlock {block : BeaconBlock preset fork}
       (fun paid => by rw [processPayloadAttestation_eq paid]; exact refl _) operated
   have tail : Kept last after := by
     split at synced
-    · exact of_data (congrArg (·.data) (processSyncAggregate_validators synced))
+    · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+      exact of_data
     · cases synced
       exact refl _
   exact head.trans <| (foldlM (fun _ _ _ ok => processProposerSlashing ok) proposersOk).trans <|

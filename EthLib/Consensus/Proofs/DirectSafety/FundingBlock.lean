@@ -208,15 +208,6 @@ private theorem funding_block_carry {fork : Fork} {s : BeaconState preset fork}
   obtain ⟨after, actionOk, rfl⟩ := ok
   exact ⟨preserves _ _ actionOk initial.1, (bound _ _ initial.1 actionOk).trans initial.2⟩
 
-/-- The execution part of a block keeps the validators: its withdrawals change balances only. -/
-private theorem funding_execution_validators {fork : Fork} {s t : BeaconState preset fork}
-    {engine : ExecutionEngine preset fork} {body : BeaconBlockBody preset fork}
-    {bellatrix : .bellatrix ≤ fork}
-    (ok : processBlockExecution config checks engine s body bellatrix = .ok t) :
-    t.validators = s.validators :=
-  processBlockExecution_step_of (fun a b => b.validators = a.validators) (fun _ => rfl)
-    (fun one two => two.trans one) (fun _ same => same) processWithdrawals_validators ok
-
 private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     (matched : BalancesMatch s) (engine : ExecutionEngine preset fork)
@@ -273,9 +264,9 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
       ⟨matched, by simp⟩ headerOk
   have executedBound := record (by decide) (by decide)
     (fun _ _ ok => (frame_processBlockExecution ok).toFrame)
-    (fun _ _ ok => registryLifecycle_processBlockExecution ok)
-    (fun _ _ ok => congrArg (·.data.size) (funding_execution_validators ok))
-    (fun _ _ ok => effectiveKept_data (congrArg (·.data) (funding_execution_validators ok)))
+    (fun _ _ ok => .of_data (congrArg (·.data) (processBlockExecution_validators ok)))
+    (fun _ _ ok => congrArg (·.data.size) (processBlockExecution_validators ok))
+    (fun _ _ ok => effectiveKept_data (congrArg (·.data) (processBlockExecution_validators ok)))
     (fun _ _ ok => SamePendingQueue.blockExecution early ok) headedBound executionOk
   have randaoBound : FundingReplay s randao := by
     apply carry (fun _ _ ok => (frame_processRandao ok).toFrame)
@@ -426,9 +417,9 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
           (funding_request_support ok)) h ok) withdrawalsBound consolidations
   exact record (by decide) (by decide)
     (fun _ _ ok => (frame_processSyncAggregate ok).toFrame)
-    (fun _ _ ok => .of_data (congrArg (·.data) (processSyncAggregate_validators ok)))
+    (fun _ _ ok => by obtain ⟨_, rfl⟩ := processSyncAggregate_eq ok; exact .of_data rfl)
     (fun _ _ ok => (sameSizes_processSyncAggregate ok).1)
-    (fun _ _ ok => effectiveKept_data (congrArg (·.data) (processSyncAggregate_validators ok)))
+    (fun _ _ ok => by obtain ⟨_, rfl⟩ := processSyncAggregate_eq ok; exact effectiveKept_data)
     (fun _ _ ok => SamePendingQueue.syncAggregate ok) requestedBound synced
 
 /-- A block preserves funding except for its recorded external credits.
