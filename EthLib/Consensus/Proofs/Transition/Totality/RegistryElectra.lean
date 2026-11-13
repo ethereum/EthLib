@@ -125,14 +125,16 @@ private theorem roundToIncrement_share_bounds {config : Config} (total quotient 
       rw [UInt64.toNat_mod]
       exact Nat.mod_le _ _)), UInt64.toNat_mod]
   rw [rounded, toNat_max, UInt64.toNat_div]
-  have positive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat := UInt64.lt_iff_toNat_lt.mp increment
+  have positive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+    UInt64.lt_iff_toNat_lt.mp increment
   have minimum := UInt64.le_iff_toNat_le.mp minimum
   have share := Nat.div_le_self total.toNat quotient.toNat
   have amountLower : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
       max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat (total.toNat / quotient.toNat) := by
     omega
   have amountUpper : max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
-      (total.toNat / quotient.toNat) ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat + total.toNat := by
+      (total.toNat / quotient.toNat) ≤
+        config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat + total.toNat := by
     omega
   generalize max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat (total.toNat / quotient.toNat) =
     amount at *
@@ -158,7 +160,8 @@ private theorem exitChurnLimit_exists_ok {config : Config} {state : BeaconState 
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ churn.toNat ∧
       churn.toNat ≤ exitChurnCeiling config state := by
   obtain ⟨total, totalOk, -, totalLe⟩ := getTotalActiveBalance_exists_ok within summed
-  have totalLe : total.toNat ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat + effectiveBalanceSum state := by
+  have totalLe :
+      total.toNat ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat + effectiveBalanceSum state := by
     rcases totalLe with rfl | le <;> omega
   unfold exitChurnLimit exitChurnCeiling
   split
@@ -210,14 +213,16 @@ private def Kept (config : Config) (electra : .pectra ≤ fork)
 
 /-- A state that keeps the effective balances of the start keeps the size of its registry. -/
 private theorem Kept.size {config : Config} {electra : .pectra ≤ fork}
-    {start state : BeaconState preset fork} {bound : Nat} (kept : Kept config electra start state bound) :
+    {start state : BeaconState preset fork} {bound : Nat}
+    (kept : Kept config electra start state bound) :
     state.validators.data.size = start.validators.data.size := by
   have := congrArg Array.size kept.2.2.1
   simpa using this
 
 /-- A state that keeps the effective balances of the start keeps their sum. -/
 private theorem Kept.sum {config : Config} {electra : .pectra ≤ fork}
-    {start state : BeaconState preset fork} {bound : Nat} (kept : Kept config electra start state bound) :
+    {start state : BeaconState preset fork} {bound : Nat}
+    (kept : Kept config electra start state bound) :
     effectiveBalanceSum state = effectiveBalanceSum start := by
   unfold effectiveBalanceSum
   have := congrArg (fun data => (data.toList.map UInt64.toNat).sum) kept.2.2.1
@@ -225,7 +230,8 @@ private theorem Kept.sum {config : Config} {electra : .pectra ≤ fork}
 
 /-- A state that keeps the slot of the start keeps its current epoch. -/
 private theorem Kept.epoch {config : Config} {electra : .pectra ≤ fork}
-    {start state : BeaconState preset fork} {bound : Nat} (kept : Kept config electra start state bound) :
+    {start state : BeaconState preset fork} {bound : Nat}
+    (kept : Kept config electra start state bound) :
     getCurrentEpoch state = getCurrentEpoch start := by
   simp [getCurrentEpoch, kept.1]
 
@@ -251,7 +257,8 @@ private theorem computeExitEpochAndUpdateChurn_kept {config : Config} {electra :
         .ok ({ state with
           exitBalanceToConsume := fun _ => left, earliestExitEpoch := fun _ => epoch }, epoch) ∧
       epoch.toNat ≤ bound + (amount.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1) ∧
-      left.toNat ≤ max (start.exitBalanceToConsume electra).toNat (exitChurnCeiling config start) := by
+      left.toNat ≤
+        max (start.exitBalanceToConsume electra).toNat (exitChurnCeiling config start) := by
   have boundLt : bound < 2 ^ 64 := Nat.lt_of_le_of_lt (Nat.le_add_right _ _) room
   have stateWithin : state.RegistryWithinLimit := by
     unfold BeaconState.RegistryWithinLimit
@@ -289,11 +296,288 @@ private theorem computeExitEpochAndUpdateChurn_kept {config : Config} {electra :
     (perEpochChurn := churn) (churnLeft := state.exitBalanceToConsume electra) (amount := amount)
     (by omega) (by omega) (by omega)
   obtain ⟨placed, spent, last⟩ := churnQueue_spend queueOk
+  have availableLe : (if state.earliestExitEpoch electra <
+      max (state.earliestExitEpoch electra) firstEpoch then churn
+      else state.exitBalanceToConsume electra).toNat ≤
+        max (start.exitBalanceToConsume electra).toNat (exitChurnCeiling config start) := by
+    split <;> omega
+  generalize (if state.earliestExitEpoch electra <
+      max (state.earliestExitEpoch electra) firstEpoch then churn
+      else state.exitBalanceToConsume electra) = available at spent availableLe
+  have placed := UInt64.le_iff_toNat_le.mp placed
   refine ⟨epoch, left, ?_, ?_, ?_⟩
   · simp only [computeExitEpochAndUpdateChurn, firstOk, churnOk, queueOk, liftArith,
       Except.mapError, bind, Except.bind, pure, Except.pure]
-  · sorry
-  · sorry
+  · rcases last with same | below
+    · rw [same]
+      have := Nat.zero_le (amount.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+      omega
+    · have epochs := epochs_le_div_add_one
+        (epochs := epoch.toNat - (max (state.earliestExitEpoch electra) firstEpoch).toNat)
+        (amount := amount.toNat) positive churnLower (by omega) below
+      omega
+  · rcases last with same | below
+    · rw [same, Nat.sub_self, Nat.zero_mul] at spent
+      omega
+    · omega
+
+/-- A state with a bound keeps the bounds below any larger one. -/
+private theorem Kept.mono {config : Config} {electra : .pectra ≤ fork}
+    {start state : BeaconState preset fork} {bound later : Nat}
+    (kept : Kept config electra start state bound) (le : bound ≤ later) :
+    Kept config electra start state later := by
+  obtain ⟨slot, balances, effective, earliest, exits, left⟩ := kept
+  exact ⟨slot, balances, effective, by omega,
+    fun validator member finite => Nat.le_trans (exits validator member finite) le, left⟩
+
+/-- A validator replaced with the same effective balance keeps the bounds below a larger one.
+
+Its exit epoch, if it has one, must lie below the larger bound. -/
+private theorem Kept.putValidator {config : Config} {electra : .pectra ≤ fork}
+    {start state : BeaconState preset fork} {bound later index : Nat}
+    (inside : index < state.validators.data.size) {validator : Validator}
+    (kept : Kept config electra start state bound) (le : bound ≤ later)
+    (same : validator.effectiveBalance = state.validators.data[index].effectiveBalance)
+    (exit : validator.exitEpoch ≠ FAR_FUTURE_EPOCH → validator.exitEpoch.toNat ≤ later) :
+    Kept config electra start (state.putValidator index inside validator) later := by
+  obtain ⟨slot, balances, effective, earliest, exits, left⟩ := kept.mono le
+  refine ⟨slot, balances, ?_, earliest, ?_, left⟩
+  · simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set]
+    rw [← effective]
+    apply Array.ext (by simp)
+    intro position first second
+    simp only [Array.getElem_map, Array.getElem_set]
+    split
+    · subst_vars
+      exact same
+    · rfl
+  · intro other member finite
+    simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set] at member
+    rcases Array.mem_or_eq_of_mem_set (w := inside) member with old | rfl
+    · exact exits other old finite
+    · exact exit finite
+
+/-- The cost of a validator in the exit queue: its effective balance in increments, plus one.
+
+A validator that has started to exit costs nothing. -/
+private def exitCostOf (preset : Preset) (validator : Validator) : Nat :=
+  if validator.exitEpoch = FAR_FUTURE_EPOCH then
+    validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1
+  else 0
+
+/-- An exit started within the bounds raises them by at most the cost of the validator.
+
+It changes no other validator. -/
+private theorem initiateValidatorExit_kept {config : Config} {electra : .pectra ≤ fork}
+    {start state : BeaconState preset fork} {bound : Nat} {index : ValidatorIndex}
+    (within : start.RegistryWithinLimit) (summed : effectiveBalanceSum start < 2 ^ 64)
+    (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
+    (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
+    (maximum :
+      preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
+    (first : (getCurrentEpoch start).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ bound)
+    (carried : (start.exitBalanceToConsume electra).toNat + 3 * exitChurnCeiling config start <
+      2 ^ 64)
+    (kept : Kept config electra start state bound)
+    (inside : index.toNat < state.validators.data.size)
+    (room : bound + exitCostOf preset state.validators.data[index.toNat] +
+      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64) :
+    ∃ after, initiateValidatorExit config state index = .ok after ∧
+      Kept config electra start after
+        (bound + exitCostOf preset state.validators.data[index.toNat]) ∧
+      ∀ other, other ≠ index.toNat →
+        after.validators.data[other]? = state.validators.data[other]? := by
+  let validator := state.validators.data[index.toNat]
+  have found : getValidator state index = .ok validator := by
+    simp [getValidator, Array.getElem?_eq_getElem inside, validator]
+  by_cases far : validator.exitEpoch = FAR_FUTURE_EPOCH
+  · have cost : exitCostOf preset validator =
+        validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1 := by
+      simp only [exitCostOf, far, ↓reduceIte]
+    have amountLe : validator.effectiveBalance.toNat ≤ effectiveBalanceSum start := by
+      rw [← kept.sum]
+      exact List.le_sum_of_mem (List.mem_map_of_mem
+        (f := fun validator : Validator => validator.effectiveBalance.toNat)
+        (Array.mem_toList_iff.mpr (Array.getElem_mem inside)))
+    change bound + exitCostOf preset validator + _ < _ at room
+    change ∃ after, _ ∧ Kept config electra start after (bound + exitCostOf preset validator) ∧ _
+    rw [cost] at room ⊢
+    obtain ⟨epoch, left, queueOk, epochLe, leftLe⟩ := computeExitEpochAndUpdateChurn_kept
+      within summed increment minimum maximum first carried kept amountLe (by omega)
+    have delayFits :
+        epoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64 := by omega
+    let changed : Validator := { validator with
+      exitEpoch := epoch, withdrawableEpoch := epoch + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY }
+    let queued : BeaconState preset fork := { state with
+      exitBalanceToConsume := fun _ => left, earliestExitEpoch := fun _ => epoch }
+    have queuedKept : Kept config electra start queued
+        (bound + (validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
+          1)) :=
+      ⟨kept.1, kept.2.1, kept.2.2.1, epochLe, fun other member finite =>
+        Nat.le_trans (kept.2.2.2.2.1 other member finite) (Nat.le_add_right _ _), leftLe⟩
+    refine ⟨queued.putValidator index.toNat inside changed, ?_,
+      Kept.putValidator (state := queued) (validator := changed) inside queuedKept
+        (Nat.le_refl _) rfl (fun _ => epochLe), ?_⟩
+    · simp only [initiateValidatorExit, found, far, bne_self_eq_false, exitQueue, electra,
+        ↓reduceDIte, queueOk, liftArith, addChecked_of_lt delayFits, Except.mapError, bind,
+        Except.bind, Bool.false_eq_true, ↓reduceIte]
+      simp [BeaconState.setValidator, inside, queued, changed]
+    · intro other different
+      simp only [queued, BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set]
+      exact Array.getElem?_set_ne inside (Ne.symm different)
+  · refine ⟨state, ?_, kept.mono (Nat.le_add_right _ _), fun _ _ => rfl⟩
+    simp [initiateValidatorExit, found, far, bind, Except.bind, pure, Except.pure]
+
+/-- A validator replaced at one position leaves the validators at the other positions. -/
+private theorem putValidator_getElem?_ne {state : BeaconState preset fork} {index other : Nat}
+    (inside : index < state.validators.data.size) (validator : Validator)
+    (different : other ≠ index) :
+    (state.putValidator index inside validator).validators.data[other]? =
+      state.validators.data[other]? := by
+  simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set]
+  exact Array.getElem?_set_ne inside (Ne.symm different)
+
+/-- One registry update from Electra raises the bounds by at most the cost of its validator.
+
+It changes no other validator. -/
+private theorem updateRegistryEntryElectra_kept {config : Config} {electra : .pectra ≤ fork}
+    {start state : BeaconState preset fork} {bound index : Nat} {activationEpoch : Epoch}
+    (within : start.RegistryWithinLimit) (summed : effectiveBalanceSum start < 2 ^ 64)
+    (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
+    (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
+    (maximum :
+      preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
+    (first : (getCurrentEpoch start).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ bound)
+    (carried : (start.exitBalanceToConsume electra).toNat + 3 * exitChurnCeiling config start <
+      2 ^ 64)
+    (kept : Kept config electra start state bound)
+    (inside : index < state.validators.data.size)
+    (room : bound + exitCostOf preset state.validators.data[index] +
+      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64) :
+    ∃ after, updateRegistryEntryElectra config activationEpoch state index = .ok after ∧
+      Kept config electra start after (bound + exitCostOf preset state.validators.data[index]) ∧
+      ∀ other, other ≠ index →
+        after.validators.data[other]? = state.validators.data[other]? := by
+  let validator := state.validators.data[index]
+  have found : getValidatorAt state index = .ok validator := by
+    simp [getValidatorAt, Array.getElem?_eq_getElem inside, validator]
+  have current := kept.epoch
+  have old : validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
+      validator.exitEpoch.toNat ≤ bound + exitCostOf preset validator :=
+    fun finite => Nat.le_trans (kept.2.2.2.2.1 validator (Array.getElem_mem inside) finite)
+      (Nat.le_add_right _ _)
+  by_cases eligible : isEligibleForActivationQueue preset fork validator
+  · have fits : (getCurrentEpoch state).toNat + (1 : UInt64).toNat < 2 ^ 64 := by
+      simp only [UInt64.toNat_one, current]
+      omega
+    let changed := { validator with activationEligibilityEpoch := getCurrentEpoch state + 1 }
+    refine ⟨state.putValidator index inside changed, ?_,
+      Kept.putValidator (validator := changed) inside kept (Nat.le_add_right _ _) rfl old,
+      fun _ different => putValidator_getElem?_ne inside changed different⟩
+    simp [updateRegistryEntryElectra, liftAccessor, found, eligible, liftArith,
+      addChecked_of_lt fits, Except.mapError, bind, Except.bind, BeaconState.setValidatorAt,
+      inside, changed, validator]
+  by_cases eject : isActiveValidator validator (getCurrentEpoch state) &&
+      validator.effectiveBalance ≤ config.EJECTION_BALANCE
+  · have indexFits : index < 2 ^ 64 := Nat.lt_of_lt_of_le inside (by
+      rw [kept.size]
+      exact Nat.le_trans within (Nat.le_of_lt preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt))
+    have converted : ofNatChecked index = .ok index.toUInt64 := ofNatChecked_of_lt indexFits
+    have indexValue : index.toUInt64.toNat = index := by
+      simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt indexFits]
+    obtain ⟨after, exited, afterKept, others⟩ := initiateValidatorExit_kept
+      (index := index.toUInt64) within summed increment minimum maximum first carried kept
+      (by rw [indexValue]; exact inside) (by simpa only [indexValue] using room)
+    simp only [indexValue] at afterKept others
+    refine ⟨after, ?_, afterKept, others⟩
+    simp only [updateRegistryEntryElectra, liftAccessor, found, eligible, eject, liftArith,
+      converted, exited, Except.mapError, bind, Except.bind, Bool.false_eq_true, ↓reduceIte]
+  by_cases ready : isEligibleForActivation state validator
+  · let changed := { validator with activationEpoch }
+    refine ⟨state.putValidator index inside changed, ?_,
+      Kept.putValidator (validator := changed) inside kept (Nat.le_add_right _ _) rfl old,
+      fun _ different => putValidator_getElem?_ne inside changed different⟩
+    simp [updateRegistryEntryElectra, liftAccessor, found, eligible, eject, ready,
+      Except.mapError, bind, Except.bind, BeaconState.setValidatorAt, inside, changed, validator]
+  · refine ⟨state, ?_, kept.mono (Nat.le_add_right _ _), fun _ _ => rfl⟩
+    simp [updateRegistryEntryElectra, liftAccessor, found, eligible, eject, ready,
+      Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- The cost of the exits not yet started at some positions of the registry. -/
+private def exitCostAt (state : BeaconState preset fork) (indices : List Nat) : Nat :=
+  (indices.map fun index => ((state.validators.data[index]?).map (exitCostOf preset)).getD 0).sum
+
+/-- The cost of the exits not yet started is their cost at every position of the registry. -/
+private theorem exitCost_eq_exitCostAt (state : BeaconState preset fork) :
+    exitCost preset state = exitCostAt state (List.range state.validators.data.size) := by
+  have filtered : ∀ validators : List Validator,
+      ((validators.filter (·.exitEpoch = FAR_FUTURE_EPOCH)).map fun validator =>
+        validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1).sum =
+      (validators.map (exitCostOf preset)).sum := by
+    intro validators
+    induction validators with
+    | nil => rfl
+    | cons validator rest ih =>
+      by_cases far : validator.exitEpoch = FAR_FUTURE_EPOCH <;>
+        simp [far, exitCostOf, ih]
+  unfold exitCost exitCostAt
+  rw [filtered]
+  congr 1
+  apply List.ext_getElem
+  · simp
+  · intro position first second
+    simp [Array.getElem?_eq_getElem (by simpa using first)]
+
+/-- Positions whose validators did not change keep their cost. -/
+private theorem exitCostAt_congr {state other : BeaconState preset fork} {indices : List Nat}
+    (same : ∀ index ∈ indices, other.validators.data[index]? = state.validators.data[index]?) :
+    exitCostAt other indices = exitCostAt state indices := by
+  unfold exitCostAt
+  congr 1
+  exact List.map_congr_left fun index member => by rw [same index member]
+
+/-- The pass from Electra over distinct positions raises the bounds by at most their cost. -/
+private theorem foldlM_updateRegistryEntryElectra_kept {config : Config}
+    {electra : .pectra ≤ fork} {start : BeaconState preset fork} {activationEpoch : Epoch}
+    (within : start.RegistryWithinLimit) (summed : effectiveBalanceSum start < 2 ^ 64)
+    (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
+    (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
+    (maximum :
+      preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
+    (carried : (start.exitBalanceToConsume electra).toNat + 3 * exitChurnCeiling config start <
+      2 ^ 64) :
+    ∀ (indices : List Nat) (state : BeaconState preset fork) (bound : Nat), indices.Nodup →
+      (∀ index ∈ indices, index < state.validators.data.size) →
+      (getCurrentEpoch start).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ bound →
+      Kept config electra start state bound →
+      bound + exitCostAt state indices + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat <
+        2 ^ 64 →
+      ∃ after, indices.foldlM (updateRegistryEntryElectra config activationEpoch) state =
+          .ok after ∧ Kept config electra start after (bound + exitCostAt state indices)
+  | [], state, bound, _, _, _, kept, _ => ⟨state, rfl, by simpa [exitCostAt] using kept⟩
+  | index :: rest, state, bound, distinct, inside, first, kept, room => by
+    obtain ⟨absent, distinct⟩ := List.nodup_cons.mp distinct
+    have inside' := inside index List.mem_cons_self
+    have split : exitCostAt state (index :: rest) =
+        exitCostOf preset state.validators.data[index] + exitCostAt state rest := by
+      simp [exitCostAt, Array.getElem?_eq_getElem inside']
+    rw [split] at room ⊢
+    obtain ⟨middle, step, middleKept, others⟩ := updateRegistryEntryElectra_kept
+      (activationEpoch := activationEpoch) within summed increment minimum maximum first
+      carried kept inside' (by omega)
+    have same : exitCostAt middle rest = exitCostAt state rest :=
+      exitCostAt_congr fun other member => others other (fun equal => absent (equal ▸ member))
+    obtain ⟨after, folded, afterKept⟩ := foldlM_updateRegistryEntryElectra_kept
+      (activationEpoch := activationEpoch) within summed
+      increment minimum maximum carried rest middle _ distinct
+      (fun other member => by
+        rw [middleKept.size, ← kept.size]
+        exact inside other (List.mem_cons_of_mem _ member))
+      (by omega) middleKept (by rw [same]; omega)
+    refine ⟨after, ?_, ?_⟩
+    · simp only [List.foldlM_cons, step, folded, bind, Except.bind]
+    · rw [same] at afterKept
+      simpa only [Nat.add_assoc] using afterKept
 
 /-- From Electra, registry updates succeed under a ceiling on the exit queue and room above it.
 
@@ -317,7 +601,8 @@ theorem processRegistryUpdates_total_of_electra {config : Config}
     (within : state.RegistryWithinLimit) (summed : effectiveBalanceSum state < 2 ^ 64)
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
-    (maximum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
+    (maximum :
+      preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
     (ceiling : Nat)
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
     (queued : (state.earliestExitEpoch electra).toNat ≤ ceiling)
@@ -336,6 +621,23 @@ theorem processRegistryUpdates_total_of_electra {config : Config}
       after.slot = state.slot ∧ after.balances = state.balances ∧
       after.validators.data.map (·.effectiveBalance) =
         state.validators.data.map (·.effectiveBalance) := by
-  sorry
+  let activationEpoch :=
+    ((getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat).toUInt64
+  have activationOk :
+      computeActivationExitEpoch preset (getCurrentEpoch state) = .ok activationEpoch :=
+    computeActivationExitEpoch_ok_iff.mpr ⟨by omega, by
+      change (_ % 2 ^ 64) = _
+      exact Nat.mod_eq_of_lt (by omega)⟩
+  have kept : Kept config electra state state ceiling :=
+    ⟨rfl, rfl, rfl, queued, exits, Nat.le_max_left _ _⟩
+  rw [exitCost_eq_exitCostAt] at room ⊢
+  obtain ⟨after, folded, slot, balances, effective, earliest, afterExits, left⟩ :=
+    foldlM_updateRegistryEntryElectra_kept (activationEpoch := activationEpoch) within summed
+      increment minimum maximum carried (List.range state.validators.data.size) state ceiling
+      List.nodup_range (fun _ member => List.mem_range.mp member) first kept room
+  refine ⟨after, ?_, earliest, afterExits, left, slot, balances, effective⟩
+  simp only [processRegistryUpdates, electra, ↓reduceIte, liftAccessor, liftArith, activationOk,
+    Except.mapError, bind, Except.bind]
+  exact folded
 
 end EthLib.Consensus
