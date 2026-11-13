@@ -45,13 +45,13 @@ The rotation of the pending attestations moves those of the current epoch to the
 
 A root joins the historical roots exactly when their list has room, and it joins at the end.
 
-Before Capella, a successful update at the start of a span adds the root of its two lists of roots.
+Before Capella, a successful update at the start of a span adds the root of the batch of roots.
 
 From Capella, it adds one summary: the root of the block roots, then the root of the state roots.
 
-Away from the start of a span, either update leaves the state unchanged.
+Away from the start of a span, a successful update leaves the state unchanged.
 
-When a next epoch exists, either update fails exactly at the start of a span with a full list.
+In its own forks, with a next epoch, each update fails exactly at a span start with a full list.
 -/
 
 @[expose] public section
@@ -1369,7 +1369,7 @@ theorem appendHistoricalRoot_eq_error_iff
     · rintro ⟨-, rfl⟩
       rfl
 
-/-- The next epoch starts a span of slots exactly when its number in natural numbers does. -/
+/-- The next epoch starts a span of slots exactly when the current epoch plus one does. -/
 private theorem nextEpoch_span_iff {current next : Epoch}
     (sum : next.toNat = current.toNat + 1) :
     next % (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH) = 0 ↔
@@ -1386,7 +1386,7 @@ private theorem addChecked_getCurrentEpoch_one_ok
   ⟨getCurrentEpoch state + 1, addChecked_ok_iff.mpr ⟨by simpa using fits, by simp; omega⟩,
     by simp; omega⟩
 
-/-- A next epoch that starts a span of slots leaves the span a positive length. -/
+/-- When a next epoch starts a span of slots, a span holds at least one slot. -/
 private theorem spanLength_pos {current next : Epoch} (sum : next.toNat = current.toNat + 1)
     (span : next % (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH) = 0) :
     NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by

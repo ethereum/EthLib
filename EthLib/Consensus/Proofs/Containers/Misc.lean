@@ -77,7 +77,7 @@ instance : LawfulSszType SignedBLSToExecutionChange :=
 
 The summary holds the root of the block roots, then the root of the state roots.
 
-The two containers differ only in the names of their fields, which their roots do not read. -/
+Its fields are the roots of the fields of the batch, so both merkleize the same two chunks. -/
 theorem hashTreeRoot_historicalSummary {preset : Preset} {batch : HistoricalBatch preset}
     {blocks states : Root} (blocksRooted : SszType.hashTreeRoot batch.blockRoots = .ok blocks)
     (statesRooted : SszType.hashTreeRoot batch.stateRoots = .ok states) :
