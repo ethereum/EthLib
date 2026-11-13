@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
+import EthLib.Consensus.Proofs.Transition.ChainRoots
 import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.Requests
 
@@ -10,6 +11,12 @@ import EthLib.Consensus.Proofs.Transition.Requests
 A block operation keeps the effective balance of every validator that existed before it.
 
 Before Gloas a whole block keeps them.
+
+Registry updates keep them as well.
+
+Six epoch stages can change the balances, and every other stage keeps them.
+
+An effective-balance update never raises the larger of the effective and the actual balance.
 -/
 
 @[expose] public section
@@ -24,6 +31,10 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 def effectiveAt (s : ForkedBeaconState preset) (i : Nat) : Nat :=
   ((s.state.validators.data[i]?).map (·.effectiveBalance.toNat)).getD 0
 
+/-- The balance at a registry position, or zero past the end of the balances. -/
+def actualBalanceAt (s : ForkedBeaconState preset) (i : Nat) : Nat :=
+  ((s.state.balances.data[i]?).map (·.toNat)).getD 0
+
 /-- The ordering of the effective-balance caps that the departure bound assumes. -/
 structure CapOrder (preset : Preset) : Prop where
   activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE
@@ -34,6 +45,13 @@ theorem CapOrder.mainnet : CapOrder Preset.mainnet := ⟨by decide, by decide⟩
 
 /-- The minimal preset orders its effective-balance caps. -/
 theorem CapOrder.minimal : CapOrder Preset.minimal := ⟨by decide, by decide⟩
+
+/-- A run from a genesis built from deposits ends in a state that satisfies the invariant. -/
+theorem Run.invariant_of_genesis {g x : ForkedBeaconState preset}
+    (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g) :
+    Invariant x.state := by
+  obtain ⟨_, _, _, ok⟩ := genesis
+  exact run.invariant (initializeBeaconStateFromEth1_invariant ok).2
 
 /-- Each validator of the first state keeps its effective balance in the second. -/
 def EffectiveKept {f h : Fork} (s : BeaconState preset f)
@@ -188,6 +206,51 @@ theorem effectiveKept_registryElectra {f : Fork} {s t : BeaconState preset f}
   split at ok
   · exact effectiveKept_setValidatorAt found (liftAccessor_ok.mp ok) rfl
   · cases ok; exact effectiveKept_refl _
+
+private theorem effectiveKept_registryEntry {f : Fork} {s t : BeaconState preset f}
+    {index : Nat} (ok : updateRegistryEntry config s index = .ok t) : EffectiveKept s t := by
+  simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨v, found, queued, queue, marked, set, ok⟩ := ok
+  have same : queued.effectiveBalance = v.effectiveBalance := by
+    unfold queueForActivation at queue
+    split at queue
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at queue
+      obtain ⟨_, _, rfl⟩ := queue
+      rfl
+    · cases queue; rfl
+  have first := effectiveKept_setValidatorAt found set same
+  split at ok
+  · simp only [bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, exited⟩ := ok
+    exact effectiveKept_trans first (effectiveKept_exit exited)
+      (Nat.le_of_eq (sameSizes_setValidatorAt set).1.symm)
+  · cases ok; exact first
+
+private theorem effectiveKept_activate {f : Fork} {s t : BeaconState preset f}
+    {index : ValidatorIndex} (ok : activateValidator s index = .ok t) : EffectiveKept s t := by
+  simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨_, found, _, _, set⟩ := ok
+  exact effectiveKept_setValidator found set rfl
+
+/-- Registry updates keep the effective balance of every validator. -/
+theorem effectiveKept_registry {f : Fork} {s t : BeaconState preset f}
+    (ok : processRegistryUpdates config s = .ok t) : EffectiveKept s t := by
+  unfold processRegistryUpdates at ok
+  split at ok
+  · simp only [bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, ok⟩ := ok
+    exact effectiveKept_fold (fun _ _ _ => effectiveKept_registryElectra)
+      (fun _ _ _ ok => (frame_updateRegistryEntryElectra ok).registryGrows) ok
+  · simp only [bind_ok_iff] at ok
+    obtain ⟨_, updated, activated⟩ := ok
+    exact effectiveKept_trans
+      (effectiveKept_fold (fun _ _ _ => effectiveKept_registryEntry)
+        (fun _ _ _ ok => (frame_updateRegistryEntry ok).registryGrows) updated)
+      (effectiveKept_fold (fun _ _ _ => effectiveKept_activate)
+        (fun _ _ _ ok => (frame_activateValidator ok).registryGrows) activated)
+      (foldlM_ok_invariant (fun t => s.validators.data.size ≤ t.validators.data.size)
+        (fun _ _ _ previous ok => previous.trans (frame_updateRegistryEntry ok).registryGrows)
+        (Nat.le_refl _) updated)
 
 private theorem effectiveKept_excess {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {index : ValidatorIndex}
@@ -375,5 +438,136 @@ theorem effectiveKept_block {f : Fork} {s t : BeaconState preset f}
         (by rw [(processAttestation_registry attested).1]),
       (frame_processAttestation attested).registryGrows⟩) attestedOk) <|
     trans rest tail).1
+
+/-- An epoch stage keeps the balances, unless it is one of six stages.
+
+Those are rewards, registry updates, slashings, the two pending stages and effective balances. -/
+theorem EpochStage.Edge.balances_eq {f : Fork} {stage : EpochStage}
+    {s t : BeaconState preset f} (edge : EpochStage.Edge config checks stage s t)
+    (other : stage ≠ .rewards ∧ stage ≠ .registry ∧ stage ≠ .slashings ∧
+      stage ≠ .pendingDeposits ∧ stage ≠ .pendingConsolidations ∧ stage ≠ .effectiveBalances) :
+    t.balances = s.balances := by
+  cases stage <;> simp only [EpochStage.Edge] at edge
+  case justification =>
+    obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok edge
+    · rfl
+    · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
+      rw [← rest]
+  case inactivity =>
+    split at edge
+    · rw [processInactivityUpdates_frame edge]
+    · exact edge ▸ rfl
+  case eth1Reset =>
+    split at edge
+    · simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at edge
+      obtain ⟨_, _, edge⟩ := edge
+      split at edge <;> cases edge <;> rfl
+    · exact edge ▸ rfl
+  case payments =>
+    split at edge
+    · rw [processBuilderPendingPayments_eq edge]
+    · exact edge ▸ rfl
+  case slashingsReset =>
+    obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
+    rfl
+  case randaoReset =>
+    obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq edge
+    rfl
+  case history =>
+    split at edge
+    · unfold processHistoricalSummariesUpdate at edge
+      simp only [bind, Except.bind, pure, Except.pure] at edge
+      repeat' (split at edge <;> try cases edge)
+      all_goals rfl
+    · unfold processHistoricalRootsUpdate at edge
+      split at edge
+      · cases edge
+      simp only [bind_ok_iff, liftAccessor_ok] at edge
+      obtain ⟨_, _, edge⟩ := edge
+      split at edge
+      · simp only [bind_ok_iff, liftSsz_ok, pure, Except.pure, Except.ok.injEq] at edge
+        obtain ⟨_, _, _, _, rfl⟩ := edge
+        rfl
+      · cases edge; rfl
+  case participation =>
+    split at edge
+    · subst edge
+      rfl
+    · unfold processParticipationRecordUpdates at edge
+      split at edge
+      · cases edge
+      · cases edge; rfl
+  case syncCommittees =>
+    split at edge
+    · unfold processSyncCommitteeUpdates at edge
+      simp only [bind, Except.bind, pure, Except.pure] at edge
+      repeat' (split at edge <;> try cases edge)
+      all_goals rfl
+    · exact edge ▸ rfl
+  case proposerLookahead =>
+    split at edge
+    · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
+        Except.ok.injEq] at edge
+      obtain ⟨_, _, _, _, rfl⟩ := edge
+      rfl
+    · exact edge ▸ rfl
+  case ptcWindow =>
+    split at edge
+    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
+      obtain ⟨_, _, _, _, rfl⟩ := edge
+      rfl
+    · exact edge ▸ rfl
+  all_goals simp at other
+
+/-- The stages after the effective-balance update keep the validators and the balances. -/
+theorem balanceDrift_late {f : Fork} {s t : BeaconState preset f}
+    (trace : EpochTrace (EpochStage.action config checks)
+      [.slashingsReset, .randaoReset, .history, .participation, .syncCommittees,
+        .proposerLookahead, .ptcWindow] s t) :
+    t.validators = s.validators ∧ t.balances = s.balances := by
+  refine EpochTrace.transport
+    (R := fun a b : BeaconState preset f => b.validators = a.validators ∧ b.balances = a.balances)
+    (fun _ => ⟨rfl, rfl⟩) (fun one two => ⟨two.1.trans one.1, two.2.trans one.2⟩) ?_ trace
+  intro k member a b computed
+  have edge := EpochStage.action_cases.mp computed
+  cases k
+  case rewards | registry | slashings | pendingDeposits | pendingConsolidations
+    | effectiveBalances => simp at member
+  all_goals exact ⟨edge.validators_eq ⟨nofun, nofun, nofun⟩,
+    edge.balances_eq ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩⟩
+
+
+/-- An effective-balance update cannot increase the funding held at any registry position. -/
+private theorem updateEffectiveBalance_funding {fork : Fork} {s t : BeaconState preset fork}
+    {index : Nat} (ok : updateEffectiveBalance s index = .ok t) (i : Nat) :
+    max (effectiveAt ⟨fork, t⟩ i) (actualBalanceAt ⟨fork, t⟩ i) ≤
+      max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i) := by
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨validator, found, balance, read, effective, updated, set⟩ := ok
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
+  have old : s.validators.data[index]? = some validator := by
+    simpa [getValidatorAt, inside] using found
+  by_cases same : i = index
+  · subst i
+    have actual : actualBalanceAt ⟨fork, s⟩ index = balance.toNat := by
+      simp [actualBalanceAt, getBalanceAt_eq_ok_iff.mp read]
+    have bound := updatedEffectiveBalance_le_max updated
+    simpa [effectiveAt, actualBalanceAt, BeaconState.putValidator,
+      Serialization.Ssz.RootedForkList.data_set, old, ← actual] using
+      (max_le bound (Nat.le_max_right validator.effectiveBalance.toNat balance.toNat))
+  · simp [effectiveAt, actualBalanceAt, BeaconState.putValidator,
+      Serialization.Ssz.RootedForkList.data_set, Ne.symm same]
+
+/-- The full effective-balance pass cannot mint funding, including at inactive positions. -/
+theorem processEffectiveBalanceUpdates_funding {fork : Fork} {s t : BeaconState preset fork}
+    (ok : processEffectiveBalanceUpdates s = .ok t) (i : Nat) :
+    max (effectiveAt ⟨fork, t⟩ i) (actualBalanceAt ⟨fork, t⟩ i) ≤
+      max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i) := by
+  unfold processEffectiveBalanceUpdates at ok
+  exact foldlM_ok_invariant
+    (fun t => max (effectiveAt ⟨fork, t⟩ i) (actualBalanceAt ⟨fork, t⟩ i) ≤
+      max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i))
+    (fun _ _ _ previous step => (updateEffectiveBalance_funding step i).trans previous)
+    (Nat.le_refl _) ok
 
 end EthLib.Consensus

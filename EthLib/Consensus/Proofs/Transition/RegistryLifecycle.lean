@@ -308,18 +308,18 @@ theorem registryLifecycle_slashValidator {slashedIndex : ValidatorIndex}
 
 /-! ## The steps of a block -/
 
-private theorem registryLifecycle_processBlockHeader {block : BeaconBlock preset fork}
+theorem registryLifecycle_processBlockHeader {block : BeaconBlock preset fork}
     (computed : processBlockHeader state block = .ok after) : RegistryLifecycle state after := by
   obtain ⟨_, _, rfl⟩ := processBlockHeader_eq computed
   exact .of_data rfl
 
-private theorem registryLifecycle_processRandao {body : BeaconBlockBody preset fork}
+theorem registryLifecycle_processRandao {body : BeaconBlockBody preset fork}
     (computed : processRandao config checks state body = .ok after) :
     RegistryLifecycle state after := by
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq computed
   exact .of_data rfl
 
-private theorem registryLifecycle_processEth1Data {before : fork < .hegota}
+theorem registryLifecycle_processEth1Data {before : fork < .hegota}
     {body : BeaconBlockBody preset fork}
     (computed : processEth1Data before state body = .ok after) : RegistryLifecycle state after := by
   obtain ⟨_, _, rest⟩ := processEth1Data_eq computed
@@ -522,7 +522,7 @@ private theorem registryLifecycle_queueExcessActiveBalance {electra : .pectra �
     exact .refl _
 
 /-- A switch to compounding changes only the withdrawal credentials of the validator. -/
-private theorem registryLifecycle_switchToCompoundingValidator {electra : .pectra ≤ fork}
+theorem registryLifecycle_switchToCompoundingValidator {electra : .pectra ≤ fork}
     {index : ValidatorIndex}
     (computed : switchToCompoundingValidator state electra index = .ok after) :
     RegistryLifecycle state after := by
@@ -807,7 +807,7 @@ private theorem registryLifecycle_activateValidator {index : ValidatorIndex} {va
   exact .setValidator oldFound set ⟨fun set => absurd far set, fun _ => rfl⟩
 
 /-- Each index in the activation queue is that of a validator eligible for activation. -/
-private theorem mem_activationQueue {index : ValidatorIndex}
+theorem mem_activationQueue {index : ValidatorIndex}
     (member : index ∈ activationQueue state) :
     ∃ (position : Nat) (validator : Validator), position.toUInt64 = index ∧
       state.validators.data[position]? = some validator ∧
@@ -825,7 +825,7 @@ private theorem mem_activationQueue {index : ValidatorIndex}
   · cases selected
 
 /-- The activation queue holds each index at most once, while the registry is below `2^64`. -/
-private theorem activationQueue_nodup (small : state.validators.data.size < 2 ^ 64) :
+theorem activationQueue_nodup (small : state.validators.data.size < 2 ^ 64) :
     (activationQueue state).Nodup := by
   let entries := state.validators.data.toList.zipIdx.filterMap fun (validator, index) =>
     if isEligibleForActivation state validator then

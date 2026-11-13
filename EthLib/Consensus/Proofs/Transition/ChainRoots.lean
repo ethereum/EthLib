@@ -509,7 +509,7 @@ private theorem Run.records_snoc {first middle last : ForkedBeaconState preset}
     · exact .inr ⟨same, got, succ⟩
 
 /-- The last state of a run keeps the invariant of the first. -/
-private theorem Run.invariant {first last : ForkedBeaconState preset}
+theorem Run.invariant {first last : ForkedBeaconState preset}
     (holds : Invariant first.state) (run : Run config checks first last) :
     Invariant last.state := by
   induction run with

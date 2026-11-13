@@ -5,6 +5,7 @@ public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.Withdrawals
+public import EthLib.Consensus.Transition.EpochUpdates
 public import EthLib.Consensus.Transition.Operations
 
 /-!
@@ -1163,6 +1164,86 @@ theorem applyPendingDeposit_cases {deposit : PendingDeposit}
   · simp only [liftAccessor_ok, bind_ok_iff, liftArith, mapError_ok_iff] at computed
     obtain ⟨index, _, computed⟩ := computed
     exact .inr (.inl ⟨index, computed⟩)
+
+/-- A block deposit changes nothing, queues a pending deposit, or applies at once.
+
+The first case covers a new key with an invalid signature.
+
+The second case is from Electra: it queues the deposit, after it adds a new key with no balance.
+
+The third case is before Electra: the deposit applies as a pending deposit. -/
+theorem applyDeposit_cases {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
+    {signature : BLSSignature}
+    (computed : applyDeposit config checks state pubkey credentials amount signature = .ok after) :
+    after = state ∨
+    (.pectra ≤ fork ∧ ∃ middle pending,
+      (middle = state ∨ addValidatorToRegistry state pubkey credentials 0 = .ok middle) ∧
+        after = { middle with pendingDeposits := fun _ => pending }) ∨
+    (fork < .pectra ∧ applyPendingDeposit config checks state
+      ⟨pubkey, credentials, amount, signature, GENESIS_SLOT⟩ = .ok after) := by
+  unfold applyDeposit at computed
+  split at computed
+  · rename_i electra
+    unfold applyDepositElectra at computed
+    split at computed
+    · simp only [bind_ok_iff] at computed
+      obtain ⟨_, _, computed⟩ := computed
+      split at computed
+      · simp only [bind_ok_iff, liftAccessor_ok] at computed
+        obtain ⟨middle, added, queued⟩ := computed
+        obtain ⟨pending, rfl⟩ := addPendingDeposit_eq queued
+        exact .inr (.inl ⟨electra, middle, pending, .inr added, rfl⟩)
+      · cases computed
+        exact .inl rfl
+    · obtain ⟨pending, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
+      exact .inr (.inl ⟨electra, state, pending, .inl rfl, rfl⟩)
+  · rename_i early
+    exact .inr (.inr ⟨Nat.lt_of_not_le early, computed⟩)
+
+/-- Slashing penalties change only the balances. -/
+theorem processSlashings_eq (computed : processSlashings state = .ok after) :
+    ∃ balances, after = { state with balances } := by
+  have fold {step : BeaconState preset fork → Nat → Except TransitionError _} {xs : List Nat}
+      (kept : ∀ a i b, step a i = .ok b → ∃ balances, b = { a with balances })
+      (computed : xs.foldlM step state = .ok after) : ∃ balances, after = { state with balances } :=
+    by
+    refine foldlM_ok_invariant (fun t => ∃ balances, t = { state with balances }) ?_ ⟨_, rfl⟩
+      computed
+    rintro _ _ _ ⟨_, rfl⟩ stepped
+    obtain ⟨_, rfl⟩ := kept _ _ _ stepped
+    exact ⟨_, rfl⟩
+  -- Each penalty either lowers one balance or leaves the state as it is.
+  have lowered {a b : BeaconState preset fork} {index : ValidatorIndex} {delta : Gwei}
+      (computed : decreaseBalance a index delta = .ok b) : ∃ balances, b = { a with balances } := by
+    obtain ⟨_, _, rfl⟩ := decreaseBalance_eq_ok_iff.mp computed
+    exact ⟨_, rfl⟩
+  unfold processSlashings at computed
+  simp only [bind_ok_iff] at computed
+  obtain ⟨_, _, _, _, _, _, computed⟩ := computed
+  split at computed
+  · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp computed
+    refine fold (fun _ _ _ computed => ?_) applied
+    simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
+      split at computed
+      · simp only [bind_ok_iff, liftAccessor_ok] at computed
+        obtain ⟨_, _, _, _, decreased⟩ := computed
+        exact lowered decreased
+      · cases computed; exact ⟨_, rfl⟩
+    · cases computed; exact ⟨_, rfl⟩
+  · refine fold (fun _ _ _ computed => ?_) computed
+    simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · obtain ⟨_, _, computed⟩ := bind_ok_iff.mp computed
+      split at computed
+      · simp only [bind_ok_iff, liftAccessor_ok] at computed
+        obtain ⟨_, _, _, _, _, _, decreased⟩ := computed
+        exact lowered decreased
+      · cases computed; exact ⟨_, rfl⟩
+    · cases computed; exact ⟨_, rfl⟩
 
 /-- A deposit adds at most one entry to the registry, and keeps each validator there. -/
 theorem applyPendingDeposit_validators_size_le_and_mem {deposit : PendingDeposit}
