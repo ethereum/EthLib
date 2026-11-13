@@ -470,6 +470,12 @@
 #define DOC_consensus_verify_builder_request_auth_signature \
   "Whether a proposer key signed a Gloas request authentication given in SSZ."
 
+#define DOC_consensus_builder_request_auth_failures \
+  "From Gloas: the failed checks of a request for a bid, by name, in order."
+
+#define DOC_consensus_builder_preferences_failures \
+  "From Gloas: the failed checks of a request that submits preferences, by name, in order."
+
 #define DOC_consensus_builder_bid_value \
   "The value of a builder's bid from its two payments and the proposer's execution payment cap."
 

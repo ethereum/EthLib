@@ -629,6 +629,14 @@ def consensus_verify_builder_request_auth_signature(name: str, fork: str, config
     """Whether a proposer key signed a Gloas request authentication given in SSZ."""
     ...
 
+def consensus_builder_request_auth_failures(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, path_slot: int, pubkey: bytes, version_header: str | None, data: bytes) -> list[str]:
+    """From Gloas: the failed checks of a request for a bid, by name, in order."""
+    ...
+
+def consensus_builder_preferences_failures(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, current_slot: int, pubkey: bytes, version_header: str | None, data: bytes) -> list[str]:
+    """From Gloas: the failed checks of a request that submits preferences, by name, in order."""
+    ...
+
 def consensus_builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The value of a builder's bid from its two payments and the proposer's execution payment cap."""
     ...

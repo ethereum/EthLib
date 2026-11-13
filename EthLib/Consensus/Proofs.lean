@@ -10,6 +10,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Identifiers
 public import EthLib.Consensus.Proofs.BuilderApi
 public import EthLib.Consensus.Proofs.BuilderApi.Bid
 public import EthLib.Consensus.Proofs.BuilderApi.Encoding
+public import EthLib.Consensus.Proofs.BuilderApi.RequestAuth
 public import EthLib.Consensus.Proofs.BuilderApi.GloasBid
 public import EthLib.Consensus.Proofs.BuilderApi.Registration
 public import EthLib.Consensus.Proofs.Builders

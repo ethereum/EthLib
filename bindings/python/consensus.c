@@ -102,6 +102,12 @@ eth_consensus_verify_builder_request_auth_signature(
 );
 
 extern lean_object*
+eth_consensus_builder_request_auth_failures(lean_object* args);
+
+extern lean_object*
+eth_consensus_builder_preferences_failures(lean_object* args);
+
+extern lean_object*
 eth_consensus_builder_bid_value(
   lean_object* args
 );
@@ -738,6 +744,22 @@ py_consensus_verify_builder_request_auth_signature(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_verify_builder_request_auth_signature, args, 5, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_builder_request_auth_failures(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_builder_request_auth_failures, args, 8, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_builder_preferences_failures(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_builder_preferences_failures, args, 8, SSZ_ERROR);
 }
 
 PyObject*

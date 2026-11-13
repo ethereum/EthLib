@@ -186,6 +186,40 @@ def verify_builder_request_auth_signature(
     return _native.consensus_verify_builder_request_auth_signature(name, fork, config, pubkey, data)
 
 
+def builder_request_auth_failures(
+    name: str,
+    fork: str,
+    agreed: bytes,
+    path_slot: int,
+    pubkey: bytes,
+    version_header: str | None,
+    data: bytes,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> list[str]:
+    """The names of the checks that fail on a Gloas request for a bid, in order."""
+    return _native.consensus_builder_request_auth_failures(
+        name, fork, config, agreed, path_slot, pubkey, version_header, data
+    )
+
+
+def builder_preferences_failures(
+    name: str,
+    fork: str,
+    agreed: bytes,
+    current_slot: int,
+    pubkey: bytes,
+    version_header: str | None,
+    data: bytes,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> list[str]:
+    """The names of the checks that fail on a Gloas request that submits preferences, in order."""
+    return _native.consensus_builder_preferences_failures(
+        name, fork, config, agreed, current_slot, pubkey, version_header, data
+    )
+
+
 def builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The bid's value in Gwei, with its execution payment capped, not reduced to 64 bits."""
     return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
@@ -1442,6 +1476,8 @@ __all__ = [
     "validate_bid",
     "unblind_signed_blinded_block",
     "verify_builder_request_auth_signature",
+    "builder_request_auth_failures",
+    "builder_preferences_failures",
     "builder_bid_value",
     "consensus_version",
     "consensus_version_fork",
