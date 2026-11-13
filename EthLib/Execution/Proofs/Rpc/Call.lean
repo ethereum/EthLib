@@ -88,6 +88,18 @@ private theorem toTransaction_ok {tx : GenericTransaction} {chainId : UInt64}
   all_goals subst h
   all_goals exact ⟨callWord_ok (by assumption), by simp_all [Transaction.to], rfl⟩
 
+/-- The transaction of a request keeps its gas limit. -/
+private theorem toTransaction_gas {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) : t.gas.toNat = gas := by
+  unfold GenericTransaction.toTransaction at h
+  simp only [bind, Except.bind] at h
+  repeat' (split at h)
+  all_goals simp only [pure, Except.pure, throw, throwThe, MonadExceptOf.throw, reduceCtorEq,
+    Except.ok.injEq] at h
+  all_goals subst h
+  all_goals exact callWord_ok (what := "gas") (by assumption)
+
 /-- What an error of the setup is not.
 
 It never has the revert code.
@@ -320,6 +332,52 @@ private theorem prepareCall_ok {v : ChainView} {tx : GenericTransaction} {p : Bl
     · rw [getAccount_ofBlock] at hbal
       omega
 
+/-- A call prepared again with its own gas limit as the gas of the request prepares the same call.
+-/
+theorem prepareCall_gas_self {v : ChainView} {tx : GenericTransaction} {p : BlockParam}
+    {c : CallChoices} {s : CallSetup} (h : v.prepareCall tx p c = .ok s) :
+    v.prepareCall { tx with gas := some s.transaction.gas.toNat } p c = .ok s := by
+  obtain ⟨r, hr, hb⟩ := ofBlock_eq_ok.mp h
+  refine ofBlock_eq_ok.mpr ⟨r, hr, ?_⟩
+  have hg : s.transaction.gas.toNat = tx.gas.getD (c.gasLimit.getD
+      (if tx.namesFee then (c.environment v r).env
+        else { (c.environment v r).env with baseFeePerGas := fun _ => 0 }).gasLimit) := by
+    simp only [bind, Except.bind] at hb
+    repeat' (split at hb)
+    all_goals simp only [pure, Except.pure, reduceCtorEq, Except.ok.injEq] at hb
+    all_goals subst hb
+    all_goals exact toTransaction_gas (by assumption)
+  rw [hg]
+  exact hb
+
+/-- A call run again with its own gas limit as the gas of the request runs the same call. -/
+theorem runCall_gas_self {v : ChainView} {tx : GenericTransaction} {p : BlockParam}
+    {c : CallChoices} {s : CallSetup} (h : v.prepareCall tx p c = .ok s) :
+    v.runCall { tx with gas := some s.transaction.gas.toNat } p c = v.runCall tx p c := by
+  unfold runCall
+  rw [prepareCall_gas_self h, h]
+
+/-- A call prepares, runs its message, and answers from the output of that message. -/
+private theorem ethCall_eq {v : ChainView} {tx : GenericTransaction} {p : BlockParam}
+    {c : CallChoices} :
+    v.ethCall tx p c = (do
+      let s ← v.prepareCall tx p c
+      let o ← s.run.mapError fun _ => callInternalError "the execution aborted"
+      callAnswer o) := by
+  unfold ethCall runCall
+  rcases v.prepareCall tx p c with e | s <;> simp only [bind, Except.bind]
+  rcases s.run with e | o <;> rfl
+
+/-- A call gives a setup and an output exactly when it prepares and its message runs to them. -/
+theorem runCall_eq_ok {v : ChainView} {tx : GenericTransaction} {p : BlockParam}
+    {c : CallChoices} {s : CallSetup} {o : Transactions.CallOutput} :
+    v.runCall tx p c = .ok (s, o) ↔ v.prepareCall tx p c = .ok s ∧ s.run = .ok o := by
+  unfold runCall
+  rcases v.prepareCall tx p c with e | s' <;> simp [bind, Except.bind]
+  rcases hrun : s'.run with e | o' <;> simp [Except.mapError, pure, Except.pure]
+  all_goals rintro rfl
+  all_goals simp [hrun]
+
 /-- A call answers the data `out` exactly when its message ends without an error.
 
 The output of the message is then `out`. -/
@@ -327,7 +385,7 @@ theorem ethCall_eq_ok_iff {v : ChainView} {tx : GenericTransaction} {p : BlockPa
     {c : CallChoices} {out : ByteArray} :
     v.ethCall tx p c = .ok out ↔
       ∃ s o, v.prepareCall tx p c = .ok s ∧ s.run = .ok o ∧ o.error = none ∧ o.output = out := by
-  unfold ethCall
+  rw [ethCall_eq]
   rcases v.prepareCall tx p c with e | s <;> simp [bind, Except.bind]
   rcases s.run with e | o <;> simp [Except.mapError, callAnswer]
   split <;> simp_all
@@ -340,7 +398,7 @@ theorem ethCall_eq_revertError_iff {v : ChainView} {tx : GenericTransaction} {p 
     v.ethCall tx p c = .error (revertError d) ↔
       ∃ s o, v.prepareCall tx p c = .ok s ∧ s.run = .ok o ∧ o.error = some .revert ∧
         o.output = d := by
-  unfold ethCall
+  rw [ethCall_eq]
   rcases hp : v.prepareCall tx p c with e | s
   · simp only [bind, Except.bind, Except.error.injEq, reduceCtorEq, false_and, exists_false,
       iff_false]
@@ -402,7 +460,7 @@ theorem ethCall_ne_insufficientFunds {v : ChainView} {tx : GenericTransaction} {
     (hr : v.resolve p = .ok (some r))
     (hvalue : tx.value.getD 0 ≤ (r.account (tx.sender.getD c.sender)).balance.toNat) :
     v.ethCall tx p c = .error e → e.code ≠ insufficientFunds.code := by
-  unfold ethCall
+  rw [ethCall_eq]
   rcases hp : v.prepareCall tx p c with e' | s
   · simp only [bind, Except.bind, Except.error.injEq]
     rintro rfl hcode
