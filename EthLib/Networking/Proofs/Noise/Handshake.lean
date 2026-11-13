@@ -224,4 +224,324 @@ theorem handshake_complete (si ei sr er : Key) (prologue p₁ p₂ p₃ : ByteAr
       hx₂, decryptAndHash_encryptAndHash hep₃]
   exact ⟨_, _, _, _, _, _, _, _, _, _, _, hw₁, hr₁, hw₂, hr₂, hw₃, hr₃, rfl, rfl, rfl, rfl, rfl⟩
 
+
+/-! ## The chaining key of each message
+
+Each token `ee`, `es` and `se` of Noise §5.3 mixes one X25519 output into the chaining key.
+
+For each message of XX, the theorems below name the outputs that the chaining key takes, in order.
+
+A token computed from the wrong pair of keys therefore fails them, even when both peers agree on it.
+-/
+
+/-- Mixing a key replaces the chaining key by the first HKDF output. -/
+private theorem chainingKey_mixKey (s : SymmetricState) (input : Key) :
+    (mixKey s input).chainingKey = ⟨(hkdf2 s.chainingKey (packBytes input)).1⟩ := rfl
+
+/-- Encrypting and hashing leaves the chaining key. -/
+private theorem chainingKey_of_encryptAndHash {s next : SymmetricState} {p c : ByteArray}
+    (h : encryptAndHash s p = .ok (next, c)) : next.chainingKey = s.chainingKey := by
+  unfold encryptAndHash at h
+  cases hc : encryptWithAd s.cipher (packBytes s.hash.bytes) p with
+  | error e => simp [hc, bind, Except.bind] at h
+  | ok r =>
+    simp only [hc, bind, Except.bind, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+    rw [← h.1]
+    rfl
+
+/-- Decrypting and hashing leaves the chaining key. -/
+private theorem chainingKey_of_decryptAndHash {s next : SymmetricState} {c p : ByteArray}
+    (h : decryptAndHash s c = .ok (next, p)) : next.chainingKey = s.chainingKey := by
+  unfold decryptAndHash at h
+  cases hc : decryptWithAd s.cipher (packBytes s.hash.bytes) c with
+  | error e => simp [hc, bind, Except.bind] at h
+  | ok r =>
+    simp only [hc, bind, Except.bind, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+    rw [← h.1]
+    rfl
+
+/-- Writing keeps the local keys and the remote ephemeral key. -/
+private theorem keys_of_writeMessage {s next : HandshakeState} {payload message : ByteArray}
+    (h : writeMessage s payload = .ok (next, message)) :
+    next.staticKey = s.staticKey ∧ next.ephemeralKey = s.ephemeralKey ∧
+      next.remoteEphemeral = s.remoteEphemeral := by
+  dsimp only [writeMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  rename_i w hw
+  cases h
+  exact ⟨rfl, rfl, rfl⟩
+
+/-- Reading keeps the local keys. -/
+private theorem keys_of_readMessage {s next : HandshakeState} {message payload : ByteArray}
+    (h : readMessage s message = .ok (next, payload)) :
+    next.staticKey = s.staticKey ∧ next.ephemeralKey = s.ephemeralKey := by
+  dsimp only [readMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  rename_i w hw
+  cases h
+  split at hv <;> (repeat' split at hv) <;> cases hv <;> exact ⟨rfl, rfl⟩
+
+/-- Writing message 1 leaves the chaining key, since its one token `e` mixes only the hash. -/
+theorem chainingKey_writeMessage_of_step_eq_zero {s next : HandshakeState}
+    {payload message : ByteArray} (h : writeMessage s payload = .ok (next, message))
+    (hs : s.step = 0) : next.symmetric.chainingKey = s.symmetric.chainingKey := by
+  dsimp only [writeMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  rename_i w hw
+  cases h
+  rw [chainingKey_of_encryptAndHash hw]
+  split at hv
+  · split at hv
+    · cases hv
+    · cases hv
+      rfl
+  all_goals first | omega | cases hv
+
+/-- Reading message 1 leaves the chaining key, since its one token `e` mixes only the hash. -/
+theorem chainingKey_readMessage_of_step_eq_zero {s next : HandshakeState}
+    {message payload : ByteArray} (h : readMessage s message = .ok (next, payload))
+    (hs : s.step = 0) : next.symmetric.chainingKey = s.symmetric.chainingKey := by
+  dsimp only [readMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  rename_i w hw
+  cases h
+  rw [chainingKey_of_decryptAndHash hw]
+  split at hv
+  · split at hv
+    · cases hv
+      rfl
+    · cases hv
+  all_goals first | omega | cases hv
+
+/-- Writing message 2 mixes `ee`, then `es`, into the chaining key, Noise §7.5.
+
+The responder computes `ee` from its ephemeral key and `es` from its static key.
+
+Both take the remote ephemeral key, which the state must hold. -/
+theorem chainingKey_writeMessage_of_step_eq_one {s next : HandshakeState}
+    {payload message : ByteArray} (h : writeMessage s payload = .ok (next, message))
+    (hs : s.step = 1) :
+    ∃ re, s.remoteEphemeral = some re ∧ next.symmetric.chainingKey =
+      ⟨(hkdf2 ⟨(hkdf2 s.symmetric.chainingKey (packBytes (X25519.x25519 s.ephemeralKey re))).1⟩
+        (packBytes (X25519.x25519 s.staticKey re))).1⟩ := by
+  dsimp only [writeMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  rename_i w hw
+  cases h
+  rw [chainingKey_of_encryptAndHash hw]
+  split at hv
+  · omega
+  · split at hv
+    · cases hv
+    cases hr : s.remoteEphemeral with
+    | none => simp [hr, requireKey] at hv
+    | some re =>
+      simp only [hr, requireKey] at hv
+      split at hv
+      · cases hv
+      rename_i u hu
+      cases hv
+      refine ⟨re, rfl, ?_⟩
+      rw [chainingKey_mixKey, chainingKey_of_encryptAndHash hu, chainingKey_mixKey]
+      rfl
+  all_goals first | omega | cases hv
+
+/-- Reading message 2 mixes `ee`, then `es`, into the chaining key, Noise §7.5.
+
+The initiator computes both from its ephemeral key.
+
+`ee` takes the remote ephemeral key and `es` the remote static key, which the state then stores. -/
+theorem chainingKey_readMessage_of_step_eq_one {s next : HandshakeState}
+    {message payload : ByteArray} (h : readMessage s message = .ok (next, payload))
+    (hs : s.step = 1) :
+    ∃ re rs, next.remoteEphemeral = some re ∧ next.remoteStatic = some rs ∧
+      next.symmetric.chainingKey =
+        ⟨(hkdf2 ⟨(hkdf2 s.symmetric.chainingKey (packBytes (X25519.x25519 s.ephemeralKey re))).1⟩
+          (packBytes (X25519.x25519 s.ephemeralKey rs))).1⟩ := by
+  dsimp only [readMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  rename_i w hw
+  cases h
+  rw [chainingKey_of_decryptAndHash hw]
+  split at hv
+  · omega
+  · split at hv
+    · split at hv
+      · cases hv
+      rename_i u hu
+      split at hv
+      · cases hv
+      cases hv
+      refine ⟨_, _, rfl, rfl, ?_⟩
+      rw [chainingKey_mixKey, chainingKey_of_decryptAndHash hu, chainingKey_mixKey]
+      rfl
+    · cases hv
+  all_goals first | omega | cases hv
+
+/-- Writing message 3 mixes `se` into the chaining key, Noise §7.5.
+
+The initiator computes it from its static key and the remote ephemeral key. -/
+theorem chainingKey_writeMessage_of_step_eq_two {s next : HandshakeState}
+    {payload message : ByteArray} (h : writeMessage s payload = .ok (next, message))
+    (hs : s.step = 2) :
+    ∃ re, s.remoteEphemeral = some re ∧ next.symmetric.chainingKey =
+      ⟨(hkdf2 s.symmetric.chainingKey (packBytes (X25519.x25519 s.staticKey re))).1⟩ := by
+  dsimp only [writeMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  rename_i w hw
+  cases h
+  rw [chainingKey_of_encryptAndHash hw]
+  split at hv
+  · omega
+  · omega
+  · split at hv
+    · cases hv
+    cases hr : s.remoteEphemeral with
+    | none => simp [hr, requireKey] at hv
+    | some re =>
+      simp only [hr, requireKey] at hv
+      split at hv
+      · cases hv
+      rename_i u hu
+      cases hv
+      refine ⟨re, rfl, ?_⟩
+      rw [chainingKey_mixKey, chainingKey_of_encryptAndHash hu]
+  · cases hv
+
+/-- Reading message 3 mixes `se` into the chaining key, Noise §7.5.
+
+The responder computes it from its ephemeral key and the remote static key, which it then stores.
+
+The stored remote ephemeral key stays as it was. -/
+theorem chainingKey_readMessage_of_step_eq_two {s next : HandshakeState}
+    {message payload : ByteArray} (h : readMessage s message = .ok (next, payload))
+    (hs : s.step = 2) :
+    next.remoteEphemeral = s.remoteEphemeral ∧ ∃ rs, next.remoteStatic = some rs ∧
+      next.symmetric.chainingKey =
+        ⟨(hkdf2 s.symmetric.chainingKey (packBytes (X25519.x25519 s.ephemeralKey rs))).1⟩ := by
+  dsimp only [readMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  rename_i w hw
+  cases h
+  rw [chainingKey_of_decryptAndHash hw]
+  split at hv
+  · omega
+  · omega
+  · split at hv
+    · split at hv
+      · cases hv
+      rename_i u hu
+      split at hv
+      · cases hv
+      cases hv
+      refine ⟨rfl, _, rfl, ?_⟩
+      rw [chainingKey_mixKey, chainingKey_of_decryptAndHash hu]
+    · cases hv
+  · cases hv
+
+/-- After message 3, the initiator's chaining key has mixed `ee`, `es` and `se`, in that order.
+
+The first chaining key is the one that the protocol name sets, Noise §5.2.
+
+`ee` and `es` take its ephemeral key, with the remote ephemeral key and the remote static key.
+
+`se` takes its static key and the remote ephemeral key. -/
+theorem chainingKey_writeMessage_readMessage_writeMessage {si ei : Key}
+    {prologue p₁ p₂ p₃ m₁ m₂ m₃ : ByteArray} {i₁ i₂ i₃ : HandshakeState}
+    (h₁ : writeMessage (initializeHandshake true si ei prologue) p₁ = .ok (i₁, m₁))
+    (h₂ : readMessage i₁ m₂ = .ok (i₂, p₂)) (h₃ : writeMessage i₂ p₃ = .ok (i₃, m₃)) :
+    ∃ re rs, i₃.remoteEphemeral = some re ∧ i₃.remoteStatic = some rs ∧
+      i₃.symmetric.chainingKey =
+        ⟨(hkdf2 ⟨(hkdf2 ⟨(hkdf2 initializeSymmetric.chainingKey
+          (packBytes (X25519.x25519 ei re))).1⟩ (packBytes (X25519.x25519 ei rs))).1⟩
+          (packBytes (X25519.x25519 si re))).1⟩ := by
+  have c₁ := chainingKey_writeMessage_of_step_eq_zero h₁ rfl
+  have k₁ := keys_of_writeMessage h₁
+  have s₁ := (writeMessage_ok h₁).2.1
+  obtain ⟨re, rs, hre, hrs, c₂⟩ := chainingKey_readMessage_of_step_eq_one h₂ s₁
+  have k₂ := keys_of_readMessage h₂
+  have s₂ := (readMessage_ok h₂).2.1
+  obtain ⟨re', hre', c₃⟩ := chainingKey_writeMessage_of_step_eq_two h₃ (by rw [s₂, s₁]; rfl)
+  rw [hre] at hre'
+  cases hre'
+  refine ⟨re, rs, by rw [(keys_of_writeMessage h₃).2.2, hre],
+    by rw [(writeMessage_ok h₃).2.2.1, hrs], ?_⟩
+  rw [c₃, c₂, c₁, k₂.1, k₁.1, k₁.2.1]
+  rfl
+
+/-- After message 3, the responder's chaining key has mixed `ee`, `es` and `se`, in that order.
+
+The first chaining key is the one that the protocol name sets, Noise §5.2.
+
+`ee` and `es` take the remote ephemeral key, with its ephemeral key and its static key.
+
+`se` takes its ephemeral key and the remote static key. -/
+theorem chainingKey_readMessage_writeMessage_readMessage {sr er : Key}
+    {prologue p₁ p₂ p₃ m₁ m₂ m₃ : ByteArray} {r₁ r₂ r₃ : HandshakeState}
+    (h₁ : readMessage (initializeHandshake false sr er prologue) m₁ = .ok (r₁, p₁))
+    (h₂ : writeMessage r₁ p₂ = .ok (r₂, m₂)) (h₃ : readMessage r₂ m₃ = .ok (r₃, p₃)) :
+    ∃ re rs, r₃.remoteEphemeral = some re ∧ r₃.remoteStatic = some rs ∧
+      r₃.symmetric.chainingKey =
+        ⟨(hkdf2 ⟨(hkdf2 ⟨(hkdf2 initializeSymmetric.chainingKey
+          (packBytes (X25519.x25519 er re))).1⟩ (packBytes (X25519.x25519 sr re))).1⟩
+          (packBytes (X25519.x25519 er rs))).1⟩ := by
+  have c₁ := chainingKey_readMessage_of_step_eq_zero h₁ rfl
+  have k₁ := keys_of_readMessage h₁
+  have s₁ := (readMessage_ok h₁).2.1
+  obtain ⟨re, hre, c₂⟩ := chainingKey_writeMessage_of_step_eq_one h₂ s₁
+  have k₂ := keys_of_writeMessage h₂
+  have s₂ := (writeMessage_ok h₂).2.1
+  obtain ⟨he₃, rs, hrs, c₃⟩ := chainingKey_readMessage_of_step_eq_two h₃ (by rw [s₂, s₁]; rfl)
+  refine ⟨re, rs, by rw [he₃, k₂.2.2, hre], hrs, ?_⟩
+  rw [c₃, c₂, c₁, k₂.2.1, k₁.1, k₁.2]
+  rfl
+
 end EthLib.Networking.Noise

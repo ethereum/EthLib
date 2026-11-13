@@ -850,7 +850,13 @@ Making a payload fails on the zero secret or when signing fails, so its success 
 Each read of message 2 or 3 then succeeds, so, by `readLibp2p_authenticates`, it verified the signature of the other peer's identity key.
 Completion returns, on each side, the static key, the identity key and the extensions of the other peer, with swapped ciphers.
 
-No theorem says that the chaining key mixed a Diffie-Hellman output with the remote static key.
+The chaining key of each peer has its own theorems in the same file.
+For each message of XX, one theorem names the X25519 outputs that the chaining key mixes, in order, and message 1 mixes none.
+`chainingKey_writeMessage_readMessage_writeMessage` and `chainingKey_readMessage_writeMessage_readMessage` compose them for the initiator and the responder.
+After message 3, each chaining key is the one that the protocol name sets, with `ee`, `es` and `se` mixed in that order.
+Each of the three takes the keys that Noise §7.5 names, and a remote static key is the one that the state then stores.
+If both peers compute a token from the wrong keys, they still agree and the statement of `handshake_complete` still holds, but these theorems do not.
+No theorem ties a stored remote ephemeral key to the bytes of the message that carried it.
 Only the libp2p read verifies an identity, and completion checks that the stored remote has the remote static key of the handshake.
 The raw transport split of an XX state checks neither.
 The Python tests compare the raw XX handshake with a published test vector.
