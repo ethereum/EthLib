@@ -1686,7 +1686,7 @@ def engine_build_payload(config: dict, state: bytes, recent: list[tuple[str, byt
     ...
 
 def engine_forkchoice_updated(config: dict, tree: list, finalized: str | None, terminal_total_difficulty: int, request: dict) -> dict:
-    """The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."""
+    """The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks."""
     ...
 
 def engine_get_blobs(pool: list[tuple[bytes, bytes | None, bytes | None, list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, fork: str, request: dict) -> list | None:

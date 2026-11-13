@@ -30,11 +30,15 @@ Otherwise the head is invalid, with the zero hash as its latest valid hash, and 
 
 A head that is invalid stays invalid, with the latest valid ancestor as the latest valid hash.
 
-That hash is zero when the ancestor is a block of proof of work, as payload validation requires.
+That hash is zero when the ancestor is a block of proof of work, by step 3 of payload validation.
 
 The execution layer may also know a finalized block, the latest one that an earlier update named.
 
 A valid head below that block is valid, and the forkchoice state is neither checked nor applied.
+
+Its chain must still pass the terminal block check, which this model runs first.
+
+The source does not order step 2 and step 3, and a block that fails step 3 is not valid.
 
 The source allows the update to be skipped there, and this model skips it.
 
@@ -48,7 +52,9 @@ Otherwise the state is invalid, with JSON-RPC code `-38002`.
 
 The source allows zero hashes only until the transition block is finalized.
 
-This model takes the transition block as finalized when the known finalized block is a payload.
+This model takes the transition block as finalized when the known finalized block is a held payload.
+
+The finalized hash of the request itself does not count.
 
 A zero safe or finalized hash then gives `-38002`.
 
@@ -216,7 +222,7 @@ structure KnownPayload where
   number : UInt64
   /-- The time of the block, in seconds since the Unix epoch. -/
   timestamp : UInt64
-  /-- For a block of proof of work, its total difficulty and that of its parent; none otherwise. -/
+  /-- For a block of proof of work, its total difficulty and its parent's; `none` otherwise. -/
   powTotalDifficulty : Option (Nat × Nat)
   deriving DecidableEq, Repr
 
@@ -261,7 +267,8 @@ def latestPow (tree : PayloadTree) (hash : Hash32) : Option (Nat × Nat) :=
 
 Its most recent block of proof of work must be terminal.
 
-A chain with no block of proof of work in the tree passes: its terminal block is not known. -/
+The model lets a chain with no block of proof of work in the tree pass, as one after the transition.
+-/
 def chainPassesTerminalCheck (transition : TransitionConfiguration) (tree : PayloadTree)
     (hash : Hash32) : Bool :=
   match latestPow tree hash with
@@ -271,7 +278,9 @@ def chainPassesTerminalCheck (transition : TransitionConfiguration) (tree : Payl
 
 /-- Whether the transition block is finalized: the known finalized block is a payload in the tree.
 
-Without a known finalized block, or with one that the tree does not hold, it is not. -/
+Without a known finalized block, or with one that the tree does not hold, it is not.
+
+The finalized hash of the request does not count. -/
 def transitionFinalized (tree : PayloadTree) (finalized : Option Hash32) : Bool :=
   match finalized.bind (tree.lookup ·) with
   | some p => !p.isPow
@@ -308,7 +317,7 @@ def forkchoiceUpdated (transition : TransitionConfiguration) (tree : PayloadTree
   match tree.lookup state.headBlockHash with
   | none => pure (⟨.syncing, none⟩, none)
   | some head =>
-    -- Step 3, and step 2 of payload validation: a chain that leaves proof of work too early.
+    -- Step 3, and step 2 of payload validation: the latest block of proof of work must be terminal.
     if !chainPassesTerminalCheck transition tree state.headBlockHash then
       pure (⟨.invalid, some ZERO_HASH⟩, none)
     else if !head.valid then pure (⟨.invalid, latestValidHash tree state.headBlockHash⟩, none)
@@ -574,6 +583,8 @@ They must then fit a structure of the version, and then pass the checks against 
 The attributes of a build are those of the fork of their timestamp.
 
 The versions of the method are 1 to 4; the C export passes no other.
+
+The configuration of the transition gives the terminal total difficulty.
 
 Version 0 reads as 1, and a version above 4 reads as 4. -/
 def forkchoiceUpdatedCall (config : ChainConfig) (transition : TransitionConfiguration)

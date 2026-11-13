@@ -33,13 +33,13 @@ The head is valid, and its chain passes the terminal block check.
 
 The head is not below the known finalized block.
 
-But its safe or its finalized block is zero after the transition, or neither zero nor on its chain.
+Its safe or its finalized block is then zero after the transition, or neither zero nor on its chain.
 
 Otherwise such a head is valid and becomes the head.
 
 A head that the execution layer does not hold gives a syncing update.
 
-An invalid head names as latest valid hash the valid block of its chain nearest the head.
+An invalid head names the valid block of its chain nearest the head.
 
 There is none when no block of the chain is valid.
 
@@ -180,9 +180,9 @@ theorem getElem?_succ_chainOf {h b : Hash32} {i : Nat} (hb : (chainOf tree h)[i 
     ∃ a p, (chainOf tree h)[i]? = some a ∧ tree.lookup a = some p ∧ b = p.parentHash :=
   getElem?_succ_ancestors hb
 
-/-- The latest valid hash of an invalid block is zero, or a valid payload of its chain.
+/-- The latest valid hash of a block is zero, or a valid payload of its chain.
 
-It is never the hash of a block of proof of work. -/
+Otherwise it is not the hash of a block of proof of work. -/
 theorem latestValidHash_spec {h v : Hash32} (hv : latestValidHash tree h = some v) :
     v = ZERO_HASH ∨
       v ∈ chainOf tree h ∧ ∃ p, tree.lookup v = some p ∧ p.valid = true ∧ p.isPow = false := by
@@ -204,6 +204,28 @@ theorem latestValidHash_spec {h v : Hash32} (hv : latestValidHash tree h = some 
         subst hv
         exact ⟨hmem, p, hk, by simpa [hk] using hvalid, by simpa using hpow⟩
 
+/-- The latest valid hash is that of the latest valid block, or zero for a block of proof of work.
+-/
+theorem latestValidHash_eq_some_iff {h v : Hash32} :
+    latestValidHash tree h = some v ↔ ∃ w p, latestValid tree h = some w ∧
+      tree.lookup w = some p ∧ v = if p.isPow then ZERO_HASH else w := by
+  unfold latestValidHash
+  cases hl : latestValid tree h with
+  | none => simp
+  | some w =>
+    obtain ⟨-, hvalid⟩ := latestValid_spec hl
+    cases hk : tree.lookup w with
+    | none => simp [hk] at hvalid
+    | some p =>
+      simp only [Option.map_some, hk, Option.any_some, Option.some.injEq]
+      constructor
+      · rintro rfl
+        exact ⟨w, p, rfl, hk, rfl⟩
+      · rintro ⟨w', p', rfl, hp', rfl⟩
+        rw [hk] at hp'
+        cases hp'
+        rfl
+
 /-- The latest valid hash is zero when the latest valid block is of proof of work. -/
 theorem latestValidHash_of_isPow {h v : Hash32} {p : KnownPayload}
     (hv : latestValid tree h = some v) (hp : tree.lookup v = some p) (hPow : p.isPow = true) :
@@ -222,6 +244,40 @@ theorem latestPow_of_lookup {h : Hash32} {p : KnownPayload} {totals : Nat × Nat
       simp only [hch, List.head?_cons, Option.some.injEq] at hc
       exact ⟨rest, by rw [hc]⟩
   simp [latestPow, hrest, hp, hPow]
+
+/-- A tree that holds two distinct blocks has at least two entries. -/
+theorem two_le_length_of_lookup {a b : Hash32} {p q : KnownPayload}
+    (ha : tree.lookup a = some p) (hb : tree.lookup b = some q) (hne : a ≠ b) :
+    2 ≤ tree.length := by
+  induction tree with
+  | nil => simp at ha
+  | cons e rest ih =>
+    obtain ⟨k, v⟩ := e
+    cases rest with
+    | cons _ _ => simp
+    | nil =>
+      by_cases hka : a = k
+      · by_cases hkb : b = k
+        · exact absurd (hka.trans hkb.symm) hne
+        · have hbk : (b == k) = false := by simp [hkb]
+          simp [List.lookup, hbk] at hb
+      · have hak : (a == k) = false := by simp [hka]
+        simp [List.lookup, hak] at ha
+
+/-- The latest block of proof of work on the chain of a held payload is its parent, if that is one.
+-/
+theorem latestPow_of_parent {h : Hash32} {p q : KnownPayload} {totals : Nat × Nat}
+    (hp : tree.lookup h = some p) (hPayload : p.powTotalDifficulty = none)
+    (hq : tree.lookup p.parentHash = some q) (hPow : q.powTotalDifficulty = some totals) :
+    latestPow tree h = some totals := by
+  have hne : h ≠ p.parentHash := by
+    rintro rfl
+    rw [hp] at hq
+    cases hq
+    simp [hPayload] at hPow
+  obtain ⟨n, hn⟩ : ∃ n, tree.length = n + 2 :=
+    ⟨tree.length - 2, by have := two_le_length_of_lookup hp hq hne; omega⟩
+  simp [latestPow, chainOf, hn, ancestors, hp, hq, hPayload, hPow]
 
 /-- The check on the chain of a held block of proof of work is the check of that block. -/
 theorem chainPassesTerminalCheck_of_lookup {h : Hash32} {p : KnownPayload}
@@ -271,6 +327,20 @@ theorem forkchoiceUpdated_of_pow_not_terminal {p : KnownPayload}
       .ok (⟨.invalid, some ZERO_HASH⟩, none) := by
   exact forkchoiceUpdated_of_not_terminal hp
     (by rw [chainPassesTerminalCheck_of_lookup hp hPow, hTerminal])
+
+/-- A held payload whose parent is a held block of proof of work that is not terminal is invalid.
+
+Its latest valid hash is zero, and the head does not change. -/
+theorem forkchoiceUpdated_of_parent_not_terminal {p q : KnownPayload}
+    {totalDifficulty parentTotalDifficulty : Nat}
+    (hp : tree.lookup state.headBlockHash = some p) (hPayload : p.powTotalDifficulty = none)
+    (hq : tree.lookup p.parentHash = some q)
+    (hPow : q.powTotalDifficulty = some (totalDifficulty, parentTotalDifficulty))
+    (hTerminal : isTerminalPowBlock transition totalDifficulty parentTotalDifficulty = false) :
+    forkchoiceUpdated transition tree finalized state =
+      .ok (⟨.invalid, some ZERO_HASH⟩, none) :=
+  forkchoiceUpdated_of_not_terminal hp
+    (by simp [chainPassesTerminalCheck, latestPow_of_parent hp hPayload hq hPow, hTerminal])
 
 /-- A valid update of a head not below the known finalized block selects that head.
 

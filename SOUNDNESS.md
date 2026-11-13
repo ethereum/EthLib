@@ -3376,18 +3376,21 @@ The theorems about `engine_forkchoiceUpdated` are in `Proofs/ForkchoiceUpdated.l
 The chain of that head also passes the terminal block check, and its safe and finalized hashes are not zero after the transition.
 The exception is step 2 of the method, which `forkchoiceUpdated_of_belowFinalized` covers.
 `onChain_of_forkchoiceUpdated` shows that an applied head is the head that the state names, and `mem_chainOf_of_onChain` that a nonzero safe or finalized hash then names a block of its chain.
-A valid head below the finalized block that the execution layer knows is `VALID` there, and the head does not change.
+A valid head below the finalized block that the execution layer knows, whose chain passes the terminal block check, is `VALID` there, and the head does not change.
 `forkchoiceUpdated_of_invalid` gives the answer for an invalid head, and `latestValid_eq_some_iff` with `getElem?_succ_chainOf` shows that its latest valid block is the valid ancestor nearest the head.
-That block gives the latest valid hash, which is zero when the block is of proof of work, as step 3 of payload validation requires (`latestValidHash_spec`, `latestValidHash_of_isPow`).
+That block gives the latest valid hash, which is zero when the block is of proof of work, as step 3 of payload validation requires (`latestValidHash_eq_some_iff`, `latestValidHash_spec`).
 
 The tree that the execution layer knows may hold blocks of proof of work, each with its total difficulty and that of its parent.
 The most recent block of proof of work on the chain of the head, the head included, must be terminal by the conditions of EIP-3675.
 Step 3 of the method asks this of a head of proof of work, and step 2 of payload validation of a payload.
 `forkchoiceUpdated_of_not_terminal` shows that a head whose chain fails the check is `INVALID`, with the zero hash, and that the head does not change.
-`forkchoiceUpdated_of_pow_not_terminal` states the same for a head of proof of work that is not terminal.
-A chain with no block of proof of work in the tree passes the check, since its terminal block is not known.
+`forkchoiceUpdated_of_pow_not_terminal` states the same for a head of proof of work that is not terminal, and `forkchoiceUpdated_of_parent_not_terminal` for a payload whose parent is such a block.
+The model lets a chain with no block of proof of work in the tree pass the check.
+It assumes such a chain is past the transition; the source would ask for the missing blocks first.
+The check runs before step 2 of the method, so a head below the known finalized block must pass it too; the source does not order the two steps.
 The forkchoice state allows zero safe and finalized hashes only until the transition block is finalized.
 The model takes that block as finalized when the finalized block that the execution layer knows is a payload of the tree.
+The finalized hash of the request itself does not count.
 `forkchoiceUpdated_zero_after_transition` shows that a zero safe or finalized hash then gives `-38002`.
 No step of the method names that error for this case, so the model reads it as an invalid forkchoice state of step 9.
 In version 4, custody columns that decode never change the answer (`forkchoiceUpdatedCall_custody`), and without payload attributes every version gives the same answer (`forkchoiceUpdatedCall_of_null`).

@@ -11616,7 +11616,7 @@
    "docstring":
    "Build a payload on a chain, from attributes, the builder's choices and transactions.\n\nThe arguments are the configuration, the state, the recent blocks, the method and the attributes.\n\nThen come the fee recipient, the extra data, the target gas limit and the transactions.\n\nIt returns the block and the accounts after it in RLP form, the requests and the block value."},
   {"summary":
-   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.",
+   "The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks.",
    "signature":
    "(config: dict, tree: list, finalized: str | None, terminal_total_difficulty: int, request: dict) -> dict",
    "operation": "EthLib.Engine.Exports.forkchoiceUpdatedExport",
@@ -11632,7 +11632,7 @@
       {"constructor": "unknownPayload", "code": 38001}]}],
    "error_class": "EngineError",
    "docstring":
-   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.\n\nThe arguments are the configuration, the tree and the known finalized block.\n\nThe terminal total difficulty and the request follow.\n\nThe terminal total difficulty must be below `2^256`, or the export raises with code 0."},
+   "The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks.\n\nThe arguments are the configuration, the tree and the known finalized block.\n\nThe terminal total difficulty and the request follow.\n\nThe terminal total difficulty must be below `2^256`, or the export raises with code 0."},
   {"summary": "The answer to an `engine_getBlobs` request, from a blob pool.",
    "signature":
    "(pool: list[tuple[bytes, bytes | None, bytes | None, list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, fork: str, request: dict) -> list | None",

@@ -24,6 +24,8 @@ A block of proof of work also has its total difficulty and that of its parent, a
 
 They are the fields `totalDifficulty` and `parentTotalDifficulty`, both present or both absent.
 
+A genesis block of a chain that starts at Paris carries no totals, since it is a payload.
+
 No two of them have the same block hash.
 
 The finalized block that the execution layer knows is a block hash, or `null` for none.
@@ -78,7 +80,7 @@ def knownOfJson (j : Json) : Result (Hash32 × KnownPayload) := do
 def forkchoiceUpdatedVersion (method : String) : Option Nat :=
   methodVersion "forkchoiceUpdated" method
 
-/-- The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.
+/-- The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks.
 
 The execution layer may know a finalized block, from an earlier update.
 
@@ -131,7 +133,7 @@ A response that does not decode is an invalid parameter, with code 32602. -/
 def readForkchoiceResponseExport (args : PyValue) : Result PyValue :=
   pyExport readForkchoiceResponseOf args
 
-/-- The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.
+/-- The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks.
 
 The arguments are the configuration, the tree and the known finalized block.
 

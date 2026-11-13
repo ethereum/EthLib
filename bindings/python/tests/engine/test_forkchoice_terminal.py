@@ -1,9 +1,9 @@
 """The terminal block check and the zero hashes of engine_forkchoiceUpdatedV1 at the transition."""
 
-# Rules: steps 3 and 9 of engine_forkchoiceUpdatedV1, step 2 of payload validation,
-# the note of ForkchoiceStateV1 on zero hashes, and the definitions of EIP-3675.
-# A block is terminal when its total difficulty reaches the terminal total difficulty,
-# and the total difficulty of its parent does not.
+# Rules: steps 3 and 9 of engine_forkchoiceUpdatedV1 and step 2 of payload validation.
+# Also the note of ForkchoiceStateV1 on zero hashes, and the definitions of EIP-3675.
+# A block is terminal when its total difficulty reaches the terminal total difficulty.
+# The total difficulty of its parent must not reach it.
 #
 # ethereum/execution-apis, src/engine/paris.md, commit 3284ee80c3da3e516c53782dde75157cccf1ebdc.
 # ethereum/EIPs, EIPS/eip-3675.md, commit 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445.
@@ -15,7 +15,7 @@ import pytest
 from ethlib import engine
 from raising import raises
 
-from .cases import BLOCK_FORKS, DEPOSIT_CONTRACT_ADDRESS
+from .cases import BLOCK_FORKS, DEPOSIT_CONTRACT_ADDRESS, MAINNET_TERMINAL_TOTAL_DIFFICULTY
 
 # London from block 0, so block 0 is of proof of work, and Paris from block 1.
 CONFIG = {
@@ -26,13 +26,11 @@ CONFIG = {
 
 ZERO = "0x" + "00" * 32
 
-# The terminal total difficulty of mainnet, from the configuration section of EIP-3675.
-MAINNET_TERMINAL_TOTAL_DIFFICULTY = 58750000000000000000000
-
 INVALID_STATE = "engine error: EthLib.Engine.EngineError.invalidForkchoiceState"
 
 
 def _hash(n: int) -> str:
+    """The block hash of block `n`: `n` in 32 big-endian bytes."""
     return "0x" + n.to_bytes(32, "big").hex()
 
 
@@ -43,6 +41,7 @@ def _is_terminal(terminal_total_difficulty: int, total: int, parent_total: int) 
 
 def _pow(block: int, parent: int, total: int, parent_total: int) -> dict:
     """A valid block of proof of work at number 0 and time 10, with its two totals."""
+    # The check reads only the totals, so every block of proof of work shares one number.
     return {
         "blockHash": _hash(block),
         "parentHash": _hash(parent),
@@ -102,20 +101,31 @@ def _status(status: str, latest_valid_hash: str | None) -> dict:
 # The zero hash as latest valid hash, by step 9 for a head that fails the terminal check.
 NOT_TERMINAL = _status("INVALID", ZERO)
 
-M = MAINNET_TERMINAL_TOTAL_DIFFICULTY
 # A terminal total difficulty, then the totals of block 1 and of its parent.
 TOTALS = [
-    # The example of the issue: 90 then 105 crosses 100, and 90 then 95 does not.
+    # From a parent at 90, a total of 105 crosses 100, and one of 95 does not.
     (100, 105, 90),
     (100, 95, 90),
     # The total reaches the terminal total difficulty exactly, or the parent's does too.
     (100, 100, 99),
     (100, 110, 100),
     # The terminal total difficulty of mainnet, far above 64 bits.
-    (M, M, M - 1),
-    (M, M + 1, M),
-    (M, M - 1, M - 2),
-    # The largest terminal total difficulty of 256 bits, and totals above 2^256.
+    (
+        MAINNET_TERMINAL_TOTAL_DIFFICULTY,
+        MAINNET_TERMINAL_TOTAL_DIFFICULTY,
+        MAINNET_TERMINAL_TOTAL_DIFFICULTY - 1,
+    ),
+    (
+        MAINNET_TERMINAL_TOTAL_DIFFICULTY,
+        MAINNET_TERMINAL_TOTAL_DIFFICULTY + 1,
+        MAINNET_TERMINAL_TOTAL_DIFFICULTY,
+    ),
+    (
+        MAINNET_TERMINAL_TOTAL_DIFFICULTY,
+        MAINNET_TERMINAL_TOTAL_DIFFICULTY - 1,
+        MAINNET_TERMINAL_TOTAL_DIFFICULTY - 2,
+    ),
+    # The largest terminal total difficulty of 256 bits, and totals at or above 2^256.
     (2**256 - 1, 2**256, 2**256 - 2),
     (2**256 - 1, 2**300, 2**256),
 ]
@@ -144,9 +154,10 @@ def test_payload_head(terminal_total_difficulty: int, total: int, parent_total: 
 
 
 def test_not_terminal_before_invalid() -> None:
-    """An invalid payload on a block that is not terminal answers zero, not its valid ancestor."""
-    tree = [_pow(1, 0, 95, 90), _payload(2, 1, valid=False)]
-    assert _update(tree, 2, terminal_total_difficulty=100) == NOT_TERMINAL
+    """An invalid payload above a block that is not terminal answers zero, not its valid parent."""
+    # Payload 2 is valid, so a check of validity first would answer its hash instead.
+    tree = [_pow(1, 0, 95, 90), _payload(2, 1), _payload(3, 2, valid=False)]
+    assert _update(tree, 3, terminal_total_difficulty=100) == NOT_TERMINAL
 
 
 def test_not_terminal_with_attributes() -> None:
@@ -178,11 +189,28 @@ def test_latest_valid_payload() -> None:
 def test_no_proof_of_work_block() -> None:
     """A tree with no block of proof of work passes the check, whatever the configuration."""
     tree = [_payload(2, 1)]
-    assert _update(tree, 2, terminal_total_difficulty=100) == _status("VALID", _hash(2))
-    # The default is the terminal total difficulty of a transition not yet decided.
-    state = {"headBlockHash": _hash(2), "safeBlockHash": ZERO, "finalizedBlockHash": ZERO}
-    response = engine.forkchoice_updated(CONFIG, tree, "engine_forkchoiceUpdatedV1", [state, None])
-    assert response == _status("VALID", _hash(2))
+    for terminal_total_difficulty in [0, 100, 2**256 - 1]:
+        response = _update(tree, 2, terminal_total_difficulty=terminal_total_difficulty)
+        assert response == _status("VALID", _hash(2))
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_versions(version: int) -> None:
+    """Versions 1 and 2 of the method run the same terminal check and the same zero rule."""
+    tree = [_pow(1, 0, 95, 90), _pow(2, 0, 105, 90), _payload(3, 2), _payload(4, 3)]
+    method = f"engine_forkchoiceUpdatedV{version}"
+
+    def update(head: int, known_finalized: str | None) -> dict:
+        state = {"headBlockHash": _hash(head), "safeBlockHash": ZERO, "finalizedBlockHash": ZERO}
+        return engine.forkchoice_updated(
+            CONFIG, tree, method, [state, None], known_finalized, terminal_total_difficulty=100
+        )
+
+    assert update(1, None) == NOT_TERMINAL
+    assert update(4, None) == _status("VALID", _hash(4))
+    with raises(engine.EngineError, INVALID_STATE) as error:
+        update(4, _hash(3))
+    assert error.value.code == 38002
 
 
 def test_transition_build() -> None:
@@ -195,7 +223,8 @@ def test_transition_build() -> None:
     }
     response = _update(tree, 1, terminal_total_difficulty=100, attributes=attributes)
     assert response["payloadStatus"] == _status("VALID", _hash(1))["payloadStatus"]
-    assert response["payloadId"] is not None
+    # A payload ID is 8 bytes.
+    assert len(bytes.fromhex(response["payloadId"].removeprefix("0x"))) == 8
 
 
 # The tree of the transition: block 1 is terminal, and payloads 2 and 3 follow it.

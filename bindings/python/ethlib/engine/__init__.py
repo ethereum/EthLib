@@ -1,7 +1,7 @@
 """The Engine API between the consensus and the execution layers."""
 
 from collections.abc import Sequence
-from typing import Any, Final, TypeAlias
+from typing import Any, TypeAlias
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -76,10 +76,6 @@ def build_payload(
     )
 
 
-# The terminal total difficulty that both layers hold while it is not decided: 2^256 - 2^10.
-UNDECIDED_TERMINAL_TOTAL_DIFFICULTY: Final = 2**256 - 2**10
-
-
 def forkchoice_updated(
     config: dict,
     tree: list,
@@ -87,7 +83,7 @@ def forkchoice_updated(
     params: list,
     finalized: str | None = None,
     *,
-    terminal_total_difficulty: int = UNDECIDED_TERMINAL_TOTAL_DIFFICULTY,
+    terminal_total_difficulty: int,
 ) -> dict:
     """The response to an `engine_forkchoiceUpdated` call, against a tree of known blocks."""
     # Each block of the tree has a block hash, a parent hash, a validity, a number and a time.
@@ -341,7 +337,6 @@ __all__ = [
     "new_payload",
     "new_payload_on_chain",
     "forkchoice_updated",
-    "UNDECIDED_TERMINAL_TOTAL_DIFFICULTY",
     "get_blobs",
     "PoolEntry",
     "get_payload",
