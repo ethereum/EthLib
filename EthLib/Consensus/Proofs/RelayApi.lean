@@ -18,6 +18,14 @@ The served bid holds the header, the value, the key and, from Deneb, the commitm
 
 A blinded body that carries the header of that bid unblinds with the payload of the submission.
 
+The JSON that the writer gives for a delivered payload reads back as that payload.
+
+A filter with no field keeps every entry.
+
+A filter with only a slot keeps exactly the entries of that slot.
+
+A sort by value orders the payloads that it is given, and keeps them all.
+
 From Fulu, each entry of the listed validators names the proposer of its slot.
 
 That proposer is the one that the state gives once the slots of the transition reach that slot.
@@ -71,6 +79,82 @@ theorem SubmissionStore.submit_other_slot (store : SubmissionStore preset fork)
     {request : SubmitBlockRequest preset fork} (slot : request.message.slot ≠ store.slot) :
     store.submit request = store := by
   simp [SubmissionStore.submit, slot]
+
+/-! ## The data API -/
+
+instance : LawfulSszType BidTraceV2 :=
+  .container (by decide) (fun _ => rfl) (fun _ => rfl)
+
+/-- The JSON reader gives back every delivered payload that the writer writes. -/
+theorem BidTraceV2.ofApiJson_toApiJson {entry : BidTraceV2} {document : Lean.Json}
+    (wrote : BeaconApi.toApiJson entry = .ok document) :
+    BeaconApi.ofApiJson BidTraceV2 document = .ok entry :=
+  BeaconApi.ofApiJson_toApiJson wrote
+
+/-- The string of an order names that order. -/
+theorem OrderBy.ofName?_name (order : OrderBy) : OrderBy.ofName? order.name = some order := by
+  cases order <;> rfl
+
+/-- A string names an order exactly when it is the string of that order, so others name none. -/
+theorem OrderBy.ofName?_eq_some {text : String} {order : OrderBy} :
+    OrderBy.ofName? text = some order ↔ order.name = text := by
+  constructor
+  · intro named
+    unfold OrderBy.ofName? at named
+    split at named <;> cases named <;> rfl
+  · rintro rfl
+    exact OrderBy.ofName?_name order
+
+/-- The filter with no field keeps every delivered payload. -/
+theorem DeliveredFilter.keeps_empty (entry : BidTraceV2) : ({} : DeliveredFilter).keeps entry := by
+  rfl
+
+/-- The filter with no field keeps every received bid. -/
+theorem ReceivedFilter.keeps_empty (entry : BidTraceV2WithTimestamp) :
+    ({} : ReceivedFilter).keeps entry := by
+  rfl
+
+/-- The filter with only a slot keeps exactly the delivered payloads of that slot. -/
+theorem DeliveredFilter.keeps_slot (slot : Slot) (entry : BidTraceV2) :
+    ({ slot := some slot } : DeliveredFilter).keeps entry ↔ entry.trace.slot = slot := by
+  simp [DeliveredFilter.keeps, eq_comm]
+
+/-- The filter with only a slot keeps exactly the received bids of that slot. -/
+theorem ReceivedFilter.keeps_slot (slot : Slot) (entry : BidTraceV2WithTimestamp) :
+    ({ slot := some slot } : ReceivedFilter).keeps entry ↔ entry.bid.trace.slot = slot := by
+  simp [ReceivedFilter.keeps, eq_comm]
+
+/-- Sorted lowest first, the values never decrease, and the payloads are those of the input. -/
+theorem sortBy_ascending (entries : List BidTraceV2) :
+    (sortBy .ascending entries).Pairwise (fun a b => a.trace.value ≤ b.trace.value) ∧
+      (sortBy .ascending entries).Perm entries := by
+  refine ⟨?_, List.mergeSort_perm _ _⟩
+  have sorted := List.pairwise_mergeSort
+    (le := fun a b : BidTraceV2 => decide (a.trace.value ≤ b.trace.value))
+    (fun a b c first second => by
+      simp only [decide_eq_true_eq] at first second ⊢
+      bv_omega)
+    (fun a b => by
+      simp only [Bool.or_eq_true, decide_eq_true_eq]
+      bv_omega)
+    entries
+  simpa [sortBy] using sorted
+
+/-- Sorted highest first, the values never increase, and the payloads are those of the input. -/
+theorem sortBy_descending (entries : List BidTraceV2) :
+    (sortBy .descending entries).Pairwise (fun a b => b.trace.value ≤ a.trace.value) ∧
+      (sortBy .descending entries).Perm entries := by
+  refine ⟨?_, List.mergeSort_perm _ _⟩
+  have sorted := List.pairwise_mergeSort
+    (le := fun a b : BidTraceV2 => decide (b.trace.value ≤ a.trace.value))
+    (fun a b c first second => by
+      simp only [decide_eq_true_eq] at first second ⊢
+      bv_omega)
+    (fun a b => by
+      simp only [Bool.or_eq_true, decide_eq_true_eq]
+      bv_omega)
+    entries
+  simpa [sortBy] using sorted
 
 /-! ## The validators that a relay lists -/
 
