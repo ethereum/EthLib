@@ -428,6 +428,12 @@
 #define DOC_consensus_api_resolve \
   "The answer to each query, against the store after the steps of a fork choice case."
 
+#define DOC_consensus_builder_api_json \
+  "The JSON body of a response of the Builder API: the version of the fork and the data."
+
+#define DOC_consensus_builder_api_ssz \
+  "The SSZ bytes of the value that a JSON body of the Builder API holds."
+
 #define DOC_consensus_is_valid_builder_signature \
   "Whether the signature of a signed message of the Builder API verifies."
 

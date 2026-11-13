@@ -562,6 +562,12 @@ def bindings : List Binding := [
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, queries: list) -> list",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_builder_api_json", `EthLib.Consensus.Exports.builderApiJsonExport,
+    "(name: str, fork: str, type: str, data: bytes) -> Any",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_builder_api_ssz", `EthLib.Consensus.Exports.builderApiSszExport,
+    "(name: str, fork: str, type: str, document: Any) -> bytes",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_is_valid_builder_signature",
     `EthLib.Consensus.Exports.isValidBuilderSignatureExport,
     "(name: str, fork: str, config: dict[str, Any] | None, type: str, data: bytes) -> bool",

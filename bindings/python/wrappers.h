@@ -388,6 +388,8 @@ PyObject* py_consensus_ssz_static                         (PyObject* self, PyObj
 PyObject* py_consensus_api_json                           (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_ssz                            (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_resolve                        (PyObject* self, PyObject* args);
+PyObject* py_consensus_builder_api_json                   (PyObject* self, PyObject* args);
+PyObject* py_consensus_builder_api_ssz                    (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_builder_signature (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_registration (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_eligible_for_bid (PyObject* self, PyObject* args);
