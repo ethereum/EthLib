@@ -4,8 +4,6 @@ import EthLib.Base.Proofs.Bytes
 public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.G1Group
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
--- Its closed equality check needs the body of Batteries' derived `Except` instance.
-import all Batteries.Data.Except
 -- The kernel reduces the check of the zero tail, which needs the body of the bounded `all`.
 import all Init.Data.Nat.Fold
 
@@ -30,7 +28,7 @@ The converse direction shows that the encoding is canonical.
 -/
 @[expose] public section
 
-open EthLib.Base (byteArray_get_eq_get! byteArray_set_eq_set!)
+open EthLib.Base (byteArray_getElem_eq_get! byteArray_set_eq_set!)
 
 deriving instance DecidableEq for EthLib.Cryptography.Bls.BlsError
 deriving instance DecidableEq for EthLib.Cryptography.Bls.G1
@@ -367,7 +365,7 @@ private theorem compress_noninf {p : G1} (hinf : ¬ p.isInfinity = true)
        if Fp.signBit ya then base.set! 0 (base.get! 0 ||| 0x20) else base) := by
   unfold compress
   simp only [Id.run, hinf, hpa, Bool.false_eq_true, ↓reduceIte]
-  split <;> simp only [byteArray_get_eq_get!, byteArray_set_eq_set!] <;> rfl
+  split <;> simp only [byteArray_getElem_eq_get!, byteArray_set_eq_set!] <;> rfl
 
 /-- The 48-byte infinity encoding decodes to the zero point. -/
 theorem uncompress_infinityBytes :
@@ -379,11 +377,11 @@ theorem uncompress_infinityBytes :
   extract_lets head isC isI yS
   -- Select the infinity branch from its header, without reducing field arithmetic.
   have hC : ¬ (!decide isC) = true := by
-    simp only [isC, head, byteArray_get_eq_get!, hhead]; decide
+    simp only [isC, head, byteArray_getElem_eq_get!, hhead]; decide
   have hI : isI := by
-    simp only [isI, head, byteArray_get_eq_get!, hhead]; decide
+    simp only [isI, head, byteArray_getElem_eq_get!, hhead]; decide
   have hflags : ¬ (decide yS || decide (head ≠ 0xc0) || !tailAllZero infinityBytes 1) = true := by
-    simp only [yS, head, byteArray_get_eq_get!, hhead, htail]; decide
+    simp only [yS, head, byteArray_getElem_eq_get!, hhead, htail]; decide
   rw [ite_eq_right hC, ite_eq_left hI, ite_eq_right hflags]
 
 /-- Sign selection in `uncompress` (a `Prop`-equality condition) recovers `y` from `±y`.
@@ -415,10 +413,10 @@ private theorem uncompress_of_facts {xa ya yPos : Fp} {cb : ByteArray}
     uncompress cb = .ok ⟨xa, ya, Fp.one⟩ := by
   rw [uncompress, dite_eq_right (show ¬ cb.size ≠ 48 from fun h => h hsize)]
   extract_lets head isC isI yS xb
-  have hC : ¬ (!decide isC) = true := by simp [isC, head, byteArray_get_eq_get!, hc]
-  have hI : ¬ isI := by simp [isI, head, byteArray_get_eq_get!, hi]
+  have hC : ¬ (!decide isC) = true := by simp [isC, head, byteArray_getElem_eq_get!, hc]
+  have hI : ¬ isI := by simp [isI, head, byteArray_getElem_eq_get!, hi]
   have hxb : xb = Fp.toBytesBE xa := by
-    simpa only [xb, head, byteArray_get_eq_get!, byteArray_set_eq_set!] using hmaskeq
+    simpa only [xb, head, byteArray_getElem_eq_get!, byteArray_set_eq_set!] using hmaskeq
   rw [ite_eq_right hC, ite_eq_right hI, hxb, Fp.fromBytesBE_toBytesBE]
   simp (config := { zeta := false, iota := false, beta := false }) only [uncompress.match_1.eq_2]
   extract_lets rhs
@@ -426,7 +424,7 @@ private theorem uncompress_of_facts {xa ya yPos : Fp} {cb : ByteArray}
   simp (config := { zeta := false, iota := false, beta := false }) only [uncompress.match_1.eq_2]
   extract_lets y
   rw [show y = ya from by
-    simpa only [y, yS, head, byteArray_get_eq_get!] using sign_recovery' hysq hsg]
+    simpa only [y, yS, head, byteArray_getElem_eq_get!] using sign_recovery' hysq hsg]
 
 /-! ## Flags in the compressed header byte
 
@@ -716,7 +714,7 @@ theorem uncompress_ok_cases {b : ByteArray} {q : G1} (h : uncompress b = .ok q) 
   split at h
   · cases h
   rename_i hcomp
-  refine ⟨fun h0 => hcomp (by simp [isC, head, byteArray_get_eq_get!, h0]), ?_⟩
+  refine ⟨fun h0 => hcomp (by simp [isC, head, byteArray_getElem_eq_get!, h0]), ?_⟩
   -- Infinity flag set: only the canonical encoding gives the identity.
   split at h
   · split at h
@@ -726,11 +724,11 @@ theorem uncompress_ok_cases {b : ByteArray} {q : G1} (h : uncompress b = .ok q) 
     simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hflags
     obtain ⟨⟨_, hhead⟩, htail⟩ := hflags
     refine Or.inl ⟨?_, by simpa only [Bool.not_eq_false'] using htail, rfl⟩
-    simpa only [head, byteArray_get_eq_get!] using
+    simpa only [head, byteArray_getElem_eq_get!] using
       Classical.not_not.mp (of_decide_eq_false hhead)
   rename_i hinf
   refine Or.inr ⟨?_, ?_⟩
-  · simpa only [isI, head, byteArray_get_eq_get!] using not_ne_iff.mp hinf
+  · simpa only [isI, head, byteArray_getElem_eq_get!] using not_ne_iff.mp hinf
   · -- Infinity flag clear: name the decoded x, then select its branch by rewriting.
     generalize hd : Fp.fromBytesBE xb = d at h
     cases d with
@@ -755,9 +753,9 @@ theorem uncompress_ok_cases {b : ByteArray} {q : G1} (h : uncompress b = .ok q) 
         extract_lets y at h
         cases h
         refine ⟨x, yPos, ?_, ?_, ?_⟩
-        · simpa only [xb, head, byteArray_get_eq_get!, byteArray_set_eq_set!] using hd
+        · simpa only [xb, head, byteArray_getElem_eq_get!, byteArray_set_eq_set!] using hd
         · exact hs
-        · simp only [y, yS, head, byteArray_get_eq_get!]
+        · simp only [y, yS, head, byteArray_getElem_eq_get!]
 
 /-- Any point returned by decompression is a nonsingular curve point.
 

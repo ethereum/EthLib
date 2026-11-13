@@ -20,6 +20,8 @@ A byte of a join or a slice is a byte of a part, or zero past its end.
 Two strings of one size are equal when they agree on every byte.
 
 A loop over the bytes of a string runs as a loop over the list of those bytes, in order.
+
+Inside the array, a bounded read or write of a byte agrees with the defaulting one.
 -/
 
 @[expose] public section
@@ -27,7 +29,7 @@ A loop over the bytes of a string runs as a loop over the list of those bytes, i
 namespace EthLib.Base
 
 /-- A bounded byte read agrees with the defaulting read at the same index. -/
-theorem byteArray_get_eq_get! (bytes : ByteArray) (index : Nat) (inside : index < bytes.size) :
+theorem byteArray_getElem_eq_get! (bytes : ByteArray) (index : Nat) (inside : index < bytes.size) :
     bytes[index]'inside = bytes.get! index := by
   change bytes.data[index] = bytes.data[index]!
   exact (getElem!_pos bytes.data index inside).symm

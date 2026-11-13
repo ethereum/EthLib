@@ -111,14 +111,12 @@ def infinityBytes : ByteArray :=
 def compress (p : G1) : ByteArray := Id.run do
   if p.isInfinity then return infinityBytes
   let (x, y) := p.toAffine
-  -- 48 big-endian bytes for `x`. We then OR the flag bits into byte 0.
+  -- `x` as 48 big-endian bytes, with the flag bits ORed into byte 0.
   let xBytes := x.toBytesBE
   have hHead : 0 < xBytes.size := by rw [Fp.size_toBytesBE]; decide
   let mut bytes := xBytes.set 0 (xBytes[0] ||| 0x80)
   if Fp.signBit y then
-    have hSize : bytes.size = xBytes.size := by
-      simp only [bytes, ByteArray.set, ByteArray.size, Array.size_set]
-    have hBytes : 0 < bytes.size := by omega
+    have hBytes : 0 < bytes.size := by rw [size_set]; exact hHead
     bytes := bytes.set 0 (bytes[0] ||| 0x20)
   return bytes
 
@@ -226,9 +224,7 @@ def compress (p : G2) : ByteArray := Id.run do
   have hHead : 0 < xBytes.size := by rw [size_fp2ToBytes]; decide
   let mut bytes := xBytes.set 0 (xBytes[0] ||| 0x80)
   if Fp2.signBit y then
-    have hSize : bytes.size = xBytes.size := by
-      simp only [bytes, ByteArray.set, ByteArray.size, Array.size_set]
-    have hBytes : 0 < bytes.size := by omega
+    have hBytes : 0 < bytes.size := by rw [size_set]; exact hHead
     bytes := bytes.set 0 (bytes[0] ||| 0x20)
   return bytes
 
