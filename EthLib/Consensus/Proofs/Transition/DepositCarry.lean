@@ -251,10 +251,6 @@ theorem depositCarry_processProposerLookahead {fulu : .fusaka ≤ fork}
   obtain ⟨_, _, _, _, rfl⟩ := ok
   rfl
 
-theorem depositCarry_processParticipationFlagUpdates (altair : .altair ≤ fork) :
-    (processParticipationFlagUpdates s altair).depositBalanceToConsume =
-      s.depositBalanceToConsume := rfl
-
 private theorem kept_excess {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (ok : queueExcessActiveBalance s electra index = .ok t) : Kept s t := by
   simp only [queueExcessActiveBalance, bind_ok_iff] at ok
