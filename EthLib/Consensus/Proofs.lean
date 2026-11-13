@@ -18,6 +18,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Produce
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
 public import EthLib.Consensus.Proofs.BeaconApi.Rewards
 public import EthLib.Consensus.Proofs.BeaconApi.StateQueries
+public import EthLib.Consensus.Proofs.BeaconApi.Submit
 public import EthLib.Consensus.Proofs.BeaconApi.Validators
 public import EthLib.Consensus.Proofs.BeaconApi.ValidatorData
 public import EthLib.Consensus.Proofs.BuilderApi

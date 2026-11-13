@@ -1516,6 +1516,36 @@ def gossip_validation(
     )
 
 
+def api_pool(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    requests: Sequence[tuple[int, str, Sequence[bytes]]],
+    verify: bool = True,
+    config: dict[str, Any] | None = None,
+    blocks: Sequence[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]]
+    | None = None,
+    finalized: tuple[int, bytes] | None = None,
+) -> list[list[tuple[int, str]]]:
+    """The failed items of each request to a Beacon API pool endpoint, with their messages."""
+    # The store is built as for gossip_validation, from the anchor and the later blocks.
+    # A request is (time in milliseconds, endpoint name such as "attestations", SSZ items).
+    # The requests share the keys of the messages seen, which each accepted item extends.
+    # An item that gossip ignores or rejects fails, with the reason of gossip.
+    return _native.consensus_api_pool(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        list(blocks or []),
+        finalized,
+        [(time, endpoint, list(items)) for time, endpoint, items in requests],
+        config,
+        verify,
+    )
+
+
 def initialize_genesis(
     name: str,
     fork: str,
@@ -2200,6 +2230,7 @@ __all__ = [
     "LightClientError",
     "ForkChoiceError",
     "fork_choice",
+    "api_pool",
     "gossip_validation",
     "light_client_sync",
     "SyncStep",
