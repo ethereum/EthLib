@@ -68,6 +68,7 @@ public import EthLib.Consensus.Gossip.Bid
 public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Gossip.InclusionList
 public import EthLib.Consensus.Gossip.LightClient
+public import EthLib.Consensus.Gossip.Message
 public import EthLib.Consensus.Gossip.Bounds
 public import EthLib.Consensus.Gossip.Operations
 public import EthLib.Consensus.Gossip.Payload

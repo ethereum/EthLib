@@ -2,15 +2,7 @@ module
 
 public import EthLib.Consensus.Exports.ForkChoice
 public import EthLib.Cryptography.Exports.Kzg
-public import EthLib.Consensus.Gossip.Attestation
-public import EthLib.Consensus.Gossip.Bid
-public import EthLib.Consensus.Gossip.Block
-public import EthLib.Consensus.Gossip.InclusionList
-public import EthLib.Consensus.Gossip.Operations
-public import EthLib.Consensus.Gossip.Payload
-public import EthLib.Consensus.Gossip.ProposerPreferences
-public import EthLib.Consensus.Gossip.Sidecar
-public import EthLib.Consensus.Gossip.SyncCommittee
+public import EthLib.Consensus.Gossip.Message
 
 /-!
 # `Exports.GossipValidation`
@@ -188,130 +180,79 @@ def gossipValidationSpecified (fork : Fork) : String → Bool
   | "inclusion_list" => .hegota ≤ fork
   | _ => false
 
+/-- The message of a topic, decoded from its bytes, with its subnet when its topic has subnets.
+
+An unknown topic, a topic that the fork of the case does not carry, or bad bytes fail with code 0.
+
+The caller checks first that the topic is specified at the fork. -/
+def decodeGossipInput {preset : Preset} {fork : Fork} (topic : String) (input : GossipInput) :
+    Result (GossipMessage preset fork) := do
+  match topic with
+  | "attester_slashing" => return .attesterSlashing (← decodeInput (AttesterSlashing preset fork)
+    input.data)
+  | "proposer_slashing" => return .proposerSlashing (← decodeInput ProposerSlashing input.data)
+  | "voluntary_exit" => return .voluntaryExit (← decodeInput SignedVoluntaryExit input.data)
+  | "bls_to_execution_change" =>
+    let signed ← decodeInput SignedBLSToExecutionChange input.data
+    if capella : .shapella ≤ fork then return .blsToExecutionChange capella signed
+    else throw (0, "changes of BLS credentials travel only from Capella")
+  | "beacon_block" => return .beaconBlock (← decodeInput (SignedBeaconBlock preset fork) input.data)
+  | "beacon_attestation" =>
+    if electra : .pectra ≤ fork then
+      return .singleAttestation electra (← decodeInput SingleAttestation input.data) input.subnetId
+    else
+      return .beaconAttestation (Nat.lt_of_not_le electra)
+        (← decodeInput (Attestation preset fork) input.data) input.subnetId
+  | "beacon_aggregate_and_proof" =>
+    return .aggregateAndProof (← decodeInput (SignedAggregateAndProof preset fork) input.data)
+  | "sync_committee" =>
+    let message ← decodeInput SyncCommitteeMessage input.data
+    if altair : .altair ≤ fork then return .syncCommitteeMessage altair message input.subnetId
+    else throw (0, "the sync committee has no topic before Altair")
+  | "sync_committee_contribution_and_proof" =>
+    let signed ← decodeInput (SignedContributionAndProof preset) input.data
+    if altair : .altair ≤ fork then return .contributionAndProof altair signed
+    else throw (0, "the sync committee has no topic before Altair")
+  | "blob_sidecar" =>
+    let sidecar ← decodeInput (BlobSidecar preset) input.data
+    if blobs : .dencun ≤ fork ∧ fork < .fusaka then return .blobSidecar blobs sidecar input.subnetId
+    else throw (0, "blob sidecars travel only at Deneb and Electra")
+  | "data_column_sidecar" =>
+    let sidecar ← decodeInput (DataColumnSidecar preset fork) input.data
+    if fulu : .fusaka ≤ fork then return .dataColumnSidecar fulu sidecar input.subnetId
+    else throw (0, "column sidecars travel only from Fulu")
+  | "proposer_preferences" =>
+    let signed ← decodeInput SignedProposerPreferences input.data
+    if gloas : .glamsterdam ≤ fork then return .proposerPreferences gloas signed
+    else throw (0, "the preferences of proposers travel only from Gloas")
+  | "execution_payload" =>
+    let signed ← decodeInput (SignedExecutionPayloadEnvelope preset fork) input.data
+    if gloas : .glamsterdam ≤ fork then return .executionPayloadEnvelope gloas signed
+    else throw (0, "the envelopes of payloads travel only from Gloas")
+  | "payload_attestation_message" =>
+    let message ← decodeInput PayloadAttestationMessage input.data
+    if gloas : .glamsterdam ≤ fork then return .payloadAttestationMessage gloas message
+    else throw (0, "the votes on payloads travel only from Gloas")
+  | "execution_payload_bid" =>
+    let signed ← decodeInput (SignedExecutionPayloadBid preset fork) input.data
+    if gloas : .glamsterdam ≤ fork then return .executionPayloadBid gloas signed
+    else throw (0, "the bids of builders travel only from Gloas")
+  | "inclusion_list" =>
+    let signed ← decodeInput SignedInclusionList input.data
+    if heze : .hegota ≤ fork then return .inclusionList heze signed
+    else throw (0, "inclusion lists travel only from Heze")
+  | _ => throw (0, s!"gossip validation of the topic {topic} is not yet specified")
+
 /-- The outcome of one message of a topic, and the keys seen after it.
 
 The keys change only when the message is valid. -/
 def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
     (checks : SignatureChecks) (store : Store preset fork) (statuses : PayloadStatuses)
     (topic : String) (seen : Seen) (input : GossipInput) : Result (ValidationResult × Seen) := do
-  let record (outcome : ValidationResult) (update : Seen → Seen) :=
-    (outcome, if outcome.isAccept then update seen else seen)
-  match topic with
-  | "attester_slashing" =>
-    let slashing ← decodeInput (AttesterSlashing preset fork) input.data
-    let outcome ← runForkChoice (validateAttesterSlashing config checks seen store slashing)
-    return record outcome (·.recordAttesterSlashing slashing)
-  | "proposer_slashing" =>
-    let slashing ← decodeInput ProposerSlashing input.data
-    let outcome ← runForkChoice (validateProposerSlashing config checks seen store slashing)
-    return record outcome (·.recordProposerSlashing slashing)
-  | "voluntary_exit" =>
-    let signed ← decodeInput SignedVoluntaryExit input.data
-    let outcome ← runForkChoice
-      (validateVoluntaryExit config checks seen store signed input.currentTimeMs)
-    return record outcome (·.recordVoluntaryExit signed)
-  | "bls_to_execution_change" =>
-    let signed ← decodeInput SignedBLSToExecutionChange input.data
-    let outcome ← runForkChoice
-      (validateBlsToExecutionChange config checks seen store signed input.currentTimeMs)
-    return record outcome (·.recordBlsToExecutionChange signed)
-  | "beacon_block" =>
-    let signed ← decodeInput (SignedBeaconBlock preset fork) input.data
-    let outcome ← runForkChoice
-      (validateBeaconBlock config checks seen store statuses signed input.currentTimeMs)
-    return record outcome (·.recordBeaconBlock signed)
-  | "beacon_attestation" =>
-    if electra : .pectra ≤ fork then
-      let attestation ← decodeInput SingleAttestation input.data
-      let outcome ← runForkChoice (validateSingleAttestation config checks seen store statuses
-        electra attestation input.currentTimeMs input.subnetId)
-      return record outcome
-        (·.recordAttestation attestation.data.target.epoch attestation.attesterIndex)
-    else
-      let attestation ← decodeInput (Attestation preset fork) input.data
-      let outcome ← runForkChoice (validateBeaconAttestation config checks seen store
-        (Nat.lt_of_not_le electra) attestation input.currentTimeMs input.subnetId)
-      if !outcome.isAccept then return (outcome, seen)
-      -- A valid attestation sets one bit, so it has an attester.
-      let some attester ← runForkChoice (beaconAttestationAttester config store attestation)
-        | throw (0, "a valid attestation has no attester")
-      return (outcome, seen.recordAttestation attestation.data.target.epoch attester)
-  | "beacon_aggregate_and_proof" =>
-    let signed ← decodeInput (SignedAggregateAndProof preset fork) input.data
-    let outcome ← runForkChoice
-      (validateAggregateAndProof config checks seen store statuses signed input.currentTimeMs)
-    if !outcome.isAccept then return (outcome, seen)
-    let root ← runSsz "aggregate rejected" (SszType.hashTreeRoot signed.message.aggregate.data)
-    return (outcome, seen.recordAggregateAndProof signed root)
-  | "sync_committee" =>
-    let message ← decodeInput SyncCommitteeMessage input.data
-    if altair : .altair ≤ fork then
-      let outcome ← runForkChoice (validateSyncCommitteeMessage config checks seen store altair
-        message input.currentTimeMs input.subnetId)
-      return record outcome (·.recordSyncCommitteeMessage message input.subnetId)
-    else throw (0, "the sync committee has no topic before Altair")
-  | "sync_committee_contribution_and_proof" =>
-    let signed ← decodeInput (SignedContributionAndProof preset) input.data
-    if altair : .altair ≤ fork then
-      let outcome ← runForkChoice
-        (validateContributionAndProof config checks seen store altair signed input.currentTimeMs)
-      return record outcome (·.recordContributionAndProof signed)
-    else throw (0, "the sync committee has no topic before Altair")
-  | "blob_sidecar" =>
-    let sidecar ← decodeInput (BlobSidecar preset) input.data
-    if blobs : .dencun ≤ fork ∧ fork < .fusaka then
-      let setup ← runForkChoice (embeddedSetup.mapError .kzg)
-      let outcome ← runForkChoice (validateBlobSidecar config checks setup seen store blobs sidecar
-        input.currentTimeMs input.subnetId)
-      return record outcome (·.recordBlobSidecar sidecar)
-    else throw (0, "blob sidecars travel only at Deneb and Electra")
-  | "data_column_sidecar" =>
-    let sidecar ← decodeInput (DataColumnSidecar preset fork) input.data
-    if gloas : .glamsterdam ≤ fork then
-      let setup ← runForkChoice (embeddedSetup.mapError .kzg)
-      let outcome ← runForkChoice (validateGloasDataColumnSidecar config setup seen store gloas
-        sidecar input.currentTimeMs input.subnetId)
-      return record outcome (·.recordGloasDataColumnSidecar gloas sidecar)
-    else if columns : .fusaka ≤ fork ∧ fork < .glamsterdam then
-      let setup ← runForkChoice (embeddedSetup.mapError .kzg)
-      let outcome ← runForkChoice (validateDataColumnSidecar config checks setup seen store columns
-        sidecar input.currentTimeMs input.subnetId)
-      return record outcome (·.recordDataColumnSidecar columns.2 sidecar)
-    else throw (0, "column sidecars travel only from Fulu")
-  | "proposer_preferences" =>
-    let signed ← decodeInput SignedProposerPreferences input.data
-    if gloas : .glamsterdam ≤ fork then
-      let outcome ← runForkChoice (validateProposerPreferences config checks seen store gloas
-        signed input.currentTimeMs)
-      return record outcome (·.recordProposerPreferences signed)
-    else throw (0, "the preferences of proposers travel only from Gloas")
-  | "execution_payload" =>
-    let signed ← decodeInput (SignedExecutionPayloadEnvelope preset fork) input.data
-    if gloas : .glamsterdam ≤ fork then
-      let outcome ← runForkChoice
-        (validateExecutionPayloadEnvelope config checks seen store gloas signed)
-      return record outcome (·.recordExecutionPayloadEnvelope signed)
-    else throw (0, "the envelopes of payloads travel only from Gloas")
-  | "payload_attestation_message" =>
-    let message ← decodeInput PayloadAttestationMessage input.data
-    if gloas : .glamsterdam ≤ fork then
-      let outcome ← runForkChoice (validatePayloadAttestationMessage config checks seen store
-        gloas message input.currentTimeMs)
-      return record outcome (·.recordPayloadAttestationMessage message)
-    else throw (0, "the votes on payloads travel only from Gloas")
-  | "execution_payload_bid" =>
-    let signed ← decodeInput (SignedExecutionPayloadBid preset fork) input.data
-    if gloas : .glamsterdam ≤ fork then
-      let outcome ← runForkChoice (validateExecutionPayloadBid config checks seen store gloas
-        signed input.currentTimeMs)
-      return record outcome (·.recordExecutionPayloadBid signed)
-    else throw (0, "the bids of builders travel only from Gloas")
-  | "inclusion_list" =>
-    let signed ← decodeInput SignedInclusionList input.data
-    let outcome ← runForkChoice
-      (validateInclusionList config checks seen store signed input.currentTimeMs)
-    return record outcome (·.recordInclusionList signed)
-  | _ => throw (0, s!"gossip validation of the topic {topic} is not yet specified")
+  let message ← decodeGossipInput topic input
+  let setup ← runForkChoice (embeddedSetup.mapError .kzg)
+  runForkChoice
+    (validateGossipMessage config checks setup seen store statuses input.currentTimeMs message)
 
 /-- From Fulu: the outcomes of the partial sidecars of a case, after the headers it records first.
 
