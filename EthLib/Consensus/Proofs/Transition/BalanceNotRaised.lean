@@ -120,35 +120,39 @@ theorem balanceNotRaised_increaseBalance {position : ValidatorIndex} {delta : Gw
   simp only [BeaconState.putBalance, Array.getElem?_set, other, ↓reduceIte] at found
   exact ⟨later, found, UInt64.le_refl _⟩
 
-/-- A validator keeps its key, its effective balance and its withdrawal credentials. -/
-private def Same (old new : Validator) : Prop :=
-  new.pubkey = old.pubkey ∧ new.effectiveBalance = old.effectiveBalance ∧
-    new.withdrawalCredentials = old.withdrawalCredentials
+/-- A validator keeps its key, its effective balance and its withdrawal credentials.
 
-/-- Each validator keeps its position, its key, its effective balance and its credentials. -/
-private def ValidatorsKept (state after : BeaconState preset fork) : Prop :=
+It also stays slashed or unslashed. -/
+def ValidatorSame (old new : Validator) : Prop :=
+  new.pubkey = old.pubkey ∧ new.effectiveBalance = old.effectiveBalance ∧
+    new.withdrawalCredentials = old.withdrawalCredentials ∧ new.slashed = old.slashed
+
+/-- Each validator keeps its position, its key, its effective balance and its credentials.
+
+It also stays slashed or unslashed. -/
+def ValidatorsKept (state after : BeaconState preset fork) : Prop :=
   ∀ (i : Nat) old, state.validators.data[i]? = some old →
-    ∃ new, after.validators.data[i]? = some new ∧ Same old new
+    ∃ new, after.validators.data[i]? = some new ∧ ValidatorSame old new
 
 /-- Each state keeps its own validators. -/
-private theorem ValidatorsKept.refl (state : BeaconState preset fork) :
+theorem ValidatorsKept.refl (state : BeaconState preset fork) :
     ValidatorsKept state state :=
-  fun _ old found => ⟨old, found, rfl, rfl, rfl⟩
+  fun _ old found => ⟨old, found, rfl, rfl, rfl, rfl⟩
 
 /-- Two steps that keep the validators keep them. -/
-private theorem ValidatorsKept.trans {first second third : BeaconState preset fork}
+theorem ValidatorsKept.trans {first second third : BeaconState preset fork}
     (one : ValidatorsKept first second) (two : ValidatorsKept second third) :
     ValidatorsKept first third := by
   intro i old found
-  obtain ⟨middle, atMiddle, a, b, c⟩ := one i old found
-  obtain ⟨new, atThird, d, e, f⟩ := two i middle atMiddle
-  exact ⟨new, atThird, d.trans a, e.trans b, f.trans c⟩
+  obtain ⟨middle, atMiddle, a, b, c, d⟩ := one i old found
+  obtain ⟨new, atThird, e, f, g, h⟩ := two i middle atMiddle
+  exact ⟨new, atThird, e.trans a, f.trans b, g.trans c, h.trans d⟩
 
 /-- A step with the same registry keeps each validator. -/
-private theorem ValidatorsKept.of_eq (same : after.validators = state.validators) :
+theorem ValidatorsKept.of_eq (same : after.validators = state.validators) :
     ValidatorsKept state after := by
   intro i old found
-  exact ⟨old, by rw [same]; exact found, rfl, rfl, rfl⟩
+  exact ⟨old, by rw [same]; exact found, rfl, rfl, rfl, rfl⟩
 
 /-- A step that keeps each validator, the balances, both pending queues and the scores. -/
 private def Kept (state after : BeaconState preset fork) : Prop :=
@@ -178,7 +182,7 @@ private theorem Kept.foldlM {α ε : Type}
 /-- A write of a validator with the same key, effective balance and credentials keeps them. -/
 private theorem kept_putValidator {position : Nat} {old validator : Validator}
     (inside : position < state.validators.data.size)
-    (found : state.validators.data[position]? = some old) (same : Same old validator) :
+    (found : state.validators.data[position]? = some old) (same : ValidatorSame old validator) :
     Kept state (state.putValidator position inside validator) := by
   refine ⟨fun i earlier atI => ?_, rfl, rfl, rfl, rfl⟩
   simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
@@ -189,12 +193,12 @@ private theorem kept_putValidator {position : Nat} {old validator : Validator}
     subst atI
     exact ⟨validator, by simp, same⟩
   · simp only [here, ↓reduceIte]
-    exact ⟨earlier, atI, rfl, rfl, rfl⟩
+    exact ⟨earlier, atI, rfl, rfl, rfl, rfl⟩
 
 /-- A write at a plain position with the same key, effective balance and credentials keeps them. -/
 private theorem kept_setValidatorAt {position : Nat} {old validator : Validator}
     (set : state.setValidatorAt position validator = .ok after)
-    (found : getValidatorAt state position = .ok old) (same : Same old validator) :
+    (found : getValidatorAt state position = .ok old) (same : ValidatorSame old validator) :
     Kept state after := by
   obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
   exact kept_putValidator inside (getValidatorAt_eq_ok_iff.mp found) same
@@ -211,19 +215,20 @@ private theorem kept_initiateValidatorExit {config : Config} {index : ValidatorI
   obtain ⟨inside, rfl⟩ := setValidator_ok set
   rw [getValidator_eq_getValidatorAt, getValidatorAt_eq_ok_iff] at found
   exact (Kept.refl state).trans (kept_putValidator (old := validator) inside
-    (by exact found) ⟨rfl, rfl, rfl⟩)
+    (by exact found) ⟨rfl, rfl, rfl, rfl⟩)
 
 /-- Joining the activation queue keeps the key, the effective balance and the credentials. -/
 private theorem same_queueForActivation {validator queued : Validator}
-    (computed : queueForActivation state validator = .ok queued) : Same validator queued := by
+    (computed : queueForActivation state validator = .ok queued) :
+    ValidatorSame validator queued := by
   unfold queueForActivation at computed
   split at computed
   · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, _, rfl⟩ := computed
-    exact ⟨rfl, rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl, rfl⟩
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     subst computed
-    exact ⟨rfl, rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl, rfl⟩
 
 /-- The registry updates keep each validator's key, effective balance and credentials.
 
@@ -240,13 +245,13 @@ private theorem kept_processRegistryUpdates {config : Config}
     split at ok
     · simp only [bind_ok_iff, liftAccessor_ok] at ok
       obtain ⟨_, _, set⟩ := ok
-      exact kept_setValidatorAt set found ⟨rfl, rfl, rfl⟩
+      exact kept_setValidatorAt set found ⟨rfl, rfl, rfl, rfl⟩
     split at ok
     · simp only [bind_ok_iff, liftAccessor_ok] at ok
       obtain ⟨_, _, exited⟩ := ok
       exact kept_initiateValidatorExit exited
     split at ok
-    · exact kept_setValidatorAt (liftAccessor_ok.mp ok) found ⟨rfl, rfl, rfl⟩
+    · exact kept_setValidatorAt (liftAccessor_ok.mp ok) found ⟨rfl, rfl, rfl, rfl⟩
     · simp only [pure, Except.pure, Except.ok.injEq] at ok
       exact ok ▸ Kept.refl _
   simp only [bind_ok_iff] at computed
@@ -266,13 +271,22 @@ private theorem kept_processRegistryUpdates {config : Config}
     obtain ⟨_, found, _, _, set⟩ := ok
     rw [setValidator_eq_setValidatorAt] at set
     rw [getValidator_eq_getValidatorAt] at found
-    exact kept_setValidatorAt set found ⟨rfl, rfl, rfl⟩
+    exact kept_setValidatorAt set found ⟨rfl, rfl, rfl, rfl⟩
 
 /-- The registry updates keep the balances, at every fork. -/
 theorem processRegistryUpdates_balances
     (computed : processRegistryUpdates config state = .ok after) :
     after.balances = state.balances :=
   (kept_processRegistryUpdates computed).2.1
+
+/-- The registry updates keep each validator's key, effective balance and credentials.
+
+They keep each validator slashed or unslashed.
+
+They keep the pending consolidations, at every fork. -/
+theorem processRegistryUpdates_kept (computed : processRegistryUpdates config state = .ok after) :
+    ValidatorsKept state after ∧ after.pendingConsolidations = state.pendingConsolidations :=
+  ⟨(kept_processRegistryUpdates computed).1, (kept_processRegistryUpdates computed).2.2.2.1⟩
 
 /-- A step that keeps each validator, both queues and the scores.
 
@@ -383,17 +397,19 @@ private theorem Credited.trans {index : Nat} {first second third : BeaconState p
     Credited index first third :=
   ⟨one.1.trans two.1, one.2.1.trans two.2.1, two.2.2.1.trans one.2.2.1, one.2.2.2.trans two.2.2.2⟩
 
-/-- From Altair, a new validator at the end keeps each validator and the balance at a position.
+/-- From Altair, a new validator at the end keeps each validator and the consolidations.
 
-The position holds a validator. -/
-private theorem credited_addValidatorToRegistry {index : Nat} {pubkey : Cryptography.Bls.BLSPubkey}
+It keeps the balance and the score at a position that holds a validator. -/
+theorem addValidatorToRegistry_kept {index : Nat} {pubkey : Cryptography.Bls.BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei} (altair : .altair ≤ fork)
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
-    (inside : index < state.validators.data.size) : Credited index state after := by
+    (inside : index < state.validators.data.size) :
+    ValidatorsKept state after ∧ after.balances.data[index]? = state.balances.data[index]? ∧
+      after.pendingConsolidations = state.pendingConsolidations ∧ ScoreKept index state after := by
   have pushed := addValidatorToRegistry_validators_eq_push computed
   have kept : ValidatorsKept state after := by
     intro i old found
-    refine ⟨old, ?_, rfl, rfl, rfl⟩
+    refine ⟨old, ?_, rfl, rfl, rfl, rfl⟩
     have below := (Array.getElem?_eq_some_iff.mp found).1
     rw [pushed, Array.getElem?_push, ite_eq_right_of_eq_false _ _ (eq_false (by omega))]
     exact found
@@ -402,12 +418,22 @@ private theorem credited_addValidatorToRegistry {index : Nat} {pubkey : Cryptogr
     pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨_, indexOk, _, _, _, balancesOk, _, _, _, _, _, scoresOk, rfl⟩ := computed
   have atEnd := (getIndexForNewValidator_ok_iff.mp indexOk).2
-  refine ⟨kept, fun later found => ⟨later, ?_, UInt64.le_refl _⟩, rfl, fun _ => ?_⟩
-  · rw [setOrAppendList_getElem? balancesOk,
-      ite_eq_right_of_eq_false _ _ (eq_false (by omega))] at found
-    exact found
+  refine ⟨kept, ?_, rfl, fun _ => ?_⟩
+  · rw [setOrAppendList_getElem? balancesOk, ite_eq_right_of_eq_false _ _ (eq_false (by omega))]
   · show _ = _
     rw [setOrAppendList_getElem? scoresOk, ite_eq_right_of_eq_false _ _ (eq_false (by omega))]
+
+/-- From Altair, a new validator at the end keeps each validator and the balance at a position.
+
+The position holds a validator. -/
+private theorem credited_addValidatorToRegistry {index : Nat} {pubkey : Cryptography.Bls.BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei} (altair : .altair ≤ fork)
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
+    (inside : index < state.validators.data.size) : Credited index state after := by
+  obtain ⟨kept, balance, consolidations, score⟩ :=
+    addValidatorToRegistry_kept altair computed inside
+  exact ⟨kept, fun later found => ⟨later, by rw [← balance]; exact found, UInt64.le_refl _⟩,
+    consolidations, score⟩
 
 /-- From Altair, a deposit to another key keeps each validator.
 
@@ -472,7 +498,7 @@ private theorem credited_passPendingDeposits {config : Config} {checks : Signatu
         ∃ now, Credited index state middle ∧ middle.validators.data[index]? = some now ∧
           ∀ deposit ∈ rest, deposit.pubkey ≠ now.pubkey := by
       have step := credited_applyPendingDeposit altair credited found first
-      obtain ⟨now, atNow, same, -, -⟩ := step.1 index validator found
+      obtain ⟨now, atNow, same, -, -, -⟩ := step.1 index validator found
       exact ⟨now, step, atNow, by rw [same]; exact others⟩
     unfold passPendingDeposits at computed
     simp only [bind, Except.bind, pure, Except.pure] at computed
@@ -609,19 +635,19 @@ theorem balanceNotRaised_processPendingConsolidations {electra : .pectra ≤ for
   (kept_processPendingConsolidations computed untargeted).2.1
 
 /-- Two states with the same balances, the same registry and the same scores. -/
-private def Unmoved (state after : BeaconState preset fork) : Prop :=
+def SameBalancesRegistryScores (state after : BeaconState preset fork) : Prop :=
   after.balances = state.balances ∧ after.validators = state.validators ∧
     after.inactivityScores = state.inactivityScores
 
 /-- From Altair, the steps after the effective balances keep the balances and the registry.
 
 They also keep the scores. -/
-private theorem unmoved_tail (altair : .altair ≤ fork)
+theorem sameBalancesRegistryScores_tail (altair : .altair ≤ fork)
     (trace : EpochTrace (EpochStage.action config checks)
       [.slashingsReset, .randaoReset, .history, .participation, .syncCommittees,
         .proposerLookahead, .ptcWindow] state after) :
-    Unmoved state after := by
-  refine trace.transport Unmoved (fun _ => ⟨rfl, rfl, rfl⟩)
+    SameBalancesRegistryScores state after := by
+  refine trace.transport SameBalancesRegistryScores (fun _ => ⟨rfl, rfl, rfl⟩)
     (fun one two => ⟨two.1.trans one.1, two.2.1.trans one.2.1, two.2.2.trans one.2.2⟩)
     fun k member a b ok => ?_
   have edge := EpochStage.action_cases.mp ok
@@ -837,7 +863,7 @@ theorem balanceNotRaised_processEpochAltair {altair : .altair ≤ fork}
     toReset.1.trans (depositedStep.1.trans
       (ValidatorsKept.of_eq (settledSame.1.trans consolidatedStep.1)))
   obtain ⟨kept, atKept, sameKept⟩ := keptAll index validator foundRewarded
-  have tail := unmoved_tail altair trace
+  have tail := sameBalancesRegistryScores_tail altair trace
   -- Only the deposits write a score, and only at the end of the registry.
   have scoreKept : ScoreKept index rewarded after :=
     (ScoreKept.of_scores toReset.2.2.2.2 index).trans <| depositedStep.2.2.2.trans <|
@@ -845,7 +871,7 @@ theorem balanceNotRaised_processEpochAltair {altair : .altair ≤ fork}
       (ScoreKept.of_scores (processEffectiveBalanceUpdates_scores updatedEq) index).trans
         (ScoreKept.of_scores tail.2.2 index)
   exact ⟨justified, scored, rewarded, settled, updated, kept, justifiedEq, justifiedSame.1,
-    justifiedSame.2.1, scoredEq, rewardedEq, raised, atKept, sameKept.2.1, sameKept.2.2,
+    justifiedSame.2.1, scoredEq, rewardedEq, raised, atKept, sameKept.2.1, sameKept.2.2.1,
     updatedEq, tail.1, tail.2.1, scoreKept⟩
 
 end EthLib.Consensus
