@@ -20,6 +20,7 @@ public import EthLib.Execution.Rpc.Filter
 public import EthLib.Execution.Rpc.Fees
 public import EthLib.Execution.Rpc.GenericTransaction
 public import EthLib.Execution.Rpc.Call
+public import EthLib.Execution.Rpc.Estimate
 public import EthLib.Execution.Rpc.Methods
 
 /-!

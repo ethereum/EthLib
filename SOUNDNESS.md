@@ -3919,6 +3919,29 @@ A revert has the message `"execution reverted"`, the only text that the source g
 A halt that is not a revert has code 801 for a lack of gas, 4 for an invalid opcode, and `-32000` otherwise.
 The error groups of the source define these codes, but no text assigns them to `eth_call`.
 
+`eth_estimateGas` and `eth_createAccessList` run the same call, with the same choices (`Execution/Rpc/Estimate.lean`).
+Their block parameter is `latest` by default, as for `eth_call`, though of the three the source states that default only for `eth_call`.
+The source asks `eth_estimateGas` only for "an estimate of how much gas is necessary to allow the transaction to complete".
+EthLib answers a gas limit with which the call completes: it prepares, and its message neither reverts nor halts (`Completes`).
+It fails exactly when `eth_call` fails, with the same error, the revert of code 3 included (`estimateGas_eq_error_iff`).
+Otherwise it searches by halves below that limit.
+The answer completes and is at most that limit (`estimateGas_completes`, `Proofs/Rpc/Estimate.lean`).
+Without the interval hypothesis, the call still does not complete with one gas less, unless the answer is at most 1 (`estimateGas_pred_not_completes`).
+It is the least positive limit that completes when the limits that complete form an interval (`estimateGas_least`).
+Code that reads the gas left can break that hypothesis, and the answer may then not be the least.
+A call completes with a gas limit exactly when `eth_call` answers data at that limit (`completes_iff`).
+
+The source fixes none of the contents of the result of `eth_createAccessList`.
+EthLib lists each address and storage key that the call read or wrote, as the state tracker records them, a revert included.
+It leaves out an address without a storage key that the transaction accesses from the start: the sender, the recipient or the created contract, the precompiles and, from Shapella, the beneficiary.
+The authorities and the delegate of EIP-7702 and the contracts that the call creates stay in, though EIP-2929 and EIP-7702 make them warm.
+It runs the call again with that list, as type 1 when the request has type 0.
+Before Berlin no transaction has an access list, so the list is empty and the call runs once.
+The result reports the gas used and the error message of that second call (`createAccessList_eq_ok`).
+A rejection of the second call, such as a gas limit that no longer covers the list, is the error of the method.
+The estimate has no cap from EIP-7825, and with a fee named the sender must hold the fee of the whole gas limit of the request.
+The list is not iterated to a fixed point, so a call whose accesses change with its access list can report a list that the second call does not match.
+
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
 The base fee of each block of the range is that of its header, or 0 before London (`ChainView.feeHistory_baseFeePerGas`).
