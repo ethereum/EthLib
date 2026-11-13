@@ -28,27 +28,19 @@ theorem processPendingDeposits_pendingConsolidations {f : Fork} {s t : BeaconSta
   have deposit {a b : BeaconState preset f} {d : PendingDeposit}
       (ok : applyPendingDeposit config checks a d = .ok b) :
       b.pendingConsolidations = a.pendingConsolidations := by
-    unfold applyPendingDeposit at ok
-    split at ok
-    · split at ok
-      · cases ok; rfl
-      simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · unfold addValidatorToRegistry at ok
-        split at ok
-        · simp only [addValidatorToRegistryAltair, bind_ok_iff, liftAccessor_ok,
-            pure, Except.pure, Except.ok.injEq] at ok
-          obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := ok
-          rfl
-        · split at ok <;> cases ok
-          rfl
-      · cases ok; rfl
-    · simp only [liftAccessor_ok, bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      obtain ⟨_, set⟩ := increaseBalance_ok ok
+    rcases applyPendingDeposit_cases ok with rfl | ⟨_, ok⟩ | ⟨_, ok⟩
+    · rfl
+    · obtain ⟨_, set⟩ := increaseBalance_ok ok
       obtain ⟨_, rfl⟩ := setBalance_ok set
       rfl
+    · unfold addValidatorToRegistry at ok
+      split at ok
+      · simp only [addValidatorToRegistryAltair, bind_ok_iff, liftAccessor_ok,
+          pure, Except.pure, Except.ok.injEq] at ok
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := ok
+        rfl
+      · split at ok <;> cases ok
+        rfl
   have pass {stop : PendingDeposit → Bool} {nextEpoch : Epoch} {available : Gwei} :
       ∀ {entries : List PendingDeposit} {a : BeaconState preset f} {processed : Gwei}
         {count : Nat} {postponed : Array PendingDeposit} {result},
@@ -473,7 +465,7 @@ theorem deposit {before : fork < .hegota} {deposit : Deposit}
     (ok : processDeposit config checks before state deposit = .ok after) :
     SamePendingQueue state after := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok ok
-  rcases applyDeposit_cases applied with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨early, _⟩
+  rcases applyDeposit_fork_cases applied with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨early, _⟩
   · rfl
   · rfl
   · unfold addValidatorToRegistry at added
@@ -1121,7 +1113,7 @@ private theorem blockDeposit {before : fork < .hegota} {deposit : Deposit}
     (ok : processDeposit config checks before state deposit = .ok after) :
     WithdrawalKept state after := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok ok
-  rcases applyDeposit_cases applied with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨early, _⟩
+  rcases applyDeposit_fork_cases applied with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨early, _⟩
   · exact of_data
   · exact of_data
   · have data := addValidatorToRegistry_validators_eq_push added

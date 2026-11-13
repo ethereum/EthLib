@@ -7,9 +7,9 @@ public import EthLib.Consensus.Proofs.Transition.Committees
 /-!
 # Validator effective-balance caps
 
-The cap predicate is the inequality used by `WithinBudget.capped`.
+Each validator's effective balance is at most the cap of its withdrawal credentials.
 
-Genesis supplies it without a fixed global budget.
+Genesis gives it, and every step keeps it before Gloas.
 -/
 
 @[expose] public section
@@ -20,6 +20,7 @@ open Base
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
+/-- At genesis, each validator's effective balance is at most the cap of its credentials. -/
 theorem Genesis.effectiveBalance_capped {g : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) :
     ∀ validator ∈ g.state.validators.data,
@@ -189,18 +190,10 @@ private theorem CapStep.add {f : Fork} {s t : BeaconState preset f}
 private theorem CapStep.deposit {f : Fork} {s t : BeaconState preset f}
     {deposit : PendingDeposit}
     (ok : applyPendingDeposit config checks s deposit = .ok t) : CapStep s t := by
-  unfold applyPendingDeposit at ok
-  split at ok
-  · split at ok
-    · cases ok; exact CapStep.refl _
-    simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · exact CapStep.add ok
-    · cases ok; exact CapStep.refl _
-  · simp only [liftAccessor_ok, bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact CapStep.increase ok
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+  · exact CapStep.refl _
+  · exact CapStep.increase raised
+  · exact CapStep.add added
 
 private theorem CapStep.applyDeposit {f : Fork} {s t : BeaconState preset f}
     {key : Cryptography.Bls.BLSPubkey} {credentials : Bytes32} {amount : Gwei}
@@ -656,7 +649,14 @@ private theorem CapStep.run {s t : ForkedBeaconState preset}
     exact (ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early)).trans
       (CapStep.step step activation compounding early)
 
-/-- Every reachable validator is below its credential-dependent cap before Gloas. -/
+/-- Before Gloas, each validator reached from genesis has an effective balance at most its cap.
+
+The preset caps are assumed in order.
+
+`MAX_EFFECTIVE_BALANCE` is at most `MIN_ACTIVATION_BALANCE`.
+
+`MIN_ACTIVATION_BALANCE` is at most `MAX_EFFECTIVE_BALANCE_ELECTRA`.
+-/
 theorem Run.effectiveBalance_capped {g x : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)

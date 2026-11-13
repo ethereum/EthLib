@@ -129,7 +129,7 @@ private theorem funding_block_deposit {fork : Fork} {s t : BeaconState preset fo
   rw [← funding_potential_eq t electra, ← funding_potential_eq s electra]
   rw [SamePendingQueue.deposit electra ok]
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok ok
-  rcases applyDeposit_cases applied with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨early, _⟩
+  rcases applyDeposit_fork_cases applied with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨early, _⟩
   · exact Nat.le_refl _
   · exact Nat.le_refl _
   · have bound := funding_registration (s.pendingConsolidations electra).data.toList

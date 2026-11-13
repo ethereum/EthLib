@@ -84,8 +84,8 @@ theorem signAtEpoch_verifies {α : Type} [SszType α] {config : Config}
     (signed : signAtEpoch config state domainType epoch object key = .ok signature) :
     ∃ domain root, getDomain config state domainType (some epoch) = .ok domain ∧
       computeSigningRoot object domain = .ok root ∧
-      Signatures.verify (packBytes (Signatures.skToPk key)) (packBytes root)
-        (packBytes signature) = true := by
+      Signatures.verify (Signatures.skToPk key) (packBytes root)
+        signature = true := by
   unfold signAtEpoch at signed
   -- Split the binds with lemmas, so the kernel never evaluates the signature.
   obtain ⟨domain, domained, signed⟩ := bind_ok_iff.mp signed

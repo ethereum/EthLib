@@ -3,6 +3,11 @@ module
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.Genesis
+public import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
+import EthLib.Consensus.Proofs.Transition.ActiveKept
+import EthLib.Consensus.Proofs.Transition.SlashedPersistence
+import EthLib.Consensus.Proofs.Transition.ValidatorCaps
+import Mathlib.Order.Interval.Finset.Nat
 
 /-!
 # Count bounds for pre-Electra cohorts
@@ -10,6 +15,8 @@ public import EthLib.Consensus.Proofs.Transition.Genesis
 The count cap uses the whole registry, so it does not decrease along a run.
 
 Along a run, activation cohorts change only at the registry pass, which fills one scheduled epoch.
+
+Before Electra, keys that join over a window therefore weigh at most one capped cohort per epoch.
 -/
 
 @[expose] public section
@@ -21,30 +28,13 @@ open Base
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
   {fork : Fork} {state after : BeaconState preset fork}
 
-/-- The pre-Electra validator-count churn limit of a registry with `size` entries. -/
-def DirectSafety.cohortCap (config : Config) (size : Nat) : Nat :=
-  max config.MIN_PER_EPOCH_CHURN_LIMIT.toNat (size / config.CHURN_LIMIT_QUOTIENT.toNat)
-
-open DirectSafety (cohortCap)
+open DirectSafety (cohortCap validatorChurnLimit_le_cohortCap)
 
 private theorem cohortCap_mono {n m : Nat} (le : n ≤ m) :
     cohortCap config n ≤ cohortCap config m := by
   unfold cohortCap
   exact Nat.max_le.mpr ⟨Nat.le_max_left _ _,
     Nat.le_trans (Nat.div_le_div_right le) (Nat.le_max_right _ _)⟩
-
-/-- The validator-count churn is bounded by the registry size, not just active entries. -/
-theorem validatorChurnLimit_le_cohortCap {fork : Fork} (s : BeaconState preset fork)
-    (bound : Nat) (bounded : s.validators.data.size ≤ bound) :
-    (getValidatorChurnLimit config s).toNat ≤ cohortCap config bound := by
-  have active : (getActiveValidatorIndices s (getCurrentEpoch s)).length ≤
-      s.validators.data.size := by
-    exact Nat.le_trans (List.length_filterMap_le _ _) (by simp)
-  have converted : (getActiveValidatorIndices s (getCurrentEpoch s)).length.toUInt64.toNat ≤
-      bound := Nat.le_trans (Nat.mod_le _ _) (Nat.le_trans active bounded)
-  simp only [getValidatorChurnLimit, Uint64.toNat_max, UInt64.toNat_div, cohortCap]
-  exact Nat.max_le.mpr ⟨Nat.le_max_left _ _,
-    Nat.le_trans (Nat.div_le_div_right converted) (Nat.le_max_right _ _)⟩
 
 /-- Count validators whose selected epoch equals a finite cohort epoch. -/
 def validatorCohort (field : Validator → Epoch) (state : BeaconState preset fork)
@@ -217,23 +207,16 @@ private theorem cohorts_admit {key : Cryptography.Bls.BLSPubkey} {credentials : 
     CohortsKept state after := by
   exact CohortsKept.append (addValidatorToRegistry_validators_eq_push ok) rfl
 
-private theorem cohorts_pendingDeposit {deposit : PendingDeposit}
-    (ok : applyPendingDeposit config checks state deposit = .ok after) :
-    CohortsKept state after := by
-  rcases applyPendingDeposit_cases ok with rfl | ⟨_, ok⟩ | ⟨_, ok⟩
-  · exact .refl _
-  · exact .increaseBalance ok
-  · exact cohorts_admit ok
-
 private theorem cohorts_deposit (early : fork < .pectra) {before : fork < .hegota}
     {deposit : Deposit} (ok : processDeposit config checks before state deposit = .ok after) :
     CohortsKept state after := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok ok
-  have noElectra : ¬ Fork.pectra ≤ fork := Nat.not_le_of_lt early
-  simp only [applyDeposit, noElectra, ↓reduceDIte] at applied
-  exact (CohortsKept.of_data (s := state)
-    (t := { state with eth1DepositIndex := fun _ => next }) rfl).trans
-      (cohorts_pendingDeposit applied)
+  refine (CohortsKept.of_data (s := state)
+    (t := { state with eth1DepositIndex := fun _ => next }) rfl).trans ?_
+  rcases applyDeposit_cases early applied with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+  · exact .refl _
+  · exact .increaseBalance raised
+  · exact cohorts_admit added
 
 private theorem cohorts_attestation {parentSlot : Slot} {attestation : Attestation preset fork}
     (ok : processAttestation config checks state parentSlot attestation = .ok after) :
@@ -315,7 +298,7 @@ def scheduledActivationEpoch (state : BeaconState preset fork) : Nat :=
   (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat
 
 /-- Non-genesis activation cohorts are bounded and precede the next registry pass. -/
-structure ActivationCohortBound (config : Config) (state : BeaconState preset fork) : Prop where
+private structure ActivationCohortBound (config : Config) (state : BeaconState preset fork) : Prop where
   count : ∀ e, e ≠ FAR_FUTURE_EPOCH → e ≠ GENESIS_EPOCH →
     validatorCohort Validator.activationEpoch state e ≤
       cohortCap config state.validators.data.size
@@ -690,7 +673,7 @@ private theorem Step.activationCohortBound {s t : ForkedBeaconState preset}
       (Nat.lt_of_le_of_lt (processUpgrades_fork_le upgrades) early) slotOk bounded)
 
 /-- A pre-Electra run bounds activation cohorts even when count churn is zero. -/
-theorem Run.activationCohortBound {s t : ForkedBeaconState preset}
+private theorem Run.activationCohortBound {s t : ForkedBeaconState preset}
     (run : Run config checks s t) (early : t.fork < .pectra)
     (bounded : ActivationCohortBound config s.state) : ActivationCohortBound config t.state := by
   induction run with
@@ -699,7 +682,7 @@ theorem Run.activationCohortBound {s t : ForkedBeaconState preset}
     exact step.activationCohortBound early (ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early))
 
 /-- Genesis activates validators only at epoch zero; all other finite cohorts are empty. -/
-theorem Genesis.activationCohortBound {g : ForkedBeaconState preset}
+private theorem Genesis.activationCohortBound {g : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) :
     ActivationCohortBound config g.state := by
   obtain ⟨hash, time, deposits, ok⟩ := genesis
@@ -747,5 +730,288 @@ theorem Genesis.activationCohortBound {g : ForkedBeaconState preset}
         (by simpa using member) (by simp)
     simp only [genesisEpoch, GENESIS_EPOCH, UInt64.toNat_zero, scheduledActivationEpoch]
     omega
+
+/-! ## The joining stake before Electra -/
+
+namespace DirectSafety
+
+private theorem effectiveWeight_le_cap {g x : ForkedBeaconState preset}
+    (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
+    (caps : CapOrder preset) (early : x.fork < .pectra) (key : Cryptography.Bls.BLSPubkey) :
+    effectiveWeight x.state key ≤ preset.MAX_EFFECTIVE_BALANCE.toNat := by
+  have capped := run.effectiveBalance_capped genesis caps.activation caps.compounding
+    (Nat.lt_trans early (by decide))
+  unfold effectiveWeight
+  cases found : x.state.validators.data.toList.find? (fun v => v.pubkey == key) with
+  | none => simp
+  | some v =>
+    have member := List.mem_of_find?_eq_some found
+    have bound := capped v (by simpa using member)
+    have noElectra : ¬ Fork.pectra ≤ x.fork := Nat.not_le_of_lt early
+    simpa [withdrawalMaxEffectiveBalance, getMaxEffectiveBalance, noElectra] using
+      (UInt64.le_iff_toNat_le.mp bound)
+
+private theorem count_epoch_window (vs : List Validator) (field : Validator → Epoch)
+    (lo hi cap : Nat)
+    (bounded : ∀ n ∈ Finset.Ioc lo hi, vs.countP (fun v => (field v).toNat == n) ≤ cap) :
+    (vs.filter fun v => lo < (field v).toNat && (field v).toNat ≤ hi).length ≤ (hi - lo) * cap := by
+  classical
+  have partition : ∀ xs : List Validator,
+      (xs.filter fun v => lo < (field v).toNat && (field v).toNat ≤ hi).length =
+        ∑ n ∈ Finset.Ioc lo hi, xs.countP (fun v => (field v).toNat == n) := by
+    intro xs
+    induction xs with
+    | nil => simp
+    | cons v xs ih =>
+      simp only [List.countP_cons, Finset.sum_add_distrib]
+      have singleton : (∑ n ∈ Finset.Ioc lo hi, if (field v).toNat == n then 1 else 0) =
+          if lo < (field v).toNat ∧ (field v).toNat ≤ hi then 1 else 0 := by
+        by_cases member : (field v).toNat ∈ Finset.Ioc lo hi
+        · rw [Finset.sum_eq_single (field v).toNat]
+          · simp [Finset.mem_Ioc.mp member]
+          · intro n _ different
+            simp [Ne.symm different]
+          · exact fun absent => False.elim (absent member)
+        · rw [Finset.sum_eq_zero (fun n inside => by
+            have different : (field v).toNat ≠ n := fun same => member (same ▸ inside)
+            simp [different])]
+          simp only [Finset.mem_Ioc] at member
+          simp [member]
+      rw [singleton]
+      by_cases inside : lo < (field v).toNat ∧ (field v).toNat ≤ hi
+      · simp [inside.1, inside.2, ih, Nat.add_comm]
+      · have no : ¬ (lo < (field v).toNat && (field v).toNat ≤ hi) := by simpa using inside
+        simp [no, ih, inside]
+  rw [partition]
+  calc
+    _ ≤ ∑ _n ∈ Finset.Ioc lo hi, cap := Finset.sum_le_sum bounded
+    _ = (hi - lo) * cap := by simp
+
+private theorem new_recent_key_activation {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (early : y.fork < .pectra)
+    {key : Cryptography.Bls.BLSPubkey} (member : key ∈ recentKeys y.state \ recentKeys x.state) :
+    ∃ v ∈ y.state.validators.data.toList, v.pubkey = key ∧
+      (getCurrentEpoch x.state).toNat < v.activationEpoch.toNat ∧
+      v.activationEpoch.toNat ≤ (getCurrentEpoch y.state).toNat := by
+  classical
+  have xEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
+  obtain ⟨recent, absent⟩ := Finset.mem_sdiff.mp member
+  obtain ⟨recent, unslashed⟩ := Finset.mem_filter.mp recent
+  -- A key slashed at the reference would still be slashed now, so it is unslashed there too.
+  have unslashedX : ¬ SlashedAt x.state key := fun slashed =>
+    unslashed (slashedAt_forward tail slashed)
+  have witness : ∃ (i : Nat) (w : Validator), y.state.validators.data[i]? = some w ∧
+      w.pubkey = key ∧ (isActiveValidator w (getCurrentEpoch y.state) = true ∨
+        isActiveValidator w (getPreviousEpoch y.state) = true) := by
+    rcases Finset.mem_union.mp recent with h | h
+    · obtain ⟨i, w, found, same, active⟩ :=
+        (mem_keysAt_epoch (Nat.lt_trans early (by decide)) _ key).mp h
+      exact ⟨i, w, found, same, Or.inl active⟩
+    · obtain ⟨i, w, found, same, active⟩ :=
+        (mem_keysAt_epoch (Nat.lt_trans early (by decide)) _ key).mp h
+      exact ⟨i, w, found, same, Or.inr active⟩
+  obtain ⟨i, v, found, keyEq, active⟩ := witness
+  have inactive (e : Epoch) (le : e ≤ getCurrentEpoch x.state)
+      (selected : e = getCurrentEpoch x.state ∨ e = getPreviousEpoch x.state) :
+      ¬ isActiveValidator v e = true := by
+    intro h
+    have kept := activeKept_of_chainSteps tail.chainSteps e
+      (UInt64.le_trans le (getCurrentEpoch_le_activityFixedEpoch _)) i
+    have oldActive : isActiveAt x.state e i = true := by
+      rw [← kept]
+      simp [isActiveAt, found, h]
+    obtain ⟨old, oldFound, oldActive⟩ := isActiveAt_eq_true_iff.mp oldActive
+    obtain ⟨later, laterFound, same⟩ := validators_getElem?_of_validatorKeys_prefix
+      (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 oldFound
+    have equal : later = v := Option.some.inj (laterFound.symm.trans found)
+    have member := (mem_keysAt_epoch (Nat.lt_trans xEarly (by decide)) e key).mpr
+      ⟨i, old, oldFound, same.symm.trans (equal ▸ keyEq), oldActive⟩
+    apply absent
+    refine Finset.mem_filter.mpr ⟨?_, unslashedX⟩
+    rcases selected with rfl | rfl
+    · exact Finset.mem_union_left _ member
+    · exact Finset.mem_union_right _ member
+  have now := inactive _ (UInt64.le_refl _) (Or.inl rfl)
+  have prev := inactive _ (getPreviousEpoch_le _) (Or.inr rfl)
+  have epochs := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
+  have px := getPreviousEpoch_toNat x.state
+  have py := getPreviousEpoch_toNat y.state
+  refine ⟨v, by simpa using Array.mem_of_getElem? found, keyEq, ?_⟩
+  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
+    UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at active now prev
+  rcases active with h | h <;> omega
+
+private theorem carry_key_same_epoch {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) (early : y.fork < .pectra)
+    {key : Cryptography.Bls.BLSPubkey}
+    (member : key ∈ (recentKeys y.state ∩ recentKeys x.state) \ activeKeys x.state) :
+    getCurrentEpoch y.state = getCurrentEpoch x.state := by
+  have ⟨_, _, _, initialized⟩ := genesis
+  classical
+  have xEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
+  obtain ⟨both, absent⟩ := Finset.mem_sdiff.mp member
+  obtain ⟨⟨i, old, found, keyEq, activation, exit⟩, _⟩ :=
+    (mem_boundary_iff x.state (Nat.lt_trans xEarly (by decide))
+      ((validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      shared.chainSteps).2) key).mp
+      (Finset.mem_sdiff.mpr ⟨(Finset.mem_inter.mp both).2, absent⟩)
+  obtain ⟨v, current, kept⟩ := tail.registryLifecycle.validators i old found
+  have assigned : old.exitEpoch ≠ FAR_FUTURE_EPOCH := by
+    intro h
+    exact getCurrentEpoch_ne_farFuture twoSlots x.state
+      ((UInt64.toNat_inj.mp exit).symm.trans h)
+  have exitSame := kept.exitEpoch assigned
+  obtain ⟨w, wFound, wKey⟩ := validators_getElem?_of_validatorKeys_prefix
+      (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 found
+  have equal : w = v := Option.some.inj (wFound.symm.trans current)
+  have vKey : v.pubkey = key := equal ▸ wKey.trans keyEq
+  have active : isActiveValidator v (getCurrentEpoch y.state) = true ∨
+      isActiveValidator v (getPreviousEpoch y.state) = true := by
+    have recent := (Finset.mem_filter.mp (Finset.mem_inter.mp both).1).1
+    have unique := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      (shared.append tail).chainSteps).2
+    have identify {j : Nat} {z : Validator} (zFound : y.state.validators.data[j]? = some z)
+        (zKey : z.pubkey = key) : z = v := by
+      obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp current
+      obtain ⟨hj, rfl⟩ := Array.getElem?_eq_some_iff.mp zFound
+      have eq : j = i := unique.eq_of_getElem_eq
+        (by simpa [validatorKeys] using hj) (by simpa [validatorKeys] using hi)
+        (by simpa [validatorKeys] using zKey.trans vKey.symm)
+      subst j
+      rfl
+    rcases Finset.mem_union.mp recent with h | h
+    · obtain ⟨j, z, zFound, zKey, h⟩ :=
+        (mem_keysAt_epoch (Nat.lt_trans early (by decide)) _ key).mp h
+      exact Or.inl (identify zFound zKey ▸ h)
+    · obtain ⟨j, z, zFound, zKey, h⟩ :=
+        (mem_keysAt_epoch (Nat.lt_trans early (by decide)) _ key).mp h
+      exact Or.inr (identify zFound zKey ▸ h)
+  have epochs := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
+  have py := getPreviousEpoch_toNat y.state
+  have exitNat := congrArg UInt64.toNat exitSame
+  apply UInt64.toNat_inj.mp
+  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
+    UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at active
+  rcases active with h | h <;> omega
+
+/-- New recent keys use only activation cohorts, including when their count cap is zero. -/
+private theorem new_recent_before_electra {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) (caps : CapOrder preset)
+    (early : y.fork < .pectra) :
+    Models.stake (effectiveWeight y.state) (recentKeys y.state \ recentKeys x.state) ≤
+      ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
+        cohortCap config y.state.validators.data.size * preset.MAX_EFFECTIVE_BALANCE.toNat := by
+  classical
+  let activated := y.state.validators.data.toList.filter fun v =>
+    (getCurrentEpoch x.state).toNat < v.activationEpoch.toNat &&
+      v.activationEpoch.toNat ≤ (getCurrentEpoch y.state).toNat
+  have subset : recentKeys y.state \ recentKeys x.state ⊆
+      (activated.map (·.pubkey)).toFinset := by
+    intro key member
+    obtain ⟨v, present, keyEq, lower, upper⟩ := new_recent_key_activation tail early member
+    exact List.mem_toFinset.mpr (List.mem_map.mpr
+      ⟨v, List.mem_filter.mpr ⟨present, by simp [lower, upper]⟩, keyEq⟩)
+  have cohorts := (shared.append tail).activationCohortBound early genesis.activationCohortBound
+  have count : activated.length ≤
+      ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
+        cohortCap config y.state.validators.data.size := by
+    apply count_epoch_window
+    intro n member
+    obtain ⟨lower, upper⟩ := Finset.mem_Ioc.mp member
+    have small : n < 2 ^ 64 := lt_of_le_of_lt upper (UInt64.toNat_lt _)
+    have numeric : n.toUInt64.toNat = n := by
+      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
+    have finite : n.toUInt64 ≠ FAR_FUTURE_EPOCH := by
+      intro equal
+      have far : n = 2 ^ 64 - 1 := by
+        have h := congrArg UInt64.toNat equal
+        rw [numeric] at h
+        exact h
+      have current := getCurrentEpoch_ne_farFuture twoSlots y.state
+      have currentNat := UInt64.toNat_lt (getCurrentEpoch y.state)
+      apply current
+      apply UInt64.toNat_inj.mp
+      change _ = 2 ^ 64 - 1
+      omega
+    have nonzero : n.toUInt64 ≠ GENESIS_EPOCH := by
+      intro equal
+      have h := congrArg UInt64.toNat equal
+      rw [numeric] at h
+      change n = 0 at h
+      omega
+    have bound := cohorts.count n.toUInt64 finite nonzero
+    have predicates : (fun v : Validator => v.activationEpoch.toNat == n) =
+        (fun v => v.activationEpoch == n.toUInt64) := by
+      funext v
+      apply Bool.eq_iff_iff.mpr
+      simp only [beq_iff_eq, ← UInt64.toNat_inj, numeric]
+    simpa only [predicates, validatorCohort] using bound
+  have cards := (Finset.card_le_card subset).trans
+    (List.toFinset_card_le (activated.map (·.pubkey)))
+  simp only [List.length_map] at cards
+  unfold Models.stake
+  calc
+    _ ≤ ∑ _key ∈ recentKeys y.state \ recentKeys x.state,
+        preset.MAX_EFFECTIVE_BALANCE.toNat :=
+      Finset.sum_le_sum (fun key _ =>
+        effectiveWeight_le_cap (shared.append tail) genesis caps early key)
+    _ = (recentKeys y.state \ recentKeys x.state).card *
+        preset.MAX_EFFECTIVE_BALANCE.toNat := by simp
+    _ ≤ _ := Nat.mul_le_mul_right _ (cards.trans count)
+
+/-- Separate new activation cohorts from reference previous-only stake without a positive cap. -/
+theorem joining_before_electra_split {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) (caps : CapOrder preset)
+    (early : y.fork < .pectra) :
+    Models.stake (effectiveWeight y.state) (recentKeys y.state \ recentKeys x.state) ≤
+      ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
+        cohortCap config y.state.validators.data.size * preset.MAX_EFFECTIVE_BALANCE.toNat ∧
+    Models.stake (effectiveWeight y.state)
+      ((recentKeys y.state ∩ recentKeys x.state) \ activeKeys x.state) ≤ boundaryStake x := by
+  have ⟨_, _, _, initialized⟩ := genesis
+  classical
+  refine ⟨new_recent_before_electra shared tail genesis twoSlots caps early, ?_⟩
+  have uniqueX := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      shared.chainSteps).2
+  have uniqueY := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      (shared.append tail).chainSteps).2
+  have xEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
+  have pointwise (key : Cryptography.Bls.BLSPubkey)
+      (member : key ∈ (recentKeys y.state ∩ recentKeys x.state) \ activeKeys x.state) :
+      effectiveWeight y.state key ≤ effectiveWeight x.state key := by
+    have same := carry_key_same_epoch shared tail genesis twoSlots early member
+    obtain ⟨both, absent⟩ := Finset.mem_sdiff.mp member
+    obtain ⟨⟨i, old, found, keyEq, _⟩, _⟩ :=
+      (mem_boundary_iff x.state (Nat.lt_trans xEarly (by decide)) uniqueX key).mp
+        (Finset.mem_sdiff.mpr ⟨(Finset.mem_inter.mp both).2, absent⟩)
+    obtain ⟨v, current, vKey⟩ := validators_getElem?_of_validatorKeys_prefix
+      (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 found
+    have bound := tail.effectiveAt_le_of_same_epoch early same i
+      (Array.getElem?_eq_some_iff.mp found).1
+    have oldWeight := effectiveWeight_of_member uniqueX
+      (by simpa using Array.mem_of_getElem? found)
+    have newWeight := effectiveWeight_of_member uniqueY
+      (by simpa using Array.mem_of_getElem? current)
+    rw [keyEq] at oldWeight
+    rw [vKey, keyEq] at newWeight
+    rw [oldWeight, newWeight]
+    simpa [effectiveAt, found, current] using bound
+  unfold boundaryStake Models.stake
+  exact (Finset.sum_le_sum pointwise).trans
+    (Finset.sum_le_sum_of_subset_of_nonneg
+      (by
+        intro key member
+        exact Finset.mem_sdiff.mpr
+          ⟨(Finset.mem_inter.mp (Finset.mem_sdiff.mp member).1).2,
+            (Finset.mem_sdiff.mp member).2⟩)
+      (by intros; exact Nat.zero_le _))
+
+end DirectSafety
 
 end EthLib.Consensus

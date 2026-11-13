@@ -92,6 +92,12 @@ theorem reachable_effective_alignment {g x : ForkedBeaconState preset}
   have numeric := congrArg UInt64.toNat whole
   simpa only [UInt64.toNat_mod, UInt64.reduceToNat] using numeric
 
+/-- The mainnet preset orders its effective-balance caps. -/
+theorem CapOrder.mainnet : CapOrder Preset.mainnet := ⟨by decide, by decide⟩
+
+/-- The minimal preset orders its effective-balance caps. -/
+theorem CapOrder.minimal : CapOrder Preset.minimal := ⟨by decide, by decide⟩
+
 /-- Each validator of the first state keeps its effective balance in the second. -/
 def EffectiveKept {f h : Fork} (s : BeaconState preset f)
     (t : BeaconState preset h) : Prop :=
@@ -194,18 +200,10 @@ private theorem effectiveKept_add {f : Fork} {s t : BeaconState preset f}
 private theorem effectiveKept_deposit {f : Fork} {s t : BeaconState preset f}
     {deposit : PendingDeposit}
     (ok : applyPendingDeposit config checks s deposit = .ok t) : EffectiveKept s t := by
-  unfold applyPendingDeposit at ok
-  split at ok
-  · split at ok
-    · cases ok; exact effectiveKept_refl _
-    simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · exact effectiveKept_add ok
-    · cases ok; exact effectiveKept_refl _
-  · simp only [liftAccessor_ok, bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact effectiveKept_increase ok
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+  · exact effectiveKept_refl _
+  · exact effectiveKept_increase raised
+  · exact effectiveKept_add added
 
 private theorem effectiveKept_applyDeposit {f : Fork} {s t : BeaconState preset f}
     {key : Cryptography.Bls.BLSPubkey} {credentials : Bytes32} {amount : Gwei}
@@ -1421,7 +1419,7 @@ private theorem admissionFunded_applyDeposit {f : Fork} {s t : BeaconState prese
     (matched : BalancesMatch s)
     (ok : applyDeposit config checks s key credentials amount signature = .ok t) :
     AdmissionFunded n t := by
-  rcases applyDeposit_cases ok with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨_, ok⟩
+  rcases applyDeposit_fork_cases ok with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨_, ok⟩
   · exact holds
   · exact holds
   · simpa only [AdmissionFunded, effectiveAt, actualBalanceAt] using

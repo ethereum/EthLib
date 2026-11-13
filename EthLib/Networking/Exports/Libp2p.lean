@@ -8,6 +8,7 @@ public import EthLib.Networking.Libp2p.Multistream
 public import EthLib.Networking.Libp2p.PeerId
 public import EthLib.Networking.Libp2p.Upgrade
 public import EthLib.Networking.Libp2p.Yamux
+public import EthLib.Networking.Libp2p.YamuxSession
 
 /-!
 # Exports: libp2p framing and peer IDs
@@ -47,6 +48,8 @@ Another export module that passes a frame imports its conversions from this modu
 The keys of a frame `dict` are the field names of its Lean structure, in snake case.
 
 The mplex streams of one side cross as a list of an ID, who opened it, and a state name.
+
+The yamux streams of one side cross as a list of an ID, a state name and the two windows.
 -/
 
 public section
@@ -251,6 +254,70 @@ def yamuxDecodeExport (args : PyValue) : Result PyValue :=
     let (frame, rest) ← (Yamux.decode data.data.toList).mapError
       fun e => (e.code, s!"yamux frame rejected: {reprStr e}")
     return (frame, (⟨rest.toArray⟩ : ByteArray))) args
+
+/-- The name of a yamux stream state in snake case, such as `syn_sent`. -/
+def yamuxStateName : Yamux.StreamState → String
+  | .synSent => "syn_sent"
+  | .synReceived => "syn_received"
+  | .established => "established"
+  | .localClosed => "local_closed"
+  | .remoteClosed => "remote_closed"
+  | .closed => "closed"
+  | .reset => "reset"
+
+/-- A message for a refused yamux frame, phrased for someone reading a Python traceback. -/
+def yamuxSessionMessage : Yamux.YamuxSessionError → String
+  | .sessionStream => "data or window update on stream 0, which names the session"
+  | .wrongParity i => s!"stream {i} has the parity of the other side"
+  | .reusedId i => s!"stream {i} was opened before"
+  | .unknownStream i => s!"stream {i} is unknown"
+  | .unexpectedAck i => s!"unexpected ACK on stream {i}"
+  | .afterReset i => s!"frame on stream {i} after its reset"
+  | .afterFin i => s!"data or FIN on stream {i} after its writer's FIN"
+  | .windowExceeded i l w => s!"data of {l} bytes on stream {i} exceeds its window of {w}"
+  | .missingAck i => s!"frame on stream {i} without ACK or RST before its ACK"
+
+/-- The yamux frames at the start of the bytes, until the bytes end. -/
+def yamuxFrames (data : List UInt8) : Except Yamux.YamuxError (List Yamux.Frame) := do
+  let mut rest := data
+  let mut frames := #[]
+  for _ in List.range data.length do
+    if rest.isEmpty then break
+    let (frame, after) ← Yamux.decode rest
+    frames := frames.push frame
+    rest := after
+  return frames.toList
+
+/-- One side of a yamux session after the frames it receives and sends, from no stream.
+
+The first argument says whether this side is the client.
+
+Each event says whether this side receives its bytes, and holds whole frames.
+
+The streams come as their ID, their state, and the windows to send and to receive.
+
+Then come whether the side received Go Away, and the bytes of the frames it sends back.
+
+A frame that does not decode, or that the side refuses, raises its error.
+
+The error names the index of the event. -/
+@[export eth_yamux_session]
+def yamuxSessionExport (args : PyValue) : Result PyValue :=
+  pyExport (fun ((isClient, events) : Bool × List (Bool × ByteArray)) => do
+    let mut session : Yamux.Session := { isClient }
+    let mut replies : Array ByteArray := #[]
+    for ((received, data), index) in events.zipIdx do
+      let frames ← (yamuxFrames data.data.toList).mapError
+        fun (e : Yamux.YamuxError) => (e.code, s!"event {index}: yamux frame rejected: {reprStr e}")
+      for frame in frames do
+        session ← (Yamux.step received session frame).mapError
+          fun (e : Yamux.YamuxSessionError) => (e.code, s!"event {index}: {yamuxSessionMessage e}")
+        if received then
+          replies := replies ++ (Yamux.reply frame).toArray.map
+            fun r => (⟨(Yamux.encode r).toArray⟩ : ByteArray)
+    let streams := session.streams.map fun ((id, s) : UInt32 × Yamux.Stream) =>
+      (id.toNat, yamuxStateName s.state, s.sendWindow, s.recvWindow)
+    return (streams, session.goneAway, replies.toList)) args
 
 /-- The result of a function on peer identities, with the code of its error. -/
 def identityResult {α : Type} (r : Except IdentityError α) : Result α :=

@@ -106,8 +106,7 @@ def isValidRegistrationSignature (config : Config) (genesisValidatorsRoot : Root
     (pubkey : BLSPubkey) (signed : SignedPQKeyRegistration) : Bool :=
   match registrationSigningRoot config genesisValidatorsRoot signed.message with
   | .ok root =>
-    Cryptography.Bls.Signatures.verify (packBytes pubkey) (packBytes root)
-      (packBytes signed.signature)
+    Cryptography.Bls.Signatures.verify pubkey (packBytes root) signed.signature
   | .error _ => false
 
 /-- The checks of a registration on its topic, cheapest first.

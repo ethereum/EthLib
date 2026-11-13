@@ -590,12 +590,7 @@ private theorem attesterLimits_result {fork : Fork} {s t : BeaconState preset fo
   intro i member
   rw [slashingIndices, mem_sortedSet, List.mem_filter, decide_eq_true_iff] at member
   rw [Array.mapM_eq_mapM_toList] at pubkeys
-  change (do
-    let keys ← sl.attestation1.attestingIndices.data.toList.mapM
-      (fun index => do return packBytes (← liftAccessor (getValidator s index)).pubkey)
-    pure keys.toArray) = .ok _ at pubkeys
-  rw [bind_ok_iff] at pubkeys
-  obtain ⟨keys, mapped, _⟩ := pubkeys
+  obtain ⟨keys, mapped, _⟩ := map_ok_iff.mp pubkeys
   obtain ⟨key, computed⟩ := mapM_ok_of_mem mapped i (by simpa using member.1)
   simp only [bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨v, found, _⟩ := computed
@@ -1113,7 +1108,7 @@ private theorem deposit_bounds {fork : Fork} {s t : BeaconState preset fork}
   let site := { s with eth1DepositIndex := fun _ => next }
   have matchedSite : BalancesMatch site := matched
   change applyDeposit config checks site _ _ _ _ = .ok t at applied
-  rcases applyDeposit_cases applied with
+  rcases applyDeposit_fork_cases applied with
     ⟨electra, unchanged | ⟨u, _, added, rfl⟩⟩ | ⟨early, applied⟩
   · subst unchanged
     simp [balanceCredits, balanceDebits, actualBalanceAt, site]
@@ -2826,21 +2821,13 @@ private theorem funding_deposit_selection {fork : Fork} {s t : BeaconState prese
     have := nextEpoch.toNat_lt
     change ¬ (2 ^ 64 - 1 < nextEpoch.toNat)
     omega
-  unfold applyPendingDeposit at ok
-  split at ok
-  · split at ok
-    · cases ok; exact selected v found
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · rcases addValidatorToRegistry_validator ok found with old | rfl
-        · exact selected v old
-        · exact fresh _ rfl
-      · cases ok; exact selected v found
-  · simp only [liftAccessor_ok, bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    rw [increaseBalance_validators ok] at found
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, ok⟩ | ⟨_, ok⟩
+  · exact selected v found
+  · rw [increaseBalance_validators ok] at found
     exact selected v found
+  · rcases addValidatorToRegistry_validator ok found with old | rfl
+    · exact selected v old
+    · exact fresh _ rfl
 
 private theorem funding_withdrawn_deposit {fork : Fork} {s t : BeaconState preset fork}
     {deposit : PendingDeposit} {nextEpoch : Epoch} {exited : Bool}

@@ -163,83 +163,11 @@ theorem decreaseBalance {index : ValidatorIndex} {delta : Gwei}
 
 end RegistryLifecycle
 
-/-- Slashing penalties change only the balances. -/
-theorem processSlashings_eq {s t : BeaconState preset fork}
-    (ok : processSlashings s = .ok t) : ∃ balances, t = { s with balances } := by
-  have fold {step : BeaconState preset fork → Nat → Except TransitionError _} {xs : List Nat}
-      (kept : ∀ a i b, step a i = .ok b → ∃ balances, b = { a with balances })
-      (ok : xs.foldlM step s = .ok t) : ∃ balances, t = { s with balances } := by
-    refine foldlM_ok_invariant (fun t => ∃ balances, t = { s with balances }) ?_ ⟨_, rfl⟩ ok
-    rintro _ _ _ ⟨_, rfl⟩ stepped
-    obtain ⟨_, rfl⟩ := kept _ _ _ stepped
-    exact ⟨_, rfl⟩
-  unfold processSlashings at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, ok⟩ := ok
-  split at ok
-  · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp ok
-    refine fold (fun _ _ _ ok => ?_) applied
-    simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, lowered⟩ := ok
-        obtain ⟨_, _, rfl⟩ := decreaseBalance_eq_ok_iff.mp lowered
-        exact ⟨_, rfl⟩
-      · cases ok; exact ⟨_, rfl⟩
-    · cases ok; exact ⟨_, rfl⟩
-  · refine fold (fun _ _ _ ok => ?_) ok
-    simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
-        obtain ⟨_, _, rfl⟩ := decreaseBalance_eq_ok_iff.mp lowered
-        exact ⟨_, rfl⟩
-      · cases ok; exact ⟨_, rfl⟩
-    · cases ok; exact ⟨_, rfl⟩
-
 /-- Slashing penalties change balances only, so they keep the validators. -/
 theorem processSlashings_validators {s t : BeaconState preset fork}
     (ok : processSlashings s = .ok t) : t.validators = s.validators := by
   obtain ⟨_, rfl⟩ := processSlashings_eq ok
   rfl
-
-/-- From Electra a deposit leaves the state unchanged or queues a pending deposit.
-
-For a new key it first adds a validator with no balance.
-
-Before Electra the deposit applies as a pending deposit. -/
-theorem applyDeposit_cases {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
-    {signature : BLSSignature}
-    (ok : applyDeposit config checks state pubkey credentials amount signature = .ok after) :
-    (.pectra ≤ fork ∧ (after = state ∨ ∃ middle pending,
-      (middle = state ∨ addValidatorToRegistry state pubkey credentials 0 = .ok middle) ∧
-        after = { middle with pendingDeposits := fun _ => pending })) ∨
-    (fork < .pectra ∧ applyPendingDeposit config checks state
-      ⟨pubkey, credentials, amount, signature, GENESIS_SLOT⟩ = .ok after) := by
-  unfold applyDeposit at ok
-  split at ok
-  · rename_i electra
-    refine .inl ⟨electra, ?_⟩
-    unfold applyDepositElectra at ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨middle, added, queued⟩ := ok
-        obtain ⟨pending, rfl⟩ := addPendingDeposit_eq queued
-        exact .inr ⟨middle, pending, .inr added, rfl⟩
-      · cases ok; exact .inl rfl
-    · obtain ⟨pending, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
-      exact .inr ⟨state, pending, .inl rfl, rfl⟩
-  · rename_i early
-    exact .inr ⟨Nat.lt_of_not_le early, ok⟩
 
 /-- An epoch stage keeps the validators, unless it is one of three stages.
 
@@ -443,20 +371,10 @@ private theorem registryLifecycle_addValidatorToRegistry {pubkey : BLSPubkey}
 theorem registryLifecycle_applyPendingDeposit {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
     RegistryLifecycle state after := by
-  unfold applyPendingDeposit at computed
-  split at computed
-  · split at computed
-    · cases computed
-      exact .refl _
-    simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    split at computed
-    · exact registryLifecycle_addValidatorToRegistry computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      exact computed ▸ .refl _
-  · simp only [liftAccessor_ok, bind_ok_iff] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    exact .increaseBalance computed
+  rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+  · exact .refl _
+  · exact .increaseBalance raised
+  · exact registryLifecycle_addValidatorToRegistry added
 
 private theorem registryLifecycle_applyDeposit {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei} {signature : BLSSignature}
@@ -1228,18 +1146,10 @@ private theorem increaseBalance {i : ValidatorIndex} {amount : Gwei}
 private theorem applyPendingDeposit {deposit : PendingDeposit}
     (ok : Consensus.applyPendingDeposit config checks state deposit = .ok after) :
     UnassignedKept state after := by
-  unfold Consensus.applyPendingDeposit at ok
-  split at ok
-  · split at ok
-    · cases ok; exact refl _
-    simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · exact append (addValidatorToRegistry_validators_eq_push ok) ⟨rfl, rfl⟩
-    · cases ok; exact refl _
-  · simp only [liftAccessor_ok, bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact increaseBalance ok
+  rcases applyPendingDeposit_cases ok with rfl | ⟨_, ok⟩ | ⟨_, ok⟩
+  · exact refl _
+  · exact increaseBalance ok
+  · exact append (addValidatorToRegistry_validators_eq_push ok) ⟨rfl, rfl⟩
 
 private theorem applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
     {signature : BLSSignature}

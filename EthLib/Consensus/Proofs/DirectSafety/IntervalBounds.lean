@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 public import EthLib.Consensus.Proofs.DirectSafety.FundingBlock
 public import EthLib.Consensus.Proofs.DirectSafety.FundingSlot
 import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
+import EthLib.Consensus.Proofs.DirectSafety.Cohorts
 import EthLib.Consensus.Proofs.Transition.SlashedPersistence
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 
@@ -222,7 +223,7 @@ private theorem registry_deposit_bound {fork : Fork} {s t : BeaconState preset f
     (ok : processDeposit config checks before s deposit = .ok t) :
     t.validators.data.size ≤ s.validators.data.size + 1 := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok ok
-  rcases applyDeposit_cases applied with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨_, applied⟩
+  rcases applyDeposit_fork_cases applied with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨_, applied⟩
   · exact Nat.le_succ _
   · exact Nat.le_succ _
   · rw [show _ = _ from addValidatorToRegistry_validators_eq_push added]
@@ -2252,20 +2253,19 @@ private theorem nonaccountable_losses_over_interval {g x y : ForkedBeaconState p
         simpa only [activeStakeWindow, funded, ↓reduceIte] using
           Nat.mul_le_mul_right preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat size)
   -- A reachable block input bounds the active weight at each internal call site.
-  have rates : ∀ site ∈ tail.consolidationSites,
-      .pectra ≤ site.fork → ∀ (rate : Gwei),
-        getConsolidationChurnLimit config site.state = .ok rate →
+  have rates : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      tail.Contains step → .pectra ≤ u.fork → ∀ rate : Gwei,
+        getConsolidationChurnLimit config u.state = .ok rate →
           rate.toNat ≤ consolidationRate (preset := preset) (config := config)
             (activeStakeWindow (config := config) x high events) := by
-    intro site member _ rate computed
-    obtain ⟨a, b, pre, step, post, same, fork, _, unique, weight⟩ :=
-      consolidationSites_provenance shared tail genesis early site member
-    have earlySite : site.fork < .glamsterdam := by
-      rw [fork]
-      exact Nat.lt_of_le_of_lt
-        (Nat.le_trans step.chainStep.fork_le (fork_le_of_chainSteps post.chainSteps)) early
-    have notGloas : ¬ .glamsterdam ≤ site.fork := Nat.not_le_of_lt earlySite
-    cases read : getTotalActiveBalance site.state with
+    intro u w step contained _ rate computed
+    obtain ⟨pre, post, same⟩ := tail.contains_split step contained
+    have earlyU : u.fork < .glamsterdam := Nat.lt_of_le_of_lt
+      (Nat.le_trans step.chainStep.fork_le (fork_le_of_chainSteps post.chainSteps)) early
+    have notGloas : ¬ .glamsterdam ≤ u.fork := Nat.not_le_of_lt earlyU
+    have unique := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
+      (shared.append pre).chainSteps).2
+    cases read : getTotalActiveBalance u.state with
     | error error =>
       simp only [getConsolidationChurnLimit, notGloas, ↓reduceIte,
         getBalanceChurnLimit, read, bind, Except.bind] at computed
@@ -2273,9 +2273,9 @@ private theorem nonaccountable_losses_over_interval {g x y : ForkedBeaconState p
     | ok total =>
       obtain ⟨inside, _, totalEq⟩ :=
         getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok read)
-      have active := keys_weight site.state _ unique inside
-      have bounded := weight.trans (prefixBound pre step post same)
-      apply intervalLoss_consolidation_rate earlySite read computed
+      have active := keys_weight u.state _ unique inside
+      have bounded := prefixBound pre step post same.symm
+      apply intervalLoss_consolidation_rate earlyU read computed
       rw [totalEq]
       apply max_le_max_left
       unfold activeKeys at bounded

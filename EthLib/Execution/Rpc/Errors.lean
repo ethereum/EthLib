@@ -52,12 +52,15 @@ def parseError : ErrorCode := ⟨-32700, "Parse error"⟩
 /-- The code of a request whose method the node does not serve. -/
 def methodNotFound : ErrorCode := ⟨-32601, "Method not found"⟩
 
+/-- The code of a failure of the node, such as a transaction whose sender it cannot recover. -/
+def internalError : ErrorCode := ⟨-32603, "Internal error"⟩
+
 /-- The codes of JSON-RPC 2.0 itself. -/
 def rpcStandardErrors : ErrorGroup where
   name := "JSONRPCStandardErrors"
   range := none
   errors := [parseError, ⟨-32600, "Invalid request"⟩, methodNotFound,
-    ⟨-32602, "Invalid params"⟩, ⟨-32603, "Internal error"⟩]
+    ⟨-32602, "Invalid params"⟩, internalError]
 
 /-- The code of an input that the method rejects, such as a block that is not canonical. -/
 def invalidInput : ErrorCode := ⟨-32000, "Invalid input"⟩

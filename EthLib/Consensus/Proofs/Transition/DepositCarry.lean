@@ -316,7 +316,7 @@ private theorem kept_applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {
     {signature : BLSSignature}
     (ok : applyDeposit config checks s pubkey credentials amount signature = .ok t) :
     Kept s t := by
-  rcases applyDeposit_cases ok with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨_, ok⟩
+  rcases applyDeposit_fork_cases ok with ⟨_, rfl | ⟨_, _, rfl | added, rfl⟩⟩ | ⟨_, ok⟩
   · rfl
   · rfl
   · have same := kept_addValidator added

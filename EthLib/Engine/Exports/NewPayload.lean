@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Exports
 public import EthLib.Base.Exports.ChainConfig
 public import EthLib.Base.Hex
+public import EthLib.Engine.Capabilities
 public import EthLib.Engine.NewPayload
 public import EthLib.Execution.Exports.Transition
 
@@ -50,6 +51,7 @@ def reasonMessage : PayloadError → String
   | .wrongVersionedHashes => "the expected versioned hashes are not those of the block"
   | .invalidBlock e => s!"{e.code}: {Execution.Blocks.Exports.blockErrorMessage e}"
   | .invalidBlockAccessList => "the block access list is not the RLP form of one"
+  | .invalidTerminalBlock => "the parent is a block of proof of work that is not terminal"
 
 /-- The JSON of a payload status, with the code of its reason first in the error. -/
 def statusJson (status : PayloadStatus) (reason : Option PayloadError) : Json :=
@@ -73,9 +75,7 @@ A status that does not decode is an invalid parameter, with code 32602. -/
 def readPayloadStatusExport (args : PyValue) : Result PyValue := pyExport readPayloadStatusOf args
 
 /-- The version of a method name `engine_newPayloadV1` to `engine_newPayloadV5`. -/
-def newPayloadVersion (method : String) : Option Nat :=
-  ["engine_newPayloadV1", "engine_newPayloadV2", "engine_newPayloadV3",
-    "engine_newPayloadV4", "engine_newPayloadV5"].idxOf? method |>.map (· + 1)
+def newPayloadVersion (method : String) : Option Nat := methodVersion "newPayload" method
 
 /-- The payload status of an `engine_newPayload` request, without the parent's state.
 
@@ -101,7 +101,7 @@ def newPayloadExport (args : PyValue) : Result PyValue :=
 
 /-- The payload status of an `engine_newPayload` request, on a chain that holds the parent.
 
-The arguments are the chain configuration, the state, the recent blocks and the request.
+The arguments are the chain configuration, the state, the recent blocks, two totals and the request.
 
 The state takes the form of the state root export.
 
@@ -109,17 +109,31 @@ The recent blocks are a list, each the fork name, the header and its ommers.
 
 The header and each ommer are in RLP form.
 
+The totals are the terminal total difficulty, and the total difficulty of the last recent block.
+
+The terminal total difficulty must be below `2^256`, or the export raises with code 0.
+
+The terminal block hash and number are zero, since the check of the method does not read them.
+
 A valid payload also gives the RLP forms of its header and of the accounts after it. -/
 def newPayloadOnChainOf
-    (args : PyValue × ByteArray × List (String × ByteArray × List ByteArray) × PyValue) :
+    (args : PyValue × ByteArray × List (String × ByteArray × List ByteArray) × Nat × Nat ×
+      PyValue) :
     Result (PyValue × Option ByteArray × Option ByteArray) := do
-  let (config, state, recent, request) := args
+  let (config, state, recent, terminalTotalDifficulty, totalDifficulty, request) := args
+  unless terminalTotalDifficulty < 2 ^ 256 do
+    throw (0, s!"config: a terminal total difficulty of {terminalTotalDifficulty}, not below 2^256")
+  let transition : TransitionConfiguration := {
+    terminalTotalDifficulty := BitVec.ofNat 256 terminalTotalDifficulty
+    terminalBlockHash := 0
+    terminalBlockNumber := 0 }
   let chain ← Execution.Blocks.Exports.chainOf config state recent
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
     | throw (0, "request: no method")
   let some version := newPayloadVersion method | throw (0, s!"no method {method}")
-  match newPayloadOnChain chain version (request.getObjValD "params") with
+  let params := request.getObjValD "params"
+  match newPayloadOnChain transition totalDifficulty chain version params with
   | .error e => throw (e.code, s!"engine error: {reprStr e}")
   | .ok (status, reason, next) =>
     let status := PyValue.ofJson (statusJson status reason)
@@ -135,7 +149,11 @@ def newPayloadOnChainOf
 
 /-- The payload status of an `engine_newPayload` request, on a chain that holds the parent.
 
-The arguments are the chain configuration, the state, the recent blocks and the request.
+The arguments are the chain configuration, the state, the recent blocks, two totals and the request.
+
+The totals are the terminal total difficulty, and the total difficulty of the last recent block.
+
+The terminal total difficulty must be below `2^256`, or the export raises with code 0.
 
 A valid payload also gives the RLP forms of its header and of the accounts after it.
 
