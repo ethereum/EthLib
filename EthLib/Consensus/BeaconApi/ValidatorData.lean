@@ -52,7 +52,7 @@ def slotBeforeHead (slot : Slot) : ErrorMessage :=
 def constructionError : ValidatorDutyError → ErrorMessage
   | .indexOutOfRange index limit =>
     { code := 400, message := s!"Index {index.toNat} is not below {limit.toNat}" }
-  | fault => internalError (reprStr fault.code)
+  | fault => internalError (toString fault.code.toNat)
 
 /-- Nothing when a block is verified, or the error with code 503. -/
 def checkVerified (optimistic : OptimisticStore preset fork) (root : Root) :
@@ -68,7 +68,7 @@ def stateAtSlot (config : Config) (state : BeaconState preset fork) (slot : Slot
     Except ErrorMessage (BeaconState preset fork) :=
   if slot < state.slot then .error (slotBeforeHead slot)
   else if slot = state.slot then .ok state
-  else (processSlots config .bls state slot).mapError fun fault => internalError (reprStr fault)
+  else (processSlots config .bls state slot).mapError fun _ => internalError "no state at the slot"
 
 /-- The attestation data for a slot, at the head of the store.
 
@@ -88,11 +88,11 @@ A slot before the head, or after the current slot of the store, gives the error 
 def produceAttestationData (config : Config) (store : Store preset fork)
     (optimistic : OptimisticStore preset fork) (slot : Slot) (committeeIndex : CommitteeIndex) :
     Except ErrorMessage AttestationData := do
-  let head ← (store.getHead config).mapError fun fault => internalError (reprStr fault)
+  let head ← (store.getHead config).mapError fun _ => internalError "no head"
   let some block := store.blocks[head.root]? | .error (internalError "unknown head block")
   let some headState := store.blockStates[head.root]? | .error (internalError "unknown head state")
   checkVerified optimistic head.root
-  let current ← (store.getCurrentSlot config).mapError fun fault => internalError (reprStr fault)
+  let current ← (store.getCurrentSlot config).mapError fun _ => internalError "no current slot"
   if current < slot then
     throw { code := 400, message := s!"Slot {slot.toNat} is after the current slot" }
   let state ← stateAtSlot config headState slot
@@ -198,8 +198,8 @@ def produceSyncCommitteeContribution (state : BeaconState preset fork) (altair :
   unless subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT do
     throw (constructionError (.indexOutOfRange subcommitteeIndex SYNC_COMMITTEE_SUBNET_COUNT))
   checkVerified optimistic root
-  let committee ← (syncCommitteeAtNextSlot state altair).mapError fun fault =>
-    internalError (reprStr fault)
+  let committee ← (syncCommitteeAtNextSlot state altair).mapError fun _ =>
+    internalError "no sync committee"
   let keys := syncSubcommitteePubkeys committee subcommitteeIndex.toNat
   let members := messages.filter (inSubcommittee state keys)
   match constructSyncCommitteeContribution state committee root subcommitteeIndex members with

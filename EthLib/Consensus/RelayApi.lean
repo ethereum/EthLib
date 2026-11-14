@@ -239,6 +239,14 @@ namespace BidTraceV2WithTimestamp
 def int64Json (x : Int64) : Lean.Json :=
   .str (toString x.toInt)
 
+/-- The integer that a text spells as decimal digits, after a minus sign if negative.
+
+Any text gives an integer, so the reader checks that writing it again gives the text back. -/
+def decimalInt (text : String) : Int :=
+  match text.toList with
+  | '-' :: digits => -(Nat.ofDigitChars 10 digits 0 : Int)
+  | digits => Nat.ofDigitChars 10 digits 0
+
 /-- The signed integer of 64 bits that a JSON string holds.
 
 Only the string that the writer gives is read, so any other spelling of the number is refused.
@@ -247,11 +255,10 @@ The relay source gives the value the type string, so a JSON number is refused as
 
 The reader of an unsigned integer accepts a JSON number, by the mapping of SSZ to JSON. -/
 def readInt64 : Lean.Json → Except Err Int64
-  | .str text => match text.toInt? with
-    | some i =>
-      if toString i = text ∧ -2 ^ 63 ≤ i ∧ i < 2 ^ 63 then .ok (Int64.ofInt i)
-      else .error .typeMismatch
-    | none => .error .typeMismatch
+  | .str text =>
+    let i := decimalInt text
+    if toString i = text ∧ -2 ^ 63 ≤ i ∧ i < 2 ^ 63 then .ok (Int64.ofInt i)
+    else .error .typeMismatch
   | _ => .error .typeMismatch
 
 /-- The JSON object of a received bid: the object of the bid, with the two timestamps added. -/

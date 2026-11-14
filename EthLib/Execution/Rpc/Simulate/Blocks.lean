@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Rpc.Simulate
 public import EthLib.Execution.Rpc.Block
 public import EthLib.Execution.Rpc.Receipt
+public import EthLib.Execution.Rpc.Submit
 
 /-!
 # `Execution.Rpc.Simulate.Blocks`
@@ -74,7 +75,7 @@ A nonce at the limit of EIP-2681 gives an internal error, as the fixtures show.
 
 The source gives no code to the other rules, so EthLib reads them as invalid parameters. -/
 def simulateInclusionError (e : InclusionError) : RpcError :=
-  let data := some (.str (reprStr e))
+  let data := some (.str (inclusionErrorText e))
   match e with
   | .nonceTooLow .. => SimulateCode.nonceTooLow.toRpcError data
   | .nonceTooHigh .. => SimulateCode.nonceTooHigh.toRpcError data
@@ -86,12 +87,12 @@ def simulateInclusionError (e : InclusionError) : RpcError :=
   | .senderNotEoa => SimulateCode.senderNotEoa.toRpcError data
   | .transaction (.initCodeTooLarge _) => SimulateCode.initCodeTooLarge.toRpcError data
   | .transaction .nonceOverflow | .missingCode _ => internalError.toRpcError data
-  | _ => RpcError.invalidParams (reprStr e)
+  | _ => RpcError.invalidParams (inclusionErrorText e)
 
 /-- The error of a simulated block whose body fails: that of its call, else an internal error. -/
 def simulateBlockError : BlockError → RpcError
   | .invalidTransaction _ e => simulateInclusionError e
-  | e => internalError.toRpcError (some (.str s!"simulated block: {reprStr e}"))
+  | _ => internalError.toRpcError (some (.str "simulated block: the block is invalid"))
 
 /-! ## The defaults of a block -/
 

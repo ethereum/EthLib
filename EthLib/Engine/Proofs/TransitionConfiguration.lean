@@ -9,6 +9,10 @@ public import EthLib.Consensus.ForkChoice.Handlers
 
 A configuration reads back from its JSON.
 
+A JSON value reads as a configuration exactly when it holds the three members in canonical form.
+
+The block hash is then in lowercase hex, and the two numbers have no leading zeros.
+
 The method succeeds exactly when the request holds one parameter that decodes as a configuration.
 
 It then answers the configuration of the execution node, whatever configuration the request holds.
@@ -48,6 +52,50 @@ theorem transitionConfigurationOfJson_json (c : TransitionConfiguration) :
   simp only [hfs, hex, r1, r2, r3, quantity_toDigits _ c.terminalTotalDifficulty.isLt,
     fixed_dataJson, uint64_toDigits, Json.liftM_ok, bind, Except.bind, ite_true, pure,
     Except.pure, BitVec.ofNat_toNat, BitVec.setWidth_eq]
+
+/-- A JSON value reads as a configuration exactly when it is an object of the form below.
+
+A member whose value is `null` counts as absent.
+
+Its other members are `terminalTotalDifficulty`, `terminalBlockHash` and `terminalBlockNumber`.
+
+Each of the three occurs once, and no other member occurs.
+
+The total difficulty is `0x` and its lowercase hex digits without leading zeros.
+
+So is the block number.
+
+The block hash is `0x` and 64 lowercase hex digits, two for each of its 32 bytes. -/
+theorem transitionConfigurationOfJson_eq_ok_iff {j : Lean.Json} {c : TransitionConfiguration} :
+    transitionConfigurationOfJson j = .ok c ↔
+      ∃ fs, fields "transitionConfiguration" j = .ok fs ∧
+        hasExactly fs ["terminalTotalDifficulty", "terminalBlockHash", "terminalBlockNumber"] =
+          true ∧
+        fs.lookup "terminalTotalDifficulty" = some (quantityJson c.terminalTotalDifficulty.toNat) ∧
+        fs.lookup "terminalBlockHash" = some (.str (hexString c.terminalBlockHash.toList)) ∧
+        fs.lookup "terminalBlockNumber" = some (quantityJson c.terminalBlockNumber.toNat) := by
+  unfold transitionConfigurationOfJson transitionConfigurationFields
+  simp only [bind_ok_iff, Json.liftM_eq_ok_iff]
+  refine exists_congr fun fs => and_congr_right fun _ => ?_
+  by_cases hex : hasExactly fs
+      ["terminalTotalDifficulty", "terminalBlockHash", "terminalBlockNumber"] = true
+  · rw [and_iff_right hex]
+    simp only [hex, ↓reduceIte, bind_ok_iff, Json.liftM_eq_ok_iff, field_eq_ok_iff,
+      quantity_eq_ok_iff, fixed_false_eq_ok_iff, uint64_eq_ok_iff_quantityJson, pure, Except.pure,
+      Except.ok.injEq]
+    obtain ⟨t, h, n⟩ := c
+    constructor
+    · rintro ⟨_, ht, v, ⟨hv, rfl⟩, _, hh, h, rfl, _, hn, n, rfl, he⟩
+      simp only [TransitionConfiguration.mk.injEq] at he
+      obtain ⟨rfl, rfl, rfl⟩ := he
+      simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hv]
+      exact ⟨ht, hh, hn⟩
+    · rintro ⟨ht, hh, hn⟩
+      exact ⟨_, ht, t.toNat, ⟨t.isLt, rfl⟩, _, hh, h, rfl, _, hn, n, rfl,
+        by simp⟩
+  -- Any other set of members fails with an invalid parameter, never with a configuration.
+  · simp only [hex, Bool.false_eq_true, ↓reduceIte]
+    simp [bind, Except.bind]
 
 /-- The method succeeds exactly on one parameter that decodes, and then answers its own values.
 -/

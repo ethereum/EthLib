@@ -55,6 +55,10 @@ The encoder of lists writes what the list reader reads back, item by item.
 
 A byte string without uppercase digits decodes exactly from `0x` and two lowercase digits per byte.
 
+So does a list of such byte strings of one size, from the array of their encodings.
+
+In general, a list decodes exactly from the array of its items when each item does.
+
 An address, whose digits may be uppercase, decodes exactly from `0x` and two digits per byte.
 
 Each of those digits is in either case, and their lowercase forms are the hex encoding.
@@ -736,6 +740,14 @@ theorem quantity_eq_ok_iff {what : String} {bits : Nat} {j : Lean.Json} {v : Nat
   · rintro ⟨hv, rfl⟩
     exact quantity_toDigits what hv
 
+/-- A 64-bit number decodes exactly from its quantity, `0x` and its hex digits.
+
+Those digits are lowercase, without leading zeros. -/
+theorem uint64_eq_ok_iff_quantityJson {what : String} {j : Lean.Json} {x : UInt64} :
+    uint64 what j = .ok x ↔ j = quantityJson x.toNat := by
+  rw [uint64_eq_ok_iff, quantity_eq_ok_iff]
+  exact and_iff_right x.toNat_lt
+
 /-! ## Only the canonical text decodes to bytes -/
 
 /-- A code that the decoder reads as a lowercase hex digit is the code of the digit of its value.
@@ -942,6 +954,37 @@ theorem fixed_false_eq_ok_iff {what : String} {n : Nat} {j : Lean.Json} {v : Vec
     fixed what n j false = .ok v ↔ j = .str (hexString v.toList) := by
   rw [fixed_eq_ok_iff, bytesOf_false_eq_ok_iff]
   exact Iff.rfl
+
+/-- A list decodes exactly from the array of the JSON of its items, in order.
+
+This holds for every reader of items that decodes a value exactly from one JSON form of it. -/
+theorem array_eq_ok_iff_of {α : Type} {what : String} {f : Lean.Json → Read α}
+    {g : α → Lean.Json} (hf : ∀ j a, f j = .ok a ↔ j = g a) {j : Lean.Json} {l : List α} :
+    array what f j = .ok l ↔ j = .arr (l.map g).toArray := by
+  cases j with
+  | arr items =>
+    simp only [array, Lean.Json.arr.injEq]
+    rw [← Array.toList_inj, List.toList_toArray]
+    generalize items.toList = xs
+    induction xs generalizing l with
+    | nil => cases l <;> simp [pure, Except.pure]
+    | cons x xs ih =>
+      cases l with
+      | nil => rw [mapM_cons_ok]; simp
+      | cons v l => rw [mapM_cons_ok]; simp [hf, ih]
+  -- Any other JSON value is not an array, so the read fails at once.
+  | _ => simp [array]
+
+/-- A list of fixed-size byte strings without uppercase digits decodes exactly from its array.
+
+The array has one item per item of the list, in order.
+
+Each is `0x` and two lowercase hex digits per byte of its item. -/
+theorem array_fixed_false_eq_ok_iff {what w : String} {n : Nat} {j : Lean.Json}
+    {l : List (Vector UInt8 n)} :
+    array what (fixed w n · false) j = .ok l ↔
+      j = .arr (l.map fun v => .str (hexString v.toList)).toArray :=
+  array_eq_ok_iff_of fun _ _ => fixed_false_eq_ok_iff
 
 /-! ## Uppercase digits -/
 

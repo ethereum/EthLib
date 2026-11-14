@@ -8,6 +8,8 @@ public import EthLib.Networking.Proofs.Devp2p.ForkId
 
 Each message reads back from its RLP item on the versions that use its form.
 
+A Status reads from no other item.
+
 The decoder of eth/68 rejects the Status of eth/69.
 
 The decoder of each later version rejects the Status of eth/68.
@@ -68,6 +70,51 @@ theorem ofItem_of_eth68 {version : EthVersion} (hv : version ≠ .eth68) (v n td
     (h g : Hash32) (id : ForkId) :
     ofItem version (eth68 v n td h g id).toItem = .error (.wrongFieldCount 7 6) := by
   simp [ofItem, toItem, hv, Item.fields, Item.toItems, bind, Except.bind]
+
+/-- A Status reads exactly from its own RLP item, on a version that uses its form.
+
+eth/68 reads only the six fields of its form, and every later version only the seven of its own. -/
+theorem ofItem_eq_ok_iff {version : EthVersion} {item : Item} {s : Status} :
+    ofItem version item = .ok s ↔
+      item = s.toItem ∧ match s with
+        | .eth68 .. => version = .eth68
+        | .eth69 .. => version ≠ .eth68 := by
+  constructor
+  · intro h
+    unfold ofItem at h
+    split at h
+    · rename_i hv
+      obtain ⟨items, rfl, hlen, hrest⟩ := Item.fields_bind_eq_ok.mp h
+      rcases items with _ | ⟨a, _ | ⟨b, _ | ⟨c, _ | ⟨d, _ | ⟨e, _ | ⟨f, _ | ⟨_, _⟩⟩⟩⟩⟩⟩⟩ <;>
+        simp at hlen
+      obtain ⟨x₁, rfl, h₁⟩ := Item.field_bind_eq_ok.mp hrest
+      obtain ⟨x₂, rfl, h₂⟩ := Item.field_bind_eq_ok.mp h₁
+      obtain ⟨x₃, rfl, h₃⟩ := Item.field_bind_eq_ok.mp h₂
+      obtain ⟨x₄, rfl, h₄⟩ := Item.field_bind_eq_ok.mp h₃
+      obtain ⟨x₅, rfl, h₅⟩ := Item.field_bind_eq_ok.mp h₄
+      obtain ⟨x₆, rfl, h₆⟩ := Item.field_bind_eq_ok.mp h₅
+      cases h₆
+      exact ⟨rfl, hv⟩
+    · rename_i hv
+      obtain ⟨items, rfl, hlen, hrest⟩ := Item.fields_bind_eq_ok.mp h
+      rcases items with
+        _ | ⟨a, _ | ⟨b, _ | ⟨c, _ | ⟨d, _ | ⟨e, _ | ⟨f, _ | ⟨g, _ | ⟨_, _⟩⟩⟩⟩⟩⟩⟩⟩ <;>
+        simp at hlen
+      obtain ⟨x₁, rfl, h₁⟩ := Item.field_bind_eq_ok.mp hrest
+      obtain ⟨x₂, rfl, h₂⟩ := Item.field_bind_eq_ok.mp h₁
+      obtain ⟨x₃, rfl, h₃⟩ := Item.field_bind_eq_ok.mp h₂
+      obtain ⟨x₄, rfl, h₄⟩ := Item.field_bind_eq_ok.mp h₃
+      obtain ⟨x₅, rfl, h₅⟩ := Item.field_bind_eq_ok.mp h₄
+      obtain ⟨x₆, rfl, h₆⟩ := Item.field_bind_eq_ok.mp h₅
+      obtain ⟨x₇, rfl, h₇⟩ := Item.field_bind_eq_ok.mp h₆
+      cases h₇
+      exact ⟨rfl, hv⟩
+  · rintro ⟨rfl, hs⟩
+    cases s with
+    | eth68 v n td h g id =>
+      subst hs
+      exact ofItem_eth68 v n td h g id
+    | eth69 v n g id r => exact ofItem_eth69 hs v n g id r
 
 end Status
 

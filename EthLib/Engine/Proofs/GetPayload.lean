@@ -23,6 +23,8 @@ Versions 3 and 4 return one proof per blob, and versions 5 and 6 return 128 per 
 
 The decoder reads back the parameters that the writer writes.
 
+It reads no JSON value other than what the writer writes.
+
 The result of a response reads back at its version and its fork.
 
 A bundle reads back exactly when it passes the length rules of its version.
@@ -213,11 +215,28 @@ theorem getPayload_eq_error_of_validateBlobs_eq_error
   simp [getPayload, hs, hf, hv, hr, hb, hp, hh, hversion, hv3, bind, Except.bind,
     Except.mapError]
 
+/-- A JSON value reads as the parameters exactly when it is an array of one payload ID.
+
+The ID is `0x` and 16 lowercase hex digits, two for each of its 8 bytes. -/
+theorem getPayloadParams_eq_ok_iff {params : Lean.Json} {id : PayloadId} :
+    getPayloadParams params = .ok id ↔ params = .arr #[.str (hexString id.toList)] := by
+  cases params with
+  | arr items =>
+    obtain ⟨xs⟩ := items
+    simp only [getPayloadParams, Serialization.JsonRpc.paramsArray]
+    match xs with
+    | [] => simp [bind, Except.bind, pure, Except.pure]
+    | [j] =>
+      simp only [Lean.Json.arr.injEq, Array.mk.injEq, List.cons.injEq, and_true,
+        ← Serialization.JsonRpc.fixed_false_eq_ok_iff (what := "payloadId")]
+      simp [bind, Except.bind, pure, Except.pure]
+    | _ :: _ :: _ => simp [bind, Except.bind, pure, Except.pure]
+  | _ => simp [getPayloadParams, Serialization.JsonRpc.paramsArray, bind, Except.bind]
+
 /-- The decoder of the parameters reads back the payload ID that the writer writes. -/
 theorem getPayloadParams_json (id : PayloadId) :
-    getPayloadParams (getPayloadParamsJson id) = .ok id := by
-  simp [getPayloadParams, getPayloadParamsJson, Serialization.JsonRpc.paramsArray, pure,
-    Except.pure, bind, Except.bind, Serialization.JsonRpc.fixed_dataJson]
+    getPayloadParams (getPayloadParamsJson id) = .ok id :=
+  getPayloadParams_eq_ok_iff.mpr rfl
 
 /-! ## The result -/
 

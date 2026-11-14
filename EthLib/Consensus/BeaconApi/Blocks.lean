@@ -69,7 +69,7 @@ def blockResponse (block : SignedBeaconBlock preset fork) : Except ErrorMessage 
 /-- The response of the block root endpoint, without the two flags that come from the store. -/
 def blockRootResponse (block : SignedBeaconBlock preset fork) :
     Except ErrorMessage ApiEnvelope := do
-  let root ← (blockRoot block).mapError fun fault => internalError (reprStr fault)
+  let root ← (blockRoot block).mapError fun _ => internalError "no block root"
   return { data := Json.mkObj [("root", .str (toHex root.toArray))] }
 
 /-- The response of the block attestations endpoint, without the two flags from the store. -/
@@ -85,7 +85,7 @@ From Gloas a block has no blinded form, and the answer is the error with code 40
 def blindedBlockResponse (block : SignedBeaconBlock preset fork) :
     Except ErrorMessage ApiEnvelope :=
   if range : HasBuilderApi fork then do
-    let blinded ← (blindedBlock block range).mapError fun fault => internalError (reprStr fault)
+    let blinded ← (blindedBlock block range).mapError fun _ => internalError "no blinded block"
     versioned fork (.ok blinded)
   else if fork < .bellatrix then versioned fork (.ok block)
   else .error { code := 400, message := "Blocks from Gloas on do not have a blinded form" }
@@ -99,7 +99,7 @@ def blockSsz (block : SignedBeaconBlock preset fork) : Except ErrorMessage ByteA
 From Gloas the answer is the error with code 400, as in JSON. -/
 def blindedBlockSsz (block : SignedBeaconBlock preset fork) : Except ErrorMessage ByteArray :=
   if range : HasBuilderApi fork then do
-    let blinded ← (blindedBlock block range).mapError fun fault => internalError (reprStr fault)
+    let blinded ← (blindedBlock block range).mapError fun _ => internalError "no blinded block"
     apiSszOr500 blinded
   else if fork < .bellatrix then apiSszOr500 block
   else .error { code := 400, message := "Blocks from Gloas on do not have a blinded form" }
@@ -134,15 +134,15 @@ def HeaderResponse.toJson (response : HeaderResponse) : Except ErrorMessage Json
 /-- The answer for one signed header: its root, and whether its block is canonical. -/
 def headerOf (config : Config) (store : Store preset fork) (header : SignedBeaconBlockHeader) :
     Except ErrorMessage HeaderResponse := do
-  let root ← (SszType.hashTreeRoot header.message).mapError fun fault =>
-    internalError (reprStr fault)
+  let root ← (SszType.hashTreeRoot header.message).mapError fun _ =>
+    internalError "no header root"
   return { root, canonical := isCanonical config store root, header }
 
 /-- The response of the header endpoint for a signed block, without the two flags from the store.
 -/
 def headerResponse (config : Config) (store : Store preset fork)
     (block : SignedBeaconBlock preset fork) : Except ErrorMessage ApiEnvelope := do
-  let header ← block.signedHeader.mapError fun fault => internalError (reprStr fault)
+  let header ← block.signedHeader.mapError fun _ => internalError "no block header"
   return { data := ← (← headerOf config store header).toJson }
 
 /-- The slot that the headers endpoint filters on.

@@ -69,62 +69,42 @@ theorem computeSlotProposer_ok {state : BeaconState preset fork}
     exact ⟨_, rfl⟩
   · exact ⟨_, computeProposerIndex_of_computeBalanceWeightedSelection drawn⟩
 
-/-- The assumptions under which the proposers of an epoch can be drawn from a state.
+/-- The draws of the proposers of an epoch end, at the seed of that epoch.
 
-No effective balance is above the cap of the draw.
+Each slot of the epoch draws its proposer among the candidates, with a seed of its own.
 
-One validator active in the epoch is at that cap: an assumption on the registry, not a bound.
+A validator at the cap of the draw makes them end.
+
+In the random oracle model, with at least one candidate, a search ends with high probability.
+
+Before Gloas a draw ends when a selection of one ends, but no theorem joins that to the bound.
+
+That is a bound on a probability, not a fact about the hash, so a run assumes the end. -/
+def ProposersDrawEnd (state : BeaconState preset fork) (epoch : Epoch) : Prop :=
+  ∀ seed, getSeed state epoch DOMAIN_BEACON_PROPOSER = .ok seed →
+    ∀ slot, computeEpochAtSlot preset slot = epoch →
+      ∃ proposer, computeSlotProposer state
+        (proposerCandidates state (getActiveValidatorIndices state epoch).toArray)
+        (proposerSlotSeed seed slot) = .ok proposer
+
+/-- The draws of the proposers of an epoch end when an active validator is at the cap.
 
 From Gloas that validator is not slashed, since a slashed one is no candidate.
 
-The registry holds at most `2^40` validators. -/
-structure ProposersDrawable (state : BeaconState preset fork) (epoch : Epoch) : Prop where
-  /-- No effective balance is above the cap of the draw. -/
-  capped : ∀ validator ∈ state.validators.data,
-    validator.effectiveBalance.toNat ≤ drawCap preset fork
-  /-- One validator active in the epoch, and unslashed from Gloas, is at the cap of the draw. -/
-  full : ∃ validator ∈ state.validators.data, isActiveValidator validator epoch ∧
-    (.glamsterdam ≤ fork → validator.slashed = false) ∧
-    validator.effectiveBalance.toNat = drawCap preset fork
-  /-- The registry holds at most `2^40` validators. -/
-  few : state.validators.data.size ≤ 2 ^ 40
+No effective balance is above the cap, and the registry holds at most `2^40` validators.
 
-/-- The proposers of an epoch stay drawable on a state with the same validators.
-
-The cap of the draw must agree, and the other state is before Gloas. -/
-theorem ProposersDrawable.of_validators {fork' : Fork}
-    {state : BeaconState preset fork} {state' : BeaconState preset fork'} {epoch : Epoch}
-    (data : state'.validators.data = state.validators.data)
-    (cap : drawCap preset fork' = drawCap preset fork) (early : ¬ .glamsterdam ≤ fork')
-    (drawable : ProposersDrawable state epoch) : ProposersDrawable state' epoch := by
-  obtain ⟨capped, full, few⟩ := drawable
-  refine ⟨?_, ?_, ?_⟩
-  · intro validator member
-    rw [cap]
-    exact capped validator (data ▸ member)
-  · obtain ⟨validator, member, active, -, atCap⟩ := full
-    exact ⟨validator, data ▸ member, active, fun later => absurd later early, cap ▸ atCap⟩
-  · rw [data]
-    exact few
-
-/-- The proposers of an epoch are drawn under bounds, with a validator at the cap of the draw.
-
-The epoch plus the length of the history of mixes stays below `2^64`.
-
-The seed lookahead is shorter than that history.
-
-The first slot of the next epoch is at most `2^64`, so every slot of the epoch fits in 64 bits. -/
-theorem getBeaconProposerIndices_ok {state : BeaconState preset fork} {epoch : Epoch}
+The products of the draw fit in 64 bits. -/
+theorem ProposersDrawEnd.of_atCap {state : BeaconState preset fork} {epoch : Epoch}
     (fits : DrawFits preset fork)
-    (seedRoom : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
-    (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (slotRoom : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
-    (drawable : ProposersDrawable state epoch) :
-    ∃ proposers, getBeaconProposerIndices state epoch = .ok proposers := by
-  obtain ⟨seed, seedOk⟩ := getSeed_ok (state := state) (epoch := epoch) DOMAIN_BEACON_PROPOSER
-    seedRoom lookahead
-  have checked := getActiveValidatorIndicesChecked_of_size_le (state := state)
-    (by have := drawable.few; omega) epoch
+    (capped : ∀ validator ∈ state.validators.data,
+      validator.effectiveBalance.toNat ≤ drawCap preset fork)
+    (full : ∃ validator ∈ state.validators.data, isActiveValidator validator epoch ∧
+      (.glamsterdam ≤ fork → validator.slashed = false) ∧
+      validator.effectiveBalance.toNat = drawCap preset fork)
+    (few : state.validators.data.size ≤ 2 ^ 40) :
+    ProposersDrawEnd state epoch := by
+  intro seed _ slot _
+  have checked := getActiveValidatorIndicesChecked_of_size_le (state := state) (by omega) epoch
   have lengthLe := length_getActiveValidatorIndices_le state epoch
   -- Each candidate names a validator of the registry, at most at the cap of the draw.
   have known : ∀ index ∈ proposerCandidates state
@@ -135,16 +115,15 @@ theorem getBeaconProposerIndices_ok {state : BeaconState preset fork} {epoch : E
     obtain ⟨validator, read, _⟩ := (mem_iff_of_getActiveValidatorIndicesChecked_ok checked).mp
       (List.mem_toArray.mp (mem_of_mem_proposerCandidates member))
     exact ⟨validator, by unfold getValidator; rw [read],
-      drawable.capped validator (Array.mem_of_getElem? read)⟩
+      capped validator (Array.mem_of_getElem? read)⟩
   have full : ∃ index ∈ proposerCandidates state
       (getActiveValidatorIndices state epoch).toArray, ∃ validator,
       getValidator state index = .ok validator ∧
         validator.effectiveBalance.toNat = drawCap preset fork := by
-    obtain ⟨validator, member, active, unslashed, atCap⟩ := drawable.full
+    obtain ⟨validator, member, active, unslashed, atCap⟩ := full
     obtain ⟨position, inside, rfl⟩ := Array.getElem_of_mem member
     have positionNat : (UInt64.ofNat position).toNat = position :=
       UInt64.toNat_ofNat_of_lt' (by
-        have := drawable.few
         have : UInt64.size = 2 ^ 64 := rfl
         omega)
     have read : state.validators.data[(UInt64.ofNat position).toNat]? =
@@ -165,8 +144,106 @@ theorem getBeaconProposerIndices_ok {state : BeaconState preset fork} {epoch : E
       2 ^ 40 := by
     refine Nat.le_trans (size_proposerCandidates_le _ _) ?_
     simp only [List.size_toArray]
-    have := drawable.few
     omega
+  exact computeSlotProposer_ok fits known full few
+
+/-- The proposer search is the same at two forks on the same side of Electra. -/
+private theorem proposerSearch_eq_of_electra_iff {fork' : Fork}
+    (electra : .pectra ≤ fork' ↔ .pectra ≤ fork) (validators : Array Validator)
+    (indices : Array ValidatorIndex) (order : Nat → Nat) (seed : Bytes32) :
+    ∀ left, ∀ {i : Nat}, left = 2 ^ 64 - i →
+      proposerSearch preset fork' validators indices order seed i =
+        proposerSearch preset fork validators indices order seed i := by
+  intro left
+  induction left using Nat.strongRecOn with
+  | _ left ih =>
+  intro i leftEq
+  conv_lhs => rw [proposerSearch, proposerDraw_eq_of_electra_iff electra]
+  conv_rhs => rw [proposerSearch]
+  by_cases next : i + 1 < 2 ^ 64
+  · rw [ih _ (leftEq ▸ Nat.sub_lt_sub_left (by omega) (Nat.lt_succ_self i)) rfl]
+  · simp only [next, ↓reduceDIte]
+
+/-- The proposer of a slot is the same on a state of another fork with the same validators.
+
+The two forks must be on the same side of Electra, and on the same side of Gloas. -/
+private theorem computeSlotProposer_eq_of_eq {fork' : Fork}
+    {state : BeaconState preset fork} {other : BeaconState preset fork'}
+    (validators : other.validators.data = state.validators.data)
+    (electra : .pectra ≤ fork' ↔ .pectra ≤ fork)
+    (gloas : .glamsterdam ≤ fork' ↔ .glamsterdam ≤ fork)
+    (indices : Array ValidatorIndex) (seed : Bytes32) :
+    computeSlotProposer other indices seed = computeSlotProposer state indices seed := by
+  unfold computeSlotProposer computeProposerIndex
+  simp only [gloas, computeBalanceWeightedSelection_eq_of_eq validators electra, validators,
+    proposerSearch_eq_of_electra_iff electra _ _ _ _ _ rfl]
+
+/-- The candidates to propose are the same on a state of another fork with the same validators.
+
+The two forks must be on the same side of Gloas. -/
+private theorem proposerCandidates_eq_of_eq {fork' : Fork}
+    {state : BeaconState preset fork} {other : BeaconState preset fork'}
+    (validators : other.validators.data = state.validators.data)
+    (gloas : .glamsterdam ≤ fork' ↔ .glamsterdam ≤ fork) (active : Array ValidatorIndex) :
+    proposerCandidates other active = proposerCandidates state active := by
+  simp only [proposerCandidates, gloas, validators]
+
+/-- The draws of the proposers still end on a state with the same validators and mixes.
+
+The two forks must be on the same side of Electra, and on the same side of Gloas. -/
+theorem ProposersDrawEnd.of_eq {fork' : Fork}
+    {state : BeaconState preset fork} {other : BeaconState preset fork'} {epoch : Epoch}
+    (validators : other.validators.data = state.validators.data)
+    (mixes : other.randaoMixes.elements = state.randaoMixes.elements)
+    (electra : .pectra ≤ fork' ↔ .pectra ≤ fork)
+    (gloas : .glamsterdam ≤ fork' ↔ .glamsterdam ≤ fork)
+    (ends : ProposersDrawEnd state epoch) : ProposersDrawEnd other epoch := by
+  intro seed seedOk slot inEpoch
+  rw [getSeed_eq_of_eq mixes] at seedOk
+  rw [getActiveValidatorIndices_eq_of_eq validators, proposerCandidates_eq_of_eq validators gloas,
+    computeSlotProposer_eq_of_eq validators electra gloas]
+  exact ends seed seedOk slot inEpoch
+
+/-- The assumptions under which the proposers of an epoch can be drawn from a state.
+
+The registry holds at most `2^40` validators.
+
+The draws of the epoch end: an assumption, not a bound. -/
+structure ProposersDrawable (state : BeaconState preset fork) (epoch : Epoch) : Prop where
+  /-- The registry holds at most `2^40` validators. -/
+  few : state.validators.data.size ≤ 2 ^ 40
+  /-- The draws of the epoch end. -/
+  ends : ProposersDrawEnd state epoch
+
+/-- The proposers of an epoch stay drawable on a state with the same validators and mixes.
+
+The two forks must be on the same side of Electra, and on the same side of Gloas. -/
+theorem ProposersDrawable.of_eq {fork' : Fork}
+    {state : BeaconState preset fork} {other : BeaconState preset fork'} {epoch : Epoch}
+    (validators : other.validators.data = state.validators.data)
+    (mixes : other.randaoMixes.elements = state.randaoMixes.elements)
+    (electra : .pectra ≤ fork' ↔ .pectra ≤ fork)
+    (gloas : .glamsterdam ≤ fork' ↔ .glamsterdam ≤ fork)
+    (drawable : ProposersDrawable state epoch) : ProposersDrawable other epoch :=
+  ⟨validators ▸ drawable.few, drawable.ends.of_eq validators mixes electra gloas⟩
+
+/-- The proposers of an epoch are drawn under bounds, when the draws of the epoch end.
+
+The epoch plus the length of the history of mixes stays below `2^64`.
+
+The seed lookahead is shorter than that history.
+
+The first slot of the next epoch is at most `2^64`, so every slot of the epoch fits in 64 bits. -/
+theorem getBeaconProposerIndices_ok {state : BeaconState preset fork} {epoch : Epoch}
+    (seedRoom : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (slotRoom : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    (drawable : ProposersDrawable state epoch) :
+    ∃ proposers, getBeaconProposerIndices state epoch = .ok proposers := by
+  obtain ⟨seed, seedOk⟩ := getSeed_ok (state := state) (epoch := epoch) DOMAIN_BEACON_PROPOSER
+    seedRoom lookahead
+  have checked := getActiveValidatorIndicesChecked_of_size_le (state := state)
+    (by have := drawable.few; omega) epoch
   have startOk : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by
     rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | pos
     · rw [zero]; simp
@@ -202,9 +279,16 @@ theorem getBeaconProposerIndices_ok {state : BeaconState preset fork} {epoch : E
             omega)]
           rw [Nat.add_mul] at slotRoom
           omega
-        obtain ⟨proposer, ok⟩ := computeSlotProposer_ok (state := state)
-          (indices := proposerCandidates state (getActiveValidatorIndices state epoch).toArray)
-          (seed := proposerSlotSeed seed (start + offset.toUInt64)) fits known full few
+        -- The slot is in the epoch, since the offset is below the slots of an epoch.
+        have inEpoch : computeEpochAtSlot preset (start + offset.toUInt64) = epoch := by
+          have offsetNat : offset.toUInt64.toNat = offset := by
+            rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' (by
+              have : UInt64.size = 2 ^ 64 := rfl
+              omega)]
+          rw [computeEpochAtSlot, ← UInt64.toNat_inj, UInt64.toNat_div,
+            Uint64.toNat_add_of_lt fitsSlot, startNat, offsetNat, Nat.add_comm,
+            Nat.add_mul_div_right _ _ (by omega), Nat.div_eq_of_lt lt, Nat.zero_add]
+        obtain ⟨proposer, ok⟩ := drawable.ends seed seedOk _ inEpoch
         exact ⟨proposer, by
           simp only [liftArith, Uint64.addChecked_of_lt fitsSlot, bind, Except.bind,
             Except.mapError]
@@ -219,9 +303,7 @@ theorem getBeaconProposerIndices_ok {state : BeaconState preset fork} {epoch : E
 
 /-- From Fulu, the move of the proposer lookahead succeeds under bounds on the state.
 
-A validator at the cap of the draw must be active in the epoch it draws.
-
-The epoch it draws is the one after the seed lookahead.
+The epoch it draws is the one after the seed lookahead, and it must be drawable.
 
 That epoch plus the length of the history of mixes stays below `2^64`.
 
@@ -231,7 +313,6 @@ The first slot of the epoch after it is at most `2^64`, so every slot of it fits
 
 The step changes only the lookahead. -/
 theorem processProposerLookahead_ok (fulu : .fusaka ≤ fork) {state : BeaconState preset fork}
-    (fits : DrawFits preset fork)
     (seedRoom : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 +
       preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -251,7 +332,7 @@ theorem processProposerLookahead_ok (fulu : .fusaka ≤ fork) {state : BeaconSta
   have epochNat : (getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD + 1).toNat + 1 =
       (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 2 := by omega
   obtain ⟨proposers, drawn⟩ := getBeaconProposerIndices_ok (state := state)
-    (epoch := getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD + 1) fits
+    (epoch := getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD + 1)
     (by omega) lookahead (by rw [epochNat]; exact slotRoom) drawable
   unfold processProposerLookahead
   simp only [liftArith, Uint64.addChecked_of_lt firstFits, Uint64.addChecked_of_lt secondFits,
@@ -262,11 +343,7 @@ theorem processProposerLookahead_ok (fulu : .fusaka ≤ fork) {state : BeaconSta
 
 It covers the current epoch and each epoch of the seed lookahead after it.
 
-Each of these epochs has an active validator at the cap of the draw, unslashed from Gloas.
-
-No effective balance is above that cap, and the registry holds at most `2^40` validators.
-
-The products of the draw fit in 64 bits.
+Each of these epochs must be drawable.
 
 The last epoch drawn plus the length of the history of mixes stays below `2^64`.
 
@@ -276,7 +353,6 @@ The first slot of the epoch after the last one drawn is at most `2^64`.
 
 So every slot drawn fits in 64 bits. -/
 theorem initializeProposerLookahead_ok {state : BeaconState preset fork}
-    (fits : DrawFits preset fork)
     (seedRoom : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat +
       preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -301,7 +377,7 @@ theorem initializeProposerLookahead_ok {state : BeaconState preset fork}
       omega
     have epochNat := Uint64.toNat_add_of_lt fitsEpoch
     obtain ⟨proposers, drawn⟩ := getBeaconProposerIndices_ok (state := state)
-      (epoch := getCurrentEpoch state + offset.toUInt64) fits (by omega) lookahead
+      (epoch := getCurrentEpoch state + offset.toUInt64) (by omega) lookahead
       (by
         rw [epochNat, offsetNat]
         exact Nat.le_trans (Nat.mul_le_mul_right _ (by omega)) slotRoom)

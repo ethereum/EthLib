@@ -145,14 +145,19 @@ def subscribed (topics : List EventTopic) (event : ApiEvent) : Bool :=
 
 /-- The message of an event in the stream: a line with the topic and a line with the data.
 
+The writer must give the JSON text of the data on one line, as a compact writer does.
+
+A line break in that text would end the data line, so the message would be malformed.
+
 A blank line ends the message. -/
-def toStream (event : ApiEvent) : String :=
-  s!"event: {event.topic.name}\ndata: {event.data.compress}\n\n"
+def toStream (write : Json → String) (event : ApiEvent) : String :=
+  s!"event: {event.topic.name}\ndata: {write event.data}\n\n"
 
 end ApiEvent
 
 /-- The messages of the events that a client receives, in order. -/
-def eventStream (topics : List EventTopic) (events : List ApiEvent) : String :=
-  String.join ((events.filter (·.subscribed topics)).map (·.toStream))
+def eventStream (write : Json → String) (topics : List EventTopic) (events : List ApiEvent) :
+    String :=
+  String.join ((events.filter (·.subscribed topics)).map (·.toStream write))
 
 end EthLib.Consensus.BeaconApi

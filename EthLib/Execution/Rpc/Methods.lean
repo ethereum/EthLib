@@ -311,11 +311,13 @@ def answerJson (v : ChainView) (j : Json) : Option Json :=
     | .error reason => { id := idOf j, outcome := .error (RpcError.invalidRequest reason) }
     | .ok r => v.answer r
 
-/-- The response of the view to the text of a request or a batch, as JSON, or none.
+/-- The response of the view to a request or a batch, as JSON, or none.
+
+The request is the JSON that its text holds, or the reason that the text is not JSON.
 
 A batch gets the array of the responses to its requests, and none when all are notifications. -/
-def serve (v : ChainView) (text : String) : Option Json :=
-  match Json.parse text with
+def serve (v : ChainView) (request : Except String Json) : Option Json :=
+  match request with
   | .error reason => some <| responseJson
       { id := .null, outcome := .error (parseError.toRpcError (some (.str reason))) }
   | .ok (.arr items) =>

@@ -144,7 +144,7 @@ def checkDutyEpoch (state : BeaconState preset fork) (epoch : Epoch) :
 /-- The error body of a failed duty: code 400 for an epoch out of range, else code 500. -/
 def dutyError (epoch : Epoch) : ValidatorDutyError → ErrorMessage
   | .epochTooFar .. | .periodOutOfRange .. => invalidEpoch epoch
-  | fault => internalError (reprStr fault.code)
+  | fault => internalError (toString fault.code.toNat)
 
 /-- The validator at an index of the registry, or the error with code 400. -/
 def requestedValidator (state : BeaconState preset fork) (index : ValidatorIndex) :
@@ -205,21 +205,21 @@ def epochProposers (state : BeaconState preset fork) (epoch : Epoch) :
     return ((state.proposerLookahead fulu).toList.drop offset).take preset.SLOTS_PER_EPOCH.toNat
   else
     unless epoch = current do throw (invalidEpoch epoch)
-    let proposers ← (getBeaconProposerIndices state epoch).mapError fun fault =>
-      internalError (reprStr fault)
+    let proposers ← (getBeaconProposerIndices state epoch).mapError fun _ =>
+      internalError "no proposers"
     return proposers.toList
 
 /-- The proposer duties of an epoch, one for each slot, in slot order. -/
 def proposerDuties (state : BeaconState preset fork) (epoch : Epoch) :
     Except ErrorMessage (List ProposerDuty) := do
   let proposers ← epochProposers state epoch
-  let start ← (computeStartSlotAtEpoch preset epoch).mapError fun fault =>
-    internalError (reprStr fault)
+  let start ← (computeStartSlotAtEpoch preset epoch).mapError fun _ =>
+    internalError "no start slot"
   proposers.zipIdx.mapM fun (proposer, offset) => do
-    let slot ← (addChecked start offset.toUInt64).mapError fun fault =>
-      internalError (reprStr fault)
-    let validator ← (getValidator state proposer).mapError fun fault =>
-      internalError (reprStr fault)
+    let slot ← (addChecked start offset.toUInt64).mapError fun _ =>
+      internalError "no slot"
+    let validator ← (getValidator state proposer).mapError fun _ =>
+      internalError "no proposer"
     return { pubkey := validator.pubkey, validatorIndex := proposer, slot }
 
 /-! ## Sync duties -/
@@ -284,7 +284,7 @@ def ptcDuties (config : Config) (state : BeaconState preset fork) (gloas : .glam
 /-- The error body of a failed root read: code 400 for a slot out of range, else code 500. -/
 def rootError (epoch : Epoch) : AccessorError → ErrorMessage
   | .slotOutOfRange .. => invalidEpoch epoch
-  | fault => internalError (reprStr fault)
+  | _ => internalError "no block root"
 
 /-- The root of the block that the duties of an epoch depend on.
 
@@ -298,8 +298,8 @@ A slot past 64 bits gives the error with code 500. -/
 def dependentRoot (state : BeaconState preset fork) (lag : Nat) (epoch : Epoch)
     (genesisRoot : Root) : Except ErrorMessage Root := do
   if epoch.toNat < lag then return genesisRoot
-  let start ← (computeStartSlotAtEpoch preset (epoch - lag.toUInt64)).mapError fun fault =>
-    internalError (reprStr fault)
+  let start ← (computeStartSlotAtEpoch preset (epoch - lag.toUInt64)).mapError fun _ =>
+    internalError "no start slot"
   if start = 0 then return genesisRoot
   (getBlockRootAtSlot state (start - 1)).mapError (rootError epoch)
 

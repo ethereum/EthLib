@@ -13,6 +13,10 @@ public import EthLib.Execution.Proofs.Network.Transactions
 
 Each message reads back from its ID and its RLP item, on every version that uses its form.
 
+The decoder reads no other ID or item, so it takes no field more or less than the writer writes.
+
+The reader of an envelope reads only that envelope, with or without its part.
+
 eth/68 rejects BlockRangeUpdate.
 
 A version rejects every ID from its count of IDs on as unknown, but not the ID just below it.
@@ -54,6 +58,20 @@ theorem readEnvelope_envelope {α : Type} [Codec α] [LawfulCodec α] (i : UInt6
   simp [readEnvelope, envelope, Item.fields, Item.toItems, Item.field_toItem, bind, Except.bind,
     pure, Except.pure]
 
+/-- An item reads as a request ID and a payload exactly when it is their envelope. -/
+theorem readEnvelope_eq_ok_iff {α : Type} [Codec α] [LawfulCodec α] {item : Item} {i : UInt64}
+    {x : α} : readEnvelope item = .ok (i, x) ↔ item = envelope i (Codec.toItem x) := by
+  constructor
+  · intro h
+    obtain ⟨items, rfl, hlen, hrest⟩ := Item.fields_bind_eq_ok.mp h
+    rcases items with _ | ⟨a, _ | ⟨b, _ | ⟨_, _⟩⟩⟩ <;> simp at hlen
+    obtain ⟨y, rfl, h₁⟩ := Item.field_bind_eq_ok.mp hrest
+    obtain ⟨z, rfl, h₂⟩ := Item.field_bind_eq_ok.mp h₁
+    cases h₂
+    rfl
+  · rintro rfl
+    exact readEnvelope_envelope i x
+
 /-- A list of items is the item of itself as a list. -/
 theorem list_eq_toItem (items : List Item) : Item.list items = Codec.toItem items := by
   show Item.list items = .list (items.map Codec.toItem)
@@ -88,6 +106,34 @@ theorem readWithPart_withPart {α β : Type} [Codec α] [LawfulCodec α] [Codec 
       exact Nat.not_lt_of_le h
     simp [readWithPart, withPart, hv, Item.fields, Item.toItems, Item.field_toItem, bind,
       Except.bind, pure, Except.pure]
+
+/-- An item reads as a request ID, a part and a payload exactly when it is their envelope.
+
+The part is present exactly from eth/70 on. -/
+theorem readWithPart_eq_ok_iff {α β : Type} [Codec α] [LawfulCodec α] [Codec β] [LawfulCodec β]
+    {version : EthVersion} {item : Item} {i : UInt64} {part : Option α} {x : β} :
+    readWithPart version item = .ok (i, part, x) ↔
+      (part.isSome ↔ EthVersion.eth70 ≤ version) ∧ item = withPart i part (Codec.toItem x) := by
+  constructor
+  · intro h
+    unfold readWithPart at h
+    split at h
+    · rename_i hv
+      obtain ⟨⟨j, y⟩, hy, h⟩ := bind_ok_iff.mp h
+      cases h
+      refine ⟨?_, readEnvelope_eq_ok_iff.mp hy⟩
+      simp only [Option.isSome_none, Bool.false_eq_true, false_iff]
+      exact Nat.not_le_of_lt hv
+    · rename_i hv
+      obtain ⟨items, rfl, hlen, hrest⟩ := Item.fields_bind_eq_ok.mp h
+      rcases items with _ | ⟨a, _ | ⟨b, _ | ⟨c, _ | ⟨_, _⟩⟩⟩⟩ <;> simp at hlen
+      obtain ⟨y, rfl, h₁⟩ := Item.field_bind_eq_ok.mp hrest
+      obtain ⟨z, rfl, h₂⟩ := Item.field_bind_eq_ok.mp h₁
+      obtain ⟨w, rfl, h₃⟩ := Item.field_bind_eq_ok.mp h₂
+      cases h₃
+      exact ⟨iff_of_true rfl (Nat.le_of_not_lt hv), rfl⟩
+  · rintro ⟨hv, rfl⟩
+    exact readWithPart_withPart i part x hv
 
 /-- A message has the form of a version.
 
@@ -188,6 +234,147 @@ theorem ofItem_toItem {version : EthVersion} {m : Message} (hm : m.FitsVersion v
     have h71 : EthVersion.eth71 ≤ version := Nat.le_trans (by decide) hm
     simp [ofItem, Message.id, toItem, hm, h71, Item.fields, Item.toItems, Item.field_toItem,
       bind, Except.bind, pure, Except.pure, Except.mapError]
+
+/-- A message reads exactly from its own ID and its item, on a version that uses its form.
+
+So the decoder takes no item with fields missing or added, and no message of another version.
+
+It takes no announcement whose lists differ in length. -/
+theorem ofItem_eq_ok_iff {version : EthVersion} {id : Nat} {item : Item} {m : Message} :
+    ofItem version id item = .ok m ↔ id = m.id ∧ m.FitsVersion version ∧ item = m.toItem := by
+  constructor
+  · intro h
+    unfold ofItem at h
+    by_cases hc : id = STATUS_ID
+    · rw [ite_eq_left hc] at h
+      obtain ⟨s, hs, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      obtain ⟨rfl, hv⟩ := Status.ofItem_eq_ok_iff.mp hs
+      refine ⟨hc, ?_, rfl⟩
+      cases s <;> exact hv
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = NEW_BLOCK_HASHES_ID
+    · rw [ite_eq_left hc] at h
+      obtain ⟨bs, hb, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      exact ⟨hc, trivial, (Codec.ofItem_eq_ok_iff.mp hb).symm⟩
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = TRANSACTIONS_ID
+    · rw [ite_eq_left hc] at h
+      obtain ⟨txs, hb, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      exact ⟨hc, trivial, ((list_eq_toItem txs).trans (Codec.ofItem_eq_ok_iff.mp hb)).symm⟩
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = GET_BLOCK_HEADERS_ID
+    · rw [ite_eq_left hc] at h
+      obtain ⟨⟨i, r⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      exact ⟨hc, trivial, readEnvelope_eq_ok_iff.mp hr⟩
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = BLOCK_HEADERS_ID
+    · rw [ite_eq_left hc] at h
+      obtain ⟨⟨i, hs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      refine ⟨hc, trivial, ?_⟩
+      show item = envelope i (.list hs)
+      rw [list_eq_toItem hs]
+      exact readEnvelope_eq_ok_iff.mp hr
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = GET_BLOCK_BODIES_ID
+    · rw [ite_eq_left hc] at h
+      obtain ⟨⟨i, hs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      exact ⟨hc, trivial, readEnvelope_eq_ok_iff.mp hr⟩
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = BLOCK_BODIES_ID
+    · rw [ite_eq_left hc] at h
+      obtain ⟨⟨i, bs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      refine ⟨hc, trivial, ?_⟩
+      show item = envelope i (.list bs)
+      rw [list_eq_toItem bs]
+      exact readEnvelope_eq_ok_iff.mp hr
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = NEW_BLOCK_ID
+    · rw [ite_eq_left hc] at h
+      obtain ⟨items, rfl, hlen, hrest⟩ := Item.fields_bind_eq_ok.mp (mapError_ok_iff.mp h)
+      rcases items with _ | ⟨b, _ | ⟨td, _ | ⟨_, _⟩⟩⟩ <;> simp at hlen
+      obtain ⟨n, rfl, h₁⟩ := Item.field_bind_eq_ok.mp hrest
+      cases h₁
+      exact ⟨hc, trivial, rfl⟩
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = NEW_POOLED_TRANSACTION_HASHES_ID
+    · rw [ite_eq_left hc] at h
+      obtain ⟨a, ha, h₁⟩ := bind_ok_iff.mp h
+      obtain ⟨rfl, hv⟩ := Announcement.ofItem_eq_ok_iff.mp (mapError_ok_iff.mp ha)
+      cases hl : a.lengthsAgree
+      · cases a <;> simp [Announcement.lists, hl, throw, throwThe, MonadExceptOf.throw] at h₁
+      · cases a <;> simp [hl, pure, Except.pure] at h₁ <;> subst h₁ <;>
+          exact ⟨hc, ⟨hv, hl⟩, rfl⟩
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = GET_POOLED_TRANSACTIONS_ID
+    · rw [ite_eq_left hc] at h
+      obtain ⟨⟨i, hs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      exact ⟨hc, trivial, readEnvelope_eq_ok_iff.mp hr⟩
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = POOLED_TRANSACTIONS_ID
+    · rw [ite_eq_left hc] at h
+      obtain ⟨⟨i, txs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      refine ⟨hc, trivial, ?_⟩
+      show item = envelope i (.list txs)
+      rw [list_eq_toItem txs]
+      exact readEnvelope_eq_ok_iff.mp hr
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = GET_RECEIPTS_ID
+    · rw [ite_eq_left hc] at h
+      obtain ⟨⟨i, k, hs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      obtain ⟨hk, rfl⟩ := readWithPart_eq_ok_iff.mp hr
+      exact ⟨hc, hk, rfl⟩
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = RECEIPTS_ID
+    · rw [ite_eq_left hc] at h
+      obtain ⟨⟨i, b, ls⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      obtain ⟨hb, hi⟩ := readWithPart_eq_ok_iff.mp hr
+      refine ⟨hc, hb, ?_⟩
+      show item = withPart i b (.list (ls.map .list))
+      rw [lists_eq_toItem ls]
+      exact hi
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = GET_BLOCK_ACCESS_LISTS_ID ∧ EthVersion.eth71 ≤ version
+    · rw [ite_eq_left hc] at h
+      obtain ⟨⟨i, hs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      exact ⟨hc.1, hc.2, readEnvelope_eq_ok_iff.mp hr⟩
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = BLOCK_ACCESS_LISTS_ID ∧ EthVersion.eth71 ≤ version
+    · rw [ite_eq_left hc] at h
+      obtain ⟨⟨i, ls⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      refine ⟨hc.1, hc.2, ?_⟩
+      show item = envelope i (.list ls)
+      rw [list_eq_toItem ls]
+      exact readEnvelope_eq_ok_iff.mp hr
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = GET_CELLS_ID ∧ EthVersion.eth72 ≤ version
+    · rw [ite_eq_left hc] at h
+      obtain ⟨items, rfl, hlen, hrest⟩ := Item.fields_bind_eq_ok.mp (mapError_ok_iff.mp h)
+      rcases items with _ | ⟨a, _ | ⟨b, _ | ⟨c, _ | ⟨_, _⟩⟩⟩⟩ <;> simp at hlen
+      obtain ⟨i, rfl, h₁⟩ := Item.field_bind_eq_ok.mp hrest
+      obtain ⟨hs, rfl, h₂⟩ := Item.field_bind_eq_ok.mp h₁
+      obtain ⟨mask, rfl, h₃⟩ := Item.field_bind_eq_ok.mp h₂
+      cases h₃
+      exact ⟨hc.1, hc.2, rfl⟩
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = CELLS_ID ∧ EthVersion.eth72 ≤ version
+    · rw [ite_eq_left hc] at h
+      obtain ⟨items, rfl, hlen, hrest⟩ := Item.fields_bind_eq_ok.mp (mapError_ok_iff.mp h)
+      rcases items with _ | ⟨a, _ | ⟨b, _ | ⟨c, _ | ⟨d, _ | ⟨_, _⟩⟩⟩⟩⟩ <;> simp at hlen
+      obtain ⟨i, rfl, h₁⟩ := Item.field_bind_eq_ok.mp hrest
+      obtain ⟨hs, rfl, h₂⟩ := Item.field_bind_eq_ok.mp h₁
+      obtain ⟨gs, rfl, h₃⟩ := Item.field_bind_eq_ok.mp h₂
+      obtain ⟨mask, rfl, h₄⟩ := Item.field_bind_eq_ok.mp h₃
+      cases h₄
+      exact ⟨hc.1, hc.2, rfl⟩
+    rw [ite_eq_right hc] at h
+    by_cases hc : id = BLOCK_RANGE_UPDATE_ID ∧ EthVersion.eth69 ≤ version
+    · rw [ite_eq_left hc] at h
+      obtain ⟨r, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
+      exact ⟨hc.1, hc.2, (Codec.ofItem_eq_ok_iff.mp hr).symm⟩
+    rw [ite_eq_right hc] at h
+    cases h
+  · rintro ⟨rfl, hm, rfl⟩
+    exact ofItem_toItem hm
 
 /-- eth/68 rejects BlockRangeUpdate, which eth/69 adds. -/
 theorem ofItem_blockRangeUpdate_eth68 (item : Item) :

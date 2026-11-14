@@ -21,6 +21,12 @@ An envelope reads back as written, so a response reads as its data under its ver
 
 A response read under one version names it, so data of one fork never reads as data of another.
 
+A document reads as an envelope exactly when it is an object with data.
+
+Each metadata key is then absent or holds its form.
+
+A response reads under a version exactly when it also names that version and its data reads.
+
 A document reads the same with any hex digits in uppercase, as the patterns of the source allow.
 
 The error bodies read back as written.
@@ -153,53 +159,224 @@ theorem readVersioned_envelope {α : Type} [SszType α] [LawfulSszType α] [ApiS
   simp [readVersioned, ApiEnvelope.ofJson_toJson, bind, Except.bind,
     ofApiJson_toApiJson wrote]
   rfl
+/-- A metadata key reads as absent exactly when the document lacks it.
+
+It reads as a value exactly when the document holds the key and its reader reads that value. -/
+theorem readKey_eq_ok_iff {β : Type} {document : Json} {key : String} {read : Json → Option β}
+    {o : Option β} :
+    ApiEnvelope.readKey document key read = .ok o ↔
+      (document.getObjVal? key).toOption = none ∧ o = none ∨
+        ∃ value b, document.getObjVal? key = .ok value ∧ read value = some b ∧ o = some b := by
+  unfold ApiEnvelope.readKey
+  cases h : document.getObjVal? key with
+  | error e => cases o <;> simp [Except.toOption]
+  | ok value =>
+    cases r : read value <;> cases o <;> simp [Except.toOption, r, eq_comm]
+
+/-- When a reader accepts only the written form of each value, a key reads as the value it holds.
+
+The key reads as absent exactly when the document lacks it. -/
+theorem readKey_eq_ok_iff_of {β : Type} {read : Json → Option β} {write : β → Json}
+    (exact : ∀ j b, read j = some b ↔ j = write b) {document : Json} {key : String}
+    {o : Option β} :
+    ApiEnvelope.readKey document key read = .ok o ↔
+      (document.getObjVal? key).toOption = o.map write := by
+  rw [readKey_eq_ok_iff]
+  cases h : document.getObjVal? key <;> cases o <;>
+    simp [Except.toOption, exact, eq_comm]
+
+/-- A version reads exactly from the string of its name. -/
+private theorem readVersion_eq_some_iff (j : Json) (v : ConsensusVersion) :
+    ApiEnvelope.readVersion j = some v ↔ j = .str v.name := by
+  cases j with
+  | str s =>
+    simp only [ApiEnvelope.readVersion, Json.str.injEq]
+    exact ⟨ConsensusVersion.name_of_ofName?, fun h => h ▸ ConsensusVersion.ofName?_name v⟩
+  | _ => simp [ApiEnvelope.readVersion]
+
+/-- A flag reads exactly from the JSON boolean of its value. -/
+private theorem readBool_eq_some_iff (j : Json) (b : Bool) :
+    ApiEnvelope.readBool j = some b ↔ j = .bool b := by
+  cases j <;> simp [ApiEnvelope.readBool]
+
+/-- A root reads exactly from a string that is its hex, with any digits after `0x` in uppercase.
+
+That hex is `0x` and 64 lowercase digits, two per byte. -/
+theorem readRoot_eq_some_iff {j : Json} {root : Root} :
+    ApiEnvelope.readRoot j = some root ↔
+      ∃ text, j = .str text ∧ HexCase (toHex root.toArray) text := by
+  cases j with
+  | str text =>
+    simp only [ApiEnvelope.readRoot, Json.str.injEq, exists_eq_left', ← ofHex_eq_ok_iff]
+    cases h : ofHex text with
+    | error e => simp
+    | ok data =>
+      by_cases size : data.size = 32
+      · obtain ⟨r, hr⟩ := root
+        simp only [size, ↓reduceDIte, Option.some.injEq, Except.ok.injEq]
+        constructor
+        · intro same
+          cases same
+          rfl
+        · intro same
+          subst same
+          rfl
+      · simp only [size, ↓reduceDIte, reduceCtorEq, false_iff, Except.ok.injEq]
+        intro same
+        exact size (same ▸ root.size_toArray)
+  | _ => simp [ApiEnvelope.readRoot]
+
+/-- A document holds an envelope exactly when it is an object whose keys read as its parts. -/
+private theorem ApiEnvelope.ofJson_eq_ok_iff_readKey {document : Json} {envelope : ApiEnvelope} :
+    ApiEnvelope.ofJson document = .ok envelope ↔
+      (∃ fields, document = .obj fields) ∧ document.getObjVal? "data" = .ok envelope.data ∧
+        ApiEnvelope.readKey document "version" ApiEnvelope.readVersion = .ok envelope.version ∧
+        ApiEnvelope.readKey document "execution_optimistic" ApiEnvelope.readBool =
+          .ok envelope.executionOptimistic ∧
+        ApiEnvelope.readKey document "finalized" ApiEnvelope.readBool = .ok envelope.finalized ∧
+        ApiEnvelope.readKey document "dependent_root" ApiEnvelope.readRoot =
+          .ok envelope.dependentRoot := by
+  obtain ⟨version, executionOptimistic, finalized, dependentRoot, data⟩ := envelope
+  cases document with
+  | obj kv =>
+    simp only [ApiEnvelope.ofJson]
+    cases hd : (Json.obj kv).getObjVal? "data" <;>
+      cases h1 : ApiEnvelope.readKey (.obj kv) "version" ApiEnvelope.readVersion <;>
+      cases h2 : ApiEnvelope.readKey (.obj kv) "execution_optimistic" ApiEnvelope.readBool <;>
+      cases h3 : ApiEnvelope.readKey (.obj kv) "finalized" ApiEnvelope.readBool <;>
+      cases h4 : ApiEnvelope.readKey (.obj kv) "dependent_root" ApiEnvelope.readRoot <;>
+      simp [bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw,
+        ApiEnvelope.mk.injEq, eq_comm, and_comm, and_left_comm]
+  | _ => simp [ApiEnvelope.ofJson, throw, throwThe, MonadExceptOf.throw]
+
 /-- An envelope that a document holds has the version that the document names. -/
 theorem readKey_version_of_ofJson {document : Json} {envelope : ApiEnvelope}
     (read : ApiEnvelope.ofJson document = .ok envelope) :
-    ApiEnvelope.readKey document "version" ApiEnvelope.readVersion = .ok envelope.version := by
-  unfold ApiEnvelope.ofJson at read
-  cases document with
-  | obj kv =>
-    simp only at read
-    split at read
-    · cases hk : ApiEnvelope.readKey (Json.obj kv) "version" ApiEnvelope.readVersion with
-      | error e => simp [hk, bind, Except.bind] at read
-      | ok v =>
-        simp only [hk, bind, Except.bind] at read
-        repeat' split at read
-        all_goals first
-          | (simp at read; done)
-          | (simp only [pure, Except.pure] at read; cases read; simp)
-    · simp at read
-  | _ => simp at read
+    ApiEnvelope.readKey document "version" ApiEnvelope.readVersion = .ok envelope.version :=
+  (ApiEnvelope.ofJson_eq_ok_iff_readKey.mp read).2.2.1
+
+/-- A document holds an envelope exactly when it is an object with that data under `data`.
+
+The version, the two flags and the root are absent exactly when the document lacks their keys.
+
+A version present is the string of its name under `version`.
+
+Each flag present is the JSON boolean of its value, under `execution_optimistic` or `finalized`.
+
+A root present is a string under `dependent_root`: its hex, with any digits after `0x` in uppercase.
+
+Every other key may hold any value. -/
+theorem ApiEnvelope.ofJson_eq_ok_iff {document : Json} {envelope : ApiEnvelope} :
+    ApiEnvelope.ofJson document = .ok envelope ↔
+      (∃ fields, document = .obj fields) ∧ document.getObjVal? "data" = .ok envelope.data ∧
+        (document.getObjVal? "version").toOption = envelope.version.map (.str ·.name) ∧
+        (document.getObjVal? "execution_optimistic").toOption =
+          envelope.executionOptimistic.map .bool ∧
+        (document.getObjVal? "finalized").toOption = envelope.finalized.map .bool ∧
+        ((document.getObjVal? "dependent_root").toOption = none ∧ envelope.dependentRoot = none ∨
+          ∃ root text, envelope.dependentRoot = some root ∧
+            document.getObjVal? "dependent_root" = .ok (.str text) ∧
+            HexCase (toHex root.toArray) text) := by
+  rw [ApiEnvelope.ofJson_eq_ok_iff_readKey, readKey_eq_ok_iff_of readVersion_eq_some_iff,
+    readKey_eq_ok_iff_of readBool_eq_some_iff, readKey_eq_ok_iff_of readBool_eq_some_iff,
+    readKey_eq_ok_iff]
+  simp only [readRoot_eq_some_iff]
+  constructor
+  · rintro ⟨obj, data, version, optimistic, final, absent | ⟨value, root, held, ⟨text, rfl, cased⟩,
+      named⟩⟩
+    · exact ⟨obj, data, version, optimistic, final, .inl absent⟩
+    · exact ⟨obj, data, version, optimistic, final, .inr ⟨root, text, named, held, cased⟩⟩
+  · rintro ⟨obj, data, version, optimistic, final, absent | ⟨root, text, named, held, cased⟩⟩
+    · exact ⟨obj, data, version, optimistic, final, .inl absent⟩
+    · exact ⟨obj, data, version, optimistic, final,
+        .inr ⟨.str text, root, held, ⟨text, rfl, cased⟩, named⟩⟩
+
+/-- A key reads whenever it is absent or its reader accepts the value it holds. -/
+private theorem readKey_ok_of {β : Type} {document : Json} {key : String}
+    {read : Json → Option β}
+    (form : ∀ value, document.getObjVal? key = .ok value → ∃ b, read value = some b) :
+    ∃ o, ApiEnvelope.readKey document key read = .ok o := by
+  unfold ApiEnvelope.readKey
+  cases h : document.getObjVal? key with
+  | error e => exact ⟨none, rfl⟩
+  | ok value =>
+    obtain ⟨b, hb⟩ := form value h
+    exact ⟨some b, by simp [hb]⟩
+
+/-- A response reads under a version exactly when it is an object that names that version.
+
+Its `version` key holds the string of that name.
+
+Its `data` key holds JSON that the reader of the API reads as the value.
+
+Where present, `execution_optimistic` and `finalized` hold JSON booleans.
+
+Where present, `dependent_root` holds the hex of a root, with any digits after `0x` in uppercase.
+
+Every other key may hold any value. -/
+theorem readVersioned_eq_ok_iff {α : Type} [SszType α] [ApiSpelling α]
+    {version : ConsensusVersion} {document : Json} {x : α} :
+    readVersioned α version document = .ok x ↔
+      (∃ fields, document = .obj fields) ∧
+        document.getObjVal? "version" = .ok (.str version.name) ∧
+        (∃ data, document.getObjVal? "data" = .ok data ∧ ofApiJson α data = .ok x) ∧
+        (∀ value, document.getObjVal? "execution_optimistic" = .ok value → ∃ b, value = .bool b) ∧
+        (∀ value, document.getObjVal? "finalized" = .ok value → ∃ b, value = .bool b) ∧
+        (∀ value, document.getObjVal? "dependent_root" = .ok value →
+          ∃ (root : Root) (text : String), value = .str text ∧
+            HexCase (toHex root.toArray) text) := by
+  have flag : ∀ {key : String} {o : Option Bool},
+      (document.getObjVal? key).toOption = o.map .bool →
+        ∀ value, document.getObjVal? key = .ok value → ∃ b, value = .bool b := by
+    intro key o h value held
+    cases o <;> simp_all [Except.toOption]
+  constructor
+  · intro read
+    unfold readVersioned at read
+    cases h : ApiEnvelope.ofJson document with
+    | error e => simp [h, bind, Except.bind] at read
+    | ok envelope =>
+      obtain ⟨obj, data, named, optimistic, final, root⟩ := ApiEnvelope.ofJson_eq_ok_iff.mp h
+      have version_eq : envelope.version = some version := by
+        by_cases n : envelope.version = some version
+        · exact n
+        · simp [h, bind, Except.bind, n] at read
+      have decoded : ofApiJson α envelope.data = .ok x := by
+        simp only [h, version_eq, bind, Except.bind, pure, Except.pure] at read
+        cases hx : ofApiJson α envelope.data <;>
+          simp [hx, throw, throwThe, MonadExceptOf.throw] at read ⊢
+        exact read
+      refine ⟨obj, ?_, ⟨envelope.data, data, decoded⟩, flag optimistic, flag final, ?_⟩
+      · rw [version_eq] at named
+        cases g : document.getObjVal? "version" <;> simp_all [Except.toOption]
+      · intro value held
+        rcases root with ⟨absent, -⟩ | ⟨r, text, -, held', cased⟩
+        · simp [held, Except.toOption] at absent
+        · rw [held] at held'
+          cases held'
+          exact ⟨r, text, rfl, cased⟩
+  · rintro ⟨obj, named, ⟨data, held, decoded⟩, optimistic, final, root⟩
+    obtain ⟨o2, h2⟩ := readKey_ok_of (read := ApiEnvelope.readBool) fun value h => by
+      obtain ⟨b, rfl⟩ := optimistic value h
+      exact ⟨b, rfl⟩
+    obtain ⟨o3, h3⟩ := readKey_ok_of (read := ApiEnvelope.readBool) fun value h => by
+      obtain ⟨b, rfl⟩ := final value h
+      exact ⟨b, rfl⟩
+    obtain ⟨o4, h4⟩ := readKey_ok_of (read := ApiEnvelope.readRoot) fun value h => by
+      obtain ⟨r, text, rfl, cased⟩ := root value h
+      exact ⟨r, readRoot_eq_some_iff.mpr ⟨text, rfl, cased⟩⟩
+    have h1 : ApiEnvelope.readKey document "version" ApiEnvelope.readVersion =
+        .ok (some version) := by
+      simp [ApiEnvelope.readKey, named, ApiEnvelope.readVersion, ConsensusVersion.ofName?_name]
+    have envelope : ApiEnvelope.ofJson document = .ok ⟨some version, o2, o3, o4, data⟩ :=
+      ApiEnvelope.ofJson_eq_ok_iff_readKey.mpr ⟨obj, held, h1, h2, h3, h4⟩
+    simp [readVersioned, envelope, bind, Except.bind, decoded, pure, Except.pure]
 
 /-- A response read under a version names that version, exactly. -/
 theorem readVersioned_version {α : Type} [SszType α] [ApiSpelling α] {version : ConsensusVersion}
     {document : Json} {x : α} (read : readVersioned α version document = .ok x) :
-    document.getObjVal? "version" = .ok (.str version.name) := by
-  unfold readVersioned at read
-  cases h : ApiEnvelope.ofJson document with
-  | error e => simp [h, bind, Except.bind] at read
-  | ok envelope =>
-    have named : envelope.version = some version := by
-      by_cases n : envelope.version = some version
-      · exact n
-      · simp [h, bind, Except.bind, n] at read
-    have hv := readKey_version_of_ofJson h
-    rw [named] at hv
-    cases hg : document.getObjVal? "version" with
-    | error e => simp [ApiEnvelope.readKey, hg] at hv
-    | ok value =>
-      cases value with
-      | str s =>
-        simp only [ApiEnvelope.readKey, hg, ApiEnvelope.readVersion] at hv
-        cases ho : ConsensusVersion.ofName? s with
-        | none => simp [ho] at hv
-        | some b =>
-          simp only [ho, Except.ok.injEq, Option.some.injEq] at hv
-          subst hv
-          rw [ConsensusVersion.name_of_ofName? ho]
-      | _ => simp [ApiEnvelope.readKey, hg, ApiEnvelope.readVersion] at hv
+    document.getObjVal? "version" = .ok (.str version.name) :=
+  (readVersioned_eq_ok_iff.mp read).2.1
 
 /-- A code reads back from the number that the writer gives it. -/
 theorem readCode_num (n : Nat) :

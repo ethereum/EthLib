@@ -223,28 +223,9 @@ theorem validateLightClientUpdate_proves {config : Config} {checks : SignatureCh
           ((store.signatureCommittee update).participantKeys update.syncAggregate)
           (packBytes signingRoot) update.syncAggregate.syncCommitteeSignature =
           true := by
-  unfold validateLightClientUpdate at accepted
-  simp only [Base.bind_ok_iff, LightClientError.require_ok] at accepted
-  obtain ⟨_, -, _, participants, _, -, _, -, _, -, rest⟩ := accepted
-  refine ⟨participants, ?_⟩
-  -- Split on the three conditions of the branches, then read each chain of checks.
-  cases known : store.isNextSyncCommitteeKnown <;>
-    cases committee : update.isSyncCommitteeUpdate <;>
-    simp only [known, committee, Bool.not_true, Bool.not_false, Bool.false_eq_true, ↓reduceIte,
-      and_false, and_true, Base.bind_ok_iff, LightClientError.require_ok] at rest
-  · obtain ⟨_, -, _, -, ⟨⟩, finality, _, empty, root, rooted, verified⟩ := rest
-    exact ⟨finality, nofun, fun _ => empty, root, rooted, verified⟩
-  · obtain ⟨_, -, _, -, ⟨⟩, finality, ⟨⟩, branch, root, rooted, verified⟩ := rest
-    exact ⟨finality, fun _ => branch, nofun, root, rooted, verified⟩
-  · obtain ⟨_, -, _, -, ⟨⟩, finality, _, empty, root, rooted, verified⟩ := rest
-    exact ⟨finality, nofun, fun _ => empty, root, rooted, verified⟩
-  · obtain ⟨_, -, _, -, ⟨⟩, finality, rest⟩ := rest
-    -- A next committee that the store knows must also match; the branch check follows.
-    split at rest <;> simp only [Base.bind_ok_iff, LightClientError.require_ok] at rest
-    · obtain ⟨_, -, ⟨⟩, branch, root, rooted, verified⟩ := rest
-      exact ⟨finality, fun _ => branch, nofun, root, rooted, verified⟩
-    · obtain ⟨⟨⟩, branch, root, rooted, verified⟩ := rest
-      exact ⟨finality, fun _ => branch, nofun, root, rooted, verified⟩
+  obtain ⟨-, participants, -, -, -, -, -, -, finality, empty, branch, signed⟩ :=
+    validateLightClientUpdate_eq_ok_iff.mp accepted
+  exact ⟨participants, finality, fun carried => (branch carried).2, empty, signed⟩
 
 /-- The finalized root of an accepted update is a node of the attested state.
 

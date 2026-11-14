@@ -21,6 +21,10 @@ The parameters of each method read back from their JSON.
 Each method succeeds exactly when its request decodes, and then answers what the node holds.
 
 A version object reads back from its JSON when its code is two letters, and only then.
+
+A JSON value reads as a version object exactly when it holds the four members, each in its form.
+
+The code is two letters, the name and the version are strings, and the commit is lowercase hex.
 -/
 
 public section
@@ -326,24 +330,61 @@ theorem clientVersionOfJson_json (v : ClientVersion) (h : IsClientCode v.code) :
   simp only [hfs, hex, r1, r2, r3, r4, hc, string, fixed_dataJson, Json.liftM_ok, bind,
     Except.bind, pure, Except.pure, ite_true]
 
+/-- A JSON value reads as a version object exactly when it is an object of the form below.
+
+A member whose value is `null` counts as absent.
+
+Its other members are `code`, `name`, `version` and `commit`.
+
+Each of the four occurs once, and no other member occurs.
+
+The code is a string of two ASCII letters, in either case.
+
+The name and the version are strings.
+
+The commit is `0x` and 8 lowercase hex digits, two for each of its 4 bytes. -/
+theorem clientVersionOfJson_eq_ok_iff {j : Lean.Json} {v : ClientVersion} :
+    clientVersionOfJson j = .ok v ↔
+      ∃ fs, fields "clientVersion" j = .ok fs ∧
+        hasExactly fs ["code", "name", "version", "commit"] = true ∧
+        IsClientCode v.code ∧
+        fs.lookup "code" = some (.str v.code) ∧ fs.lookup "name" = some (.str v.name) ∧
+        fs.lookup "version" = some (.str v.version) ∧
+        fs.lookup "commit" = some (.str (hexString v.commit.toList)) := by
+  unfold clientVersionOfJson clientVersionFields
+  simp only [bind_ok_iff, Json.liftM_eq_ok_iff]
+  refine exists_congr fun fs => and_congr_right fun _ => ?_
+  by_cases hex : hasExactly fs ["code", "name", "version", "commit"] = true
+  · rw [and_iff_right hex]
+    simp only [hex, ↓reduceIte, bind_ok_iff, Json.liftM_eq_ok_iff, field_eq_ok_iff,
+      string_eq_ok_iff]
+    obtain ⟨code, name, version, commit⟩ := v
+    constructor
+    · rintro ⟨_, hc, code, rfl, h⟩
+      by_cases hcc : IsClientCode code
+      · simp only [decide_eq_true hcc, ↓reduceIte, bind_ok_iff, Json.liftM_eq_ok_iff,
+          field_eq_ok_iff, string_eq_ok_iff, fixed_false_eq_ok_iff, pure, Except.pure,
+          Except.ok.injEq] at h
+        obtain ⟨_, hn, name, rfl, _, hv, version, rfl, _, hm, commit, rfl, he⟩ := h
+        cases he
+        exact ⟨hcc, hc, hn, hv, hm⟩
+      -- A code that is not two letters fails with an invalid parameter.
+      · simp [decide_eq_false hcc, bind, Except.bind] at h
+    · rintro ⟨hcc, hc, hn, hv, hm⟩
+      refine ⟨_, hc, code, rfl, ?_⟩
+      simp only [decide_eq_true hcc, ↓reduceIte,
+        bind_ok_iff, Json.liftM_eq_ok_iff, field_eq_ok_iff, string_eq_ok_iff,
+        fixed_false_eq_ok_iff, pure, Except.pure, Except.ok.injEq]
+      exact ⟨_, hn, name, rfl, _, hv, version, rfl, _, hm, commit, rfl, rfl⟩
+  -- Any other set of members fails with an invalid parameter, never with a version object.
+  · simp only [hex, Bool.false_eq_true, ↓reduceIte]
+    simp [bind, Except.bind]
+
 /-- A version object that decodes has a code of two letters. -/
 theorem isClientCode_of_clientVersionOfJson {j : Lean.Json} {v : ClientVersion}
-    (h : clientVersionOfJson j = .ok v) : IsClientCode v.code := by
-  unfold clientVersionOfJson at h
-  rcases hf : fields "clientVersion" j with e | fs
-  · simp [hf, bind, Except.bind] at h
-  cases hx : hasExactly fs clientVersionFields
-  · simp [hf, hx, bind, Except.bind] at h
-  rcases hc : field "clientVersion" fs "code" with e | cj
-  · simp [hf, hx, hc, bind, Except.bind] at h
-  rcases hs : string "code" cj with e | code
-  · simp [hf, hx, hc, hs, bind, Except.bind] at h
-  by_cases hcc : IsClientCode code
-  case neg => simp [hf, hx, hc, hs, hcc, bind, Except.bind] at h
-  simp only [hf, hx, hc, hs, Json.liftM_ok, bind, Except.bind, decide_eq_true hcc, ite_true,
-    pure, Except.pure] at h
-  repeat' split at h
-  all_goals cases h <;> exact hcc
+    (h : clientVersionOfJson j = .ok v) : IsClientCode v.code :=
+  let ⟨_, _, _, code, _⟩ := clientVersionOfJson_eq_ok_iff.mp h
+  code
 
 /-- The method succeeds exactly on one parameter that decodes, and then answers its own object.
 -/

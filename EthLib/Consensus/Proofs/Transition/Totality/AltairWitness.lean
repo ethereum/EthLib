@@ -195,7 +195,8 @@ theorem runHolds_altairWitnessState :
     exact absurd this (by decide)
   · rw [witness_epoch, Nat.sub_self]
     refine ⟨?_, Or.inl ?_, ?_, fun _ score member => ?_, fun validator member => ?_,
-      fun electra => (notElectra electra).elim, ?_, fun capella => (notCapella capella).elim,
+      fun electra => (notElectra electra).elim, fun electra => (notElectra electra).elim, ?_,
+      fun capella => (notCapella capella).elim,
       fun electra => (notElectra electra).elim, fun electra => (notElectra electra).elim, ?_⟩
     · rw [balanceSum, pendingDepositSum, dite_eq_right_of_eq_false (eq_false notElectra),
         witness_balances, Nat.zero_mul, Nat.add_zero]
@@ -271,7 +272,7 @@ theorem processSlotsAcross_exists_ok_altairWitnessState {checks : SignatureCheck
     (by rw [witness_epoch]; decide) (by rw [witness_epoch]; exact runHolds_altairWitnessState)
     (UInt64.lt_iff_toNat_lt.mpr (by rw [slot0]; exact later))
     (by rw [witness_epoch]; change slot.toNat / 32 ≤ 74240 + 2250000; omega)
-    signers draws limit
+    signers (draws.drawsEnd fun fork => (drawFits_presets fork).1) limit
   rw [witness_epoch] at holds
   exact ⟨after, computed, holds⟩
 

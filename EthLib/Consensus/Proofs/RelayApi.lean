@@ -117,11 +117,30 @@ private theorem toApiJson_bid_obj (x : BidTraceV2) {document : Lean.Json}
 
 namespace BidTraceV2WithTimestamp
 
+/-- The decimal text of an integer reads back as that integer. -/
+theorem decimalInt_toString (i : Int) : decimalInt (toString i) = i := by
+  have noMinus (n : Nat) (rest : List Char) : Nat.toDigits 10 n ≠ '-' :: rest := fun h => by
+    have digit := Nat.isDigit_of_mem_toDigits (c := '-') (n := n) (by decide) (by decide)
+      (h ▸ List.mem_cons_self)
+    exact absurd digit (by decide)
+  rw [Int.toString_eq_repr, Int.repr_eq_ite]
+  split
+  · unfold decimalInt
+    rw [Nat.toList_repr]
+    split
+    · next rest h => exact absurd h (noMinus _ rest)
+    · rw [Nat.ofDigitChars_ten_toDigits]
+      omega
+  · unfold decimalInt
+    simp only [String.toList_append, Nat.toList_repr]
+    simp [Nat.ofDigitChars_ten_toDigits]
+    omega
+
 /-- A signed integer of 64 bits reads back from its JSON. -/
 theorem readInt64_int64Json (x : Int64) : readInt64 (int64Json x) = .ok x := by
   have low := Int64.le_toInt x
   have high := Int64.toInt_lt x
-  simp only [readInt64, int64Json, toString, Int.toInt?_repr]
+  simp only [readInt64, int64Json, decimalInt_toString]
   have inside : -2 ^ 63 ≤ x.toInt ∧ x.toInt < 2 ^ 63 := ⟨low, high⟩
   simp only [true_and, Int64.ofInt_toInt, inside, ite_true]
 
@@ -130,14 +149,12 @@ theorem int64Json_of_readInt64 {document : Lean.Json} {x : Int64}
     (read : readInt64 document = .ok x) : document = int64Json x := by
   unfold readInt64 at read
   split at read
-  · split at read
-    · rename_i text i _
-      split at read
-      · rename_i canonical
-        obtain ⟨spelled, low, high⟩ := canonical
-        cases read
-        simp only [int64Json, Int64.toInt_ofInt_of_le low high, spelled]
-      · cases read
+  · simp only at read
+    split at read
+    · rename_i canonical
+      obtain ⟨spelled, low, high⟩ := canonical
+      cases read
+      simp only [int64Json, Int64.toInt_ofInt_of_le low high, spelled]
     · cases read
   · cases read
 

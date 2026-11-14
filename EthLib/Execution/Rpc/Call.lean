@@ -86,6 +86,10 @@ So is a field that the kind of the request cannot carry, or a chain other than t
 
 So is a creation of type 3 or 4.
 
+Past their reading as bytes, a call never reads the blobs, their commitments or their proofs.
+
+So its kind does not limit them.
+
 The other checks of a transaction before its block do not run.
 
 They are the checks of the blobs and of the authorization list, and of a sender with code.
@@ -166,7 +170,17 @@ def callWord (what : String) (n : Nat) : Except RpcError U256 :=
 
 Each fee field that the request leaves out is 0 here, and the fee cap is `maxFee`.
 
-A field that its kind does not allow, or another chain, fails with the code of invalid parameters.
+A fee, an access list, blob hashes, a blob fee cap or authorizations that its kind lacks fail.
+
+So does a chain other than `chainId`, a kind above 4, or type 3 or 4 without a recipient.
+
+So does a value, fee or fee cap of the request, or `nonce`, `gas` or `maxFee`, of `2 ^ 256` or more.
+
+Each of these fails with the code of invalid parameters.
+
+The schema of the request ties none of its fields to its kind, so the checks of kind are EthLib's.
+
+The blobs, their commitments and their proofs are never checked, and leave the result unchanged.
 -/
 def GenericTransaction.toTransaction (tx : GenericTransaction) (chainId : UInt64)
     (nonce gas maxFee : Nat) : Except RpcError Transaction := do

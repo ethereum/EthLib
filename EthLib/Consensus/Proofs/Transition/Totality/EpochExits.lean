@@ -78,6 +78,116 @@ theorem exitCost_le (state : BeaconState preset fork) :
   have := floors (state.validators.data.toList.map (·.effectiveBalance.toNat))
   rwa [List.map_map] at this
 
+private abbrev ConsolidationKept (s t : BeaconState preset fork) : Prop :=
+  t.earliestConsolidationEpoch = s.earliestConsolidationEpoch
+
+private theorem consolidationKept_setValidatorAt {s t : BeaconState preset fork} {index : Nat}
+    {v : Validator} (ok : s.setValidatorAt index v = .ok t) : ConsolidationKept s t := by
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok ok
+  rfl
+
+private theorem consolidationKept_setBalance {s t : BeaconState preset fork}
+    {index : ValidatorIndex} {balance : Gwei} (ok : s.setBalance index balance = .ok t) :
+    ConsolidationKept s t := by
+  obtain ⟨_, rfl⟩ := setBalance_ok ok
+  rfl
+
+private theorem consolidationKept_exitQueue {config : Config} {s t : BeaconState preset fork}
+    {amount : Gwei} {epoch : Epoch} (ok : exitQueue config s amount = .ok (t, epoch)) :
+    ConsolidationKept s t := by
+  unfold exitQueue at ok
+  split at ok
+  · simp only [computeExitEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq, Prod.mk.injEq] at ok
+    obtain ⟨_, _, _, _, _, _, rfl, _⟩ := ok
+    rfl
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at ok
+    obtain ⟨_, _, rfl, _⟩ := ok
+    rfl
+
+private theorem consolidationKept_exit {config : Config} {s t : BeaconState preset fork}
+    {index : ValidatorIndex} (ok : initiateValidatorExit config s index = .ok t) :
+    ConsolidationKept s t := by
+  obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok ok
+  · rfl
+  · exact (consolidationKept_setValidatorAt (by rwa [← setValidator_eq_setValidatorAt])).trans
+      (consolidationKept_exitQueue queue)
+
+private theorem consolidationKept_addValidator {s t : BeaconState preset fork}
+    {pubkey : Cryptography.Bls.BLSPubkey} {credentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry s pubkey credentials amount = .ok t) :
+    ConsolidationKept s t := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · simp only [addValidatorToRegistryAltair, bind_ok_iff, liftAccessor_ok,
+      pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    rfl
+  · split at computed <;> cases computed
+    rfl
+
+/-- Every write that an epoch step makes keeps the end of the consolidation queue. -/
+private theorem consolidationLaws : EpochFrameLaws (fork := fork) (preset := preset)
+    ConsolidationKept where
+  refl _ := rfl
+  trans one two := two.trans one
+  setValidatorAt set _ _ _ _ _ := consolidationKept_setValidatorAt set
+  increaseBalance ok := by
+    obtain ⟨_, set⟩ := increaseBalance_ok ok
+    exact consolidationKept_setBalance set
+  decreaseBalance ok := by
+    obtain ⟨_, set⟩ := decreaseBalance_ok ok
+    exact consolidationKept_setBalance set
+  initiateValidatorExit := consolidationKept_exit
+  addValidatorToRegistry added _ := consolidationKept_addValidator added
+  eth1DataVotes _ _ := rfl
+  inactivityScores _ _ := rfl
+  slashings _ _ := rfl
+  randaoMixes _ _ := rfl
+  historicalRoots _ _ := rfl
+  historicalSummaries _ _ := rfl
+  participationRecords _ := rfl
+  pendingDeposits _ _ _ := rfl
+  pendingConsolidations _ _ := rfl
+  syncCommittees _ _ _ := rfl
+  proposerLookahead _ _ := rfl
+  ptcWindow _ _ := rfl
+
+/-- No step of an epoch moves the end of the consolidation queue. -/
+theorem processEpoch_earliestConsolidationEpoch {config : Config} {checks : SignatureChecks}
+    (computed : processEpoch config checks state = .ok after) :
+    after.earliestConsolidationEpoch = state.earliestConsolidationEpoch := by
+  refine (processEpoch_trace computed).transport ConsolidationKept (fun _ => rfl)
+    (fun one two => two.trans one) fun stage _ _ _ ok => ?_
+  by_cases ordinary : stage ≠ .justification ∧ stage ≠ .payments ∧ stage ≠ .participation ∧
+      stage ≠ .pendingDeposits
+  · exact consolidationLaws.toEpochStepLaws.epochEdge ordinary ok
+  have edge := action_cases.mp ok
+  cases stage <;> simp only [Edge] at edge
+  case justification =>
+    obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok edge
+    · rfl
+    · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
+      rw [← rest]
+  case payments =>
+    split at edge
+    · rw [processBuilderPendingPayments_eq edge]
+    · exact edge ▸ rfl
+  case participation =>
+    split at edge
+    · subst edge
+      rfl
+    · rename_i early
+      obtain ⟨u, computed, _, _, restored⟩ :=
+        processParticipationRecordUpdates_eq (state := _) (Nat.lt_of_not_le early)
+      obtain rfl := Except.ok.inj (computed.symm.trans edge)
+      exact congrArg (·.earliestConsolidationEpoch) restored
+  case pendingDeposits =>
+    split at edge
+    · exact consolidationLaws.processPendingDeposits edge
+    · exact edge ▸ rfl
+  all_goals exact absurd ⟨nofun, nofun, nofun, nofun⟩ ordinary
+
 /-- Each exit epoch that a later state sets is one set before. -/
 private def ExitEpochsKept (state after : BeaconState preset fork) : Prop :=
   ∀ validator ∈ after.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →

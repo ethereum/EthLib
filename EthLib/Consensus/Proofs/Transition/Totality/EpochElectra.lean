@@ -111,8 +111,6 @@ The rewards fit for the budget and an inactivity bound plus the bias.
 
 The ceiling on the balances after the rewards is below `2^63`.
 
-The products of the draws fit in 64 bits.
-
 The seed lookahead is shorter than the history of mixes, and a sync committee is not empty.
 
 The step runs at the last slot of an epoch.
@@ -181,19 +179,11 @@ When the next epoch starts a sync committee period, take the state reached befor
 
 Every key of that state must pass validation.
 
-That state must also hold a validator at the cap, active in the next epoch.
+The other two draws are for the epoch one past the seed lookahead, from Fulu and from Gloas.
 
-The other two draws are for the epoch one past the seed lookahead.
+Each draw must end on the state it reads, under the bounds of the draw.
 
-From Fulu the state that the lookahead step reads must hold a validator at the cap, active then.
-
-From Gloas that validator must also be unslashed.
-
-From Gloas, the state the window step reads needs a validator at the cap in each slot of that epoch.
-
-That validator must be a member of the beacon committees of that slot.
-
-Those validators at the cap let each draw stop; validity does not give them, so they are assumed. -/
+No bound on the state makes a draw end, so that is assumed. -/
 theorem processEpoch_total_of_electra {config : Config} {checks : SignatureChecks}
     {budget scoreBound ceiling : Nat}
     [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
@@ -203,7 +193,6 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
     (roots : preset.RootsReachPreviousEpoch) (bands : preset.HysteresisBandsBelow)
     (fit : RewardsFit preset config budget (scoreBound + config.INACTIVITY_SCORE_BIAS.toNat))
     (half : preset.rewardsCeiling budget < 2 ^ 63)
-    (fits : DrawFits preset fork)
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     (members : preset.SYNC_COMMITTEE_SIZE ≠ 0)
     (last : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0)
@@ -267,25 +256,27 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
       ∀ ready, run (action config checks) readyStages state = .ok ready →
         ∀ validator ∈ ready.validators.data,
           ∃ point, Cryptography.Bls.G1.keyValidatePoint (packBytes validator.pubkey) = .ok point)
-    (syncFull : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
+    (syncEnds : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
       ∀ ready, run (action config checks) readyStages state = .ok ready →
-        ∃ validator ∈ ready.validators.data,
-          isActiveValidator validator (getCurrentEpoch state + 1) ∧
-            validator.effectiveBalance.toNat = drawCap preset fork)
-    (proposersFull : .fusaka ≤ fork → ∀ synced,
+        (∀ validator ∈ ready.validators.data,
+          validator.effectiveBalance.toNat ≤ drawCap preset fork) →
+        ready.validators.data.size ≤ 2 ^ 40 →
+        preset.SYNC_COMMITTEE_SIZE.toNat * ready.validators.data.size < 2 ^ 64 →
+        SyncDrawEnds ready (getCurrentEpoch state + 1))
+    (proposersEnd : .fusaka ≤ fork → ∀ synced,
       run (action config checks) (readyStages ++ [.syncCommittees]) state = .ok synced →
-        ∃ validator ∈ synced.validators.data,
-          isActiveValidator validator (getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD + 1) ∧
-            (.glamsterdam ≤ fork → validator.slashed = false) ∧
-            validator.effectiveBalance.toNat = drawCap preset fork)
-    (ptcFull : .glamsterdam ≤ fork → ∀ moved,
+        (∀ validator ∈ synced.validators.data,
+          validator.effectiveBalance.toNat ≤ drawCap preset fork) →
+        synced.validators.data.size ≤ 2 ^ 40 →
+        ProposersDrawEnd synced (getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD + 1))
+    (ptcEnd : .glamsterdam ≤ fork → ∀ moved,
       run (action config checks) (readyStages ++ [.syncCommittees, .proposerLookahead]) state =
           .ok moved →
-        ∀ slot, computeEpochAtSlot preset slot =
-            getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD + 1 →
-          ∀ members, slotCommitteeMembers moved slot = .ok members →
-            ∃ index ∈ members, ∃ validator, getValidator moved index = .ok validator ∧
-              validator.effectiveBalance.toNat = drawCap preset fork) :
+        (∀ validator ∈ moved.validators.data,
+          validator.effectiveBalance.toNat ≤ drawCap preset fork) →
+        moved.validators.data.size ≤ 2 ^ 40 →
+        preset.PTC_SIZE.toNat * moved.validators.data.size < 2 ^ 64 →
+        PtcDrawsEnd moved (getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD + 1)) :
     ∃ after, processEpoch config checks state = .ok after := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
   have capella : .shapella ≤ fork := Nat.le_trans (by decide) electra
@@ -633,21 +624,21 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
         .nil)))))))))))))
   -- The sync committee is drawn at the end of a period, from the state the steps reach.
   have validatorsFlagged : flagged.validators = updated.validators := validators13
-  obtain ⟨synced, syncedOk⟩ := processSyncCommitteeUpdates_ok altair fits
+  obtain ⟨synced, syncedOk⟩ := processSyncCommitteeUpdates_ok altair
     (by rw [currentEpochFlagged]; omega) lookahead members
     (fun boundary => by
       have boundary : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 :=
         by rw [← currentEpochFlagged]; exact boundary
       have ran := run_ok_iff.mpr readyTrace
-      refine ⟨keys boundary flagged ran, ?_, ?_, ?_, ?_⟩
-      · rw [validatorsFlagged]
-        exact capped10
-      · rw [currentEpochFlagged]
-        exact syncFull boundary flagged ran
-      · rw [validatorsFlagged]
+      have fewFlagged : flagged.validators.data.size ≤ 2 ^ 40 := by
+        rw [validatorsFlagged]
         omega
-      · rw [validatorsFlagged]
-        exact Nat.lt_of_le_of_lt (Nat.mul_le_mul_left _ size10) syncRoom)
+      refine ⟨keys boundary flagged ran, fewFlagged, ?_⟩
+      rw [currentEpochFlagged]
+      exact syncEnds boundary flagged ran (by rw [validatorsFlagged]; exact capped10) fewFlagged
+        (by
+          rw [validatorsFlagged]
+          exact Nat.lt_of_le_of_lt (Nat.mul_le_mul_left _ size10) syncRoom))
   have validatorsSynced : synced.validators = updated.validators := by
     rw [← validatorsFlagged]
     unfold processSyncCommitteeUpdates at syncedOk
@@ -666,16 +657,16 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
       action config checks .proposerLookahead synced = .ok moved ∧ moved.slot = synced.slot ∧
         moved.validators = synced.validators := by
     by_cases fulu : Fork.fusaka ≤ fork
-    · obtain ⟨moved, ok, same⟩ := processProposerLookahead_ok fulu fits
+    · have fewSynced : synced.validators.data.size ≤ 2 ^ 40 := by
+        rw [validatorsSynced]
+        omega
+      obtain ⟨moved, ok, same⟩ := processProposerLookahead_ok fulu
         (by rw [currentEpochSynced]; exact seedRoom) lookahead
         (by rw [currentEpochSynced]; exact slotRoom)
         (by
           rw [currentEpochSynced]
-          refine ⟨?_, proposersFull fulu synced (run_ok_iff.mpr syncedTrace), ?_⟩
-          · rw [validatorsSynced]
-            exact capped10
-          · rw [validatorsSynced]
-            omega)
+          exact ⟨fewSynced, proposersEnd fulu synced (run_ok_iff.mpr syncedTrace)
+            (by rw [validatorsSynced]; exact capped10) fewSynced⟩)
       exact ⟨moved, action_cases.mpr (by simp only [Edge, fulu, ↓reduceDIte]; exact ok),
         by rw [same], by rw [same]⟩
     · exact ⟨synced, action_cases.mpr (by simp only [Edge, fulu, ↓reduceDIte]), rfl, rfl⟩
@@ -693,7 +684,7 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
   obtain ⟨windowed, windowedOk⟩ : ∃ windowed,
       action config checks .ptcWindow moved = .ok windowed := by
     by_cases gloas : Fork.glamsterdam ≤ fork
-    · obtain ⟨windowed, ok, -⟩ := processPtcWindow_ok gloas fits
+    · obtain ⟨windowed, ok, -⟩ := processPtcWindow_ok gloas
         (by rw [currentEpochMoved]; exact seedRoom) lookahead
         (by rw [currentEpochMoved]; exact slotRoom) positive.slotsPerEpoch
         (by
@@ -702,8 +693,9 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
             rw [validatorsMoved, validatorsSynced]
             exact size10
           obtain ⟨ptcFits, committeeFits⟩ := ptcRoom gloas
-          refine ⟨?_, ptcFull gloas moved (run_ok_iff.mpr movedTrace), by omega,
-            Nat.lt_of_le_of_lt (Nat.mul_le_mul_left _ size) ptcFits,
+          have fewMoved : moved.validators.data.size ≤ 2 ^ 40 := by omega
+          refine ⟨ptcEnd gloas moved (run_ok_iff.mpr movedTrace) ?_ fewMoved
+            (Nat.lt_of_le_of_lt (Nat.mul_le_mul_left _ size) ptcFits), fewMoved,
             Nat.lt_of_le_of_lt (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ size))
               committeeFits⟩
           rw [validatorsMoved, validatorsSynced]

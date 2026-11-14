@@ -1,11 +1,14 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHex
 public import EthLib.Serialization.Ssz.Codec.Json
 
 /-!
 # Proofs: hex reads the same in either case
 
 A hex digit reads the same in uppercase, so a hex string does too.
+
+A string reads as bytes exactly when it is their hex, with any digits after `0x` in uppercase.
 
 A document reads the same with any hex digits of its strings in uppercase, at every shape.
 
@@ -166,6 +169,124 @@ theorem ofHex_hexCase {text other : String} (cased : HexCase text other) :
   · rfl
   · rw [ofHex_marked marked, ofHex_marked markedOther, hexBytes, hexBytes,
       hexBytesFrom_keptOrUpper digits upper _ kept]
+
+/-- The code of each of the sixteen digits: `0` to `9`, then `a` to `f`. -/
+private theorem hexDigitChar_val (digit : Fin 16) :
+    (Base.hexDigitChar digit).val.toNat =
+      if digit.val < 10 then 48 + digit.val else 87 + digit.val := by
+  revert digit
+  decide
+
+/-- The code of the uppercase form of each of the sixteen digits: `0` to `9`, then `A` to `F`. -/
+private theorem hexDigitChar_toUpper_val (digit : Fin 16) :
+    (Base.hexDigitChar digit).toUpper.val.toNat =
+      if digit.val < 10 then 48 + digit.val else 55 + digit.val := by
+  revert digit
+  decide
+
+/-- A character that reads as a digit is the lowercase digit of its value, or its uppercase form. -/
+private theorem hexDigit_eq_ok {c : Char} {n : Nat} (read : hexDigit c = .ok n) :
+    ∃ digit : Fin 16, digit.val = n ∧
+      (c = Base.hexDigitChar digit ∨ c = (Base.hexDigitChar digit).toUpper) := by
+  have e0 : ('0' : Char).val.toNat = 48 := rfl
+  have e9 : ('9' : Char).val.toNat = 57 := rfl
+  have ea : ('a' : Char).val.toNat = 97 := rfl
+  have ef : ('f' : Char).val.toNat = 102 := rfl
+  have eA : ('A' : Char).val.toNat = 65 := rfl
+  have eF : ('F' : Char).val.toNat = 70 := rfl
+  have same : ∀ d : Char, d.val.toNat = c.val.toNat → c = d := fun d h =>
+    Char.ext (UInt32.toNat_inj.mp h.symm)
+  unfold hexDigit at read
+  simp only [Char.le_def, Char.toNat, UInt32.le_iff_toNat_le, e0, e9, ea, ef, eA, eF,
+    Bool.and_eq_true, decide_eq_true_eq] at read
+  split at read
+  · rename_i h
+    cases read
+    refine ⟨⟨c.val.toNat - 48, by omega⟩, rfl, .inl (same _ ?_)⟩
+    rw [hexDigitChar_val]
+    dsimp only
+    split <;> omega
+  · split at read
+    · rename_i h
+      cases read
+      refine ⟨⟨c.val.toNat - 97 + 10, by omega⟩, rfl, .inl (same _ ?_)⟩
+      rw [hexDigitChar_val]
+      dsimp only
+      split <;> omega
+    · split at read
+      · rename_i h
+        cases read
+        refine ⟨⟨c.val.toNat - 65 + 10, by omega⟩, rfl, .inr (same _ ?_)⟩
+        rw [hexDigitChar_toUpper_val]
+        dsimp only
+        split <;> omega
+      · cases read
+
+/-- Pairs of digits that read as bytes are the hex digits of those bytes, each in either case. -/
+private theorem keptOrUpper_of_hexBytesFrom :
+    ∀ (digits : List Char) (out data : Bytes), hexBytesFrom digits out = .ok data →
+      ∃ rest : List UInt8, data.toList = out.toList ++ rest ∧
+        KeptOrUpper (rest.flatMap Base.byteHexDigits) digits
+  | [], out, data, read => by
+    cases read
+    exact ⟨[], by simp, trivial⟩
+  | [_], _, _, read => by cases read
+  | high :: low :: rest, out, data, read => by
+    simp only [hexBytesFrom] at read
+    cases hh : hexDigit high with
+    | error e => simp [hh, Bind.bind, Except.bind] at read
+    | ok a =>
+      cases hl : hexDigit low with
+      | error e => simp [hh, hl, Bind.bind, Except.bind] at read
+      | ok b =>
+        simp only [hh, hl, Bind.bind, Except.bind] at read
+        obtain ⟨dh, rfl, kh⟩ := hexDigit_eq_ok hh
+        obtain ⟨dl, rfl, kl⟩ := hexDigit_eq_ok hl
+        obtain ⟨more, hdata, kept⟩ := keptOrUpper_of_hexBytesFrom rest _ data read
+        have value : (UInt8.ofNat (16 * dh.val + dl.val)).toNat = 16 * dh.val + dl.val := by
+          have := dh.isLt
+          have := dl.isLt
+          simp only [UInt8.toNat_ofNat']
+          omega
+        refine ⟨UInt8.ofNat (16 * dh.val + dl.val) :: more, by simp [hdata], ?_⟩
+        have digits : Base.byteHexDigits (UInt8.ofNat (16 * dh.val + dl.val)) =
+            [Base.hexDigitChar dh, Base.hexDigitChar dl] := by
+          simp only [Base.byteHexDigits, value]
+          have := dl.isLt
+          congr 2 <;> congr 1 <;> first | omega | (apply Fin.ext; dsimp only; omega)
+        simp only [List.flatMap_cons, digits, List.cons_append, List.nil_append]
+        exact ⟨kh, kl, kept⟩
+
+/-- A string reads as bytes exactly when it is their hex, with any digits after `0x` in uppercase.
+
+That hex is `0x` and two lowercase digits per byte, high digit first. -/
+theorem ofHex_eq_ok_iff {text : String} {data : Bytes} :
+    ofHex text = .ok data ↔ HexCase (toHex data) text := by
+  constructor
+  · intro read
+    obtain ⟨digits, marked⟩ : ∃ digits, text.toList = '0' :: 'x' :: digits := by
+      unfold ofHex at read
+      generalize text.toList = cs at read
+      match cs, read with
+      | '0' :: 'x' :: digits, _ => exact ⟨digits, rfl⟩
+      | [], read => simp [Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at read
+      | [_], read => simp [Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at read
+      | a :: b :: _, read =>
+        by_cases ab : a = '0' ∧ b = 'x'
+        · obtain ⟨rfl, rfl⟩ := ab
+          exact ⟨_, rfl⟩
+        · exfalso
+          have : [a, b] ≠ ['0', 'x'] := by simpa using ab
+          simp [this, Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at read
+    rw [ofHex_marked marked, hexBytes] at read
+    obtain ⟨rest, hdata, kept⟩ := keptOrUpper_of_hexBytesFrom digits #[] data read
+    simp only [List.nil_append] at hdata
+    refine .inr ⟨data.toList.flatMap Base.byteHexDigits, digits, ?_, marked, ?_⟩
+    · exact Base.toList_hexString data.toList
+    · rw [hdata]
+      exact kept
+  · intro cased
+    rw [← ofHex_hexCase cased, ofHex_toHex]
 
 /-- No decimal string has an `x` as its second character. -/
 private theorem toString_toList_ne_marked (n : Nat) (rest : List Char) :

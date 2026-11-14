@@ -103,7 +103,7 @@ def test_blob_transaction_without_blobs() -> None:
     (item,) = [item for item in rlp.decode(block)[1] if isinstance(item, bytes) and item[0] == 3]
     error = _error(item)
     assert error["code"] == -32000
-    assert error["data"].startswith("EthLib.Execution.Transactions.TransactionError.decoding")
+    assert error["data"] == "the RLP of the transaction does not decode"
 
 
 def _blob_form() -> list[Any]:

@@ -290,7 +290,7 @@ The access lists of the named block numbers are pruned first.
 A notification, or a batch of notifications, gets none. -/
 def serveOf (args : ViewInputs × List Nat × List String) : Result (List (Option String)) := do
   let view := (← viewOf args.1).pruneAccessLists args.2.1
-  return args.2.2.map fun text => (view.serve text).map (·.compress)
+  return args.2.2.map fun text => (view.serve (Json.parse text)).map (·.compress)
 
 /-- Answer requests of the execution JSON-RPC API from the chain that the arguments build.
 

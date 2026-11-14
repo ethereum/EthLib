@@ -137,12 +137,13 @@ private structure ElectraStep {fork : Fork} (state after : BeaconState preset fo
   depositChurn : after.depositBalanceToConsume = state.depositBalanceToConsume
   exitChurn : after.exitBalanceToConsume = state.exitBalanceToConsume
   queue : after.earliestExitEpoch = state.earliestExitEpoch
+  consolidations : after.earliestConsolidationEpoch = state.earliestConsolidationEpoch
   slashings : after.slashings = state.slashings
 
 private theorem ElectraStep.refl {fork : Fork} (state : BeaconState preset fork) :
     ElectraStep state state :=
   ⟨Nat.le_refl _, fun validator member => ⟨validator, member, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl,
-    rfl⟩
+    rfl, rfl⟩
 
 private theorem ElectraStep.trans {fork : Fork} {first second third : BeaconState preset fork}
     (one : ElectraStep first second) (two : ElectraStep second third) :
@@ -150,7 +151,8 @@ private theorem ElectraStep.trans {fork : Fork} {first second third : BeaconStat
   refine ⟨two.supply.trans one.supply, fun validator member => ?_, two.scores.trans one.scores,
     two.roots.trans one.roots, two.summaries.trans one.summaries,
     two.depositChurn.trans one.depositChurn, two.exitChurn.trans one.exitChurn,
-    two.queue.trans one.queue, two.slashings.trans one.slashings⟩
+    two.queue.trans one.queue, two.consolidations.trans one.consolidations,
+    two.slashings.trans one.slashings⟩
   obtain ⟨middle, middleMember, same⟩ := two.exits validator member
   obtain ⟨old, oldMember, same'⟩ := one.exits middle middleMember
   exact ⟨old, oldMember, same'.trans same⟩
@@ -178,7 +180,7 @@ private theorem electraStep_queuePreActivation {fork : Fork}
     rw [← shape]
     simp [BeaconState.putValidator, BeaconState.putBalance]
   subst shape
-  refine ⟨?_, fun member mem => ?_, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  refine ⟨?_, fun member mem => ?_, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   · have moved := balanceSum_putBalance inside₁ 0
     rw [(Array.getElem?_eq_some_iff.mp (getBalance_eq_ok_iff.mp gotBalance)).2,
       UInt64.toNat_zero] at moved
@@ -214,7 +216,7 @@ private theorem electraStep_queueCompoundingExcess {fork : Fork}
         have queuedDeposits : after.pendingDeposits electra = pending := by
           rw [← shape]
         subst shape
-        refine ⟨?_, fun member mem => ⟨member, mem, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+        refine ⟨?_, fun member mem => ⟨member, mem, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
         have moved := balanceSum_putBalance inside preset.MIN_ACTIVATION_BALANCE
         rw [(Array.getElem?_eq_some_iff.mp (getBalance_eq_ok_iff.mp gotBalance)).2] at moved
         rw [balanceSum_eq_of_balances balances, pendingDepositSum_of_electra electra,
@@ -311,6 +313,9 @@ private structure ElectraBounds (config : Config) (pre : BeaconState preset .den
     (∀ validator ∈ pre.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
       validator.exitEpoch.toNat ≤ bound) →
     (after.earliestExitEpoch (by decide)).toNat ≤ bound + 1
+  /-- The consolidation queue opens at the first activation epoch. -/
+  consolidations : (after.earliestConsolidationEpoch (by decide)).toNat =
+    (getCurrentEpoch pre).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat
   /-- The slashed balances carry over. -/
   slashings : after.slashings = pre.slashings
 
@@ -332,7 +337,7 @@ private theorem upgradeToElectra_bounds {pre : BeaconState preset .dencun}
   have earliestEq := (Uint64.addChecked_ok_iff.mp earliestOk).2
   refine ⟨?_, fun validator member => ?_, by rw [kept.scores]; rfl, kept.roots,
     by rw [kept.summaries]; rfl, by rw [kept.depositChurn]; rfl, ?_, fun bound early exits => ?_,
-    kept.slashings⟩
+    ?_, kept.slashings⟩
   · refine kept.supply.trans (Nat.le_of_eq ?_)
     rw [balanceSum_eq_of_balances (state := pre) rfl]
     rfl
@@ -347,6 +352,9 @@ private theorem upgradeToElectra_bounds {pre : BeaconState preset .dencun}
     rw [Array.foldl_toList] at latest
     rw [earliestEq]
     exact Nat.add_le_add latest (Nat.le_refl _)
+  · rw [kept.consolidations]
+    change activation.toNat = _
+    exact activationEq
 
 /-- An upgrade never raises the sum of the effective balances. -/
 theorem upgradeNext_effectiveBalanceSum_le {pre : ForkedBeaconState preset}
@@ -442,7 +450,8 @@ private theorem RunBounded.of_early {fork post : Fork} {state : BeaconState pres
     RunBounded config start budget elapsed after := by
   have notElectra : ¬ Fork.pectra ≤ post := Nat.not_le_of_lt early
   refine ⟨?_, holds.effective_of_le effective, load, scores, ?_,
-    fun electra => absurd electra notElectra, by rw [roots]; exact holds.roots, summaries,
+    fun electra => absurd electra notElectra, fun electra => absurd electra notElectra,
+    by rw [roots]; exact holds.roots, summaries,
     fun electra => absurd electra notElectra, fun electra => absurd electra notElectra,
     (slashedBalanceSum_eq slashings).trans_le holds.slashed⟩
   · rw [balanceSum_eq_of_data balances, pendingDepositSum_of_lt early]
@@ -474,6 +483,8 @@ private theorem RunBounded.of_carried {fork post : Fork} {state : BeaconState pr
       after.exitBalanceToConsume later = state.exitBalanceToConsume earlier)
     (queue : ∀ (later : .pectra ≤ post) (earlier : .pectra ≤ fork),
       after.earliestExitEpoch later = state.earliestExitEpoch earlier)
+    (consolidations : ∀ (later : .pectra ≤ post) (earlier : .pectra ≤ fork),
+      after.earliestConsolidationEpoch later = state.earliestConsolidationEpoch earlier)
     (slashings : after.slashings = state.slashings) :
     RunBounded config start budget elapsed after := by
   have altair : Fork.altair ≤ fork := Nat.le_trans (by decide) electra
@@ -481,6 +492,7 @@ private theorem RunBounded.of_carried {fork post : Fork} {state : BeaconState pr
   refine ⟨supply.trans holds.supply, holds.effective_of_le effective, load,
     fun later score member => ?_, by rw [validators]; exact holds.exits,
     fun later => by rw [queue later electra]; exact holds.queue electra,
+    fun later => by rw [consolidations later electra]; exact holds.consolidations electra,
     by rw [roots]; exact holds.roots,
     fun later => by rw [summaries later capella]; exact holds.summaries capella,
     fun later => by rw [depositChurn later electra]; exact holds.depositChurn electra,
@@ -541,11 +553,12 @@ private theorem RunBounded.of_upgradeToElectra {pre : BeaconState preset .dencun
     (load : registryLoadFactor .pectra * registryLoad after ≤ start.load)
     (computed : upgradeToElectra config pre = .ok after) :
     RunBounded config start budget elapsed after := by
-  obtain ⟨supply, exits, scores, roots, summaries, depositChurn, exitChurn, queue, slashings⟩ :=
-    upgradeToElectra_bounds computed
+  obtain ⟨supply, exits, scores, roots, summaries, depositChurn, exitChurn, queue, consolidations,
+    slashings⟩ := upgradeToElectra_bounds computed
   refine ⟨supply.trans holds.supply, holds.effective_of_le effective, load,
     fun _ score member => ?_, fun validator member set => ?_,
-    fun _ => queue _ first holds.exits, by rw [roots]; exact holds.roots,
+    fun _ => queue _ first holds.exits, fun _ => by rw [consolidations]; omega,
+    by rw [roots]; exact holds.roots,
     fun _ => by rw [summaries]; exact holds.summaries (by decide),
     fun _ => by rw [depositChurn]; exact Nat.zero_le _, fun _ => ?_,
     (slashedBalanceSum_eq slashings).trans_le holds.slashed⟩
@@ -568,7 +581,8 @@ private theorem RunBounded.of_upgradeToFulu {pre : BeaconState preset .pectra}
   simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨_, -, rfl⟩ := computed
   exact holds.of_carried (by decide) (Nat.le_of_eq rfl) effective load rfl
-    (fun _ _ => rfl) rfl (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl) rfl
+    (fun _ _ => rfl) rfl (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl)
+    (fun _ _ => rfl) rfl
 
 /-- The upgrade to Gloas keeps the bounds, since its onboarding only removes pending deposits. -/
 private theorem RunBounded.of_upgradeToGloas {pre : BeaconState preset .fusaka}
@@ -591,7 +605,8 @@ private theorem RunBounded.of_upgradeToGloas {pre : BeaconState preset .fusaka}
     exact Nat.add_le_add_left this _
   exact holds.of_carried (by decide)
     (by rw [pendingDepositSum_of_electra (by decide)]; exact supply) effective load rfl
-    (fun _ _ => rfl) rfl (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl) rfl
+    (fun _ _ => rfl) rfl (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl)
+    (fun _ _ => rfl) rfl
 
 /-- An upgrade keeps the bounds of a run, with the same number of epochs.
 
@@ -638,7 +653,8 @@ theorem RunBounded.of_upgradeNext {start : RunStart} {budget elapsed : Nat}
     obtain ⟨_, upgraded, rfl⟩ := computed
     obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
     exact holds.of_carried (by dsimp only; decide) (Nat.le_of_eq rfl) effective load rfl
-      (fun _ _ => rfl) rfl (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl) rfl
+      (fun _ _ => rfl) rfl (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl)
+      (fun _ _ => rfl) rfl
   all_goals simp only [upgradeNext] at computed; cases computed
 
 /-- The upgrades due at a slot keep the bounds of a run, with the same number of epochs.

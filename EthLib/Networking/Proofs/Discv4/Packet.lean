@@ -15,6 +15,10 @@ For Ping and Pong the full list ends with the sequence number of EIP-868.
 
 Without that number, the items after the first extra item are ignored.
 
+A packet reads only from its own type and its fields, followed by any items.
+
+A Ping or a Pong reads without a sequence number only when no item follows its fields.
+
 A packet whose hash does not match the bytes after it is rejected.
 
 Every packet that the reader accepts has at most 1280 bytes.
@@ -140,6 +144,112 @@ theorem Packet.ofItems_pong_append (t : Endpoint) (h : Vector UInt8 32) (e : Nat
     Packet.ofItems 0x02 ((pong t h e none).fields ++ x :: rest) =
       Packet.ofItems 0x02 ((pong t h e none).fields ++ [x]) := by
   simp [Packet.ofItems, Packet.fields, Packet.enrSeqItems, Packet.readEnrSeq]
+
+/-! ## The items that the reader accepts -/
+
+/-- The items after the fixed fields give a sequence number exactly when it is the first of them.
+
+They give none exactly when there are no such items. -/
+private theorem Packet.readEnrSeq_eq_ok_iff {rest : List Item} {s : Option UInt64} :
+    Packet.readEnrSeq rest = .ok s ↔
+      ∃ extra, rest = Packet.enrSeqItems s ++ extra ∧ (s = none → extra = []) := by
+  cases rest with
+  | nil => cases s <;> simp [Packet.readEnrSeq, Packet.enrSeqItems]
+  | cons x rest =>
+    cases s with
+    | none => simp [Packet.readEnrSeq, Packet.enrSeqItems, EthLib.Base.map_ok_iff]
+    | some n =>
+      rw [Packet.readEnrSeq, EthLib.Base.map_ok_iff]
+      simp [Packet.enrSeqItems, Codec.ofItem_eq_ok_iff]
+      exact eq_comm
+
+/--
+The reader takes a packet exactly when the type is its type and the items start with its fields.
+
+Any items may follow the fields, as EIP-8 asks.
+
+A Ping or a Pong reads without the sequence number of EIP-868 only when no item follows its fields.
+-/
+theorem Packet.ofItems_eq_ok_iff {type : UInt8} {items : List Item} {p : Packet} :
+    Packet.ofItems type items = .ok p ↔
+      type = p.type ∧ ∃ extra, items = p.fields ++ extra ∧
+        (∀ v f t e, p = .ping v f t e none → extra = []) ∧
+        (∀ t h e, p = .pong t h e none → extra = []) := by
+  constructor
+  · intro h
+    unfold Packet.ofItems at h
+    split_ifs at h with h1 h2 h3 h4 h5 h6
+    · subst h1
+      match items, h with
+      | v :: f :: t :: e :: rest, h =>
+        simp only [EthLib.Base.mapError_ok_iff, bind_ok_iff, pure, Except.pure,
+          Except.ok.injEq] at h
+        obtain ⟨v', hv, f', hf, t', ht, e', he, s, hs, rfl⟩ := h
+        obtain ⟨extra, rfl, hnone⟩ := Packet.readEnrSeq_eq_ok_iff.mp hs
+        refine ⟨rfl, extra, ?_, ?_, ?_⟩
+        · simp [Packet.fields, (Codec.ofItem_eq_ok_iff.mp hv).symm,
+            (Codec.ofItem_eq_ok_iff.mp hf).symm, (Codec.ofItem_eq_ok_iff.mp ht).symm,
+            (Codec.ofItem_eq_ok_iff.mp he).symm]
+        · intro _ _ _ _ hp
+          cases hp
+          exact hnone rfl
+        · intro _ _ _ hp
+          cases hp
+    · subst h2
+      match items, h with
+      | t :: hh :: e :: rest, h =>
+        simp only [EthLib.Base.mapError_ok_iff, bind_ok_iff, pure, Except.pure,
+          Except.ok.injEq] at h
+        obtain ⟨t', ht, h', hh, e', he, s, hs, rfl⟩ := h
+        obtain ⟨extra, rfl, hnone⟩ := Packet.readEnrSeq_eq_ok_iff.mp hs
+        refine ⟨rfl, extra, ?_, ?_, ?_⟩
+        · simp [Packet.fields, (Codec.ofItem_eq_ok_iff.mp ht).symm,
+            (Codec.ofItem_eq_ok_iff.mp hh).symm, (Codec.ofItem_eq_ok_iff.mp he).symm]
+        · intro _ _ _ _ hp
+          cases hp
+        · intro _ _ _ hp
+          cases hp
+          exact hnone rfl
+    · subst h3
+      match items, h with
+      | t :: e :: extra, h =>
+        simp only [EthLib.Base.mapError_ok_iff, bind_ok_iff, pure, Except.pure,
+          Except.ok.injEq] at h
+        obtain ⟨t', ht, e', he, rfl⟩ := h
+        refine ⟨rfl, extra, ?_, by simp, by simp⟩
+        simp [Packet.fields, (Codec.ofItem_eq_ok_iff.mp ht).symm,
+          (Codec.ofItem_eq_ok_iff.mp he).symm]
+    · subst h4
+      match items, h with
+      | ns :: e :: extra, h =>
+        simp only [EthLib.Base.mapError_ok_iff, bind_ok_iff, pure, Except.pure,
+          Except.ok.injEq] at h
+        obtain ⟨ns', hns, e', he, rfl⟩ := h
+        refine ⟨rfl, extra, ?_, by simp, by simp⟩
+        simp [Packet.fields, (Codec.ofItem_eq_ok_iff.mp hns).symm,
+          (Codec.ofItem_eq_ok_iff.mp he).symm]
+    · subst h5
+      match items, h with
+      | e :: extra, h =>
+        simp only [EthLib.Base.mapError_ok_iff, bind_ok_iff, pure, Except.pure,
+          Except.ok.injEq] at h
+        obtain ⟨e', he, rfl⟩ := h
+        refine ⟨rfl, extra, ?_, by simp, by simp⟩
+        simp [Packet.fields, (Codec.ofItem_eq_ok_iff.mp he).symm]
+    · subst h6
+      match items, h with
+      | hh :: r :: extra, h =>
+        simp only [EthLib.Base.mapError_ok_iff, bind_ok_iff, pure, Except.pure,
+          Except.ok.injEq] at h
+        obtain ⟨h', hh, rfl⟩ := h
+        refine ⟨rfl, extra, ?_, by simp, by simp⟩
+        simp [Packet.fields, (Codec.ofItem_eq_ok_iff.mp hh).symm]
+  · rintro ⟨rfl, extra, rfl, hping, hpong⟩
+    by_cases hextra : extra = []
+    · subst hextra
+      simpa using Packet.ofItems_fields p
+    · exact Packet.ofItems_fields_append p extra (fun v f t e hp => hextra (hping v f t e hp))
+        (fun t h e hp => hextra (hpong t h e hp))
 
 /-! ## Packets -/
 

@@ -8,6 +8,8 @@ public import EthLib.Serialization.Proofs.Rlp.Codec
 
 An announcement reads back from its RLP item on the versions that use its form.
 
+It reads from no other item.
+
 Take an answer that passes the check.
 
 Its transactions have hashes that are requested hashes, in the order of the request.
@@ -43,6 +45,47 @@ theorem ofItem_eth68_of_eth72 {version : EthVersion} (hv : version < .eth72) (t 
     (s : List Nat) (h : List Hash32) (c : Option (Vector UInt8 16)) :
     ofItem version (eth72 t s h c).toItem = .error (.wrongFieldCount 3 4) := by
   simp [ofItem, toItem, hv, Item.fields, Item.toItems, bind, Except.bind]
+
+/-- An announcement reads exactly from its own RLP item, on a version that uses its form.
+
+eth/68 to eth/71 read only the three fields of the older form, and eth/72 only the four of its own.
+
+This reader does not check the lengths of the lists.
+
+The decoder of messages does. -/
+theorem ofItem_eq_ok_iff {version : EthVersion} {item : Item} {a : Announcement} :
+    ofItem version item = .ok a ↔
+      item = a.toItem ∧ match a with
+        | .eth68 .. => version < .eth72
+        | .eth72 .. => version = .eth72 := by
+  constructor
+  · intro h
+    unfold ofItem at h
+    split at h
+    · rename_i hv
+      obtain ⟨items, rfl, hlen, hrest⟩ := Item.fields_bind_eq_ok.mp h
+      rcases items with _ | ⟨t, _ | ⟨s, _ | ⟨h, _ | ⟨_, _⟩⟩⟩⟩ <;> simp at hlen
+      obtain ⟨x₁, rfl, h₁⟩ := Item.field_bind_eq_ok.mp hrest
+      obtain ⟨x₂, rfl, h₂⟩ := Item.field_bind_eq_ok.mp h₁
+      obtain ⟨x₃, rfl, h₃⟩ := Item.field_bind_eq_ok.mp h₂
+      cases h₃
+      exact ⟨rfl, hv⟩
+    · rename_i hv
+      obtain ⟨items, rfl, hlen, hrest⟩ := Item.fields_bind_eq_ok.mp h
+      rcases items with _ | ⟨t, _ | ⟨s, _ | ⟨h, _ | ⟨c, _ | ⟨_, _⟩⟩⟩⟩⟩ <;> simp at hlen
+      obtain ⟨x₁, rfl, h₁⟩ := Item.field_bind_eq_ok.mp hrest
+      obtain ⟨x₂, rfl, h₂⟩ := Item.field_bind_eq_ok.mp h₁
+      obtain ⟨x₃, rfl, h₃⟩ := Item.field_bind_eq_ok.mp h₂
+      obtain ⟨x₄, rfl, h₄⟩ := Item.field_bind_eq_ok.mp h₃
+      cases h₄
+      refine ⟨rfl, ?_⟩
+      cases version <;> first | rfl | exact absurd (by decide) hv
+  · rintro ⟨rfl, hv⟩
+    cases a with
+    | eth68 t s h => exact ofItem_eth68 hv t s h
+    | eth72 t s h c =>
+      subst hv
+      exact ofItem_eth72 t s h c
 
 end Announcement
 

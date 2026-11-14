@@ -92,7 +92,7 @@ def hasRival (store : Store preset fork) (root : Root) (block : BeaconBlock pres
 /-- The reason of a failed check of the fork choice, if it failed. -/
 def checkFailure (label : String) : Except ForkChoiceError Unit → Option String
   | .ok () => none
-  | .error error => some s!"{label}: {reprStr error}"
+  | .error _ => some s!"{label}: the fork choice rejects it"
 
 /-- The reason that an object fails a level, if it fails.
 

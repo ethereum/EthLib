@@ -12,6 +12,12 @@ Each message reads back from its frame data, compressed or not.
 
 A reader of Hello ignores the list items after the five fields it knows, as EIP-8 asks.
 
+A message is read only from its own ID and its own items.
+
+Only Hello takes further items after its fields.
+
+Only the item of a capability reads as that capability.
+
 With Snappy, a reader rejects a message other than Hello whose preamble declares more than 16 MiB.
 
 A message other than Hello that such a reader accepts decompresses to at most 16 MiB.
@@ -85,6 +91,87 @@ theorem Message.ofItem_toItem (m : Message) : Message.ofItem m.id m.toItem = .ok
       toScalar_scalar, Except.mapError, Functor.map, Except.map]
   | ping => rfl
   | pong => rfl
+
+/-! ## The items that the readers accept -/
+
+/-- Only the item of a capability reads as that capability. -/
+instance : LawfulCodec Capability where
+  ofItem_toItem := Capability.ofItem_toItem
+  toItem_of_ofItem {item c} h := by
+    obtain ⟨items, rfl, hlen, h⟩ := Item.fields_bind_eq_ok.mp h
+    match items, hlen, h with
+    | [n, v], _, h =>
+      simp only [EthLib.Base.bind_ok_iff, pure, Except.pure, Except.ok.injEq] at h
+      obtain ⟨n', hn, v', hv, rfl⟩ := h
+      simp [Codec.toItem, (Codec.ofItem_eq_ok_iff.mp hn).symm,
+        (Codec.ofItem_eq_ok_iff.mp hv).symm]
+
+/--
+Hello is read from a list exactly when the list starts with the items of its five fields.
+
+Any items may follow them, as EIP-8 asks.
+-/
+theorem Hello.ofItem_eq_ok_iff {item : Item} {h : Hello} :
+    Codec.ofItem item = .ok h ↔
+      ∃ fields extra, Codec.toItem h = .list fields ∧ item = .list (fields ++ extra) := by
+  constructor
+  · intro hh
+    obtain ⟨fields, extra, rfl, hlen, hh⟩ := Rlpx.leadingFields_bind_eq_ok.mp hh
+    match fields, hlen, hh with
+    | [v, c, caps, p, n], _, hh =>
+      simp only [EthLib.Base.bind_ok_iff, pure, Except.pure, Except.ok.injEq] at hh
+      obtain ⟨v', hv, c', hc, caps', hcaps, p', hp, n', hn, rfl⟩ := hh
+      refine ⟨_, extra, rfl, ?_⟩
+      rw [← Codec.ofItem_eq_ok_iff.mp hv, ← Codec.ofItem_eq_ok_iff.mp hc,
+        ← Codec.ofItem_eq_ok_iff.mp hcaps, ← Codec.ofItem_eq_ok_iff.mp hp,
+        ← Codec.ofItem_eq_ok_iff.mp hn]
+      rfl
+  · rintro ⟨fields, extra, hf, rfl⟩
+    have hlen : 5 ≤ fields.length := by
+      simp [Codec.toItem] at hf
+      simp [← hf]
+    rw [Hello.ofItem_append extra hlen, ← hf, Hello.ofItem_toItem]
+
+/--
+The reader takes a message exactly when the ID is its ID and the list starts with its items.
+
+Only Hello takes any items after its fields, as EIP-8 asks.
+-/
+theorem Message.ofItem_eq_ok_iff {id : Nat} {item : Item} {m : Message} :
+    Message.ofItem id item = .ok m ↔
+      id = m.id ∧ ∃ fields extra, m.toItem = .list fields ∧ item = .list (fields ++ extra) ∧
+        ((∀ h, m ≠ .hello h) → extra = []) := by
+  constructor
+  · intro h
+    unfold Message.ofItem at h
+    split at h
+    · simp only [EthLib.Base.mapError_ok_iff, EthLib.Base.map_ok_iff] at h
+      obtain ⟨hh, hh', rfl⟩ := h
+      obtain ⟨fields, extra, hf, rfl⟩ := Hello.ofItem_eq_ok_iff.mp hh'
+      exact ⟨rfl, fields, extra, hf, rfl, fun hne => absurd rfl (hne hh)⟩
+    · split at h
+      · cases h
+        exact ⟨rfl, [], [], rfl, rfl, fun _ => rfl⟩
+      · simp only [EthLib.Base.mapError_ok_iff, EthLib.Base.map_ok_iff] at h
+        obtain ⟨n, hn, rfl⟩ := h
+        exact ⟨rfl, _, [], rfl, by simp [Codec.ofItem_eq_ok_iff.mp hn], fun _ => rfl⟩
+      · cases h
+      · cases h
+    · split_ifs at h with hi
+      · cases h
+        exact ⟨rfl, [], [], rfl, hi, fun _ => rfl⟩
+    · split_ifs at h with hi
+      · cases h
+        exact ⟨rfl, [], [], rfl, hi, fun _ => rfl⟩
+    · cases h
+  · rintro ⟨rfl, fields, extra, hf, rfl, hx⟩
+    cases m with
+    | hello h =>
+      have hh := Hello.ofItem_eq_ok_iff.mpr ⟨fields, extra, hf, rfl⟩
+      simp [Message.ofItem, Message.id, hh, Except.mapError, Functor.map, Except.map]
+    | _ =>
+      rw [hx (fun _ hne => nomatch hne), List.append_nil, ← hf]
+      exact Message.ofItem_toItem _
 
 /-- The frame data starts with the message ID, and the reader stops right after it. -/
 private theorem decodeItem_id_append {id : Nat} {idE : ByteArray}
