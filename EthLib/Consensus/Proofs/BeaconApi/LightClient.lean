@@ -4,6 +4,7 @@ public import EthLib.Consensus.BeaconApi.LightClient
 public import EthLib.Consensus.Proofs.ForkDigest
 public import EthLib.Consensus.Proofs.LightClient.Containers
 public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Consensus.Proofs.BeaconApi.Responses
 
 /-!
 # Proofs: the light client answers of the Beacon API
@@ -16,7 +17,7 @@ On a chain whose digests name their forks, the SSZ chunks of updates decode back
 
 On such a chain, bytes that decode are the chunks of the updates they give.
 
-The finality and the optimistic update answers have code 404 exactly when the node knows no update.
+The finality and the optimistic update answers refuse with code 404 exactly when the node knows no update.
 -/
 
 @[expose] public section
@@ -427,46 +428,28 @@ theorem encodeUpdateChunks_decode [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
   rw [ByteArray.empty_append, ByteArray.extract_zero_size] at encoded
   exact encoded
 
-/-- A response that carries a value fails only with code 500, when its JSON cannot be written. -/
-private theorem versioned_value_error_code {α : Type} [SszType α] [ApiSpelling α] {fork : Fork}
-    {value : α} {error : ErrorMessage} (failed : versioned fork (.ok value) = .error error) :
-    error.code = 500 := by
-  unfold versioned apiJsonOr500 at failed
-  cases json : toApiJson value with
-  | error fault =>
-    simp only [json, Except.mapError, bind, Except.bind, Except.error.injEq] at failed
-    rw [← failed]
-    rfl
-  | ok _ => simp [json, Except.mapError, bind, Except.bind, pure, Except.pure] at failed
-
 /-- The finality update response refuses with code 404 exactly when the node knows no update. -/
 theorem finalityUpdateResponse_notFound_iff {fork : Fork}
     {latest : Option (LightClientUpdate preset fork)} :
     (∃ error, finalityUpdateResponse latest = .error error ∧ error.code = 404) ↔
       latest = none := by
-  constructor
-  · rintro ⟨error, refused, code⟩
-    cases latest with
-    | none => rfl
-    | some update =>
-      have served := versioned_value_error_code refused
-      omega
-  · rintro rfl
-    exact ⟨_, rfl, rfl⟩
+  cases latest with
+  | none => exact iff_of_true ⟨_, rfl, rfl⟩ rfl
+  | some update =>
+    refine iff_of_false ?_ (by simp)
+    rw [finalityUpdateResponse, versioned_error_iff (by decide)]
+    simp
 
 /-- The optimistic update response refuses with code 404 exactly when the node knows no update. -/
 theorem optimisticUpdateResponse_notFound_iff {fork : Fork}
     {latest : Option (LightClientUpdate preset fork)} :
     (∃ error, optimisticUpdateResponse latest = .error error ∧ error.code = 404) ↔
       latest = none := by
-  constructor
-  · rintro ⟨error, refused, code⟩
-    cases latest with
-    | none => rfl
-    | some update =>
-      have served := versioned_value_error_code refused
-      omega
-  · rintro rfl
-    exact ⟨_, rfl, rfl⟩
+  cases latest with
+  | none => exact iff_of_true ⟨_, rfl, rfl⟩ rfl
+  | some update =>
+    refine iff_of_false ?_ (by simp)
+    rw [optimisticUpdateResponse, versioned_error_iff (by decide)]
+    simp
 
 end EthLib.Consensus.BeaconApi

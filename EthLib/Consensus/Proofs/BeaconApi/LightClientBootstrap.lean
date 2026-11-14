@@ -6,6 +6,7 @@ public import EthLib.Consensus.Proofs.Containers.State
 public import EthLib.Consensus.Proofs.LightClient.Authenticate
 public import EthLib.Consensus.Proofs.LightClient.Execution
 public import EthLib.Consensus.Proofs.LightClient.FullNode
+public import EthLib.Consensus.Proofs.BeaconApi.Responses
 public import EthLib.Consensus.Proofs.LightClient.Upgrade
 
 /-!
@@ -298,10 +299,10 @@ theorem bootstrapFor_valid [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     LightClientError.require, bind, Except.bind, pure, Except.pure]
   exact ⟨_, rfl⟩
 
-/-- The bootstrap fails only with code 404. -/
-theorem bootstrapFor_error_code {config : Config} {store : Store preset fork} {root : Root}
+/-- Each refusal of the bootstrap is the error that names the root. -/
+theorem bootstrapFor_error {config : Config} {store : Store preset fork} {root : Root}
     {error : ErrorMessage} (refused : bootstrapFor config store root = .error error) :
-    error.code = 404 := by
+    error = noBootstrap root := by
   unfold bootstrapFor at refused
   split at refused
   · split at refused
@@ -313,12 +314,18 @@ theorem bootstrapFor_error_code {config : Config} {store : Store preset fork} {r
   · cases refused
     rfl
 
+/-- The bootstrap fails only with code 404. -/
+theorem bootstrapFor_error_code {config : Config} {store : Store preset fork} {root : Root}
+    {error : ErrorMessage} (refused : bootstrapFor config store root = .error error) :
+    error.code = 404 := by
+  rw [bootstrapFor_error refused]
+  rfl
+
 /-- The JSON answer of the bootstrap passes each refusal on unchanged. -/
 theorem bootstrapResponse_of_error {config : Config} {store : Store preset fork} {root : Root}
     {error : ErrorMessage} (refused : bootstrapFor config store root = .error error) :
-    bootstrapResponse config store root = .error error := by
-  rw [bootstrapResponse, versioned, refused]
-  rfl
+    bootstrapResponse config store root = .error error :=
+  versioned_of_error refused
 
 /-- A root whose block or post state the store lacks gets the error with code 404 that names it. -/
 theorem bootstrapFor_of_missing {config : Config} {store : Store preset fork} {root : Root}
@@ -335,7 +342,7 @@ It needs the store to hold that state under the root.
 
 It needs the epoch of that state to be before the Altair fork epoch.
 
-Even a Gloas store refuses such a root, when the schedule puts Altair after Gloas. -/
+It holds for a store of any fork and under any schedule. -/
 theorem bootstrapFor_of_lt_altair {config : Config} {store : Store preset fork}
     {root : Root} {state : BeaconState preset fork}
     (heldState : store.blockStates[root]? = some state)
