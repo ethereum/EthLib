@@ -2815,7 +2815,7 @@ These are store-local facts: no theorem here shows that a recorded honest vote i
 No theorem relates either test to the justification of the target in a later state.
 
 `Consensus/Proofs/Models/Network/ForkChoice.lean` states the network conditions that `Execution.mem_supportersOf_of_duty_epoch` and `Execution.isAncestor_getHead_of_duty_epoch` add to synchrony.
-`DelayFits` requires a vote sent at its deadline, delayed by the bound, to arrive before the next slot; `Prompt` requires every honest store to be up to date at each slot start up to the bound, and one millisecond before it.
+`DelayFits` requires a vote sent at its deadline, delayed by the bound, to arrive before the next slot; `Prompt` requires every honest store to be up to date at each slot start from the start of the execution up to the bound, and, after the first, one millisecond before it.
 `BlocksAdmitted` assumes that a delayed block passing `validateOnBlock` also passes the rest of `onBlockWithVotes`, including every vote and slashing the block carries.
 It restricts the adversary: a block may carry a vote or a slashing that a later honest receiver rejects, for example a vote whose target conflicts with that receiver's newer finalized checkpoint.
 Neither synchrony nor validation implies it, and no proof of handler totality can discharge it.
@@ -2824,8 +2824,8 @@ It is not an additional hypothesis of the theorems on its own.
 The count gives active honest voters, each of whom signs the target or lies outside the committees of the epoch so far, and three times their stake is at least three times the computed support plus the margin.
 `quorum_of_no_conflicting_checkpoint` instantiates that count when the one-third test passes; no theorem derives the count from a bound on Byzantine stake, or shows that the target is justified.
 The two theorems on voting and the head also assume facts that hashing makes hard to break, without naming a witness for them.
-Every block held by an honest store has a nonzero state root, so no beacon state hashes to the zero root; the theorem on the head also assumes that no honest store holds a block at the root of the anchor's parent, which needs a preimage of that root.
-They also assume that every honest justified checkpoint up to the horizon descends from every honest finalized checkpoint, a finality-safety assumption that an honest majority alone does not give.
+Every block held by an honest store has a nonzero state root, so no state that such a block commits to hashes to the zero root; the theorem on the head also assumes that no honest store holds a block at the root of the anchor's parent, which needs a preimage of that root.
+They also assume that every honest justified or unrealized justified checkpoint, from the finalized epoch up to the horizon, descends from every honest finalized checkpoint, a finality-safety assumption that an honest majority alone does not give.
 They also keep their duty, stake and ancestry hypotheses, and conclude their result or a hash collision between blocks of two honest stores.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
