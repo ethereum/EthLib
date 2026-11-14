@@ -4095,7 +4095,16 @@ Where the source is silent or conflicts with itself for the blocks, EthLib follo
 - the base block must be canonical, so that the hashes before each block are those of its chain;
 - from Fusaka to BPO5, the default gas of a call is at most `2^24`, the cap of EIP-7825;
 - before London, a call without a type or a fee cap is legacy, or type 1 with an access list from Berlin;
-- before Paris, the fee recipient gets the block reward, as in a real block.
+- before Paris, the fee recipient gets the block reward, as in a real block;
+- `maxUsedGas` is the gas used with no refund, so from Pectra it is at least the call data floor, as the fixtures show;
+- a failed call returns no data, and a revert puts its output in the `data` of its error, as the fixtures show, though the schema lists only a code and a message;
+- a failure other than a revert gets `-32015` with a message of EthLib's choice, which the source leaves to the client;
+- `traceTransfers` adds no log yet; every fixture of the pin is after Amsterdam, where EIP-7708 already logs the transfers.
+
+Each simulated block holds the result of each call: the output of its message, its gas used before the refund, and its error.
+The body records them without changing anything else that it computes.
+From Byzantium, the status of a call result agrees with its receipt: the receipt succeeds exactly when the result has no error (`applyTransaction_status`, `Proofs/Blocks/Transition.lean`).
+A body has as many results as receipts (`applyTransactions_results_length`), and a refund never raises the gas used (`runTransaction_gasUsed_le`).
 
 The results of the calls are not yet in the blocks.
 

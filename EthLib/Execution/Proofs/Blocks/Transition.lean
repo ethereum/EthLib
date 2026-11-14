@@ -421,7 +421,7 @@ theorem applyTransaction_receipts {env : BlockEnvironment fork} {index : Nat}
 
 /-- A transaction that enters the body adds one receipt and one result, the result of its run.
 
-The result holds the output of its message and the gas that it used before its refund.
+The result holds the output of its message, the gas used before the refund, and the error.
 
 It holds with the overrides of a simulation too. -/
 theorem applyTransaction_results {env : BlockEnvironment fork} {index : Nat}
@@ -433,7 +433,7 @@ theorem applyTransaction_results {env : BlockEnvironment fork} {index : Nat}
       processTransaction env before.block included tx overrides.precompiles overrides.lifted =
         .ok out ∧
       after.receipts.length = before.receipts.length + 1 ∧
-      after.results = before.results ++ [⟨out.messageOutput, out.gasBeforeRefund⟩] := by
+      after.results = before.results ++ [⟨out.messageOutput, out.gasBeforeRefund, out.error⟩] := by
   unfold applyTransaction at h
   obtain ⟨included, hIncluded, h⟩ := bind_ok_iff.mp h
   obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
@@ -442,6 +442,27 @@ theorem applyTransaction_results {env : BlockEnvironment fork} {index : Nat}
   dsimp only at h
   split at h <;>
     (obtain ⟨_, -, h⟩ := bind_ok_iff.mp h; cases h; exact ⟨by simp, rfl⟩)
+
+/-- From Byzantium, a transaction that enters the body adds a receipt and a result that agree.
+
+The receipt has a successful status exactly when the result has no error. -/
+theorem applyTransaction_status {env : BlockEnvironment fork} {index : Nat}
+    {before after : BodyOutput fork} {tx : Transaction} {overrides : BodyOverrides}
+    (hb : .byzantium ≤ fork) (h : applyTransaction env index before tx overrides = .ok after) :
+    ∃ (result : TransactionResult) (receipt : Receipt fork),
+      after.results = before.results ++ [result] ∧
+      after.receipts = before.receipts ++ [(tx.type, receipt)] ∧
+      receipt.outcome = .status hb result.error.isNone := by
+  unfold applyTransaction at h
+  obtain ⟨included, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨out, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
+  dsimp only at h
+  simp only [hb, ↓reduceDIte] at h
+  obtain ⟨_, hOutcome, h⟩ := bind_ok_iff.mp h
+  cases hOutcome
+  cases h
+  exact ⟨_, _, rfl, rfl, rfl⟩
 
 /-- The transactions of a body that runs give as many results as receipts. -/
 theorem applyTransactions_results_length {env : BlockEnvironment fork} {body : BodyState}

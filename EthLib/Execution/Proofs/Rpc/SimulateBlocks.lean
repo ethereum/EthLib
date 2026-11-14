@@ -62,7 +62,7 @@ private theorem simulateBlock_spec {chain chain' : BlockChain} {base : RecentBlo
                hash := hash
                state := result.post
                receipts := result.output.receipts
-               logs := result.output.logs }, senders⟩ ∧
+               logs := result.output.logs }, senders, result.output.results⟩ ∧
         chain' = c.addBlock (⟨fillHeader (simulatedHeader chain.config fork base parent parentHash
           number time request.blockOverrides validation) result.output result.roots, txs, [], ws⟩ :
           Block fork Transaction) result.post := by
@@ -633,7 +633,7 @@ private theorem simulateBlock_valid_spec {chain chain' : BlockChain} {base : Rec
              hash := hash
              state := result.post
              receipts := result.output.receipts
-             logs := result.output.logs }, filled.map (·.2)⟩ := by
+             logs := result.output.logs }, filled.map (·.2), result.output.results⟩ := by
   have hState : overrideState fork chain.state [] = chain.state := by
     simp [overrideState, applyOverrides]
   have hMoves : movedPrecompiles (precompileMoves []) = some := by
@@ -834,7 +834,7 @@ private theorem simulateBlock_valid_header {chain chain' : BlockChain} {base : R
              hash := hash
              state := result.post
              receipts := result.output.receipts
-             logs := result.output.logs }, filled.map (·.2)⟩ := by
+             logs := result.output.logs }, filled.map (·.2), result.output.results⟩ := by
   have hState : overrideState fork chain.state [] = chain.state := by
     simp [overrideState, applyOverrides]
   have hMoves : movedPrecompiles (precompileMoves []) = some := by

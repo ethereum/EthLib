@@ -35,9 +35,19 @@ def _answer_codes(requests: list[str]) -> list[int | None]:
     return codes
 
 
+def _call(call: Mapping[str, Any]) -> dict[str, Any]:
+    """A call result without the message of its error, which the source leaves to the client."""
+    if "error" not in call:
+        return dict(call)
+    error = {k: v for k, v in call["error"].items() if k != "message"}
+    return {**call, "error": error}
+
+
 def _blocks(response: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """The blocks of a response without the results of their calls, which are not yet specified."""
-    return [{k: v for k, v in block.items() if k != "calls"} for block in response["result"]]
+    """The blocks of a response, with their call results compared without error messages."""
+    return [
+        {**block, "calls": [_call(call) for call in block["calls"]]} for block in response["result"]
+    ]
 
 
 def _request(payload: Mapping[str, Any], *block: str) -> str:
