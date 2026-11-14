@@ -86,7 +86,9 @@ So is a field that the kind of the request cannot carry, or a chain other than t
 
 So is a creation of type 3 or 4.
 
-A call never reads the blobs, their commitments or their proofs, so its kind does not limit them.
+Past their reading as bytes, a call never reads the blobs, their commitments or their proofs.
+
+So its kind does not limit them.
 
 The other checks of a transaction before its block do not run.
 
@@ -172,7 +174,9 @@ A fee, an access list, blob hashes, a blob fee cap or authorizations that its ki
 
 So does a chain other than `chainId`, a kind above 4, or type 3 or 4 without a recipient.
 
-So does a number of `2 ^ 256` or more, and each of these fails with the code of invalid parameters.
+So does a value, fee or fee cap of the request, or `nonce`, `gas` or `maxFee`, of `2 ^ 256` or more.
+
+Each of these fails with the code of invalid parameters.
 
 The schema of the request ties none of its fields to its kind, so the checks of kind are EthLib's.
 

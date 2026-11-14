@@ -4142,7 +4142,7 @@ The nonce, the gas limit and the fee cap that the call gives are below `2^256`.
 So is each number of the request that the transaction carries.
 The blobs, commitments and proofs of the schema are not checked, for any kind, and they leave the result of the conversion unchanged (`toTransaction_sidecar`).
 They are the sidecar of a blob transaction, which its network form carries and its block form does not, and the message of a call never reads them.
-They leave the answer of `eth_call` unchanged too (`ethCall_sidecar`).
+Once the request is read, they leave the answer of the call unchanged too (`ethCall_sidecar`); its reader only checks that each one is hex bytes.
 That transaction has the kind, value, recipient, data and lists of the request, and the nonce and gas limit that the call gives (`type_of_toTransaction_eq_ok` and the lemmas next to it).
 Its fee cap is the gas price of the request, or 0, up to type 1, and the cap that the call gives from type 2.
 Its price per gas is that gas price up to type 1.
