@@ -56,54 +56,6 @@ open Base Uint64
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
   {state after : BeaconState preset fork}
 
-/-- A pass over the pending deposits keeps one balance for each validator. -/
-theorem balancesMatch_passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
-    {available : Gwei} :
-    ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
-      {count : Nat} {postponed : Array PendingDeposit} {pass},
-      passPendingDeposits config checks stop nextEpoch available state processed count postponed
-        deposits = .ok pass →
-      BalancesMatch state → BalancesMatch pass.1.state
-  | [], _, _, _, _, _, computed, holds => by
-    simp only [passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact holds
-  | deposit :: rest, state, processed, count, postponed, pass, computed, holds => by
-    unfold passPendingDeposits at computed
-    simp only [bind, Except.bind, pure, Except.pure] at computed
-    split at computed
-    · cases computed
-      exact holds
-    split at computed
-    · cases computed
-    split at computed
-    · split at computed
-      · cases computed
-      rename_i credited
-      split at computed
-      · cases computed
-      cases computed
-      exact balancesMatch_passPendingDeposits (deposits := rest) ‹_›
-        ((applyPendingDeposit_kept credited).1 holds)
-    split at computed
-    · split at computed
-      · cases computed
-      cases computed
-      exact balancesMatch_passPendingDeposits (deposits := rest) ‹_› holds
-    split at computed
-    · cases computed
-    split at computed
-    · cases computed
-      exact holds
-    split at computed
-    · cases computed
-    rename_i credited
-    split at computed
-    · cases computed
-    cases computed
-    exact balancesMatch_passPendingDeposits (deposits := rest) ‹_›
-      ((applyPendingDeposit_kept credited).1 holds)
-
 /-- A pass that starts within the churn available credits no more than that churn inside it. -/
 theorem passPendingDeposits_processed_le {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
     {available : Gwei} :
@@ -321,17 +273,6 @@ theorem processPendingDeposits_pass {electra : .pectra ≤ fork}
   · rename_i unreached
     rw [ite_eq_right_of_eq_false _ _ (eq_false unreached)]
     rfl
-
-/-- The pending deposits of an epoch keep one balance for each validator. -/
-theorem balancesMatch_processPendingDeposits {electra : .pectra ≤ fork}
-    (computed : processPendingDeposits config checks state electra = .ok after)
-    (holds : BalancesMatch state) : BalancesMatch after := by
-  obtain ⟨_, _, _, _, pass, _, _, _, _, passed, validators, balances, _⟩ :=
-    processPendingDeposits_pass computed
-  have kept := balancesMatch_passPendingDeposits passed holds
-  unfold BalancesMatch at kept ⊢
-  rw [validators, balances]
-  exact kept
 
 /-- The pending deposits of an epoch leave a queue at most as long as before. -/
 theorem processPendingDeposits_size_le {electra : .pectra ≤ fork}
@@ -647,6 +588,29 @@ theorem passPendingDeposits_of
   obtain ⟨_, _, _, facts⟩ := passPendingDeposits_applied computed
   exact foldlM_ok_invariant (R state) (fun _ _ _ prior ok => trans prior (admit ok)) (refl _)
     facts.applies
+
+/-- A pass over the pending deposits keeps one balance for each validator. -/
+theorem balancesMatch_passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
+    {available : Gwei} :
+    ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
+      {count : Nat} {postponed : Array PendingDeposit} {pass},
+      passPendingDeposits config checks stop nextEpoch available state processed count postponed
+        deposits = .ok pass →
+      BalancesMatch state → BalancesMatch pass.1.state :=
+  fun computed => passPendingDeposits_of (fun s t => BalancesMatch s → BalancesMatch t)
+    (fun _ holds => holds) (fun one two holds => two (one holds))
+    (fun ok => (applyPendingDeposit_kept ok).1) computed
+
+/-- The pending deposits of an epoch keep one balance for each validator. -/
+theorem balancesMatch_processPendingDeposits {electra : .pectra ≤ fork}
+    (computed : processPendingDeposits config checks state electra = .ok after)
+    (holds : BalancesMatch state) : BalancesMatch after := by
+  obtain ⟨_, _, _, _, pass, _, _, _, _, passed, validators, balances, _⟩ :=
+    processPendingDeposits_pass computed
+  have kept := balancesMatch_passPendingDeposits passed holds
+  unfold BalancesMatch at kept ⊢
+  rw [validators, balances]
+  exact kept
 
 /-- The pending deposits of an epoch read a prefix of the queue, at most the limit per epoch.
 
