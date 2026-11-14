@@ -23,6 +23,7 @@ public import EthLib.Execution.Proofs.Transactions.Rebuild
 public import EthLib.Execution.Proofs.Transactions.Replay
 public import EthLib.Execution.Proofs.Transactions.Settlement
 public import EthLib.Execution.Proofs.Transactions.SettlementRebuild
+public import EthLib.Execution.Proofs.Transactions.SimulatedLogs
 public import EthLib.Execution.Proofs.Transactions.Signature
 public import EthLib.Execution.Proofs.Transactions.StateAborts
 public import EthLib.Execution.Proofs.Transactions.StateGas
