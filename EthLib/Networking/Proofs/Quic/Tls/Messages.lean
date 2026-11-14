@@ -132,10 +132,12 @@ theorem encodeBody_finished_length (hashLength : Nat) (data : List UInt8)
     encodeBody hashLength (.finished data) = .error .length := by
   simp [encodeBody, Base.ensure, wrong, bind, Except.bind]
 
+/-- The legacy version bytes read as `0x0303`. -/
 @[simp] theorem uint_legacy (rest : List UInt8) :
     uint 2 (3 :: 3 :: rest) = .ok (0x0303, rest) := by
   exact uint_encode Wire.Error.truncated 2 0x0303 rest
 
+/-- The compression vector reads back unchanged. -/
 @[simp] theorem bytes_compression (rest : List UInt8) :
     bytes 2 (1 :: 0 :: rest) = .ok ([1, 0], rest) := by
   simpa using bytes_append Wire.Error.truncated [1, 0] rest

@@ -21,7 +21,9 @@ The errors are local codec errors, rather than TLS alerts or QUIC connection err
 
 namespace EthLib.Networking.Quic.Tls.Wire
 
-/-- A malformed wire field, an unsupported message, or a misplaced transcript retry. -/
+/-- A malformed wire field, an unsupported message, or a misplaced transcript retry.
+
+A fixed field with another value, or an extension of the wrong type, is a constant error. -/
 inductive Error where
   | truncated
   | length

@@ -847,6 +847,7 @@ The Python suite checks the RFC 8448 §3 transcript, and its SHA-256 hash agains
 It also checks the CertificateVerify signed content of RFC 8446 §4.4.3, including the zero separator and the role's context string.
 
 The client and server steps, QUIC CRYPTO reassembly and encryption-level checks are absent.
+The codecs reject NewSessionTicket and KeyUpdate, which a QUIC connection still carries after the handshake.
 The maintainer policy questions of [#2163](https://github.com/ethereum/EthLib/issues/2163) remain open.
 
 ### QUIC v1 packet protection

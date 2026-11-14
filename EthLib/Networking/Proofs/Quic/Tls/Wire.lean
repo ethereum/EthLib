@@ -19,6 +19,7 @@ namespace EthLib.Networking.Quic.Tls.Wire
 open EthLib.Base (bind_ok_iff)
 open EthLib.Base.ByteReader (bytes_append uint_encode require_true)
 
+/-- A one-byte integer is the value of that byte. -/
 @[simp] theorem uint_byte (value : UInt8) (rest : List UInt8) :
     uint 1 (value :: rest) = .ok (value.toNat, rest) := by
   simp [uint, Base.ByteReader.uint, Base.ByteReader.bytes, Base.bytesToNat, StateT.bind,

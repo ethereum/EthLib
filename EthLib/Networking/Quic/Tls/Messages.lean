@@ -223,7 +223,9 @@ A truncated message reports a truncation error.
 
 A stream caller can then keep it until more data arrives.
 
-Unknown handshake types are rejected; unknown extension types and algorithm identifiers survive. -/
+Handshake types other than these seven are rejected.
+
+Unknown extension types and algorithm identifiers survive. -/
 def decode (hashLength : Nat) : Reader Message := do
   let (kind, body) ← readFrame
   -- An incomplete field inside an already complete envelope cannot be repaired by more input.
