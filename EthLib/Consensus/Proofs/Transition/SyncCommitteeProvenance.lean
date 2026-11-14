@@ -294,54 +294,11 @@ private theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (ok : Consensus.applyExpectedWithdrawals state capella expected = .ok after) :
     SameSyncCommittees state after := by
-  unfold Consensus.applyExpectedWithdrawals at ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := ok
-  have one : SameSyncCommittees state applied := by
-    unfold applyWithdrawals at appliedOk
-    rw [← Array.foldlM_toList] at appliedOk
-    exact foldlM (fun _ _ _ ok => by rw [applyWithdrawal_eq ok]; exact ⟨rfl, rfl⟩) appliedOk
-  have two : SameSyncCommittees applied indexed := by
-    unfold updateNextWithdrawalIndex at indexedOk
-    split at indexedOk
-    · obtain ⟨_, _, built⟩ := bind_ok_iff.mp indexedOk
-      cases built
-      exact ⟨rfl, rfl⟩
-    · cases indexedOk; exact .refl _
-  have three : ∀ kept : BeaconState preset fork,
-      (if gloas : .glamsterdam ≤ fork then
-        updateNextWithdrawalBuilderIndex kept gloas expected.processedBuildersSweepCount
-      else pure kept) = .ok finished → SameSyncCommittees kept finished := by
-    intro kept ok
-    split at ok
-    · unfold updateNextWithdrawalBuilderIndex at ok
-      dsimp only at ok
-      split at ok
-      · cases ok; exact .refl _
-      · obtain ⟨_, _, built⟩ := bind_ok_iff.mp ok
-        cases built
-        exact ⟨rfl, rfl⟩
-    · cases ok; exact .refl _
-  have queued : SameSyncCommittees indexed (if electra : .pectra ≤ fork then
-      updatePendingPartialWithdrawals (if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals indexed gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else indexed) electra expected.processedPartialWithdrawalsCount
-    else if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals indexed gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else indexed) := by
-    split <;> split <;> exact ⟨rfl, rfl⟩
-  have four : SameSyncCommittees finished after := by
-    unfold updateNextWithdrawalValidatorIndex at last
-    obtain ⟨_, _, last⟩ := bind_ok_iff.mp last
-    dsimp only at last
-    split at last
-    · cases last
-    · cases last; exact ⟨rfl, rfl⟩
-  exact one.trans (two.trans (queued.trans ((three _ sweptOk).trans four)))
+  apply applyExpectedWithdrawals_of_setters SameSyncCommittees .refl
+    (fun one two => one.trans two) (fun step => by
+      rw [applyWithdrawal_eq step]
+      exact ⟨rfl, rfl⟩) (computed := ok)
+  all_goals exact fun _ _ => ⟨rfl, rfl⟩
 
 private theorem processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
