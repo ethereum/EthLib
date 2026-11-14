@@ -363,7 +363,9 @@ structure TransactionOutput where
   error : Option EvmError
   /-- The output of its message: the data that it returned, or the data of its revert.
 
-  It is empty after any other error. -/
+  It is empty after any other error, from Byzantium.
+
+  Before Byzantium, a creation whose code deposit fails keeps the code that it returned. -/
   messageOutput : ByteArray
   /-- The gas that it used before its refund.
 
