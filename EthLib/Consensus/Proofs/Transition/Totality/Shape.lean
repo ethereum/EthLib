@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.EpochDecomposition
 public import EthLib.Consensus.Proofs.Transition.Totality.Bound
+public import EthLib.Consensus.Transition.ForkBoundary
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 import EthLib.Consensus.Proofs.Transition.BuilderPayments
 import EthLib.Consensus.Proofs.Transition.EpochJustification
@@ -29,6 +30,8 @@ Before Electra they assume a bound that this one implies.
 From Electra, they assume that each queued consolidation names two validators of the registry.
 
 One epoch keeps these facts, and so does one slot and a run of slots within a fork.
+
+So do the upgrades, when the caps of the preset grow at Electra.
 
 A deposit appends one entry to each list.
 
@@ -310,5 +313,173 @@ theorem advanceSlots_shaped {count : Nat}
     simp only [advanceSlots, bind_ok_iff] at computed
     obtain ⟨next, nextOk, rest⟩ := computed
     exact ih rest (advanceSlot_shaped nextOk shaped)
+
+/-- An upgrade from a fork at or after Altair keeps the shape.
+
+It must carry the registry, the flags and the scores.
+
+Each queued consolidation after it must be one queued before it. -/
+private theorem Shaped.of_carried {f h : Fork} {s : BeaconState preset f}
+    {t : BeaconState preset h} (shaped : Shaped s) (capped : EffectiveBalancesCapped t)
+    (matched : BalancesMatch t) (altair : .altair ≤ f) (forward : f ≤ h)
+    (validators : t.validators.data.size = s.validators.data.size)
+    (previous : (t.previousEpochParticipation (Nat.le_trans altair forward)).data =
+      (s.previousEpochParticipation altair).data)
+    (current : (t.currentEpochParticipation (Nat.le_trans altair forward)).data =
+      (s.currentEpochParticipation altair).data)
+    (scores : (t.inactivityScores (Nat.le_trans altair forward)).data =
+      (s.inactivityScores altair).data)
+    (consolidations : ∀ (electra : .pectra ≤ h), ∀ c ∈ (t.pendingConsolidations electra).data,
+      ∃ early : .pectra ≤ f, c ∈ (s.pendingConsolidations early).data) : Shaped t := by
+  refine ⟨matched, fun _ => ⟨?_, ?_⟩, fun _ => ?_, capped, fun electra c member => ?_⟩
+  · rw [validators, ← (shaped.participationMatches altair).1]
+    exact congrArg Array.size previous
+  · rw [validators, ← (shaped.participationMatches altair).2]
+    exact congrArg Array.size current
+  · rw [validators, ← shaped.inactivityScoresMatch altair]
+    exact congrArg Array.size scores
+  · obtain ⟨early, found⟩ := consolidations electra c member
+    rw [validators]
+    exact shaped.inside early c found
+
+/-- A step of the upgrade to Electra keeps the size of the registry and four lists.
+
+These are both lists of flags, the scores and the queue of consolidations. -/
+private def QueueKept (s t : BeaconState preset fork) : Prop :=
+  t.validators.data.size = s.validators.data.size ∧
+    t.previousEpochParticipation = s.previousEpochParticipation ∧
+    t.currentEpochParticipation = s.currentEpochParticipation ∧
+    t.inactivityScores = s.inactivityScores ∧ t.pendingConsolidations = s.pendingConsolidations
+
+private theorem QueueKept.trans {s t u : BeaconState preset fork} (one : QueueKept s t)
+    (two : QueueKept t u) : QueueKept s u :=
+  ⟨two.1.trans one.1, two.2.1.trans one.2.1, two.2.2.1.trans one.2.2.1,
+    two.2.2.2.1.trans one.2.2.2.1, two.2.2.2.2.trans one.2.2.2.2⟩
+
+private theorem QueueKept.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
+    (kept : ∀ s x t, step s x = .ok t → QueueKept s t) {items : List α}
+    {s t : BeaconState preset fork} (computed : items.foldlM step s = .ok t) : QueueKept s t :=
+  foldlM_ok_invariant (QueueKept s) (fun _ _ _ before ok => before.trans (kept _ _ _ ok))
+    ⟨rfl, rfl, rfl, rfl, rfl⟩ computed
+
+private theorem QueueKept.queuePreActivation {s t : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : ValidatorIndex}
+    (computed : queuePreActivation s electra index = .ok t) : QueueKept s t := by
+  simp only [Consensus.queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, _, _, _, set₁, _, set₂, rfl⟩ := computed
+  obtain ⟨_, rfl⟩ := setBalance_ok set₁
+  obtain ⟨_, rfl⟩ := setValidator_ok set₂
+  exact ⟨(sameSizes_putValidator _ _ _).1, rfl, rfl, rfl, rfl⟩
+
+private theorem QueueKept.queueCompoundingExcess {s t : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : Nat}
+    (computed : queueCompoundingExcess s electra index = .ok t) : QueueKept s t := by
+  unfold Consensus.queueCompoundingExcess at computed
+  split at computed
+  · split at computed
+    · have queued := liftAccessor_ok.mp computed
+      simp only [queueExcessActiveBalance, bind_ok_iff] at queued
+      obtain ⟨_, _, queued⟩ := queued
+      split at queued
+      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at queued
+        obtain ⟨_, _, _, _, _, set, rfl⟩ := queued
+        obtain ⟨_, rfl⟩ := setBalance_ok set
+        exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+      · cases queued
+        exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+    · cases computed
+      exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+  · cases computed
+    exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+/-- The upgrade to the next fork keeps the shape of the state.
+
+The caps of the preset are assumed in order.
+
+The largest balance before Electra must be at most the least one from Electra.
+
+That one must be at most the largest one for compounding credentials. -/
+theorem upgradeNext_shaped {pre : ForkedBeaconState preset}
+    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
+    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
+    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (computed : upgradeNext config checks pre = .ok post) (shaped : Shaped pre.state) :
+    Shaped post.val.state := by
+  have capped := upgradeNext_capped activation compounding computed shaped.capped
+  have matched := (upgradeFrame_upgradeNext computed).balancesMatch shaped.balancesMatch
+  obtain ⟨fork, state⟩ := pre
+  cases fork <;>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
+      throwThe, MonadExceptOf.throw, reduceCtorEq] at computed
+  · obtain ⟨_, upgraded, rfl⟩ := computed
+    dsimp only at shaped capped matched ⊢
+    obtain ⟨validators, -, previous, current, scores, -⟩ := upgradeToAltair_spec upgraded
+    refine ⟨matched, fun _ => ⟨?_, ?_⟩, fun _ => ?_, capped, fun electra => absurd electra ?_⟩
+    · rw [validators]; exact previous
+    · rw [validators]; exact current
+    · rw [validators]; exact scores
+    · decide
+  case altair | bellatrix | shapella =>
+    subst computed
+    dsimp only at shaped capped matched ⊢
+    refine shaped.of_carried capped matched (by decide) (by decide) ?_ ?_ ?_ ?_
+      (fun electra => absurd electra (by decide)) <;>
+      simp [carryFields, carryList, carryRooted] <;> rw [dite_eq_left (by decide)]
+  · obtain ⟨_, upgraded, rfl⟩ := computed
+    dsimp only at shaped capped matched ⊢
+    simp only [upgradeToElectra, bind_ok_iff] at upgraded
+    obtain ⟨_, -, _, -, _, -, _, -, _, queued, compounded⟩ := upgraded
+    obtain ⟨size, previous, current, scores, consolidations⟩ :=
+      (QueueKept.foldlM (fun _ _ _ ok => QueueKept.queuePreActivation ok) queued).trans
+        (QueueKept.foldlM (fun _ _ _ ok => QueueKept.queueCompoundingExcess ok) compounded)
+    clear queued compounded
+    refine shaped.of_carried capped matched (by decide) (by decide) ?_ ?_ ?_ ?_ ?_
+    · rw [size]; simp [carryFields, carryRooted]
+    · rw [previous]; simp [carryFields, carryList]; rw [dite_eq_left (by decide)]
+    · rw [current]; simp [carryFields, carryList]; rw [dite_eq_left (by decide)]
+    · rw [scores]; simp [carryFields, carryList]; rw [dite_eq_left (by decide)]
+    · intro electra c member
+      rw [consolidations] at member
+      have early : ¬Fork.pectra ≤ Fork.dencun := by decide
+      simp [carryFields, early] at member
+  · obtain ⟨_, upgraded, rfl⟩ := computed
+    dsimp only at shaped capped matched ⊢
+    simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at upgraded
+    obtain ⟨_, -, rfl⟩ := upgraded
+    have altair : Fork.altair ≤ Fork.pectra := by decide
+    have electra : Fork.pectra ≤ Fork.pectra := by decide
+    refine shaped.of_carried capped matched altair (by decide) ?_ ?_ ?_ ?_
+      (fun _ c member => ⟨electra, ?_⟩) <;> clear capped matched
+    · simp [carryFields, carryRooted]
+    · simp [carryFields, carryList, altair]
+    · simp [carryFields, carryList, altair]
+    · simp [carryFields, carryList, altair]
+    · simpa [carryFields, carryList, electra] using member
+  · obtain ⟨_, upgraded, rfl⟩ := computed
+    dsimp only at shaped capped matched ⊢
+    unfold upgradeToGloas at upgraded
+    obtain ⟨root, -, rest⟩ := bind_ok_iff.mp upgraded
+    obtain ⟨window, -, onboarded⟩ := bind_ok_iff.mp rest
+    obtain ⟨⟨builders, pending, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
+    obtain ⟨validators, -, -, -, consolidations, -⟩ :=
+      upgradeFields_lists (config := config) state root
+    exact shaped.of_carried capped matched (by decide) (by decide)
+      (congrArg Array.size validators) rfl rfl rfl
+      (fun _ c member => ⟨by decide, consolidations ▸ member⟩)
+  · obtain ⟨_, upgraded, rfl⟩ := computed
+    dsimp only at shaped capped matched ⊢
+    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    exact shaped.of_carried capped matched (by decide) (by decide) rfl rfl rfl rfl
+      (fun _ c member => ⟨by decide, member⟩)
+
+/-- The upgrades due at a slot keep the shape of the state, under the same conditions. -/
+theorem processUpgrades_shaped {forked upgraded : ForkedBeaconState preset}
+    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
+    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (computed : processUpgrades config checks forked = .ok upgraded)
+    (shaped : Shaped forked.state) : Shaped upgraded.state :=
+  processUpgrades_induction (property := fun forked => Shaped forked.state)
+    (fun held ok => upgradeNext_shaped activation compounding ok held) shaped computed
 
 end EthLib.Consensus
