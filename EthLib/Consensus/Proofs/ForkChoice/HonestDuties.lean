@@ -646,4 +646,11 @@ theorem exists_votes_execution {anchorState : BeaconState preset fork}
     subst honest receiver
     exact e.monotone_view _ le member
 
+/-- A validator signs a vote with a target, in a message sent by the time `last`. -/
+def SignsTarget
+    (e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
+      genesisTimeMs) J) (v : ValidatorIndex) (target : Checkpoint) (last : ℕ) : Prop :=
+  ∃ k, (e.world k).time ≤ last ∧ ∃ m ∈ (e.world k).sent, ∃ data,
+    (v, data) ∈ statements config checks anchorState anchorBlock m ∧ data.target = target
+
 end EthLib.Consensus.Models.Network
