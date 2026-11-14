@@ -10,6 +10,8 @@ public import EthLib.Consensus.Proofs.Transition.Committees
 Each validator's effective balance is at most the cap of its withdrawal credentials.
 
 Genesis gives it, and every step keeps it before Gloas.
+
+An epoch and a slot keep it at every fork.
 -/
 
 @[expose] public section
@@ -652,5 +654,17 @@ theorem processEpoch_validatorCap_mono {f : Fork} {s t : BeaconState preset f}
     ∃ w, t.validators.data[i]? = some w ∧
       withdrawalMaxEffectiveBalance preset f v ≤ withdrawalMaxEffectiveBalance preset f w :=
   (CapStep.epoch ok).monotone i v found
+
+/-- One epoch keeps each effective balance at most the largest one of its validator. -/
+theorem processEpoch_capped {f : Fork} {s t : BeaconState preset f}
+    (ok : processEpoch config checks s = .ok t) (capped : EffectiveBalancesCapped s) :
+    EffectiveBalancesCapped t :=
+  (CapStep.epoch ok).capped capped
+
+/-- One slot keeps each effective balance at most the largest one of its validator. -/
+theorem advanceSlot_capped {f : Fork} {s t : BeaconState preset f}
+    (ok : advanceSlot config checks s = .ok t) (capped : EffectiveBalancesCapped s) :
+    EffectiveBalancesCapped t :=
+  (CapStep.slot ok).capped capped
 
 end EthLib.Consensus
