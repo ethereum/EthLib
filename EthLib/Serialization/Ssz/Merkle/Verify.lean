@@ -12,12 +12,19 @@ namespace EthLib.Serialization.Ssz
 /--
 Joining a node with each branch node in turn, from the leaf upward.
 
+The hash may answer in a monad.
+
 The level counts how far the walk has climbed, which is the bit of the index it reads.
 
 It is the Merkle climb from the node at that level, hashing every node alike.
 -/
+def climbBranchM {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray)
+    (index level : Nat) (node : Bytes) (branch : List Bytes) : m Bytes :=
+  Cryptography.Merkle.climb (fun _ _ => combineM hash) level (index >>> level) node branch
+
+/-- Joining a node with each branch node in turn, from the leaf upward, with SHA-256. -/
 def climbBranch (index level : Nat) (node : Bytes) (branch : List Bytes) : Bytes :=
-  (Cryptography.Merkle.climb (m := Id) (fun _ _ => combine) level (index >>> level) node branch).run
+  (climbBranchM (m := Id) Cryptography.Hash.Sha256.hash index level node branch).run
 
 /--
 A root rebuilt from one leaf and its branch, trusting every node to be 32 bytes wide.

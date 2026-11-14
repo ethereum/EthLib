@@ -6,7 +6,7 @@ public import EthLib.Serialization.Proofs.Ssz.Merkle.Branch
 /-!
 # Proofs: two branches of one root in the random oracle model
 
-An adversary that makes queries outputs one index and two leaves, each with a branch.
+An adversary queries the oracle, then outputs one index and two leaves, each with a branch.
 
 The depth of the branches is fixed before the run.
 
@@ -16,7 +16,7 @@ The experiment climbs both branches as the branch check does, with the oracle as
 
 Each win exposes two different queried inputs with one answer, so the birthday bound applies.
 
-Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2.
+Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
 
 <https://cseweb.ucsd.edu/~mihir/papers/ro.pdf>
 -/
@@ -164,6 +164,38 @@ theorem collision_of_extractBranches {depth : Nat} {cache : HashOracle.QueryCach
     exact collision_of_cached hdistinct hequal (cached_of_climbBranchM hf hrun₁ a ha)
       (cached_of_climbBranchM hf hrun₂ b hb)
 
+/-- A climb makes at most one oracle call per branch node. -/
+private theorem climbBranchM_queryBound (index level : Nat) (node : Bytes) (branch : List Bytes) :
+    IsQueryBoundP (climbBranchM queryHash index level node branch) (fun _ => True)
+      branch.length := by
+  unfold climbBranchM
+  generalize index >>> level = j
+  induction branch generalizing level j node with
+  | nil => trivial
+  | cons sibling rest ih =>
+    simp only [Cryptography.Merkle.climb]
+    refine (isQueryBoundP_bind (n := 1) ?_ fun parent _ => ih (level + 1) parent (j / 2)).mono
+      (by simp [Nat.add_comm])
+    simp [combineM, queryHash]
+
+/-- The experiment makes the adversary's oracle calls and at most one call per climbed node.
+
+The extraction climbs at most `depth` nodes of each branch. -/
+theorem experimentWith_extractBranches_queryBound (depth : Nat)
+    {adversary : OracleComp (unifSpec + HashOracle) BranchClaim} {q : Nat}
+    (hq : IsQueryBoundP adversary (fun t => t.isRight = true) q) :
+    IsQueryBoundP (experimentWith (extractBranches queryHash depth) adversary)
+      (fun t => t.isRight = true) (q + 2 * depth) := by
+  -- Each climb takes at most `depth` branch nodes, with one call per node.
+  have climbs : ∀ (index : Nat) (leaf : Vector UInt8 32) (branch : List (Vector UInt8 32)),
+      IsQueryBoundP (climbBranchM queryHash index 0 leaf.toArray
+        ((branch.take depth).map Vector.toArray)) (fun _ => True) depth := fun _ _ _ =>
+    (climbBranchM_queryBound _ _ _ _).mono (by simp)
+  refine isQueryBoundP_bind hq fun claim _ => IsQueryBoundP.liftComp_subSpec
+    (fun _ => iff_of_true trivial rfl) ?_
+  refine (isQueryBoundP_bind (climbs _ _ _) fun _ _ =>
+    isQueryBoundP_bind (climbs _ _ _) fun _ _ => isQueryBoundP_pure _ _ 0).mono (by omega)
+
 /-- Two different leaves at one index with one root, at probability at most `Q^2 / N`.
 
 A win needs both branches to have `depth` nodes, and `N` is the number of digests.
@@ -196,6 +228,18 @@ theorem prEvent_branchWins_le_two_pow (depth : Nat)
   have bound := prEvent_branchWins_le depth adversary hQ
   rw [Cryptography.Merkle.RandomOracle.card_bytes32, Nat.cast_pow, Nat.cast_ofNat] at bound
   exact bound
+
+/-- The same bound with the adversary's oracle calls `q` counted alone.
+
+A win has probability at most `(q + 2 * depth)^2 / 2^256`. -/
+theorem prEvent_branchWins_le_of_adversary (depth : Nat)
+    (adversary : OracleComp (unifSpec + HashOracle) BranchClaim) {q : Nat}
+    (hq : IsQueryBoundP adversary (fun t => t.isRight = true) q) :
+    Pr{let z ← (simulateQ HashOracle.romImpl
+      (experimentWith (extractBranches queryHash depth) adversary)).run ∅}[BranchWins depth z.1] ≤
+      (q + 2 * depth : Nat) * (((q + 2 * depth : Nat) : ℝ≥0∞) / 2 ^ 256) :=
+  prEvent_branchWins_le_two_pow depth adversary
+    (experimentWith_extractBranches_queryBound depth hq)
 
 /-- With SHA-256 in the identity monad, the extraction climbs as the branch check does. -/
 theorem extractBranches_sha256 (depth : Nat) (claim : BranchClaim) :

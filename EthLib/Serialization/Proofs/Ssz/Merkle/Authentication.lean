@@ -21,11 +21,6 @@ namespace EthLib.Serialization.Ssz
   -- SHA-256 produces thirty-two bytes independently of the message contents.
   exact Cryptography.Hash.Sha256.hash_size (ByteArray.mk (left ++ right))
 
-/-- The climb of a branch from one index, with a node hash in any monad. -/
-def climbBranchM {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray)
-    (index level : Nat) (node : Bytes) (branch : List Bytes) : m Bytes :=
-  Cryptography.Merkle.climb (fun _ _ => combineM hash) level (index >>> level) node branch
-
 /-- The climb with SHA-256 in the identity monad is the climb of the specification. -/
 @[simp] theorem climbBranchM_sha256 (index level : Nat) (node : Bytes) (branch : List Bytes) :
     (climbBranchM (m := Id) Cryptography.Hash.Sha256.hash index level node branch).run =
@@ -131,7 +126,9 @@ theorem findBranchCollision_mem {hash : ByteArray → ByteArray} {index level : 
 
 /-- Two same-length branches from one index with the same root start from one node.
 
-Otherwise the search finds a collision, for any node hash. -/
+Otherwise the search returns a pair of messages, for any node hash.
+
+They form a collision when every digest has 32 bytes. -/
 theorem climbBranchM_binding (hash : ByteArray → ByteArray) {index level : Nat}
     {left right : Bytes} {leftProof rightProof : List Bytes}
     (lengths : leftProof.length = rightProof.length)

@@ -11,6 +11,13 @@ public import EthLib.Cryptography.Proofs.Merkle.Completeness
 
 namespace EthLib.Serialization.Ssz
 
+/-- The climb of a branch with SHA-256 is the Merkle climb that joins nodes with SHA-256. -/
+theorem climbBranch_eq_climb (index level : Nat) (node : Bytes) (branch : List Bytes) :
+    climbBranch index level node branch =
+      (Cryptography.Merkle.climb (m := Id) (fun _ _ => combine) level (index >>> level) node
+        branch).run :=
+  rfl
+
 /-- A branch with no node left is the node already reached. -/
 @[simp] theorem climbBranch_nil (index level : Nat) (node : Bytes) :
     climbBranch index level node [] = node :=
@@ -27,15 +34,15 @@ theorem climbBranch_cons (index level : Nat) (node sibling : Bytes) (rest : List
       = if gindexBit index level then combine sibling node else combine node sibling := by
     simp only [Cryptography.Merkle.ordered, gindexBit_parity]
     rcases Nat.mod_two_eq_zero_or_one (index >>> level) with h | h <;> simp [h]
-  unfold climbBranch
-  rw [Cryptography.Merkle.climb_cons, ← Nat.shiftRight_succ, step]
+  rw [climbBranch_eq_climb, climbBranch_eq_climb, Cryptography.Merkle.climb_cons,
+    ← Nat.shiftRight_succ, step]
   rfl
 
 /-- Climbing a joined branch climbs the front, then the back from where the front ends. -/
 theorem climbBranch_append (index level : Nat) (node : Bytes) (front back : List Bytes) :
     climbBranch index level node (front ++ back)
       = climbBranch index (level + front.length) (climbBranch index level node front) back := by
-  unfold climbBranch
+  simp only [climbBranch_eq_climb]
   rw [Cryptography.Merkle.climb_append]
   simp [Nat.shiftRight_eq_div_pow, Nat.div_div_eq_div_mul, Nat.pow_add]
 
