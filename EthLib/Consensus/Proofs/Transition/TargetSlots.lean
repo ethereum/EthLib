@@ -158,7 +158,7 @@ theorem JustifiedSeparated.of_frame (frame : Frame state after)
   rw [frame.slot, frame.previousJustified]
   exact separated
 
-/-- Once justification runs, the justified checkpoint that a link names as its source is older.
+/-- Once justification runs, the source of a link is older than its target.
 
 The link targets the current epoch from the current justified checkpoint.
 
