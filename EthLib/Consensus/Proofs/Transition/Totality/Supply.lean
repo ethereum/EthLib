@@ -433,13 +433,8 @@ private theorem effectiveBalanceSum_applyPendingDeposit_le {config : Config}
     rw [addValidatorToRegistry_validators_eq_push added, Array.toList_push, List.map_append,
       List.sum_append_nat]
     refine Nat.add_le_add_left ?_ _
-    simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, Nat.add_zero,
-      getValidatorFromDeposit]
-    rw [← UInt64.le_iff_toNat_le]
-    have mod : deposit.amount % preset.EFFECTIVE_BALANCE_INCREMENT ≤ deposit.amount := by
-      rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
-      exact Nat.mod_le _ _
-    exact UInt64.le_trans Std.min_le_left (UInt64.sub_le mod)
+    simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, Nat.add_zero]
+    exact UInt64.le_iff_toNat_le.mp (getValidatorFromDeposit_effectiveBalance_le _ _ _)
 
 /-- Deposits applied in order raise the sum of the effective balances by at most their amounts. -/
 private theorem effectiveBalanceSum_foldlM_applyPendingDeposit_le {config : Config}
