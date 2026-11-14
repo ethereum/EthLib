@@ -14,7 +14,7 @@ A request reads back with its parameters, whether it has any or not.
 
 A JSON value reads as a request exactly when it is an object of this form.
 
-Its only members are those of a request.
+Its only members are `jsonrpc`, `id`, `method` and `params`, and `params` may be missing.
 
 Its version is `2.0`, its identifier a string, a number or `null`, and its method a string.
 
