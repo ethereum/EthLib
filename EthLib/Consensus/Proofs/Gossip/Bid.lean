@@ -31,9 +31,11 @@ Otherwise it must build on the head block, with the payload that a proposer woul
 
 So a valid bid builds on the head block, or on its parent and the payload that the head builds on.
 
-On a bid on the latest payload, the exit check reads the envelope of its parent block.
+The exit check reads the envelope that the store keeps for the parent block of a bid.
 
-It reports an exit exactly when a request of that envelope has the key and address of the builder.
+It does so when the bid builds on the latest payload of the parent state, advanced to its slot.
+
+It then reports an exit exactly when a request there has the key and address of the builder.
 
 It fails when the store lacks that envelope.
 
@@ -344,7 +346,7 @@ theorem builderMayExit_eq_error_iff {state : BeaconState preset fork}
     | some envelope => simp [latest, pure, Except.pure]
   · simp [latest, pure, Except.pure]
 
-/-- For a valid bid, the exit check answers that no request asks its builder to exit.
+/-- For a valid bid, the exit check answers no.
 
 The check reads the state of the parent block, advanced to the slot of the bid.
 
