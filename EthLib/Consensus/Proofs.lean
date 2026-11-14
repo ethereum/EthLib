@@ -256,6 +256,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Horizon
 public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
 public import EthLib.Consensus.Proofs.Transition.Totality.Justification
 public import EthLib.Consensus.Proofs.Transition.Totality.Pending
+public import EthLib.Consensus.Proofs.Transition.Totality.PendingBlock
 public import EthLib.Consensus.Proofs.Transition.Totality.PendingDeposits
 public import EthLib.Consensus.Proofs.Transition.Totality.ProposerLookahead
 public import EthLib.Consensus.Proofs.Transition.Totality.PtcWindow

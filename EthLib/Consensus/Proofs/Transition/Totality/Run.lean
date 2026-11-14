@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
+public import EthLib.Consensus.Proofs.Transition.Totality.PendingBlock
 public import EthLib.Consensus.Proofs.Transition.Totality.RunStep
 public import EthLib.Consensus.Proofs.Transition.Totality.RunUpgrades
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot
@@ -58,28 +59,6 @@ structure RunHolds (config : Config) (start : RunStart) (budget startEpoch : Nat
   quiet : startEpoch + 2 ≤ (getCurrentEpoch state).toNat → Quiet state
 
 /-! ## One slot -/
-
-/-- From Altair, the votes of the pending attestations hold for any set, since none are kept. -/
-private theorem PendingVoted.of_altair_le {fork : Fork}
-    {votes : Set (ValidatorIndex × AttestationData)} (altair : .altair ≤ fork)
-    (state : BeaconState preset fork) : PendingVoted votes state :=
-  fun before => absurd before (Nat.not_lt_of_le altair)
-
-/-- The upgrades due at a slot keep the pending attestations well formed. -/
-private theorem PendingWellFormed.of_processUpgrades {forked after : ForkedBeaconState preset}
-    (holds : PendingWellFormed forked.state)
-    (computed : processUpgrades config checks forked = .ok after) :
-    PendingWellFormed after.state :=
-  processUpgrades_induction (property := fun state => PendingWellFormed state.state)
-    (fun _ stepOk => PendingWellFormed.of_altair (upgradeNext_altair stepOk).1 _) holds computed
-
-/-- The upgrades due at a slot keep the pending attestations resolved. -/
-private theorem PendingResolved.of_processUpgrades {forked after : ForkedBeaconState preset}
-    (holds : PendingResolved forked.state)
-    (computed : processUpgrades config checks forked = .ok after) :
-    PendingResolved after.state :=
-  processUpgrades_induction (property := fun state => PendingResolved state.state)
-    (fun _ stepOk => PendingResolved.of_altair (upgradeNext_altair stepOk).1 _) holds computed
 
 /-- The caching of a slot keeps the pending attestations resolved. -/
 private theorem PendingResolved.of_processSlot {fork : Fork}
@@ -161,7 +140,7 @@ private theorem RunHolds.of_advanceSlot {start : RunStart}
   have voted : PendingVoted Set.univ advanced := by
     by_cases before : fork < .altair
     · exact holds.voted.of_advanceSlot before conditions.apart holds.early computed
-    · exact PendingVoted.of_altair_le (Nat.le_of_not_lt before) advanced
+    · exact PendingVoted.of_altair (Nat.le_of_not_lt before) advanced
   -- The epoch moves on by at most one.
   have moves : (getCurrentEpoch advanced).toNat = (getCurrentEpoch state).toNat ∨
       (getCurrentEpoch advanced).toNat = (getCurrentEpoch state).toNat + 1 := by
@@ -351,7 +330,7 @@ theorem RunHolds.advanceSlotAcross_exists_ok
         bounded.of_upgradeNext (bounded.effective_le conditions (by omega))
           (by rw [epochEq]; exact first_le conditions fits advancedHolds.started) nextOk,
         upgradeNext_shaped conditions.activation conditions.compounding nextOk shaped,
-        PendingResolved.of_altair altair _, PendingVoted.of_altair_le altair _⟩)
+        PendingResolved.of_altair altair _, PendingVoted.of_altair altair _⟩)
   exact ⟨after, by simp only [advanceSlotAcross, advancedOk, bind, Except.bind]; exact afterOk⟩
 
 /-- One slot of a bounded run keeps the facts of the run, with the upgrades on the way.
