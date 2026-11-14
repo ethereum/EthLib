@@ -159,3 +159,63 @@ py_quic_retry_tag(
 ) {
   return call_pyvalue_export(eth_quic_retry_tag, args, 2, QUIC_PROTECTION_ERROR);
 }
+
+extern lean_object* eth_quic_tls_message_encode(lean_object* args);
+
+PyObject*
+py_quic_tls_message_encode(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_tls_message_encode, args, 2, TLS_HANDSHAKE_ERROR);
+}
+
+extern lean_object* eth_quic_tls_message_decode(lean_object* args);
+
+PyObject*
+py_quic_tls_message_decode(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_tls_message_decode, args, 2, TLS_HANDSHAKE_ERROR);
+}
+
+extern lean_object* eth_quic_tls_payload_encode(lean_object* args);
+
+PyObject*
+py_quic_tls_payload_encode(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_tls_payload_encode, args, 1, TLS_HANDSHAKE_ERROR);
+}
+
+extern lean_object* eth_quic_tls_payload_decode(lean_object* args);
+
+PyObject*
+py_quic_tls_payload_decode(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_tls_payload_decode, args, 2, TLS_HANDSHAKE_ERROR);
+}
+
+extern lean_object* eth_quic_tls_transcript(lean_object* args);
+
+PyObject*
+py_quic_tls_transcript(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_tls_transcript, args, 1, TLS_HANDSHAKE_ERROR);
+}
+
+extern lean_object* eth_quic_tls_certificate_verify_input(lean_object* args);
+
+PyObject*
+py_quic_tls_certificate_verify_input(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_tls_certificate_verify_input, args, 2, TLS_HANDSHAKE_ERROR);
+}
