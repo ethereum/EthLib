@@ -45,23 +45,37 @@ Before Electra the count can still double, at the upgrade to Electra. -/
 def registryLoadFactor (fork : Fork) : Nat :=
   if fork < .pectra then 2 else 1
 
+/-- One upgrade never raises the weighted count. -/
+theorem upgradeNext_weightedRegistryLoad_le {pre : ForkedBeaconState preset}
+    {next : {post : ForkedBeaconState preset // pre.fork < post.fork}}
+    (computed : upgradeNext config checks pre = .ok next) :
+    registryLoadFactor next.val.fork * registryLoad next.val.state ≤
+      registryLoadFactor pre.fork * registryLoad pre.state := by
+  have bound := upgradeNext_registryLoad_le computed
+  have ordered : pre.fork.ctorIdx < next.val.fork.ctorIdx := next.property
+  have size : pre.state.validators.data.size ≤ registryLoad pre.state := Nat.le_add_right _ _
+  unfold registryLoadFactor
+  change registryLoad next.val.state ≤ registryLoad pre.state +
+    (if pre.fork.ctorIdx < Fork.pectra.ctorIdx ∧ Fork.pectra.ctorIdx ≤ next.val.fork.ctorIdx
+      then pre.state.validators.data.size else 0) at bound
+  change (if next.val.fork.ctorIdx < Fork.pectra.ctorIdx then 2 else 1) *
+      registryLoad next.val.state ≤
+    (if pre.fork.ctorIdx < Fork.pectra.ctorIdx then 2 else 1) * registryLoad pre.state
+  split_ifs at bound ⊢ <;> omega
+
 /-- A slot with the upgrades due at it never raises the weighted count. -/
 theorem advanceSlotAcross_weightedRegistryLoad_le {forked after : ForkedBeaconState preset}
     (computed : advanceSlotAcross config checks forked = .ok after) :
     registryLoadFactor after.fork * registryLoad after.state ≤
       registryLoadFactor forked.fork * registryLoad forked.state := by
-  have bound := advanceSlotAcross_registryLoad_le computed
-  have ordered : forked.fork ≤ after.fork := (ChainStep.slot computed).fork_le
-  have size : forked.state.validators.data.size ≤ registryLoad forked.state :=
-    Nat.le_add_right _ _
-  unfold registryLoadFactor
-  change forked.fork.ctorIdx ≤ after.fork.ctorIdx at ordered
-  change registryLoad after.state ≤ registryLoad forked.state +
-    (if forked.fork.ctorIdx < Fork.pectra.ctorIdx ∧ Fork.pectra.ctorIdx ≤ after.fork.ctorIdx
-      then forked.state.validators.data.size else 0) at bound
-  change (if after.fork.ctorIdx < Fork.pectra.ctorIdx then 2 else 1) * registryLoad after.state
-    ≤ (if forked.fork.ctorIdx < Fork.pectra.ctorIdx then 2 else 1) * registryLoad forked.state
-  split_ifs at bound ⊢ <;> omega
+  obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp computed
+  -- The slot keeps the fork, and each upgrade lowers the weighted count.
+  have upgraded := processUpgrades_induction
+    (property := fun state => registryLoadFactor state.fork * registryLoad state.state ≤
+      registryLoadFactor forked.fork * registryLoad advanced)
+    (fun before stepOk => (upgradeNext_weightedRegistryLoad_le stepOk).trans before)
+    (Nat.le_refl _) upgrades
+  exact upgraded.trans (Nat.mul_le_mul_left _ (advanceSlot_registryLoad_le slotOk))
 
 /-- The bound of a block weighted by its fork, and zero for a slot. -/
 def Step.loadBound {before after : ForkedBeaconState preset} :
