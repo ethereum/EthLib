@@ -64,7 +64,9 @@ theorem processMessage_map_val {Meter : Type} [GasMeter Meter] [LawfulGasMeter M
         (if message.shouldTransferValue = true ∧ message.value ≠ 0 then
           { substate with
             logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-              message.value } else substate)
+              message.value
+            simulatedLogs := pushSimulatedTransferLog fork substate.simulatedLogs message.caller
+              message.currentTarget message.value } else substate)
         meter) within = result := by
     intro within
     simp only [noValue, ite_false]
@@ -108,7 +110,9 @@ theorem processMessage_map_val_value {Meter : Type} [GasMeter Meter] [LawfulGasM
       (startFrame message movedState
         { substate with
           logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-            message.value }
+            message.value
+          simulatedLogs := pushSimulatedTransferLog fork substate.simulatedLogs message.caller
+            message.currentTarget message.value }
         meter) held = result) :
     (processMessage fork message state substate meter held).map Subtype.val =
       result.map (rollbackOnError state) := by
@@ -118,7 +122,9 @@ theorem processMessage_map_val_value {Meter : Type} [GasMeter Meter] [LawfulGasM
         (if message.shouldTransferValue = true ∧ message.value ≠ 0 then
           { substate with
             logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-              message.value } else substate)
+              message.value
+            simulatedLogs := pushSimulatedTransferLog fork substate.simulatedLogs message.caller
+              message.currentTarget message.value } else substate)
         meter) within = result := by
     intro within
     simp only [transfers, ne_eq, not_false_eq_true, and_self, ite_true]
@@ -222,7 +228,9 @@ theorem processMessage_empty_value {message : Message fork} {state movedState : 
   obtain ⟨stopped, ran, herr, hst⟩ := runFrame_startFrame_empty (fork := fork) (state := movedState)
     (substate := { substate with
       logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-        message.value })
+        message.value
+      simulatedLogs := pushSimulatedTransferLog fork substate.simulatedLogs message.caller
+        message.currentTarget message.value })
     (runChild := processRunner fork message.gas) (within := Nat.le_refl _) hcode
   have hmap := processMessage_map_val_value transfers moved noPrecompile ran
   rw [h] at hmap

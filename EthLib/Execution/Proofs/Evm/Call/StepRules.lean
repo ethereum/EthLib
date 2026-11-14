@@ -63,7 +63,9 @@ structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter
 
   It must keep the message, the code and the state. -/
   log : ∀ {a b : Evm fork Meter} (log : Blocks.Log), b.state = a.state →
-    b.substate = { a.substate with logs := a.substate.logs.push log } → b.message = a.message →
+    b.substate = { a.substate with
+      logs := a.substate.logs.push log
+      simulatedLogs := a.substate.simulatedLogs.push log } → b.message = a.message →
     b.code = a.code → R a b
   /-- The rise of a nonce that is not the greatest keeps the relation. -/
   incrementNonce : ∀ (evm : Evm fork Meter) (address : Address) (state : TransactionState),

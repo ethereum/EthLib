@@ -392,6 +392,8 @@ private theorem logStep_zero_cons {Meter : Type} [GasMeter Meter]
           memory
           substate := { evm.substate with
             logs := evm.substate.logs.push
+              ⟨evm.message.currentTarget, [], memoryReadBytes memory start.toNat size.toNat⟩
+            simulatedLogs := evm.substate.simulatedLogs.push
               ⟨evm.message.currentTarget, [], memoryReadBytes memory start.toNat size.toNat⟩ }
           pc := evm.pc + 1 } := by
   have stack : evm.stack = ⟨start :: size :: rest, words ▸ evm.stack.property⟩ := Subtype.ext words

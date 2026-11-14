@@ -433,7 +433,8 @@ theorem applyTransaction_results {env : BlockEnvironment fork} {index : Nat}
       processTransaction env before.block included tx overrides.precompiles overrides.lifted =
         .ok out ∧
       after.receipts.length = before.receipts.length + 1 ∧
-      after.results = before.results ++ [⟨out.messageOutput, out.gasBeforeRefund, out.error⟩] := by
+      after.results = before.results ++
+        [⟨out.messageOutput, out.gasBeforeRefund, out.error, out.simulatedLogs.toList⟩] := by
   unfold applyTransaction at h
   obtain ⟨included, hIncluded, h⟩ := bind_ok_iff.mp h
   obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h

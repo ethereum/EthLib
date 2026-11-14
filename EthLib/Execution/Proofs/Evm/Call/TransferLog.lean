@@ -11,6 +11,10 @@ Before Glamsterdam, a move of ether writes no log.
 From Glamsterdam, it writes exactly one log when it moves a positive amount to another account.
 
 That log comes from the system address, and its last two topics hold the sender and the recipient.
+
+The logs that a simulation reports get the same log from Glamsterdam.
+
+Before Glamsterdam, they get it from `0xee…ee`.
 -/
 
 @[expose] public section
@@ -21,6 +25,13 @@ open EthLib.Base (Address Fork U256 toAddressMasked)
 open EthLib.Execution.Blocks (Log)
 
 variable {fork : Fork}
+
+/-- By default, a move of ether writes the log of EIP-7708 from Glamsterdam. -/
+theorem pushTransferLog_default (logs : Array Log) (sender recipient : Address) (amount : U256) :
+    pushTransferLog fork logs sender recipient amount =
+      if fork ≥ .glamsterdam ∧ amount ≠ 0 ∧ sender ≠ recipient then
+        logs.push (transferLog sender recipient amount)
+      else logs := rfl
 
 /-- Before Glamsterdam, a move of ether writes no log. -/
 theorem pushTransferLog_of_lt (h : fork < .glamsterdam) (logs : Array Log)
@@ -42,6 +53,32 @@ theorem pushTransferLog_eq_self (logs : Array Log) {sender recipient : Address} 
     pushTransferLog fork logs sender recipient amount = logs := by
   unfold pushTransferLog
   rcases h with h | h <;> simp [h]
+
+/-- From Glamsterdam, a simulation reports the logs of the receipts for a move of ether. -/
+theorem pushSimulatedTransferLog_of_glamsterdam (h : fork ≥ .glamsterdam) (logs : Array Log)
+    (sender recipient : Address) (amount : U256) :
+    pushSimulatedTransferLog fork logs sender recipient amount =
+      pushTransferLog fork logs sender recipient amount := by
+  simp only [pushSimulatedTransferLog, h, ↓reduceIte]
+
+/-- Before Glamsterdam, a simulation reports a move of a positive amount to another account.
+
+Its log comes from `0xee…ee`. -/
+theorem pushSimulatedTransferLog_of_lt (h : fork < .glamsterdam) (logs : Array Log)
+    {sender recipient : Address} {amount : U256} (pos : amount ≠ 0) (hne : sender ≠ recipient) :
+    pushSimulatedTransferLog fork logs sender recipient amount =
+      logs.push (transferLog sender recipient amount SIMULATED_TRANSFER_ADDRESS) := by
+  have : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
+  have hf : fork ≥ .frontier := Nat.zero_le _
+  simp only [pushSimulatedTransferLog, pushTransferLog, this, hf, pos, hne, ne_eq,
+    not_false_eq_true, and_self, ↓reduceIte]
+
+/-- A simulation reports no log for a move of 0 wei, or from an account to itself. -/
+theorem pushSimulatedTransferLog_eq_self (logs : Array Log) {sender recipient : Address}
+    {amount : U256} (h : amount = 0 ∨ sender = recipient) :
+    pushSimulatedTransferLog fork logs sender recipient amount = logs := by
+  unfold pushSimulatedTransferLog pushTransferLog
+  rcases h with h | h <;> split <;> simp [h]
 
 /-- A transfer log comes from the system address. -/
 theorem transferLog_address (sender recipient : Address) (amount : U256) :
