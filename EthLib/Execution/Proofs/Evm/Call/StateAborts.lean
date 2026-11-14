@@ -443,7 +443,11 @@ private theorem runFrame_state [LawfulGasMeter Meter] {bound : Nat}
     (hfit : evm.state.NoncesFit) (e : EvmError)
     (h : runFrame (step fork) (step_decreases fork) bound runChild evm within = .error e) :
     ∃ error, e = .state error := by
-  fun_induction runFrame (step fork) (step_decreases fork) bound runChild evm within
+  revert hfit h
+  refine runFrame_induct
+    (motive := fun evm _ r => evm.state.NoncesFit → r = .error e → ∃ error, e = .state error)
+    ?case1 ?case2 ?case3 ?case4 ?case5 ?case6 ?case7 ?case8 evm within
+  all_goals (intros; rename_i hfit h)
   case case1 hstep aborts =>
     cases h
     exact (fine_step hfit _ hstep).state aborts
@@ -540,7 +544,7 @@ private theorem processMessage_state_of_gas [LawfulGasMeter Meter] (n : Nat) :
         ∃ error, e = .state error := by
       intro message state substate meter held hn hfit e h
       have start : (startState fork message state).NoncesFit := noncesFit_startState hfit
-      rw [processMessage] at h
+      rw [processMessage_unfold] at h
       simp only [Except.map] at h
       split at h
       · rename_i hdo
@@ -573,7 +577,7 @@ private theorem processMessage_state_of_gas [LawfulGasMeter Meter] (n : Nat) :
             | (rename_i hrun; cases hdo; exact ran start hrun)
       · cases h
     refine ⟨call, fun message state substate meter held hn hfit htarget e h => ?_⟩
-    rw [processCreateMessage] at h
+    rw [processCreateMessage_unfold] at h
     rcases Base.bind_eq_error h with hp | ⟨prepared, hprep, h⟩
     · unfold prepareCreation at hp
       split at hp

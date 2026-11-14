@@ -71,7 +71,7 @@ theorem processMessage_map_val {Meter : Type} [GasMeter Meter] [LawfulGasMeter M
     intro within
     simp only [noValue, ite_false]
     exact ran
-  rw [processMessage]
+  rw [processMessage_unfold]
   simp only [Except.map, noPrecompile, noValue, ite_false, bind, pure, Except.bind, Except.pure]
   split <;> rename_i heq
   · split at heq <;> rename_i heq'
@@ -129,7 +129,7 @@ theorem processMessage_map_val_value {Meter : Type} [GasMeter Meter] [LawfulGasM
     intro within
     simp only [transfers, ne_eq, not_false_eq_true, and_self, ite_true]
     exact ran
-  rw [processMessage]
+  rw [processMessage_unfold]
   simp only [Except.map, noPrecompile, transfers, ne_eq, not_false_eq_true, and_self, ite_true,
     bind, pure, Except.bind, Except.pure, Except.mapError, moved]
   split <;> rename_i heq
@@ -164,7 +164,7 @@ theorem moveEther_of_processMessage_eq_ok {message : Message fork} {state : Tran
   | ok movedState => exact ⟨movedState, rfl⟩
   | error e =>
     have hv : ¬message.value = 0#256 := transfers.2
-    rw [processMessage] at h
+    rw [processMessage_unfold] at h
     simp [Except.map, transfers, hv, bind, Except.bind, Except.mapError, hmove] at h
 
 /-- A message with no value and no precompile runs its code to a stopped frame of a specification.

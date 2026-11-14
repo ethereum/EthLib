@@ -114,7 +114,8 @@ Each step must keep the relation, which keeps the invariant.
 The runner must end each message from a caller with the invariant in a frame that `C` relates.
 
 The run must start from a frame with the invariant. -/
-theorem rel_runFrame (refl : ∀ evm, R evm evm) (trans : ∀ {a b c}, R a b → R b c → R a c)
+theorem rel_runFrame [LawfulGasMeter Meter] (refl : ∀ evm, R evm evm)
+    (trans : ∀ {a b c}, R a b → R b c → R a c)
     (keeps : ∀ {a b}, Inv a → R a b → Inv b)
     (halt : ∀ evm error, Inv evm → R evm (exceptionalHalt evm error))
     (steps : ∀ {evm result}, Inv evm → evm.running = true → step evm = .ok result →
@@ -123,7 +124,11 @@ theorem rel_runFrame (refl : ∀ evm, R evm evm) (trans : ∀ {a b c}, R a b →
       C caller message ended.val)
     {evm after : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound} (start : Inv evm)
     (h : runFrame step decreases bound runChild evm within = .ok after) : R evm after := by
-  fun_induction runFrame step decreases bound runChild evm within
+  revert start h
+  refine runFrame_induct
+    (motive := fun evm _ r => Inv evm → r = .ok after → R evm after)
+    ?case1 ?case2 ?case3 ?case4 ?case5 ?case6 ?case7 ?case8 evm within
+  all_goals (intros; rename_i start h)
   case case1 => cases h
   case case2 => cases h; exact halt _ _ start
   case case3 =>
@@ -271,7 +276,7 @@ theorem processMessage_frame_byKind [LawfulGasMeter Meter]
         ∀ ended, processMessage fork message state substate meter held = .ok ended →
           Mcall message state substate meter ended.val := by
       intro message state substate meter held hn ended h
-      rw [processMessage] at h
+      rw [processMessage_unfold] at h
       obtain ⟨ended0, hdo, rolled⟩ := Base.map_ok_iff.mp h
       have hval := congrArg Subtype.val rolled
       simp only at hval
@@ -340,7 +345,7 @@ theorem processMessage_frame_byKind [LawfulGasMeter Meter]
                 (skip _ hpa (.inr (by split at hnone <;> first | exact hnone | contradiction)))
     refine ⟨callCase, ?_⟩
     intro message state substate meter held hn ended h
-    rw [processCreateMessage] at h
+    rw [processCreateMessage_unfold] at h
     obtain ⟨prepared, hp, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨⟨evm, used⟩, hrun, h⟩ := Base.bind_ok_iff.mp h
     dsimp only at h

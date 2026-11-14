@@ -200,7 +200,10 @@ private theorem runFrame_ne_insufficientBalance [LawfulGasMeter Meter] {bound : 
     {evm : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound} (address : Address) :
     runFrame (step fork) (step_decreases fork) bound runChild evm within ≠
       .error (.state (.insufficientBalance address)) := by
-  fun_induction runFrame (step fork) (step_decreases fork) bound runChild evm within
+  refine runFrame_induct
+    (motive := fun _ _ r => r ≠ .error (.state (.insufficientBalance address)))
+    ?case1 ?case2 ?case3 ?case4 ?case5 ?case6 ?case7 ?case8 evm within
+  all_goals (intros)
   case case1 _ _ hstep _ =>
     intro h
     cases h
@@ -303,7 +306,7 @@ theorem processMessage_ne_insufficientBalance_of_gas [LawfulGasMeter Meter] (n :
       have start : Funded message (startState fork message state) := fun transfers => by
         rw [balance_startState]
         exact funded transfers
-      rw [processMessage] at h
+      rw [processMessage_unfold] at h
       simp only [Except.map] at h
       split at h
       · rename_i hdo
@@ -341,7 +344,7 @@ theorem processMessage_ne_insufficientBalance_of_gas [LawfulGasMeter Meter] (n :
             | (rename_i hrun; cases hdo; exact ran hrun rfl)
       · cases h
     refine ⟨call, fun message state substate meter held hn funded address h => ?_⟩
-    rw [processCreateMessage] at h
+    rw [processCreateMessage_unfold] at h
     rcases Base.bind_eq_error h with hp | ⟨prepared, hprep, h⟩
     · unfold prepareCreation at hp
       split at hp

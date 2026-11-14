@@ -597,7 +597,7 @@ private theorem Fit.of_keptStep {block : BlockState} {a b : Evm fork Meter} (h :
 
 section Unfold
 
-variable {step : Evm fork Meter → Except EvmError (StepResult fork Meter)}
+variable [LawfulGasMeter Meter] {step : Evm fork Meter → Except EvmError (StepResult fork Meter)}
   {decreases : ∀ {evm result}, evm.running = true → step evm = .ok result →
     result.Decreases evm}
   {bound : Nat} {runChild : MessageRunner fork Meter bound} {evm : Evm fork Meter}
@@ -607,7 +607,7 @@ variable {step : Evm fork Meter → Except EvmError (StepResult fork Meter)}
 private theorem runFrame_of_halt (running : evm.running = true) {e : EvmError}
     (hstep : step evm = .error e) (aborts : e.aborts = false) :
     runFrame step decreases bound runChild evm within = .ok (exceptionalHalt evm e) := by
-  rw [runFrame, dite_eq_left_of_eq_true (eq_true running)]
+  rw [runFrame_unfold, dite_eq_left_of_eq_true (eq_true running)]
   split
   · rename_i heq
     rw [hstep] at heq
@@ -623,7 +623,7 @@ private theorem runFrame_of_next (running : evm.running = true) {after : Evm for
     (hstep : step evm = .ok (.next after)) (within' : GasMeter.gasHeld after.gas ≤ bound) :
     runFrame step decreases bound runChild evm within =
       runFrame step decreases bound runChild after within' := by
-  rw [runFrame, dite_eq_left_of_eq_true (eq_true running)]
+  rw [runFrame_unfold, dite_eq_left_of_eq_true (eq_true running)]
   split
   all_goals
     rename_i heq
@@ -640,7 +640,7 @@ private theorem runFrame_of_child (running : evm.running = true) {caller after :
     (within' : GasMeter.gasHeld after.gas ≤ bound) :
     runFrame step decreases bound runChild evm within =
       runFrame step decreases bound runChild after within' := by
-  rw [runFrame, dite_eq_left_of_eq_true (eq_true running)]
+  rw [runFrame_unfold, dite_eq_left_of_eq_true (eq_true running)]
   split
   all_goals
     rename_i heq
@@ -687,7 +687,15 @@ private theorem runFrame_agrees [LawfulGasMeter Meter] {block : BlockState}
   have kept : ∀ {a b : Evm fork Meter} {w : GasMeter.gasHeld a.gas ≤ bound},
       runFrame (step fork) (step_decreases fork) bound runChild a w = .ok b → Kept a b :=
     fun hrun => stepRules_kept.runFrame (fun c m lt ended hr => (ens c m lt ended hr).1) hrun
-  fun_induction runFrame (step fork) (step_decreases fork) bound runChild e1 within
+  revert h
+  refine runFrame_induct (motive := fun e1 _ r => r = .ok after →
+    ∀ e2 (within' : GasMeter.gasHeld e2.gas ≤ bound),
+      FrameAgrees account allStorage slot code e1 e2 → Fit block e1 →
+      ReadsIn account slot after.state →
+      ∃ after', runFrame (step fork) (step_decreases fork) bound runChild e2 within' = .ok after' ∧
+        FrameAgrees account allStorage slot code after after')
+    ?case1 ?case2 ?case3 ?case4 ?case5 ?case6 ?case7 ?case8 e1 within
+  all_goals (intros; rename_i h e2 w hagree hfit hreads; revert e2 w hagree hfit hreads)
   case case1 => cases h
   case case4 => cases h
   case case5 => cases h
@@ -696,7 +704,7 @@ private theorem runFrame_agrees [LawfulGasMeter Meter] {block : BlockState}
     intro e2 w hagree _ _
     obtain ⟨s, rfl⟩ : ∃ s, e2 = { after with state := s } := ⟨_, hagree.rest⟩
     refine ⟨_, ?_, hagree⟩
-    rw [runFrame]
+    rw [runFrame_unfold]
     exact dite_eq_right_of_eq_false (eq_false running)
   case case2 evm _ running e hstep aborts =>
     cases h
@@ -856,7 +864,7 @@ private theorem processMessage_eq [LawfulGasMeter Meter] (message : Message fork
       Except.map (fun ended => ⟨rollbackOnError state ended.val,
         gasHeld_rollbackOnError_le state ended⟩)
         (enterState fork message state >>= runBody fork message substate meter held) := by
-  rw [processMessage]
+  rw [processMessage_unfold]
   unfold enterState runBody enterSubstate
   dsimp only
   split <;> rfl
@@ -1074,7 +1082,7 @@ private theorem agrees_induction [LawfulGasMeter Meter] {block : BlockState}
     dsimp only at h ⊢
     have hacc : account message.currentTarget :=
       hreads.account _ ((readsLe_processCreateMessage h).accountReads _ hcurrent)
-    rw [processCreateMessage] at h ⊢
+    rw [processCreateMessage_unfold] at h ⊢
     obtain ⟨prepared, hp, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨⟨evm, used⟩, hrun, h⟩ := Base.bind_ok_iff.mp h
     dsimp only at h
