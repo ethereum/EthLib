@@ -30,8 +30,9 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
 
 /-- The assumed honest count for a head, measured in its pulled-up state.
 
-Each counted honest validator is active and either signs the target or lies outside the past
-committee set.
+Each counted honest validator is active.
+
+It either signs the target or lies outside the past committee set.
 
 Three times their stake covers three times the computed support plus `margin`. -/
 def HonestTargetVotes
