@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.BuilderPayments
 public import EthLib.Consensus.Proofs.Transition.EpochDecomposition
 public import EthLib.Consensus.Proofs.Transition.EpochJustification
+public import EthLib.Consensus.Proofs.Transition.EpochPending
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 public import EthLib.Consensus.Proofs.Transition.Execution
@@ -1208,7 +1209,11 @@ theorem updateNextWithdrawalBuilderIndex {gloas : .glamsterdam ≤ fork} {count 
 
 end EpochFrameLaws
 
-/-- Applying withdrawals composes their balance writes with the bookkeeping steps. -/
+/-- A reflexive, transitive relation holds across the expected withdrawals.
+
+It must hold across each single withdrawal.
+
+It must also hold across each block frame that keeps the registry. -/
 theorem applyExpectedWithdrawals_of
     (R : BeaconState preset fork → BeaconState preset fork → Prop)
     (refl : ∀ s, R s s)
@@ -2247,60 +2252,6 @@ theorem processEpoch_split_of_lt_altair (before : fork < .altair)
     all_goals exact laws.epochEdge (by simp) ok
 
 end EpochStepLaws
-
-/-- A pending-deposit pass composes the relation preserved by each admitted deposit. -/
-theorem passPendingDeposits_of
-    (R : BeaconState preset fork → BeaconState preset fork → Prop)
-    (refl : ∀ s, R s s)
-    (trans : ∀ {s m t}, R s m → R m t → R s t)
-    (admit : ∀ {s t} {d : PendingDeposit},
-      applyPendingDeposit config checks s d = .ok t → R s t)
-    {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
-    {available : Gwei} :
-    ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
-      {count : Nat} {postponed : Array PendingDeposit} {pass},
-      Consensus.passPendingDeposits config checks stop nextEpoch available state processed count
-        postponed deposits = .ok pass →
-      R state pass.1.state
-  | [], _, _, _, _, _, computed => by
-    simp only [Consensus.passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact refl _
-  | deposit :: rest, state, processed, count, postponed, pass, computed => by
-    unfold Consensus.passPendingDeposits at computed
-    simp only [bind, Except.bind, pure, Except.pure] at computed
-    split at computed
-    · cases computed
-      exact refl _
-    split at computed
-    · cases computed
-    split at computed
-    · split at computed
-      · cases computed
-      rename_i credited
-      split at computed
-      · cases computed
-      cases computed
-      exact trans (admit credited)
-        (passPendingDeposits_of R refl trans admit (deposits := rest) ‹_›)
-    split at computed
-    · split at computed
-      · cases computed
-      cases computed
-      exact passPendingDeposits_of R refl trans admit (deposits := rest) ‹_›
-    split at computed
-    · cases computed
-    split at computed
-    · cases computed
-      exact refl _
-    split at computed
-    · cases computed
-    rename_i credited
-    split at computed
-    · cases computed
-    cases computed
-    exact trans (admit credited)
-      (passPendingDeposits_of R refl trans admit (deposits := rest) ‹_›)
 
 namespace EpochFrameLaws
 
