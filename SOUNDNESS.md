@@ -148,6 +148,8 @@ So the statements say something, even though every compressing hash has collisio
 `Proofs/Merkle/RandomOracle.lean` bounds classical searches against an ideal random oracle with `N` outputs and an empty initial cache.
 `prEvent_collision_le` bounds a collision among queried inputs by `q^2 / N` for at most `q` hash calls, and private uniform sampling is not counted.
 This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`: at most 4 for `q >= 2`, and close to 2 for large `q`.
+`prEvent_experimentWith_le` applies it to an experiment where the adversary outputs a claim and an extraction then runs on it with the oracle alone.
+It bounds a win by `q^2 / N` when every replayed win of the extraction leaves a collision in the cache.
 
 `prEvent_secondPreimage_le` bounds by `q / N` a hit on a target digest fixed before the run, among queried inputs other than one honest input.
 The theorem does not tie the target to the digest of the honest input.
@@ -197,8 +199,11 @@ It computes the roots of the all-zero subtrees with that hash too.
 
 Layout separation is `hashTreeRoot_progressiveContainer_layouts_separate` (`Proofs/Ssz/Codec/LayoutSeparation.lean`).
 Two legal progressive containers with one root have one layout, or `findMixinCollision` returns the inputs of the two last hashes.
+`hashTreeRootM_progressiveContainer_layouts_separate` states the same for any hash with 32-byte digests.
+It computes the roots of the all-zero subtrees with that hash too.
 
-No theorem bounds the probability of finding a collision in a branch, a multiproof or a layout.
+No theorem bounds the probability of finding a collision in a branch or a multiproof.
+Their verifiers call SHA-256 directly, so no experiment runs them against the oracle.
 
 `Proofs/Ssz/RandomOracle.lean` bounds whole-value binding, with the node hash a random oracle.
 The merkleization takes its hash in any monad, so the experiment runs the root of the specification with a hasher that queries the oracle.
@@ -208,7 +213,7 @@ The experiment computes both roots, then hashes every node of both expanded comp
 The adversary wins when the two values differ, fit the well-formed type, are `CommitmentSized`, and have one root.
 `collision_of_extract` shows that every win leaves two different cached inputs with one answer.
 Its proof finds them with `findMessageCollision`, run with a table that agrees with the cache.
-`prEvent_wins_le` then bounds a win by `Q^2 / N` through `prEvent_collision_le`, and `prEvent_wins_le_two_pow` states it with `N = 2^256`.
+`prEvent_wins_le` bounds a win by `Q^2 / N`, applying `prEvent_experimentWith_le` to `collision_of_extract`, and `prEvent_wins_le_two_pow` states the bound with `N = 2^256`.
 `Q` counts every oracle call of the experiment, repeats included.
 The extraction makes many: the expanded computations hash every node of the padded tree of each value, one query each.
 So `Q` grows with the capacity of the type, not with the length of the values.
@@ -219,6 +224,17 @@ A rehash that shares the all-zero subtrees would bring `Q` down to the size of t
 That is still the birthday bound, not a sharper fixed-target bound.
 The bound needs no hypothesis that the cache covers the witnesses, since the experiment queries them itself.
 One oracle answers inner nodes and mixed-in words alike, so a collision between any two inputs counts.
+
+`Proofs/Ssz/LayoutRandomOracle.lean` runs layout separation against the same oracle, with the same hasher.
+An adversary outputs two types and a value of each, and may pick the types after its queries.
+The experiment is the generic one that also gives the experiment for whole values, run with another extraction.
+That extraction computes both roots, then the input of each last hash with the oracle, and queries each input again.
+The adversary wins when both types are legal progressive containers with different layouts, and the two roots are equal.
+`collision_of_extractLayouts` shows that every win leaves two different cached inputs with one answer.
+Its proof applies `hashTreeRootM_progressiveContainer_layouts_separate` to a table that agrees with the cache, and takes the inputs that `findMixinCollision` returns.
+The extraction queried both inputs again, so the cache holds them, by `cached_of_extractLayouts`.
+`prEvent_experimentWith_le` then gives `prEvent_layoutWins_le`, which bounds a win by `Q^2 / N`, and `prEvent_layoutWins_le_two_pow` states it with `N = 2^256`.
+The layout extraction expands no padded tree, so `Q` grows with the data and with the depth of each tree, since a zero subtree costs one query per level, not with the capacity of the type.
 
 ### leanSPHINCS
 
@@ -2032,7 +2048,7 @@ The experiment computes both roots and both proofs of the key, then queries the 
 The adversary wins when the tries are both secured or both plain, each has distinct keys, and they have one root, yet give the key different values.
 `collision_of_extract` shows that every win leaves two different cached inputs with one answer.
 The searches `findCollision`, `findPathCollision` and `findLookupCollision` name them, run with a table that agrees with the cache.
-`prEvent_wins_le` then bounds a win by `Q^2 / N` through `prEvent_collision_le`, where `Q` bounds the queries of the whole experiment.
+`prEvent_wins_le` then bounds a win by `Q^2 / N` through `prEvent_experimentWith_le`, where `Q` bounds the queries of the whole experiment.
 `prEvent_wins_le_two_pow` states it with `N = 2^256`.
 The bound needs no hypothesis that the cache covers the witnesses, since the experiment queries them itself.
 One oracle answers keys and nodes alike, so a collision between a key and a node counts too.
@@ -5364,7 +5380,7 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   No SHA-256, Keccak or quantum security claim follows from this model.
 - SSZ root bound: the SHA-256 node hash is a random oracle on byte strings, shared by every node of the tree.
   The roots of the all-zero subtrees, constants of the specification, are oracle answers in the model.
-  The type is fixed before the run.
+  The type is fixed before the run, except in the layout bound, where the adversary picks both types.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of SHA-256.

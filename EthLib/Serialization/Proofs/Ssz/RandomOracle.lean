@@ -43,7 +43,7 @@ open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography (evalWithAnswerFn_exceptT_bind evalWithAnswerFn_exceptT_pure
   evalWithAnswerFn_exceptT_throw evalWithAnswerFn_exceptT_lift evalWithAnswerFn_exceptT_liftExcept
   evalWithAnswerFn_exceptT_mapM)
-open EthLib.Cryptography.Merkle.RandomOracle (Collision prEvent_collision_le)
+open EthLib.Cryptography.Merkle.RandomOracle (Collision experimentWith prEvent_experimentWith_le)
 
 /-- The node hash as one oracle from byte strings to 32-byte digests. -/
 abbrev HashOracle : OracleSpec ByteArray := ByteArray →ₒ Hash32
@@ -92,9 +92,8 @@ def extract (shape : Desc) (first second : Value) : OracleComp HashOracle Outcom
 
 /-- The experiment: the adversary picks two values of the type, then the extraction runs. -/
 def experiment (shape : Desc) (adversary : OracleComp (unifSpec + HashOracle) (Value × Value)) :
-    OracleComp (unifSpec + HashOracle) Outcome := do
-  let (first, second) ← adversary
-  liftComp (extract shape first second) (unifSpec + HashOracle)
+    OracleComp (unifSpec + HashOracle) Outcome :=
+  experimentWith (fun pair => extract shape pair.1 pair.2) adversary
 
 /-- The adversary wins: two different values that fit one well-formed type have one root.
 
@@ -108,6 +107,10 @@ def Wins (shape : Desc) (outcome : Outcome) : Prop :=
 /-- The node hash that a full answer table gives, with its digests as bytes. -/
 def tableHash (f : QueryImpl HashOracle Id) (x : ByteArray) : ByteArray :=
   ⟨(f x).toArray⟩
+
+/-- Every digest of a full answer table is 32 bytes. -/
+theorem tableHash_size (f : QueryImpl HashOracle Id) (x : ByteArray) : (tableHash f x).size = 32 :=
+  (f x).size_toArray
 
 /-- One query, run against a full answer table, is the table's digest as bytes. -/
 theorem evalWithAnswerFn_queryHash (f : QueryImpl HashOracle Id) (x : ByteArray) :
@@ -258,6 +261,15 @@ theorem evalWithAnswerFn_rehash (f : QueryImpl HashOracle Id) (tree : Commitment
     simp only [rehash, evalWithAnswerFn_bind, ihLeft, ihRight, evalWithAnswerFn_combineM,
       evalWithAnswerFn_pure, CommitmentTree.root, CommitmentTree.messages]
 
+/-- A replayed query caches its input. -/
+theorem cached_of_queryHash {cache : HashOracle.QueryCache} {x digest : ByteArray}
+    (hrun : simulateQ cache.toPartialImpl (queryHash x) = some digest) :
+    ∃ answer, cache x = some answer := by
+  simp only [queryHash, simulateQ_bind, simulateQ_spec_query,
+    QueryCache.toPartialImpl_apply] at hrun
+  obtain ⟨answer, hanswer, -⟩ := Option.bind_eq_some_iff.mp hrun
+  exact ⟨answer, hanswer⟩
+
 /-- A replayed rehash caches every hash input of the computation. -/
 theorem cached_of_rehash {cache : HashOracle.QueryCache} {tree : CommitmentTree}
     {result : Bytes × List Bytes}
@@ -277,14 +289,25 @@ theorem cached_of_rehash {cache : HashOracle.QueryCache} {tree : CommitmentTree}
     cases hrun
     intro x hx
     rcases List.mem_cons.mp hx with rfl | hx
-    · simp only [combineM, queryHash, simulateQ_bind, simulateQ_spec_query,
-        QueryCache.toPartialImpl_apply] at hparent
+    · simp only [combineM, simulateQ_bind] at hparent
       obtain ⟨inner, hinner, -⟩ := Option.bind_eq_some_iff.mp hparent
-      obtain ⟨digest, hdigest, -⟩ := Option.bind_eq_some_iff.mp hinner
-      exact ⟨digest, hdigest⟩
+      exact cached_of_queryHash hinner
     · rcases List.mem_append.mp hx with hx | hx
       · exact ihLeft hleft x hx
       · exact ihRight hright x hx
+
+/-- Two different inputs with one digest of a table collide in a cache.
+
+The cache must give both inputs the answers of the table. -/
+theorem collision_of_cached {cache : HashOracle.QueryCache} {f : QueryImpl HashOracle Id}
+    {a b : Bytes} (hdistinct : a ≠ b)
+    (hequal : tableHash f (ByteArray.mk a) = tableHash f (ByteArray.mk b))
+    (ha : cache (ByteArray.mk a) = some (f (ByteArray.mk a)))
+    (hb : cache (ByteArray.mk b) = some (f (ByteArray.mk b))) : Collision cache := by
+  refine ⟨ByteArray.mk a, ByteArray.mk b, f (ByteArray.mk a),
+    fun h => hdistinct (congrArg ByteArray.data h), ha, ?_⟩
+  rw [hb]
+  exact congrArg some (Vector.toArray_inj.mp (ByteArray.mk.inj hequal)).symm
 
 /-- A replayed winning extraction exposes a collision of the cache.
 
@@ -326,17 +349,14 @@ theorem collision_of_extract {cache : HashOracle.QueryCache} {shape : Desc} {fir
       subst heval
       obtain ⟨digest, hdigest⟩ := cached_of_rehash hreplay x hx
       rw [hdigest, hf hdigest]
-    have hwidth : ∀ x, (tableHash f x).size = 32 := fun x =>
-      show (f x).toArray.size = 32 from (f x).size_toArray
+    have hwidth := tableHash_size f
     -- A collision between the two expanded computations is a collision of the cache.
     cases hsearch : findMessageCollision (firstTree.messages (tableHash f))
         (secondTree.messages (tableHash f)) (tableHash f) with
     | some pair =>
       obtain ⟨hmem₁, hmem₂, -, -, hdistinct, hequal⟩ := findMessageCollision_valid hsearch
-      refine ⟨ByteArray.mk pair.1, ByteArray.mk pair.2, f (ByteArray.mk pair.1),
-        fun h => hdistinct (congrArg ByteArray.data h), hcached hresult₁ _ hmem₁, ?_⟩
-      rw [hcached hresult₂ _ hmem₂]
-      exact congrArg some (Vector.toArray_inj.mp (ByteArray.mk.inj hequal)).symm
+      exact collision_of_cached hdistinct hequal (hcached hresult₁ _ hmem₁)
+        (hcached hresult₂ _ hmem₂)
     | none =>
       -- With no collision, the two values are equal, against the win.
       have hclean : CommitmentTree.NoCollision firstTree secondTree (tableHash f) := by
@@ -370,18 +390,10 @@ theorem prEvent_wins_le [SampleableType Hash32] (shape : Desc)
     (adversary : OracleComp (unifSpec + HashOracle) (Value × Value)) {Q : Nat}
     (hQ : IsQueryBoundP (experiment shape adversary) (fun t => t.isRight = true) Q) :
     Pr{let z ← (simulateQ HashOracle.romImpl (experiment shape adversary)).run ∅}[Wins shape z.1] ≤
-      Q * ((Q : ℝ≥0∞) / Nat.card Hash32) := by
-  refine (prEvent_mono_of_support _ _ _ ?_).trans
-    (prEvent_collision_le (experiment shape adversary) hQ)
-  intro z hz hwins
-  simp only [experiment, simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hz
-  obtain ⟨⟨⟨first, second⟩, cache⟩, -, hz⟩ := hz
-  -- The extraction calls only the hash, which the random oracle answers with caching.
-  rw [QueryImpl.simulateQ_add_liftComp_right] at hz
-  -- The final cache replays the extraction without sampling again.
-  have hreplay := QueryImpl.simulateQ_toPartialImpl_snd_of_mem_support_run_simulateQ_withCaching
-    _ (extract shape first second) hz
-  exact collision_of_extract hreplay hwins
+      Q * ((Q : ℝ≥0∞) / Nat.card Hash32) :=
+  prEvent_experimentWith_le (fun pair : Value × Value => extract shape pair.1 pair.2) (Wins shape)
+    (fun {_} {claim} {_} hrun hwins =>
+      collision_of_extract (first := claim.1) (second := claim.2) hrun hwins) adversary hQ
 
 /-- The same bound for 32 uniform bytes per answer: probability at most `Q^2 / 2^256`. -/
 theorem prEvent_wins_le_two_pow (shape : Desc)
