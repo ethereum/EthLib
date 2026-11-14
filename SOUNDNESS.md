@@ -4032,13 +4032,16 @@ Such a request, from a sender that holds its value, never fails with code 809 (`
 Since it pays no fee, that is how EthLib meets the rule of the source.
 A sender that holds less than the value of its request gets no data (`ethCall_ne_ok_of_balance_lt_value`).
 A request makes a transaction exactly when it passes the checks of its kind (`exists_toTransaction_eq_ok_iff`).
-Its kind is at most 4, it names only the fields of that kind, and a request of type 3 or 4 names a recipient.
+Its kind is at most 4, and a request of type 3 or 4 names a recipient.
+A gas price, a fee cap, a priority fee, an access list, blob hashes, a blob fee cap or authorizations appear only in the kinds that carry them.
 A chain that it names is that of the node.
 The nonce, the gas limit and the fee cap that the call gives are below `2^256`.
 So is each number of the request that the transaction carries.
 That transaction has the kind, value, recipient, data and lists of the request, and the nonce and gas limit that the call gives (`type_of_toTransaction_eq_ok` and the lemmas next to it).
-Its fee cap is the gas price of the request up to type 1, and the cap that the call gives from type 2.
-Its signature is 0.
+Its fee cap is the gas price of the request, or 0, up to type 1, and the cap that the call gives from type 2.
+Its price per gas is that gas price up to type 1.
+From type 2 it is the base fee plus the priority fee, cut to the fee cap above the base fee.
+From type 1 it names the chain of the node, and its signature is 0.
 
 The source leaves most of the call to the node, and `CallChoices` takes those choices as one input:
 

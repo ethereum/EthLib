@@ -29,9 +29,15 @@ Such a request, from a sender that holds its value, never fails with code 809, i
 
 A sender that holds less than the value never gets an answer with data.
 
-A request makes a transaction exactly when its fields suit its kind and its chain is the node's.
+A request makes a transaction exactly when it passes the checks below.
 
-Each number of that transaction must also fit in 256 bits.
+Its fee, access, blob and authorization fields must fit its kind.
+
+Its kind must be at most 4, and a request of type 3 or 4 must name a recipient.
+
+A chain that it names must be that of the node.
+
+Each number that the transaction carries must also fit in 256 bits.
 
 That transaction has the kind, the value, the recipient, the data and the lists of the request.
 -/
@@ -105,13 +111,17 @@ Its kind is at most 4.
 
 A fee cap or a priority fee needs type 2 or more, and a gas price type 1 or less.
 
-An access list needs type 1 or more, blob fields type 3, and an authorization list type 4.
+An access list needs type 1 or more, and authorizations type 4.
+
+Blob hashes or a blob fee cap need type 3.
 
 A chain that the request names is the chain of the node.
 
 Type 3 and type 4 need a recipient.
 
-Each number of the transaction is below `2 ^ 256`. -/
+The nonce, the gas limit and the fee cap that the call gives are below `2 ^ 256`.
+
+So is each number of the request that the transaction carries. -/
 theorem exists_toTransaction_eq_ok_iff {tx : GenericTransaction} {chainId : UInt64}
     {nonce gas maxFee : Nat} :
     (∃ t, tx.toTransaction chainId nonce gas maxFee = .ok t) ↔
@@ -257,9 +267,9 @@ theorem blobHashes_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : U
     t.blobHashes = tx.blobVersionedHashes.getD [] :=
   (toTransaction_fields h).2.2.2.2.2.2.2.2.1
 
-/-- The fee cap of the transaction is the gas price of the request up to type 1.
+/-- The fee cap of the transaction is the gas price of the request, or 0, up to type 1.
 
-From type 2 it is the cap that the call gives. -/
+From type 2 it is the cap that the call gives, not the one that the request names. -/
 theorem maxFeePerGas_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
     {nonce gas maxFee : Nat} {t : Transaction}
     (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
