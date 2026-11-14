@@ -4403,6 +4403,11 @@ The committee has the length of the duty and holds the validator at the position
 `attesterDuties_complete` shows that a requested validator with a committee assignment has exactly one duty, when the request repeats no index.
 `attesterDuties_epoch` shows that each attester duty is in the requested epoch, with the count of committees per slot of the epoch and an index below it.
 `attesterDuties_epoch_bound` and `ptcDuties_epoch_bound` show that a request for an epoch after the next one gets the error of an invalid epoch, code 400.
+`attesterDuties_seed_gone` shows the same for an attester epoch too old for the mixes of the state to hold its seed.
+It reads the clause of the epoch check that asks the mixes to still hold the seed.
+`attesterDuties_nil` shows that the attester duties of a request with no index get the error of an empty request, code 400.
+`syncDuties_nil` shows the same for the sync duties, from Altair.
+`dutiesResponse_nil` shows that the answer to an attester, sync or PTC request with no index is an error with code 400.
 `ptcDuties_eq` states the PTC duties whole, from Gloas, before the dependent root.
 An empty request gets code 400, and so does an epoch outside a window.
 The window runs from the previous epoch to the next one, and not before the Gloas fork epoch.
@@ -4415,6 +4420,10 @@ Distinct indices run the duty of each requested validator in turn, in request or
 `dependentRoot_genesis` shows that the dependent root of the first two epochs, with a lag of one, is the genesis root.
 `dependentRoot_genesis_zero` shows the same for epoch 0 without a lag.
 `dependentRoot_eq` unfolds the case past the underflow: the block root at the slot before the start of the epoch a lag before.
+`dependentRoot_too_old` shows that a dependent root that has left the block roots gets the error of an invalid epoch, code 400.
+It reads the clause of `getBlockRootAtSlot` that bounds the slot of the state by the slot asked for plus the length of the buffer.
+`dutiesResponse_attester_too_old` shows that an attester request for an epoch whose dependent root has left the block roots gets that error too.
+It needs at least one index, each naming a validator whose committee assignment succeeds.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_duties.py`) reads the minimal states of the committee tests.
 It checks the attester duties against the committees answer, and the PTC duties against the assignments of the guide.
 It checks the proposer duties against the lookahead of the state from Fulu, and against the proposer of each slot before Fulu.
@@ -4422,7 +4431,9 @@ It checks the sync duties against the keys of the committees in the JSON of the 
 It gives the state a different block root at each place, and checks each dependent root against it.
 It checks code 400 for an empty request, a repeated PTC index, a PTC epoch before the previous one, and an attester epoch too old for the block roots.
 It never asks for PTC duties at the previous epoch or before the Gloas fork epoch; only `ptcDuties_eq` covers those two.
-No theorem states these refusals, among others: an attester or sync request with no index, an attester epoch whose seed is gone, and an attester epoch whose dependent root has left the block roots.
+Other refusals still have no theorem, among them an index that names no validator, and a sync epoch outside the current and next periods.
+A proposer epoch that the state cannot answer for has none either.
+Nor does a sync or PTC request with an index, to a state before its fork.
 
 The answers that hand a validator its data are in `Consensus/BeaconApi/ValidatorData.lean`: attestation data, payload attestation data, aggregates and sync committee contributions.
 `produceAttestationData_head` (`Consensus/Proofs/BeaconApi/ValidatorData.lean`) shows that the attestation data votes for the head of the store, at the requested slot, and that the head is not optimistic.
