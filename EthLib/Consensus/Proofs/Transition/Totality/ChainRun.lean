@@ -23,6 +23,8 @@ The draws must end, and a run before Altair must end within the epoch limit.
 
 On mainnet, the step covers the limits for 16 epochs at a budget of `2^57` Gwei.
 
+Before Gloas, the types of a mainnet body keep it within three of those limits.
+
 The chain may start at any epoch up to `2^40`.
 -/
 
@@ -56,27 +58,6 @@ inductive ChainReaches (config : Config) (checks : SignatureChecks) (limits : Bl
       (computed :
         stateTransitionAcross config checks engine reached signed validateResult = .ok after) :
       ChainReaches config checks limits forked (count + 1) ⟨fork, after⟩
-
-/-- A block that the transition accepts lands after the state before it, at its own slot. -/
-private theorem stateTransitionAcross_slot {fork : Fork} {engine : ExecutionEngine preset fork}
-    {forked : ForkedBeaconState preset} {signed : SignedBeaconBlock preset fork}
-    {validateResult : Bool} {after : BeaconState preset fork}
-    (computed :
-      stateTransitionAcross config checks engine forked signed validateResult = .ok after) :
-    forked.state.slot.toNat < signed.message.slot.toNat ∧
-      after.slot.toNat = signed.message.slot.toNat := by
-  obtain ⟨advanced, slotsOk, applied⟩ := stateTransitionAcross_ok computed
-  have blockOk := (applySignedBlock_ok applied).2.1
-  simp only [processSlotsAcross, bind_ok_iff, ensure_ok_iff] at slotsOk
-  obtain ⟨_, later, advancedOk⟩ := slotsOk
-  have laterNat := UInt64.lt_iff_toNat_lt.mp later
-  have advancedSlot : advanced.slot.toNat = signed.message.slot.toNat := by
-    have := advanceSlotsAcross_slot _ advancedOk
-    dsimp only at this
-    omega
-  refine ⟨laterNat, ?_⟩
-  rw [(frame_processBlock blockOk).slot]
-  exact advancedSlot
 
 /-- A chain of blocks keeps the facts of a chain, with its blocks counted.
 
@@ -133,44 +114,26 @@ private theorem advanceSlotsAcross_chain
       SignersAtEnds config checks forked count →
       DrawsEnd config checks forked count → EpochLimitBeforeAltair forked count →
       ∃ after, advanceSlotsAcross config checks count forked = .ok after ∧
-        ChainHolds config start step budget startEpoch blocks after.state
-  | 0, forked, holds, _, _, _, _ => ⟨forked, rfl, holds⟩
-  | count + 1, forked, holds, within, signers, draws, limit => by
-    have stepWithin : (forked.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat ≤
-        startEpoch + epochs :=
-      (Nat.div_le_div_right (by omega)).trans within
-    have stepSigners := signers 0 (Nat.succ_pos _) forked rfl
-    obtain ⟨stepDraws, stepUpgradeDraws⟩ := draws 0 (Nat.succ_pos _) forked rfl
-    have stepLimit : forked.fork < .altair →
-        (getCurrentEpoch forked.state).toNat ≤ preset.epochLimitBeforeAltair := fun before => by
-      rw [getCurrentEpoch_toNat]
-      exact (Nat.div_le_div_right (by omega)).trans (limit before)
-    obtain ⟨next, nextOk⟩ := ChainHolds.advanceSlotAcross_exists_ok conditions fits holds
-      stepWithin stepSigners stepDraws stepUpgradeDraws stepLimit
-    have nextHolds := ChainHolds.of_advanceSlotAcross conditions fits holds stepWithin
-      stepSigners nextOk
-    obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp nextOk
-    have nextSlot : next.state.slot.toNat = forked.state.slot.toNat + 1 := by
-      rw [processUpgrades_slot upgraded]
-      exact advanceSlot_slot advancedOk
-    have nextFork : forked.fork ≤ next.fork :=
-      processUpgrades_fork_le (forked := ⟨forked.fork, advanced⟩) upgraded
-    -- The rest of the run starts from the next state, one step later.
-    have shifted : ∀ {steps reached}, advanceSlotsAcross config checks steps next = .ok reached →
-        advanceSlotsAcross config checks (steps + 1) forked = .ok reached := fun reachedOk => by
-      simp only [advanceSlotsAcross, nextOk, bind, Except.bind]
-      exact reachedOk
-    obtain ⟨after, afterOk, afterHolds⟩ := advanceSlotsAcross_chain conditions fits count
-      (forked := next) nextHolds (by rwa [nextSlot, Nat.add_right_comm, Nat.add_assoc])
-      (fun steps below reached reachedOk =>
-        signers (steps + 1) (by omega) reached (shifted reachedOk))
-      (fun steps below reached reachedOk =>
-        draws (steps + 1) (by omega) reached (shifted reachedOk))
-      (fun before => by
-        rw [nextSlot, Nat.add_right_comm, Nat.add_assoc]
-        exact limit (Nat.lt_of_le_of_lt nextFork before))
-    exact ⟨after, by simp only [advanceSlotsAcross, nextOk, bind, Except.bind]; exact afterOk,
-      afterHolds⟩
+        ChainHolds config start step budget startEpoch blocks after.state :=
+  fun count _ holds within signers draws limit =>
+  advanceSlotsAcross_of_step
+    (Holds := fun f => ChainHolds config start step budget startEpoch blocks f.state)
+    (Ahead := fun f =>
+      ((f.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
+        ∀ cached, processSlot f.state = .ok cached → SignersWithinActive cached) ∧
+      ((f.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
+        ∀ cached, processSlot f.state = .ok cached → EpochDrawsEnd config checks cached) ∧
+      ∀ advanced, advanceSlot config checks f.state = .ok advanced →
+        ∀ upgrading, UpgradesPass config checks ⟨f.fork, advanced⟩ upgrading →
+          upgradeDue config upgrading = true → UpgradeDrawsEnd upgrading)
+    (fun {forked} holds stepWithin ahead stepLimit => by
+      obtain ⟨stepSigners, stepDraws, stepUpgradeDraws⟩ := ahead
+      obtain ⟨next, nextOk⟩ := ChainHolds.advanceSlotAcross_exists_ok conditions fits holds
+        stepWithin stepSigners stepDraws stepUpgradeDraws stepLimit
+      exact ⟨next, nextOk, ChainHolds.of_advanceSlotAcross conditions fits holds stepWithin
+        stepSigners nextOk⟩)
+    count holds within (fun steps below reached reachedOk =>
+      ⟨signers steps below reached reachedOk, draws steps below reached reachedOk⟩) limit
 
 /-- Every slot advance within the epochs of a chain succeeds, from a state of the chain.
 
@@ -261,11 +224,61 @@ It raises the validators plus the pending deposits by at most `2^14`.
 
 Its slashings name at most `2^10` validators, and it carries at most 16 withdrawal requests.
 
-The count of deposits, the load and the withdrawal requests are within what the protocol allows.
+Before Gloas, the body types bound the count of deposits, the load and the withdrawal requests.
 
 The protocol does not cap the Gwei of the deposits, and it allows far more slashed validators. -/
 def BlockLimits.mainnet : BlockLimits :=
   { deposits := 10 ^ 13, joins := 16, load := 2 ^ 14, slashings := 2 ^ 10, withdrawals := 16 }
+
+/-- Before Gloas, every mainnet block body is within three of the mainnet limits.
+
+It applies at most 16 deposits of the deposit contract, the most that a body holds.
+
+It raises the load by at most `2^14`, and carries at most 16 withdrawal requests. -/
+theorem blockLimits_mainnet_of_body {fork : Fork} (before : fork < .glamsterdam)
+    (body : BeaconBlockBody Preset.mainnet fork) :
+    blockDepositCount body ≤ BlockLimits.mainnet.joins ∧
+      blockLoadBound body ≤ BlockLimits.mainnet.load ∧
+      (blockWithdrawalRequests body).length ≤ BlockLimits.mainnet.withdrawals := by
+  have gloas : ¬ .glamsterdam ≤ fork := Nat.not_le.mpr before
+  have deposits : blockDepositCount body ≤ 16 := by
+    have bound := (body.deposits (Nat.lt_trans before (by decide))).bound before
+    have limit : Preset.mainnet.MAX_DEPOSITS.toNat = 16 := by decide
+    simpa [blockDepositCount, before, limit] using bound
+  have requests : blockRequestCount body ≤ 2 ^ 13 + 2 := by
+    unfold blockRequestCount
+    split
+    · rename_i electra
+      have d := (body.executionRequests electra).deposits.bound before
+      have c := (body.executionRequests electra).consolidations.bound before
+      have dl : Preset.mainnet.MAX_DEPOSIT_REQUESTS_PER_PAYLOAD.toNat = 2 ^ 13 := by decide
+      have cl : Preset.mainnet.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD.toNat = 2 := by decide
+      omega
+    · simp
+  refine ⟨deposits, ?_, ?_⟩
+  · unfold blockLoadBound
+    simp only [BlockLimits.mainnet]
+    split <;> omega
+  · unfold blockWithdrawalRequests
+    simp only [BlockLimits.mainnet, gloas, dite_false]
+    split
+    · rename_i electra
+      have w := (body.executionRequests ⟨electra, Nat.lt_of_not_le gloas⟩).withdrawals.bound before
+      have wl : Preset.mainnet.MAX_WITHDRAWAL_REQUESTS_PER_PAYLOAD.toNat = 16 := by decide
+      simpa using w.trans wl.le
+    · simp
+
+/-- Before Gloas, a mainnet block body is within the mainnet limits under two conditions.
+
+Its deposits and deposit requests bring in at most `10^13` Gwei.
+
+Its slashings name at most `2^10` validators. -/
+theorem BlockBounded.mainnet {fork : Fork} (before : fork < .glamsterdam)
+    {body : BeaconBlockBody Preset.mainnet fork}
+    (deposits : blockDepositAmount body ≤ 10 ^ 13) (slashings : blockSlashingCount body ≤ 2 ^ 10) :
+    BlockBounded BlockLimits.mainnet body :=
+  have limits := blockLimits_mainnet_of_body before body
+  ⟨deposits, limits.1, limits.2.1, slashings, limits.2.2⟩
 
 /-- The step of a block on mainnet, which covers the mainnet limits at a budget of `2^57` Gwei.
 

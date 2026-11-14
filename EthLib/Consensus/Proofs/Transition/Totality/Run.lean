@@ -186,6 +186,63 @@ theorem RunHolds.of_advanceSlotAcross {start : RunStart}
   exact RunHolds.of_chainHolds (ChainHolds.of_advanceSlotAcross conditions.toChain fits
     holds.toChainHolds within (holds.signers signers) computed) quietCurrent quiet
 
+/-- A run of slots succeeds and keeps a fact, when each slot advance from it succeeds and keeps it.
+
+Each advance reads that its next slot is within the last epoch, and a condition on its state.
+
+It also reads the epoch limit before Altair.
+
+The run starts from a state with the fact, and its last slot is within the last epoch.
+
+It meets the condition at each state it reaches before its end, and the epoch limit. -/
+theorem advanceSlotsAcross_of_step {Holds Ahead : ForkedBeaconState preset → Prop}
+    {lastEpoch : Nat}
+    (step : ∀ {forked : ForkedBeaconState preset}, Holds forked →
+      (forked.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat ≤ lastEpoch →
+      Ahead forked →
+      (forked.fork < .altair →
+        (getCurrentEpoch forked.state).toNat ≤ preset.epochLimitBeforeAltair) →
+      ∃ next, advanceSlotAcross config checks forked = .ok next ∧ Holds next) :
+    ∀ (count : Nat) {forked : ForkedBeaconState preset}, Holds forked →
+      (forked.state.slot.toNat + count) / preset.SLOTS_PER_EPOCH.toNat ≤ lastEpoch →
+      (∀ steps < count, ∀ reached,
+        advanceSlotsAcross config checks steps forked = .ok reached → Ahead reached) →
+      EpochLimitBeforeAltair forked count →
+      ∃ after, advanceSlotsAcross config checks count forked = .ok after ∧ Holds after := by
+  intro count
+  induction count with
+  | zero => exact fun holds _ _ _ => ⟨_, rfl, holds⟩
+  | succ count ih =>
+    intro forked holds within ahead limit
+    have stepWithin : (forked.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat ≤ lastEpoch :=
+      (Nat.div_le_div_right (by omega)).trans within
+    have stepLimit : forked.fork < .altair →
+        (getCurrentEpoch forked.state).toNat ≤ preset.epochLimitBeforeAltair := fun before => by
+      rw [getCurrentEpoch_toNat]
+      exact (Nat.div_le_div_right (by omega)).trans (limit before)
+    obtain ⟨next, nextOk, nextHolds⟩ :=
+      step holds stepWithin (ahead 0 (Nat.succ_pos _) forked rfl) stepLimit
+    obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp nextOk
+    have nextSlot : next.state.slot.toNat = forked.state.slot.toNat + 1 := by
+      rw [processUpgrades_slot upgraded]
+      exact advanceSlot_slot advancedOk
+    have nextFork : forked.fork ≤ next.fork :=
+      processUpgrades_fork_le (forked := ⟨forked.fork, advanced⟩) upgraded
+    -- The rest of the run starts from the next state, one step later.
+    have shifted : ∀ {steps reached}, advanceSlotsAcross config checks steps next = .ok reached →
+        advanceSlotsAcross config checks (steps + 1) forked = .ok reached := fun reachedOk => by
+      simp only [advanceSlotsAcross, nextOk, bind, Except.bind]
+      exact reachedOk
+    obtain ⟨after, afterOk, afterHolds⟩ := ih (forked := next) nextHolds
+      (by rwa [nextSlot, Nat.add_right_comm, Nat.add_assoc])
+      (fun steps below reached reachedOk =>
+        ahead (steps + 1) (by omega) reached (shifted reachedOk))
+      (fun before => by
+        rw [nextSlot, Nat.add_right_comm, Nat.add_assoc]
+        exact limit (Nat.lt_of_le_of_lt nextFork before))
+    exact ⟨after, by simp only [advanceSlotsAcross, nextOk, bind, Except.bind]; exact afterOk,
+      afterHolds⟩
+
 /-- A run of slots from a state of a run succeeds and keeps the facts of the run.
 
 The hypotheses on the states it reaches read the first epoch of the run. -/
@@ -206,44 +263,27 @@ private theorem advanceSlotsAcross_run
         ∀ cached, processSlot reached.state = .ok cached → SignersWithinActive cached) →
       DrawsEnd config checks forked count → EpochLimitBeforeAltair forked count →
       ∃ after, advanceSlotsAcross config checks count forked = .ok after ∧
-        RunHolds config start budget startEpoch after.state
-  | 0, forked, holds, _, _, _, _ => ⟨forked, rfl, holds⟩
-  | count + 1, forked, holds, within, signers, draws, limit => by
-    have stepWithin : (forked.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat ≤
-        startEpoch + epochs :=
-      (Nat.div_le_div_right (by omega)).trans within
-    have stepSigners := signers 0 (Nat.succ_pos _) forked rfl
-    obtain ⟨stepDraws, stepUpgradeDraws⟩ := draws 0 (Nat.succ_pos _) forked rfl
-    have stepLimit : forked.fork < .altair →
-        (getCurrentEpoch forked.state).toNat ≤ preset.epochLimitBeforeAltair := fun before => by
-      rw [getCurrentEpoch_toNat]
-      exact (Nat.div_le_div_right (by omega)).trans (limit before)
-    obtain ⟨next, nextOk⟩ := RunHolds.advanceSlotAcross_exists_ok conditions fits holds
-      stepWithin stepSigners stepDraws stepUpgradeDraws stepLimit
-    have nextHolds := RunHolds.of_advanceSlotAcross conditions fits holds stepWithin
-      stepSigners nextOk
-    obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp nextOk
-    have nextSlot : next.state.slot.toNat = forked.state.slot.toNat + 1 := by
-      rw [processUpgrades_slot upgraded]
-      exact advanceSlot_slot advancedOk
-    have nextFork : forked.fork ≤ next.fork :=
-      processUpgrades_fork_le (forked := ⟨forked.fork, advanced⟩) upgraded
-    -- The rest of the run starts from the next state, one step later.
-    have shifted : ∀ {steps reached}, advanceSlotsAcross config checks steps next = .ok reached →
-        advanceSlotsAcross config checks (steps + 1) forked = .ok reached := fun reachedOk => by
-      simp only [advanceSlotsAcross, nextOk, bind, Except.bind]
-      exact reachedOk
-    obtain ⟨after, afterOk, afterHolds⟩ := advanceSlotsAcross_run conditions fits count
-      (forked := next) nextHolds (by rwa [nextSlot, Nat.add_right_comm, Nat.add_assoc])
-      (fun steps below reached reachedOk =>
-        signers (steps + 1) (by omega) reached (shifted reachedOk))
-      (fun steps below reached reachedOk =>
-        draws (steps + 1) (by omega) reached (shifted reachedOk))
-      (fun before => by
-        rw [nextSlot, Nat.add_right_comm, Nat.add_assoc]
-        exact limit (Nat.lt_of_le_of_lt nextFork before))
-    exact ⟨after, by simp only [advanceSlotsAcross, nextOk, bind, Except.bind]; exact afterOk,
-      afterHolds⟩
+        RunHolds config start budget startEpoch after.state :=
+  fun count _ holds within signers draws limit =>
+  advanceSlotsAcross_of_step
+    (Holds := fun f => RunHolds config start budget startEpoch f.state)
+    (Ahead := fun f =>
+      ((getCurrentEpoch f.state).toNat < startEpoch + 2 →
+        (f.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
+        ∀ cached, processSlot f.state = .ok cached → SignersWithinActive cached) ∧
+      ((f.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
+        ∀ cached, processSlot f.state = .ok cached → EpochDrawsEnd config checks cached) ∧
+      ∀ advanced, advanceSlot config checks f.state = .ok advanced →
+        ∀ upgrading, UpgradesPass config checks ⟨f.fork, advanced⟩ upgrading →
+          upgradeDue config upgrading = true → UpgradeDrawsEnd upgrading)
+    (fun {forked} holds stepWithin ahead stepLimit => by
+      obtain ⟨stepSigners, stepDraws, stepUpgradeDraws⟩ := ahead
+      obtain ⟨next, nextOk⟩ := RunHolds.advanceSlotAcross_exists_ok conditions fits holds
+        stepWithin stepSigners stepDraws stepUpgradeDraws stepLimit
+      exact ⟨next, nextOk, RunHolds.of_advanceSlotAcross conditions fits holds stepWithin
+        stepSigners nextOk⟩)
+    count holds within (fun steps below reached reachedOk =>
+      ⟨signers steps below reached reachedOk, draws steps below reached reachedOk⟩) limit
 
 /-! ## The run -/
 

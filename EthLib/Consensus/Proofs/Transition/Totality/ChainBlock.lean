@@ -413,6 +413,43 @@ private theorem RunBounded.of_processBlock {fork : Fork} {engine : ExecutionEngi
 
 /-! ## One block -/
 
+/-- A block that the transition accepts follows the slots that lead to its own slot.
+
+The slots reach a state at the slot of the block, which the block then processes.
+
+The slot of the block is after the slot of the state before it. -/
+theorem stateTransitionAcross_advanced {fork : Fork} {engine : ExecutionEngine preset fork}
+    {forked : ForkedBeaconState preset} {signed : SignedBeaconBlock preset fork}
+    {validateResult : Bool} {after : BeaconState preset fork}
+    (computed :
+      stateTransitionAcross config checks engine forked signed validateResult = .ok after) :
+    ∃ advanced, forked.state.slot.toNat < signed.message.slot.toNat ∧
+      advanceSlotsAcross config checks (signed.message.slot.toNat - forked.state.slot.toNat)
+        forked = .ok ⟨fork, advanced⟩ ∧
+      advanced.slot.toNat = signed.message.slot.toNat ∧
+      processBlock config checks engine advanced signed.message = .ok after := by
+  obtain ⟨advanced, slotsOk, applied⟩ := stateTransitionAcross_ok computed
+  have blockOk := (applySignedBlock_ok applied).2.1
+  simp only [processSlotsAcross, bind_ok_iff, ensure_ok_iff] at slotsOk
+  obtain ⟨_, later, advancedOk⟩ := slotsOk
+  have laterNat := UInt64.lt_iff_toNat_lt.mp later
+  refine ⟨advanced, laterNat, advancedOk, ?_, blockOk⟩
+  have := advanceSlotsAcross_slot _ advancedOk
+  dsimp only at this
+  omega
+
+/-- A block that the transition accepts lands after the state before it, at its own slot. -/
+theorem stateTransitionAcross_slot {fork : Fork} {engine : ExecutionEngine preset fork}
+    {forked : ForkedBeaconState preset} {signed : SignedBeaconBlock preset fork}
+    {validateResult : Bool} {after : BeaconState preset fork}
+    (computed :
+      stateTransitionAcross config checks engine forked signed validateResult = .ok after) :
+    forked.state.slot.toNat < signed.message.slot.toNat ∧
+      after.slot.toNat = signed.message.slot.toNat := by
+  obtain ⟨advanced, later, _, advancedSlot, blockOk⟩ := stateTransitionAcross_advanced computed
+  rw [(frame_processBlock blockOk).slot]
+  exact ⟨later, advancedSlot⟩
+
 /-- A block within the limits that the transition accepts keeps the facts of a chain.
 
 The facts hold at the state before the slots that lead to the block, with some count of blocks.
@@ -445,15 +482,9 @@ theorem ChainHolds.of_stateTransitionAcross {fork : Fork} {engine : ExecutionEng
     (computed :
       stateTransitionAcross config checks engine forked signed validateResult = .ok after) :
     ChainHolds config start step budget startEpoch (blocks + 1) after := by
-  obtain ⟨advanced, slotsOk, applied⟩ := stateTransitionAcross_ok computed
-  have blockOk := (applySignedBlock_ok applied).2.1
-  simp only [processSlotsAcross, bind_ok_iff, ensure_ok_iff] at slotsOk
-  obtain ⟨_, later, advancedOk⟩ := slotsOk
-  have laterNat := UInt64.lt_iff_toNat_lt.mp later
-  have advancedSlot : advanced.slot.toNat = signed.message.slot.toNat := by
-    have := advanceSlotsAcross_slot _ advancedOk
-    dsimp only at this
-    omega
+  obtain ⟨advanced, later, advancedOk, advancedSlot, blockOk⟩ :=
+    stateTransitionAcross_advanced computed
+  have laterNat := later
   -- The slots before the block keep the facts, with the same count of blocks.
   have advancedHolds : ChainHolds config start step budget startEpoch blocks advanced :=
     ChainHolds.of_advanceSlotsAcross conditions fits _ holds
