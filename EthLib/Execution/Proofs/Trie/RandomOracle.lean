@@ -40,7 +40,7 @@ open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography (evalWithAnswerFn_exceptT_bind evalWithAnswerFn_exceptT_pure
   evalWithAnswerFn_exceptT_throw evalWithAnswerFn_exceptT_lift evalWithAnswerFn_exceptT_liftExcept
   evalWithAnswerFn_exceptT_adapt)
-open EthLib.Cryptography.Merkle.RandomOracle (Collision prEvent_collision_le)
+open EthLib.Cryptography.Merkle.RandomOracle (Collision experimentWith prEvent_experimentWith_le)
 
 /-- The hash of the trie as one oracle from byte strings to 32-byte digests. -/
 abbrev HashOracle : OracleSpec ByteArray := ByteArray →ₒ Hash32
@@ -83,9 +83,8 @@ def extract (first second : Trie) (key : ByteArray) : OracleComp HashOracle Outc
 
 /-- The experiment: the adversary picks two tries and a key, then the extraction runs. -/
 def experiment (adversary : OracleComp (unifSpec + HashOracle) (Trie × Trie × ByteArray)) :
-    OracleComp (unifSpec + HashOracle) Outcome := do
-  let (first, second, key) ← adversary
-  liftComp (extract first second key) (unifSpec + HashOracle)
+    OracleComp (unifSpec + HashOracle) Outcome :=
+  experimentWith (fun claim => extract claim.1 claim.2.1 claim.2.2) adversary
 
 /-- The adversary wins: two tries with distinct keys share a root but give the key two values.
 
@@ -422,17 +421,11 @@ theorem prEvent_wins_le [SampleableType Hash32]
     (adversary : OracleComp (unifSpec + HashOracle) (Trie × Trie × ByteArray)) {Q : Nat}
     (hQ : IsQueryBoundP (experiment adversary) (fun t => t.isRight = true) Q) :
     Pr{let z ← (simulateQ HashOracle.romImpl (experiment adversary)).run ∅}[Wins z.1] ≤
-      Q * ((Q : ℝ≥0∞) / Nat.card Hash32) := by
-  refine (prEvent_mono_of_support _ _ _ ?_).trans (prEvent_collision_le (experiment adversary) hQ)
-  intro z hz hwins
-  simp only [experiment, simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hz
-  obtain ⟨⟨⟨first, second, key⟩, cache⟩, -, hz⟩ := hz
-  -- The extraction calls only the hash, which the random oracle answers with caching.
-  rw [QueryImpl.simulateQ_add_liftComp_right] at hz
-  -- The final cache replays the extraction without sampling again.
-  have hreplay := QueryImpl.simulateQ_toPartialImpl_snd_of_mem_support_run_simulateQ_withCaching
-    _ (extract first second key) hz
-  exact collision_of_extract hreplay hwins
+      Q * ((Q : ℝ≥0∞) / Nat.card Hash32) :=
+  prEvent_experimentWith_le
+    (fun claim : Trie × Trie × ByteArray => extract claim.1 claim.2.1 claim.2.2) Wins
+    (fun {_} {claim} {_} hrun hwins => collision_of_extract (first := claim.1)
+      (second := claim.2.1) (key := claim.2.2) hrun hwins) adversary hQ
 
 /-- The same bound for 32 uniform bytes per answer: probability at most `Q^2 / 2^256`. -/
 theorem prEvent_wins_le_two_pow

@@ -66,7 +66,7 @@ theorem mixinMessageM_id_eq (hasher : Hasher Id) (shape : Desc) (value : Value) 
 
 /-- A progressive container's root hashes a 32-byte contents node beside its layout word.
 
-The root is the one that a hash with 32-byte digests computes. -/
+The hash is any hash with 32-byte digests, and it also computes the zero subtrees. -/
 theorem hashTreeRootM_progressiveContainer_mixin (hash : ByteArray → ByteArray)
     (width : ∀ x, (hash x).size = 32) {active : List Bool} {names : List String}
     {fields : List Desc} {value : Value} {root : Bytes}
@@ -150,7 +150,7 @@ theorem findMixinCollision_self (shape : Desc) (value : Value)
 /--
 Two legal progressive containers with one root have one layout, or the search finds a collision.
 
-The root is the one that a hash with 32-byte digests computes.
+The hash is any hash with 32-byte digests, and it also computes the zero subtrees.
 
 The final hash takes the contents node and the layout word, 64 bytes in all.
 

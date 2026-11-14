@@ -27,8 +27,6 @@ Each win exposes two different queried inputs with one answer, found by the bind
 
 So the birthday bound of the oracle bounds the probability of a win.
 
-The experiment and the bound also take any other extraction whose wins expose a collision.
-
 The bound counts every query of the experiment, the adversary's and the extraction's.
 
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2.
@@ -45,7 +43,7 @@ open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography (evalWithAnswerFn_exceptT_bind evalWithAnswerFn_exceptT_pure
   evalWithAnswerFn_exceptT_throw evalWithAnswerFn_exceptT_lift evalWithAnswerFn_exceptT_liftExcept
   evalWithAnswerFn_exceptT_mapM)
-open EthLib.Cryptography.Merkle.RandomOracle (Collision prEvent_collision_le)
+open EthLib.Cryptography.Merkle.RandomOracle (Collision experimentWith prEvent_experimentWith_le)
 
 /-- The node hash as one oracle from byte strings to 32-byte digests. -/
 abbrev HashOracle : OracleSpec ByteArray := ByteArray →ₒ Hash32
@@ -92,19 +90,10 @@ def extract (shape : Desc) (first second : Value) : OracleComp HashOracle Outcom
   | _, _ => pure ()
   return ⟨first, second, firstRoot, secondRoot⟩
 
-/-- An experiment with any extraction: the adversary picks two inputs, then the extraction runs.
-
-The extraction only calls the oracle. -/
-def experimentWith {α β : Type} (extraction : α → α → OracleComp HashOracle β)
-    (adversary : OracleComp (unifSpec + HashOracle) (α × α)) :
-    OracleComp (unifSpec + HashOracle) β := do
-  let (first, second) ← adversary
-  liftComp (extraction first second) (unifSpec + HashOracle)
-
 /-- The experiment: the adversary picks two values of the type, then the extraction runs. -/
 def experiment (shape : Desc) (adversary : OracleComp (unifSpec + HashOracle) (Value × Value)) :
     OracleComp (unifSpec + HashOracle) Outcome :=
-  experimentWith (extract shape) adversary
+  experimentWith (fun pair => extract shape pair.1 pair.2) adversary
 
 /-- The adversary wins: two different values that fit one well-formed type have one root.
 
@@ -386,36 +375,6 @@ theorem collision_of_extract {cache : HashOracle.QueryCache} {shape : Desc} {fir
     obtain ⟨tree₂, htree₂, -⟩ := valueTree_of_hashTreeRootM (tableHash f) shape second root hroot₂
     exact (hnot tree₁ tree₂ htree₁ htree₂).elim
 
-/-- A win of an experiment with any extraction, at probability at most `Q^2 / N`.
-
-Each replay of the extraction that ends in a win must expose a collision of the cache.
-
-`N` is the number of digests.
-
-`Q` bounds the oracle calls of the whole experiment, repeats included.
-
-The oracle cache starts empty, and the adversary's private sampling is not counted. -/
-theorem prEvent_experimentWith_le [SampleableType Hash32] {α β : Type}
-    (extraction : α → α → OracleComp HashOracle β) (wins : β → Prop)
-    (collision : ∀ {cache : HashOracle.QueryCache} {first second : α} {outcome : β},
-      simulateQ cache.toPartialImpl (extraction first second) = some outcome → wins outcome →
-        Collision cache)
-    (adversary : OracleComp (unifSpec + HashOracle) (α × α)) {Q : Nat}
-    (hQ : IsQueryBoundP (experimentWith extraction adversary) (fun t => t.isRight = true) Q) :
-    Pr{let z ← (simulateQ HashOracle.romImpl
-      (experimentWith extraction adversary)).run ∅}[wins z.1] ≤
-      Q * ((Q : ℝ≥0∞) / Nat.card Hash32) := by
-  refine (prEvent_mono_of_support _ _ _ ?_).trans
-    (prEvent_collision_le (experimentWith extraction adversary) hQ)
-  intro z hz hwins
-  simp only [experimentWith, simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hz
-  obtain ⟨⟨⟨first, second⟩, cache⟩, -, hz⟩ := hz
-  -- The extraction calls only the hash, which the random oracle answers with caching.
-  rw [QueryImpl.simulateQ_add_liftComp_right] at hz
-  -- The final cache replays the extraction without sampling again.
-  exact collision (QueryImpl.simulateQ_toPartialImpl_snd_of_mem_support_run_simulateQ_withCaching
-    _ (extraction first second) hz) hwins
-
 /-- Two different values of one type with one root, at probability at most `Q^2 / N`.
 
 `N` is the number of digests.
@@ -432,7 +391,9 @@ theorem prEvent_wins_le [SampleableType Hash32] (shape : Desc)
     (hQ : IsQueryBoundP (experiment shape adversary) (fun t => t.isRight = true) Q) :
     Pr{let z ← (simulateQ HashOracle.romImpl (experiment shape adversary)).run ∅}[Wins shape z.1] ≤
       Q * ((Q : ℝ≥0∞) / Nat.card Hash32) :=
-  prEvent_experimentWith_le (extract shape) (Wins shape) collision_of_extract adversary hQ
+  prEvent_experimentWith_le (fun pair : Value × Value => extract shape pair.1 pair.2) (Wins shape)
+    (fun {_} {claim} {_} hrun hwins =>
+      collision_of_extract (first := claim.1) (second := claim.2) hrun hwins) adversary hQ
 
 /-- The same bound for 32 uniform bytes per answer: probability at most `Q^2 / 2^256`. -/
 theorem prEvent_wins_le_two_pow (shape : Desc)

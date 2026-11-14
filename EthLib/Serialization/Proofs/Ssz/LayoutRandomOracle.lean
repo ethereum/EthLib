@@ -10,7 +10,7 @@ An adversary that makes queries outputs two types and a value of each.
 
 It wins with two legal progressive containers of different layouts and one root.
 
-Each win exposes a cache collision, so the birthday bound applies.
+Each win exposes two different queried inputs with one answer, so the birthday bound applies.
 
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2.
 
@@ -25,7 +25,7 @@ open EthLib.Base
 open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography (evalWithAnswerFn_exceptT_bind evalWithAnswerFn_exceptT_pure
   evalWithAnswerFn_exceptT_lift evalWithAnswerFn_exceptT_liftExcept)
-open EthLib.Cryptography.Merkle.RandomOracle (Collision)
+open EthLib.Cryptography.Merkle.RandomOracle (Collision experimentWith prEvent_experimentWith_le)
 
 /-- What the layout experiment reports: the two types and the roots of their values. -/
 structure LayoutOutcome where
@@ -48,14 +48,18 @@ def queryLastInput : Except Err (Option Bytes) → OracleComp HashOracle Unit
 /-- The extraction for layouts, run on two types, each with a value.
 
 It computes both roots, then the input of each last hash, and queries each input again. -/
-def extractLayouts (first second : Desc × Value) : OracleComp HashOracle LayoutOutcome := do
+def extractLayouts (claim : (Desc × Value) × (Desc × Value)) :
+    OracleComp HashOracle LayoutOutcome := do
+  let (first, second) := claim
   let firstRoot ← (hashTreeRootM oracleHasher first.1 first.2).run
   let secondRoot ← (hashTreeRootM oracleHasher second.1 second.2).run
   queryLastInput (← (mixinMessageM oracleHasher first.1 first.2).run)
   queryLastInput (← (mixinMessageM oracleHasher second.1 second.2).run)
   return ⟨first.1, second.1, firstRoot, secondRoot⟩
 
-/-- The adversary wins: two legal progressive containers with different layouts have one root. -/
+/-- The adversary wins: two legal progressive containers with different layouts have one root.
+
+The layout is the list of active fields, which the root mixes in. -/
 def LayoutWins (outcome : LayoutOutcome) : Prop :=
   outcome.firstShape.wellFormed = .ok () ∧ outcome.secondShape.wellFormed = .ok () ∧
     (∃ firstActive firstNames firstFields secondActive secondNames secondFields,
@@ -64,7 +68,7 @@ def LayoutWins (outcome : LayoutOutcome) : Prop :=
       firstActive ≠ secondActive) ∧
     ∃ root, outcome.firstRoot = .ok root ∧ outcome.secondRoot = .ok root
 
-/-- The input of a last hash, run against a full answer table, is the input with that table. -/
+/-- Run against a full answer table, the input of a last hash is the one the table computes. -/
 theorem evalWithAnswerFn_mixinMessageM (f : QueryImpl HashOracle Id) (shape : Desc)
     (value : Value) :
     evalWithAnswerFn f (mixinMessageM oracleHasher shape value).run =
@@ -87,7 +91,7 @@ theorem evalWithAnswerFn_mixinMessageM (f : QueryImpl HashOracle Id) (shape : De
 /-- A replayed layout extraction caches the input of each last hash, with the table's answer. -/
 theorem cached_of_extractLayouts {cache : HashOracle.QueryCache} {f : QueryImpl HashOracle Id}
     (hf : cache.AgreesWithFn f) {first second : Desc × Value} {outcome : LayoutOutcome}
-    (hrun : simulateQ cache.toPartialImpl (extractLayouts first second) = some outcome) :
+    (hrun : simulateQ cache.toPartialImpl (extractLayouts (first, second)) = some outcome) :
     (∀ input, mixinMessage first.1 first.2 (tableHash f) = some input →
       cache (ByteArray.mk input) = some (f (ByteArray.mk input))) ∧
     ∀ input, mixinMessage second.1 second.2 (tableHash f) = some input →
@@ -103,7 +107,7 @@ theorem cached_of_extractLayouts {cache : HashOracle.QueryCache} {f : QueryImpl 
   have hfirst' := cache.evalWithAnswerFn_eq_of_agreesWithFn hf _ hfirst
   have hsecond' := cache.evalWithAnswerFn_eq_of_agreesWithFn hf _ hsecond
   rw [evalWithAnswerFn_mixinMessageM] at hfirst' hsecond'
-  -- An input that the table finds was queried again, and the cache keeps the table's answer.
+  -- An input computed with the table was queried again, and the cache keeps the table's answer.
   have hcached : ∀ {input : Bytes} (result : Except Err (Option Bytes)),
       simulateQ cache.toPartialImpl (queryLastInput result) = some () →
       (match result with
@@ -129,11 +133,10 @@ theorem cached_of_extractLayouts {cache : HashOracle.QueryCache} {f : QueryImpl 
 
 The layout search of SSZ finds it, run with a table that extends the cache. -/
 theorem collision_of_extractLayouts {cache : HashOracle.QueryCache}
-    {first second : Desc × Value} {outcome : LayoutOutcome}
-    (hrun : simulateQ cache.toPartialImpl (extractLayouts first second) = some outcome)
+    {claim : (Desc × Value) × (Desc × Value)} {outcome : LayoutOutcome}
+    (hrun : simulateQ cache.toPartialImpl (extractLayouts claim) = some outcome)
     (hwins : LayoutWins outcome) : Collision cache := by
-  obtain ⟨shape₁, value₁⟩ := first
-  obtain ⟨shape₂, value₂⟩ := second
+  obtain ⟨⟨shape₁, value₁⟩, ⟨shape₂, value₂⟩⟩ := claim
   -- A table that extends the cache fixes the value of every replayed computation.
   obtain ⟨f, hf⟩ := cache.exists_agreesWithFn
   have hout := cache.evalWithAnswerFn_eq_of_agreesWithFn hf _ hrun
@@ -153,23 +156,33 @@ theorem collision_of_extractLayouts {cache : HashOracle.QueryCache}
     exact collision_of_cached hdistinct hequal ((cached_of_extractLayouts hf hrun).1 _ ha)
       ((cached_of_extractLayouts hf hrun).2 _ hb)
 
-/-- Two legal progressive containers with different layouts and one root.
+/-- Two legal progressive containers with different layouts and one root, at most `Q^2 / N`.
 
-The probability is at most `Q^2 / 2^256`.
+`N` is the number of digests.
 
 `Q` bounds the oracle calls of the whole experiment, repeats included.
 
 The extraction computes each root twice, once whole and once up to its last hash.
 
+It then queries the input of each last hash once more.
+
 The oracle cache starts empty, and the adversary's private sampling is not counted. -/
+theorem prEvent_layoutWins_le [SampleableType Hash32]
+    (adversary : OracleComp (unifSpec + HashOracle) ((Desc × Value) × (Desc × Value))) {Q : Nat}
+    (hQ : IsQueryBoundP (experimentWith extractLayouts adversary) (fun t => t.isRight = true) Q) :
+    Pr{let z ← (simulateQ HashOracle.romImpl
+      (experimentWith extractLayouts adversary)).run ∅}[LayoutWins z.1] ≤
+      Q * ((Q : ℝ≥0∞) / Nat.card Hash32) :=
+  prEvent_experimentWith_le extractLayouts LayoutWins collision_of_extractLayouts adversary hQ
+
+/-- The same bound for 32 uniform bytes per answer: probability at most `Q^2 / 2^256`. -/
 theorem prEvent_layoutWins_le_two_pow
     (adversary : OracleComp (unifSpec + HashOracle) ((Desc × Value) × (Desc × Value))) {Q : Nat}
     (hQ : IsQueryBoundP (experimentWith extractLayouts adversary) (fun t => t.isRight = true) Q) :
     Pr{let z ← (simulateQ HashOracle.romImpl
       (experimentWith extractLayouts adversary)).run ∅}[LayoutWins z.1] ≤
       Q * ((Q : ℝ≥0∞) / 2 ^ 256) := by
-  have bound := prEvent_experimentWith_le extractLayouts LayoutWins collision_of_extractLayouts
-    adversary hQ
+  have bound := prEvent_layoutWins_le adversary hQ
   rw [Cryptography.Merkle.RandomOracle.card_bytes32, Nat.cast_pow, Nat.cast_ofNat] at bound
   exact bound
 

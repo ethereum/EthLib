@@ -148,6 +148,8 @@ So the statements say something, even though every compressing hash has collisio
 `Proofs/Merkle/RandomOracle.lean` bounds classical searches against an ideal random oracle with `N` outputs and an empty initial cache.
 `prEvent_collision_le` bounds a collision among queried inputs by `q^2 / N` for at most `q` hash calls, and private uniform sampling is not counted.
 This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`: at most 4 for `q >= 2`, and close to 2 for large `q`.
+`prEvent_experimentWith_le` applies it to an experiment where the adversary outputs a claim and an extraction then runs on it with the oracle alone.
+It bounds a win by `q^2 / N` when every replayed win of the extraction leaves a collision in the cache.
 
 `prEvent_secondPreimage_le` bounds by `q / N` a hit on a target digest fixed before the run, among queried inputs other than one honest input.
 The theorem does not tie the target to the digest of the honest input.
@@ -211,8 +213,7 @@ The experiment computes both roots, then hashes every node of both expanded comp
 The adversary wins when the two values differ, fit the well-formed type, are `CommitmentSized`, and have one root.
 `collision_of_extract` shows that every win leaves two different cached inputs with one answer.
 Its proof finds them with `findMessageCollision`, run with a table that agrees with the cache.
-`prEvent_experimentWith_le` bounds a win by `Q^2 / N` through `prEvent_collision_le`, for any extraction whose wins all leave such a collision.
-`prEvent_wins_le` applies it to `collision_of_extract`, and `prEvent_wins_le_two_pow` states the bound with `N = 2^256`.
+`prEvent_wins_le` bounds a win by `Q^2 / N`, applying `prEvent_experimentWith_le` to `collision_of_extract`, and `prEvent_wins_le_two_pow` states the bound with `N = 2^256`.
 `Q` counts every oracle call of the experiment, repeats included.
 The extraction makes many: the expanded computations hash every node of the padded tree of each value, one query each.
 So `Q` grows with the capacity of the type, not with the length of the values.
@@ -232,8 +233,8 @@ The adversary wins when both types are legal progressive containers with differe
 `collision_of_extractLayouts` shows that every win leaves two different cached inputs with one answer.
 Its proof applies `hashTreeRootM_progressiveContainer_layouts_separate` to a table that agrees with the cache, and takes the inputs that `findMixinCollision` returns.
 The extraction queried both inputs again, so the cache holds them, by `cached_of_extractLayouts`.
-`prEvent_experimentWith_le` then gives `prEvent_layoutWins_le_two_pow`, which bounds a win by `Q^2 / 2^256`.
-The layout extraction rehashes no padded tree.
+`prEvent_experimentWith_le` then gives `prEvent_layoutWins_le`, which bounds a win by `Q^2 / N`, and `prEvent_layoutWins_le_two_pow` states it with `N = 2^256`.
+The layout extraction expands no padded tree, so `Q` grows with the data and the depth of each tree, not with the capacity of the type.
 
 ### leanSPHINCS
 
@@ -2047,7 +2048,7 @@ The experiment computes both roots and both proofs of the key, then queries the 
 The adversary wins when the tries are both secured or both plain, each has distinct keys, and they have one root, yet give the key different values.
 `collision_of_extract` shows that every win leaves two different cached inputs with one answer.
 The searches `findCollision`, `findPathCollision` and `findLookupCollision` name them, run with a table that agrees with the cache.
-`prEvent_wins_le` then bounds a win by `Q^2 / N` through `prEvent_collision_le`, where `Q` bounds the queries of the whole experiment.
+`prEvent_wins_le` then bounds a win by `Q^2 / N` through `prEvent_experimentWith_le`, where `Q` bounds the queries of the whole experiment.
 `prEvent_wins_le_two_pow` states it with `N = 2^256`.
 The bound needs no hypothesis that the cache covers the witnesses, since the experiment queries them itself.
 One oracle answers keys and nodes alike, so a collision between a key and a node counts too.
