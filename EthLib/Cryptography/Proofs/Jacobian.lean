@@ -73,6 +73,140 @@ theorem toZ_injective : Function.Injective (toZ (m := m)) := by
     toZ (Fin.inverse x) = (toZ x)⁻¹ :=
   Fin.inverse_val x
 
+/-! ## Scaling by natural numbers -/
+
+namespace Coords
+
+/-- A map that preserves zero and addition preserves a sum of `n` copies. -/
+theorem map_scale {F G : Type} [OfNat F 0] [OfNat G 0] [Add F] [Add G]
+    (f : F → G) (h0 : f 0 = 0) (hadd : ∀ x y, f (x + y) = f x + f y)
+    (n : Nat) (x : F) : f (scale n x) = scale n (f x) := by
+  induction n using Nat.strong_induction_on with
+  | h n ih =>
+    conv_lhs => rw [scale]
+    conv_rhs => rw [scale]
+    split_ifs with h0n h1n he
+    · exact h0
+    · rfl
+    · rw [hadd, ih (n / 2) (by omega)]
+    · rw [hadd, hadd, ih (n / 2) (by omega)]
+
+/-- A field representation change preserves the exceptional cases and the addition formula. -/
+theorem map_add {F G : Type}
+    [OfNat F 0] [OfNat F 1] [Add F] [Sub F] [Mul F] [DecidableEq F]
+    [OfNat G 0] [OfNat G 1] [Add G] [Sub G] [Mul G] [DecidableEq G]
+    (f : F → G) (h0 : f 0 = 0) (h1 : f 1 = 1)
+    (hadd : ∀ x y, f (x + y) = f x + f y) (hsub : ∀ x y, f (x - y) = f x - f y)
+    (hmul : ∀ x y, f (x * y) = f x * f y) (hf : Function.Injective f)
+    (hdbl : ∀ a p, (double a p).map f = double (f a) (p.map f))
+    (a : F) (p q : Coords F) : (add a p q).map f = add (f a) (p.map f) (q.map f) := by
+  have hzero (x : F) : f x = 0 ↔ x = 0 := by rw [← h0, hf.eq_iff]
+  have hone (x : F) : f x = 1 ↔ x = 1 := by rw [← h1, hf.eq_iff]
+  have hscale (n : Nat) (x : F) : f (scale n x) = scale n (f x) :=
+    map_scale f h0 hadd n x
+  have hinf : (infinity : Coords F).map f = infinity := by simp only [infinity, map, h0, h1]
+  have hite (c : Prop) [Decidable c] (r s : Coords F) :
+      (if c then r else s).map f = if c then r.map f else s.map f := by split_ifs <;> rfl
+  have mx (r : Coords F) : (r.map f).x = f r.x := rfl
+  have my (r : Coords F) : (r.map f).y = f r.y := rfl
+  have mz (r : Coords F) : (r.map f).z = f r.z := rfl
+  by_cases hp : p.z = 0
+  · simp only [add, mz, hzero, hp, ite_true]
+  by_cases hq : q.z = 0
+  · simp only [add, mz, hzero, hp, hq, ite_true, ite_false]
+  simp only [add, mx, my, mz, hzero, hp, hq, ite_false]
+  by_cases hq1 : q.z = 1
+  all_goals
+    simp only [hone, hq1, ite_true, ite_false]
+    simp only [← hmul, ← hsub, ← hscale, hzero, hite]
+    split_ifs with h r
+    · exact hdbl a p
+    · exact hinf
+    · simp only [map, hmul, hsub, hscale]
+
+end Coords
+
+theorem toZ_scale [NeZero m] (n : Nat) (x : Fin m) :
+    toZ (Coords.scale n x) = (n : ZMod m) * toZ x := by
+  induction n using Nat.strong_induction_on with
+  | h n ih =>
+    rw [Coords.scale]
+    split_ifs with h0 h1 he
+    · subst n
+      simp
+    · subst n
+      simp
+    · rw [toZ_add, ih (n / 2) (by omega)]
+      have hn : n = 2 * (n / 2) := by omega
+      conv_rhs => rw [hn]
+      push_cast
+      ring
+    · rw [toZ_add, toZ_add, ih (n / 2) (by omega)]
+      have hn : n = 2 * (n / 2) + 1 := by omega
+      conv_rhs => rw [hn]
+      push_cast
+      ring
+
+theorem scale_eq_mul [NeZero m] (n : Nat) (x : Fin m) :
+    Coords.scale n x = Fin.ofNat m n * x := by
+  apply toZ_injective
+  rw [toZ_scale, toZ_mul, toZ_ofNat]
+
+private theorem double_slope_eq [NeZero m] (a x z : Fin m) :
+    (if a = 0 then Coords.scale 3 x else Coords.scale 3 x + a * (z * z) * (z * z)) =
+      3 * x + a * (z * z) * (z * z) := by
+  by_cases ha : a = 0 <;> simp [ha, scale_eq_mul]
+
+private theorem mixed_coords_eq [NeZero m] (p q : Jacobian m) :
+    (if q.z = 1 then (p.x, p.y, p.z) else
+      let z2z2 := q.z * q.z
+      (p.x * z2z2, p.y * q.z * z2z2, p.z * q.z)) =
+        (p.x * (q.z * q.z), p.y * q.z * (q.z * q.z), p.z * q.z) := by
+  by_cases hz : q.z = 1 <;> simp [hz]
+
+/-- The modular double formula is unchanged for every input, including forms off the curve. -/
+theorem double_eq_formula [NeZero m] (a : Fin m) (p : Jacobian m) :
+    double a p =
+    let xx := p.x * p.x
+    let yy := p.y * p.y
+    let zz := p.z * p.z
+    let s := 4 * p.x * yy
+    let l := 3 * xx + a * zz * zz
+    let t := l * l - 2 * s
+    ⟨t, l * (s - t) - 8 * yy * yy, 2 * p.y * p.z⟩ := by
+  dsimp only [double, Coords.double, ofCoords, toCoords]
+  simp only [double_slope_eq]
+  simp only [scale_eq_mul]
+  congr 1 <;> apply toZ_injective <;>
+    simp only [toZ_add, toZ_sub, toZ_mul, toZ_ofNat, toZ_two, toZ_three, toZ_four, toZ_eight] <;>
+    ring
+
+/-- The modular add formula is unchanged for every input, including forms off the curve. -/
+theorem add_eq_formula [NeZero m] (a : Fin m) (p q : Jacobian m) :
+    add a p q =
+    if p.z = 0 then q
+    else if q.z = 0 then p
+    else
+      let z1z1 := p.z * p.z
+      let z2z2 := q.z * q.z
+      let u1 := p.x * z2z2
+      let u2 := q.x * z1z1
+      let s1 := p.y * q.z * z2z2
+      let s2 := q.y * p.z * z1z1
+      let h := u2 - u1
+      let r := s2 - s1
+      if h = 0 then
+        -- One `x`: the same point, or opposite points.
+        if r = 0 then double a p else infinity
+      else
+        let hh := h * h
+        let hhh := h * hh
+        let v := u1 * hh
+        let x3 := r * r - hhh - 2 * v
+        ⟨x3, r * (v - x3) - s1 * hhh, p.z * q.z * h⟩ := by
+  simp only [add, Coords.add, mixed_coords_eq, scale_eq_mul]
+  split_ifs <;> rfl
+
 /-! ## The point of a form -/
 
 variable [NeZero m] [Fact m.Prime] {A B : ZMod m} [(ShortWeierstrass.curve A B).IsElliptic]
@@ -150,7 +284,9 @@ include ha h2
 The formula must use the curve's `a`, and `2 != 0` in the field. -/
 theorem double_spec {p : Jacobian m} (hp : OnCurve A B p) :
     OnCurve A B (double a p) ∧ toPoint A B (double a p) = toPoint A B p + toPoint A B p := by
-  have hz3 : toZ (double a p).z = 2 * toZ p.y * toZ p.z := by simp [double]
+  have hz3 : toZ (double a p).z = 2 * toZ p.y * toZ p.z := by
+    rw [double_eq_formula]
+    simp
   by_cases hz : p.z = 0
   · -- At infinity, the double is at infinity.
     have hz3' : (double a p).z = 0 := toZ_eq_zero.mp (by rw [hz3, hz, toZ_zero, mul_zero])
@@ -183,7 +319,8 @@ theorem double_spec {p : Jacobian m} (hp : OnCurve A B p) :
       clear hsum h3 hY
       generalize affX p = x at *
       generalize affY p = y at *
-      simp only [affX, affY, double, toZ_add, toZ_sub, toZ_mul, toZ_two, toZ_three, toZ_four,
+      rw [double_eq_formula]
+      simp only [affX, affY, toZ_add, toZ_sub, toZ_mul, toZ_two, toZ_three, toZ_four,
         toZ_eight, ha]
       rw [hX, hY']
       field_simp
@@ -195,10 +332,10 @@ theorem double_spec {p : Jacobian m} (hp : OnCurve A B p) :
 theorem add_spec {p q : Jacobian m} (hp : OnCurve A B p) (hq : OnCurve A B q) :
     OnCurve A B (add a p q) ∧ toPoint A B (add a p q) = toPoint A B p + toPoint A B q := by
   by_cases hzp : p.z = 0
-  · simp only [add, hzp, ↓reduceIte]
+  · simp only [add, Coords.add, hzp, ↓reduceIte]
     exact ⟨hq, by rw [toPoint_of_z_eq_zero hzp, zero_add]⟩
   by_cases hzq : q.z = 0
-  · simp only [add, hzp, hzq, ↓reduceIte]
+  · simp only [add, Coords.add, hzp, hzq, ↓reduceIte]
     exact ⟨hp, by rw [toPoint_of_z_eq_zero hzq, add_zero]⟩
   have hZ1 := toZ_z_ne_zero hzp
   have hZ2 := toZ_z_ne_zero hzq
@@ -214,7 +351,7 @@ theorem add_spec {p q : Jacobian m} (hp : OnCurve A B p) (hq : OnCurve A B q) :
       = toZ p.z ^ 3 * toZ q.z ^ 3 * (affY q - affY p) := by
     simp only [affY, toZ_sub, toZ_mul]
     field_simp
-  simp only [add, hzp, hzq, ↓reduceIte]
+  simp only [add, Coords.add, mixed_coords_eq, scale_eq_mul, hzp, hzq, ↓reduceIte]
   split_ifs with hx hy
   · -- One point twice.
     have hx' : affX q = affX p := by
@@ -271,7 +408,7 @@ theorem add_spec {p q : Jacobian m} (hp : OnCurve A B p) (hq : OnCurve A B q) :
       have hY2 : toZ q.y = affY q * toZ q.z ^ 3 := by simp only [affY]; field_simp
       clear hsum h3
       generalize affX p = x1, affX q = x2, affY p = y1, affY q = y2 at *
-      simp only [affX, affY, toZ_sub, toZ_mul, toZ_two]
+      simp only [affX, affY, toZ_sub, toZ_mul, toZ_ofNat]
       rw [hX1, hX2, hY1, hY2]
       field_simp
       ring
@@ -286,7 +423,7 @@ theorem onCurve_mulBits (fuel k : Nat) {p : Jacobian m} (hp : OnCurve A B p) :
   | zero => exact onCurve_infinity
   | succ fuel ih =>
     have hrest := ih (k / 2) (double_spec ha h2 hp).1
-    simp only [mulBits]
+    simp only [mulBits, Coords.mulBits]
     split
     · exact (add_spec ha h2 hp hrest).1
     · exact hrest
@@ -297,13 +434,13 @@ theorem toPoint_mulBits (fuel k : Nat) {p : Jacobian m} (hp : OnCurve A B p) (hk
   induction fuel generalizing k p with
   | zero =>
     obtain rfl : k = 0 := by simpa using hk
-    simp [mulBits, toPoint_of_z_eq_zero (rfl : (infinity : Jacobian m).z = 0)]
+    simp [mulBits, Coords.mulBits, toPoint_of_z_eq_zero (rfl : (infinity : Jacobian m).z = 0)]
   | succ fuel ih =>
     have hk2 : k / 2 < 2 ^ fuel := by rw [Nat.pow_succ] at hk; omega
     obtain ⟨hd, hdp⟩ := double_spec ha h2 hp
     have hrest := ih (k / 2) hd hk2
     rw [hdp] at hrest
-    simp only [mulBits]
+    simp only [mulBits, Coords.mulBits]
     split
     · -- An odd `k` is `2 (k / 2) + 1`.
       rw [(add_spec ha h2 hp (onCurve_mulBits ha h2 fuel _ hd)).2, hrest]
@@ -323,7 +460,7 @@ theorem onCurve_mulAddAux {p q pq : Jacobian m} (hp : OnCurve A B p) (hq : OnCur
   | zero => exact onCurve_infinity
   | succ fuel ih =>
     have hacc := (double_spec ha h2 (ih (k / 2) (l / 2))).1
-    simp only [mulAddAux]
+    simp only [mulAddAux, Coords.mulAddAux]
     split_ifs
     · exact (add_spec ha h2 hacc hpq).1
     · exact (add_spec ha h2 hacc hp).1
@@ -339,7 +476,7 @@ theorem toPoint_mulAddAux {p q pq : Jacobian m} (hp : OnCurve A B p) (hq : OnCur
   | zero =>
     obtain rfl : k = 0 := by simpa using hk
     obtain rfl : l = 0 := by simpa using hl
-    simp [mulAddAux, toPoint_of_z_eq_zero (rfl : (infinity : Jacobian m).z = 0)]
+    simp [mulAddAux, Coords.mulAddAux, toPoint_of_z_eq_zero (rfl : (infinity : Jacobian m).z = 0)]
   | succ fuel ih =>
     have hk2 : k / 2 < 2 ^ fuel := by rw [Nat.pow_succ] at hk; omega
     have hl2 : l / 2 < 2 ^ fuel := by rw [Nat.pow_succ] at hl; omega
@@ -349,7 +486,7 @@ theorem toPoint_mulAddAux {p q pq : Jacobian m} (hp : OnCurve A B p) (hq : OnCur
     -- `k = 2 (k / 2) + k mod 2`, and likewise for `l`.
     have ek := Nat.div_add_mod k 2
     have el := Nat.div_add_mod l 2
-    simp only [mulAddAux]
+    simp only [mulAddAux, Coords.mulAddAux]
     split_ifs with hk1 hl1 hl1
     · rw [(add_spec ha h2 hacc hpq).2, hdbl, hsum]
       conv_rhs => rw [← ek, ← el, hk1, hl1]

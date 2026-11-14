@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Secp256k1.Curve
 public import EthLib.Cryptography.Proofs.Secp256k1.Field
+public import EthLib.Cryptography.Proofs.Secp256k1.Montgomery
 public import EthLib.Cryptography.Proofs.Jacobian
 public import Mathlib.AlgebraicGeometry.EllipticCurve.Affine.Point
 
@@ -224,16 +225,36 @@ theorem ofJacobian_spec {p : Jacobian Fp.modulus} (hp : Jacobian.OnCurve 0 7 p) 
     simp only [hx, hy]
     rfl
 
+/-- Normalization commutes with reading the Montgomery coordinates. -/
+theorem ofMontgomeryCoords_eq_ofJacobian (p : Jacobian.Coords Fp.Montgomery) :
+    ofMontgomeryCoords p = ofJacobian (Jacobian.ofCoords (p.map Fp.ofMontgomery)) := by
+  change (match p.toAffine Montgomery.inv with
+    | none => infinity
+    | some (x, y) => affine (Fp.ofMontgomery x) (Fp.ofMontgomery y)) =
+    (match (p.map Fp.ofMontgomery).toAffine Fin.inverse with
+    | none => infinity
+    | some (x, y) => affine x y)
+  rw [← Fp.map_toAffine Fp.modulus_prime]
+  cases p.toAffine Montgomery.inv <;> rfl
+
+/-- Montgomery limbs give exactly the same double-and-add result on every input. -/
+theorem mulBits_eq_jacobian (fuel k : Nat) (p : Point) :
+    mulBits fuel k p = ofJacobian (Jacobian.mulBits 0 fuel k (toJacobian p)) := by
+  simp only [mulBits, ofMontgomeryCoords_eq_ofJacobian, Fp.map_mulBits,
+    Fp.ofMontgomery_zero, Fp.map_ofMontgomery_toMontgomery]
+
 theorem isOnCurve_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) :
-    (mulBits fuel k p).isOnCurve = true :=
-  (ofJacobian_spec (Jacobian.onCurve_mulBits toZ_a two_ne_zero' fuel k
+    (mulBits fuel k p).isOnCurve = true := by
+  rw [mulBits_eq_jacobian]
+  exact (ofJacobian_spec (Jacobian.onCurve_mulBits toZ_a two_ne_zero' fuel k
     (toJacobian_spec hp).1)).1
 
 /-- Double and add computes `k P`, when `k < 2^fuel`. -/
 theorem toPoint_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
     toPoint (mulBits fuel k p) = k • toPoint p := by
   have hJ := toJacobian_spec hp
-  rw [mulBits, (ofJacobian_spec (Jacobian.onCurve_mulBits toZ_a two_ne_zero' fuel k hJ.1)).2,
+  rw [mulBits_eq_jacobian,
+    (ofJacobian_spec (Jacobian.onCurve_mulBits toZ_a two_ne_zero' fuel k hJ.1)).2,
     Jacobian.toPoint_mulBits toZ_a two_ne_zero' fuel k hJ.1 hk]
   exact congrArg (k • ·) hJ.2
 
@@ -287,9 +308,18 @@ theorem toPoint_surjective (P : curve.Point) : ∃ p : Point, p.isOnCurve = true
 
 /-! ## Two products with shared doublings -/
 
+/-- Montgomery limbs preserve the simultaneous chain, including forms off the curve. -/
+theorem mulAdd_eq_jacobian (k : Fn) (p : Point) (l : Fn) (q : Point) :
+    mulAdd k p l q =
+      ofJacobian (Jacobian.mulAdd 0 256 k.val (toJacobian p) l.val (toJacobian q)) := by
+  unfold mulAdd
+  rw [ofMontgomeryCoords_eq_ofJacobian, Fp.map_mulAdd]
+  simp only [Fp.ofMontgomery_zero, Fp.map_ofMontgomery_toMontgomery]
+
 theorem isOnCurve_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
-    (hq : q.isOnCurve = true) : (mulAdd k p l q).isOnCurve = true :=
-  (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
+    (hq : q.isOnCurve = true) : (mulAdd k p l q).isOnCurve = true := by
+  rw [mulAdd_eq_jacobian]
+  exact (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
     (toJacobian_spec hp).1 (toJacobian_spec hq).1)).1
 
 /-- The shared chain computes `k P + l Q`, with the values of `k` and `l` below `n`. -/
@@ -298,7 +328,8 @@ theorem toPoint_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
     toPoint (mulAdd k p l q) = k.val • toPoint p + l.val • toPoint q := by
   have hJp := toJacobian_spec hp
   have hJq := toJacobian_spec hq
-  rw [mulAdd, (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
+  rw [mulAdd_eq_jacobian,
+    (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
       hJp.1 hJq.1)).2,
     Jacobian.toPoint_mulAdd toZ_a two_ne_zero' 256 k.val l.val hJp.1 hJq.1
       (Nat.lt_trans k.isLt (by decide)) (Nat.lt_trans l.isLt (by decide))]
