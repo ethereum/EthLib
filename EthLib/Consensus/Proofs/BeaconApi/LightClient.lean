@@ -17,7 +17,7 @@ On a chain whose digests name their forks, the SSZ chunks of updates decode back
 
 On such a chain, bytes that decode are the chunks of the updates they give.
 
-The finality and the optimistic update answers refuse with code 404 exactly when the node knows no update.
+Each latest update answer refuses with code 404 exactly when the node knows no update.
 -/
 
 @[expose] public section
