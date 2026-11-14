@@ -49,6 +49,12 @@ theorem andThenM_of_ne_accept {m : Type → Type} [Monad m] {first : ValidationR
   · exact absurd rfl h
   all_goals rfl
 
+/-- A check that may run fallible next checks accepts exactly when it and the next checks do. -/
+theorem andThenM_eq_ok_accept {ε : Type} {first : ValidationResult}
+    {next : Unit → Except ε ValidationResult} :
+    first.andThenM next = .ok accept ↔ first = accept ∧ next () = .ok accept := by
+  cases first <;> simp [andThenM, pure, Except.pure]
+
 end ValidationResult
 
 /-- An ignore check accepts exactly when its condition holds. -/
