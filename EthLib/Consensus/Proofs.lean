@@ -285,6 +285,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot
 public import EthLib.Consensus.Proofs.Transition.Totality.Supply
 public import EthLib.Consensus.Proofs.Transition.Totality.SupplyBeforeAltair
+public import EthLib.Consensus.Proofs.Transition.Totality.SupplyBlock
 public import EthLib.Consensus.Proofs.Transition.Totality.SyncCommittee
 public import EthLib.Consensus.Proofs.Transition.Totality.UpgradeNext
 public import EthLib.Consensus.Proofs.Transition.Totality.Upgrades
