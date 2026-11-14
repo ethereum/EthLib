@@ -4202,9 +4202,10 @@ The genesis answer takes its time and its root from the genesis state, and its v
 `genesisInfo_version` shows that the genesis state that deposits build holds that version.
 `currentVersion_of_genesis_chainSteps` shows that along a chain from that genesis state, across forks, each state has the version of its fork as its current version.
 It follows from `currentVersion_of_chainSteps`, which shows the same along a chain from any state that has it.
-`forkVersions_mem_forkSchedule_of_genesis_chainSteps` shows that the fork versions of each state of such a chain are in the schedule.
+`forkVersions_mem_forkSchedule_of_genesis_chainSteps` shows that the fork versions of each state of such a chain are an entry of the schedule.
 That genesis state is before Altair (`initializeBeaconStateFromEth1_frame`), and each fork before Altair has the genesis version, which the state holds (`genesisInfo_version`).
-A slot with its epoch processing, or a block, keeps the fork versions at every fork (`advanceSlot_kept`, `frame_processBlock`).
+Its fork versions are the genesis version twice with epoch 0, the first entry of the schedule.
+A slot with its epoch processing, or a block, keeps the fork versions at every fork (`advanceSlot_kept` in `Consensus/Proofs/Transition/TargetSlots.lean`, `frame_processBlock`).
 An upgrade writes the version of the fork that it reaches as the current version (`upgradeFrame_upgradeNext`).
 So each upgrade of such a chain starts from a state that holds the version of its fork, and `forkSchedule_upgrade` applies to it.
 
@@ -4649,8 +4650,9 @@ Points that remain open:
 - The source does not order the entries of the sync committee rewards; EthLib lists them in increasing order of index.
 - The source does not say whether the genesis fork version is the one of the configuration or the one that the genesis state holds; EthLib reads the configuration, which the domain of a deposit uses, so a chain that starts at a later fork reports a version that its genesis state does not hold.
 - `forkSchedule_upgrade` assumes that the state before the upgrade holds the version of its own fork.
-  `currentVersion_of_genesis_chainSteps` covers each state that a chain from the Phase 0 genesis state of deposits reaches.
-  No theorem yet ties the states that a store keeps, from any anchor, to such a chain.
+  `currentVersion_of_chainSteps` shows it for each state of a chain whose first state holds the version of its fork.
+  `currentVersion_of_genesis_chainSteps` discharges that for the genesis state that deposits build, which is before Altair.
+  No theorem yet ties the states that a store keeps to a chain from its anchor, or shows that an anchor holds the version of its fork.
   So the answers of the API are not covered.
 - The format rule of the spec map names hex, numbers and arrays only; EthLib writes the names of the preset and of the configuration as text, as the files do.
 - The source has the `randao` query answer "Invalid state ID or epoch" with code 400, and its example message is "Epoch is out of range for the `randao_mixes` of the state", but it names no range.

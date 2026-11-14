@@ -21,15 +21,11 @@ With fork epochs that do not decrease, the entry with the largest started epoch 
 
 The genesis state that deposits build holds the genesis fork version that the API reports.
 
-Each state of a chain holds the version of its fork, when the first state of the chain does.
+Along a chain, each state holds the version of its fork as its current version, if the first does.
 
-A slot or a block keeps the fork versions, and each upgrade writes the version of the next fork.
+A chain from the genesis state that deposits build meets this.
 
-The genesis state that deposits build is before Altair, so it holds the version of its fork.
-
-So each state of a chain from that genesis state holds the version of its fork.
-
-The fork versions of each such state are an entry of the fork schedule.
+The fork versions of each state of such a chain are an entry of the fork schedule.
 -/
 
 @[expose] public section
@@ -192,27 +188,6 @@ theorem genesisInfo_version {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
 
 /-! ## The version of the fork along a chain -/
 
-/-- The upgrades due at a slot keep a property of the fork and of the fork versions.
-
-It needs each upgrade that is due to keep that property. -/
-private theorem processUpgrades_forkVersions {property : Fork → ForkVersions → Prop}
-    (upgrade : ∀ {pre : ForkedBeaconState preset}
-      {post : {post : ForkedBeaconState preset // pre.fork < post.fork}},
-      upgradeNext config checks pre = .ok post → upgradeDue config pre = true →
-      property pre.fork pre.state.forkVersions →
-      property post.val.fork post.val.state.forkVersions)
-    {forked after : ForkedBeaconState preset}
-    (holds : property forked.fork forked.state.forkVersions)
-    (computed : processUpgrades config checks forked = .ok after) :
-    property after.fork after.state.forkVersions := by
-  fun_induction processUpgrades config checks forked generalizing after with
-  | case1 forked due more =>
-    obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp computed
-    exact more next (upgrade nextOk due holds) rest
-  | case2 forked _ =>
-    cases computed
-    exact holds
-
 /-- One step of a chain keeps a property of the fork and of the fork versions.
 
 It needs each upgrade that is due to keep that property. -/
@@ -229,7 +204,9 @@ private theorem chainStep_forkVersions {property : Fork → ForkVersions → Pro
   | slot computed =>
     -- One slot keeps the fork versions, and the upgrades due at the slot it reaches follow.
     obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
-    refine processUpgrades_forkVersions upgrade ?_ upgraded
+    refine processUpgrades_induction_due
+      (property := fun forked => property forked.fork forked.state.forkVersions)
+      (fun due holds stepOk => upgrade stepOk due holds) ?_ upgraded
     show property forked.fork advanced.forkVersions
     rw [(advanceSlot_kept advancedOk).1]
     exact holds
@@ -270,7 +247,7 @@ private theorem initializeBeaconStateFromEth1_currentVersion {eth1BlockHash : Ha
   obtain ⟨before, -⟩ := initializeBeaconStateFromEth1_frame computed
   exact (genesisInfo_version computed).trans (forkVersion_of_lt_altair before).symm
 
-/-- The fork versions of the genesis state that deposits build are in the fork schedule. -/
+/-- The fork versions of the genesis state that deposits build are an entry of the fork schedule. -/
 private theorem initializeBeaconStateFromEth1_mem_forkSchedule {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {state : BeaconState preset fork}
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
@@ -299,6 +276,8 @@ theorem currentVersion_of_chainSteps {first last : ForkedBeaconState preset}
 Consider a chain from the genesis state that deposits build.
 
 Each state of the chain holds the version of its fork as its current version.
+
+That genesis state is before Altair, since a later fork refuses to build it.
 -/
 theorem currentVersion_of_genesis_chainSteps {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit} {genesis : BeaconState preset fork}
@@ -314,6 +293,8 @@ theorem currentVersion_of_genesis_chainSteps {eth1BlockHash : Hash32} {eth1Times
 Consider a chain from the genesis state that deposits build.
 
 The fork versions of each state of the chain are an entry of the fork schedule.
+
+That genesis state is before Altair, since a later fork refuses to build it.
 -/
 theorem forkVersions_mem_forkSchedule_of_genesis_chainSteps {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {genesis : BeaconState preset fork}
