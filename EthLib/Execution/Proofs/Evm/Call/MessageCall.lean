@@ -39,6 +39,97 @@ open EthLib.Execution.State (TransactionState)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
+/-- A message with no observer unfolds to its run in the monad of errors.
+
+It moves the value, then runs a precompile or the frame of its code, and rolls back on failure. -/
+theorem processMessage_unfold [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
+    (state : TransactionState) (substate : Substate) (meter : Meter)
+    (held : GasMeter.gasHeld meter ≤ message.gas) :
+    processMessage fork message state substate meter held = (
+      let rollback (ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }) :
+          { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } :=
+        ⟨rollbackOnError state ended.val, by
+          unfold rollbackOnError
+          split
+          · dsimp only
+            split
+            · exact Nat.le_trans (LawfulGasMeter.gasHeld_rollback _) ended.property
+            · exact ended.property
+          · exact ended.property⟩
+      Except.map rollback do
+        let state := startState fork message state
+        let transfers := message.shouldTransferValue ∧ message.value ≠ 0
+        let state ←
+          if transfers then
+            (state.moveEther fork message.caller message.currentTarget message.value).mapError
+              EvmError.state
+          else pure state
+        let substate :=
+          if transfers then
+            { substate with
+              logs := pushTransferLog fork substate.logs message.caller message.currentTarget
+                message.value
+              simulatedLogs := pushSimulatedTransferLog fork substate.simulatedLogs
+                message.caller message.currentTarget message.value }
+          else substate
+        let evm : Evm fork Meter := startFrame message state substate meter
+        match precompileAddress fork message with
+        | some address =>
+          if message.disablePrecompiles then
+            pure ⟨{ evm with running := false }, held⟩
+          else
+            match h : runPrecompile fork address evm with
+            | some after => pure ⟨after, Nat.le_trans (gasHeld_runPrecompile_le h) held⟩
+            | none => pure ⟨{ evm with running := false }, held⟩
+        | none =>
+          match h : runFrame (step fork) (step_decreases fork) message.gas
+              (fun caller child _ =>
+                match child.target with
+                | some _ => processMessage fork child caller.state caller.substate.child
+                | none => processCreateMessage fork child caller.state caller.substate.child)
+              evm held with
+          | .error e => throw e
+          | .ok after => pure ⟨after, Nat.le_trans (gasHeld_runFrame_le h) held⟩) := by
+  have key : ∀ (runChild : MessageRunner fork Meter message.gas) (evm : Evm fork Meter)
+      (within : GasMeter.gasHeld evm.gas ≤ message.gas),
+      runFrameWith (fun _ _ => pure ()) (step fork) (step_decreases fork) message.gas runChild
+        evm within =
+      match h : runFrame (step fork) (step_decreases fork) message.gas runChild evm within with
+      | .error e => throw e
+      | .ok after => pure ⟨after, Nat.le_trans (gasHeld_runFrame_le h) within⟩ := by
+    intro runChild evm within
+    symm
+    split <;> rename_i hr <;> unfold runFrame at hr <;>
+      cases hw : runFrameWith (fun _ _ => pure ()) (step fork) (step_decreases fork) message.gas
+        runChild evm within <;>
+      rw [hw] at hr <;>
+      simp only [Functor.map, Except.map, pure, Except.pure, throw,
+        throwThe, MonadExceptOf.throw, reduceCtorEq, Except.ok.injEq, Except.error.injEq] at hr ⊢
+    · exact hr.symm
+    · exact Subtype.ext hr.symm
+  rw [processMessage, processMessageWith]
+  show Except.map _ _ = Except.map _ _
+  congr 1
+  dsimp only
+  cases Except.mapError EvmError.state (TransactionState.moveEther fork
+      (startState fork message state) message.caller message.currentTarget message.value) <;>
+    congr 1 <;> cases precompileAddress fork message <;> first | rfl | exact key _ _ _
+
+/-- A creation with no observer unfolds to its run in the monad of errors.
+
+It prepares the account, runs the message, then deposits the code. -/
+theorem processCreateMessage_unfold [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
+    (state : TransactionState) (substate : Substate) (meter : Meter)
+    (held : GasMeter.gasHeld meter ≤ message.gas) :
+    processCreateMessage fork message state substate meter held = (do
+      let prepared ← prepareCreation fork state message.currentTarget
+      let ⟨evm, used⟩ ← processMessage fork message prepared substate meter held
+      match h : depositCode fork state evm with
+      | .error e => throw e
+      | .ok after => pure ⟨after, Nat.le_trans (gasHeld_depositCode_le h) used⟩) := by
+  rw [processCreateMessage, processCreateMessageWith]
+  cases prepareCreation fork state message.currentTarget <;> rfl
+
 /-- The same writes as a snapshot, apart from the record of the created accounts. -/
 structure SameWrites (tx snapshot : TransactionState) : Prop where
   accountWrites : tx.accountWrites = snapshot.accountWrites
@@ -114,7 +205,7 @@ theorem processMessage_sameWrites_of_error [LawfulGasMeter Meter] {message : Mes
     {used : GasMeter.gasHeld evm.gas ≤ message.gas}
     (h : processMessage fork message state substate = .ok ⟨evm, used⟩)
     (failed : evm.error.isSome) : SameWrites evm.state state := by
-  rw [processMessage] at h
+  rw [processMessage_unfold] at h
   obtain ⟨ended, -, rolled⟩ := Base.map_ok_iff.mp h
   have hval := congrArg Subtype.val rolled
   simp only at hval
@@ -133,7 +224,7 @@ theorem processMessage_state_of_error [LawfulGasMeter Meter] {message : Message 
     (h : processMessage fork message state substate = .ok ⟨evm, used⟩)
     (failed : evm.error.isSome) :
     ∃ ended : TransactionState, evm.state = ended.restoreTxState state := by
-  rw [processMessage] at h
+  rw [processMessage_unfold] at h
   obtain ⟨ended, -, rolled⟩ := Base.map_ok_iff.mp h
   have hval := congrArg Subtype.val rolled
   simp only at hval
@@ -239,7 +330,7 @@ theorem aborts_of_process_eq_error [LawfulGasMeter Meter] (n : Nat) :
     have call : ∀ state substate (meter : Meter) held e,
         processMessage fork message state substate meter held = .error e → e.aborts = true := by
       intro state substate meter held e h
-      rw [processMessage] at h
+      rw [processMessage_unfold] at h
       simp only [Except.map] at h
       split at h
       · rename_i hdo
@@ -256,7 +347,7 @@ theorem aborts_of_process_eq_error [LawfulGasMeter Meter] (n : Nat) :
               | (rename_i hrun; cases hdo; exact aborts_of_runFrame_eq_error runner hrun)
       · cases h
     refine ⟨call, fun state substate meter held e h => ?_⟩
-    rw [processCreateMessage] at h
+    rw [processCreateMessage_unfold] at h
     rcases bind_eq_error h with hp | ⟨prepared, -, h⟩
     · unfold prepareCreation at hp
       split at hp

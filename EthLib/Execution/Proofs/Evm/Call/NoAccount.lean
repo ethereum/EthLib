@@ -107,7 +107,11 @@ private theorem runFrame_ne_noAccount [LawfulGasMeter Meter] {bound : Nat}
     runFrame (step fork) (step_decreases fork) bound runChild evm within ≠
       .error (.state (.noAccount address)) := by
   have T := stepRules_settledLe (fork := fork) (Meter := Meter) |>.and stepRules_messageCode
-  fun_induction runFrame (step fork) (step_decreases fork) bound runChild evm within
+  revert hosts
+  refine runFrame_induct
+    (motive := fun evm _ r => FrameHosts evm → r ≠ .error (.state (.noAccount address)))
+    ?case1 ?case2 ?case3 ?case4 ?case5 ?case6 ?case7 ?case8 evm within
+  all_goals (intros; rename_i hosts)
   case case1 _ _ hstep _ =>
     intro h
     cases h
@@ -203,7 +207,7 @@ theorem processMessage_ne_noAccount_of_gas [LawfulGasMeter Meter] (n : Nat) :
         processMessage fork message state substate meter held ≠
           .error (.state (.noAccount address)) := by
       intro message state substate meter held hn hosts address h
-      rw [processMessage] at h
+      rw [processMessage_unfold] at h
       simp only [Except.map] at h
       split at h
       · rename_i hdo
@@ -240,7 +244,7 @@ theorem processMessage_ne_noAccount_of_gas [LawfulGasMeter Meter] (n : Nat) :
     refine ⟨fun message state substate meter held hn hosts address => call message state substate
       meter held hn (fun hs => settledLe_startState message state _ (hosts hs)) address,
       fun message state substate meter held hn address h => ?_⟩
-    rw [processCreateMessage] at h
+    rw [processCreateMessage_unfold] at h
     rcases Base.bind_eq_error h with hp | ⟨prepared, hprep, h⟩
     · unfold prepareCreation at hp
       split at hp
