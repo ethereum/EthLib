@@ -3187,9 +3187,9 @@ The theorems derive the agreement of justified checkpoints across honest stores 
 `JustifiedPinned` assumes an honest set of a call's voters that pins the justified checkpoints of the call's epoch.
 Its stake exceeds a third of the total of the call's pulled-up head state, plus `margin` and the call's pin reserve `pinReserve`.
 The pinned-checkpoint step pays for cross-state drift with that per-call reserve, carried by the count.
-At the typical non-finality depth of 4 epochs it costs about 1.05–1.41 points of the Byzantine threshold at the last slot of an epoch, and about 0.07 points at mid-epoch, on three mainnet snapshots.
-It stays below 1.5 points through depth 5 and below 5 points through depth 42.
-From depth 6 on, the exit and consolidation queues switch on, at about 0.08 points per extra epoch.
+At the typical non-finality depth of 4 epochs it costs about 1.06–1.42 points of the Byzantine threshold at the last slot of an epoch, and about 0.07–0.09 points at mid-epoch, on three mainnet states.
+Over 60 days of mainnet epochs it costs at most about 1.42 points, and at depth 5 at most about 1.45 points.
+From depth 6 the exit and consolidation queues and the late activations take it past 1.5 points: about 1.75–2.1 points at depth 6 and about 2.4 points at depth 10.
 The bound grows with non-finality depth.
 
 `TargetIncluded` is a network-model premise.
