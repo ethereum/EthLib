@@ -4431,9 +4431,12 @@ It checks the sync duties against the keys of the committees in the JSON of the 
 It gives the state a different block root at each place, and checks each dependent root against it.
 It checks code 400 for an empty request, a repeated PTC index, a PTC epoch before the previous one, and an attester epoch too old for the block roots.
 It never asks for PTC duties at the previous epoch or before the Gloas fork epoch; only `ptcDuties_eq` covers those two.
-Other refusals still have no theorem, among them an index that names no validator, and a sync epoch outside the current and next periods.
-A proposer epoch that the state cannot answer for has none either.
-Nor does a sync or PTC request with an index, to a state before its fork.
+These refusals of the duty answers have no theorem:
+
+- an index that names no validator;
+- a sync epoch outside the current and next periods;
+- a proposer epoch that the state cannot answer for;
+- a sync or PTC request with an index, to a state before its fork.
 
 The answers that hand a validator its data are in `Consensus/BeaconApi/ValidatorData.lean`: attestation data, payload attestation data, aggregates and sync committee contributions.
 `produceAttestationData_head` (`Consensus/Proofs/BeaconApi/ValidatorData.lean`) shows that the attestation data votes for the head of the store, at the requested slot, and that the head is not optimistic.

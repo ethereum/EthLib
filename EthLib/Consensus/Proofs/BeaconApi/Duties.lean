@@ -19,7 +19,7 @@ So is an attester epoch whose seed is gone.
 
 An attester epoch whose dependent root has left the block roots is refused as well.
 
-That needs each requested index to name a validator whose committee assignment succeeds.
+That refusal needs each requested index to name a validator whose committee assignment succeeds.
 
 From Gloas, a PTC request is refused outside the previous epoch to the next one.
 
@@ -187,9 +187,9 @@ theorem attesterDuties_nil {state : BeaconState preset fork} {epoch : Epoch} :
     attesterDuties state epoch [] = .error emptyIndices := by
   simp [attesterDuties, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
-/-- An attester request for an epoch whose seed is gone gets the error of an invalid epoch.
+/-- An attester epoch whose seed is gone gets the error of an invalid epoch, code 400.
 
-It needs the epoch to be too old for the mixes of the state to hold its seed. -/
+It needs at least one index, and an epoch too old for the mixes of the state to hold its seed. -/
 theorem attesterDuties_seed_gone {state : BeaconState preset fork} {epoch : Epoch}
     {index : ValidatorIndex} {rest : List ValidatorIndex}
     (gone : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat ≤
@@ -538,7 +538,9 @@ theorem dependentRoot_eq {state : BeaconState preset fork} {lag : Nat} {epoch : 
   simp [dependentRoot, Nat.not_lt.mpr late, started, positive, Except.mapError, bind,
     Except.bind]
 
-/-- A dependent root that has left the block roots gets the error of an invalid epoch, code 400.
+/-- A dependent root whose slot has left the block roots gives the error of an invalid epoch.
+
+The error has code 400.
 
 Its slot is the one before the start of the epoch a lag before the given one.
 
@@ -603,7 +605,7 @@ theorem dutiesResponse_nil {config : Config} {state : BeaconState preset fork}
     · exact ⟨beforeFork "PTC duties" .glamsterdam, by simp [dutiesResponse, gloas], rfl⟩
 
 /-- The duty lookup of a validator of the state succeeds when its committee assignment does. -/
-private theorem attesterDuty_found {state : BeaconState preset fork} {epoch : Epoch}
+private theorem attesterDuty_exists {state : BeaconState preset fork} {epoch : Epoch}
     {index : ValidatorIndex} (known : ∃ validator, getValidator state index = .ok validator)
     (assigned : ∃ assignment, getCommitteeAssignment state epoch index = .ok assignment) :
     ∃ duty, attesterDuty state epoch index = .ok duty := by
@@ -613,7 +615,9 @@ private theorem attesterDuty_found {state : BeaconState preset fork} {epoch : Ep
     simp [attesterDuty, requestedValidator, validatorOk, assignedOk, Except.mapError, bind,
       Except.bind, pure, Except.pure]
 
-/-- An attester request whose dependent root is gone gets the error of an invalid epoch, code 400.
+/-- An attester epoch whose dependent root has left the block roots gets an invalid epoch error.
+
+The error has code 400.
 
 It needs at least one index, each naming a validator of the state.
 
@@ -634,7 +638,7 @@ theorem dutiesResponse_attester_too_old {config : Config} {state : BeaconState p
       .error (invalidEpoch epoch) := by
   rcases checkDutyEpoch_cases state epoch with checked | refused
   · obtain ⟨found, mapped⟩ := mapM_exists_ok (f := attesterDuty state epoch)
-      fun member inside => attesterDuty_found (known member inside) (assigned member inside)
+      fun member inside => attesterDuty_exists (known member inside) (assigned member inside)
     simp [dutiesResponse, attesterDuties, checked, mapped, dependentRoot_too_old started old,
       bind, Except.bind, pure, Except.pure]
   · simp [dutiesResponse, attesterDuties, refused, bind, Except.bind]
