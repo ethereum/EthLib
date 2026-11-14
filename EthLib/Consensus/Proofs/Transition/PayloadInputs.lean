@@ -370,9 +370,8 @@ theorem payloadInputs_applyExpectedWithdrawals {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (computed : applyExpectedWithdrawals state capella expected = .ok after) :
     PayloadInputs state after := by
-  apply applyExpectedWithdrawals_of_setters PayloadInputs PayloadInputs.refl
-    (fun one two => one.trans two) (fun step => payloadInputs_applyWithdrawal step)
-    (computed := computed)
+  apply applyExpectedWithdrawals_of_setters PayloadInputs PayloadInputs.refl PayloadInputs.trans
+    payloadInputs_applyWithdrawal (computed := computed)
   all_goals exact fun _ _ => ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- The withdrawal step changes none of the inputs of a payload. -/

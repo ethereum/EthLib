@@ -249,61 +249,9 @@ private theorem loadKept_applyExpectedWithdrawals {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (computed : applyExpectedWithdrawals state capella expected = .ok after) :
     LoadKept state after := by
-  unfold applyExpectedWithdrawals at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := computed
-  have one : LoadKept state applied := by
-    unfold applyWithdrawals at appliedOk
-    rw [← Array.foldlM_toList] at appliedOk
-    exact LoadKept.foldlM (fun _ _ _ ok => loadKept_applyWithdrawal ok) appliedOk
-  have indexedStep : LoadKept applied indexed := by
-    unfold updateNextWithdrawalIndex at indexedOk
-    split at indexedOk
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at indexedOk
-      obtain ⟨_, _, rfl⟩ := indexedOk
-      exact LoadKept.of_validators
-    · cases indexedOk
-      exact LoadKept.refl _
-  have queued : ∀ kept : BeaconState preset fork,
-      LoadKept kept (if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals kept gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else kept) := by
-    intro kept
-    split <;> exact LoadKept.of_validators
-  have partials : ∀ kept : BeaconState preset fork,
-      LoadKept kept (if electra : .pectra ≤ fork then
-        updatePendingPartialWithdrawals kept electra expected.processedPartialWithdrawalsCount
-      else kept) := by
-    intro kept
-    split <;> exact LoadKept.of_validators
-  have swept : ∀ kept : BeaconState preset fork,
-      (if gloas : .glamsterdam ≤ fork then
-        updateNextWithdrawalBuilderIndex kept gloas expected.processedBuildersSweepCount
-      else pure kept) = .ok finished → LoadKept kept finished := by
-    intro kept ok
-    split at ok
-    · unfold updateNextWithdrawalBuilderIndex at ok
-      dsimp only at ok
-      split at ok
-      · cases ok
-        exact LoadKept.of_validators
-      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-        obtain ⟨_, _, rfl⟩ := ok
-        exact LoadKept.of_validators
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ LoadKept.refl _
-  have lastStep : LoadKept finished after := by
-    unfold updateNextWithdrawalValidatorIndex at last
-    simp only [bind_ok_iff] at last
-    obtain ⟨_, _, last⟩ := last
-    split at last
-    · cases last
-    · cases last
-      exact LoadKept.of_validators
-  exact one.trans <| indexedStep.trans <| (queued _).trans <| (partials _).trans <|
-    (swept _ sweptOk).trans lastStep
+  apply applyExpectedWithdrawals_of_setters LoadKept LoadKept.refl LoadKept.trans
+    loadKept_applyWithdrawal (computed := computed)
+  all_goals exact fun _ _ => LoadKept.of_validators
 
 /-- The withdrawals of a block keep the count. -/
 private theorem loadKept_processWithdrawals {capella : .shapella ≤ fork}

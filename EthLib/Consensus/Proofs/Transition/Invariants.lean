@@ -1232,7 +1232,13 @@ theorem updateNextWithdrawalBuilderIndex {gloas : .glamsterdam ≤ fork} {count 
 
 end EpochFrameLaws
 
-/-- A relation preserved by withdrawals and each bookkeeping setter holds across their traversal. -/
+/-- A reflexive, transitive relation holds across the expected withdrawals.
+
+It must hold across each single withdrawal.
+
+It must also hold across each write of a withdrawal index or a withdrawal queue.
+
+It must also hold across each write of the expected withdrawals of the payload. -/
 theorem applyExpectedWithdrawals_of_setters
     (R : BeaconState preset fork → BeaconState preset fork → Prop)
     (refl : ∀ s, R s s)

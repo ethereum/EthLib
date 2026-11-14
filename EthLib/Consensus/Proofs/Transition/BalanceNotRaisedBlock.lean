@@ -1119,60 +1119,11 @@ private theorem fixed_applyExpectedWithdrawals {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (computed : applyExpectedWithdrawals state capella expected = .ok after) :
     BlockFixed state after := by
-  unfold applyExpectedWithdrawals at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := computed
-  have one : BlockFixed state applied := by
-    unfold applyWithdrawals at appliedOk
-    rw [← Array.foldlM_toList] at appliedOk
-    refine BlockFixed.foldlM (fun _ _ _ ok => ?_) appliedOk
-    rw [applyWithdrawal_eq ok]
-    exact BlockFixed.of_eq
-  have two : BlockFixed applied indexed := by
-    unfold updateNextWithdrawalIndex at indexedOk
-    split at indexedOk
-    · obtain ⟨_, _, built⟩ := bind_ok_iff.mp indexedOk
-      cases built
-      exact BlockFixed.of_eq
-    · cases indexedOk
-      exact BlockFixed.refl _
-  have three : ∀ kept : BeaconState preset fork,
-      (if gloas : .glamsterdam ≤ fork then
-        updateNextWithdrawalBuilderIndex kept gloas expected.processedBuildersSweepCount
-      else pure kept) = .ok finished → BlockFixed kept finished := by
-    intro kept ok
-    split at ok
-    · unfold updateNextWithdrawalBuilderIndex at ok
-      dsimp only at ok
-      split at ok
-      · cases ok
-        exact BlockFixed.refl _
-      · obtain ⟨_, _, built⟩ := bind_ok_iff.mp ok
-        cases built
-        exact BlockFixed.of_eq
-    · cases ok
-      exact BlockFixed.refl _
-  have queued : BlockFixed indexed (if electra : .pectra ≤ fork then
-      updatePendingPartialWithdrawals (if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals indexed gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else indexed) electra expected.processedPartialWithdrawalsCount
-    else if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals indexed gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else indexed) := by
-    split <;> split <;> exact BlockFixed.of_eq
-  have four : BlockFixed finished after := by
-    unfold updateNextWithdrawalValidatorIndex at last
-    obtain ⟨_, _, last⟩ := bind_ok_iff.mp last
-    dsimp only at last
-    split at last
-    · cases last
-    · cases last
-      exact BlockFixed.of_eq
-  exact one.trans (two.trans (queued.trans ((three _ sweptOk).trans four)))
+  apply applyExpectedWithdrawals_of_setters BlockFixed BlockFixed.refl
+    (fun one two => one.trans two) (fun step => by
+      rw [applyWithdrawal_eq step]
+      exact BlockFixed.of_eq) (computed := computed)
+  all_goals exact fun _ _ => BlockFixed.of_eq
 
 /-- The withdrawal step keeps the fields. -/
 private theorem fixed_processWithdrawals {capella : .shapella ≤ fork}
