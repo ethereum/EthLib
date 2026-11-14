@@ -84,6 +84,8 @@ A type that is not yet active at the fork of the call is an invalid parameter.
 
 So is a field that the kind of the request cannot carry, or a chain other than the node's.
 
+The blobs, their commitments and their proofs are not such fields: a call never reads them.
+
 So is a creation of type 3 or 4.
 
 The other checks of a transaction before its block do not run.
@@ -166,7 +168,13 @@ def callWord (what : String) (n : Nat) : Except RpcError U256 :=
 
 Each fee field that the request leaves out is 0 here, and the fee cap is `maxFee`.
 
-A field that its kind does not allow, or another chain, fails with the code of invalid parameters.
+A fee, an access list, blob hashes, a blob fee cap or authorizations that its kind lacks fail.
+
+So does a chain other than `chainId`, with the code of invalid parameters.
+
+The blobs, their commitments and their proofs are never checked, and leave the result unchanged.
+
+The source ties no field of the request to its kind, so these checks are choices of EthLib.
 -/
 def GenericTransaction.toTransaction (tx : GenericTransaction) (chainId : UInt64)
     (nonce gas maxFee : Nat) : Except RpcError Transaction := do
