@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Rpc.Methods
 public import EthLib.Execution.Proofs.Rpc.Raw
 public import EthLib.Execution.Proofs.Blocks.Receipt
@@ -450,7 +451,7 @@ private theorem processTransaction_buyGas {fork : Fork} {env : Evm.BlockEnvironm
     {block : State.BlockState} {included : Included} {tx : Transaction}
     {out : TransactionOutput} (h : processTransaction env block included tx = .ok out) :
     ∃ bought, buyGas env (.ofBlock block) included.sender tx = .ok bought := by
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   split at h
   · cases h
   split at h

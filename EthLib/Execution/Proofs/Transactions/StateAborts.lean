@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.StateAborts
 public import EthLib.Execution.Proofs.Transactions.NoncesFit
 import EthLib.Execution.Proofs.Evm.Call.ContractAddress
@@ -121,7 +122,7 @@ theorem processMessageCall_eq_error {chainId : Nat} {message : Message fork}
     (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
       .error e) :
     ∃ error, e = .state error := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   rcases hprep : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid
     with ⟨e', read⟩ | first
   · rw [hprep] at h
@@ -153,7 +154,7 @@ private theorem runTransaction_eq_error {env : BlockEnvironment fork} {block : B
     (hfit : (TransactionState.ofBlock block).NoncesFit)
     (hsender : ((TransactionState.ofBlock block).getAccount included.sender).nonce < MAX_NONCE)
     (h : runTransaction Meter env block included tx = .error e) : ∃ error, e = .state error := by
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   rcases Base.bind_eq_error h with h | ⟨target, -, h⟩
   · unfold messageTarget at h
     split at h
@@ -214,7 +215,7 @@ theorem processTransaction_eq_error {env : BlockEnvironment fork} {block : Block
     rw [← hnonce]
     exact (validateTransaction_ok hvalid).2.2.1
   have hhegota : ¬.hegota ≤ fork := Nat.not_le_of_lt before
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   simp only [hhegota, ↓reduceIte] at h
   split at h
   · exact runTransaction_eq_error hfit hsender h

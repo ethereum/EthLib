@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.Nonce
 public import EthLib.Execution.Proofs.Transactions.Authorization
 public import EthLib.Execution.Proofs.Transactions.Process
@@ -275,7 +276,7 @@ theorem processMessageCall_of_error [LawfulGasMeter Meter] {chainId : Nat}
       .ok output) (failed : output.error.isSome) :
     output.accountsToDelete = ∅ ∧ output.touchedAccounts = ∅ ∧
       SameOutside (auths.filterMap recoverAuthority) state output.state := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h
@@ -347,7 +348,7 @@ theorem runTransaction_sameOutside_of_error {Meter : Type} [GasMeter Meter]
     (h : runTransaction Meter env block included tx = .ok out) (failed : out.error.isSome) :
     SameOutside (included.sender :: env.coinbase :: tx.authorizations.filterMap recoverAuthority)
       (State.TransactionState.ofBlock block) out.state := by
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   obtain ⟨target, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨bought, hbought, h⟩ := bind_ok_iff.mp h
   obtain ⟨message, -, h⟩ := bind_ok_iff.mp h
@@ -379,7 +380,7 @@ theorem processTransaction_sameOutside_of_error {env : BlockEnvironment fork}
     State.TransactionState.SameOutside
       (included.sender :: env.coinbase :: tx.authorizations.filterMap recoverAuthority)
       (State.TransactionState.ofBlock block) out.state := by
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   split at h
   · cases h
   split at h
@@ -627,7 +628,7 @@ theorem processMessageCall_reads_of_error [LawfulGasMeter Meter] {chainId : Nat}
     · simp only [‹last.error.isSome = true›, ↓reduceIte] at hp ⊢
       exact getCode_restoreTxState hp codeHash
     · exact absurd herr' ‹_›
-  unfold processMessageCall at hout
+  rw [processMessageCall_unfold] at hout
   split at hout
   · rename_i e read hprep
     split at hout
@@ -878,7 +879,7 @@ theorem runTransaction_values_of_error {Meter : Type} [GasMeter Meter] [LawfulGa
     {block : State.BlockState} (h : runTransaction Meter env block included tx = .ok out)
     (failed : out.error.isSome = true) : FailedRun Meter tx env block included out := by
   dsimp only [FailedRun]
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   obtain ⟨target, htarget, h⟩ := bind_ok_iff.mp h
   obtain ⟨bought, hbought, h⟩ := bind_ok_iff.mp h
   obtain ⟨message, hmessage, h⟩ := bind_ok_iff.mp h
@@ -938,7 +939,7 @@ theorem runTransaction_values_of_error {Meter : Type} [GasMeter Meter] [LawfulGa
       · rw [hstate]
         exact sameOutside_withReadsOf _ _
       · have hzero : output.refund = 0 := by
-          unfold processMessageCall at houtput
+          rw [processMessageCall_unfold] at houtput
           rw [hprep] at houtput
           cases he : e.aborts <;> simp [he] at houtput <;> cases houtput <;> rfl
         exact hzero
@@ -948,7 +949,7 @@ theorem runTransaction_values_of_error {Meter : Type} [GasMeter Meter] [LawfulGa
         rw [hmsg_target.1, hto] at hprep
         refine .inl ⟨.inl rfl, (hprep.1.trans hsame).mono (by simp),
           fun codeHash => (hcode codeHash).trans (hprep.2 codeHash), ?_⟩
-        unfold processMessageCall at houtput
+        rw [processMessageCall_unfold] at houtput
         rw [hfirst, hmsg_target.1, hto] at houtput
         obtain ⟨⟨evm, _⟩, -, houtput⟩ := bind_ok_iff.mp houtput
         cases houtput
@@ -966,7 +967,7 @@ theorem runTransaction_values_of_error {Meter : Type} [GasMeter Meter] [LawfulGa
         rw [hmsg_target.2] at hdone
         refine .inr ⟨first, done, rfl, hfirst, hdone, (hfirst_same.trans hsame).mono (by simp),
           fun codeHash => (hcode codeHash).trans (hfirst_code codeHash), ?_⟩
-        unfold processMessageCall at houtput
+        rw [processMessageCall_unfold] at houtput
         rw [hfirst, hmsg_target.1, hto] at houtput
         obtain ⟨⟨evm, _⟩, -, houtput⟩ := bind_ok_iff.mp houtput
         cases houtput
@@ -1115,7 +1116,7 @@ private theorem failedRun_authority_of_starts {Meter : Type} [GasMeter Meter]
             rw [← hto]
             exact (target_transactionMessage hmessage).1
           have habort := aborts_of_prepareFirstFrame_of_lt_glamsterdam hlt htarget hprep
-          simp only [processMessageCall, transactionFirstFrame] at houtput hprep
+          simp only [processMessageCall_unfold, transactionFirstFrame] at houtput hprep
           rw [hprep] at houtput
           simp [habort] at houtput
         · exact absurd ⟨target, bought, message, e, read, htarget0, hbought, hmessage, hprep⟩ hnot

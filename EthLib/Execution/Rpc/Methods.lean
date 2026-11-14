@@ -11,6 +11,7 @@ public import EthLib.Execution.Rpc.Filter
 public import EthLib.Execution.Rpc.Proof
 public import EthLib.Execution.Rpc.Request
 public import EthLib.Execution.Rpc.Simulate.Blocks
+public import EthLib.Execution.Rpc.TraceView
 public import EthLib.Execution.Rpc.TransactionInfo
 
 /-!
@@ -252,6 +253,34 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
   | "debug_getRawReceipts" => oneParam params fun b => do
     let block ← readParam (blockNumberOrTagOrHash "block") b
     listJson (dataJson ·.toList) <$> v.rawReceipts block
+  | "debug_traceTransaction" => match params with
+    | [h] | [h, .null] => do
+      transactionTraceJson <$> v.traceTransactionByHash {}
+        (← readParam (hash32 "transaction hash") h)
+    | [h, c] => do
+      let config ← readParam traceConfig c
+      transactionTraceJson <$> v.traceTransactionByHash config
+        (← readParam (hash32 "transaction hash") h)
+    | [] => .error (RpcError.invalidParams "missing parameter")
+    | _ => .error (RpcError.invalidParams "the method takes two parameters")
+  | "debug_traceBlockByNumber" => match params with
+    | [b] | [b, .null] => do
+      blockTraceJson <$> v.traceBlockByParam {} (← readParam (blockNumberOrTag "block") b)
+    | [b, c] => do
+      let config ← readParam traceConfig c
+      blockTraceJson <$> v.traceBlockByParam config (← readParam (blockNumberOrTag "block") b)
+    | [] => .error (RpcError.invalidParams "missing parameter")
+    | _ => .error (RpcError.invalidParams "the method takes two parameters")
+  | "debug_traceBlockByHash" => match params with
+    | [h] | [h, .null] => do
+      let block := BlockParam.hash (← readParam (hash32 "block hash") h) false
+      blockTraceJson <$> v.traceBlockByParam {} block
+    | [h, c] => do
+      let config ← readParam traceConfig c
+      let block := BlockParam.hash (← readParam (hash32 "block hash") h) false
+      blockTraceJson <$> v.traceBlockByParam config block
+    | [] => .error (RpcError.invalidParams "missing parameter")
+    | _ => .error (RpcError.invalidParams "the method takes two parameters")
   | _ => .error (methodNotFound.toRpcError (some (.str method)))
 
 /-- The response of the view to a request. -/

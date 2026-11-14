@@ -48,6 +48,9 @@ RESULT_SCHEMAS: Final[dict[str, rpc.Schema | None]] = {
     "debug_getRawBlock": "bytes",
     "debug_getRawTransaction": "bytes",
     "debug_getRawReceipts": None,
+    "debug_traceTransaction": None,
+    "debug_traceBlockByNumber": None,
+    "debug_traceBlockByHash": None,
 }
 
 
@@ -72,10 +75,104 @@ def _check_access_list_result(result: object) -> None:
         rpc.read_param("uint", result["gasUsed"])
 
 
+# The fields of a StructLog in `opcode-tracer.yaml` of the source.
+_STRUCT_LOG_REQUIRED: Final = frozenset({"pc", "op", "gas", "gasCost", "depth"})
+_STRUCT_LOG_OPTIONAL: Final = frozenset(
+    {"error", "refund", "stack", "memory", "returnData", "storage"}
+)
+
+
+def _check_count(name: str, value: object, *, minimum: int = 0) -> None:
+    """Raise unless the value is a JSON integer of at least `minimum`."""
+    if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+        raise ValueError(f"{name}: not an integer of at least {minimum}")
+
+
+def _check_struct_log(entry: object) -> None:
+    """Raise unless the entry fits the StructLog schema of the source."""
+    if not isinstance(entry, dict):
+        raise ValueError("structLogs: an entry is not an object")
+    if not _STRUCT_LOG_REQUIRED <= set(entry) <= _STRUCT_LOG_REQUIRED | _STRUCT_LOG_OPTIONAL:
+        raise ValueError("structLogs: an entry lacks a required field or has an unknown one")
+    for name in ("pc", "gas", "gasCost", "refund"):
+        if name in entry:
+            _check_count(name, entry[name])
+    _check_count("depth", entry["depth"], minimum=1)
+    if not isinstance(entry["op"], str):
+        raise ValueError("op: not a string")
+    # The source forbids an error that is null or empty.
+    if "error" in entry and (not isinstance(entry["error"], str) or not entry["error"]):
+        raise ValueError("error: not a non-empty string")
+    for word in entry.get("stack", []):
+        rpc.read_param("uint256", word)
+    for chunk in entry.get("memory", []):
+        rpc.read_param("bytes32", chunk)
+    if "returnData" in entry:
+        rpc.read_param("bytes", entry["returnData"])
+    if "storage" in entry:
+        if not isinstance(entry["storage"], dict):
+            raise ValueError("storage: not an object")
+        for key, value in entry["storage"].items():
+            rpc.read_param("bytes32", key)
+            rpc.read_param("bytes32", value)
+
+
+def _check_trace_result(result: object) -> None:
+    """Raise unless the result fits the OpcodeTransactionTrace schema of the source."""
+    if not isinstance(result, dict) or set(result) != {
+        "gas",
+        "failed",
+        "returnValue",
+        "structLogs",
+    }:
+        raise ValueError("result: not an object of gas, failed, returnValue and structLogs")
+    _check_count("gas", result["gas"])
+    if not isinstance(result["failed"], bool):
+        raise ValueError("failed: not a boolean")
+    rpc.read_param("bytes", result["returnValue"])
+    if not isinstance(result["structLogs"], list):
+        raise ValueError("structLogs: not an array")
+    for entry in result["structLogs"]:
+        _check_struct_log(entry)
+
+
+def _check_block_trace_result(result: object) -> None:
+    """Raise unless the result is an array of OpcodeBlockTransactionTrace of the source."""
+    if not isinstance(result, list):
+        raise ValueError("result: not an array")
+    for item in result:
+        if not isinstance(item, dict) or set(item) != {"txHash", "result"}:
+            raise ValueError("result: an entry is not an object of txHash and result")
+        rpc.read_param("hash32", item["txHash"])
+        _check_trace_result(item["result"])
+
+
 # The methods whose result is an object, with a check of its schema.
 RESULT_CHECKS: Final[dict[str, Callable[[object], None]]] = {
     "eth_createAccessList": _check_access_list_result,
+    "debug_traceTransaction": _check_trace_result,
+    "debug_traceBlockByNumber": _check_block_trace_result,
+    "debug_traceBlockByHash": _check_block_trace_result,
 }
+
+# The trace methods, whose speconly fixtures EthLib still matches value for value.
+TRACE_METHODS: Final = frozenset(
+    {
+        "debug_traceTransaction",
+        "debug_traceBlockByNumber",
+        "debug_traceBlockByHash",
+    }
+)
+
+
+def _without_refund(value: object) -> object:
+    """The value with every `refund` field of its objects left out."""
+    if isinstance(value, dict):
+        return {key: _without_refund(item) for key, item in value.items() if key != "refund"}
+    if isinstance(value, list):
+        return [_without_refund(item) for item in value]
+    return value
+
 
 # Every fixture of a method that the view serves.
 SERVED: Final = sorted(
@@ -130,6 +227,10 @@ def test_fixture(path: Path, answers: dict[str, dict[str, Any]]) -> None:
         assert schema is not None or check is not None or not fixture.speconly
         if not fixture.speconly:
             assert got["result"] == expected["result"]
+        elif fixture.method in TRACE_METHODS:
+            # The trace gives the refund counter at every step, as the source recommends.
+            # The fixtures leave it out; every other field is compared.
+            assert _without_refund(got["result"]) == expected["result"]
 
 
 def test_chain_links() -> None:
@@ -167,6 +268,127 @@ def _call(method: str, params: list[object]) -> Any:
     answer = _answer(json.dumps(request))
     assert set(answer) == {"jsonrpc", "id", "result"}
     return answer["result"]
+
+
+# The creation that block 1 holds, which the trace fixtures name.
+_TRACED: Final = "0xc1d605c6612a5fe84dc95810030bfe5b1d327652b381bc695e28f50d13b2b09e"
+
+
+def test_trace_limit_keeps_the_first_entries() -> None:
+    """A limit keeps the first entries of the full trace, and the rest of the result."""
+    full = _call("debug_traceTransaction", [_TRACED])
+    cut = _call("debug_traceTransaction", [_TRACED, {"limit": 2}])
+    assert len(full["structLogs"]) > 2
+    assert cut == {**full, "structLogs": full["structLogs"][:2]}
+    # Every entry gives its refund counter, which the source recommends even when it is zero.
+    assert all("refund" in entry for entry in full["structLogs"])
+
+
+@pytest.mark.parametrize("config", [{"limit": 0}, {"tracer": ""}], ids=["limit-0", "tracer-empty"])
+def test_trace_default_config(config: dict[str, object]) -> None:
+    """A limit of 0 and an empty tracer name give the trace with no configuration."""
+    assert _call("debug_traceTransaction", [_TRACED, config]) == _call(
+        "debug_traceTransaction", [_TRACED]
+    )
+
+
+def test_trace_flags() -> None:
+    """The stack flag leaves out the stack, the memory flag adds the memory, and nothing else."""
+    full = _call("debug_traceTransaction", [_TRACED])
+    assert any("stack" in entry for entry in full["structLogs"])
+    bare = _call("debug_traceTransaction", [_TRACED, {"disableStack": True}])
+    assert bare["structLogs"] == [
+        {key: value for key, value in entry.items() if key != "stack"}
+        for entry in full["structLogs"]
+    ]
+    with_memory = _call("debug_traceTransaction", [_TRACED, {"enableMemory": True}])
+    assert any("memory" in entry for entry in with_memory["structLogs"])
+    assert [
+        {key: value for key, value in entry.items() if key != "memory"}
+        for entry in with_memory["structLogs"]
+    ] == full["structLogs"]
+
+
+@pytest.mark.parametrize(
+    ("config", "data"),
+    [
+        ({"tracer": "callTracer"}, "tracer: named tracers are not supported"),
+        ({"limit": -1}, "limit: negative"),
+        ({"limit": 1.5}, "limit: not an integer"),
+        ({"disableStack": 1}, "disableStack: not a boolean"),
+    ],
+    ids=["named-tracer", "negative-limit", "fractional-limit", "flag-not-boolean"],
+)
+def test_trace_bad_config(config: dict[str, object], data: str) -> None:
+    """A named tracer and a malformed configuration are invalid parameters."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": "debug_traceTransaction"}
+    answer = _error(json.dumps({**request, "params": [_TRACED, config]}))
+    assert answer["error"] == {"code": -32602, "message": "Invalid params", "data": data}
+
+
+def _entry(**fields: object) -> dict[str, object]:
+    """A valid StructLog entry, with some fields replaced."""
+    return {"pc": 0, "op": "STOP", "gas": 0, "gasCost": 0, "depth": 1} | fields
+
+
+def _trace(*entries: dict[str, object]) -> dict[str, object]:
+    """A valid OpcodeTransactionTrace with the given entries."""
+    return {"gas": 21000, "failed": False, "returnValue": "0x", "structLogs": list(entries)}
+
+
+_HASH: Final = "0x" + "00" * 32
+
+# Results that the checks of the trace schema reject, each with the full message of its check.
+BAD_TRACE_RESULTS: Final = [
+    pytest.param(
+        _trace() | {"extra": 1},
+        ValueError,
+        "result: not an object of gas, failed, returnValue and structLogs",
+        id="extra-field",
+    ),
+    pytest.param(_trace() | {"failed": 0}, ValueError, "failed: not a boolean", id="failed"),
+    pytest.param(
+        _trace(_entry(depth=0)), ValueError, "depth: not an integer of at least 1", id="depth-0"
+    ),
+    pytest.param(
+        _trace(_entry(gas=True)), ValueError, "gas: not an integer of at least 0", id="gas-bool"
+    ),
+    pytest.param(
+        _trace({"pc": 0}),
+        ValueError,
+        "structLogs: an entry lacks a required field or has an unknown one",
+        id="missing-field",
+    ),
+    pytest.param(
+        _trace(_entry(error="")), ValueError, "error: not a non-empty string", id="empty-error"
+    ),
+    pytest.param(
+        _trace(_entry(storage=[])), ValueError, "storage: not an object", id="storage-array"
+    ),
+    pytest.param(
+        _trace(_entry(memory=["0x00"])),
+        rpc.RpcError,
+        "bytes32: 1 bytes, not 32",
+        id="short-memory-word",
+    ),
+]
+
+
+@pytest.mark.parametrize(("result", "error", "message"), BAD_TRACE_RESULTS)
+def test_trace_result_check_rejects(result: object, error: type[Exception], message: str) -> None:
+    """The check of the trace schema rejects a result that breaks one of its rules."""
+    _check_trace_result(_trace())
+    with raises(error, message):
+        _check_trace_result(result)
+
+
+def test_block_trace_result_check_rejects() -> None:
+    """The check of a block trace rejects an entry without its hash or with a bad hash."""
+    _check_block_trace_result([{"txHash": _HASH, "result": _trace()}])
+    with raises(ValueError, "result: an entry is not an object of txHash and result"):
+        _check_block_trace_result([{"result": _trace()}])
+    with raises(rpc.RpcError, "hash32: 1 bytes, not 32"):
+        _check_block_trace_result([{"txHash": "0x00", "result": _trace()}])
 
 
 def test_transaction_at_index() -> None:

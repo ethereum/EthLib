@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Rpc.Call
 import ToMathlib.Data.ByteArray
 import EthLib.Execution.Proofs.State.Frame
@@ -247,7 +248,8 @@ theorem runTransaction_eq_transactionStart {fork : Fork} (Meter : Type) [GasMete
       let state ← (deleteAccounts fork state output).mapError .state
       return ⟨state, gasUsed, blockGas, output.logs, output.simulatedLogs, output.error,
         output.output, gasBeforeRefund⟩) := by
-  unfold runTransaction transactionStart
+  rw [runTransaction_unfold]
+  unfold transactionStart
   simp only [bind_assoc, pure_bind]
 
 namespace ChainView

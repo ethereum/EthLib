@@ -23,6 +23,7 @@ public import EthLib.Execution.Proofs.Rpc.Receipt
 public import EthLib.Execution.Proofs.Rpc.Filter
 public import EthLib.Execution.Proofs.Rpc.Fees
 public import EthLib.Execution.Proofs.Rpc.Submit
+public import EthLib.Execution.Proofs.Rpc.Trace
 public import EthLib.Execution.Proofs.Rpc.Transaction
 public import EthLib.Execution.Proofs.Rpc.TransactionInfo
 

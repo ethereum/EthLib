@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.Funded
 public import EthLib.Execution.Proofs.Transactions.Process
 import EthLib.Execution.Proofs.Transactions.Inclusion
@@ -310,7 +311,7 @@ theorem processMessageCall_ne_insufficientBalance [LawfulGasMeter Meter]
     processMessageCall (Meter := Meter) chainId message state substate auths paid ≠
       .error (.state (.insufficientBalance address)) := by
   intro h
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   rcases hprep : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid
     with ⟨e, read⟩ | first
   · rw [hprep] at h
@@ -342,7 +343,7 @@ private theorem runTransaction_ne_insufficientBalance [LawfulGasMeter Meter]
     runTransaction Meter env block included tx ≠
       .error (.state (.insufficientBalance address)) := by
   intro h
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   rcases Base.bind_eq_error h with h | ⟨target, -, h⟩
   · unfold messageTarget at h
     split at h
@@ -413,7 +414,7 @@ theorem processTransaction_ne_insufficientBalance {fork : Fork} {env : BlockEnvi
   have funds := checkInclusion_no_overdraw checked
   obtain ⟨-, -, -, hBlob, -, -, -, hPrice, -⟩ := checkInclusion_ok checked
   rw [hPrice, hBlob] at funds
-  unfold processTransaction
+  rw [processTransaction_unfold]
   split
   · nofun
   split

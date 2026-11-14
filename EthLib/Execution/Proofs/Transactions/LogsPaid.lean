@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.LogsPaid
 public import EthLib.Execution.Proofs.Blocks.Receipt
 public import EthLib.Execution.Proofs.Transactions.Replay
@@ -80,7 +81,7 @@ theorem processMessageCall_logsWeight {Meter : Type} [GasMeter Meter]
     (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
       .ok output) :
     4 * logsWeight output.logs.toList ≤ message.gas + transferAllowance fork := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h
@@ -116,7 +117,7 @@ private theorem runTransaction_logsWeight {Meter : Type} [GasMeter Meter] [Lawfu
     {env : BlockEnvironment fork} {block : State.BlockState} {included : Included}
     {out : TransactionOutput} (h : runTransaction Meter env block included tx = .ok out) :
     4 * logsWeight out.logs.toList ≤ tx.gas.toNat + transferAllowance fork := by
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   obtain ⟨target, htarget, h⟩ := bind_ok_iff.mp h
   obtain ⟨bought, hbought, h⟩ := bind_ok_iff.mp h
   obtain ⟨message, hmessage, h⟩ := bind_ok_iff.mp h
@@ -140,7 +141,7 @@ theorem processTransaction_logsWeight {env : BlockEnvironment fork} {block : Sta
   by_cases hhegota : .hegota ≤ fork
   · rw [processTransaction_of_hegota_le hhegota] at h
     cases h
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   simp only [hhegota, ↓reduceIte] at h
   split at h
   · refine runTransaction_logsWeight (fun meter => ?_) h
