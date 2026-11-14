@@ -1,8 +1,6 @@
 module
 
 public import EthLib.Cryptography.Secp256k1.Field
-public import EthLib.Cryptography.Proofs.Secp256k1.Montgomery
-public import EthLib.Cryptography.Proofs.Secp256k1.ScalarMontgomery
 public import EthLib.Cryptography.Proofs.Pratt
 public import EthLib.Cryptography.Proofs.Inverse
 public import Mathlib.FieldTheory.Finite.Basic
@@ -21,13 +19,27 @@ An element of `Fp` crosses over unchanged.
 
 - Both moduli are prime, by Pratt certificates that the kernel checks.
 - Square and multiply computes the power.
-- The Fermat inverse is the field inverse.
+- The Euclidean inverse is the field inverse.
 - The square root succeeds exactly on the squares, and then returns a root.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Secp256k1
+
+open Fin.CommRing in
+/-- Square and multiply computes `a^e`, when `e < 2^fuel`. -/
+theorem Fin.powBits_eq_pow {m : Nat} [NeZero m] (fuel : Nat) (a : Fin m) (e : Nat) (he : e < 2 ^ fuel) :
+    Fin.powBits fuel a e = a ^ e := by
+  induction fuel generalizing a e with
+  | zero =>
+    obtain rfl : e = 0 := by simpa using he
+    simp [Fin.powBits]
+  | succ fuel ih =>
+    have h2 : e / 2 < 2 ^ fuel := by rw [Nat.pow_succ] at he; omega
+    -- `a^e = a^(e mod 2) * (a^2)^(e / 2)`.
+    rw [Fin.powBits, ih _ _ h2, ← pow_two, ← pow_mul]
+    split <;> [rw [← pow_succ']; skip] <;> congr 1 <;> omega
 
 namespace Fp
 
@@ -196,12 +208,11 @@ def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
 
 /-- `pow` computes `a^e`, for an exponent below `2^256`. -/
 theorem toZMod_pow (a : Fp) (e : Nat) (he : e < 2 ^ 256) : toZMod (a.pow e) = toZMod a ^ e :=
-  (Fp.pow_eq_powBits a e).trans (Fin.powBits_eq_pow 256 a e he)
+  Fin.powBits_eq_pow 256 a e he
 
-/-- The Fermat inverse is the field inverse, and both send `0` to `0`. -/
-@[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ := by
-  rw [inv_eq_inverse modulus_prime]
-  exact Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
+/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
+@[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ :=
+  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
 
 /-- `p = 3 mod 4`, which gives the square root its closed form. -/
 theorem modulus_mod_four : modulus % 4 = 3 := by decide
@@ -406,10 +417,9 @@ def toZMod : Fn ≃+* ZMod modulus := RingEquiv.refl _
 theorem toZMod_pow (a : Fn) (e : Nat) (he : e < 2 ^ 256) : toZMod (a.pow e) = toZMod a ^ e :=
   Fin.powBits_eq_pow 256 a e he
 
-/-- The Fermat inverse is the field inverse, and both send `0` to `0`. -/
-@[simp] theorem toZMod_inv (a : Fn) : toZMod a.inv = (toZMod a)⁻¹ := by
-  rw [inv_eq_inverse modulus_prime]
-  exact Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
+/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
+@[simp] theorem toZMod_inv (a : Fn) : toZMod a.inv = (toZMod a)⁻¹ :=
+  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
 
 end Fn
 

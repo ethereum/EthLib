@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Inverse
-public import EthLib.Cryptography.Montgomery
+public import EthLib.Cryptography.Montgomery.Fin
 
 /-!
 # `Secp256k1.Field`
@@ -17,9 +17,9 @@ Each field is `Fin` of its modulus, so every element is below the modulus by con
 
 Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod the modulus.
 
-Exponentiation in `Fp` and scalar multiplication keep intermediate values in Montgomery limbs.
+An inverse comes from the extended Euclidean algorithm.
 
-An inverse is a power, by Fermat's little theorem.
+Point multiplication holds the coordinates of `Fp` in Montgomery limbs.
 
 A square root is a power too, because `p = 3 mod 4`.
 
@@ -65,9 +65,9 @@ def Fin.powBits {m : Nat} [NeZero m] : Nat → Fin m → Nat → Fin m
 
 namespace Fp
 
-/-- The base modulus of SEC 2 v2 §2.4.1, with radix `R = 2^256`.
+/-- The Montgomery constants of `p`, with radix `R = 2^256`.
 
-Each constant is checked against its defining equation. -/
+Each one derives from `p` and `R`, and is checked against its defining equation. -/
 @[inline] def params : Montgomery.Modulus 8 where
   p := modulus
   pLimbs := ⟨0xfffffc2f, 0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
@@ -86,27 +86,13 @@ Each constant is checked against its defining equation. -/
 /-- A base-field element held in eight Montgomery limbs. -/
 abbrev Montgomery := EthLib.Cryptography.Montgomery params
 
-instance (k : Nat) : OfNat Montgomery k := ⟨Montgomery.ofNat k⟩
-
-/-- Convert a coordinate to Montgomery form once before a chain of curve operations. -/
-@[no_expose, inline] def toMontgomery (a : Fp) : Montgomery := Montgomery.ofNat a.val
-
-/-- Read a Montgomery coordinate as the same element of `Fin p`.
-
-The conversion laws keep proof checking from expanding symbolic limb arithmetic. -/
-@[no_expose, inline] def ofMontgomery (a : Montgomery) : Fp :=
-  ⟨a.toNat, by
-    rw [EthLib.Cryptography.Montgomery.toNat_eq_val]
-    exact (EthLib.Cryptography.Montgomery.mulLimbs params a.limbs a.lt _).lt⟩
-
 /-- `a^e`, for an exponent below `2^256`. -/
-def pow (a : Fp) (e : Nat) : Fp :=
-  ofMontgomery (Montgomery.powLimbs (toMontgomery a) (Montgomery.Limbs.ofNat e))
+def pow (a : Fp) (e : Nat) : Fp := Fin.powBits 256 a e
 
-/-- The inverse of `a`, as `a^(p - 2)` by Fermat's little theorem.
+/-- The inverse of `a`, by the extended Euclidean algorithm.
 
 It sends `0` to `0`. -/
-def inv (a : Fp) : Fp := ofMontgomery (Montgomery.inv (toMontgomery a))
+def inv (a : Fp) : Fp := Fin.inverse a
 
 /-- A square root of `a`, or `none` when `a` is not a square.
 
@@ -123,46 +109,13 @@ end Fp
 
 namespace Fn
 
-/-- The scalar modulus of SEC 2 v2 §2.4.1, with radix `R = 2^256`.
-
-Each constant is checked against its defining equation. -/
-@[inline] def params : Montgomery.Modulus 8 where
-  p := modulus
-  pLimbs := ⟨0xd0364141, 0xbfd25e8c, 0xaf48a03b, 0xbaaedce6, 0xfffffffe, 0xffffffff,
-    0xffffffff, 0xffffffff⟩
-  r1 := ⟨0x2fc9bebf, 0x402da173, 0x50b75fc4, 0x45512319, 0x1, 0x0, 0x0, 0x0⟩
-  r2 := ⟨0x67d7d140, 0x896cf214, 0x0e7cf878, 0x741496c2, 0x5bcd07c6, 0xe697f5e4,
-    0x81c69bc5, 0x9d671cd5⟩
-  pm2 := ⟨0xd036413f, 0xbfd25e8c, 0xaf48a03b, 0xbaaedce6, 0xfffffffe, 0xffffffff,
-    0xffffffff, 0xffffffff⟩
-  pinv := 0x5588b13f
-  pLimbs_spec := by decide
-  pinv_spec := by decide
-  r1_spec := by decide
-  r2_spec := by decide
-  pm2_spec := by decide
-
-/-- A scalar-field element held in eight Montgomery limbs. -/
-abbrev Montgomery := EthLib.Cryptography.Montgomery params
-
-/-- Convert a scalar to Montgomery form before inversion. -/
-@[no_expose, inline] def toMontgomery (a : Fn) : Montgomery := Montgomery.ofNat a.val
-
-/-- Read a Montgomery scalar as the same element of `Fin n`.
-
-The conversion laws keep proof checking from expanding symbolic limb arithmetic. -/
-@[no_expose, inline] def ofMontgomery (a : Montgomery) : Fn :=
-  ⟨a.toNat, by
-    rw [EthLib.Cryptography.Montgomery.toNat_eq_val]
-    exact (EthLib.Cryptography.Montgomery.mulLimbs params a.limbs a.lt _).lt⟩
-
 /-- `a^e`, for an exponent below `2^256`. -/
 def pow (a : Fn) (e : Nat) : Fn := Fin.powBits 256 a e
 
-/-- The inverse of `a`, as `a^(n - 2)` in Montgomery form, by Fermat's little theorem.
+/-- The inverse of `a`, by the extended Euclidean algorithm.
 
 It sends `0` to `0`. -/
-def inv (a : Fn) : Fn := ofMontgomery (Montgomery.inv (toMontgomery a))
+def inv (a : Fn) : Fn := Fin.inverse a
 
 end Fn
 

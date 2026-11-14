@@ -92,24 +92,33 @@ def toJacobian : Point → Jacobian Fp.modulus
   | infinity => .infinity
   | affine x y => .ofAffine x y
 
-/-- The point of a Jacobian form. -/
-def ofJacobian (p : Jacobian Fp.modulus) : Point :=
-  match p.toAffine with
-  | none => infinity
-  | some (x, y) => affine x y
+/-- The point of Jacobian coordinates in a representation of `Fp`.
 
-/-- Normalize a Montgomery form before reading its affine coordinates. -/
-def ofMontgomeryCoords (p : Jacobian.Coords Fp.Montgomery) : Point :=
-  match p.toAffine Montgomery.inv with
+It takes the inverse of that representation, and the map that reads an element back. -/
+def ofCoords {F : Type} [OfNat F 0] [OfNat F 1] [Add F] [Sub F] [Mul F] [DecidableEq F]
+    (inverse : F → F) (read : F → Fp) (p : Jacobian.Coords F) : Point :=
+  match p.toAffine inverse with
   | none => infinity
-  | some (x, y) => affine (Fp.ofMontgomery x) (Fp.ofMontgomery y)
+  | some (x, y) => affine (read x) (read y)
+
+/-- The point of a Jacobian form. -/
+def ofJacobian (p : Jacobian Fp.modulus) : Point := ofCoords Fin.inverse id p.toCoords
+
+/-- The Jacobian form of a point, on Montgomery limbs. -/
+def toMontgomeryCoords (p : Point) : Jacobian.Coords Fp.Montgomery :=
+  (toJacobian p).toCoords.map Montgomery.ofFin
+
+/-- The point of a Jacobian form on Montgomery limbs. -/
+def ofMontgomeryCoords (p : Jacobian.Coords Fp.Montgomery) : Point :=
+  ofCoords Montgomery.inv Montgomery.toFin p
 
 /-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`, low bit first.
 
-The steps run in Jacobian coordinates, so only the conversion back takes an inverse. -/
+The steps run in Jacobian coordinates on Montgomery limbs.
+
+Only the conversion back takes an inverse. -/
 def mulBits (fuel k : Nat) (p : Point) : Point :=
-  ofMontgomeryCoords (Jacobian.Coords.mulBits 0 fuel k
-    ((toJacobian p).toCoords.map Fp.toMontgomery))
+  ofMontgomeryCoords (Jacobian.Coords.mulBits 0 fuel k (toMontgomeryCoords p))
 
 /-- `k P`, the scalar multiplication of SEC 1 v2 §2.2.1, for a scalar mod `n`.
 
@@ -120,9 +129,8 @@ def mul (k : Fn) (p : Point) : Point := mulBits 256 k.val p
 
 On points of the curve it is the sum of the two products. -/
 def mulAdd (k : Fn) (p : Point) (l : Fn) (q : Point) : Point :=
-  ofMontgomeryCoords (Jacobian.Coords.mulAdd 0 256 k.val
-    ((toJacobian p).toCoords.map Fp.toMontgomery)
-    l.val ((toJacobian q).toCoords.map Fp.toMontgomery))
+  ofMontgomeryCoords
+    (Jacobian.Coords.mulAdd 0 256 k.val (toMontgomeryCoords p) l.val (toMontgomeryCoords q))
 
 end Point
 
