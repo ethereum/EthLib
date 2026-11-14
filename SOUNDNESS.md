@@ -4585,14 +4585,16 @@ It also assumes that the schedule puts the forks from Capella to Heze in order.
 It assumes a lawful state type and a preset whose sizes in the block and the state are nonzero.
 The answer itself refuses a block whose fork is not the fork that the schedule gives at its slot.
 
-`bootstrapFor_valid_of_reachable` (`Consensus/Proofs/BeaconApi/StateQueries.lean`) shows the same for a store that the handlers reach from any anchor, with no other assumption on the store.
+`bootstrapFor_valid_of_reachable` (`Consensus/Proofs/BeaconApi/LightClientBootstrapReachable.lean`) shows the same for a store that the handlers reach from an anchor that the fork choice accepts, with no other assumption on the store.
 It keeps the assumptions on the schedule, the state type and the preset.
 Its proof reads `Store.Reachable.root`, which shows that each known block has its own root as its key.
 The proof also reads `stateRoot_blockStates`, which shows that the state kept under that root has the state root of the block.
 
 The handlers of `Store.Reachable` leave out `onInvalidPayload`, which runs when the execution layer finds a payload invalid.
-From Heze they also leave out `Store.recordValidatedInclusionListSatisfaction`, which runs when a payload turns valid.
-After either step, only `bootstrapFor_valid` applies, with its assumptions on the store.
+From Heze they also leave out `Store.recordValidatedInclusionListSatisfaction`, which records whether a payload that turns valid satisfies its inclusion lists.
+The first step removes a block only together with its state, and the second touches neither the blocks nor the states.
+So both keep the two facts that the proof reads.
+No theorem states that yet, so after either step only `bootstrapFor_valid` applies, with its assumptions on the store.
 
 `bootstrapFor_error` shows that each refusal of the bootstrap is the error with code 404 that names the root, and `bootstrapFor_error_code` gives the code.
 The file `apis/beacon/light_client/bootstrap.yaml` of release `v5.0.0-beta.0` lists that code when "`LightClientBootstrap` instance cannot be produced for the given block root".
