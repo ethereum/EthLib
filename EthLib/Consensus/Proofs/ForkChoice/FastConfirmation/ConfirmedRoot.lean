@@ -39,7 +39,7 @@ In the latter case the ancestry Boolean test also passes.
 
 Away from an epoch boundary, the applicable no-conflict Boolean test passes.
 
-The applicable unrealized justification is recent.
+Away from an epoch boundary, the applicable unrealized justification is also recent.
 
 These are successful checks, not conclusions of actual justification or execution safety. -/
 def Checked (store : Store preset fork) (config : Config) (fcr : FastConfirmationStore)
@@ -478,7 +478,23 @@ theorem findLatestConfirmedDescendant_checked {fcr : FastConfirmationStore}
     root = start ∨ store.Checked config fcr head start root := by
   exact (findLatestConfirmedDescendant_walk found).imp id (fun h => h.2 recent)
 
-/-- The descendant is the start or the end of a one-confirmed walk from that start. -/
+/-- The latest confirmed descendant is the start, or a one-confirmed root of the walk to the head.
+
+Each root of the walk before it is one-confirmed too.
+
+The walk goes from the head back to the start, without the start, with the oldest root first.
+
+The votes are those of the state of the observed justified checkpoint.
+
+The theorem does not record the other checks of the two walks of the rule.
+
+It leaves out the checks on the epochs of the start and of the walked blocks.
+
+It also leaves out the check on the head of the slot before.
+
+It also leaves out the checks that a voting source or an unrealized justification is recent.
+
+It also leaves out the two checks on the justification of the target of the current epoch. -/
 theorem findLatestConfirmedDescendant_eq_or {fcr : FastConfirmationStore}
     {head start root : Root}
     (found : store.findLatestConfirmedDescendant config fcr head start = .ok root) :
@@ -737,7 +753,21 @@ theorem getLatestConfirmed_checked_start {fcr : FastConfirmationStore} {head roo
   exact ⟨slot, start, slotOk, startCase,
     result.imp id (fun h => ⟨h.1, h.2.1⟩)⟩
 
-/-- The latest confirmed block is a selected start or its latest confirmed descendant. -/
+/-- The latest confirmed block is a block to start from, or its latest confirmed descendant.
+
+The rule starts from the stored block, the finalized block or the observed justified block.
+
+It keeps the stored block only when that block is in the chain of the head.
+
+At the first slot of an epoch, the chain of the stored block must also still be safe.
+
+It takes the observed justified block only at the first slot of an epoch.
+
+That block is then in the epoch before the current one.
+
+Its checkpoint is then the unrealized justification of the head.
+
+The theorem does not record the other checks on the epochs and the slots of the blocks. -/
 theorem getLatestConfirmed_eq_or {fcr : FastConfirmationStore} {head root : Root}
     (latest : store.getLatestConfirmed config fcr head = .ok root) :
     ∃ slot start, store.getCurrentSlot config = .ok slot ∧
@@ -907,7 +937,27 @@ theorem onFastConfirmation_checked {fcr after : FastConfirmationStore}
     obtain rfl : b = t := Except.ok.inj (bOk.symm.trans tOk)
     exact UInt64.lt_irrefl _ lt
 
-/-- The stored root is a selected start or the end of its one-confirmed walk. -/
+/-- The fast confirmation of a slot stores a block to start from, or a confirmed block after it.
+
+The rule starts from the block stored before, the finalized block or the observed justified block.
+
+It keeps the block stored before only when that block is in the chain of the head of the store.
+
+At the first slot of an epoch, the chain of that block must also still be safe.
+
+It takes the observed justified block only at the first slot of an epoch.
+
+That block is then in the epoch before the current one.
+
+Its checkpoint is then the unrealized justification of the head.
+
+A later block is a root of the walk from the start to the head.
+
+That block and each root before it in the walk are one-confirmed.
+
+The observed justified checkpoint is that of the store after the call, as the rule reads it.
+
+The theorem does not record the other checks of the rule. -/
 theorem onFastConfirmation_confirmedRoot {fcr after : FastConfirmationStore}
     (confirmed : store.onFastConfirmation config fcr = .ok after) :
     ∃ head slot start, store.getHead config = .ok head ∧
