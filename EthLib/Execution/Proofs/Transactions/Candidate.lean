@@ -247,6 +247,7 @@ theorem noNewCandidate_buyGas {env : BlockEnvironment fork} {block : BlockState}
     (hinv : NoNewCandidate block state) (h : buyGas env state sender tx = .ok state') :
     NoNewCandidate block state' := by
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, h1, h2⟩ := bind_ok_iff.mp h
   have vmid : NoNewCandidate block mid :=
     hinv.modifyState (fun _ hupd hn _ => by cases hupd; exact absurd hn (Nat.succ_ne_zero _)) h1
@@ -265,6 +266,7 @@ private theorem noNewCandidate_settleGas {env : BlockEnvironment fork} {block : 
     (h : settleGas env state sender tx gasLeft refundCounter = .ok (state', used)) :
     NoNewCandidate block state' := by
   unfold settleGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, h1, h⟩ := bind_ok_iff.mp h
   obtain ⟨paid, h2, h⟩ := bind_ok_iff.mp h
   cases h

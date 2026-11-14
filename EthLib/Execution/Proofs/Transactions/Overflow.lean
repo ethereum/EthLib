@@ -100,6 +100,7 @@ private theorem buyGas_ne_balanceOverflow (env : BlockEnvironment fork)
     buyGas env state sender tx ≠ .error (.balanceOverflow other) := by
   intro h
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, hmid⟩ := State.TransactionState.incrementNonce_isOk fork state sender
   simp only [hmid, bind, Except.bind] at h
   refine modifyState_ne_balanceOverflow (fun _ h => ?_) h
@@ -115,6 +116,7 @@ private theorem settleGas_ne_balanceOverflow {env : BlockEnvironment fork}
     settleGas env state sender tx gasLeft refund ≠ .error (.balanceOverflow other) := by
   intro he
   unfold settleGas at he
+  rw [paidBaseFee_empty] at he
   rcases Base.bind_eq_error he with he | ⟨mid, hmid, he⟩
   · exact creditEther_ne_balanceOverflow (by omega) _ he
   have hsupply := (supply_creditEther hmid).1

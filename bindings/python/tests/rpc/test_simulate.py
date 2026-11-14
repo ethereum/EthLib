@@ -16,13 +16,6 @@ from .chain import FIXTURES, genesis_state, read_fixture, replay_chain
 # The vendored fixtures of the method.
 SIMULATE: Final = sorted((FIXTURES / "eth_simulateV1").glob("*.io"))
 
-# The fixtures that EthLib does not yet match, with the reason.
-DIVERGENT: Final = {
-    "ethSimulate-basefee-too-low-without-validation-38012": (
-        "without validation, a fee cap below an overridden base fee is rejected with -38012"
-    ),
-}
-
 # The answer of a request that passes every check and runs its blocks.
 RESULT: Final = None
 
@@ -56,19 +49,9 @@ def _request(payload: Mapping[str, Any], *block: str) -> str:
 def test_every_fixture_is_vendored() -> None:
     """The suite holds every fixture of the method at the pinned commit."""
     assert len(SIMULATE) == 95
-    assert set(DIVERGENT) <= {path.stem for path in SIMULATE}
 
 
-@pytest.mark.parametrize(
-    "path",
-    [
-        pytest.param(path, marks=pytest.mark.xfail(reason=DIVERGENT[path.stem], strict=True))
-        if path.stem in DIVERGENT
-        else path
-        for path in SIMULATE
-    ],
-    ids=lambda path: path.stem,
-)
+@pytest.mark.parametrize("path", SIMULATE, ids=lambda path: path.stem)
 def test_fixture(path: Path) -> None:
     """The view answers the code or the blocks of the fixture; the source fixes no message."""
     (exchange,) = read_fixture(path).exchanges
