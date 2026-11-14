@@ -165,27 +165,32 @@ theorem storeTargetCheckpointState_kept {checks : SignatureChecks} {target : Che
           rfl))) absent
     · exact found
 
-/-- After an attestation, a latest vote is one from before or the vote of the attestation.
-
-The vote of the attestation then has the facts behind it, in the store after it. -/
-theorem onAttestation_latestMessages_cases {checks : SignatureChecks}
+/-- A newly recorded vote has its origin and the same successful indexed signature read. -/
+theorem onAttestation_latestMessages_read_cases {checks : SignatureChecks}
     {attestation : Attestation preset fork} {isFromBlock : Bool}
     {validator : ValidatorIndex} {latest : LatestMessage fork}
     (attested : store.onAttestation config checks attestation isFromBlock = .ok after)
     (found : after.latestMessages[validator]? = some latest) :
     store.latestMessages[validator]? = some latest ∨
       (latest = LatestMessage.ofAttestation attestation ∧
-        after.VoteOrigin config validator attestation) := by
+        after.VoteOrigin config validator attestation ∧
+        ∃ stored targetState indexed,
+          store.storeTargetCheckpointState config checks attestation.data.target = .ok stored ∧
+          stored.checkpointState attestation.data.target = .ok targetState ∧
+          getIndexedAttestation targetState attestation = .ok indexed ∧
+          isValidIndexedAttestation config checks targetState indexed = .ok true ∧
+          validator ∈ indexed.attestingIndices.data.toList) := by
   have frame := onAttestation_frame attested
   have clock := (onAttestation_sameClock attested).getCurrentSlot (config := config)
   unfold onAttestation at attested
   simp only [bind_ok_iff] at attested
   obtain ⟨passed, valid, stored, storing, targetState, stateFound, checked, committeesOk,
-    indexed, indexedOk, isValid, _, attested⟩ := attested
+    indexed, indexedOk, isValid, validIndexed, attested⟩ := attested
   cases passed
   cases checked
   split at attested
-  · simp only [pure, Except.pure, Except.ok.injEq] at attested
+  · rename_i validTrue
+    simp only [pure, Except.pure, Except.ok.injEq] at attested
     subst attested
     obtain ⟨keptMessages, -⟩ := storeTargetCheckpointState_kept storing
     rcases foldl_recordVote_cases _ _ found with old | ⟨voter, rfl⟩
@@ -197,14 +202,32 @@ theorem onAttestation_latestMessages_cases {checks : SignatureChecks}
       intro root block known
       rw [frame.2.1]
       exact known
-    refine .inr ⟨rfl, ?_, epoch, getCheckpointBlock_of_blocks blocks root, ?_, ?_⟩
+    refine .inr ⟨rfl, ⟨?_, epoch, getCheckpointBlock_of_blocks blocks root, ?_, ?_⟩,
+      stored, targetState, indexed, storing, stateFound, mapError_ok_iff.mp indexedOk,
+      ?_, voter⟩
     · obtain ⟨block, known, le⟩ := voted
       exact ⟨block, blocks known, le⟩
     · exact ⟨targetState, indexed, checkpointState_ok_iff.mp stateFound,
         mapError_ok_iff.mp committeesOk, mapError_ok_iff.mp indexedOk, voter⟩
     · rw [clock]
       exact past
+    · simpa [validTrue] using mapError_ok_iff.mp validIndexed
   · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested
+
+/-- After an attestation, a latest vote is one from before or the vote of the attestation.
+
+The vote of the attestation then has the facts behind it, in the store after it. -/
+theorem onAttestation_latestMessages_cases {checks : SignatureChecks}
+    {attestation : Attestation preset fork} {isFromBlock : Bool}
+    {validator : ValidatorIndex} {latest : LatestMessage fork}
+    (attested : store.onAttestation config checks attestation isFromBlock = .ok after)
+    (found : after.latestMessages[validator]? = some latest) :
+    store.latestMessages[validator]? = some latest ∨
+      (latest = LatestMessage.ofAttestation attestation ∧
+        after.VoteOrigin config validator attestation) := by
+  rcases onAttestation_latestMessages_read_cases attested found with old | ⟨same, origin, _⟩
+  · exact .inl old
+  · exact .inr ⟨same, origin⟩
 
 /-- An attestation keeps the state of each checkpoint of the store. -/
 theorem onAttestation_checkpointStates_of_found {checks : SignatureChecks}

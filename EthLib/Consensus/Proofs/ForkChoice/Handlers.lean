@@ -1335,6 +1335,24 @@ theorem onBlock_sameClock {checks : SignatureChecks} {sources : BlockSources pre
     · rw [third.1, updateCheckpoints_timeMs, second.1, first.1]
     · rw [third.2, updateCheckpoints_genesisTimeMs, second.2, first.2]
 
+/-- A property established by the block and kept by its votes holds after both. -/
+theorem onBlockWithVotes_establishes {P : Store preset fork → Prop} {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
+    {after : Store preset fork}
+    (block : ∀ {s'}, store.onBlock config checks sources signed = .ok s' → P s')
+    (attestation : ∀ {s s'} (a : Attestation preset fork), P s →
+      s.onAttestation config checks a true = .ok s' → P s')
+    (slashing : ∀ {s s'} (sl : AttesterSlashing preset fork), P s →
+      s.onAttesterSlashing config checks sl = .ok s' → P s')
+    (added : store.onBlockWithVotes config checks sources signed = .ok after) :
+    P after := by
+  unfold onBlockWithVotes at added
+  simp only [bind_ok_iff, ← Array.foldlM_toList] at added
+  obtain ⟨blocked, blockOk, voted, attested, slashed⟩ := added
+  have votes := foldlM_ok_invariant P (fun _ a _ h step => attestation a h step)
+    (block blockOk) attested
+  exact foldlM_ok_invariant P (fun _ sl _ h step => slashing sl h step) votes slashed
+
 /-- A property that a block, each attestation from it and each slashing in it keep is kept.
 
 It is kept by the block with its votes. -/
@@ -1347,13 +1365,8 @@ theorem onBlockWithVotes_preserves {P : Store preset fork → Prop} {checks : Si
     (slashing : ∀ {s s'} (sl : AttesterSlashing preset fork), P s →
       s.onAttesterSlashing config checks sl = .ok s' → P s')
     (holds : P store) (added : store.onBlockWithVotes config checks sources signed = .ok after) :
-    P after := by
-  unfold onBlockWithVotes at added
-  simp only [bind_ok_iff, ← Array.foldlM_toList] at added
-  obtain ⟨blocked, blockOk, voted, attested, slashed⟩ := added
-  have votes := foldlM_ok_invariant P (fun _ a _ h step => attestation a h step)
-    (block holds blockOk) attested
-  exact foldlM_ok_invariant P (fun _ sl _ h step => slashing sl h step) votes slashed
+    P after :=
+  onBlockWithVotes_establishes (block holds) attestation slashing added
 
 /-- A block and the votes that it carries keep each checkpoint, or move it to a greater epoch. -/
 theorem onBlockWithVotes_checkpointsAdvance {checks : SignatureChecks}

@@ -31,7 +31,7 @@ variable {ν κ : Type*} [DecidableEq ν] {config : Config} {checks : SignatureC
 
 /-- A held block is initial or has a signed transition witness in the holder's view. -/
 theorem Execution.exists_signed_of_blocks
-    (e : Execution (forkChoice config checks sources signed sends) J) {u : ν} (_honest : u ∈ J)
+    (e : Execution (forkChoice config checks sources signed sends) J) {u : ν}
     {n : ℕ} {root : Root} {block : BeaconBlock preset fork}
     (found : ((e.world n).state u).blocks[root]? = some block) :
     ((e.start u).blocks[root]? = some block ∧
@@ -157,17 +157,14 @@ theorem Execution.blockStates_eq (e : Execution (forkChoice config checks source
     (leftFound : ((e.world n).state u).blockStates[root]? = some left)
     (rightFound : ((e.world k).state w).blockStates[root]? = some right) :
     left = right := by
-  have reachable {v : ν} (start : e.start v = anchor) (i : ℕ) :
+  have reachable {v : ν} (honest : v ∈ J) (start : e.start v = anchor) (i : ℕ) :
       Store.Reachable config anchorState anchorBlock ((e.world i).state v) := by
-    induction i with
-    | zero =>
-      change Store.Reachable config anchorState anchorBlock (e.start v)
-      rw [start]
-      exact .anchor anchored
-    | succ i ih =>
-      rcases e.state_succ i v with same | ⟨_, moved⟩
-      · exact same ▸ ih
-      · exact moved.reachable ih
+    have initial : Store.Reachable config anchorState anchorBlock (e.start v) :=
+      start ▸ Store.Reachable.anchor anchored
+    exact e.state_induction
+      (I := fun w s => w = v → Store.Reachable config anchorState anchorBlock s)
+      (fun w _ same => same ▸ initial)
+      (fun _ _ _ _ _ _ reached moved same => moved.reachable (reached same)) i v honest rfl
   have keep {v : ν} {r : Root} {b : BeaconBlock preset fork}
       (known : (e.start v).blocks[r]? = some b) (i : ℕ) :
       ((e.world i).state v).blockStates[r]? = (e.start v).blockStates[r]? := by
@@ -220,8 +217,8 @@ theorem Execution.blockStates_eq (e : Execution (forkChoice config checks source
   generalize bound : left.slot.toNat = height
   induction height using Nat.strong_induction_on generalizing root left right with
   | h height ih =>
-    obtain ⟨lb, lbFound⟩ := (reachable startFirst n).known_of_blockState leftFound
-    obtain ⟨rb, rbFound⟩ := (reachable startSecond k).known_of_blockState rightFound
+    obtain ⟨lb, lbFound⟩ := (reachable first startFirst n).known_of_blockState leftFound
+    obtain ⟨rb, rbFound⟩ := (reachable second startSecond k).known_of_blockState rightFound
     have message := sameBlocks root lb rb lbFound rbFound
     subst rb
     cases initial : anchor.blocks[root]? with
@@ -233,10 +230,10 @@ theorem Execution.blockStates_eq (e : Execution (forkChoice config checks source
       exact Option.some.inj (leftFound.symm.trans (leftKept.trans
         (rightKept.symm.trans rightFound)))
     | none =>
-      rcases e.exists_signed_of_blocks first lbFound with old | lnew
+      rcases e.exists_signed_of_blocks lbFound with old | lnew
       · rw [startFirst, initial] at old
         cases old.1
-      rcases e.exists_signed_of_blocks second rbFound with old | rnew
+      rcases e.exists_signed_of_blocks rbFound with old | rnew
       · rw [startSecond, initial] at old
         cases old.1
       obtain ⟨lsb, lp, ls, _, lmsg, _, lpFound, lt, lsFound⟩ := lnew
@@ -471,24 +468,21 @@ theorem Execution.blocks_of_partiallySynchronous {GST Δ last : ℕ}
       (msg ▸ bf) late upToDate hash validated
     have fixed := upToDate.2 after (.block memK added)
     have inserted : after.blocks[r]? = some sb.message := by
-      unfold Store.onBlockWithVotes at added
-      simp only [bind_ok_iff, ← Array.foldlM_toList] at added
-      obtain ⟨blocked, blockedOk, voted, attested, slashed⟩ := added
-      have bKnown : blocked.blocks[r]? = some sb.message := by
-        by_cases known : ((e.world k).state u).blocks.contains r
-        · have same := Store.onBlock_known (config := config) (checks := checks)
-            (sources := sources) hash known
-          rw [same] at blockedOk
-          cases blockedOk
-          obtain ⟨existing, existingFound⟩ := Option.isSome_iff_exists.mp
-            (by rwa [Std.TreeMap.contains_eq_isSome_getElem?] at known)
-          have eq := oneBlock v honest u receiver n k nBound bounded r b existing bf existingFound
-          simpa [msg, eq] using existingFound
-        · exact (Store.onBlock_new hash known blockedOk).2.1
-      have votes := foldlM_ok_invariant (fun s => s.blocks[r]? = some sb.message)
-        (fun _ _ _ h ok => (Store.onAttestation_frame ok).2.1 ▸ h) bKnown attested
-      exact foldlM_ok_invariant (fun s => s.blocks[r]? = some sb.message)
-        (fun _ _ _ h ok => (Store.onAttesterSlashing_frame ok).2.1 ▸ h) votes slashed
+      apply Store.onBlockWithVotes_establishes
+        (attestation := fun _ h step => (Store.onAttestation_frame step).2.1 ▸ h)
+        (slashing := fun _ h step => (Store.onAttesterSlashing_frame step).2.1 ▸ h)
+        (added := added)
+      intro blocked blockedOk
+      by_cases known : ((e.world k).state u).blocks.contains r
+      · have same := Store.onBlock_known (config := config) (checks := checks)
+          (sources := sources) hash known
+        rw [same] at blockedOk
+        cases blockedOk
+        obtain ⟨existing, existingFound⟩ := Option.isSome_iff_exists.mp
+          (by rwa [Std.TreeMap.contains_eq_isSome_getElem?] at known)
+        have eq := oneBlock v honest u receiver n k nBound bounded r b existing bf existingFound
+        simpa [msg, eq] using existingFound
+      · exact (Store.onBlock_new hash known blockedOk).2.1
     simpa [fixed, msg] using inserted
   obtain ⟨⟨b, bf, bk⟩, agree⟩ := Store.getAncestor_of_admission
     (oneBlock v honest u receiver n k nBound bounded) base admission walk

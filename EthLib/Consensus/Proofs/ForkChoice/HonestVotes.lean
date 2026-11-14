@@ -2,7 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.ForkChoice.HonestDuties
 public import EthLib.Consensus.Proofs.ForkChoice.VoteOrigins
-public import EthLib.Consensus.Proofs.Models.Network.Signers
+public import EthLib.Consensus.Proofs.Models.Network.Model
 
 /-!
 # Joint signature and accepted-vote provenance
@@ -95,32 +95,18 @@ theorem Execution.exists_signed_origin_of_latestMessages {anchor : Store preset 
         (Store.onAttestation_checkpointStates_of_found handled)
         (fun slotOk => ⟨_, slotOk ▸ (Store.onAttestation_sameClock handled).getCurrentSlot,
           UInt64.le_refl _⟩)⟩
-    rcases Store.onAttestation_latestMessages_cases handled found with previous | ⟨same, origin⟩
+    rcases Store.onAttestation_latestMessages_read_cases handled found with previous |
+      ⟨same, origin, stored, target, indexed, storing, targetOk, indexedOk, validOk, member⟩
     · exact keepOld previous
-    have acceptedOrigin := origin
-    unfold Store.onAttestation at handled
-    simp only [bind_ok_iff] at handled
-    obtain ⟨_, _, stored, storing, target, targetOk, _, _, indexed, indexedOk,
-      valid, validOk, handled⟩ := handled
-    split at handled
-    · rename_i validTrue
-      simp only [pure, Except.pure, Except.ok.injEq] at handled
-      subst after
-      rcases Store.foldl_recordVote_cases _ _ found with previous | ⟨member, same⟩
-      · exact keepOld ((Store.storeTargetCheckpointState_kept storing).1 ▸ previous)
-      · have indexedOk := mapError_ok_iff.mp indexedOk
-        have dataSame : indexed.data = a.data := by
-          obtain ⟨indices, indicesOk, _⟩ := getAttestingIndices_of_getIndexedAttestation indexedOk
-          obtain ⟨indexed', made, _, dataSame, _⟩ :=
-            getIndexedAttestation_of_getAttestingIndices indicesOk
-          have same := Except.ok.inj (indexedOk.symm.trans made)
-          exact same ▸ dataSame
-        refine ⟨a, m, seen, same, carried ?_, acceptedOrigin⟩
-        exact ⟨store, indexed, reachable,
-          ⟨stored, target, storing, targetOk, indexedOk,
-            by simpa [validTrue] using mapError_ok_iff.mp validOk⟩,
-          by simpa [indexedStatements, dataSame] using member⟩
-    · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at handled
+    have dataSame : indexed.data = a.data := by
+      obtain ⟨indices, indicesOk, _⟩ := getAttestingIndices_of_getIndexedAttestation indexedOk
+      obtain ⟨indexed', made, _, dataSame, _⟩ :=
+        getIndexedAttestation_of_getAttestingIndices indicesOk
+      have same := Except.ok.inj (indexedOk.symm.trans made)
+      exact same ▸ dataSame
+    refine ⟨a, m, seen, same, carried ?_, origin⟩
+    exact ⟨store, indexed, reachable, ⟨stored, target, storing, targetOk, indexedOk, validOk⟩,
+      by simpa [indexedStatements, dataSame] using member⟩
   have invariant : ∀ n, Origin ((e.world n).view u) ((e.world n).state u) := by
     intro n
     induction n with
