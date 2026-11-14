@@ -20,6 +20,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.ObjectEvents
 public import EthLib.Consensus.Proofs.BeaconApi.Produce
 public import EthLib.Consensus.Proofs.BeaconApi.Publish
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
+public import EthLib.Consensus.Proofs.BeaconApi.Responses
 public import EthLib.Consensus.Proofs.BeaconApi.Rewards
 public import EthLib.Consensus.Proofs.BeaconApi.StateQueries
 public import EthLib.Consensus.Proofs.BeaconApi.Submit

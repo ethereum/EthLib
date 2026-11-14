@@ -6,6 +6,7 @@ public import EthLib.Consensus.Proofs.Containers.State
 public import EthLib.Consensus.Proofs.LightClient.Authenticate
 public import EthLib.Consensus.Proofs.LightClient.Execution
 public import EthLib.Consensus.Proofs.LightClient.FullNode
+public import EthLib.Consensus.Proofs.BeaconApi.Responses
 public import EthLib.Consensus.Proofs.LightClient.Upgrade
 
 /-!
@@ -22,6 +23,12 @@ The sizes of the preset that the block and the state hold must be nonzero.
 The state type must be lawful.
 
 The answer itself refuses a block of another fork than the fork of its slot.
+
+It refuses a root whose block or post state the store lacks.
+
+It refuses a root whose post state is before the Altair fork epoch.
+
+Each refusal has code 404, and the JSON answer passes it on unchanged.
 -/
 
 @[expose] public section
@@ -291,5 +298,68 @@ theorem bootstrapFor_valid [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     stateRoot, branchVector_toList fits, climbs, LightClientError.liftRoot, Except.mapError,
     LightClientError.require, bind, Except.bind, pure, Except.pure]
   exact ⟨_, rfl⟩
+
+/-- Each refusal of the bootstrap is the error that names the root. -/
+theorem bootstrapFor_error {config : Config} {store : Store preset fork} {root : Root}
+    {error : ErrorMessage} (refused : bootstrapFor config store root = .error error) :
+    error = noBootstrap root := by
+  unfold bootstrapFor at refused
+  split at refused
+  · split at refused
+    · cases refused
+      rfl
+    · simp only [Except.mapError] at refused
+      split at refused <;> cases refused
+      rfl
+  · cases refused
+    rfl
+
+/-- The bootstrap fails only with code 404. -/
+theorem bootstrapFor_error_code {config : Config} {store : Store preset fork} {root : Root}
+    {error : ErrorMessage} (refused : bootstrapFor config store root = .error error) :
+    error.code = 404 := by
+  rw [bootstrapFor_error refused]
+  rfl
+
+/-- The JSON answer of the bootstrap passes each refusal on unchanged. -/
+theorem bootstrapResponse_of_error {config : Config} {store : Store preset fork} {root : Root}
+    {error : ErrorMessage} (refused : bootstrapFor config store root = .error error) :
+    bootstrapResponse config store root = .error error :=
+  versioned_of_error refused
+
+/-- A root whose block or post state the store lacks gets the error with code 404 that names it. -/
+theorem bootstrapFor_of_missing {config : Config} {store : Store preset fork} {root : Root}
+    (missing : store.blocks[root]? = none ∨ store.blockStates[root]? = none) :
+    bootstrapFor config store root = .error (noBootstrap root) := by
+  unfold bootstrapFor
+  split
+  · simp_all
+  · rfl
+
+/-- A root whose post state is before Altair gets the error with code 404 that names it.
+
+It needs the store to hold that state under the root.
+
+It needs the epoch of that state to be before the Altair fork epoch.
+
+It holds for a store of any fork and under any schedule. -/
+theorem bootstrapFor_of_lt_altair {config : Config} {store : Store preset fork}
+    {root : Root} {state : BeaconState preset fork}
+    (heldState : store.blockStates[root]? = some state)
+    (early : computeEpochAtSlot preset state.slot < config.ALTAIR_FORK_EPOCH) :
+    bootstrapFor config store root = .error (noBootstrap root) := by
+  cases held : store.blocks[root]? with
+  | none => exact bootstrapFor_of_missing (.inl held)
+  | some block =>
+    have notStarted : ¬config.ALTAIR_FORK_EPOCH ≤ computeEpochAtSlot preset state.slot :=
+      UInt64.not_le.mpr early
+    by_cases scheduled : config.forkAtEpoch (computeEpochAtSlot preset block.slot) = fork
+    · by_cases altair : .altair ≤ fork
+      · simp [bootstrapFor, held, heldState, scheduled, createLightClientBootstrap,
+          LightClientError.specifiedFork, altair, LightClientError.require, notStarted, bind,
+          Except.bind, Except.mapError]
+      · simp [bootstrapFor, held, heldState, scheduled, createLightClientBootstrap,
+          LightClientError.specifiedFork, altair, bind, Except.bind, Except.mapError]
+    · simp [bootstrapFor, held, heldState, scheduled]
 
 end EthLib.Consensus.BeaconApi
