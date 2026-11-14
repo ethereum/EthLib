@@ -56,6 +56,7 @@ theorem of_upgradeFrame {f h : Fork} {s : BeaconState preset f} {t : BeaconState
     (frame : UpgradeFrame config s t) : SlashedPersistence s t := by
   intro i v found flag
   have same := frame.slashed i
+  simp only [slashedFlagAt] at same
   rw [found] at same
   obtain ⟨w, read, marked⟩ := Option.map_eq_some_iff.mp same
   exact ⟨w, read, marked.trans flag⟩

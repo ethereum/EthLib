@@ -112,8 +112,7 @@ structure UpgradeFrame (config : Config) {fork post : Fork} (pre : BeaconState p
   flags : ∀ (altair : .altair ≤ fork) (current : Bool) (position : Nat),
     TargetFlagAt (recentParticipation after (Nat.le_trans altair forward) current) position →
       TargetFlagAt (recentParticipation pre altair current) position
-  slashed : ∀ position : Nat, (after.validators.data[position]?).map (·.slashed) =
-    (pre.validators.data[position]?).map (·.slashed)
+  slashed : ∀ position, slashedFlagAt after position = slashedFlagAt pre position
 
 /-- An upgrade that carries the registry and both lists of flags as the same sequences.
 
@@ -162,7 +161,7 @@ theorem UpgradeFrame.of_carried {fork post : Fork} {pre : BeaconState preset for
   flags altair current position flagged := by
     obtain ⟨flags, found, set⟩ := flagged
     exact ⟨flags, by rw [← participation altair current]; exact found, set⟩
-  slashed _ := by rw [validators]
+  slashed _ := by unfold slashedFlagAt; rw [validators]
 
 /-- An upgrade frame followed by a block frame of the new fork is an upgrade frame.
 
@@ -170,8 +169,7 @@ It needs the steps after the upgrade to keep every slashed flag, since a block f
 theorem UpgradeFrame.trans_blockFrame {fork post : Fork} {pre : BeaconState preset fork}
     {middle after : BeaconState preset post} (one : UpgradeFrame config pre middle)
     (two : BlockFrame middle after)
-    (slashed : ∀ position : Nat, (after.validators.data[position]?).map (·.slashed) =
-      (middle.validators.data[position]?).map (·.slashed)) :
+    (slashed : ∀ position, slashedFlagAt after position = slashedFlagAt middle position) :
     UpgradeFrame config pre after where
   forward := one.forward
   slot := two.slot.trans one.slot
@@ -345,8 +343,7 @@ It also keeps the slashed flag at each position of the registry.
 def ElectraKept {fork : Fork} (state after : BeaconState preset fork) : Prop :=
   SameSizes state after ∧ after.forkVersions = state.forkVersions ∧
     after.depositRequestsStartIndex = state.depositRequestsStartIndex ∧
-    ∀ position : Nat, (after.validators.data[position]?).map (·.slashed) =
-      (state.validators.data[position]?).map (·.slashed)
+    ∀ position, slashedFlagAt after position = slashedFlagAt state position
 
 theorem ElectraKept.trans {fork : Fork} {first second third : BeaconState preset fork}
     (one : ElectraKept first second) (two : ElectraKept second third) :
@@ -366,7 +363,7 @@ theorem electraKept_queuePreActivation {fork : Fork} {state after : BeaconState 
   rw [getValidator_eq_getValidatorAt] at found
   rw [setValidator_eq_setValidatorAt] at set₂
   -- The balance write keeps the registry, so the read of the validator holds after it.
-  have flags := slashed_setValidatorAt (old := validator) (by exact found) set₂ rfl
+  have flags := slashedFlagAt_setValidatorAt (old := validator) (by exact found) set₂ rfl
   obtain ⟨_, rfl⟩ := setValidatorAt_ok set₂
   exact ⟨sizes₁.trans (sizes₂.trans ⟨rfl, rfl⟩), rfl, rfl, flags⟩
 

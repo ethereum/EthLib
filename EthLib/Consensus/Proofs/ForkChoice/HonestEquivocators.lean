@@ -222,19 +222,6 @@ theorem onInclusionList_equivocatingIndices {heze : .hegota ≤ fork} {signed : 
   obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
   rfl
 
-/-- A property that each step keeps, for each element of the list, holds after the fold. -/
-private theorem foldlM_ok_invariant_mem {α β ε : Type} {g : β → α → Except ε β} (P : β → Prop) :
-    ∀ {xs : List α}, (∀ b x b', x ∈ xs → P b → g b x = .ok b' → P b') →
-      ∀ {b b' : β}, P b → xs.foldlM g b = .ok b' → P b'
-  | [], _, _, _, holds, computed => by
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ holds
-  | x :: _, step, b, _, holds, computed => by
-    rw [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨middle, first, rest⟩ := computed
-    exact foldlM_ok_invariant_mem P (fun b y b' mem => step b y b' (List.mem_cons_of_mem x mem))
-      (step b x middle List.mem_cons_self holds first) rest
-
 /-- A block with its votes adds an equivocator only from one of its attester slashings.
 
 That slashing holds the validator in both of its votes, and those votes can be slashed together. -/
@@ -255,7 +242,7 @@ theorem mem_equivocatingIndices_of_onBlockWithVotes {signed : SignedBeaconBlock 
       store.equivocatingIndices) (fun _ _ _ held step =>
         (onAttestation_equivocatingIndices step).trans held)
       (onBlock_equivocatingIndices blockOk) attested
-  refine foldlM_ok_invariant_mem (fun s : Store preset fork => ∀ i ∈ s.equivocatingIndices,
+  refine foldlM_ok_invariant_of_mem (fun s : Store preset fork => ∀ i ∈ s.equivocatingIndices,
       i ∈ store.equivocatingIndices ∨
       ∃ slashing ∈ signed.message.body.attesterSlashings.data,
         isSlashableAttestationData slashing.attestation1.data slashing.attestation2.data = true ∧
