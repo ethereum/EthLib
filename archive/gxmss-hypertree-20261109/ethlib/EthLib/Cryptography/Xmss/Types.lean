@@ -1,0 +1,108 @@
+module
+
+public import EthLib.Base.Bytes
+public import EthLib.Base.LittleEndian
+public import EthLib.Cryptography.HashSig
+public import EthLib.Cryptography.Xmss.Constants
+
+/-!
+# leanXMSS types
+
+Fixed-size byte objects, with the length carried in the type.
+
+- Indexing is total, so reading a field needs no bounds proof and cannot panic.
+- Sizes stop being side conditions dragged through proofs.
+- These are abbreviations, so equal-length objects stay interchangeable.
+
+Untyped bytes survive at two edges only: hash inputs and serialization.
+-/
+
+@[expose] public section
+
+namespace EthLib.Cryptography.Xmss
+
+open EthLib.Cryptography.Xmss.Constants
+
+/-! ## Objects -/
+
+/-- A hash value.
+
+Chain values, Merkle nodes and leaves are all digests. -/
+abbrev Digest := Vector UInt8 DIGEST_LEN
+
+/-- The public parameter `P`, hashed into every call.
+
+It makes one key's hash functions independent of another's. -/
+abbrev PublicParam := Vector UInt8 PUBLIC_PARAM_LEN
+
+/-- The address `A` hashed after the public parameter.
+
+It names the call site of one hash inside one key. -/
+abbrev Address := Vector UInt8 ADDRESS_LEN
+
+/-- The randomizer `rho` under which a one-time key's digest is a codeword.
+
+It is part of the signature. -/
+abbrev Randomizer := Vector UInt8 RANDOMIZER_LEN
+
+/-- The message to sign: a 256-bit message hash, not a document. -/
+abbrev Message := Vector UInt8 MESSAGE_LEN
+
+/-- A 32-byte seed.
+
+The secret key is one, and the scheme's seed `S` derived from it is another. -/
+abbrev Seed := Vector UInt8 SEED_LEN
+
+/-- A leaf index, below `2^32`.
+
+- Its top 16 bits name the bottom tree.
+- Its low 16 bits name the leaf inside that tree.
+
+Each leaf index may sign only one message, ever. -/
+abbrev LeafIndex := UInt32
+
+/-- One of the two layers of trees. -/
+inductive Layer where
+  /-- Layer 0: `2^16` trees, whose keys sign messages. -/
+  | bottom
+  /-- Layer 1: one tree, whose keys sign the roots of the bottom trees. -/
+  | top
+  deriving DecidableEq, Repr
+
+/-- The layer's number `l` in the specification: 0 at the bottom, 1 at the top. -/
+def Layer.toNat : Layer → Nat
+  | .bottom => 0
+  | .top => 1
+
+/-! ## Little-endian integers
+
+The conversions `LE_{8k}` and `LE^-1` of the paper are the shared little-endian ones.
+-/
+
+export EthLib.Base (uintToBytes bytesToUint)
+
+/-! ## Crossing to and from untyped bytes -/
+
+export EthLib.Base (packBytes readBytes)
+export EthLib.Cryptography.HashSig (unpackBytes?)
+
+/-- The bytes of a list of digests, in order. -/
+def packDigests {n : Nat} (ds : Vector Digest n) : ByteArray :=
+  -- Digest `i` lands at bytes `16i` to `16i + 15`.
+  packBytes ds.flatten
+
+/-- Cut a byte field into consecutive 16-byte digests. -/
+def splitDigests {n : Nat} (bytes : Vector UInt8 (n * DIGEST_LEN)) : Vector Digest n :=
+  -- Byte j of digest i sits at position 16 i + j of the field.
+  Vector.ofFn fun i => Vector.ofFn fun j => bytes[i.val * DIGEST_LEN + j.val]'(by
+    -- With i < n and j < 16, that position is below 16 n.
+    have hi := i.isLt
+    have hj := j.isLt
+    simp only [DIGEST_LEN] at *
+    omega)
+
+/-! ## Computing a vector in order -/
+
+export EthLib.Cryptography.HashSig (ofFnInOrder)
+
+end EthLib.Cryptography.Xmss

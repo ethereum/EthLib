@@ -1,0 +1,147 @@
+module
+
+public import EthLib.Cryptography.Xmss.Address
+public import EthLib.Cryptography.Proofs.Xmss.Types
+
+/-!
+# Proofs: leanXMSS addresses
+
+Distinct call sites have distinct addresses.
+
+- The encoding is injective on its four fields.
+- The type codes are distinct, so two address types never share an address.
+- The top layer's flag is a separate bit, so the two layers never share an address.
+- Each address of a key determines its own arguments.
+-/
+
+@[expose] public section
+
+namespace EthLib.Cryptography.Xmss
+
+open EthLib.Cryptography.Xmss.Constants
+
+/-! ## The encoding is injective -/
+
+/-- The 16 bytes of an address determine its type, position and both fields.
+
+- Bytes 0 to 3 hold `lo`, and bytes 4 to 6 hold `hi`.
+- Byte 7 holds `tau + 32 mu`, and bytes 8 to 15 are zero.
+-/
+theorem encodeAddress_inj {tau tau' : Fin 32} {mu mu' : Fin 8} {hi hi' : Fin (2 ^ 24)}
+    {lo lo' : UInt32} :
+    encodeAddress tau mu hi lo = encodeAddress tau' mu' hi' lo' ↔
+      tau = tau' ∧ mu = mu' ∧ hi = hi' ∧ lo = lo' := by
+  constructor
+  · intro h
+    -- Peel the zero tail, then the type byte, then the two fields.
+    obtain ⟨h, -⟩ := Vector.append_inj h
+    obtain ⟨h, htype⟩ := Vector.append_inj h
+    obtain ⟨hlo, hhi⟩ := Vector.append_inj h
+    -- Each field is below the range its bytes cover.
+    have lo_eq := Base.uintToBytes_inj lo.toNat_lt_size lo'.toNat_lt_size hlo
+    have hi_eq := Base.uintToBytes_inj (k := 3) hi.isLt hi'.isLt hhi
+    have type_eq := Base.uintToBytes_inj (k := 1)
+      (by have := tau.isLt; have := mu.isLt; omega)
+      (by have := tau'.isLt; have := mu'.isLt; omega) htype
+    -- `tau < 32` is the remainder by 32 and `mu` the quotient.
+    refine ⟨Fin.ext (by omega), Fin.ext (by omega), Fin.ext hi_eq, UInt32.toNat_inj.mp lo_eq⟩
+  · rintro ⟨rfl, rfl, rfl, rfl⟩
+    rfl
+
+/-- Addresses whose types differ are different addresses. -/
+theorem encodeAddress_ne_of_type_ne {tau tau' : Fin 32} (mu mu' : Fin 8) (hi hi' : Fin (2 ^ 24))
+    (lo lo' : UInt32) (h : tau ≠ tau') :
+    encodeAddress tau mu hi lo ≠ encodeAddress tau' mu' hi' lo' :=
+  fun same => h (encodeAddress_inj.mp same).1
+
+/-- The seven address types have seven different codes. -/
+theorem AddressType.code_injective : Function.Injective AddressType.code := by
+  intro a b h
+  cases a <;> cases b <;> first | rfl | exact absurd h (by decide)
+
+/-! ## The two layers -/
+
+/-- `hi_l(a)` determines both the layer and `a`. -/
+theorem layerHi_inj {layer layer' : Layer} {a a' : Fin (2 ^ 23)} :
+    layerHi layer a = layerHi layer' a' ↔ layer = layer' ∧ a = a' := by
+  constructor
+  · intro h
+    have h := congrArg Fin.val h
+    simp only [layerHi] at h
+    -- Bit 23 is the layer, the 23 bits below it are `a`.
+    have ha := a.isLt
+    have ha' := a'.isLt
+    cases layer <;> cases layer' <;> simp only [Layer.toNat] at h <;>
+      first
+      | exact ⟨rfl, Fin.ext (by omega)⟩
+      | omega
+  · rintro ⟨rfl, rfl⟩
+    rfl
+
+/-! ## Each address determines its arguments -/
+
+/-- A chain-start address names its layer, key and pair of chains. -/
+theorem addrPrf_inj {layer layer' : Layer} {e e' : UInt32} {j j' : Fin (V / 2)} :
+    addrPrf layer e j = addrPrf layer' e' j' ↔ layer = layer' ∧ e = e' ∧ j = j' := by
+  constructor
+  · intro h
+    obtain ⟨-, -, hhi, he⟩ := encodeAddress_inj.mp h
+    obtain ⟨hl, hj⟩ := layerHi_inj.mp hhi
+    exact ⟨hl, he, Fin.ext (by simpa using congrArg Fin.val hj)⟩
+  · rintro ⟨rfl, rfl, rfl⟩
+    rfl
+
+/-- A chain-step address names its layer, key and position. -/
+theorem addrChain_inj {layer layer' : Layer} {e e' : UInt32} {mu mu' : Fin (CHAIN_LENGTH - 1)} :
+    addrChain layer e mu = addrChain layer' e' mu' ↔ layer = layer' ∧ e = e' ∧ mu = mu' := by
+  constructor
+  · intro h
+    obtain ⟨-, hmu, hhi, he⟩ := encodeAddress_inj.mp h
+    exact ⟨(layerHi_inj.mp hhi).1, he, Fin.ext (by simpa using congrArg Fin.val hmu)⟩
+  · rintro ⟨rfl, rfl, rfl⟩
+    rfl
+
+/-- A leaf address names its layer and key. -/
+theorem addrLeaf_inj {layer layer' : Layer} {e e' : UInt32} :
+    addrLeaf layer e = addrLeaf layer' e' ↔ layer = layer' ∧ e = e' := by
+  constructor
+  · intro h
+    obtain ⟨-, -, hhi, he⟩ := encodeAddress_inj.mp h
+    exact ⟨(layerHi_inj.mp hhi).1, he⟩
+  · rintro ⟨rfl, rfl⟩
+    rfl
+
+/-- A node address names its layer, level and index. -/
+theorem addrNode_inj {layer layer' : Layer} {level level' : Fin (LAYER_HEIGHT + 1)}
+    {j j' : UInt32} :
+    addrNode layer level j = addrNode layer' level' j' ↔
+      layer = layer' ∧ level = level' ∧ j = j' := by
+  constructor
+  · intro h
+    obtain ⟨-, -, hhi, hj⟩ := encodeAddress_inj.mp h
+    obtain ⟨hl, hlevel⟩ := layerHi_inj.mp hhi
+    exact ⟨hl, Fin.ext (by simpa using congrArg Fin.val hlevel), hj⟩
+  · rintro ⟨rfl, rfl, rfl⟩
+    rfl
+
+/-- A randomizer-base address names its layer and key. -/
+theorem addrRnd_inj {layer layer' : Layer} {e e' : UInt32} :
+    addrRnd layer e = addrRnd layer' e' ↔ layer = layer' ∧ e = e' := by
+  constructor
+  · intro h
+    obtain ⟨-, -, hhi, he⟩ := encodeAddress_inj.mp h
+    exact ⟨(layerHi_inj.mp hhi).1, he⟩
+  · rintro ⟨rfl, rfl⟩
+    rfl
+
+/-- A digest address names its layer and key. -/
+theorem addrMsg_inj {layer layer' : Layer} {e e' : UInt32} :
+    addrMsg layer e = addrMsg layer' e' ↔ layer = layer' ∧ e = e' := by
+  constructor
+  · intro h
+    obtain ⟨-, -, hhi, he⟩ := encodeAddress_inj.mp h
+    exact ⟨(layerHi_inj.mp hhi).1, he⟩
+  · rintro ⟨rfl, rfl⟩
+    rfl
+
+end EthLib.Cryptography.Xmss
