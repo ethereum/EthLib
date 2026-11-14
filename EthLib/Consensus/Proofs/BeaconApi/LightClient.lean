@@ -15,6 +15,8 @@ No accepted answer holds more updates than that one.
 On a chain whose digests name their forks, the SSZ chunks of updates decode back to the updates.
 
 On such a chain, bytes that decode are the chunks of the updates they give.
+
+The finality and the optimistic update answers have code 404 exactly when the node knows no update.
 -/
 
 @[expose] public section
@@ -424,5 +426,47 @@ theorem encodeUpdateChunks_decode [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     (by omega) decoded
   rw [ByteArray.empty_append, ByteArray.extract_zero_size] at encoded
   exact encoded
+
+/-- A response that carries a value fails only with code 500, when its JSON cannot be written. -/
+private theorem versioned_value_error_code {α : Type} [SszType α] [ApiSpelling α] {fork : Fork}
+    {value : α} {error : ErrorMessage} (failed : versioned fork (.ok value) = .error error) :
+    error.code = 500 := by
+  unfold versioned apiJsonOr500 at failed
+  cases json : toApiJson value with
+  | error fault =>
+    simp only [json, Except.mapError, bind, Except.bind, Except.error.injEq] at failed
+    rw [← failed]
+    rfl
+  | ok _ => simp [json, Except.mapError, bind, Except.bind, pure, Except.pure] at failed
+
+/-- The finality update response refuses with code 404 exactly when the node knows no update. -/
+theorem finalityUpdateResponse_notFound_iff {fork : Fork}
+    {latest : Option (LightClientUpdate preset fork)} :
+    (∃ error, finalityUpdateResponse latest = .error error ∧ error.code = 404) ↔
+      latest = none := by
+  constructor
+  · rintro ⟨error, refused, code⟩
+    cases latest with
+    | none => rfl
+    | some update =>
+      have served := versioned_value_error_code refused
+      omega
+  · rintro rfl
+    exact ⟨_, rfl, rfl⟩
+
+/-- The optimistic update response refuses with code 404 exactly when the node knows no update. -/
+theorem optimisticUpdateResponse_notFound_iff {fork : Fork}
+    {latest : Option (LightClientUpdate preset fork)} :
+    (∃ error, optimisticUpdateResponse latest = .error error ∧ error.code = 404) ↔
+      latest = none := by
+  constructor
+  · rintro ⟨error, refused, code⟩
+    cases latest with
+    | none => rfl
+    | some update =>
+      have served := versioned_value_error_code refused
+      omega
+  · rintro rfl
+    exact ⟨_, rfl, rfl⟩
 
 end EthLib.Consensus.BeaconApi

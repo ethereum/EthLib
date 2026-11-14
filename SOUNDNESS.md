@@ -4565,6 +4565,22 @@ These two facts are what the store checks when it takes a block, but no theorem 
 It also assumes that the schedule puts the forks from Capella to Heze in order.
 It assumes a lawful state type and a preset whose sizes in the block and the state are nonzero.
 The answer itself refuses a block whose fork is not the fork that the schedule gives at its slot.
+`bootstrapFor_error_code` shows that each refusal of the bootstrap has code 404.
+The source lists that code when "`LightClientBootstrap` instance cannot be produced for the given block root".
+`bootstrapResponse_of_error` shows that the JSON answer passes each refusal on unchanged.
+`bootstrapFor_of_missing` shows that a root whose block or post state the store lacks gets the error with code 404 that names the root.
+`bootstrapFor_of_lt_altair` shows that error with code 404 for a root whose post state is before the Altair fork epoch, whatever the fork of the store.
+When the store is of another fork than the schedule gives at the slot, it reads the check of the fork of the slot.
+Else it reads the check in `createLightClientBootstrap` that the fork of the store has a light client.
+When that check passes, it reads the next one there, that the state is not before the Altair fork epoch.
+So even a Gloas store refuses such a root, when the schedule puts Altair after Gloas.
+These points of the bootstrap answer have no theorem:
+
+- which roots it refuses when their post state is from the Altair fork epoch on;
+- whether a served bootstrap can get code 500 when it is written in SSZ.
+
+The first is reachable by a block whose fork is not the fork that the schedule gives at its slot.
+
 `IsUpdatesAnswer` is the rule of the source for the updates answer: known updates of the range, in increasing period order, starting with the earliest known one, at most `min(128, count)` of them.
 `updatesInRange_answer` (`Consensus/Proofs/BeaconApi/LightClient.lean`) shows that the known updates of the range, cut to that limit, form such an answer.
 `IsUpdatesAnswer.length_le` shows that no accepted answer holds more updates, and `IsUpdatesAnswer.length_le_limit` gives the limit itself.
@@ -4572,11 +4588,14 @@ The answer itself refuses a block whose fork is not the fork that the schedule g
 It assumes a preset with a nonempty logs bloom and sync committee, as the round trip of SSZ for these containers does.
 The decoder also refuses a chunk whose digest is not the digest of the epoch of its update.
 `encodeUpdateChunks_decode` shows the converse under the same assumptions: bytes that decode are the chunks of the updates they give.
+`finalityUpdateResponse_notFound_iff` and `optimisticUpdateResponse_notFound_iff` show that each latest update answer has code 404 exactly when the node knows no update of its kind.
+The source lists that code when "No `LightClientFinalityUpdate` is available", and for the optimistic update when "No `LightClientOptimisticUpdate` is available".
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_light_client.py`) reads the pinned data collection cases of the light client.
 It checks that the chunks of the best updates of each case carry the digests and the bytes that the case serves, and decode back to them.
 It checks the start, the count and the limit of 128 of a range, the versions of the JSON answer, and the refusal of an update of another fork than its epoch.
 It builds the store of a Gloas fork choice case, checks the bootstrap of the head and of the anchor, and starts a light client from each.
-It checks code 404 for an unknown block, for a schedule before Altair, and for a missing finality or optimistic update; no theorem states these codes.
+It checks code 404 for the bootstrap of an unknown block and under a schedule before Altair.
+It checks code 404 for the latest finality and optimistic updates when the node knows none.
 
 The answers that split the rewards of validators are in `Consensus/BeaconApi/Rewards.lean`: the attestation rewards of an epoch, and the ideal rewards of each effective balance.
 `attestationRewardsResponse_ok` (`Consensus/Proofs/BeaconApi/Rewards.lean`) shows that an answer comes from a state at the last slot of an epoch past the first, for the epoch before, and that both lists are read from the state that the rewards step of the epoch transition reads.
