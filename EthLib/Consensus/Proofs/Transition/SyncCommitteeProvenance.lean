@@ -638,39 +638,8 @@ private theorem passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch 
       {count : Nat} {postponed : Array PendingDeposit} {pass},
       Consensus.passPendingDeposits config checks stop nextEpoch available state processed count
         postponed deposits = .ok pass → SameSyncCommittees state pass.1.state
-  | [], _, _, _, _, _, ok => by
-    cases ok; exact .refl _
-  | deposit :: rest, state, processed, count, postponed, pass, ok => by
-    unfold Consensus.passPendingDeposits at ok
-    simp only [bind, Except.bind, pure, Except.pure] at ok
-    split at ok
-    · cases ok; exact .refl _
-    split at ok
-    · cases ok
-    split at ok
-    · split at ok
-      · cases ok
-      rename_i credited
-      split at ok
-      · cases ok
-      cases ok
-      exact (applyPendingDeposit credited).trans (passPendingDeposits (deposits := rest) ‹_›)
-    split at ok
-    · split at ok
-      · cases ok
-      cases ok
-      exact passPendingDeposits (deposits := rest) ‹_›
-    split at ok
-    · cases ok
-    split at ok
-    · cases ok; exact .refl _
-    split at ok
-    · cases ok
-    rename_i credited
-    split at ok
-    · cases ok
-    cases ok
-    exact (applyPendingDeposit credited).trans (passPendingDeposits (deposits := rest) ‹_›)
+  := fun ok => passPendingDeposits_of SameSyncCommittees .refl (fun one two => one.trans two)
+    (fun step => applyPendingDeposit step) ok
 
 private theorem passPendingConsolidations {nextEpoch : Epoch} :
     ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
