@@ -1,10 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
-public import EthLib.Consensus.Proofs.Transition.Totality.PendingBlock
-public import EthLib.Consensus.Proofs.Transition.Totality.RunStep
-public import EthLib.Consensus.Proofs.Transition.Totality.RunUpgrades
-public import EthLib.Consensus.Proofs.Transition.Totality.Slot
+public import EthLib.Consensus.Proofs.Transition.Totality.ChainHolds
 
 /-!
 # Proofs: every slot advance within the horizon succeeds on a bounded state
@@ -47,7 +43,7 @@ structure RunHolds (config : Config) (start : RunStart) (budget startEpoch : Nat
   wellFormed : PendingWellFormed state
   /-- The committee and the signers of each pending attestation succeed. -/
   resolved : PendingResolved state
-  /-- In the first two epochs of the chain, the two justified checkpoints are equal. -/
+  /-- In the first two epochs after genesis, the two justified checkpoints are equal. -/
   early : JustifiedEarly state
   /-- Each pending attestation has the target and the source that its block checked. -/
   voted : PendingVoted Set.univ state
@@ -58,174 +54,75 @@ structure RunHolds (config : Config) (start : RunStart) (budget startEpoch : Nat
   /-- From the third epoch of the run, no one has signed. -/
   quiet : startEpoch + 2 ≤ (getCurrentEpoch state).toNat → Quiet state
 
+/-- A state that keeps the facts of a run keeps those of a chain whose blocks raise no bound. -/
+theorem RunHolds.toChainHolds {start : RunStart} {budget startEpoch : Nat} {fork : Fork}
+    {state : BeaconState preset fork} (holds : RunHolds config start budget startEpoch state) :
+    ChainHolds config start BlockStep.zero budget startEpoch 0 state := by
+  refine ⟨holds.started, holds.invariant, holds.shaped, holds.wellFormed, holds.resolved,
+    holds.early, holds.voted, Nat.zero_le _, ?_⟩
+  rw [RunStart.afterBlocks_zero]
+  exact holds.bounded
+
 /-! ## One slot -/
 
-/-- The caching of a slot keeps the pending attestations resolved. -/
-private theorem PendingResolved.of_processSlot {fork : Fork}
-    {state cached : BeaconState preset fork}
-    (resolved : PendingResolved state) (computed : processSlot state = .ok cached) :
-    PendingResolved cached := by
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok computed
-  intro before attestation member
-  rw [cachedEq] at member
-  obtain ⟨signers, ok⟩ := resolved before attestation member
-  refine ⟨signers, ?_⟩
-  unfold getPendingAttestingIndices at ok ⊢
-  rw [CommitteesKept.of_eq (state := state) (other := cached) (by rw [cachedEq])
-    (by rw [cachedEq]) (computeEpochAtSlot preset attestation.data.slot) attestation.data.slot
-    attestation.data.index rfl]
-  exact ok
+/-- A state of a chain whose blocks raise no bound, with the absence of signers, is in a run. -/
+private theorem RunHolds.of_chainHolds {start : RunStart} {budget startEpoch blocks : Nat}
+    {fork : Fork}
+    {state : BeaconState preset fork}
+    (holds : ChainHolds config start BlockStep.zero budget startEpoch blocks state)
+    (quietCurrent : startEpoch < (getCurrentEpoch state).toNat → QuietCurrent state)
+    (quiet : startEpoch + 2 ≤ (getCurrentEpoch state).toNat → Quiet state) :
+    RunHolds config start budget startEpoch state := by
+  have bounded := holds.bounded
+  rw [RunStart.afterBlocks_zero] at bounded
+  exact ⟨holds.started, holds.invariant, holds.shaped, holds.wellFormed, holds.resolved,
+    holds.early, holds.voted, bounded, quietCurrent, quiet⟩
 
-/-- The caching of a slot keeps the facts of a run. -/
-private theorem RunHolds.of_processSlot {start : RunStart} {budget startEpoch : Nat}
-    {fork : Fork} {state cached : BeaconState preset fork}
-    (holds : RunHolds config start budget startEpoch state)
-    (computed : processSlot state = .ok cached) :
-    RunHolds config start budget startEpoch cached := by
-  have frame := frame_processSlot computed
-  have resolved := holds.resolved.of_processSlot computed
-  have voted := holds.voted.of_processSlot computed
-  have bounded := holds.bounded.of_processSlot computed
-  have invariant := frame.invariant holds.invariant
-  have early := holds.early.of_frame frame
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
-  have shaped := holds.shaped
-  exact ⟨holds.started, invariant, ⟨shaped.balancesMatch, shaped.participationMatches,
-    shaped.inactivityScoresMatch, shaped.capped, shaped.inside⟩, holds.wellFormed, resolved,
-    early, voted, bounded, holds.quietCurrent, holds.quiet⟩
+/-- At the end of each epoch of a run, the signers hold at most the active balance.
 
-/-- An epoch of the run, plus one and the longest lookahead, is at most the exit ceiling there. -/
-private theorem first_le {start : RunStart} {budget epochs lastEpoch startEpoch epoch : Nat}
-    (conditions : RunConditions preset config start budget epochs lastEpoch)
-    (fits : startEpoch + epochs ≤ lastEpoch) (started : startEpoch ≤ epoch) :
-    epoch + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤
-      start.ceilingAt preset budget (epoch - startEpoch) := by
-  have firstStart := conditions.firstStart
-  have step : epoch - startEpoch ≤ (epoch - startEpoch) * start.exitStep preset budget :=
-    Nat.le_mul_of_pos_right _ (Nat.succ_pos _)
-  unfold RunStart.ceilingAt
-  omega
-
-/-- A chain of upgrades extends by one more due upgrade. -/
-private theorem UpgradesPass.snoc {first reached : ForkedBeaconState preset}
-    {next : {post : ForkedBeaconState preset // reached.fork < post.fork}}
-    (pass : UpgradesPass config checks first reached) (due : upgradeDue config reached = true)
-    (computed : upgradeNext config checks reached = .ok next) :
-    UpgradesPass config checks first next.val := by
-  induction pass with
-  | refl forked => exact .step due computed (.refl _)
-  | step stepDue stepOk rest ih => exact .step stepDue stepOk (ih due computed)
-
-/-- One slot keeps the facts of a run, before the upgrades of the slot it reaches. -/
-private theorem RunHolds.of_advanceSlot {start : RunStart}
-    {budget epochs lastEpoch startEpoch : Nat} {fork : Fork}
-    {state advanced : BeaconState preset fork}
-    (conditions : RunConditions preset config start budget epochs lastEpoch)
-    (fits : startEpoch + epochs ≤ lastEpoch)
-    (holds : RunHolds config start budget startEpoch state)
-    (within : (state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs)
+In the first two epochs of the run this is the hypothesis, and after them no one has signed. -/
+private theorem RunHolds.signers {start : RunStart} {budget startEpoch : Nat} {fork : Fork}
+    {state : BeaconState preset fork} (holds : RunHolds config start budget startEpoch state)
     (signers : (getCurrentEpoch state).toNat < startEpoch + 2 →
       (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
-      ∀ cached, processSlot state = .ok cached → SignersWithinActive cached)
-    (computed : advanceSlot config checks state = .ok advanced) :
-    RunHolds config start budget startEpoch advanced := by
-  have stateEpoch := getCurrentEpoch_toNat state
-  have advancedEpoch := getCurrentEpoch_toNat advanced
-  have slot := advanceSlot_slot computed
-  have invariant := (advanceSlot_invariant holds.invariant computed).1
-  have shaped := advanceSlot_shaped computed holds.shaped
-  have wellFormed := holds.wellFormed.of_advanceSlot computed
-  have resolved := holds.resolved.of_advanceSlot conditions.apart holds.wellFormed computed
-  have early := holds.early.of_advanceSlot computed
-  have voted : PendingVoted Set.univ advanced := by
-    by_cases before : fork < .altair
-    · exact holds.voted.of_advanceSlot before conditions.apart holds.early computed
-    · exact PendingVoted.of_altair (Nat.le_of_not_lt before) advanced
-  -- The epoch moves on by at most one.
-  have moves : (getCurrentEpoch advanced).toNat = (getCurrentEpoch state).toNat ∨
-      (getCurrentEpoch advanced).toNat = (getCurrentEpoch state).toNat + 1 := by
-    rw [advancedEpoch, stateEpoch, slot, Nat.succ_div]
-    split <;> simp
-  have started : startEpoch ≤ (getCurrentEpoch advanced).toNat := by
-    have := holds.started
-    omega
-  have quietCurrent : startEpoch < (getCurrentEpoch advanced).toNat → QuietCurrent advanced := by
-    intro late
-    rcases moves with same | crossed
-    · exact (holds.quietCurrent (by omega)).of_advanceSlot computed
-    · exact advanceSlot_quietCurrent_of_lt computed (by omega)
-  have quiet : startEpoch + 2 ≤ (getCurrentEpoch advanced).toNat → Quiet advanced := by
-    intro late
-    rcases moves with same | crossed
-    · exact (holds.quiet (by omega)).of_advanceSlot computed
-    · exact (holds.quietCurrent (by omega)).quiet_of_advanceSlot_of_lt computed (by omega)
-  refine ⟨started, invariant, shaped, wellFormed, resolved, early, voted, ?_, quietCurrent, quiet⟩
-  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  have cachedHolds := holds.of_processSlot cachedOk
-  have cachedEpoch : (getCurrentEpoch cached).toNat = (getCurrentEpoch state).toNat := by
-    rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, processSlot_slot cachedOk]
-  have nextEpoch : (getCurrentEpoch { epoched with slot := next }).toNat =
-      next.toNat / preset.SLOTS_PER_EPOCH.toNat := getCurrentEpoch_toNat _
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    have crossed := nextSlot_epoch_of_boundary sum boundary
-    have nextIs : (state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat =
-        (getCurrentEpoch state).toNat + 1 := by
-      rw [← sum, crossed, stateEpoch]
-    have started := holds.started
-    have boundaryNat : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 := by
-      have := congrArg UInt64.toNat boundary
-      rwa [UInt64.toNat_mod, sum] at this
-    have cachedSigners : SignersWithinActive cached := by
-      by_cases early : (getCurrentEpoch state).toNat < startEpoch + 2
-      · exact signers early boundaryNat cached cachedOk
-      · exact (cachedHolds.quiet (by omega)).signers
-    have bounded := RunBounded.of_processEpoch_of_run conditions cachedHolds.bounded
-      cachedHolds.invariant cachedHolds.shaped cachedHolds.resolved
-      (by rw [cachedEpoch]; omega)
-      (first_le conditions fits cachedHolds.started) cachedSigners epochedOk
-    have elapsed : (getCurrentEpoch { epoched with slot := next }).toNat - startEpoch =
-        (getCurrentEpoch cached).toNat - startEpoch + 1 := by
-      have := holds.started
-      omega
-    rw [elapsed]
-    exact bounded.withSlot next
-  · rename_i inside
-    simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    have same := nextSlot_epoch_of_inside sum inside
-    have elapsed : (getCurrentEpoch { cached with slot := next }).toNat - startEpoch =
-        (getCurrentEpoch cached).toNat - startEpoch := by
-      omega
-    rw [elapsed]
-    exact cachedHolds.bounded.withSlot next
+      ∀ cached, processSlot state = .ok cached → SignersWithinActive cached) :
+    (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
+      ∀ cached, processSlot state = .ok cached → SignersWithinActive cached := by
+  intro boundary cached cachedOk
+  by_cases early : (getCurrentEpoch state).toNat < startEpoch + 2
+  · exact signers early boundary cached cachedOk
+  · obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    exact (holds.quiet (by omega)).signers
 
-/-- The upgrades due at a slot keep the facts of a run, while the epoch is within the run. -/
-private theorem RunHolds.of_processUpgrades {start : RunStart}
-    {budget epochs lastEpoch startEpoch : Nat} {forked after : ForkedBeaconState preset}
-    (conditions : RunConditions preset config start budget epochs lastEpoch)
-    (fits : startEpoch + epochs ≤ lastEpoch)
-    (counted : (getCurrentEpoch forked.state).toNat ≤ startEpoch + epochs)
+/-- One slot keeps the absence of signers of a run, with the upgrades on the way. -/
+private theorem RunHolds.quiet_of_advanceSlotAcross {start : RunStart} {budget startEpoch : Nat}
+    {forked next : ForkedBeaconState preset}
     (holds : RunHolds config start budget startEpoch forked.state)
-    (computed : processUpgrades config checks forked = .ok after) :
-    RunHolds config start budget startEpoch after.state := by
-  have epochEq : getCurrentEpoch after.state = getCurrentEpoch forked.state := by
+    (computed : advanceSlotAcross config checks forked = .ok next) :
+    (startEpoch < (getCurrentEpoch next.state).toNat → QuietCurrent next.state) ∧
+      (startEpoch + 2 ≤ (getCurrentEpoch next.state).toNat → Quiet next.state) := by
+  obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
+  have epochEq : getCurrentEpoch next.state = getCurrentEpoch advanced := by
     unfold getCurrentEpoch
-    rw [processUpgrades_slot computed]
-  have bounded := holds.bounded.of_processUpgrades
-    (holds.bounded.effective_le conditions (by omega))
-    (first_le conditions fits holds.started) computed
-  refine ⟨?_, (processUpgrades_invariant holds.invariant computed).1,
-    processUpgrades_shaped conditions.activation conditions.compounding computed holds.shaped,
-    holds.wellFormed.of_processUpgrades computed, holds.resolved.of_processUpgrades computed,
-    holds.early.of_processUpgrades computed, holds.voted.of_processUpgrades computed, ?_,
-    fun late => (holds.quietCurrent (epochEq ▸ late)).of_processUpgrades computed,
-    fun late => (holds.quiet (epochEq ▸ late)).of_processUpgrades computed⟩
-  · rw [epochEq]
-    exact holds.started
-  · rw [epochEq]
-    exact bounded
+    rw [processUpgrades_slot upgraded]
+  rw [epochEq]
+  -- The epoch moves on by at most one.
+  have moves : (getCurrentEpoch advanced).toNat = (getCurrentEpoch forked.state).toNat ∨
+      (getCurrentEpoch advanced).toNat = (getCurrentEpoch forked.state).toNat + 1 := by
+    rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, advanceSlot_slot advancedOk,
+      Nat.succ_div]
+    split <;> simp
+  refine ⟨fun late => ?_, fun late => ?_⟩
+  · refine QuietCurrent.of_processUpgrades (forked := ⟨forked.fork, advanced⟩) ?_ upgraded
+    change QuietCurrent advanced
+    rcases moves with same | crossed
+    · exact (holds.quietCurrent (by omega)).of_advanceSlot advancedOk
+    · exact advanceSlot_quietCurrent_of_lt advancedOk (by omega)
+  · refine Quiet.of_processUpgrades (forked := ⟨forked.fork, advanced⟩) ?_ upgraded
+    change Quiet advanced
+    rcases moves with same | crossed
+    · exact (holds.quiet (by omega)).of_advanceSlot advancedOk
+    · exact (holds.quietCurrent (by omega)).quiet_of_advanceSlot_of_lt advancedOk (by omega)
 
 /-- One slot of a bounded run succeeds, with the upgrades due at the slot it reaches.
 
@@ -262,76 +159,8 @@ theorem RunHolds.advanceSlotAcross_exists_ok
     (limit : forked.fork < .altair →
       (getCurrentEpoch forked.state).toNat ≤ preset.epochLimitBeforeAltair) :
     ∃ next, advanceSlotAcross config checks forked = .ok next := by
-  have started := holds.started
-  have stateEpoch := getCurrentEpoch_toNat forked.state
-  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by
-    have := conditions.slots
-    omega
-  -- The next slot is before the end of the last epoch, so it fits in 64 bits.
-  have slotFits : forked.state.slot.toNat + 1 < 2 ^ 64 := by
-    have room := conditions.slotRoom
-    have below := Nat.lt_div_mul_add (a := forked.state.slot.toNat + 1) positive
-    have scaled : (forked.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat *
-        preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat ≤
-        (lastEpoch + preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat := by
-      rw [← Nat.succ_mul]
-      exact Nat.mul_le_mul_right _ (by omega)
-    omega
-  obtain ⟨advanced, advancedOk⟩ := advanceSlot_exists_ok (config := config) (checks := checks)
-    slotFits fun boundary cached cachedOk => by
-      have cachedHolds := holds.of_processSlot cachedOk
-      have cachedEpoch : (getCurrentEpoch cached).toNat = (getCurrentEpoch forked.state).toNat := by
-        rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, processSlot_slot cachedOk]
-      have nextIs : (forked.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat =
-          (getCurrentEpoch forked.state).toNat + 1 := by
-        rw [stateEpoch]
-        exact Nat.succ_div_of_dvd (Nat.dvd_of_mod_eq_zero boundary)
-      have cachedSigners : SignersWithinActive cached := by
-        by_cases early : (getCurrentEpoch forked.state).toNat < startEpoch + 2
-        · exact signers early boundary cached cachedOk
-        · exact (cachedHolds.quiet (by omega)).signers
-      exact processEpoch_exists_ok_of_run conditions cachedHolds.bounded cachedHolds.invariant
-        cachedHolds.shaped cachedHolds.wellFormed cachedHolds.resolved
-        (by rw [cachedEpoch]; omega) (by omega) (by rwa [processSlot_slot cachedOk])
-        (first_le conditions fits cachedHolds.started) cachedSigners
-        (draws boundary cached cachedOk) (fun before => cachedEpoch ▸ limit before)
-  have advancedHolds := RunHolds.of_advanceSlot conditions fits holds within signers advancedOk
-  have advancedEpoch : (getCurrentEpoch advanced).toNat ≤ startEpoch + epochs := by
-    rw [getCurrentEpoch_toNat, advanceSlot_slot advancedOk]
-    exact within
-  have advancedSlot := advanceSlot_slot advancedOk
-  -- Each due upgrade succeeds from a state that the upgrades pass through.
-  obtain ⟨after, afterOk, -⟩ := processUpgrades_exists_ok (config := config) (checks := checks)
-    (property := fun upgrading =>
-      UpgradesPass config checks ⟨forked.fork, advanced⟩ upgrading ∧
-        upgrading.state.slot = advanced.slot ∧
-        RunBounded config start budget ((getCurrentEpoch advanced).toNat - startEpoch)
-          upgrading.state ∧
-        Shaped upgrading.state ∧ PendingResolved upgrading.state ∧
-        PendingVoted Set.univ upgrading.state)
-    ⟨.refl _, rfl, advancedHolds.bounded, advancedHolds.shaped, advancedHolds.resolved,
-      advancedHolds.voted⟩
-    (fun reached ⟨passes, slotEq, bounded, shaped, resolved, voted⟩ due => by
-      have epochEq : getCurrentEpoch reached.state = getCurrentEpoch advanced := by
-        unfold getCurrentEpoch
-        rw [slotEq]
-      have nonzero : reached.state.slot ≠ 0 := by
-        intro zero
-        have := congrArg UInt64.toNat (slotEq.symm.trans zero)
-        simp only [UInt64.toNat_zero] at this
-        omega
-      have ready := UpgradeReady.of_run conditions bounded shaped resolved (by omega)
-        (by rw [epochEq]; omega) (upgradeDraws advanced advancedOk reached passes due) due voted
-        fun _ => nonzero
-      obtain ⟨next, nextOk⟩ := upgradeNext_exists_ok (config := config) (checks := checks) ready
-      have altair := (upgradeNext_altair nextOk).1
-      refine ⟨next, nextOk, passes.snoc due nextOk,
-        (upgradeFrame_upgradeNext nextOk).slot.trans slotEq,
-        bounded.of_upgradeNext (bounded.effective_le conditions (by omega))
-          (by rw [epochEq]; exact first_le conditions fits advancedHolds.started) nextOk,
-        upgradeNext_shaped conditions.activation conditions.compounding nextOk shaped,
-        PendingResolved.of_altair altair _, PendingVoted.of_altair altair _⟩)
-  exact ⟨after, by simp only [advanceSlotAcross, advancedOk, bind, Except.bind]; exact afterOk⟩
+  exact ChainHolds.advanceSlotAcross_exists_ok conditions.toChain fits holds.toChainHolds within
+    (holds.signers signers) draws upgradeDraws limit
 
 /-- One slot of a bounded run keeps the facts of the run, with the upgrades on the way.
 
@@ -351,13 +180,9 @@ theorem RunHolds.of_advanceSlotAcross {start : RunStart}
       ∀ cached, processSlot forked.state = .ok cached → SignersWithinActive cached)
     (computed : advanceSlotAcross config checks forked = .ok next) :
     RunHolds config start budget startEpoch next.state := by
-  obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
-  have advancedEpoch : (getCurrentEpoch advanced).toNat ≤ startEpoch + epochs := by
-    rw [getCurrentEpoch_toNat, advanceSlot_slot advancedOk]
-    exact within
-  exact RunHolds.of_processUpgrades (forked := ⟨forked.fork, advanced⟩) conditions fits
-    advancedEpoch (RunHolds.of_advanceSlot conditions fits holds within signers advancedOk)
-    upgraded
+  obtain ⟨quietCurrent, quiet⟩ := holds.quiet_of_advanceSlotAcross computed
+  exact RunHolds.of_chainHolds (ChainHolds.of_advanceSlotAcross conditions.toChain fits
+    holds.toChainHolds within (holds.signers signers) computed) quietCurrent quiet
 
 /-- A run of slots from a state of a run succeeds and keeps the facts of the run.
 
