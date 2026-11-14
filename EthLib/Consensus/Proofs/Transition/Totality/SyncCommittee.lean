@@ -342,8 +342,12 @@ private theorem aggregatePubkeys_ok {pubkeys : Array Cryptography.Bls.BLSPubkey}
     Cryptography.Bls.Signatures.aggregatePubkeyPoint, notEmpty, folded, Bool.false_eq_true,
     ↓reduceIte, bind, Except.bind, pure, Except.pure, Except.mapError]
 
-/-- The next sync committee is drawn and aggregated under the bounds of the update. -/
-private theorem getNextSyncCommittee_ok {state : BeaconState preset fork}
+/-- The next sync committee is drawn and aggregated under the bounds of the draw.
+
+It also needs valid keys, no balance above the cap and an active validator at it.
+
+Those are assumptions on the registry, not bounds. -/
+theorem getNextSyncCommittee_ok {state : BeaconState preset fork}
     (fits : DrawFits preset fork)
     (epochRoom : (getCurrentEpoch state).toNat + 1 + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat <
       2 ^ 64)
