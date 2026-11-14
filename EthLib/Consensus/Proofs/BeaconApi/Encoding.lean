@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.BeaconApi.Encoding
 public import EthLib.Consensus.BeaconApi.Spelling
+public import EthLib.Consensus.BeaconApi.StateQueries
 public import EthLib.Consensus.Proofs.ConsensusVersion
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHexCase
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonRoundTrip
@@ -16,6 +17,8 @@ import all Lean.Data.Json.Basic
 The JSON reader gives back every value that the writer writes.
 
 The writer never fails on a value of a lawful type.
+
+Writing a value as JSON for an answer fails only with code 500.
 
 An envelope reads back as written, so a response reads as its data under its version.
 
@@ -44,6 +47,17 @@ theorem ofApiJson_toApiJson {α : Type} [SszType α] [LawfulSszType α] [ApiSpel
 theorem toApiJson_total {α : Type} [SszType α] [LawfulSszType α] [ApiSpelling α] (x : α) :
     ∃ document, toApiJson x = .ok document :=
   jsonOf_ok LawfulSszType.wellFormed (LawfulSszType.fits x) _
+
+/-- Writing a value as JSON for an answer fails only with code 500. -/
+theorem apiJsonOr500_error_code {α : Type} [SszType α] [ApiSpelling α] {x : α}
+    {error : ErrorMessage} (failed : apiJsonOr500 x = .error error) : error.code = 500 := by
+  unfold apiJsonOr500 at failed
+  cases json : toApiJson x with
+  | error fault =>
+    simp only [json, Except.mapError, Except.error.injEq] at failed
+    rw [← failed]
+    rfl
+  | ok _ => simp [json, Except.mapError] at failed
 
 /-- A container whose marks carry no text mark carries none. -/
 theorem fieldSpelling_hasText {shape : Desc} {marks : List (String × Spelling)}
