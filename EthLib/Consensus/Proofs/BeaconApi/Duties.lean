@@ -25,7 +25,9 @@ From Gloas, a PTC request is refused outside the previous epoch to the next one.
 
 It is also refused before the Gloas fork epoch.
 
-An index that names no validator is refused, when the lookup of each earlier index succeeds.
+An attester, sync or PTC index that names no validator is refused.
+
+That refusal needs an epoch the answer serves, and the duty lookup of each earlier index to succeed.
 
 A sync epoch outside the current and next periods is refused.
 
@@ -604,8 +606,6 @@ theorem dependentRoot_too_old {state : BeaconState preset fork} {lag : Nat} {epo
 
 /-- Before Altair, the sync answer is the error with code 400 that names Altair.
 
-It needs a fork before Altair.
-
 A request with no index gets that error too, not the error of an empty request. -/
 theorem dutiesResponse_sync_of_lt_altair {config : Config} {state : BeaconState preset fork}
     {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root}
@@ -616,8 +616,6 @@ theorem dutiesResponse_sync_of_lt_altair {config : Config} {state : BeaconState 
   simp [dutiesResponse, notAltair]
 
 /-- Before Gloas, the PTC answer is the error with code 400 that names Gloas.
-
-It needs a fork before Gloas.
 
 A request with no index gets that error too, not the error of an empty request. -/
 theorem dutiesResponse_ptc_of_lt_gloas {config : Config} {state : BeaconState preset fork}
@@ -786,7 +784,7 @@ theorem dutiesResponse_sync_outside {config : Config} {state : BeaconState prese
     omega
   simp [dutiesResponse, altair, syncDuties, syncCommitteeOf, other, notNext, bind, Except.bind]
 
-/-- The PTC duty lookup of a validator succeeds when its PTC assignment does. -/
+/-- The PTC duty lookup of a validator of the state succeeds when its PTC assignment does. -/
 private theorem ptcDuty_exists {config : Config} {state : BeaconState preset fork}
     {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {index : ValidatorIndex}
     (known : ∃ validator, getValidator state index = .ok validator)
@@ -800,7 +798,11 @@ private theorem ptcDuty_exists {config : Config} {state : BeaconState preset for
 
 /-- A PTC index that names no validator gets the error of an invalid index, code 400.
 
-It needs a fork from Gloas, an epoch in the window of the PTC duties, and no repeated index.
+It needs a fork from Gloas, and no repeated index.
+
+The epoch must lie from the previous one to the next, and not before the Gloas fork epoch.
+
+The mixes of the state must still hold its seed.
 
 It needs each earlier index to name a validator whose PTC assignment succeeds. -/
 theorem dutiesResponse_ptc_unknown {config : Config} {state : BeaconState preset fork}

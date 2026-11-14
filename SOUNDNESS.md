@@ -4504,12 +4504,14 @@ For the attester answer it also checks code 400 for an unknown index, and for an
 For the PTC answer it checks code 400 for a repeated index, and an epoch too far ahead or too old.
 It also checks code 400 for a PTC request to an Electra state.
 For the sync answer it checks code 400 for a request to a Phase 0 state.
-It checks the same for epochs of the previous period and of two periods ahead.
+It also checks code 400 for a sync epoch of the previous period and of two periods ahead.
 For the first proposer answer it checks code 400 at the next epoch from Fulu.
 For the second it checks code 400 at the next epoch before Fulu, and from Fulu at the previous epoch and two epochs ahead.
 It never asks for PTC duties at the previous epoch or before the Gloas fork epoch; only `ptcDuties_eq` covers those two.
 It sends no unknown index to the sync or PTC answer, so only the theorems cover those two.
 No theorem states the errors with code 500, where the node cannot compute an assignment, a proposer, a slot or a root.
+No theorem states the code 400 that the PTC assignment gives to an epoch past the seed lookahead.
+It is reachable only at the next epoch, under a preset whose seed lookahead is zero.
 
 The answers that hand a validator its data are in `Consensus/BeaconApi/ValidatorData.lean`: attestation data, payload attestation data, aggregates and sync committee contributions.
 `produceAttestationData_head` (`Consensus/Proofs/BeaconApi/ValidatorData.lean`) shows that the attestation data votes for the head of the store, at the requested slot, and that the head is not optimistic.
