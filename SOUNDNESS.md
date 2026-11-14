@@ -3449,6 +3449,15 @@ A newer finalized header signed by two thirds of the committee then replaces it 
 `processLightClientUpdate_maxActiveParticipants` gives both counts of signers after an update.
 They move back a period when a newer finalized header enters the next period.
 That needs two thirds of the committee, and a store that knows the next committee.
+`applyLightClientUpdate_eq_ok_iff` states when applying an update succeeds, and the store that it returns.
+A store that does not know the next committee needs the finalized header of the update in its own period.
+Such a store then takes the next committee of the update.
+A store that knows the next committee moves both committees and both counts back a period when that header opens the next period.
+`processLightClientStoreForceUpdate_eq_ok_iff` states when a forced update succeeds, and the store that it returns.
+It fails at a fork without a light client, when the timeout overflows 64 bits, or when applying the best update past the timeout fails.
+Past the timeout it applies the best update, whose attested header stands for a finalized header that is not newer than that of the store.
+`processLightClientUpdate_eq_ok_iff` states when processing an update succeeds, and the store that it returns, with its committees and its best update.
+Without a newer finalized header, the first next committee is applied only from a finality update whose finalized header is in the period of its attested header.
 `SyncAggregate.participants_le` bounds the signers by the size of the committee, so their count fits in 64 bits.
 No theorem links an honest signer to the canonical chain; that is a property of the validators, not of the protocol text.
 
