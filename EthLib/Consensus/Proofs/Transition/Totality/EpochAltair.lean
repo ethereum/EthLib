@@ -179,11 +179,8 @@ theorem processEpoch_total_of_altair_of_lt_electra {config : Config} {checks : S
   have kept1 : justified.balances = state.balances ∧ justified.slashings = state.slashings ∧
       justified.historicalRoots = state.historicalRoots ∧
       justified.historicalSummaries = state.historicalSummaries := by
-    obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok justifiedOk
-    · exact ⟨rfl, rfl, rfl, rfl⟩
-    · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
-      rw [← rest]
-      exact ⟨rfl, rfl, rfl, rfl⟩
+    rw [processJustificationAndFinalization_eq justifiedOk]
+    exact ⟨rfl, rfl, rfl, rfl⟩
   obtain ⟨balances1, slashings1, roots1, summaries1⟩ := kept1
   have within1 : justified.RegistryWithinLimit := by
     unfold BeaconState.RegistryWithinLimit
