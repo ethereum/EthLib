@@ -91,6 +91,12 @@ theorem logGA {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List 
               topics := words.map U256.toBeBytes
               data := memoryReadBytes
                 (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
+                start.toNat size.toNat }
+          simulatedLogs := substate.simulatedLogs.push
+            { address := message.currentTarget
+              topics := words.map U256.toBeBytes
+              data := memoryReadBytes
+                (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
                 start.toNat size.toNat } } returnData) := by
   apply At.ruleGA hlt hbyte (ofByte_of_decode decoded (Fork.frontier_le _)) (instruction_log n)
     (runMono_log n.val) (noAbort_log n.val)
@@ -134,6 +140,12 @@ theorem logG {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U
               topics := words.map U256.toBeBytes
               data := memoryReadBytes
                 (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
+                start.toNat size.toNat }
+          simulatedLogs := substate.simulatedLogs.push
+            { address := message.currentTarget
+              topics := words.map U256.toBeBytes
+              data := memoryReadBytes
+                (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
                 start.toNat size.toNat } } returnData) :=
   (logGA hlen hlt hbyte decoded hstatic hgas).toG
 
@@ -153,6 +165,12 @@ theorem log {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U2
         (gas - (logCost n.val size + (extendMemory memory.size [(start, size)]).cost)) state
         { substate with
           logs := substate.logs.push
+            { address := message.currentTarget
+              topics := words.map U256.toBeBytes
+              data := memoryReadBytes
+                (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
+                start.toNat size.toNat }
+          simulatedLogs := substate.simulatedLogs.push
             { address := message.currentTarget
               topics := words.map U256.toBeBytes
               data := memoryReadBytes

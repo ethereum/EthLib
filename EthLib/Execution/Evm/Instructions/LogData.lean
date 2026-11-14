@@ -56,7 +56,10 @@ def logStep (n : Nat) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) 
       address := evm.message.currentTarget
       topics
       data := memoryReadBytes evm.memory start.toNat size.toNat }
-    return advance { evm with substate := { evm.substate with logs := evm.substate.logs.push log } }
+    return advance { evm with
+      substate := { evm.substate with
+        logs := evm.substate.logs.push log
+        simulatedLogs := evm.substate.simulatedLogs.push log } }
 
 /-- The instruction of a LOG opcode, or none for another opcode. -/
 def logOpStep : Op → Option (Evm fork Meter → Except EvmError (Evm fork Meter))

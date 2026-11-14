@@ -83,6 +83,7 @@ def incorporateChild (fork : Fork) (caller child : Evm fork Meter) : Evm fork Me
         accountsToDelete :=
           caller.substate.accountsToDelete.insertMany child.substate.accountsToDelete.toList
         logs := caller.substate.logs ++ child.substate.logs
+        simulatedLogs := caller.substate.simulatedLogs ++ child.substate.simulatedLogs
         touchedAccounts := touchedOnSuccess fork caller child
         refundCounter := caller.substate.refundCounter + child.substate.refundCounter
         accessedAddresses := child.substate.accessedAddresses

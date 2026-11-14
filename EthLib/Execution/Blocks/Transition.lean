@@ -159,6 +159,10 @@ structure TransactionResult where
   gasBeforeRefund : Nat
   /-- The error that stopped its message, or none when the message succeeded. -/
   error : Option EvmError
+  /-- The logs that a simulation with traced transfers reports for it, oldest first.
+
+  Every run computes them, and no rule of the block reads them. -/
+  simulatedLogs : List Log
 
 /-- What the body of a block gives, at `fork`. -/
 structure BodyOutput (fork : Fork) where
@@ -223,7 +227,8 @@ def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
            receipts :=
              before.receipts ++ [(tx.type, makeReceipt outcome cumulativeGasUsed out.logs.toList)]
            logs := before.logs ++ out.logs.toList
-           results := before.results ++ [⟨out.messageOutput, out.gasBeforeRefund, out.error⟩] }
+           results := before.results ++
+             [⟨out.messageOutput, out.gasBeforeRefund, out.error, out.simulatedLogs.toList⟩] }
 
 /-- Run the transactions of a block in order, from the body so far. -/
 def applyTransactions {fork : Fork} (env : BlockEnvironment fork) (body : BodyState)
