@@ -145,7 +145,9 @@ def subscribed (topics : List EventTopic) (event : ApiEvent) : Bool :=
 
 /-- The message of an event in the stream: a line with the topic and a line with the data.
 
-The data line holds the JSON text of the data, on one line, as the writer gives it.
+The writer must give the JSON text of the data on one line, as a compact writer does.
+
+A line break in that text would end the data line, so the message would be malformed.
 
 A blank line ends the message. -/
 def toStream (write : Json → String) (event : ApiEvent) : String :=

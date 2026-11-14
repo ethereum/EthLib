@@ -127,7 +127,8 @@ def transactionErrorText : TransactionError → String
   | .decoding _ => "the RLP of the transaction does not decode"
   | .encoding _ => "the signed fields of the transaction have no RLP encoding"
   | .invalidSignature => "the signature names no sender"
-  | .insufficientGas needed gas => s!"gas limit {gas} is below the intrinsic gas {needed}"
+  | .insufficientGas needed gas =>
+    s!"gas limit {gas} is below {needed}, the intrinsic gas or the call data floor"
   | .initCodeTooLarge size => s!"init code of {size} bytes is above the limit"
   | .gasLimitExceeded gas => s!"gas limit {gas} is above the limit of a transaction"
   | .nonceOverflow => "the nonce is at least 2^64 - 1"
@@ -137,7 +138,8 @@ def transactionErrorText : TransactionError → String
   | .blobCountExceeded count => s!"{count} blobs are above the limit"
   | .invalidBlobVersionedHash => "a versioned hash has the wrong version"
   | .emptyAuthorizationList => "a set code transaction carries no authorization"
-  | .intrinsicGasAboveLimit gas => s!"intrinsic gas {gas} is above the limit of a transaction"
+  | .intrinsicGasAboveLimit gas =>
+    s!"intrinsic gas or floor {gas} is above the limit of a transaction"
 
 /-- Why a transaction cannot enter its block, as the data of its error. -/
 def inclusionErrorText : InclusionError → String
