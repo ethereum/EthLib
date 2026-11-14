@@ -120,7 +120,8 @@ theorem messageFailure_of_error {message : GossipMessage preset fork}
     {error : ForkChoiceError}
     (gossip : validateGossipMessage context.config context.checks context.setup seen
       context.store context.statuses context.currentTimeMs message = .error error) :
-    messageFailure context seen message = (some s!"fork choice: {reprStr error}", seen) := by
+    messageFailure context seen message =
+      (some "fork choice: the store cannot check it", seen) := by
   simp [messageFailure, gossip]
 
 /-- An item validates its first message, then the rest after its keys.

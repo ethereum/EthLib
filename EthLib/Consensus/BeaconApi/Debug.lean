@@ -289,7 +289,8 @@ def ChainHead.toJson (head : ChainHead) : Json :=
 It holds the checkpoints of the store, and the view of each node, with empty extra data. -/
 def forkChoiceResponse (config : Config) (store : Store preset fork)
     (optimistic : OptimisticStore preset fork) : Except ErrorMessage ApiEnvelope := do
-  let views ← (nodeViews config store optimistic).mapError fun e => internalError (reprStr e)
+  let views ← (nodeViews config store optimistic).mapError fun _ =>
+    internalError "no fork choice nodes"
   return { data := Json.mkObj [
     ("justified_checkpoint", checkpointJson store.justifiedCheckpoint),
     ("finalized_checkpoint", checkpointJson store.finalizedCheckpoint),
@@ -299,7 +300,7 @@ def forkChoiceResponse (config : Config) (store : Store preset fork)
 /-- The response of the heads endpoint, or the error with code 500. -/
 def chainHeadsResponse (store : Store preset fork) (optimistic : OptimisticStore preset fork) :
     Except ErrorMessage ApiEnvelope := do
-  let heads ← (chainHeads store optimistic).mapError fun e => internalError (reprStr e)
+  let heads ← (chainHeads store optimistic).mapError fun _ => internalError "no chain heads"
   return { data := .arr (heads.map (·.toJson)).toArray }
 
 end EthLib.Consensus.BeaconApi

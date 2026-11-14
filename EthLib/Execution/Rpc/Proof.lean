@@ -100,8 +100,8 @@ namespace ChainView
 def accountProof (v : ChainView) (a : Address) (keys : List Bytes32) (p : BlockParam) :
     Except RpcError AccountProof :=
   v.ofBlock p fun r =>
-    (AccountProof.ofState Cryptography.Hash.Keccak.keccak256 r.state a keys).mapError fun e =>
-      internalError.toRpcError (some (.str s!"proof: {reprStr e}"))
+    (AccountProof.ofState Cryptography.Hash.Keccak.keccak256 r.state a keys).mapError fun _ =>
+      internalError.toRpcError (some (.str "proof: the state has no proof"))
 
 end ChainView
 

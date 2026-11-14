@@ -152,10 +152,7 @@ def test_consensus_level_refuses_a_bad_state_root() -> None:
         ],
         **store,
     )
-    reason = (
-        "consensus: EthLib.Consensus.ForkChoiceError.transition "
-        "(EthLib.Consensus.TransitionError.wrongStateRoot)"
-    )
+    reason = "consensus: the fork choice rejects it"
     # A refused block is not seen, so the default level broadcasts it.
     # The gossip level then finds it already seen.
     seen = "block is not the first valid block for this slot and proposer"

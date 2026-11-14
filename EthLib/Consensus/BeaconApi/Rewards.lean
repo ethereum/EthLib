@@ -298,7 +298,7 @@ def attestationRewardsResponse (config : Config) (state : BeaconState preset for
   if getCurrentEpoch state = GENESIS_EPOCH ∨ getPreviousEpoch state ≠ epoch ∨
       (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat ≠ 0 then
     throw (epochNotKnown epoch)
-  let fault (error : TransitionError) := internalError (reprStr error)
+  let fault (_ : TransitionError) := internalError "no attestation rewards"
   let state ← (stateBeforeRewards config state).mapError fault
   let ideal ← (idealAttestationRewards state).mapError fault
   let total ← (attestationRewards config state ids).mapError fault
@@ -386,7 +386,7 @@ def syncCommitteeRewardsResponse (state : BeaconState preset fork)
     Except ErrorMessage ApiEnvelope := do
   if altair : .altair ≤ fork then
     let entries ← (syncCommitteeRewards state altair aggregate ids).mapError
-      fun error => internalError (reprStr error)
+      fun _ => internalError "no sync committee rewards"
     return { data := .arr (entries.map (·.toJson)).toArray }
   else throw invalidSyncRewardsRequest
 
@@ -473,7 +473,7 @@ def blockRewardsResponse (config : Config) (checks : SignatureChecks)
     (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) : Except ErrorMessage ApiEnvelope := do
   let rewards ← (blockRewards config checks engine state block).mapError
-    fun error => internalError (reprStr error)
+    fun _ => internalError "no block rewards"
   return { data := rewards.toJson }
 
 end EthLib.Consensus.BeaconApi

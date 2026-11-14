@@ -71,9 +71,11 @@ theorem readEventTopics_map_name (topics : List EventTopic) :
       more, rfl⟩
 
 /-- The stream of a list of events is the message of the first, if chosen, then the rest. -/
-theorem eventStream_cons (topics : List EventTopic) (event : ApiEvent) (rest : List ApiEvent) :
-    eventStream topics (event :: rest) =
-      (if event.subscribed topics then event.toStream else "") ++ eventStream topics rest := by
+theorem eventStream_cons (write : Lean.Json → String) (topics : List EventTopic) (event : ApiEvent)
+    (rest : List ApiEvent) :
+    eventStream write topics (event :: rest) =
+      (if event.subscribed topics then event.toStream write else "") ++
+        eventStream write topics rest := by
   unfold eventStream
   cases chosen : event.subscribed topics <;> simp [chosen]
 

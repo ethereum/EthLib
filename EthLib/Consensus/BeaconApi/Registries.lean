@@ -233,7 +233,7 @@ def readBuilderIds (texts : List String) : Except ErrorMessage (List ValidatorId
 def validatorsResponse (state : BeaconState preset fork) (ids : List ValidatorId)
     (filter : StatusFilter) : Except ErrorMessage ApiEnvelope := do
   let entries ← (stateValidators state ids filter).mapM fun entry =>
-    entry.toJson.mapError fun fault => internalError (reprStr fault)
+    entry.toJson.mapError fun _ => internalError "no JSON of an entry"
   return { data := .arr entries.toArray }
 
 /-- The response of the balances endpoint, without the two flags that come from the store. -/
@@ -321,7 +321,7 @@ def buildersResponse (state : BeaconState preset fork) (ids : List ValidatorId)
     (filter : List BuilderStatus) : Except ErrorMessage ApiEnvelope := do
   if gloas : .glamsterdam ≤ fork then
     let entries ← (stateBuilders state gloas ids filter).mapM fun entry =>
-      entry.toJson.mapError fun fault => internalError (reprStr fault)
+      entry.toJson.mapError fun _ => internalError "no JSON of an entry"
     return { data := .arr entries.toArray }
   else .error (beforeFork "builders" .glamsterdam)
 

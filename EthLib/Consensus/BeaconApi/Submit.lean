@@ -96,7 +96,7 @@ def messageFailure (context : SubmitContext preset fork) (seen : Seen)
   match validateGossipMessage context.config context.checks context.setup seen context.store
       context.statuses context.currentTimeMs message with
   | .ok (outcome, after) => (failureReason outcome, after)
-  | .error error => (some s!"fork choice: {reprStr error}", seen)
+  | .error _ => (some "fork choice: the store cannot check it", seen)
 
 /-- The messages of an item in turn: the reason of the first one that fails, if any.
 

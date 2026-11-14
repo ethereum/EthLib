@@ -154,11 +154,11 @@ def internalError (fault : String) : ErrorMessage :=
 
 /-- The JSON of a value, or the error with code 500. -/
 def apiJsonOr500 {α : Type} [SszType α] [ApiSpelling α] (x : α) : Except ErrorMessage Json :=
-  (toApiJson x).mapError fun fault => internalError (reprStr fault)
+  (toApiJson x).mapError fun _ => internalError "no JSON of a value"
 
 /-- The SSZ body of a value, or the error with code 500. -/
 def apiSszOr500 {α : Type} [SszType α] (x : α) : Except ErrorMessage ByteArray :=
-  (toApiSsz x).mapError fun fault => internalError (reprStr fault)
+  (toApiSsz x).mapError fun _ => internalError "no SSZ of a value"
 
 /-- The response that carries a field of a state of a fork, with the version of that fork. -/
 def versioned {α : Type} [SszType α] [ApiSpelling α] (fork : Fork)
@@ -172,12 +172,12 @@ The root and the RANDAO mix are objects with one key, `root` and `randao`.
 The queues, the lookahead and the builder fields also name the consensus version of the state. -/
 def stateQuery (state : BeaconState preset fork) : StateQuery → Except ErrorMessage ApiEnvelope
   | .root => do
-    let root ← (stateRoot state).mapError fun fault => internalError (reprStr fault)
+    let root ← (stateRoot state).mapError fun _ => internalError "no state root"
     return { data := Json.mkObj [("root", .str (toHex root.toArray))] }
   | .fork => do return { data := ← apiJsonOr500 (stateFork state) }
   | .finalityCheckpoints => do return { data := ← apiJsonOr500 (finalityCheckpoints state) }
   | .randao epoch => do
-    let mix ← (stateRandao state epoch).mapError fun fault => internalError (reprStr fault)
+    let mix ← (stateRandao state epoch).mapError fun _ => internalError "no RANDAO mix"
     return { data := Json.mkObj [("randao", .str (toHex mix.toArray))] }
   | .pendingDeposits => versioned fork (pendingDeposits state)
   | .pendingPartialWithdrawals => versioned fork (pendingPartialWithdrawals state)

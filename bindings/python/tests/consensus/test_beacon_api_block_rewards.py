@@ -162,7 +162,7 @@ def test_block_of_another_slot():
     # The block does not apply to a state past its slot, which gives code 500.
     with raises(
         consensus.ConsensusError,
-        f"Internal error: EthLib.Consensus.TransitionError.slotMismatch {slot} {slot + 1}",
+        "Internal error: no block rewards",
     ) as info:
         consensus.api_block_rewards("minimal", FORKS[fork], at_slot, block)
     assert info.value.code == 500

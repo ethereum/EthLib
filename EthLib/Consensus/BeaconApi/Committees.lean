@@ -101,8 +101,8 @@ def committeesResponse (state : BeaconState preset fork) (epoch : Option Epoch)
     throw { code := 400, message := s!"Epoch {epoch.toNat} is before the mixes of the state" }
   if slot.any (computeEpochAtSlot preset · != epoch) then
     throw { code := 400, message := "Slot does not belong in epoch" }
-  let committees ← (epochCommittees state epoch index slot).mapError fun fault =>
-    internalError (reprStr fault)
+  let committees ← (epochCommittees state epoch index slot).mapError fun _ =>
+    internalError "no committees"
   return { data := .arr (committees.map Committee.toJson).toArray }
 
 /-! ## Sync committees -/

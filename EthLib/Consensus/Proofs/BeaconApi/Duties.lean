@@ -1008,7 +1008,7 @@ theorem dutiesResponse_proposer_no_active {config : Config} {state : BeaconState
       rw [getActiveValidatorIndicesChecked_ok activeOk, idle] at first
       simp [computeSlotProposer, notGloas, proposerCandidates, computeProposerIndex, throw,
         throwThe, MonadExceptOf.throw, bind, Except.bind] at first
-  refine ⟨internalError (reprStr fault), ?_, rfl⟩
+  refine ⟨internalError "no proposers", ?_, rfl⟩
   rcases version with rfl | rfl <;>
     simp [dutiesResponse, proposerDuties, epochProposers, notFulu, drawFailed, Except.mapError,
       bind, Except.bind]

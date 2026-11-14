@@ -78,10 +78,10 @@ def BlockRecord.baseFee (r : BlockRecord) : Nat :=
 It fails when the signature names no sender or the transaction has no hash. -/
 def BlockRecord.transactionInfo (r : BlockRecord) (index : Nat) (tx : Transaction) :
     Except RpcError TransactionInfo := do
-  let sender ← (recoverSender r.fork tx).mapError fun e =>
-    internalError.toRpcError (some (.str s!"transaction sender: {reprStr e}"))
-  let hash ← (transactionHash tx).mapError fun e =>
-    internalError.toRpcError (some (.str s!"transaction hash: {reprStr e}"))
+  let sender ← (recoverSender r.fork tx).mapError fun _ =>
+    internalError.toRpcError (some (.str "transaction sender: the sender is not recovered"))
+  let hash ← (transactionHash tx).mapError fun _ =>
+    internalError.toRpcError (some (.str "transaction hash: the transaction has no RLP encoding"))
   return { blockHash := r.hash, blockNumber := r.block.header.number
            blockTimestamp := r.block.header.timestamp.toNat, index, sender, hash
            gasPrice := effectiveGasPrice r.baseFee tx, tx }

@@ -84,7 +84,8 @@ def attributeFields (a : PayloadAttributes fork) : List (String × AttributeValu
 The export derivation has the same function at compile time only, so a specification cannot call it.
 -/
 def snakeName (name : String) : String :=
-  name.foldl (fun out c => if c.isUpper then out ++ "_" ++ c.toLower.toString else out.push c) ""
+  name.toList.foldl
+    (fun out c => if c.isUpper then out ++ "_" ++ c.toLower.toString else out.push c) ""
 
 /-- A value as the Engine API writes it: an integer in hexadecimal. -/
 def AttributeScalar.engineJson : AttributeScalar → Json
