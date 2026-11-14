@@ -272,7 +272,7 @@ theorem processSlotsAcross_exists_ok_altairWitnessState {checks : SignatureCheck
     (by rw [witness_epoch]; decide) (by rw [witness_epoch]; exact runHolds_altairWitnessState)
     (UInt64.lt_iff_toNat_lt.mpr (by rw [slot0]; exact later))
     (by rw [witness_epoch]; change slot.toNat / 32 ≤ 74240 + 2250000; omega)
-    signers draws limit
+    signers (draws.drawsEnd fun fork => (drawFits_presets fork).1) limit
   rw [witness_epoch] at holds
   exact ⟨after, computed, holds⟩
 

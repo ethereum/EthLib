@@ -54,13 +54,10 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 It draws the proposers of the current epoch and of each epoch of the seed lookahead.
 
-In each of these epochs one active validator is at the cap of the draw.
-
-That is an assumption on the registry, not a bound.
+In each of these epochs the draws must end: an assumption, not a bound.
 
 The bounds are those of the first lookahead, read on the Electra state. -/
 theorem upgradeToFulu_ok {pre : BeaconState preset .pectra}
-    (fits : DrawFits preset .fusaka)
     (seedRoom : (getCurrentEpoch pre).toNat + preset.MIN_SEED_LOOKAHEAD.toNat +
       preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -71,15 +68,12 @@ theorem upgradeToFulu_ok {pre : BeaconState preset .pectra}
     ∃ post, upgradeToFulu config pre = .ok post := by
   have epoch : getCurrentEpoch (carryFields config .fusaka pre (by decide) (by decide)) =
       getCurrentEpoch pre := rfl
-  have cap : drawCap preset .fusaka = drawCap preset .pectra := by
-    simp only [drawCap, show Fork.pectra ≤ Fork.fusaka from by decide,
-      show Fork.pectra ≤ Fork.pectra from by decide, ↓reduceIte]
   obtain ⟨proposers, drawn⟩ := initializeProposerLookahead_ok
-    (state := carryFields config .fusaka pre (by decide) (by decide)) fits
+    (state := carryFields config .fusaka pre (by decide) (by decide))
     (by rw [epoch]; exact seedRoom) lookahead (by rw [epoch]; exact slotRoom)
     (fun offset le => by
       rw [epoch]
-      exact ProposersDrawable.of_validators (state := pre) rfl cap (by decide)
+      exact ProposersDrawable.of_eq (state := pre) rfl rfl (by decide) (by decide)
         (drawable offset le))
   refine ⟨{ carryFields config .fusaka pre (by decide) (by decide) with
     proposerLookahead := fun _ => proposers }, ?_⟩
@@ -230,9 +224,7 @@ theorem onboardBuildersFromPendingDeposits_ok {state : BeaconState preset .glams
 
 It draws the committees of the current epoch and of each epoch of the seed lookahead.
 
-In each slot of these epochs one member of the beacon committees is at the cap of the draw.
-
-That is an assumption on the registry, not a bound.
+In each of these epochs the draws must end: an assumption, not a bound.
 
 An epoch must have at least one slot.
 
@@ -240,7 +232,6 @@ The pending deposits must also hold less than `2^64` Gwei.
 
 The bounds of the draw are those of the first window, read on the Fulu state. -/
 theorem upgradeToGloas_ok {pre : BeaconState preset .fusaka}
-    (fits : DrawFits preset .glamsterdam)
     (seedRoom : (getCurrentEpoch pre).toNat + preset.MIN_SEED_LOOKAHEAD.toNat +
       preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -254,14 +245,11 @@ theorem upgradeToGloas_ok {pre : BeaconState preset .fusaka}
   obtain ⟨root, rooted⟩ :=
     Serialization.Ssz.SszType.hashTreeRoot_total (ExecutionRequests.empty preset .glamsterdam)
   have epoch : getCurrentEpoch (upgradeFields config pre root) = getCurrentEpoch pre := rfl
-  have cap : drawCap preset .glamsterdam = drawCap preset .fusaka := by
-    simp only [drawCap, show Fork.pectra ≤ Fork.glamsterdam from by decide,
-      show Fork.pectra ≤ Fork.fusaka from by decide, ↓reduceIte]
   obtain ⟨window, windowOk⟩ := initializePtcWindow_ok (state := upgradeFields config pre root)
-    fits (by rw [epoch]; exact seedRoom) lookahead (by rw [epoch]; exact slotRoom) perEpoch
+    (by rw [epoch]; exact seedRoom) lookahead (by rw [epoch]; exact slotRoom) perEpoch
     (fun offset le => by
       rw [epoch]
-      exact PtcDrawable.of_eq (state := pre) rfl rfl cap (drawable offset le))
+      exact PtcDrawable.of_eq (state := pre) rfl rfl (by decide) (drawable offset le))
   obtain ⟨post, onboarded⟩ := onboardBuildersFromPendingDeposits_ok (config := config)
     (checks := checks)
     (state := { upgradeFields config pre root with ptcWindow := fun _ => window }) rfl
@@ -337,11 +325,10 @@ That is an assumption on the pending attestations, not a bound.
 
 The sync committee is drawn under the bounds of the draw, read on the state before the upgrade.
 
-The draw also needs valid keys, no balance above its cap and an active validator at it.
+The draw also needs valid keys, and it must end.
 
 Those are assumptions too. -/
 theorem upgradeToAltair_exists_ok {pre : BeaconState preset .phase0}
-    (fits : DrawFits preset .altair)
     (epochRoom : (getCurrentEpoch pre).toNat + 1 + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat <
       2 ^ 64)
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -382,13 +369,11 @@ theorem upgradeToAltair_exists_ok {pre : BeaconState preset .phase0}
     (by decide) (by decide) (by decide) (by decide)
   obtain ⟨participation, folded⟩ := walk _ (fun _ member => member)
     (carried.previousEpochParticipation (by decide)) (by rw [previous, Array.size_replicate])
-  have cap : drawCap preset .altair = drawCap preset .phase0 := by
-    simp only [drawCap, show ¬Fork.pectra ≤ Fork.altair from by decide,
-      show ¬Fork.pectra ≤ Fork.phase0 from by decide, ↓reduceIte]
-  obtain ⟨keys, capped, full, few, room⟩ := drawable
+  obtain ⟨keys, few, ends⟩ := drawable
   obtain ⟨committee, drawn⟩ := getNextSyncCommittee_ok
     (state := { carried with previousEpochParticipation := fun _ => participation })
-    fits epochRoom lookahead keys (cap ▸ capped) (cap ▸ full) few room members
+    epochRoom lookahead keys few (SyncDrawEnds.of_eq (state := pre) rfl rfl (by decide) ends)
+    members
   have start : (pre.previousEpochAttestations (by decide)).data.toList.foldlM
       (fun state attestation => translateAttestation state (by decide) attestation)
         (carryFields config .altair pre (by decide) (by decide)) =

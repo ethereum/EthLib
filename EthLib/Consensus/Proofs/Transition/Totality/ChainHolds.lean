@@ -384,9 +384,9 @@ The chain then ends by the last epoch of the conditions.
 
 At the end of an epoch, the signers hold at most the active balance.
 
-At the end of an epoch, the draws meet a validator at the cap.
+At the end of an epoch, the draws of the epoch transition end.
 
-The draws of the upgrades due at the next slot meet a validator at the cap.
+The draws of the upgrades due at the next slot end.
 
 Before Altair, the epoch is within the limit before Altair. -/
 theorem ChainHolds.advanceSlotAcross_exists_ok
@@ -403,10 +403,10 @@ theorem ChainHolds.advanceSlotAcross_exists_ok
     (signers : (forked.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
       ∀ cached, processSlot forked.state = .ok cached → SignersWithinActive cached)
     (draws : (forked.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
-      ∀ cached, processSlot forked.state = .ok cached → EpochDraws config checks cached)
+      ∀ cached, processSlot forked.state = .ok cached → EpochDrawsEnd config checks cached)
     (upgradeDraws : ∀ advanced, advanceSlot config checks forked.state = .ok advanced →
       ∀ upgrading, UpgradesPass config checks ⟨forked.fork, advanced⟩ upgrading →
-        upgradeDue config upgrading = true → UpgradeDraws upgrading)
+        upgradeDue config upgrading = true → UpgradeDrawsEnd upgrading)
     (limit : forked.fork < .altair →
       (getCurrentEpoch forked.state).toNat ≤ preset.epochLimitBeforeAltair) :
     ∃ next, advanceSlotAcross config checks forked = .ok next := by

@@ -13,7 +13,9 @@ So every slot advance within the horizon succeeds, under three hypotheses on the
 
 From Electra, a run of empty slots leaks.
 
-The hypothesis on the draws then fails within about `7.7 * 10^5` epochs.
+Within about `7.7 * 10^5` epochs no validator stays at the cap of the draw.
+
+The hypothesis on the draws asks only that each draw ends, which needs no validator at the cap.
 
 On mainnet the bounds alone hold for `2.25 * 10^6` epochs, about 27 years.
 -/
@@ -130,11 +132,11 @@ The epoch of the next slot is at most the first epoch of the run plus the number
 
 The run then ends by the last epoch of the conditions.
 
-At the end of an epoch, the draws meet a validator at the cap.
+At the end of an epoch, the draws of the epoch transition end.
 
 In the first two epochs of the run, the signers hold at most the active balance.
 
-The draws of the upgrades due at the next slot meet a validator at the cap.
+The draws of the upgrades due at the next slot end.
 
 Before Altair, the epoch is within the limit before Altair. -/
 theorem RunHolds.advanceSlotAcross_exists_ok
@@ -152,10 +154,10 @@ theorem RunHolds.advanceSlotAcross_exists_ok
       (forked.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
       ∀ cached, processSlot forked.state = .ok cached → SignersWithinActive cached)
     (draws : (forked.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
-      ∀ cached, processSlot forked.state = .ok cached → EpochDraws config checks cached)
+      ∀ cached, processSlot forked.state = .ok cached → EpochDrawsEnd config checks cached)
     (upgradeDraws : ∀ advanced, advanceSlot config checks forked.state = .ok advanced →
       ∀ upgrading, UpgradesPass config checks ⟨forked.fork, advanced⟩ upgrading →
-        upgradeDue config upgrading = true → UpgradeDraws upgrading)
+        upgradeDue config upgrading = true → UpgradeDrawsEnd upgrading)
     (limit : forked.fork < .altair →
       (getCurrentEpoch forked.state).toNat ≤ preset.epochLimitBeforeAltair) :
     ∃ next, advanceSlotAcross config checks forked = .ok next := by
@@ -202,7 +204,7 @@ private theorem advanceSlotsAcross_run
         (getCurrentEpoch reached.state).toNat < startEpoch + 2 →
         (reached.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
         ∀ cached, processSlot reached.state = .ok cached → SignersWithinActive cached) →
-      DrawsAtCap config checks forked count → EpochLimitBeforeAltair forked count →
+      DrawsEnd config checks forked count → EpochLimitBeforeAltair forked count →
       ∃ after, advanceSlotsAcross config checks count forked = .ok after ∧
         RunHolds config start budget startEpoch after.state
   | 0, forked, holds, _, _, _, _ => ⟨forked, rfl, holds⟩
@@ -263,7 +265,7 @@ theorem advanceSlotsAcross_exists_ok_of_run
     (within : (forked.state.slot.toNat + count) / preset.SLOTS_PER_EPOCH.toNat ≤
       (getCurrentEpoch forked.state).toNat + epochs)
     (signers : SignersEarly config checks forked count)
-    (draws : DrawsAtCap config checks forked count)
+    (draws : DrawsEnd config checks forked count)
     (limit : EpochLimitBeforeAltair forked count) :
     ∃ after, advanceSlotsAcross config checks count forked = .ok after ∧
       RunHolds config start budget (getCurrentEpoch forked.state).toNat after.state :=
@@ -283,7 +285,7 @@ The run takes three hypotheses on the states it reaches.
 
 In its first two epochs, the signers hold at most the active balance.
 
-The draws meet a validator at the cap, and before Altair the run ends within the epoch limit.
+The draws end, and before Altair the run ends within the epoch limit.
 
 The state that the advance returns keeps the facts of the run. -/
 theorem processSlotsAcross_exists_ok_of_run
@@ -300,7 +302,7 @@ theorem processSlotsAcross_exists_ok_of_run
     (within : slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤
       (getCurrentEpoch forked.state).toNat + epochs)
     (signers : SignersEarly config checks forked (slot.toNat - forked.state.slot.toNat))
-    (draws : DrawsAtCap config checks forked (slot.toNat - forked.state.slot.toNat))
+    (draws : DrawsEnd config checks forked (slot.toNat - forked.state.slot.toNat))
     (limit : EpochLimitBeforeAltair forked (slot.toNat - forked.state.slot.toNat)) :
     ∃ after, processSlotsAcross config checks forked slot = .ok after ∧
       RunHolds config start budget (getCurrentEpoch forked.state).toNat after.state := by
@@ -323,11 +325,7 @@ The budget of effective balances is `2^57` Gwei.
 
 The run takes the three hypotheses on the states it reaches.
 
-From Electra, the leak takes every validator off the cap of 2048 ETH.
-
-It does so within about `7.7 * 10^5` epochs.
-
-From a balance at the cap, it takes 68 epochs. -/
+The hypothesis on the draws needs no validator at the cap, so a leak alone does not break it. -/
 theorem processSlotsAcross_exists_ok_mainnet {forked : ForkedBeaconState Preset.mainnet}
     {slot : Slot} (early : (getCurrentEpoch forked.state).toNat ≤ 2 ^ 40)
     (holds : RunHolds Config.mainnet (RunStart.mainnet (getCurrentEpoch forked.state).toNat)
@@ -336,7 +334,7 @@ theorem processSlotsAcross_exists_ok_mainnet {forked : ForkedBeaconState Preset.
     (within : slot.toNat / Preset.mainnet.SLOTS_PER_EPOCH.toNat ≤
       (getCurrentEpoch forked.state).toNat + 2250000)
     (signers : SignersEarly Config.mainnet checks forked (slot.toNat - forked.state.slot.toNat))
-    (draws : DrawsAtCap Config.mainnet checks forked (slot.toNat - forked.state.slot.toNat))
+    (draws : DrawsEnd Config.mainnet checks forked (slot.toNat - forked.state.slot.toNat))
     (limit : EpochLimitBeforeAltair forked (slot.toNat - forked.state.slot.toNat)) :
     ∃ after, processSlotsAcross Config.mainnet checks forked slot = .ok after ∧
       RunHolds Config.mainnet (RunStart.mainnet (getCurrentEpoch forked.state).toNat) (2 ^ 57)
@@ -415,7 +413,8 @@ theorem processSlotsAcross_exists_ok_emptyGenesisState {slot : Slot} (later : 0 
     (by rw [epoch]; exact Nat.zero_le _) (by rw [epoch]; exact holds)
     (UInt64.lt_iff_toNat_lt.mpr (by rw [slot0]; exact later))
     (by rw [epoch]; change slot.toNat / 32 ≤ 0 + 2250000; omega)
-    (by rw [slot0, Nat.sub_zero]; exact signers) (by rw [slot0, Nat.sub_zero]; exact draws)
+    (by rw [slot0, Nat.sub_zero]; exact signers)
+    (by rw [slot0, Nat.sub_zero]; exact draws.drawsEnd fun fork => (drawFits_presets fork).1)
     (by rw [slot0, Nat.sub_zero]; exact limit)
   exact ⟨after, computed⟩
 

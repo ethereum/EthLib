@@ -19,7 +19,7 @@ From that state, every slot advance within the epochs of the chain succeeds.
 
 At the end of each epoch on the way, the signers must hold at most the active balance.
 
-The draws must meet a validator at the cap, and a run before Altair must end within the epoch limit.
+The draws must end, and a run before Altair must end within the epoch limit.
 
 On mainnet, the step covers the limits for 16 epochs at a budget of `2^57` Gwei.
 
@@ -131,7 +131,7 @@ private theorem advanceSlotsAcross_chain
       ChainHolds config start step budget startEpoch blocks forked.state →
       (forked.state.slot.toNat + count) / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs →
       SignersAtEnds config checks forked count →
-      DrawsAtCap config checks forked count → EpochLimitBeforeAltair forked count →
+      DrawsEnd config checks forked count → EpochLimitBeforeAltair forked count →
       ∃ after, advanceSlotsAcross config checks count forked = .ok after ∧
         ChainHolds config start step budget startEpoch blocks after.state
   | 0, forked, holds, _, _, _, _ => ⟨forked, rfl, holds⟩
@@ -178,7 +178,7 @@ It keeps the facts of the chain, with the same count of blocks.
 
 At the end of each epoch on the way, the signers hold at most the active balance.
 
-The draws meet a validator at the cap, and before Altair the advance ends within the epoch limit. -/
+The draws end, and before Altair the advance ends within the epoch limit. -/
 theorem ChainHolds.processSlotsAcross_exists_ok
     [∀ fork, Serialization.Ssz.LawfulSszType (BeaconState preset fork)]
     [NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat]
@@ -192,7 +192,7 @@ theorem ChainHolds.processSlotsAcross_exists_ok
     (later : forked.state.slot < slot)
     (within : slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs)
     (signers : SignersAtEnds config checks forked (slot.toNat - forked.state.slot.toNat))
-    (draws : DrawsAtCap config checks forked (slot.toNat - forked.state.slot.toNat))
+    (draws : DrawsEnd config checks forked (slot.toNat - forked.state.slot.toNat))
     (limit : EpochLimitBeforeAltair forked (slot.toNat - forked.state.slot.toNat)) :
     ∃ after, processSlotsAcross config checks forked slot = .ok after ∧
       ChainHolds config start step budget startEpoch blocks after.state := by
@@ -218,7 +218,7 @@ The increment is at most the least balance to activate.
 
 At the end of each epoch of the advance, the signers hold at most the active balance.
 
-The draws meet a validator at the cap, and before Altair the advance ends within the epoch limit.
+The draws end, and before Altair the advance ends within the epoch limit.
 
 The state that the advance returns keeps the facts of the chain, with its blocks counted. -/
 theorem processSlotsAcross_exists_ok_of_chain
@@ -240,7 +240,7 @@ theorem processSlotsAcross_exists_ok_of_chain
     (later : reached.state.slot < slot)
     (within : slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs)
     (signers : SignersAtEnds config checks reached (slot.toNat - reached.state.slot.toNat))
-    (draws : DrawsAtCap config checks reached (slot.toNat - reached.state.slot.toNat))
+    (draws : DrawsEnd config checks reached (slot.toNat - reached.state.slot.toNat))
     (limit : EpochLimitBeforeAltair reached (slot.toNat - reached.state.slot.toNat)) :
     ∃ after, processSlotsAcross config checks reached slot = .ok after ∧
       ChainHolds config start step budget startEpoch (blocks + count) after.state := by
@@ -397,7 +397,7 @@ theorem processSlotsAcross_exists_ok_of_chain_mainnet {startEpoch blocks count :
     (later : reached.state.slot < slot)
     (within : slot.toNat / Preset.mainnet.SLOTS_PER_EPOCH.toNat ≤ startEpoch + 16)
     (signers : SignersAtEnds Config.mainnet checks reached (slot.toNat - reached.state.slot.toNat))
-    (draws : DrawsAtCap Config.mainnet checks reached (slot.toNat - reached.state.slot.toNat))
+    (draws : DrawsEnd Config.mainnet checks reached (slot.toNat - reached.state.slot.toNat))
     (limit : EpochLimitBeforeAltair reached (slot.toNat - reached.state.slot.toNat)) :
     ∃ after, processSlotsAcross Config.mainnet checks reached slot = .ok after ∧
       ChainHolds Config.mainnet (RunStart.mainnet startEpoch) BlockStep.mainnet (2 ^ 57)
@@ -429,7 +429,7 @@ theorem processSlotsAcross_exists_ok_of_chain_altairWitnessState {count : Nat}
     (later : reached.state.slot < slot)
     (within : slot.toNat / Preset.mainnet.SLOTS_PER_EPOCH.toNat ≤ 74240 + 16)
     (signers : SignersAtEnds Config.mainnet checks reached (slot.toNat - reached.state.slot.toNat))
-    (draws : DrawsAtCap Config.mainnet checks reached (slot.toNat - reached.state.slot.toNat))
+    (draws : DrawsEnd Config.mainnet checks reached (slot.toNat - reached.state.slot.toNat))
     (limit : EpochLimitBeforeAltair reached (slot.toNat - reached.state.slot.toNat)) :
     ∃ after, processSlotsAcross Config.mainnet checks reached slot = .ok after ∧
       ChainHolds Config.mainnet (RunStart.mainnet 74240) BlockStep.mainnet (2 ^ 57) 74240 count

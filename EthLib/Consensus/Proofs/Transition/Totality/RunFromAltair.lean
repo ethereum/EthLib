@@ -427,6 +427,8 @@ private theorem Tracked.of_advanceSlotsAcross {origin index : Nat} {validator : 
 
 /-- A run from Altair that ends before Electra meets its three hypotheses.
 
+It meets the draws in their form at the cap.
+
 The state is quiet, and every key of its registry passes validation.
 
 One validator is at the cap, and every inactivity score is at most a bound.

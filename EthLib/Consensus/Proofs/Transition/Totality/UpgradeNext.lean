@@ -40,8 +40,7 @@ A fork with no next fork, such as Heze, is never ready, since its upgrade always
 def UpgradeReady (forked : ForkedBeaconState preset) : Prop :=
   match forked with
   | ⟨.phase0, pre⟩ =>
-    DrawFits preset .altair ∧
-      (getCurrentEpoch pre).toNat + 1 + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64 ∧
+    (getCurrentEpoch pre).toNat + 1 + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64 ∧
       preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat ∧
       preset.SYNC_COMMITTEE_SIZE ≠ 0 ∧ SyncDrawable pre ∧
       ∀ attestation ∈ (pre.previousEpochAttestations (by decide)).data.toList,
@@ -56,8 +55,7 @@ def UpgradeReady (forked : ForkedBeaconState preset) : Prop :=
       (getCurrentEpoch pre).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat + 1 < 2 ^ 64 ∧
       2 * pre.validators.data.size ≤ preset.PENDING_DEPOSITS_LIMIT.toNat
   | ⟨.pectra, pre⟩ =>
-    DrawFits preset .fusaka ∧
-      (getCurrentEpoch pre).toNat + preset.MIN_SEED_LOOKAHEAD.toNat +
+    (getCurrentEpoch pre).toNat + preset.MIN_SEED_LOOKAHEAD.toNat +
         preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64 ∧
       preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat ∧
       ((getCurrentEpoch pre).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1) *
@@ -65,8 +63,7 @@ def UpgradeReady (forked : ForkedBeaconState preset) : Prop :=
       ∀ offset ≤ preset.MIN_SEED_LOOKAHEAD.toNat,
         ProposersDrawable pre (getCurrentEpoch pre + offset.toUInt64)
   | ⟨.fusaka, pre⟩ =>
-    DrawFits preset .glamsterdam ∧
-      (getCurrentEpoch pre).toNat + preset.MIN_SEED_LOOKAHEAD.toNat +
+    (getCurrentEpoch pre).toNat + preset.MIN_SEED_LOOKAHEAD.toNat +
         preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64 ∧
       preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat ∧
       ((getCurrentEpoch pre).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1) *
@@ -85,8 +82,8 @@ theorem upgradeNext_exists_ok {forked : ForkedBeaconState preset}
   obtain ⟨fork, pre⟩ := forked
   cases fork with
   | phase0 =>
-    obtain ⟨fits, room, look, members, drawable, translated⟩ := ready
-    obtain ⟨post, ok⟩ := upgradeToAltair_exists_ok (config := config) fits room look members
+    obtain ⟨room, look, members, drawable, translated⟩ := ready
+    obtain ⟨post, ok⟩ := upgradeToAltair_exists_ok (config := config) room look members
       drawable translated
     exact ⟨⟨⟨.altair, post⟩, (by decide : Fork.phase0 < .altair)⟩, by simp [upgradeNext, ok]⟩
   | altair => exact ⟨_, rfl⟩
@@ -97,12 +94,12 @@ theorem upgradeNext_exists_ok {forked : ForkedBeaconState preset}
     obtain ⟨post, ok⟩ := upgradeToElectra_exists_ok (config := config) matched summed room queue
     exact ⟨⟨⟨.pectra, post⟩, (by decide : Fork.dencun < .pectra)⟩, by simp [upgradeNext, ok]⟩
   | pectra =>
-    obtain ⟨fits, seedRoom, look, slotRoom, drawable⟩ := ready
-    obtain ⟨post, ok⟩ := upgradeToFulu_ok (config := config) fits seedRoom look slotRoom drawable
+    obtain ⟨seedRoom, look, slotRoom, drawable⟩ := ready
+    obtain ⟨post, ok⟩ := upgradeToFulu_ok (config := config) seedRoom look slotRoom drawable
     exact ⟨⟨⟨.fusaka, post⟩, (by decide : Fork.pectra < .fusaka)⟩, by simp [upgradeNext, ok]⟩
   | fusaka =>
-    obtain ⟨fits, seedRoom, look, slotRoom, perEpoch, drawable, funded⟩ := ready
-    obtain ⟨post, ok⟩ := upgradeToGloas_ok (config := config) (checks := checks) fits seedRoom
+    obtain ⟨seedRoom, look, slotRoom, perEpoch, drawable, funded⟩ := ready
+    obtain ⟨post, ok⟩ := upgradeToGloas_ok (config := config) (checks := checks) seedRoom
       look slotRoom perEpoch drawable funded
     exact ⟨⟨⟨.glamsterdam, post⟩, (by decide : Fork.fusaka < .glamsterdam)⟩,
       by simp [upgradeNext, ok]⟩
