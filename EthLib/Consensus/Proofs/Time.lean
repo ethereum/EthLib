@@ -29,6 +29,32 @@ open Base Uint64
 
 variable {config : Config} {preset : Preset}
 
+/-- A slot no later than a representable boundary has a representable start time. -/
+theorem exists_timeAtSlotMs_of_le {genesisTimeMs : UInt64} {slot last : Slot}
+    {lastTime : UInt64}
+    (le : slot ≤ last)
+    (lastOk : computeTimeAtSlotMs config genesisTimeMs last = .ok lastTime) :
+    ∃ start, computeTimeAtSlotMs config genesisTimeMs slot = .ok start ∧
+      start.toNat = genesisTimeMs.toNat + slot.toNat * config.SLOT_DURATION_MS.toNat ∧
+      start ≤ lastTime := by
+  unfold computeTimeAtSlotMs at lastOk ⊢
+  simp only [bind_ok_iff] at lastOk
+  obtain ⟨offset, multiplied, added⟩ := lastOk
+  obtain ⟨bound, offsetEq⟩ := mulChecked_ok_iff.mp multiplied
+  obtain ⟨timeBound, timeEq⟩ := addChecked_ok_iff.mp added
+  have productLe := Nat.mul_le_mul_right config.SLOT_DURATION_MS.toNat
+    (UInt64.le_iff_toNat_le.mp le)
+  have productBound : slot.toNat * config.SLOT_DURATION_MS.toNat < 2 ^ 64 := by omega
+  have productEq := mulChecked_of_lt productBound
+  have productNat := (mulChecked_ok_iff.mp productEq).2
+  have sumBound : genesisTimeMs.toNat +
+      (slot * config.SLOT_DURATION_MS).toNat < 2 ^ 64 := by omega
+  have sumEq := addChecked_of_lt sumBound
+  have sumNat := (addChecked_ok_iff.mp sumEq).2
+  refine ⟨genesisTimeMs + slot * config.SLOT_DURATION_MS,
+    ?_, by omega, UInt64.le_iff_toNat_le.mpr (by omega)⟩
+  simp only [productEq, bind, Except.bind, sumEq]
+
 /-- The first slot of an epoch exists exactly when it fits in 64 bits. -/
 theorem computeStartSlotAtEpoch_ok_iff {epoch : Epoch} {slot : Slot} :
     computeStartSlotAtEpoch preset epoch = .ok slot ↔

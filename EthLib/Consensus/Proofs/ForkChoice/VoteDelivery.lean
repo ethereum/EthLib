@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.ForkChoice.HonestDuties
 public import EthLib.Consensus.Proofs.ForkChoice.VoteRecords
+public import EthLib.Consensus.Proofs.Time
 
 /-!
 # Conditional delivery of accepted votes
@@ -77,31 +78,6 @@ theorem DelayFits.before_boundary {Δ : ℕ}
   subst start'
   rw [timeEq]
   exact fits.2 slot next start due following nextOk startOk dueOk followingOk
-
-/-- A slot no later than a representable boundary has a representable start time. -/
-theorem exists_timeAtSlotMs_of_le {slot last : Slot} {lastTime : UInt64}
-    (le : slot ≤ last)
-    (lastOk : computeTimeAtSlotMs config genesisTimeMs last = .ok lastTime) :
-    ∃ start, computeTimeAtSlotMs config genesisTimeMs slot = .ok start ∧
-      start.toNat = genesisTimeMs.toNat + slot.toNat * config.SLOT_DURATION_MS.toNat ∧
-      start ≤ lastTime := by
-  unfold computeTimeAtSlotMs at lastOk ⊢
-  simp only [bind_ok_iff] at lastOk
-  obtain ⟨offset, multiplied, added⟩ := lastOk
-  obtain ⟨bound, offsetEq⟩ := mulChecked_ok_iff.mp multiplied
-  obtain ⟨timeBound, timeEq⟩ := addChecked_ok_iff.mp added
-  have productLe := Nat.mul_le_mul_right config.SLOT_DURATION_MS.toNat
-    (UInt64.le_iff_toNat_le.mp le)
-  have productBound : slot.toNat * config.SLOT_DURATION_MS.toNat < 2 ^ 64 := by omega
-  have productEq := mulChecked_of_lt productBound
-  have productNat := (mulChecked_ok_iff.mp productEq).2
-  have sumBound : genesisTimeMs.toNat +
-      (slot * config.SLOT_DURATION_MS).toNat < 2 ^ 64 := by omega
-  have sumEq := addChecked_of_lt sumBound
-  have sumNat := (addChecked_ok_iff.mp sumEq).2
-  refine ⟨genesisTimeMs + slot * config.SLOT_DURATION_MS,
-    ?_, by omega, UInt64.le_iff_toNat_le.mpr (by omega)⟩
-  simp only [productEq, bind, Except.bind, sumEq]
 
 /-- A fitting delay places the attestation deadline inside each representable slot. -/
 theorem DelayFits.due_lt_slot {Δ : ℕ}
