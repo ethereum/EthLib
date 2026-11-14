@@ -468,6 +468,32 @@ def slashedFlag (state : BeaconState preset fork) (index : ValidatorIndex) :
     Except AccessorError Bool :=
   (getValidator state index).map (·.slashed)
 
+/-- The slashed flag at a position of the registry, or nothing outside it.
+
+From Gloas the registry has no limit in its type, so a position may lie beyond every index.
+
+So results that hold at each position of the registry read the flag here. -/
+def slashedFlagAt (state : BeaconState preset fork) (position : Nat) : Option Bool :=
+  (state.validators.data[position]?).map (·.slashed)
+
+/-- A fold changes no slashed flag at a position that none of its inputs names.
+
+Each step may change slashed flags only at the positions of the indices that its input names.
+
+The fold may thread more than a state, as the steps of an attester slashing do. -/
+theorem slashedFlagAt_foldlM {β α ε : Type} (toState : β → BeaconState preset fork)
+    {step : β → α → Except ε β} (named : α → List ValidatorIndex)
+    (kept : ∀ b x b', step b x = .ok b' → ∀ position,
+      (∀ index ∈ named x, index.toNat ≠ position) →
+        slashedFlagAt (toState b') position = slashedFlagAt (toState b) position)
+    {items : List α} {start done : β} (computed : items.foldlM step start = .ok done)
+    (position : Nat) (outside : ∀ x ∈ items, ∀ index ∈ named x, index.toNat ≠ position) :
+    slashedFlagAt (toState done) position = slashedFlagAt (toState start) position :=
+  foldlM_ok_invariant_of_mem
+    (fun b => slashedFlagAt (toState b) position = slashedFlagAt (toState start) position)
+    (fun _ x _ member same ok => (kept _ x _ ok position (outside x member)).trans same)
+    rfl computed
+
 /-- A replaced validator is read back at its index. -/
 theorem getValidator_putValidator_self {state : BeaconState preset fork}
     {index : ValidatorIndex} (inside : index.toNat < state.validators.data.size)
@@ -577,24 +603,23 @@ theorem balance_decreaseBalance {state after : BeaconState preset fork}
 
 /-- Equal slashed flags at the position of an index give equal reads of the flag at that index. -/
 theorem slashedFlag_eq_of_slashed {state after : BeaconState preset fork} {index : ValidatorIndex}
-    (same : (after.validators.data[index.toNat]?).map (·.slashed) =
-      (state.validators.data[index.toNat]?).map (·.slashed)) :
+    (same : slashedFlagAt after index.toNat = slashedFlagAt state index.toNat) :
     slashedFlag after index = slashedFlag state index := by
   unfold slashedFlag getValidator
+  unfold slashedFlagAt at same
   revert same
   cases after.validators.data[index.toNat]? <;> cases state.validators.data[index.toNat]? <;>
     simp [Except.map]
 
 /-- A write that keeps the slashed flag of its validator keeps every slashed flag. -/
-theorem slashed_setValidatorAt {state after : BeaconState preset fork} {index : Nat}
+theorem slashedFlagAt_setValidatorAt {state after : BeaconState preset fork} {index : Nat}
     {old validator : Validator} (found : getValidatorAt state index = .ok old)
     (set : state.setValidatorAt index validator = .ok after)
     (flag : validator.slashed = old.slashed) (position : Nat) :
-    (after.validators.data[position]?).map (·.slashed) =
-      (state.validators.data[position]?).map (·.slashed) := by
+    slashedFlagAt after position = slashedFlagAt state position := by
   obtain ⟨_, rfl⟩ := setValidatorAt_ok set
   rw [getValidatorAt_eq_ok_iff] at found
-  simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
+  simp only [slashedFlagAt, BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
     Array.getElem?_set]
   split
   · rename_i equal
@@ -602,18 +627,18 @@ theorem slashed_setValidatorAt {state after : BeaconState preset fork} {index : 
   · rfl
 
 /-- Starting an exit changes no slashed flag, at any position of the registry. -/
-theorem slashedFlag_initiateValidatorExit {config : Config}
+theorem slashedFlagAt_initiateValidatorExit {config : Config}
     {state after : BeaconState preset fork} {index : ValidatorIndex}
     (computed : initiateValidatorExit config state index = .ok after) (position : Nat) :
-    (after.validators.data[position]?).map (·.slashed) =
-      (state.validators.data[position]?).map (·.slashed) := by
+    slashedFlagAt after position = slashedFlagAt state position := by
   obtain ⟨validator, found, ⟨_, rfl⟩ | ⟨_, queued, _, _, queue, _, set⟩⟩ :=
     initiateValidatorExit_ok computed
   · rfl
   have same := (exitQueue_validators queue).1
   rw [← getValidator_of_validators_eq same, getValidator_eq_getValidatorAt] at found
   rw [setValidator_eq_setValidatorAt] at set
-  rw [slashed_setValidatorAt found set rfl, same]
+  rw [slashedFlagAt_setValidatorAt found set rfl, slashedFlagAt, same]
+  rfl
 
 /-- Slashing a validator sets its slashed flag, and changes no slashed flag at another position. -/
 theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState preset fork}
@@ -621,8 +646,7 @@ theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState 
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     slashedFlag after slashedIndex = .ok true ∧
       ∀ position, position ≠ slashedIndex.toNat →
-        (after.validators.data[position]?).map (·.slashed) =
-          (state.validators.data[position]?).map (·.slashed) := by
+        slashedFlagAt after position = slashedFlagAt state position := by
   obtain ⟨exited, validator, withdrawable, slashedState, _, _, _, _, _, _, _, last, exitedOk, -, -,
     markedOk, -, -, -, lowered, -, -, raised, final, done⟩ := slashValidator_ok computed
   -- The balance steps keep the registry in which the validator is marked slashed.
@@ -637,9 +661,9 @@ theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState 
   · simp [slashedFlag, getValidator_of_validators_eq same,
       getValidator_setValidator_self markedOk, Except.map]
   · obtain ⟨_, rfl⟩ := setValidator_ok markedOk
-    rw [same, BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
+    rw [slashedFlagAt, same, BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
       Array.getElem?_set_ne _ (Ne.symm distinct)]
-    exact slashedFlag_initiateValidatorExit exitedOk position
+    exact slashedFlagAt_initiateValidatorExit exitedOk position
 
 /-! ## The builder payments of a slashing -/
 

@@ -4089,6 +4089,26 @@ A simulated block differs from a real one in these places:
 - the overrides of the accounts change the state before the block, and are not in its access list;
 - the default gas of a call follows the gas that its block has used, within a global budget of 50,000,000 that each call spends, and a call that overspends it gets `-38026`.
 
+Each simulated block follows the last block of its chain at the number that it is given (`simulateBlock_links`, `Proofs/Rpc/SimulateBlocks.lean`).
+Its parent hash is the hash of the header of that block, and its own hash is the hash of its header.
+When the view holds the hash of each header, there is one block for each planned block and each gap block before it (`simulateBlocks_links`).
+They have consecutive numbers after the base block.
+The first has the hash of the base block as parent hash, and each other the hash of the block before it.
+Without validation, a block whose base fee is not overridden has a base fee of 0, whatever the base fee of the block before it (`simulateBlock_baseFee`).
+Its body runs in the environment of its header, whose base fee is then 0, and BASEFEE reads it (`simulateBlock_environment_baseFee`).
+With validation off, every block of a simulation whose base fee is not overridden has a base fee of 0, gap blocks included (`simulateBlocks_baseFee`).
+With validation and no overrides, a simulated block agrees with the state transition (`stateTransition_of_simulateBlock`).
+The fork must be active at the block and come before Hegotá.
+Its calls must be signed transactions whose signatures give their senders and name the chain.
+Each gas limit must be at most `2^32 - 1` at every fork, and their blob gas must fit 64 bits.
+The parent must be the last block of the chain, from London on, at a fork no later than the block's.
+The block must be from Paris on, one number above its parent, later in time, and its time must fit 256 bits.
+The parent's gas limit must be at least 5,000, and its excess blob gas and blob gas used must add up to less than `2^64`.
+The block with those transactions and their root must fit the size limit, which depends on the signatures.
+When the state holds the code of each account, its transition gives the state after the simulated block, or fails at a sender with code by EIP-3607, which the simulation skips.
+The parent, fork, number, time, gas limit, blob gas and size hypotheses alone make the block with those transactions pass the checks of a block (`checkBlock_simulateBlock`).
+Before Paris, the simulated difficulty is that of the base block, which the difficulty rule need not accept, so both theorems start at Paris.
+
 Where the source is silent or conflicts with itself for the blocks, EthLib follows the fixtures, else decides:
 
 - a block keeps the gas limit of the block before it, where the notes name the base block;

@@ -74,7 +74,6 @@ PATHS = [
     ([], 1, NESTED, NESTED_VALUE),
     (["slot"], 4, UINT64, {"uint": 7}),
     (["pair"], 5, MIXED_PAIR, PAIR),
-    ([1], 5, MIXED_PAIR, PAIR),
     (["pair", "a"], 10, UINT16, {"uint": 1}),
     (["pair", "b"], 11, {"list": [UINT16, 4]}, _uints([2, 3])),
     (["pair", "b", "__len__"], 23, UINT64, {"uint": 2}),
@@ -112,6 +111,9 @@ OTHER_PATHS = [
     (SQUARE, ["side"], 4),
     (SQUARE, ["color"], 41),
     (UNION, [1, "color"], 73),
+    # A progressive container mixes in its field layout, and a union its selector, at the right.
+    (SQUARE, ["__active_fields__"], 3),
+    (UNION, ["__selector__"], 3),
 ]
 
 
@@ -129,10 +131,19 @@ OUT_OF_TREE = [
     (UNION, [3], "noSuchOption 3"),
     (MIXED_PAIR, ["a", 0], "noParts"),
     (MIXED_PAIR, ["b", "__len__", 0], "noPartsMixin"),
-    # A field name after a refused step gets the fault of that step.
+    # A field name, a position or a word after a refused step gets the fault of that step.
     (NESTED, ["pairs", 9, "a"], "noSuchPosition 9"),
     (UNION, [3, "color"], "noSuchOption 3"),
     (MIXED_PAIR, ["b", "__len__", "x"], "noPartsMixin"),
+    (NESTED, ["pairs", 9, 0], "noSuchPosition 9"),
+    (UNION, [3, "__selector__"], "noSuchOption 3"),
+    # A mixed-in node and a basic value have no parts.
+    (UNION, ["__selector__", 1], "noPartsMixin"),
+    (SQUARE, ["__active_fields__", "side"], "noPartsMixin"),
+    (MIXED_PAIR, ["a", "__selector__"], "noParts"),
+    # A word that the type does not mix in is refused.
+    (MIXED_PAIR, ["__selector__"], "noMixin"),
+    (MIXED_PAIR, ["__active_fields__"], "noMixin"),
 ]
 
 
@@ -145,6 +156,15 @@ def test_generalized_index_refuses_a_path_out_of_the_tree(ssz_type, path, fault)
 def test_generalized_index_refuses_an_unknown_field():
     with raises(SszError, "path: no field c"):
         ssz.get_generalized_index(MIXED_PAIR, "c")
+
+
+# A container takes the names of its fields, never their positions.
+@pytest.mark.parametrize(
+    ("ssz_type", "path"), [(NESTED, [1]), (NESTED, ["pair", 0]), (SQUARE, [0]), (UNION, [1, 0])]
+)
+def test_generalized_index_refuses_a_field_position(ssz_type, path):
+    with raises(SszError, f"path: no field {path[-1]}"):
+        ssz.get_generalized_index(ssz_type, *path)
 
 
 # The root has no branch.

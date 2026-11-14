@@ -11667,7 +11667,7 @@
       {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
-   "The generalized index of the node that a path selects in the tree of a type.\n\nThe type is in its tagged form.\n\nEach part of the path is a position, a field name or `__len__`."},
+   "The generalized index of the node that a path selects in the tree of a type.\n\nThe type is in its tagged form.\n\nEach part of the path is a position, a field name, or a word for a mixed-in node.\n\nA field of a container is named, never given by its position."},
   {"summary":
    "The branch that proves the node at a generalized index of a value against its root.",
    "signature":

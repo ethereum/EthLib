@@ -257,7 +257,7 @@ def fillCalls {fork : Fork} (env : BlockEnvironment fork) (validation : Bool)
     let used := after.cumulativeGasUsed - before.cumulativeGasUsed
     ensure (used ≤ budget) (clientLimitExceeded.toRpcError (some (.str "gas budget exceeded")))
     return (after, filled ++ [(tx, sender)], budget - used)
-  let (_, filled, budget) ← calls.zipIdx.foldlM step (⟨body, .zero, 0, [], []⟩, [], budget)
+  let (_, filled, budget) ← calls.zipIdx.foldlM step (⟨body, .zero, 0, [], [], []⟩, [], budget)
   return (filled, budget)
 
 /-! ## The blocks -/
@@ -308,6 +308,15 @@ def simulateBlock (chain : BlockChain) (base : RecentBlock) (fork : Fork) (numbe
     { fork, block, hash, state := result.post, receipts := result.output.receipts
       logs := result.output.logs }
   return (chain.addBlock block result.post, budget, ⟨record, senders⟩)
+
+/-- A simulated block with other transactions in place of its calls, with their root.
+
+Such transactions can be the signed form of the calls, which a real block needs. -/
+def SimulatedBlock.withTransactions (b : SimulatedBlock) (txs : List Transaction)
+    (root : Hash32) : Block b.record.fork Transaction :=
+  { b.record.block with
+    header := { b.record.block.header with transactionsRoot := root }
+    transactions := txs }
 
 /-- What a simulation carries from one block to the next. -/
 structure SimulateStep where
