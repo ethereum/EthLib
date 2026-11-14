@@ -216,11 +216,23 @@ def hashTreeRootExport (args : PyValue) : Result PyValue := pyExport hashTreeRoo
 
 /-- The step that one part of a path names, read against the type the path has reached.
 
-A part is a position, `__len__` for the length, or the name of a field of a container. -/
+A part is a position, a word for a mixed-in node, or the name of a field of a container.
+
+The word `__len__` names the length.
+
+The word `__active_fields__` names the field layout of a progressive container.
+
+The word `__selector__` names the selector of a union.
+
+A container takes the names of its fields only; a position given for a field is refused. -/
 def pathStep (shape : Option Desc) (part : PyValue) : Result PathStep :=
   match part, shape with
+  | .int position, some (.container _ _) | .int position, some (.progressiveContainer _ _ _) =>
+    throw (0, s!"path: no field {position}")
   | .int position, _ => return .position position
   | .str "__len__", _ => return .length
+  | .str "__active_fields__", _ => return .activeFields
+  | .str "__selector__", _ => return .selector
   | .str name, some (.container names _) | .str name, some (.progressiveContainer _ names _) =>
     if names.contains name then return .position (names.idxOf name)
     else throw (0, s!"path: no field {name}")
@@ -237,7 +249,7 @@ def pathSteps (root : Desc) (read : List PathStep) (shape : Option Desc) :
   | [] => return read
   | part :: rest => do
     if let (.str name, none) := (part, shape) then
-      if name != "__len__" then
+      if !["__len__", "__active_fields__", "__selector__"].contains name then
         let _ ← runSsz "path rejected" (getGeneralizedIndex root (read ++ [.position 0]))
     let step ← pathStep shape part
     let next := shape.bind fun shape => (shape.resolveStep step).toOption.bind (·.2)
@@ -253,7 +265,9 @@ def generalizedIndexOf (args : PyValue × List PyValue) : Result Nat := do
 
 The type is in its tagged form.
 
-Each part of the path is a position, a field name or `__len__`. -/
+Each part of the path is a position, a field name, or a word for a mixed-in node.
+
+A field of a container is named, never given by its position. -/
 @[export eth_ssz_generalized_index]
 def generalizedIndexExport (args : PyValue) : Result PyValue := pyExport generalizedIndexOf args
 
