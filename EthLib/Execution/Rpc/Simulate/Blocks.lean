@@ -14,7 +14,8 @@ A simulated block runs through the body of a real block, with the changes of the
 - without validation, its base fee and its base fee per blob gas are 0;
 - each call runs as a transaction from its given sender, with no signature;
 - the cap at `2^32 - 1` on the gas limit never applies;
-- without validation, a call skips the nonce check and the caps at `2^24` of EIP-8037.
+- without validation, a call skips the nonce check and the caps at `2^24` of EIP-8037;
+- without validation, a call with a fee cap of 0 pays nothing for its gas.
 
 Its roots, its gas used, its hash and its size are computed as for a real block.
 
@@ -189,9 +190,11 @@ def movedPrecompiles (moves : List (Address × Address)) (a : Address) : Option 
 
 The cap at `2^32 - 1` on the gas limit never applies.
 
-Without validation, the nonce check and the caps at `2^24` of EIP-8037 do not apply either. -/
+Without validation, the nonce check and the caps at `2^24` of EIP-8037 do not apply either.
+
+Without validation, a call with a fee cap of 0 also pays nothing for its gas at any base fee. -/
 def simulateLifted (validation : Bool) : LiftedRules :=
-  { nonce := !validation, gasCap := !validation, totalGasCap := true }
+  { nonce := !validation, gasCap := !validation, totalGasCap := true, zeroFee := !validation }
 
 /-! ## The defaults of a call -/
 
@@ -352,8 +355,11 @@ def ChainView.simulateBlocks (v : ChainView) (payload : SimulatePayload) (p : Bl
 
 /-- A simulated block as a block object, with the objects of its transactions when asked for.
 
+Without validation, a call with a fee cap of 0 reports a gas price of 0, which it paid.
+
 The results of the calls are left out. -/
-def SimulatedBlock.json (b : SimulatedBlock) (full : Bool) : Except RpcError Json := do
+def SimulatedBlock.json (b : SimulatedBlock) (full : Bool) (validation : Bool) :
+    Except RpcError Json := do
   let r := b.record
   let size ← r.size
   let transactions ← if full then
@@ -363,7 +369,8 @@ def SimulatedBlock.json (b : SimulatedBlock) (full : Bool) : Except RpcError Jso
             BlockRecord.encodingError "transaction hash"
           return { blockHash := r.hash, blockNumber := r.block.header.number
                    blockTimestamp := r.block.header.timestamp.toNat, index, sender, hash
-                   gasPrice := effectiveGasPrice r.baseFee tx, tx }
+                   gasPrice := effectiveGasPrice
+                     (if !validation && tx.maxFeePerGas == 0 then 0 else r.baseFee) tx, tx }
     else listJson hash32Json <$> r.transactionHashes
   return Json.mkObj (headerFields r.hash r.block.header ++
     blockFields size [] transactions r.block.withdrawals)
@@ -372,6 +379,6 @@ def SimulatedBlock.json (b : SimulatedBlock) (full : Bool) : Except RpcError Jso
 def ChainView.simulate (v : ChainView) (payload : SimulatePayload) (p : BlockParam)
     (choices : SimulateChoices) : Except RpcError Json := do
   let blocks ← v.simulateBlocks payload p choices
-  return .arr (← blocks.mapM (·.json payload.returnFullTransactions)).toArray
+  return .arr (← blocks.mapM (·.json payload.returnFullTransactions payload.validation)).toArray
 
 end EthLib.Execution.Rpc

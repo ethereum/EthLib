@@ -18,6 +18,12 @@ Not yet released.
   `slashedFlagAt_processProposerSlashing` and `slashedFlagAt_processAttesterSlashing` state that a slashing changes flags only at the positions that it names.
   `slashedFlagAt_foldlM` states the same for a fold of such steps.
 
+- In Lean, the shuffle, custody, keystore and discv5 callers of SHA-256 keep the digest as a `Vector UInt8 32` ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  `Shuffle.bucketBits` and `Keystore.passwordChecksum` return one, and `Shuffle.bitAt` and `DataAvailability.firstUInt64` take one.
+  A caller that needs the bytes applies `packBytes`, and `Sha256.packBytes_hash32` gives back the byte-array digest.
+  The keystore checksum theorems compare the checksum with `store.checksum` directly, and `checksumVector` is removed: use `passwordChecksum`.
+  Nothing breaks in Python.
+
 - The execution RPC answers `eth_simulateV1` with its simulated blocks ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
   The results of the calls are not yet in the blocks.
   In Lean, `fillHeader`, `outputChecks_fillHeader` and `runBody_fillHeader` move from `EthLib.Engine` to `EthLib.Execution.Blocks`, and `SimulateChoices` gains `gasCap`.
