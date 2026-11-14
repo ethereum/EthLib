@@ -4099,14 +4099,13 @@ Where the source is silent or conflicts with itself for the blocks, EthLib follo
 - `maxUsedGas` is the gas used with no refund, so from Pectra it is at least the call data floor, as the fixtures show;
 - a failed call returns no data, and a revert puts its output in the `data` of its error, as the fixtures show, though the schema lists only a code and a message;
 - a failure other than a revert gets `-32015` with a message of EthLib's choice, which the source leaves to the client;
-- `traceTransfers` adds no log yet; every fixture of the pin is after Amsterdam, where EIP-7708 already logs the transfers.
+- `traceTransfers` adds no log yet, so before Amsterdam the answer lacks the `0xeeee…eeee` transfer logs that the source asks for; every fixture of the pin is after Amsterdam, where EIP-7708 logs the transfers;
+- a revert error has the message "execution reverted", without the decoded reason that the fixtures add.
 
 Each simulated block holds the result of each call: the output of its message, its gas used before the refund, and its error.
 The body records them without changing anything else that it computes.
 From Byzantium, the status of a call result agrees with its receipt: the receipt succeeds exactly when the result has no error (`applyTransaction_status`, `Proofs/Blocks/Transition.lean`).
-A body has as many results as receipts (`applyTransactions_results_length`), and a refund never raises the gas used (`runTransaction_gasUsed_le`).
-
-The results of the calls are not yet in the blocks.
+A body has as many results as receipts (`applyTransactions_results_length`), and a refund never raises the gas used (`runTransaction_gasUsed_le`, `Proofs/Transactions/Process.lean`).
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).

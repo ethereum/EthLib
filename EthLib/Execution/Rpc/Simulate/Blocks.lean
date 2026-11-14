@@ -388,7 +388,9 @@ def callResultError (e : Evm.EvmError) (output : ByteArray) : RpcError :=
 
 A call that succeeds has the status `0x1` and returns the output of its message.
 
-A call that fails has the status `0x0`, no return data, and its error.
+A call that fails has the status `0x0`, no return data, no logs, and its error.
+
+The status follows the error, at every fork.
 
 The gas before the refund is the `maxUsedGas` of the source. -/
 def callResultJson (result : TransactionResult) (gasUsed : Nat) (logs : List LogInfo) : Json :=
@@ -404,7 +406,9 @@ def callResultJson (result : TransactionResult) (gasUsed : Nat) (logs : List Log
 
 /-- The results of the calls of a simulated block as JSON, in order.
 
-The logs of a call are those of its receipt, numbered among all the logs of the block. -/
+The logs of a call are those of its receipt, numbered among all the logs of the block.
+
+The body gives one result per receipt, so no call is left out. -/
 def SimulatedBlock.callsJson (b : SimulatedBlock) : Except RpcError Json := do
   let r := b.record
   let calls := (r.block.transactions.zip (r.receipts.zip b.results)).zipIdx

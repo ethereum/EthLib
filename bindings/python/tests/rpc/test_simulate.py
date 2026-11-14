@@ -36,15 +36,18 @@ def _answer_codes(requests: list[str]) -> list[int | None]:
 
 
 def _call(call: Mapping[str, Any]) -> dict[str, Any]:
-    """A call result without the message of its error, which the source leaves to the client."""
+    """A call result without the message of its error, after checking the prefix of a revert."""
     if "error" not in call:
         return dict(call)
-    error = {k: v for k, v in call["error"].items() if k != "message"}
+    error = dict(call["error"])
+    message = error.pop("message")
+    # The schema fixes the start of the message of a revert, and leaves the rest to the client.
+    assert error["code"] != 3 or message.startswith("execution reverted")
     return {**call, "error": error}
 
 
 def _blocks(response: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """The blocks of a response, with their call results compared without error messages."""
+    """The blocks of a response, without the error messages of their calls."""
     return [
         {**block, "calls": [_call(call) for call in block["calls"]]} for block in response["result"]
     ]
