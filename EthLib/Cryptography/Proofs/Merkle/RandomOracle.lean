@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Merkle.Binding
 public import VCVio.OracleComp.QueryTracking.RandomOracle.FreshAnswer
 public import VCVio.OracleComp.Constructions.SampleableType.Measure
 public import VCVio.OracleComp.QueryTracking.SubSpec
+public import VCVio.OracleComp.QueryTracking.RandomOracle.CachePartial
 
 /-!
 # Classical random-oracle collision bounds
@@ -99,6 +100,41 @@ theorem prEvent_collision_le [SampleableType R]
   -- Every reachable cache respects the budget, so the bounded event loses no collisions.
   exact (prEvent_mono_of_support _ _ _ fun z hz hc =>
     ⟨hc, enncard_le_of_mem_support_run_unifFwdImpl_add_randomOracle hq hz⟩).trans h
+
+/-- An experiment: the adversary outputs a claim, then an extraction runs on it.
+
+The extraction only calls the oracle. -/
+def experimentWith {γ β : Type} (extraction : γ → OracleComp (D →ₒ R) β)
+    (adversary : OracleComp (unifSpec + (D →ₒ R)) γ) : OracleComp (unifSpec + (D →ₒ R)) β := do
+  let claim ← adversary
+  liftComp (extraction claim) (unifSpec + (D →ₒ R))
+
+/-- A win of an experiment, at probability at most `q * (q / N)`.
+
+Each replay of the extraction that ends in a win must expose a collision of the cache.
+
+Here `N = Nat.card R`, and `q` bounds the oracle calls of the whole experiment, repeats included.
+
+The initial cache is empty, and private uniform sampling is not counted. -/
+theorem prEvent_experimentWith_le [SampleableType R] {γ β : Type}
+    (extraction : γ → OracleComp (D →ₒ R) β) (wins : β → Prop)
+    (collision : ∀ {cache : (D →ₒ R).QueryCache} {claim : γ} {outcome : β},
+      simulateQ cache.toPartialImpl (extraction claim) = some outcome → wins outcome →
+        Collision cache)
+    (adversary : OracleComp (unifSpec + (D →ₒ R)) γ) {q : Nat}
+    (hq : IsQueryBoundP (experimentWith extraction adversary) (fun t => t.isRight = true) q) :
+    Pr{let z ← (simulateQ (D →ₒ R).romImpl (experimentWith extraction adversary)).run ∅}[
+      wins z.1] ≤ q * ((q : ℝ≥0∞) / Nat.card R) := by
+  refine (prEvent_mono_of_support _ _ _ ?_).trans
+    (prEvent_collision_le (experimentWith extraction adversary) hq)
+  intro z hz hwins
+  simp only [experimentWith, simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hz
+  obtain ⟨⟨claim, cache⟩, -, hz⟩ := hz
+  -- The extraction calls only the oracle, which answers with caching.
+  rw [QueryImpl.simulateQ_add_liftComp_right] at hz
+  -- The final cache replays the extraction without sampling again.
+  exact collision (QueryImpl.simulateQ_toPartialImpl_snd_of_mem_support_run_simulateQ_withCaching
+    _ (extraction claim) hz) hwins
 
 /-- The cache contains a query with the fixed target digest. -/
 def Hits (r : R) (c : (D →ₒ R).QueryCache) : Prop := ∃ x, c x = some r
