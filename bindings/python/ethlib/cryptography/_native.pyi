@@ -1666,11 +1666,11 @@ def quic_tls_payload_decode(form: str, extension: Any) -> Any:
     ...
 
 def quic_tls_transcript(messages: list[bytes]) -> tuple[bytes, bytes]:
-    """Return SHA-256 transcript bytes and their hash from complete handshake messages (§4.4.1)."""
+    """Return the SHA-256 transcript of complete handshake messages and its hash, RFC 8446 §4.4.1."""
     ...
 
 def quic_tls_certificate_verify_input(server: bool, digest: bytes) -> bytes:
-    """Build the signed content of CertificateVerify from a SHA-256 transcript hash (§4.4.3)."""
+    """Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 8446 §4.4.3."""
     ...
 
 def quic_protect(suite: str, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes) -> bytes:

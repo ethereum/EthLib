@@ -14,6 +14,8 @@ A HelloRetryRequest replaces ClientHello1 with its synthetic SHA-256 `message_ha
 
 The retry is accepted only immediately after one ClientHello, and only once.
 
+The caller must have negotiated a cipher suite whose hash is SHA-256.
+
 Other message-order checks and all authentication checks belong to the handshake steps.
 
 [transcript]: https://www.rfc-editor.org/rfc/rfc8446#section-4.4.1

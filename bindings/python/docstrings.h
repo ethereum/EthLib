@@ -1248,10 +1248,10 @@
   "Decode an extension in the payload form that its message context requires."
 
 #define DOC_quic_tls_transcript \
-  "Return SHA-256 transcript bytes and their hash from complete handshake messages (§4.4.1)."
+  "Return the SHA-256 transcript of complete handshake messages and its hash, RFC 8446 §4.4.1."
 
 #define DOC_quic_tls_certificate_verify_input \
-  "Build the signed content of CertificateVerify from a SHA-256 transcript hash (§4.4.3)."
+  "Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 8446 §4.4.3."
 
 #define DOC_quic_protect \
   "Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4."

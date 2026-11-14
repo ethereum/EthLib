@@ -7,6 +7,7 @@ import pytest
 from ethlib.networking.quic import tls
 from raising import raises
 
+from .test_handshake import CODES, PREFIX
 from .test_tls import CLIENT_HELLO, SERVER_FLIGHT, SERVER_HELLO, SERVER_TRANSCRIPT
 
 
@@ -47,15 +48,18 @@ def test_retry_transcript() -> None:
 
 @pytest.mark.parametrize("messages", [[RETRY], [SERVER_HELLO, RETRY], [CLIENT_HELLO, RETRY, RETRY]])
 def test_misplaced_retry(messages: list[bytes]) -> None:
-    with raises(tls.TlsHandshakeError, "EthLib.Networking.Quic.Tls.Wire.Error.retry"):
+    with raises(tls.TlsHandshakeError, f"{PREFIX}retry") as info:
         tls.transcript(messages)
+    assert info.value.code == CODES["retry"]
 
 
 def test_transcript_requires_complete_separate_messages() -> None:
-    with raises(tls.TlsHandshakeError, "EthLib.Networking.Quic.Tls.Wire.Error.trailing"):
+    with raises(tls.TlsHandshakeError, f"{PREFIX}trailing") as info:
         tls.transcript([CLIENT_HELLO + SERVER_HELLO])
-    with raises(tls.TlsHandshakeError, "EthLib.Networking.Quic.Tls.Wire.Error.truncated"):
+    assert info.value.code == CODES["trailing"]
+    with raises(tls.TlsHandshakeError, f"{PREFIX}truncated") as info:
         tls.transcript([CLIENT_HELLO[:-1]])
+    assert info.value.code == CODES["truncated"]
     assert tls.transcript([]) == (b"", hashlib.sha256(b"").digest())
 
 

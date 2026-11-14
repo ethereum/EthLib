@@ -7,6 +7,19 @@ from raising import raises
 
 from .test_tls import CLIENT_HELLO, SERVER_FLIGHT, SERVER_HELLO
 
+PREFIX = "EthLib.Networking.Quic.Tls.Wire.Error."
+
+# The stable codes of the TLS codec errors, one for each Lean constructor.
+CODES = {
+    "truncated": 1,
+    "length": 2,
+    "trailing": 3,
+    "constant": 4,
+    "duplicateExtension": 5,
+    "messageType": 6,
+    "retry": 7,
+}
+
 # Source: RFC 8446 §§4.1.2, 4.1.3, 4.3.1, 4.3.2 and 4.4.2–4.4.4.
 # These small layouts are derived by hand from the field widths and bounds.
 # They pin wire syntax, with opaque certificate and signature bytes, rather than authentication.
@@ -62,11 +75,12 @@ def test_message_layout(message: tls.Message, encoded: str) -> None:
 
 @pytest.mark.parametrize(("message", "encoded"), MESSAGES)
 def test_incomplete_envelope(message: tls.Message, encoded: str) -> None:
-    # Every proper prefix lacks bytes promised by the outer handshake length.
+    # Every proper prefix ends before the header or before the body length that the header states.
     data = bytes.fromhex(encoded)
     for cut in range(len(data)):
-        with raises(tls.TlsHandshakeError, "EthLib.Networking.Quic.Tls.Wire.Error.truncated"):
+        with raises(tls.TlsHandshakeError, f"{PREFIX}truncated") as info:
             tls.decode_message(32, data[:cut])
+        assert info.value.code == CODES["truncated"]
 
 
 @pytest.mark.parametrize(
@@ -110,28 +124,31 @@ def test_extension_payload(payload: tls.Payload, kind: int, encoded: str) -> Non
     ],
 )
 def test_payload_length_rejected(payload: tls.Payload) -> None:
-    with raises(tls.TlsHandshakeError, "EthLib.Networking.Quic.Tls.Wire.Error.length"):
+    with raises(tls.TlsHandshakeError, f"{PREFIX}length") as info:
         tls.encode_payload(payload)
+    assert info.value.code == CODES["length"]
 
 
 @pytest.mark.parametrize(
     ("form", "kind", "data", "error"),
     [
-        ("supported_versions", 43, "03030400", "truncated"),
+        # An incomplete field inside a complete extension cannot be repaired by more input.
+        ("supported_versions", 43, "03030400", "length"),
         ("supported_versions", 43, "00", "length"),
         ("supported_groups", 10, "000100", "length"),
-        ("signature_algorithms", 13, "0003040300", "truncated"),
+        ("signature_algorithms", 13, "0003040300", "length"),
         ("selected_version", 43, "030400", "trailing"),
         ("selected_version", 10, "0304", "constant"),
         ("server_key_share", 51, "00170000", "length"),
-        ("client_key_share", 51, "000100", "truncated"),
+        ("client_key_share", 51, "000100", "length"),
         ("alpn", 16, "00020000", "length"),
-        ("alpn", 16, "0003016162", "truncated"),
+        ("alpn", 16, "0003016162", "length"),
     ],
 )
 def test_bad_payload(form: tls.PayloadForm, kind: int, data: str, error: str) -> None:
-    with raises(tls.TlsHandshakeError, f"EthLib.Networking.Quic.Tls.Wire.Error.{error}"):
+    with raises(tls.TlsHandshakeError, f"{PREFIX}{error}") as info:
         tls.decode_payload(form, {"kind": kind, "data": list(bytes.fromhex(data))})
+    assert info.value.code == CODES[error]
 
 
 @pytest.mark.parametrize(
@@ -149,16 +166,18 @@ def test_bad_payload(form: tls.PayloadForm, kind: int, data: str, error: str) ->
     ],
 )
 def test_bad_message(encoded: str, error: str) -> None:
-    with raises(tls.TlsHandshakeError, f"EthLib.Networking.Quic.Tls.Wire.Error.{error}"):
+    with raises(tls.TlsHandshakeError, f"{PREFIX}{error}") as info:
         tls.decode_message(32, bytes.fromhex(encoded))
+    assert info.value.code == CODES[error]
 
 
 def test_legacy_constants() -> None:
     data = bytes.fromhex(MESSAGES[0][1])
     # RFC 8446 §4.1.2 fixes legacy_version to 0303 and compression to 01 00.
     for malformed in [data[:5] + b"\x04" + data[6:], data[:44] + b"\x01" + data[45:]]:
-        with raises(tls.TlsHandshakeError, "EthLib.Networking.Quic.Tls.Wire.Error.constant"):
+        with raises(tls.TlsHandshakeError, f"{PREFIX}constant") as info:
             tls.decode_message(32, malformed)
+        assert info.value.code == CODES["constant"]
 
 
 def test_unknown_extensions_keep_their_order() -> None:
@@ -173,8 +192,9 @@ def test_unknown_extensions_keep_their_order() -> None:
 
 
 def test_duplicate_extension_encoding() -> None:
-    with raises(tls.TlsHandshakeError, "EthLib.Networking.Quic.Tls.Wire.Error.duplicateExtension"):
+    with raises(tls.TlsHandshakeError, f"{PREFIX}duplicateExtension") as info:
         tls.encode_message(32, ("encrypted_extensions", [PARAMETERS, PARAMETERS]))
+    assert info.value.code == CODES["duplicateExtension"]
 
 
 def test_duplicate_extension_type_with_different_data() -> None:
@@ -183,27 +203,30 @@ def test_duplicate_extension_type_with_different_data() -> None:
         {"kind": 0xAAAA, "data": [0xAB]},
         {"kind": 0xAAAA, "data": [0xCD]},
     ]
-    error = "EthLib.Networking.Quic.Tls.Wire.Error.duplicateExtension"
-    with raises(tls.TlsHandshakeError, error):
+    error = f"{PREFIX}duplicateExtension"
+    with raises(tls.TlsHandshakeError, error) as info:
         tls.encode_message(32, ("encrypted_extensions", extensions))
+    assert info.value.code == CODES["duplicateExtension"]
     encoded = bytes.fromhex("0800000c000aaaaa0001abaaaa0001cd")
-    with raises(tls.TlsHandshakeError, error):
+    with raises(tls.TlsHandshakeError, error) as info:
         tls.decode_message(32, encoded)
+    assert info.value.code == CODES["duplicateExtension"]
 
 
 def test_caller_supplies_finished_hash_length() -> None:
     data = bytes.fromhex("14000030") + bytes(48)
     assert tls.encode_message(48, ("finished", [0] * 48)) == data
     assert tls.decode_message(48, data) == (("finished", [0] * 48), b"")
-    with raises(tls.TlsHandshakeError, "EthLib.Networking.Quic.Tls.Wire.Error.length"):
+    with raises(tls.TlsHandshakeError, f"{PREFIX}length") as info:
         tls.encode_message(32, ("finished", [0] * 48))
+    assert info.value.code == CODES["length"]
 
 
 def test_rfc8448_trace() -> None:
-    # Source: RFC 8448 §3, the complete messages already pinned in test_tls.py.
+    # Source: RFC 8448 §3, its complete ClientHello, ServerHello and server flight.
     messages = [CLIENT_HELLO, SERVER_HELLO]
     remaining = SERVER_FLIGHT
-    kinds = []
+    kinds: list[str] = []
     while remaining:
         message, rest = tls.decode_message(32, remaining)
         encoded = remaining[: len(remaining) - len(rest)]

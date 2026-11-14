@@ -820,10 +820,12 @@ These results establish neither cryptographic security nor constant-time executi
 `decode_encode` and `encode_injective` (`Networking/Proofs/Quic/Tls/Messages.lean`) prove that every successfully encoded handshake message recovers its fields, with arbitrary trailing bytes, and that successful encodings are injective.
 The messages are ClientHello, ServerHello, EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify and Finished, with the layouts of RFC 8446 §4.
 The caller supplies the hash length of Finished.
-The codecs check field bounds, the fixed TLS 1.3 legacy fields and duplicate extension types.
+The decoders check field bounds, the fixed TLS 1.3 legacy fields and duplicate extension types.
+No theorem yet states the converse: that every input a decoder accepts is the encoding of its result.
+So these checks rest on the code and the Python tests, not on a proof.
 They preserve extension order, opaque certificate bytes, opaque extension data and unrecognized two-byte identifiers.
 
-`decodePayload_encodePayload` (`Networking/Proofs/Quic/Tls/Extensions.lean`) proves the round trip for the supported-versions, supported-groups, signature-algorithms, key-share, ALPN and opaque QUIC transport-parameter payload forms.
+`decodePayload_encodePayload` (`Networking/Proofs/Quic/Tls/Extensions.lean`) proves the round trip for every payload form: supported and selected versions, supported groups, signature algorithms, the three key-share forms, ALPN and opaque QUIC transport parameters.
 The caller chooses the payload form from its message context; parsing a message alone does not validate these opaque payloads.
 
 The Python suite checks message layouts and payload bounds against the RFC wire formats.
@@ -838,8 +840,9 @@ They do not check negotiation, extension placement, required extensions, message
 The transcript proofs (`Networking/Proofs/Quic/Tls/Transcript.lean`) state that preservation and the HelloRetryRequest replacement of RFC 8446 §4.4.1.
 A retry replaces one saved ClientHello with a synthetic `message_hash`, then appends the received retry bytes.
 A retry after another message or a second retry is rejected.
+The transcript always hashes with SHA-256; the steps must reject a suite with another hash.
 
-The Python suite checks the RFC 8448 §3 transcript and its SHA-256 hash with Python's SHA-256.
+The Python suite checks the RFC 8448 §3 transcript, and its SHA-256 hash against an independent SHA-256.
 It also checks the CertificateVerify signed content of RFC 8446 §4.4.3, including the zero separator and the role's context string.
 
 The client and server steps, QUIC CRYPTO reassembly and encryption-level checks are absent.

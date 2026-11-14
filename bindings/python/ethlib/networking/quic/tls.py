@@ -53,7 +53,7 @@ class CertificateRequest(TypedDict):
 
 
 class KeyShareEntry(TypedDict):
-    """A named group and its unvalidated key-exchange bytes, RFC 8446 §4.2.8."""
+    """A named group and its opaque key-exchange bytes, RFC 8446 §4.2.8."""
 
     group: int
     key_exchange: list[int]
@@ -93,12 +93,12 @@ Payload: TypeAlias = (
 
 
 def encode_message(hash_length: int, message: Message) -> bytes:
-    """Encode one handshake message with its header and the negotiated hash length."""
+    """Encode one handshake message with its header, using the caller's hash length for Finished."""
     return _native.quic_tls_message_encode(hash_length, message)
 
 
 def decode_message(hash_length: int, data: bytes) -> tuple[Message, bytes]:
-    """Read one message and trailing bytes; a truncated message raises TlsHandshakeError."""
+    """Decode one complete message and return it with the bytes that follow it."""
     return _native.quic_tls_message_decode(hash_length, data)
 
 
@@ -108,12 +108,12 @@ def encode_payload(payload: Payload) -> Extension:
 
 
 def decode_payload(form: PayloadForm, extension: Extension) -> Payload:
-    """Read all extension data in the form required by the enclosing handshake message."""
+    """Decode all of an extension's data in the form the caller names, which must match its type."""
     return _native.quic_tls_payload_decode(form, extension)
 
 
 def transcript(messages: list[bytes]) -> tuple[bytes, bytes]:
-    """Return SHA-256 transcript bytes and their hash, with the HelloRetryRequest replacement."""
+    """Return SHA-256 transcript bytes and their hash, with the retry rule of RFC 8446 §4.4.1."""
     return _native.quic_tls_transcript(messages)
 
 
