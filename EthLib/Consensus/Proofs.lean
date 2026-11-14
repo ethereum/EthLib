@@ -248,6 +248,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.EpochAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.EpochElectra
 public import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Genesis
+public import EthLib.Consensus.Proofs.Transition.Totality.Horizon
 public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
 public import EthLib.Consensus.Proofs.Transition.Totality.Justification
 public import EthLib.Consensus.Proofs.Transition.Totality.PendingDeposits
