@@ -154,7 +154,7 @@ private theorem RunBounded.size_le (holds : RunBounded config start budget elaps
   omega
 
 /-- The bound on the supply at the last epoch is at most the budget. -/
-private theorem RunConditions.supply_le_budget
+theorem RunConditions.supply_le_budget
     (conditions : RunConditions preset config start budget epochs lastEpoch) :
     start.supply + epochs * preset.epochIssuanceBeforeAltair budget ≤ budget := by
   have quotient : 0 < preset.HYSTERESIS_QUOTIENT.toNat := by
@@ -175,11 +175,17 @@ private theorem RunBounded.supply_le_of_le (holds : RunBounded config start budg
       start.supply + epochs * preset.epochIssuanceBeforeAltair budget :=
   holds.supply.trans (Nat.add_le_add_left (Nat.mul_le_mul_right _ le) _)
 
-/-- Up to the last epoch, the sum of the effective balances is at most the budget. -/
-theorem RunBounded.effective_le (holds : RunBounded config start budget elapsed state)
+/-- Up to the last epoch, either bound keeps the effective balances within the budget. -/
+theorem RunConditions.effective_le_budget {elapsed : Nat}
     (conditions : RunConditions preset config start budget epochs lastEpoch)
-    (le : elapsed ≤ epochs) : effectiveBalanceSum state ≤ budget := by
-  rcases holds.effective with low | ratio
+    (le : elapsed ≤ epochs)
+    (effective : effectiveBalanceSum state ≤ start.effective ∨
+      effectiveBalanceSum state *
+          (preset.HYSTERESIS_QUOTIENT.toNat - preset.HYSTERESIS_DOWNWARD_MULTIPLIER.toNat) ≤
+        (start.supply + elapsed * preset.epochIssuanceBeforeAltair budget) *
+          preset.HYSTERESIS_QUOTIENT.toNat) :
+    effectiveBalanceSum state ≤ budget := by
+  rcases effective with low | ratio
   · exact low.trans ((le_max_right _ _).trans conditions.effectiveStart)
   · have gap : 0 < preset.HYSTERESIS_QUOTIENT.toNat -
         preset.HYSTERESIS_DOWNWARD_MULTIPLIER.toNat := by
@@ -188,6 +194,12 @@ theorem RunBounded.effective_le (holds : RunBounded config start budget elapsed 
     refine Nat.le_of_mul_le_mul_right ?_ gap
     refine ratio.trans (le_trans ?_ conditions.supplyRatio)
     exact Nat.mul_le_mul_right _ (Nat.add_le_add_left (Nat.mul_le_mul_right _ le) _)
+
+/-- Up to the last epoch, the sum of the effective balances is at most the budget. -/
+theorem RunBounded.effective_le (holds : RunBounded config start budget elapsed state)
+    (conditions : RunConditions preset config start budget epochs lastEpoch)
+    (le : elapsed ≤ epochs) : effectiveBalanceSum state ≤ budget :=
+  conditions.effective_le_budget le holds.effective
 
 /-- Up to the last epoch, each balance is at most the budget. -/
 private theorem RunBounded.funded (holds : RunBounded config start budget elapsed state)

@@ -200,7 +200,7 @@ private theorem ChainHolds.of_processSlot {start : RunStart} {step : BlockStep}
     early, voted, blocksLe, bounded⟩
 
 /-- A state of a chain within its epochs meets the conditions of a run at its blocks. -/
-private theorem ChainHolds.run {start : RunStart} {step : BlockStep}
+theorem ChainHolds.run {start : RunStart} {step : BlockStep}
     {budget epochs lastEpoch startEpoch blocks : Nat} {fork : Fork}
     {state : BeaconState preset fork}
     (conditions : ChainConditions preset config start step budget epochs lastEpoch)
@@ -223,7 +223,8 @@ private theorem ChainHolds.run {start : RunStart} {step : BlockStep}
   omega
 
 /-- An epoch of the run, plus one and the longest lookahead, is at most the exit ceiling there. -/
-private theorem first_le {start : RunStart} {budget epochs lastEpoch startEpoch epoch : Nat}
+theorem RunConditions.first_le_ceilingAt {start : RunStart}
+    {budget epochs lastEpoch startEpoch epoch : Nat}
     (conditions : RunConditions preset config start budget epochs lastEpoch)
     (fits : startEpoch + epochs ≤ lastEpoch) (started : startEpoch ≤ epoch) :
     epoch + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤
@@ -305,7 +306,8 @@ private theorem ChainHolds.of_advanceSlot {start : RunStart} {step : BlockStep}
     have bounded := RunBounded.of_processEpoch_of_run run cachedBounded
       cachedHolds.invariant cachedHolds.shaped cachedHolds.resolved
       (by rw [cachedEpoch]; omega)
-      (first_le run fits cachedHolds.started) (signers boundaryNat cached cachedOk) epochedOk
+      (run.first_le_ceilingAt fits cachedHolds.started) (signers boundaryNat cached cachedOk)
+      epochedOk
     have elapsed : (getCurrentEpoch { epoched with slot := next }).toNat - startEpoch =
         (getCurrentEpoch cached).toNat - startEpoch + 1 := by
       have := holds.started
@@ -338,7 +340,7 @@ private theorem ChainHolds.of_processUpgrades {start : RunStart} {step : BlockSt
   have bounded := holds.bounded
   have run := holds.run conditions counted
   have bounded := bounded.of_processUpgrades (bounded.effective_le run (by omega))
-    (first_le run fits holds.started) computed
+    (run.first_le_ceilingAt fits holds.started) computed
   refine ⟨?_, (processUpgrades_invariant holds.invariant computed).1,
     processUpgrades_shaped run.activation run.compounding computed holds.shaped,
     holds.wellFormed.of_processUpgrades computed, holds.resolved.of_processUpgrades computed,
@@ -441,7 +443,7 @@ theorem ChainHolds.advanceSlotAcross_exists_ok
       exact processEpoch_exists_ok_of_run run cachedBounded cachedHolds.invariant
         cachedHolds.shaped cachedHolds.wellFormed cachedHolds.resolved
         (by rw [cachedEpoch]; omega) (by omega) (by rwa [processSlot_slot cachedOk])
-        (first_le run fits cachedHolds.started) (signers boundary cached cachedOk)
+        (run.first_le_ceilingAt fits cachedHolds.started) (signers boundary cached cachedOk)
         (draws boundary cached cachedOk) (fun before => cachedEpoch ▸ limit before)
   have advancedHolds := ChainHolds.of_advanceSlot conditions fits holds within signers advancedOk
   have advancedEpoch : (getCurrentEpoch advanced).toNat ≤ startEpoch + epochs := by
@@ -479,7 +481,8 @@ theorem ChainHolds.advanceSlotAcross_exists_ok
       refine ⟨next, nextOk, passes.snoc due nextOk,
         (upgradeFrame_upgradeNext nextOk).slot.trans slotEq,
         bounded.of_upgradeNext (bounded.effective_le advancedRun (by omega))
-          (by rw [epochEq]; exact first_le advancedRun fits advancedHolds.started) nextOk,
+          (by rw [epochEq]; exact advancedRun.first_le_ceilingAt fits advancedHolds.started)
+          nextOk,
         upgradeNext_shaped advancedRun.activation advancedRun.compounding nextOk shaped,
         PendingResolved.of_altair altair _, PendingVoted.of_altair altair _⟩)
   exact ⟨after, by simp only [advanceSlotAcross, advancedOk, bind, Except.bind]; exact afterOk⟩

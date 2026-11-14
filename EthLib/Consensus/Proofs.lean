@@ -244,6 +244,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.AltairWitness
 public import EthLib.Consensus.Proofs.Transition.Totality.AtCap
 public import EthLib.Consensus.Proofs.Transition.Totality.Bound
 public import EthLib.Consensus.Proofs.Transition.Totality.BuilderPayments
+public import EthLib.Consensus.Proofs.Transition.Totality.ChainBlock
 public import EthLib.Consensus.Proofs.Transition.Totality.ChainHolds
 public import EthLib.Consensus.Proofs.Transition.Totality.Consolidations
 public import EthLib.Consensus.Proofs.Transition.Totality.EffectiveBalances
