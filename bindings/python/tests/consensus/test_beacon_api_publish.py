@@ -9,7 +9,7 @@ from ethlib import consensus
 from raising import raises
 
 from .containers import FORKS
-from .test_beacon_api_events import block_events, envelope_events
+from .test_beacon_api_events import block_events, envelope_events, parsed
 from .test_beacon_api_pool import ENDPOINTS, event
 from .test_gossip_validation import FILES, MESSAGE_TOPICS, case_store, read, runs
 
@@ -73,8 +73,10 @@ def test_case(preset: str, fork: str, case: Path) -> None:
         # The publish endpoints take the gossip level; the pool endpoints take no level.
         level = "gossip" if endpoint in PUBLISH.values() else None
         requests.append((time, endpoint, item, level))
-    answers = consensus.api_post(
-        name=preset, fork=FORKS[fork], requests=requests, **case_store(preset, fork, case, meta)
+    answers = parsed(
+        consensus.api_post(
+            name=preset, fork=FORKS[fork], requests=requests, **case_store(preset, fork, case, meta)
+        )
     )
     for message, request, answer in zip(meta["messages"], requests, answers, strict=True):
         status, failures, events = answer

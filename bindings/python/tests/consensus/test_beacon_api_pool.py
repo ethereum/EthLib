@@ -9,6 +9,7 @@ from ethlib import consensus
 from raising import raises
 
 from .containers import FORKS
+from .test_beacon_api_events import parsed
 from .test_gossip_validation import FILES, MESSAGE_TOPICS, case_store, read, valid_case
 
 # The pool endpoint of each gossip handler whose objects a client may submit.
@@ -114,8 +115,10 @@ def test_case(preset: str, fork: str, case: Path) -> None:
         (message.get("current_time_ms", 0), endpoint, [read(case, message["message"])])
         for message in meta["messages"]
     ]
-    answers = consensus.api_post(
-        name=preset, fork=FORKS[fork], requests=requests, **case_store(preset, fork, case, meta)
+    answers = parsed(
+        consensus.api_post(
+            name=preset, fork=FORKS[fork], requests=requests, **case_store(preset, fork, case, meta)
+        )
     )
     handler = case.parts[-3]
     expected = [
@@ -133,11 +136,15 @@ def test_list_reports_each_failure() -> None:
     meta = _YAML.load((case / "meta.yaml").read_text())
     message = meta["messages"][0]
     change = read(case, message["message"])
-    answers = consensus.api_post(
-        name="minimal",
-        fork=FORKS["capella"],
-        requests=[(message.get("current_time_ms", 0), "bls_to_execution_changes", [change] * 3)],
-        **case_store("minimal", "capella", case, meta),
+    answers = parsed(
+        consensus.api_post(
+            name="minimal",
+            fork=FORKS["capella"],
+            requests=[
+                (message.get("current_time_ms", 0), "bls_to_execution_changes", [change] * 3)
+            ],
+            **case_store("minimal", "capella", case, meta),
+        )
     )
     reason = "already seen BLS to execution change for this validator"
     events = event("minimal", "capella", "gossip_bls_to_execution_change", change)
@@ -152,13 +159,15 @@ def test_list_events_follow_positions() -> None:
     change = read(case, message["message"])
     # The message starts with the validator index, which no validator of the state holds here.
     unknown = (2**40).to_bytes(8, "little") + change[8:]
-    answers = consensus.api_post(
-        name="minimal",
-        fork=FORKS["capella"],
-        requests=[
-            (message.get("current_time_ms", 0), "bls_to_execution_changes", [unknown, change])
-        ],
-        **case_store("minimal", "capella", case, meta),
+    answers = parsed(
+        consensus.api_post(
+            name="minimal",
+            fork=FORKS["capella"],
+            requests=[
+                (message.get("current_time_ms", 0), "bls_to_execution_changes", [unknown, change])
+            ],
+            **case_store("minimal", "capella", case, meta),
+        )
     )
     [(status, failures, events)] = answers
     assert (status, [position for position, _ in failures]) == (400, [0])

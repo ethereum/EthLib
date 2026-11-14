@@ -250,7 +250,7 @@ private theorem errorsMeet_applyTransactions {env : BlockEnvironment fork} {body
     ErrorsMeet (¬Short ·) (applyTransactions env body transactions) := fun _ h =>
   foldlM_error_of_step (fun _ : BodyOutput fork => True) (¬Short ·)
     (fun _ _ _ _ _ => trivial) (fun _ _ e _ h => errorsMeet_applyTransaction _ e h)
-    (b := ⟨body, .zero, 0, [], []⟩) trivial h
+    (b := ⟨body, .zero, 0, [], [], []⟩) trivial h
 
 /-- A checked system call never fails for a short balance. -/
 private theorem errorsMeet_checkedSystemCall {env : BlockEnvironment fork} {block : BlockState}

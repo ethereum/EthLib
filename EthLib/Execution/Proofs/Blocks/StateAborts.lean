@@ -122,7 +122,7 @@ private theorem errorsMeet_applyTransactions {env : BlockEnvironment fork} {body
   foldlM_error_of_step (fun before : BodyOutput fork => before.block.NoncesFit) StateAbort
     (fun _ _ _ fit h => applyTransaction_noncesFit fit h)
     (fun _ _ e fit h => errorsMeet_applyTransaction _ hbefore fit e h)
-    (b := ⟨body, .zero, 0, [], []⟩) hfit h
+    (b := ⟨body, .zero, 0, [], [], []⟩) hfit h
 
 /-- A checked system call on a block within the bound aborts only with an error of the state. -/
 private theorem errorsMeet_checkedSystemCall {env : BlockEnvironment fork} {block : BlockState}

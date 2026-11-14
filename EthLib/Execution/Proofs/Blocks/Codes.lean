@@ -426,7 +426,7 @@ private theorem errorsMeet_applyTransactions {env : BlockEnvironment fork} {body
     ErrorsMeet (¬Missing ·) (applyTransactions env body transactions) := fun _ h =>
   foldlM_error_of_step (fun before : BodyOutput fork => HasCodes (.ofBlock before.block))
     (¬Missing ·) (fun _ _ _ fit h => applyTransaction_hasCodes fit h)
-    (fun _ _ e fit h => errorsMeet_applyTransaction _ fit e h) (b := ⟨body, .zero, 0, [], []⟩)
+    (fun _ _ e fit h => errorsMeet_applyTransaction _ fit e h) (b := ⟨body, .zero, 0, [], [], []⟩)
     available h
 
 /-- A checked system call on a block that holds every code never fails for a missing code. -/

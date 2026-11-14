@@ -81,6 +81,22 @@ def _root(fork: str, type_name: str, value: dict) -> str:
     return "0x" + consensus.ssz_static("minimal", FORKS[fork], type_name, encoded)[0].hex()
 
 
+def parsed(
+    answers: list[tuple[int, list[tuple[int, str]], list[tuple[str, str]]]],
+) -> list[tuple[int, list[tuple[int, str]], list[tuple[str, Any]]]]:
+    """The answers of the pool and publish endpoints, with the JSON data of each event parsed."""
+    return [
+        (status, failures, [(topic, json.loads(data)) for topic, data in events])
+        for status, failures, events in answers
+    ]
+
+
+def gossip_event(preset: str, fork: str, topic: str, data: bytes) -> tuple[str, Any] | None:
+    """The event of an object that gossip accepts, with its JSON data text parsed, or None."""
+    event = consensus.api_gossip_event(preset, fork, topic, data)
+    return None if event is None else (event[0], json.loads(event[1]))
+
+
 def test_examples_name_their_topic() -> None:
     """Each example of the source names the event of its own key."""
     assert [name for name, (event, _) in EXAMPLES.items() if event != name] == []
@@ -93,7 +109,7 @@ def test_object_example(name: str) -> None:
     event, data = EXAMPLES[name]
     obj = data["data"] if name in VERSIONED else data
     encoded = consensus.api_ssz("mainnet", FORKS[fork], type_name, obj)
-    assert consensus.api_gossip_event("mainnet", FORKS[fork], topic, encoded) == (
+    assert gossip_event("mainnet", FORKS[fork], topic, encoded) == (
         event,
         _lower(data),
     )
@@ -106,7 +122,7 @@ def test_attestation_example() -> None:
     event, data = EXAMPLES["attestation"]
     early = {key: value for key, value in data.items() if key != "committee_bits"}
     encoded = consensus.api_ssz("mainnet", "phase0", "Attestation", early)
-    assert consensus.api_gossip_event("mainnet", "phase0", "beacon_attestation", encoded) == (
+    assert gossip_event("mainnet", "phase0", "beacon_attestation", encoded) == (
         event,
         early,
     )
@@ -139,7 +155,7 @@ def test_column_sidecar(fork: str) -> None:
         root, slot = sidecar["beacon_block_root"], sidecar["slot"]
     expected = {"block_root": root, "index": sidecar["index"], "slot": slot}
     assert set(expected) == set(EXAMPLES["data_column_sidecar"][1])
-    assert consensus.api_gossip_event("minimal", FORKS[fork], "data_column_sidecar", data) == (
+    assert gossip_event("minimal", FORKS[fork], "data_column_sidecar", data) == (
         "data_column_sidecar",
         expected,
     )
@@ -166,11 +182,13 @@ def test_published_block(fork: str) -> None:
     message = meta["messages"][0]
     signed = read(case, message["message"])
     time = message.get("current_time_ms", 0)
-    answers = consensus.api_post(
-        name="minimal",
-        fork=FORKS[fork],
-        requests=[(time, "blocks", [signed]), (time, "blocks", [signed])],
-        **case_store("minimal", fork, case, meta),
+    answers = parsed(
+        consensus.api_post(
+            name="minimal",
+            fork=FORKS[fork],
+            requests=[(time, "blocks", [signed]), (time, "blocks", [signed])],
+            **case_store("minimal", fork, case, meta),
+        )
     )
     events = block_events(fork, signed, imported=True)
     assert set(events[0][1]) == set(EXAMPLES["block_gossip"][1])
@@ -201,11 +219,13 @@ def test_published_envelope() -> None:
     )
     envelope = read(case, meta["messages"][0]["message"])
     request = (0, "execution_payload_envelopes", [envelope])
-    answers = consensus.api_post(
-        name="minimal",
-        fork=FORKS["gloas"],
-        requests=[request, request],
-        **case_store("minimal", "gloas", case, meta),
+    answers = parsed(
+        consensus.api_post(
+            name="minimal",
+            fork=FORKS["gloas"],
+            requests=[request, request],
+            **case_store("minimal", "gloas", case, meta),
+        )
     )
     events = envelope_events(envelope)
     assert set(events[0][1]) == set(EXAMPLES["execution_payload_gossip"][1])
@@ -220,11 +240,13 @@ def test_published_block_already_held() -> None:
     signed = read(case, message["message"])
     store = case_store("minimal", "capella", case, meta)
     store["blocks"] = [*store["blocks"], (0, None, signed, b"")]
-    answers = consensus.api_post(
-        name="minimal",
-        fork=FORKS["capella"],
-        requests=[(message.get("current_time_ms", 0), "blocks", [signed])],
-        **store,
+    answers = parsed(
+        consensus.api_post(
+            name="minimal",
+            fork=FORKS["capella"],
+            requests=[(message.get("current_time_ms", 0), "blocks", [signed])],
+            **store,
+        )
     )
     assert answers == [(200, [], block_events("capella", signed, imported=False))]
 

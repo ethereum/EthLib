@@ -241,10 +241,12 @@ theorem runTransaction_eq_transactionStart {fork : Fork} (Meter : Type) [GasMete
         tx.authorizations (paidWrites sender target tx)
       let gasLeft := output.gasLeft + output.reservoir
       let blockGas := transactionBlockGas fork sender tx gasLeft output.refund output.stateGasUsed
+      let gasBeforeRefund := gasUsed fork sender tx gasLeft 0
       let (state, gasUsed) ←
         (settleGas env output.state sender tx gasLeft output.refund).mapError .state
       let state ← (deleteAccounts fork state output).mapError .state
-      return ⟨state, gasUsed, blockGas, output.logs, output.error⟩) := by
+      return ⟨state, gasUsed, blockGas, output.logs, output.error, output.output,
+        gasBeforeRefund⟩) := by
   unfold runTransaction transactionStart
   simp only [bind_assoc, pure_bind]
 

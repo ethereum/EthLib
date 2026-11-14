@@ -24,7 +24,7 @@ def hash_tree_root(ssz_type: str | dict[str, Any], value: dict[str, Any]) -> byt
 
 
 def get_generalized_index(ssz_type: str | dict[str, Any], *path: int | str) -> int:
-    """The generalized index that a path of positions, field names or "__len__" selects."""
+    """The generalized index a path selects: positions, field names and words such as "__len__"."""
     return _native.ssz_generalized_index(ssz_type, list(path))
 
 
