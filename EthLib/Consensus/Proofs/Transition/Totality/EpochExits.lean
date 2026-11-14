@@ -5,11 +5,13 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RegistryElectra
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 
 /-!
-# Proofs: the exit queue after one epoch, from Electra
+# Proofs: the exit queue after one epoch
 
-One epoch from Electra carries a ceiling on the exit queue into the next.
+One epoch carries a ceiling on the exit queue into the next, both before and from Electra.
 
-After the registry updates, the queue end and each exit epoch are at most a ceiling plus the cost.
+From Electra, the registry updates bound the queue end and each exit epoch.
+
+The bound is a ceiling plus the cost.
 
 That cost counts each validator that has not started to exit.
 
@@ -24,6 +26,10 @@ That cost is at most the sum of the effective balances in increments, plus the r
 So the ceiling rises by at most that amount in each epoch.
 
 The churn carried for exits stays at most the larger of its value before and a bound on one churn.
+
+Before Electra, the registry updates leave each exit epoch at most a ceiling plus the registry size.
+
+The other steps keep every exit epoch that is set, so the ceiling rises by at most that size.
 -/
 
 @[expose] public section
@@ -264,5 +270,75 @@ theorem processEpoch_exits_of_electra {config : Config} {checks : SignatureCheck
     refine ⟨middle.of_kept kept, ?_⟩
     rw [kept.2.1]
     exact carried'
+
+/-- Before Electra, one epoch keeps a ceiling on the exit epochs, raised by the registry size.
+
+The epoch must succeed.
+
+The ceiling must be at least the first epoch at which a new exit can take effect.
+
+Each exit epoch that is set must be at most the ceiling.
+
+The ceiling plus the registry size and the withdrawal delay must stay below 2^64.
+
+They are the bounds that the registry updates need.
+
+After the epoch, each exit epoch that is set is at most the ceiling plus the registry size.
+
+At the next epoch, take this ceiling plus one, since the current epoch has risen by one. -/
+theorem processEpoch_exits_of_lt_electra {config : Config} {checks : SignatureChecks}
+    (before : fork < .pectra) (computed : processEpoch config checks state = .ok after)
+    {ceiling : Nat}
+    (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
+    (exits : ∀ validator ∈ state.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
+      validator.exitEpoch.toNat ≤ ceiling)
+    (room : ceiling + state.validators.data.size +
+      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64) :
+    ∀ validator ∈ after.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
+      validator.exitEpoch.toNat ≤ ceiling + state.validators.data.size := by
+  have trace := processEpoch_trace computed
+  change EpochTrace _ ([.justification, .inactivity, .rewards] ++ (.registry :: [.slashings,
+    .eth1Reset, .pendingDeposits, .pendingConsolidations, .payments, .effectiveBalances,
+    .slashingsReset, .randaoReset, .history, .participation, .syncCommittees,
+    .proposerLookahead, .ptcWindow])) _ _ at trace
+  obtain ⟨middle, head, rest⟩ := append_iff.mp trace
+  cases rest with
+  | cons registryOk tail =>
+    -- The steps before the registry updates keep the validators and the slot.
+    obtain ⟨validators, slot⟩ := head.transport
+      (fun (first second : BeaconState preset fork) =>
+        second.validators = first.validators ∧ second.slot = first.slot)
+      (fun _ => ⟨rfl, rfl⟩)
+      (fun one two => ⟨two.1.trans one.1, two.2.trans one.2⟩)
+      fun stage member _ _ ok => by
+        have edge := action_cases.mp ok
+        refine ⟨edge.validators_eq ⟨by rintro rfl; simp at member,
+          by rintro rfl; simp at member, by rintro rfl; simp at member⟩, ?_⟩
+        by_cases rewards : stage = .rewards
+        · subst rewards
+          rw [processRewardsAndPenalties_frame edge]
+        · exact (edge.records ⟨rewards, by rintro rfl; simp at member,
+            by rintro rfl; simp at member, by rintro rfl; simp at member,
+            by rintro rfl; simp at member, by rintro rfl; simp at member⟩).2.2.2.2
+    have sizeSame : middle.validators.data.size = state.validators.data.size := by
+      rw [validators]
+    have epochSame : getCurrentEpoch middle = getCurrentEpoch state := by
+      simp only [getCurrentEpoch, slot]
+    -- The registry updates set each exit epoch to at most the ceiling plus the registry size.
+    obtain ⟨registered, registeredOk, bounded⟩ :=
+      processRegistryUpdates_total_of_lt_electra (config := config) middle before ceiling
+        (by rw [epochSame]; exact first) (by rw [validators]; exact exits)
+        (by rw [sizeSame]; exact room)
+    obtain rfl : registered = _ :=
+      Except.ok.inj (registeredOk.symm.trans (action_cases.mp registryOk))
+    rw [sizeSame] at bounded
+    -- The steps after the registry updates set no new exit epoch.
+    have kept := tail.transport ExitsKept ExitsKept.refl (fun one two => one.trans two)
+      fun stage member _ _ ok =>
+        ExitsKept.of_edge (action_cases.mp ok) (by rintro rfl; simp at member)
+    intro validator member set
+    obtain ⟨old, oldMember, same⟩ := kept.2.2 validator member set
+    rw [← same] at set ⊢
+    exact bounded old oldMember set
 
 end EthLib.Consensus
