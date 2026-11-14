@@ -2810,6 +2810,16 @@ These are store-local facts: no theorem here shows that a recorded honest vote i
 `willNoConflictingCheckpointBeJustified_of_willCurrentTargetBeJustified` shows that the one-third test passes wherever the two-thirds test does, for a nonzero effective balance increment.
 No theorem relates either test to the justification of the target in a later state.
 
+`Consensus/Proofs/Models/Network/ForkChoice.lean` states the additional network conditions used by the duty/head results.
+`DelayFits` requires deadline votes to arrive before the next slot; `Prompt` requires honest receivers to process messages at the specified boundary events.
+`BlocksAdmitted` assumes that a delayed block passing `validateOnBlock` also passes the remaining `onBlockWithVotes` handler steps.
+It is an explicit endpoint assumption, not a consequence of synchrony or validation alone; separate handler-totality work could remove it.
+`SignsTarget` describes a signing witness by a bounded time inside the assumed honest target-vote count, `HonestTargetVotes`.
+It is not an additional endpoint premise on its own.
+The count hypothesis supplies active honest voters whose stake meets its margin and who either sign the target or lie outside the past committee set.
+The direct-count quorum theorem instantiates that hypothesis; it does not derive the count from numerical sufficient conditions or prove actual FFG justification.
+The duty/head endpoints also retain their stated duty, stake, ancestry and finality hypotheses, and conclude their result or a bounded honest-store block-collision search witness.
+
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
 It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.

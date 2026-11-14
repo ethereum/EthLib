@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.ForkChoice.HonestDuties
+public import EthLib.Consensus.Proofs.Models.Network.ForkChoice
 public import EthLib.Consensus.Proofs.ForkChoice.VoteRecords
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.ForkChoice.BlockAgreement
@@ -195,29 +195,6 @@ theorem VoteAt.data_target {anchor : Store preset fork}
     obtain ⟨targetBlock, targetKnown⟩ := known
     exact reachable.lookahead_history_ancestor (UInt64.le_of_eq anchorSlot) nonzero
       stored' targetKnown advanced read' firstAfter .pending
-
-variable (fork) in
-/-- A vote sent at its deadline arrives before the next slot starts. -/
-def DelayFits (config : Config) (genesisTimeMs : UInt64) (Δ : ℕ) : Prop :=
-  (∃ due, getAttestationDueMs config fork = .ok due) ∧
-  ∀ slot next start due following, addChecked slot 1 = .ok next →
-    computeTimeAtSlotMs config genesisTimeMs slot = .ok start →
-    getAttestationDueMs config fork = .ok due →
-    computeTimeAtSlotMs config genesisTimeMs next = .ok following →
-    start.toNat + due.toNat + Δ < following.toNat
-
-/-- Honest receivers process messages immediately before and at slot boundaries up to `last`.
-
-This is a processing hypothesis, not a consequence of synchrony. -/
-def Prompt
-    (e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
-      genesisTimeMs) J) (last : ℕ) : Prop :=
-  ∀ w ∈ J, ∀ slot start, computeTimeAtSlotMs config genesisTimeMs slot = .ok start →
-    e.startTime ≤ start.toNat → start.toNat ≤ last →
-    (∃ k, (e.world k).time = start.toNat ∧
-      UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w)) ∧
-    (e.startTime < start.toNat → ∃ k, (e.world k).time + 1 = start.toNat ∧
-      UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w))
 
 /-- Processing through a time supplies processing through every earlier time. -/
 theorem Prompt.of_le {last later : ℕ} (prompt : Prompt e later) (le : last ≤ later) :

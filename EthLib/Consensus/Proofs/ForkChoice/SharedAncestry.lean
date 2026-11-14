@@ -30,6 +30,21 @@ namespace EthLib.Consensus
 
 open Base Serialization.Ssz
 
+/-- Selected partial lookups agree at shared keys, or two selected lookups disagree there. -/
+theorem lookup_agree_or_disagree {ι κ α : Type*}
+    (lookup : ι → κ → Option α) (selected : ι → Prop) :
+    (∀ i, selected i → ∀ j, selected j → ∀ k a b,
+      lookup i k = some a → lookup j k = some b → a = b) ∨
+    ∃ i, selected i ∧ ∃ j, selected j ∧ ∃ k a b,
+      lookup i k = some a ∧ lookup j k = some b ∧ a ≠ b := by
+  classical
+  by_cases agree : ∀ i, selected i → ∀ j, selected j → ∀ k a b,
+      lookup i k = some a → lookup j k = some b → a = b
+  · exact .inl agree
+  · right
+    push Not at agree
+    exact agree
+
 variable {preset : Preset} {fork : Fork}
 
 namespace Store
@@ -83,16 +98,11 @@ theorem blocks_agree_or_collision {ι : Type*}
     ∃ i, selected i ∧ ∃ j, selected j ∧ ∃ root collision,
       findBlockCollision (stores i) (stores j) [root] = some collision := by
   classical
-  by_cases found : ∃ i, selected i ∧ ∃ j, selected j ∧ ∃ root collision,
-      findBlockCollision (stores i) (stores j) [root] = some collision
-  · exact .inr found
-  · refine .inl ?_
-    intro i hi j hj root left right heldLeft heldRight
-    have absent : findBlockCollision (stores i) (stores j) [root] = none := by
-      by_contra present
-      obtain ⟨collision, search⟩ := Option.ne_none_iff_exists'.mp present
-      exact found ⟨i, hi, j, hj, root, collision, search⟩
-    exact eq_of_findBlockCollision_none absent (by simp) heldLeft heldRight
+  rcases lookup_agree_or_disagree (fun i (root : Root) => (stores i).blocks[root]?) selected with
+    agree | ⟨i, hi, j, hj, root, left, right, heldLeft, heldRight, different⟩
+  · exact .inl agree
+  · exact .inr ⟨i, hi, j, hj, root, (root, left, right),
+      by simp [findBlockCollision, heldLeft, heldRight, different]⟩
 
 /-- Without a collision, a store that holds a block at each root of a walk agrees on them. -/
 private theorem agree_of_findBlockCollision_none {node : ForkChoiceNode} {slot : Slot}

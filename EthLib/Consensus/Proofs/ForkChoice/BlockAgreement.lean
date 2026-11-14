@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.ForkChoice.HonestDuties
+public import EthLib.Consensus.Proofs.Models.Network.ForkChoice
 public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 public import EthLib.Consensus.Proofs.ForkChoice.SharedAncestry
 import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
@@ -264,23 +264,6 @@ variable {config : Config} {checks : SignatureChecks} {sources : BlockSources pr
   {assignment : Assignment preset} {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
-
-/-- Validated delayed blocks pass the receiver's remaining handler checks.
-
-Synchrony supplies view membership, not success of carried votes inside onBlockWithVotes. -/
-def BlocksAdmitted
-    (e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
-      genesisTimeMs) J) (GST Δ last : ℕ) : Prop :=
-  ∀ v ∈ J, ∀ u ∈ J, ∀ n k, (e.world k).time ≤ last → ∀ signedBlock blockRoot state,
-    .block signedBlock ∈ (e.world n).view v →
-    ((e.world n).state v).blocks[blockRoot]? = some signedBlock.message →
-    max (e.world n).time GST + Δ ≤ (e.world k).time →
-    UpToDate config checks sources (e.world k).time ((e.world k).view u)
-      ((e.world k).state u) →
-    SszType.hashTreeRoot signedBlock.message = .ok blockRoot →
-    ((e.world k).state u).validateOnBlock config checks sources signedBlock blockRoot =
-      .ok state →
-    ∃ after, ((e.world k).state u).onBlockWithVotes config checks sources signedBlock = .ok after
 
 /-- A cached target state has a lookahead origin with the execution's fixed checks. -/
 theorem Execution.checkpointStates_fixedChecks {anchor : Store preset fork}
