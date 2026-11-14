@@ -1337,30 +1337,58 @@ theorem onBlockWithVotes_sameClock {checks : SignatureChecks}
     (onBlock_sameClock step)) (fun _ same step => same.trans (onAttestation_sameClock step))
     (fun _ same step => same.trans (onAttesterSlashing_sameClock step)) (.refl _) added
 
+/-- One more vote keeps each latest vote, or replaces it with a vote of a later rank. -/
+theorem recordVote_rank {equivocating : List ValidatorIndex} {message : LatestMessage fork}
+    {messages : Std.TreeMap ValidatorIndex (LatestMessage fork)} {i j : ValidatorIndex}
+    {old : LatestMessage fork} (found : messages[j]? = some old) :
+    ∃ m, (recordVote equivocating message messages i)[j]? = some m ∧ old.rank ≤ m.rank := by
+  unfold recordVote
+  split
+  · exact ⟨old, found, UInt64.le_refl _⟩
+  · split
+    · rename_i previous held
+      split
+      · rename_i later
+        by_cases same : i = j
+        · subst same
+          rw [found] at held
+          cases held
+          exact ⟨message, by simp, UInt64.le_of_lt later⟩
+        · exact ⟨old, by simpa [Std.TreeMap.getElem?_insert, same] using found,
+            UInt64.le_refl _⟩
+      · exact ⟨old, found, UInt64.le_refl _⟩
+    · rename_i absent
+      have other : i ≠ j := by
+        intro same
+        subst same
+        rw [found] at absent
+        cases absent
+      exact ⟨old, by simpa [Std.TreeMap.getElem?_insert, other] using found,
+        UInt64.le_refl _⟩
+
 /-- A vote keeps every other vote at or after its rank at or after it. -/
 theorem recordVote_keeps {equivocating : List ValidatorIndex} {message : LatestMessage fork}
     {messages : Std.TreeMap ValidatorIndex (LatestMessage fork)} {i j : ValidatorIndex}
     {old : LatestMessage fork}
     (found : messages[j]? = some old) (late : message.rank ≤ old.rank) :
     ∃ m, (recordVote equivocating message messages i)[j]? = some m ∧ message.rank ≤ m.rank := by
-  unfold recordVote
-  split
-  · exact ⟨old, found, late⟩
-  · split
-    · split
-      · by_cases same : i = j
-        · subst same
-          exact ⟨message, by simp, UInt64.le_refl _⟩
-        · refine ⟨old, ?_, late⟩
-          rw [Std.TreeMap.getElem?_insert]
-          simp [same, found]
-      · exact ⟨old, found, late⟩
-    · by_cases same : i = j
-      · subst same
-        exact ⟨message, by simp, UInt64.le_refl _⟩
-      · refine ⟨old, ?_, late⟩
-        rw [Std.TreeMap.getElem?_insert]
-        simp [same, found]
+  obtain ⟨m, held, later⟩ := recordVote_rank (i := i) (message := message)
+    (equivocating := equivocating) found
+  exact ⟨m, held, UInt64.le_trans late later⟩
+
+/-- A run of votes keeps each latest vote, or replaces it with a vote of a later rank. -/
+theorem foldl_recordVote_rank {equivocating : List ValidatorIndex} {message : LatestMessage fork}
+    (indices : List ValidatorIndex) {messages : Std.TreeMap ValidatorIndex (LatestMessage fork)}
+    {j : ValidatorIndex} {old : LatestMessage fork} (found : messages[j]? = some old) :
+    ∃ m, (indices.foldl (recordVote equivocating message) messages)[j]? = some m ∧
+      old.rank ≤ m.rank := by
+  induction indices generalizing messages old with
+  | nil => exact ⟨old, found, UInt64.le_refl _⟩
+  | cons i rest ih =>
+    obtain ⟨m, held, later⟩ := recordVote_rank (i := i) (message := message)
+      (equivocating := equivocating) found
+    obtain ⟨latest, held', later'⟩ := ih held
+    exact ⟨latest, held', UInt64.le_trans later later'⟩
 
 /-- After the vote of a validator that does not equivocate, its vote is at or after the rank. -/
 theorem recordVote_self {equivocating : List ValidatorIndex} {message : LatestMessage fork}
@@ -1384,27 +1412,14 @@ theorem foldl_recordVote {equivocating : List ValidatorIndex} {message : LatestM
     {i : ValidatorIndex} (voted : i ∈ indices) (honest : i ∉ equivocating) :
     ∃ m, (indices.foldl (recordVote equivocating message) messages)[i]? = some m ∧
       message.rank ≤ m.rank := by
-  -- A vote at or after the rank survives the rest of the run.
-  have keep : ∀ (rest : List ValidatorIndex)
-      (messages : Std.TreeMap ValidatorIndex (LatestMessage fork))
-      (old : LatestMessage fork), messages[i]? = some old → message.rank ≤ old.rank →
-      ∃ m, (rest.foldl (recordVote equivocating message) messages)[i]? = some m ∧
-        message.rank ≤ m.rank := by
-    intro rest
-    induction rest with
-    | nil => exact fun messages old found late => ⟨old, found, late⟩
-    | cons j rest ih =>
-      intro messages old found late
-      obtain ⟨m, found', late'⟩ :=
-        recordVote_keeps (i := j) (equivocating := equivocating) found late
-      exact ih _ m found' late'
   induction indices generalizing messages with
   | nil => cases voted
   | cons j rest ih =>
     rw [List.foldl_cons]
     rcases List.mem_cons.mp voted with rfl | voted
     · obtain ⟨m, found, late⟩ := recordVote_self (message := message) (messages := messages) honest
-      exact keep rest _ m found late
+      obtain ⟨latest, held, later⟩ := foldl_recordVote_rank rest found
+      exact ⟨latest, held, UInt64.le_trans late later⟩
     · exact ih _ voted
 
 /-- One vote leaves a vote as it was, or sets it to the new vote for the voter. -/

@@ -139,7 +139,7 @@ private theorem VotesHaveOrigins.of_same (holds : store.VotesHaveOrigins config)
 /-! ## The attestation handler -/
 
 /-- Storing the state of a target keeps the latest votes and the states already stored. -/
-private theorem storeTargetCheckpointState_kept {checks : SignatureChecks} {target : Checkpoint}
+theorem storeTargetCheckpointState_kept {checks : SignatureChecks} {target : Checkpoint}
     (stored : store.storeTargetCheckpointState config checks target = .ok after) :
     after.latestMessages = store.latestMessages ∧
       ∀ {checkpoint : Checkpoint} {state : BeaconState preset fork},

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.ForkChoice.Network
+import EthLib.Consensus.Proofs.ForkChoice.VoteOrigins
 
 /-!
 # Proofs: the latest vote of a validator never goes back
@@ -40,49 +41,6 @@ namespace Store
 
 variable {config : Config} {store after : Store preset fork}
 
-/-- One more vote keeps each latest vote, or replaces it with a vote of a later rank. -/
-theorem recordVote_rank {equivocating : List ValidatorIndex} {message : LatestMessage fork}
-    {messages : Std.TreeMap ValidatorIndex (LatestMessage fork)} {i j : ValidatorIndex}
-    {old : LatestMessage fork} (found : messages[j]? = some old) :
-    ∃ m, (recordVote equivocating message messages i)[j]? = some m ∧ old.rank ≤ m.rank := by
-  unfold recordVote
-  split
-  · exact ⟨old, found, UInt64.le_refl _⟩
-  · split
-    · rename_i previous held
-      split
-      · rename_i later
-        by_cases same : i = j
-        · subst same
-          rw [found] at held
-          cases held
-          exact ⟨message, by simp, UInt64.le_of_lt later⟩
-        · exact ⟨old, by simpa [Std.TreeMap.getElem?_insert, same] using found,
-            UInt64.le_refl _⟩
-      · exact ⟨old, found, UInt64.le_refl _⟩
-    · rename_i absent
-      have other : i ≠ j := by
-        intro same
-        subst same
-        rw [found] at absent
-        cases absent
-      exact ⟨old, by simpa [Std.TreeMap.getElem?_insert, other] using found,
-        UInt64.le_refl _⟩
-
-/-- A run of votes keeps each latest vote, or replaces it with a vote of a later rank. -/
-theorem foldl_recordVote_rank {equivocating : List ValidatorIndex} {message : LatestMessage fork}
-    (indices : List ValidatorIndex) {messages : Std.TreeMap ValidatorIndex (LatestMessage fork)}
-    {j : ValidatorIndex} {old : LatestMessage fork} (found : messages[j]? = some old) :
-    ∃ m, (indices.foldl (recordVote equivocating message) messages)[j]? = some m ∧
-      old.rank ≤ m.rank := by
-  induction indices generalizing messages old with
-  | nil => exact ⟨old, found, UInt64.le_refl _⟩
-  | cons i rest ih =>
-    obtain ⟨m, held, later⟩ := recordVote_rank (i := i) (message := message)
-      (equivocating := equivocating) found
-    obtain ⟨latest, held', later'⟩ := ih held
-    exact ⟨latest, held', UInt64.le_trans later later'⟩
-
 /-- An attestation keeps each latest vote, or replaces it with a vote of a later rank. -/
 theorem onAttestation_latestMessages_rank {checks : SignatureChecks}
     {attestation : Attestation preset fork} {isFromBlock : Bool} {j : ValidatorIndex}
@@ -93,16 +51,7 @@ theorem onAttestation_latestMessages_rank {checks : SignatureChecks}
   unfold onAttestation at attested
   simp only [bind_ok_iff] at attested
   obtain ⟨_, _, stored, storing, _, _, _, _, indexed, _, _, _, attested⟩ := attested
-  -- Storing the target state changes only checkpoint states, not the latest votes.
-  have kept : stored.latestMessages = store.latestMessages := by
-    unfold storeTargetCheckpointState at storing
-    split at storing
-    · simp only [pure, Except.pure, Except.ok.injEq] at storing
-      subst storing
-      rfl
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at storing
-      obtain ⟨_, _, rfl⟩ := storing
-      rfl
+  have kept := (storeTargetCheckpointState_kept storing).1
   split at attested
   · simp only [pure, Except.pure, Except.ok.injEq] at attested
     subst attested
@@ -161,6 +110,10 @@ theorem Handles.latestMessages_rank {config : Config} {checks : SignatureChecks}
     exact ⟨old, found, UInt64.le_refl _⟩
 
 /-- Along an execution, a store keeps each latest vote, or holds one of a later rank.
+
+The network model freezes non-honest local states.
+
+This does not describe arbitrary Byzantine updates to a local state.
 
 The store at a later event holds a vote of that validator, at the same rank or later. -/
 theorem Execution.latestMessages_rank {ν κ : Type*} [DecidableEq ν] {config : Config}
