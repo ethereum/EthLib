@@ -245,8 +245,11 @@ public import EthLib.Consensus.Proofs.Transition.Totality.BuilderPayments
 public import EthLib.Consensus.Proofs.Transition.Totality.Consolidations
 public import EthLib.Consensus.Proofs.Transition.Totality.EffectiveBalances
 public import EthLib.Consensus.Proofs.Transition.Totality.EpochAltair
+public import EthLib.Consensus.Proofs.Transition.Totality.EpochElectra
 public import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
+public import EthLib.Consensus.Proofs.Transition.Totality.EpochBounds
 public import EthLib.Consensus.Proofs.Transition.Totality.Genesis
+public import EthLib.Consensus.Proofs.Transition.Totality.Horizon
 public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
 public import EthLib.Consensus.Proofs.Transition.Totality.Justification
 public import EthLib.Consensus.Proofs.Transition.Totality.PendingDeposits
@@ -263,6 +266,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot
 public import EthLib.Consensus.Proofs.Transition.Totality.Supply
+public import EthLib.Consensus.Proofs.Transition.Totality.SupplyBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.SyncCommittee
 public import EthLib.Consensus.Proofs.Transition.Totality.Upgrades
 public import EthLib.Consensus.Proofs.Transition.Upgrade
