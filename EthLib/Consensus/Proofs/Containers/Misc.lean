@@ -5,6 +5,7 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
 public import EthLib.Serialization.Proofs.Ssz.Typed.Container
 public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingDomain
 
 /-!
 # Proofs: the shared containers of the beacon chain are lawful
@@ -16,6 +17,8 @@ So its bytes decode back to it, and two values with one encoding are equal.
 A vector whose length comes from the preset needs that length to be positive.
 
 A summary of a span of slots has the root of the batch of that span.
+
+A header, a checkpoint or a vote has no list, so every variable-size count in it fits its word.
 -/
 
 @[expose] public section
@@ -100,5 +103,32 @@ theorem hashTreeRoot_historicalSummary {preset : Preset} {batch : HistoricalBatc
     toChunk_ok_iff.mp blocksRooted, toChunk_ok_iff.mp statesRooted, chunk, bind, Except.bind, pure,
     Except.pure, List.map]
   rw [hashTreeRoot_container_names]
+
+/-- Every variable-size count of a block header fits its 256-bit word, since it has no list. -/
+theorem BeaconBlockHeader.commitmentSized (header : BeaconBlockHeader) :
+    CommitmentSized (SszType.desc BeaconBlockHeader) (SszType.toValue header) := by
+  refine .container fun pair member => ?_
+  simp [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at member
+  repeat' rcases member with rfl | member
+  all_goals first | exact .byteVector _ _ | exact .uint _ _
+
+/-- Every variable-size count of a checkpoint fits its 256-bit word, since it has no list. -/
+theorem Checkpoint.commitmentSized (checkpoint : Checkpoint) :
+    CommitmentSized (SszType.desc Checkpoint) (SszType.toValue checkpoint) := by
+  refine .container fun pair member => ?_
+  simp [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at member
+  repeat' rcases member with rfl | member
+  all_goals first | exact .byteVector _ _ | exact .uint _ _
+
+/-- Every variable-size count of a vote fits its 256-bit word, since it has no list. -/
+theorem AttestationData.commitmentSized (data : AttestationData) :
+    CommitmentSized (SszType.desc AttestationData) (SszType.toValue data) := by
+  refine .container fun pair member => ?_
+  simp [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at member
+  repeat' rcases member with rfl | member
+  all_goals first
+    | exact .byteVector _ _
+    | exact .uint _ _
+    | exact Checkpoint.commitmentSized _
 
 end EthLib.Consensus

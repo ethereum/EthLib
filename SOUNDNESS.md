@@ -3053,7 +3053,19 @@ The theorems are in `Consensus/Proofs/SlashingProtection.lean`.
 `signingRoot_eq_of_processProposerSlashing` shows that the two headers of a valid proposer slashing, both signed by it, are different headers with one signing root.
 These theorems hold for every function that gives the signing root of a message.
 They assume only that every check of the signer passed.
-So a slashable pair of signed messages needs a collision of the signing root, and no theorem bounds the chance of one.
+So a slashable pair of signed messages needs two different messages of one type with one signing root.
+
+When the node hash is a random oracle, `prEvent_signingRoot_le_two_pow` (`Consensus/Proofs/SigningRandomOracle.lean`) bounds the chance of finding such a pair whose counts fit their words, with the signing roots computed by the oracle.
+The signer takes its signing roots as an argument, so no theorem composes the signer theorems with this bound.
+Its adversary outputs two objects of one type, each with a domain, and the two domains may differ.
+`computeSigningRoot_eq_hashTreeRoot` (`Consensus/Proofs/Signing.lean`) shows that the signing root of an object of a lawful type is the root of one value.
+That value is the signing data with the object in place of its root.
+So the experiment of the SSZ root bound runs on that value, and `prEvent_wins_le_two_pow` bounds a win by `Q^2 / 2^256`.
+By `wins_signingValue_iff`, a win is two different pairs of an object and a domain whose objects fit one well-formed type, whose variable-size counts fit their 256-bit words, and whose signing values have one root.
+`wins_of_computeSigningRoot_eq` shows that two such pairs of a lawful type with one signing root are a win, with SHA-256 roots.
+It needs every variable-size count in them to fit its 256-bit word, which `BeaconBlockHeader.commitmentSized` and `AttestationData.commitmentSized` give for headers and votes.
+The step from SHA-256 to the oracle is the idealisation of A4, not a theorem.
+`Q` counts every call to the node hash in that experiment, the adversary's and the extraction's, repeats included.
 
 `isSlashableWith_eq_false_of_signAttestations` shows that each signed vote is not slashable with a vote of the starting file, as a record sees it.
 A record holds the epochs of a vote and maybe its signing root, not its data.
@@ -5372,6 +5384,7 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of SHA-256.
+  The bound on signing roots runs the same experiment, so it rests on the same oracle.
 - Trie root bound: Keccak-256 is a random oracle on byte strings, shared by the keys and the nodes of the trie.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
@@ -5611,6 +5624,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Consensus/Proofs/Gossip/`
 - `EthLib/Consensus/Proofs/LightClient/`
 - `EthLib/Consensus/Proofs/PqKeys/`
+- `EthLib/Consensus/Proofs/SigningRandomOracle.lean`
 - `EthLib/Cryptography/Proofs/Aes/`
 - `EthLib/Cryptography/Proofs/BadOnBudget.lean`
 - `EthLib/Cryptography/Proofs/BadOnGrowth.lean`
