@@ -491,7 +491,7 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
     (by
       rw [frame6, frame5]
       show (registered.depositBalanceToConsume electra).toNat + _ < _
-      rw [fields4.2.2.2.2.2, frame3, frame2, frame1]
+      rw [fields4.2.2.2.2.2.2, frame3, frame2, frame1]
       exact depositCarried)
     (by rw [currentEpoch6]; exact epochNext)
     (by
@@ -510,7 +510,7 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
     Nat.le_trans (Nat.le_add_right _ _)
       ((processPendingDeposits_registryLoad_le depositedOk).trans (Nat.le_of_eq load6))
   have frame7 := frame_processPendingDeposits depositedOk
-  have summaries7 := processPendingDeposits_historicalSummaries depositedOk
+  have summaries7 := (processPendingDeposits_history depositedOk).2.2
   -- The pending consolidations move balances between validators of the registry.
   obtain ⟨consolidated, consolidatedOk⟩ := processPendingConsolidations_total deposited electra
     matched7 (by omega)
@@ -529,7 +529,7 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
   have kept8 := processPendingConsolidations_kept consolidatedOk
   have effectiveSupply8 := processPendingConsolidations_effectiveSupply_eq consolidatedOk
   have frame8 := frame_processPendingConsolidations consolidatedOk
-  have summaries8 := fields8.2.2.2.2.2.2
+  have summaries8 := fields8.2.2.2.2.2.2.1
   -- From Gloas the payments to builders change only their own queues.
   obtain ⟨paid, paidAction, validators9, balances9, slot9, summaries9⟩ : ∃ paid,
       action config checks .payments consolidated = .ok paid ∧
@@ -595,7 +595,7 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
   have summaries10 : updated.historicalSummaries = state.historicalSummaries := by
     rw [frame10, summaries9, summaries8, summaries7, frame6, frame5]
     show registered.historicalSummaries = _
-    rw [fields4.2.2.2.2.1, frame3, frame2, frame1]
+    rw [fields4.2.2.2.2.2.1, frame3, frame2, frame1]
   -- The resets and the update of the summaries need only a next slot.
   obtain ⟨cleared, clearedOk⟩ := processSlashingsReset_total (state := updated)
     (by rw [slot10]; exact next)

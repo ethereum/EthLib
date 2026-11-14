@@ -184,6 +184,8 @@ Each collision is two different 64-byte inputs with one digest, returned by an e
 Branch binding is `verifyMerkleProof_binding` (`Proofs/Ssz/Merkle/Authentication.lean`).
 Two accepted branches at one index and root open one leaf, or `findBranchCollision` returns a collision.
 It rests on `climb_binding`, above.
+`climbBranchM_binding` states the binding of the climb for any node hash.
+`findBranchCollision_valid_of_width` states the collision for any hash with 32-byte digests.
 
 Multiproof binding is `verifyMerkleMultiproof_binding` and `verifyMerkleMultiproof_overlap_binding` (`Proofs/Ssz/Merkle/MultiproofBinding.lean`).
 Two accepted requests for one root agree on every position they both claim, or `findMessageCollision` returns a collision.
@@ -202,8 +204,8 @@ Two legal progressive containers with one root have one layout, or `findMixinCol
 `hashTreeRootM_progressiveContainer_layouts_separate` states the same for any hash with 32-byte digests.
 It computes the roots of the all-zero subtrees with that hash too.
 
-No theorem bounds the probability of finding a collision in a branch or a multiproof.
-Their verifiers call SHA-256 directly, so no experiment runs them against the oracle.
+No theorem bounds the probability of finding a collision in a multiproof.
+Its verifier hashes each pair with `combine` in `foldLevelNodes`, which takes no node hash as an argument, so no experiment runs it against the oracle.
 
 `Proofs/Ssz/RandomOracle.lean` bounds whole-value binding, with the node hash a random oracle.
 The merkleization takes its hash in any monad, so the experiment runs the root of the specification with a hasher that queries the oracle.
@@ -235,6 +237,23 @@ Its proof applies `hashTreeRootM_progressiveContainer_layouts_separate` to a tab
 The extraction queried both inputs again, so the cache holds them, by `cached_of_extractLayouts`.
 `prEvent_experimentWith_le` then gives `prEvent_layoutWins_le`, which bounds a win by `Q^2 / N`, and `prEvent_layoutWins_le_two_pow` states it with `N = 2^256`.
 The layout extraction expands no padded tree, so `Q` grows with the data and with the depth of each tree, since a zero subtree costs one query per level, not with the capacity of the type.
+
+`Proofs/Ssz/BranchRandomOracle.lean` bounds the binding of `isValidMerkleBranch`, the branch check by depth and index, with the same oracle.
+The depth is fixed before the run, and an adversary outputs an index and two leaves, each with a branch.
+The extraction climbs the first `depth` nodes of each branch, as `computeMerkleBranchRoot` does.
+It climbs with `climbBranchM`, which is `climbBranch` with the node hash as an argument (`climbBranchM_sha256`), and here that hash is the oracle.
+The adversary wins when the leaves differ, both branches have `depth` nodes, and both climbs reach one root, computed by the oracle.
+`collision_of_extractBranches` shows that every win leaves two different cached inputs with one answer.
+Its proof applies `climbBranchM_binding` to a table that agrees with the cache, and takes the messages that `findBranchCollision` returns.
+The climbs queried every message they hash, so the cache holds both, by `cached_of_climbBranchM`.
+`prEvent_experimentWith_le` then gives `prEvent_branchWins_le`, which bounds a win by `Q^2 / N`, and `prEvent_branchWins_le_two_pow` states it with `N = 2^256`.
+`Q` counts the adversary's queries and one query for each branch node that a climb hashes, so the extraction adds at most `2 * depth`.
+`experimentWith_extractBranches_queryBound` proves this count.
+`prEvent_branchWins_le_of_adversary` states the bound with `Q = q + 2 * depth`, for an adversary that makes at most `q` queries.
+Beyond the adversary's own queries, `Q` grows with the depth, not with the `2^depth` leaves.
+With SHA-256 in place of the oracle, `branchWins_sha256_iff` shows that a win is two different leaves that `isValidMerkleBranch` accepts at one depth, index and root.
+The specification hashes with SHA-256, and the step from SHA-256 to the oracle is the idealisation of A4, not a theorem.
+The light client, data availability and deposit proofs bind their branches with SHA-256, and no theorem composes them with this bound.
 
 ### leanSPHINCS
 
@@ -4565,6 +4584,19 @@ These two facts are what the store checks when it takes a block, but no theorem 
 It also assumes that the schedule puts the forks from Capella to Heze in order.
 It assumes a lawful state type and a preset whose sizes in the block and the state are nonzero.
 The answer itself refuses a block whose fork is not the fork that the schedule gives at its slot.
+
+`bootstrapFor_error` shows that each refusal of the bootstrap is the error with code 404 that names the root, and `bootstrapFor_error_code` gives the code.
+The file `apis/beacon/light_client/bootstrap.yaml` of release `v5.0.0-beta.0` lists that code when "`LightClientBootstrap` instance cannot be produced for the given block root".
+`bootstrapResponse_of_error` shows that the JSON answer passes each refusal on unchanged.
+`bootstrapFor_of_missing` shows that a root whose block or post state the store lacks gets that error.
+`bootstrapFor_of_lt_altair` shows that error for a root whose post state is before the Altair fork epoch, for a store of any fork and under any schedule.
+These points of the bootstrap answer have no theorem:
+
+- which roots it refuses when their post state is from the Altair fork epoch on;
+- whether a served bootstrap can get code 500, when it is written in JSON or in SSZ.
+
+One such root is a block whose fork is not the fork that the schedule gives at its slot.
+
 `IsUpdatesAnswer` is the rule of the source for the updates answer: known updates of the range, in increasing period order, starting with the earliest known one, at most `min(128, count)` of them.
 `updatesInRange_answer` (`Consensus/Proofs/BeaconApi/LightClient.lean`) shows that the known updates of the range, cut to that limit, form such an answer.
 `IsUpdatesAnswer.length_le` shows that no accepted answer holds more updates, and `IsUpdatesAnswer.length_le_limit` gives the limit itself.
@@ -4572,11 +4604,15 @@ The answer itself refuses a block whose fork is not the fork that the schedule g
 It assumes a preset with a nonempty logs bloom and sync committee, as the round trip of SSZ for these containers does.
 The decoder also refuses a chunk whose digest is not the digest of the epoch of its update.
 `encodeUpdateChunks_decode` shows the converse under the same assumptions: bytes that decode are the chunks of the updates they give.
+`finalityUpdateResponse_notFound_iff` and `optimisticUpdateResponse_notFound_iff` show that each latest update answer refuses with code 404 exactly when the node knows no update of its kind.
+The files `finality_update.yaml` and `optimistic_update.yaml` of that release list that code when "No `LightClientFinalityUpdate` is available" and "No `LightClientOptimisticUpdate` is available".
+No theorem states whether a known update can get code 500 when it is written in JSON.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_light_client.py`) reads the pinned data collection cases of the light client.
 It checks that the chunks of the best updates of each case carry the digests and the bytes that the case serves, and decode back to them.
 It checks the start, the count and the limit of 128 of a range, the versions of the JSON answer, and the refusal of an update of another fork than its epoch.
 It builds the store of a Gloas fork choice case, checks the bootstrap of the head and of the anchor, and starts a light client from each.
-It checks code 404 for an unknown block, for a schedule before Altair, and for a missing finality or optimistic update; no theorem states these codes.
+It checks code 404 for the bootstrap of an unknown block and under a schedule before Altair.
+It checks code 404 for the latest finality and optimistic updates when the node knows none.
 
 The answers that split the rewards of validators are in `Consensus/BeaconApi/Rewards.lean`: the attestation rewards of an epoch, and the ideal rewards of each effective balance.
 `attestationRewardsResponse_ok` (`Consensus/Proofs/BeaconApi/Rewards.lean`) shows that an answer comes from a state at the last slot of an epoch past the first, for the epoch before, and that both lists are read from the state that the rewards step of the epoch transition reads.
@@ -5430,6 +5466,7 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
 - SSZ root bound: the SHA-256 node hash is a random oracle on byte strings, shared by every node of the tree.
   The roots of the all-zero subtrees, constants of the specification, are oracle answers in the model.
   The type is fixed before the run, except in the layout bound, where the adversary picks both types.
+  The branch bound fixes the depth before the run, and its adversary picks the index, the leaves and the branches.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of SHA-256.

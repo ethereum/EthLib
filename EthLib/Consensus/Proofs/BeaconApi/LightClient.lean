@@ -4,6 +4,7 @@ public import EthLib.Consensus.BeaconApi.LightClient
 public import EthLib.Consensus.Proofs.ForkDigest
 public import EthLib.Consensus.Proofs.LightClient.Containers
 public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Consensus.Proofs.BeaconApi.Responses
 
 /-!
 # Proofs: the light client answers of the Beacon API
@@ -15,6 +16,8 @@ No accepted answer holds more updates than that one.
 On a chain whose digests name their forks, the SSZ chunks of updates decode back to the updates.
 
 On such a chain, bytes that decode are the chunks of the updates they give.
+
+Each latest update answer refuses with code 404 exactly when the node knows no update.
 -/
 
 @[expose] public section
@@ -424,5 +427,29 @@ theorem encodeUpdateChunks_decode [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     (by omega) decoded
   rw [ByteArray.empty_append, ByteArray.extract_zero_size] at encoded
   exact encoded
+
+/-- The finality update response refuses with code 404 exactly when the node knows no update. -/
+theorem finalityUpdateResponse_notFound_iff {fork : Fork}
+    {latest : Option (LightClientUpdate preset fork)} :
+    (∃ error, finalityUpdateResponse latest = .error error ∧ error.code = 404) ↔
+      latest = none := by
+  cases latest with
+  | none => exact iff_of_true ⟨_, rfl, rfl⟩ rfl
+  | some update =>
+    refine iff_of_false ?_ (by simp)
+    rw [finalityUpdateResponse, versioned_error_iff (by decide)]
+    simp
+
+/-- The optimistic update response refuses with code 404 exactly when the node knows no update. -/
+theorem optimisticUpdateResponse_notFound_iff {fork : Fork}
+    {latest : Option (LightClientUpdate preset fork)} :
+    (∃ error, optimisticUpdateResponse latest = .error error ∧ error.code = 404) ↔
+      latest = none := by
+  cases latest with
+  | none => exact iff_of_true ⟨_, rfl, rfl⟩ rfl
+  | some update =>
+    refine iff_of_false ?_ (by simp)
+    rw [optimisticUpdateResponse, versioned_error_iff (by decide)]
+    simp
 
 end EthLib.Consensus.BeaconApi

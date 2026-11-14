@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.BeaconApi.ValidatorData
 public import EthLib.Consensus.Proofs.HonestAggregateSignatures
 public import EthLib.Consensus.Proofs.Transition.StateTransition
+public import EthLib.Consensus.Proofs.BeaconApi.Responses
 
 /-!
 # Proofs: the data that the Beacon API hands a validator
@@ -681,34 +682,6 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
         internalError, notInternal, @eq_comm _ 404 code, @eq_comm _ 500 code]
 
 /-! ## Responses -/
-
-/-- Writing the value of an answer as JSON fails only with code 500. -/
-theorem apiJsonOr500_error_code {α : Type} [Serialization.Ssz.SszType α] [ApiSpelling α] {x : α}
-    {error : ErrorMessage} (failed : apiJsonOr500 x = .error error) : error.code = 500 := by
-  unfold apiJsonOr500 at failed
-  cases json : toApiJson x with
-  | error fault =>
-    simp only [json, Except.mapError, Except.error.injEq] at failed
-    rw [← failed]
-    rfl
-  | ok _ => simp [json, Except.mapError] at failed
-
-/-- Writing the value of an answer as JSON adds no refusal with a code other than 500.
-
-It needs a code other than 500, the code of an internal error. -/
-private theorem apiJsonOr500_bind_error_iff {α β : Type} [Serialization.Ssz.SszType α]
-    [ApiSpelling α]
-    {answer : Except ErrorMessage α} {wrap : Lean.Json → β} {code : Nat}
-    (notInternal : code ≠ 500) :
-    (∃ error, (do return wrap (← apiJsonOr500 (← answer))) = .error error ∧ error.code = code) ↔
-      ∃ error, answer = .error error ∧ error.code = code := by
-  cases answer with
-  | error fault => simp [bind, Except.bind]
-  | ok value =>
-    simp only [bind, Except.bind]
-    cases json : apiJsonOr500 value with
-    | error fault => simp [apiJsonOr500_error_code json, notInternal, @eq_comm _ 500 code]
-    | ok _ => simp [pure, Except.pure]
 
 /-- The aggregate response refuses with a code exactly when the answer does.
 
