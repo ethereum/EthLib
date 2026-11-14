@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.NoAccount
 public import EthLib.Execution.Proofs.Transactions.Process
 
@@ -274,7 +275,7 @@ theorem processMessageCall_ne_noAccount [LawfulGasMeter Meter]
     processMessageCall (Meter := Meter) chainId message state substate auths paid ≠
       .error (.state (.noAccount address)) := by
   intro h
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   rcases hprep : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid
     with ⟨e, read⟩ | first
   · rw [hprep] at h
@@ -301,7 +302,7 @@ private theorem runTransaction_ne_noAccount [LawfulGasMeter Meter]
     (address : Address) :
     runTransaction Meter env block included tx ≠ .error (.state (.noAccount address)) := by
   intro h
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   rcases Base.bind_eq_error h with h | ⟨target, htarget, h⟩
   · unfold messageTarget at h
     split at h
@@ -358,7 +359,7 @@ end
 theorem processTransaction_ne_noAccount {fork : Fork} {env : BlockEnvironment fork}
     {block : BlockState} {included : Included} {tx : Transaction} (address : Address) :
     processTransaction env block included tx ≠ .error (.state (.noAccount address)) := by
-  unfold processTransaction
+  rw [processTransaction_unfold]
   split
   · nofun
   split

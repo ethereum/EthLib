@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.SimulatedLogs
 public import EthLib.Execution.Proofs.Transactions.Deletion
 
@@ -70,7 +71,7 @@ theorem simulatedLogs_processMessageCall [LawfulGasMeter Meter] (hfork : fork �
       .ok output)
     (start : substate.simulatedLogs = substate.logs) :
     output.simulatedLogs = output.logs := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h
@@ -101,7 +102,7 @@ private theorem simulatedLogs_runTransaction [LawfulGasMeter Meter]
     {lifted : LiftedRules} {out : TransactionOutput}
     (h : runTransaction Meter env block included tx precompiles lifted = .ok out) :
     out.simulatedLogs = out.logs := by
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   obtain ⟨target, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨bought, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨message, -, h⟩ := bind_ok_iff.mp h
@@ -117,7 +118,7 @@ theorem simulatedLogs_processTransaction (hfork : fork ≥ .glamsterdam)
     {precompiles : Address → Option Address} {lifted : LiftedRules} {out : TransactionOutput}
     (h : processTransaction env block included tx precompiles lifted = .ok out) :
     out.simulatedLogs = out.logs := by
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   split at h
   · cases h
   exact simulatedLogs_runTransaction hfork h

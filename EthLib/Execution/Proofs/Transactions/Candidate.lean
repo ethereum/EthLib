@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.Candidate
 public import EthLib.Execution.Proofs.Transactions.Authorization
 public import EthLib.Execution.Proofs.Transactions.Deletion
@@ -211,7 +212,7 @@ theorem processMessageCall_noNewCandidate [LawfulGasMeter Meter] {block : BlockS
     (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
       .ok output) :
     NoNewCandidate block output.state := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   rcases hprep : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid
     with ⟨e, read⟩ | first
   · rw [hprep] at h
@@ -345,7 +346,7 @@ theorem processTransaction_noNewCandidate {env : BlockEnvironment fork} {block :
     {included : Included} {tx : Transaction} {output : TransactionOutput}
     (h : processTransaction env block included tx = .ok output) :
     NoNewCandidate block output.state := by
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   split at h
   · cases h
   split at h

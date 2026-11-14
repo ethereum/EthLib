@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.MeterRules
 public import EthLib.Execution.Proofs.Transactions.Process
 public import EthLib.Execution.Proofs.Transactions.Validity
@@ -83,7 +84,7 @@ private theorem processMessageCall_gas {chainId : Nat} {message : Message fork}
     (message.reservoir : Int) ≤ output.reservoir + output.stateGasUsed ∧
       (output.gasLeft + output.reservoir : Int) + output.stateGasUsed ≤
         message.gas + message.reservoir := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h
