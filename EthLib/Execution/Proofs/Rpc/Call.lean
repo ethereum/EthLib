@@ -28,6 +28,10 @@ A request that names no fee takes no wei from its sender before its message runs
 Such a request, from a sender that holds its value, never fails with code 809, insufficient funds.
 
 A sender that holds less than the value never gets an answer with data.
+
+A request makes a transaction exactly when its fields pass the checks of its kind.
+
+That transaction has the kind of the request, and its numbers and its lists.
 -/
 
 public section
@@ -76,30 +80,145 @@ private theorem callWord_ok {what : String} {n : Nat} {x : U256}
   split at h <;> cases h
   exact Nat.mod_eq_of_lt ‹_›
 
+/-- A number that fits its field is below `2 ^ 256`. -/
+private theorem lt_of_callWord_ok {what : String} {n : Nat} {x : U256}
+    (h : callWord what n = .ok x) : n < 2 ^ 256 := by
+  unfold callWord at h
+  split at h <;> cases h
+  assumption
+
+/-- A kind of at most 4 is one of the five types. -/
+private theorem kind_cases {k : UInt8} (h : k ≤ 4) : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3 ∨ k = 4 := by
+  rw [UInt8.le_iff_toNat_le] at h
+  simp only [← UInt8.toNat_inj]
+  simp at h ⊢
+  omega
+
+/-- A kind of at most 4 that is none of the first four types is type 4. -/
+private theorem kind_eq_four {k : UInt8} (h : k ≤ 4) (h0 : ¬k = 0) (h1 : ¬k = 1) (h2 : ¬k = 2)
+    (h3 : ¬k = 3) : k = 4 := by
+  rcases kind_cases h with rfl | rfl | rfl | rfl | rfl <;> simp_all
+
+/-- A request makes a transaction exactly when each check of its fields passes.
+
+Its kind is at most 4.
+
+A fee cap or a priority fee needs type 2 or more, and a gas price type 1 or less.
+
+An access list needs type 1 or more, blob fields type 3, and an authorization list type 4.
+
+A chain that the request names is the chain of the node.
+
+Type 3 and type 4 need a recipient.
+
+Each number of the transaction is below `2 ^ 256`. -/
+theorem exists_toTransaction_eq_ok_iff {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} :
+    (∃ t, tx.toTransaction chainId nonce gas maxFee = .ok t) ↔
+      tx.kind ≤ 4 ∧
+      (tx.kind ≤ 1 → tx.maxFeePerGas = none ∧ tx.maxPriorityFeePerGas = none) ∧
+      (2 ≤ tx.kind → tx.gasPrice = none) ∧
+      (tx.kind = 0 → tx.accessList = none) ∧
+      (tx.kind ≠ 3 → tx.blobVersionedHashes = none ∧ tx.maxFeePerBlobGas = none) ∧
+      (tx.kind ≠ 4 → tx.authorizationList = none) ∧
+      (∀ c, tx.chainId = some c → c = chainId.toNat) ∧
+      (3 ≤ tx.kind → tx.to.isSome) ∧
+      nonce < 2 ^ 256 ∧ gas < 2 ^ 256 ∧ tx.value.getD 0 < 2 ^ 256 ∧
+      tx.maxPriorityFeePerGas.getD 0 < 2 ^ 256 ∧ maxFee < 2 ^ 256 ∧
+      tx.gasPrice.getD 0 < 2 ^ 256 ∧ tx.maxFeePerBlobGas.getD 0 < 2 ^ 256 := by
+  constructor
+  · rintro ⟨t, h⟩
+    unfold GenericTransaction.toTransaction at h
+    simp only [bind, Except.bind] at h
+    repeat' (split at h)
+    all_goals simp only [pure, Except.pure, throw, throwThe, MonadExceptOf.throw, reduceCtorEq,
+      Except.ok.injEq] at h
+    all_goals
+      have := lt_of_callWord_ok (what := "nonce") (by assumption)
+      have := lt_of_callWord_ok (what := "gas") (by assumption)
+      have := lt_of_callWord_ok (what := "value") (by assumption)
+      have := lt_of_callWord_ok (what := "maxPriorityFeePerGas") (by assumption)
+      have := lt_of_callWord_ok (what := "maxFeePerGas") (by assumption)
+      have := lt_of_callWord_ok (what := "gasPrice") (by assumption)
+      try have := lt_of_callWord_ok (what := "maxFeePerBlobGas") (by assumption)
+      simp only [ensure_ok_iff] at *
+    all_goals simp_all
+    -- Only type 4 is left, which no branch names by its number.
+    all_goals
+      have := kind_eq_four ‹tx.kind ≤ 4› ‹¬tx.kind = 0› ‹¬tx.kind = 1› ‹¬tx.kind = 2›
+        ‹¬tx.kind = 3›
+      simp_all
+  · rintro ⟨hk, h1, h2, h3, h4, h5, h6, h7, hn, hg, hv, hp, hm, hgp, hb⟩
+    unfold GenericTransaction.toTransaction
+    rcases kind_cases hk with hk' | hk' | hk' | hk' | hk' <;>
+    rcases hc : tx.chainId with _ | c <;>
+    rcases hto : tx.to with _ | to <;>
+    simp_all [ensure, callWord, bind, Except.bind, pure, Except.pure]
+
+/-- The transaction of a request has the kind of the request and the fields of the request.
+
+Its nonce is `nonce` and its gas limit is `gas`.
+
+Its fee cap is the gas price of the request up to type 1, and `maxFee` from type 2.
+
+From type 2 it pays the base fee plus the priority fee of the request, within that cap.
+
+From type 1 it names the chain `chainId`.
+
+A list or a number that the request leaves out is empty or 0.
+
+Its signature is 0. -/
+theorem toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    t.type = tx.kind ∧ t.nonce.toNat = nonce ∧ t.gas.toNat = gas ∧
+      t.value.toNat = tx.value.getD 0 ∧ t.to = tx.to ∧ t.data = tx.input.getD .empty ∧
+      t.accesses = tx.accessList.getD [] ∧ t.authorizations = tx.authorizationList.getD [] ∧
+      t.blobHashes = tx.blobVersionedHashes.getD [] ∧
+      t.maxFeePerGas = (if tx.kind ≤ 1 then tx.gasPrice.getD 0 else maxFee) ∧
+      t.maxFeePerBlobGas = tx.maxFeePerBlobGas.getD 0 ∧
+      (∀ baseFee, effectiveGasPrice baseFee t = if tx.kind ≤ 1 then tx.gasPrice.getD 0 else
+        min (tx.maxPriorityFeePerGas.getD 0) (maxFee - baseFee) + baseFee) ∧
+      (1 ≤ tx.kind → ∀ fork, t.chainId fork = .ok (some (.ofNat 256 chainId.toNat))) ∧
+      t.unsigned = t := by
+  unfold GenericTransaction.toTransaction at h
+  simp only [bind, Except.bind] at h
+  repeat' (split at h)
+  all_goals simp only [pure, Except.pure, throw, throwThe, MonadExceptOf.throw, reduceCtorEq,
+    Except.ok.injEq] at h
+  all_goals subst h
+  all_goals
+    have := callWord_ok (what := "nonce") (by assumption)
+    have := callWord_ok (what := "gas") (by assumption)
+    have := callWord_ok (what := "value") (by assumption)
+    have := callWord_ok (what := "maxPriorityFeePerGas") (by assumption)
+    have := callWord_ok (what := "maxFeePerGas") (by assumption)
+    have := callWord_ok (what := "gasPrice") (by assumption)
+    try have := callWord_ok (what := "maxFeePerBlobGas") (by assumption)
+    simp only [ensure_ok_iff] at *
+  all_goals simp_all [Transaction.type, Transaction.nonce, Transaction.gas, Transaction.value,
+    Transaction.to, Transaction.data, Transaction.accesses, Transaction.authorizations,
+    Transaction.blobHashes, Transaction.maxFeePerGas, Transaction.maxFeePerBlobGas,
+    effectiveGasPrice, effectiveGasPrice.feeMarket, Transaction.chainId, Transaction.unsigned]
+  -- Only type 4 is left, which no branch names by its number.
+  all_goals
+    have := kind_eq_four ‹tx.kind ≤ 4› ‹¬tx.kind = 0› ‹¬tx.kind = 1› ‹¬tx.kind = 2›
+      ‹¬tx.kind = 3›
+    simp_all
+
 /-- The transaction of a request keeps its value, its recipient and its data. -/
 private theorem toTransaction_ok {tx : GenericTransaction} {chainId : UInt64}
     {nonce gas maxFee : Nat} {t : Transaction}
     (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
-    t.value.toNat = tx.value.getD 0 ∧ t.to = tx.to ∧ t.data = tx.input.getD .empty := by
-  unfold GenericTransaction.toTransaction at h
-  simp only [bind, Except.bind] at h
-  repeat' (split at h)
-  all_goals simp only [pure, Except.pure, throw, throwThe, MonadExceptOf.throw, reduceCtorEq,
-    Except.ok.injEq] at h
-  all_goals subst h
-  all_goals exact ⟨callWord_ok (by assumption), by simp_all [Transaction.to], rfl⟩
+    t.value.toNat = tx.value.getD 0 ∧ t.to = tx.to ∧ t.data = tx.input.getD .empty :=
+  let ⟨_, _, _, hvalue, hto, hdata, _⟩ := toTransaction_eq_ok h
+  ⟨hvalue, hto, hdata⟩
 
 /-- The transaction of a request keeps its gas limit. -/
 private theorem toTransaction_gas {tx : GenericTransaction} {chainId : UInt64}
     {nonce gas maxFee : Nat} {t : Transaction}
-    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) : t.gas.toNat = gas := by
-  unfold GenericTransaction.toTransaction at h
-  simp only [bind, Except.bind] at h
-  repeat' (split at h)
-  all_goals simp only [pure, Except.pure, throw, throwThe, MonadExceptOf.throw, reduceCtorEq,
-    Except.ok.injEq] at h
-  all_goals subst h
-  all_goals exact callWord_ok (what := "gas") (by assumption)
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) : t.gas.toNat = gas :=
+  (toTransaction_eq_ok h).2.2.1
 
 /-- What an error of the setup is not.
 

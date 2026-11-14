@@ -4031,6 +4031,12 @@ A request that names no fee takes no wei from its sender before its message (`pr
 Such a request, from a sender that holds its value, never fails with code 809 (`ethCall_ne_insufficientFunds`).
 Since it pays no fee, that is how EthLib meets the rule of the source.
 A sender that holds less than the value of its request gets no data (`ethCall_ne_ok_of_balance_lt_value`).
+A request makes a transaction exactly when its fields pass the checks of its kind (`exists_toTransaction_eq_ok_iff`).
+Its kind is at most 4, it names only the fields of that kind, and a request of type 3 or 4 names a recipient.
+A chain that it names is that of the node, and each of its numbers is below `2^256`.
+That transaction has the kind of the request, and its nonce, gas limit, value, recipient, data and lists (`toTransaction_eq_ok`).
+It has the fee caps that the call gives it, and a signature of 0.
+`eth_simulateV1` makes the transaction of each of its calls with the same function.
 
 The source leaves most of the call to the node, and `CallChoices` takes those choices as one input:
 
