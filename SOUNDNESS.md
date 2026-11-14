@@ -227,14 +227,14 @@ One oracle answers inner nodes and mixed-in words alike, so a collision between 
 
 `Proofs/Ssz/LayoutRandomOracle.lean` runs layout separation against the same oracle, with the same hasher.
 An adversary outputs two types and a value of each, and may pick the types after its queries.
-The experiment is the one for whole values, with another extraction.
+The experiment is the generic one that also gives the experiment for whole values, run with another extraction.
 That extraction computes both roots, then the input of each last hash with the oracle, and queries each input again.
 The adversary wins when both types are legal progressive containers with different layouts, and the two roots are equal.
 `collision_of_extractLayouts` shows that every win leaves two different cached inputs with one answer.
 Its proof applies `hashTreeRootM_progressiveContainer_layouts_separate` to a table that agrees with the cache, and takes the inputs that `findMixinCollision` returns.
 The extraction queried both inputs again, so the cache holds them, by `cached_of_extractLayouts`.
 `prEvent_experimentWith_le` then gives `prEvent_layoutWins_le`, which bounds a win by `Q^2 / N`, and `prEvent_layoutWins_le_two_pow` states it with `N = 2^256`.
-The layout extraction expands no padded tree, so `Q` grows with the data and the depth of each tree, not with the capacity of the type.
+The layout extraction expands no padded tree, so `Q` grows with the data and with the depth of each tree, since a zero subtree costs one query per level, not with the capacity of the type.
 
 ### leanSPHINCS
 
