@@ -50,6 +50,7 @@ The tests compare only the code of that error, since the source fixes the code o
 Some files name a block by an object of EIP-1898, or by a hash written as a string.
 The tests also check how the reader reads that block parameter.
 For a method that the view does not serve, they do not check the result of the request.
+The view does not serve the trace methods yet, so the tests do not run their other files.
 
 The tests compare the error codes of the bindings with these groups.
 They take the order of the groups from the table of reserved ranges in `src/error-groups/README.md` of the source.
