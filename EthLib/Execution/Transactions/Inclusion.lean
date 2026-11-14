@@ -224,7 +224,7 @@ def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork
     (used : BlockGas) (state : TransactionState) (tx : Transaction)
     (knownSender : Option Address := none) (lifted : LiftedRules := {}) :
     Except InclusionError Included := do
-  let baseFee := baseFeeOf env
+  let baseFee := paidBaseFee env tx lifted
   let coversBaseFee := failIf (tx.maxFeePerGas < baseFee)
     (.insufficientMaxFeePerGas tx.maxFeePerGas baseFee)
   let recover : Except InclusionError Address :=

@@ -4017,7 +4017,7 @@ Filling them keeps every field that the call gives, and changes no other field (
 The nonce is that of the sender after the earlier calls, and the gas is what the block has left.
 The execution core takes four exceptions of a simulated block as optional overrides, whose defaults leave a real block unchanged.
 They are a sender given in place of the signature, the precompile that a call to each address runs, a base fee per blob gas that the block sets, and rules of a transaction that the simulation lifts.
-The lifted rules are the nonce check, the caps at `2^24` of EIP-8037, and its cap at `2^32 - 1` on the gas limit.
+The lifted rules are the nonce check, the caps at `2^24` of EIP-8037, its cap at `2^32 - 1` on the gas limit, and the base fee of a transaction whose fee cap is 0.
 A known sender that the signature names, and that passes the rule on its code, gives the same check of the transaction (`checkInclusion_of_knownSender`, `Proofs/Transactions/Overrides.lean`).
 With the default map, a call runs the precompile at the address of its code (`precompileAddress_of_default`).
 A move leaves the addresses that are warm at the start of a transaction unchanged, as the notes say.
@@ -4027,6 +4027,10 @@ With the nonce check skipped, a sender whose nonce is `2^64 - 1` still fails, as
 The nonce of the call itself stays below `2^64 - 1` in both modes, a rule the notes do not lift.
 With the caps lifted, all the gas past the intrinsic gas is execution gas (`allocateGas_of_gasCap`).
 The whole gas limit must then fit in the execution gas that the block has left (`executionCapacity_of_gasCap`).
+Unless that rule is lifted, a transaction pays for its gas at the base fee of its block (`paidBaseFee_empty`, `paidBaseFee_default`).
+Once it is, a transaction whose fee cap is 0 pays at a base fee of 0 (`paidBaseFee_of_zeroFee`).
+The check of the base fee, the purchase of the gas and the settlement read that base fee, by definition.
+The base fee of the block, which BASEFEE reads, stays unchanged, since the block environment is not modified.
 
 Where the source is silent or conflicts with itself, EthLib follows the fixtures, else decides:
 
@@ -4051,6 +4055,7 @@ A simulated block differs from a real one in these places:
 - without validation, its base fee and its base fee per blob gas are 0, unless the request sets them;
 - each call runs from its given sender with `r`, `s` and `yParity` 0, so it needs no signature and may come from an account with code;
 - the cap at `2^32 - 1` on the gas limit never applies, and without validation the nonce check and the caps at `2^24` of EIP-8037 do not either;
+- without validation, a call whose fee cap is 0 pays nothing for its gas, apart from its blob gas, even below a base fee that the request sets;
 - the overrides of the accounts change the state before the block, and are not in its access list;
 - the default gas of a call follows the gas that its block has used, within a global budget of 50,000,000 that each call spends, and a call that overspends it gets `-38026`.
 
@@ -4064,14 +4069,15 @@ Where the source is silent or conflicts with itself for the blocks, EthLib follo
 - a blob fee cap on a call without blobs is ignored, as the fixtures show;
 - a nonce at `2^64 - 1` gets `-32603`, as the fixtures show;
 - a call that does not fit the gas or the blob gas left gets `-38015`, and a rule without a code of its own gets `-32602`;
+- without validation, a fee cap of 0 passes at any base fee, as a fixture shows at a base fee of 10;
+- a nonzero fee cap below the base fee still gets `-38012`;
+- a blob fee cap below a base fee per blob gas that the request sets still fails, with `-32602`;
 - the base block must be canonical, so that the hashes before each block are those of its chain;
 - from Fusaka to BPO5, the default gas of a call is at most `2^24`, the cap of EIP-7825;
 - before London, a call without a type or a fee cap is legacy, or type 1 with an access list from Berlin;
 - before Paris, the fee recipient gets the block reward, as in a real block.
 
 The results of the calls are not yet in the blocks.
-
-One fixture differs: without validation, a fee cap below a base fee that the request sets is accepted there, and rejected here with `-38012`.
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
