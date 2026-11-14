@@ -1164,7 +1164,7 @@ private theorem balanceSum_applyDeltas_le {rewards penalties : Array Gwei} {inde
   omega
 
 /-- The deltas at some positions raise the sum of the balances by at most their rewards. -/
-private theorem balanceSum_foldlM_applyDeltas_le {rewards penalties : Array Gwei} :
+theorem balanceSum_foldlM_applyDeltas_le {rewards penalties : Array Gwei} :
     ∀ {indices : List Nat} {state after : BeaconState preset fork},
       indices.foldlM (applyDeltas rewards penalties) state = .ok after →
         balanceSum after ≤ balanceSum state +
