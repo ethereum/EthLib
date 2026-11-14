@@ -81,17 +81,22 @@ structure RunBounded (config : Config) (start : RunStart) (budget elapsed : Nat)
   /-- The balances plus the pending deposits grow by at most the issuance of each epoch. -/
   supply : balanceSum state + pendingDepositSum state ≤
     start.supply + elapsed * preset.epochIssuanceBeforeAltair budget
-  /-- The effective balances stay within their start, or within a fixed ratio of the supply.
+  /-- The effective balances stay within their start or a fixed ratio of the bound on the supply.
 
   The ratio comes from the hysteresis constants, and it is 4/3 on mainnet.
 
   The bound says nothing when the downward multiplier is at least the quotient.
 
-  An epoch sets them within that ratio of the balances, and a slot does not change them. -/
+  An epoch sets them within that ratio of the balances, and a slot does not change them.
+
+  It reads the bound on the supply, not the supply.
+
+  The upgrade to Gloas can lower the supply. -/
   effective : effectiveBalanceSum state ≤ start.effective ∨
     effectiveBalanceSum state *
         (preset.HYSTERESIS_QUOTIENT.toNat - preset.HYSTERESIS_DOWNWARD_MULTIPLIER.toNat) ≤
-      (balanceSum state + pendingDepositSum state) * preset.HYSTERESIS_QUOTIENT.toNat
+      (start.supply + elapsed * preset.epochIssuanceBeforeAltair budget) *
+        preset.HYSTERESIS_QUOTIENT.toNat
   /-- The registry load, counted twice before Electra, does not grow. -/
   load : registryLoadFactor fork * registryLoad state ≤ start.load
   /-- Each inactivity score grows by at most the score bias in each epoch. -/
@@ -192,6 +197,12 @@ theorem RunBounded.of_processEpoch {config : Config} {checks : SignatureChecks}
   have sizeLe : state.validators.data.size ≤ start.load :=
     (Nat.le_add_right _ _).trans ((Nat.le_mul_of_pos_left _ factor).trans holds.load)
   have budgetLe : effectiveBalanceSum state ≤ budget := (le_max_right _ _).trans budgeted
+  -- The supply grows by at most the issuance of the budget.
+  have supplyAfter : balanceSum after + pendingDepositSum after ≤
+      start.supply + (elapsed + 1) * preset.epochIssuanceBeforeAltair budget := by
+    have := holds.supply
+    rw [Nat.add_mul, Nat.one_mul]
+    omega
   have ceilingStep : start.ceilingAt preset budget (elapsed + 1) =
       start.ceilingAt preset budget elapsed + start.exitStep preset budget := by
     simp only [RunStart.ceilingAt, Nat.add_mul, Nat.one_mul, Nat.add_assoc]
@@ -234,12 +245,10 @@ theorem RunBounded.of_processEpoch {config : Config} {checks : SignatureChecks}
         (widened validator member set).trans (by omega)⟩
   refine ⟨?_, ?_, ?_, ?_, exits.2, fun electra => (exits.1 electra).1.1, ?_, ?_, ?_,
     fun electra => (exits.1 electra).2, slashedLe.trans holds.slashed⟩
-  · -- The supply grows by at most the issuance of the budget.
-    have := holds.supply
-    rw [Nat.add_mul, Nat.one_mul]
-    omega
-  · -- The effective balances follow the balances, and the pending deposits only add.
-    exact .inr (effectiveLe.trans (Nat.mul_le_mul_right _ (Nat.le_add_right _ _)))
+  · exact supplyAfter
+  · -- The effective balances follow the balances, which the bound on the supply covers.
+    exact .inr (effectiveLe.trans (Nat.mul_le_mul_right _
+      ((Nat.le_add_right _ _).trans supplyAfter)))
   · exact (Nat.mul_le_mul_left _ loadLe).trans holds.load
   · intro altair score member
     have := processEpoch_scoreBound altair (holds.scores altair) computed score member

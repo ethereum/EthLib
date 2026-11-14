@@ -259,6 +259,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Pending
 public import EthLib.Consensus.Proofs.Transition.Totality.PendingDeposits
 public import EthLib.Consensus.Proofs.Transition.Totality.ProposerLookahead
 public import EthLib.Consensus.Proofs.Transition.Totality.PtcWindow
+public import EthLib.Consensus.Proofs.Transition.Totality.Quiet
 public import EthLib.Consensus.Proofs.Transition.Totality.Registry
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryElectra
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoad
@@ -268,6 +269,8 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadUpgrades
 public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.RunBounds
+public import EthLib.Consensus.Proofs.Transition.Totality.RunHypotheses
+public import EthLib.Consensus.Proofs.Transition.Totality.RunUpgrades
 public import EthLib.Consensus.Proofs.Transition.Totality.Shape
 public import EthLib.Consensus.Proofs.Transition.Totality.Signers
 public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
