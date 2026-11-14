@@ -330,6 +330,25 @@ theorem Store.ForwardReachable.slot_le_of_blockState_of_getCurrentSlot
     exact blockStates_le_of_same (Store.onInclusionList_frame accepted).2.2
       (Store.onInclusionList_sameClock accepted) ih
 
+/-- A forward store has a current slot no earlier than any held block or block state. -/
+theorem Store.ForwardReachable.slots_le_current
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (positive : 0 < config.SLOT_DURATION_MS) (anchorSlot : anchorBlock.slot ≤ anchorState.slot) :
+    ∃ current, store.getCurrentSlot config = .ok current ∧
+      (∀ (root : Root) (block : BeaconBlock preset fork),
+        store.blocks[root]? = some block → block.slot ≤ current) ∧
+      (∀ (root : Root) (state : BeaconState preset fork),
+        store.blockStates[root]? = some state → state.slot ≤ current) := by
+  obtain ⟨current, slotOk⟩ := forward.exists_getCurrentSlot positive
+  have states := fun root state found =>
+    forward.slot_le_of_blockState_of_getCurrentSlot (root := root) (state := state) found slotOk
+  refine ⟨current, slotOk, ?_, states⟩
+  intro root block found
+  obtain ⟨state, stateFound, -⟩ := forward.reachable.blockStatesFromParents found
+  exact UInt64.le_trans
+    (forward.reachable.slot_le_of_blockState anchorSlot found stateFound)
+    (states root state stateFound)
+
 /-- The anchor state hashes to the state root of its anchor block. -/
 theorem Store.Reachable.anchorState_root
     (reachable : Store.Reachable config anchorState anchorBlock store) :

@@ -219,95 +219,30 @@ theorem exists_getCurrentSlot_onTick_ge {timeMs : UInt64} {current : Slot}
   · exact getCurrentSlot_le_of_onTick forward ticked slotOk
       (by rw [getCurrentSlot_onTick ticked, tickOk])
 
-/-- A forward store has a current slot no earlier than any held block or block state. -/
-theorem ForwardReachable.slots_le_current
+/-- A forward store has a defined current slot when the slot duration is positive. -/
+theorem ForwardReachable.exists_getCurrentSlot
     (forward : ForwardReachable config anchorState anchorBlock store)
-    (positive : 0 < config.SLOT_DURATION_MS) (anchorSlot : anchorBlock.slot ≤ anchorState.slot) :
-    ∃ current, store.getCurrentSlot config = .ok current ∧
-      (∀ (root : Root) (block : BeaconBlock preset fork),
-        store.blocks[root]? = some block → block.slot ≤ current) ∧
-      (∀ (root : Root) (state : BeaconState preset fork),
-        store.blockStates[root]? = some state → state.slot ≤ current) := by
-  have transport {before after : Store preset fork}
-      (clock : SameClock before after) (blocks : after.blocks = before.blocks)
-      (states : after.blockStates = before.blockStates)
-      (holds : ∃ current, before.getCurrentSlot config = .ok current ∧
-        (∀ (root : Root) (block : BeaconBlock preset fork),
-          before.blocks[root]? = some block → block.slot ≤ current) ∧
-        (∀ (root : Root) (state : BeaconState preset fork),
-          before.blockStates[root]? = some state → state.slot ≤ current)) :
-      ∃ current, after.getCurrentSlot config = .ok current ∧
-        (∀ (root : Root) (block : BeaconBlock preset fork),
-          after.blocks[root]? = some block → block.slot ≤ current) ∧
-        (∀ (root : Root) (state : BeaconState preset fork),
-          after.blockStates[root]? = some state → state.slot ≤ current) := by
-    simpa only [clock.getCurrentSlot, blocks, states] using holds
+    (positive : 0 < config.SLOT_DURATION_MS) :
+    ∃ current, store.getCurrentSlot config = .ok current := by
   induction forward with
   | anchor made =>
-    obtain ⟨root, -, blocks, states⟩ := getForkchoiceStore_maps made
-    refine ⟨anchorState.slot, getCurrentSlot_getForkchoiceStore positive made, ?_, ?_⟩
-    · intro r b found
-      rw [blocks, getElem?_insert_root] at found
-      split at found
-      · cases Option.some.inj found
-        exact anchorSlot
-      · simp at found
-    · intro r s found
-      rw [states, getElem?_insert_root] at found
-      split at found
-      · cases Option.some.inj found
-        exact UInt64.le_refl _
-      · simp at found
+    exact ⟨_, getCurrentSlot_getForkchoiceStore positive made⟩
   | tick _ forward ticked holds =>
-    obtain ⟨current, currentOk, blocks, states⟩ := holds
-    obtain ⟨later, laterOk, le⟩ := exists_getCurrentSlot_onTick_ge forward ticked currentOk
-    obtain ⟨-, -, keptBlocks, keptStates⟩ := onTick_frame ticked
-    refine ⟨later, laterOk, ?_, ?_⟩
-    · intro r b found
-      exact UInt64.le_trans (blocks r b (keptBlocks ▸ found)) le
-    · intro r s found
-      exact UInt64.le_trans (states r s (keptStates ▸ found)) le
-  | @block before after checks sources signed _ added holds =>
-    rcases onBlock_same_or_insert added with
-      same | ⟨root, hashed, absent, blocks, pre, state, -, transitioned, states⟩
-    · exact same ▸ holds
-    obtain ⟨current, currentOk, blockBound, stateBound⟩ := holds
-    have new : ¬ before.blocks.contains root := by
-      simp [Std.TreeMap.contains_eq_isSome_getElem?, absent]
-    obtain ⟨⟨checked, checkedOk, bound⟩, -⟩ := onBlock_checks hashed new added
-    rw [currentOk, Except.ok.injEq] at checkedOk
-    subst checked
-    refine ⟨current, (onBlock_sameClock added).getCurrentSlot.trans currentOk, ?_, ?_⟩
-    · intro r b found
-      rw [blocks, getElem?_insert_root] at found
-      split at found
-      · cases Option.some.inj found
-        exact bound
-      · exact blockBound r b found
-    · intro r s found
-      rw [states, getElem?_insert_root] at found
-      split at found
-      · cases Option.some.inj found
-        rw [(stateTransition_slot transitioned).2]
-        exact bound
-      · exact stateBound r s found
+    obtain ⟨current, currentOk⟩ := holds
+    obtain ⟨later, laterOk, -⟩ := exists_getCurrentSlot_onTick_ge forward ticked currentOk
+    exact ⟨later, laterOk⟩
+  | block _ step holds =>
+    simpa only [(onBlock_sameClock step).getCurrentSlot] using holds
   | attestation _ step holds =>
-    exact transport (onAttestation_sameClock step) (onAttestation_frame step).2.1
-      (onAttestation_frame step).2.2.1 holds
+    simpa only [(onAttestation_sameClock step).getCurrentSlot] using holds
   | attesterSlashing _ step holds =>
-    exact transport (onAttesterSlashing_sameClock step) (onAttesterSlashing_frame step).2.1
-      (onAttesterSlashing_frame step).2.2.1 holds
+    simpa only [(onAttesterSlashing_sameClock step).getCurrentSlot] using holds
   | payloadAttestation _ step holds =>
-    exact transport (onPayloadAttestationMessage_sameClock step)
-      (onPayloadAttestationMessage_onlyPtcVotes step).frame.2.1
-      (onPayloadAttestationMessage_onlyPtcVotes step).frame.2.2 holds
+    simpa only [(onPayloadAttestationMessage_sameClock step).getCurrentSlot] using holds
   | envelope _ step holds =>
-    exact transport (onExecutionPayloadEnvelope_sameClock step)
-      (onExecutionPayloadEnvelope_frame step).2.1
-      (onExecutionPayloadEnvelope_frame step).2.2 holds
+    simpa only [(onExecutionPayloadEnvelope_sameClock step).getCurrentSlot] using holds
   | inclusionList _ step holds =>
-    exact transport (onInclusionList_sameClock step) (onInclusionList_frame step).2.1
-      (onInclusionList_frame step).2.2 holds
+    simpa only [(onInclusionList_sameClock step).getCurrentSlot] using holds
 
 end Store
 

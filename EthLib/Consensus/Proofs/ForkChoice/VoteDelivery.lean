@@ -164,23 +164,10 @@ theorem VoteAt.data_target {anchor : Store preset fork}
     have firstAfter : anchorState.slot ≤ first := by
       have rounded : anchorState.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH =
           anchorState.slot := by
-        unfold isStartSlotAtEpoch computeSlotsSinceEpochStart at anchorAtBoundary
-        rw [anchorSlot, computeStartSlotAtEpoch_computeEpochAtSlot] at anchorAtBoundary
-        simp only [Except.mapError, bind, Except.bind, pure, Except.pure,
-          Except.ok.injEq, decide_eq_true_eq] at anchorAtBoundary
-        have h := (computeStartSlotAtEpoch_ok_iff.mp
-          (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) anchorState.slot)).2
-        have le : (anchorState.slot / preset.SLOTS_PER_EPOCH *
-            preset.SLOTS_PER_EPOCH).toNat ≤ anchorState.slot.toNat := by
-          rw [h, computeEpochAtSlot, UInt64.toNat_div]
-          exact Nat.div_mul_le_self _ _
-        have zero := congrArg UInt64.toNat anchorAtBoundary
-        simp only [UInt64.toNat_sub, UInt64.toNat_zero] at zero
-        have upper := anchorState.slot.toNat_lt
-        have lower := (anchorState.slot / preset.SLOTS_PER_EPOCH *
-          preset.SLOTS_PER_EPOCH).toNat_lt
-        apply UInt64.toNat_inj.mp
-        omega
+        apply epoch_floor_eq_of_sub_eq_zero
+        simpa [isStartSlotAtEpoch, computeSlotsSinceEpochStart, anchorSlot,
+          computeStartSlotAtEpoch_computeEpochAtSlot, Except.mapError, bind, Except.bind,
+          pure, Except.pure] using anchorAtBoundary
       have mono := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat
         (Nat.div_le_div_right (c := preset.SLOTS_PER_EPOCH.toNat)
           (UInt64.le_iff_toNat_le.mp anchorLe))

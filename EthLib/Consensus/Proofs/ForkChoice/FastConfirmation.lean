@@ -20,7 +20,13 @@ Other proofs tie the stake tests of the rule to the supporters and the committee
 
 TargetVotes instantiates an assumed honest count at an accepted checkpoint test.
 
-DutySupport puts a previously safe prefix on the head chain after a complete honest duty epoch.
+DutySupport concludes head-chain ancestry or a bounded honest-store block-collision search witness.
+
+It assumes a complete honest duty epoch, the stake margin and earlier ancestry.
+
+Finality compatibility and block admission are explicit hypotheses.
+
+The network must handle messages promptly, with delivery delay fitting before the next slot.
 
 No theorem here shows that the confirmed block is safe in an execution or in another store.
 -/

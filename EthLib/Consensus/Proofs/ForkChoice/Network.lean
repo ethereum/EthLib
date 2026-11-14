@@ -278,13 +278,15 @@ theorem Execution.exists_validated_of_blocks {ν κ : Type*} [DecidableEq ν]
     | inclusionList _ h =>
       exact False.elim (frames (Store.onInclusionList_frame h).2.1 rfl rfl)
     | @block sb mem added =>
-      unfold Store.onBlockWithVotes at added
-      simp only [bind_ok_iff, ← Array.foldlM_toList] at added
-      obtain ⟨blocked, blockOk, voted, attested, slashed⟩ := added
-      have av := foldlM_ok_invariant (fun s => s.blocks = blocked.blocks)
-        (fun _ _ _ eq step => (Store.onAttestation_frame step).2.1.trans eq) rfl attested
-      have sv := foldlM_ok_invariant (fun s => s.blocks = blocked.blocks)
-        (fun _ _ _ eq step => (Store.onAttesterSlashing_frame step).2.1.trans eq) av slashed
+      obtain ⟨blocked, blockOk, sv⟩ := Store.onBlockWithVotes_establishes
+        (P := fun s => ∃ blocked,
+          ((e.world n).state v).onBlock config checks sources sb = .ok blocked ∧
+            s.blocks = blocked.blocks)
+        (fun step => ⟨_, step, rfl⟩)
+        (fun _ ⟨blocked, blockOk, maps⟩ step =>
+          ⟨blocked, blockOk, (Store.onAttestation_frame step).2.1.trans maps⟩)
+        (fun _ ⟨blocked, blockOk, maps⟩ step =>
+          ⟨blocked, blockOk, (Store.onAttesterSlashing_frame step).2.1.trans maps⟩) added
       have bf : blocked.blocks[r]? = some b := sv ▸ found
       rcases Store.onBlock_same_or_insert blockOk with same | ⟨q, hash, fresh, maps, rest⟩
       · exact False.elim (held (same ▸ bf))

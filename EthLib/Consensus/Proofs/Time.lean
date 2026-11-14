@@ -83,6 +83,22 @@ theorem computeStartSlotAtEpoch_computeEpochAtSlot (slot : Slot) :
   rw [UInt64.toNat_mul, Nat.mod_eq_of_lt fits]
   rfl
 
+/-- A slot with zero distance from its epoch's first slot equals that first slot. -/
+theorem epoch_floor_eq_of_sub_eq_zero {slot : Slot}
+    (boundary : slot - slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH = 0) :
+    slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH = slot := by
+  have floor := (computeStartSlotAtEpoch_ok_iff.mp
+    (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) slot)).2
+  have le : (slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH).toNat ≤ slot.toNat := by
+    rw [floor, computeEpochAtSlot, UInt64.toNat_div]
+    exact Nat.div_mul_le_self _ _
+  have zero := congrArg UInt64.toNat boundary
+  simp only [UInt64.toNat_sub, UInt64.toNat_zero] at zero
+  have upper := slot.toNat_lt
+  have lower := (slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH).toNat_lt
+  apply UInt64.toNat_inj.mp
+  omega
+
 /-- A slot lies in the epoch that starts at most one epoch's slots before it. -/
 theorem computeStartSlotAtEpoch_le_lt {slot start : Slot}
     (positive : 0 < preset.SLOTS_PER_EPOCH)

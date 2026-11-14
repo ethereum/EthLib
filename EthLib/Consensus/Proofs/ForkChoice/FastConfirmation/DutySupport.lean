@@ -234,21 +234,10 @@ private theorem blocks_or_justified_covers {Δ : ℕ} (sync : e.Synchronous Δ)
         (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) anchorState.slot)).2
       have rounded : anchorState.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH =
           anchorState.slot := by
-        unfold isStartSlotAtEpoch computeSlotsSinceEpochStart at anchorBoundary
-        rw [anchorSlot, computeStartSlotAtEpoch_computeEpochAtSlot] at anchorBoundary
-        simp only [Except.mapError, bind, Except.bind, pure, Except.pure,
-          Except.ok.injEq, decide_eq_true_eq] at anchorBoundary
-        have le : (anchorState.slot / preset.SLOTS_PER_EPOCH *
-            preset.SLOTS_PER_EPOCH).toNat ≤ anchorState.slot.toNat := by
-          rw [floor, computeEpochAtSlot, UInt64.toNat_div]
-          exact Nat.div_mul_le_self _ _
-        have zero := congrArg UInt64.toNat anchorBoundary
-        simp only [UInt64.toNat_sub, UInt64.toNat_zero] at zero
-        have upper := anchorState.slot.toNat_lt
-        have lower := (anchorState.slot / preset.SLOTS_PER_EPOCH *
-          preset.SLOTS_PER_EPOCH).toNat_lt
-        apply UInt64.toNat_inj.mp
-        omega
+        apply epoch_floor_eq_of_sub_eq_zero
+        simpa [isStartSlotAtEpoch, computeSlotsSinceEpochStart, anchorSlot,
+          computeStartSlotAtEpoch_computeEpochAtSlot, Except.mapError, bind, Except.bind,
+          pure, Except.pure] using anchorBoundary
       rw [rounded] at floor
       rw [anchorSlot, UInt64.le_iff_toNat_le,
         (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2, floor]
