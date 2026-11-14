@@ -29,6 +29,10 @@ No other step of a block changes those lengths or an existing effective balance.
 A change of credentials never lowers a cap, and a queued consolidation stays in the registry.
 
 So a block keeps the shape, and so does a block applied across the forks.
+
+A block also keeps the history and the deposit carry.
+
+From Altair, each inactivity score after a block is the one before it, or zero.
 -/
 
 @[expose] public section
@@ -43,23 +47,43 @@ section Steps
 
 variable {fork : Fork} {engine : ExecutionEngine preset fork} {s t : BeaconState preset fork}
 
+/-- What a block keeps of the history, the deposit carry and the inactivity scores. -/
+structure BlockKept (state after : BeaconState preset fork) : Prop where
+  /-- The historical roots stay. -/
+  roots : after.historicalRoots = state.historicalRoots
+  /-- The historical summaries stay. -/
+  summaries : after.historicalSummaries = state.historicalSummaries
+  /-- The deposit carry to the next epoch stays. -/
+  depositCarry : after.depositBalanceToConsume = state.depositBalanceToConsume
+  /-- From Altair, each inactivity score is the one at its position before, or zero. -/
+  scores : ∀ altair : .altair ≤ fork, ∀ i : Nat,
+    (after.inactivityScores altair).data[i]? = (state.inactivityScores altair).data[i]? ∨
+      (after.inactivityScores altair).data[i]? = some 0
+
 /-- The facts of the shape on the flags, the scores and the queue of consolidations. -/
 private def Listed (s : BeaconState preset fork) : Prop :=
   ParticipationMatches s ∧ InactivityScoresMatch s ∧ ConsolidationsInside s
 
-/-- A step keeps the size of the registry and leaves the flags, scores and queue unchanged. -/
+/-- A step keeps the size of the registry and leaves the flags, scores and queue unchanged.
+
+It also leaves the historical roots, the historical summaries and the deposit carry unchanged. -/
 private def Kept (s t : BeaconState preset fork) : Prop :=
   t.validators.data.size = s.validators.data.size ∧
     t.previousEpochParticipation = s.previousEpochParticipation ∧
     t.currentEpochParticipation = s.currentEpochParticipation ∧
-    t.inactivityScores = s.inactivityScores ∧ t.pendingConsolidations = s.pendingConsolidations
+    t.inactivityScores = s.inactivityScores ∧ t.pendingConsolidations = s.pendingConsolidations ∧
+    t.historicalRoots = s.historicalRoots ∧ t.historicalSummaries = s.historicalSummaries ∧
+    t.depositBalanceToConsume = s.depositBalanceToConsume
 
-private theorem Kept.refl (s : BeaconState preset fork) : Kept s s := ⟨rfl, rfl, rfl, rfl, rfl⟩
+private theorem Kept.refl (s : BeaconState preset fork) :
+    Kept s s := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private theorem Kept.trans {u : BeaconState preset fork} (one : Kept s t) (two : Kept t u) :
     Kept s u :=
   ⟨two.1.trans one.1, two.2.1.trans one.2.1, two.2.2.1.trans one.2.2.1,
-    two.2.2.2.1.trans one.2.2.2.1, two.2.2.2.2.trans one.2.2.2.2⟩
+    two.2.2.2.1.trans one.2.2.2.1, two.2.2.2.2.1.trans one.2.2.2.2.1,
+    two.2.2.2.2.2.1.trans one.2.2.2.2.2.1, two.2.2.2.2.2.2.1.trans one.2.2.2.2.2.2.1,
+    two.2.2.2.2.2.2.2.trans one.2.2.2.2.2.2.2⟩
 
 private theorem Kept.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
     (kept : ∀ a x b, step a x = .ok b → Kept a b) {items : List α}
@@ -69,7 +93,7 @@ private theorem Kept.foldlM {α ε : Type} {step : BeaconState preset fork → �
 
 /-- A step that keeps the registry size and the lists keeps the facts. -/
 private theorem Kept.listed (kept : Kept s t) (listed : Listed s) : Listed t := by
-  obtain ⟨size, previous, current, scores, queue⟩ := kept
+  obtain ⟨size, previous, current, scores, queue, -⟩ := kept
   obtain ⟨flags, scored, inside⟩ := listed
   refine ⟨fun altair => ?_, fun altair => ?_, fun electra => ?_⟩
   · rw [previous, current, size]
@@ -90,7 +114,7 @@ private theorem listed_foldlM {α ε : Type} {step : BeaconState preset fork →
 private theorem Kept.setValidatorAt {i : Nat} {v : Validator}
     (ok : s.setValidatorAt i v = .ok t) : Kept s t := by
   obtain ⟨inside, rfl⟩ := setValidatorAt_ok ok
-  exact ⟨(sameSizes_putValidator _ _ _).1, rfl, rfl, rfl, rfl⟩
+  exact ⟨(sameSizes_putValidator _ _ _).1, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private theorem Kept.setValidator {i : ValidatorIndex} {v : Validator}
     (ok : s.setValidator i v = .ok t) : Kept s t :=
@@ -99,7 +123,7 @@ private theorem Kept.setValidator {i : ValidatorIndex} {v : Validator}
 private theorem Kept.setBalance {i : ValidatorIndex} {b : Gwei}
     (ok : s.setBalance i b = .ok t) : Kept s t := by
   obtain ⟨_, rfl⟩ := setBalance_ok ok
-  exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private theorem Kept.increase {i : ValidatorIndex} {amount : Gwei}
     (ok : increaseBalance s i amount = .ok t) : Kept s t := by
@@ -125,10 +149,10 @@ private theorem Kept.slash {i : ValidatorIndex} {whistleblower : Option Validato
     _, _, _, lowered, _, _, raised, paid, rfl⟩ := slashValidator_ok ok
   have first := (Kept.exit exited).trans (Kept.setValidator set)
   have second : Kept marked last :=
-    (show Kept marked { marked with slashings } from ⟨rfl, rfl, rfl, rfl, rfl⟩).trans
+    (show Kept marked { marked with slashings } from ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩).trans
       ((Kept.decrease lowered).trans ((Kept.increase raised).trans (Kept.increase paid)))
   refine (first.trans second).trans ?_
-  split <;> exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+  split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private theorem Kept.proposerSlashing {slashing : ProposerSlashing}
     (ok : processProposerSlashing config checks s slashing = .ok t) : Kept s t := by
@@ -160,7 +184,7 @@ private theorem Kept.exitChurn {electra : .pectra ≤ fork} {balance : Gwei} {ep
     Except.ok.injEq] at ok
   obtain ⟨_, _, _, _, _, _, ok⟩ := ok
   cases ok
-  exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private theorem Kept.consolidationChurn {electra : .pectra ≤ fork} {balance : Gwei}
     {epoch : Epoch}
@@ -170,7 +194,7 @@ private theorem Kept.consolidationChurn {electra : .pectra ≤ fork} {balance : 
     Except.ok.injEq] at ok
   obtain ⟨_, _, _, _, _, _, ok⟩ := ok
   cases ok
-  exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private theorem Kept.partialWithdrawal {electra : .pectra ≤ fork} {index : ValidatorIndex}
     {validator : Validator} {amount owed : Gwei}
@@ -181,7 +205,7 @@ private theorem Kept.partialWithdrawal {electra : .pectra ≤ fork} {index : Val
   split at ok
   · simp only [bind_ok_iff, liftAccessor_ok, Except.ok.injEq] at ok
     obtain ⟨⟨_, _⟩, churned, _, _, _, _, rfl⟩ := ok
-    exact (Kept.exitChurn churned).trans ⟨rfl, rfl, rfl, rfl, rfl⟩
+    exact (Kept.exitChurn churned).trans ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   · cases ok
     exact Kept.refl _
 
@@ -198,7 +222,7 @@ private theorem Kept.depositRequest {electra : .pectra ≤ fork} {request : Depo
   simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
     bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
   obtain ⟨_, _, rfl⟩ := ok
-  exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private theorem Kept.excess {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (ok : queueExcessActiveBalance s electra index = .ok t) : Kept s t := by
@@ -207,7 +231,7 @@ private theorem Kept.excess {electra : .pectra ≤ fork} {index : ValidatorIndex
   split at ok
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, _, _, _, _, set, rfl⟩ := ok
-    exact (Kept.setBalance set).trans ⟨rfl, rfl, rfl, rfl, rfl⟩
+    exact (Kept.setBalance set).trans ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   · cases ok
     exact Kept.refl _
 
@@ -223,9 +247,11 @@ private theorem Kept.withdrawals {capella : .shapella ≤ fork}
   have expected {a b : BeaconState preset fork} {expected : ExpectedWithdrawals}
       (applied : applyExpectedWithdrawals a capella expected = .ok b) : Kept a b := by
     apply applyExpectedWithdrawals_of_setters Kept Kept.refl (fun one two => one.trans two)
-      (fun withdrawn => by rw [applyWithdrawal_eq withdrawn]; exact ⟨rfl, rfl, rfl, rfl, rfl⟩)
+      (fun withdrawn => by
+        rw [applyWithdrawal_eq withdrawn]
+        exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
       _ _ _ _ _ _ applied
-    all_goals exact fun _ _ => ⟨rfl, rfl, rfl, rfl, rfl⟩
+    all_goals exact fun _ _ => ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   unfold processWithdrawals at ok
   split at ok
   · split at ok
@@ -245,13 +271,13 @@ private theorem Kept.blockExecution {body : BeaconBlockBody preset fork}
       {execution : .bellatrix ≤ fork ∧ fork < .glamsterdam}
       (paid : processExecutionPayload config engine a body execution = .ok b) : Kept a b := by
     obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok paid
-    exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   unfold processBlockExecution at ok
   split at ok
   · simp only [bind_ok_iff] at ok
     obtain ⟨_, withdrawn, bid⟩ := ok
     obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq bid
-    exact (Kept.withdrawals withdrawn).trans ⟨rfl, rfl, rfl, rfl, rfl⟩
+    exact (Kept.withdrawals withdrawn).trans ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   split at ok
   · simp only [bind_ok_iff] at ok
     obtain ⟨_, withdrawn, paid⟩ := ok
@@ -350,7 +376,7 @@ private theorem listed_queueConsolidation {electra : .pectra ≤ fork}
   simp only at member
   rw [pushed, Array.mem_push] at member
   rcases member with old | rfl
-  · rw [kept.2.2.2.2] at old
+  · rw [kept.2.2.2.2.1] at old
     exact listed.2.2 electra' c old
   · exact ⟨sourceInside, targetInside⟩
 
@@ -395,19 +421,19 @@ private theorem listed_parentPayload {gloas : .glamsterdam ≤ fork}
   · exact listed
   have settled : Kept s settled := by
     rw [settleParentPayment_eq settledOk]
-    exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   have requested := listed_foldlM (fun _ _ _ ok => listed_consolidationRequest ok)
     consolidationsOk <|
     (Kept.foldlM (fun _ _ _ => Kept.withdrawalRequest) withdrawalsOk).listed <|
     (Kept.foldlM (fun _ _ _ => Kept.depositRequest) depositsOk).listed (settled.listed listed)
   have builders := Kept.foldlM (fun _ _ _ ok => by
     obtain ⟨_, rfl⟩ := processBuilderDepositRequest_eq ok
-    exact ⟨rfl, rfl, rfl, rfl, rfl⟩) buildersOk
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩) buildersOk
   have exits := Kept.foldlM (fun _ _ _ ok => by
     obtain ⟨_, rfl⟩ := processBuilderExitRequest_eq ok
-    exact ⟨rfl, rfl, rfl, rfl, rfl⟩) exitsOk
-  exact (show Kept _ _ from (builders.trans exits).trans ⟨rfl, rfl, rfl, rfl, rfl⟩).listed
-    requested
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩) exitsOk
+  have tail : Kept _ _ := (builders.trans exits).trans ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  exact tail.listed requested
 
 /-- A block keeps the facts on the flags, the scores and the queue. -/
 private theorem processBlock_listed {block : BeaconBlock preset fork}
@@ -446,6 +472,199 @@ private theorem processBlock_listed {block : BeaconBlock preset fork}
     exact operatedListed
   · cases synced
     exact operatedListed
+
+/-! ### What a block keeps of the history, the deposit carry and the scores -/
+
+/-- A state keeps what a block keeps of itself. -/
+theorem BlockKept.refl (s : BeaconState preset fork) : BlockKept s s :=
+  ⟨rfl, rfl, rfl, fun _ _ => .inl rfl⟩
+
+/-- Two steps that keep these fields keep them. -/
+theorem BlockKept.trans {u : BeaconState preset fork} (one : BlockKept s t)
+    (two : BlockKept t u) : BlockKept s u :=
+  ⟨two.roots.trans one.roots, two.summaries.trans one.summaries,
+    two.depositCarry.trans one.depositCarry, fun altair i =>
+      (two.scores altair i).elim
+        (fun same => (one.scores altair i).elim (fun old => .inl (same.trans old))
+          (fun zero => .inr (same.trans zero)))
+        .inr⟩
+
+private theorem BlockKept.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
+    (kept : ∀ a x b, step a x = .ok b → BlockKept a b) {items : List α}
+    (computed : items.foldlM step s = .ok t) : BlockKept s t :=
+  foldlM_ok_invariant (BlockKept s) (fun _ _ _ before ok => before.trans (kept _ _ _ ok))
+    (BlockKept.refl s) computed
+
+/-- A step that writes none of the four fields keeps the history, the carry and the scores. -/
+private theorem BlockKept.of_eq (roots : t.historicalRoots = s.historicalRoots := by rfl)
+    (summaries : t.historicalSummaries = s.historicalSummaries := by rfl)
+    (churn : t.depositBalanceToConsume = s.depositBalanceToConsume := by rfl)
+    (scores : t.inactivityScores = s.inactivityScores := by rfl) : BlockKept s t :=
+  ⟨roots, summaries, churn, fun altair i => .inl (by rw [scores])⟩
+
+/-- A step that keeps the shape keeps the history, the carry and the scores. -/
+private theorem Kept.kept (kept : Kept s t) : BlockKept s t :=
+  ⟨kept.2.2.2.2.2.1, kept.2.2.2.2.2.2.1, kept.2.2.2.2.2.2.2, fun altair i =>
+    .inl (by rw [kept.2.2.2.1])⟩
+
+private theorem kept_queueConsolidation {electra : .pectra ≤ fork}
+    {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
+    (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
+    BlockKept s t := by
+  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff, Base.Uint64.addChecked_ok_iff, pure, Except.pure] at ok
+  obtain ⟨⟨churned, epoch⟩, churn, _, _, marked, set, pending, appended, ok⟩ := ok
+  simp only [Except.ok.injEq] at ok
+  subst ok
+  exact ((Kept.consolidationChurn churn).trans (Kept.setValidator set)).kept.trans
+    BlockKept.of_eq
+
+private theorem kept_consolidationRequest {electra : .pectra ≤ fork}
+    {request : ConsolidationRequest}
+    (ok : processConsolidationRequest config s electra request = .ok t) : BlockKept s t := by
+  unfold processConsolidationRequest at ok
+  simp only [bind, Except.bind, pure, Except.pure] at ok
+  repeat' split at ok
+  all_goals first
+    | (cases ok; done)
+    | (cases ok; exact BlockKept.refl _)
+    | exact (Kept.compounding (liftAccessor_ok.mp ok)).kept
+    | exact kept_queueConsolidation ok
+
+/-- The requests of the execution layer keep the history, the carry and the scores. -/
+private theorem kept_executionRequests {body : BeaconBlockBody preset fork}
+    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
+    (ok : processExecutionRequests config s body electra = .ok t) : BlockKept s t := by
+  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at ok
+  obtain ⟨_, deposits, _, withdrawals, consolidations⟩ := ok
+  exact ((BlockKept.foldlM (fun _ _ _ ok => (Kept.depositRequest ok).kept) deposits).trans
+    (BlockKept.foldlM (fun _ _ _ ok => (Kept.withdrawalRequest ok).kept) withdrawals)).trans
+    (BlockKept.foldlM (fun _ _ _ => kept_consolidationRequest) consolidations)
+
+/-- From Gloas, the payload of the parent keeps the history, the carry and the scores. -/
+private theorem kept_parentPayload {gloas : .glamsterdam ≤ fork}
+    {body : BeaconBlockBody preset fork}
+    (ok : processParentExecutionPayload config checks s gloas body = .ok t) : BlockKept s t := by
+  rcases processParentExecutionPayload_ok ok with ⟨-, -, rfl⟩ |
+    ⟨-, settled, _, _, _, _, _, _, settledOk, depositsOk, withdrawalsOk, consolidationsOk,
+      buildersOk, exitsOk, -, rfl⟩
+  · exact BlockKept.refl _
+  have settled : BlockKept s settled := by
+    rw [settleParentPayment_eq settledOk]
+    exact BlockKept.of_eq
+  have builders := BlockKept.foldlM (fun _ _ _ ok => by
+    obtain ⟨_, rfl⟩ := processBuilderDepositRequest_eq ok
+    exact BlockKept.of_eq) buildersOk
+  have exits := BlockKept.foldlM (fun _ _ _ ok => by
+    obtain ⟨_, rfl⟩ := processBuilderExitRequest_eq ok
+    exact BlockKept.of_eq) exitsOk
+  exact (((((settled.trans (BlockKept.foldlM (fun _ _ _ ok => (Kept.depositRequest ok).kept)
+    depositsOk)).trans
+    (BlockKept.foldlM (fun _ _ _ ok => (Kept.withdrawalRequest ok).kept) withdrawalsOk)).trans
+    (BlockKept.foldlM (fun _ _ _ => kept_consolidationRequest) consolidationsOk)).trans
+    builders).trans exits).trans BlockKept.of_eq
+
+/-- An attestation keeps the history, the carry and the scores.
+
+From Altair it sets flags in place, and before Altair it records a pending attestation. -/
+private theorem kept_attestation {attestation : Attestation preset fork} {parentSlot : Slot}
+    (ok : processAttestation config checks s parentSlot attestation = .ok t) : BlockKept s t := by
+  by_cases altair : Fork.altair ≤ fork
+  · simp only [processAttestation, altair, ↓reduceDIte] at ok
+    unfold processAttestationAltair at ok
+    simp only [bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+      ⟨updated, _⟩, folded, _, _, _, raisedOk, final⟩ := ok
+    have flagged : BlockKept s (setEpochParticipation s
+        (attestation.data.target.epoch == getCurrentEpoch s) updated) := by
+      unfold setEpochParticipation
+      split <;> exact BlockKept.of_eq
+    have raised := flagged.trans (Kept.increase raisedOk).kept
+    split at final
+    · rw [recordPaymentWeight_eq final]
+      exact raised.trans BlockKept.of_eq
+    · cases final
+      exact raised
+  · obtain ⟨_, _, _, _, _, recorded, _⟩ := processAttestation_records (Nat.lt_of_not_le altair) ok
+    have kept := recordPendingAttestation_ok recorded
+    split at kept
+    all_goals
+      obtain ⟨_, rest⟩ := kept
+      rw [← rest]
+      exact BlockKept.of_eq
+
+/-- A new validator keeps the history and the carry, and from Altair appends a zero score. -/
+private theorem kept_addValidator {key : Cryptography.Bls.BLSPubkey} {credentials : Bytes32}
+    {amount : Gwei} (ok : addValidatorToRegistry s key credentials amount = .ok t) :
+    BlockKept s t := by
+  unfold addValidatorToRegistry at ok
+  split at ok
+  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at ok
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, scoresOk, rfl⟩ := ok
+    refine ⟨rfl, rfl, rfl, fun altair i => ?_⟩
+    simp only
+    rw [setOrAppendList_getElem? scoresOk]
+    split
+    · exact .inr rfl
+    · exact .inl rfl
+  · split at ok <;> cases ok
+    exact ⟨rfl, rfl, rfl, fun altair => absurd altair ‹_›⟩
+
+/-- A deposit keeps the history and the carry, and from Altair adds at most a zero score. -/
+private theorem kept_deposit {before : fork < .hegota} {deposit : Deposit}
+    (ok : processDeposit config checks before s deposit = .ok t) : BlockKept s t := by
+  obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok ok
+  have start : BlockKept s { s with eth1DepositIndex := fun _ => next } := BlockKept.of_eq
+  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, pending⟩
+  · exact start
+  · exact start.trans BlockKept.of_eq
+  · exact start.trans ((kept_addValidator added).trans BlockKept.of_eq)
+  · rcases applyPendingDeposit_cases pending with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+    · exact start
+    · exact start.trans (Kept.increase raised).kept
+    · exact start.trans (kept_addValidator added)
+
+/-- A block keeps the history, the deposit carry and the inactivity scores at their positions.
+
+This holds when the block succeeds. -/
+theorem processBlock_blockKept {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine s block = .ok t) : BlockKept s t := by
+  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput computed
+  have head : BlockKept s input :=
+    started.step_of BlockKept BlockKept.refl BlockKept.trans
+      (fun _ paid => kept_parentPayload paid)
+      (fun headed => by
+        obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
+        exact BlockKept.of_eq)
+      (fun _ executed => (Kept.blockExecution executed).kept)
+      (fun revealed => by
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
+        exact BlockKept.of_eq)
+      (fun _ voted => by
+        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
+        rw [← rest]
+        exact BlockKept.of_eq)
+  obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
+    processOperations_folds_of BlockKept BlockKept.refl BlockKept.trans
+      (fun deposited => kept_deposit deposited)
+      (fun exited => (Kept.exit (processVoluntaryExit_initiates exited)).kept)
+      (fun changed => by
+        obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok changed
+        exact (Kept.setValidator set).kept)
+      (fun requested => kept_executionRequests requested)
+      (fun attested => by
+        rw [processPayloadAttestation_eq attested]
+        exact BlockKept.refl _) operated
+  have operatedKept := (head.trans
+    ((BlockKept.foldlM (fun _ _ _ ok => (Kept.proposerSlashing ok).kept) proposersOk).trans
+      ((BlockKept.foldlM (fun _ _ _ ok => (Kept.attesterSlashing ok).kept) slashingsOk).trans
+        (BlockKept.foldlM (fun _ _ _ => kept_attestation) attestedOk)))).trans rest
+  split at synced
+  · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+    exact operatedKept.trans BlockKept.of_eq
+  · cases synced
+    exact operatedKept
 
 end Steps
 

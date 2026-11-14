@@ -4,11 +4,12 @@ public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.Upgrade
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
+import EthLib.Consensus.Proofs.Transition.Totality.ShapeBlock
 
 /-!
 # Preservation of the deposit carry
 
-Blocks before Gloas and the epoch operations other than pending deposits keep the carry.
+Blocks and the epoch operations other than pending deposits keep the carry.
 
 The Electra upgrade initializes it to zero, and later upgrades before Gloas keep it.
 -/
@@ -176,223 +177,13 @@ theorem depositCarry_processUpgrades {s t : ForkedBeaconState preset}
       (kept_upgradeNext nextOk later).trans (held (Nat.lt_trans post.property later)))
     (fun _ => rfl) ok early
 
-private theorem kept_slash {index : ValidatorIndex} {whistleblower : Option ValidatorIndex}
-    (ok : slashValidator config s index whistleblower = .ok t) : Kept s t := by
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, last, exited, -, -, marked, -, -, -, lowered, -, -,
-    raised, paid, done⟩ := slashValidator_ok ok
-  have cancelled : Kept last t := by
-    subst done
-    split <;> rfl
-  exact cancelled.trans ((kept_increase paid).trans ((kept_increase raised).trans
-    ((kept_decrease lowered).trans ((kept_setValidator marked).trans (kept_exit exited)))))
+/-- A block keeps the deposit carry.
 
-private theorem kept_proposer {slashing : ProposerSlashing}
-    (ok : processProposerSlashing config checks s slashing = .ok t) : Kept s t := by
-  simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := ok
-  exact kept_slash slashed
-
-private theorem kept_attester {slashing : AttesterSlashing preset fork}
-    (ok : processAttesterSlashing config checks s slashing = .ok t) : Kept s t := by
-  simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, folded, _, _, rfl⟩ := ok
-  refine foldlM_ok_invariant (fun step => Kept s step.1) (fun _ _ _ previous ok => ?_)
-    rfl folded
-  simp only [slashIfSlashable, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, ok⟩ := ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, slashed, rfl⟩ := ok
-    exact (kept_slash slashed).trans previous
-  · cases ok
-    exact previous
-
-private theorem kept_attestation {attestation : Attestation preset fork} {parentSlot : Slot}
-    (ok : processAttestation config checks s parentSlot attestation = .ok t) : Kept s t := by
-  unfold processAttestation at ok
-  split at ok
-  · unfold processAttestationAltair at ok
-    simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, raised, raisedOk, final⟩ := ok
-    have last : Kept raised t := by
-      split at final
-      · rw [recordPaymentWeight_eq final]
-      · cases final; rfl
-    have flags (current : Bool) (p : EpochParticipation preset fork) :
-        Kept s (setEpochParticipation s current p) := by
-      unfold setEpochParticipation
-      split <;> rfl
-    exact last.trans ((kept_increase raisedOk).trans (flags _ _))
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := ok
-  have kept := recordPendingAttestation_ok recorded
-  split at kept <;>
-  · obtain ⟨_, rest⟩ := kept
-    rw [← rest]
-
-private theorem kept_addValidator {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
-    (ok : addValidatorToRegistry s pubkey credentials amount = .ok t) : Kept s t := by
-  unfold addValidatorToRegistry at ok
-  split at ok
-  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := ok
-    rfl
-  split at ok
-  · cases ok
-    rfl
-  · cases ok
-
-private theorem kept_applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
-    {signature : BLSSignature}
-    (ok : applyDeposit config checks s pubkey credentials amount signature = .ok t) :
-    Kept s t := by
-  rcases applyDeposit_cases ok with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, ok⟩
-  · rfl
-  · rfl
-  · have same := kept_addValidator added
-    exact same
-  · rcases applyPendingDeposit_cases ok with rfl | ⟨_, ok⟩ | ⟨_, ok⟩
-    · rfl
-    · exact kept_increase ok
-    · exact kept_addValidator ok
-
-private theorem kept_withdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
-    (ok : processWithdrawalRequest config s electra request = .ok t) : Kept s t := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
-  · rfl
-  · exact kept_exit exited
-  · exact (requestPartialWithdrawal_kept withdrawn).2.2.2
-
-private theorem kept_consolidationRequest {electra : .pectra ≤ fork}
-    {request : ConsolidationRequest}
-    (ok : processConsolidationRequest config s electra request = .ok t) : Kept s t := by
-  have switch {s t : BeaconState preset fork} {index : ValidatorIndex}
-      (ok : switchToCompoundingValidator s electra index = .ok t) : Kept s t := by
-    simp only [switchToCompoundingValidator, bind_ok_iff] at ok
-    obtain ⟨_, _, _, set, queued⟩ := ok
-    exact (kept_excess queued).trans (kept_setValidator set)
-  have queue {s t : BeaconState preset fork} {sourceIndex targetIndex : ValidatorIndex}
-      {source : Validator}
-      (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
-      Kept s t := by
-    simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-      pure, Except.pure] at ok
-    obtain ⟨⟨_, _⟩, churned, _, _, _, set, _, _, ok⟩ := ok
-    cases ok
-    simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at churned
-    obtain ⟨_, _, _, _, _, _, churned⟩ := churned
-    cases churned
-    have same := kept_setValidator set
-    exact same
-  unfold processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; rfl)
-    | exact switch (liftAccessor_ok.mp ok)
-    | exact queue ok
-
-private theorem kept_requests {body : BeaconBlockBody preset fork}
-    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
-    (ok : processExecutionRequests config s body electra = .ok t) : Kept s t := by
-  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at ok
-  obtain ⟨_, deposited, _, withdrawn, consolidated⟩ := ok
-  have first := kept_fold (fun a request _ ok => by
-    obtain ⟨_, recorded⟩ := recordDepositRequestsStart_eq
-      (state := a) (index := request.index)
-    simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-      bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, rfl⟩ := ok
-    rfl) deposited
-  exact (kept_fold (fun _ _ _ ok => kept_consolidationRequest ok) consolidated).trans
-    ((kept_fold (fun _ _ _ ok => kept_withdrawalRequest ok) withdrawn).trans first)
-
-private theorem kept_withdrawals {capella : .shapella ≤ fork}
-    {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (early : fork < .glamsterdam) (ok : processWithdrawals s capella payload = .ok t) :
-    Kept s t := by
-  have notGloas : ¬Fork.glamsterdam ≤ fork := Nat.not_le_of_lt early
-  simp only [processWithdrawals, notGloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,
-    liftAccessor_ok] at ok
-  obtain ⟨expected, _, _, _, applied⟩ := ok
-  apply applyExpectedWithdrawals_of_setters Kept (fun _ => rfl)
-    (fun one two => two.trans one) (fun ok => by rw [applyWithdrawal_eq ok])
-    _ _ _ _ _ _ applied
-  all_goals exact fun _ _ => rfl
-
-/-- Before Gloas, a block keeps the deposit carry.
-
-The block is read step by step.
-
-A block frame does not carry the deposit carry.
-
-So the execution part, the withdrawals and the sync aggregate keep their own short proofs. -/
+This holds at every fork. -/
 theorem depositCarry_processBlock {engine : ExecutionEngine preset fork}
-    {block : BeaconBlock preset fork} (early : fork < .glamsterdam)
+    {block : BeaconBlock preset fork} (_early : fork < .glamsterdam)
     (ok : processBlock config checks engine s block = .ok t) :
-    t.depositBalanceToConsume = s.depositBalanceToConsume := by
-  have trans {a b c : BeaconState preset fork} (one : Kept a b) (two : Kept b c) : Kept a c :=
-    two.trans one
-  have folds {α : Type} {step : BeaconState preset fork → α → Except TransitionError _}
-      (each : ∀ a x b, step a x = .ok b → Kept a b) {items : List α}
-      {a b : BeaconState preset fork} (computed : items.foldlM step a = .ok b) : Kept a b :=
-    kept_fold each computed
-  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
-  have head : Kept s input :=
-    OperationsInput.step_of Kept (fun _ => rfl) trans
-      (fun gloas _ => absurd gloas (Nat.not_le_of_lt early))
-      (fun headed => by obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed; rfl)
-      (fun _ executed => by
-        have payload {a b : BeaconState preset fork}
-            {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam}
-            (ok : processExecutionPayload config engine a block.body bellatrix = .ok b) :
-            Kept a b := by
-          obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok
-          rfl
-        unfold processBlockExecution at executed
-        split at executed
-        · exact absurd (by assumption) (Nat.not_le_of_lt early)
-        split at executed
-        · obtain ⟨_, withdrawn, paid⟩ := bind_ok_iff.mp executed
-          exact (payload paid).trans (kept_withdrawals early withdrawn)
-        · dsimp only at executed
-          split at executed
-          · exact payload executed
-          · cases executed; rfl)
-      (fun revealed => by
-        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
-        rfl)
-      (fun _ voted => by
-        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
-        rw [← rest])
-      started
-  obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
-    processOperations_folds_of Kept (fun _ => rfl) trans
-      (fun deposited => by
-        obtain ⟨_, _, _, _, applied⟩ := processDeposit_ok deposited
-        have same := kept_applyDeposit applied
-        exact same)
-      (fun exited => kept_exit (processVoluntaryExit_initiates exited))
-      (fun changed => by
-        obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok changed
-        exact kept_setValidator set)
-      kept_requests
-      (fun paid => by rw [processPayloadAttestation_eq paid]) operated
-  have tail : Kept last t := by
-    split at synced
-    · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
-      rfl
-    · cases synced
-      rfl
-  exact trans head <| trans (folds (fun _ _ _ ok => kept_proposer ok) proposersOk) <|
-    trans (folds (fun _ _ _ ok => kept_attester ok) slashingsOk) <|
-    trans (folds (fun _ _ _ ok => kept_attestation ok) attestedOk) <| trans rest tail
+    t.depositBalanceToConsume = s.depositBalanceToConsume :=
+  (processBlock_blockKept ok).depositCarry
 
 end EthLib.Consensus
