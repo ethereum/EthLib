@@ -81,23 +81,23 @@ theorem valueOf_jsonOf_uint {spelling : Spelling} {width n : Nat} {document : Js
     (fitted : n < 2 ^ (8 * width))
     (written : jsonOf (.uint width) spelling (.uint n) = .ok document) :
     valueOf (.uint width) spelling document = .ok (.uint n) := by
-  have wide : ¬ (2 ^ (8 * width) ≤ n) := Nat.not_le.mpr fitted
+  have fits : ¬ ((!uintFits width n) = true) := by simpa using fitted
   rw [jsonOf] at written
   by_cases alias? : (spelling.isByte && width == 1) = true
   · have single : width = 1 := by simpa using ((Bool.and_eq_true ..).mp alias?).2
     have small : n < 256 := by rw [single] at fitted; simpa using fitted
     have byte : (UInt8.ofNat n).toNat = n := by
       simpa [UInt8.toNat_ofNat] using Nat.mod_eq_of_lt small
-    simp only [wide, ite_false, alias?, ite_true, Except.ok.injEq] at written
+    simp only [fits, Bool.false_eq_true, ite_false, alias?, ite_true, Except.ok.injEq] at written
     subst written
     rw [valueOf, ite_eq_left alias?]
     simp [ofHex_toHex, byte, Bind.bind, Except.bind, pure, Except.pure]
-  · rw [ite_eq_right wide, ite_eq_right (by simpa using alias?), Except.ok.injEq] at written
+  · rw [ite_eq_right fits, ite_eq_right (by simpa using alias?), Except.ok.injEq] at written
     subst written
     -- The digits have to be a constructor before the reader's own match can reduce.
     simp only [decimal]
     rw [valueOf, ite_eq_right alias?, readNat_str]
-    simp [wide, Bind.bind, Except.bind, pure, Except.pure]
+    simp [fits, Bind.bind, Except.bind, pure, Except.pure]
 
 /-- A byte array document reads back as the bytes it was written from. -/
 theorem valueOf_jsonOf_byteVector {spelling : Spelling} {length : Nat} {data : Bytes}
@@ -119,6 +119,34 @@ theorem byteDigitsFrom_map : ∀ (bytes : List UInt8) (out : Bytes),
       ite_false, UInt8.ofNat_toNat, byteDigitsFrom_map rest]
     simp
 
+/-- The UTF-8 bytes of a text decode back to it. -/
+private theorem fromUTF8?_toByteArray (text : String) :
+    String.fromUTF8? ⟨text.toByteArray.data⟩ = some text := by
+  have valid : ByteArray.IsValidUTF8 ⟨text.toByteArray.data⟩ := text.isValidUTF8
+  simp [String.fromUTF8?, valid, String.fromUTF8]
+
+/-- A text within the limit is written as itself, under the text spelling. -/
+theorem jsonOf_text {limit : Nat} {text : String} (fitted : text.utf8ByteSize ≤ limit) :
+    jsonOf (.byteList limit) .text (.bytes text.toByteArray.data) = .ok (.str text) := by
+  simp [jsonOf, fitted, byteListJson, Spelling.isDigits, Spelling.isText,
+    fromUTF8?_toByteArray]
+
+/-- A text within the limit reads back as its UTF-8 bytes, under the text spelling. -/
+theorem valueOf_text {limit : Nat} {text : String} (fitted : text.utf8ByteSize ≤ limit) :
+    valueOf (.byteList limit) .text (.str text) = .ok (.bytes text.toByteArray.data) := by
+  simp [valueOf, textBytes, Spelling.isDigits, Spelling.isText, fitted, Bind.bind, Except.bind,
+    pure, Except.pure]
+
+/-- Decimal strings of bytes that spell a text are refused under the text spelling. -/
+theorem valueOf_text_digits {limit : Nat} {data : Bytes} (valid : ByteArray.IsValidUTF8 ⟨data⟩) :
+    valueOf (.byteList limit) .text (byteDigitsJson data) = .error .typeMismatch := by
+  have digits := byteDigitsFrom_map data.toList #[]
+  simp only [Array.empty_append, Array.toArray_toList] at digits
+  have some : (String.fromUTF8? ⟨data⟩).isSome := by
+    simpa [String.fromUTF8?] using valid
+  simp [valueOf, textBytes, byteDigitsJson, Spelling.isDigits, Spelling.isText, digits, some,
+    Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
 /-- A byte list document reads back as the bytes it was written from. -/
 theorem valueOf_jsonOf_byteList {spelling : Spelling} {limit : Nat} {data : Bytes}
     {document : Json} (fitted : data.size ≤ limit)
@@ -126,19 +154,45 @@ theorem valueOf_jsonOf_byteList {spelling : Spelling} {limit : Nat} {data : Byte
     valueOf (.byteList limit) spelling document = .ok (.bytes data) := by
   simp only [jsonOf, fitted, ↓reduceIte, Except.ok.injEq, byteListJson] at written
   by_cases digits : spelling.isDigits = true
-  · simp only [digits, ↓reduceIte] at written
+  · simp only [digits, ↓reduceIte, byteDigitsJson] at written
     subst written
     rw [valueOf]
     simp [digits, Array.toList_map, byteDigitsFrom_map, Nat.not_lt.mpr fitted, Bind.bind,
       Except.bind, pure, Except.pure]
   · rw [Bool.not_eq_true] at digits
     simp only [digits, Bool.false_eq_true, ↓reduceIte] at written
-    subst written
-    rw [valueOf]
-    simp [digits, collectionHex, ofHex_toHex, Nat.not_lt.mpr fitted, Bind.bind, Except.bind,
-      pure, Except.pure]
-    intro _ same
-    cases same
+    by_cases text : spelling.isText = true
+    · simp only [text, ↓reduceIte] at written
+      cases valid : String.fromUTF8? ⟨data⟩ with
+      | some s =>
+        simp only [valid] at written
+        subst written
+        have back : s.toByteArray = ⟨data⟩ := by
+          unfold String.fromUTF8? at valid
+          split at valid
+          · simp only [String.fromUTF8, Option.some.injEq] at valid
+            subst valid
+            rfl
+          · cases valid
+        rw [valueOf]
+        simp [digits, text, textBytes, back, Nat.not_lt.mpr fitted, Bind.bind, Except.bind,
+          pure, Except.pure]
+        intro _ same
+        cases same
+      | none =>
+        simp only [valid, byteDigitsJson] at written
+        subst written
+        rw [valueOf]
+        simp [digits, text, textBytes, Array.toList_map, byteDigitsFrom_map, valid,
+          Nat.not_lt.mpr fitted, Bind.bind, Except.bind, pure, Except.pure]
+    · rw [Bool.not_eq_true] at text
+      simp only [text, Bool.false_eq_true, ↓reduceIte] at written
+      subst written
+      rw [valueOf]
+      simp [digits, text, collectionHex, ofHex_toHex, Nat.not_lt.mpr fitted, Bind.bind,
+        Except.bind, pure, Except.pure]
+      intro _ same
+      cases same
 
 /--
 A bitfield document reads back as the bits it was written from.
@@ -333,6 +387,7 @@ theorem valueOf_obj_of_equiv {shape : Desc} {spelling : Spelling}
   have read := getObjVal?_obj_of_equiv wf₁ wf₂ same
   have fieldsOf := valueOfFields_obj_of_equiv wf₁ wf₂ same
   cases shape <;>
-    simp [valueOf, valueOfSequence, readBitfield, readNat, collectionHex, names, read, fieldsOf]
+    simp [valueOf, valueOfSequence, readBitfield, readNat, textBytes, collectionHex, names, read,
+      fieldsOf]
 
 end EthLib.Serialization.Ssz

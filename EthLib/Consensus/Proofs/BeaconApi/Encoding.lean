@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.BeaconApi.Encoding
+public import EthLib.Consensus.BeaconApi.Spelling
 public import EthLib.Consensus.Proofs.ConsensusVersion
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHexCase
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonRoundTrip
@@ -44,12 +45,45 @@ theorem toApiJson_total {α : Type} [SszType α] [LawfulSszType α] [ApiSpelling
     ∃ document, toApiJson x = .ok document :=
   jsonOf_ok LawfulSszType.wellFormed (LawfulSszType.fits x) _
 
+/-- A container whose marks carry no text mark carries none. -/
+theorem fieldSpelling_hasText {shape : Desc} {marks : List (String × Spelling)}
+    (plain : ∀ mark ∈ marks, mark.2.hasText = false) :
+    (fieldSpelling shape marks).hasText = false := by
+  have mark : ∀ (name : String) (marks : List (String × Spelling)),
+      (∀ mark ∈ marks, mark.2.hasText = false) →
+      ((marks.lookup name).getD .opaque).hasText = false := by
+    intro name marks plain
+    induction marks with
+    | nil => simp [List.lookup, Spelling.opaque, Spelling.hasText, Spelling.anyText]
+    | cons head rest ih =>
+      have first := plain head (by simp)
+      have others := ih fun mark inside => plain mark (by simp [inside])
+      by_cases same : name == head.1
+      · simp [List.lookup, same, first]
+      · simp [List.lookup, same, others]
+  have none : Spelling.opaque.hasText = false := by
+    simp [Spelling.opaque, Spelling.hasText, Spelling.anyText]
+  unfold fieldSpelling
+  split <;> first
+    | exact none
+    | (simp only [Spelling.hasText, Spelling.anyText_eq_false, List.mem_map]
+       rintro _ ⟨name, _, rfl⟩
+       exact mark name marks plain)
+
+/-- The spelling of a state carries no text mark. -/
+theorem BeaconState.spelling_hasText {preset : Preset} {fork : Base.Fork} :
+    (ApiSpelling.spelling (BeaconState preset fork)).hasText = false :=
+  fieldSpelling_hasText (by simp [Spelling.hasText])
+
 /-- A document reads the same with some hex digits of its strings in uppercase.
 
-It holds for a refusal as well as a value. -/
-theorem ofApiJson_uppercase {α : Type} [SszType α] [ApiSpelling α] {left right : Json}
+It holds for a type that writes no text, for a refusal as well as a value.
+
+Builder entries and configurations are left out, since the case of a URL is part of the URL. -/
+theorem ofApiJson_uppercase {α : Type} [SszType α] [ApiSpelling α]
+    (plain : (ApiSpelling.spelling α).hasText = false) {left right : Json}
     (same : SameUpToCase left right) : ofApiJson α left = ofApiJson α right := by
-  simp only [ofApiJson, valueOf_sameUpToCase _ _ same]
+  simp only [ofApiJson, valueOf_sameUpToCase _ plain same]
 
 /-- A metadata key that was written reads back, and one that was not written reads as absent. -/
 theorem readKey_mkObj {β : Type} {pairs : List (String × Json)}

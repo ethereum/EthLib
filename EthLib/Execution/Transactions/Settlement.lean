@@ -85,9 +85,7 @@ def baseFeeOf {fork : Fork} (env : BlockEnvironment fork) : Nat :=
 
 /-- The base fee per blob gas of a block at `fork`, or 0 before Dencun, which has no blobs. -/
 def blobGasPriceOf {fork : Fork} (env : BlockEnvironment fork) : Nat :=
-  if h : .dencun ≤ fork then
-    getBaseFeePerBlobGas (env.blobSchedule h) (env.excessBlobGas h).toNat
-  else 0
+  if h : .dencun ≤ fork then env.blobBaseFee h else 0
 
 /-! ## The price per gas -/
 
@@ -139,14 +137,19 @@ From Glamsterdam, the execution gas is at most `2^24` minus the intrinsic gas.
 
 The rest of the gas goes to the state gas reservoir.
 
+A simulation can lift that cap, so that all the gas past the intrinsic gas is execution gas.
+
 [EIP-8037][eip8037] defines the split.
 
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-level-gas-accounting-reservoir-model -/
-def allocateGas (fork : Fork) (tx : Transaction) (intrinsic : Nat) : GasAllocation :=
+def allocateGas (fork : Fork) (tx : Transaction) (intrinsic : Nat) (lifted : LiftedRules := {}) :
+    GasAllocation :=
   let evmGas := tx.gas.toNat - intrinsic
   if fork ≥ .glamsterdam then
-    let execution := min (TX_MAX_GAS_LIMIT - intrinsic) evmGas
-    ⟨execution, evmGas - execution⟩
+    if lifted.gasCap then ⟨evmGas, 0⟩
+    else
+      let execution := min (TX_MAX_GAS_LIMIT - intrinsic) evmGas
+      ⟨execution, evmGas - execution⟩
   else ⟨evmGas, 0⟩
 
 /-! ## The gas used -/

@@ -179,7 +179,7 @@ theorem processTransaction_blockGas_execution_le_of_glamsterdam {env : BlockEnvi
   have hres := processMessageCall_reservoir_le hOutput
   dsimp only at hres
   rw [hBlock]
-  simp only [executionCapacity, hGlam, ↓reduceIte]
+  simp only [executionCapacity, hGlam, Bool.false_eq_true, ↓reduceIte]
   rw [← hIntrinsic] at hI
   simp only [GasCosts.TX_MAX_GAS_LIMIT] at hMax hexec ⊢
   omega
