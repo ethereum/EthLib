@@ -140,7 +140,7 @@ theorem processUpgrades_exists_ok {property : ForkedBeaconState preset → Prop}
 Inside an epoch it keeps both lists.
 
 At an epoch boundary the current list becomes the previous one, and the current list is emptied. -/
-private theorem advanceSlot_pending {fork : Fork} {state after : BeaconState preset fork}
+theorem advanceSlot_pending {fork : Fork} {state after : BeaconState preset fork}
     (before : fork < .altair) (computed : advanceSlot config checks state = .ok after) :
     ((getCurrentEpoch after).toNat = (getCurrentEpoch state).toNat ∧
       after.previousEpochAttestations before = state.previousEpochAttestations before ∧
