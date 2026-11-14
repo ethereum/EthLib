@@ -401,7 +401,7 @@ The sender gets back the gas left and the reservoir left, with its refund.
 
 Each call runs the precompile that the given map assigns to its code address.
 
-A simulation can lift the cap on the execution gas. -/
+A simulation can lift the cap on the execution gas, and charge a fee cap of 0 at a base fee of 0. -/
 def runTransaction {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
     (env : BlockEnvironment fork) (block : BlockState) (included : Included) (tx : Transaction)
     (precompiles : Address → Option Address := some) (lifted : LiftedRules := {}) :
@@ -409,7 +409,7 @@ def runTransaction {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter
   let state := TransactionState.ofBlock block
   let sender := included.sender
   let target ← messageTarget sender (state.getAccount sender).nonce tx
-  let state ← (buyGas env state sender tx).mapError .state
+  let state ← (buyGas env state sender tx lifted).mapError .state
   let txEnv : TransactionEnvironment fork :=
     { origin := sender, gasPrice := included.gasPrice,
       blobVersionedHashes := fun _ => tx.blobHashes, precompiles }
@@ -421,8 +421,8 @@ def runTransaction {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter
     (paidWrites sender target tx)
   let gasLeft := output.gasLeft + output.reservoir
   let blockGas := transactionBlockGas fork sender tx gasLeft output.refund output.stateGasUsed
-  let (state, gasUsed) ← (settleGas env output.state sender tx gasLeft output.refund).mapError
-    .state
+  let (state, gasUsed) ←
+    (settleGas env output.state sender tx gasLeft output.refund lifted).mapError .state
   let state ← (deleteAccounts fork state output).mapError .state
   return ⟨state, gasUsed, blockGas, output.logs, output.error⟩
 

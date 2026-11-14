@@ -91,6 +91,7 @@ private theorem buyGas_ne_noAccount (env : BlockEnvironment fork) (state : Trans
     buyGas env state sender tx ≠ .error (.noAccount other) := by
   intro h
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, hmid⟩ := State.TransactionState.incrementNonce_isOk fork state sender
   simp only [hmid, bind, Except.bind] at h
   refine modifyState_ne_noAccount (fun _ h => ?_) h
@@ -102,6 +103,7 @@ private theorem settleGas_ne_noAccount (env : BlockEnvironment fork) (state : Tr
     settleGas env state sender tx gasLeft refund ≠ .error (.noAccount other) := by
   intro he
   unfold settleGas at he
+  rw [paidBaseFee_empty] at he
   rcases Base.bind_eq_error he with he | ⟨mid, -, he⟩
   · exact creditEther_ne_noAccount _ _ _ _ he
   rcases Base.bind_eq_error he with he | ⟨paid, -, he⟩

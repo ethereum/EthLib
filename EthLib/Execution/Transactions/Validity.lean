@@ -283,6 +283,10 @@ structure LiftedRules where
   gasCap : Bool := false
   /-- Lift the cap at `2^32 - 1` on the gas limit, which a simulation does in both modes. -/
   totalGasCap : Bool := false
+  /-- Let a transaction with a maximum fee per gas of 0 pay for its gas at a base fee of 0.
+
+  It then passes the check of the base fee, and pays nothing for its gas. -/
+  zeroFee : Bool := false
   deriving DecidableEq, Repr
 
 /-- Check the type, the fees, the gas limit and the nonce of a transaction from `sender` at `fork`.

@@ -101,6 +101,7 @@ private theorem buyGas_ok {env : BlockEnvironment fork} {state : TransactionStat
   | error e =>
     exfalso
     unfold buyGas at hb
+    rw [paidBaseFee_empty] at hb
     obtain ⟨mid, hmid⟩ := State.TransactionState.incrementNonce_isOk fork state sender
     simp only [hmid, bind, Except.bind] at hb
     have hf := State.TransactionState.modifyState_eq_error.mp hb
@@ -383,6 +384,7 @@ private theorem runTransaction_ne_insufficientBalance [LawfulGasMeter Meter]
   · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
     unfold settleGas at he
+    rw [paidBaseFee_empty] at he
     rcases Base.bind_eq_error he with he | ⟨mid, -, he⟩
     · exact creditEther_ne_insufficientBalance _ _ _ _ he
     rcases Base.bind_eq_error he with he | ⟨paid, -, he⟩
