@@ -9,6 +9,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the SSZ exports read a Python value directly, without writing it as JSON first ([#2475](https://github.com/ethereum/EthLib/issues/2475)).
+  In Lean, `valueOfJson` becomes `valueOf`, `jsonOfValue` and `jsonOfValues` become `pyOfValue` and `pyOfValues`, and `descOf`, `tagged`, `optionalNat`, `pair` and `readValue` take a `PyValue`.
+  Bytes given as `bytes` are taken as they are, instead of being written as hex and read back.
+  Nothing breaks in Python: every input gives the same result or the same error as before.
+
 - In Lean, the shuffle, custody, keystore and discv5 callers of SHA-256 keep the digest as a `Vector UInt8 32` ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
   `Shuffle.bucketBits` and `Keystore.passwordChecksum` return one, and `Shuffle.bitAt` and `DataAvailability.firstUInt64` take one.
   A caller that needs the bytes applies `packBytes`, and `Sha256.packBytes_hash32` gives back the byte-array digest.
