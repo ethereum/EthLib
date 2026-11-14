@@ -151,6 +151,15 @@ def blockEnvironment {fork : Fork} (config : ChainConfig) (hashes : List Hash32)
 
 /-! ## The body -/
 
+/-- What a transaction of a body returns beside its receipt. -/
+structure TransactionResult where
+  /-- The output of its message: the data that it returned, or the data of its revert. -/
+  output : ByteArray
+  /-- The gas that it used before its refund, at least the call data floor from Pectra. -/
+  gasBeforeRefund : Nat
+  /-- The error that stopped its message, or none when the message succeeded. -/
+  error : Option EvmError
+
 /-- What the body of a block gives, at `fork`. -/
 structure BodyOutput (fork : Fork) where
   /-- The block state and the builder of the block access list, after the body so far. -/
@@ -163,6 +172,8 @@ structure BodyOutput (fork : Fork) where
   receipts : List (UInt8 × Receipt fork)
   /-- The logs of the transactions, oldest first. -/
   logs : List Log
+  /-- The result of each transaction, oldest first, which no rule of the block reads. -/
+  results : List TransactionResult
 
 /-- The block state, with the writes of the body so far. -/
 def BodyOutput.block {fork : Fork} (output : BodyOutput fork) : BlockState :=
@@ -191,7 +202,9 @@ The block counts the gas of the transaction by its counts of gas.
 
 Its receipt adds up the gas used after the refunds, as EIP-8037 keeps it.
 
-Before Byzantium, its receipt holds the state root after it. -/
+Before Byzantium, its receipt holds the state root after it.
+
+It also records the result of the transaction. -/
 def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
     (before : BodyOutput fork) (tx : Transaction) (overrides : BodyOverrides := {}) :
     Except BlockError (BodyOutput fork) := do
@@ -209,7 +222,8 @@ def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
   return { body, gas, cumulativeGasUsed
            receipts :=
              before.receipts ++ [(tx.type, makeReceipt outcome cumulativeGasUsed out.logs.toList)]
-           logs := before.logs ++ out.logs.toList }
+           logs := before.logs ++ out.logs.toList
+           results := before.results ++ [⟨out.messageOutput, out.gasBeforeRefund, out.error⟩] }
 
 /-- Run the transactions of a block in order, from the body so far. -/
 def applyTransactions {fork : Fork} (env : BlockEnvironment fork) (body : BodyState)
@@ -217,7 +231,7 @@ def applyTransactions {fork : Fork} (env : BlockEnvironment fork) (body : BodySt
     Except BlockError (BodyOutput fork) :=
   transactions.zipIdx.foldlM
     (fun before (tx, index) => applyTransaction env index before tx overrides)
-    ⟨body, .zero, 0, [], []⟩
+    ⟨body, .zero, 0, [], [], []⟩
 
 /-- Run a writing step on a block state, as a transaction of its own. -/
 def onBlock (block : BlockState)

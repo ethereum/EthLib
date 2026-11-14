@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Rpc.Simulate
 public import EthLib.Execution.Proofs.Transactions.Overrides
 public import EthLib.Execution.Proofs.Transactions.Process
+public import EthLib.Execution.Proofs.Transactions.StateGas
 public import EthLib.Execution.Proofs.Transactions.Unsigned
 
 /-!
@@ -26,9 +27,9 @@ Without validation, a block whose base fee is not overridden has a base fee of 0
 
 That holds whatever the base fee of the block before it.
 
-With validation and no overrides, a simulated block agrees with the state transition.
+With validation and no overrides, a simulated block from Paris on passes the checks of a block.
 
-Its calls must then be signed and the block must pass its checks.
+Its calls must then be signed, and it agrees with the state transition.
 
 Its transition may still fail at a sender with code.
 -/
@@ -61,7 +62,7 @@ private theorem simulateBlock_spec {chain chain' : BlockChain} {base : RecentBlo
                hash := hash
                state := result.post
                receipts := result.output.receipts
-               logs := result.output.logs }, senders⟩ ∧
+               logs := result.output.logs }, senders, result.output.results⟩ ∧
         chain' = c.addBlock (⟨fillHeader (simulatedHeader chain.config fork base parent parentHash
           number time request.blockOverrides validation) result.output result.roots, txs, [], ws⟩ :
           Block fork Transaction) result.post := by
@@ -632,7 +633,7 @@ private theorem simulateBlock_valid_spec {chain chain' : BlockChain} {base : Rec
              hash := hash
              state := result.post
              receipts := result.output.receipts
-             logs := result.output.logs }, filled.map (·.2)⟩ := by
+             logs := result.output.logs }, filled.map (·.2), result.output.results⟩ := by
   have hState : overrideState fork chain.state [] = chain.state := by
     simp [overrideState, applyOverrides]
   have hMoves : movedPrecompiles (precompileMoves []) = some := by
@@ -683,6 +684,273 @@ private theorem outputRoots_of_transactionsRoot {fork : Fork} {txs txs' : List T
   obtain ⟨withdrawalRoot, hWithdrawal, h⟩ := bind_ok_iff.mp h
   cases h
   simp only [hTx, hPost, hReceipt, hWithdrawal, bind, Except.bind, pure, Except.pure]
+
+/-- The excess blob gas that a parent gives is at most its excess plus its blob gas used. -/
+private theorem calcExcessBlobGas_le_add {fork : Fork} {schedule : BlobSchedule}
+    {excess used baseFee : Nat} :
+    Fees.BlobBaseFee.calcExcessBlobGas fork schedule excess used baseFee ≤ excess + used := by
+  have hd : used * (schedule.max - schedule.target) / schedule.max ≤ used :=
+    Nat.div_le_of_le_mul (by
+      rw [Nat.mul_comm schedule.max]
+      exact Nat.mul_le_mul_left _ (Nat.sub_le _ _))
+  unfold Fees.BlobBaseFee.calcExcessBlobGas
+  dsimp only
+  split
+  · exact Nat.zero_le _
+  · split <;> omega
+
+/-- Dropping the signature keeps the gas limit. -/
+private theorem Transaction.gas_unsigned (tx : Transaction) : tx.unsigned.gas = tx.gas := by
+  cases tx <;> rfl
+
+/-- A check with the sender given that succeeds passes the validity rules and the gas rules. -/
+private theorem checkInclusion_some_ok {fork : Fork} {chainId : UInt64}
+    {env : Evm.BlockEnvironment fork} {used : BlockGas} {state : State.TransactionState}
+    {tx : Transaction} {sender : Address} {inc : Included}
+    (h : checkInclusion chainId env used state tx (some sender) = .ok inc) :
+    validateTransaction fork inc.sender tx = .ok inc.intrinsicGas ∧
+      checkBlockGas env used tx = .ok () := by
+  unfold checkInclusion at h
+  by_cases hg : fork ≥ .glamsterdam
+  · simp only [hg, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at h
+    obtain ⟨_, -, _, rfl, _, hv, ⟨⟩, hb, _, -, _, rfl, _, -, _, -, rfl⟩ := h
+    exact ⟨mapError_ok_iff.mp hv, hb⟩
+  · simp only [hg, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at h
+    obtain ⟨_, hv, ⟨⟩, hb, _, -, _, rfl, _, -, _, -, _, rfl, _, -, _, -, rfl⟩ := h
+    refine ⟨?_, hb⟩
+    rw [validateTransaction_sender_of_lt_glamsterdam (Nat.lt_of_not_le hg) _ default]
+    exact mapError_ok_iff.mp hv
+
+/-- A step of a simulated body keeps its execution gas and its state gas within the gas limit.
+
+The step has its sender given, keeps each precompile and lifts only the cap on gas.
+
+The gas limit of its transaction is at most `2^32 - 1`, and the counts before it fit the limit. -/
+private theorem applyTransaction_simulated_gas {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {index : Nat} {before after : BodyOutput fork} {tx : Transaction} {sender : Address}
+    {overrides : BodyOverrides} (hs : overrides.senders index = some sender)
+    (hp : overrides.precompiles = some) (hl : overrides.lifted = { totalGasCap := true })
+    (hGas : tx.gas.toNat ≤ Evm.GasCosts.TX_MAX_TOTAL_GAS_LIMIT)
+    (hExecution : before.gas.execution ≤ env.gasLimit) (hState : before.gas.state ≤ env.gasLimit)
+    (h : applyTransaction env index before tx overrides = .ok after) :
+    after.gas.execution ≤ env.gasLimit ∧ after.gas.state ≤ env.gasLimit := by
+  unfold applyTransaction at h
+  rw [hs, hl, hp, checkInclusion_totalGasCap hGas] at h
+  simp only [processTransaction_totalGasCap] at h
+  obtain ⟨included, hIncluded, h⟩ := bind_ok_iff.mp h
+  obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
+  obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
+  have hAfter : after.gas = before.gas.add out.blockGas := by
+    split at h <;> (obtain ⟨_, -, h⟩ := bind_ok_iff.mp h; cases h; rfl)
+  obtain ⟨hValid, hBlock⟩ := checkInclusion_some_ok (mapError_ok_iff.mp hIncluded)
+  obtain ⟨hFits, hStateFits, -⟩ := checkBlockGas_ok_iff.mp hBlock
+  have hRun := mapError_ok_iff.mp hOut
+  rw [hAfter, BlockGas.add]
+  dsimp only
+  by_cases hGlam : .glamsterdam ≤ fork
+  · have h1 := processTransaction_blockGas_execution_le_of_glamsterdam hGlam hValid hRun
+    have h2 := processTransaction_blockGas_state_le_of_glamsterdam hGlam hRun
+    have h3 := hStateFits hGlam
+    constructor <;> omega
+  · have hlt := Nat.lt_of_not_le hGlam
+    rw [executionCapacity_of_lt hlt] at hFits
+    have h1 := processTransaction_blockGas_execution_le_of_lt hlt
+      (validateTransaction_ok hValid).2.1 hRun
+    have h2 := processTransaction_blockGas_state_of_lt hlt hRun
+    constructor <;> omega
+
+/-- A simulated body keeps its execution gas and its state gas within the gas limit.
+
+Each transaction has its sender given, and has a gas limit of at most `2^32 - 1`.
+
+The body keeps each precompile and lifts only the cap on gas. -/
+private theorem applyTransactions_simulated_gas {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {body : BodyState} {txs : List Transaction} {overrides : BodyOverrides}
+    {out : BodyOutput fork} (hs : ∀ i < txs.length, ∃ sender, overrides.senders i = some sender)
+    (hp : overrides.precompiles = some) (hl : overrides.lifted = { totalGasCap := true })
+    (hGas : ∀ tx ∈ txs, tx.gas.toNat ≤ Evm.GasCosts.TX_MAX_TOTAL_GAS_LIMIT)
+    (h : applyTransactions env body txs overrides = .ok out) :
+    out.gas.execution ≤ env.gasLimit ∧ out.gas.state ≤ env.gasLimit := by
+  unfold applyTransactions at h
+  refine foldlM_ok_invariant_of_mem (fun before : BodyOutput fork =>
+    before.gas.execution ≤ env.gasLimit ∧ before.gas.state ≤ env.gasLimit) ?_
+    ⟨Nat.zero_le _, Nat.zero_le _⟩ h
+  rintro before ⟨tx, index⟩ after hm ⟨hE, hS⟩ hStep
+  obtain ⟨hi, hx⟩ := List.mem_zipIdx' hm
+  obtain ⟨sender, hSender⟩ := hs index hi
+  have hMem : tx ∈ txs := by
+    rw [hx]
+    exact List.getElem_mem hi
+  exact applyTransaction_simulated_gas hSender hp hl (hGas tx hMem) hE hS hStep
+
+/-- A body that runs with overrides has the gas counts of the run of its transactions. -/
+private theorem applyBody_gas {fork : Fork} {config : ChainConfig}
+    {env : Evm.BlockEnvironment fork} {block : Block fork Transaction} {start : State.BlockState}
+    {overrides : BodyOverrides} {output : BlockOutput fork}
+    (h : applyBody config env block start overrides = .ok output) :
+    ∃ body txs, applyTransactions env body block.transactions overrides = .ok txs ∧
+      output.gas = txs.gas := by
+  unfold applyBody at h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨txs, hTxs, h⟩ := bind_ok_iff.mp h
+  refine ⟨body, txs, hTxs, ?_⟩
+  dsimp only at h
+  split at h
+  · obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨⟨_, _⟩, -, h⟩ := bind_ok_iff.mp h
+    dsimp only at h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    cases h
+    rfl
+  · obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨⟨_, _⟩, -, h⟩ := bind_ok_iff.mp h
+    dsimp only at h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    cases h
+    rfl
+
+/-- With validation and no overrides, a simulated block runs its calls under its default header.
+
+That header follows the last block of the chain, and the hash of that block is its parent hash. -/
+private theorem simulateBlock_valid_header {chain chain' : BlockChain} {base : RecentBlock}
+    {fork : Fork} {number time budget budget' : Nat} {calls : List GenericTransaction}
+    {b : SimulatedBlock}
+    (h : simulateBlock chain base fork number time { calls } true budget =
+      .ok (chain', budget', b)) :
+    ∃ (parent : RecentBlock) (parentHash : Hash32) (filled : List (Transaction × Address))
+      (result : BodyResult fork) (hash : Hash32),
+      chain.recent.getLast? = some parent ∧ parent.header.hash = .ok parentHash ∧
+      runBody chain ⟨simulatedHeader chain.config fork base parent parentHash number time {} true,
+          filled.map (·.1), [], fun _ => []⟩
+        { senders := ((filled.map (·.2))[·]?), precompiles := some,
+          lifted := { totalGasCap := true } } = .ok result ∧
+      b = ⟨{ fork := fork
+             block := ⟨fillHeader (simulatedHeader chain.config fork base parent parentHash number
+               time {} true) result.output result.roots, filled.map (·.1), [], fun _ => []⟩
+             hash := hash
+             state := result.post
+             receipts := result.output.receipts
+             logs := result.output.logs }, filled.map (·.2), result.output.results⟩ := by
+  have hState : overrideState fork chain.state [] = chain.state := by
+    simp [overrideState, applyOverrides]
+  have hMoves : movedPrecompiles (precompileMoves []) = some := by
+    funext a
+    rfl
+  simp only [simulateBlock] at h
+  split at h
+  · rename_i parent hP
+    simp only [bind_ok_iff, mapError_ok_iff] at h
+    obtain ⟨parentHash, hph, _, -, _, -, _, -, filled, -, result, hResult, hash, -, hEq⟩ := h
+    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at hEq
+    obtain ⟨-, -, rfl⟩ := hEq
+    rw [hState, hMoves] at hResult
+    exact ⟨parent, parentHash, filled.1, result, hash, hP, hph, hResult, rfl⟩
+  · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- From Paris on, a block without ommers that fits the size limit passes its checks.
+
+Its parent is the last recent block, at a fork no later than its own.
+
+Its header must pass the checks against that parent. -/
+private theorem checkBlock_of_checkHeader {fork : Fork} {config : ChainConfig}
+    {recent : List RecentBlock} {block : Block fork Transaction} {parent : RecentBlock}
+    (hSize : (do validateBlockSize (← bodyItems block)) = .ok ())
+    (hParent : recent.getLast? = some parent) (hFork : parent.fork ≤ fork)
+    (hParis : .paris ≤ fork)
+    (hHeader : checkHeader hFork parent.header block.header
+      (Fees.BlobBaseFee.chainBlobSchedule config fork block.header.number
+        block.header.timestamp.toNat) = .ok ())
+    (hOmmers : block.ommers = []) :
+    checkBlock config false recent block = .ok () := by
+  obtain ⟨items, hItems, hValid⟩ := bind_ok_iff.mp hSize
+  have hNot : ¬fork < .paris := Nat.not_lt.mpr hParis
+  simp only [checkBlock, hItems, hValid, hParent, hFork, ↓reduceDIte, Bool.false_eq_true,
+    ↓reduceIte, hHeader, daoExtraDataValid, hNot, hOmmers, List.isEmpty_nil, bind, Except.bind]
+  rfl
+
+/-- With validation and no overrides, a simulated block passes the checks of a block.
+
+Its calls must then be signed.
+
+The parent must be the last block of the chain, from London on, at a fork no later than the block's.
+
+The block must be from Paris on, one number above the parent, and later in time.
+
+Its time must fit the 256 bits of the header.
+
+The parent's gas limit must be at least 5,000, the least that the gas limit rule allows.
+
+The excess blob gas and the blob gas used of the parent must add up to less than `2^64`.
+
+The block takes the transactions `txs` and any root `root`, and must fit the size limit.
+
+Each of `txs` is the signed form of a call, with a gas limit of at most `2^32 - 1`. -/
+theorem checkBlock_simulateBlock {chain chain' : BlockChain} {base parent : RecentBlock}
+    {fork : Fork} {number time budget budget' : Nat} {calls : List GenericTransaction}
+    {b : SimulatedBlock} {txs : List Transaction} {root : Hash32}
+    (h : simulateBlock chain base fork number time { calls } true budget =
+      .ok (chain', budget', b))
+    (hParent : chain.recent.getLast? = some parent)
+    (hLondon : .london ≤ parent.fork) (hParentFork : parent.fork ≤ fork) (hParis : .paris ≤ fork)
+    (hNumber : number = parent.header.number + 1)
+    (hTime : parent.header.timestamp.toNat < time) (hTimeBits : time < 2 ^ 256)
+    (hGasLimit : Fees.GasLimit.LIMIT_MINIMUM ≤ parent.header.gasLimit)
+    (hExcess : parentExcessBlobGas parent.header + parentBlobGasUsed parent.header < 2 ^ 64)
+    (hUnsigned : txs.map Transaction.unsigned = b.record.block.transactions)
+    (hGas : ∀ tx ∈ txs, tx.gas.toNat ≤ Evm.GasCosts.TX_MAX_TOTAL_GAS_LIMIT)
+    (hSize : (do validateBlockSize (← bodyItems (b.withTransactions txs root))) = .ok ()) :
+    checkBlock chain.config false chain.recent (b.withTransactions txs root) = .ok () := by
+  obtain ⟨parent', parentHash, filled, result, hash, hP, hph, hRun, rfl⟩ :=
+    simulateBlock_valid_header h
+  rw [hParent, Option.some.injEq] at hP
+  subst hP
+  have hUsed : result.output.gas.gasUsed ≤ parent.header.gasLimit := by
+    have hU : txs.map Transaction.unsigned = filled.map (·.1) := hUnsigned
+    unfold runBody at hRun
+    obtain ⟨hashes, -, hRun⟩ := bind_ok_iff.mp hRun
+    obtain ⟨output, hOutput, hRun⟩ := bind_ok_iff.mp hRun
+    obtain ⟨roots, -, hRun⟩ := bind_ok_iff.mp hRun
+    cases hRun
+    obtain ⟨body, out, hTxs, hGasEq⟩ := applyBody_gas hOutput
+    have hs : ∀ i < (filled.map (·.1)).length,
+        ∃ sender, (filled.map (·.2))[i]? = some sender := fun i hi =>
+      ⟨_, List.getElem?_eq_getElem (by simpa using hi)⟩
+    have hGas' : ∀ tx ∈ filled.map (·.1),
+        tx.gas.toNat ≤ Evm.GasCosts.TX_MAX_TOTAL_GAS_LIMIT := by
+      intro tx hm
+      rw [← hU, List.mem_map] at hm
+      obtain ⟨t, ht, rfl⟩ := hm
+      rw [Transaction.gas_unsigned]
+      exact hGas t ht
+    obtain ⟨hE, hS⟩ := applyTransactions_simulated_gas hs rfl rfl hGas' hTxs
+    dsimp only
+    rw [hGasEq, BlockGas.gasUsed]
+    exact Nat.max_le.mpr ⟨hE, hS⟩
+  refine checkBlock_of_checkHeader hSize hParent hParentFork hParis ?_ rfl
+  rw [checkHeader_eq_ok_iff]
+  dsimp only [SimulatedBlock.withTransactions, fillHeader, simulatedHeader]
+  have hT : (BitVec.ofNat 256 time).toNat = time := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hTimeBits]
+  refine ⟨fun _ => hLondon, by omega, fun hD hL => ?_, hUsed, ?_, fun _ => rfl,
+    by rw [hT]; exact hTime, hNumber, by simp, fun h => absurd h (Nat.not_lt.mpr hParis),
+    fun _ => ⟨by simp only [ge_iff_le, hParis, ↓reduceIte], rfl, rfl⟩, hph⟩
+  · simp only [hL, ↓reduceDIte, hT]
+    have hle : expectedExcessBlobGas hL hD parent.header
+        (Fees.BlobBaseFee.chainBlobSchedule chain.config fork number time) < 2 ^ 64 :=
+      Nat.lt_of_le_of_lt calcExcessBlobGas_le_add hExcess
+    exact UInt64.toNat_ofNat_of_lt' hle
+  · have hNot : ¬(parent.fork < .london ∧ .london ≤ fork) := fun h => absurd hLondon
+      (Nat.not_le.mpr h.1)
+    simp only [Option.getD_none, Fees.GasLimit.checkGasLimitAcross,
+      Fees.GasLimit.parentGasLimitForCheck, hNot, ↓reduceIte, Fees.GasLimit.checkGasLimit,
+      Fees.GasLimit.LIMIT_ADJUSTMENT_FACTOR, Fees.GasLimit.LIMIT_MINIMUM, Bool.and_eq_true,
+      decide_eq_true_eq]
+    simp only [Fees.GasLimit.LIMIT_MINIMUM] at hGasLimit
+    exact ⟨by omega, decide_eq_true hGasLimit⟩
 
 /-- When a block passes its checks and its body fails, its transition fails with that error. -/
 private theorem stateTransition_of_runBody_error {fork : Fork} {chain : BlockChain}
@@ -793,7 +1061,17 @@ Each gas limit must be at most `2^32 - 1`, the cap from Glamsterdam that a simul
 
 The blob gas must fit the 64 bits of the header, which a large blob schedule of a chain allows.
 
-The block with `txs` and their root `root` must pass the checks of a block, its parent included.
+The parent must be the last block of the chain, from London on, at a fork no later than the block's.
+
+The block must be from Paris on, one number above the parent, and later in time.
+
+Its time must fit the 256 bits of the header.
+
+The parent's gas limit must be at least 5,000, the least that the gas limit rule allows.
+
+The excess blob gas and the blob gas used of the parent must add up to less than `2^64`.
+
+The block with `txs` and their root `root` must fit the size limit, which depends on the signatures.
 
 That block has the gas used, the other roots and the logs Bloom of the simulated block.
 
@@ -818,11 +1096,19 @@ theorem stateTransition_of_simulateBlock {chain chain' : BlockChain} {base : Rec
     (hGas : ∀ tx ∈ txs, tx.gas.toNat ≤ Evm.GasCosts.TX_MAX_TOTAL_GAS_LIMIT)
     (hBlob : (txs.map Fees.BlobBaseFee.calculateTotalBlobGas).sum < 2 ^ 64)
     (hRoot : transactionsRoot txs = .ok root)
-    (hCheck : checkBlock chain.config false chain.recent (b.withTransactions txs root) = .ok ())
+    {parent : RecentBlock} (hParent : chain.recent.getLast? = some parent)
+    (hLondon : .london ≤ parent.fork) (hParentFork : parent.fork ≤ fork) (hParis : .paris ≤ fork)
+    (hNumber : number = parent.header.number + 1)
+    (hTime : parent.header.timestamp.toNat < time) (hTimeBits : time < 2 ^ 256)
+    (hGasLimit : Fees.GasLimit.LIMIT_MINIMUM ≤ parent.header.gasLimit)
+    (hExcess : parentExcessBlobGas parent.header + parentBlobGasUsed parent.header < 2 ^ 64)
+    (hSize : (do validateBlockSize (← bodyItems (b.withTransactions txs root))) = .ok ())
     (available : chain.state.HasCodes) :
     stateTransition chain (b.withTransactions txs root) false = .ok b.record.state ∨
       ∃ i, stateTransition chain (b.withTransactions txs root) false =
         .error (.invalidTransaction i .senderNotEoa) := by
+  have hCheck := checkBlock_simulateBlock h hParent hLondon hParentFork hParis hNumber hTime
+    hTimeBits hGasLimit hExcess hUnsigned hGas hSize
   rcases stateTransition_of_simulateBlock_or h hFork hHegota hUnsigned hSenders hGas hBlob hRoot
     hCheck with ok | ⟨i, e, he, hE⟩
   · exact .inl ok

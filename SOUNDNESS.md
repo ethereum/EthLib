@@ -4071,10 +4071,13 @@ With validation and no overrides, a simulated block agrees with the state transi
 The fork must be active at the block and come before Hegotá.
 Its calls must be signed transactions whose signatures give their senders and name the chain.
 Each gas limit must be at most `2^32 - 1` at every fork, and their blob gas must fit 64 bits.
-The block with those transactions and their root must pass the checks of a block, its size and its header against its parent included, which the simulation does not run.
+The parent must be the last block of the chain, from London on, at a fork no later than the block's.
+The block must be from Paris on, one number above its parent, later in time, and its time must fit 256 bits.
+The parent's gas limit must be at least 5,000, and its excess blob gas and blob gas used must add up to less than `2^64`.
+The block with those transactions and their root must fit the size limit, which depends on the signatures.
 When the state holds the code of each account, its transition gives the state after the simulated block, or fails at a sender with code by EIP-3607, which the simulation skips.
-The checks of a block stay a hypothesis: the size limit of a block depends on the signatures, and before Paris the simulated difficulty is that of the base block.
-The simulated header is built to pass the other checks against its parent, but no theorem states it yet.
+The parent, fork, number, time, gas limit, blob gas and size hypotheses alone make the block with those transactions pass the checks of a block (`checkBlock_simulateBlock`).
+Before Paris, the simulated difficulty is that of the base block, which the difficulty rule need not accept, so both theorems start at Paris.
 
 Where the source is silent or conflicts with itself for the blocks, EthLib follows the fixtures, else decides:
 
@@ -4092,9 +4095,17 @@ Where the source is silent or conflicts with itself for the blocks, EthLib follo
 - the base block must be canonical, so that the hashes before each block are those of its chain;
 - from Fusaka to BPO5, the default gas of a call is at most `2^24`, the cap of EIP-7825;
 - before London, a call without a type or a fee cap is legacy, or type 1 with an access list from Berlin;
-- before Paris, the fee recipient gets the block reward, as in a real block.
+- before Paris, the fee recipient gets the block reward, as in a real block;
+- `maxUsedGas` is the gas used with no refund, so from Pectra it is at least the call data floor, as the fixtures show;
+- a failed call returns no data, and a revert puts its output in the `data` of its error, as the fixtures show, though the schema lists only a code and a message;
+- a failure other than a revert gets `-32015` with a message of EthLib's choice, which the source leaves to the client;
+- `traceTransfers` adds no log yet, so before Amsterdam the answer lacks the `0xeeee…eeee` transfer logs that the source asks for; every fixture of the pin is after Amsterdam, where EIP-7708 logs the transfers;
+- a revert error has the message "execution reverted", without the decoded reason that the fixtures add.
 
-The results of the calls are not yet in the blocks.
+Each simulated block holds the result of each call: the output of its message, its gas used before the refund, and its error.
+The body records them without changing anything else that it computes.
+From Byzantium, the status of a call result agrees with its receipt: the receipt succeeds exactly when the result has no error (`applyTransaction_status`, `Proofs/Blocks/Transition.lean`).
+A body has as many results as receipts (`applyTransactions_results_length`), and a refund never raises the gas used (`runTransaction_gasUsed_le`, `Proofs/Transactions/Process.lean`).
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).

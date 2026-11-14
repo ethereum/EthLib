@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Rpc.Simulate
 public import EthLib.Execution.Rpc.Block
+public import EthLib.Execution.Rpc.Receipt
 
 /-!
 # `Execution.Rpc.Simulate.Blocks`
@@ -257,17 +258,19 @@ def fillCalls {fork : Fork} (env : BlockEnvironment fork) (validation : Bool)
     let used := after.cumulativeGasUsed - before.cumulativeGasUsed
     ensure (used ≤ budget) (clientLimitExceeded.toRpcError (some (.str "gas budget exceeded")))
     return (after, filled ++ [(tx, sender)], budget - used)
-  let (_, filled, budget) ← calls.zipIdx.foldlM step (⟨body, .zero, 0, [], []⟩, [], budget)
+  let (_, filled, budget) ← calls.zipIdx.foldlM step (⟨body, .zero, 0, [], [], []⟩, [], budget)
   return (filled, budget)
 
 /-! ## The blocks -/
 
-/-- A simulated block, with the sender of each of its transactions. -/
+/-- A simulated block, with the sender and the result of each of its transactions. -/
 structure SimulatedBlock where
   /-- The block, its hash, the state after it, its receipts and its logs. -/
   record : BlockRecord
   /-- The sender of each transaction, in order. -/
   senders : List Address
+  /-- The result of each transaction, in order. -/
+  results : List TransactionResult
 
 /-- Simulate a block at `fork` with its number, its time and its request, on a chain.
 
@@ -307,7 +310,7 @@ def simulateBlock (chain : BlockChain) (base : RecentBlock) (fork : Fork) (numbe
   let record : BlockRecord :=
     { fork, block, hash, state := result.post, receipts := result.output.receipts
       logs := result.output.logs }
-  return (chain.addBlock block result.post, budget, ⟨record, senders⟩)
+  return (chain.addBlock block result.post, budget, ⟨record, senders, result.output.results⟩)
 
 /-- A simulated block with other transactions in place of its calls, with their root.
 
@@ -362,11 +365,70 @@ def ChainView.simulateBlocks (v : ChainView) (payload : SimulatePayload) (p : Bl
     (SimulateStep.next v.config plan.base.recent payload.validation choices.blockTime) start
   return s.blocks
 
+/-! ## The call results -/
+
+namespace SimulateCode
+
+/-- The code of a call that fails for a reason other than a revert. -/
+def callFailed : ErrorCode := ⟨-32015, "Execution error"⟩
+
+end SimulateCode
+
+/-- The error of a call that failed with `e`, with `output` the output of its message.
+
+A revert has the code 3, with that output as its data.
+
+Any other error has the code `-32015`, whose message the source leaves to the client. -/
+def callResultError (e : Evm.EvmError) (output : ByteArray) : RpcError :=
+  match e with
+  | .revert => revertError output
+  | _ => SimulateCode.callFailed.toRpcError
+
+/-- The result of a call as JSON, from its result, its gas used and its logs.
+
+A call that succeeds has the status `0x1` and returns the output of its message.
+
+A call that fails has the status `0x0`, no return data, no logs, and its error.
+
+The status follows the error, at every fork.
+
+The gas before the refund is the `maxUsedGas` of the source. -/
+def callResultJson (result : TransactionResult) (gasUsed : Nat) (logs : List LogInfo) : Json :=
+  let common := [("logs", listJson logInfoJson logs), ("gasUsed", quantityJson gasUsed),
+    ("maxUsedGas", quantityJson result.gasBeforeRefund)]
+  match result.error with
+  | none =>
+    Json.mkObj ([("returnData", dataJson result.output.toList)] ++ common ++
+      [("status", quantityJson 1)])
+  | some e =>
+    Json.mkObj ([("returnData", dataJson [])] ++ common ++
+      [("status", quantityJson 0), ("error", rpcErrorJson (callResultError e result.output))])
+
+/-- The results of the calls of a simulated block as JSON, in order.
+
+The logs of a call are those of its receipt, numbered among all the logs of the block.
+
+The body gives one result per receipt, so no call is left out. -/
+def SimulatedBlock.callsJson (b : SimulatedBlock) : Except RpcError Json := do
+  let r := b.record
+  let calls := (r.block.transactions.zip (r.receipts.zip b.results)).zipIdx
+  let (_, _, items) ← calls.foldlM (init := (0, 0, ([] : List Json)))
+    fun (before, firstLog, items) ((tx, (_, receipt), result), index) => do
+      let hash ← (transactionHash tx).mapError fun _ =>
+        BlockRecord.encodingError "transaction hash"
+      let logs := receipt.logs.zipIdx.map fun (log, i) =>
+        { log, logIndex := firstLog + i, transactionIndex := index, transactionHash := hash
+          blockHash := r.hash, blockNumber := r.block.header.number
+          blockTimestamp := r.block.header.timestamp.toNat : LogInfo }
+      let item := callResultJson result (receipt.cumulativeGasUsed - before) logs
+      return (receipt.cumulativeGasUsed, firstLog + receipt.logs.length, items ++ [item])
+  return .arr items.toArray
+
 /-- A simulated block as a block object, with the objects of its transactions when asked for.
 
 Without validation, a call with a fee cap of 0 reports a gas price of 0, which it paid.
 
-The results of the calls are left out. -/
+It also holds the results of its calls. -/
 def SimulatedBlock.json (b : SimulatedBlock) (full : Bool) (validation : Bool) :
     Except RpcError Json := do
   let r := b.record
@@ -381,8 +443,9 @@ def SimulatedBlock.json (b : SimulatedBlock) (full : Bool) (validation : Bool) :
                    gasPrice := effectiveGasPrice
                      (if !validation && tx.maxFeePerGas == 0 then 0 else r.baseFee) tx, tx }
     else listJson hash32Json <$> r.transactionHashes
+  let calls ← b.callsJson
   return Json.mkObj (headerFields r.hash r.block.header ++
-    blockFields size [] transactions r.block.withdrawals)
+    blockFields size [] transactions r.block.withdrawals ++ [("calls", calls)])
 
 /-- The answer of `eth_simulateV1`: the simulated blocks, gap blocks included. -/
 def ChainView.simulate (v : ChainView) (payload : SimulatePayload) (p : BlockParam)

@@ -188,8 +188,9 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
   have targetSets := sets kept
   rw [epoch] at rootOk targetSets
   have before := chain current _ rootOk
-  have settled' := UInt64.le_iff_toNat_le.mp settled
-  have previous := getPreviousEpoch_toNat state
+  -- In both cases the source epoch of the link is below its target epoch.
+  have below := UInt64.lt_iff_toNat_lt.mp (separated.source_lt settled
+    (UInt64.lt_iff_toNat_lt.mpr (by rw [one]; exact late)) current)
   -- The new checkpoint is the checkpoint of its epoch, with the root of its first slot.
   have target : after.currentJustifiedCheckpoint.toFfg block =
       ⟨block after.currentJustifiedCheckpoint.root,
@@ -198,14 +199,11 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
   rw [target] at link ⊢
   cases current
   · -- The previous epoch: its source is the previous justified checkpoint.
-    simp only [Bool.false_eq_true, ↓reduceIte] at link before rootOk targetSets ⊢
-    have below := UInt64.lt_iff_toNat_lt.mp
-      (separated (UInt64.lt_iff_toNat_lt.mpr (by rw [one]; exact late)))
+    simp only [Bool.false_eq_true, ↓reduceIte] at link before rootOk targetSets below ⊢
     exact .link holds.1 (link.slackLink targetSets rootOk below before)
   · -- The current epoch: its source is the current justified checkpoint.
-    simp only [↓reduceIte] at link before rootOk targetSets ⊢
-    exact .link holds.2 (link.slackLink targetSets rootOk (by simp only [Checkpoint.toFfg]; omega)
-      before)
+    simp only [↓reduceIte] at link before rootOk targetSets below ⊢
+    exact .link holds.2 (link.slackLink targetSets rootOk below before)
 
 /-- An epoch has at least one slot when the slot after another one starts an epoch. -/
 theorem slotsPerEpoch_pos_of_mod {slot next : Slot} (sum : next.toNat = slot.toNat + 1)

@@ -9,6 +9,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- `ssz.get_generalized_index` names a field of a container only by its name ([#2480](https://github.com/ethereum/EthLib/issues/2480)).
+  A position given for a field is refused with the error for an unknown field.
+  In addition, a path takes `__active_fields__` and `__selector__`, the mixed-in nodes of a progressive container and of a union.
+
+- In Python, `consensus.api_post` and `consensus.api_gossip_event` return the data of each event as its JSON text, instead of the parsed value ([#2515](https://github.com/ethereum/EthLib/pull/2515)).
+  This is the `data` field of the Beacon API event stream, and the form that the fork choice events already return.
+  A caller that needs the value applies `json.loads` to that text.
+
 - In Lean, the SSZ exports read a Python value directly, without writing it as JSON first ([#2475](https://github.com/ethereum/EthLib/issues/2475)).
   In Lean, `valueOfJson` becomes `valueOf`, `jsonOfValue` and `jsonOfValues` become `pyOfValue` and `pyOfValues`, and `descOf`, `tagged`, `optionalNat`, `pair` and `readValue` take a `PyValue`.
   Bytes given as `bytes` are taken as they are, instead of being written as hex and read back.
