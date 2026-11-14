@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Except
 public import EthLib.Base.Proofs.GasLimit
 public import EthLib.Consensus.Gossip.Bid
 public import EthLib.Base.Proofs.Uint64
@@ -30,9 +31,15 @@ Otherwise it must build on the head block, with the payload that a proposer woul
 
 So a valid bid builds on the head block, or on its parent and the payload that the head builds on.
 
-A bid on the latest payload exits its builder exactly when the envelope of its parent asks it to.
+On a bid on the latest payload, the exit check reads the envelope of its parent block.
 
-So a valid bid on that payload has a parent envelope with no exit request for its builder.
+It reports an exit exactly when a request of that envelope has the key and address of the builder.
+
+It fails when the store lacks that envelope.
+
+So the store holds the parent envelope of a valid bid on that payload.
+
+No exit request of that envelope has both the key and the address of the builder of the bid.
 -/
 
 @[expose] public section
@@ -289,13 +296,13 @@ theorem exists_head_of_validateExecutionPayloadBid_eq_accept
 
 /-! ## The exit of the builder -/
 
-/-- The check whether the payload of the parent of a bid exits its builder, when it succeeds.
+/-- The answer of the check whether the parent payload of a bid asks a builder to exit.
 
-A bid that does not build on the latest payload of the state never exits its builder.
+A bid that does not build on the latest payload of the state gets the answer no.
 
 A bid on that payload needs the envelope that the store keeps for its parent block.
 
-Its builder then exits exactly when an exit request of that envelope has its key and its address.
+The answer is then yes exactly when a request of that envelope has the builder's key and address.
 -/
 theorem builderMayExit_eq_ok_iff {state : BeaconState preset fork}
     {bid : ExecutionPayloadBid preset fork} {builder : Builder} {exiting : Bool} :
@@ -319,7 +326,7 @@ theorem builderMayExit_eq_ok_iff {state : BeaconState preset fork}
       · simp only [true_iff, List.any_eq_true, Bool.and_eq_true, beq_iff_eq, Array.mem_toList_iff]
   · cases exiting <;> simp [latest, pure, Except.pure]
 
-/-- The check of the exit of a builder fails exactly when it needs an envelope that the store lacks.
+/-- The exit check fails exactly when it needs an envelope that the store lacks.
 
 It needs one when the bid builds on the latest payload of the state.
 
@@ -337,9 +344,11 @@ theorem builderMayExit_eq_error_iff {state : BeaconState preset fork}
     | some envelope => simp [latest, pure, Except.pure]
   · simp [latest, pure, Except.pure]
 
-/-- A valid bid passes the check of the exit of its builder.
+/-- For a valid bid, the exit check answers that no request asks its builder to exit.
 
-The check reads the state of the parent block at the slot of the bid, and the builder there.
+The check reads the state of the parent block, advanced to the slot of the bid.
+
+The builder is the one at the index of the bid in that state.
 -/
 theorem builderMayExit_of_validateExecutionPayloadBid_eq_accept
     (valid : validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
@@ -349,53 +358,42 @@ theorem builderMayExit_of_validateExecutionPayloadBid_eq_accept
         processSlots config checks state signed.message.slot = .ok advanced ∧
         (advanced.builders gloas).data[signed.message.builderIndex.toNat]? = some builder ∧
         builderMayExit store gloas advanced signed.message builder = .ok false := by
-  have check : ∀ {first : ValidationResult}
-      {next : Unit → Except ForkChoiceError ValidationResult},
-      first.andThenM next = .ok accept → first = accept ∧ next () = .ok accept := by
-    intro first next h
-    cases first <;> simp_all [ValidationResult.andThenM, pure, Except.pure]
-  have computed : ∀ {α : Type} {x : Except ForkChoiceError α}
-      {next : α → Except ForkChoiceError ValidationResult},
-      x.bind next = .ok accept → ∃ v, x = .ok v ∧ next v = .ok accept := by
-    intro α x next h
-    cases x <;> simp_all [Except.bind]
   unfold validateExecutionPayloadBid at valid
-  simp only [bind] at valid
-  replace valid := (check valid).2
-  replace valid := (check valid).2
-  obtain ⟨_, -, valid⟩ := computed valid
-  replace valid := (check valid).2
-  replace valid := (check valid).2
-  replace valid := (check valid).2
-  replace valid := (check valid).2
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
   cases known : store.blocks[signed.message.parentBlockRoot]? with
   | none => simp [known, pure, Except.pure] at valid
   | some _ =>
   simp only [known] at valid
-  replace valid := (check valid).2
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
   cases held : store.blockStates[signed.message.parentBlockRoot]? with
   | none => simp [held, pure, Except.pure] at valid
   | some state =>
   simp only [held] at valid
-  obtain ⟨_, -, valid⟩ := computed valid
-  replace valid := (check valid).2
-  obtain ⟨dependentRoot, -, valid⟩ := computed valid
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨dependentRoot, -, valid⟩ := bind_ok_iff.mp valid
   cases preferred : seen.proposerPreferencesFor (signed.message.slot, dependentRoot) with
   | none => simp [preferred, pure, Except.pure] at valid
   | some _ =>
   simp only [preferred] at valid
-  replace valid := (check valid).2
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
   cases payload : seen.executionPayloadGasLimitFor signed.message.parentBlockHash with
   | none => simp [payload, pure, Except.pure] at valid
   | some _ =>
   simp only [payload] at valid
-  obtain ⟨_, -, valid⟩ := computed valid
-  replace valid := (check valid).2
-  obtain ⟨_, -, valid⟩ := computed valid
-  replace valid := (check valid).2
-  obtain ⟨_, -, valid⟩ := computed valid
-  replace valid := (check valid).2
-  obtain ⟨advanced, slots, valid⟩ := computed valid
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨advanced, slots, valid⟩ := bind_ok_iff.mp valid
   replace slots : processSlots config checks state signed.message.slot = .ok advanced := by
     revert slots
     cases processSlots config checks state signed.message.slot <;> simp [Except.mapError]
@@ -403,19 +401,19 @@ theorem builderMayExit_of_validateExecutionPayloadBid_eq_accept
   | none => simp [found, pure, Except.pure] at valid
   | some builder =>
   simp only [found] at valid
-  replace valid := (check valid).2
-  obtain ⟨_, -, valid⟩ := computed valid
-  replace valid := (check valid).2
-  obtain ⟨_, -, valid⟩ := computed valid
-  replace valid := (check valid).2
-  obtain ⟨exiting, exit, valid⟩ := computed valid
-  have staying := (check valid).1
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨exiting, exit, valid⟩ := bind_ok_iff.mp valid
+  have staying := (andThenM_eq_ok_accept.mp valid).1
   refine ⟨state, advanced, builder, rfl, slots, found, ?_⟩
   cases exiting
   · exact exit
   · simp at staying
 
-/-- A valid bid on the latest payload of the state of its parent has the envelope of that block.
+/-- For a valid bid on the latest payload, the store holds the envelope of its parent block.
 
 No exit request of that envelope has both the key and the address of its builder.
 
