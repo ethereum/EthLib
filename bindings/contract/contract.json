@@ -12535,6 +12535,109 @@
    "docstring":
    "Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1."},
   {"summary":
+   "Start a client certificate handshake under an explicit policy, RFC 8446 §4.1.2.",
+   "signature": "(config: dict[str, object]) -> dict[str, object]",
+   "operation":
+   "EthLib.Networking.Quic.Tls.Handshake.Exports.clientStartExport",
+   "method": "quic_tls_client_start",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Tls.Handshake.Error",
+     "codes":
+     [{"constructor": "unexpectedMessage", "code": 266},
+      {"constructor": "illegalParameter", "code": 303},
+      {"constructor": "missingExtension", "code": 365},
+      {"constructor": "unsupportedExtension", "code": 366},
+      {"constructor": "handshakeFailure", "code": 296},
+      {"constructor": "protocolVersion", "code": 326},
+      {"constructor": "noApplicationProtocol", "code": 376},
+      {"constructor": "certificateRequired", "code": 372},
+      {"constructor": "decodeError", "code": 306},
+      {"constructor": "decryptError", "code": 307},
+      {"constructor": "protocolViolation", "code": 10},
+      {"constructor": "configuration", "code": 336},
+      {"constructor": "certificate", "code": 298},
+      {"constructor": "crypto", "code": null}]}],
+   "error_class": "TlsStepError",
+   "docstring":
+   "Start a client certificate handshake under an explicit policy, RFC 8446 §4.1.2."},
+  {"summary": "Start a server certificate handshake under an explicit policy.",
+   "signature": "(config: dict[str, object]) -> dict[str, object]",
+   "operation":
+   "EthLib.Networking.Quic.Tls.Handshake.Exports.serverStartExport",
+   "method": "quic_tls_server_start",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Tls.Handshake.Error",
+     "codes":
+     [{"constructor": "unexpectedMessage", "code": 266},
+      {"constructor": "illegalParameter", "code": 303},
+      {"constructor": "missingExtension", "code": 365},
+      {"constructor": "unsupportedExtension", "code": 366},
+      {"constructor": "handshakeFailure", "code": 296},
+      {"constructor": "protocolVersion", "code": 326},
+      {"constructor": "noApplicationProtocol", "code": 376},
+      {"constructor": "certificateRequired", "code": 372},
+      {"constructor": "decodeError", "code": 306},
+      {"constructor": "decryptError", "code": 307},
+      {"constructor": "protocolViolation", "code": 10},
+      {"constructor": "configuration", "code": 336},
+      {"constructor": "certificate", "code": 298},
+      {"constructor": "crypto", "code": null}]}],
+   "error_class": "TlsStepError",
+   "docstring":
+   "Start a server certificate handshake under an explicit policy."},
+  {"summary":
+   "Process one complete server message and check the intended peer ID at authentication.",
+   "signature":
+   "(config: dict[str, object], expected: bytes, state: dict[str, object], message: dict[str, object]) -> dict[str, object]",
+   "operation": "EthLib.Networking.Quic.Tls.Handshake.Exports.clientStepExport",
+   "method": "quic_tls_client_step",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Tls.Handshake.Error",
+     "codes":
+     [{"constructor": "unexpectedMessage", "code": 266},
+      {"constructor": "illegalParameter", "code": 303},
+      {"constructor": "missingExtension", "code": 365},
+      {"constructor": "unsupportedExtension", "code": 366},
+      {"constructor": "handshakeFailure", "code": 296},
+      {"constructor": "protocolVersion", "code": 326},
+      {"constructor": "noApplicationProtocol", "code": 376},
+      {"constructor": "certificateRequired", "code": 372},
+      {"constructor": "decodeError", "code": 306},
+      {"constructor": "decryptError", "code": 307},
+      {"constructor": "protocolViolation", "code": 10},
+      {"constructor": "configuration", "code": 336},
+      {"constructor": "certificate", "code": 298},
+      {"constructor": "crypto", "code": null}]}],
+   "error_class": "TlsStepError",
+   "docstring":
+   "Process one complete server message and check the intended peer ID at authentication."},
+  {"summary":
+   "Process one complete client message and require libp2p client authentication.",
+   "signature":
+   "(config: dict[str, object], state: dict[str, object], message: dict[str, object]) -> dict[str, object]",
+   "operation": "EthLib.Networking.Quic.Tls.Handshake.Exports.serverStepExport",
+   "method": "quic_tls_server_step",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Tls.Handshake.Error",
+     "codes":
+     [{"constructor": "unexpectedMessage", "code": 266},
+      {"constructor": "illegalParameter", "code": 303},
+      {"constructor": "missingExtension", "code": 365},
+      {"constructor": "unsupportedExtension", "code": 366},
+      {"constructor": "handshakeFailure", "code": 296},
+      {"constructor": "protocolVersion", "code": 326},
+      {"constructor": "noApplicationProtocol", "code": 376},
+      {"constructor": "certificateRequired", "code": 372},
+      {"constructor": "decodeError", "code": 306},
+      {"constructor": "decryptError", "code": 307},
+      {"constructor": "protocolViolation", "code": 10},
+      {"constructor": "configuration", "code": 336},
+      {"constructor": "certificate", "code": 298},
+      {"constructor": "crypto", "code": null}]}],
+   "error_class": "TlsStepError",
+   "docstring":
+   "Process one complete client message and require libp2p client authentication."},
+  {"summary":
    "Return the early, handshake, master, two handshake traffic and two application traffic secrets.",
    "signature":
    "(shared_secret: bytes, hello_transcript: bytes, server_transcript: bytes) -> tuple[bytes, bytes, bytes, bytes, bytes, bytes, bytes]",

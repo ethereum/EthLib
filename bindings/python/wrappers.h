@@ -151,6 +151,7 @@ extern PyObject* CONSENSUS_ERROR;
 extern PyObject* HKDF_ERROR;
 extern PyObject* TLS13_ERROR;
 extern PyObject* TLS_HANDSHAKE_ERROR;
+extern PyObject* TLS_STEP_ERROR;
 extern PyObject* QUIC_PROTECTION_ERROR;
 extern PyObject* PBKDF2_ERROR;
 extern PyObject* SCRYPT_ERROR;
@@ -813,5 +814,10 @@ PyObject* py_quic_tls_payload_encode(PyObject* self, PyObject* args);
 PyObject* py_quic_tls_payload_decode(PyObject* self, PyObject* args);
 PyObject* py_quic_tls_transcript(PyObject* self, PyObject* args);
 PyObject* py_quic_tls_certificate_verify_input(PyObject* self, PyObject* args);
+
+PyObject* py_quic_tls_client_start(PyObject* self, PyObject* args);
+PyObject* py_quic_tls_server_start(PyObject* self, PyObject* args);
+PyObject* py_quic_tls_client_step(PyObject* self, PyObject* args);
+PyObject* py_quic_tls_server_step(PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */
