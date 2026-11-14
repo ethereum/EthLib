@@ -8,7 +8,7 @@ public import EthLib.Consensus.ForkChoice.FastConfirmation
 public import EthLib.Consensus.Proofs.ForkChoice.Store
 
 /-!
-# Proofs: the fast confirmation rule
+# Proofs: the arithmetic and the updates of the fast confirmation rule
 
 An empty range of slots weighs nothing, and so does a sum over no items.
 
@@ -24,7 +24,7 @@ A range that covers a whole epoch weighs the whole active balance.
 
 At each slot the tracked heads move on by one: the current head becomes the previous one.
 
-The update keeps the confirmed block.
+The update keeps the confirmed block, and sets the checkpoints by the epoch boundaries.
 
 A restart keeps the old confirmed block or takes the one confirmed before the restart.
 
@@ -456,6 +456,44 @@ theorem updateFastConfirmationVariables_confirmedRoot {fcr after : FastConfirmat
     obtain ⟨_, -, updated⟩ := updated <;> split at updated <;>
     (simp only [pure, Except.pure, Except.ok.injEq] at updated; subst updated; rfl)
 
+/-- The update of the tracked variables sets the checkpoints by the epoch boundaries.
+
+The greatest unrealized checkpoint is taken from the store before the first slot of an epoch.
+
+At the first slot of an epoch, the observed justified checkpoints move on by one epoch.
+
+At any other slot, they stay as they were. -/
+theorem updateFastConfirmationVariables_checkpoints
+    {fcr after : FastConfirmationStore} {head : Root}
+    (updated : store.updateFastConfirmationVariables config fcr head = .ok after) :
+    ∃ slot, store.getCurrentSlot config = .ok slot ∧
+      (∀ next, Uint64.addChecked slot 1 = .ok next →
+        isStartSlotAtEpoch preset next = .ok true →
+        after.previousEpochGreatestUnrealizedCheckpoint = store.unrealizedJustifiedCheckpoint) ∧
+      (∀ next, Uint64.addChecked slot 1 = .ok next →
+        isStartSlotAtEpoch preset next = .ok false →
+        after.previousEpochGreatestUnrealizedCheckpoint =
+          fcr.previousEpochGreatestUnrealizedCheckpoint) ∧
+      (isStartSlotAtEpoch preset slot = .ok true →
+        after.currentEpochObservedJustifiedCheckpoint =
+          after.previousEpochGreatestUnrealizedCheckpoint ∧
+        after.previousEpochObservedJustifiedCheckpoint =
+          fcr.currentEpochObservedJustifiedCheckpoint) ∧
+      (isStartSlotAtEpoch preset slot = .ok false →
+        after.currentEpochObservedJustifiedCheckpoint =
+          fcr.currentEpochObservedJustifiedCheckpoint ∧
+        after.previousEpochObservedJustifiedCheckpoint =
+          fcr.previousEpochObservedJustifiedCheckpoint) := by
+  unfold updateFastConfirmationVariables at updated
+  simp only [bind_ok_iff] at updated
+  obtain ⟨slot, slotOk, next, nextOk, nextStart, nextStartOk, updated⟩ := updated
+  have nextOk := mapError_ok_iff.mp nextOk
+  refine ⟨slot, slotOk, ?_⟩
+  split at updated <;> simp only [bind_ok_iff] at updated <;>
+    obtain ⟨atStart, atStartOk, updated⟩ := updated <;> split at updated <;>
+    simp only [pure, Except.pure, Except.ok.injEq] at updated <;> subst updated <;>
+    simp_all
+
 /-- A restart keeps the old confirmed block, or takes the block confirmed before the restart. -/
 theorem getRestartResilientConfirmedRoot_eq_or {fcr : FastConfirmationStore}
     {head rootBeforeRestart root : Root}
@@ -629,6 +667,36 @@ theorem onFastConfirmation_heads {fcr after : FastConfirmationStore}
   simp only [pure, Except.pure, Except.ok.injEq] at confirmed
   subst confirmed
   exact ⟨head, found, updateFastConfirmationVariables_heads (after := updated) update⟩
+
+/-- The fast confirmation of a slot sets the checkpoints by the epoch boundaries.
+
+It sets them as the update of the tracked variables does, at the current slot. -/
+theorem onFastConfirmation_checkpoints {fcr after : FastConfirmationStore}
+    (confirmed : store.onFastConfirmation config fcr = .ok after) :
+    ∃ slot, store.getCurrentSlot config = .ok slot ∧
+      (∀ next, Uint64.addChecked slot 1 = .ok next →
+        isStartSlotAtEpoch preset next = .ok true →
+        after.previousEpochGreatestUnrealizedCheckpoint = store.unrealizedJustifiedCheckpoint) ∧
+      (∀ next, Uint64.addChecked slot 1 = .ok next →
+        isStartSlotAtEpoch preset next = .ok false →
+        after.previousEpochGreatestUnrealizedCheckpoint =
+          fcr.previousEpochGreatestUnrealizedCheckpoint) ∧
+      (isStartSlotAtEpoch preset slot = .ok true →
+        after.currentEpochObservedJustifiedCheckpoint =
+          after.previousEpochGreatestUnrealizedCheckpoint ∧
+        after.previousEpochObservedJustifiedCheckpoint =
+          fcr.currentEpochObservedJustifiedCheckpoint) ∧
+      (isStartSlotAtEpoch preset slot = .ok false →
+        after.currentEpochObservedJustifiedCheckpoint =
+          fcr.currentEpochObservedJustifiedCheckpoint ∧
+        after.previousEpochObservedJustifiedCheckpoint =
+          fcr.previousEpochObservedJustifiedCheckpoint) := by
+  unfold onFastConfirmation at confirmed
+  simp only [bind_ok_iff] at confirmed
+  obtain ⟨head, -, updated, update, root, -, confirmed⟩ := confirmed
+  simp only [pure, Except.pure, Except.ok.injEq] at confirmed
+  subst confirmed
+  exact updateFastConfirmationVariables_checkpoints (after := updated) update
 
 /-- Before Gloas the execution block of a block of the store is its payload. -/
 theorem executionBlockHashAt_of_lt {root : Root} {bellatrix : .bellatrix ≤ fork}

@@ -2783,20 +2783,24 @@ The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/P
 No theorem yet shows that the roots of a walk are in the chain of the head.
 
 These theorems prove no safety: no theorem yet shows that a start is safe, or that a one-confirmed walk keeps a block in the chain of every honest head.
-They do not record every check of the rule.
+The two root-selection theorems do not record every check of the rule.
 For the start they leave out the other checks that compare the epochs and the slots of the blocks.
 For the walks they leave out the checks on the epochs of the start and of the walked blocks.
 They also leave out the check that the head of the slot before holds each block of the first walk.
 They leave out the checks that a voting source or an unrealized justification is recent.
-They also leave out the calls to `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, whose tests `FastConfirmation/Indicators.lean` states on their own.
+They also leave out the calls to `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, whose tests `Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean` states on their own.
 
-`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` records those checkpoint checks through the same walks as its root-selection corollaries.
-`Store.onFastConfirmation_checked` characterizes one successful call: it names the selected start, the checkpoint-field updates and the checks passed if the returned root is later than that start.
-It assumes only success of the call, not parent-slot ordering, reachability or safety of a start.
-`Store.Checked` names the recent voting-source and justification tests, target-justification test and conflicting-checkpoint test that the applicable branch of the walk passes.
-These are successful Boolean checks, not conclusions about future justification or honest heads.
-The general walk-member slot bound in `AncestorRoots.lean` assumes its initial accumulator is above the terminal block; these proofs discharge that condition with an empty accumulator.
-The planned conditional and accountable safety consumers under #1458 are not established here.
+The same module also records the checks that those two theorems leave out.
+`Store.SelectsStart` names the start of a call with every check that decides it.
+These are the three checks that keep the block stored before, and the four that replace it by the observed justified block.
+`Store.FastConfirmationChecked` names the checkpoint tests that a later root passes.
+They are a recent voting source or unrealized justification, the ancestry test on the head of the slot before, and the two target tests.
+It also records the bound that the start is at most one epoch behind the current epoch.
+`Store.onFastConfirmation_checked` states that a successful call stores its selected start, or a later one-confirmed root of its walk that passes those tests.
+It assumes only that the call succeeds.
+`Store.onFastConfirmation_checkpoints` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states how the same call sets the observed justified checkpoints at the epoch boundaries.
+These are tests that passed, not proofs that a checkpoint becomes justified or that a block stays in the chain of an honest head.
+No theorem here proves conditional or accountable safety of the confirmed block.
 
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.

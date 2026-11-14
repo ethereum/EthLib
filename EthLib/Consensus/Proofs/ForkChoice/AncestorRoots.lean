@@ -14,6 +14,7 @@ It is empty when the walk reaches a block whose slot is not above the slot of th
 
 - A successful walk is empty, or it lists the block after its older roots.
 - A walk that returns a root starts at a block with a higher slot than the terminal block.
+- Every root that a walk lists has a higher slot than the terminal block.
 - The roots of a walk after one of its roots are the walk from the block back to that root.
 
 The last fact splits a walk at one of its roots.
@@ -35,7 +36,9 @@ namespace Store
 
 variable {store : Store preset fork}
 
-/-- Each listed root has a slot strictly above the terminal block. -/
+/-- Each listed root has a slot strictly above the terminal block.
+
+This assumes the same of every root that the walk already held. -/
 theorem slot_lt_of_mem_getAncestorRoots {root terminal member : Root} {acc roots : List Root}
     (walked : store.getAncestorRoots root terminal acc = .ok roots)
     (accAbove : ∀ r ∈ acc, ∃ b t, store.block r = .ok b ∧ store.block terminal = .ok t ∧

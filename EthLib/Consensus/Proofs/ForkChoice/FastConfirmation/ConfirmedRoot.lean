@@ -4,15 +4,16 @@ public import EthLib.Consensus.Proofs.ForkChoice.AncestorRoots
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
 
 /-!
-# Root selection and checkpoint-check soundness of the fast confirmation rule
+# Proofs: how the fast confirmation rule chooses the confirmed block
 
-A successful call records its selected start and the checkpoint tests along its walk.
+The rule starts from the block stored before, the finalized block or the observed justified block.
 
-Each operation has one walk, shared by its root-selection and checkpoint-check interfaces.
+It then stores that block, or a one-confirmed root of the walk from it to the head.
 
-This result does not establish safety in an execution or in another store.
+A successful call also passes the checkpoint tests of its walk, and each theorem says which.
+
+No theorem here shows that the confirmed block is safe in an execution or in another store.
 -/
-
 @[expose] public section
 
 namespace EthLib.Consensus
@@ -25,25 +26,25 @@ namespace Store
 
 variable {config : Config} {store : Store preset fork}
 
-/-- The checkpoint tests passed by a block confirmed after the selected start.
+/-- The checkpoint tests that a block confirmed after the start passes.
 
-The start satisfies the lower freshness bound `currentEpoch ≤ startEpoch + 1`.
+The start is at most one epoch behind the current epoch, or ahead of it.
 
-This bound permits future start epochs.
+A root outside the current epoch has a recent voting source, its own or that of the previous head.
 
-For a current-epoch root after a non-current start, the target-justification Boolean test passes.
+When the previous head supplies it, the start is in the epoch before the current one.
 
-A non-current root has a recent voting source, either its own or the previous-slot head's.
+That head then also descends from the root.
 
-In the latter case the ancestry Boolean test also passes.
+A root in the current epoch after a start outside it passes the target-justification test.
 
-Away from an epoch boundary, the applicable no-conflict Boolean test passes.
+At a slot that does not start an epoch, the applicable no-conflict test passes.
 
-Away from an epoch boundary, the applicable unrealized justification is also recent.
+At such a slot, the applicable unrealized justification is also recent.
 
-These are successful checks, not conclusions of actual justification or execution safety. -/
-def Checked (store : Store preset fork) (config : Config) (fcr : FastConfirmationStore)
-    (head start root : Root) : Prop :=
+These are tests that passed, not proofs of justification or of safety in an execution. -/
+def FastConfirmationChecked (store : Store preset fork) (config : Config)
+    (fcr : FastConfirmationStore) (head start root : Root) : Prop :=
   ∃ epoch slot rootEpoch startEpoch,
     store.getCurrentStoreEpoch config = .ok epoch ∧ store.getCurrentSlot config = .ok slot ∧
     store.getBlockEpoch root = .ok rootEpoch ∧ store.getBlockEpoch start = .ok startEpoch ∧
@@ -68,7 +69,79 @@ def Checked (store : Store preset fork) (config : Config) (fcr : FastConfirmatio
         (isStartSlotAtEpoch preset slot = .ok false →
           store.willNoConflictingCheckpointBeJustified config head = .ok true))))
 
-/-- Reading a later root of a walk cannot decrease the block epoch. -/
+/-- The three checks that keep the block stored before as the base of the walk.
+
+The block is at most one epoch behind the current epoch, and the head descends from it.
+
+At the first slot of an epoch, the chain of that block must also still be safe. -/
+def KeepsConfirmedRoot (store : Store preset fork) (config : Config)
+    (fcr : FastConfirmationStore) (confirmed head : Root) (slot : Slot) : Prop :=
+  (∃ epoch blockEpoch, store.getCurrentStoreEpoch config = .ok epoch ∧
+      store.getBlockEpoch confirmed = .ok blockEpoch ∧
+      epoch.toNat ≤ blockEpoch.toNat + 1) ∧
+    store.isAncestor ⟨head, .pending⟩ ⟨confirmed, .pending⟩ = .ok true ∧
+    (isStartSlotAtEpoch preset slot = .ok true →
+      store.isConfirmedChainSafe config fcr head confirmed = .ok true)
+
+/-- The four checks that replace the base by the observed justified block.
+
+The slot starts an epoch, and the observed block is in the epoch before the current one.
+
+Its checkpoint is the unrealized justification of the head.
+
+The observed block is at a later slot than the base. -/
+def ReplacesBase (store : Store preset fork) (config : Config)
+    (fcr : FastConfirmationStore) (head base : Root) (slot : Slot) : Prop :=
+  isStartSlotAtEpoch preset slot = .ok true ∧
+    (∃ observedBlock epoch,
+      store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
+      store.getCurrentStoreEpoch config = .ok epoch ∧
+      Uint64.addChecked (computeEpochAtSlot preset observedBlock.slot) 1 = .ok epoch) ∧
+    store.unrealizedJustification head = .ok fcr.currentEpochObservedJustifiedCheckpoint ∧
+    ∃ baseBlock observedBlock, store.block base = .ok baseBlock ∧
+      store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
+      baseBlock.slot < observedBlock.slot
+
+/-- The start that the rule selects, with the checks that decide it.
+
+The base is the block stored before when it passes its three checks, else the finalized block.
+
+The start is the observed justified block when the four replacement checks pass, else the base. -/
+def SelectsStart (store : Store preset fork) (config : Config)
+    (fcr : FastConfirmationStore) (confirmed head : Root) (slot : Slot) (start : Root) : Prop :=
+  ∃ base,
+    (base = confirmed ∧ store.KeepsConfirmedRoot config fcr confirmed head slot ∨
+      base = store.finalizedCheckpoint.root ∧
+        ¬store.KeepsConfirmedRoot config fcr confirmed head slot) ∧
+    (start = base ∧ ¬store.ReplacesBase config fcr head base slot ∨
+      start = fcr.currentEpochObservedJustifiedCheckpoint.root ∧
+        store.ReplacesBase config fcr head base slot)
+
+/-- A selected start is the stored block, the finalized block or the observed justified block.
+
+This keeps only some of the checks that decide it. -/
+theorem SelectsStart.eq_or {fcr : FastConfirmationStore} {confirmed head start : Root}
+    {slot : Slot} (selected : store.SelectsStart config fcr confirmed head slot start) :
+    start = confirmed ∧
+        store.isAncestor ⟨head, .pending⟩ ⟨confirmed, .pending⟩ = .ok true ∧
+        (isStartSlotAtEpoch preset slot = .ok true →
+          store.isConfirmedChainSafe config fcr head confirmed = .ok true) ∨
+      start = store.finalizedCheckpoint.root ∨
+      start = fcr.currentEpochObservedJustifiedCheckpoint.root ∧
+        isStartSlotAtEpoch preset slot = .ok true ∧
+        (∃ observedBlock epoch,
+          store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
+          store.getCurrentStoreEpoch config = .ok epoch ∧
+          Uint64.addChecked (computeEpochAtSlot preset observedBlock.slot) 1 = .ok epoch) ∧
+        store.unrealizedJustification head = .ok fcr.currentEpochObservedJustifiedCheckpoint := by
+  obtain ⟨base, baseCase, startCase⟩ := selected
+  rcases startCase with ⟨rfl, _⟩ | ⟨same, boundary, observed, justified, _⟩
+  · rcases baseCase with ⟨same, _, ancestry, safe⟩ | ⟨same, _⟩
+    · exact Or.inl ⟨same, ancestry, safe⟩
+    · exact Or.inr (Or.inl same)
+  · exact Or.inr (Or.inr ⟨same, boundary, observed, justified⟩)
+
+/-- Each root of a walk is in an epoch at or after the epoch of the terminal block. -/
 private theorem walk_epoch_le {head start root : Root} {roots : List Root}
     {startEpoch rootEpoch : Epoch}
     (walked : store.getAncestorRoots head start = .ok roots) (member : root ∈ roots)
@@ -82,7 +155,7 @@ private theorem walk_epoch_le {head start root : Root} {roots : List Root}
     simp only [computeEpochAtSlot, UInt64.toNat_div]
     exact Nat.div_le_div_right (Nat.le_of_lt (UInt64.lt_iff_toNat_lt.mp lt)))
 
-/-- A loop over an increasing walk records a target check whenever it crosses the start epoch. -/
+/-- A loop over a walk that ends in a later epoch than the start has passed the target test. -/
 private theorem target_checked_loop {head start init out : Root} {roots : List Root}
     {body : Root → Root → Except ForkChoiceError (ForInStep Root)}
     (walked : store.getAncestorRoots head start = .ok roots)
@@ -124,7 +197,9 @@ private theorem target_checked_loop {head start init out : Root} {roots : List R
     · exact ForInStep.done.inj stopped ▸ holds
     · cases went
 
-/-- The descendant walk retains one-confirmed roots and its conditional checkpoint checks. -/
+/-- The descendant walk returns the start, or a one-confirmed root of the walk to the head.
+
+That root passes the checkpoint tests when the start is at most one epoch behind. -/
 private theorem findLatestConfirmedDescendant_walk {fcr : FastConfirmationStore}
     {head start root : Root}
     (found : store.findLatestConfirmedDescendant config fcr head start = .ok root) :
@@ -136,7 +211,7 @@ private theorem findLatestConfirmedDescendant_walk {fcr : FastConfirmationStore}
           (store.tallyVotes balanceSource) member = .ok true) ∧
       ((∀ epoch startEpoch, store.getCurrentStoreEpoch config = .ok epoch →
         store.getBlockEpoch start = .ok startEpoch → epoch.toNat ≤ startEpoch.toNat + 1) →
-        store.Checked config fcr head start root) := by
+        store.FastConfirmationChecked config fcr head start root) := by
   unfold findLatestConfirmedDescendant at found
   rw [bind_ok_iff] at found
   obtain ⟨epoch, epochOk, found⟩ := found
@@ -153,7 +228,7 @@ private theorem findLatestConfirmedDescendant_walk {fcr : FastConfirmationStore}
   suffices result : chainTo root ∧
       ((∀ epoch startEpoch, store.getCurrentStoreEpoch config = .ok epoch →
         store.getBlockEpoch start = .ok startEpoch → epoch.toNat ≤ startEpoch.toNat + 1) →
-        root = start ∨ store.Checked config fcr head start root) by
+        root = start ∨ store.FastConfirmationChecked config fcr head start root) by
     rcases result.1 with same | ⟨chain, later, walked, allGood⟩
     · exact Or.inl same
     · by_cases same : root = start
@@ -307,7 +382,7 @@ private theorem findLatestConfirmedDescendant_walk {fcr : FastConfirmationStore}
   have firstResult (recent : ∀ epoch startEpoch,
       store.getCurrentStoreEpoch config = .ok epoch →
       store.getBlockEpoch start = .ok startEpoch → epoch.toNat ≤ startEpoch.toNat + 1) :
-      mid = start ∨ store.Checked config fcr head start mid := by
+      mid = start ∨ store.FastConfirmationChecked config fcr head start mid := by
     obtain ⟨se, seOk, same | ⟨me, source, meOk, seValue, different, sourceOk,
       sourceBound, ancestry, boundary⟩⟩ := firstChecks
     · exact Or.inl same
@@ -469,13 +544,15 @@ private theorem findLatestConfirmedDescendant_walk {fcr : FastConfirmationStore}
   · have same : root = mid := by simpa [finish, pure, Except.pure] using found.symm
     exact same ▸ ⟨firstChain, firstResult⟩
 
-/-- The descendant search records the applicable checkpoint checks for its selected start. -/
+/-- The descendant search returns the start, or a root that passes the checkpoint tests.
+
+It assumes the start is at most one epoch behind, as the caller checks before the search. -/
 theorem findLatestConfirmedDescendant_checked {fcr : FastConfirmationStore}
     {head start root : Root}
     (recent : ∀ epoch startEpoch, store.getCurrentStoreEpoch config = .ok epoch →
       store.getBlockEpoch start = .ok startEpoch → epoch.toNat ≤ startEpoch.toNat + 1)
     (found : store.findLatestConfirmedDescendant config fcr head start = .ok root) :
-    root = start ∨ store.Checked config fcr head start root := by
+    root = start ∨ store.FastConfirmationChecked config fcr head start root := by
   exact (findLatestConfirmedDescendant_walk found).imp id (fun h => h.2 recent)
 
 /-- The latest confirmed descendant is the start, or a one-confirmed root of the walk to the head.
@@ -505,60 +582,14 @@ theorem findLatestConfirmedDescendant_eq_or {fcr : FastConfirmationStore}
         (store.tallyVotes balanceSource) member = .ok true := by
   exact (findLatestConfirmedDescendant_walk found).imp id And.left
 
-/-- The selected start carries the reset and replacement checks of the actual call.
+/-- The latest confirmed block comes from a start that passed the checks deciding it.
 
-Keeping the stored root requires the lower freshness bound, which permits future epochs.
-
-The ancestry and applicable chain-safety Boolean checks must also pass.
-
-Otherwise the base is the finalized root.
-
-Replacing the base requires the epoch-boundary and preceding-epoch checks to pass.
-
-The unrealized-justification and strictly-later-slot checks must also pass.
-
-The returned root is that start or passes its applicable checkpoint checks. -/
+It is that start, or a later one-confirmed root of the walk that passes the checkpoint tests. -/
 private theorem getLatestConfirmed_walk {fcr : FastConfirmationStore} {head root : Root}
     (latest : store.getLatestConfirmed config fcr head = .ok root) :
     ∃ slot start, store.getCurrentSlot config = .ok slot ∧
-      (∃ base,
-        (base = fcr.confirmedRoot ∧
-            ((∃ epoch blockEpoch, store.getCurrentStoreEpoch config = .ok epoch ∧
-                store.getBlockEpoch fcr.confirmedRoot = .ok blockEpoch ∧
-                epoch.toNat ≤ blockEpoch.toNat + 1) ∧
-              store.isAncestor ⟨head, .pending⟩ ⟨fcr.confirmedRoot, .pending⟩ = .ok true ∧
-              (isStartSlotAtEpoch preset slot = .ok true →
-                store.isConfirmedChainSafe config fcr head fcr.confirmedRoot = .ok true)) ∨
-          base = store.finalizedCheckpoint.root ∧
-            ¬((∃ epoch blockEpoch, store.getCurrentStoreEpoch config = .ok epoch ∧
-                store.getBlockEpoch fcr.confirmedRoot = .ok blockEpoch ∧
-                epoch.toNat ≤ blockEpoch.toNat + 1) ∧
-              store.isAncestor ⟨head, .pending⟩ ⟨fcr.confirmedRoot, .pending⟩ = .ok true ∧
-              (isStartSlotAtEpoch preset slot = .ok true →
-                store.isConfirmedChainSafe config fcr head fcr.confirmedRoot = .ok true))) ∧
-        (start = base ∧
-            ¬(isStartSlotAtEpoch preset slot = .ok true ∧
-              (∃ observedBlock epoch,
-                store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
-                store.getCurrentStoreEpoch config = .ok epoch ∧
-                Uint64.addChecked (computeEpochAtSlot preset observedBlock.slot) 1 = .ok epoch) ∧
-              store.unrealizedJustification head =
-                .ok fcr.currentEpochObservedJustifiedCheckpoint ∧
-              ∃ baseBlock observedBlock, store.block base = .ok baseBlock ∧
-                store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
-                baseBlock.slot < observedBlock.slot) ∨
-          start = fcr.currentEpochObservedJustifiedCheckpoint.root ∧
-            isStartSlotAtEpoch preset slot = .ok true ∧
-            (∃ observedBlock epoch,
-              store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
-              store.getCurrentStoreEpoch config = .ok epoch ∧
-              Uint64.addChecked (computeEpochAtSlot preset observedBlock.slot) 1 = .ok epoch) ∧
-            store.unrealizedJustification head =
-              .ok fcr.currentEpochObservedJustifiedCheckpoint ∧
-            ∃ baseBlock observedBlock, store.block base = .ok baseBlock ∧
-              store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
-              baseBlock.slot < observedBlock.slot)) ∧
-      (root = start ∨ store.Checked config fcr head start root ∧
+      store.SelectsStart config fcr fcr.confirmedRoot head slot start ∧
+      (root = start ∨ store.FastConfirmationChecked config fcr head start root ∧
         store.findLatestConfirmedDescendant config fcr head start = .ok root ∧
         ∃ balanceSource chain later,
           store.checkpointState fcr.currentEpochObservedJustifiedCheckpoint = .ok balanceSource ∧
@@ -573,14 +604,7 @@ private theorem getLatestConfirmed_walk {fcr : FastConfirmationStore} {head root
   refine ⟨slot, ?_⟩
   extract_lets arith confirmedRoot observed finish observedRoot afterReset finalizedRoot
     resetBody at latest
-  -- The three checks that keep the block stored before.
-  let kept : Prop :=
-    (∃ epoch blockEpoch, store.getCurrentStoreEpoch config = .ok epoch ∧
-      store.getBlockEpoch fcr.confirmedRoot = .ok blockEpoch ∧
-      epoch.toNat ≤ blockEpoch.toNat + 1) ∧
-    store.isAncestor ⟨head, .pending⟩ ⟨fcr.confirmedRoot, .pending⟩ = .ok true ∧
-    (isStartSlotAtEpoch preset slot = .ok true →
-      store.isConfirmedChainSafe config fcr head fcr.confirmedRoot = .ok true)
+  let kept : Prop := store.KeepsConfirmedRoot config fcr fcr.confirmedRoot head slot
   -- Keep the reset decision paired with the continuation that consumes it.
   have reset : ∃ reset, (reset = false → kept) ∧ (reset = true → ¬kept) ∧
       resetBody reset = .ok root := by
@@ -591,7 +615,7 @@ private theorem getLatestConfirmed_walk {fcr : FastConfirmationStore} {head root
     obtain ⟨sum, sumOk, latest⟩ := latest
     have sumValue := (Uint64.addChecked_ok_iff.mp (mapError_ok_iff.mp sumOk)).2
     simp only [UInt64.toNat_one] at sumValue
-    -- The epoch check of `kept` is the negation of the staleness test of the rule.
+    -- The epoch check for keeping the stored block is the negation of the staleness test.
     have epochCheck : (∃ epoch be, store.getCurrentStoreEpoch config = .ok epoch ∧
         store.getBlockEpoch fcr.confirmedRoot = .ok be ∧ epoch.toNat ≤ be.toNat + 1) ↔
         ¬sum < currentEpoch := by
@@ -645,17 +669,7 @@ private theorem getLatestConfirmed_walk {fcr : FastConfirmationStore} {head root
     · exact ⟨store.finalizedCheckpoint.root, Or.inr ⟨rfl, drops rfl⟩, latest⟩
   clear latest keeps drops
   obtain ⟨base, baseCase, latest⟩ := base
-  -- The observed checkpoint replaces this base exactly when all four replacement checks pass.
-  let over : Prop :=
-    isStartSlotAtEpoch preset slot = .ok true ∧
-    (∃ observedBlock epoch,
-      store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
-      store.getCurrentStoreEpoch config = .ok epoch ∧
-      Uint64.addChecked (computeEpochAtSlot preset observedBlock.slot) 1 = .ok epoch) ∧
-    store.unrealizedJustification head = .ok fcr.currentEpochObservedJustifiedCheckpoint ∧
-    ∃ baseBlock observedBlock, store.block base = .ok baseBlock ∧
-      store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
-      baseBlock.slot < observedBlock.slot
+  let over : Prop := store.ReplacesBase config fcr head base slot
   have start : ∃ start, (start = base ∧ ¬over ∨
       start = fcr.currentEpochObservedJustifiedCheckpoint.root ∧ over) ∧
       finish () start = .ok root := by
@@ -706,48 +720,14 @@ private theorem getLatestConfirmed_walk {fcr : FastConfirmationStore} {head root
     · exact Or.inr ⟨checked recent, latest, chain⟩
   · exact Or.inl (Except.ok.inj latest).symm
 
-/-- The selected start retains its reset, replacement and descendant checkpoint checks. -/
+/-- The latest confirmed block comes from a start that passed the checks deciding it.
+
+It is that start, or a block found from it that passes the checkpoint tests. -/
 theorem getLatestConfirmed_checked_start {fcr : FastConfirmationStore} {head root : Root}
     (latest : store.getLatestConfirmed config fcr head = .ok root) :
     ∃ slot start, store.getCurrentSlot config = .ok slot ∧
-      (∃ base,
-        (base = fcr.confirmedRoot ∧
-            ((∃ epoch blockEpoch, store.getCurrentStoreEpoch config = .ok epoch ∧
-                store.getBlockEpoch fcr.confirmedRoot = .ok blockEpoch ∧
-                epoch.toNat ≤ blockEpoch.toNat + 1) ∧
-              store.isAncestor ⟨head, .pending⟩ ⟨fcr.confirmedRoot, .pending⟩ = .ok true ∧
-              (isStartSlotAtEpoch preset slot = .ok true →
-                store.isConfirmedChainSafe config fcr head fcr.confirmedRoot = .ok true)) ∨
-          base = store.finalizedCheckpoint.root ∧
-            ¬((∃ epoch blockEpoch, store.getCurrentStoreEpoch config = .ok epoch ∧
-                store.getBlockEpoch fcr.confirmedRoot = .ok blockEpoch ∧
-                epoch.toNat ≤ blockEpoch.toNat + 1) ∧
-              store.isAncestor ⟨head, .pending⟩ ⟨fcr.confirmedRoot, .pending⟩ = .ok true ∧
-              (isStartSlotAtEpoch preset slot = .ok true →
-                store.isConfirmedChainSafe config fcr head fcr.confirmedRoot = .ok true))) ∧
-        (start = base ∧
-            ¬(isStartSlotAtEpoch preset slot = .ok true ∧
-              (∃ observedBlock epoch,
-                store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
-                store.getCurrentStoreEpoch config = .ok epoch ∧
-                Uint64.addChecked (computeEpochAtSlot preset observedBlock.slot) 1 = .ok epoch) ∧
-              store.unrealizedJustification head =
-                .ok fcr.currentEpochObservedJustifiedCheckpoint ∧
-              ∃ baseBlock observedBlock, store.block base = .ok baseBlock ∧
-                store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
-                baseBlock.slot < observedBlock.slot) ∨
-          start = fcr.currentEpochObservedJustifiedCheckpoint.root ∧
-            isStartSlotAtEpoch preset slot = .ok true ∧
-            (∃ observedBlock epoch,
-              store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
-              store.getCurrentStoreEpoch config = .ok epoch ∧
-              Uint64.addChecked (computeEpochAtSlot preset observedBlock.slot) 1 = .ok epoch) ∧
-            store.unrealizedJustification head =
-              .ok fcr.currentEpochObservedJustifiedCheckpoint ∧
-            ∃ baseBlock observedBlock, store.block base = .ok baseBlock ∧
-              store.block fcr.currentEpochObservedJustifiedCheckpoint.root = .ok observedBlock ∧
-              baseBlock.slot < observedBlock.slot)) ∧
-      (root = start ∨ store.Checked config fcr head start root ∧
+      store.SelectsStart config fcr fcr.confirmedRoot head slot start ∧
+      (root = start ∨ store.FastConfirmationChecked config fcr head start root ∧
         store.findLatestConfirmedDescendant config fcr head start = .ok root) := by
   obtain ⟨slot, start, slotOk, startCase, result⟩ := getLatestConfirmed_walk latest
   exact ⟨slot, start, slotOk, startCase,
@@ -785,125 +765,24 @@ theorem getLatestConfirmed_eq_or {fcr : FastConfirmationStore} {head root : Root
           store.unrealizedJustification head =
             .ok fcr.currentEpochObservedJustifiedCheckpoint) ∧
       (root = start ∨ store.findLatestConfirmedDescendant config fcr head start = .ok root) := by
-  obtain ⟨slot, start, slotOk, ⟨base, baseCase, startCase⟩, result⟩ :=
-    getLatestConfirmed_walk latest
-  refine ⟨slot, start, slotOk, ?_, result.imp id (fun h => h.2.1)⟩
-  rcases startCase with ⟨rfl, _⟩ | ⟨same, boundary, observed, justified, _⟩
-  · rcases baseCase with ⟨same, _, ancestry, safe⟩ | ⟨same, _⟩
-    · exact Or.inl ⟨same, ancestry, safe⟩
-    · exact Or.inr (Or.inl same)
-  · exact Or.inr (Or.inr ⟨same, boundary, observed, justified⟩)
+  obtain ⟨slot, start, slotOk, startCase, result⟩ := getLatestConfirmed_walk latest
+  exact ⟨slot, start, slotOk, startCase.eq_or, result.imp id (fun h => h.2.1)⟩
 
-/-- The checkpoint update records the epoch boundary tests of the same slot. -/
-private theorem updateFastConfirmationVariables_checkpoints
-    {fcr after : FastConfirmationStore} {head : Root}
-    (updated : store.updateFastConfirmationVariables config fcr head = .ok after) :
-    ∃ slot, store.getCurrentSlot config = .ok slot ∧
-      (∀ next, addChecked slot 1 = .ok next →
-        isStartSlotAtEpoch preset next = .ok true →
-        after.previousEpochGreatestUnrealizedCheckpoint = store.unrealizedJustifiedCheckpoint) ∧
-      (∀ next, addChecked slot 1 = .ok next →
-        isStartSlotAtEpoch preset next = .ok false →
-        after.previousEpochGreatestUnrealizedCheckpoint =
-          fcr.previousEpochGreatestUnrealizedCheckpoint) ∧
-      (isStartSlotAtEpoch preset slot = .ok true →
-        after.currentEpochObservedJustifiedCheckpoint =
-          after.previousEpochGreatestUnrealizedCheckpoint ∧
-        after.previousEpochObservedJustifiedCheckpoint =
-          fcr.currentEpochObservedJustifiedCheckpoint) ∧
-      (isStartSlotAtEpoch preset slot = .ok false →
-        after.currentEpochObservedJustifiedCheckpoint =
-          fcr.currentEpochObservedJustifiedCheckpoint ∧
-        after.previousEpochObservedJustifiedCheckpoint =
-          fcr.previousEpochObservedJustifiedCheckpoint) := by
-  unfold updateFastConfirmationVariables at updated
-  simp only [bind_ok_iff] at updated
-  obtain ⟨slot, slotOk, next, nextOk, nextStart, nextStartOk, updated⟩ := updated
-  have nextOk := mapError_ok_iff.mp nextOk
-  refine ⟨slot, slotOk, ?_⟩
-  split at updated <;> simp only [bind_ok_iff] at updated <;>
-    obtain ⟨atStart, atStartOk, updated⟩ := updated <;> split at updated <;>
-    simp only [pure, Except.pure, Except.ok.injEq] at updated <;> subst updated <;>
-    simp_all
+/-- The fast confirmation of a slot stores its selected start, or a later root of its walk.
 
-/-- A successful call records its selected start, tracked heads and checkpoint-field updates.
+That root and each root before it in the walk are one-confirmed.
 
-Its stored root is that start or a distinct root of its one-confirmed walk passing `Checked`.
+It also passes the checkpoint tests of its walk, read in the store after the call.
 
-The checkpoint tests read the previous-slot head in the store after the call.
-
-Success is the only premise; execution safety is neither assumed nor concluded. -/
+The theorem assumes only that the call succeeds, and it says nothing about safety. -/
 theorem onFastConfirmation_checked {fcr after : FastConfirmationStore}
     (confirmed : store.onFastConfirmation config fcr = .ok after) :
     ∃ head slot start, store.getHead config = .ok head ∧
       store.getCurrentSlot config = .ok slot ∧
-      after.previousSlotHead = fcr.currentSlotHead ∧
-      after.currentSlotHead = head.root ∧
-      (∀ next, addChecked slot 1 = .ok next →
-        isStartSlotAtEpoch preset next = .ok true →
-        after.previousEpochGreatestUnrealizedCheckpoint = store.unrealizedJustifiedCheckpoint) ∧
-      (∀ next, addChecked slot 1 = .ok next →
-        isStartSlotAtEpoch preset next = .ok false →
-        after.previousEpochGreatestUnrealizedCheckpoint =
-          fcr.previousEpochGreatestUnrealizedCheckpoint) ∧
-      (isStartSlotAtEpoch preset slot = .ok true →
-        after.currentEpochObservedJustifiedCheckpoint =
-          after.previousEpochGreatestUnrealizedCheckpoint ∧
-        after.previousEpochObservedJustifiedCheckpoint =
-          fcr.currentEpochObservedJustifiedCheckpoint) ∧
-      (isStartSlotAtEpoch preset slot = .ok false →
-        after.currentEpochObservedJustifiedCheckpoint =
-          fcr.currentEpochObservedJustifiedCheckpoint ∧
-        after.previousEpochObservedJustifiedCheckpoint =
-          fcr.previousEpochObservedJustifiedCheckpoint) ∧
-      (∃ base,
-        (base = fcr.confirmedRoot ∧
-            ((∃ epoch blockEpoch, store.getCurrentStoreEpoch config = .ok epoch ∧
-                store.getBlockEpoch fcr.confirmedRoot = .ok blockEpoch ∧
-                epoch.toNat ≤ blockEpoch.toNat + 1) ∧
-              store.isAncestor ⟨head.root, .pending⟩ ⟨fcr.confirmedRoot, .pending⟩ =
-                .ok true ∧
-              (isStartSlotAtEpoch preset slot = .ok true →
-                store.isConfirmedChainSafe config after head.root
-                  fcr.confirmedRoot = .ok true)) ∨
-          base = store.finalizedCheckpoint.root ∧
-            ¬((∃ epoch blockEpoch, store.getCurrentStoreEpoch config = .ok epoch ∧
-                 store.getBlockEpoch fcr.confirmedRoot = .ok blockEpoch ∧
-                 epoch.toNat ≤ blockEpoch.toNat + 1) ∧
-               store.isAncestor ⟨head.root, .pending⟩ ⟨fcr.confirmedRoot, .pending⟩ =
-                 .ok true ∧
-               (isStartSlotAtEpoch preset slot = .ok true →
-                 store.isConfirmedChainSafe config after head.root
-                   fcr.confirmedRoot = .ok true))) ∧
-        (start = base ∧
-            ¬(isStartSlotAtEpoch preset slot = .ok true ∧
-               (∃ observedBlock epoch,
-                 store.block after.currentEpochObservedJustifiedCheckpoint.root =
-                   .ok observedBlock ∧
-                 store.getCurrentStoreEpoch config = .ok epoch ∧
-                 Uint64.addChecked (computeEpochAtSlot preset observedBlock.slot) 1 = .ok epoch) ∧
-               store.unrealizedJustification head.root =
-                 .ok after.currentEpochObservedJustifiedCheckpoint ∧
-               ∃ baseBlock observedBlock, store.block base = .ok baseBlock ∧
-                 store.block after.currentEpochObservedJustifiedCheckpoint.root =
-                   .ok observedBlock ∧
-                 baseBlock.slot < observedBlock.slot) ∨
-          start = after.currentEpochObservedJustifiedCheckpoint.root ∧
-            (isStartSlotAtEpoch preset slot = .ok true ∧
-              (∃ observedBlock epoch,
-                store.block after.currentEpochObservedJustifiedCheckpoint.root =
-                  .ok observedBlock ∧
-                store.getCurrentStoreEpoch config = .ok epoch ∧
-                Uint64.addChecked (computeEpochAtSlot preset observedBlock.slot) 1 = .ok epoch) ∧
-              store.unrealizedJustification head.root =
-                .ok after.currentEpochObservedJustifiedCheckpoint ∧
-              ∃ baseBlock observedBlock, store.block base = .ok baseBlock ∧
-                store.block after.currentEpochObservedJustifiedCheckpoint.root =
-                  .ok observedBlock ∧
-                baseBlock.slot < observedBlock.slot))) ∧
+      store.SelectsStart config after fcr.confirmedRoot head.root slot start ∧
       (after.confirmedRoot = start ∨
         after.confirmedRoot ≠ start ∧
-        store.Checked config after head.root start after.confirmedRoot ∧
+        store.FastConfirmationChecked config after head.root start after.confirmedRoot ∧
         ∃ balanceSource chain later,
           store.checkpointState after.currentEpochObservedJustifiedCheckpoint =
             .ok balanceSource ∧
@@ -917,15 +796,8 @@ theorem onFastConfirmation_checked {fcr after : FastConfirmationStore}
   subst confirmed
   obtain ⟨slot, start, slotOk, startCase, result⟩ :=
     getLatestConfirmed_walk latest
-  obtain ⟨previousHead, currentHead⟩ :=
-    Prod.mk.inj (updateFastConfirmationVariables_heads updateOk)
-  obtain ⟨updateSlot, updateSlotOk, checkpoints⟩ :=
-    updateFastConfirmationVariables_checkpoints updateOk
-  have sameSlot : updateSlot = slot := Except.ok.inj (updateSlotOk.symm.trans slotOk)
-  subst updateSlot
   rw [updateFastConfirmationVariables_confirmedRoot updateOk] at startCase
-  refine ⟨head, slot, start, headOk, slotOk, previousHead, currentHead,
-    checkpoints.1, checkpoints.2.1, checkpoints.2.2.1, checkpoints.2.2.2, startCase, ?_⟩
+  refine ⟨head, slot, start, headOk, slotOk, startCase, ?_⟩
   rcases result with same | ⟨checked, _, walk⟩
   · exact Or.inl same
   · obtain ⟨balanceSource, chain, later, sourceOk, walked, confirmedAll⟩ := walk
@@ -980,14 +852,9 @@ theorem onFastConfirmation_confirmedRoot {fcr after : FastConfirmationStore}
         store.getAncestorRoots head.root start = .ok (chain ++ after.confirmedRoot :: later) ∧
         ∀ member ∈ chain ++ [after.confirmedRoot], store.isOneConfirmed config head.root
           balanceSource (store.tallyVotes balanceSource) member = .ok true) := by
-  obtain ⟨head, slot, start, headOk, slotOk, _, _, _, _, _, _,
-    ⟨base, baseCase, startCase⟩, result⟩ := onFastConfirmation_checked confirmed
-  refine ⟨head, slot, start, headOk, slotOk, ?_, result.imp id (fun h => h.2.2)⟩
-  rcases startCase with ⟨rfl, _⟩ | ⟨same, boundary, observed, justified, _⟩
-  · rcases baseCase with ⟨same, _, ancestry, safe⟩ | ⟨same, _⟩
-    · exact Or.inl ⟨same, ancestry, safe⟩
-    · exact Or.inr (Or.inl same)
-  · exact Or.inr (Or.inr ⟨same, boundary, observed, justified⟩)
+  obtain ⟨head, slot, start, headOk, slotOk, startCase, result⟩ :=
+    onFastConfirmation_checked confirmed
+  exact ⟨head, slot, start, headOk, slotOk, startCase.eq_or, result.imp id (fun h => h.2.2)⟩
 
 end Store
 
