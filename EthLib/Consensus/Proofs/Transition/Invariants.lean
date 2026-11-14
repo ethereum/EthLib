@@ -1162,7 +1162,8 @@ theorem applyWithdrawal {withdrawal : Withdrawal}
     exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
   · exact laws.decreaseBalance computed
 
-theorem updateNextWithdrawalIndex {withdrawals : Array Withdrawal}
+omit laws in
+private theorem updateNextWithdrawalIndex_of (refl : ∀ s, R s s) {withdrawals : Array Withdrawal}
     (computed : Consensus.updateNextWithdrawalIndex state withdrawals = .ok after) :
     R state after := by
   unfold Consensus.updateNextWithdrawalIndex at computed
@@ -1171,7 +1172,12 @@ theorem updateNextWithdrawalIndex {withdrawals : Array Withdrawal}
     obtain ⟨_, _, rfl⟩ := computed
     exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
   · cases computed
-    exact laws.refl _
+    exact refl _
+
+theorem updateNextWithdrawalIndex {withdrawals : Array Withdrawal}
+    (computed : Consensus.updateNextWithdrawalIndex state withdrawals = .ok after) :
+    R state after :=
+  updateNextWithdrawalIndex_of keep laws.refl computed
 
 omit laws in
 theorem updateNextWithdrawalValidatorIndex {capella : .shapella ≤ fork}
@@ -1200,7 +1206,17 @@ theorem updateNextWithdrawalBuilderIndex {gloas : .glamsterdam ≤ fork} {count 
     obtain ⟨_, _, rfl⟩ := computed
     exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
 
-theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
+end EpochFrameLaws
+
+/-- Applying withdrawals composes their balance writes with the bookkeeping steps. -/
+theorem applyExpectedWithdrawals_of
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (withdraw : ∀ {s t} {w : Withdrawal}, applyWithdrawal s w = .ok t → R s t)
+    (keep : ∀ {s t : BeaconState preset fork}, BlockFrame s t → t.validators = s.validators →
+      R s t)
+    {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (computed : Consensus.applyExpectedWithdrawals state capella expected = .ok after) :
     R state after := by
@@ -1210,7 +1226,8 @@ theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
   have one : R state applied := by
     unfold applyWithdrawals at appliedOk
     rw [← Array.foldlM_toList] at appliedOk
-    exact laws.foldlM (fun _ _ _ ok => laws.applyWithdrawal keep ok) appliedOk
+    exact foldlM_ok_invariant (R state)
+      (fun _ _ _ prior ok => trans prior (withdraw ok)) (refl state) appliedOk
   have queued : ∀ kept : BeaconState preset fork,
       R kept (if gloas : .glamsterdam ≤ fork then
         updateBuilderPendingWithdrawals
@@ -1233,10 +1250,26 @@ theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
     split at ok
     · exact EpochFrameLaws.updateNextWithdrawalBuilderIndex keep ok
     · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ laws.refl _
-  exact laws.trans one <| laws.trans (laws.updateNextWithdrawalIndex keep indexedOk) <|
-    laws.trans (queued _) <| laws.trans (partials _) <| laws.trans (swept _ sweptOk)
+      exact ok ▸ refl _
+  exact trans one <| trans (EpochFrameLaws.updateNextWithdrawalIndex_of keep refl indexedOk) <|
+    trans (queued _) <| trans (partials _) <| trans (swept _ sweptOk)
       (EpochFrameLaws.updateNextWithdrawalValidatorIndex keep last)
+
+namespace EpochFrameLaws
+
+variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
+  (laws : EpochFrameLaws R)
+  (keep : ∀ {state after : BeaconState preset fork}, BlockFrame state after →
+    after.validators = state.validators → R state after)
+
+include laws keep
+
+theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
+    {expected : ExpectedWithdrawals}
+    (computed : Consensus.applyExpectedWithdrawals state capella expected = .ok after) :
+    R state after :=
+  applyExpectedWithdrawals_of R laws.refl laws.trans (fun ok => laws.applyWithdrawal keep ok)
+    keep computed
 
 theorem processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
@@ -2215,14 +2248,14 @@ theorem processEpoch_split_of_lt_altair (before : fork < .altair)
 
 end EpochStepLaws
 
-namespace EpochFrameLaws
-
-variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
-  (laws : EpochFrameLaws R)
-
-include laws
-
-theorem passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
+/-- A pending-deposit pass composes the relation preserved by each admitted deposit. -/
+theorem passPendingDeposits_of
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (admit : ∀ {s t} {d : PendingDeposit},
+      applyPendingDeposit config checks s d = .ok t → R s t)
+    {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
     {available : Gwei} :
     ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
       {count : Nat} {postponed : Array PendingDeposit} {pass},
@@ -2232,13 +2265,13 @@ theorem passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
   | [], _, _, _, _, _, computed => by
     simp only [Consensus.passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
-    exact laws.refl _
+    exact refl _
   | deposit :: rest, state, processed, count, postponed, pass, computed => by
     unfold Consensus.passPendingDeposits at computed
     simp only [bind, Except.bind, pure, Except.pure] at computed
     split at computed
     · cases computed
-      exact laws.refl _
+      exact refl _
     split at computed
     · cases computed
     split at computed
@@ -2248,26 +2281,40 @@ theorem passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
       split at computed
       · cases computed
       cases computed
-      exact laws.trans (laws.applyPendingDeposit credited)
-        (passPendingDeposits (deposits := rest) ‹_›)
+      exact trans (admit credited)
+        (passPendingDeposits_of R refl trans admit (deposits := rest) ‹_›)
     split at computed
     · split at computed
       · cases computed
       cases computed
-      exact passPendingDeposits (deposits := rest) ‹_›
+      exact passPendingDeposits_of R refl trans admit (deposits := rest) ‹_›
     split at computed
     · cases computed
     split at computed
     · cases computed
-      exact laws.refl _
+      exact refl _
     split at computed
     · cases computed
     rename_i credited
     split at computed
     · cases computed
     cases computed
-    exact laws.trans (laws.applyPendingDeposit credited)
-      (passPendingDeposits (deposits := rest) ‹_›)
+    exact trans (admit credited)
+      (passPendingDeposits_of R refl trans admit (deposits := rest) ‹_›)
+
+namespace EpochFrameLaws
+
+variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
+  (laws : EpochFrameLaws R)
+
+include laws
+
+theorem passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
+    {available : Gwei} {deposits : List PendingDeposit} {state : BeaconState preset fork}
+    {processed : Gwei} {count : Nat} {postponed : Array PendingDeposit} {pass}
+    (computed : Consensus.passPendingDeposits config checks stop nextEpoch available state
+      processed count postponed deposits = .ok pass) : R state pass.1.state :=
+  passPendingDeposits_of R laws.refl laws.trans (fun ok => laws.applyPendingDeposit ok) computed
 
 theorem processPendingDeposits {electra : .pectra ≤ fork}
     (computed : Consensus.processPendingDeposits config checks state electra = .ok after) :
