@@ -3,7 +3,6 @@ module
 public import EthLib.Consensus.BeaconApi.ValidatorData
 public import EthLib.Consensus.Proofs.HonestAggregateSignatures
 public import EthLib.Consensus.Proofs.Transition.StateTransition
-import EthLib.Consensus.Proofs.BeaconApi.Encoding
 
 /-!
 # Proofs: the data that the Beacon API hands a validator
@@ -388,9 +387,9 @@ private theorem constructAggregate_ne_indexOutOfRange {state : BeaconState prese
     cases mapped
   · simp [pure, Except.pure] at failed
 
-/-- From Electra, an aggregate fails to build for an index out of range in one case only.
+/-- An aggregate of single attestations fails for an index out of range in one case only.
 
-That case is a committee index not below the number of committees of a slot. -/
+That case is a committee index not below the most committees a slot can have. -/
 private theorem constructAggregateOfSingleAttestations_indexOutOfRange_iff
     {state : BeaconState preset fork} {data : AttestationData} {committeeIndex : CommitteeIndex}
     {singles : List SingleAttestation} :
@@ -459,7 +458,9 @@ It refuses with code 503 when the block of the first match is optimistic.
 
 When that block is verified, it refuses with code 400 for a committee index out of range.
 
-That index is not below the number of committees of a slot.
+That index is not below the most committees a slot can have.
+
+A lower index never gives code 400, even when the epoch has fewer committees.
 
 It needs a fork from Electra, and a code other than 500, the code of an internal error. -/
 theorem aggregateAttestation_error_iff_of_electra {state : BeaconState preset fork}
@@ -541,7 +542,7 @@ theorem produceSyncCommitteeContribution_bits {state : BeaconState preset fork}
       rw [key]
       exact List.getElem_mem _
 
-/-- From Altair, a contribution fails for want of messages in one case only.
+/-- A contribution fails for want of messages in one case only.
 
 That case is no message of the slot of the state on the root.
 
@@ -681,6 +682,17 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
 
 /-! ## Responses -/
 
+/-- Writing the value of an answer as JSON fails only with code 500. -/
+theorem apiJsonOr500_error_code {α : Type} [Serialization.Ssz.SszType α] [ApiSpelling α] {x : α}
+    {error : ErrorMessage} (failed : apiJsonOr500 x = .error error) : error.code = 500 := by
+  unfold apiJsonOr500 at failed
+  cases json : toApiJson x with
+  | error fault =>
+    simp only [json, Except.mapError, Except.error.injEq] at failed
+    rw [← failed]
+    rfl
+  | ok _ => simp [json, Except.mapError] at failed
+
 /-- Writing the value of an answer as JSON adds no refusal with a code other than 500.
 
 It needs a code other than 500, the code of an internal error. -/
@@ -716,7 +728,7 @@ theorem aggregateAttestationResponse_error_iff {state : BeaconState preset fork}
 
 It needs a code other than 500, the code of an internal error. -/
 theorem syncCommitteeContributionResponse_error_iff {state : BeaconState preset fork}
-    {altair : .altair ≤ fork} {optimistic : OptimisticStore preset fork}
+    (altair : .altair ≤ fork) {optimistic : OptimisticStore preset fork}
     {messages : List SyncCommitteeMessage} {slot : Slot} {subcommitteeIndex : UInt64}
     {root : Root} {code : Nat} (notInternal : code ≠ 500) :
     (∃ error, syncCommitteeContributionResponse state optimistic messages slot
@@ -726,10 +738,10 @@ theorem syncCommitteeContributionResponse_error_iff {state : BeaconState preset 
   rw [syncCommitteeContributionResponse, dite_eq_left altair]
   exact apiJsonOr500_bind_error_iff notInternal
 
-/-- The contribution response gets the error of a query on a state before its fork, code 400.
+/-- Before Altair, the contribution response is the error with code 400 that names Altair.
 
 It needs a fork before Altair. -/
-theorem syncCommitteeContributionResponse_before_altair {state : BeaconState preset fork}
+theorem syncCommitteeContributionResponse_of_lt_altair {state : BeaconState preset fork}
     {optimistic : OptimisticStore preset fork} {messages : List SyncCommitteeMessage}
     {slot : Slot} {subcommitteeIndex : UInt64} {root : Root} (early : fork < .altair) :
     syncCommitteeContributionResponse state optimistic messages slot subcommitteeIndex root =

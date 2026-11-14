@@ -4508,6 +4508,7 @@ It refuses with code 503 exactly when the block of the first match is optimistic
 `aggregateAttestation_error_iff_of_electra` states the same from Electra, for the single attestations.
 From Electra it also refuses with code 400 exactly when the block of the first match is verified and the index is out of range.
 That is, the committee index is not below `MAX_COMMITTEES_PER_SLOT`.
+A lower index never gives code 400, even when the epoch has fewer committees.
 `produceSyncCommitteeContribution_error_iff` states when the contribution answer refuses with a code other than 500.
 It refuses with code 400 exactly when the slot is not that of the state, or the subcommittee index names no subnet.
 Else it refuses with code 503 exactly when the root is optimistic.
@@ -4517,8 +4518,8 @@ That refusal also needs the sync committee of the next slot, which `syncCommitte
 The three theorems share `checkVerified_bind_error_iff`.
 After the check of a block, an answer refuses with code 503 for an optimistic block, and else as the rest does.
 `aggregateAttestationResponse_error_iff` and `syncCommitteeContributionResponse_error_iff` lift these codes to the responses of the two endpoints.
-`apiJsonOr500_error_code` (`Consensus/Proofs/BeaconApi/Encoding.lean`) shows that writing the value of an answer as JSON fails only with code 500.
-`syncCommitteeContributionResponse_before_altair` shows that before Altair the contribution response gets the error of a query on a state before its fork, code 400.
+`apiJsonOr500_error_code` shows that writing the value of an answer as JSON fails only with code 500.
+`syncCommitteeContributionResponse_of_lt_altair` shows that before Altair the contribution response is the error with code 400 that names Altair.
 The source requires code 503 when "the block identified by the response `beacon_block_root` is optimistic".
 It requires code 404 when "no attestation is available for the requested `attestation_data_root`".
 It requires the same when "no sync committee contribution is available for the requested `beacon_block_root`".
@@ -4529,7 +4530,8 @@ The Python suite (`bindings/python/tests/consensus/test_beacon_api_validator_dat
 It checks the attestation data at the slot of the head and after it, where the index signals the payload, and codes 400 and 503.
 It checks the payload attestation data of a slot with a block, and none for a slot without one.
 It checks the attestation data index of Deneb, Electra and Fulu stores, and code 400 for payload attestation data before Gloas.
-It checks the aggregates and contributions against bytes it builds itself, and codes 400, 404 and 503.
+It checks the aggregates and contributions against bytes it builds itself.
+It checks codes 404 and 503 for the aggregate, and codes 400, 404 and 503 for the contribution.
 It checks the codes of the aggregate before Electra only, so only the theorems speak for the single attestations.
 No theorem states when these answers refuse with code 500.
 The issue's single matching and validity theorems are split by fork; from Electra the union of bits is stated as the set of attesters.
