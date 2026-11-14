@@ -274,6 +274,8 @@ A compatible finalized checkpoint gives the finality check of block validation.
 
 The hypothesis on delayed blocks gives the rest of the block handler.
 
+The root is assumed to fit each finalized checkpoint seen since the safe interval starts.
+
 Finalized-prefix compatibility and nonzero state roots of held blocks are assumed. -/
 theorem Execution.mem_supportersOf_of_duty_epoch {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
