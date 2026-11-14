@@ -160,6 +160,7 @@ public import EthLib.Consensus.Proofs.Shuffle
 public import EthLib.Consensus.Proofs.SlashingProtection
 public import EthLib.Consensus.Proofs.ShufflePermutation
 public import EthLib.Consensus.Proofs.Signing
+public import EthLib.Consensus.Proofs.SigningRandomOracle
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
