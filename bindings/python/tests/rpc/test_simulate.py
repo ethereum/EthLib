@@ -35,9 +35,22 @@ def _answer_codes(requests: list[str]) -> list[int | None]:
     return codes
 
 
+def _call(call: Mapping[str, Any]) -> dict[str, Any]:
+    """A call result without the message of its error, after checking the prefix of a revert."""
+    if "error" not in call:
+        return dict(call)
+    error = dict(call["error"])
+    message = error.pop("message")
+    # The schema fixes the start of the message of a revert, and leaves the rest to the client.
+    assert error["code"] != 3 or message.startswith("execution reverted")
+    return {**call, "error": error}
+
+
 def _blocks(response: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """The blocks of a response without the results of their calls, which are not yet specified."""
-    return [{k: v for k, v in block.items() if k != "calls"} for block in response["result"]]
+    """The blocks of a response, without the error messages of their calls."""
+    return [
+        {**block, "calls": [_call(call) for call in block["calls"]]} for block in response["result"]
+    ]
 
 
 def _request(payload: Mapping[str, Any], *block: str) -> str:
