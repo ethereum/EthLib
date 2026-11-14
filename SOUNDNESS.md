@@ -4002,8 +4002,7 @@ A rejection of the second call, such as a gas limit that no longer covers the li
 The list is not iterated to a fixed point, so a call whose accesses change with its access list can report a list that the second call does not match.
 
 `eth_simulateV1` of [`execute.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/execute.yaml) runs calls in a sequence of blocks on top of a base block (`Execution/Rpc/Simulate.lean`).
-EthLib specifies its request and the checks before the execution.
-The simulated blocks are not yet specified, so a request that passes the checks gets `-32603`.
+EthLib specifies its request, the checks before the execution, and the simulated blocks.
 The reader rejects a key outside the schema of block or account overrides (`blockOverrides_unknown_key`, `accountOverride_unknown_key`, `Proofs/Rpc/Simulate.lean`).
 It rejects an account override with both `state` and `stateDiff`, even when one is `null` (`accountOverride_state_and_stateDiff`).
 A rejected override rejects the whole request (`simulatePayload_rejects` and the lemmas before it), with code `-32602` (`call_simulate_rejected`).
@@ -4018,7 +4017,7 @@ Filling them keeps every field that the call gives, and changes no other field (
 The nonce is that of the sender after the earlier calls, and the gas is what the block has left.
 The execution core takes four exceptions of a simulated block as optional overrides, whose defaults leave a real block unchanged.
 They are a sender given in place of the signature, the precompile that a call to each address runs, a base fee per blob gas that the block sets, and rules of a transaction that the simulation lifts.
-The lifted rules are the nonce check, the caps at `2^24` of EIP-8037, and its cap at `2^32 - 1` on the gas limit.
+The lifted rules are the nonce check, the caps at `2^24` of EIP-8037, its cap at `2^32 - 1` on the gas limit, and the base fee of a transaction whose fee cap is 0.
 A known sender that the signature names, and that passes the rule on its code, gives the same check of the transaction (`checkInclusion_of_knownSender`, `Proofs/Transactions/Overrides.lean`).
 With the default map, a call runs the precompile at the address of its code (`precompileAddress_of_default`).
 A move leaves the addresses that are warm at the start of a transaction unchanged, as the notes say.
@@ -4028,6 +4027,10 @@ With the nonce check skipped, a sender whose nonce is `2^64 - 1` still fails, as
 The nonce of the call itself stays below `2^64 - 1` in both modes, a rule the notes do not lift.
 With the caps lifted, all the gas past the intrinsic gas is execution gas (`allocateGas_of_gasCap`).
 The whole gas limit must then fit in the execution gas that the block has left (`executionCapacity_of_gasCap`).
+Unless that rule is lifted, a transaction pays for its gas at the base fee of its block (`paidBaseFee_empty`, `paidBaseFee_default`).
+Once it is, a transaction whose fee cap is 0 pays at a base fee of 0 (`paidBaseFee_of_zeroFee`).
+The check of the base fee, the purchase of the gas and the settlement read that base fee, by definition.
+The base fee of the block, which BASEFEE reads, stays unchanged, since the block environment is not modified.
 
 Where the source is silent or conflicts with itself, EthLib follows the fixtures, else decides:
 
@@ -4044,6 +4047,54 @@ Where the source is silent or conflicts with itself, EthLib follows the fixtures
 - an address or a slot given twice, in hex digits of another case, gets `-32602`;
 - block and account overrides support no key beyond their schema, `difficulty` included, nor a key that differs from one only in case;
 - the payload and each block ignore a key outside their schema, as the schema allows.
+
+The simulated blocks run through the body of a real block (`simulateBlocks`, `Execution/Rpc/Simulate/Blocks.lean`).
+A simulated block differs from a real one in these places:
+
+- its header takes the defaults of the notes and the overrides of the request, and is not checked against its parent;
+- without validation, its base fee and its base fee per blob gas are 0, unless the request sets them;
+- each call runs from its given sender with `r`, `s` and `yParity` 0, so it needs no signature and may come from an account with code;
+- the cap at `2^32 - 1` on the gas limit never applies, and without validation the nonce check and the caps at `2^24` of EIP-8037 do not either;
+- without validation, a call whose fee cap is 0 pays nothing for its gas, apart from its blob gas, even below a base fee that the request sets;
+- the overrides of the accounts change the state before the block, and are not in its access list;
+- the default gas of a call follows the gas that its block has used, within a global budget of 50,000,000 that each call spends, and a call that overspends it gets `-38026`.
+
+Each simulated block follows the last block of its chain at the number that it is given (`simulateBlock_links`, `Proofs/Rpc/SimulateBlocks.lean`).
+Its parent hash is the hash of the header of that block, and its own hash is the hash of its header.
+When the view holds the hash of each header, there is one block for each planned block and each gap block before it (`simulateBlocks_links`).
+They have consecutive numbers after the base block.
+The first has the hash of the base block as parent hash, and each other the hash of the block before it.
+Without validation, a block whose base fee is not overridden has a base fee of 0, whatever the base fee of the block before it (`simulateBlock_baseFee`).
+Its body runs in the environment of its header, whose base fee is then 0, and BASEFEE reads it (`simulateBlock_environment_baseFee`).
+With validation off, every block of a simulation whose base fee is not overridden has a base fee of 0, gap blocks included (`simulateBlocks_baseFee`).
+With validation and no overrides, a simulated block agrees with the state transition (`stateTransition_of_simulateBlock`).
+The fork must be active at the block and come before Hegotá.
+Its calls must be signed transactions whose signatures give their senders and name the chain.
+Each gas limit must be at most `2^32 - 1` at every fork, and their blob gas must fit 64 bits.
+The block with those transactions and their root must pass the checks of a block, its size and its header against its parent included, which the simulation does not run.
+When the state holds the code of each account, its transition gives the state after the simulated block, or fails at a sender with code by EIP-3607, which the simulation skips.
+The checks of a block stay a hypothesis: the size limit of a block depends on the signatures, and before Paris the simulated difficulty is that of the base block.
+The simulated header is built to pass the other checks against its parent, but no theorem states it yet.
+
+Where the source is silent or conflicts with itself for the blocks, EthLib follows the fixtures, else decides:
+
+- a block keeps the gas limit of the block before it, where the notes name the base block;
+- after another simulated block, a block keeps its fee recipient, where the notes name the zero address;
+- the extra data is empty, as the fixtures show, where the notes give 32 zero bytes, and the root of the parent beacon block is zero;
+- after a block without a slot, the slot is 0, where the notes omit it;
+- an override creates no account that it leaves empty, as the fixtures show;
+- a blob fee cap on a call without blobs is ignored, as the fixtures show;
+- a nonce at `2^64 - 1` gets `-32603`, as the fixtures show;
+- a call that does not fit the gas or the blob gas left gets `-38015`, and a rule without a code of its own gets `-32602`;
+- without validation, a fee cap of 0 passes at any base fee, as a fixture shows at a base fee of 10;
+- a nonzero fee cap below the base fee still gets `-38012`;
+- a blob fee cap below a base fee per blob gas that the request sets still fails, with `-32602`;
+- the base block must be canonical, so that the hashes before each block are those of its chain;
+- from Fusaka to BPO5, the default gas of a call is at most `2^24`, the cap of EIP-7825;
+- before London, a call without a type or a fee cap is legacy, or type 1 with an access list from Berlin;
+- before Paris, the fee recipient gets the block reward, as in a real block.
+
+The results of the calls are not yet in the blocks.
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
@@ -4172,6 +4223,14 @@ The fork schedule lists Phase 0, with the genesis version twice and epoch 0, the
 Without that order it fails: with Altair at epoch 10 and Bellatrix at epoch 5, at epoch 12 that entry is Altair's, while the fork version is Bellatrix's.
 The genesis answer takes its time and its root from the genesis state, and its version from the configuration.
 `genesisInfo_version` shows that the genesis state that deposits build holds that version.
+`currentVersion_of_genesis_chainSteps` shows that along a chain from that genesis state, across forks, each state has the version of its fork as its current version.
+It follows from `currentVersion_of_chainSteps`, which shows the same along a chain from any state that has it.
+`forkVersions_mem_forkSchedule_of_genesis_chainSteps` shows that the fork versions of each state of such a chain are an entry of the schedule.
+That genesis state is before Altair (`initializeBeaconStateFromEth1_frame`), and each fork before Altair has the genesis version, which the state holds (`genesisInfo_version`).
+Its fork versions are the genesis version twice with epoch 0, the first entry of the schedule.
+A slot with its epoch processing, or a block, keeps the fork versions at every fork (`advanceSlot_kept` in `Consensus/Proofs/Transition/TargetSlots.lean`, `frame_processBlock`).
+An upgrade writes the version of the fork that it reaches as the current version (`upgradeFrame_upgradeNext`).
+So each upgrade of such a chain starts from a state that holds the version of its fork, and `forkSchedule_upgrade` applies to it.
 
 The answers that read one field of a state are in `Consensus/BeaconApi/StateQueries.lean`.
 They are the root, the fork, the finality checkpoints, the RANDAO mix, the three pending queues, the proposer lookahead, and the pending payments and withdrawals of builders.
@@ -4613,7 +4672,12 @@ Points that remain open:
 - The source does not say what a block before Altair, which has no sync aggregate, gives; EthLib answers with code 400 and the example message of the source.
 - The source does not order the entries of the sync committee rewards; EthLib lists them in increasing order of index.
 - The source does not say whether the genesis fork version is the one of the configuration or the one that the genesis state holds; EthLib reads the configuration, which the domain of a deposit uses, so a chain that starts at a later fork reports a version that its genesis state does not hold.
-- `forkSchedule_upgrade` assumes that the state before the upgrade holds the version of its own fork; no theorem yet shows this for every state that the transition reaches.
+- `forkSchedule_upgrade` assumes that the state before the upgrade holds the version of its own fork.
+  `currentVersion_of_chainSteps` shows it for each state of a chain whose first state holds the version of its fork.
+  `currentVersion_of_genesis_chainSteps` discharges that for the genesis state that deposits build, which is before Altair.
+  `Store.Reachable.blockStatesFromParents` links each state that a store keeps to the state of its parent by a state transition.
+  No theorem yet shows that this transition keeps the fork versions, or that an anchor holds the version of its fork.
+  So the answers of the API are not covered.
 - The format rule of the spec map names hex, numbers and arrays only; EthLib writes the names of the preset and of the configuration as text, as the files do.
 - The source has the `randao` query answer "Invalid state ID or epoch" with code 400, and its example message is "Epoch is out of range for the `randao_mixes` of the state", but it names no range.
   EthLib reads the circular buffer at the epoch modulo its length and refuses no epoch.
@@ -5294,12 +5358,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 512 operations and 49 size constants.
-The Python extension calls 512 of the operations and 49 of the constants.
+Lean exports 515 operations and 49 size constants.
+The Python extension calls 515 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11723 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1633), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (47), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (806), `x25519.c` (21), `xmss.c` (134).
+11768 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1636), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (809), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

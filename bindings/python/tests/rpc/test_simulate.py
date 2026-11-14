@@ -1,4 +1,4 @@
-"""The checks of eth_simulateV1 before its blocks run, and the overrides of its accounts."""
+"""The simulated blocks of eth_simulateV1, its checks, and the overrides of its accounts."""
 
 import json
 from collections.abc import Mapping
@@ -16,24 +16,28 @@ from .chain import FIXTURES, genesis_state, read_fixture, replay_chain
 # The vendored fixtures of the method.
 SIMULATE: Final = sorted((FIXTURES / "eth_simulateV1").glob("*.io"))
 
-# The code of a request that passes every check before the execution.
-# The execution of the simulated blocks is not yet specified, so the node fails with this code.
-NOT_YET_SPECIFIED: Final = -32603
+# The answer of a request that passes every check and runs its blocks.
+RESULT: Final = None
 
 # The number and the time of the head of the test chain.
 HEAD_NUMBER: Final = 60
 HEAD_TIME: Final = 0x258
 
 
-def _answer_codes(requests: list[str]) -> list[int]:
-    """The error code of the response of the chain to each request."""
-    codes = []
+def _answer_codes(requests: list[str]) -> list[int | None]:
+    """The error code of the response of the chain to each request, or None for a result."""
+    codes: list[int | None] = []
     for text in replay_chain().serve(requests):
         assert text is not None
         response = json.loads(text)
-        assert set(response) == {"jsonrpc", "id", "error"}
-        codes.append(response["error"]["code"])
+        assert set(response) in ({"jsonrpc", "id", "error"}, {"jsonrpc", "id", "result"})
+        codes.append(response["error"]["code"] if "error" in response else RESULT)
     return codes
+
+
+def _blocks(response: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The blocks of a response without the results of their calls, which are not yet specified."""
+    return [{k: v for k, v in block.items() if k != "calls"} for block in response["result"]]
 
 
 def _request(payload: Mapping[str, Any], *block: str) -> str:
@@ -42,29 +46,33 @@ def _request(payload: Mapping[str, Any], *block: str) -> str:
     return json.dumps({"jsonrpc": "2.0", "id": 1, "method": "eth_simulateV1", "params": params})
 
 
-def test_every_fixture_fails_before_execution() -> None:
-    """Each vendored fixture expects an error, so none is checked for its result."""
-    assert len(SIMULATE) == 17
-    for path in SIMULATE:
-        (exchange,) = read_fixture(path).exchanges
-        assert "error" in exchange.response, path.name
+def test_every_fixture_is_vendored() -> None:
+    """The suite holds every fixture of the method at the pinned commit."""
+    assert len(SIMULATE) == 95
 
 
 @pytest.mark.parametrize("path", SIMULATE, ids=lambda path: path.stem)
 def test_fixture(path: Path) -> None:
-    """The view answers the code of the fixture, and the source fixes no message."""
+    """The view answers the code or the blocks of the fixture; the source fixes no message."""
     (exchange,) = read_fixture(path).exchanges
-    assert _answer_codes([exchange.request]) == [exchange.response["error"]["code"]]
+    (text,) = replay_chain().serve([exchange.request])
+    assert text is not None
+    response = json.loads(text)
+    if "error" in exchange.response:
+        assert response["error"]["code"] == exchange.response["error"]["code"]
+    else:
+        assert "result" in response, response.get("error")
+        assert _blocks(response) == _blocks(exchange.response)
 
 
 # Requests that pass every check before the execution, and requests that fail one.
 CHECKS = [
-    pytest.param({"blockStateCalls": [{}]}, NOT_YET_SPECIFIED, id="one-empty-block"),
-    pytest.param({"blockStateCalls": []}, NOT_YET_SPECIFIED, id="no-block"),
+    pytest.param({"blockStateCalls": [{}]}, RESULT, id="one-empty-block"),
+    pytest.param({"blockStateCalls": []}, RESULT, id="no-block"),
     # A gap counts toward the limit of 256 blocks: 256 blocks fit, 257 do not.
     pytest.param(
         {"blockStateCalls": [{"blockOverrides": {"number": hex(HEAD_NUMBER + 256)}}]},
-        NOT_YET_SPECIFIED,
+        RESULT,
         id="gap-to-limit",
     ),
     pytest.param(
@@ -97,7 +105,7 @@ CHECKS = [
                 {"stateOverrides": {f"0x{1:040x}": {"movePrecompileToAddress": f"0x{0xC2:040x}"}}}
             ]
         },
-        NOT_YET_SPECIFIED,
+        RESULT,
         id="move-precompile",
     ),
     pytest.param(
@@ -113,7 +121,7 @@ CHECKS = [
 
 
 @pytest.mark.parametrize(("payload", "code"), CHECKS)
-def test_checks(payload: Mapping[str, Any], code: int) -> None:
+def test_checks(payload: Mapping[str, Any], code: int | None) -> None:
     """A request on the head gets the code of the first check that it fails."""
     assert _answer_codes([_request(payload)]) == [code]
 
@@ -126,7 +134,7 @@ def test_base_block_is_latest_by_default() -> None:
         _request(payload, "latest"),
         _request(payload, hex(HEAD_NUMBER - 1)),
     ]
-    assert _answer_codes(requests) == [-38020, -38020, NOT_YET_SPECIFIED]
+    assert _answer_codes(requests) == [-38020, -38020, RESULT]
 
 
 def test_gap_block_times() -> None:
@@ -147,7 +155,7 @@ def test_gap_block_times() -> None:
     assert text is not None
     time = int(json.loads(text)["result"]["timestamp"], 16)
     # On block 59, block 61 leaves a gap of one block, 12 seconds after block 59.
-    for offset, code in ((12, -38021), (13, NOT_YET_SPECIFIED)):
+    for offset, code in ((12, -38021), (13, RESULT)):
         overrides = {"number": hex(HEAD_NUMBER + 1), "time": hex(time + offset)}
         payload = {"blockStateCalls": [{"blockOverrides": overrides}]}
         assert _answer_codes([_request(payload, base)]) == [code]

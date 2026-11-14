@@ -88,6 +88,7 @@ private theorem reads_settleGas (hfork : .paris ≤ fork) {env : BlockEnvironmen
     (h : settleGas env tx sender t gasLeft refund = .ok (tx', used)) :
     tx.ReadsLe tx' ∧ sender ∈ tx'.accountReads ∧ env.coinbase ∈ tx'.accountReads := by
   unfold settleGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨refunded, hrefund, h⟩ := bind_ok_iff.mp h
   obtain ⟨paid, hpay, h⟩ := bind_ok_iff.mp h
   cases h
@@ -167,6 +168,7 @@ private theorem buyGas_agrees {env : BlockEnvironment fork} {tx other bought : T
     ∃ bought', buyGas env other sender t = .ok bought' ∧
       AgreesOn account allStorage slot code bought bought' := by
   unfold buyGas at h ⊢
+  rw [paidBaseFee_empty] at h ⊢
   obtain ⟨mid, hmid, h⟩ := bind_ok_iff.mp h
   obtain ⟨mid', hmid', hagree'⟩ := exists_ok_of_exceptRel (hagree.incrementNonce fork (.inr hs))
     hmid
@@ -198,6 +200,7 @@ private theorem settleGas_agrees (hfork : .paris ≤ fork) {env : BlockEnvironme
     ∃ other', settleGas env other sender t gasLeft refund = .ok (other', used) ∧
       AgreesOn account allStorage slot code tx' other' := by
   unfold settleGas at h ⊢
+  rw [paidBaseFee_empty] at h ⊢
   obtain ⟨refunded, hrefund, h⟩ := bind_ok_iff.mp h
   obtain ⟨paid, hpay, h⟩ := bind_ok_iff.mp h
   cases h
@@ -366,6 +369,7 @@ private theorem parent_buyGas {env : BlockEnvironment fork} {tx tx' : Transactio
     {sender : Address} {t : Transaction} (h : buyGas env tx sender t = .ok tx') :
     tx'.parent = tx.parent ∧ tx'.createdAccounts = tx.createdAccounts := by
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, hmid, h⟩ := bind_ok_iff.mp h
   exact ⟨(TransactionState.parent_modifyState h).trans (TransactionState.parent_modifyState hmid),
     (TransactionState.createdAccounts_modifyState h).trans
@@ -376,6 +380,7 @@ private theorem hasCodes_buyGas {env : BlockEnvironment fork} {tx tx' : Transact
     {sender : Address} {t : Transaction} (h : buyGas env tx sender t = .ok tx')
     (hcodes : HasCodes tx) : HasCodes tx' := by
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, hmid, h⟩ := bind_ok_iff.mp h
   refine hasCodes_modifyState h (hasCodes_incrementNonce hmid hcodes) fun _ hf => .inl ?_
   split at hf

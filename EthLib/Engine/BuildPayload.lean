@@ -117,20 +117,6 @@ def buildHeader (config : ChainConfig) (parent : RecentBlock) (parentHash : Hash
     blockAccessListHash := fun _ => 0
     slotNumber := attributes.slotNumber }
 
-/-- The header of a built block, with the fields that its body gives. -/
-def fillHeader (header : Header fork) (output : BlockOutput fork) (roots : OutputRoots) :
-    Header fork :=
-  { header with
-    stateRoot := roots.state
-    transactionsRoot := roots.transactions
-    receiptRoot := roots.receipts
-    bloom := logsBloom output.logs
-    gasUsed := output.gas.gasUsed
-    withdrawalsRoot := fun _ => roots.withdrawals.getD 0
-    blobGasUsed := fun _ => output.gas.blob.toUInt64
-    requestsHash := fun _ => requestsHash output.requests
-    blockAccessListHash := fun _ => output.accessListHash.getD 0 }
-
 /-- The priority fees that transactions pay to the fee recipient of their block, in wei.
 
 Each transaction pays its gas used times its gas price above the base fee.

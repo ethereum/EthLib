@@ -1,8 +1,8 @@
 module
 
-public import Lean.Data.Json
 public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Serialization.Ssz.Codec.Json
+public import EthLib.Serialization.Ssz.Codec.Proof
 public import EthLib.Serialization.Ssz.Codec.Root
 public import EthLib.Serialization.Ssz.Type.Valid
 
@@ -26,55 +26,84 @@ public section
 
 namespace EthLib.Serialization.Ssz.Exports
 
-open Lean
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport toPy)
 
 /-- The deepest nesting of types or values that the exports read.
 
 From Python the converter bounds the nesting first, at 64 levels below an argument. -/
 def MAX_NESTING : Nat := 256
 
-/-- The one key and its value of an object with exactly one entry. -/
-def tagged (document : Json) : Except String (String × Json) := do
-  let .obj entries := document | throw "expected an object with one key"
-  match entries.toArray with
-  | #[⟨key, value⟩] => return (key, value)
+/-- The key and the value of a `dict` with one key.
+
+A key given more than once keeps its last value, as in a JSON object. -/
+def tagged : PyValue → Except String (String × PyValue)
+  | .dict entries =>
+    match entries.back? with
+    | some (key, value) =>
+      if entries.all (·.1 == key) then return (key, value)
+      else throw "expected an object with one key"
+    | none => throw "expected an object with one key"
   | _ => throw "expected an object with one key"
 
-/-- A natural number, or none for `null`. -/
-def optionalNat (document : Json) : Except String (Option Nat) :=
-  if document.isNull then .ok none else some <$> document.getNat?
+/-- A natural number, from an `int`. -/
+def natOf : PyValue → Except String Nat
+  | .int n => return n
+  | _ => throw "Natural number expected"
 
-/-- The elements of a JSON array of exactly two elements. -/
-def pair (document : Json) : Except String (Json × Json) := do
-  match ← document.getArr? with
+/-- A natural number, or none for `None` and for an error inside a result.
+
+JSON wrote both of them as `null`. -/
+def optionalNat : PyValue → Except String (Option Nat)
+  | .none | .failure _ => return none
+  | value => some <$> natOf value
+
+/-- A boolean, from `False` or `True`. -/
+def boolOf : PyValue → Except String Bool
+  | .false => return false
+  | .true => return true
+  | _ => throw "Bool expected"
+
+/-- A text, from a `str`, or the `0x` and hex of a `bytes`. -/
+def strOf : PyValue → Except String String
+  | .str s => return s
+  | .bytes data => return Base.hexString data.toList
+  | _ => throw "String expected"
+
+/-- The items of a `list` or a `tuple`. -/
+def itemsOf : PyValue → Except String (Array PyValue)
+  | .list items | .tuple items => return items
+  | _ => throw "array expected"
+
+/-- The items of a `list` or a `tuple` of exactly two items. -/
+def pair (value : PyValue) : Except String (PyValue × PyValue) := do
+  match ← itemsOf value with
   | #[first, second] => return (first, second)
   | _ => throw "expected an array of two elements"
 
-/-- The type that a tagged document names, reading at most `fuel` levels of nesting. -/
-def descOf : Nat → Json → Except String Desc
+/-- The type that a tagged value names, reading at most `fuel` levels of nesting. -/
+def descOf : Nat → PyValue → Except String Desc
   | 0, _ => throw "the type is nested too deeply"
+  | _ + 1, .str "bool" => return .bool
   | fuel + 1, document => do
-    if document == "bool" then return .bool
     let (key, body) ← tagged document
-    let fields (body : Json) : Except String (List String × List Desc) := do
-      let entries ← (← body.getArr?).toList.mapM pair
-      let names ← entries.mapM fun (name, _) => name.getStr?
+    let fields (body : PyValue) : Except String (List String × List Desc) := do
+      let entries ← (← itemsOf body).toList.mapM pair
+      let names ← entries.mapM fun (name, _) => strOf name
       let types ← entries.mapM fun (_, type) => descOf fuel type
       return (names, types)
     match key with
-    | "uint" => return .uint (← body.getNat?)
-    | "byte_vector" => return .byteVector (← body.getNat?)
-    | "byte_list" => return .byteList (← body.getNat?)
-    | "bitvector" => return .bitVector (← body.getNat?)
-    | "bitlist" => return .bitList (← body.getNat?)
+    | "uint" => return .uint (← natOf body)
+    | "byte_vector" => return .byteVector (← natOf body)
+    | "byte_list" => return .byteList (← natOf body)
+    | "bitvector" => return .bitVector (← natOf body)
+    | "bitlist" => return .bitList (← natOf body)
     | "progressive_bitlist" => return .progressiveBitList (← optionalNat body)
     | "vector" => do
       let (element, length) ← pair body
-      return .vector (← descOf fuel element) (← length.getNat?)
+      return .vector (← descOf fuel element) (← natOf length)
     | "list" => do
       let (element, limit) ← pair body
-      return .list (← descOf fuel element) (← limit.getNat?)
+      return .list (← descOf fuel element) (← natOf limit)
     | "progressive_list" => do
       let (element, limit) ← pair body
       return .progressiveList (← descOf fuel element) (← optionalNat limit)
@@ -83,59 +112,62 @@ def descOf : Nat → Json → Except String Desc
       return .container names types
     | "progressive_container" => do
       let (active, entries) ← pair body
-      let active ← (← active.getArr?).toList.mapM Json.getBool?
+      let active ← (← itemsOf active).toList.mapM boolOf
       let (names, types) ← fields entries
       return .progressiveContainer active names types
     | "compatible_union" => do
-      let entries ← (← body.getArr?).toList.mapM pair
-      let selectors ← entries.mapM fun (selector, _) => selector.getNat?
+      let entries ← (← itemsOf body).toList.mapM pair
+      let selectors ← entries.mapM fun (selector, _) => natOf selector
       let options ← entries.mapM fun (_, option) => descOf fuel option
       return .compatibleUnion selectors options
     | _ => throw s!"unknown SSZ type {key}"
 
-/-- The value that a tagged document writes, reading at most `fuel` levels of nesting. -/
-def valueOfJson : Nat → Json → Except String Value
+/-- The value that a tagged value writes, reading at most `fuel` levels of nesting.
+
+Bytes given as `bytes` are taken as they are, and bytes given as text are read from hex. -/
+def valueOf : Nat → PyValue → Except String Value
   | 0, _ => throw "the value is nested too deeply"
   | fuel + 1, document => do
     let (key, body) ← tagged document
-    match key with
-    | "bool" => return .bool (← body.getBool?)
-    | "uint" => return .uint (← body.getNat?)
-    | "bytes" => do
-      match ofHex (← body.getStr?) with
+    match key, body with
+    | "bool", body => return .bool (← boolOf body)
+    | "uint", body => return .uint (← natOf body)
+    | "bytes", .bytes data => return .bytes data.data
+    | "bytes", body => do
+      match ofHex (← strOf body) with
       | .ok data => return .bytes data
       | .error _ => throw "bytes must be 0x and hex digits"
-    | "bits" => return .bits (← (← body.getArr?).mapM Json.getBool?)
-    | "seq" => return .seq (← (← body.getArr?).toList.mapM (valueOfJson fuel))
-    | "union" => do
+    | "bits", body => return .bits (← (← itemsOf body).mapM boolOf)
+    | "seq", body => return .seq (← (← itemsOf body).toList.mapM (valueOf fuel))
+    | "union", body => do
       let (selector, data) ← pair body
-      return .union (← selector.getNat?) (← valueOfJson fuel data)
-    | _ => throw s!"unknown SSZ value {key}"
+      return .union (← natOf selector) (← valueOf fuel data)
+    | _, _ => throw s!"unknown SSZ value {key}"
 
 mutual
 
-/-- The JSON document of a value, in the tagged form that the value reader takes. -/
-def jsonOfValue : Value → Json
-  | .bool b => Json.mkObj [("bool", b)]
-  | .uint n => Json.mkObj [("uint", n)]
-  | .bytes data => Json.mkObj [("bytes", toHex data)]
-  | .bits data => Json.mkObj [("bits", Json.arr (data.map Json.bool))]
-  | .seq elements => Json.mkObj [("seq", Json.arr (jsonOfValues elements #[]))]
-  | .union selector data => Json.mkObj [("union", Json.arr #[selector, jsonOfValue data])]
+/-- A value in the tagged form that the value reader takes, with bytes as `0x` and hex. -/
+def pyOfValue : Value → PyValue
+  | .bool b => .dict #[("bool", toPy b)]
+  | .uint n => .dict #[("uint", .int n)]
+  | .bytes data => .dict #[("bytes", .str (toHex data))]
+  | .bits data => .dict #[("bits", .list (data.map toPy))]
+  | .seq elements => .dict #[("seq", .list (pyOfValues elements #[]))]
+  | .union selector data => .dict #[("union", .list #[.int selector, pyOfValue data])]
 
-/-- The JSON documents so far, then those of the values, in order.
+/-- The tagged values so far, then those of the values, in order.
 
 The loop runs in constant stack for any number of values. -/
-def jsonOfValues : List Value → Array Json → Array Json
+def pyOfValues : List Value → Array PyValue → Array PyValue
   | [], out => out
-  | value :: rest, out => jsonOfValues rest (out.push (jsonOfValue value))
+  | value :: rest, out => pyOfValues rest (out.push (pyOfValue value))
 
 end
 
-/-- Decode a Python value in the form of JSON. -/
-def readValue {α : Type} (what : String) (value : PyValue) (decode : Json → Except String α) :
+/-- Decode a Python value. -/
+def readValue {α : Type} (what : String) (value : PyValue) (decode : PyValue → Except String α) :
     Result α :=
-  (decode value.toJson).mapError fun e => (0, s!"{what}: {e}")
+  (decode value).mapError fun e => (0, s!"{what}: {e}")
 
 /-- Run a fallible step of the codec, with the code of its error and a message. -/
 def runSsz {α : Type} (what : String) (act : Except Err α) : Result α :=
@@ -153,7 +185,7 @@ def readType (type : PyValue) : Result Desc := do
 def serializeOf (args : PyValue × PyValue) : Result ByteArray := do
   let (type, value) := args
   let shape ← readType type
-  let value ← readValue "value" value (valueOfJson MAX_NESTING)
+  let value ← readValue "value" value (valueOf MAX_NESTING)
   return ⟨← runSsz "value rejected" (serialize shape value)⟩
 
 /-- The SSZ bytes of a value of a type, both given in their tagged form. -/
@@ -165,7 +197,7 @@ def deserializeOf (args : PyValue × ByteArray) : Result PyValue := do
   let (type, data) := args
   let shape ← readType type
   let value ← runSsz "input rejected" (deserialize shape data.data)
-  return PyValue.ofJson (jsonOfValue value)
+  return pyOfValue value
 
 /-- The value that SSZ bytes hold for a type given in its tagged form, as a tagged `dict`. -/
 @[export eth_ssz_deserialize]
@@ -175,11 +207,92 @@ def deserializeExport (args : PyValue) : Result PyValue := pyExport deserializeO
 def hashTreeRootOf (args : PyValue × PyValue) : Result ByteArray := do
   let (type, value) := args
   let shape ← readType type
-  let value ← readValue "value" value (valueOfJson MAX_NESTING)
+  let value ← readValue "value" value (valueOf MAX_NESTING)
   return ⟨← runSsz "value rejected" (hashTreeRoot shape value)⟩
 
 /-- The 32-byte hash tree root of a value of a type, both given in their tagged form. -/
 @[export eth_ssz_hash_tree_root]
 def hashTreeRootExport (args : PyValue) : Result PyValue := pyExport hashTreeRootOf args
+
+/-- The step that one part of a path names, read against the type the path has reached.
+
+A part is a position, `__len__` for the length, or the name of a field of a container. -/
+def pathStep (shape : Option Desc) (part : PyValue) : Result PathStep :=
+  match part, shape with
+  | .int position, _ => return .position position
+  | .str "__len__", _ => return .length
+  | .str name, some (.container names _) | .str name, some (.progressiveContainer _ names _) =>
+    if names.contains name then return .position (names.idxOf name)
+    else throw (0, s!"path: no field {name}")
+  | .str name, _ => throw (0, s!"path: no field {name}")
+  | _, _ => throw (0, "path: a part must be an int or a str")
+
+/-- The steps that the parts of a path name, after the steps already read.
+
+The type is the one those steps reach, or none where they leave the tree.
+
+A field name past that point gets the fault that the index gives for any step there. -/
+def pathSteps (root : Desc) (read : List PathStep) (shape : Option Desc) :
+    List PyValue → Result (List PathStep)
+  | [] => return read
+  | part :: rest => do
+    if let (.str name, none) := (part, shape) then
+      if name != "__len__" then
+        let _ ← runSsz "path rejected" (getGeneralizedIndex root (read ++ [.position 0]))
+    let step ← pathStep shape part
+    let next := shape.bind fun shape => (shape.resolveStep step).toOption.bind (·.2)
+    pathSteps root (read ++ [step]) next rest
+
+/-- The generalized index of the node that a path selects in the tree of a type. -/
+def generalizedIndexOf (args : PyValue × List PyValue) : Result Nat := do
+  let (type, path) := args
+  let shape ← readType type
+  runSsz "path rejected" (getGeneralizedIndex shape (← pathSteps shape [] (some shape) path))
+
+/-- The generalized index of the node that a path selects in the tree of a type.
+
+The type is in its tagged form.
+
+Each part of the path is a position, a field name or `__len__`. -/
+@[export eth_ssz_generalized_index]
+def generalizedIndexExport (args : PyValue) : Result PyValue := pyExport generalizedIndexOf args
+
+/-- The branch that proves the node at a generalized index of a value against its root.
+
+The value is first checked by serializing it, so a value that does not fit gets no proof. -/
+def merkleProofOf (args : PyValue × PyValue × Nat) : Result (List ByteArray) := do
+  let (type, value, gindex) := args
+  let shape ← readType type
+  let value ← readValue "value" value (valueOf MAX_NESTING)
+  let _ ← runSsz "value rejected" (serialize shape value)
+  let branch ← runSsz "proof rejected" (buildProof shape value gindex)
+  return branch.map fun sibling => ⟨sibling⟩
+
+/-- The branch that proves the node at a generalized index of a value against its root.
+
+The type and the value are in their tagged form.
+
+The branch lists the sibling of each node on the path, from the node up to the root.
+
+The root itself has no branch, so index 1 is refused. -/
+@[export eth_ssz_merkle_proof]
+def merkleProofExport (args : PyValue) : Result PyValue := pyExport merkleProofOf args
+
+/-- The root of 32-byte chunks, in a tree padded to a power of two.
+
+The width is the limit if one is given, and the number of chunks otherwise. -/
+def merkleizeChunksOf (args : List ByteArray × Option Nat) : Result ByteArray := do
+  let (chunks, limit) := args
+  let chunks := chunks.map (·.data)
+  runSsz "chunks rejected" (checkChunks chunks)
+  return ⟨← runSsz "chunks rejected" (merkleizeBoundedUnchecked chunks.toArray limit)⟩
+
+/-- The root of 32-byte chunks, in a tree padded to a power of two.
+
+The width is the limit if one is given, and the number of chunks otherwise.
+
+A limit below the number of chunks is refused, and so is a chunk of another width. -/
+@[export eth_ssz_merkleize_chunks]
+def merkleizeChunksExport (args : PyValue) : Result PyValue := pyExport merkleizeChunksOf args
 
 end EthLib.Serialization.Ssz.Exports

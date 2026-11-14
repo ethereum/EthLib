@@ -119,6 +119,15 @@ where
   feeMarket (maxPriorityFee maxFee : Nat) : Nat :=
     min maxPriorityFee (maxFee - baseFee) + baseFee
 
+/-- The base fee per gas at which a transaction pays for its gas, in a block at `fork`.
+
+It is the base fee of the block.
+
+A simulation can lower it to 0 for a transaction with a maximum fee per gas of 0. -/
+def paidBaseFee {fork : Fork} (env : BlockEnvironment fork) (tx : Transaction)
+    (lifted : LiftedRules := {}) : Nat :=
+  if lifted.zeroFee && tx.maxFeePerGas == 0 then 0 else baseFeeOf env
+
 /-! ## The gas of the run -/
 
 /-- The gas that a transaction gives to its first frame. -/
@@ -288,10 +297,13 @@ The fee is the gas limit times the price per gas, plus the fee of the blobs.
 
 It fails if the sender does not hold the fee.
 
-This is only the deduction: the checks of the block ask for the balance at the maximum fees. -/
+This is only the deduction: the checks of the block ask for the balance at the maximum fees.
+
+A simulation can charge a transaction with a maximum fee per gas of 0 at a base fee of 0. -/
 def buyGas {fork : Fork} (env : BlockEnvironment fork) (state : TransactionState)
-    (sender : Address) (tx : Transaction) : Except StateError TransactionState := do
-  let fee := tx.gas.toNat * effectiveGasPrice (baseFeeOf env) tx +
+    (sender : Address) (tx : Transaction) (lifted : LiftedRules := {}) :
+    Except StateError TransactionState := do
+  let fee := tx.gas.toNat * effectiveGasPrice (paidBaseFee env tx lifted) tx +
     calculateTotalBlobGas tx * blobGasPriceOf env
   let state ← state.incrementNonce fork sender
   state.modifyState fork sender fun account =>
@@ -321,11 +333,13 @@ The sender gets back its refund, then the beneficiary gets the priority fee.
 
 From Glamsterdam the gas left includes the state gas reservoir left, so the sender gets it back.
 
+A simulation can charge a transaction with a maximum fee per gas of 0 at a base fee of 0.
+
 It returns the state and the gas used. -/
 def settleGas {fork : Fork} (env : BlockEnvironment fork) (state : TransactionState)
-    (sender : Address) (tx : Transaction) (gasLeft refundCounter : Nat) :
-    Except StateError (TransactionState × Nat) := do
-  let s := settlement fork (baseFeeOf env) sender tx gasLeft refundCounter
+    (sender : Address) (tx : Transaction) (gasLeft refundCounter : Nat)
+    (lifted : LiftedRules := {}) : Except StateError (TransactionState × Nat) := do
+  let s := settlement fork (paidBaseFee env tx lifted) sender tx gasLeft refundCounter
   let state ← creditEther fork state sender s.senderRefund
   let state ← payBeneficiary fork state env.coinbase s.priorityFee
   return (state, s.gasUsed)
