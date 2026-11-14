@@ -702,14 +702,17 @@ theorem getNodeChildren_empty_ok {node : ForkChoiceNode} {nodes : List ForkChoic
     exact ⟨children, childrenOk⟩
   · simp [throw, throwThe, MonadExceptOf.throw] at below
 
-/-- Before Gloas, the walk from a known pending node ends at a node that descends from it.
-
-The walk from the end node back to the slot of the start reaches the start. -/
-theorem getAncestor_getHeadFrom (before : fork < .glamsterdam) {nodes : List ForkChoiceNode}
+/-- A successful walk retains its start and successful child reads along the returned chain. -/
+private theorem getHeadFrom_chain_reads (before : fork < .glamsterdam)
+    {nodes : List ForkChoiceNode}
     {start head : ForkChoiceNode} (walk : store.getHeadFrom config tally nodes start = .ok head)
     (pending : start.payloadStatus = .pending) {startBlock : BeaconBlock preset fork}
     (found : store.blocks[start.root]? = some startBlock) :
-    store.getAncestor head startBlock.slot = .ok start := by
+    store.getAncestor head startBlock.slot = .ok start ∧
+      ∀ {target : Root} {targetBlock : BeaconBlock preset fork},
+        startBlock.slot ≤ targetBlock.slot →
+        store.getAncestor head targetBlock.slot = .ok ⟨target, .pending⟩ →
+        ∃ result, store.heaviestChild config tally nodes ⟨target, .pending⟩ = .ok result := by
   induction start using getHeadFrom.induct store generalizing startBlock with
   | _ start ih =>
     rw [getHeadFrom] at walk
@@ -720,7 +723,10 @@ theorem getAncestor_getHeadFrom (before : fork < .glamsterdam) {nodes : List For
       | none =>
         simp [chosen, bind, Except.bind, pure, Except.pure] at walk
         subst walk
-        exact getAncestor_of_le found (UInt64.le_refl _)
+        refine ⟨getAncestor_of_le found (UInt64.le_refl _), ?_⟩
+        intro target targetBlock below path
+        rw [getAncestor_of_le found below] at path
+        exact ⟨none, (Except.ok.inj path) ▸ chosen⟩
       | some child =>
         simp only [chosen, bind, Except.bind] at walk
         split at walk
@@ -740,11 +746,83 @@ theorem getAncestor_getHeadFrom (before : fork < .glamsterdam) {nodes : List For
             have := startBlock.slot.toNat_lt
             rw [UInt64.lt_iff_toNat_lt]
             omega
-          have upper := ih child lower walk childPending childFound
-          rw [getAncestor_trans (UInt64.le_of_lt higher) upper,
-            getAncestor_parent_of_slot_lt childFound (parent ▸ found) higher,
-            parentPayloadStatus_of_lt before, parent, ← pending]
+          obtain ⟨upper, reads⟩ := ih child lower walk childPending childFound
+          constructor
+          · rw [getAncestor_trans (UInt64.le_of_lt higher) upper,
+              getAncestor_parent_of_slot_lt childFound (parent ▸ found) higher,
+              parentPayloadStatus_of_lt before, parent, ← pending]
+          · intro target targetBlock below path
+            by_cases childBelow : childBlock.slot ≤ targetBlock.slot
+            · exact reads childBelow path
+            · rw [getAncestor_trans (UInt64.le_of_lt (UInt64.not_le.mp childBelow)) upper,
+                getAncestor_step childFound childBelow (parent ▸ found) higher,
+                parentPayloadStatus_of_lt before, parent] at path
+              have startNode : (⟨start.root, .pending⟩ : ForkChoiceNode) = start := by
+                cases start
+                simp_all
+              rw [startNode, getAncestor_of_le found below] at path
+              exact ⟨some child, (Except.ok.inj path) ▸ chosen⟩
         · cases walk
+
+/-- Before Gloas, the walk from a known pending node ends at a node that descends from it.
+
+The walk from the end node back to the slot of the start reaches the start. -/
+theorem getAncestor_getHeadFrom (before : fork < .glamsterdam) {nodes : List ForkChoiceNode}
+    {start head : ForkChoiceNode} (walk : store.getHeadFrom config tally nodes start = .ok head)
+    (pending : start.payloadStatus = .pending) {startBlock : BeaconBlock preset fork}
+    (found : store.blocks[start.root]? = some startBlock) :
+    store.getAncestor head startBlock.slot = .ok start :=
+  (getHeadFrom_chain_reads before walk pending found).1
+
+/-- A successful head walk reads children at each held ancestor above its start. -/
+theorem heaviestChild_ok_of_getHeadFrom (before : fork < .glamsterdam)
+    {nodes : List ForkChoiceNode} {start head : ForkChoiceNode}
+    (walk : store.getHeadFrom config tally nodes start = .ok head)
+    (pending : start.payloadStatus = .pending) {startBlock targetBlock : BeaconBlock preset fork}
+    (found : store.blocks[start.root]? = some startBlock)
+    (below : startBlock.slot ≤ targetBlock.slot) {target : Root}
+    (path : store.getAncestor head targetBlock.slot = .ok ⟨target, .pending⟩) :
+    ∃ result, store.heaviestChild config tally nodes ⟨target, .pending⟩ = .ok result :=
+  (getHeadFrom_chain_reads before walk pending found).2 below path
+
+/-- A viable child of a visited parent has a successful justified-state score read. -/
+theorem getAttestationScore_ok_of_getHead (before : fork < .glamsterdam)
+    {state : BeaconState preset fork} {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
+    {root : Root} {block parent justified : BeaconBlock preset fork}
+    (known : store.blocks[root]? = some block)
+    (parentKnown : store.blocks[block.parentRoot]? = some parent)
+    (justifiedKnown : store.blocks[store.justifiedCheckpoint.root]? = some justified)
+    (below : justified.slot ≤ parent.slot)
+    (stateOk : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tree : store.getFilteredNodeTree config = .ok nodes)
+    (viable : (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes)
+    (parentAbove : store.isAncestor head ⟨block.parentRoot, .pending⟩ = .ok true)
+    (headOk : store.getHead config = .ok head) :
+    ∃ score, store.getAttestationScore ⟨root, .pending⟩ state = .ok score := by
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp only [getHead, notGloas, false_and, ↓reduceIte, tree, bind, Except.bind] at headOk
+  have parentPath : store.getAncestor head parent.slot = .ok ⟨block.parentRoot, .pending⟩ := by
+    simp only [isAncestor, block_ok_iff.mpr parentKnown, notGloas, ↓reduceIte,
+      bind, Except.bind] at parentAbove
+    cases walk : store.getAncestor head parent.slot with
+    | error error => simp [walk] at parentAbove
+    | ok found =>
+      simp only [walk, pure, Except.pure, Except.ok.injEq, beq_iff_eq] at parentAbove
+      exact congrArg Except.ok parentAbove
+  obtain ⟨result, read⟩ := heaviestChild_ok_of_getHeadFrom before headOk rfl justifiedKnown below
+    parentPath
+  obtain ⟨children, weighted, childrenOk, weightedOk, _⟩ := heaviestChild_eq read
+  have member : (⟨root, .pending⟩ : ForkChoiceNode) ∈ children.filter (· ∈ nodes) := by
+    apply List.mem_filter.mpr
+    exact ⟨(mem_getNodeChildren before childrenOk).mpr ⟨rfl, block, known, rfl⟩,
+      by simpa using viable⟩
+  obtain ⟨weighed, _, weightOk⟩ := exists_mem_of_mapM_ok weightedOk member
+  have weightOk := (weighNode_ok_iff.mp weightOk).2.1
+  simp only [getWeight, notGloas, ↓reduceIte, justifiedTally_of_state stateOk,
+    bind, Except.bind, pure, Except.pure, Bool.false_eq_true] at weightOk
+  cases scoreOk : store.scoreFromTally (store.tallyVotes state) ⟨root, .pending⟩ with
+  | error error => simp [scoreOk] at weightOk
+  | ok score => exact ⟨score, scoreOk⟩
 
 /-- A node whose viable subtree can be computed is a known block.
 
