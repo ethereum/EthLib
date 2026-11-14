@@ -130,7 +130,7 @@ class TlsHandshakeError(EthLibError, ValueError):
 
 
 class TlsStepError(EthLibError, ValueError):
-    """A TLS handshake transition failed, with its QUIC connection error code."""
+    """A TLS handshake step failed, with its QUIC error code, or 0 for a malformed argument."""
 
 
 class Tls13Error(EthLibError, ValueError):

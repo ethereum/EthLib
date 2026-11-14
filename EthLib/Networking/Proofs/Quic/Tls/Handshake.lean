@@ -3,15 +3,18 @@ module
 public import EthLib.Networking.Quic.Tls.Handshake
 public import EthLib.Networking.Proofs.Libp2p.Tls
 public import EthLib.Networking.Proofs.Quic.Tls.Crypto
+public import EthLib.Base.Proofs.MapM
 
 /-!
 # Proofs: the libp2p QUIC certificate handshake
 
 Completion reports the peer ID of certificate authentication and reconstructs the TLS key schedule.
 
-The rejection results state the libp2p ALPN and mandatory client-certificate checks.
+Rejection theorems cover the libp2p ALPN check and the required client certificate.
 
-Traffic-secret agreement assumes equal ECDHE secrets and transcript boundaries.
+CertificateVerify and Finished are accepted exactly when they match the saved transcript.
+
+No theorem here ties a completion to an earlier CertificateVerify over every reachable state.
 -/
 
 @[expose] public section
@@ -19,16 +22,6 @@ Traffic-secret agreement assumes equal ECDHE secrets and transcript boundaries.
 namespace EthLib.Networking.Quic.Tls.Handshake
 
 open EthLib.Base
-
-/-- An error translation preserves every successful result. -/
-private theorem of_mapError_ok {α ε δ : Type} {value : Except ε α} {f : ε → δ} {out : α}
-    (accepted : value.mapError f = .ok out) : value = .ok out := by
-  cases value <;> simp_all [Except.mapError]
-
-/-- Error translation changes neither successful results nor their acceptance. -/
-private theorem mapError_eq_ok_iff {α ε δ : Type} (value : Except ε α) (f : ε → δ) (out : α) :
-    value.mapError f = .ok out ↔ value = .ok out := by
-  cases value <;> simp [Except.mapError]
 
 /-- Reading a saved value succeeds exactly when that value is present. -/
 private theorem saved_eq_ok_iff {α : Type} (value : Option α) (out : α) :
@@ -46,7 +39,7 @@ private theorem authenticate_source (config : Config) (expected : Option ByteArr
   simp only [authenticate, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at accepted
   obtain ⟨remote, original, _, _, same⟩ := accepted
   cases same
-  exact of_mapError_ok original
+  exact mapError_ok_iff.mp original
 
 /-- Completion authenticates the chain that it reports and returns exactly that peer ID. -/
 theorem complete_peerId (config : Config) (expected : Option ByteArray) (state : State)
@@ -70,7 +63,7 @@ theorem complete_keySchedule (config : Config) (expected : Option ByteArray) (st
   simp only [complete, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at accepted
   obtain ⟨negotiated, _, secrets, schedule, peer, _, rfl⟩ := accepted
   cases Option.some.inj completed
-  exact of_mapError_ok schedule
+  exact mapError_ok_iff.mp schedule
 
 /-- ALPN rejects a parsed client offer without the libp2p application protocol. -/
 theorem serverClientHello_alpn (config : Config) (state : State) (hello : ClientHello)
@@ -127,12 +120,12 @@ theorem checkFinished_eq_ok_iff (server : Bool) (state : State) (value : List UI
         finished (if server then negotiated.secrets.serverHandshake
           else negotiated.secrets.clientHandshake) ⟨state.transcript.bytes.toArray⟩ =
             .ok verifyData ∧ value = verifyData.toList := by
-  simp only [checkFinished, bind_ok_iff, ensure_ok_iff, saved_eq_ok_iff, mapError_eq_ok_iff]
+  simp only [checkFinished, bind_ok_iff, ensure_ok_iff, saved_eq_ok_iff, mapError_ok_iff]
   aesop
 
 /-- CertificateVerify requires an offered scheme and a valid signature on this role's transcript.
 
-The certificate and the signing-use check are those of `authenticate`. -/
+The certificate and its signing-use check come from peer authentication. -/
 theorem checkCertificateVerify_eq_ok_iff (config : Config) (expected : Option ByteArray)
     (server : Bool) (offered : List Wire.CodePoint) (state : State) (algorithm : Wire.CodePoint)
     (signature : List UInt8) :
@@ -225,12 +218,12 @@ theorem serverStep_finished_eq (config : Config) (state : State) (input : Flight
 /-- A Finished value different from the derived HMAC is rejected, RFC 8446 §4.4.4. -/
 theorem checkFinished_rejects (server : Bool) (state : State) (negotiated : Negotiated)
     (value : List UInt8) (verifyData : Vector UInt8 32)
-    (saved : state.negotiated = some negotiated)
+    (stored : state.negotiated = some negotiated)
     (computed : finished (if server then negotiated.secrets.serverHandshake
         else negotiated.secrets.clientHandshake) ⟨state.transcript.bytes.toArray⟩ = .ok verifyData)
     (different : value ≠ verifyData.toList) :
     checkFinished server state value = .error .decryptError := by
-  simp [checkFinished, saved, Handshake.saved, computed, Except.mapError,
+  simp [checkFinished, stored, saved, computed, Except.mapError,
     ensure, different, bind, Except.bind]
 
 /-- A dialer rejects a mismatching server Finished before emitting its final flight. -/
@@ -341,7 +334,7 @@ theorem serverStep_complete (config : Config) (state : State) (input : FlightMes
     (add norm simp [bind_ok_iff, pure, Except.pure, Except.ok.injEq])
     (add safe forward serverClientHello_completion)
 
-/-- A completed dialer reports its authenticated certificate peer ID and the identity it dialled. -/
+/-- A completed dialer reports its certificate-derived peer ID, which is the identity it dialled. -/
 theorem clientStep_peerId (config : Config) (expected : ByteArray) (state : State)
     (input : FlightMessage) (step : Step) (result : Completion)
     (accepted : clientStep config expected state input = .ok step)
@@ -375,8 +368,10 @@ theorem serverStep_peerId (config : Config) (state : State) (input : FlightMessa
     complete_peerId config none final output step result boundary completed
   exact ⟨peer, authenticate_source config none result.peerChain peer authenticated, identity⟩
 
-/-- Completed peers with the same ECDHE secret and transcript boundaries derive the same secrets. -/
-theorem traffic_secrets_agree (clientConfig serverConfig : Config) (expected : ByteArray)
+/-- The secrets of two completions are equal when their ECDHE secrets and transcripts are equal.
+
+The schedule is a function of those three inputs; no protocol agreement is claimed. -/
+theorem completion_secrets_eq_of_inputs (clientConfig serverConfig : Config) (expected : ByteArray)
     (clientState serverState : State) (clientInput serverInput : FlightMessage)
     (clientStepResult serverStepResult : Step) (client server : Completion)
     (clientAccepted : clientStep clientConfig expected clientState clientInput =

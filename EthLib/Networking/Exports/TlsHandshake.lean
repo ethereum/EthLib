@@ -12,7 +12,9 @@ Every caller supplies an algorithm policy and the private inputs of one handshak
 
 The returned messages carry their QUIC encryption levels.
 
-Error codes are the QUIC connection errors of RFC 9001 §4.8.
+Error codes are the QUIC transport errors of RFC 9000 §20.1 and the alert codes of RFC 9001 §4.8.
+
+An argument that Lean cannot read fails with code 0 instead.
 -/
 
 public section
@@ -58,7 +60,7 @@ def stepResult {α : Type} (value : Except Error α) : Result α :=
 def clientStartExport (args : PyValue) : Result PyValue :=
   pyExport (fun (config : Config) => stepResult (clientStart config)) args
 
-/-- Start a server certificate handshake under an explicit policy, RFC 8446 §4.1.2. -/
+/-- Start a server certificate handshake under an explicit policy. -/
 @[export eth_quic_tls_server_start]
 def serverStartExport (args : PyValue) : Result PyValue :=
   pyExport (fun (config : Config) => stepResult (serverStart config)) args

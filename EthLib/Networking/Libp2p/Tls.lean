@@ -4,7 +4,7 @@ public import EthLib.Base.Except
 public import EthLib.Serialization.Der
 public import EthLib.Networking.Libp2p.PeerId
 public import EthLib.Cryptography.Hash.Sha256
-public import EthLib.Cryptography.Secp256r1.Curve
+public import EthLib.Cryptography.Secp256r1.Encoding
 
 /-!
 # libp2p TLS certificates
@@ -292,19 +292,9 @@ def readP256 (spki : ByteArray) : Except TlsCertError EthLib.Cryptography.Secp25
     let curve ← der (Der.exact 6 parameter)
     ensure (oid = ecPublicKeyOid ∧ (← der (Der.oid curve)) = p256Oid) .algorithm
     let bytes ← der (Der.bitString key)
-    match bytes.data.toList with
-    | 4 :: coords =>
-      ensure (coords.length = 64) .publicKey
-      let x := EthLib.Base.bytesToNat (coords.take 32)
-      let y := EthLib.Base.bytesToNat (coords.drop 32)
-      if hx : x < EthLib.Cryptography.Secp256r1.Fp.modulus then
-        if hy : y < EthLib.Cryptography.Secp256r1.Fp.modulus then
-          let point := EthLib.Cryptography.Secp256r1.Point.affine ⟨x, hx⟩ ⟨y, hy⟩
-          ensure (point.isOnCurve = true) .publicKey
-          return point
-        else throw .publicKey
-      else throw .publicKey
-    | _ => throw .publicKey
+    match EthLib.Cryptography.Secp256r1.decodeUncompressed bytes.data.toList with
+    | some point => return point
+    | none => throw .publicKey
   | _ => throw .publicKey
 
 /-- Verify ECDSA/SHA-256 under an uncompressed P-256 SPKI, with strict DER scalars.

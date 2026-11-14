@@ -48,13 +48,12 @@ class EphemeralKey(TypedDict):
 
 
 class Config(TypedDict):
-    """The explicit policy, credentials and fresh private inputs of one endpoint."""
+    """One endpoint's policy, credentials and fresh ephemeral keys, for one handshake only."""
 
     policy: Policy
     now: int
     certificates: list[bytes]
     signing_key: bytes
-    signing_nonce: bytes
     random: bytes
     ephemeral_keys: list[EphemeralKey]
     initial_shares: list[int]
@@ -62,7 +61,7 @@ class Config(TypedDict):
 
 
 class Transcript(TypedDict):
-    """Exact received handshake bytes and whether a retry replaced ClientHello1."""
+    """The exact sent and received handshake bytes, and whether a retry occurred."""
 
     bytes: list[int]
     retried: bool
@@ -112,7 +111,7 @@ class State(TypedDict):
 
 
 class Completion(TypedDict):
-    """Authenticated peer identity and the traffic secrets of a completed handshake."""
+    """The certificate-derived peer identity, its chain and the negotiated key schedule."""
 
     peer_id: bytes
     peer_chain: list[bytes]
@@ -120,7 +119,7 @@ class Completion(TypedDict):
 
 
 class Step(TypedDict):
-    """The next state, outgoing messages and an optional authenticated completion."""
+    """The next state, outgoing messages and an optional completion."""
 
     state: State
     output: list[FlightMessage]
@@ -128,7 +127,7 @@ class Step(TypedDict):
 
 
 def client_start(config: Config) -> Step:
-    """Send ClientHello under an explicit policy and wait for the server's response."""
+    """Return the ClientHello flight and the state that awaits ServerHello."""
     return cast("Step", _native.quic_tls_client_start(cast("dict[str, object]", config)))
 
 
@@ -140,7 +139,7 @@ def server_start(config: Config) -> State:
 def client_step(
     config: Config, expected_peer_id: bytes, state: State, message: FlightMessage
 ) -> Step:
-    """Process a server message and authenticate the dialled peer ID."""
+    """Process a server message and check the dialled peer ID."""
     return cast(
         "Step",
         _native.quic_tls_client_step(
@@ -153,7 +152,7 @@ def client_step(
 
 
 def server_step(config: Config, state: State, message: FlightMessage) -> Step:
-    """Process a client message and require the libp2p client's certificate authentication."""
+    """Process a client message and require the libp2p client certificate."""
     return cast(
         "Step",
         _native.quic_tls_server_step(

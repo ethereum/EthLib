@@ -1230,7 +1230,7 @@
   "Start a client certificate handshake under an explicit policy, RFC 8446 §4.1.2."
 
 #define DOC_quic_tls_server_start \
-  "Start a server certificate handshake under an explicit policy, RFC 8446 §4.1.2."
+  "Start a server certificate handshake under an explicit policy."
 
 #define DOC_quic_tls_client_step \
   "Process one complete server message and check the intended peer ID at authentication."

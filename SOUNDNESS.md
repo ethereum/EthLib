@@ -935,16 +935,19 @@ The available suites are TLS_AES_128_GCM_SHA256 and TLS_CHACHA20_POLY1305_SHA256
 The steps reject suites that use another transcript hash.
 Configuration rejects any listed algorithm that lacks a backend.
 The available groups are X25519 and P-256, and CertificateVerify supports only ecdsa_secp256r1_sha256.
-The caller also chooses the certificate policy described above and whether the server rejects a nonempty legacy session ID, the SHOULD of RFC 9001 §8.4.
+The caller also chooses the certificate policy described above and whether the server rejects a nonempty legacy session ID, the SHOULD of [RFC 9001 §8.4](https://www.rfc-editor.org/rfc/rfc9001#section-8.4).
 Local credentials must omit the deprecated unique-ID fields even when the receive policy tolerates them.
-These backends do not settle the application-profile question of RFC 8446 §9.1, the RSA requirements or the other maintainer choices of [#2163](https://github.com/ethereum/EthLib/issues/2163).
+EthLib does not settle the application profile left open by [RFC 8446 §9.1](https://www.rfc-editor.org/rfc/rfc8446#section-9.1), the RSA requirements or the other maintainer choices of [#2163](https://github.com/ethereum/EthLib/issues/2163).
 
-The steps require ALPN `libp2p` and mutual certificate authentication, as [pinned libp2p TLS](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/tls/tls.md) specifies.
+The steps require ALPN `libp2p` and mutual certificate authentication, as [libp2p TLS at c750236](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/tls/tls.md) specifies.
 The client omits SNI, and the server ignores received SNI as its Future Extensibility section requires.
 The client checks the peer ID it dialled.
-A certificate with a noncritical KeyUsage extension must permit digital signatures; the certificate helper still rejects critical extensions other than the libp2p one.
-Private keys, ephemeral inputs, random fields and a fresh ECDSA signing nonce enter explicitly.
-The caller must keep one configuration throughout the handshake, use fresh secret inputs for each handshake and discard state after an error.
+A certificate with a noncritical KeyUsage extension must permit digital signatures; certificate authentication still rejects every critical extension other than the libp2p one.
+Private keys, ephemeral inputs and random fields enter explicitly.
+The caller must keep one configuration throughout the handshake, use fresh ephemeral keys for each handshake and discard state after an error.
+CertificateVerify signs with the deterministic nonce of [RFC 6979 §3.2](https://www.rfc-editor.org/rfc/rfc6979#section-3.2), shared with secp256k1 signing (`Cryptography/Rfc6979.lean`).
+A caller-supplied nonce would leak the certificate key as soon as two connections reused it, since the clients choose part of the signed transcript; the derived nonce depends only on the key and the signed content, so equal content gives the same signature and different content a different nonce.
+`verify_sign_of_sign` (`Cryptography/Proofs/Secp256r1/Sign.lean`) proves that a P-256 signature from signing verifies under the signer's key; nothing proves the pseudorandomness of the nonces.
 
 `serverStep_alpn` and `serverStep_clientCertificate` (`Networking/Proofs/Quic/Tls/Handshake.lean`) prove rejection of an offered ALPN list without `libp2p` and of an empty client certificate at their receive phases.
 `checkFinished_eq_ok_iff` states that the check succeeds exactly for the Finished value derived from the saved handshake traffic secret and pre-message transcript.
@@ -953,9 +956,10 @@ It requires certificate authentication and P-256 verification of the exact role-
 The corresponding client and server step lemmas establish these conditions when the message is accepted in its receive phase.
 
 `clientStep_peerId` and `serverStep_peerId` prove that every returned completion reports the peer ID of certificate authentication; the client result also equals its expected ID.
-Completion authenticates the saved chain again, so these identity theorems hold even for caller-constructed states.
-`traffic_secrets_agree` proves equality of all reported schedule secrets for completed client and server steps with equal ECDHE secrets and equal hello and server-Finished transcript boundaries.
-It does not prove that arbitrary received key shares yield those equal ECDHE secrets or that the peers saw one transcript.
+Completion checks the saved chain again, so these identity theorems hold even for caller-constructed states.
+That is certificate validation only: a caller-built state in a Finished phase can complete without any CertificateVerify check, so proof of key possession rests on the steps of a state reached from initialization, which no theorem yet covers.
+`completion_secrets_eq_of_inputs` proves that two completions with equal ECDHE secrets and equal hello and server-Finished transcript boundaries report equal schedule secrets.
+That is only the fact that the schedule is a function of those inputs; it does not prove that received key shares yield equal ECDHE secrets or that the peers saw one transcript.
 
 The cryptographic proofs (`Networking/Proofs/Quic/Tls/Crypto.lean`) prove agreement of honest X25519 exchanges, rejection of all-zero X25519 output, and verification of a generated P-256 CertificateVerify under the matching certificate key.
 No theorem proves P-256 ECDHE agreement here, handshake unforgeability or constant-time execution.
@@ -964,8 +968,11 @@ The Python tests use independently signed libp2p certificates with known private
 They also check malformed negotiation, signatures, Finished values and post-handshake messages.
 
 Completed clients accept and discard well-formed NewSessionTicket messages, without adding them to the handshake transcript.
-They reject post-handshake CertificateRequest and TLS KeyUpdate as RFC 9001 requires.
-Errors carry QUIC connection codes; the caller sends the connection close and destroys the saved state.
+They reject post-handshake CertificateRequest and TLS KeyUpdate, as [RFC 9001 §§4.4 and 6](https://www.rfc-editor.org/rfc/rfc9001#section-4.4) require.
+Errors carry QUIC connection codes; a malformed peer key share is illegal_parameter and a local cryptographic failure is internal_error.
+A message at an earlier encryption level than expected is a PROTOCOL_VIOLATION, by [RFC 9001 §4.1.3](https://www.rfc-editor.org/rfc/rfc9001#section-4.1.3).
+A hello without supported_versions is a protocol_version error, by [RFC 8446 Appendix D](https://www.rfc-editor.org/rfc/rfc8446#appendix-D).
+The caller sends the connection close and destroys the saved state.
 
 ### QUIC v1 packet protection
 

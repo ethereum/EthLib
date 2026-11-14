@@ -1642,7 +1642,7 @@ def quic_tls_client_start(config: dict[str, object]) -> dict[str, object]:
     ...
 
 def quic_tls_server_start(config: dict[str, object]) -> dict[str, object]:
-    """Start a server certificate handshake under an explicit policy, RFC 8446 §4.1.2."""
+    """Start a server certificate handshake under an explicit policy."""
     ...
 
 def quic_tls_client_step(config: dict[str, object], expected: bytes, state: dict[str, object], message: dict[str, object]) -> dict[str, object]:

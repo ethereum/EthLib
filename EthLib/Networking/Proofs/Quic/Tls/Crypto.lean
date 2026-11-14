@@ -3,7 +3,7 @@ module
 public import EthLib.Networking.Quic.Tls.Crypto
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Cryptography.Proofs.X25519.Agreement
-public import EthLib.Cryptography.Proofs.Secp256r1.Ecdsa
+public import EthLib.Cryptography.Proofs.Secp256r1.Sign
 public import EthLib.Networking.Proofs.Libp2p.PeerId
 
 /-!
@@ -78,61 +78,33 @@ theorem verifyCertificateVerify_eq_true_iff (algorithm : Wire.CodePoint)
   simp [verifyCertificateVerify]
 
 /-- A generated CertificateVerify verifies under the matching P-256 certificate key. -/
-theorem verifyCertificateVerify_signCertificateVerify (privateKey nonce : Vector UInt8 32)
+theorem verifyCertificateVerify_signCertificateVerify (privateKey : Vector UInt8 32)
     (content signature spki : ByteArray) (secret : Secp256r1.Fn)
     (key : readScalar privateKey .privateKey = .ok secret)
     (publicKey : Libp2p.Tls.readP256 spki = .ok (Secp256r1.Point.mul secret .generator))
-    (signed : signCertificateVerify 0x0403 privateKey nonce content = .ok signature) :
+    (signed : signCertificateVerify 0x0403 privateKey content = .ok signature) :
     verifyCertificateVerify 0x0403 spki content signature = true := by
-  have allowed : ensure ((0x0403 : Wire.CodePoint).val = 0x0403)
-      Error.signatureScheme = .ok () := rfl
-  cases hn : readScalar nonce .nonce with
-  | error error =>
-    simp [signCertificateVerify, key, hn, ensure, bind, Except.bind] at signed
-  | ok k =>
-    cases hp : Secp256r1.Point.mul k .generator with
-    | infinity =>
-      simp [signCertificateVerify, key, hn, hp, ensure, bind, Except.bind] at signed
-    | affine x y =>
-      let r : Secp256r1.Fn := Fin.ofNat _ x.val
-      let e := bytesToNat (Hash.Sha256.hash32 content).toList
-      let s := Secp256r1.Fn.inv k * (Fin.ofNat _ e + r * secret)
-      have hsign : (do
-          ensure (r ≠ 0 ∧ s ≠ 0) Error.nonce
-          return Libp2p.encodeSignature r.val s.val) = .ok signature := by
-        simpa only [signCertificateVerify, allowed, key, hn, hp, bind, Except.bind] using signed
-      rw [bind_ok_iff] at hsign
-      obtain ⟨u, valid, result⟩ := hsign
-      have nonzero := ensure_ok_iff.mp valid
-      have sig := Except.ok.inj result
-      subst signature
-      have hd := (readScalar_eq_ok_iff privateKey .privateKey secret).mp key |>.2
-      have hr : x.val % Secp256r1.Fn.modulus ≠ 0 := by
-        intro zero
-        apply nonzero.1
-        exact Fin.ext zero
-      have hv := Secp256r1.verify_sign secret k e hd hp hr
-      have cast_mod : (Fin.ofNat Secp256r1.Fn.modulus
-          (x.val % Secp256r1.Fn.modulus) : Secp256r1.Fn) = r := by
-        apply Fin.ext
-        simp [Fin.ofNat, r]
-      have hs : Secp256r1.Fn.inv k *
-          (Fin.ofNat _ e + Fin.ofNat _ (x.val % Secp256r1.Fn.modulus) * secret) ≠ 0 := by
-        simpa only [cast_mod] using nonzero.2
-      have verified := hv hs
-      have hrange : 0 < r.val ∧ r.val < 2 ^ 256 :=
-        ⟨Nat.pos_of_ne_zero (fun hz => nonzero.1 (Fin.ext hz)),
-          Nat.lt_trans r.isLt (by decide)⟩
-      have srange : 0 < s.val ∧ s.val < 2 ^ 256 :=
-        ⟨Nat.pos_of_ne_zero (fun hz => nonzero.2 (Fin.ext hz)),
-          Nat.lt_trans s.isLt (by decide)⟩
-      have decoded :=
-        EthLib.Networking.Proofs.Libp2p.PeerId.decodeScalars_eq_some_iff.mpr
-          ⟨hrange.1, hrange.2, srange.1, srange.2, rfl⟩
-      simp only [verifyCertificateVerify, show (0x0403 : Wire.CodePoint).val = 0x0403 from rfl,
-        beq_self_eq_true, Bool.true_and, Libp2p.Tls.verifyP256, publicKey, decoded]
-      change Secp256r1.verify (Secp256r1.Point.mul secret .generator) e
-        (x.val % Secp256r1.Fn.modulus) s.val = true
-      simpa only [cast_mod] using verified
+  cases hs : Secp256r1.Ecdsa.sign secret (Hash.Sha256.hash32 content) with
+  | none =>
+    simp [signCertificateVerify, ensure, key, hs, bind, Except.bind] at signed
+  | some rs =>
+    obtain ⟨r, s⟩ := rs
+    have sig : Libp2p.encodeSignature r.val s.val = signature := by
+      simpa [signCertificateVerify, ensure, key, hs, bind, Except.bind, pure, Except.pure] using
+        signed
+    subst signature
+    have verified := Secp256r1.Ecdsa.verify_sign_of_sign hs
+    -- Signing returns nonzero scalars, so the DER sequence decodes back to them.
+    have hd := ((readScalar_eq_ok_iff privateKey .privateKey secret).mp key).2
+    simp only [Secp256r1.Ecdsa.sign, hd, ↓reduceIte] at hs
+    obtain ⟨k, x, y, -, -, rfl, hr0, -, hs0⟩ := Secp256r1.Ecdsa.signWith_spec hs
+    have decoded :=
+      EthLib.Networking.Proofs.Libp2p.PeerId.decodeScalars_eq_some_iff.mpr
+        ⟨Nat.pos_of_ne_zero (fun hz => hr0 (Fin.ext hz)), Nat.lt_trans (Fin.isLt _) (by decide),
+          Nat.pos_of_ne_zero (fun hz => hs0 (Fin.ext hz)), Nat.lt_trans (Fin.isLt _) (by decide),
+          rfl⟩
+    simp only [verifyCertificateVerify, show (0x0403 : Wire.CodePoint).val = 0x0403 from rfl,
+      beq_self_eq_true, Bool.true_and, Libp2p.Tls.verifyP256, publicKey, decoded]
+    exact verified
 
 end EthLib.Networking.Quic.Tls.Crypto

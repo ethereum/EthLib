@@ -12556,12 +12556,11 @@
       {"constructor": "protocolViolation", "code": 10},
       {"constructor": "configuration", "code": 336},
       {"constructor": "certificate", "code": 298},
-      {"constructor": "crypto", "code": 303}]}],
+      {"constructor": "crypto", "code": null}]}],
    "error_class": "TlsStepError",
    "docstring":
    "Start a client certificate handshake under an explicit policy, RFC 8446 §4.1.2."},
-  {"summary":
-   "Start a server certificate handshake under an explicit policy, RFC 8446 §4.1.2.",
+  {"summary": "Start a server certificate handshake under an explicit policy.",
    "signature": "(config: dict[str, object]) -> dict[str, object]",
    "operation":
    "EthLib.Networking.Quic.Tls.Handshake.Exports.serverStartExport",
@@ -12582,10 +12581,10 @@
       {"constructor": "protocolViolation", "code": 10},
       {"constructor": "configuration", "code": 336},
       {"constructor": "certificate", "code": 298},
-      {"constructor": "crypto", "code": 303}]}],
+      {"constructor": "crypto", "code": null}]}],
    "error_class": "TlsStepError",
    "docstring":
-   "Start a server certificate handshake under an explicit policy, RFC 8446 §4.1.2."},
+   "Start a server certificate handshake under an explicit policy."},
   {"summary":
    "Process one complete server message and check the intended peer ID at authentication.",
    "signature":
@@ -12608,7 +12607,7 @@
       {"constructor": "protocolViolation", "code": 10},
       {"constructor": "configuration", "code": 336},
       {"constructor": "certificate", "code": 298},
-      {"constructor": "crypto", "code": 303}]}],
+      {"constructor": "crypto", "code": null}]}],
    "error_class": "TlsStepError",
    "docstring":
    "Process one complete server message and check the intended peer ID at authentication."},
@@ -12634,7 +12633,7 @@
       {"constructor": "protocolViolation", "code": 10},
       {"constructor": "configuration", "code": 336},
       {"constructor": "certificate", "code": 298},
-      {"constructor": "crypto", "code": 303}]}],
+      {"constructor": "crypto", "code": null}]}],
    "error_class": "TlsStepError",
    "docstring":
    "Process one complete client message and require libp2p client authentication."},
