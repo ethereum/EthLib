@@ -12,9 +12,13 @@ The readers of requests and responses read back what their writers write.
 
 A request reads back with its parameters, whether it has any or not.
 
-A JSON value reads as a request exactly when it is an object of the request members alone.
+A JSON value reads as a request exactly when it is an object of this form.
 
-Its version is `2.0`, its identifier a string, a number or `null`, and its parameters an array.
+Its only members are those of a request.
+
+Its version is `2.0`, its identifier a string, a number or `null`, and its method a string.
+
+Its parameters, when present, are an array.
 
 A response reads back with its result, even `null`, or with its error object.
 -/
@@ -26,9 +30,14 @@ namespace EthLib.Execution.Rpc
 open Lean (Json)
 open EthLib.Serialization.JsonRpc
 
+/-- An identifier is read exactly from its JSON. -/
+theorem requestId_eq_ok_iff {j : Json} {i : RequestId} :
+    requestId j = .ok i ↔ j = requestIdJson i := by
+  cases j <;> cases i <;> simp [requestId, requestIdJson, pure, Except.pure]
+
 /-- The reader of identifiers reads back any identifier. -/
-theorem requestId_requestIdJson (i : RequestId) : requestId (requestIdJson i) = .ok i := by
-  cases i <;> rfl
+theorem requestId_requestIdJson (i : RequestId) : requestId (requestIdJson i) = .ok i :=
+  requestId_eq_ok_iff.mpr rfl
 
 /-- The reader of requests reads back any request. -/
 theorem request_requestJson (r : Request) : request (requestJson r) = .ok r := by
@@ -130,28 +139,15 @@ theorem response_responseJson (r : Response) : response (responseJson r) = .ok r
     simp [rpcErrorOfJson_json]
     rfl
 
+/-- A JSON value reads as a request exactly when it is an object that meets the conditions below.
 
-/-- An identifier is read exactly from its JSON. -/
-private theorem requestId_eq_ok_iff {j : Json} {i : RequestId} :
-    requestId j = .ok i ↔ j = requestIdJson i := by
-  cases j <;> cases i <;>
-    simp [requestId, requestIdJson, reject, throw, throwThe, MonadExceptOf.throw, pure,
-      Except.pure]
-
-/-- A string is read exactly from its JSON. -/
-private theorem string_eq_ok_iff {what : String} {j : Json} {s : String} :
-    string what j = .ok s ↔ j = .str s := by
-  cases j <;> simp [string, reject, throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
-
-/-- A JSON value reads as a request exactly when it is an object of request members alone.
-
-Those members are `jsonrpc`, `id`, `method` and `params`, and the last may be missing.
+Its only members are `jsonrpc`, `id`, `method` and `params`, and the last may be missing.
 
 The value of `jsonrpc` is the string `2.0`.
 
 The values of `id` and `method` are the identifier and the method of the request.
 
-The parameters of the request are the array under `params`, or none when it is missing. -/
+The parameters of the request are the array under `params`, or empty when it is missing. -/
 theorem request_eq_ok_iff {j : Json} {r : Request} :
     request j = .ok r ↔ ∃ kvs, j = .obj kvs ∧
       (∀ member ∈ kvs.toList, member.1 = "jsonrpc" ∨ member.1 = "id" ∨
@@ -177,8 +173,7 @@ theorem request_eq_ok_iff {j : Json} {r : Request} :
     by_cases hall : (kvs.toList.all fun (k, _) =>
         k == "jsonrpc" || k == "id" || k == "method" || k == "params") = true
     · by_cases hv : jsonrpcVersion kvs.toList = true
-      · simp only [hall, hv, ↓reduceIte,
-          versionIff.mp hv, true_and]
+      · simp only [hall, hv, ↓reduceIte, versionIff.mp hv, true_and]
         rw [and_iff_right (allIff.mp hall)]
         simp only [Base.bind_ok_iff, field_eq_ok_iff, requestId_eq_ok_iff, string_eq_ok_iff]
         cases hp : kvs.toList.lookup "params" with
@@ -208,17 +203,17 @@ theorem request_eq_ok_iff {j : Json} {r : Request} :
                 exact ⟨_, idOk, id, rfl, _, methodOk, method, rfl,
                   by simp [pure, Except.pure, bind, Except.bind]⟩
           | _ =>
-            simp [reject, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+            simp [bind, Except.bind]
       · constructor
         · intro h
-          simp [hall, hv, reject, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+          simp [hall, hv, bind, Except.bind] at h
         · rintro ⟨-, version, -⟩
           exact absurd (versionIff.mpr version) hv
     · constructor
       · intro h
-        simp [hall, reject, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+        simp [hall, bind, Except.bind] at h
       · rintro ⟨members, -⟩
         exact absurd (allIff.mpr members) hall
-  | _ => simp [request, reject, throw, throwThe, MonadExceptOf.throw]
+  | _ => simp [request]
 
 end EthLib.Execution.Rpc
