@@ -245,8 +245,8 @@ theorem runTransaction_eq_transactionStart {fork : Fork} (Meter : Type) [GasMete
       let (state, gasUsed) ←
         (settleGas env output.state sender tx gasLeft output.refund).mapError .state
       let state ← (deleteAccounts fork state output).mapError .state
-      return ⟨state, gasUsed, blockGas, output.logs, output.error, output.output,
-        gasBeforeRefund⟩) := by
+      return ⟨state, gasUsed, blockGas, output.logs, output.simulatedLogs, output.error,
+        output.output, gasBeforeRefund⟩) := by
   unfold runTransaction transactionStart
   simp only [bind_assoc, pure_bind]
 

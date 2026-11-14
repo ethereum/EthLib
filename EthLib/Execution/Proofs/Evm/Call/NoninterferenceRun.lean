@@ -802,7 +802,9 @@ private def enterSubstate (fork : Base.Fork) (message : Message fork) (substate 
   if message.shouldTransferValue = true ∧ message.value ≠ 0 then
     { substate with
       logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-        message.value }
+        message.value
+      simulatedLogs := pushSimulatedTransferLog fork substate.simulatedLogs message.caller
+        message.currentTarget message.value }
   else substate
 
 /-- A message runs its code or its precompile from the state it enters. -/

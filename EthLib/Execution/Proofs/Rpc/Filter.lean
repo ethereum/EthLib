@@ -125,7 +125,7 @@ private theorem receiptInfo_blockHash {r : BlockRecord} {config : ChainConfig}
     {index before firstLog : Nat} {tx : Transaction} {receipt : Receipt r.fork}
     {info : ReceiptInfo} (h : r.receiptInfo config index before firstLog tx receipt = .ok info) :
     ∀ l ∈ info.logs, l.blockHash = r.hash := by
-  unfold BlockRecord.receiptInfo at h
+  unfold BlockRecord.receiptInfo BlockRecord.logInfos at h
   obtain ⟨ti, hti, h⟩ := bind_ok_iff.mp h
   obtain ⟨sender, hash, -, -, rfl⟩ := BlockRecord.transactionInfo_eq_ok.mp hti
   rcases hto : tx.to with _ | a

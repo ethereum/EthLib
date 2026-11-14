@@ -316,7 +316,9 @@ def processMessage [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
       if transfers then
         { substate with
           logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-            message.value }
+            message.value
+          simulatedLogs := pushSimulatedTransferLog fork substate.simulatedLogs message.caller
+            message.currentTarget message.value }
       else substate
     let evm : Evm fork Meter := startFrame message state substate meter
     match precompileAddress fork message with

@@ -810,10 +810,45 @@ The no-PSK SHA-256 schedule takes a shared secret and encoded transcripts from i
 `keySchedule_congr_hash` proves that the schedule reads each transcript only through its SHA-256 hash.
 `finished_ok` and `deriveSecret_ok` prove that the Finished value and Derive-Secret succeed, the latter for every label within the bounds of §7.1.
 The Python suite checks the secrets and Finished values of RFC 8448 §3.
-No result covers message parsing, negotiation, peer authentication or the Diffie-Hellman exchange.
+The schedule's results do not cover message parsing, negotiation, peer authentication or the Diffie-Hellman exchange.
 The schedule does not check the shared secret, and the SHA-384 schedule of TLS_AES_256_GCM_SHA384 is absent.
 The certificate, group and signature policy questions of [#2163](https://github.com/ethereum/EthLib/issues/2163) remain open.
 These results establish neither cryptographic security nor constant-time execution.
+
+### TLS 1.3 handshake codecs
+
+`decode_encode` and `encode_injective` (`Networking/Proofs/Quic/Tls/Messages.lean`) prove that every successfully encoded handshake message recovers its fields, with arbitrary trailing bytes, and that successful encodings are injective.
+The messages are ClientHello, ServerHello, EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify and Finished, with the layouts of RFC 8446 §4.
+The caller supplies the hash length of Finished.
+The decoders check field bounds, the fixed TLS 1.3 legacy fields and duplicate extension types.
+No theorem yet states the converse: that every input a decoder accepts is the encoding of its result.
+So these checks rest on the code and the Python tests, not on a proof.
+They preserve extension order, opaque certificate bytes, opaque extension data and unrecognized two-byte identifiers.
+
+`decodePayload_encodePayload` (`Networking/Proofs/Quic/Tls/Extensions.lean`) proves the round trip for every payload form.
+The forms are supported and selected versions, supported groups, signature algorithms, the three key-share forms, ALPN and opaque QUIC transport parameters.
+The caller chooses the payload form from its message context; parsing a message alone does not validate these opaque payloads.
+
+The Python suite checks message layouts and payload bounds against the RFC wire formats.
+It also parses and re-encodes the RFC 8448 §3 trace.
+
+These codecs define no accepted cipher-suite, group, signature-scheme or libp2p certificate profile.
+They do not check negotiation, extension placement, required extensions, message order, key shares, certificate authentication, signatures or Finished values.
+
+### TLS 1.3 transcripts
+
+`Transcript.append` retains exactly the received bytes of one complete SHA-256 handshake message, including its four-byte header.
+The transcript proofs (`Networking/Proofs/Quic/Tls/Transcript.lean`) state that preservation and the HelloRetryRequest replacement of RFC 8446 §4.4.1.
+A retry replaces one saved ClientHello with a synthetic `message_hash`, then appends the received retry bytes.
+A retry after another message or a second retry is rejected.
+The transcript always hashes with SHA-256; the steps must reject a suite with another hash.
+
+The Python suite checks the RFC 8448 §3 transcript, and its SHA-256 hash against an independent SHA-256.
+It also checks the CertificateVerify signed content of RFC 8446 §4.4.3, including the zero separator and the role's context string.
+
+The client and server steps, QUIC CRYPTO reassembly and encryption-level checks are absent.
+The codecs reject NewSessionTicket and KeyUpdate, which a QUIC connection still carries after the handshake.
+The maintainer policy questions of [#2163](https://github.com/ethereum/EthLib/issues/2163) remain open.
 
 ### QUIC v1 packet protection
 
@@ -4099,13 +4134,24 @@ Where the source is silent or conflicts with itself for the blocks, EthLib follo
 - `maxUsedGas` is the gas used with no refund, so from Pectra it is at least the call data floor, as the fixtures show;
 - a failed call returns no data, and a revert puts its output in the `data` of its error, as the fixtures show, though the schema lists only a code and a message;
 - a failure other than a revert gets `-32015` with a message of EthLib's choice, which the source leaves to the client;
-- `traceTransfers` adds no log yet, so before Amsterdam the answer lacks the `0xeeee…eeee` transfer logs that the source asks for; every fixture of the pin is after Amsterdam, where EIP-7708 logs the transfers;
+- with `traceTransfers`, a transfer of 0 wei or from an account to itself gets no `0xeeee…eeee` log, as [EIP-7708](https://eips.ethereum.org/EIPS/eip-7708#specification) rules, which the notes leave open; this covers CALLCODE with value and SELFDESTRUCT to itself;
+- no fixture of the pin covers the `0xeeee…eeee` logs, since every simulated block of the fixtures is from Glamsterdam, so hand-built tests check them;
 - a revert error has the message "execution reverted", without the decoded reason that the fixtures add.
 
 Each simulated block holds the result of each call: the output of its message, its gas used before the refund, and its error.
 The body records them without changing anything else that it computes.
 From Byzantium, the status of a call result agrees with its receipt: the receipt succeeds exactly when the result has no error (`applyTransaction_status`, `Proofs/Blocks/Transition.lean`).
 A body has as many results as receipts (`applyTransactions_results_length`), and a refund never raises the gas used (`runTransaction_gasUsed_le`, `Proofs/Transactions/Process.lean`).
+
+Each frame also records the logs that a simulation reports with `traceTransfers` (`Execution/Evm/Call/TransferLog.lean`).
+They are its logs, with a log from `0xeeee…eeee` before Glamsterdam for each move of ether that EIP-7708 would log, in the order of execution.
+A frame that fails drops them with its logs.
+The flag is not an input of the blocks of a simulation, so they and their headers do not depend on it (`simulateBlocks_traceTransfers`, `Proofs/Rpc/SimulateCalls.lean`).
+The code of the receipts, their root and the bloom reads only the logs; no theorem yet states that the logs never depend on the simulated logs.
+Without the flag, a call reports the log objects of its receipt, with the same `logIndex` (`callLogInfos_false`).
+From Glamsterdam, a message that starts with equal lists of logs ends with equal lists (`simulatedLogs_processMessage`, `Proofs/Evm/Call/SimulatedLogs.lean`).
+So each result reports the logs of its receipt (`runBody_simulatedLogs`, `Proofs/Blocks/SimulatedLogs.lean`).
+A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`); no theorem yet lifts this to the whole answer.
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
@@ -5369,12 +5415,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 515 operations and 49 size constants.
-The Python extension calls 515 of the operations and 49 of the constants.
+Lean exports 521 operations and 49 size constants.
+The Python extension calls 521 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11768 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1636), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (809), `x25519.c` (21), `xmss.c` (134).
+11844 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1644), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (221), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (817), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

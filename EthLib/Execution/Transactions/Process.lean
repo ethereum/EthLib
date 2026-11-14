@@ -192,6 +192,8 @@ structure CallOutput where
   refund : Nat
   /-- The logs, oldest first. -/
   logs : Array Log
+  /-- The logs that a simulation reports, oldest first. -/
+  simulatedLogs : Array Log
   /-- The accounts to delete. -/
   accountsToDelete : Std.ExtTreeSet Address
   /-- The touched accounts, whose empty ones EIP-161 deletes. -/
@@ -215,10 +217,10 @@ def CallOutput.ofFrame {fork : Fork} (evm : Evm fork Meter) (refund : Nat)
   let reservoir := GasMeter.reservoir evm.gas
   let used := GasMeter.stateGasUsed evm.gas
   if evm.error.isSome then
-    ⟨evm.state, gasLeft, reservoir, refund, #[], ∅, ∅, evm.error, evm.output, used⟩
+    ⟨evm.state, gasLeft, reservoir, refund, #[], #[], ∅, ∅, evm.error, evm.output, used⟩
   else
     ⟨evm.state, gasLeft, reservoir, refund + evm.substate.refundCounter.toNat, evm.substate.logs,
-      evm.substate.accountsToDelete, touched, none, evm.output, used⟩
+      evm.substate.simulatedLogs, evm.substate.accountsToDelete, touched, none, evm.output, used⟩
 
 /-- The output of a message whose first frame never runs, because of `error`.
 
@@ -227,7 +229,7 @@ The state stays `state`, from before the message.
 No execution gas is left, the reservoir `reservoir` comes back whole, and no state gas is used. -/
 def CallOutput.ofHalt (state : TransactionState) (reservoir : Nat) (error : EvmError) :
     CallOutput :=
-  ⟨state, 0, reservoir, 0, #[], ∅, ∅, some error, .empty, 0⟩
+  ⟨state, 0, reservoir, 0, #[], #[], ∅, ∅, some error, .empty, 0⟩
 
 /-- The first frame of a transaction, ready to run, with a gas meter of type `Meter`. -/
 structure FirstFrame (fork : Fork) (Meter : Type) [GasMeter Meter] where
@@ -359,6 +361,8 @@ structure TransactionOutput where
   blockGas : BlockGas
   /-- The logs of the transaction, oldest first. -/
   logs : Array Log
+  /-- The logs that a simulation reports for the transaction, oldest first. -/
+  simulatedLogs : Array Log
   /-- The error that stopped its message, or none when the message succeeded. -/
   error : Option EvmError
   /-- The output of its message: the data that it returned, or the data of its revert.
@@ -435,7 +439,8 @@ def runTransaction {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter
   let (state, gasUsed) ←
     (settleGas env output.state sender tx gasLeft output.refund lifted).mapError .state
   let state ← (deleteAccounts fork state output).mapError .state
-  return ⟨state, gasUsed, blockGas, output.logs, output.error, output.output, gasBeforeRefund⟩
+  return ⟨state, gasUsed, blockGas, output.logs, output.simulatedLogs, output.error, output.output,
+    gasBeforeRefund⟩
 
 /-- Run a transaction that may enter its block, on the block state `block` at `fork`.
 
@@ -445,7 +450,11 @@ It returns the state of the transaction, whose writes then join the block.
 
 It also returns the gas used, the gas it adds to its block, the logs, and the error of the message.
 
-It also returns the output of the message and the gas used before the refund, which no rule reads.
+It also returns the output of the message and the gas used before the refund.
+
+It also returns the logs that a simulation reports.
+
+No rule reads these three.
 
 It fails only with an error that aborts the whole execution, such as missing code.
 

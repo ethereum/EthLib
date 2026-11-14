@@ -4,6 +4,7 @@ public import EthLib.Base.Proofs.Address
 public import EthLib.Base.Proofs.Base64
 public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Base.Proofs.BitVec
+public import EthLib.Base.Proofs.ByteReader
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Base.Proofs.ChainConfig
 public import EthLib.Base.Proofs.ExceptRel

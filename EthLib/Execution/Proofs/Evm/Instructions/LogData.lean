@@ -51,7 +51,9 @@ It keeps the message, the code and the state of the frame. -/
 theorem logStep_eq_ok {n : Nat} {evm after : Evm fork Meter} (h : logStep n evm = .ok after) :
     ∃ log : Log, log.address = evm.message.currentTarget ∧ log.topics.length = n ∧
       after.message = evm.message ∧ after.code = evm.code ∧ after.state = evm.state ∧
-      after.substate = { evm.substate with logs := evm.substate.logs.push log } := by
+      after.substate = { evm.substate with
+        logs := evm.substate.logs.push log
+        simulatedLogs := evm.substate.simulatedLogs.push log } := by
   obtain ⟨⟨st, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨sz, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨topics, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
