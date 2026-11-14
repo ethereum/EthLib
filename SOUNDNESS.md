@@ -3849,6 +3849,12 @@ A tag, and a hash in the object of EIP-1898, read back (`blockNumberOrTagOrHash_
 A number reads back when its text is no hash (`blockNumberOrTagOrHash_number`), which holds below `2^252` (`hash32_quantityJson_of_lt`).
 
 The request and the response objects of JSON-RPC 2.0 read back from their writers (`request_requestJson`, `response_responseJson`), a result of `null` included, and so does the identifier of a request (`requestId_requestIdJson`).
+An identifier reads exactly from a string, a number or `null` (`requestId_eq_ok_iff`, `Proofs/Rpc/Request.lean`).
+A JSON value reads as a request exactly when it is an object of this form (`request_eq_ok_iff`).
+Its only members are `jsonrpc`, `id`, `method` and `params`.
+Its `jsonrpc` is the string `2.0`, its `id` a string, a number or `null`, and its `method` a string.
+Its `params`, when present, is an array.
+By that theorem, the reader refuses a request without the version, with its parameters by name, or with an identifier of another type.
 The error codes of the source come in groups.
 Every code of a group that declares a range lies in that range (`code_mem_range`, `Proofs/Rpc/Errors.lean`).
 No code appears twice (`codes_nodup`), and the code `4444` of pruned history is in no group (`prunedHistoryUnavailable_not_mem`).
