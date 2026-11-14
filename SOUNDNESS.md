@@ -825,7 +825,8 @@ No theorem yet states the converse: that every input a decoder accepts is the en
 So these checks rest on the code and the Python tests, not on a proof.
 They preserve extension order, opaque certificate bytes, opaque extension data and unrecognized two-byte identifiers.
 
-`decodePayload_encodePayload` (`Networking/Proofs/Quic/Tls/Extensions.lean`) proves the round trip for every payload form: supported and selected versions, supported groups, signature algorithms, the three key-share forms, ALPN and opaque QUIC transport parameters.
+`decodePayload_encodePayload` (`Networking/Proofs/Quic/Tls/Extensions.lean`) proves the round trip for every payload form.
+The forms are supported and selected versions, supported groups, signature algorithms, the three key-share forms, ALPN and opaque QUIC transport parameters.
 The caller chooses the payload form from its message context; parsing a message alone does not validate these opaque payloads.
 
 The Python suite checks message layouts and payload bounds against the RFC wire formats.
