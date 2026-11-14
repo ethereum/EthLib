@@ -36,9 +36,7 @@ It counts the active validators whose exit epoch is at most three epochs after t
 
 Every exit placed at the source or later lands at least `MAX_SEED_LOOKAHEAD + 1` epochs after it.
 
-So when `MAX_SEED_LOOKAHEAD` is at least 3, no other validator leaves by those three epochs.
-
-`exitStake_le_exitReserveNear` proves that bound. -/
+So when `MAX_SEED_LOOKAHEAD` is at least 3, no other validator leaves by those three epochs. -/
 def exitReserveNear (source : BeaconState preset fork) : ℕ :=
   stake (fun v => balanceAt source v.toNat)
     {v ∈ activeVoters source | (source.validators.data[v.toNat]?).any fun validator =>
@@ -53,7 +51,7 @@ The epoch is from the source's epoch to three epochs after it.
 A validator active at the source and inactive at that epoch was inactive there in the source too.
 
 So its exit epoch in the source is at most that epoch, which `exitReserveNear` counts. -/
-theorem exitStake_le_exitReserveNear {post : Fork}
+private theorem exitStake_le_exitReserveNear {post : Fork}
     {source : BeaconState preset fork} {later : BeaconState preset post}
     (preGloas : fork < .glamsterdam) (fixedWindow : preset.SeedLookaheadAtLeastThree)
     (kept : ActiveKept (activityFixedEpoch source) source later)
@@ -92,7 +90,7 @@ Each full epoch of the window must lie between the source's epoch and three epoc
 The committees of a full epoch hold every validator active in it at the head state.
 
 So each omitted source validator is inactive there, and `exitStake_le_exitReserveNear` applies. -/
-theorem windowExitBoundWith_of_activeKept (store : Store preset fork)
+private theorem windowExitBoundWith_of_activeKept (store : Store preset fork)
     (source : BeaconState preset fork) (head : Root) (first last : Slot)
     {headState : BeaconState preset fork} (preGloas : fork < .glamsterdam)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (fixedWindow : preset.SeedLookaheadAtLeastThree)
@@ -154,13 +152,9 @@ variable {config : Config} {checks : SignatureChecks} {sources : BlockSources pr
 
 /-- The near exit bound of a call, from the call's source on the parent's chain.
 
-Each near receiver's head descends from the parent, so its chain holds the checkpoint block.
+Each full epoch of a near receiver's window omits at most `exitReserveNear` of active source stake.
 
-The checkpoint state then runs on to the head's state, which keeps the source's fixed activity.
-
-A full epoch of a near receiver's window is one to three epochs after the source.
-
-So `windowExitBoundWith_of_activeKept` bounds it, with a seed lookahead of at least three epochs.
+It needs a seed lookahead of at least three, and a checkpoint at most two epochs before the parent.
 
 The alternative is a block collision between two honest stores by the horizon. -/
 theorem Execution.receiverWindowExitsNear_of_sourceOnParentChain

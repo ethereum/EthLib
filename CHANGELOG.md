@@ -183,7 +183,7 @@ Not yet released.
   `Preset.SeedLookaheadAtLeastThree` asks for a seed lookahead of at least three epochs, so that activity is fixed three epochs ahead.
   `Execution.receiverWindowExitsNear_of_sourceOnParentChain` in `FastConfirmation/ReceiverExits.lean` reads it, since the near window reaches three epochs past the source.
   `Preset.SeedLookaheadAtLeastThree.mainnet` and `Preset.SeedLookaheadAtLeastThree.minimal` show that both presets satisfy it.
-  Under it, `exitStake_le_exitReserveNear` shows that no other source stake leaves by then, in any later state that keeps the source's fixed activity.
+  Under it, no other source stake leaves by then, in any later state that keeps the source's fixed activity.
   `exitReserve` keeps its value, and no theorem orders the two values.
   `SourceWindowReserveWith`, `WindowExitBoundWith` and `ReceiverWindowExitsNearWith` take the reserve as an argument.
   `SourceWindowReserve`, `WindowExitBound` and `ReceiverWindowExitsNear` are their instances at `exitReserve`, with their statements unchanged.
@@ -192,7 +192,7 @@ Not yet released.
 
 - `Execution.receiverWindowExitsNear_of_sourceOnParentChain` proves `ReceiverWindowExitsNearWith` at `exitReserveNear` when the call's balance source is on the parent's chain (`SourceOnParentChain`), or names a block collision between honest stores.
   The checkpoint's epoch is at most two epochs before the parent's, and the preset satisfies `Preset.SeedLookaheadAtLeastThree`.
-  Each near receiver's head state keeps the source's activity three epochs ahead, so `windowExitBoundWith_of_activeKept` bounds each full epoch of its window by `exitReserveNear`.
+  Each near receiver's head state keeps the source's activity three epochs ahead, so each full epoch of its window is bounded by `exitReserveNear`.
   `historical_stores_or_collision`, the split of honest stores into agreement or a collision, is now public; the proof reads it.
 
 - `Store.Reachable.blockState_slot_eq` states that a known block's state is at the block's slot, when the anchor block is at the anchor state's slot.
