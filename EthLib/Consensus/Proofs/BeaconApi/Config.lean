@@ -1,8 +1,10 @@
 module
 
 public import EthLib.Consensus.BeaconApi.Config
+public import EthLib.Consensus.Proofs.Transition.Chain
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
 public import EthLib.Consensus.Proofs.Transition.Genesis
+import EthLib.Consensus.Proofs.Transition.TargetSlots
 
 /-!
 # Proofs: the answers of the Beacon API that describe the chain
@@ -18,6 +20,12 @@ The last entry that has started at an epoch gives the fork version at that epoch
 With fork epochs that do not decrease, the entry with the largest started epoch gives it too.
 
 The genesis state that deposits build holds the genesis fork version that the API reports.
+
+Along a chain, each state holds the version of its fork as its current version, if the first does.
+
+A chain from the genesis state that deposits build meets this.
+
+The fork versions of each state of such a chain are an entry of the fork schedule.
 -/
 
 @[expose] public section
@@ -177,5 +185,131 @@ theorem genesisInfo_version {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
   obtain ⟨before, genesisTime, bodyRoot, activated, root, frame, rfl⟩ :=
     initializeBeaconStateFromEth1_frame computed
   exact congrArg ForkVersions.currentVersion frame.forkVersions
+
+/-! ## The version of the fork along a chain -/
+
+/-- One step of a chain keeps a property of the fork and of the fork versions.
+
+It needs each upgrade that is due to keep that property. -/
+private theorem chainStep_forkVersions {property : Fork → ForkVersions → Prop}
+    (upgrade : ∀ {pre : ForkedBeaconState preset}
+      {post : {post : ForkedBeaconState preset // pre.fork < post.fork}},
+      upgradeNext config checks pre = .ok post → upgradeDue config pre = true →
+      property pre.fork pre.state.forkVersions →
+      property post.val.fork post.val.state.forkVersions)
+    {forked after : ForkedBeaconState preset} (step : ChainStep config checks forked after)
+    (holds : property forked.fork forked.state.forkVersions) :
+    property after.fork after.state.forkVersions := by
+  cases step with
+  | slot computed =>
+    -- One slot keeps the fork versions, and the upgrades due at the slot it reaches follow.
+    obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
+    refine processUpgrades_induction_due
+      (property := fun forked => property forked.fork forked.state.forkVersions)
+      (fun due holds stepOk => upgrade stepOk due holds) ?_ upgraded
+    show property forked.fork advanced.forkVersions
+    rw [(advanceSlot_kept advancedOk).1]
+    exact holds
+  | @block blockFork blockState blockAfter engine signed _ computed =>
+    obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok computed
+    show property blockFork blockAfter.forkVersions
+    rw [(frame_processBlock blockOk).forkVersions]
+    exact holds
+
+/-- Along a run of steps of a chain, a property of the fork and of the fork versions holds.
+
+It needs the first state to meet the property, and each upgrade that is due to keep it. -/
+private theorem chainSteps_forkVersions {property : Fork → ForkVersions → Prop}
+    (upgrade : ∀ {pre : ForkedBeaconState preset}
+      {post : {post : ForkedBeaconState preset // pre.fork < post.fork}},
+      upgradeNext config checks pre = .ok post → upgradeDue config pre = true →
+      property pre.fork pre.state.forkVersions →
+      property post.val.fork post.val.state.forkVersions)
+    {first last : ForkedBeaconState preset}
+    (steps : Relation.ReflTransGen (ChainStep config checks) first last)
+    (holds : property first.fork first.state.forkVersions) :
+    property last.fork last.state.forkVersions := by
+  induction steps with
+  | refl => exact holds
+  | tail _ step more => exact chainStep_forkVersions upgrade step more
+
+/-- A fork before Altair has the genesis fork version. -/
+private theorem forkVersion_of_lt_altair (before : fork < .altair) :
+    config.forkVersion fork = config.GENESIS_FORK_VERSION := by
+  cases fork <;> first | rfl | exact absurd before (by decide)
+
+/-- The genesis state that deposits build holds the version of its fork as its current version. -/
+private theorem initializeBeaconStateFromEth1_currentVersion {eth1BlockHash : Hash32}
+    {eth1Timestamp : UInt64} {deposits : Array Deposit} {state : BeaconState preset fork}
+    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      .ok state) :
+    state.forkVersions.currentVersion = config.forkVersion fork := by
+  obtain ⟨before, -⟩ := initializeBeaconStateFromEth1_frame computed
+  exact (genesisInfo_version computed).trans (forkVersion_of_lt_altair before).symm
+
+/-- The fork versions of the genesis state that deposits build are an entry of the fork schedule. -/
+private theorem initializeBeaconStateFromEth1_mem_forkSchedule {eth1BlockHash : Hash32}
+    {eth1Timestamp : UInt64} {deposits : Array Deposit} {state : BeaconState preset fork}
+    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      .ok state) :
+    state.forkVersions ∈ forkSchedule config := by
+  obtain ⟨_, _, _, activated, _, frame, rfl⟩ := initializeBeaconStateFromEth1_frame computed
+  have versions : activated.forkVersions =
+      ⟨config.GENESIS_FORK_VERSION, config.GENESIS_FORK_VERSION, GENESIS_EPOCH⟩ :=
+    frame.forkVersions
+  show activated.forkVersions ∈ forkSchedule config
+  rw [versions]
+  exact List.mem_cons_self
+
+/-- Each state of a chain holds the version of its fork as its current version.
+
+It needs the first state of the chain to hold the version of its fork as its current version. -/
+theorem currentVersion_of_chainSteps {first last : ForkedBeaconState preset}
+    (steps : Relation.ReflTransGen (ChainStep config checks) first last)
+    (current : first.state.forkVersions.currentVersion = config.forkVersion first.fork) :
+    last.state.forkVersions.currentVersion = config.forkVersion last.fork :=
+  chainSteps_forkVersions
+    (property := fun fork versions => versions.currentVersion = config.forkVersion fork)
+    (fun computed _ _ => (upgradeFrame_upgradeNext computed).currentVersion) steps current
+
+/--
+Consider a chain from the genesis state that deposits build.
+
+Each state of the chain holds the version of its fork as its current version.
+
+That genesis state is before Altair, since a later fork refuses to build it.
+-/
+theorem currentVersion_of_genesis_chainSteps {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
+    {deposits : Array Deposit} {genesis : BeaconState preset fork}
+    {last : ForkedBeaconState preset}
+    (initialized :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+        .ok genesis)
+    (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, genesis⟩ last) :
+    last.state.forkVersions.currentVersion = config.forkVersion last.fork :=
+  currentVersion_of_chainSteps steps (initializeBeaconStateFromEth1_currentVersion initialized)
+
+/--
+Consider a chain from the genesis state that deposits build.
+
+The fork versions of each state of the chain are an entry of the fork schedule.
+
+That genesis state is before Altair, since a later fork refuses to build it.
+-/
+theorem forkVersions_mem_forkSchedule_of_genesis_chainSteps {eth1BlockHash : Hash32}
+    {eth1Timestamp : UInt64} {deposits : Array Deposit} {genesis : BeaconState preset fork}
+    {last : ForkedBeaconState preset}
+    (initialized :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+        .ok genesis)
+    (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, genesis⟩ last) :
+    last.state.forkVersions ∈ forkSchedule config :=
+  (chainSteps_forkVersions
+    (property := fun fork versions =>
+      versions.currentVersion = config.forkVersion fork ∧ versions ∈ forkSchedule config)
+    (fun computed due holds => ⟨(upgradeFrame_upgradeNext computed).currentVersion,
+      (forkSchedule_upgrade computed due holds.1).2⟩)
+    steps ⟨initializeBeaconStateFromEth1_currentVersion initialized,
+      initializeBeaconStateFromEth1_mem_forkSchedule initialized⟩).2
 
 end EthLib.Consensus.BeaconApi
