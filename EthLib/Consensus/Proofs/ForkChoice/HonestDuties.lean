@@ -285,14 +285,9 @@ private theorem computeSlotAtTimeMs_inside {config : Config} {genesisTimeMs due 
       genesisTimeMs.toNat + due.toNat := by
     simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat']
     exact Nat.mod_eq_of_lt fits
-  have elapsed :
-      Uint64.subChecked (genesisTimeMs.toNat + due.toNat).toUInt64 genesisTimeMs = .ok due :=
-    Uint64.subChecked_ok_iff.mpr ⟨by omega, by omega⟩
-  have below := UInt64.lt_iff_toNat_lt.mp inSlot
-  have quotient : Uint64.divChecked due config.SLOT_DURATION_MS = .ok 0 :=
-    Uint64.divChecked_ok_iff.mpr ⟨fun zero => by simp [zero] at below,
-      by simp [Nat.div_eq_of_lt below]⟩
-  simp only [computeSlotAtTimeMs, elapsed, quotient, bind, Except.bind]
+  exact EthLib.Consensus.computeSlotAtTimeMs_inside
+    (by simp [computeTimeAtSlotMs, Uint64.mulChecked, Uint64.addChecked,
+      bind, Except.bind, genesisTimeMs.toNat_lt]) round inSlot
 
 /-- Before Gloas, a store that holds only an anchor block at slot zero has that block as head.
 

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.ForkChoice.Supporters
 public import EthLib.Consensus.Proofs.ForkChoice.VoteOrigins
+public import EthLib.Consensus.Proofs.ForkChoice.Ghost
 
 /-!
 # Proofs: the supporters of a block that the fast confirmation rule tests
@@ -93,6 +94,139 @@ theorem VotesHaveOrigins.slot_mem_range_of_mem_supportersOf (holds : store.Votes
   rw [UInt64.le_iff_toNat_le]
   have := UInt64.lt_iff_toNat_lt.mp past
   simp only [UInt64.toNat_one] at le eq
+  omega
+
+/-- The tally indices are the registry positions of the active, unslashed validators. -/
+private theorem tally_indices {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) :
+    ((unslashedActiveBalances state).map (·.1)).toFinset.image UInt64.toNat =
+      voters state := by
+  ext i
+  simp only [Finset.mem_image, List.mem_toFinset, List.mem_map,
+    unslashedActiveBalances, List.mem_filterMap, Option.ite_none_right_eq_some,
+    Option.some.injEq, Prod.mk.injEq, Prod.exists, voters, Finset.mem_filter,
+    Finset.mem_range]
+  constructor
+  · rintro ⟨v, ⟨index, balance, ⟨validator, j, inZip, active, rfl, rfl⟩, rfl⟩, rfl⟩
+    have found := List.mem_zipIdx_iff_getElem?.mp inZip
+    have lt : j < state.validators.data.size := by
+      simpa using (List.getElem?_eq_some_iff.mp found).1
+    rw [toNat_toUInt64_of_lt within lt]
+    exact ⟨lt, by simpa [counts, ← Array.getElem?_toList, found] using active⟩
+  · rintro ⟨lt, active⟩
+    cases found : state.validators.data[i]? with
+    | none => simp [counts, found] at active
+    | some validator =>
+      refine ⟨i.toUInt64, ⟨i.toUInt64, validator.effectiveBalance, ?_, rfl⟩,
+        toNat_toUInt64_of_lt within lt⟩
+      refine ⟨validator, i, ?_, ?_, rfl, rfl⟩
+      · exact List.mem_zipIdx_iff_getElem?.mpr (by simpa using found)
+      · simpa [counts, found] using active
+
+/-- Reindexing the tally preserves the stake of every selected set of validators. -/
+private theorem tally_stake {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (P : ValidatorIndex → Prop) [DecidablePred P] :
+    Models.stake (balanceAt state) {i ∈ voters state | P i.toUInt64} =
+      Models.stake (fun v => balanceAt state v.toNat)
+        {v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset | P v} := by
+  rw [← tally_indices within]
+  have selected :
+      {i ∈ ((unslashedActiveBalances state).map (·.1)).toFinset.image UInt64.toNat |
+        P i.toUInt64} =
+      ({v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset | P v}).image
+        UInt64.toNat := by
+    ext i
+    simp only [Finset.mem_filter, Finset.mem_image]
+    constructor
+    · rintro ⟨⟨v, member, rfl⟩, passes⟩
+      exact ⟨v, ⟨member, by simpa using passes⟩, rfl⟩
+    · rintro ⟨v, ⟨member, passes⟩, rfl⟩
+      exact ⟨⟨v, member, rfl⟩, by simpa using passes⟩
+  rw [selected, Models.stake, Finset.sum_image]
+  · rfl
+  · intro a _ b _ eq
+    exact UInt64.toNat_inj.mp eq
+
+/-- A viable block not covered by justification has its parent at or above justification. -/
+private theorem justified_below_parent (lower : store.ParentsBelow)
+    (before : fork < .glamsterdam)
+    {nodes : List ForkChoiceNode} {root : Root} {block parent : BeaconBlock preset fork}
+    (known : store.blocks[root]? = some block)
+    (parentKnown : store.blocks[block.parentRoot]? = some parent)
+    (tree : store.getFilteredNodeTree config = .ok nodes)
+    (viable : (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes)
+    (uncovered : store.isAncestor ⟨store.justifiedCheckpoint.root, .pending⟩
+      ⟨root, .pending⟩ ≠ .ok true) :
+    ∃ justified, store.blocks[store.justifiedCheckpoint.root]? = some justified ∧
+      justified.slot ≤ parent.slot := by
+  have treeWalk : store.filterNodeTree config ⟨store.justifiedCheckpoint.root, .pending⟩ =
+      .ok nodes := tree
+  obtain ⟨justified, justifiedKnown⟩ := (filterNodeTree_mem treeWalk _
+    (filterNodeTree_self treeWalk (by intro empty; simp [empty] at viable))).2.1
+  refine ⟨justified, justifiedKnown, ?_⟩
+  have ancestor := (filterNodeTree_ancestor (lower := lower) before treeWalk _ viable).1
+  rcases ancestor.eq_or_parent with same | above
+  · have same := Option.some.inj same
+    change store.justifiedCheckpoint.root = root at same
+    apply False.elim
+    apply uncovered
+    simpa only [same] using isAncestor_self (node := ⟨root, .pending⟩) known
+  · rw [blockTree_parent_of known] at above
+    have le := above.height_le
+    rw [blockTree_height_of justifiedKnown, blockTree_height_of parentKnown] at le
+    exact UInt64.le_iff_toNat_le.mpr (by omega)
+
+/-- An honest duty majority in the justified state puts a viable block on the head chain.
+
+Twice the honest duty stake exceeds the active, unslashed stake plus proposer boost.
+
+The successful head walk supplies the attestation-score read at the block's visited parent. -/
+theorem isAncestor_getHead_of_duty_support
+    {state : BeaconState preset fork} {nodes : List ForkChoiceNode}
+    {root : Root} {head : ForkChoiceNode} {J : Set ValidatorIndex}
+    [DecidablePred (· ∈ J)] (duty : ValidatorIndex → Prop) [DecidablePred duty]
+    (within : state.RegistryWithinLimit) (lower : store.ParentsBelow)
+    (before : fork < .glamsterdam)
+    (stateOk : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tree : store.getFilteredNodeTree config = .ok nodes)
+    (viable : (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes)
+    {block parent : BeaconBlock preset fork}
+    (known : store.blocks[root]? = some block)
+    (parentKnown : store.blocks[block.parentRoot]? = some parent)
+    (parentAbove : store.isAncestor head ⟨block.parentRoot, .pending⟩ = .ok true)
+    (supported : ∀ v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset,
+      v ∈ J → duty v → v ∈ store.supportersOf state ⟨root, .pending⟩)
+    (majority : Models.stake (fun v => balanceAt state v.toNat)
+        ((unslashedActiveBalances state).map (·.1)).toFinset + store.boostScore config <
+      2 * Models.stake (fun v => balanceAt state v.toNat)
+        {v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset | v ∈ J ∧ duty v})
+    (headOk : store.getHead config = .ok head) :
+    store.isAncestor head ⟨root, .pending⟩ = .ok true := by
+  classical
+  by_cases covered : store.isAncestor ⟨store.justifiedCheckpoint.root, .pending⟩
+      ⟨root, .pending⟩ = .ok true
+  · have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+    have walk := headOk
+    simp only [getHead, notGloas, false_and, ↓reduceIte, bind_ok_iff] at walk
+    obtain ⟨nodes', _, walk⟩ := walk
+    exact getHeadFrom_descends before rfl covered walk
+  obtain ⟨justified, justifiedKnown, below⟩ := justified_below_parent lower before known
+    parentKnown tree viable covered
+  obtain ⟨score, scoreOk⟩ := getAttestationScore_ok_of_getHead before known parentKnown
+    justifiedKnown below stateOk tree viable parentAbove headOk
+  have total := tally_stake within (fun _ => True)
+  simp only [Finset.filter_true] at total
+  have counted : Models.stake (fun v => balanceAt state v.toNat)
+      {v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset | v ∈ J ∧ duty v} ≤
+      score.toNat := by
+    rw [← stake_supportersOf within scoreOk]
+    apply Models.stake_mono
+    intro v member
+    obtain ⟨inside, honest, dutied⟩ := Finset.mem_filter.mp member
+    exact supported v inside honest dutied
+  apply isAncestor_getHead_of_majority_withBoost lower before stateOk tree viable scoreOk
+    ?_ headOk
+  rw [total]
   omega
 
 end Store

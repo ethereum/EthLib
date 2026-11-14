@@ -856,4 +856,43 @@ theorem Store.Reachable.finalized_origins {config : Config}
   rintro checkpoint (rfl | rfl)
   exacts [reachable.tracked.finalized.origin, reachable.tracked.unrealizedFinalized.origin]
 
+/-- Both justified fields are no later than the current epoch of a forward-reachable store. -/
+theorem Store.ForwardReachable.justified_epoch_le_current {config : Config}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork}
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (sound : Invariant anchorState) (slots : 0 < config.SLOT_DURATION_MS)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) {epoch : Epoch}
+    (epochOk : store.getCurrentStoreEpoch config = .ok epoch) :
+    store.justifiedCheckpoint.epoch ≤ epoch ∧
+      store.unrealizedJustifiedCheckpoint.epoch ≤ epoch := by
+  have reached := forward.reachable
+  obtain ⟨current, currentOk, _, states⟩ := forward.slots_le_current slots anchorSlot
+  have epochEq : computeEpochAtSlot preset current = epoch := by
+    simpa [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
+      using epochOk
+  have stateBound : ∀ (r : Root) (s : BeaconState preset fork),
+      store.blockStates[r]? = some s → getCurrentEpoch s ≤ epoch := by
+    intro r s held
+    rw [← epochEq, UInt64.le_iff_toNat_le]
+    exact Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp (states r s held))
+  have anchorBound : getCurrentEpoch anchorState ≤ epoch := by
+    obtain ⟨root, _, held⟩ := reached.anchor_known
+    obtain ⟨state, found, same, _⟩ := reached.blockStatesFromParents held
+    simpa only [same rfl] using stateBound root state found
+  have each : ∀ checkpoint, (checkpoint = store.justifiedCheckpoint ∨
+      checkpoint = store.unrealizedJustifiedCheckpoint) → checkpoint.epoch ≤ epoch := by
+    intro checkpoint selected
+    rcases reached.justified_origins checkpoint selected with
+      ⟨root, _, rfl⟩ | ⟨root, state, held, rfl⟩ | ⟨root, state, pulled, held, run, rfl⟩
+    · exact anchorBound
+    · exact UInt64.le_trans
+        (UInt64.le_trans ((reached.ordered sound).2 held).settled (getPreviousEpoch_le _))
+        (stateBound root state held)
+    · have inv := (reached.ordered sound).2 held
+      exact UInt64.le_trans
+        (processJustificationAndFinalization_invariant inv.ordered inv.settled run).2.2.1
+        (stateBound root state held)
+  exact ⟨each _ (.inl rfl), each _ (.inr rfl)⟩
+
 end EthLib.Consensus

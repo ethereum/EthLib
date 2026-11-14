@@ -219,6 +219,31 @@ theorem exists_getCurrentSlot_onTick_ge {timeMs : UInt64} {current : Slot}
   · exact getCurrentSlot_le_of_onTick forward ticked slotOk
       (by rw [getCurrentSlot_onTick ticked, tickOk])
 
+/-- A forward store has a defined current slot when the slot duration is positive. -/
+theorem ForwardReachable.exists_getCurrentSlot
+    (forward : ForwardReachable config anchorState anchorBlock store)
+    (positive : 0 < config.SLOT_DURATION_MS) :
+    ∃ current, store.getCurrentSlot config = .ok current := by
+  induction forward with
+  | anchor made =>
+    exact ⟨_, getCurrentSlot_getForkchoiceStore positive made⟩
+  | tick _ forward ticked holds =>
+    obtain ⟨current, currentOk⟩ := holds
+    obtain ⟨later, laterOk, -⟩ := exists_getCurrentSlot_onTick_ge forward ticked currentOk
+    exact ⟨later, laterOk⟩
+  | block _ step holds =>
+    simpa only [(onBlock_sameClock step).getCurrentSlot] using holds
+  | attestation _ step holds =>
+    simpa only [(onAttestation_sameClock step).getCurrentSlot] using holds
+  | attesterSlashing _ step holds =>
+    simpa only [(onAttesterSlashing_sameClock step).getCurrentSlot] using holds
+  | payloadAttestation _ step holds =>
+    simpa only [(onPayloadAttestationMessage_sameClock step).getCurrentSlot] using holds
+  | envelope _ step holds =>
+    simpa only [(onExecutionPayloadEnvelope_sameClock step).getCurrentSlot] using holds
+  | inclusionList _ step holds =>
+    simpa only [(onInclusionList_sameClock step).getCurrentSlot] using holds
+
 end Store
 
 end EthLib.Consensus

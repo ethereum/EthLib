@@ -2865,6 +2865,21 @@ These are store-local facts: no theorem here shows that a recorded honest vote i
 `willNoConflictingCheckpointBeJustified_of_willCurrentTargetBeJustified` shows that the one-third test passes wherever the two-thirds test does, for a nonzero effective balance increment.
 No theorem relates either test to the justification of the target in a later state.
 
+`Consensus/Proofs/Models/Network/ForkChoice.lean` states the network conditions that `Execution.mem_supportersOf_of_duty_epoch` and `Execution.isAncestor_getHead_of_duty_epoch` add to synchrony.
+`DelayFits` requires a vote sent at its deadline, delayed by the bound, to arrive before the next slot; `Prompt` requires every honest store to be up to date at each slot start from the start of the execution up to the bound, and, at each slot start later than the start of the execution, one millisecond before it.
+`BlocksAdmitted` assumes that a delayed block passing `validateOnBlock` also passes the rest of `onBlockWithVotes`, including every vote and slashing the block carries.
+It restricts the adversary: a block may carry a vote or a slashing that a later honest receiver rejects, for example a vote whose target conflicts with that receiver's newer finalized checkpoint.
+Neither synchrony nor validation implies it, and no proof of handler totality can discharge it.
+The two theorems on voting and the head also assume facts that hashing makes hard to break, without naming a witness for them.
+Every block held by an honest store has a nonzero state root, so no state that such a block commits to hashes to the zero root; the theorem on the head also assumes that no honest store holds a block at the root of the anchor's parent, which needs a preimage of that root.
+They also assume that every honest justified or unrealized justified checkpoint, from the finalized epoch up to the horizon, descends from every honest finalized checkpoint, a finality-safety assumption that an honest majority alone does not give.
+They also keep their duty, stake and ancestry hypotheses, and conclude their result or a hash collision between blocks held by honest stores at two points of the execution, up to the bound.
+
+`Consensus/Proofs/ForkChoice/FastConfirmation/TargetVotes.lean` states the assumed honest target-vote count, `HonestTargetVotes`.
+`SignsTarget`, in the network file above, describes a signing witness by a bounded time inside that count; it is not an additional hypothesis on its own.
+The count gives active honest voters, each of whom signs the target or lies outside the committees of the epoch so far, and three times their stake is at least three times the computed support plus the margin.
+`quorum_of_no_conflicting_checkpoint` takes that count as a hypothesis and, when the one-third test passes, applies it; no theorem derives the count from a bound on Byzantine stake, or shows that the target is justified.
+
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
 It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.

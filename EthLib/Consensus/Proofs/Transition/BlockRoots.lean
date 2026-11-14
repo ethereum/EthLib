@@ -24,6 +24,10 @@ A root that is readable after one slot was readable before it, or is the root of
 
 The new header is the one before it, with its state root filled by the root of the state before.
 
+After several slots such a root was readable before them, or is the root of the final header.
+
+Or the state before hashes to the zero root, and it is the root of the header before.
+
 From Gloas the slots and the epoch transition also keep the latest block hash and the latest bid.
 
 The slots and the transition keep the genesis time.
@@ -132,6 +136,61 @@ theorem advanceSlot_latestBlockHeader (computed : advanceSlot config checks stat
   rw [header]
   exact processSlot_latestBlockHeader cachedOk
 
+/-- Empty slots preserve a nonzero header. -/
+theorem advanceSlots_latestBlockHeader_of_nonzero {count : Nat}
+    (nonzero : state.latestBlockHeader.stateRoot ≠ Vector.replicate 32 0)
+    (computed : advanceSlots config checks count state = .ok after) :
+    after.latestBlockHeader = state.latestBlockHeader := by
+  induction count generalizing state with
+  | zero =>
+    cases Except.ok.inj computed
+    rfl
+  | succ count ih =>
+    simp only [advanceSlots, bind_ok_iff] at computed
+    obtain ⟨next, stepped, rest⟩ := computed
+    obtain ⟨root, -, header⟩ := advanceSlot_latestBlockHeader stepped
+    simp only [nonzero, ↓reduceIte] at header
+    exact (ih (header ▸ nonzero) rest).trans header
+
+/-- Empty slots fill a zero header once when the initial state root is nonzero. -/
+theorem processSlots_latestBlockHeader_of_zero {root : Root} {slot : Slot}
+    (zero : state.latestBlockHeader.stateRoot = Vector.replicate 32 0)
+    (hashed : SszType.hashTreeRoot state = .ok root) (nonzero : root ≠ Vector.replicate 32 0)
+    (computed : processSlots config checks state slot = .ok after) :
+    after.latestBlockHeader = { state.latestBlockHeader with stateRoot := root } := by
+  have earlier := UInt64.lt_iff_toNat_lt.mp (processSlots_slot computed).1
+  simp only [processSlots, bind_ok_iff, ensure_ok_iff] at computed
+  obtain ⟨_, -, advanced⟩ := computed
+  obtain ⟨count, eq⟩ : ∃ count, slot.toNat - state.slot.toNat = count + 1 :=
+    ⟨slot.toNat - state.slot.toNat - 1, by omega⟩
+  rw [eq] at advanced
+  simp only [advanceSlots, bind_ok_iff] at advanced
+  obtain ⟨next, stepped, rest⟩ := advanced
+  obtain ⟨filledRoot, filledHash, header⟩ := advanceSlot_latestBlockHeader stepped
+  rw [hashed, Except.ok.injEq] at filledHash
+  subst filledRoot
+  simp only [zero, ↓reduceIte] at header
+  exact (advanceSlots_latestBlockHeader_of_nonzero
+    (state := next) (by rw [header]; exact nonzero) rest).trans header
+
+/-- Two nonempty slot runs from one state finish with the same header. -/
+theorem processSlots_latestBlockHeader_eq {left right : BeaconState preset fork}
+    {leftChecks rightChecks : SignatureChecks} {leftSlot rightSlot : Slot} {root : Root}
+    (hashed : SszType.hashTreeRoot state = .ok root) (nonzero : root ≠ Vector.replicate 32 0)
+    (one : processSlots config leftChecks state leftSlot = .ok left)
+    (two : processSlots config rightChecks state rightSlot = .ok right) :
+    left.latestBlockHeader = right.latestBlockHeader := by
+  by_cases zero : state.latestBlockHeader.stateRoot = Vector.replicate 32 0
+  · rw [processSlots_latestBlockHeader_of_zero zero hashed nonzero one,
+      processSlots_latestBlockHeader_of_zero zero hashed nonzero two]
+  · have kept {checks : SignatureChecks} {slot : Slot} {after : BeaconState preset fork}
+        (ok : processSlots config checks state slot = .ok after) :
+        after.latestBlockHeader = state.latestBlockHeader := by
+      simp only [processSlots, bind_ok_iff, ensure_ok_iff] at ok
+      obtain ⟨_, -, advanced⟩ := ok
+      exact advanceSlots_latestBlockHeader_of_nonzero zero advanced
+    exact (kept one).trans (kept two).symm
+
 /-- A root that one slot makes readable was readable before, or is the root of the new header.
 
 The root of the new header is at the slot of the state before the slot step. -/
@@ -158,6 +217,141 @@ theorem getBlockRootAtSlot_advanceSlot_cases {slot : Slot} {root : Root}
     rw [readCircular_writeCircular_of_ne written other] at read
     exact .inl ⟨UInt64.lt_iff_toNat_lt.mpr earlier,
       getBlockRootAtSlot_ok_iff.mpr ⟨earlier, fits, by omega, read⟩⟩
+
+section HeaderRoots
+
+open SszType
+
+/-- A header that the filling leaves with a zero state root was filled with the zero root.
+
+So the filling changed nothing. -/
+theorem header_unfilled_of_filled {header filled : BeaconBlockHeader} {stateRoot : Root}
+    (equation : filled = if header.stateRoot = Vector.replicate 32 0 then
+      { header with stateRoot := stateRoot } else header)
+    (unfilled : filled.stateRoot = Vector.replicate 32 0) :
+    stateRoot = Vector.replicate 32 0 ∧ filled = header := by
+  by_cases empty : header.stateRoot = Vector.replicate 32 0
+  · simp only [empty, ↓reduceIte] at equation
+    have zero : stateRoot = Vector.replicate 32 0 := by rw [equation] at unfilled; exact unfilled
+    refine ⟨zero, ?_⟩
+    rw [equation, zero, ← empty]
+  · simp only [empty, ↓reduceIte] at equation
+    exact absurd (equation ▸ unfilled) empty
+
+/-- The root of the header after a slot is that of the header at the end, or of the header before.
+
+The header before counts only when the slot leaves it unfilled.
+
+Then the state before hashes to zero. -/
+theorem hashTreeRoot_latestBlockHeader_advanceSlots {count : Nat}
+    {next last : BeaconState preset fork}
+    (step : advanceSlot config checks state = .ok next)
+    (rest : advanceSlots config checks count next = .ok last) {root : Root}
+    (rooted : hashTreeRoot next.latestBlockHeader = .ok root) :
+    hashTreeRoot last.latestBlockHeader = .ok root ∨
+      (hashTreeRoot state = .ok (Vector.replicate 32 0) ∧
+        hashTreeRoot state.latestBlockHeader = .ok root) := by
+  obtain ⟨stateRoot, hashed, header⟩ := advanceSlot_latestBlockHeader step
+  by_cases filled : next.latestBlockHeader.stateRoot = Vector.replicate 32 0
+  · obtain ⟨zero, same⟩ := header_unfilled_of_filled header filled
+    rw [same] at rooted
+    exact .inr ⟨zero ▸ hashed, rooted⟩
+  · exact .inl (by rw [advanceSlots_latestBlockHeader_of_nonzero filled rest]; exact rooted)
+
+/-- A root that some slots make readable was readable before them, or comes from the header.
+
+It is the root of the header at the end.
+
+Or the state before hashes to zero, and it is the root of the header before. -/
+theorem getBlockRootAtSlot_advanceSlots :
+    ∀ (count : Nat) {state after : BeaconState preset fork},
+      advanceSlots config checks count state = .ok after → ∀ {slot : Slot} {root : Root},
+      getBlockRootAtSlot after slot = .ok root →
+      (slot < state.slot ∧ getBlockRootAtSlot state slot = .ok root) ∨
+        (state.slot ≤ slot ∧ (hashTreeRoot after.latestBlockHeader = .ok root ∨
+          (hashTreeRoot state = .ok (Vector.replicate 32 0) ∧
+            hashTreeRoot state.latestBlockHeader = .ok root)))
+  | 0, state, after, computed, slot, root, read => by
+    simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact .inl ⟨(getBlockRootAtSlot_read read).1, read⟩
+  | count + 1, state, after, computed, slot, root, read => by
+    simp only [advanceSlots, bind_ok_iff] at computed
+    obtain ⟨next, nextOk, rest⟩ := computed
+    have succ := advanceSlot_slot nextOk
+    rcases getBlockRootAtSlot_advanceSlots count rest read with ⟨_, nextRead⟩ | ⟨later, rooted⟩
+    · rcases getBlockRootAtSlot_advanceSlot_cases nextOk nextRead with
+        ⟨before, read⟩ | ⟨same, rooted⟩
+      · exact .inl ⟨before, read⟩
+      · exact .inr ⟨same.symm ▸ UInt64.le_refl _,
+          hashTreeRoot_latestBlockHeader_advanceSlots nextOk rest rooted⟩
+    · refine .inr ⟨UInt64.le_iff_toNat_le.mpr ?_, ?_⟩
+      · have := UInt64.le_iff_toNat_le.mp later
+        omega
+      · rcases rooted with rooted | ⟨-, rooted⟩
+        · exact .inl rooted
+        · exact hashTreeRoot_latestBlockHeader_advanceSlots nextOk rest rooted
+
+/-- A history read that predates empty slots was already in their input state. -/
+theorem getBlockRootAtSlot_of_advanceSlots {slot : Slot} {root : Root} {count : Nat}
+    (computed : advanceSlots config checks count state = .ok after)
+    (read : getBlockRootAtSlot after slot = .ok root)
+    (earlier : slot < state.slot) : getBlockRootAtSlot state slot = .ok root := by
+  rcases getBlockRootAtSlot_advanceSlots count computed read with ⟨-, kept⟩ | ⟨later, -⟩
+  · exact kept
+  · exact absurd earlier (UInt64.not_lt.mpr later)
+
+/-- A root written during empty slots hashes their unchanged nonzero header. -/
+private theorem getBlockRootAtSlot_advanceSlots_of_nonzero
+    {slot : Slot} {root : Root} {count : Nat}
+    (nonzero : state.latestBlockHeader.stateRoot ≠ Vector.replicate 32 0)
+    (computed : advanceSlots config checks count state = .ok after)
+    (read : getBlockRootAtSlot after slot = .ok root) (later : state.slot ≤ slot) :
+    SszType.hashTreeRoot state.latestBlockHeader = .ok root := by
+  rcases getBlockRootAtSlot_advanceSlots count computed read with
+    ⟨earlier, -⟩ | ⟨-, rooted | ⟨-, rooted⟩⟩
+  · exact absurd later (UInt64.not_le.mpr earlier)
+  · rwa [advanceSlots_latestBlockHeader_of_nonzero nonzero computed] at rooted
+  · exact rooted
+
+end HeaderRoots
+
+/-- A history read written in empty slots equals their final header root.
+
+A nonzero initial state root prevents the zero header sentinel from being filled twice. -/
+theorem getBlockRootAtSlot_processSlots_header {slot query : Slot} {root stateRoot : Root}
+    (hashed : SszType.hashTreeRoot state = .ok stateRoot)
+    (nonzero : stateRoot ≠ Vector.replicate 32 0)
+    (computed : processSlots config checks state slot = .ok after)
+    (read : getBlockRootAtSlot after query = .ok root) (later : state.slot ≤ query) :
+    SszType.hashTreeRoot after.latestBlockHeader = .ok root := by
+  have earlier := UInt64.lt_iff_toNat_lt.mp (processSlots_slot computed).1
+  have run := computed
+  simp only [processSlots, bind_ok_iff, ensure_ok_iff] at run
+  obtain ⟨_, -, advanced⟩ := run
+  by_cases zero : state.latestBlockHeader.stateRoot = Vector.replicate 32 0
+  · obtain ⟨count, eq⟩ : ∃ count, slot.toNat - state.slot.toNat = count + 1 :=
+      ⟨slot.toNat - state.slot.toNat - 1, by omega⟩
+    rw [eq] at advanced
+    simp only [advanceSlots, bind_ok_iff] at advanced
+    obtain ⟨next, stepped, rest⟩ := advanced
+    obtain ⟨filledRoot, filledHash, header⟩ := advanceSlot_latestBlockHeader stepped
+    rw [hashed, Except.ok.injEq] at filledHash
+    subst filledRoot
+    simp only [zero, ↓reduceIte] at header
+    rw [processSlots_latestBlockHeader_of_zero zero hashed nonzero computed]
+    by_cases before : query < next.slot
+    · rcases getBlockRootAtSlot_advanceSlot_cases stepped
+          (getBlockRootAtSlot_of_advanceSlots rest read before) with old | ⟨-, rooted⟩
+      · have lt := UInt64.lt_iff_toNat_lt.mp old.1
+        have le := UInt64.le_iff_toNat_le.mp later
+        omega
+      · rwa [header] at rooted
+    · have rooted := getBlockRootAtSlot_advanceSlots_of_nonzero
+        (state := next) (by rw [header]; exact nonzero) rest read (UInt64.not_lt.mp before)
+      rwa [header] at rooted
+  · rw [advanceSlots_latestBlockHeader_of_nonzero zero advanced]
+    exact getBlockRootAtSlot_advanceSlots_of_nonzero zero advanced read later
 
 /-- One slot keeps the root of the block at the first slot of an epoch.
 
