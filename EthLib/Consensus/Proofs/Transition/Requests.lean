@@ -99,6 +99,47 @@ theorem processPendingConsolidations_kept {electra : .pectra ≤ fork}
   cases computed
   exact passPendingConsolidations_kept passed
 
+/-- A pass over the pending consolidations keeps the end of the exit queue and its balance. -/
+theorem passPendingConsolidations_exitQueue {nextEpoch : Epoch} :
+    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
+      {result : BeaconState preset fork × Nat},
+      passPendingConsolidations nextEpoch state consolidations = .ok result →
+      result.1.earliestExitEpoch = state.earliestExitEpoch ∧
+        result.1.exitBalanceToConsume = state.exitBalanceToConsume
+  | [], _, _, computed => by
+    cases computed
+    exact ⟨rfl, rfl⟩
+  | consolidation :: rest, state, result, computed => by
+    simp only [passPendingConsolidations, bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · obtain ⟨⟨passed, read⟩, passedOk, computed⟩ := bind_ok_iff.mp computed
+      cases computed
+      exact passPendingConsolidations_exitQueue (result := (passed, read)) passedOk
+    split at computed
+    · cases computed
+      exact ⟨rfl, rfl⟩
+    simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, _, loweredOk, _, raisedOk, ⟨passed, read⟩, passedOk, computed⟩ := computed
+    cases computed
+    obtain ⟨_, rfl⟩ := decreaseBalance_eq_ok_iff.mp loweredOk
+    obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp raisedOk
+    exact (passPendingConsolidations_exitQueue (result := (passed, read)) passedOk :)
+
+/-- The pending consolidations of an epoch keep the end of the exit queue and its balance. -/
+theorem processPendingConsolidations_exitQueue {electra : .pectra ≤ fork}
+    (computed : processPendingConsolidations state electra = .ok after) :
+    after.earliestExitEpoch = state.earliestExitEpoch ∧
+      after.exitBalanceToConsume = state.exitBalanceToConsume := by
+  simp only [processPendingConsolidations, bind, Except.bind, pure, Except.pure] at computed
+  split at computed
+  · cases computed
+  split at computed
+  · cases computed
+  rename_i passed
+  cases computed
+  exact passPendingConsolidations_exitQueue passed
+
 /-- A pass leaves its list from the first source that is unslashed and cannot withdraw.
 
 A source can withdraw when its withdrawable epoch is at most the epoch of the pass. -/
