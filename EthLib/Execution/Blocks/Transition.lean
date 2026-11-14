@@ -153,9 +153,9 @@ def blockEnvironment {fork : Fork} (config : ChainConfig) (hashes : List Hash32)
 
 /-- What a transaction of a body returns beside its receipt. -/
 structure TransactionResult where
-  /-- The data that its message returned, or the data of its revert. -/
-  returnData : ByteArray
-  /-- The gas that it used before its refund. -/
+  /-- The output of its message: the data that it returned, or the data of its revert. -/
+  output : ByteArray
+  /-- The gas that it used before its refund, at least the call data floor from Pectra. -/
   gasBeforeRefund : Nat
 
 /-- What the body of a block gives, at `fork`. -/
@@ -170,7 +170,7 @@ structure BodyOutput (fork : Fork) where
   receipts : List (UInt8 × Receipt fork)
   /-- The logs of the transactions, oldest first. -/
   logs : List Log
-  /-- The result of each transaction, which no rule of the block reads. -/
+  /-- The result of each transaction, oldest first, which no rule of the block reads. -/
   results : List TransactionResult
 
 /-- The block state, with the writes of the body so far. -/
@@ -200,7 +200,9 @@ The block counts the gas of the transaction by its counts of gas.
 
 Its receipt adds up the gas used after the refunds, as EIP-8037 keeps it.
 
-Before Byzantium, its receipt holds the state root after it. -/
+Before Byzantium, its receipt holds the state root after it.
+
+It also records the result of the transaction. -/
 def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
     (before : BodyOutput fork) (tx : Transaction) (overrides : BodyOverrides := {}) :
     Except BlockError (BodyOutput fork) := do
@@ -219,7 +221,7 @@ def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
            receipts :=
              before.receipts ++ [(tx.type, makeReceipt outcome cumulativeGasUsed out.logs.toList)]
            logs := before.logs ++ out.logs.toList
-           results := before.results ++ [⟨out.returnData, out.gasBeforeRefund⟩] }
+           results := before.results ++ [⟨out.messageOutput, out.gasBeforeRefund⟩] }
 
 /-- Run the transactions of a block in order, from the body so far. -/
 def applyTransactions {fork : Fork} (env : BlockEnvironment fork) (body : BodyState)

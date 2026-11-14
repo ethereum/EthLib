@@ -361,9 +361,13 @@ structure TransactionOutput where
   logs : Array Log
   /-- The error that stopped its message, or none when the message succeeded. -/
   error : Option EvmError
-  /-- The data that its message returned, or the data of its revert. -/
-  returnData : ByteArray
-  /-- The gas that it used before its refund, its gas limit less the gas left. -/
+  /-- The output of its message: the data that it returned, or the data of its revert.
+
+  It is empty after any other error. -/
+  messageOutput : ByteArray
+  /-- The gas that it used before its refund.
+
+  It is the gas used with no refund: from Pectra it is at least the call data floor. -/
   gasBeforeRefund : Nat
 
 /-- The block state, with the writes of the transaction. -/
@@ -425,11 +429,11 @@ def runTransaction {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter
     (paidWrites sender target tx)
   let gasLeft := output.gasLeft + output.reservoir
   let blockGas := transactionBlockGas fork sender tx gasLeft output.refund output.stateGasUsed
+  let gasBeforeRefund := gasUsed fork sender tx gasLeft 0
   let (state, gasUsed) ←
     (settleGas env output.state sender tx gasLeft output.refund lifted).mapError .state
   let state ← (deleteAccounts fork state output).mapError .state
-  return ⟨state, gasUsed, blockGas, output.logs, output.error, output.output,
-    tx.gas.toNat - gasLeft⟩
+  return ⟨state, gasUsed, blockGas, output.logs, output.error, output.output, gasBeforeRefund⟩
 
 /-- Run a transaction that may enter its block, on the block state `block` at `fork`.
 
@@ -438,6 +442,8 @@ The checks of the transaction gave `included`.
 It returns the state of the transaction, whose writes then join the block.
 
 It also returns the gas used, the gas it adds to its block, the logs, and the error of the message.
+
+It also returns the output of the message and the gas used before the refund, which no rule reads.
 
 It fails only with an error that aborts the whole execution, such as missing code.
 

@@ -470,7 +470,7 @@ theorem runTransaction_agrees {Meter : Type} [GasMeter Meter] [LawfulGasMeter Me
   obtain ⟨final', hfinal', hagreeF⟩ := deleteAccounts_agrees hagreeS hdel htouched hfinal
   refine ⟨⟨final', used, transactionBlockGas fork included.sender tx (out.gasLeft + out.reservoir)
     out.refund out.stateGasUsed, out.logs, out.error, out.output,
-    tx.gas.toNat - (out.gasLeft + out.reservoir)⟩, ?_, rfl, hagreeF⟩
+    gasUsed fork included.sender tx (out.gasLeft + out.reservoir) 0⟩, ?_, rfl, hagreeF⟩
   unfold runTransaction
   dsimp only
   rw [htarget']

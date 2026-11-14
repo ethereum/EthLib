@@ -419,9 +419,9 @@ theorem applyTransaction_receipts {env : BlockEnvironment fork} {index : Nat}
   split at h <;>
     (obtain ⟨_, -, h⟩ := bind_ok_iff.mp h; cases h; exact ⟨_, _, rfl⟩)
 
-/-- A transaction that enters the body adds one result, with the return data of its run.
+/-- A transaction that enters the body adds one receipt and one result, the result of its run.
 
-The result also holds the gas that the run used before its refund.
+The result holds the output of its message and the gas that it used before its refund.
 
 It holds with the overrides of a simulation too. -/
 theorem applyTransaction_results {env : BlockEnvironment fork} {index : Nat}
@@ -433,7 +433,7 @@ theorem applyTransaction_results {env : BlockEnvironment fork} {index : Nat}
       processTransaction env before.block included tx overrides.precompiles overrides.lifted =
         .ok out ∧
       after.receipts.length = before.receipts.length + 1 ∧
-      after.results = before.results ++ [⟨out.returnData, out.gasBeforeRefund⟩] := by
+      after.results = before.results ++ [⟨out.messageOutput, out.gasBeforeRefund⟩] := by
   unfold applyTransaction at h
   obtain ⟨included, hIncluded, h⟩ := bind_ok_iff.mp h
   obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
@@ -443,7 +443,7 @@ theorem applyTransaction_results {env : BlockEnvironment fork} {index : Nat}
   split at h <;>
     (obtain ⟨_, -, h⟩ := bind_ok_iff.mp h; cases h; exact ⟨by simp, rfl⟩)
 
-/-- The transactions of a body that runs give one result for each receipt, in order. -/
+/-- The transactions of a body that runs give as many results as receipts. -/
 theorem applyTransactions_results_length {env : BlockEnvironment fork} {body : BodyState}
     {transactions : List Transaction} {overrides : BodyOverrides} {output : BodyOutput fork}
     (h : applyTransactions env body transactions overrides = .ok output) :
