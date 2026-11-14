@@ -266,6 +266,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadChain
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadUpgrades
 public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
+public import EthLib.Consensus.Proofs.Transition.Totality.Shape
 public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot
 public import EthLib.Consensus.Proofs.Transition.Totality.Supply
