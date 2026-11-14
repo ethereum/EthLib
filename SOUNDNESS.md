@@ -3060,6 +3060,20 @@ The count gives active honest voters, each of whom signs the target or lies outs
 `quorum_of_current_target` applies the count in the same way when the two-thirds test passes.
 Then three times the voters' stake is at least twice the total active balance plus the margin of the count.
 
+`Execution.honestTargetVotes_signed_of_checked` in `Consensus/Proofs/ForkChoice/FastConfirmation/RootViability.lean` turns that count into signatures, for the current target ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).
+The caller's store is up to date at a slot start of the target's epoch, and its head passes the two-thirds test.
+The theorem concludes that honest validators with two thirds of the pulled-up head state's active balance each sent a `SignsTarget` statement before the start of the next epoch.
+Three times their stake is at least twice that balance plus the margin of the count.
+Each of them lies in `activeVoters` of that state, the validators active in its current epoch.
+It does not show that a later state counts these votes, or that the target is justified.
+`HonestTargetVotes` stands in for a bound on Byzantine stake and remains a hypothesis.
+`HonestHeadsCover` assumes that every up-to-date honest head descends from a block of the target's epoch, from the call through the start of the next epoch.
+`HonestBlocksAgree` assumes that honest stores agree on every block that they both hold, and `HeldBlockStateRootsNonzero` that their blocks have nonzero state roots.
+`RolloverWindowRead` assumes that at the start of the next epoch the caller's store has a head and reads that head's committee window over the target's epoch.
+No theorem yet shows that the head read of an honest store succeeds, so this read is assumed.
+The theorem also assumes `AssignmentWindowAgreement`, `ValidatedDutyVotes`, `Prompt` and `DelayFits`.
+It also requires an anchor block at an epoch start, and a historical vector longer than the seed lookahead by more than two epochs.
+
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
 It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.

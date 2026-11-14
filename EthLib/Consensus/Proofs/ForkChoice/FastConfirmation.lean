@@ -9,6 +9,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalTran
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalAnchor
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalCoverage
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Indicators
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootViability
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Supporters
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.TargetVotes
@@ -39,4 +40,8 @@ It also assumes that delayed blocks pass the handler and that stores process mes
 Historical anchor transport derives later head ancestry from a guarded margin, or returns evidence.
 
 It retains committee agreement, historical coverage, drift and finality conditions as hypotheses.
+
+When the two-thirds test on the current target passes, honest voters sign that target.
+
+Those voters hold two thirds of the active balance, given an honest count and coverage of the heads.
 -/

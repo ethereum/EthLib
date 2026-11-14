@@ -9,6 +9,13 @@ Not yet released.
 
 ### Proof additions
 
+- `Execution.honestTargetVotes_signed_of_checked` shows that an accepted current-target test has honest signers with two thirds of the active balance ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).
+  Three times their stake is at least twice the total active balance plus the margin of the count.
+  Each of them is active in the pulled-up head state, and sent a vote for the target before the start of the next epoch.
+  It assumes the honest count `HonestTargetVotes`, and that every honest head descends from a block of the target's epoch until then.
+  It also assumes `HonestBlocksAgree`, that honest stores agree on the blocks that they both hold.
+  `RolloverWindowRead` assumes that the caller has a head at the start of the next epoch and reads its committee window over the target's epoch.
+
 - `quorum_of_current_target` names the honest voters of `HonestTargetVotes` when the two-thirds test on the current target passes.
   Three times their stake is at least twice the total active balance plus the margin of the count.
   `quorum_of_count` and `headState_epoch_le` are now public.

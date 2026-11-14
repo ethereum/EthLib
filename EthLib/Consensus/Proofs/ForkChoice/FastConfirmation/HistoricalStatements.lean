@@ -232,6 +232,13 @@ def ResidualFinalizedCheckpointCompatibility (horizon : Epoch) (last : Nat) : Pr
 def HeldBlockStateRootsNonzero (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last → HeldStateRootsNonzero ((e.world k).state w)
 
+/-- Honest stores up to a time agree on every block they both hold. -/
+def HonestBlocksAgree (time : Nat) : Prop :=
+  ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+    ∀ (r : Root) (left right : BeaconBlock preset fork),
+    ((e.world i).state a).blocks[r]? = some left →
+    ((e.world j).state b).blocks[r]? = some right → left = right
+
 /-- No honest validator has a true slashed flag in a counted state through the horizon. -/
 def HonestCountedStatesUnslashed (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k state, (e.world k).time ≤ last →
