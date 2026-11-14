@@ -47,7 +47,7 @@ A run also needs the budget below a ceiling, and its epochs within a horizon.
 
 It also needs the inactivity scores and the participation lists to match the registry.
 
-Its indices must be in range.
+Its indices must be in range, and each effective balance at most the largest one of its validator.
 
 The budget covers the larger of each balance and its effective balance, and the pending deposits.
 
@@ -255,6 +255,17 @@ def ParticipationMatches (state : BeaconState preset fork) : Prop :=
 /-- From Altair, the list of inactivity scores has one entry for each validator. -/
 def InactivityScoresMatch (state : BeaconState preset fork) : Prop :=
   ∀ altair : .altair ≤ fork, (state.inactivityScores altair).data.size = state.validators.data.size
+
+/-- Each effective balance is at most the largest one of its validator, at the fork of the state. -/
+def EffectiveBalancesCapped (state : BeaconState preset fork) : Prop :=
+  ∀ validator ∈ state.validators.data,
+    validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator
+
+/-- From Electra, each queued consolidation names two validators of the registry. -/
+def ConsolidationsInside (state : BeaconState preset fork) : Prop :=
+  ∀ electra : .pectra ≤ fork, ∀ consolidation ∈ (state.pendingConsolidations electra).data,
+    consolidation.sourceIndex.toNat < state.validators.data.size ∧
+      consolidation.targetIndex.toNat < state.validators.data.size
 
 /-- The sum over the registry of the larger of each balance and its effective balance.
 

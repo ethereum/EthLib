@@ -10,6 +10,8 @@ public import EthLib.Consensus.Proofs.Transition.Committees
 Each validator's effective balance is at most the cap of its withdrawal credentials.
 
 Genesis gives it, and every step keeps it before Gloas.
+
+An epoch and a slot keep it at every fork.
 -/
 
 @[expose] public section
@@ -543,8 +545,7 @@ private theorem CapStep.upgrade {s : ForkedBeaconState preset}
     {t : {t : ForkedBeaconState preset // s.fork < t.fork}}
     (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
     (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
-    (ok : upgradeNext config checks s = .ok t) (early : t.val.fork < .glamsterdam) :
-    CapStep s.state t.val.state := by
+    (ok : upgradeNext config checks s = .ok t) : CapStep s.state t.val.state := by
   obtain ⟨fork, state⟩ := s
   cases fork <;>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
@@ -575,21 +576,22 @@ private theorem CapStep.upgrade {s : ForkedBeaconState preset}
   · obtain ⟨_, upgraded, rfl⟩ := ok
     exact CapStep.carry (upgradeToFulu_spec upgraded).1
       activation compounding (by change Fork.pectra ≤ .fusaka; decide)
-  · obtain ⟨_, _, rfl⟩ := ok
-    exact False.elim (Nat.lt_irrefl _ early)
-  · obtain ⟨_, _, rfl⟩ := ok
-    exact False.elim ((by decide : ¬Fork.hegota < Fork.glamsterdam) early)
+  · obtain ⟨_, upgraded, rfl⟩ := ok
+    exact CapStep.carry (upgradeToGloas_spec upgraded).1
+      activation compounding (by change Fork.fusaka ≤ .glamsterdam; decide)
+  · obtain ⟨_, upgraded, rfl⟩ := ok
+    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    exact CapStep.carry (upgradeHezeFields_lists state).1
+      activation compounding (by change Fork.glamsterdam ≤ .hegota; decide)
 
 private theorem CapStep.upgrades {s t : ForkedBeaconState preset}
     (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
     (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
-    (ok : processUpgrades config checks s = .ok t) (early : t.fork < .glamsterdam) :
-    CapStep s.state t.state := by
+    (ok : processUpgrades config checks s = .ok t) : CapStep s.state t.state := by
   fun_induction processUpgrades config checks s generalizing t with
   | case1 s due ih =>
     obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
-    exact (CapStep.upgrade activation compounding nextOk
-      (Nat.lt_of_le_of_lt (processUpgrades_fork_le rest) early)).trans (ih next rest early)
+    exact (CapStep.upgrade activation compounding nextOk).trans (ih next rest)
   | case2 s notDue => cases ok; exact CapStep.refl _
 
 private theorem CapStep.step {s t : ForkedBeaconState preset}
@@ -603,7 +605,7 @@ private theorem CapStep.step {s t : ForkedBeaconState preset}
   | slot ok =>
     obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
     exact (CapStep.slot slotOk).trans
-      (CapStep.upgrades activation compounding upgrades early)
+      (CapStep.upgrades activation compounding upgrades)
 
 private theorem CapStep.run {s t : ForkedBeaconState preset}
     (run : Run config checks s t)
@@ -652,5 +654,32 @@ theorem processEpoch_validatorCap_mono {f : Fork} {s t : BeaconState preset f}
     ∃ w, t.validators.data[i]? = some w ∧
       withdrawalMaxEffectiveBalance preset f v ≤ withdrawalMaxEffectiveBalance preset f w :=
   (CapStep.epoch ok).monotone i v found
+
+/-- One epoch keeps each effective balance at most the largest one of its validator. -/
+theorem processEpoch_capped {f : Fork} {s t : BeaconState preset f}
+    (ok : processEpoch config checks s = .ok t) (capped : EffectiveBalancesCapped s) :
+    EffectiveBalancesCapped t :=
+  (CapStep.epoch ok).capped capped
+
+/-- One slot keeps each effective balance at most the largest one of its validator. -/
+theorem advanceSlot_capped {f : Fork} {s t : BeaconState preset f}
+    (ok : advanceSlot config checks s = .ok t) (capped : EffectiveBalancesCapped s) :
+    EffectiveBalancesCapped t :=
+  (CapStep.slot ok).capped capped
+
+/-- The upgrade to the next fork keeps each effective balance at most the cap of its validator.
+
+The caps of the preset are assumed in order.
+
+The largest balance before Electra must be at most the least one from Electra.
+
+That one must be at most the largest one for compounding credentials. -/
+theorem upgradeNext_capped {s : ForkedBeaconState preset}
+    {t : {t : ForkedBeaconState preset // s.fork < t.fork}}
+    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
+    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (ok : upgradeNext config checks s = .ok t) (capped : EffectiveBalancesCapped s.state) :
+    EffectiveBalancesCapped t.val.state :=
+  (CapStep.upgrade activation compounding ok).capped capped
 
 end EthLib.Consensus

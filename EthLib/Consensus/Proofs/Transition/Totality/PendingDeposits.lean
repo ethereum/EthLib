@@ -166,6 +166,20 @@ private theorem applyPendingDeposit_matches {config : Config} {checks : Signatur
         exact ⟨fun altair => absurd altair ‹_›, fun altair => absurd altair ‹_›⟩
       · cases added
 
+/-- The pending deposits of an epoch keep one entry for each validator in the flags and scores. -/
+theorem processPendingDeposits_matches {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork} {electra : .pectra ≤ fork}
+    (computed : processPendingDeposits config checks state electra = .ok after)
+    (sized : ParticipationMatches state) (scored : InactivityScoresMatch state) :
+    ParticipationMatches after ∧ InactivityScoresMatch after := by
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, applies, rfl⟩ :=
+    processPendingDeposits_applied computed
+  have flags := foldlM_ok_invariant
+    (fun s : BeaconState preset fork => ParticipationMatches s ∧ InactivityScoresMatch s)
+    (fun _ _ _ before step => applyPendingDeposit_matches step before.1 before.2) ⟨sized, scored⟩
+    applies
+  exact flags
+
 /-- A pass over the pending deposits succeeds under bounds on what it may still read.
 
 The validators plus the deposits left must be within the limit of the registry.
@@ -516,10 +530,7 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
   have frame := frame_processPendingDeposits computed
   obtain ⟨_, _, applied, _, next, _, _, _, _, _, _, _, _, applies, rest⟩ :=
     processPendingDeposits_applied computed
-  have flags := foldlM_ok_invariant
-    (fun s : BeaconState preset fork => ParticipationMatches s ∧ InactivityScoresMatch s)
-    (fun _ _ _ before step => applyPendingDeposit_matches step before.1 before.2) ⟨sized, scored⟩
-    applies
+  have flags := processPendingDeposits_matches computed sized scored
   have bounded := foldlM_ok_invariant
     (fun s : BeaconState preset fork => ∀ validator ∈ s.validators.data,
       validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator)
@@ -532,10 +543,8 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
     simpa only [electra, ↓reduceDIte] using total
   · exact congrFun (processPendingDeposits_pendingConsolidations computed) electra
   · simp only [getCurrentEpoch, frame.slot]
-  · subst rest
-    exact flags.1
-  · subst rest
-    exact flags.2
+  · exact flags.1
+  · exact flags.2
   · subst rest
     exact bounded
 
