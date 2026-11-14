@@ -15,7 +15,7 @@ A domain starts with its domain type, so two domain types never share a domain.
 
 Before Fulu, a fork digest is the first four bytes of the root of the fork data.
 
-A signing root is also the root of the signing data with the object in place of its root.
+A signing root is also the root of the signing data whose first field holds the object itself.
 -/
 
 @[expose] public section

@@ -7,13 +7,15 @@ import EthLib.Serialization.Proofs.Ssz.Type.Legality
 /-!
 # Proofs: a collision of the signing root in the random oracle model
 
-A signing root is also the root of the signing data with the object in place of its root.
+A signing root is also the root of the signing data whose first field holds the object itself.
 
 So a collision of the signing root is two different such values with one root.
 
 The two objects have one type, and their two domains may differ.
 
 With the node hash a random oracle, finding one has probability at most `Q^2 / 2^256`.
+
+A win also needs every variable-size count in both objects to fit its 256-bit word.
 
 `Q` counts every call to the node hash in the experiment, the adversary's and the extraction's.
 
@@ -101,7 +103,7 @@ theorem wins_signingValue_iff {shape : Desc} {first second : Value}
 
 The adversary outputs two objects of one type, each with a domain, and the domains may differ.
 
-It wins when the two pairs differ, fit the well-formed type, and their signing values share a root.
+It wins when the two pairs differ, both objects fit the type, and their signing values share a root.
 
 That root is computed with the oracle as the node hash.
 
