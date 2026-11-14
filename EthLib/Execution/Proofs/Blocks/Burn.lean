@@ -513,7 +513,7 @@ def BodyBurns (config : ChainConfig) (env : BlockEnvironment fork)
   ∃ dao system txs withdrawn requested,
     daoTransfer config fork block.header.number start = .ok dao ∧
     StartSystemCallsBurns env block.header.parentHash (.init dao) system losses.start ∧
-    TransactionsBurns env ⟨system, .zero, 0, [], []⟩ block.transactions.zipIdx txs
+    TransactionsBurns env ⟨system, .zero, 0, [], [], []⟩ block.transactions.zipIdx txs
       losses.transactions ∧
     (if h : .shapella ≤ fork then ∃ tx,
       withdrawalState fork txs.block (block.withdrawals h) = .ok tx ∧

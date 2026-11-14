@@ -493,6 +493,28 @@ theorem runTransaction_eq_ok {env : BlockEnvironment fork} {block : State.BlockS
   exact ⟨target, bought, message, output, settled, hTarget, Base.mapError_ok_iff.mp hBought,
     hMessage, hOutput, rfl, Base.mapError_ok_iff.mp hSettle, Base.mapError_ok_iff.mp hDeleted⟩
 
+/-- A transaction that runs keeps the data that its message returned.
+
+It also keeps its gas limit less the gas left of its message, the gas used before the refund. -/
+theorem runTransaction_returnData {env : BlockEnvironment fork} {block : State.BlockState}
+    {included : Included} {out : TransactionOutput}
+    (h : runTransaction Meter env block included tx = .ok out) :
+    ∃ target bought message output settled,
+      TransactionRun Meter env block included tx out target bought message output settled ∧
+      out.returnData = output.output ∧
+      out.gasBeforeRefund = tx.gas.toNat - (output.gasLeft + output.reservoir) := by
+  unfold runTransaction at h
+  obtain ⟨target, hTarget, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨bought, hBought, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨message, hMessage, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨output, hOutput, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨settled, used⟩, hSettle, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨deleted, hDeleted, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  exact ⟨target, bought, message, output, settled, ⟨hTarget, Base.mapError_ok_iff.mp hBought,
+    hMessage, hOutput, rfl, Base.mapError_ok_iff.mp hSettle, Base.mapError_ok_iff.mp hDeleted⟩,
+    rfl, rfl⟩
+
 /-- Two runs of a transaction to the same output take the same steps, with the same values. -/
 theorem TransactionRun.unique {env : BlockEnvironment fork} {block : State.BlockState}
     {included : Included} {out : TransactionOutput} {target target' : Address}

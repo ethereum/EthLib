@@ -361,6 +361,10 @@ structure TransactionOutput where
   logs : Array Log
   /-- The error that stopped its message, or none when the message succeeded. -/
   error : Option EvmError
+  /-- The data that its message returned, or the data of its revert. -/
+  returnData : ByteArray
+  /-- The gas that it used before its refund, its gas limit less the gas left. -/
+  gasBeforeRefund : Nat
 
 /-- The block state, with the writes of the transaction. -/
 def TransactionOutput.block (output : TransactionOutput) : BlockState :=
@@ -424,7 +428,8 @@ def runTransaction {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter
   let (state, gasUsed) ←
     (settleGas env output.state sender tx gasLeft output.refund lifted).mapError .state
   let state ← (deleteAccounts fork state output).mapError .state
-  return ⟨state, gasUsed, blockGas, output.logs, output.error⟩
+  return ⟨state, gasUsed, blockGas, output.logs, output.error, output.output,
+    tx.gas.toNat - gasLeft⟩
 
 /-- Run a transaction that may enter its block, on the block state `block` at `fork`.
 
