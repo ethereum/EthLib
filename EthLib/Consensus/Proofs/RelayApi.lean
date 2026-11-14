@@ -600,46 +600,9 @@ private theorem kept_passPendingDeposits {stop : PendingDeposit → Bool} {nextE
       {count : Nat} {postponed : Array PendingDeposit} {pass},
       passPendingDeposits config checks stop nextEpoch available state processed count postponed
         deposits = .ok pass →
-      Kept state pass.1.state
-  | [], _, _, _, _, _, computed => by
-    simp only [passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact Kept.refl _
-  | deposit :: rest, state, processed, count, postponed, pass, computed => by
-    unfold passPendingDeposits at computed
-    simp only [bind, Except.bind, pure, Except.pure] at computed
-    split at computed
-    · cases computed
-      exact Kept.refl _
-    split at computed
-    · cases computed
-    split at computed
-    · split at computed
-      · cases computed
-      rename_i credited
-      split at computed
-      · cases computed
-      cases computed
-      exact (kept_applyPendingDeposit credited).trans
-        (kept_passPendingDeposits (deposits := rest) ‹_›)
-    split at computed
-    · split at computed
-      · cases computed
-      cases computed
-      exact kept_passPendingDeposits (deposits := rest) ‹_›
-    split at computed
-    · cases computed
-    split at computed
-    · cases computed
-      exact Kept.refl _
-    split at computed
-    · cases computed
-    rename_i credited
-    split at computed
-    · cases computed
-    cases computed
-    exact (kept_applyPendingDeposit credited).trans
-      (kept_passPendingDeposits (deposits := rest) ‹_›)
+      Kept state pass.1.state :=
+  fun computed => passPendingDeposits_of Kept Kept.refl
+    (fun one two => one.trans two) (fun ok => kept_applyPendingDeposit ok) computed
 
 /-- A pass over the pending consolidations keeps the lookahead. -/
 private theorem kept_passPendingConsolidations {nextEpoch : Epoch} :
