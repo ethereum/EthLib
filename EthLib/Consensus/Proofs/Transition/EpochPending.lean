@@ -630,6 +630,24 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
       rw [kept] at filtered
       simp only [List.filter_cons, known, notMoved, Bool.false_eq_true, ↓reduceIte, filtered]
 
+/-- A reflexive, transitive relation holds across a pass over the pending deposits.
+
+It must hold across each deposit that the pass applies. -/
+theorem passPendingDeposits_of
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (admit : ∀ {s t} {d : PendingDeposit},
+      applyPendingDeposit config checks s d = .ok t → R s t)
+    {stop : PendingDeposit → Bool} {nextEpoch : Epoch} {available : Gwei}
+    {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
+    {count : Nat} {postponed : Array PendingDeposit} {pass}
+    (computed : passPendingDeposits config checks stop nextEpoch available state processed count
+      postponed deposits = .ok pass) : R state pass.1.state := by
+  obtain ⟨_, _, _, facts⟩ := passPendingDeposits_applied computed
+  exact foldlM_ok_invariant (R state) (fun _ _ _ prior ok => trans prior (admit ok)) (refl _)
+    facts.applies
+
 /-- The pending deposits of an epoch read a prefix of the queue, at most the limit per epoch.
 
 They apply some of those in order, and move the others to the end of the queue in order.
@@ -689,6 +707,40 @@ theorem processPendingDeposits_pendingConsolidations {electra : .pectra ≤ fork
     processPendingDeposits_applied computed
   exact foldlM_ok_invariant (fun b => b.pendingConsolidations = state.pendingConsolidations)
     (fun _ _ _ prior step => (applyPendingDeposit_pendingConsolidations step).trans prior) rfl
+    folded
+
+/-- A new validator keeps the history summaries. -/
+theorem addValidatorToRegistry_historicalSummaries {pubkey : Cryptography.Bls.BLSPubkey}
+    {credentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey credentials amount = .ok after) :
+    after.historicalSummaries = state.historicalSummaries := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · simp only [addValidatorToRegistryAltair, bind_ok_iff, liftAccessor_ok,
+      pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    rfl
+  · split at computed <;> cases computed
+    rfl
+
+/-- A pending deposit keeps the history summaries. -/
+theorem applyPendingDeposit_historicalSummaries {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    after.historicalSummaries = state.historicalSummaries := by
+  rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+  · rfl
+  · obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp raised
+    rfl
+  · exact addValidatorToRegistry_historicalSummaries added
+
+/-- The pending deposits of an epoch keep the history summaries. -/
+theorem processPendingDeposits_historicalSummaries {electra : .pectra ≤ fork}
+    (computed : processPendingDeposits config checks state electra = .ok after) :
+    after.historicalSummaries = state.historicalSummaries := by
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, folded, rfl⟩ :=
+    processPendingDeposits_applied computed
+  exact foldlM_ok_invariant (fun b => b.historicalSummaries = state.historicalSummaries)
+    (fun _ _ _ prior step => (applyPendingDeposit_historicalSummaries step).trans prior) rfl
     folded
 
 /-- The pending deposits of an epoch read a prefix of the queue, at most the limit per epoch.

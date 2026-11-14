@@ -4493,19 +4493,41 @@ Distinct indices run the duty of each requested validator in turn, in request or
 It reads the clause of `getBlockRootAtSlot` that bounds the slot of the state by the slot asked for plus the length of the buffer.
 `dutiesResponse_attester_too_old` shows that an attester request for an epoch whose dependent root has left the block roots gets that error too.
 It needs at least one index, each naming a validator whose committee assignment succeeds.
+`dutiesResponse_attester_unknown` shows that an attester index that names no validator gets the error of an invalid index, code 400.
+It reads `requestedValidator`, which gives that error for an index past the registry.
+It needs an epoch that passes the epoch check, and each earlier index to name a validator whose committee assignment succeeds.
+`dutiesResponse_sync_unknown` shows the same for a sync index, from Altair, at an epoch of the current or the next period.
+It needs each earlier index to name a validator.
+`dutiesResponse_ptc_unknown` shows it for a PTC index, from Gloas, in the window of `ptcDuties_eq` and with no repeated index.
+It needs each earlier index to name a validator whose PTC assignment succeeds.
+`dutiesResponse_sync_outside` shows that from Altair a sync epoch outside the current and next periods gets code 400, when the request has an index.
+It reads the last clause of `syncCommitteeOf`, whose error says that the epoch is outside the sync committee period of the state.
+`dutiesResponse_proposer_not_current` shows that the first proposer answer gives the error of an invalid epoch, code 400, to any epoch but the current one.
+So it refuses the next epoch even from Fulu, where the lookahead holds its proposers.
+It shows the same for the second answer before Fulu, where `epochProposers` draws the current epoch alone.
+`dutiesResponse_proposer_outside` shows that the second answer gives that error to an epoch before the current one or past the seed lookahead, on every fork.
+It reads the clause of `epochProposers` that bounds the epoch from Fulu by the lookahead of the state.
+`dutiesResponse_sync_of_lt_altair` shows that before Altair the sync answer is the error with code 400 that names Altair.
+`dutiesResponse_ptc_of_lt_gloas` shows that before Gloas the PTC answer is the error with code 400 that names Gloas.
+They read the fork branches of `dutiesResponse`, which come before any check of the request, so a request with no index gets these errors too.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_duties.py`) reads the minimal states of the committee tests.
 It checks the attester duties against the committees answer, and the PTC duties against the assignments of the guide.
 It checks the proposer duties against the lookahead of the state from Fulu, and against the proposer of each slot before Fulu.
 It checks the sync duties against the keys of the committees in the JSON of the state.
 It gives the state a different block root at each place, and checks each dependent root against it.
-It checks code 400 for an empty request, a repeated PTC index, a PTC epoch before the previous one, and an attester epoch too old for the block roots.
+It checks code 400 for an empty request to the attester, sync and PTC answers.
+For the attester answer it also checks code 400 for an unknown index, and for an epoch too far ahead or too old.
+For the PTC answer it checks code 400 for a repeated index, and an epoch too far ahead or too old.
+It also checks code 400 for a PTC request to an Electra state.
+For the sync answer it checks code 400 for a request to a Phase 0 state.
+It also checks code 400 for a sync epoch of the previous period and of two periods ahead.
+For the first proposer answer it checks code 400 at the next epoch from Fulu.
+For the second it checks code 400 at the next epoch before Fulu, and from Fulu at the previous epoch and two epochs ahead.
 It never asks for PTC duties at the previous epoch or before the Gloas fork epoch; only `ptcDuties_eq` covers those two.
-These refusals of the duty answers have no theorem:
-
-- an index that names no validator;
-- a sync epoch outside the current and next periods;
-- a proposer epoch that the state cannot answer for;
-- a sync or PTC request with an index, to a state before its fork.
+It sends no unknown index to the sync or PTC answer, so only the theorems cover those two.
+No theorem states the errors with code 500, where the node cannot compute an assignment, a proposer, a slot or a root.
+No theorem states the code 400 that the PTC assignment gives to an epoch past the seed lookahead.
+It is reachable only at the next epoch, under a preset whose seed lookahead is zero.
 
 The answers that hand a validator its data are in `Consensus/BeaconApi/ValidatorData.lean`: attestation data, payload attestation data, aggregates and sync committee contributions.
 `produceAttestationData_head` (`Consensus/Proofs/BeaconApi/ValidatorData.lean`) shows that the attestation data votes for the head of the store, at the requested slot, and that the head is not optimistic.
