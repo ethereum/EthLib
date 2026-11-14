@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.ForkChoice.AncestorRoots
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
 
 /-!
 # Proofs: how the fast confirmation rule chooses the confirmed block
