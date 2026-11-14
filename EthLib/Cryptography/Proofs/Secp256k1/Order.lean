@@ -49,7 +49,9 @@ namespace Point
 theorem isOnCurve_generator : generator.isOnCurve = true := by decide +kernel
 
 /-- `n G = O`, as the kernel computes it by double and add. -/
-theorem mulBits_order_generator : mulBits 256 Fn.modulus generator = infinity := by decide +kernel
+theorem mulBits_order_generator : mulBits 256 Fn.modulus generator = infinity := by
+  rw [mulBits_eq_jacobian]
+  decide +kernel
 
 /-- `G` is not the point at infinity. -/
 theorem toPoint_generator_ne_zero : toPoint generator ≠ 0 := fun h =>

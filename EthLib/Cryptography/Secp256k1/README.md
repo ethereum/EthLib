@@ -24,9 +24,10 @@ Each part of the module follows the standard that defines it:
 
 ## Reading this module
 
-The specification is written to be read rather than to be fast.
+The specification is written to be read first.
+Where it runs on Montgomery limbs for speed, theorems tie each step to the plain computation.
 Points are in affine coordinates, as SEC 1 prints them.
-Scalar multiplication works on Jacobian coordinates and converts back once, at the end.
+Scalar multiplication works on Jacobian coordinates, on Montgomery limbs, and converts back once.
 Inverses are computed by the extended Euclidean algorithm.
 The files build on one another in this order:
 
