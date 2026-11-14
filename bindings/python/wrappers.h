@@ -427,6 +427,8 @@ PyObject* py_consensus_api_attestation_data      (PyObject* self, PyObject* args
 PyObject* py_consensus_api_payload_attestation_data(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_fork_choice           (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_chain_heads           (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_chain_events          (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_fast_confirmation_event(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_aggregate_attestation (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_sync_committee_contribution(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_attestation_rewards(PyObject* self, PyObject* args);
@@ -610,6 +612,9 @@ PyObject* py_rlp_decode_as                                (PyObject* self, PyObj
 PyObject* py_ssz_serialize                                (PyObject* self, PyObject* args);
 PyObject* py_ssz_deserialize                              (PyObject* self, PyObject* args);
 PyObject* py_ssz_hash_tree_root                           (PyObject* self, PyObject* args);
+PyObject* py_ssz_generalized_index                        (PyObject* self, PyObject* args);
+PyObject* py_ssz_merkle_proof                             (PyObject* self, PyObject* args);
+PyObject* py_ssz_merkleize_chunks                         (PyObject* self, PyObject* args);
 PyObject* py_snappy_decompress                            (PyObject* self, PyObject* args);
 PyObject* py_snappy_compress                              (PyObject* self, PyObject* args);
 PyObject* py_snappy_decode_frames                         (PyObject* self, PyObject* args);
@@ -742,6 +747,8 @@ PyObject* py_engine_get_client_version                   (PyObject* self, PyObje
 PyObject* py_engine_rewrite_params                       (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
+PyObject* py_engine_payload_attributes_event          (PyObject* self, PyObject* args);
+PyObject* py_engine_payload_attributes_event_gloas    (PyObject* self, PyObject* args);
 PyObject* py_engine_finalized_execution_block_hash       (PyObject* self, PyObject* args);
 
 /* ---- Execution JSON-RPC API (`rpc.c`) --------------------------------- */

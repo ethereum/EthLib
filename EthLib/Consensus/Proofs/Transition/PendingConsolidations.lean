@@ -3,7 +3,6 @@ module
 public import EthLib.Consensus.Proofs.Transition.Trace
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Genesis
-import EthLib.Consensus.Proofs.Transition.BalanceDrift
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.EpochPending
@@ -61,6 +60,19 @@ private theorem SamePendingQueue.decrease {f : Fork} {s t : BeaconState preset f
     SamePendingQueue s t := by
   obtain ⟨_, rfl⟩ := decreaseBalance_eq_ok_iff.mp ok
   rfl
+
+/-- Starting an exit writes one validator and the exit queue only.
+
+So it keeps the balances and the pending consolidations. -/
+theorem initiateValidatorExit_balances_eq_and_pendingConsolidations_eq {f : Fork}
+    {s t : BeaconState preset f} {index : ValidatorIndex}
+    (ok : initiateValidatorExit config s index = .ok t) :
+    t.balances = s.balances ∧ t.pendingConsolidations = s.pendingConsolidations := by
+  obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok ok
+  · exact ⟨rfl, rfl⟩
+  · obtain ⟨_, _, rfl⟩ := exitQueue_eq queue
+    obtain ⟨_, rfl⟩ := setValidator_ok set
+    exact ⟨rfl, rfl⟩
 
 private theorem SamePendingQueue.exit {f : Fork} {s t : BeaconState preset f}
     {i : ValidatorIndex} (ok : initiateValidatorExit config s i = .ok t) :
@@ -344,6 +356,11 @@ private theorem upgradeNext_pending (P : ∀ {f : Fork}, BeaconState preset f �
     exact False.elim (Nat.lt_irrefl _ early)
   · obtain ⟨_, _, rfl⟩ := ok
     exact False.elim (Nat.not_le_of_lt early (show Fork.glamsterdam ≤ .hegota from by decide))
+
+/-- Every pending consolidation names a source inside the registry. -/
+def PendingSources {f : Fork} (s : BeaconState preset f) : Prop :=
+  ∀ electra : .pectra ≤ f, ∀ entry ∈ (s.pendingConsolidations electra).data.toList,
+    entry.sourceIndex.toNat < s.validators.data.size
 
 private def WithdrawalKept {f g : Fork} (s : BeaconState preset f)
     (t : BeaconState preset g) : Prop :=
@@ -1004,5 +1021,17 @@ theorem Run.pendingConsolidation_invariant {g x : ForkedBeaconState preset}
       exact PendingConsolidationInvariant.step step early
         (ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early)) delay
   exact holds electra
+
+/-- Every pending consolidation of a state of a run names a source inside the registry. -/
+theorem Run.pendingConsolidation_sources {g x : ForkedBeaconState preset}
+    (run : Run config checks g x)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (early : x.fork < .glamsterdam)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
+    PendingSources x.state := by
+  intro electra c member
+  obtain ⟨v, found, -⟩ :=
+    (run.pendingConsolidation_invariant genesis early electra delay).2 c member
+  exact (Array.getElem?_eq_some_iff.mp found).1
 
 end EthLib.Consensus

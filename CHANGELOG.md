@@ -9,8 +9,35 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the shuffle, custody, keystore and discv5 callers of SHA-256 keep the digest as a `Vector UInt8 32` ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  `Shuffle.bucketBits` and `Keystore.passwordChecksum` return one, and `Shuffle.bitAt` and `DataAvailability.firstUInt64` take one.
+  A caller that needs the bytes applies `packBytes`, and `Sha256.packBytes_hash32` gives back the byte-array digest.
+  The keystore checksum theorems compare the checksum with `store.checksum` directly, and `checksumVector` is removed: use `passwordChecksum`.
+  Nothing breaks in Python.
+
+- The execution RPC answers `eth_simulateV1` with its simulated blocks ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
+  The results of the calls are not yet in the blocks.
+  In Lean, `fillHeader`, `outputChecks_fillHeader` and `runBody_fillHeader` move from `EthLib.Engine` to `EthLib.Execution.Blocks`, and `SimulateChoices` gains `gasCap`.
+  Nothing breaks in Python.
+
+- In Lean, the block environment gains the field `blobGasPrice` ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
+  A simulation sets the base fee per blob gas with it, and its default `none` keeps the price of the excess blob gas.
+  Supply that field in positional constructors, or use structure notation with its default.
+  The checks and the run of a transaction, and the simulation overrides of a body, take optional lifted rules.
+  A simulation can skip the nonce check and lift the gas caps of EIP-8037 with them.
+  The sender check gains a flag for the nonce check.
+  Nothing breaks in Python.
+
+- In Lean, the transaction environment gains the field `precompiles` ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
+  It gives the address of the precompile that a call to each address runs.
+  Its default `some` keeps each precompile at its own address, so a real block is unchanged.
+  Supply that field in positional constructors, or use structure notation with its default.
+  The checks of a transaction, its run and the body of a block take optional simulation overrides.
+  A simulation can give the sender in place of the signature, and that sender may have code.
+  The sender check gains a flag for that case.
+  Nothing breaks in Python.
+
 - The execution RPC checks the requests of `eth_simulateV1` before their blocks run ([#2107](https://github.com/ethereum/EthLib/issues/2107)).
-  A request that passes the checks gets `-32603` until the simulated blocks are specified.
   In Lean, `call_unknown` requires the method name to differ from `eth_simulateV1`.
   Nothing breaks in Python: `rpc.apply_overrides` gives the state root after the account overrides of one block.
 
@@ -21,6 +48,13 @@ Not yet released.
   `call_unknown` requires the method name to differ from both access-list method names.
   Nothing breaks in Python: `rpc.serve` takes the new optional argument `pruned_access_lists` for block numbers whose lists are unavailable.
   `rpc.encode_block_access_list` encodes a JSON list as its EIP-7928 RLP bytes.
+
+- In Lean, `Frame` gains the field `slashed`, after `pubkeysDistinct` ([#1451](https://github.com/ethereum/EthLib/issues/1451)).
+  A validator slashed before a step, at a registry position, is slashed after it at the same position.
+  A proof that builds a `Frame` with an anonymous constructor adds that field.
+  `frame_setValidatorAt_of_whole`, `frame_setValidator_of_whole` and `frame_setValidator` take a new premise `old.slashed = true → validator.slashed = true` after the proof of the key.
+  A caller passes `id` when the new validator copies the flag of the old one, and `fun _ => rfl` when it is slashed.
+  `initiateValidatorExit_balances_eq_and_pendingConsolidations_eq` moves to `Consensus/Proofs/Transition/PendingConsolidations.lean`, which `BalanceDrift.lean` imports publicly.
 
 - In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
@@ -102,6 +136,13 @@ Not yet released.
   The two bodies are not definitionally equal.
   A proof that unfolds `HashEvidence` to take it apart first rewrites with `hashEvidence_iff`, or applies `hashEvidence_iff.mp`.
   A proof that builds the evidence as an `Or` of the old form applies `hashEvidence_iff.mpr`.
+
+- In Lean, the four rules by which one justification step finalizes a checkpoint have one definition, `FinalizationStepRule state after checkpoint` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+  The bits come from the state after the step, the epoch and the justified checkpoints from the state before it.
+  `weighJustificationAndFinalization_finalized` states its second disjunct as `FinalizationStepRule state after after.finalizedCheckpoint`, with the same unfolded body.
+  `DirectSafety.FinalizationRule call checkpoint` is `FinalizationStepRule call.cached call.weighed checkpoint`, with the same unfolded body.
+  A proof that took either apart by name first unfolds `FinalizationStepRule`.
+  No C export or Python function changes.
 
 - `verify_kzg_proof` checks its inputs in the order of EIP-4844: the commitment, `z`, `y`, then the proof.
   When more than one input is invalid, the first in that order gives the error.

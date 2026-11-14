@@ -407,7 +407,12 @@ The digest fits in the first block of output, so no further permutation is neede
 
 Its 32 bytes are the bytes of lanes 0 to 3, in order. -/
 def squeeze (S : State) : Vector UInt8 DIGEST_LEN :=
-  ⟨(bytesOfLane S.a0 ++ bytesOfLane S.a1 ++ bytesOfLane S.a2 ++ bytesOfLane S.a3).toArray, rfl⟩
+  -- One row per lane: byte `j` of a lane is its bits `8j` to `8j + 7`.
+  let b (v : UInt64) (j : UInt64) : UInt8 := (v >>> (8 * j)).toUInt8
+  #v[b S.a0 0, b S.a0 1, b S.a0 2, b S.a0 3, b S.a0 4, b S.a0 5, b S.a0 6, b S.a0 7,
+    b S.a1 0, b S.a1 1, b S.a1 2, b S.a1 3, b S.a1 4, b S.a1 5, b S.a1 6, b S.a1 7,
+    b S.a2 0, b S.a2 1, b S.a2 2, b S.a2 3, b S.a2 4, b S.a2 5, b S.a2 6, b S.a2 7,
+    b S.a3 0, b S.a3 1, b S.a3 2, b S.a3 3, b S.a3 4, b S.a3 5, b S.a3 6, b S.a3 7]
 
 /-- The first `d = 512` bits of the state: `Trunc_d(S)` of FIPS 202 §4, Algorithm 8, step 9.
 
@@ -415,8 +420,16 @@ The digest fits in the first 72 bytes of output, so no further permutation is ne
 
 Its 64 bytes are the bytes of lanes 0 to 7, in order. -/
 def squeeze512 (S : State) : Vector UInt8 DIGEST_LEN_512 :=
-  ⟨(bytesOfLane S.a0 ++ bytesOfLane S.a1 ++ bytesOfLane S.a2 ++ bytesOfLane S.a3 ++
-    bytesOfLane S.a4 ++ bytesOfLane S.a5 ++ bytesOfLane S.a6 ++ bytesOfLane S.a7).toArray, rfl⟩
+  -- One row per lane: byte `j` of a lane is its bits `8j` to `8j + 7`.
+  let b (v : UInt64) (j : UInt64) : UInt8 := (v >>> (8 * j)).toUInt8
+  #v[b S.a0 0, b S.a0 1, b S.a0 2, b S.a0 3, b S.a0 4, b S.a0 5, b S.a0 6, b S.a0 7,
+    b S.a1 0, b S.a1 1, b S.a1 2, b S.a1 3, b S.a1 4, b S.a1 5, b S.a1 6, b S.a1 7,
+    b S.a2 0, b S.a2 1, b S.a2 2, b S.a2 3, b S.a2 4, b S.a2 5, b S.a2 6, b S.a2 7,
+    b S.a3 0, b S.a3 1, b S.a3 2, b S.a3 3, b S.a3 4, b S.a3 5, b S.a3 6, b S.a3 7,
+    b S.a4 0, b S.a4 1, b S.a4 2, b S.a4 3, b S.a4 4, b S.a4 5, b S.a4 6, b S.a4 7,
+    b S.a5 0, b S.a5 1, b S.a5 2, b S.a5 3, b S.a5 4, b S.a5 5, b S.a5 6, b S.a5 7,
+    b S.a6 0, b S.a6 1, b S.a6 2, b S.a6 3, b S.a6 4, b S.a6 5, b S.a6 6, b S.a6 7,
+    b S.a7 0, b S.a7 1, b S.a7 2, b S.a7 3, b S.a7 4, b S.a7 5, b S.a7 6, b S.a7 7]
 
 /-- Absorb `n` blocks of `rate` bytes from index `start` on, in order, one permutation each.
 

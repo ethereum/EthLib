@@ -165,33 +165,33 @@ theorem finalizes_eq_true {justified : Bool} {source gap currentEpoch : Epoch}
     obtain ⟨sum, sumOk, rfl⟩ := computed
     exact ⟨rfl, ((addChecked_ok_iff.mp sumOk).2).symm⟩
 
-/-- The four rules by which weighing the votes finalizes a checkpoint, with every bit they read.
+/-- The four rules by which one justification step finalizes a checkpoint, read from its bits.
 
-The new finalized checkpoint is the old one, or an old justified one by one of the rules.
+The bits are those of the state after the step.
 
-The old previous justified checkpoint needs bits 1 and 2, and also bit 3 when three back.
+The epoch and the justified checkpoints are those of the state before the step.
 
-The old current justified checkpoint needs bits 0 and 1, and also bit 2 when two back.
+The old previous justified checkpoint needs bits 1 and 2, and also bit 3 when three epochs back.
 
-The bits are those after the step.
+The old current justified checkpoint needs bits 0 and 1, and also bit 2 when two epochs back. -/
+def FinalizationStepRule (state after : BeaconState preset fork) (checkpoint : Checkpoint) :
+    Prop :=
+  let bits := after.justificationBits.bits
+  let e := (getCurrentEpoch state).toNat
+  (checkpoint = state.previousJustifiedCheckpoint ∧
+    ((bits[1] = true ∧ bits[2] = true ∧ bits[3] = true ∧ checkpoint.epoch.toNat + 3 = e) ∨
+      (bits[1] = true ∧ bits[2] = true ∧ checkpoint.epoch.toNat + 2 = e))) ∨
+  (checkpoint = state.currentJustifiedCheckpoint ∧
+    ((bits[0] = true ∧ bits[1] = true ∧ bits[2] = true ∧ checkpoint.epoch.toNat + 2 = e) ∨
+      (bits[0] = true ∧ bits[1] = true ∧ checkpoint.epoch.toNat + 1 = e)))
 
-A checkpoint is two or three back when its epoch is two or three before the current epoch. -/
+/-- Weighing the votes keeps the finalized checkpoint, or finalizes an old justified one by a rule. -/
 theorem weighJustificationAndFinalization_finalized {total previousBalance currentBalance : Gwei}
     (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
       .ok after) :
     after.finalizedCheckpoint = state.finalizedCheckpoint ∨
-      (after.finalizedCheckpoint = state.previousJustifiedCheckpoint ∧
-        ((after.justificationBits.bits[1] = true ∧ after.justificationBits.bits[2] = true ∧
-            after.justificationBits.bits[3] = true ∧
-            after.finalizedCheckpoint.epoch.toNat + 3 = (getCurrentEpoch state).toNat) ∨
-          (after.justificationBits.bits[1] = true ∧ after.justificationBits.bits[2] = true ∧
-            after.finalizedCheckpoint.epoch.toNat + 2 = (getCurrentEpoch state).toNat))) ∨
-      (after.finalizedCheckpoint = state.currentJustifiedCheckpoint ∧
-        ((after.justificationBits.bits[0] = true ∧ after.justificationBits.bits[1] = true ∧
-            after.justificationBits.bits[2] = true ∧
-            after.finalizedCheckpoint.epoch.toNat + 2 = (getCurrentEpoch state).toNat) ∨
-          (after.justificationBits.bits[0] = true ∧ after.justificationBits.bits[1] = true ∧
-            after.finalizedCheckpoint.epoch.toNat + 1 = (getCurrentEpoch state).toNat))) := by
+      FinalizationStepRule state after after.finalizedCheckpoint := by
+  unfold FinalizationStepRule
   simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, pure,
     Except.pure, Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, b₃, h₃, b₂, h₂, c₂, hc₂, c₁, hc₁, eq⟩ := computed

@@ -152,9 +152,11 @@ theorem gasHeld_runPrecompile_le [LawfulGasMeter Meter] {address : Nat}
       cases h
       exact Nat.le_trans (Nat.le_add_right _ _) (LawfulGasMeter.gasHeld_charge hc)
 
-/-- The address of the precompile that a message calls at fork `fork`, or none. -/
+/-- The address of the precompile that a message calls at fork `fork`, or none.
+
+The transaction can map the code address to another precompile, as in a simulation. -/
 def precompileAddress (fork : Fork) (message : Message fork) : Option Nat :=
-  match message.codeAddress with
+  match message.codeAddress.bind message.txEnv.precompiles with
   | some address =>
     let number := address.toU256.toNat
     if Precompiles.isPrecompile fork number then some number else none

@@ -187,6 +187,46 @@ def simulatePayload (j : Json) : Read SimulatePayload := do
     validation := ← flag "validation"
     returnFullTransactions := ← flag "returnFullTransactions" }
 
+/-! ## The defaults of a call -/
+
+namespace GenericTransaction
+
+/-- The type of a call of a simulation: its own, else type 2, as the notes say.
+
+It replaces the kind that a call infers from its fields, which reads a blob fee cap as type 3.
+
+Blob hashes make type 3, as the fixtures show, and a blob fee cap alone does not.
+
+The source is silent on the other kinds, which type 2 cannot carry.
+
+So EthLib makes authorizations type 4, and a gas price type 0, or type 1 with an access list. -/
+def simulateType (tx : GenericTransaction) : UInt8 :=
+  match tx.type with
+  | some t => t
+  | none =>
+    if tx.authorizationList.any (!·.isEmpty) then 4
+    else if tx.blobVersionedHashes.any (!·.isEmpty) then 3
+    else if tx.gasPrice.isSome then if tx.accessList.isSome then 1 else 0
+    else 2
+
+/-- A call of a simulation with its defaults filled in.
+
+The nonce is that of the sender, its default included, after the earlier calls.
+
+The gas is what the block has left.
+
+The sender is the zero address, as the notes say.
+
+The other fields keep their defaults of a call: no value, no data and no fee. -/
+def withDefaults (tx : GenericTransaction) (nonce gas : Nat) : GenericTransaction :=
+  { tx with
+    type := some tx.simulateType
+    nonce := some (tx.nonce.getD nonce)
+    gas := some (tx.gas.getD gas)
+    sender := some (tx.sender.getD (Vector.replicate 20 0)) }
+
+end GenericTransaction
+
 /-! ## The sequence of blocks -/
 
 /-- The choices that the source leaves to the node, for a simulation. -/
@@ -197,6 +237,10 @@ structure SimulateChoices where
   blockTime_pos : 0 < blockTime := by decide
   /-- The most blocks of a simulation, gap blocks included. -/
   maxBlocks : Nat := 256
+  /-- The gas budget of a whole simulation, which each call spends and which caps a default gas.
+
+  The fixtures take 50,000,000. -/
+  gasCap : Nat := 50000000
 
 /-- A block of the request, with its number, its time and the empty blocks before it. -/
 structure PlannedBlock where
@@ -332,13 +376,5 @@ def ChainView.planSimulate (v : ChainView) (payload : SimulatePayload) (p : Bloc
     checkMoves fork b.request.stateOverrides
     return (b, fork)
   return { base, blocks }
-
-/-- The answer of `eth_simulateV1`, which fails once the request passes its checks.
-
-The execution of the simulated blocks is not yet specified, so the node fails with `-32603`. -/
-def ChainView.simulate (v : ChainView) (payload : SimulatePayload) (p : BlockParam)
-    (choices : SimulateChoices) : Except RpcError Json := do
-  let _ ← v.planSimulate payload p choices
-  throw (callInternalError "simulated blocks are not yet specified")
 
 end EthLib.Execution.Rpc

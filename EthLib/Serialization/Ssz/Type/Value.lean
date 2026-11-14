@@ -52,6 +52,24 @@ end
 
 instance : BEq Value := ⟨Value.beq⟩
 
+/--
+Whether a number is an unsigned integer of a byte width, that is, below `2 ^ (8 * width)`.
+
+It holds when no bit of the number lies at or above bit `8 * width`.
+-/
+def uintFits (width n : Nat) : Bool :=
+  -- A shift builds no big power, where a comparison with `2 ^ (8 * width)` would.
+  n >>> (8 * width) == 0
+
+/-- A number fits a byte width exactly when it is below `2 ^ (8 * width)`. -/
+@[simp] theorem uintFits_iff (width n : Nat) : uintFits width n = true ↔ n < 2 ^ (8 * width) := by
+  simp [uintFits, Nat.shiftRight_eq_div_pow, Nat.div_eq_zero_iff]
+
+/-- A number does not fit a byte width exactly when it is at least `2 ^ (8 * width)`. -/
+@[simp] theorem uintFits_eq_false_iff (width n : Nat) :
+    uintFits width n = false ↔ 2 ^ (8 * width) ≤ n := by
+  rw [← Bool.not_eq_true, uintFits_iff, Nat.not_lt]
+
 mutual
 
 /--

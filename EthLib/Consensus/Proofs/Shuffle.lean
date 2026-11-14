@@ -50,6 +50,62 @@ theorem _root_.EthLib.Consensus.DataAvailability.CustodyError.code_ne_subnet {ε
 
 namespace Shuffle
 
+/-- The 32 bytes of the bits of a bucket are the SHA-256 digest of its input. -/
+theorem packBytes_bucketBits (seed : Bytes32) (round bucket : Nat) :
+    packBytes (bucketBits seed round bucket) =
+      Cryptography.Hash.Sha256.hash (bucketInput seed round bucket) := rfl
+
+/-- A bit reads the same from 32 bytes as from their byte array, for every position. -/
+theorem bitAt_eq_byteRead (bits : Bytes32) (position : Nat) :
+    bitAt bits position =
+      (((packBytes bits)[position % 256 / 8]?.getD 0) >>>
+        (position % 8).toUInt8 &&& 1 == 1) := by
+  have h : position % 256 / 8 < 32 := by
+    have := Nat.mod_lt position (by decide : 0 < 256)
+    omega
+  have hb : position % 256 / 8 < (packBytes bits).size := by
+    simpa [packBytes, ByteArray.size] using h
+  rw [getElem?_pos (packBytes bits) (position % 256 / 8) hb]
+  rfl
+
+/-- An all-zero bucket has no set bit, for every position. -/
+theorem bitAt_replicate_zero (position : Nat) :
+    bitAt (Vector.replicate 32 0) position = false := by
+  simp [bitAt]
+
+/-- A round that hashes each bucket once agrees with byte-array buckets, for every index.
+
+A position whose bucket is absent reads a zero bit in both forms. -/
+theorem round_eq_byteArray (seed : Bytes32) (count roundNumber : Nat) (indices : Array Nat) :
+    round seed count roundNumber indices =
+      let buckets := Array.ofFn (n := count / 256 + 1) fun bucket =>
+        Cryptography.Hash.Sha256.hash (bucketInput seed roundNumber bucket.val)
+      let bit position :=
+        (buckets.getD (position / 256) ByteArray.empty)[position % 256 / 8]?.getD 0 >>>
+          (position % 8).toUInt8 &&& 1 == 1
+      indices.map (swapOrNot count (pivot seed roundNumber count) bit) := by
+  unfold round
+  dsimp only
+  apply Array.map_congr_left
+  intro index _
+  unfold swapOrNot
+  dsimp only
+  by_cases h : max index ((pivot seed roundNumber count + count - index) % count) / 256 <
+      count / 256 + 1
+  · simp [Array.getD_eq_getD_getElem?, h, bitAt_eq_byteRead,
+      packBytes_bucketBits]
+  · simp [Array.getD_eq_getD_getElem?, h, bitAt_replicate_zero]
+
+/-- A round on one index reads each bit from the SHA-256 digest of the input of its bucket. -/
+theorem indexRound_eq_byteArray (seed : Bytes32) (count roundNumber index : Nat) :
+    indexRound seed count roundNumber index =
+      swapOrNot count (pivot seed roundNumber count)
+        (fun position =>
+          (Cryptography.Hash.Sha256.hash
+            (bucketInput seed roundNumber (position / 256)))[position % 256 / 8]?.getD 0 >>>
+              (position % 8).toUInt8 &&& 1 == 1) index := by
+  simp [indexRound, bitAt_eq_byteRead, packBytes_bucketBits]
+
 /-- Swap-or-not keeps an index below the count. -/
 theorem swapOrNot_lt {count pivot index : Nat} {bit : Nat → Bool} (lt : index < count) :
     swapOrNot count pivot bit index < count := by

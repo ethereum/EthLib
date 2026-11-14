@@ -22,7 +22,7 @@ theorem Err.code_eq_ctorIdx (e : Err) : e.code = UInt32.ofNat (e.ctorIdx + 1) :=
 theorem Err.code_injective (e₁ e₂ : Err) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
   -- Every position is small, so adding one and reading it as a 32-bit integer never wraps.
-  have small (e : Err) : e.ctorIdx < 75 := by cases e <;> simp [Err.ctorIdx]
+  have small (e : Err) : e.ctorIdx < 76 := by cases e <;> simp [Err.ctorIdx]
   have h₁ := small e₁
   have h₂ := small e₂
   rw [Err.code_eq_ctorIdx, Err.code_eq_ctorIdx] at h

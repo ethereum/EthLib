@@ -143,7 +143,7 @@ mutual
 def serialize : Desc → Value → Except Err Bytes
   | .bool, .bool b => .ok #[if b then 1 else 0]
   | .uint width, .uint n =>
-    if n < 2 ^ (8 * width) then .ok (uintBytes width n) else .error .typeMismatch
+    if uintFits width n then .ok (uintBytes width n) else .error .typeMismatch
   -- A byte array is a sequence of bytes, so it meets the size bound every sequence meets.
   | .byteVector length, .bytes data => do
     if data.size != length then throw (.scope length data.size)

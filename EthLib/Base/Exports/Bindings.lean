@@ -682,6 +682,16 @@ def bindings : List Binding := [
       "verify: bool, optimistic_roots: list[bytes], config: dict[str, Any] | None) " ++
       "-> dict[str, Any]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_chain_events", `EthLib.Consensus.Exports.apiChainEventsExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, first: int, genesis_root: bytes, optimistic_roots: list[bytes], " ++
+      "config: dict[str, Any] | None) -> list[tuple[str, str]]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_fast_confirmation_event",
+    `EthLib.Consensus.Exports.apiFastConfirmationEventExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "verify: bool, config: dict[str, Any] | None) -> tuple[str, str]",
+    [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_api_aggregate_attestation",
     `EthLib.Consensus.Exports.apiAggregateAttestationExport,
     "(name: str, fork: str, state: bytes, attestations: list[bytes], singles: list[bytes], " ++
@@ -1377,6 +1387,15 @@ def bindings : List Binding := [
   ⟨"ssz_hash_tree_root", `EthLib.Serialization.Ssz.Exports.hashTreeRootExport,
     "(type: str | dict[str, Any], value: dict[str, Any]) -> bytes",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"ssz_generalized_index", `EthLib.Serialization.Ssz.Exports.generalizedIndexExport,
+    "(type: str | dict[str, Any], path: list[int | str]) -> int",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"ssz_merkle_proof", `EthLib.Serialization.Ssz.Exports.merkleProofExport,
+    "(type: str | dict[str, Any], value: dict[str, Any], index: int) -> list[bytes]",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"ssz_merkleize_chunks", `EthLib.Serialization.Ssz.Exports.merkleizeChunksExport,
+    "(chunks: list[bytes], limit: int | None) -> bytes",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"rlpx_ecies_encrypt", `EthLib.Networking.Rlpx.Ecies.encrypt,
     "(recipient: bytes, ephemeral: bytes, iv: bytes, shared_mac: bytes, message: bytes) -> bytes",
     [`EthLib.Networking.Rlpx.Ecies.EciesError], some "RlpxError"⟩,
@@ -1871,6 +1890,18 @@ def bindings : List Binding := [
       "head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, " ++
       "suggested_fee_recipient: bytes, target_gas_limit: int, custody_columns: bytes | None, " ++
       "verify: bool, config: dict | None) -> dict",
+    [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
+  ⟨"engine_payload_attributes_event", `EthLib.Engine.Exports.payloadAttributesEventExport,
+    "(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, " ++
+      "finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes], " ++
+      "terminal_number: int) -> tuple[str, str] | None",
+    [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
+  ⟨"engine_payload_attributes_event_gloas",
+    `EthLib.Engine.Exports.payloadAttributesEventGloasExport,
+    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
+      "head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, " ++
+      "suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, " ++
+      "config: dict | None) -> tuple[str, str]",
     [`EthLib.Consensus.ProposerError], some "ProposerError"⟩,
   ⟨"engine_finalized_execution_block_hash",
     `EthLib.Engine.Exports.finalizedExecutionBlockHashExport,

@@ -23,6 +23,7 @@ public import EthLib.Execution.Rpc.GenericTransaction
 public import EthLib.Execution.Rpc.Call
 public import EthLib.Execution.Rpc.Estimate
 public import EthLib.Execution.Rpc.Simulate
+public import EthLib.Execution.Rpc.Simulate.Blocks
 public import EthLib.Execution.Rpc.Methods
 
 /-!

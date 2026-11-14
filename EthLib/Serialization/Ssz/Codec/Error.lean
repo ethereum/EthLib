@@ -161,6 +161,8 @@ inductive Err where
   | structNotAnObject
   /-- An object naming a selector its union does not declare. -/
   | undeclaredSelector (selector : Nat)
+  /-- Bytes of a text that are not UTF-8. -/
+  | notUtf8
   deriving Repr, BEq, DecidableEq
 
 /--
@@ -248,6 +250,7 @@ def Err.reason : Err → String
   | .undeclared => "UNDECLARED"
   | .capacityNegative => "CAPACITY_NEGATIVE"
   | .layoutNotBits => "LAYOUT_NOT_BITS"
+  | .notUtf8 => "NOT_UTF8"
 
 /--
 The code of a refusal, for the C exports: one number for each constructor, from 1.
@@ -330,5 +333,6 @@ def Err.code : Err → UInt32
   | .missingField .. => 73
   | .structNotAnObject => 74
   | .undeclaredSelector .. => 75
+  | .notUtf8 => 76
 
 end EthLib.Serialization.Ssz

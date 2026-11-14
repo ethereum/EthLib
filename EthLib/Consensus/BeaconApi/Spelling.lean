@@ -5,6 +5,7 @@ public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.Containers.Block
 public import EthLib.Consensus.Containers.BuilderApi
+public import EthLib.Consensus.Containers.BuilderConfig
 public import EthLib.Consensus.Containers.Builder
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.InclusionList
@@ -30,10 +31,13 @@ SSZ gives a byte and a one-byte integer the same type, and so a byte list and a 
 
 The JSON mapping does not.
 
+SSZ also holds a text as a byte list, and the JSON mapping writes it as a string.
+
 A container marks each field where the two differ, and every other container marks nothing.
 
 - Before Gloas, participation flags are a byte list, written as one decimal string per byte.
 - From Gloas, a transaction and a block access list are lists of one-byte integers, written as hex.
+- From Gloas, the URL of a builder entry is a byte list written as text.
 - A container that holds one of these takes the spelling of the field that holds it.
 
 The [`types` files] of the API fix these forms.
@@ -136,6 +140,13 @@ instance : ApiSpelling (BuilderSubmitNewBlockRequest preset fork) :=
 The API defines no inclusion list yet, so this follows its form of a transaction. -/
 instance : ApiSpelling InclusionList :=
   .ofFields InclusionList [("transactions", transactionsSpelling)]
+
+/-- The URL of a builder entry is text. -/
+instance : ApiSpelling BuilderEntry := .ofFields BuilderEntry [("url", .text)]
+
+/-- A builder configuration holds builder entries. -/
+instance : ApiSpelling BuilderConfig :=
+  .ofFields BuilderConfig [("builders", .plain [ApiSpelling.spelling BuilderEntry])]
 
 /-- A signed inclusion list holds a list. -/
 instance : ApiSpelling SignedInclusionList :=

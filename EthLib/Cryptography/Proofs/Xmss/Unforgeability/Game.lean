@@ -72,7 +72,7 @@ theorem publicParamOf_queryH (S : MasterSeed) :
     rw [ofParam, ofBV_eq_uintToBytes]
     apply Vector.ext
     intro i hi
-    simp [uintToBytes]
+    simp [EthLib.Base.uintToBytes_eq_div]
   have hinput : (thInput (ofParam (0 : XmssSecurity.PublicParameter)) addrParam
       (packBytes (ofSeed S))).data.toList = paramInput S := by
     rw [XmssSecurity.Bridge.paramInput_eq]

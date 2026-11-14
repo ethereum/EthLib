@@ -20,6 +20,8 @@ The order check passes exactly when all numbers and times, gap blocks included, 
 An override sets each field that it gives, and keeps the others and the other accounts.
 
 `stateDiff` keeps the slots that it does not name, and `state` clears them.
+
+Filling the defaults of a call keeps every field that the call gives.
 -/
 
 public section
@@ -164,6 +166,31 @@ theorem simulatePayload_rejects {j : Json} {fs : List (String × Json)}
   cases hl : items.toList.mapM blockStateCall with
   | error e => simp [hl, pure, Except.pure] at hp
   | ok r => exact hm r hl
+
+/-! ## The defaults of a call -/
+
+/-- A call keeps its type, or takes the type of a simulation. -/
+theorem GenericTransaction.withDefaults_type (tx : GenericTransaction) (nonce gas : Nat) :
+    (tx.withDefaults nonce gas).type = some (tx.type.getD tx.simulateType) := by
+  cases h : tx.type <;> simp [GenericTransaction.withDefaults, GenericTransaction.simulateType, h]
+
+/-- A call keeps its nonce, or takes the given one. -/
+theorem GenericTransaction.withDefaults_nonce (tx : GenericTransaction) (nonce gas : Nat) :
+    (tx.withDefaults nonce gas).nonce = some (tx.nonce.getD nonce) := rfl
+
+/-- A call keeps its gas, or takes the given one. -/
+theorem GenericTransaction.withDefaults_gas (tx : GenericTransaction) (nonce gas : Nat) :
+    (tx.withDefaults nonce gas).gas = some (tx.gas.getD gas) := rfl
+
+/-- A call keeps its sender, or takes the zero address. -/
+theorem GenericTransaction.withDefaults_sender (tx : GenericTransaction) (nonce gas : Nat) :
+    (tx.withDefaults nonce gas).sender = some (tx.sender.getD (Vector.replicate 20 0)) := rfl
+
+/-- Filling the defaults of a call changes no field but the type, the nonce, the gas and the sender.
+-/
+theorem GenericTransaction.withDefaults_rest (tx : GenericTransaction) (nonce gas : Nat) :
+    { tx.withDefaults nonce gas with
+      type := tx.type, nonce := tx.nonce, gas := tx.gas, sender := tx.sender } = tx := rfl
 
 /-! ## The sequence of blocks -/
 

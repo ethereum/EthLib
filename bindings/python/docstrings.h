@@ -521,6 +521,12 @@
 #define DOC_consensus_api_chain_heads \
   "The JSON response of the heads endpoint, as a `dict`."
 
+#define DOC_consensus_api_chain_events \
+  "The events of the fork choice between two stores of a case."
+
+#define DOC_consensus_api_fast_confirmation_event \
+  "The event of the last run of the fast confirmation rule in a case that passed."
+
 #define DOC_consensus_api_aggregate_attestation \
   "The JSON response of the aggregate endpoint, as a `dict`."
 
@@ -1076,6 +1082,15 @@
 #define DOC_ssz_hash_tree_root \
   "The 32-byte hash tree root of a value of a type, both given in their tagged form."
 
+#define DOC_ssz_generalized_index \
+  "The generalized index of the node that a path selects in the tree of a type."
+
+#define DOC_ssz_merkle_proof \
+  "The branch that proves the node at a generalized index of a value against its root."
+
+#define DOC_ssz_merkleize_chunks \
+  "The root of 32-byte chunks, in a tree padded to a power of two."
+
 #define DOC_rlpx_ecies_encrypt \
   "The ciphertext `R || iv || c || d` of `m` to the public key `recipient`."
 
@@ -1495,6 +1510,12 @@
 
 #define DOC_engine_prepare_execution_payload_gloas \
   "From Gloas: the forkchoice update of a proposer, as the value of its JSON."
+
+#define DOC_engine_payload_attributes_event \
+  "From Bellatrix to Fulu: the event of the payload attributes of a proposer."
+
+#define DOC_engine_payload_attributes_event_gloas \
+  "Gloas: the event of the payload attributes of a proposer."
 
 #define DOC_engine_finalized_execution_block_hash \
   "From Bellatrix: the 32 bytes of the finalized block hash of a store."

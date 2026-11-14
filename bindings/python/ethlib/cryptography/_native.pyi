@@ -697,6 +697,14 @@ def consensus_api_chain_heads(name: str, fork: str, anchor_state: bytes, anchor_
     """The JSON response of the heads endpoint, as a `dict`."""
     ...
 
+def consensus_api_chain_events(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, first: int, genesis_root: bytes, optimistic_roots: list[bytes], config: dict[str, Any] | None) -> list[tuple[str, str]]:
+    """The events of the fork choice between two stores of a case."""
+    ...
+
+def consensus_api_fast_confirmation_event(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict[str, Any] | None) -> tuple[str, str]:
+    """The event of the last run of the fast confirmation rule in a case that passed."""
+    ...
+
 def consensus_api_aggregate_attestation(name: str, fork: str, state: bytes, attestations: list[bytes], singles: list[bytes], optimistic_roots: list[bytes], data_root: bytes, slot: int, committee_index: int) -> dict[str, Any]:
     """The JSON response of the aggregate endpoint, as a `dict`."""
     ...
@@ -1437,6 +1445,18 @@ def ssz_hash_tree_root(type: str | dict[str, Any], value: dict[str, Any]) -> byt
     """The 32-byte hash tree root of a value of a type, both given in their tagged form."""
     ...
 
+def ssz_generalized_index(type: str | dict[str, Any], path: list[int | str]) -> int:
+    """The generalized index of the node that a path selects in the tree of a type."""
+    ...
+
+def ssz_merkle_proof(type: str | dict[str, Any], value: dict[str, Any], index: int) -> list[bytes]:
+    """The branch that proves the node at a generalized index of a value against its root."""
+    ...
+
+def ssz_merkleize_chunks(chunks: list[bytes], limit: int | None) -> bytes:
+    """The root of 32-byte chunks, in a tree padded to a power of two."""
+    ...
+
 def rlpx_ecies_encrypt(recipient: bytes, ephemeral: bytes, iv: bytes, shared_mac: bytes, message: bytes) -> bytes:
     """The ciphertext `R || iv || c || d` of `m` to the public key `recipient`."""
     ...
@@ -1995,6 +2015,14 @@ def engine_prepare_execution_payload(name: str, fork: str, state: bytes, config:
 
 def engine_prepare_execution_payload_gloas(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, custody_columns: bytes | None, verify: bool, config: dict | None) -> dict:
     """From Gloas: the forkchoice update of a proposer, as the value of its JSON."""
+    ...
+
+def engine_payload_attributes_event(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes], terminal_number: int) -> tuple[str, str] | None:
+    """From Bellatrix to Fulu: the event of the payload attributes of a proposer."""
+    ...
+
+def engine_payload_attributes_event_gloas(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, config: dict | None) -> tuple[str, str]:
+    """Gloas: the event of the payload attributes of a proposer."""
     ...
 
 def engine_finalized_execution_block_hash(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> bytes:

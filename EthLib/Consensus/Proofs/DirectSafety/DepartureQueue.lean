@@ -1927,7 +1927,7 @@ private theorem withdrawalRequests_indexedTrace {fork : Fork} {s t : BeaconState
     exact effectiveKept_withdrawalRequest stepped
 
 /-- The validator-count churn is bounded by the registry size, not just active entries. -/
-private theorem validatorChurnLimit_le_cohortCap {fork : Fork} (s : BeaconState preset fork)
+theorem validatorChurnLimit_le_cohortCap {fork : Fork} (s : BeaconState preset fork)
     (bound : Nat) (bounded : s.validators.data.size ≤ bound) :
     (getValidatorChurnLimit config s).toNat ≤ cohortCap config bound := by
   have active : (getActiveValidatorIndices s (getCurrentEpoch s)).length ≤

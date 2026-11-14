@@ -245,8 +245,8 @@ def deriveKey (password : ByteArray) (kdf : Kdf) : Except KeystoreError ByteArra
     else (Hash.Scrypt.scrypt password salt n r p length).mapError .scrypt
 
 /-- SHA-256 of key bytes 16 through 31 followed by the ciphertext ("Password verification"). -/
-def passwordChecksum (key message : ByteArray) : ByteArray :=
-  Hash.Sha256.hash (key.extract 16 32 ++ message)
+def passwordChecksum (key message : ByteArray) : Vector UInt8 32 :=
+  Hash.Sha256.hash32 (key.extract 16 32 ++ message)
 
 /-- Verify the checksum before AES-128-CTR decryption ("Secret decryption").
 
@@ -254,7 +254,7 @@ A longer key is truncated to its first 16 bytes for AES.
 -/
 def decryptWithKey (store : Store) (key : ByteArray) : Except KeystoreError ByteArray := do
   if h : 32 ≤ key.size then
-    if passwordChecksum key store.message != ⟨store.checksum.toArray⟩ then
+    if passwordChecksum key store.message != store.checksum then
       throw .checksumMismatch
     let aesKey : Aes.Key .aes128 := Vector.ofFn fun i => key[i.val]'(by
       change i.val < key.data.size
