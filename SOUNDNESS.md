@@ -919,9 +919,53 @@ The transcript always hashes with SHA-256; the steps must reject a suite with an
 The Python suite checks the RFC 8448 §3 transcript, and its SHA-256 hash against an independent SHA-256.
 It also checks the CertificateVerify signed content of RFC 8446 §4.4.3, including the zero separator and the role's context string.
 
-The client and server steps, QUIC CRYPTO reassembly and encryption-level checks are absent.
-The codecs reject NewSessionTicket and KeyUpdate, which a QUIC connection still carries after the handshake.
-The maintainer policy questions of [#2163](https://github.com/ethereum/EthLib/issues/2163) remain open.
+The message codec covers the initial certificate handshake.
+The steps below handle post-handshake NewSessionTicket separately and reject TLS KeyUpdate, which [RFC 9001 §6](https://www.rfc-editor.org/rfc/rfc9001#section-6) forbids.
+
+### libp2p QUIC TLS handshake
+
+`clientStep` and `serverStep` (`Networking/Quic/Tls/Handshake.lean`) process one complete encoded message at a time, under [RFC 8446 §4](https://www.rfc-editor.org/rfc/rfc8446#section-4) and [RFC 9001 §4](https://www.rfc-editor.org/rfc/rfc9001#section-4).
+They check message order, encryption level, extension placement, offered selections, retry continuity, certificate authentication, CertificateVerify and Finished.
+The caller supplies reassembled CRYPTO data and validates the opaque QUIC transport parameters.
+The steps require those parameters in ClientHello and EncryptedExtensions.
+They do not implement CRYPTO reassembly, packet transport, resumption or 0-RTT.
+
+The caller supplies an explicit policy, with no default cipher suites, groups or signature schemes.
+The available suites are TLS_AES_128_GCM_SHA256 and TLS_CHACHA20_POLY1305_SHA256.
+The steps reject suites that use another transcript hash.
+Configuration rejects any listed algorithm that lacks a backend.
+The available groups are X25519 and P-256, and CertificateVerify supports only ecdsa_secp256r1_sha256.
+The caller also chooses the certificate policy described above and whether the server rejects a nonempty legacy session ID, the SHOULD of RFC 9001 §8.4.
+Local credentials must omit the deprecated unique-ID fields even when the receive policy tolerates them.
+These backends do not settle the application-profile question of RFC 8446 §9.1, the RSA requirements or the other maintainer choices of [#2163](https://github.com/ethereum/EthLib/issues/2163).
+
+The steps require ALPN `libp2p` and mutual certificate authentication, as [pinned libp2p TLS](https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/tls/tls.md) specifies.
+The client omits SNI, and the server ignores received SNI as its Future Extensibility section requires.
+The client checks the peer ID it dialled.
+A certificate with a noncritical KeyUsage extension must permit digital signatures; the certificate helper still rejects critical extensions other than the libp2p one.
+Private keys, ephemeral inputs, random fields and a fresh ECDSA signing nonce enter explicitly.
+The caller must keep one configuration throughout the handshake, use fresh secret inputs for each handshake and discard state after an error.
+
+`serverStep_alpn` and `serverStep_clientCertificate` (`Networking/Proofs/Quic/Tls/Handshake.lean`) prove rejection of an offered ALPN list without `libp2p` and of an empty client certificate at their receive phases.
+`checkFinished_eq_ok_iff` states that the check succeeds exactly for the Finished value derived from the saved handshake traffic secret and pre-message transcript.
+`checkCertificateVerify_eq_ok_iff` characterizes acceptance for an offered and allowed `ecdsa_secp256r1_sha256` scheme.
+It requires certificate authentication and P-256 verification of the exact role-specific signed content.
+The corresponding client and server step lemmas establish these conditions when the message is accepted in its receive phase.
+
+`clientStep_peerId` and `serverStep_peerId` prove that every returned completion reports the peer ID of certificate authentication; the client result also equals its expected ID.
+Completion authenticates the saved chain again, so these identity theorems hold even for caller-constructed states.
+`traffic_secrets_agree` proves equality of all reported schedule secrets for completed client and server steps with equal ECDHE secrets and equal hello and server-Finished transcript boundaries.
+It does not prove that arbitrary received key shares yield those equal ECDHE secrets or that the peers saw one transcript.
+
+The cryptographic proofs (`Networking/Proofs/Quic/Tls/Crypto.lean`) prove agreement of honest X25519 exchanges, rejection of all-zero X25519 output, and verification of a generated P-256 CertificateVerify under the matching certificate key.
+No theorem proves P-256 ECDHE agreement here, handshake unforgeability or constant-time execution.
+The step theorems do not establish a complete invariant over every state reachable from initialization.
+The Python tests use independently signed libp2p certificates with known private keys and check both groups, both suites and retries against independent shared-secret, signature, HKDF and HMAC calculations.
+They also check malformed negotiation, signatures, Finished values and post-handshake messages.
+
+Completed clients accept and discard well-formed NewSessionTicket messages, without adding them to the handshake transcript.
+They reject post-handshake CertificateRequest and TLS KeyUpdate as RFC 9001 requires.
+Errors carry QUIC connection codes; the caller sends the connection close and destroys the saved state.
 
 ### QUIC v1 packet protection
 
@@ -5824,12 +5868,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 521 operations and 49 size constants.
-The Python extension calls 521 of the operations and 49 of the constants.
+Lean exports 525 operations and 49 size constants.
+The Python extension calls 525 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11844 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1644), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (221), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (817), `x25519.c` (21), `xmss.c` (134).
+11896 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1650), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (261), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (823), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

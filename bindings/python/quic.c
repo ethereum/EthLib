@@ -219,3 +219,43 @@ py_quic_tls_certificate_verify_input(
 ) {
   return call_pyvalue_export(eth_quic_tls_certificate_verify_input, args, 2, TLS_HANDSHAKE_ERROR);
 }
+
+extern lean_object* eth_quic_tls_client_start(lean_object* args);
+
+PyObject*
+py_quic_tls_client_start(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_tls_client_start, args, 1, TLS_STEP_ERROR);
+}
+
+extern lean_object* eth_quic_tls_server_start(lean_object* args);
+
+PyObject*
+py_quic_tls_server_start(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_tls_server_start, args, 1, TLS_STEP_ERROR);
+}
+
+extern lean_object* eth_quic_tls_client_step(lean_object* args);
+
+PyObject*
+py_quic_tls_client_step(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_tls_client_step, args, 4, TLS_STEP_ERROR);
+}
+
+extern lean_object* eth_quic_tls_server_step(lean_object* args);
+
+PyObject*
+py_quic_tls_server_step(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_tls_server_step, args, 3, TLS_STEP_ERROR);
+}

@@ -1226,6 +1226,18 @@
 #define DOC_quic_packet_keys \
   "Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1."
 
+#define DOC_quic_tls_client_start \
+  "Start a client certificate handshake under an explicit policy, RFC 8446 §4.1.2."
+
+#define DOC_quic_tls_server_start \
+  "Start a server certificate handshake under an explicit policy, RFC 8446 §4.1.2."
+
+#define DOC_quic_tls_client_step \
+  "Process one complete server message and check the intended peer ID at authentication."
+
+#define DOC_quic_tls_server_step \
+  "Process one complete client message and require libp2p client authentication."
+
 #define DOC_quic_tls_key_schedule \
   "Return the early, handshake, master, two handshake traffic and two application traffic secrets."
 

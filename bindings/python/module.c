@@ -80,6 +80,7 @@ PyObject* CONSENSUS_ERROR;
 PyObject* HKDF_ERROR;
 PyObject* TLS13_ERROR;
 PyObject* TLS_HANDSHAKE_ERROR;
+PyObject* TLS_STEP_ERROR;
 PyObject* QUIC_PROTECTION_ERROR;
 PyObject* PBKDF2_ERROR;
 PyObject* SCRYPT_ERROR;
@@ -1253,6 +1254,10 @@ static PyMethodDef methods[] = {
   {"uvarint_decode", py_uvarint_decode, METH_VARARGS, DOC_uvarint_decode},
   {"quic_initial_secrets", py_quic_initial_secrets, METH_VARARGS, DOC_quic_initial_secrets},
   {"quic_packet_keys", py_quic_packet_keys, METH_VARARGS, DOC_quic_packet_keys},
+  {"quic_tls_client_start", py_quic_tls_client_start, METH_VARARGS, DOC_quic_tls_client_start},
+  {"quic_tls_server_start", py_quic_tls_server_start, METH_VARARGS, DOC_quic_tls_server_start},
+  {"quic_tls_client_step", py_quic_tls_client_step, METH_VARARGS, DOC_quic_tls_client_step},
+  {"quic_tls_server_step", py_quic_tls_server_step, METH_VARARGS, DOC_quic_tls_server_step},
   {"quic_tls_key_schedule", py_quic_tls_key_schedule, METH_VARARGS, DOC_quic_tls_key_schedule},
   {"quic_tls_derive_secret", py_quic_tls_derive_secret, METH_VARARGS, DOC_quic_tls_derive_secret},
   {"quic_tls_finished", py_quic_tls_finished, METH_VARARGS, DOC_quic_tls_finished},
@@ -1428,6 +1433,7 @@ PyInit__native(void) {
     QUIC_PROTECTION_ERROR = PyObject_GetAttrString(errors, "QuicProtectionError");
     TLS13_ERROR = PyObject_GetAttrString(errors, "Tls13Error");
     TLS_HANDSHAKE_ERROR = PyObject_GetAttrString(errors, "TlsHandshakeError");
+    TLS_STEP_ERROR = PyObject_GetAttrString(errors, "TlsStepError");
     PBKDF2_ERROR = PyObject_GetAttrString(errors, "Pbkdf2Error");
     SCRYPT_ERROR = PyObject_GetAttrString(errors, "ScryptError");
     X25519_ERROR = PyObject_GetAttrString(errors, "X25519Error");

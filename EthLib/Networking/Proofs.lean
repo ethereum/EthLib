@@ -45,6 +45,8 @@ public import EthLib.Networking.Proofs.Quic.Keys
 public import EthLib.Networking.Proofs.Quic.Protection
 public import EthLib.Networking.Proofs.Quic.Tls
 public import EthLib.Networking.Proofs.Quic.Tls.Extensions
+public import EthLib.Networking.Proofs.Quic.Tls.Crypto
+public import EthLib.Networking.Proofs.Quic.Tls.Handshake
 public import EthLib.Networking.Proofs.Quic.Tls.Transcript
 public import EthLib.Networking.Proofs.Quic.Varint
 public import EthLib.Networking.Proofs.ReqResp.Bounds

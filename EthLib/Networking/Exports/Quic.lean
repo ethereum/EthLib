@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.Fin
 public import EthLib.Base.Exports.PyDerive
 public import EthLib.Networking.Quic.Frame
 public import EthLib.Cryptography.Exports.Tls13
@@ -93,19 +94,7 @@ def finishedExport (args : PyValue) : Result PyValue :=
   pyExport (fun (secret, transcript) => ofExcept (Tls.finished secret transcript)) args
 
 open EthLib.Exports (ToPy FromPy LawfulPy PlainPy toPy fromPy)
-
-local instance (n : Nat) : ToPy (Fin n) := ⟨fun value => .int value.val⟩
-local instance (n : Nat) : FromPy (Fin n) := ⟨fun value => do
-  let bounded ← EthLib.Exports.fromPyBelow n value
-  return ⟨bounded.val, bounded.property⟩⟩
-local instance (n : Nat) : PlainPy (Fin n) := ⟨fun _ => rfl⟩
-local instance (n : Nat) : LawfulPy (Fin n) where
-  fromPy_toPy value := by
-    show (do
-      let bounded ← EthLib.Exports.fromPyBelow n (.int value.val)
-      pure (⟨bounded.val, bounded.property⟩ : Fin n)) = .ok value
-    simp [EthLib.Exports.fromPyBelow, fromPy, value.isLt, bind, Except.bind,
-      pure, Except.pure]
+open scoped EthLib.Exports.FinAsInt
 
 derive_py Packet.PacketType
 derive_py_laws Packet.PacketType

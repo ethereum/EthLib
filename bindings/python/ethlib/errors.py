@@ -129,6 +129,10 @@ class TlsHandshakeError(EthLibError, ValueError):
     """A TLS handshake codec or transcript rejected its input."""
 
 
+class TlsStepError(EthLibError, ValueError):
+    """A TLS handshake transition failed, with its QUIC connection error code."""
+
+
 class Tls13Error(EthLibError, ValueError):
     """A TLS 1.3 key derivation rejected its input."""
 
@@ -372,6 +376,7 @@ __all__ = [
     "HkdfError",
     "Tls13Error",
     "TlsHandshakeError",
+    "TlsStepError",
     "Pbkdf2Error",
     "ScryptError",
     "X25519Error",

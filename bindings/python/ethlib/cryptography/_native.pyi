@@ -1637,6 +1637,22 @@ def quic_packet_keys(suite: str, secret: bytes) -> tuple[bytes, bytes, bytes]:
     """Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1."""
     ...
 
+def quic_tls_client_start(config: dict[str, object]) -> dict[str, object]:
+    """Start a client certificate handshake under an explicit policy, RFC 8446 §4.1.2."""
+    ...
+
+def quic_tls_server_start(config: dict[str, object]) -> dict[str, object]:
+    """Start a server certificate handshake under an explicit policy, RFC 8446 §4.1.2."""
+    ...
+
+def quic_tls_client_step(config: dict[str, object], expected: bytes, state: dict[str, object], message: dict[str, object]) -> dict[str, object]:
+    """Process one complete server message and check the intended peer ID at authentication."""
+    ...
+
+def quic_tls_server_step(config: dict[str, object], state: dict[str, object], message: dict[str, object]) -> dict[str, object]:
+    """Process one complete client message and require libp2p client authentication."""
+    ...
+
 def quic_tls_key_schedule(shared_secret: bytes, hello_transcript: bytes, server_transcript: bytes) -> tuple[bytes, bytes, bytes, bytes, bytes, bytes, bytes]:
     """Return the early, handshake, master, two handshake traffic and two application traffic secrets."""
     ...
