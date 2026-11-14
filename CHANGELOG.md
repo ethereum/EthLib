@@ -9,6 +9,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the SHA-256 digests that a caller keeps are `Vector UInt8 32` ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  `Shuffle.bucketBits` and `Keystore.passwordChecksum` return one, and `Shuffle.bitAt` and `DataAvailability.firstUInt64` take one.
+  A caller that needs the bytes applies `packBytes`, and `Sha256.packBytes_hash32` gives back the byte-array digest.
+  The keystore checksum theorems compare the checksum with `store.checksum` directly, and `checksumVector` is removed: use `passwordChecksum`.
+  Nothing breaks in Python.
+
 - In Lean, the block environment gains the field `blobGasPrice` ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
   A simulation sets the base fee per blob gas with it, and its default `none` keeps the price of the excess blob gas.
   Supply that field in positional constructors, or use structure notation with its default.

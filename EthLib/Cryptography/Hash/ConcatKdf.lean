@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Base.BigEndian
-public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Hash.Sha256
 
 /-!
@@ -47,8 +46,7 @@ def ConcatKdfError.code : ConcatKdfError → UInt32
 def blocks (z fixedInfo : ByteArray) (i : Nat) : (count : Nat) → ByteArray
   | 0 => ByteArray.empty
   | count + 1 =>
-    Base.packBytes (Sha256.hash32 (Base.natToBytes4 i ++ z ++ fixedInfo)) ++
-      blocks z fixedInfo (i + 1) count
+    Sha256.hash (Base.natToBytes4 i ++ z ++ fixedInfo) ++ blocks z fixedInfo (i + 1) count
 
 /--
 The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1.

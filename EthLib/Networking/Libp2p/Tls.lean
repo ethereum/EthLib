@@ -387,8 +387,7 @@ def authenticateHost (policy : Policy) (spki key signature : ByteArray) :
     let hostSpki : ByteArray := ⟨bytes.toArray⟩
     let _ ← readP256 hostSpki
     ensure (verifyP256 hostSpki (hostMessage spki) signature = true) .hostSignature
-    return ⟨#[0x12, 0x20]⟩ ++
-      EthLib.Base.packBytes (EthLib.Cryptography.Hash.Sha256.hash32 key)
+    return ⟨#[0x12, 0x20]⟩ ++ EthLib.Cryptography.Hash.Sha256.hash key
   | 8 :: 0 :: _ | 8 :: 1 :: _ | 8 :: 3 :: _ => throw .algorithm
   | _ => throw .publicKey
 

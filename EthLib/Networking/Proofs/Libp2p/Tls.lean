@@ -174,7 +174,7 @@ theorem authenticateHost_ok {policy : Policy} {spki key signature id : ByteArray
           rw [← heq]
         subst hdata
         rfl
-    · simpa [pure, Except.pure, Base.packBytes, Cryptography.Hash.Sha256.hash32] using same.symm
+    · simpa [pure, Except.pure] using same.symm
   all_goals simp [throw, throwThe, MonadExceptOf.throw] at success
 
 /-- Authentication returns the peer ID of the host key in the certificate's libp2p extension.

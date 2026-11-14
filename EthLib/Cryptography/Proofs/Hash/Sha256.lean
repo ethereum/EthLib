@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Hash.Sha256
 
 /-!
@@ -397,9 +398,9 @@ theorem pad_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
 @[simp] theorem hash_size (message : ByteArray) : (hash message).size = 32 := by
   simp only [hash, digest, ByteArray.size, List.size_toArray, List.length_cons, List.length_nil]
 
-/-- The typed digest contains exactly the bytes of the byte-array digest. -/
-@[simp] theorem hash32_toByteArray (message : ByteArray) :
-    ByteArray.mk (hash32 message).toArray = hash message := rfl
+/-- The 32-byte digest holds exactly the bytes of the byte-array digest. -/
+@[simp] theorem packBytes_hash32 (message : ByteArray) :
+    Base.packBytes (hash32 message) = hash message := rfl
 
 /-- The blocks from any block on continue the model's chain of blocks. -/
 theorem chain_toState (block : ByteArray) (initial : Spec.State) :
@@ -446,9 +447,9 @@ theorem hash_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
       Nat.zero_add, Spec.hash]
   exact padded (pad message) (pad_eq_spec message admitted) _
 
-/-- The typed digest agrees with FIPS 180-4 under its message-length bound. -/
+/-- The 32-byte digest agrees with FIPS 180-4 on every message shorter than 2^61 bytes. -/
 theorem hash32_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
-    ByteArray.mk (hash32 message).toArray = Spec.hash message :=
+    Base.packBytes (hash32 message) = Spec.hash message :=
   hash_eq_spec message admitted
 
 end EthLib.Cryptography.Hash.Sha256

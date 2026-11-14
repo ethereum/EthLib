@@ -17,7 +17,7 @@ namespace EthLib.Serialization.Ssz
 /-- Every parent digest is a complete SSZ node, regardless of the child inputs. -/
 @[simp] theorem combine_size (left right : Bytes) : (combine left right).size = bytesPerChunk := by
   -- SHA-256 produces thirty-two bytes independently of the message contents.
-  exact (Cryptography.Hash.Sha256.hash32 (ByteArray.mk (left ++ right))).size_toArray
+  exact Cryptography.Hash.Sha256.hash_size (ByteArray.mk (left ++ right))
 
 /-- The messages a branch hashes, from its starting node up: each pair of nodes, concatenated. -/
 def branchMessages (index level : Nat) (node : Bytes) (proof : List Bytes) : List Bytes :=

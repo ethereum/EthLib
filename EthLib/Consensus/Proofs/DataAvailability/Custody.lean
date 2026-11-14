@@ -23,7 +23,7 @@ namespace EthLib.Consensus.DataAvailability
 
 variable {config : Config}
 
-/-- Reading the typed digest keeps the little-endian value of its first eight bytes. -/
+/-- The first eight of 32 bytes give one integer, least significant first, packed or not. -/
 theorem firstUInt64_eq_byteRead (bytes : Base.Bytes32) :
     firstUInt64 bytes =
       (List.range 8).foldr
@@ -38,7 +38,7 @@ theorem firstUInt64_eq_byteRead (bytes : Base.Bytes32) :
   simp only [Base.packBytes, Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem hi,
     Option.getD_some, Vector.getElem_toArray]
 
-/-- The selected group is the first eight SHA-256 bytes read little-endian, modulo the count. -/
+/-- The group of an ID: its first eight SHA-256 bytes, least significant first, modulo the count. -/
 theorem groupOfId_eq_byteRead (config : Config) (id : NodeID) :
     groupOfId config id =
       (List.range 8).foldr (fun i (acc : UInt64) => acc <<< 8 |||

@@ -50,12 +50,12 @@ theorem _root_.EthLib.Consensus.DataAvailability.CustodyError.code_ne_subnet {ε
 
 namespace Shuffle
 
-/-- The bytes of a typed bucket are the SHA-256 digest of its input. -/
+/-- The 32 bytes of the bits of a bucket are the SHA-256 digest of its input. -/
 theorem packBytes_bucketBits (seed : Bytes32) (round bucket : Nat) :
     packBytes (bucketBits seed round bucket) =
       Cryptography.Hash.Sha256.hash (bucketInput seed round bucket) := rfl
 
-/-- Reading a typed bucket gives the bit of its bytes, for every position. -/
+/-- A bit reads the same from 32 bytes as from their byte array, for every position. -/
 theorem bitAt_eq_byteRead (bits : Bytes32) (position : Nat) :
     bitAt bits position =
       (((packBytes bits)[position % 256 / 8]?.getD 0) >>>
@@ -73,7 +73,7 @@ theorem bitAt_replicate_zero (position : Nat) :
     bitAt (Vector.replicate 32 0) position = false := by
   simp [bitAt]
 
-/-- The cached round agrees with byte-array buckets even on indices outside the count.
+/-- A round that hashes each bucket once agrees with byte-array buckets, for every index.
 
 A position whose bucket is absent reads a zero bit in both forms. -/
 theorem round_eq_byteArray (seed : Bytes32) (count roundNumber : Nat) (indices : Array Nat) :
@@ -96,7 +96,7 @@ theorem round_eq_byteArray (seed : Bytes32) (count roundNumber : Nat) (indices :
       packBytes_bucketBits]
   · simp [Array.getD_eq_getD_getElem?, h, bitAt_replicate_zero]
 
-/-- A round on one index agrees with reading the SHA-256 bytes at every position. -/
+/-- A round on one index reads each bit from the SHA-256 digest of the input of its bucket. -/
 theorem indexRound_eq_byteArray (seed : Bytes32) (count roundNumber index : Nat) :
     indexRound seed count roundNumber index =
       swapOrNot count (pivot seed roundNumber count)

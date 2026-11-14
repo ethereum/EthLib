@@ -25,10 +25,7 @@ theorem blocks_size (z fixedInfo : ByteArray) (i count : Nat) :
   induction count generalizing i with
   | zero => rfl
   | succ count ih =>
-    change (Sha256.hash (Base.natToBytes4 i ++ z ++ fixedInfo) ++
-      blocks z fixedInfo (i + 1) count).size = _
-    rw [ByteArray.size_append, Sha256.hash_size, ih]
-    simp only [HASH_LEN]
+    simp only [blocks, ByteArray.size_append, Sha256.hash_size, ih, HASH_LEN]
     omega
 
 /-- More blocks extend fewer: the counter of each block depends only on its position. -/

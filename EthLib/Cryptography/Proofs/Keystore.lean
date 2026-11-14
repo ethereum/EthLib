@@ -35,12 +35,7 @@ A store of a version other than 4 is refused before any other field is read.
 
 namespace EthLib.Cryptography.Keystore
 
-/-- The typed checksum contains the SHA-256 bytes required by password verification. -/
-theorem packBytes_passwordChecksum (key message : ByteArray) :
-    Base.packBytes (passwordChecksum key message) =
-      Hash.Sha256.hash (key.extract 16 32 ++ message) := rfl
-
-/-- Comparing typed checksums gives the same mismatch result as comparing their bytes. -/
+/-- Comparing 32-byte checksums gives the same mismatch result as comparing their bytes. -/
 theorem passwordChecksum_bne_eq (key message : ByteArray) (checksum : Vector UInt8 32) :
     (passwordChecksum key message != checksum) =
       (Hash.Sha256.hash (key.extract 16 32 ++ message) != Base.packBytes checksum) := by
@@ -153,10 +148,6 @@ theorem decryptWithKey_ne_shortKey_of_deriveKey {password key : ByteArray} {kdf 
 
 /-! ## CTR undoes itself -/
 
-/-- The checksum of a key and a message, as the 32 bytes a store holds. -/
-def checksumVector (key message : ByteArray) : Vector UInt8 32 :=
-  passwordChecksum key message
-
 /-- Encrypting the decrypted secret again gives back the stored ciphertext.
 
 The AES step is CTR under one key and counter, and CTR is its own inverse.
@@ -165,12 +156,10 @@ The second store holds the checksum of the secret, so its verification passes.
 -/
 theorem decryptWithKey_decryptWithKey {store : Store} {key secret : ByteArray}
     (h : decryptWithKey store key = .ok secret) :
-    decryptWithKey { store with message := secret, checksum := checksumVector key secret } key =
+    decryptWithKey { store with message := secret, checksum := passwordChecksum key secret } key =
       .ok store.message := by
   obtain ⟨hsize, hmatch⟩ := decryptWithKey_ok_inv h
-  have hcheck : (passwordChecksum key secret !=
-      checksumVector key secret) = false := by
-    show (passwordChecksum key secret != passwordChecksum key secret) = false
+  have hcheck : (passwordChecksum key secret != passwordChecksum key secret) = false := by
     simp
   simp [decryptWithKey, hsize, hmatch] at h
   simp only [Pure.pure, Except.pure] at h
