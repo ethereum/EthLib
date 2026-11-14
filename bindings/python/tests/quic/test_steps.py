@@ -930,16 +930,20 @@ def test_completed_client_rejects_forbidden_or_malformed_messages(
     assert error.value.code == code
 
 
-@pytest.mark.parametrize("index", [0, 2])
-def test_completed_server_rejects_every_message(index: int) -> None:
+@pytest.mark.parametrize(
+    ("index", "expected", "code"),
+    [(0, "unexpectedMessage", 0x10A), (2, "protocolViolation", 0x0A)],
+)
+def test_completed_server_rejects_every_message(index: int, expected: str, code: int) -> None:
     _, server_config, client, server = client_flight()
     for incoming in client["output"]:
         server = hs.server_step(server_config, server["state"], incoming)
     assert server["state"]["phase"] == "complete"
+    # RFC 9001 §4.1.3: handshake-level data after completion is a protocol violation.
     incoming = ticket() if index == 0 else client["output"][index]
-    with raises(hs.TlsStepError, PREFIX + "unexpectedMessage") as error:
+    with raises(hs.TlsStepError, PREFIX + expected) as error:
         hs.server_step(server_config, server["state"], incoming)
-    assert error.value.code == 0x10A
+    assert error.value.code == code
 
 
 def test_ticket_rejects_an_extension_in_the_wrong_message() -> None:

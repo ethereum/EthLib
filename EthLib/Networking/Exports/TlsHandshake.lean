@@ -14,7 +14,7 @@ The returned messages carry their QUIC encryption levels.
 
 Error codes are the QUIC transport errors of RFC 9000 §20.1 and the alert codes of RFC 9001 §4.8.
 
-An argument that Lean cannot read fails with code 0 instead.
+An argument that Lean cannot read fails with code 0, which is not a QUIC error to forward.
 -/
 
 public section

@@ -946,7 +946,7 @@ A certificate with a noncritical KeyUsage extension must permit digital signatur
 Private keys, ephemeral inputs and random fields enter explicitly.
 The caller must keep one configuration throughout the handshake, use fresh ephemeral keys for each handshake and discard state after an error.
 CertificateVerify signs with the deterministic nonce of [RFC 6979 §3.2](https://www.rfc-editor.org/rfc/rfc6979#section-3.2), shared with secp256k1 signing (`Cryptography/Rfc6979.lean`).
-A caller-supplied nonce would leak the certificate key as soon as two connections reused it, since the clients choose part of the signed transcript; the derived nonce depends only on the key and the signed content, so equal content gives the same signature and different content a different nonce.
+A caller-supplied nonce would leak the certificate key as soon as two connections reused it, since the clients choose part of the signed transcript; the derived nonce depends only on the key and the signed content, so equal content gives the same signature; two contents whose hashes differ mod n share a nonce only through an HMAC-SHA-256 collision, which no theorem rules out.
 `verify_sign_of_sign` (`Cryptography/Proofs/Secp256r1/Sign.lean`) proves that a P-256 signature from signing verifies under the signer's key; nothing proves the pseudorandomness of the nonces.
 
 `serverStep_alpn` and `serverStep_clientCertificate` (`Networking/Proofs/Quic/Tls/Handshake.lean`) prove rejection of an offered ALPN list without `libp2p` and of an empty client certificate at their receive phases.
@@ -969,9 +969,9 @@ They also check malformed negotiation, signatures, Finished values and post-hand
 
 Completed clients accept and discard well-formed NewSessionTicket messages, without adding them to the handshake transcript.
 They reject post-handshake CertificateRequest and TLS KeyUpdate, as [RFC 9001 §§4.4 and 6](https://www.rfc-editor.org/rfc/rfc9001#section-4.4) require.
-Errors carry QUIC connection codes; a malformed peer key share is illegal_parameter and a local cryptographic failure is internal_error.
+Errors carry QUIC connection codes; a malformed peer key share or a degenerate shared secret is illegal_parameter, the incorrect-field alert of RFC 8446 §6.2, and a local cryptographic failure is internal_error.
 A message at an earlier encryption level than expected is a PROTOCOL_VIOLATION, by [RFC 9001 §4.1.3](https://www.rfc-editor.org/rfc/rfc9001#section-4.1.3).
-A hello without supported_versions is a protocol_version error, by [RFC 8446 Appendix D](https://www.rfc-editor.org/rfc/rfc8446#appendix-D).
+A hello without supported_versions is a protocol_version error, by [RFC 8446 Appendix D](https://www.rfc-editor.org/rfc/rfc8446#appendix-D); on the server, the ALPN, session-ID and extension-placement checks run first.
 The caller sends the connection close and destroys the saved state.
 
 ### QUIC v1 packet protection

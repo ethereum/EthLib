@@ -53,7 +53,7 @@ def signWith (d e : Fn) : (fuel : Nat) → NonceState → Except Secp256k1Error 
       | .affine x y =>
         -- Step 3: `r = x_R mod n`.
         let r : Fn := Fin.ofNat _ x.val
-        -- Step 5: `s = k^(-1) (e + r d) mod n`.
+        -- Step 6: `s = k^(-1) (e + r d) mod n`.
         let s := k.inv * (e + r * d)
         if r = 0 ∨ s = 0 then signWith d e fuel (nonceReject state)
         -- Recovery with the ids 0 and 1 needs `x_R = r`.
@@ -73,7 +73,7 @@ The key is secret, and this function makes no constant-time claim.
 def sign (sk : Fn) (hash : Vector UInt8 32) : Except Secp256k1Error (Fn × Fn × Bool) :=
   if sk = 0 then .error .zeroPrivateKey
   else do
-    -- Step 4: `e` is the hash read as an integer mod `n`.
+    -- Step 5: `e` is the hash read as an integer mod `n`.
     let (r, s, odd) ← signWith sk (Fin.ofNat _ (hashToInt hash)) MAX_NONCES (nonceSeed sk hash)
     if isLowS s.val then .ok (r, s, odd) else .ok (r, -s, !odd)
 

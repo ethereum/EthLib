@@ -38,6 +38,8 @@ Steps b to g of RFC 6979 §3.2: the generator seeded with the key `x` and the ha
 
 The group order is `q`; with `qlen = hlen = 256`, `bits2octets(h1)` is `h1 mod q` as 32 bytes.
 
+The result is that of RFC 6979 only for a 256-bit `q`, which both curves of EthLib have.
+
 The key is secret, and this function makes no constant-time claim.
 -/
 def nonceSeed (q x : Nat) (hash : Vector UInt8 32) : NonceState :=
@@ -64,7 +66,7 @@ def nonceReject (state : NonceState) : NonceState :=
   let k := hmac state.key (state.value ++ ⟨#[0x00]⟩)
   ⟨k, hmac k state.value⟩
 
-/-- The bound on the candidates that signing tries before it gives up. -/
+/-- EthLib's bound on the candidates that signing tries; RFC 6979 §3.2 step h has none. -/
 def MAX_NONCES : Nat := 16
 
 end EthLib.Cryptography.Rfc6979

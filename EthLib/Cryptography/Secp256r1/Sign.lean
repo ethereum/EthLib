@@ -10,7 +10,7 @@ Signing follows SEC 1 v2 §4.1.3, with the deterministic nonce of RFC 6979 §3.2
 
 The nonce generator is HMAC-SHA-256, keyed by the private key and the 32-byte hash.
 
-One key and one hash therefore give one signature, so no caller can reuse a nonce across messages.
+One key and one hash therefore give one signature, and no caller chooses the nonce.
 
 The private key is secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3).
 -/
@@ -45,7 +45,7 @@ def signWith (d e : Fn) : (fuel : Nat) → NonceState → Option (Fn × Fn)
       | .affine x _ =>
         -- Step 3: `r = x_R mod n`.
         let r : Fn := Fin.ofNat _ x.val
-        -- Step 5: `s = k^(-1) (e + r d) mod n`.
+        -- Step 6: `s = k^(-1) (e + r d) mod n`.
         let s := k.inv * (e + r * d)
         if r = 0 ∨ s = 0 then signWith d e fuel (nonceReject state)
         else some (r, s)
@@ -63,7 +63,7 @@ The key is secret, and this function makes no constant-time claim.
 def sign (d : Fn) (hash : Vector UInt8 32) : Option (Fn × Fn) :=
   if d = 0 then none
   else
-    -- Step 4: `e` is the hash read as an integer mod `n`.
+    -- Step 5: `e` is the hash read as an integer mod `n`.
     signWith d (Fin.ofNat _ (Base.bytesToNat hash.toList)) MAX_NONCES
       (nonceSeed Fn.modulus d.val hash)
 

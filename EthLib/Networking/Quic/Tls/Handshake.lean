@@ -59,7 +59,9 @@ inductive Error where
 
 /-- The QUIC connection error, RFC 9000 §20.1; a TLS alert maps to 0x100 + alert, RFC 9001 §4.8.
 
-A malformed peer key share is illegal_parameter; every other cryptographic failure is local. -/
+A bad peer key share or a degenerate shared secret is illegal_parameter, RFC 8446 §6.2.
+
+Every other cryptographic failure is local, so it is internal_error. -/
 def Error.code : Error → UInt32
   | .unexpectedMessage => 0x10a
   | .illegalParameter => 0x12f
@@ -173,7 +175,9 @@ structure State where
 
 /-- The certificate-derived peer identity, its chain and the negotiated key schedule.
 
-On a state reached from initialization, the peer's CertificateVerify and Finished were checked. -/
+On a state reached from initialization, the peer's CertificateVerify and Finished were checked.
+
+No theorem yet proves that for every reachable state. -/
 structure Completion where
   peerId : ByteArray
   peerChain : List ByteArray
@@ -830,6 +834,10 @@ def serverStep (config : Config) (state : State) (input : FlightMessage) : Excep
       let state ← receive state input
       complete config none state []
     | _ => throw .unexpectedMessage
+  | .complete =>
+    -- Data at an earlier level is a protocol violation; nothing else follows completion here.
+    checkLevel .application input
+    throw .unexpectedMessage
   | _ => throw .unexpectedMessage
 
 end EthLib.Networking.Quic.Tls.Handshake

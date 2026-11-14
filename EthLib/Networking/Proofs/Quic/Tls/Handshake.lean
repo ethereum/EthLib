@@ -12,7 +12,9 @@ Completion reports the peer ID of certificate authentication and reconstructs th
 
 Rejection theorems cover the libp2p ALPN check and the required client certificate.
 
-CertificateVerify and Finished are accepted exactly when they match the saved transcript.
+Finished is accepted exactly when it matches the saved transcript.
+
+CertificateVerify also needs an offered scheme and an authenticated certificate.
 
 No theorem here ties a completion to an earlier CertificateVerify over every reachable state.
 -/
