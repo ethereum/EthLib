@@ -159,12 +159,10 @@ theorem decryptWithKey_decryptWithKey {store : Store} {key secret : ByteArray}
     decryptWithKey { store with message := secret, checksum := passwordChecksum key secret } key =
       .ok store.message := by
   obtain ⟨hsize, hmatch⟩ := decryptWithKey_ok_inv h
-  have hcheck : (passwordChecksum key secret != passwordChecksum key secret) = false := by
-    simp
   simp [decryptWithKey, hsize, hmatch] at h
   simp only [Pure.pure, Except.pure] at h
   obtain rfl := Except.ok.inj h
-  simp [decryptWithKey, hsize, hcheck, Aes.ctr_ctr]
+  simp [decryptWithKey, hsize, Aes.ctr_ctr]
   rfl
 
 /-! ## The password that the reader prepares -/
