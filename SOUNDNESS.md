@@ -4076,8 +4076,8 @@ The block must be from Paris on, one number above its parent, later in time, and
 The parent's gas limit must be at least 5,000, and its excess blob gas and blob gas used must add up to less than `2^64`.
 The block with those transactions and their root must fit the size limit, which depends on the signatures.
 When the state holds the code of each account, its transition gives the state after the simulated block, or fails at a sender with code by EIP-3607, which the simulation skips.
-Under these hypotheses, the simulated header passes every check of a block against its parent (`checkBlock_simulateBlock`).
-Before Paris, the simulated difficulty is that of the base block, which the difficulty rule need not accept, so the theorem starts at Paris.
+The parent, fork, number, time, gas limit, blob gas and size hypotheses alone make the block with those transactions pass the checks of a block (`checkBlock_simulateBlock`).
+Before Paris, the simulated difficulty is that of the base block, which the difficulty rule need not accept, so both theorems start at Paris.
 
 Where the source is silent or conflicts with itself for the blocks, EthLib follows the fixtures, else decides:
 

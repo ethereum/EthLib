@@ -27,9 +27,9 @@ Without validation, a block whose base fee is not overridden has a base fee of 0
 
 That holds whatever the base fee of the block before it.
 
-With validation and no overrides, a simulated block passes the checks against its parent.
+With validation and no overrides, a simulated block from Paris on passes the checks of a block.
 
-It then agrees with the state transition, once its calls are signed.
+Its calls must then be signed, and it agrees with the state transition.
 
 Its transition may still fail at a sender with code.
 -/
@@ -703,7 +703,7 @@ private theorem calcExcessBlobGas_le_add {fork : Fork} {schedule : BlobSchedule}
 private theorem Transaction.gas_unsigned (tx : Transaction) : tx.unsigned.gas = tx.gas := by
   cases tx <;> rfl
 
-/-- A check with the sender given passes the validity rules and the gas rules of the block. -/
+/-- A check with the sender given that succeeds passes the validity rules and the gas rules. -/
 private theorem checkInclusion_some_ok {fork : Fork} {chainId : UInt64}
     {env : Evm.BlockEnvironment fork} {used : BlockGas} {state : State.TransactionState}
     {tx : Transaction} {sender : Address} {inc : Included}
@@ -723,7 +723,9 @@ private theorem checkInclusion_some_ok {fork : Fork} {chainId : UInt64}
 
 /-- A step of a simulated body keeps its execution gas and its state gas within the gas limit.
 
-The step has its sender given, keeps each precompile and lifts only the cap on gas. -/
+The step has its sender given, keeps each precompile and lifts only the cap on gas.
+
+The gas limit of its transaction is at most `2^32 - 1`, and the counts before it fit the limit. -/
 private theorem applyTransaction_simulated_gas {fork : Fork} {env : Evm.BlockEnvironment fork}
     {index : Nat} {before after : BodyOutput fork} {tx : Transaction} {sender : Address}
     {overrides : BodyOverrides} (hs : overrides.senders index = some sender)
@@ -759,7 +761,9 @@ private theorem applyTransaction_simulated_gas {fork : Fork} {env : Evm.BlockEnv
 
 /-- A simulated body keeps its execution gas and its state gas within the gas limit.
 
-Each transaction has its sender given, and has a gas limit of at most `2^32 - 1`. -/
+Each transaction has its sender given, and has a gas limit of at most `2^32 - 1`.
+
+The body keeps each precompile and lifts only the cap on gas. -/
 private theorem applyTransactions_simulated_gas {fork : Fork} {env : Evm.BlockEnvironment fork}
     {body : BodyState} {txs : List Transaction} {overrides : BodyOverrides}
     {out : BodyOutput fork} (hs : ∀ i < txs.length, ∃ sender, overrides.senders i = some sender)
@@ -847,9 +851,11 @@ private theorem simulateBlock_valid_header {chain chain' : BlockChain} {base : R
     exact ⟨parent, parentHash, filled.1, result, hash, hP, hph, hResult, rfl⟩
   · simp [throw, throwThe, MonadExceptOf.throw] at h
 
-/-- From Paris, a block without ommers that fits the size limit passes its checks.
+/-- From Paris on, a block without ommers that fits the size limit passes its checks.
 
-Its header must pass the checks against its parent, the last recent block. -/
+Its parent is the last recent block, at a fork no later than its own.
+
+Its header must pass the checks against that parent. -/
 private theorem checkBlock_of_checkHeader {fork : Fork} {config : ChainConfig}
     {recent : List RecentBlock} {block : Block fork Transaction} {parent : RecentBlock}
     (hSize : (do validateBlockSize (← bodyItems block)) = .ok ())
@@ -866,11 +872,13 @@ private theorem checkBlock_of_checkHeader {fork : Fork} {config : ChainConfig}
     ↓reduceIte, hHeader, daoExtraDataValid, hNot, hOmmers, List.isEmpty_nil, bind, Except.bind]
   rfl
 
-/-- With validation and no overrides, a simulated block passes the checks against its parent.
+/-- With validation and no overrides, a simulated block passes the checks of a block.
 
-The parent is the last block of the chain, from London on, at a fork no later than the block's.
+Its calls must then be signed.
 
-The block is from Paris on, its number is one more than the parent's, and its time is later.
+The parent must be the last block of the chain, from London on, at a fork no later than the block's.
+
+The block must be from Paris on, one number above the parent, and later in time.
 
 Its time must fit the 256 bits of the header.
 
@@ -878,7 +886,7 @@ The parent's gas limit must be at least 5,000, the least that the gas limit rule
 
 The excess blob gas and the blob gas used of the parent must add up to less than `2^64`.
 
-The block with the transactions `txs` and their root `root` must fit the size limit.
+The block takes the transactions `txs` and any root `root`, and must fit the size limit.
 
 Each of `txs` is the signed form of a call, with a gas limit of at most `2^32 - 1`. -/
 theorem checkBlock_simulateBlock {chain chain' : BlockChain} {base parent : RecentBlock}
@@ -1053,9 +1061,9 @@ Each gas limit must be at most `2^32 - 1`, the cap from Glamsterdam that a simul
 
 The blob gas must fit the 64 bits of the header, which a large blob schedule of a chain allows.
 
-The parent is the last block of the chain, from London on, at a fork no later than the block's.
+The parent must be the last block of the chain, from London on, at a fork no later than the block's.
 
-The block is from Paris on, its number is one more than the parent's, and its time is later.
+The block must be from Paris on, one number above the parent, and later in time.
 
 Its time must fit the 256 bits of the header.
 
@@ -1063,7 +1071,7 @@ The parent's gas limit must be at least 5,000, the least that the gas limit rule
 
 The excess blob gas and the blob gas used of the parent must add up to less than `2^64`.
 
-The block with `txs` and their root `root` must fit the size limit, which the signatures change.
+The block with `txs` and their root `root` must fit the size limit, which depends on the signatures.
 
 That block has the gas used, the other roots and the logs Bloom of the simulated block.
 
