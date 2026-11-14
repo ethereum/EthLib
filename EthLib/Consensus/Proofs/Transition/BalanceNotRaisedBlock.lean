@@ -744,18 +744,9 @@ private theorem Kept.foldlM {index : Nat} {α ε : Type}
     {start : BeaconState preset fork} {items : List α}
     (each : ∀ u x v, x ∈ items → Kept index start u → step u x = .ok v → Kept index u v) :
     ∀ {first last : BeaconState preset fork}, Kept index start first →
-      items.foldlM step first = .ok last → Kept index start last := by
-  induction items with
-  | nil =>
-    intro first last held computed
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ held
-  | cons item rest more =>
-    intro first last held computed
-    rw [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨middle, stepped, folded⟩ := computed
-    exact more (fun u x v member => each u x v (List.mem_cons_of_mem _ member))
-      (held.trans (each _ _ _ List.mem_cons_self held stepped)) folded
+      items.foldlM step first = .ok last → Kept index start last :=
+  foldlM_ok_invariant_of_mem (Kept index start)
+    (fun _ _ _ member held computed => held.trans (each _ _ _ member held computed))
 
 /-- A slashing keeps what the proposer of the slot reads. -/
 private theorem steady_slashValidator {slashedIndex : ValidatorIndex}
