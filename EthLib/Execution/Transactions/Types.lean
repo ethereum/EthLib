@@ -249,6 +249,14 @@ A legacy transaction exists from Frontier. -/
 def fork (t : Transaction) : Fork :=
   (typeFork t.type).getD .frontier
 
+/-- The transaction with a signature of 0, as a simulation runs a call. -/
+def unsigned : Transaction → Transaction
+  | .legacy tx => .legacy { tx with v := 0, r := 0, s := 0 }
+  | .accessList tx => .accessList { tx with yParity := 0, r := 0, s := 0 }
+  | .feeMarket tx => .feeMarket { tx with yParity := 0, r := 0, s := 0 }
+  | .blob tx => .blob { tx with yParity := 0, r := 0, s := 0 }
+  | .setCode tx => .setCode { tx with yParity := 0, r := 0, s := 0 }
+
 end Transaction
 
 /-- Why a transaction is not valid. -/
