@@ -4222,6 +4222,31 @@ The code 802 names a minimum that the node configures.
 The codes 805, 807 and 808 name values that the decoder already rejects.
 The code 1000 names a transaction that the node already knows, and the codes `-32000` to `-32006` name no single condition.
 
+`debug_traceTransaction`, `debug_traceBlockByNumber` and `debug_traceBlockByHash` of [`trace.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/debug/trace.yaml) return the trace of the opcode logger, whose shape [`opcode-tracer.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/opcode-tracer.yaml) fixes (`Execution/Rpc/Trace.lean`, `Execution/Rpc/TraceView.lean`).
+The trace is an observer of the one interpreter: the frame loop, the message runs and the transaction runs take an observer of the steps, and the runs of the rest of EthLib are the instances with no observer (`processMessageCall_unfold`, `runTransaction_unfold`, `processTransaction_unfold`, `Proofs/Transactions/Unfold.lean`).
+An observer that only records in a state leaves the run unchanged once the state is dropped (`processTransactionWith_modify`, `Proofs/Transactions/Observe.lean`), so the traced run gives what the run gives, for every configuration and bound (`traceRun_output`, `Proofs/Rpc/Trace.lean`).
+Two recording observers related by a map of their states give related runs (`runFrameWith_map`, `processTransactionWith_map`).
+With no bound, the trace has one entry for each step of a frame with code, as a counter of those steps sees the same run (`traceRun_count`).
+That count includes the STOP past the end of the code, which the official fixtures record; a frame with no code has no step, so a plain transfer gives no entry.
+Before Glamsterdam, between two consecutive entries at one depth, where the first starts no message and did not fail, the gas falls by exactly the cost of the first (`traceRun_gas`, `Proofs/Rpc/TraceGas.lean`).
+A transaction that the body of a block runs has a trace (`traceTransaction_ok`), and from Byzantium its receipt says it succeeded exactly when the trace says it did not fail (`traceTransaction_failed`).
+The Python suite runs the 13 vendored `tests/debug_trace*` fixtures; each success fixture is `speconly`, and EthLib matches it field for field, apart from `refund`, which the fixtures leave out.
+
+The source leaves these points open, and EthLib picks:
+- `failed` counts every exceptional halt, while the schema names a revert and a lack of gas.
+- `gasCost` is the gas that the step removes from its frame; a step that starts a message counts the gas that it passes, and a call that starts none counts only its price.
+- A step that fails counts all the gas left, which its halt burns: the schema asks for the price on success, which a failed step does not give.
+- From Glamsterdam, `gas` and `gasCost` count execution gas only, without the reservoir of EIP-8037.
+- `refund` adds the counters of the frame and of its callers, and is always given, as the schema recommends; it leaves out the refund of EIP-7702 authorizations, which no step shows, and a negative total counts as 0.
+- `stack`, `memory` and `returnData` are those before the step; empty memory and empty return data are left out, as the fixtures do.
+- `storage` holds, at SLOAD and SSTORE, every slot of the current account that the trace has seen, with its value after the last step that read or wrote it; a failed step adds no slot.
+- A byte that is no opcode at the fork is `INVALID`, the name that EIP-141 gives to `0xfe`, and `0x44` is `DIFFICULTY` before Paris, by EIP-4399.
+- The text of `error` is EthLib's own; the source fixes none.
+- `gas` of the trace is the gas used after the refund.
+- Block 0 fails with `-32000`, the code of the fixture `trace-genesis.io`; a block whose parent is not a canonical block of the view, and a number below its lowest block, fail with `4444`; an unknown block or transaction fails with `-32000`.
+- A named tracer fails as an invalid parameter, since the source puts named tracers out of its scope; `timeout`, `debug` and `tracerConfig` change no answer.
+- The traced block replays the start of the body, then each transaction twice, once traced and once plain; no theorem yet ties that replay to the body.
+
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 
