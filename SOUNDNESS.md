@@ -4502,11 +4502,38 @@ The answers that hand a validator its data are in `Consensus/BeaconApi/Validator
 `aggregateAttestation_committeeBits_of_electra` shows that from Electra its committee bits mark the requested committee alone.
 `aggregateAttestation_valid_of_lt_electra` and `aggregateAttestation_valid_of_electra` show that an aggregate of distinct honest messages passes the check of an indexed attestation, when the registry holds each signer's key and the secret keys do not sum to zero.
 `produceSyncCommitteeContribution_bits` shows that a bit of a contribution is set exactly when a message of the slot and root comes from a validator with the key of that seat.
+`aggregateAttestation_error_iff_of_lt_electra` states when the aggregate answer refuses before Electra with a code other than 500, the code of an internal error.
+It refuses with code 404 exactly when no attestation has the requested data root, slot and committee index.
+It refuses with code 503 exactly when the block of the first match is optimistic, and never with code 400.
+`aggregateAttestation_error_iff_of_electra` states the same from Electra, for the single attestations.
+From Electra it also refuses with code 400 exactly when the block of the first match is verified and the index is out of range.
+That is, the committee index is not below `MAX_COMMITTEES_PER_SLOT`.
+A lower index never gives code 400, even when the epoch has fewer committees.
+`produceSyncCommitteeContribution_error_iff` states when the contribution answer refuses with a code other than 500.
+It refuses with code 400 exactly when the slot is not that of the state, or the subcommittee index names no subnet.
+Else it refuses with code 503 exactly when the root is optimistic.
+Else it refuses with code 404 exactly when no message of the slot on the root comes from a member of the subcommittee.
+A member is a known validator with a key of the subcommittee.
+That refusal also needs the sync committee of the next slot, which `syncCommitteeAtNextSlot_eq` gives at every slot but the last.
+The three theorems share `checkVerified_bind_error_iff`.
+After the check of a block, an answer refuses with code 503 for an optimistic block, and else as the rest does.
+`aggregateAttestationResponse_error_iff` and `syncCommitteeContributionResponse_error_iff` lift these codes to the responses of the two endpoints.
+`apiJsonOr500_error_code` shows that writing the value of an answer as JSON fails only with code 500.
+`syncCommitteeContributionResponse_of_lt_altair` shows that before Altair the contribution response is the error with code 400 that names Altair.
+The source requires code 503 when "the block identified by the response `beacon_block_root` is optimistic".
+It requires code 404 when "no attestation is available for the requested `attestation_data_root`".
+It requires the same when "no sync committee contribution is available for the requested `beacon_block_root`".
+It lists code 400 only as "Invalid request syntax.", so the cases of code 400 are a choice of EthLib.
+The source requires code 404 for the data root alone, so code 404 for another slot or committee is a choice of EthLib.
+So is the order of the checks, which picks one code when two apply.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_validator_data.py`) builds stores from the pinned Gloas fork choice cases.
 It checks the attestation data at the slot of the head and after it, where the index signals the payload, and codes 400 and 503.
 It checks the payload attestation data of a slot with a block, and none for a slot without one.
 It checks the attestation data index of Deneb, Electra and Fulu stores, and code 400 for payload attestation data before Gloas.
-It checks the aggregates and contributions against bytes it builds itself, and codes 400, 404 and 503; no theorem states these error codes.
+It checks the aggregates and contributions against bytes it builds itself.
+It checks codes 404 and 503 for the aggregate, and codes 400, 404 and 503 for the contribution.
+It checks the codes of the aggregate before Electra only, so only the theorems speak for the single attestations.
+No theorem states when these answers refuse with code 500.
 The issue's single matching and validity theorems are split by fork; from Electra the union of bits is stated as the set of attesters.
 
 The light client answers are in `Consensus/BeaconApi/LightClient.lean`: the bootstrap of a block, the updates of a range of periods, and the latest finality and optimistic updates.
