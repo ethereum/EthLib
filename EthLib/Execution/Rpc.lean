@@ -25,6 +25,7 @@ public import EthLib.Execution.Rpc.Estimate
 public import EthLib.Execution.Rpc.Simulate
 public import EthLib.Execution.Rpc.Simulate.Blocks
 public import EthLib.Execution.Rpc.Methods
+public import EthLib.Execution.Rpc.Trace
 
 /-!
 # `EthLib.Execution.Rpc`
