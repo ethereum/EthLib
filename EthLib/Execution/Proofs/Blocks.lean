@@ -33,6 +33,7 @@ public import EthLib.Execution.Proofs.Blocks.Replay
 public import EthLib.Execution.Proofs.Blocks.Rewards
 public import EthLib.Execution.Proofs.Blocks.Requests
 public import EthLib.Execution.Proofs.Blocks.Roots
+public import EthLib.Execution.Proofs.Blocks.SimulatedLogs
 public import EthLib.Execution.Proofs.Blocks.StateAborts
 public import EthLib.Execution.Proofs.Blocks.Supply
 public import EthLib.Execution.Proofs.Blocks.SystemCall

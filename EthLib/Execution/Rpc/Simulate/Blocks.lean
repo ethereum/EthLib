@@ -404,32 +404,52 @@ def callResultJson (result : TransactionResult) (gasUsed : Nat) (logs : List Log
     Json.mkObj ([("returnData", dataJson [])] ++ common ++
       [("status", quantityJson 0), ("error", rpcErrorJson (callResultError e result.output))])
 
+/-- The logs that a call reports, from its receipt and its result.
+
+With transfers traced, they are the logs that a simulation reports.
+
+Before Glamsterdam, these add a log from `0xee…ee` for each move of ether.
+
+A move of 0 wei, or from an account to itself, adds none.
+
+Without traced transfers, they are the logs of the receipt. -/
+def callLogs {fork : Fork} (trace : Bool) (receipt : Receipt fork) (result : TransactionResult) :
+    List Log :=
+  if trace then result.simulatedLogs else receipt.logs
+
+/-- The number of logs that the calls before `index` report, with transfers traced or not. -/
+def SimulatedBlock.firstLog (b : SimulatedBlock) (trace : Bool) (index : Nat) : Nat :=
+  (((b.record.receipts.zip b.results).take index).map fun (receipt, result) =>
+    (callLogs trace receipt.2 result).length).sum
+
+/-- The log objects that the call at `index` reports, with the hash `hash` of its transaction. -/
+def SimulatedBlock.callLogInfos (b : SimulatedBlock) (trace : Bool) (index : Nat) (hash : Hash32)
+    (receipt : Receipt b.record.fork) (result : TransactionResult) : List LogInfo :=
+  b.record.logInfos index (b.firstLog trace index) hash (callLogs trace receipt result)
+
 /-- The results of the calls of a simulated block as JSON, in order.
 
-The logs of a call are those of its receipt, numbered among all the logs of the block.
+The logs of a call are numbered among all the logs that the calls of the block report.
+
+With transfers traced, before Glamsterdam, each move of ether adds a log.
 
 The body gives one result per receipt, so no call is left out. -/
-def SimulatedBlock.callsJson (b : SimulatedBlock) : Except RpcError Json := do
+def SimulatedBlock.callsJson (b : SimulatedBlock) (trace : Bool := false) :
+    Except RpcError Json := do
   let r := b.record
   let calls := (r.block.transactions.zip (r.receipts.zip b.results)).zipIdx
-  let (_, _, items) ← calls.foldlM (init := (0, 0, ([] : List Json)))
-    fun (before, firstLog, items) ((tx, (_, receipt), result), index) => do
-      let hash ← (transactionHash tx).mapError fun _ =>
-        BlockRecord.encodingError "transaction hash"
-      let logs := receipt.logs.zipIdx.map fun (log, i) =>
-        { log, logIndex := firstLog + i, transactionIndex := index, transactionHash := hash
-          blockHash := r.hash, blockNumber := r.block.header.number
-          blockTimestamp := r.block.header.timestamp.toNat : LogInfo }
-      let item := callResultJson result (receipt.cumulativeGasUsed - before) logs
-      return (receipt.cumulativeGasUsed, firstLog + receipt.logs.length, items ++ [item])
+  let items ← calls.mapM fun ((tx, (_, receipt), result), index) => do
+    let hash ← (transactionHash tx).mapError fun _ => BlockRecord.encodingError "transaction hash"
+    let logs := b.callLogInfos trace index hash receipt result
+    return callResultJson result (receipt.cumulativeGasUsed - r.gasBefore index) logs
   return .arr items.toArray
 
 /-- A simulated block as a block object, with the objects of its transactions when asked for.
 
 Without validation, a call with a fee cap of 0 reports a gas price of 0, which it paid.
 
-It also holds the results of its calls. -/
-def SimulatedBlock.json (b : SimulatedBlock) (full : Bool) (validation : Bool) :
+It also holds the results of its calls, with traced transfers when asked for. -/
+def SimulatedBlock.json (b : SimulatedBlock) (full validation : Bool) (trace : Bool := false) :
     Except RpcError Json := do
   let r := b.record
   let size ← r.size
@@ -443,7 +463,7 @@ def SimulatedBlock.json (b : SimulatedBlock) (full : Bool) (validation : Bool) :
                    gasPrice := effectiveGasPrice
                      (if !validation && tx.maxFeePerGas == 0 then 0 else r.baseFee) tx, tx }
     else listJson hash32Json <$> r.transactionHashes
-  let calls ← b.callsJson
+  let calls ← b.callsJson trace
   return Json.mkObj (headerFields r.hash r.block.header ++
     blockFields size [] transactions r.block.withdrawals ++ [("calls", calls)])
 
@@ -451,6 +471,7 @@ def SimulatedBlock.json (b : SimulatedBlock) (full : Bool) (validation : Bool) :
 def ChainView.simulate (v : ChainView) (payload : SimulatePayload) (p : BlockParam)
     (choices : SimulateChoices) : Except RpcError Json := do
   let blocks ← v.simulateBlocks payload p choices
-  return .arr (← blocks.mapM (·.json payload.returnFullTransactions payload.validation)).toArray
+  let full := payload.returnFullTransactions
+  return .arr (← blocks.mapM (·.json full payload.validation payload.traceTransfers)).toArray
 
 end EthLib.Execution.Rpc

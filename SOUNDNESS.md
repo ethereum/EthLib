@@ -4134,13 +4134,24 @@ Where the source is silent or conflicts with itself for the blocks, EthLib follo
 - `maxUsedGas` is the gas used with no refund, so from Pectra it is at least the call data floor, as the fixtures show;
 - a failed call returns no data, and a revert puts its output in the `data` of its error, as the fixtures show, though the schema lists only a code and a message;
 - a failure other than a revert gets `-32015` with a message of EthLib's choice, which the source leaves to the client;
-- `traceTransfers` adds no log yet, so before Amsterdam the answer lacks the `0xeeee…eeee` transfer logs that the source asks for; every fixture of the pin is after Amsterdam, where EIP-7708 logs the transfers;
+- with `traceTransfers`, a transfer of 0 wei or from an account to itself gets no `0xeeee…eeee` log, as [EIP-7708](https://eips.ethereum.org/EIPS/eip-7708#specification) rules, which the notes leave open; this covers CALLCODE with value and SELFDESTRUCT to itself;
+- no fixture of the pin covers the `0xeeee…eeee` logs, since every simulated block of the fixtures is from Glamsterdam, so hand-built tests check them;
 - a revert error has the message "execution reverted", without the decoded reason that the fixtures add.
 
 Each simulated block holds the result of each call: the output of its message, its gas used before the refund, and its error.
 The body records them without changing anything else that it computes.
 From Byzantium, the status of a call result agrees with its receipt: the receipt succeeds exactly when the result has no error (`applyTransaction_status`, `Proofs/Blocks/Transition.lean`).
 A body has as many results as receipts (`applyTransactions_results_length`), and a refund never raises the gas used (`runTransaction_gasUsed_le`, `Proofs/Transactions/Process.lean`).
+
+Each frame also records the logs that a simulation reports with `traceTransfers` (`Execution/Evm/Call/TransferLog.lean`).
+They are its logs, with a log from `0xeeee…eeee` before Glamsterdam for each move of ether that EIP-7708 would log, in the order of execution.
+A frame that fails drops them with its logs.
+The flag is not an input of the blocks of a simulation, so they and their headers do not depend on it (`simulateBlocks_traceTransfers`, `Proofs/Rpc/SimulateCalls.lean`).
+The code of the receipts, their root and the bloom reads only the logs; no theorem yet states that the logs never depend on the simulated logs.
+Without the flag, a call reports the log objects of its receipt, with the same `logIndex` (`callLogInfos_false`).
+From Glamsterdam, a message that starts with equal lists of logs ends with equal lists (`simulatedLogs_processMessage`, `Proofs/Evm/Call/SimulatedLogs.lean`).
+So each result reports the logs of its receipt (`runBody_simulatedLogs`, `Proofs/Blocks/SimulatedLogs.lean`).
+A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`); no theorem yet lifts this to the whole answer.
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
