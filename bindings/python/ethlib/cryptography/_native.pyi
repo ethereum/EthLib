@@ -1445,6 +1445,18 @@ def ssz_hash_tree_root(type: str | dict[str, Any], value: dict[str, Any]) -> byt
     """The 32-byte hash tree root of a value of a type, both given in their tagged form."""
     ...
 
+def ssz_generalized_index(type: str | dict[str, Any], path: list[int | str]) -> int:
+    """The generalized index of the node that a path selects in the tree of a type."""
+    ...
+
+def ssz_merkle_proof(type: str | dict[str, Any], value: dict[str, Any], index: int) -> list[bytes]:
+    """The branch that proves the node at a generalized index of a value against its root."""
+    ...
+
+def ssz_merkleize_chunks(chunks: list[bytes], limit: int | None) -> bytes:
+    """The root of 32-byte chunks, in a tree padded to a power of two."""
+    ...
+
 def rlpx_ecies_encrypt(recipient: bytes, ephemeral: bytes, iv: bytes, shared_mac: bytes, message: bytes) -> bytes:
     """The ciphertext `R || iv || c || d` of `m` to the public key `recipient`."""
     ...

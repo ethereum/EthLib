@@ -37,8 +37,9 @@ The view also serves the submission `eth_sendRawTransaction`.
 The two block access-list methods run against the same chain and the `bal` files, since the pin has no `.io` fixture for them.
 The files of the other methods run through the readers of the parameters, without a chain.
 
-The files of `eth_simulateV1` are those that fail before the simulated blocks run, which the view checks.
-The other files of the method need the simulated blocks, which EthLib does not yet specify.
+The view runs every file of `eth_simulateV1`, and compares its error code or its blocks.
+One file is expected to fail, for the reason that `SOUNDNESS.md` gives.
+The results of the calls in each block are not yet specified, so the comparison leaves them out.
 
 The trie suite also checks each answer of `eth_getProof` against the state root of block 60.
 

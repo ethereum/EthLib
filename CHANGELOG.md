@@ -15,6 +15,11 @@ Not yet released.
   The keystore checksum theorems compare the checksum with `store.checksum` directly, and `checksumVector` is removed: use `passwordChecksum`.
   Nothing breaks in Python.
 
+- The execution RPC answers `eth_simulateV1` with its simulated blocks ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
+  The results of the calls are not yet in the blocks.
+  In Lean, `fillHeader`, `outputChecks_fillHeader` and `runBody_fillHeader` move from `EthLib.Engine` to `EthLib.Execution.Blocks`, and `SimulateChoices` gains `gasCap`.
+  Nothing breaks in Python.
+
 - In Lean, the block environment gains the field `blobGasPrice` ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
   A simulation sets the base fee per blob gas with it, and its default `none` keeps the price of the excess blob gas.
   Supply that field in positional constructors, or use structure notation with its default.
@@ -33,7 +38,6 @@ Not yet released.
   Nothing breaks in Python.
 
 - The execution RPC checks the requests of `eth_simulateV1` before their blocks run ([#2107](https://github.com/ethereum/EthLib/issues/2107)).
-  A request that passes the checks gets `-32603` until the simulated blocks are specified.
   In Lean, `call_unknown` requires the method name to differ from `eth_simulateV1`.
   Nothing breaks in Python: `rpc.apply_overrides` gives the state root after the account overrides of one block.
 
