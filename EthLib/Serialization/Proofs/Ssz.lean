@@ -119,6 +119,7 @@ public import EthLib.Serialization.Proofs.Ssz.RandomOracle
 public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 public import EthLib.Serialization.Proofs.Ssz.Typed.RootedList
 public import EthLib.Serialization.Proofs.Ssz.Typed.RootedValue
+public import EthLib.Serialization.Proofs.Ssz.LayoutRandomOracle
 
 /-!
 # `EthLib.Serialization.Proofs.Ssz`
