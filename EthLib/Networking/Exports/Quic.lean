@@ -114,6 +114,71 @@ derive_py_laws Frame.Ack
 derive_py Frame.Frame
 derive_py_laws Frame.Frame
 
+derive_py Tls.Extension
+derive_py_laws Tls.Extension
+derive_py Tls.ClientHello
+derive_py_laws Tls.ClientHello
+derive_py Tls.ServerHello
+derive_py_laws Tls.ServerHello
+derive_py Tls.CertificateEntry
+derive_py_laws Tls.CertificateEntry
+derive_py Tls.CertificateMessage
+derive_py_laws Tls.CertificateMessage
+derive_py Tls.CertificateRequest
+derive_py_laws Tls.CertificateRequest
+derive_py Tls.Message
+derive_py_laws Tls.Message
+derive_py Tls.KeyShareEntry
+derive_py_laws Tls.KeyShareEntry
+derive_py Tls.PayloadForm
+derive_py_laws Tls.PayloadForm
+derive_py Tls.Payload
+derive_py_laws Tls.Payload
+
+/-- Report local handshake codec errors without assigning a TLS alert. -/
+def handshakeResult {α : Type} (value : Except Tls.Wire.Error α) : Result α :=
+  value.mapError fun e => (e.code, reprStr e)
+
+/-- Encode one handshake message with its header and the caller's hash length, RFC 8446 §4. -/
+@[export eth_quic_tls_message_encode]
+def messageEncodeExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (hashLength, message) => do
+    let data ← handshakeResult (Tls.encode hashLength message)
+    return (⟨data.toArray⟩ : ByteArray)) args
+
+/-- Decode one complete message and return its fields and trailing bytes, RFC 8446 §4. -/
+@[export eth_quic_tls_message_decode]
+def messageDecodeExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (input : Nat × ByteArray) => do
+    let (hashLength, data) := input
+    let (message, rest) ← handshakeResult (Tls.decode hashLength data.toList)
+    return (message, (⟨rest.toArray⟩ : ByteArray))) args
+
+/-- Encode a structured extension payload without selecting an algorithm or protocol. -/
+@[export eth_quic_tls_payload_encode]
+def payloadEncodeExport (args : PyValue) : Result PyValue :=
+  pyExport (fun payload => handshakeResult (Tls.encodePayload payload)) args
+
+/-- Decode an extension in the payload form that its message context requires. -/
+@[export eth_quic_tls_payload_decode]
+def payloadDecodeExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (form, extension) => handshakeResult (Tls.decodePayload form extension)) args
+
+/-- Return SHA-256 transcript bytes and their hash from complete handshake messages (§4.4.1).
+
+A HelloRetryRequest replaces ClientHello1 with its synthetic `message_hash` message. -/
+@[export eth_quic_tls_transcript]
+def transcriptExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (messages : List ByteArray) => do
+    let result ← handshakeResult (Tls.transcript (messages.map ByteArray.toList))
+    return ((⟨result.bytes.toArray⟩ : ByteArray), result.hash)) args
+
+/-- Build the signed content of CertificateVerify from a SHA-256 transcript hash (§4.4.3). -/
+@[export eth_quic_tls_certificate_verify_input]
+def certificateVerifyInputExport (args : PyValue) : Result PyValue :=
+  pyExport (fun (server, digest) =>
+    pure (⟨(Tls.certificateVerifyInput server digest).toArray⟩ : ByteArray)) args
+
 /-- Encode a QUIC header, with checked lengths and packet-number bounds (RFC 9000 §17). -/
 @[export eth_quic_header_encode]
 def headerEncodeExport (args : PyValue) : Result PyValue :=

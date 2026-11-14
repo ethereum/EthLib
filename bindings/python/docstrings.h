@@ -1235,6 +1235,24 @@
 #define DOC_quic_tls_finished \
   "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."
 
+#define DOC_quic_tls_message_encode \
+  "Encode one handshake message with its header and the caller's hash length, RFC 8446 §4."
+
+#define DOC_quic_tls_message_decode \
+  "Decode one complete message and return its fields and trailing bytes, RFC 8446 §4."
+
+#define DOC_quic_tls_payload_encode \
+  "Encode a structured extension payload without selecting an algorithm or protocol."
+
+#define DOC_quic_tls_payload_decode \
+  "Decode an extension in the payload form that its message context requires."
+
+#define DOC_quic_tls_transcript \
+  "Return SHA-256 transcript bytes and their hash from complete handshake messages (§4.4.1)."
+
+#define DOC_quic_tls_certificate_verify_input \
+  "Build the signed content of CertificateVerify from a SHA-256 transcript hash (§4.4.3)."
+
 #define DOC_quic_protect \
   "Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4."
 

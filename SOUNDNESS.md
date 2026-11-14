@@ -810,10 +810,40 @@ The no-PSK SHA-256 schedule takes a shared secret and encoded transcripts from i
 `keySchedule_congr_hash` proves that the schedule reads each transcript only through its SHA-256 hash.
 `finished_ok` and `deriveSecret_ok` prove that the Finished value and Derive-Secret succeed, the latter for every label within the bounds of §7.1.
 The Python suite checks the secrets and Finished values of RFC 8448 §3.
-No result covers message parsing, negotiation, peer authentication or the Diffie-Hellman exchange.
+The schedule's results do not cover message parsing, negotiation, peer authentication or the Diffie-Hellman exchange.
 The schedule does not check the shared secret, and the SHA-384 schedule of TLS_AES_256_GCM_SHA384 is absent.
 The certificate, group and signature policy questions of [#2163](https://github.com/ethereum/EthLib/issues/2163) remain open.
 These results establish neither cryptographic security nor constant-time execution.
+
+### TLS 1.3 handshake codecs
+
+`decode_encode` and `encode_injective` (`Networking/Proofs/Quic/Tls/Messages.lean`) prove that every successfully encoded handshake message recovers its fields, with arbitrary trailing bytes, and that successful encodings are injective.
+The messages are ClientHello, ServerHello, EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify and Finished, with the layouts of RFC 8446 §4.
+The caller supplies the hash length of Finished.
+The codecs check field bounds, the fixed TLS 1.3 legacy fields and duplicate extension types.
+They preserve extension order, opaque certificate bytes, opaque extension data and unrecognized two-byte identifiers.
+
+`decodePayload_encodePayload` (`Networking/Proofs/Quic/Tls/Extensions.lean`) proves the round trip for the supported-versions, supported-groups, signature-algorithms, key-share, ALPN and opaque QUIC transport-parameter payload forms.
+The caller chooses the payload form from its message context; parsing a message alone does not validate these opaque payloads.
+
+The Python suite checks message layouts and payload bounds against the RFC wire formats.
+It also parses and re-encodes the RFC 8448 §3 trace.
+
+These codecs define no accepted cipher-suite, group, signature-scheme or libp2p certificate profile.
+They do not check negotiation, extension placement, required extensions, message order, key shares, certificate authentication, signatures or Finished values.
+
+### TLS 1.3 transcripts
+
+`Transcript.append` retains exactly the received bytes of one complete SHA-256 handshake message, including its four-byte header.
+The transcript proofs (`Networking/Proofs/Quic/Tls/Transcript.lean`) state that preservation and the HelloRetryRequest replacement of RFC 8446 §4.4.1.
+A retry replaces one saved ClientHello with a synthetic `message_hash`, then appends the received retry bytes.
+A retry after another message or a second retry is rejected.
+
+The Python suite checks the RFC 8448 §3 transcript and its SHA-256 hash with Python's SHA-256.
+It also checks the CertificateVerify signed content of RFC 8446 §4.4.3, including the zero separator and the role's context string.
+
+The client and server steps, QUIC CRYPTO reassembly and encryption-level checks are absent.
+The maintainer policy questions of [#2163](https://github.com/ethereum/EthLib/issues/2163) remain open.
 
 ### QUIC v1 packet protection
 
@@ -5341,12 +5371,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 515 operations and 49 size constants.
-The Python extension calls 515 of the operations and 49 of the constants.
+Lean exports 521 operations and 49 size constants.
+The Python extension calls 521 of the operations and 49 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11768 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1636), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (161), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (809), `x25519.c` (21), `xmss.c` (134).
+11844 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1644), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (221), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (817), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Cryptography.Hash.Tls13
+public import EthLib.Networking.Quic.Tls.Extensions
+public import EthLib.Networking.Quic.Tls.Transcript
 
 /-!
 # TLS 1.3 key schedule for SHA-256
@@ -19,7 +21,7 @@ After a HelloRetryRequest, the transcript starts with the `message_hash` message
 
 That message, with its handshake header, takes the place of ClientHello1.
 
-The functions do not parse messages, negotiate algorithms or authenticate a peer.
+The derivation functions do not parse messages, negotiate algorithms or authenticate a peer.
 
 They accept a shared secret of any length and do not check it.
 

@@ -12581,6 +12581,105 @@
    "docstring":
    "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4.\n\nDuring the handshake the secret is the sender's handshake traffic secret."},
   {"summary":
+   "Encode one handshake message with its header and the caller's hash length, RFC 8446 §4.",
+   "signature": "(hash_length: int, message: Any) -> bytes",
+   "operation": "EthLib.Networking.Quic.Exports.messageEncodeExport",
+   "method": "quic_tls_message_encode",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Tls.Wire.Error",
+     "codes":
+     [{"constructor": "truncated", "code": 1},
+      {"constructor": "length", "code": 2},
+      {"constructor": "trailing", "code": 3},
+      {"constructor": "constant", "code": 4},
+      {"constructor": "duplicateExtension", "code": 5},
+      {"constructor": "messageType", "code": 6},
+      {"constructor": "retry", "code": 7}]}],
+   "error_class": "TlsHandshakeError",
+   "docstring":
+   "Encode one handshake message with its header and the caller's hash length, RFC 8446 §4."},
+  {"summary":
+   "Decode one complete message and return its fields and trailing bytes, RFC 8446 §4.",
+   "signature": "(hash_length: int, data: bytes) -> tuple[Any, bytes]",
+   "operation": "EthLib.Networking.Quic.Exports.messageDecodeExport",
+   "method": "quic_tls_message_decode",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Tls.Wire.Error",
+     "codes":
+     [{"constructor": "truncated", "code": 1},
+      {"constructor": "length", "code": 2},
+      {"constructor": "trailing", "code": 3},
+      {"constructor": "constant", "code": 4},
+      {"constructor": "duplicateExtension", "code": 5},
+      {"constructor": "messageType", "code": 6},
+      {"constructor": "retry", "code": 7}]}],
+   "error_class": "TlsHandshakeError",
+   "docstring":
+   "Decode one complete message and return its fields and trailing bytes, RFC 8446 §4."},
+  {"summary":
+   "Encode a structured extension payload without selecting an algorithm or protocol.",
+   "signature": "(payload: Any) -> Any",
+   "operation": "EthLib.Networking.Quic.Exports.payloadEncodeExport",
+   "method": "quic_tls_payload_encode",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Tls.Wire.Error",
+     "codes":
+     [{"constructor": "truncated", "code": 1},
+      {"constructor": "length", "code": 2},
+      {"constructor": "trailing", "code": 3},
+      {"constructor": "constant", "code": 4},
+      {"constructor": "duplicateExtension", "code": 5},
+      {"constructor": "messageType", "code": 6},
+      {"constructor": "retry", "code": 7}]}],
+   "error_class": "TlsHandshakeError",
+   "docstring":
+   "Encode a structured extension payload without selecting an algorithm or protocol."},
+  {"summary":
+   "Decode an extension in the payload form that its message context requires.",
+   "signature": "(form: str, extension: Any) -> Any",
+   "operation": "EthLib.Networking.Quic.Exports.payloadDecodeExport",
+   "method": "quic_tls_payload_decode",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Tls.Wire.Error",
+     "codes":
+     [{"constructor": "truncated", "code": 1},
+      {"constructor": "length", "code": 2},
+      {"constructor": "trailing", "code": 3},
+      {"constructor": "constant", "code": 4},
+      {"constructor": "duplicateExtension", "code": 5},
+      {"constructor": "messageType", "code": 6},
+      {"constructor": "retry", "code": 7}]}],
+   "error_class": "TlsHandshakeError",
+   "docstring":
+   "Decode an extension in the payload form that its message context requires."},
+  {"summary":
+   "Return SHA-256 transcript bytes and their hash from complete handshake messages (§4.4.1).",
+   "signature": "(messages: list[bytes]) -> tuple[bytes, bytes]",
+   "operation": "EthLib.Networking.Quic.Exports.transcriptExport",
+   "method": "quic_tls_transcript",
+   "errors":
+   [{"type": "EthLib.Networking.Quic.Tls.Wire.Error",
+     "codes":
+     [{"constructor": "truncated", "code": 1},
+      {"constructor": "length", "code": 2},
+      {"constructor": "trailing", "code": 3},
+      {"constructor": "constant", "code": 4},
+      {"constructor": "duplicateExtension", "code": 5},
+      {"constructor": "messageType", "code": 6},
+      {"constructor": "retry", "code": 7}]}],
+   "error_class": "TlsHandshakeError",
+   "docstring":
+   "Return SHA-256 transcript bytes and their hash from complete handshake messages (§4.4.1).\n\nA HelloRetryRequest replaces ClientHello1 with its synthetic `message_hash` message."},
+  {"summary":
+   "Build the signed content of CertificateVerify from a SHA-256 transcript hash (§4.4.3).",
+   "signature": "(server: bool, digest: bytes) -> bytes",
+   "operation": "EthLib.Networking.Quic.Exports.certificateVerifyInputExport",
+   "method": "quic_tls_certificate_verify_input",
+   "errors": [],
+   "error_class": "TlsHandshakeError",
+   "docstring":
+   "Build the signed content of CertificateVerify from a SHA-256 transcript hash (§4.4.3)."},
+  {"summary":
    "Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4.",
    "signature":
    "(suite: str, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes) -> bytes",

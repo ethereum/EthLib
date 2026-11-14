@@ -1649,6 +1649,30 @@ def quic_tls_finished(secret: bytes, transcript: bytes) -> bytes:
     """Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."""
     ...
 
+def quic_tls_message_encode(hash_length: int, message: Any) -> bytes:
+    """Encode one handshake message with its header and the caller's hash length, RFC 8446 §4."""
+    ...
+
+def quic_tls_message_decode(hash_length: int, data: bytes) -> tuple[Any, bytes]:
+    """Decode one complete message and return its fields and trailing bytes, RFC 8446 §4."""
+    ...
+
+def quic_tls_payload_encode(payload: Any) -> Any:
+    """Encode a structured extension payload without selecting an algorithm or protocol."""
+    ...
+
+def quic_tls_payload_decode(form: str, extension: Any) -> Any:
+    """Decode an extension in the payload form that its message context requires."""
+    ...
+
+def quic_tls_transcript(messages: list[bytes]) -> tuple[bytes, bytes]:
+    """Return SHA-256 transcript bytes and their hash from complete handshake messages (§4.4.1)."""
+    ...
+
+def quic_tls_certificate_verify_input(server: bool, digest: bytes) -> bytes:
+    """Build the signed content of CertificateVerify from a SHA-256 transcript hash (§4.4.3)."""
+    ...
+
 def quic_protect(suite: str, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes) -> bytes:
     """Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4."""
     ...
