@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.ForkChoice.HonestDuties
 public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
+public import EthLib.Consensus.Proofs.ForkChoice.SharedAncestry
 import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 
 /-!
@@ -11,7 +12,7 @@ Honest stores run the same checks and execution engine from one anchor.
 
 When their held blocks agree at shared roots, the corresponding states agree too.
 
-Agreement is an explicit collision-exclusion hypothesis, not injectivity of hashing.
+The shared store dichotomy supplies agreement or names a collision, without hash injectivity.
 -/
 
 @[expose] public section
@@ -264,17 +265,6 @@ variable {config : Config} {checks : SignatureChecks} {sources : BlockSources pr
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
-/-- Honest stores agree on blocks at shared roots up to the given time.
-
-This excludes collisions among held blocks without assuming hash injectivity. -/
-def OneBlockPerRoot
-    (e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
-      genesisTimeMs) J) (last : ℕ) : Prop :=
-  ∀ v ∈ J, ∀ u ∈ J, ∀ n k, (e.world n).time ≤ last → (e.world k).time ≤ last →
-    ∀ (root : Root) left right,
-    ((e.world n).state v).blocks[root]? = some left →
-    ((e.world k).state u).blocks[root]? = some right → left = right
-
 /-- Validated delayed blocks pass the receiver's remaining handler checks.
 
 Synchrony supplies view membership, not success of carried votes inside onBlockWithVotes. -/
@@ -337,10 +327,10 @@ theorem Execution.targetState_fixedChecks {anchor : Store preset fork}
     exact ⟨base, slot, Store.blockState_ok_iff.mp held, mapError_ok_iff.mp boundary,
       by simpa only [lookaheadState] using computedOk⟩
 
-/-- Two honest stores agree on a target state they read after caching. -/
-theorem Execution.targetStates_eq_of_oneBlock {anchor : Store preset fork}
+/-- Two honest stores read equal cached target states, or their bounded stores name a collision. -/
+theorem Execution.targetStates_eq_or_collision {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (start : ∀ u ∈ J, e.start u = anchor) {last : ℕ} (oneBlock : OneBlockPerRoot e last)
+    (start : ∀ u ∈ J, e.start u = anchor) {last : ℕ}
     {u w : ValidatorIndex} (first : u ∈ J) (second : w ∈ J) {n k : ℕ}
     (nBound : (e.world n).time ≤ last) (kBound : (e.world k).time ≤ last)
     {target : Checkpoint} {leftStore rightStore : Store preset fork}
@@ -350,24 +340,34 @@ theorem Execution.targetStates_eq_of_oneBlock {anchor : Store preset fork}
     (leftRead : leftStore.checkpointState target = .ok left)
     (rightStored : ((e.world k).state w).storeTargetCheckpointState config checks target =
       .ok rightStore)
-    (rightRead : rightStore.checkpointState target = .ok right) : left = right := by
+    (rightRead : rightStore.checkpointState target = .ok right) : left = right ∨
+    ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ last ∧ (e.world m).time ≤ last ∧
+      ∃ root collision, Store.findBlockCollision ((e.world n).state u)
+        ((e.world m).state v) [root] = some collision := by
+  rcases Store.blocks_agree_or_collision
+      (fun i : ValidatorIndex × ℕ => (e.world i.2).state i.1)
+      (fun i => i.1 ∈ J ∧ (e.world i.2).time ≤ last) with agree | collision
+  swap
+  · obtain ⟨⟨u, n⟩, ⟨hu, hn⟩, ⟨v, m⟩, ⟨hv, hm⟩, root, collision, found⟩ := collision
+    exact .inr ⟨u, hu, v, hv, n, m, hn, hm, root, collision, found⟩
+  left
   obtain ⟨leftBase, leftSlot, leftFound, leftSlotOk, leftRun⟩ :=
     e.targetState_fixedChecks anchored start first leftStored leftRead
   obtain ⟨rightBase, rightSlot, rightFound, rightSlotOk, rightRun⟩ :=
     e.targetState_fixedChecks anchored start second rightStored rightRead
   have baseEq := e.blockStates_eq anchored first second (start u first) (start w second)
-    (oneBlock u first w second n k nBound kBound) leftFound rightFound
+    (agree (u, n) ⟨first, nBound⟩ (w, k) ⟨second, kBound⟩) leftFound rightFound
   have slotEq := Except.ok.inj (leftSlotOk.symm.trans rightSlotOk)
   subst rightBase
   subst rightSlot
   exact Except.ok.inj (leftRun.symm.trans rightRun)
 
-/-- Before Gloas, synchrony and compatible finality deliver a held block to an honest receiver.
+/-- Before Gloas, synchrony and compatible finality deliver a block or name a collision.
 
 Admission uses the separate handler-success hypothesis, not synchrony alone. -/
 theorem Execution.blocks_of_partiallySynchronous {GST Δ last : ℕ}
     (sync : e.PartiallySynchronous GST Δ) (preGloas : fork < .glamsterdam)
-    (oneBlock : OneBlockPerRoot e last) (admitted : BlocksAdmitted e GST Δ last)
+    (admitted : BlocksAdmitted e GST Δ last)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ u ∈ J, e.start u = anchor) {v u : ValidatorIndex} (honest : v ∈ J)
@@ -383,11 +383,22 @@ theorem Execution.blocks_of_partiallySynchronous {GST Δ last : ℕ}
     (final : ((e.world n).state v).getCheckpointBlock root
       ((e.world k).state u).finalizedCheckpoint.epoch =
         .ok ((e.world k).state u).finalizedCheckpoint.root) :
-    ((e.world k).state u).blocks[root]? = some block ∧
+    (((e.world k).state u).blocks[root]? = some block ∧
       ∀ epoch checkpointRoot,
         ((e.world k).state u).finalizedCheckpoint.epoch ≤ epoch →
         ((e.world n).state v).getCheckpointBlock root epoch = .ok checkpointRoot →
-        ((e.world k).state u).getCheckpointBlock root epoch = .ok checkpointRoot := by
+        ((e.world k).state u).getCheckpointBlock root epoch = .ok checkpointRoot) ∨
+    ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ last ∧ (e.world m).time ≤ last ∧
+      ∃ root collision, Store.findBlockCollision ((e.world n).state u)
+        ((e.world m).state v) [root] = some collision := by
+  rcases Store.blocks_agree_or_collision
+      (fun i : ValidatorIndex × ℕ => (e.world i.2).state i.1)
+      (fun i => i.1 ∈ J ∧ (e.world i.2).time ≤ last) with agree | collision
+  swap
+  · obtain ⟨⟨u, n⟩, ⟨hu, hn⟩, ⟨v, m⟩, ⟨hv, hm⟩, root, collision, found⟩ := collision
+    exact .inr ⟨u, hu, v, hv, n, m, hn, hm, root, collision, found⟩
+  have oneBlock v hv u hu n k hn hk := agree (v, n) ⟨hv, hn⟩ (u, k) ⟨hu, hk⟩
+  left
   have reached (w : ValidatorIndex) (h : w ∈ J) (i : ℕ) :=
     e.reachable (fun w hw => (start w hw).symm ▸ Store.Reachable.anchor anchored) i w h
   have ordered : n ≤ k := by

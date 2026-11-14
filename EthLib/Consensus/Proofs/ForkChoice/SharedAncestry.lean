@@ -73,6 +73,27 @@ private theorem eq_of_findBlockCollision_none {roots : List Root} {root : Root}
         · simp at none
       · exact ih none mem
 
+/-- Selected stores agree at shared roots, or a search names a collision between two of them. -/
+theorem blocks_agree_or_collision {ι : Type*}
+    (stores : ι → Store preset fork) (selected : ι → Prop) :
+    (∀ i, selected i → ∀ j, selected j → ∀ (root : Root)
+      (left right : BeaconBlock preset fork),
+      (stores i).blocks[root]? = some left →
+      (stores j).blocks[root]? = some right → left = right) ∨
+    ∃ i, selected i ∧ ∃ j, selected j ∧ ∃ root collision,
+      findBlockCollision (stores i) (stores j) [root] = some collision := by
+  classical
+  by_cases found : ∃ i, selected i ∧ ∃ j, selected j ∧ ∃ root collision,
+      findBlockCollision (stores i) (stores j) [root] = some collision
+  · exact .inr found
+  · refine .inl ?_
+    intro i hi j hj root left right heldLeft heldRight
+    have absent : findBlockCollision (stores i) (stores j) [root] = none := by
+      by_contra present
+      obtain ⟨collision, search⟩ := Option.ne_none_iff_exists'.mp present
+      exact found ⟨i, hi, j, hj, root, collision, search⟩
+    exact eq_of_findBlockCollision_none absent (by simp) heldLeft heldRight
+
 /-- Without a collision, a store that holds a block at each root of a walk agrees on them. -/
 private theorem agree_of_findBlockCollision_none {node : ForkChoiceNode} {slot : Slot}
     {roots : List Root} (none : findBlockCollision first second roots = none)

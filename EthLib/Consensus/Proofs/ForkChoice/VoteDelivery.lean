@@ -521,10 +521,10 @@ private theorem Store.exists_storeTargetCheckpointState {store : Store preset fo
     simp [EthLib.Consensus.Store.storeTargetCheckpointState, cached, computed, bind, Except.bind,
       pure, Except.pure]
 
-/-- A duty attestation is accepted once its target block is held and its time checks pass. -/
+/-- A held, timely duty attestation is accepted, or bounded honest stores name a collision. -/
 theorem VoteAt.accepted_of_target_known {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (start : ∀ u ∈ J, e.start u = anchor) {last : ℕ} (oneBlock : OneBlockPerRoot e last)
+    (start : ∀ u ∈ J, e.start u = anchor) {last : ℕ}
     {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J)
     {slot : Slot} {committeeIndex : CommitteeIndex} {deadline n k : ℕ}
     {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
@@ -538,8 +538,17 @@ theorem VoteAt.accepted_of_target_known {anchor : Store preset fork}
     {targetBlock : BeaconBlock preset fork}
     (known : ((e.world k).state w).blocks[attestation.data.target.root]? = some targetBlock)
     (valid : ((e.world k).state w).validateOnAttestation config attestation false = .ok ()) :
-    (∃ after, ((e.world k).state w).onAttestation config checks attestation false = .ok after) ∧
-      ReadsAttestation config checks ((e.world k).state w) attestation indexed := by
+    ((∃ after, ((e.world k).state w).onAttestation config checks attestation false = .ok after) ∧
+      ReadsAttestation config checks ((e.world k).state w) attestation indexed) ∨
+    ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ last ∧ (e.world m).time ≤ last ∧
+      ∃ root collision, EthLib.Consensus.Store.findBlockCollision ((e.world n).state u)
+        ((e.world m).state v) [root] = some collision := by
+  rcases EthLib.Consensus.Store.blocks_agree_or_collision
+      (fun i : ValidatorIndex × ℕ => (e.world i.2).state i.1)
+      (fun i => i.1 ∈ J ∧ (e.world i.2).time ≤ last) with agree | collision
+  swap
+  · obtain ⟨⟨u, n⟩, ⟨hu, hn⟩, ⟨v, m⟩, ⟨hv, hm⟩, root, collision, found⟩ := collision
+    exact .inr ⟨u, hu, v, hv, n, m, hn, hm, root, collision, found⟩
   obtain ⟨sourceStore, sourceState, sourceStored, sourceRead, indexedOk, signed⟩ := vote.reads
   obtain ⟨base, boundary, baseFound, boundaryOk, ran⟩ :=
     e.targetState_fixedChecks anchored start honest sourceStored sourceRead
@@ -547,7 +556,7 @@ theorem VoteAt.accepted_of_target_known {anchor : Store preset fork}
     (fun u hu => (start u hu).symm ▸ EthLib.Consensus.Store.Reachable.anchor anchored) k w receiver
   obtain ⟨receiverBase, receiverBaseFound, _, _⟩ := reached.blockStatesFromParents known
   have baseEq := e.blockStates_eq anchored honest receiver (start v honest) (start w receiver)
-    (oneBlock v honest w receiver n k nBound kBound) baseFound receiverBaseFound
+    (agree (v, n) ⟨honest, nBound⟩ (w, k) ⟨receiver, kBound⟩) baseFound receiverBaseFound
   subst receiverBase
   have computed : ((e.world k).state w).computeCheckpointState config checks
       attestation.data.target = .ok sourceState := by
@@ -555,20 +564,23 @@ theorem VoteAt.accepted_of_target_known {anchor : Store preset fork}
       EthLib.Consensus.Store.blockState_ok_iff.mpr receiverBaseFound,
       boundaryOk, lookaheadState, bind, Except.bind, Except.mapError] using ran
   obtain ⟨withTarget, targetState, stored, read⟩ := Store.exists_storeTargetCheckpointState computed
-  have stateEq := e.targetStates_eq_of_oneBlock anchored start oneBlock honest receiver nBound
-    kBound sourceStored sourceRead stored read
+  rcases e.targetStates_eq_or_collision anchored start honest receiver nBound
+      kBound sourceStored sourceRead stored read with stateEq | collision
+  swap
+  · exact .inr collision
   subst targetState
   have committees := committees sourceStore sourceState sourceStored sourceRead
+  left
   refine ⟨⟨withTarget.updateLatestMessages indexed.attestingIndices.data.toList attestation, ?_⟩,
     ⟨withTarget, sourceState, stored, read, indexedOk, signed⟩⟩
   simp [EthLib.Consensus.Store.onAttestation, valid, stored, read, committees, indexedOk, signed,
     bind, Except.bind, Except.mapError, pure, Except.pure]
 
-/-- A delivered duty is recorded at its next slot boundary and retained at later events. -/
+/-- A delivered duty is recorded and retained, or bounded honest stores name a collision. -/
 theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
     (preGloas : fork < .glamsterdam) {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (start : ∀ u ∈ J, e.start u = anchor) {last : ℕ} (oneBlock : OneBlockPerRoot e last)
+    (start : ∀ u ∈ J, e.start u = anchor) {last : ℕ}
     {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J)
     {slot next : Slot} {committeeIndex : CommitteeIndex} {deadline n arrival endpoint : ℕ}
     {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
@@ -593,8 +605,11 @@ theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
     (notFuture : voted.slot ≤ slot)
     (checkpoint : ((e.world arrival).state w).getCheckpointBlock attestation.data.beaconBlockRoot
       attestation.data.target.epoch = .ok attestation.data.target.root) :
-    ∃ message, ((e.world endpoint).state w).latestMessages[v]? = some message ∧
-      attestation.data.target.epoch ≤ message.rank := by
+    (∃ message, ((e.world endpoint).state w).latestMessages[v]? = some message ∧
+      attestation.data.target.epoch ≤ message.rank) ∨
+    ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ last ∧ (e.world m).time ≤ last ∧
+      ∃ root collision, EthLib.Consensus.Store.findBlockCollision ((e.world n).state u)
+        ((e.world m).state v) [root] = some collision := by
   obtain ⟨_, target, _, targetKnown, _, _⟩ :=
     EthLib.Consensus.Store.isAncestor_of_getCheckpointBlock preGloas checkpoint
   have past : attestation.data.slot < next := UInt64.lt_iff_toNat_lt.mpr (by
@@ -607,12 +622,14 @@ theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
     (epoch.trans (congrArg (computeEpochAtSlot preset) dataSlot).symm)
     targetKnown votedKnown (dataSlot ▸ notFuture)
     (fun gloas => False.elim (Nat.not_le_of_lt preGloas gloas)) checkpoint past
-  obtain ⟨⟨after, accepted⟩, reads⟩ := vote.accepted_of_target_known anchored start oneBlock
-    honest receiver committees
-    (by have := vote.atTime; omega) arrivalBound targetKnown valid
+  rcases vote.accepted_of_target_known anchored start honest receiver committees
+      (by have := vote.atTime; omega) arrivalBound targetKnown valid with
+    ⟨⟨after, accepted⟩, reads⟩ | collision
+  swap
+  · exact .inr collision
   obtain ⟨message, latest, rank⟩ := vote.recorded_of_le sync honest receiver late upToDate
     accepted reads counted later
-  refine ⟨message, latest, ?_⟩
+  refine .inl ⟨message, latest, ?_⟩
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
   simpa [LatestMessage.rank, LatestMessage.ofAttestation, notGloas] using rank
 
