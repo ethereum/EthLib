@@ -253,6 +253,23 @@ def depositChurnCap (config : Config) (fork : Base.Fork) : Nat :=
   if .glamsterdam ≤ fork then config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS.toNat
   else config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
 
+/-- When the churn of deposits succeeds, it is at most the cap of its fork. -/
+theorem depositChurnLimit_le_cap {config : Config} {state : BeaconState preset fork}
+    {churn : Gwei} (computed : depositChurnLimit config state = .ok churn) :
+    churn.toNat ≤ depositChurnCap config fork := by
+  unfold depositChurnLimit at computed
+  unfold depositChurnCap
+  split at computed
+  · simp only [getActivationChurnLimit, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, rfl⟩ := computed
+    rw [UInt64.min_def]
+    split <;> rename_i chosen <;> simp only [UInt64.le_iff_toNat_le] at chosen <;> omega
+  · simp only [getActivationExitChurnLimit, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at computed
+    obtain ⟨_, _, rfl⟩ := computed
+    rw [UInt64.min_def]
+    split <;> rename_i chosen <;> simp only [UInt64.le_iff_toNat_le] at chosen <;> omega
+
 /-- The churn of deposits succeeds when the effective balances sum below `2^64`.
 
 The registry must stay within its limit.
@@ -263,20 +280,30 @@ theorem depositChurnLimit_exists_ok (config : Config) {state : BeaconState prese
     ∃ churn, depositChurnLimit config state = .ok churn ∧
       churn.toNat ≤ depositChurnCap config fork := by
   obtain ⟨total, totalOk, -⟩ := getTotalActiveBalance_exists_ok within summed
-  unfold depositChurnLimit depositChurnCap
+  suffices exists_ok : ∃ churn, depositChurnLimit config state = .ok churn by
+    obtain ⟨churn, churnOk⟩ := exists_ok
+    exact ⟨churn, churnOk, depositChurnLimit_le_cap churnOk⟩
+  unfold depositChurnLimit
   split
-  · refine ⟨min config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS (roundToIncrement preset
-      (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA (total / config.CHURN_LIMIT_QUOTIENT_GLOAS))),
-      by simp [getActivationChurnLimit, getExitChurnLimit, totalOk, bind, Except.bind,
-      pure, Except.pure], ?_⟩
-    rw [UInt64.min_def]
-    split <;> rename_i chosen <;> simp only [UInt64.le_iff_toNat_le] at chosen <;> omega
-  · refine ⟨min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT (roundToIncrement preset
-      (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA (total / config.CHURN_LIMIT_QUOTIENT))),
-      by simp [getActivationExitChurnLimit, getBalanceChurnLimit, totalOk, bind,
-      Except.bind, pure, Except.pure], ?_⟩
-    rw [UInt64.min_def]
-    split <;> rename_i chosen <;> simp only [UInt64.le_iff_toNat_le] at chosen <;> omega
+  · exact ⟨_, by simp [getActivationChurnLimit, getExitChurnLimit, totalOk, bind, Except.bind,
+      pure, Except.pure]; rfl⟩
+  · exact ⟨_, by simp [getActivationExitChurnLimit, getBalanceChurnLimit, totalOk, bind,
+      Except.bind, pure, Except.pure]; rfl⟩
+
+/-- From Electra, the pending deposits carry at most the churn carried before plus a cap.
+
+The cap is that of the churn of deposits of its fork. -/
+theorem processPendingDeposits_depositBalanceToConsume_le {config : Config}
+    {checks : SignatureChecks} {state after : BeaconState preset fork} {electra : .pectra ≤ fork}
+    (computed : processPendingDeposits config checks state electra = .ok after) :
+    (after.depositBalanceToConsume electra).toNat ≤
+      (state.depositBalanceToConsume electra).toNat + depositChurnCap config fork := by
+  obtain ⟨_, _, _, _, _, _, churnOk, availableOk, _, _, _, _, _, carriedEq⟩ :=
+    processPendingDeposits_pass computed
+  have capped := depositChurnLimit_le_cap churnOk
+  have value := (addChecked_ok_iff.mp (mapError_ok_iff.mp availableOk)).2
+  rw [carriedEq]
+  split <;> omega
 
 /-- A pass over the pending consolidations changes only the balances. -/
 private theorem passPendingConsolidations_fields {nextEpoch : Epoch} :
@@ -289,11 +316,12 @@ private theorem passPendingConsolidations_fields {nextEpoch : Epoch} :
         result.1.inactivityScores = state.inactivityScores ∧
         result.1.pendingDeposits = state.pendingDeposits ∧
         result.1.depositBalanceToConsume = state.depositBalanceToConsume ∧
-        result.1.historicalSummaries = state.historicalSummaries
+        result.1.historicalSummaries = state.historicalSummaries ∧
+        result.1.slashings = state.slashings ∧ result.1.historicalRoots = state.historicalRoots
   | [], _, _, computed => by
     simp only [passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   | consolidation :: rest, state, result, computed => by
     unfold passPendingConsolidations at computed
     simp only [bind, Except.bind, pure, Except.pure] at computed
@@ -307,7 +335,7 @@ private theorem passPendingConsolidations_fields {nextEpoch : Epoch} :
       exact (passPendingConsolidations_fields (consolidations := rest) recur :)
     split at computed
     · cases computed
-      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
     split at computed
     · cases computed
     split at computed
@@ -335,7 +363,8 @@ theorem processPendingConsolidations_fields {electra : .pectra ≤ fork}
       after.inactivityScores = state.inactivityScores ∧
       after.pendingDeposits = state.pendingDeposits ∧
       after.depositBalanceToConsume = state.depositBalanceToConsume ∧
-      after.historicalSummaries = state.historicalSummaries := by
+      after.historicalSummaries = state.historicalSummaries ∧
+      after.slashings = state.slashings ∧ after.historicalRoots = state.historicalRoots := by
   simp only [processPendingConsolidations, bind, Except.bind, pure, Except.pure] at computed
   split at computed
   · cases computed
@@ -491,22 +520,13 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
     (fun s : BeaconState preset fork => ParticipationMatches s ∧ InactivityScoresMatch s)
     (fun _ _ _ before step => applyPendingDeposit_matches step before.1 before.2) ⟨sized, scored⟩
     applies
-  have carried : (after.depositBalanceToConsume electra).toNat ≤
-      (state.depositBalanceToConsume electra).toNat + depositChurnCap config fork := by
-    obtain ⟨_, churn', available, _, _, _, churnOk'', availableOk', _, _, _, _, _, carriedEq⟩ :=
-      processPendingDeposits_pass computed
-    rw [churnOk] at churnOk''
-    cases churnOk''
-    have value := (addChecked_ok_iff.mp (mapError_ok_iff.mp availableOk')).2
-    rw [carriedEq]
-    split <;> omega
   have bounded := foldlM_ok_invariant
     (fun s : BeaconState preset fork => ∀ validator ∈ s.validators.data,
       validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator)
     (fun _ _ _ before step => applyPendingDeposit_capped step before) capped applies
   refine ⟨after, computed, (processPendingDeposits_registryLoad_le computed).trans loaded,
     balancesMatch_processPendingDeposits computed matched, ?_, frame.registryGrows, ?_, ?_,
-    ?_, ?_, carried, ?_⟩
+    ?_, ?_, processPendingDeposits_depositBalanceToConsume_le computed, ?_⟩
   · have total := processPendingDeposits_total_le computed
     unfold pendingDepositSum
     simpa only [electra, ↓reduceDIte] using total

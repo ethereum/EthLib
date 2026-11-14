@@ -709,39 +709,51 @@ theorem processPendingDeposits_pendingConsolidations {electra : .pectra ≤ fork
     (fun _ _ _ prior step => (applyPendingDeposit_pendingConsolidations step).trans prior) rfl
     folded
 
-/-- A new validator keeps the history summaries. -/
-theorem addValidatorToRegistry_historicalSummaries {pubkey : Cryptography.Bls.BLSPubkey}
+/-- A new validator keeps the slashed balances and the historical roots.
+
+It also keeps the historical summaries. -/
+theorem addValidatorToRegistry_history {pubkey : Cryptography.Bls.BLSPubkey}
     {credentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey credentials amount = .ok after) :
-    after.historicalSummaries = state.historicalSummaries := by
+    after.slashings = state.slashings ∧ after.historicalRoots = state.historicalRoots ∧
+      after.historicalSummaries = state.historicalSummaries := by
   unfold addValidatorToRegistry at computed
   split at computed
   · simp only [addValidatorToRegistryAltair, bind_ok_iff, liftAccessor_ok,
       pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
-    rfl
+    exact ⟨rfl, rfl, rfl⟩
   · split at computed <;> cases computed
-    rfl
+    exact ⟨rfl, rfl, rfl⟩
 
-/-- A pending deposit keeps the history summaries. -/
-theorem applyPendingDeposit_historicalSummaries {deposit : PendingDeposit}
+/-- A pending deposit keeps the slashed balances and the historical roots.
+
+It also keeps the historical summaries. -/
+theorem applyPendingDeposit_history {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
-    after.historicalSummaries = state.historicalSummaries := by
+    after.slashings = state.slashings ∧ after.historicalRoots = state.historicalRoots ∧
+      after.historicalSummaries = state.historicalSummaries := by
   rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨_, added⟩
-  · rfl
+  · exact ⟨rfl, rfl, rfl⟩
   · obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp raised
-    rfl
-  · exact addValidatorToRegistry_historicalSummaries added
+    exact ⟨rfl, rfl, rfl⟩
+  · exact addValidatorToRegistry_history added
 
-/-- The pending deposits of an epoch keep the history summaries. -/
-theorem processPendingDeposits_historicalSummaries {electra : .pectra ≤ fork}
+/-- The pending deposits of an epoch keep the slashed balances and the historical roots.
+
+They also keep the historical summaries. -/
+theorem processPendingDeposits_history {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after) :
-    after.historicalSummaries = state.historicalSummaries := by
+    after.slashings = state.slashings ∧ after.historicalRoots = state.historicalRoots ∧
+      after.historicalSummaries = state.historicalSummaries := by
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, folded, rfl⟩ :=
     processPendingDeposits_applied computed
-  exact foldlM_ok_invariant (fun b => b.historicalSummaries = state.historicalSummaries)
-    (fun _ _ _ prior step => (applyPendingDeposit_historicalSummaries step).trans prior) rfl
-    folded
+  refine foldlM_ok_invariant (fun b => b.slashings = state.slashings ∧
+      b.historicalRoots = state.historicalRoots ∧
+      b.historicalSummaries = state.historicalSummaries)
+    (fun _ _ _ prior step => ?_) ⟨rfl, rfl, rfl⟩ folded
+  obtain ⟨slashings, roots, summaries⟩ := applyPendingDeposit_history step
+  exact ⟨slashings.trans prior.1, roots.trans prior.2.1, summaries.trans prior.2.2⟩
 
 /-- The pending deposits of an epoch read a prefix of the queue, at most the limit per epoch.
 

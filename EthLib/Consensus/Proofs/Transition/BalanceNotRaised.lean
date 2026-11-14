@@ -167,7 +167,7 @@ theorem ValidatorsKept.exists_of_mem (kept : ValidatorsKept state after)
 
 /-- A step that keeps each validator, the balances, both pending queues and the scores.
 
-It also keeps the slashed balances, the flags and the history summaries.
+It also keeps the slashed balances, the flags, the historical roots and the historical summaries.
 
 It keeps the churn carried for deposits too. -/
 private def Kept (state after : BeaconState preset fork) : Prop :=
@@ -178,24 +178,25 @@ private def Kept (state after : BeaconState preset fork) : Prop :=
     after.slashings = state.slashings ∧
     after.previousEpochParticipation = state.previousEpochParticipation ∧
     after.currentEpochParticipation = state.currentEpochParticipation ∧
+    after.historicalRoots = state.historicalRoots ∧
     after.historicalSummaries = state.historicalSummaries ∧
     after.depositBalanceToConsume = state.depositBalanceToConsume
 
 /-- Each state keeps its own validators, balances, queues, scores and the other fields. -/
 private theorem Kept.refl (state : BeaconState preset fork) : Kept state state :=
-  ⟨ValidatorsKept.refl state, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  ⟨ValidatorsKept.refl state, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- Two steps that keep the validators, balances, queues, scores and the other fields keep them. -/
 private theorem Kept.trans {first second third : BeaconState preset fork}
     (one : Kept first second) (two : Kept second third) : Kept first third := by
   obtain ⟨validators, balances, deposits, consolidations, scores, slashings, previous, current,
-    summaries, churn⟩ := one
+    roots, summaries, churn⟩ := one
   obtain ⟨validators', balances', deposits', consolidations', scores', slashings', previous',
-    current', summaries', churn'⟩ := two
+    current', roots', summaries', churn'⟩ := two
   exact ⟨validators.trans validators', balances'.trans balances, deposits'.trans deposits,
     consolidations'.trans consolidations, scores'.trans scores, slashings'.trans slashings,
-    previous'.trans previous, current'.trans current, summaries'.trans summaries,
-    churn'.trans churn⟩
+    previous'.trans previous, current'.trans current, roots'.trans roots,
+    summaries'.trans summaries, churn'.trans churn⟩
 
 /-- A fold whose every step keeps the validators, balances, queues and scores keeps them. -/
 private theorem Kept.foldlM {α ε : Type}
@@ -210,7 +211,7 @@ private theorem kept_putValidator {position : Nat} {old validator : Validator}
     (inside : position < state.validators.data.size)
     (found : state.validators.data[position]? = some old) (same : ValidatorSame old validator) :
     Kept state (state.putValidator position inside validator) := by
-  refine ⟨fun i earlier atI => ?_, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  refine ⟨fun i earlier atI => ?_, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
     Array.getElem?_set]
   by_cases here : position = i
@@ -316,18 +317,21 @@ theorem processRegistryUpdates_kept (computed : processRegistryUpdates config st
 
 /-- The registry updates keep the slashed balances, the flags and the scores.
 
-They also keep the history summaries and the churn carried for deposits, at every fork. -/
+They also keep the historical roots and the historical summaries.
+
+They keep the churn carried for deposits, at every fork. -/
 theorem processRegistryUpdates_fields
     (computed : processRegistryUpdates config state = .ok after) :
     after.slashings = state.slashings ∧
       after.previousEpochParticipation = state.previousEpochParticipation ∧
       after.currentEpochParticipation = state.currentEpochParticipation ∧
       after.inactivityScores = state.inactivityScores ∧
+      after.historicalRoots = state.historicalRoots ∧
       after.historicalSummaries = state.historicalSummaries ∧
       after.depositBalanceToConsume = state.depositBalanceToConsume := by
-  obtain ⟨-, -, -, -, scores, slashings, previous, current, summaries, churn⟩ :=
+  obtain ⟨-, -, -, -, scores, slashings, previous, current, roots, summaries, churn⟩ :=
     kept_processRegistryUpdates computed
-  exact ⟨slashings, previous, current, scores, summaries, churn⟩
+  exact ⟨slashings, previous, current, scores, roots, summaries, churn⟩
 
 /-- A step that keeps each validator, both queues and the scores.
 
@@ -856,7 +860,7 @@ theorem balanceNotRaised_processEpochAltair {altair : .altair ≤ fork}
       split at edge <;>
         (simp only [pure, Except.pure, Except.ok.injEq] at edge
          subst edge
-         exact ⟨ValidatorsKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+         exact ⟨ValidatorsKept.refl _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
     · subst edge
       exact Kept.refl _
   have toReset : Lowered index rewarded reset :=
