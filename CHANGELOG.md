@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- `quorum_of_current_target` names the honest voters of `HonestTargetVotes` when the two-thirds test on the current target passes.
+  Three times their stake is at least twice the total active balance plus the margin of the count.
+  `quorum_of_count` and `headState_epoch_le` are now public.
+
 - `Execution.honestHeadsCover_of_historical_anchor` keeps a confirmed block on every honest head chain from the call to a horizon, by induction on time ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   It no longer assumes the root's own earlier coverage.
   It assumes the parent's coverage, the root's viability, the receivers' reads and exits, and a late duty majority.

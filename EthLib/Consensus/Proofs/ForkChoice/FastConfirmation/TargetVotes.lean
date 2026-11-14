@@ -55,7 +55,7 @@ def HonestTargetVotes
       3 * support.toNat + margin ≤ 3 * stake (fun v => balanceAt state v.toNat) voters
 
 /-- Instantiating honest count with successful support reads supplies its concrete voters. -/
-private theorem quorum_of_count {u : ValidatorIndex} {n margin : ℕ}
+theorem quorum_of_count {u : ValidatorIndex} {n margin : ℕ}
     {head : Root} (count : HonestTargetVotes e margin u n head)
     {state : BeaconState preset fork} {support : Gwei}
     (stateOk : ((e.world n).state u).getPulledUpHeadState config head = .ok state)
@@ -140,5 +140,37 @@ theorem quorum_of_no_conflicting_checkpoint {u : ValidatorIndex} {n margin : ℕ
       checkpointOk, members, ?_⟩
     simp only [UInt64.toNat_ofNat] at productNat
     omega
+
+/-- An accepted current-target test names the honest set of the count.
+
+Honest count is assumed, not established by the Boolean test.
+
+Three times the voters' stake is at least twice the total active balance plus `margin`. -/
+theorem quorum_of_current_target {u : ValidatorIndex} {n margin : ℕ}
+    {head : Root} (count : HonestTargetVotes e margin u n head)
+    (justified : ((e.world n).state u).willCurrentTargetBeJustified config head = .ok true) :
+    ∃ state total target slot first last participants, ∃ voters : Finset ValidatorIndex,
+      ((e.world n).state u).getPulledUpHeadState config head = .ok state ∧
+      getTotalActiveBalance state = .ok total ∧
+      ((e.world n).state u).getCurrentTarget config head = .ok target ∧
+      ((e.world n).state u).getCurrentSlot config = .ok slot ∧
+      ((e.world n).state u).getCurrentStoreEpoch config = .ok target.epoch ∧
+      computeStartSlotAtEpoch preset (computeEpochAtSlot preset slot) = .ok first ∧
+      subChecked slot 1 = .ok last ∧
+      ((e.world n).state u).getCommitteesBetweenSlots head first last = .ok participants ∧
+      ((e.world n).state u).getCheckpointBlock head target.epoch = .ok target.root ∧
+      (∀ v ∈ voters, v ∈ J ∧
+        v ∈ (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ∧
+        (SignsTarget e v target (e.world n).time ∨ v ∉ participants)) ∧
+      2 * total.toNat + margin ≤ 3 * stake (fun v => balanceAt state v.toNat) voters := by
+  obtain ⟨state, total, support, _, _, stateOk, totalOk, supportOk, -, -, -⟩ :=
+    Store.willCurrentTargetBeJustified_eq_ok_true_iff.mp justified
+  have twoThirds := Store.two_mul_le_three_mul_of_willCurrentTargetBeJustified stateOk totalOk
+    supportOk justified
+  obtain ⟨target, slot, first, last, participants, voters, targetOk, slotOk, epochOk, firstOk,
+    lastOk, participantsOk, checkpointOk, members, bound⟩ :=
+    quorum_of_count count stateOk supportOk
+  exact ⟨state, total, target, slot, first, last, participants, voters, stateOk, totalOk, targetOk,
+    slotOk, epochOk, firstOk, lastOk, participantsOk, checkpointOk, members, by omega⟩
 
 end EthLib.Consensus.Models.Network

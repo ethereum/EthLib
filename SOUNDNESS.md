@@ -3057,6 +3057,8 @@ The drift counts from the anchor, so on a long execution with enough churn since
 `SignsTarget`, in the network file above, describes a signing witness by a bounded time inside that count; it is not an additional hypothesis on its own.
 The count gives active honest voters, each of whom signs the target or lies outside the committees of the epoch so far, and three times their stake is at least three times the computed support plus the margin.
 `quorum_of_no_conflicting_checkpoint` takes that count as a hypothesis and, when the one-third test passes, applies it; no theorem derives the count from a bound on Byzantine stake, or shows that the target is justified.
+`quorum_of_current_target` applies the count in the same way when the two-thirds test passes.
+Then three times the voters' stake is at least twice the total active balance plus the margin of the count.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
