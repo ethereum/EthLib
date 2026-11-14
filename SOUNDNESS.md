@@ -2790,15 +2790,12 @@ They also leave out the check that the head of the slot before holds each block 
 They leave out the checks that a voting source or an unrealized justification is recent.
 They also leave out the calls to `willNoConflictingCheckpointBeJustified` and `willCurrentTargetBeJustified`, whose tests `FastConfirmation/Indicators.lean` states on their own.
 
-`Consensus/Proofs/ForkChoice/FastConfirmation/Checkpoints.lean` records those checkpoint checks.
-`Store.onFastConfirmation_checked` characterizes one successful call: it names the selected start,
-the checkpoint-field updates and the checks passed if the returned root is later than that start.
+`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` records those checkpoint checks through the same walks as its root-selection corollaries.
+`Store.onFastConfirmation_checked` characterizes one successful call: it names the selected start, the checkpoint-field updates and the checks passed if the returned root is later than that start.
 It assumes only success of the call, not parent-slot ordering, reachability or safety of a start.
-`Store.Checked` names the recent voting-source and justification tests, target-justification test
-and conflicting-checkpoint test that the applicable branch of the walk passes.
+`Store.Checked` names the recent voting-source and justification tests, target-justification test and conflicting-checkpoint test that the applicable branch of the walk passes.
 These are successful Boolean checks, not conclusions about future justification or honest heads.
-The general walk-member slot bound in `AncestorRoots.lean` assumes its initial accumulator is
-above the terminal block; these proofs discharge that condition with an empty accumulator.
+The general walk-member slot bound in `AncestorRoots.lean` assumes its initial accumulator is above the terminal block; these proofs discharge that condition with an empty accumulator.
 The planned conditional and accountable safety consumers under #1458 are not established here.
 
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
