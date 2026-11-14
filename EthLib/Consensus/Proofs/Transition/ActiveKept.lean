@@ -327,61 +327,10 @@ private theorem stepKeeps_applyExpectedWithdrawals {capella : .shapella ≤ fork
     {expected : ExpectedWithdrawals}
     (computed : applyExpectedWithdrawals state capella expected = .ok after) :
     StepKeeps state after := by
-  unfold applyExpectedWithdrawals at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := computed
-  have one : StepKeeps state applied := by
-    unfold applyWithdrawals at appliedOk
-    rw [← Array.foldlM_toList] at appliedOk
-    exact StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_applyWithdrawal ok) appliedOk
-  have indexedStep : StepKeeps applied indexed := by
-    unfold updateNextWithdrawalIndex at indexedOk
-    split at indexedOk
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at indexedOk
-      obtain ⟨_, _, rfl⟩ := indexedOk
-      exact StepKeeps.of_validators
-    · cases indexedOk
-      exact StepKeeps.refl _
-  have queued : ∀ kept : BeaconState preset fork,
-      StepKeeps kept (if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals kept gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else kept) := by
-    intro kept
-    split <;> exact StepKeeps.of_validators
-  have partials : ∀ kept : BeaconState preset fork,
-      StepKeeps kept (if electra : .pectra ≤ fork then
-        updatePendingPartialWithdrawals kept electra expected.processedPartialWithdrawalsCount
-      else kept) := by
-    intro kept
-    split <;> exact StepKeeps.of_validators
-  have swept : ∀ kept : BeaconState preset fork,
-      (if gloas : .glamsterdam ≤ fork then
-        updateNextWithdrawalBuilderIndex kept gloas expected.processedBuildersSweepCount
-      else pure kept) = .ok finished → StepKeeps kept finished := by
-    intro kept ok
-    split at ok
-    · unfold updateNextWithdrawalBuilderIndex at ok
-      dsimp only at ok
-      split at ok
-      · cases ok
-        exact StepKeeps.of_validators
-      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-        obtain ⟨_, _, rfl⟩ := ok
-        exact StepKeeps.of_validators
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ StepKeeps.refl _
-  have lastStep : StepKeeps finished after := by
-    unfold updateNextWithdrawalValidatorIndex at last
-    simp only [bind_ok_iff] at last
-    obtain ⟨_, _, last⟩ := last
-    split at last
-    · cases last
-    · cases last
-      exact StepKeeps.of_validators
-  exact one.trans <| indexedStep.trans <| (queued _).trans <| (partials _).trans <|
-    (swept _ sweptOk).trans lastStep
+  exact applyExpectedWithdrawals_of StepKeeps StepKeeps.refl (fun one two => one.trans two)
+    (fun ok => stepKeeps_applyWithdrawal ok)
+    (fun frame validators => StepKeeps.of_validators (congrArg (·.data) validators) frame.slot)
+    computed
 
 private theorem stepKeeps_processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
@@ -722,45 +671,8 @@ private theorem stepKeeps_passPendingDeposits {stop : PendingDeposit → Bool} {
       passPendingDeposits config checks stop nextEpoch available state processed count postponed
         deposits = .ok pass →
       StepKeeps state pass.1.state
-  | [], _, _, _, _, _, computed => by
-    simp only [passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact StepKeeps.refl _
-  | deposit :: rest, state, processed, count, postponed, pass, computed => by
-    unfold passPendingDeposits at computed
-    simp only [bind, Except.bind, pure, Except.pure] at computed
-    split at computed
-    · cases computed
-      exact StepKeeps.refl _
-    split at computed
-    · cases computed
-    split at computed
-    · split at computed
-      · cases computed
-      rename_i credited
-      split at computed
-      · cases computed
-      cases computed
-      exact (stepKeeps_applyPendingDeposit credited).trans
-        (stepKeeps_passPendingDeposits (deposits := rest) ‹_›)
-    split at computed
-    · split at computed
-      · cases computed
-      cases computed
-      exact stepKeeps_passPendingDeposits (deposits := rest) ‹_›
-    split at computed
-    · cases computed
-    split at computed
-    · cases computed
-      exact StepKeeps.refl _
-    split at computed
-    · cases computed
-    rename_i credited
-    split at computed
-    · cases computed
-    cases computed
-    exact (stepKeeps_applyPendingDeposit credited).trans
-      (stepKeeps_passPendingDeposits (deposits := rest) ‹_›)
+  := fun computed => passPendingDeposits_of StepKeeps StepKeeps.refl
+    (fun one two => one.trans two) (fun ok => stepKeeps_applyPendingDeposit ok) computed
 
 private theorem stepKeeps_processEpochAltair {altair : .altair ≤ fork}
     (computed : processEpochAltair config checks state altair = .ok after) :

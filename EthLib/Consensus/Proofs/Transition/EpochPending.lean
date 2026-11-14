@@ -630,6 +630,24 @@ theorem passPendingDeposits_applied {stop : PendingDeposit → Bool} {nextEpoch 
       rw [kept] at filtered
       simp only [List.filter_cons, known, notMoved, Bool.false_eq_true, ↓reduceIte, filtered]
 
+/-- A reflexive, transitive relation holds across a pass over the pending deposits.
+
+It must hold across each deposit that the pass applies. -/
+theorem passPendingDeposits_of
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (admit : ∀ {s t} {d : PendingDeposit},
+      applyPendingDeposit config checks s d = .ok t → R s t)
+    {stop : PendingDeposit → Bool} {nextEpoch : Epoch} {available : Gwei}
+    {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
+    {count : Nat} {postponed : Array PendingDeposit} {pass}
+    (computed : passPendingDeposits config checks stop nextEpoch available state processed count
+      postponed deposits = .ok pass) : R state pass.1.state := by
+  obtain ⟨_, _, _, facts⟩ := passPendingDeposits_applied computed
+  exact foldlM_ok_invariant (R state) (fun _ _ _ prior ok => trans prior (admit ok)) (refl _)
+    facts.applies
+
 /-- The pending deposits of an epoch read a prefix of the queue, at most the limit per epoch.
 
 They apply some of those in order, and move the others to the end of the queue in order.
