@@ -150,6 +150,7 @@ private theorem buyGas_parent {fork : Fork} {env : BlockEnvironment fork}
     {st st' : TransactionState} {a : Address} {t : Transaction}
     (h : buyGas env st a t = .ok st') : st'.parent = st.parent := by
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, h1, h2⟩ := bind_ok_iff.mp h
   rw [State.TransactionState.parent_modifyState h2,
     State.TransactionState.parent_incrementNonce h1]
@@ -240,10 +241,12 @@ theorem runTransaction_eq_transactionStart {fork : Fork} (Meter : Type) [GasMete
         tx.authorizations (paidWrites sender target tx)
       let gasLeft := output.gasLeft + output.reservoir
       let blockGas := transactionBlockGas fork sender tx gasLeft output.refund output.stateGasUsed
+      let gasBeforeRefund := gasUsed fork sender tx gasLeft 0
       let (state, gasUsed) ←
         (settleGas env output.state sender tx gasLeft output.refund).mapError .state
       let state ← (deleteAccounts fork state output).mapError .state
-      return ⟨state, gasUsed, blockGas, output.logs, output.error⟩) := by
+      return ⟨state, gasUsed, blockGas, output.logs, output.simulatedLogs, output.error,
+        output.output, gasBeforeRefund⟩) := by
   unfold runTransaction transactionStart
   simp only [bind_assoc, pure_bind]
 

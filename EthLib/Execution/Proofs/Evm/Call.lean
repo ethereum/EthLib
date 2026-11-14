@@ -33,6 +33,7 @@ public import EthLib.Execution.Proofs.Evm.Call.ReadsGrow
 public import EthLib.Execution.Proofs.Evm.Call.Rebuild
 public import EthLib.Execution.Proofs.Evm.Call.Run
 public import EthLib.Execution.Proofs.Evm.Call.Settled
+public import EthLib.Execution.Proofs.Evm.Call.SimulatedLogs
 public import EthLib.Execution.Proofs.Evm.Call.StateAborts
 public import EthLib.Execution.Proofs.Evm.Call.StateErrors
 public import EthLib.Execution.Proofs.Evm.Call.StaticMessage

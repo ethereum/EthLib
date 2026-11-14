@@ -128,9 +128,11 @@ def recentHashes (recent : List RecentBlock) : Except BlockError (List Hash32) :
 
 /-- The block environment of a block at `fork`, on the chain with configuration `config`.
 
-`hashes` are the hashes of the blocks before it, oldest first. -/
+`hashes` are the hashes of the blocks before it, oldest first.
+
+A simulation can set the base fee per blob gas. -/
 def blockEnvironment {fork : Fork} (config : ChainConfig) (hashes : List Hash32)
-    (header : Header fork) : BlockEnvironment fork where
+    (header : Header fork) (blobGasPrice : Option Nat := none) : BlockEnvironment fork where
   chainId := config.chainId
   coinbase := header.coinbase
   number := header.number
@@ -145,8 +147,22 @@ def blockEnvironment {fork : Fork} (config : ChainConfig) (hashes : List Hash32)
   slotNumber := header.slotNumber
   blobSchedule :=
     Fees.BlobBaseFee.chainBlobSchedule config fork header.number header.timestamp.toNat
+  blobGasPrice
 
 /-! ## The body -/
+
+/-- What a transaction of a body returns beside its receipt. -/
+structure TransactionResult where
+  /-- The output of its message: the data that it returned, or the data of its revert. -/
+  output : ByteArray
+  /-- The gas that it used before its refund, at least the call data floor from Pectra. -/
+  gasBeforeRefund : Nat
+  /-- The error that stopped its message, or none when the message succeeded. -/
+  error : Option EvmError
+  /-- The logs that a simulation with traced transfers reports for it, oldest first.
+
+  Every run computes them, and no rule of the block reads them. -/
+  simulatedLogs : List Log
 
 /-- What the body of a block gives, at `fork`. -/
 structure BodyOutput (fork : Fork) where
@@ -160,6 +176,8 @@ structure BodyOutput (fork : Fork) where
   receipts : List (UInt8 × Receipt fork)
   /-- The logs of the transactions, oldest first. -/
   logs : List Log
+  /-- The result of each transaction, oldest first, which no rule of the block reads. -/
+  results : List TransactionResult
 
 /-- The block state, with the writes of the body so far. -/
 def BodyOutput.block {fork : Fork} (output : BodyOutput fork) : BlockState :=
@@ -175,6 +193,8 @@ structure BodyOverrides where
   senders : Nat → Option Address := fun _ => none
   /-- The address of the precompile that a call to each address runs, if any. -/
   precompiles : Address → Option Address := some
+  /-- The rules of a transaction that the simulation lifts. -/
+  lifted : LiftedRules := {}
 
 /-- Run the transaction `tx`, the `index`-th of its block, after the transactions before it.
 
@@ -186,14 +206,17 @@ The block counts the gas of the transaction by its counts of gas.
 
 Its receipt adds up the gas used after the refunds, as EIP-8037 keeps it.
 
-Before Byzantium, its receipt holds the state root after it. -/
+Before Byzantium, its receipt holds the state root after it.
+
+It also records the result of the transaction. -/
 def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
     (before : BodyOutput fork) (tx : Transaction) (overrides : BodyOverrides := {}) :
     Except BlockError (BodyOutput fork) := do
   let included ← (checkInclusion env.chainId env before.gas
-    (.ofBlock before.block) tx (overrides.senders index)).mapError (.invalidTransaction index)
-  let out ← (processTransaction env before.block included tx overrides.precompiles).mapError
-    .aborted
+    (.ofBlock before.block) tx (overrides.senders index) overrides.lifted).mapError
+    (.invalidTransaction index)
+  let out ← (processTransaction env before.block included tx overrides.precompiles
+    overrides.lifted).mapError .aborted
   let body ← ((before.body.beginIndex (index + 1)).join out.state).mapError .state
   let gas := before.gas.add out.blockGas
   let cumulativeGasUsed := before.cumulativeGasUsed + out.gasUsed
@@ -203,7 +226,9 @@ def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
   return { body, gas, cumulativeGasUsed
            receipts :=
              before.receipts ++ [(tx.type, makeReceipt outcome cumulativeGasUsed out.logs.toList)]
-           logs := before.logs ++ out.logs.toList }
+           logs := before.logs ++ out.logs.toList
+           results := before.results ++
+             [⟨out.messageOutput, out.gasBeforeRefund, out.error, out.simulatedLogs.toList⟩] }
 
 /-- Run the transactions of a block in order, from the body so far. -/
 def applyTransactions {fork : Fork} (env : BlockEnvironment fork) (body : BodyState)
@@ -211,7 +236,7 @@ def applyTransactions {fork : Fork} (env : BlockEnvironment fork) (body : BodySt
     Except BlockError (BodyOutput fork) :=
   transactions.zipIdx.foldlM
     (fun before (tx, index) => applyTransaction env index before tx overrides)
-    ⟨body, .zero, 0, [], []⟩
+    ⟨body, .zero, 0, [], [], []⟩
 
 /-- Run a writing step on a block state, as a transaction of its own. -/
 def onBlock (block : BlockState)
@@ -398,14 +423,31 @@ The body reads none of the header fields that it gives: the roots, the gas count
 
 Nor does it read the requests hash and the block access list hash.
 
-So a builder can run it before it fills those fields. -/
-def runBody (chain : BlockChain) {fork : Fork} (block : Block fork Transaction) :
+So a builder can run it before it fills those fields.
+
+A simulation runs it with its overrides and its base fee per blob gas. -/
+def runBody (chain : BlockChain) {fork : Fork} (block : Block fork Transaction)
+    (overrides : BodyOverrides := {}) (blobGasPrice : Option Nat := none) :
     Except BlockError (BodyResult fork) := do
   let hashes ← recentHashes chain.recent
-  let env := blockEnvironment chain.config hashes block.header
-  let output ← applyBody chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩
+  let env := blockEnvironment chain.config hashes block.header blobGasPrice
+  let output ← applyBody chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩ overrides
   let roots ← outputRoots block.transactions block.withdrawals output output.block.applyChanges
   return ⟨output, roots⟩
+
+/-- A header with the fields that the body of its block gives, as after a build or a simulation. -/
+def fillHeader {fork : Fork} (header : Header fork) (output : BlockOutput fork)
+    (roots : OutputRoots) : Header fork :=
+  { header with
+    stateRoot := roots.state
+    transactionsRoot := roots.transactions
+    receiptRoot := roots.receipts
+    bloom := logsBloom output.logs
+    gasUsed := output.gas.gasUsed
+    withdrawalsRoot := fun _ => roots.withdrawals.getD 0
+    blobGasUsed := fun _ => output.gas.blob.toUInt64
+    requestsHash := fun _ => requestsHash output.requests
+    blockAccessListHash := fun _ => output.accessListHash.getD 0 }
 
 /-! ## The transition -/
 

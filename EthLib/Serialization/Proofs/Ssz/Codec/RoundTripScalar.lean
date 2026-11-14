@@ -98,7 +98,7 @@ theorem roundTrip_uint {width value : Nat} (bound : value < 2 ^ (8 * width)) :
     serialize (.uint width) (.uint value) >>= deserialize (.uint width)
       = .ok (.uint value) := by
   -- The value fits its width, so the encoder writes rather than refusing.
-  simp only [serialize, ite_eq_left bound]
+  simp only [serialize, ite_eq_left ((uintFits_iff width value).mpr bound)]
   show deserialize (.uint width) (uintBytes width value) = _
   -- The decoder's width check passes because the encoding is exactly that wide.
   simp [deserialize, uintBytes_size, readUint_uintBytes width value bound, Pure.pure, Except.pure]

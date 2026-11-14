@@ -68,13 +68,15 @@ def bucketInput (seed : Bytes32) (round bucket : Nat) : ByteArray :=
   ⟨(roundInput seed round).data ++ (uintToBytes 4 bucket).toArray⟩
 
 /-- The 256 bits of a round that decide the positions of one bucket of 256 positions. -/
-def bucketBits (seed : Bytes32) (round bucket : Nat) : ByteArray :=
-  Cryptography.Hash.Sha256.hash (bucketInput seed round bucket)
+def bucketBits (seed : Bytes32) (round bucket : Nat) : Bytes32 :=
+  Cryptography.Hash.Sha256.hash32 (bucketInput seed round bucket)
 
 /-- The bit of a position in the bits of its bucket, least significant first in each byte. -/
-def bitAt (bits : ByteArray) (position : Nat) : Bool :=
-  -- The byte is read in place: the array of the bytes would be a copy of all of them.
-  (bits[position % 256 / 8]?.getD 0) >>> (position % 8).toUInt8 &&& 1 == 1
+def bitAt (bits : Bytes32) (position : Nat) : Bool :=
+  have h : position % 256 / 8 < 32 := by
+    have := Nat.mod_lt position (by decide : 0 < 256)
+    omega
+  bits[position % 256 / 8] >>> (position % 8).toUInt8 &&& 1 == 1
 
 /-- One round of swap-or-not on one index.
 
@@ -91,7 +93,7 @@ Each bucket of 256 positions is hashed once for the round. -/
 def round (seed : Bytes32) (count roundNumber : Nat) (indices : Array Nat) : Array Nat :=
   let buckets := Array.ofFn (n := count / 256 + 1) fun bucket =>
     bucketBits seed roundNumber bucket.val
-  let bit position := bitAt (buckets.getD (position / 256) .empty) position
+  let bit position := bitAt (buckets.getD (position / 256) (Vector.replicate 32 0)) position
   indices.map (swapOrNot count (pivot seed roundNumber count) bit)
 
 /-- One round of swap-or-not on one index, hashing the bucket of its position directly. -/

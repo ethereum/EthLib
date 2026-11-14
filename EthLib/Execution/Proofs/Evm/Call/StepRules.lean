@@ -63,7 +63,9 @@ structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter
 
   It must keep the message, the code and the state. -/
   log : ∀ {a b : Evm fork Meter} (log : Blocks.Log), b.state = a.state →
-    b.substate = { a.substate with logs := a.substate.logs.push log } → b.message = a.message →
+    b.substate = { a.substate with
+      logs := a.substate.logs.push log
+      simulatedLogs := a.substate.simulatedLogs.push log } → b.message = a.message →
     b.code = a.code → R a b
   /-- The rise of a nonce that is not the greatest keeps the relation. -/
   incrementNonce : ∀ (evm : Evm fork Meter) (address : Address) (state : TransactionState),
@@ -271,7 +273,7 @@ theorem finishCall (rules : OrdinaryStepRules fork R) {kind : CallKind} {call : 
   dsimp only at h
   have pre : StaticStep evm (recordAccountRead { evm with
       memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-      evm.message.currentTarget) := ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl⟩
+      evm.message.currentTarget) := ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl⟩
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
     exact (rules.static ((pre.trans (.of_sameContext (sameContext_refillStateGas _ _))).trans
@@ -597,7 +599,7 @@ private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
   dsimp only at h
   have pre : StaticStep evm (recordAccountRead { evm with
       memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-      evm.message.currentTarget) := ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl⟩
+      evm.message.currentTarget) := ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl⟩
   split at h
   · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
     trivial

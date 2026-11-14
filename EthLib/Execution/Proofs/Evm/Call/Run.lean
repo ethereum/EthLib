@@ -162,7 +162,9 @@ def Entered (fork : Fork) (message : Message fork) (state : TransactionState)
         message.value = .ok entry ∧
       entrySubstate = { substate with
         logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-          message.value })
+          message.value
+        simulatedLogs := pushSimulatedTransferLog fork substate.simulatedLogs message.caller
+          message.currentTarget message.value })
 
 /-- A message that moves no value starts from the start state and the substate of its caller. -/
 theorem Entered.of_not_transfers {message : Message fork} {state entry : TransactionState}

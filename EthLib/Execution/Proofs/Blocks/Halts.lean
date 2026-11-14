@@ -105,7 +105,7 @@ private theorem errorsMeet_applyTransactions {env : BlockEnvironment fork} {body
     ErrorsMeet CallErrorOk (applyTransactions env body transactions) := fun _ h =>
   foldlM_error_of_step (fun _ : BodyOutput fork => True) CallErrorOk
     (fun _ _ _ _ _ => trivial) (fun _ _ e _ h => errorsMeet_applyTransaction _ e h)
-    (b := ⟨body, .zero, 0, [], []⟩) trivial h
+    (b := ⟨body, .zero, 0, [], [], []⟩) trivial h
 
 /-- A request read fails for a system call only with an error that does not abort. -/
 private theorem errorsMeet_readRequest {env : BlockEnvironment fork}

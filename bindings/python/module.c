@@ -79,6 +79,7 @@ PyObject* REQRESP_ERROR;
 PyObject* CONSENSUS_ERROR;
 PyObject* HKDF_ERROR;
 PyObject* TLS13_ERROR;
+PyObject* TLS_HANDSHAKE_ERROR;
 PyObject* QUIC_PROTECTION_ERROR;
 PyObject* PBKDF2_ERROR;
 PyObject* SCRYPT_ERROR;
@@ -1204,6 +1205,9 @@ static PyMethodDef methods[] = {
   {"ssz_serialize", py_ssz_serialize, METH_VARARGS, DOC_ssz_serialize},
   {"ssz_deserialize", py_ssz_deserialize, METH_VARARGS, DOC_ssz_deserialize},
   {"ssz_hash_tree_root", py_ssz_hash_tree_root, METH_VARARGS, DOC_ssz_hash_tree_root},
+  {"ssz_generalized_index", py_ssz_generalized_index, METH_VARARGS, DOC_ssz_generalized_index},
+  {"ssz_merkle_proof", py_ssz_merkle_proof, METH_VARARGS, DOC_ssz_merkle_proof},
+  {"ssz_merkleize_chunks", py_ssz_merkleize_chunks, METH_VARARGS, DOC_ssz_merkleize_chunks},
   {"rlpx_ecies_encrypt", py_rlpx_ecies_encrypt, METH_VARARGS, DOC_rlpx_ecies_encrypt},
   {"rlpx_ecies_decrypt", py_rlpx_ecies_decrypt, METH_VARARGS, DOC_rlpx_ecies_decrypt},
   {"devp2p_decode_message", py_devp2p_decode_message, METH_VARARGS, DOC_devp2p_decode_message},
@@ -1252,6 +1256,12 @@ static PyMethodDef methods[] = {
   {"quic_tls_key_schedule", py_quic_tls_key_schedule, METH_VARARGS, DOC_quic_tls_key_schedule},
   {"quic_tls_derive_secret", py_quic_tls_derive_secret, METH_VARARGS, DOC_quic_tls_derive_secret},
   {"quic_tls_finished", py_quic_tls_finished, METH_VARARGS, DOC_quic_tls_finished},
+  {"quic_tls_message_encode", py_quic_tls_message_encode, METH_VARARGS, DOC_quic_tls_message_encode},
+  {"quic_tls_message_decode", py_quic_tls_message_decode, METH_VARARGS, DOC_quic_tls_message_decode},
+  {"quic_tls_payload_encode", py_quic_tls_payload_encode, METH_VARARGS, DOC_quic_tls_payload_encode},
+  {"quic_tls_payload_decode", py_quic_tls_payload_decode, METH_VARARGS, DOC_quic_tls_payload_decode},
+  {"quic_tls_transcript", py_quic_tls_transcript, METH_VARARGS, DOC_quic_tls_transcript},
+  {"quic_tls_certificate_verify_input", py_quic_tls_certificate_verify_input, METH_VARARGS, DOC_quic_tls_certificate_verify_input},
   {"quic_protect", py_quic_protect, METH_VARARGS, DOC_quic_protect},
   {"quic_unprotect", py_quic_unprotect, METH_VARARGS, DOC_quic_unprotect},
   {"quic_retry_tag", py_quic_retry_tag, METH_VARARGS, DOC_quic_retry_tag},
@@ -1417,6 +1427,7 @@ PyInit__native(void) {
     HKDF_ERROR = PyObject_GetAttrString(errors, "HkdfError");
     QUIC_PROTECTION_ERROR = PyObject_GetAttrString(errors, "QuicProtectionError");
     TLS13_ERROR = PyObject_GetAttrString(errors, "Tls13Error");
+    TLS_HANDSHAKE_ERROR = PyObject_GetAttrString(errors, "TlsHandshakeError");
     PBKDF2_ERROR = PyObject_GetAttrString(errors, "Pbkdf2Error");
     SCRYPT_ERROR = PyObject_GetAttrString(errors, "ScryptError");
     X25519_ERROR = PyObject_GetAttrString(errors, "X25519Error");

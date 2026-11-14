@@ -64,7 +64,7 @@ theorem validateGossipMessage_of_accept {after : Seen}
 private theorem next_of_andThenM {ε : Type} {first : ValidationResult}
     {next : Unit → Except ε ValidationResult}
     (accepted : first.andThenM next = .ok .accept) : next () = .ok .accept :=
-  (andThenM_eq_ok_accept.mp accepted).2
+  (ValidationResult.andThenM_eq_ok_accept.mp accepted).2
 
 /-- The keys of a message that its topic accepts can always be recorded.
 

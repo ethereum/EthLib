@@ -267,6 +267,28 @@ def checkContents (fork : Fork) : Transaction → Except TransactionError Unit
   | .setCode tx => if tx.authorizations.isEmpty then .error .emptyAuthorizationList else .ok ()
   | _ => .ok ()
 
+/-- The rules of a transaction that a simulation lifts.
+
+By default every rule holds, as in a real block.
+
+[EIP-8037][eip-8037] adds the two caps on the gas.
+
+[eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-validation -/
+structure LiftedRules where
+  /-- Skip the check that the nonce of the transaction is the nonce of its sender. -/
+  nonce : Bool := false
+  /-- Lift the caps at `2^24` on the intrinsic gas, the floor and the execution gas.
+
+  They exist from Glamsterdam; the cap of Fusaka to BPO5 stays. -/
+  gasCap : Bool := false
+  /-- Lift the cap at `2^32 - 1` on the gas limit, which a simulation does in both modes. -/
+  totalGasCap : Bool := false
+  /-- Let a transaction with a maximum fee per gas of 0 pay for its gas at a base fee of 0.
+
+  It then passes the check of the base fee, and pays nothing for its gas. -/
+  zeroFee : Bool := false
+  deriving DecidableEq, Repr
+
 /-- Check the type, the fees, the gas limit and the nonce of a transaction from `sender` at `fork`.
 
 It returns the intrinsic gas.
@@ -291,6 +313,8 @@ From Glamsterdam, the nonce comes next, and the least gas limit and its bound co
 
 The other rules keep the order of the list.
 
+A simulation can lift the caps of Glamsterdam on the gas.
+
 A typed transaction exists from the fork of the EIP that adds its type to [EIP-2718][eip-2718]:
 
 - type 1 from Berlin, by [EIP-2930][eip-2930];
@@ -310,8 +334,8 @@ Sources: [EIP-7825][eip-7825], [EIP-8037][eip-8037], [EIP-2681][eip-2681], [EIP-
 [eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-validation
 [eip-2681]: https://eips.ethereum.org/EIPS/eip-2681#specification
 [eip-1559]: https://eips.ethereum.org/EIPS/eip-1559#specification -/
-def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction) :
-    Except TransactionError Nat := do
+def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction)
+    (lifted : LiftedRules := {}) : Except TransactionError Nat := do
   let minimum := minimumGas fork sender tx
   let coversMinimum := ensure (minimum ≤ tx.gas.toNat) (.insufficientGas minimum tx.gas.toNat)
   let initCodeFits := ensure (fork ≥ .shapella → tx.to = none → tx.data.size ≤ maxInitCodeSize fork)
@@ -322,11 +346,12 @@ def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction) :
   if fork ≥ .glamsterdam then
     nonceFits
     initCodeFits
-    ensure (tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT) (.gasLimitExceeded tx.gas.toNat)
+    unless lifted.totalGasCap do
+      ensure (tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT) (.gasLimitExceeded tx.gas.toNat)
     feesOrdered
     checkContents fork tx
     coversMinimum
-    ensure (minimum ≤ TX_MAX_GAS_LIMIT) (.intrinsicGasAboveLimit minimum)
+    unless lifted.gasCap do ensure (minimum ≤ TX_MAX_GAS_LIMIT) (.intrinsicGasAboveLimit minimum)
   else
     coversMinimum
     initCodeFits

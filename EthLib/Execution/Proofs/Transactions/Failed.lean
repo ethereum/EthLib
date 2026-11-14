@@ -522,6 +522,7 @@ theorem settleGas_accounts {env : BlockEnvironment fork} {state state' : State.T
         state'.getStorage address key = state.getStorage address key) ∧
       (∀ codeHash, state'.getCode codeHash = state.getCode codeHash) := by
   unfold settleGas at h
+  rw [paidBaseFee_empty] at h
   dsimp only at h ⊢
   obtain ⟨refunded, hrefund, h⟩ := bind_ok_iff.mp h
   obtain ⟨paid, hpay, h⟩ := bind_ok_iff.mp h

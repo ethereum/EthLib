@@ -195,6 +195,7 @@ private theorem allCodes_buyGas {env : BlockEnvironment fork} {state state' : Tr
     {sender : Address} {tx : Transaction} (available : AllCodes state)
     (h : buyGas env state sender tx = .ok state') : AllCodes state' := by
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, h1, h2⟩ := Base.bind_ok_iff.mp h
   have vmid : AllCodes mid := available.modifyState (fun _ hf => by cases hf; rfl) h1
   refine vmid.modifyState (fun updated hupd => ?_) h2
@@ -222,6 +223,7 @@ private theorem allCodes_settleGas {env : BlockEnvironment fork}
     (h : settleGas env state sender tx gasLeft refundCounter = .ok (state', used)) :
     AllCodes state' := by
   unfold settleGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨paid, h2, h⟩ := Base.bind_ok_iff.mp h
   cases h
@@ -523,6 +525,7 @@ private theorem noMiss_runTransaction [LawfulGasMeter Meter] {env : BlockEnviron
   · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
     unfold buyGas at he
+    rw [paidBaseFee_empty] at he
     rcases Base.bind_eq_error he with he | ⟨mid, -, he⟩
     · exact modifyState_ne_missingCode (fun _ _ h => by cases h) c he
     · exact modifyState_ne_missingCode (fun _ _ h => by split at h <;> cases h) c he
@@ -542,6 +545,7 @@ private theorem noMiss_runTransaction [LawfulGasMeter Meter] {env : BlockEnviron
   · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
     unfold settleGas at he
+    rw [paidBaseFee_empty] at he
     rcases Base.bind_eq_error he with he | ⟨mid, -, he⟩
     · exact creditEther_ne_missingCode _ _ _ c he
     rcases Base.bind_eq_error he with he | ⟨paid, -, he⟩

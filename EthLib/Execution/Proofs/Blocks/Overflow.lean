@@ -309,7 +309,7 @@ private theorem errorsMeet_applyTransactions {env : BlockEnvironment fork} {body
     (fun b : BodyOutput fork => SupplyRoom fork (TransactionState.ofBlock b.block).supply)
     (¬Overflows ·) (fun _ _ _ hb hstep => hb.mono (supply_applyTransaction_le hstep))
     (fun _ _ e hb h => errorsMeet_applyTransaction _ hb e h)
-    (b := ⟨body, .zero, 0, [], []⟩) room h
+    (b := ⟨body, .zero, 0, [], [], []⟩) room h
 
 /-- The transactions of a block keep or lower the supply. -/
 private theorem supply_applyTransactions_le {env : BlockEnvironment fork} {body : BodyState}
@@ -321,7 +321,7 @@ private theorem supply_applyTransactions_le {env : BlockEnvironment fork} {body 
     (fun b : BodyOutput fork => (TransactionState.ofBlock b.block).supply ≤
       (TransactionState.ofBlock body.block).supply)
     (fun _ _ _ hb hstep => Nat.le_trans (supply_applyTransaction_le hstep) hb)
-    (b := ⟨body, .zero, 0, [], []⟩) (Nat.le_refl _) h
+    (b := ⟨body, .zero, 0, [], [], []⟩) (Nat.le_refl _) h
 
 /-- A checked system call never overflows a balance when the supply of its block leaves room. -/
 private theorem errorsMeet_checkedSystemCall {env : BlockEnvironment fork} {block : BlockState}

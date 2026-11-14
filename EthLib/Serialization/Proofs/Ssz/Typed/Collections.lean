@@ -43,14 +43,20 @@ theorem ofElements_eq {α : Type} [SszType α] (elements : List Value) :
 
 variable {α : Type} [SszType α] [LawfulSszType α]
 
-/-- Converted elements read back as the elements they came from. -/
-theorem ofElements_map (items : List α) : ofElements (items.map toValue) = .ok items.toArray := by
+/-- Elements that each read back from their value read back as a list. -/
+theorem ofElements_map_of {α : Type} [SszType α]
+    (back : ∀ a : α, ofValue (toValue a) = .ok a) (items : List α) :
+    ofElements (items.map toValue) = .ok items.toArray := by
   suffices read : (items.map toValue).mapM (ofValue (α := α)) = .ok items by
     simp [ofElements_eq, read, Functor.map, Except.map]
   induction items with
   | nil => rfl
   | cons item rest ih =>
-    simp [List.mapM_cons, LawfulSszType.ofValue_toValue, ih, bind, Except.bind, pure, Except.pure]
+    simp [List.mapM_cons, back, ih, bind, Except.bind, pure, Except.pure]
+
+/-- Converted elements read back as the elements they came from. -/
+theorem ofElements_map (items : List α) : ofElements (items.map toValue) = .ok items.toArray :=
+  ofElements_map_of LawfulSszType.ofValue_toValue items
 
 /-- Elements that read back are the values that their typed elements stand for. -/
 theorem map_toValue_of_ofElements {elements : List Value} {items : Array α}

@@ -1082,6 +1082,15 @@
 #define DOC_ssz_hash_tree_root \
   "The 32-byte hash tree root of a value of a type, both given in their tagged form."
 
+#define DOC_ssz_generalized_index \
+  "The generalized index of the node that a path selects in the tree of a type."
+
+#define DOC_ssz_merkle_proof \
+  "The branch that proves the node at a generalized index of a value against its root."
+
+#define DOC_ssz_merkleize_chunks \
+  "The root of 32-byte chunks, in a tree padded to a power of two."
+
 #define DOC_rlpx_ecies_encrypt \
   "The ciphertext `R || iv || c || d` of `m` to the public key `recipient`."
 
@@ -1225,6 +1234,24 @@
 
 #define DOC_quic_tls_finished \
   "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."
+
+#define DOC_quic_tls_message_encode \
+  "Encode one handshake message with its header and the caller's hash length, RFC 8446 §4."
+
+#define DOC_quic_tls_message_decode \
+  "Decode one complete message and return its fields and trailing bytes, RFC 8446 §4."
+
+#define DOC_quic_tls_payload_encode \
+  "Encode a structured extension payload without selecting an algorithm or protocol."
+
+#define DOC_quic_tls_payload_decode \
+  "Decode an extension in the payload form that its message context requires."
+
+#define DOC_quic_tls_transcript \
+  "Return the SHA-256 transcript of complete handshake messages and its hash, RFC 8446 §4.4.1."
+
+#define DOC_quic_tls_certificate_verify_input \
+  "Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 8446 §4.4.3."
 
 #define DOC_quic_protect \
   "Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4."

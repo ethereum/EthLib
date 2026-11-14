@@ -125,6 +125,10 @@ class HkdfError(EthLibError, ValueError):
     """HKDF rejected its input."""
 
 
+class TlsHandshakeError(EthLibError, ValueError):
+    """A TLS handshake codec or transcript rejected its input."""
+
+
 class Tls13Error(EthLibError, ValueError):
     """A TLS 1.3 key derivation rejected its input."""
 
@@ -367,6 +371,7 @@ __all__ = [
     "ForkChoiceError",
     "HkdfError",
     "Tls13Error",
+    "TlsHandshakeError",
     "Pbkdf2Error",
     "ScryptError",
     "X25519Error",

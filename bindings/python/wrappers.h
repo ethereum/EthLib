@@ -150,6 +150,7 @@ extern PyObject* REQRESP_ERROR;
 extern PyObject* CONSENSUS_ERROR;
 extern PyObject* HKDF_ERROR;
 extern PyObject* TLS13_ERROR;
+extern PyObject* TLS_HANDSHAKE_ERROR;
 extern PyObject* QUIC_PROTECTION_ERROR;
 extern PyObject* PBKDF2_ERROR;
 extern PyObject* SCRYPT_ERROR;
@@ -612,6 +613,9 @@ PyObject* py_rlp_decode_as                                (PyObject* self, PyObj
 PyObject* py_ssz_serialize                                (PyObject* self, PyObject* args);
 PyObject* py_ssz_deserialize                              (PyObject* self, PyObject* args);
 PyObject* py_ssz_hash_tree_root                           (PyObject* self, PyObject* args);
+PyObject* py_ssz_generalized_index                        (PyObject* self, PyObject* args);
+PyObject* py_ssz_merkle_proof                             (PyObject* self, PyObject* args);
+PyObject* py_ssz_merkleize_chunks                         (PyObject* self, PyObject* args);
 PyObject* py_snappy_decompress                            (PyObject* self, PyObject* args);
 PyObject* py_snappy_compress                              (PyObject* self, PyObject* args);
 PyObject* py_snappy_decode_frames                         (PyObject* self, PyObject* args);
@@ -802,5 +806,12 @@ PyObject* py_tls_certificate_verify_p256(PyObject* self, PyObject* args);
 PyObject* py_quic_protect(PyObject* self, PyObject* args);
 PyObject* py_quic_unprotect(PyObject* self, PyObject* args);
 PyObject* py_quic_retry_tag(PyObject* self, PyObject* args);
+
+PyObject* py_quic_tls_message_encode(PyObject* self, PyObject* args);
+PyObject* py_quic_tls_message_decode(PyObject* self, PyObject* args);
+PyObject* py_quic_tls_payload_encode(PyObject* self, PyObject* args);
+PyObject* py_quic_tls_payload_decode(PyObject* self, PyObject* args);
+PyObject* py_quic_tls_transcript(PyObject* self, PyObject* args);
+PyObject* py_quic_tls_certificate_verify_input(PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

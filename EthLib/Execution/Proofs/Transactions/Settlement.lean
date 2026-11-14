@@ -43,6 +43,8 @@ Crediting at least `2^256` fails as an overflow of the balance.
 
 Settling the gas reports the gas used that the settlement counts.
 
+With no rule lifted, a transaction pays at the base fee of its block.
+
 Buying the gas takes exactly the fee from the sender and adds one to its nonce.
 
 It fails if the sender does not hold the fee.
@@ -54,6 +56,12 @@ namespace EthLib.Execution.Transactions
 
 open EthLib.Base
 open EthLib.Execution.Fees.BlobBaseFee (calculateTotalBlobGas)
+
+/-! ## The base fee paid -/
+
+/-- With no rule lifted, a transaction pays at the base fee of its block. -/
+@[simp] theorem paidBaseFee_empty {fork : Fork} (env : Evm.BlockEnvironment fork)
+    (tx : Transaction) : paidBaseFee env tx = baseFeeOf env := rfl
 
 /-! ## The refund -/
 
@@ -201,7 +209,9 @@ theorem allocateGas_add (fork : Fork) (tx : Transaction) (intrinsic : Nat) :
     (allocateGas fork tx intrinsic).execution + (allocateGas fork tx intrinsic).reservoir =
       tx.gas.toNat - intrinsic := by
   unfold allocateGas
-  split <;> simp only <;> omega
+  split
+  · split <;> simp only <;> omega
+  · simp only; omega
 
 /-- Before Glamsterdam, all the gas past the intrinsic gas is execution gas. -/
 theorem allocateGas_of_lt {fork : Fork} (hFork : fork < .glamsterdam) (tx : Transaction)
@@ -213,7 +223,7 @@ theorem allocateGas_of_lt {fork : Fork} (hFork : fork < .glamsterdam) (tx : Tran
 theorem allocateGas_execution_le {fork : Fork} (hFork : fork ≥ .glamsterdam) (tx : Transaction)
     (intrinsic : Nat) :
     (allocateGas fork tx intrinsic).execution ≤ Evm.GasCosts.TX_MAX_GAS_LIMIT - intrinsic := by
-  simp only [allocateGas, hFork, ↓reduceIte]
+  simp only [allocateGas, hFork, Bool.false_eq_true, ↓reduceIte]
   exact Nat.min_le_left _ _
 
 /-- From Glamsterdam, the reservoir is the gas limit past `2^24`.
@@ -223,7 +233,7 @@ theorem allocateGas_reservoir {fork : Fork} (hFork : fork ≥ .glamsterdam) {tx 
     {intrinsic : Nat} (hMax : intrinsic ≤ Evm.GasCosts.TX_MAX_GAS_LIMIT)
     (hGas : intrinsic ≤ tx.gas.toNat) :
     (allocateGas fork tx intrinsic).reservoir = tx.gas.toNat - Evm.GasCosts.TX_MAX_GAS_LIMIT := by
-  simp only [allocateGas, hFork, ↓reduceIte]
+  simp only [allocateGas, hFork, Bool.false_eq_true, ↓reduceIte]
   omega
 
 /-! ## The gas of the block -/
@@ -336,6 +346,7 @@ theorem settleGas_gasUsed {fork : Fork} {env : Evm.BlockEnvironment fork}
     (h : settleGas env state sender tx gasLeft refundCounter = .ok (state', used)) :
     used = gasUsed fork sender tx gasLeft refundCounter := by
   unfold settleGas at h
+  rw [paidBaseFee_empty] at h
   cases h₁ : creditEther fork state sender
       (settlement fork (baseFeeOf env) sender tx gasLeft refundCounter).senderRefund with
   | error e => simp [h₁, bind, Except.bind] at h
@@ -362,6 +373,7 @@ theorem buyGas_sender {fork : Fork} {env : Evm.BlockEnvironment fork}
       (state'.getAccount sender).nonce = (state.getAccount sender).nonce + 1 := by
   subst hfee
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, hmid⟩ := TransactionState.incrementNonce_isOk fork state sender
   simp only [hmid, bind, Except.bind] at h
   obtain ⟨hself, -⟩ := TransactionState.getAccount_incrementNonce hmid
@@ -387,6 +399,7 @@ theorem buyGas_of_lt {fork : Fork} {env : Evm.BlockEnvironment fork}
         calculateTotalBlobGas tx * blobGasPriceOf env) :
     buyGas env state sender tx = .error (.insufficientBalance sender) := by
   unfold buyGas
+  rw [paidBaseFee_empty]
   obtain ⟨mid, hmid⟩ := TransactionState.incrementNonce_isOk fork state sender
   obtain ⟨hself, -⟩ := TransactionState.getAccount_incrementNonce hmid
   have hbal : (mid.getAccount sender).balance = (state.getAccount sender).balance := by

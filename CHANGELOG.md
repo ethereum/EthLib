@@ -9,6 +9,38 @@ Not yet released.
 
 ### Changes that break callers
 
+- `ssz.get_generalized_index` names a field of a container only by its name ([#2480](https://github.com/ethereum/EthLib/issues/2480)).
+  A position given for a field is refused with the error for an unknown field.
+  In addition, a path takes `__active_fields__` and `__selector__`, the mixed-in nodes of a progressive container and of a union.
+
+- In Python, `consensus.api_post` and `consensus.api_gossip_event` return the data of each event as its JSON text, instead of the parsed value ([#2515](https://github.com/ethereum/EthLib/pull/2515)).
+  This is the `data` field of the Beacon API event stream, and the form that the fork choice events already return.
+  A caller that needs the value applies `json.loads` to that text.
+
+- In Lean, the SSZ exports read a Python value directly, without writing it as JSON first ([#2475](https://github.com/ethereum/EthLib/issues/2475)).
+  In Lean, `valueOfJson` becomes `valueOf`, `jsonOfValue` and `jsonOfValues` become `pyOfValue` and `pyOfValues`, and `descOf`, `tagged`, `optionalNat`, `pair` and `readValue` take a `PyValue`.
+  Bytes given as `bytes` are taken as they are, instead of being written as hex and read back.
+  Nothing breaks in Python: every input gives the same result or the same error as before.
+
+- In Lean, the shuffle, custody, keystore and discv5 callers of SHA-256 keep the digest as a `Vector UInt8 32` ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  `Shuffle.bucketBits` and `Keystore.passwordChecksum` return one, and `Shuffle.bitAt` and `DataAvailability.firstUInt64` take one.
+  A caller that needs the bytes applies `packBytes`, and `Sha256.packBytes_hash32` gives back the byte-array digest.
+  The keystore checksum theorems compare the checksum with `store.checksum` directly, and `checksumVector` is removed: use `passwordChecksum`.
+  Nothing breaks in Python.
+
+- The execution RPC answers `eth_simulateV1` with its simulated blocks ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
+  The results of the calls are not yet in the blocks.
+  In Lean, `fillHeader`, `outputChecks_fillHeader` and `runBody_fillHeader` move from `EthLib.Engine` to `EthLib.Execution.Blocks`, and `SimulateChoices` gains `gasCap`.
+  Nothing breaks in Python.
+
+- In Lean, the block environment gains the field `blobGasPrice` ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
+  A simulation sets the base fee per blob gas with it, and its default `none` keeps the price of the excess blob gas.
+  Supply that field in positional constructors, or use structure notation with its default.
+  The checks and the run of a transaction, and the simulation overrides of a body, take optional lifted rules.
+  A simulation can skip the nonce check and lift the gas caps of EIP-8037 with them.
+  The sender check gains a flag for the nonce check.
+  Nothing breaks in Python.
+
 - In Lean, the transaction environment gains the field `precompiles` ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
   It gives the address of the precompile that a call to each address runs.
   Its default `some` keeps each precompile at its own address, so a real block is unchanged.
@@ -19,7 +51,6 @@ Not yet released.
   Nothing breaks in Python.
 
 - The execution RPC checks the requests of `eth_simulateV1` before their blocks run ([#2107](https://github.com/ethereum/EthLib/issues/2107)).
-  A request that passes the checks gets `-32603` until the simulated blocks are specified.
   In Lean, `call_unknown` requires the method name to differ from `eth_simulateV1`.
   Nothing breaks in Python: `rpc.apply_overrides` gives the state root after the account overrides of one block.
 
@@ -38,9 +69,10 @@ Not yet released.
   A caller passes `id` when the new validator copies the flag of the old one, and `fun _ => rfl` when it is slashed.
   `initiateValidatorExit_balances_eq_and_pendingConsolidations_eq` moves to `Consensus/Proofs/Transition/PendingConsolidations.lean`, which `BalanceDrift.lean` imports publicly.
 
-- In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+- In Lean, the results on slashed flags state them at each position of the registry, through `slashedFlagAt state position`, the read `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
-  `slashedFlag_initiateValidatorExit` takes a `position : Nat` in place of an index.
+  A proof whose goal spells out the read unfolds the name first, as in `simp only [slashedFlagAt] at h`.
+  `slashedFlag_initiateValidatorExit` is renamed `slashedFlagAt_initiateValidatorExit`, and it takes a `position : Nat` in place of an index.
   The second conjunct of `slashValidator_slashedFlag` holds at each position other than `slashedIndex.toNat`.
   A caller that read either at an index `i` reads it at `i.toNat`.
   The new `slashedFlag_eq_of_slashed` turns equal flags there into equal values of `slashedFlag` at `i`.
@@ -51,6 +83,10 @@ Not yet released.
   `UpgradeFrame.trans_blockFrame` takes the new premise `slashed`: the steps after the upgrade keep every slashed flag.
   A block frame alone may slash, so it cannot give the field.
   Compose the block frames of the steps first, and pass their slashed flags once.
+  `slashedFlagAt_processProposerSlashing` and `slashedFlagAt_processAttesterSlashing` state that a slashing changes flags only at the positions that it names.
+  `slashedFlagAt_foldlM` states the same for a fold of such steps.
+  `slashed_setValidatorAt` is renamed `slashedFlagAt_setValidatorAt`.
+  `foldlM_ok_invariant_of_mem` moves to `Base/Proofs/MapM.lean`, in the namespace `EthLib.Base`.
 
 - `engine_forkchoiceUpdated` checks that the most recent block of proof of work on the chain of the head is terminal, as step 3 of the method and step 2 of payload validation of Paris require.
   A head whose chain fails the check is `INVALID`, with the zero hash, and the head does not change.

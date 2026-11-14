@@ -1445,6 +1445,18 @@ def ssz_hash_tree_root(type: str | dict[str, Any], value: dict[str, Any]) -> byt
     """The 32-byte hash tree root of a value of a type, both given in their tagged form."""
     ...
 
+def ssz_generalized_index(type: str | dict[str, Any], path: list[int | str]) -> int:
+    """The generalized index of the node that a path selects in the tree of a type."""
+    ...
+
+def ssz_merkle_proof(type: str | dict[str, Any], value: dict[str, Any], index: int) -> list[bytes]:
+    """The branch that proves the node at a generalized index of a value against its root."""
+    ...
+
+def ssz_merkleize_chunks(chunks: list[bytes], limit: int | None) -> bytes:
+    """The root of 32-byte chunks, in a tree padded to a power of two."""
+    ...
+
 def rlpx_ecies_encrypt(recipient: bytes, ephemeral: bytes, iv: bytes, shared_mac: bytes, message: bytes) -> bytes:
     """The ciphertext `R || iv || c || d` of `m` to the public key `recipient`."""
     ...
@@ -1635,6 +1647,30 @@ def quic_tls_derive_secret(secret: bytes, label: bytes, messages: bytes) -> byte
 
 def quic_tls_finished(secret: bytes, transcript: bytes) -> bytes:
     """Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."""
+    ...
+
+def quic_tls_message_encode(hash_length: int, message: Any) -> bytes:
+    """Encode one handshake message with its header and the caller's hash length, RFC 8446 §4."""
+    ...
+
+def quic_tls_message_decode(hash_length: int, data: bytes) -> tuple[Any, bytes]:
+    """Decode one complete message and return its fields and trailing bytes, RFC 8446 §4."""
+    ...
+
+def quic_tls_payload_encode(payload: Any) -> Any:
+    """Encode a structured extension payload without selecting an algorithm or protocol."""
+    ...
+
+def quic_tls_payload_decode(form: str, extension: Any) -> Any:
+    """Decode an extension in the payload form that its message context requires."""
+    ...
+
+def quic_tls_transcript(messages: list[bytes]) -> tuple[bytes, bytes]:
+    """Return the SHA-256 transcript of complete handshake messages and its hash, RFC 8446 §4.4.1."""
+    ...
+
+def quic_tls_certificate_verify_input(server: bool, digest: bytes) -> bytes:
+    """Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 8446 §4.4.3."""
     ...
 
 def quic_protect(suite: str, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes) -> bytes:

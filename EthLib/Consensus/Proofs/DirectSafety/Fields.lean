@@ -1100,40 +1100,21 @@ private def TerminalQuorum.ofTest {a : ForkedBeaconState preset}
   counted := test.counted
   passes := test.passes
 
-/-- The justified checkpoint that a link names as its source is older than its target. -/
-private theorem link_source_lt {fork : Fork} {state : BeaconState preset fork}
-    (settled : JustifiedSettled state) (separated : JustifiedSeparated state)
-    (later : GENESIS_EPOCH + 1 < getCurrentEpoch state) (current : Bool) (target : Checkpoint)
-    (targetEpoch : target.epoch =
-      if current then getCurrentEpoch state else getPreviousEpoch state) :
-    (if current then state.currentJustifiedCheckpoint
-      else state.previousJustifiedCheckpoint).epoch < target.epoch := by
-  have previous := separated later
-  rw [targetEpoch]
-  cases current
-  · exact previous
-  · have settledNat := UInt64.le_iff_toNat_le.mp settled
-    have laterNat := UInt64.lt_iff_toNat_lt.mp later
-    apply UInt64.lt_iff_toNat_lt.mpr
-    simp only [getPreviousEpoch_toNat] at settledNat
-    rw [toNat_genesisEpoch_add_one] at laterNat
-    simp only [↓reduceIte]
-    omega
-
 private theorem call_epochs {g a : ForkedBeaconState preset} (run : Run config checks g a)
     (genesis : Genesis config checks g)
     (call : QuorumCall run) : call.source.epoch < call.target.epoch := by
   obtain ⟨pre, _, _, frame, _⟩ := call.toEpochCall.selected_prefix
   obtain ⟨holds, _, separated⟩ := run_justified_separated pre genesis
-  exact link_source_lt (frame.invariant holds).settled (separated.of_frame frame) call.later
-    call.current call.target call.targetEpoch
+  rw [call.targetEpoch]
+  exact (separated.of_frame frame).source_lt (frame.invariant holds).settled call.later
+    call.current
 
 private theorem terminal_epochs {g a : ForkedBeaconState preset} (run : Run config checks g a)
     (genesis : Genesis config checks g) {view : TerminalView a}
     (call : TerminalQuorum view) : call.source.epoch < call.target.epoch := by
   obtain ⟨holds, _, separated⟩ := run_justified_separated run genesis
-  exact link_source_lt holds.settled separated call.later call.current call.target
-    call.targetEpoch
+  rw [call.targetEpoch]
+  exact separated.source_lt holds.settled call.later call.current
 
 /-- The first call crossing an epoch is chosen from the actual justification history. -/
 private theorem history_crossing {g a : ForkedBeaconState preset} {run : Run config checks g a}

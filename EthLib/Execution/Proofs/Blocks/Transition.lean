@@ -29,6 +29,8 @@ From Glamsterdam, the list that a body builds is well formed and fits the gas li
 
 A block that passes the checks then commits to that list by the hash in its header.
 
+A header filled from a body passes every check against what that body gave.
+
 From Hegotá the transition fails as not yet specified.
 
 When the hash of the last recent block succeeds, the recent blocks give hashes.
@@ -417,6 +419,64 @@ theorem applyTransaction_receipts {env : BlockEnvironment fork} {index : Nat}
   split at h <;>
     (obtain ⟨_, -, h⟩ := bind_ok_iff.mp h; cases h; exact ⟨_, _, rfl⟩)
 
+/-- A transaction that enters the body adds one receipt and one result, the result of its run.
+
+The result holds the output of its message, the gas used before the refund, and the error.
+
+It holds with the overrides of a simulation too. -/
+theorem applyTransaction_results {env : BlockEnvironment fork} {index : Nat}
+    {before after : BodyOutput fork} {tx : Transaction} {overrides : BodyOverrides}
+    (h : applyTransaction env index before tx overrides = .ok after) :
+    ∃ included out,
+      checkInclusion env.chainId env before.gas (.ofBlock before.block) tx
+        (overrides.senders index) overrides.lifted = .ok included ∧
+      processTransaction env before.block included tx overrides.precompiles overrides.lifted =
+        .ok out ∧
+      after.receipts.length = before.receipts.length + 1 ∧
+      after.results = before.results ++
+        [⟨out.messageOutput, out.gasBeforeRefund, out.error, out.simulatedLogs.toList⟩] := by
+  unfold applyTransaction at h
+  obtain ⟨included, hIncluded, h⟩ := bind_ok_iff.mp h
+  obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
+  obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
+  refine ⟨included, out, mapError_ok_iff.mp hIncluded, mapError_ok_iff.mp hOut, ?_⟩
+  dsimp only at h
+  split at h <;>
+    (obtain ⟨_, -, h⟩ := bind_ok_iff.mp h; cases h; exact ⟨by simp, rfl⟩)
+
+/-- From Byzantium, a transaction that enters the body adds a receipt and a result that agree.
+
+The receipt has a successful status exactly when the result has no error. -/
+theorem applyTransaction_status {env : BlockEnvironment fork} {index : Nat}
+    {before after : BodyOutput fork} {tx : Transaction} {overrides : BodyOverrides}
+    (hb : .byzantium ≤ fork) (h : applyTransaction env index before tx overrides = .ok after) :
+    ∃ (result : TransactionResult) (receipt : Receipt fork),
+      after.results = before.results ++ [result] ∧
+      after.receipts = before.receipts ++ [(tx.type, receipt)] ∧
+      receipt.outcome = .status hb result.error.isNone := by
+  unfold applyTransaction at h
+  obtain ⟨included, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨out, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
+  dsimp only at h
+  simp only [hb, ↓reduceDIte] at h
+  obtain ⟨_, hOutcome, h⟩ := bind_ok_iff.mp h
+  cases hOutcome
+  cases h
+  exact ⟨_, _, rfl, rfl, rfl⟩
+
+/-- The transactions of a body that runs give as many results as receipts. -/
+theorem applyTransactions_results_length {env : BlockEnvironment fork} {body : BodyState}
+    {transactions : List Transaction} {overrides : BodyOverrides} {output : BodyOutput fork}
+    (h : applyTransactions env body transactions overrides = .ok output) :
+    output.results.length = output.receipts.length := by
+  refine foldlM_ok_invariant (fun b : BodyOutput fork => b.results.length = b.receipts.length)
+    ?_ rfl h
+  rintro before ⟨tx, index⟩ after hBefore hStep
+  obtain ⟨_, _, -, -, hReceipts, hResults⟩ := applyTransaction_results hStep
+  rw [hResults, List.length_append, hBefore, hReceipts]
+  rfl
+
 /-- A transaction that cannot enter its block makes the block invalid, with its error. -/
 theorem applyTransaction_of_checkInclusion {env : BlockEnvironment fork} {index : Nat}
     {before : BodyOutput fork} {tx : Transaction} {e : InclusionError}
@@ -452,7 +512,7 @@ theorem applyTransactions_steps {env : BlockEnvironment fork} {body : BodyState}
     (step : ∀ {index before after tx}, applyTransaction env index before tx = .ok after →
       R before after)
     (h : applyTransactions env body transactions = .ok output) :
-    R ⟨body, .zero, 0, [], []⟩ output ∧ ∀ i (hi : i < transactions.length), ∃ before next,
+    R ⟨body, .zero, 0, [], [], []⟩ output ∧ ∀ i (hi : i < transactions.length), ∃ before next,
       applyTransactions env body (transactions.take i) = .ok before ∧
       applyTransaction env i before transactions[i] = .ok next ∧ R next output := by
   obtain ⟨hStart, hSteps⟩ := foldlM_ok_steps R refl trans (fun _ _ _ hStep => step hStep) h
@@ -760,5 +820,56 @@ theorem of_stateTransition {chain : BlockChain} {block : Block fork Transaction}
   refine ⟨hActive, ?_⟩
   rw [← (of_outputChecks hChecks).2.1]
   exact outputRoots_state hRoots
+
+/-- A header filled from a body passes every check against what that body gave.
+
+The blob gas used must fit 64 bits.
+
+From Shapella the withdrawals root must exist, and from Glamsterdam the access list hash. -/
+theorem outputChecks_fillHeader {fork : Fork} {header : Header fork} {output : BlockOutput fork}
+    {roots : OutputRoots} (hb : output.gas.blob < 2 ^ 64)
+    (hw : .shapella ≤ fork → roots.withdrawals.isSome)
+    (ha : .glamsterdam ≤ fork → output.accessListHash.isSome) :
+    firstFailure (outputChecks (fillHeader header output roots) output roots) = .ok () := by
+  rw [firstFailure_eq_ok_iff]
+  intro c hc
+  simp only [outputChecks, fillHeader, List.mem_append, List.mem_cons, List.not_mem_nil,
+    or_false] at hc
+  rcases hc with ((((hc | hc | hc | hc | hc) | hc) | hc) | hc) | hc <;>
+    (try subst hc) <;> (try simp only [decide_true])
+  · split at hc
+    · next h =>
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      subst hc
+      obtain ⟨r, hr⟩ := Option.isSome_iff_exists.mp (hw h)
+      simp [hr]
+    · simp at hc
+  · split at hc
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      subst hc
+      simp [Nat.mod_eq_of_lt hb]
+    · simp at hc
+  · split at hc
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      subst hc
+      simp
+    · simp at hc
+  · split at hc
+    · next h =>
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      subst hc
+      obtain ⟨r, hr⟩ := Option.isSome_iff_exists.mp (ha h)
+      simp [hr]
+    · simp at hc
+
+/-- The body of a block runs alike before and after its header is filled.
+
+The body reads none of the fields that the fill sets. -/
+theorem runBody_fillHeader {fork : Fork} {chain : BlockChain} {transactions : List Transaction}
+    {header : Header fork} {output : BlockOutput fork}
+    {roots : OutputRoots} {withdrawals : Since .shapella fork (List Withdrawal)} :
+    runBody chain ⟨fillHeader header output roots, transactions, [], withdrawals⟩ =
+      runBody chain ⟨header, transactions, [], withdrawals⟩ :=
+  rfl
 
 end EthLib.Execution.Blocks

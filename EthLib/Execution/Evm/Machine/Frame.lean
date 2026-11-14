@@ -297,6 +297,12 @@ structure Substate where
   accountsToDelete : Std.ExtTreeSet Address
   /-- The logs, oldest first. -/
   logs : Array Log
+  /-- The logs that a simulation reports, oldest first.
+
+  Before Glamsterdam, they also hold a transfer log for each move of ether.
+
+  A move of 0 wei, or from an account to itself, adds none. -/
+  simulatedLogs : Array Log
   /-- The accounts that the transaction touched, whose empty ones EIP-161 deletes. -/
   touchedAccounts : Std.ExtTreeSet Address
   /-- The gas to give back at the end of the transaction, which can be negative within a frame. -/
@@ -307,7 +313,7 @@ structure Substate where
   accessedStorageKeys : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)
 
 /-- The substate with no account, no log, no refund and no access. -/
-def Substate.empty : Substate := ⟨∅, #[], ∅, 0, ∅, ∅⟩
+def Substate.empty : Substate := ⟨∅, #[], #[], ∅, 0, ∅, ∅⟩
 
 /-- The state of one frame of execution at fork `fork`, with a gas meter of type `Meter`. -/
 structure Evm (fork : Fork) (Meter : Type) where

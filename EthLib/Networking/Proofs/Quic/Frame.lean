@@ -16,6 +16,7 @@ An ACK frame is well formed exactly when no packet number it acknowledges is neg
 namespace EthLib.Networking.Quic.Frame
 
 open Wire
+open EthLib.Base.ByteReader (bytes_append uint_encode require_true)
 
 /-- Reading optional fields undoes writing them. -/
 theorem optional_encode (value : Option Varint) (rest : List UInt8) :
@@ -68,10 +69,11 @@ theorem allowed_of_decode {packet : Packet.PacketType} {input rest : List UInt8}
         cases u
         simp only [StateT.lift, bind, pure, hv, Except.bind, Except.pure] at h
         by_cases allowed : f.allowed packet = true
-        · simp only [require, allowed, ↓reduceIte, Except.ok.injEq, Prod.mk.injEq] at h
+        · simp only [require, Base.ByteReader.require, allowed, ↓reduceIte, Except.ok.injEq,
+            Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
           exact allowed
-        · simp only [require, allowed] at h
+        · simp only [require, Base.ByteReader.require, allowed] at h
           contradiction
 
 /-- A type that Table 3 forbids cannot be decoded as that frame. -/
@@ -172,10 +174,11 @@ theorem valid_of_decode {packet : Packet.PacketType} {input rest : List UInt8}
         cases u
         simp only [StateT.lift, bind, pure, hv, Except.bind, Except.pure] at h
         by_cases allowed : f.allowed packet = true
-        · simp only [require, allowed, ↓reduceIte, Except.ok.injEq, Prod.mk.injEq] at h
+        · simp only [require, Base.ByteReader.require, allowed, ↓reduceIte, Except.ok.injEq,
+            Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
           exact valid_of_validate hv
-        · simp only [require, allowed] at h
+        · simp only [require, Base.ByteReader.require, allowed] at h
           contradiction
 
 /-- The ACK ranges after the first one, each as its largest and smallest packet number.
@@ -291,6 +294,6 @@ theorem decode_encode (frame : Frame) (packet : Packet.PacketType) (encoded rest
         UInt8.toNat_ofNat_of_lt' (by have := type_lt frame; simp only [UInt8.size]; omega)
       simp only [decode, bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure,
         List.cons_append, byte, kind, fields, Except.mapError, StateT.lift, checked,
-        require, allowed, ↓reduceIte]
+        require, Base.ByteReader.require, allowed, ↓reduceIte]
 
 end EthLib.Networking.Quic.Frame

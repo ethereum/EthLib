@@ -81,9 +81,13 @@ def maxBlobGasPerBlock {fork : Fork} (env : BlockEnvironment fork) : Nat :=
 
 /-- The gas of a transaction that must fit in the execution gas that its block has left, at `fork`.
 
-It is the gas limit, capped from Glamsterdam at `2^24`, the most execution gas of a transaction. -/
-def executionCapacity (fork : Fork) (tx : Transaction) : Nat :=
-  if fork ≥ .glamsterdam then min TX_MAX_GAS_LIMIT tx.gas.toNat else tx.gas.toNat
+It is the gas limit, capped from Glamsterdam at `2^24`, the most execution gas of a transaction.
+
+A simulation can lift that cap. -/
+def executionCapacity (fork : Fork) (tx : Transaction) (lifted : LiftedRules := {}) : Nat :=
+  if fork ≥ .glamsterdam then
+    if lifted.gasCap then tx.gas.toNat else min TX_MAX_GAS_LIMIT tx.gas.toNat
+  else tx.gas.toNat
 
 /-! ## The rules -/
 
@@ -150,13 +154,13 @@ def failIf (condition : Bool) (error : InclusionError) : Except InclusionError U
 
 /-- Check that a transaction fits in what its block has left, after the gas `used` before it.
 
-- The gas limit, capped from Glamsterdam, fits in the execution gas left.
+- The gas limit, capped from Glamsterdam unless lifted, fits in the execution gas left.
 - From Glamsterdam, the gas limit fits in the state gas left.
 - The blob gas fits in the blob gas left. -/
 def checkBlockGas {fork : Fork} (env : BlockEnvironment fork) (used : BlockGas)
-    (tx : Transaction) : Except InclusionError Unit := do
+    (tx : Transaction) (lifted : LiftedRules := {}) : Except InclusionError Unit := do
   let available := env.gasLimit - used.execution
-  let gas := executionCapacity fork tx
+  let gas := executionCapacity fork tx lifted
   failIf (available < gas) (.gasAllowanceExceeded gas available)
   let stateAvailable := env.gasLimit - used.state
   failIf (fork ≥ .glamsterdam ∧ stateAvailable < tx.gas.toNat)
@@ -172,12 +176,18 @@ def checkBlockGas {fork : Fork} (env : BlockEnvironment fork) (used : BlockGas)
 - The sender has no code, and from Pectra it may have a delegation indicator.
 
 A sender that no signature names, as in a simulation, may have code, which is then not read.
+
+A simulation can also skip the check of the nonce.
+
+The nonce of the sender must then still be below `2^64 - 1`, as EIP-2681 asks.
 -/
 def checkSender (fork : Fork) (state : TransactionState) (sender : Address) (tx : Transaction)
-    (signed : Bool := true) : Except InclusionError Unit := do
+    (signed : Bool := true) (skipNonce : Bool := false) : Except InclusionError Unit := do
   let account := state.getAccount sender
-  failIf (tx.nonce.toNat < account.nonce) (.nonceTooLow account.nonce tx.nonce.toNat)
-  failIf (account.nonce < tx.nonce.toNat) (.nonceTooHigh account.nonce tx.nonce.toNat)
+  if skipNonce then failIf (2 ^ 64 - 1 ≤ account.nonce) (.transaction .nonceOverflow)
+  else
+    failIf (tx.nonce.toNat < account.nonce) (.nonceTooLow account.nonce tx.nonce.toNat)
+    failIf (account.nonce < tx.nonce.toNat) (.nonceTooHigh account.nonce tx.nonce.toNat)
   let cost := tx.maxGasFee + tx.value.toNat
   failIf (account.balance.toNat < cost) (.insufficientBalance account.balance.toNat cost)
   if signed then
@@ -207,11 +217,14 @@ At every fork, the fee per blob gas and the sender come last.
 
 A simulation may give the sender, which skips the signature and the rule on the sender's code.
 
-A legacy transaction then names no chain, since only its signature does. -/
+A legacy transaction then names no chain, since only its signature does.
+
+A simulation may also lift some rules. -/
 def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork)
     (used : BlockGas) (state : TransactionState) (tx : Transaction)
-    (knownSender : Option Address := none) : Except InclusionError Included := do
-  let baseFee := baseFeeOf env
+    (knownSender : Option Address := none) (lifted : LiftedRules := {}) :
+    Except InclusionError Included := do
+  let baseFee := paidBaseFee env tx lifted
   let coversBaseFee := failIf (tx.maxFeePerGas < baseFee)
     (.insufficientMaxFeePerGas tx.maxFeePerGas baseFee)
   let recover : Except InclusionError Address :=
@@ -225,13 +238,13 @@ def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork
     if fork ≥ .glamsterdam then do
       checkChain
       let sender ← recover
-      let intrinsic ← (validateTransaction fork sender tx).mapError .transaction
-      checkBlockGas env used tx
+      let intrinsic ← (validateTransaction fork sender tx lifted).mapError .transaction
+      checkBlockGas env used tx lifted
       coversBaseFee
       pure (sender, intrinsic)
     else do
-      let intrinsic ← (validateTransaction fork default tx).mapError .transaction
-      checkBlockGas env used tx
+      let intrinsic ← (validateTransaction fork default tx lifted).mapError .transaction
+      checkBlockGas env used tx lifted
       checkChain
       let sender ← recover
       coversBaseFee
@@ -241,7 +254,7 @@ def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork
   let blobGasPrice := blobGasPriceOf env
   failIf (0 < blobGas ∧ tx.maxFeePerBlobGas < blobGasPrice)
     (.insufficientMaxFeePerBlobGas tx.maxFeePerBlobGas blobGasPrice)
-  checkSender fork state sender tx knownSender.isNone
+  checkSender fork state sender tx knownSender.isNone lifted.nonce
   return ⟨sender, intrinsic, effectiveGasPrice baseFee tx, blobGas⟩
 
 end EthLib.Execution.Transactions

@@ -204,8 +204,10 @@ theorem processJustificationAndFinalization_slackBits
     intro epoch
     simp only [getBlockRoot, getBlockRootAtSlot_congr slot roots]
   have previousNat := getPreviousEpoch_toNat state
-  have settled' := UInt64.le_iff_toNat_le.mp settled
+  -- Once justification runs, each justified epoch is below the epoch of a link from it.
+  have currentBelow := UInt64.lt_iff_toNat_lt.mp (separated.source_lt settled late true)
   have below := UInt64.lt_iff_toNat_lt.mp (separated late)
+  simp only [↓reduceIte] at currentBelow
   -- A passing test of the current epoch gives a slack link from the old current justified one.
   have currentLink : ∀ root, threshold ≤ currentWeight →
       getBlockRoot state (getCurrentEpoch state) = .ok root →

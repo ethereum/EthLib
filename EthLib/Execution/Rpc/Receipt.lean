@@ -155,6 +155,16 @@ namespace BlockRecord
 def blobGasPrice (r : BlockRecord) (config : ChainConfig) : Nat :=
   blobGasPriceOf (blockEnvironment config [] r.block.header)
 
+/-- The log objects of the transaction at `index` of a block, with the hash `hash`.
+
+The logs before them in the block number `firstLog`. -/
+def logInfos (r : BlockRecord) (index firstLog : Nat) (hash : Hash32) (logs : List Log) :
+    List LogInfo :=
+  logs.zipIdx.map fun (log, i) =>
+    { log, logIndex := firstLog + i, transactionIndex := index, transactionHash := hash
+      blockHash := r.hash, blockNumber := r.block.header.number
+      blockTimestamp := r.block.header.timestamp.toNat }
+
 /-- The receipt object of the transaction at an index of a block.
 
 The receipts before it used `before` gas, and wrote `firstLog` logs. -/
@@ -165,10 +175,7 @@ def receiptInfo (r : BlockRecord) (config : ChainConfig) (index before firstLog 
     | some _ => pure none
     | none => some <$> (Evm.createAddress info.sender tx.nonce.toNat).mapError fun _ =>
         encodingError "contract address"
-  let logs := receipt.logs.zipIdx.map fun (log, i) =>
-    { log, logIndex := firstLog + i, transactionIndex := index, transactionHash := info.hash
-      blockHash := r.hash, blockNumber := r.block.header.number
-      blockTimestamp := r.block.header.timestamp.toNat : LogInfo }
+  let logs := r.logInfos index firstLog info.hash receipt.logs
   let blob := match tx with
     | .blob _ =>
       some (Fees.BlobBaseFee.GAS_PER_BLOB * tx.blobHashes.length, r.blobGasPrice config)

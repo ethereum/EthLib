@@ -68,7 +68,7 @@ theorem receiptInfo_eq_ok {r : BlockRecord} {config : ChainConfig}
       info.logs.map (·.logIndex) = (List.range receipt.logs.length).map (firstLog + ·) ∧
       info.outcome = outcomeOf receipt.outcome ∧
       info.effectiveGasPrice = effectiveGasPrice r.baseFee tx := by
-  unfold receiptInfo at h
+  unfold receiptInfo logInfos at h
   obtain ⟨ti, hti, h⟩ := bind_ok_iff.mp h
   obtain ⟨sender, hash, -, -, rfl⟩ := transactionInfo_eq_ok.mp hti
   rcases hto : tx.to with _ | a
@@ -140,7 +140,7 @@ theorem receiptInfo_contractAddress {r : BlockRecord} {config : ChainConfig}
       (tx.to = none → Evm.createAddress info.sender tx.nonce.toNat =
         .ok (info.contractAddress.getD default)) ∧
       (tx.to = none → info.contractAddress.isSome) := by
-  unfold receiptInfo at h
+  unfold receiptInfo logInfos at h
   obtain ⟨ti, hti, h⟩ := bind_ok_iff.mp h
   obtain ⟨sender, hash, -, -, rfl⟩ := transactionInfo_eq_ok.mp hti
   rcases hto : tx.to with _ | a
@@ -159,7 +159,7 @@ private theorem receiptInfo_transactionInfo {r : BlockRecord} {config : ChainCon
     {index before firstLog : Nat} {tx : Transaction} {receipt : Receipt r.fork}
     {info : ReceiptInfo} (h : r.receiptInfo config index before firstLog tx receipt = .ok info) :
     ∃ ti, r.transactionInfo index tx = .ok ti ∧ info.sender = ti.sender := by
-  unfold receiptInfo at h
+  unfold receiptInfo logInfos at h
   obtain ⟨ti, hti, h⟩ := bind_ok_iff.mp h
   refine ⟨ti, hti, ?_⟩
   rcases hto : tx.to with _ | a
@@ -194,7 +194,7 @@ theorem receiptInfo_blob {r : BlockRecord} {config : ChainConfig}
               (r.block.header.excessBlobGas hd).toNat
           else 0)
       | _ => none := by
-  unfold receiptInfo at h
+  unfold receiptInfo logInfos at h
   obtain ⟨ti, -, h⟩ := bind_ok_iff.mp h
   rcases hto : tx.to with _ | a
   · rcases hc : (Evm.createAddress ti.sender tx.nonce.toNat) with e | ca
@@ -643,7 +643,7 @@ theorem Valid.buyGas_receiptInfos {v : ChainView} {checkSeal : Bool}
     rw [hprice, hbase, hblob]
     rcases tx with t | t | t | t | t <;>
       simp [Fees.BlobBaseFee.calculateTotalBlobGas, Fees.BlobBaseFee.GAS_PER_BLOB,
-        blobGasPriceOf, blockEnvironment]
+        blobGasPriceOf, blockEnvironment, Evm.BlockEnvironment.blobBaseFee]
   obtain ⟨hle, hbal, -⟩ := buyGas_sender hfee hbought
   omega
 
