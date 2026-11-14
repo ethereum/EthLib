@@ -88,13 +88,13 @@ The list of history entries of the fork has room for one more.
 
 When the next epoch starts a sync committee period, a new committee is drawn.
 
-The registry must then hold at most `2^40` validators with valid keys.
+The registry must then hold at most `2^40` validators.
 
 The committee size times the registry size must also fit in 64 bits.
 
-The draw also needs one validator at the cap, active in the next epoch.
+The draw also needs valid keys and one validator at the cap, active in the next epoch.
 
-That validator is read in the state that the steps before the draw reach. -/
+Both are read in the state that the steps before the draw reach. -/
 theorem processEpoch_total_of_altair_of_lt_electra {config : Config} {checks : SignatureChecks}
     {budget scoreBound ceiling : Nat}
     [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
@@ -139,8 +139,10 @@ theorem processEpoch_total_of_altair_of_lt_electra {config : Config} {checks : S
     (summariesRoom : ∀ capella : .shapella ≤ fork,
       (state.historicalSummaries capella).data.size < preset.HISTORICAL_ROOTS_LIMIT.toNat)
     (keys : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
-      ∀ validator ∈ state.validators.data,
-        ∃ point, Cryptography.Bls.G1.keyValidatePoint (packBytes validator.pubkey) = .ok point)
+      ∀ ready, run (action config checks) (prefixStages ++ middleStages ++ [.participation])
+          state = .ok ready →
+        ∀ validator ∈ ready.validators.data,
+          ∃ point, Cryptography.Bls.G1.keyValidatePoint (packBytes validator.pubkey) = .ok point)
     (few : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
       state.validators.data.size ≤ 2 ^ 40)
     (syncRoom : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
@@ -370,16 +372,7 @@ theorem processEpoch_total_of_altair_of_lt_electra {config : Config} {checks : S
       rw [validatorsFlagged, (sameSizes_processEffectiveBalanceUpdates updatedOk).1, validators6,
         size4]
     refine ⟨fun validator member => ?_, fun validator member => ?_, ?_, ?_, ?_⟩
-    · rw [validatorsFlagged] at member
-      obtain ⟨old, oldMember, key, -⟩ :=
-        processEffectiveBalanceUpdates_mem matched6 updatedOk member
-      rw [validators6] at oldMember
-      obtain ⟨first, firstMember, same, -⟩ :=
-        (processRegistryUpdates_kept registeredOk).1.exists_of_mem
-          (Nat.le_of_eq (size4.trans (by rw [validators3]))) oldMember
-      rw [validators3] at firstMember
-      rw [key, same]
-      exact keys boundary first firstMember
+    · exact keys boundary flagged (run_ok_iff.mpr readyTrace) validator member
     · rw [validatorsFlagged] at member
       obtain ⟨old, oldMember, -, bound⟩ :=
         processEffectiveBalanceUpdates_mem matched6 updatedOk member

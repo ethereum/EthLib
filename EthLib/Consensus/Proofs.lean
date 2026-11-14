@@ -269,6 +269,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadUpgrades
 public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Proofs.Transition.Totality.RewardsBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.RunBounds
+public import EthLib.Consensus.Proofs.Transition.Totality.RunHypotheses
 public import EthLib.Consensus.Proofs.Transition.Totality.Shape
 public import EthLib.Consensus.Proofs.Transition.Totality.Signers
 public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
