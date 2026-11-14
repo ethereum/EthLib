@@ -108,6 +108,11 @@ structure RunBounded (config : Config) (start : RunStart) (budget elapsed : Nat)
   /-- From Electra, the end of the exit queue is at most one past the exit ceiling. -/
   queue : ∀ electra : .pectra ≤ fork,
     (state.earliestExitEpoch electra).toNat ≤ start.ceilingAt preset budget elapsed + 1
+  /-- From Electra, the end of the consolidation queue is at most the exit ceiling.
+
+  A consolidation sets the exit epoch of its source to the end of this queue. -/
+  consolidations : ∀ electra : .pectra ≤ fork,
+    (state.earliestConsolidationEpoch electra).toNat ≤ start.ceilingAt preset budget elapsed
   /-- The historical roots gain at most one entry in each epoch, and none from Capella. -/
   roots : state.historicalRoots.data.size ≤ start.history + elapsed
   /-- From Capella, the historical summaries gain at most one entry in each epoch. -/
@@ -131,14 +136,16 @@ theorem RunBounded.of_processSlot {config : Config} {start : RunStart} {budget e
   -- The caching writes only the roots, the header and the availability bits.
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
   exact ⟨holds.supply, holds.effective, holds.load, holds.scores, holds.exits, holds.queue,
-    holds.roots, holds.summaries, holds.depositChurn, holds.exitChurn, holds.slashed⟩
+    holds.consolidations, holds.roots, holds.summaries, holds.depositChurn, holds.exitChurn,
+    holds.slashed⟩
 
 /-- A new slot number keeps the bounds of a run, since none of them reads the slot. -/
 theorem RunBounded.withSlot {config : Config} {start : RunStart} {budget elapsed : Nat}
     (holds : RunBounded config start budget elapsed state) (slot : Slot) :
     RunBounded config start budget elapsed { state with slot := slot } := by
   exact ⟨holds.supply, holds.effective, holds.load, holds.scores, holds.exits, holds.queue,
-    holds.roots, holds.summaries, holds.depositChurn, holds.exitChurn, holds.slashed⟩
+    holds.consolidations, holds.roots, holds.summaries, holds.depositChurn, holds.exitChurn,
+    holds.slashed⟩
 
 /-- One epoch keeps the bounds of a run, one epoch further on.
 
@@ -241,8 +248,8 @@ theorem RunBounded.of_processEpoch {config : Config} {checks : SignatureChecks}
         holds.exits (by omega)
       exact ⟨fun electra' => absurd electra' electra, fun validator member set =>
         (widened validator member set).trans (by omega)⟩
-  refine ⟨?_, ?_, ?_, ?_, exits.2, fun electra => (exits.1 electra).1.1, ?_, ?_, ?_,
-    fun electra => (exits.1 electra).2, slashedLe.trans holds.slashed⟩
+  refine ⟨?_, ?_, ?_, ?_, exits.2, fun electra => (exits.1 electra).1.1, fun electra => ?_, ?_,
+    ?_, ?_, fun electra => (exits.1 electra).2, slashedLe.trans holds.slashed⟩
   · exact supplyAfter
   · -- The effective balances follow the balances, which the bound on the supply covers.
     exact .inr (effectiveLe.trans (Nat.mul_le_mul_right _
@@ -251,6 +258,10 @@ theorem RunBounded.of_processEpoch {config : Config} {checks : SignatureChecks}
   · intro altair score member
     have := processEpoch_scoreBound altair (holds.scores altair) computed score member
     rw [Nat.mul_add, Nat.mul_one]
+    omega
+  · -- No step of an epoch moves the end of the consolidation queue.
+    rw [processEpoch_earliestConsolidationEpoch computed, ceilingStep]
+    have := holds.consolidations electra
     omega
   · have := holds.roots
     omega

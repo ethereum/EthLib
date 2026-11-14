@@ -195,7 +195,8 @@ theorem runHolds_altairWitnessState :
     exact absurd this (by decide)
   · rw [witness_epoch, Nat.sub_self]
     refine ⟨?_, Or.inl ?_, ?_, fun _ score member => ?_, fun validator member => ?_,
-      fun electra => (notElectra electra).elim, ?_, fun capella => (notCapella capella).elim,
+      fun electra => (notElectra electra).elim, fun electra => (notElectra electra).elim, ?_,
+      fun capella => (notCapella capella).elim,
       fun electra => (notElectra electra).elim, fun electra => (notElectra electra).elim, ?_⟩
     · rw [balanceSum, pendingDepositSum, dite_eq_right_of_eq_false (eq_false notElectra),
         witness_balances, Nat.zero_mul, Nat.add_zero]

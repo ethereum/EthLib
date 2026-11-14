@@ -382,7 +382,8 @@ theorem runHolds_emptyGenesisState {fork : Fork} (before : fork < .altair) (star
     cases current <;> simp [recentPending, emptyGenesisState] at member
   refine ⟨?_, Or.inl ?_, ?_, fun altair => (notAltair altair).elim,
     fun _ member => by simp [emptyGenesisState] at member,
-    fun electra => (notElectra electra).elim, ?_, fun capella => (never (by decide) capella).elim,
+    fun electra => (notElectra electra).elim, fun electra => (notElectra electra).elim, ?_,
+    fun capella => (never (by decide) capella).elim,
     fun electra => (notElectra electra).elim, fun electra => (notElectra electra).elim, ?_⟩
   all_goals simp [balanceSum, pendingDepositSum, effectiveBalanceSum, registryLoad,
     slashedBalanceSum, emptyGenesisState, notElectra]
