@@ -4652,7 +4652,8 @@ Points that remain open:
 - `forkSchedule_upgrade` assumes that the state before the upgrade holds the version of its own fork.
   `currentVersion_of_chainSteps` shows it for each state of a chain whose first state holds the version of its fork.
   `currentVersion_of_genesis_chainSteps` discharges that for the genesis state that deposits build, which is before Altair.
-  No theorem yet ties the states that a store keeps to a chain from its anchor, or shows that an anchor holds the version of its fork.
+  `Store.Reachable.blockStatesFromParents` links each state that a store keeps to the state of its parent by a state transition.
+  No theorem yet shows that this transition keeps the fork versions, or that an anchor holds the version of its fork.
   So the answers of the API are not covered.
 - The format rule of the spec map names hex, numbers and arrays only; EthLib writes the names of the preset and of the configuration as text, as the files do.
 - The source has the `randao` query answer "Invalid state ID or epoch" with code 400, and its example message is "Epoch is out of range for the `randao_mixes` of the state", but it names no range.
