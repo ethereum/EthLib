@@ -164,7 +164,7 @@ theorem ChainHolds.of_advanceSlotsAcross {start : RunStart} {step : BlockStep}
 /-! ## The bounds across one block -/
 
 /-- A run of slots ends that many slots after its first state. -/
-private theorem advanceSlotsAcross_slot :
+theorem advanceSlotsAcross_slot :
     ∀ (count : Nat) {forked next : ForkedBeaconState preset},
       advanceSlotsAcross config checks count forked = .ok next →
       next.state.slot.toNat = forked.state.slot.toNat + count

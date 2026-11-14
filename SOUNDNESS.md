@@ -5596,7 +5596,6 @@ On mainnet, from scores of zero, that is 2251799 epochs, about 27 years, and the
 The state at the start must keep the facts of a run (`RunHolds`).
 They are the invariant of the state transition, the shape of the state and the bounds of the start.
 They also include `JustifiedEarly`, and before Altair the facts that a block checked on each pending attestation.
-No theorem yet shows that block processing keeps `PendingWellFormed`, `PendingResolved` and the bounds, so the theorem says nothing about a chain with blocks.
 The run also takes three hypotheses on the states it reaches, which no bound gives.
 `SignersEarly`: in the first two epochs of the run, the signers of the previous epoch hold at most the active balance; a validator that signed and exits at the epoch boundary can break it, and from the third epoch no one has signed.
 `DrawsAtCap`: each draw of a sync committee, of the proposers and of a payload committee meets a validator at the cap of its fork, and the upgrade to Heze finds its two deposit indices equal.
@@ -5618,6 +5617,27 @@ The leak and the missed-vote penalties take at most about `9.886 * 10^4` ETH in 
 The witness is a valid state under the mainnet preset, but no mainnet genesis leads to it: it has one validator and no history.
 No witness yet covers a run across the Electra fork epoch.
 Without a validator at the cap, whether a draw ends depends on the hashes; a theorem without `DrawsAtCap` would need a model of the hash, such as a random oracle.
+
+`processSlotsAcross_exists_ok_of_chain` (`Proofs/Transition/Totality/ChainRun.lean`) extends the run theorem to a chain with blocks.
+Each block of the chain is one that the transition accepts.
+Each block must stay within stated limits on its body (`BlockBounded`), and each raises the bounds by a fixed step (`BlockStep.Covers`).
+The protocol does not cap the Gwei that deposits bring in, so that limit is an assumption on the chain.
+The step charges each block the most rewards that any block can pay within the budget.
+It takes the base reward per increment at its largest, when the total active balance is one increment.
+It does not read the rewards that the attestations earn.
+On mainnet that is about 70,640 ETH a block at a budget of `2^57` Gwei.
+So the mainnet corollary covers 16 epochs, not the horizon of the scores.
+From Electra one attester slashing may name `2048 * 64` validators.
+A step that covers that many names would pass `2^64` Gwei over the 544 blocks of 16 epochs.
+So the slashing limit is far below what the protocol allows at every fork: the mainnet corollary allows `2^10` slashed validators in a block.
+A tight bound would read the flags that the attestations set.
+It needs the flags to be set only at active validators.
+It also needs the previous active balance to stay near the current one.
+Neither is proved.
+Blocks carry attestations, so the chain takes `SignersAtEnds` in place of `SignersEarly`.
+The signers then hold at most the active balance at the end of every epoch, not only the first two.
+The theorem also assumes a positive inclusion delay, a positive withdrawal delay, and an increment at most the activation balance; mainnet meets all three.
+`processSlotsAcross_exists_ok_of_chain_altairWitnessState` instantiates the mainnet corollary at the Altair witness, so its hypotheses can hold together.
 
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
