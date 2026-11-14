@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.BigEndian
 public import EthLib.Base.Except
+public import EthLib.Base.ByteReader
 
 /-!
 # TLS presentation-language fields
@@ -41,19 +42,17 @@ def Error.code : Error → UInt32
   | .retry => 7
 
 /-- A reader consumes a prefix of a byte list. -/
-abbrev Reader (α : Type) := StateT (List UInt8) (Except Error) α
+abbrev Reader (α : Type) := Base.ByteReader.Reader Error α
 
 /-- Require a format condition without consuming input. -/
-def require (condition : Prop) [Decidable condition] (error : Error) : Reader Unit :=
-  fun input => if condition then .ok ((), input) else .error error
+abbrev require (condition : Prop) [Decidable condition] (error : Error) : Reader Unit :=
+  Base.ByteReader.require condition error
 
 /-- Read exactly `n` bytes, without padding an incomplete field. -/
-def bytes (n : Nat) : Reader (List UInt8) := fun input =>
-  if n ≤ input.length then .ok (input.take n, input.drop n) else .error .truncated
+abbrev bytes (n : Nat) : Reader (List UInt8) := Base.ByteReader.bytes .truncated n
 
 /-- Read a big-endian integer of the given width, RFC 8446 §3.3. -/
-def uint (width : Nat) : Reader Nat := do
-  return Base.bytesToNat (← bytes width)
+abbrev uint (width : Nat) : Reader Nat := Base.ByteReader.uint .truncated width
 
 /-- A two-byte protocol identifier, without an algorithm-selection policy. -/
 abbrev CodePoint := Fin (2 ^ 16)

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Networking.Quic.Tls.Wire
 public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteReader
 
 /-!
 # Proofs: TLS wire fields
@@ -16,26 +17,12 @@ Vector encoders reject lengths that do not fit, rather than reducing them modulo
 namespace EthLib.Networking.Quic.Tls.Wire
 
 open EthLib.Base (bind_ok_iff)
-
-@[simp] theorem bytes_append (data rest : List UInt8) :
-    bytes data.length (data ++ rest) = .ok (data, rest) := by
-  simp [bytes]
-
-@[simp] theorem uint_encode (width value : Nat) (rest : List UInt8) :
-    uint width (Base.natToBytes width value ++ rest) =
-      .ok (value % 256 ^ width, rest) := by
-  simp [uint, bytes, Base.natToBytes_length, Base.bytesToNat_natToBytes,
-    StateT.bind, StateT.pure, bind, Except.bind, pure, Except.pure]
+open EthLib.Base.ByteReader (bytes_append uint_encode require_true)
 
 @[simp] theorem uint_byte (value : UInt8) (rest : List UInt8) :
     uint 1 (value :: rest) = .ok (value.toNat, rest) := by
-  simp [uint, bytes, Base.bytesToNat, StateT.bind, StateT.pure,
-    bind, Except.bind, pure, Except.pure]
-
-@[simp] theorem require_true (condition : Prop) [Decidable condition]
-    (h : condition) (error : Error) (rest : List UInt8) :
-    require condition error rest = .ok ((), rest) := by
-  simp [require, h]
+  simp [uint, Base.ByteReader.uint, Base.ByteReader.bytes, Base.bytesToNat, StateT.bind,
+    StateT.pure, bind, Except.bind, pure, Except.pure]
 
 /-- Reading a bounded vector recovers all its bytes and leaves the following bytes. -/
 theorem blob_encode (width minimum maximum : Nat) (data rest : List UInt8)

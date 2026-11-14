@@ -16,6 +16,7 @@ Reading the frame preserves arbitrary bytes after it.
 namespace EthLib.Networking.Quic.Tls
 
 open Wire
+open EthLib.Base.ByteReader (bytes_append uint_encode require_true)
 open EthLib.Base (bind_ok_iff)
 
 attribute [local simp] bind pure StateT.bind StateT.pure StateT.lift Except.bind Except.pure
@@ -131,11 +132,11 @@ theorem encodeBody_finished_length (hashLength : Nat) (data : List UInt8)
 
 @[simp] theorem uint_legacy (rest : List UInt8) :
     uint 2 (3 :: 3 :: rest) = .ok (0x0303, rest) := by
-  exact uint_encode 2 0x0303 rest
+  exact uint_encode Wire.Error.truncated 2 0x0303 rest
 
 @[simp] theorem bytes_compression (rest : List UInt8) :
     bytes 2 (1 :: 0 :: rest) = .ok ([1, 0], rest) := by
-  simpa using bytes_append [1, 0] rest
+  simpa using bytes_append Wire.Error.truncated [1, 0] rest
 
 /-- Every successfully encoded message body recovers all fields with arbitrary trailing bytes. -/
 theorem readBody_encodeBody {hashLength : Nat} {message : Message} {body : List UInt8}
@@ -146,12 +147,12 @@ theorem readBody_encodeBody {hashLength : Nat} {message : Message} {body : List 
     simp only [encodeBody, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at written
     obtain ⟨session, hs, suites, hc, extensions, he, rfl⟩ := written
     simp [readBody, Message.type, List.append_assoc, blob_encode_of_encode hs,
-      codePoints_encode hc, readExtensions_encode he, require]
+      codePoints_encode hc, readExtensions_encode he, require, Base.ByteReader.require]
   | serverHello h =>
     simp only [encodeBody, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at written
     obtain ⟨session, hs, extensions, he, rfl⟩ := written
     simp [readBody, Message.type, List.append_assoc, blob_encode_of_encode hs,
-      readExtensions_encode he, require]
+      readExtensions_encode he, require, Base.ByteReader.require]
   | encryptedExtensions extensions =>
     simp [readBody, Message.type, readExtensions_encode written rest]
   | certificateRequest request =>
