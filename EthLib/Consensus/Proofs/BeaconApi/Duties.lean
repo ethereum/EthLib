@@ -25,6 +25,16 @@ From Gloas, a PTC request is refused outside the previous epoch to the next one.
 
 It is also refused before the Gloas fork epoch.
 
+An attester, sync or PTC index that names no validator is refused.
+
+That refusal needs an epoch the answer serves, and the duty lookup of each earlier index to succeed.
+
+A sync epoch outside the current and next periods is refused.
+
+So is a proposer epoch that the state cannot answer for.
+
+A sync request before Altair is refused, and so is a PTC request before Gloas.
+
 In the current epoch, each proposer duty from the slot of the state on names its proposer.
 
 Each seat of a sync duty holds the key of the validator.
@@ -163,6 +173,14 @@ private theorem checkDutyEpoch_seed_gone {state : BeaconState preset fork} {epoc
   · simp [checkDutyEpoch, Nat.not_lt.mp far, Nat.not_lt.mpr gone, throw, throwThe,
       MonadExceptOf.throw]
 
+/-- The epoch check passes an epoch at most the next one, whose seed the mixes still hold. -/
+private theorem checkDutyEpoch_ok {state : BeaconState preset fork} {epoch : Epoch}
+    (near : epoch.toNat ≤ (getCurrentEpoch state).toNat + 1)
+    (seeded : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+      epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
+    checkDutyEpoch state epoch = .ok () := by
+  simp [checkDutyEpoch, near, seeded, pure, Except.pure]
+
 /-- The epoch check passes, or gives the error of an invalid epoch. -/
 private theorem checkDutyEpoch_cases (state : BeaconState preset fork) (epoch : Epoch) :
     checkDutyEpoch state epoch = .ok () ∨
@@ -172,8 +190,7 @@ private theorem checkDutyEpoch_cases (state : BeaconState preset fork) (epoch : 
   by_cases gone : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat ≤
       (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1
   · exact .inr (checkDutyEpoch_seed_gone gone)
-  · left
-    simp [checkDutyEpoch, Nat.not_lt.mp far, Nat.lt_of_not_le gone, pure, Except.pure]
+  · exact .inl (checkDutyEpoch_ok (Nat.not_lt.mp far) (Nat.lt_of_not_le gone))
 
 /-- A request for an epoch after the next one gets the error of an invalid epoch, code 400. -/
 theorem attesterDuties_epoch_bound {state : BeaconState preset fork} {epoch : Epoch}
@@ -587,6 +604,28 @@ theorem dependentRoot_too_old {state : BeaconState preset fork} {lag : Nat} {epo
   simp [getBlockRootAtSlot, before, liftArith, bound, beyond, Except.mapError, rootError,
     throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
+/-- Before Altair, the sync answer is the error with code 400 that names Altair.
+
+A request with no index gets that error too, not the error of an empty request. -/
+theorem dutiesResponse_sync_of_lt_altair {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root}
+    (early : fork < .altair) :
+    dutiesResponse config state .sync epoch indices genesisRoot =
+      .error (beforeFork "sync duties" .altair) := by
+  have notAltair : ¬.altair ≤ fork := Nat.not_le.2 early
+  simp [dutiesResponse, notAltair]
+
+/-- Before Gloas, the PTC answer is the error with code 400 that names Gloas.
+
+A request with no index gets that error too, not the error of an empty request. -/
+theorem dutiesResponse_ptc_of_lt_gloas {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root}
+    (early : fork < .glamsterdam) :
+    dutiesResponse config state .ptc epoch indices genesisRoot =
+      .error (beforeFork "PTC duties" .glamsterdam) := by
+  have notGloas : ¬.glamsterdam ≤ fork := Nat.not_le.2 early
+  simp [dutiesResponse, notGloas]
+
 /-- An attester, sync or PTC request with no index gets an error with code 400. -/
 theorem dutiesResponse_nil {config : Config} {state : BeaconState preset fork}
     {kind : DutyKind} {epoch : Epoch} {genesisRoot : Root}
@@ -598,11 +637,11 @@ theorem dutiesResponse_nil {config : Config} {state : BeaconState preset fork}
   · by_cases altair : .altair ≤ fork
     · exact ⟨emptyIndices, by simp [dutiesResponse, altair, syncDuties_nil, bind, Except.bind],
         rfl⟩
-    · exact ⟨beforeFork "sync duties" .altair, by simp [dutiesResponse, altair], rfl⟩
+    · exact ⟨_, dutiesResponse_sync_of_lt_altair (Nat.lt_of_not_le altair), rfl⟩
   · by_cases gloas : .glamsterdam ≤ fork
     · exact ⟨emptyIndices, by simp [dutiesResponse, gloas, ptcDuties_eq, bind, Except.bind],
         rfl⟩
-    · exact ⟨beforeFork "PTC duties" .glamsterdam, by simp [dutiesResponse, gloas], rfl⟩
+    · exact ⟨_, dutiesResponse_ptc_of_lt_gloas (Nat.lt_of_not_le gloas), rfl⟩
 
 /-- The duty lookup of a validator of the state succeeds when its committee assignment does. -/
 private theorem attesterDuty_exists {state : BeaconState preset fork} {epoch : Epoch}
@@ -642,5 +681,201 @@ theorem dutiesResponse_attester_too_old {config : Config} {state : BeaconState p
     simp [dutiesResponse, attesterDuties, checked, mapped, dependentRoot_too_old started old,
       bind, Except.bind, pure, Except.pure]
   · simp [dutiesResponse, attesterDuties, refused, bind, Except.bind]
+
+/-- The lookup of an index that names no validator gets the error of an invalid index. -/
+private theorem requestedValidator_unknown {state : BeaconState preset fork}
+    {index : ValidatorIndex} (unknown : state.validators.data.size ≤ index.toNat) :
+    requestedValidator state index = .error (invalidIndex index) := by
+  simp [requestedValidator, getValidator, Array.getElem?_eq_none unknown, Except.mapError]
+
+/-- An attester index that names no validator gets the error of an invalid index, code 400.
+
+It needs the epoch to be at most the next one, with its seed still in the mixes of the state.
+
+It needs each earlier index to name a validator whose committee assignment succeeds. -/
+theorem dutiesResponse_attester_unknown {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {before after : List ValidatorIndex} {index : ValidatorIndex}
+    {genesisRoot : Root} (near : epoch.toNat ≤ (getCurrentEpoch state).toNat + 1)
+    (seeded : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+      epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (known : ∀ member ∈ before, ∃ validator, getValidator state member = .ok validator)
+    (assigned : ∀ member ∈ before, ∃ assignment,
+      getCommitteeAssignment state epoch member = .ok assignment)
+    (unknown : state.validators.data.size ≤ index.toNat) :
+    dutiesResponse config state .attester epoch (before ++ index :: after) genesisRoot =
+      .error (invalidIndex index) := by
+  obtain ⟨found, mapped⟩ := mapM_exists_ok (f := attesterDuty state epoch)
+    fun member inside => attesterDuty_exists (known member inside) (assigned member inside)
+  have failed : attesterDuty state epoch index = .error (invalidIndex index) := by
+    simp [attesterDuty, requestedValidator_unknown unknown, bind, Except.bind]
+  simp [dutiesResponse, attesterDuties, checkDutyEpoch_ok near seeded, mapped, failed, bind,
+    Except.bind]
+
+/-- The sync committee of the current or the next period of the state is found. -/
+private theorem syncCommitteeOf_exists {state : BeaconState preset fork}
+    (altair : .altair ≤ fork) {epoch : Epoch}
+    (period : (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat ≤
+        (computeSyncCommitteePeriod preset epoch).toNat ∧
+      (computeSyncCommitteePeriod preset epoch).toNat ≤
+        (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat + 1) :
+    ∃ committee, syncCommitteeOf state altair epoch = .ok committee := by
+  unfold syncCommitteeOf
+  by_cases same : computeSyncCommitteePeriod preset epoch =
+      computeSyncCommitteePeriod preset (getCurrentEpoch state)
+  · simp [same]
+  · have next : (computeSyncCommitteePeriod preset epoch).toNat =
+        (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat + 1 := by
+      have := mt UInt64.toNat_inj.mp same
+      omega
+    simp [same, next]
+
+/-- The sync duty lookup of a validator of the state succeeds. -/
+private theorem syncDuty_exists {state : BeaconState preset fork}
+    {committee : SyncCommittee preset} {index : ValidatorIndex}
+    (known : ∃ validator, getValidator state index = .ok validator) :
+    ∃ duty, syncDuty state committee index = .ok duty := by
+  obtain ⟨validator, validatorOk⟩ := known
+  simp only [syncDuty, requestedValidator, validatorOk, Except.mapError, bind, Except.bind]
+  split <;> exact ⟨_, rfl⟩
+
+/-- A sync index that names no validator gets the error of an invalid index, code 400.
+
+It needs a fork from Altair, and an epoch in the current or the next period of the state.
+
+It needs each earlier index to name a validator. -/
+theorem dutiesResponse_sync_unknown {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {before after : List ValidatorIndex} {index : ValidatorIndex}
+    {genesisRoot : Root} (altair : .altair ≤ fork)
+    (period : (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat ≤
+        (computeSyncCommitteePeriod preset epoch).toNat ∧
+      (computeSyncCommitteePeriod preset epoch).toNat ≤
+        (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat + 1)
+    (known : ∀ member ∈ before, ∃ validator, getValidator state member = .ok validator)
+    (unknown : state.validators.data.size ≤ index.toNat) :
+    dutiesResponse config state .sync epoch (before ++ index :: after) genesisRoot =
+      .error (invalidIndex index) := by
+  obtain ⟨committee, committeeOk⟩ := syncCommitteeOf_exists altair period
+  obtain ⟨found, mapped⟩ := mapM_exists_ok (f := syncDuty state committee)
+    fun member inside => syncDuty_exists (known member inside)
+  have failed : syncDuty state committee index = .error (invalidIndex index) := by
+    simp [syncDuty, requestedValidator_unknown unknown, bind, Except.bind]
+  simp [dutiesResponse, altair, syncDuties, committeeOk, mapped, failed, bind, Except.bind]
+
+/-- A sync epoch outside the current and next periods of the state gets the error with code 400.
+
+The error says that the epoch is outside the sync committee period of the state.
+
+It needs a fork from Altair, and at least one index. -/
+theorem dutiesResponse_sync_outside {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {index : ValidatorIndex} {rest : List ValidatorIndex} {genesisRoot : Root}
+    (altair : .altair ≤ fork)
+    (outside : (computeSyncCommitteePeriod preset epoch).toNat <
+        (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat ∨
+      (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat + 1 <
+        (computeSyncCommitteePeriod preset epoch).toNat) :
+    dutiesResponse config state .sync epoch (index :: rest) genesisRoot = .error
+      { code := 400, message := "Epoch is outside the sync committee period of the state" } := by
+  have other : computeSyncCommitteePeriod preset epoch ≠
+      computeSyncCommitteePeriod preset (getCurrentEpoch state) := fun same => by
+    rw [same] at outside
+    omega
+  have notNext : (computeSyncCommitteePeriod preset epoch).toNat ≠
+      (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat + 1 := by
+    omega
+  simp [dutiesResponse, altair, syncDuties, syncCommitteeOf, other, notNext, bind, Except.bind]
+
+/-- The PTC duty lookup of a validator of the state succeeds when its PTC assignment does. -/
+private theorem ptcDuty_exists {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {index : ValidatorIndex}
+    (known : ∃ validator, getValidator state index = .ok validator)
+    (assigned : ∃ slot, getPtcAssignment config state gloas epoch index = .ok slot) :
+    ∃ duty, ptcDuty config state gloas epoch index = .ok duty := by
+  obtain ⟨validator, validatorOk⟩ := known
+  obtain ⟨slot, slotOk⟩ := assigned
+  rcases slot with _ | slot <;>
+    simp [ptcDuty, requestedValidator, validatorOk, slotOk, Except.mapError, bind, Except.bind,
+      pure, Except.pure]
+
+/-- A PTC index that names no validator gets the error of an invalid index, code 400.
+
+It needs a fork from Gloas, and no repeated index.
+
+The epoch must lie from the previous one to the next, and not before the Gloas fork epoch.
+
+The mixes of the state must still hold its seed.
+
+It needs each earlier index to name a validator whose PTC assignment succeeds. -/
+theorem dutiesResponse_ptc_unknown {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {before after : List ValidatorIndex} {index : ValidatorIndex}
+    {genesisRoot : Root} (gloas : .glamsterdam ≤ fork)
+    (window : (getCurrentEpoch state).toNat ≤ epoch.toNat + 1 ∧
+      epoch.toNat ≤ (getCurrentEpoch state).toNat + 1 ∧
+      config.GLOAS_FORK_EPOCH.toNat ≤ epoch.toNat ∧
+      (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+        epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (distinct : (before ++ index :: after).Nodup)
+    (known : ∀ member ∈ before, ∃ validator, getValidator state member = .ok validator)
+    (assigned : ∀ member ∈ before, ∃ slot,
+      getPtcAssignment config state gloas epoch member = .ok slot)
+    (unknown : state.validators.data.size ≤ index.toNat) :
+    dutiesResponse config state .ptc epoch (before ++ index :: after) genesisRoot =
+      .error (invalidIndex index) := by
+  obtain ⟨found, mapped⟩ := mapM_exists_ok (f := ptcDuty config state gloas epoch)
+    fun member inside => ptcDuty_exists (known member inside) (assigned member inside)
+  have failed : ptcDuty config state gloas epoch index = .error (invalidIndex index) := by
+    simp [ptcDuty, requestedValidator_unknown unknown, bind, Except.bind]
+  have mappedAll : (before ++ index :: after).mapM (ptcDuty config state gloas epoch) =
+      .error (invalidIndex index) := by
+    simp [mapped, failed, bind, Except.bind]
+  have nonempty : before ++ index :: after ≠ [] := by simp
+  have refused : ptcDuties config state gloas epoch (before ++ index :: after) =
+      .error (invalidIndex index) := by
+    rw [ptcDuties_eq, ite_eq_right nonempty, ite_eq_left window, ite_eq_left distinct, mappedAll]
+    rfl
+  simp [dutiesResponse, gloas, refused, bind, Except.bind]
+
+/-- A proposer epoch other than the current one gets the error of an invalid epoch, code 400.
+
+It needs the first proposer answer, or the second on a fork before Fulu.
+
+The first answer refuses the next epoch even from Fulu, where the lookahead holds its proposers. -/
+theorem dutiesResponse_proposer_not_current {config : Config} {state : BeaconState preset fork}
+    {kind : DutyKind} {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root}
+    (version : kind = .proposerV1 ∨ (kind = .proposerV2 ∧ fork < .fusaka))
+    (other : epoch ≠ getCurrentEpoch state) :
+    dutiesResponse config state kind epoch indices genesisRoot = .error (invalidEpoch epoch) := by
+  rcases version with rfl | ⟨rfl, early⟩
+  · simp [dutiesResponse, other, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  · have notFulu : ¬.fusaka ≤ fork := Nat.not_le.2 early
+    simp [dutiesResponse, proposerDuties, epochProposers, notFulu, other, throw, throwThe,
+      MonadExceptOf.throw, bind, Except.bind]
+
+/-- The second proposer answer refuses an epoch before the current one or past the seed lookahead.
+
+The error is that of an invalid epoch, code 400.
+
+It holds on every fork, as before Fulu that answer serves the current epoch alone. -/
+theorem dutiesResponse_proposer_outside {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root}
+    (outside : epoch.toNat < (getCurrentEpoch state).toNat ∨
+      (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < epoch.toNat) :
+    dutiesResponse config state .proposerV2 epoch indices genesisRoot =
+      .error (invalidEpoch epoch) := by
+  by_cases fulu : .fusaka ≤ fork
+  · rcases outside with behind | ahead
+    · have notAfter : ¬getCurrentEpoch state ≤ epoch := by
+        rw [UInt64.le_iff_toNat_le]
+        omega
+      simp [dutiesResponse, proposerDuties, epochProposers, fulu, notAfter, throw, throwThe,
+        MonadExceptOf.throw, bind, Except.bind]
+    · have far :
+          ¬epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat :=
+        Nat.not_le.2 ahead
+      simp [dutiesResponse, proposerDuties, epochProposers, fulu, far, throw, throwThe,
+        MonadExceptOf.throw, bind, Except.bind]
+  · have other : epoch ≠ getCurrentEpoch state := fun same => by
+      rw [same] at outside
+      omega
+    exact dutiesResponse_proposer_not_current (.inr ⟨rfl, Nat.lt_of_not_le fulu⟩) other
 
 end EthLib.Consensus.BeaconApi
