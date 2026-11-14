@@ -1028,7 +1028,7 @@ public theorem slotStart_le_clock {store : Store preset fork}
 /-- The slot after one before a store's current slot exists, and starts by the store's clock.
 
 The store must follow the model's time of genesis. -/
-public theorem nextSlotStart_le_clock {store : Store preset fork}
+private theorem nextSlotStart_le_clock {store : Store preset fork}
     (genesisEq : store.genesisTimeMs = genesisTimeMs) {current slot : Slot}
     (currentOk : store.getCurrentSlot config = .ok current) (before : slot < current) :
     addChecked slot 1 = .ok (slot + 1) ∧ ∃ following,

@@ -33,7 +33,7 @@ Not yet released.
   The proofs of the justified and finalized ages of a forward-reachable store read them.
 
 - `slotStart_le_of_slotAtTime` shows that each slot up to the slot at a time starts by that time.
-  `nextSlotStart_le_of_slotAtTime` shows it for the slot after an earlier one, and `nextSlotStart_le_clock` reads that at a store's clock.
+  `nextSlotStart_le_of_slotAtTime` shows it for the slot after an earlier one.
   `slotStart_le_clock`, `DelayFits.deadline_add_le` and `duty_window_of_slot_le` read them.
   `isAncestor_of_getCheckpointBlock_above` places a checkpoint read above a block at or before the epoch's first slot.
   `signerHead_of_duty` gives the head on which an honest duty's signer reads its target.
