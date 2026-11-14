@@ -241,40 +241,10 @@ private theorem withdrawals {capella : .shapella ≤ fork}
   rw [dite_eq_right (show ¬ .glamsterdam ≤ fork from Nat.not_le_of_lt early)] at ok
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, _, _, applied⟩ := ok
-  unfold applyExpectedWithdrawals at applied
-  simp only [bind_ok_iff] at applied
-  obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := applied
-  have one : SamePendingQueue state applied := by
-    unfold applyWithdrawals at appliedOk
-    rw [← Array.foldlM_toList] at appliedOk
-    exact fold (fun _ _ _ ok => by
-      unfold applyWithdrawal at ok
-      split at ok
-      · simp only [bind_ok_iff] at ok
-        obtain ⟨_, _, set⟩ := ok
-        obtain ⟨_, rfl⟩ := setBuilder_ok set
-        rfl
-      · exact decrease ok) appliedOk
-  have two : SamePendingQueue applied indexed := by
-    unfold updateNextWithdrawalIndex at indexedOk
-    split at indexedOk
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at indexedOk
-      obtain ⟨_, _, rfl⟩ := indexedOk
-      rfl
-    · cases indexedOk; rfl
-  simp only [dite_eq_right (show ¬ .glamsterdam ≤ fork from Nat.not_le_of_lt early),
-    pure, Except.pure, Except.ok.injEq] at sweptOk
-  subst finished
-  have lastKept : SamePendingQueue indexed after := by
-    split at last <;>
-    unfold updateNextWithdrawalValidatorIndex at last
-    all_goals
-      simp only [bind_ok_iff] at last
-      obtain ⟨_, _, last⟩ := last
-      split at last
-      · cases last
-      · cases last; rfl
-  exact one.trans (two.trans lastKept)
+  apply applyExpectedWithdrawals_of_setters SamePendingQueue refl
+    (fun one two => one.trans two) (fun ok => by rw [applyWithdrawal_eq ok]; rfl)
+    _ _ _ _ _ _ applied
+  all_goals exact fun _ _ => rfl
 
 theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
     (early : fork < .glamsterdam)

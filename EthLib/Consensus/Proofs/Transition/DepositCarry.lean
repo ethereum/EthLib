@@ -322,30 +322,10 @@ private theorem kept_withdrawals {capella : .shapella ≤ fork}
   simp only [processWithdrawals, notGloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,
     liftAccessor_ok] at ok
   obtain ⟨expected, _, _, _, applied⟩ := ok
-  simp only [applyExpectedWithdrawals, notGloas, ↓reduceDIte, bind_ok_iff,
-    pure, Except.pure] at applied
-  obtain ⟨a, appliedOk, b, indexedOk, c, sweptOk, last⟩ := applied
-  have one : Kept s a := kept_fold (step := applyWithdrawal)
-    (fun _ _ _ ok => by rw [applyWithdrawal_eq ok])
-    (by simpa only [applyWithdrawals, ← Array.foldlM_toList] using appliedOk)
-  have two : Kept a b := by
-    unfold updateNextWithdrawalIndex at indexedOk
-    split at indexedOk
-    · obtain ⟨_, _, built⟩ := bind_ok_iff.mp indexedOk
-      cases built
-      rfl
-    · cases indexedOk
-      rfl
-  have queued : Kept b c := by
-    cases sweptOk
-    split <;> rfl
-  have three : Kept c t := by
-    unfold updateNextWithdrawalValidatorIndex at last
-    obtain ⟨_, _, last⟩ := bind_ok_iff.mp last
-    dsimp only at last
-    split at last <;> cases last
-    rfl
-  exact three.trans (queued.trans (two.trans one))
+  apply applyExpectedWithdrawals_of_setters Kept (fun _ => rfl)
+    (fun one two => two.trans one) (fun ok => by rw [applyWithdrawal_eq ok])
+    _ _ _ _ _ _ applied
+  all_goals exact fun _ _ => rfl
 
 /-- Before Gloas, a block keeps the deposit carry.
 

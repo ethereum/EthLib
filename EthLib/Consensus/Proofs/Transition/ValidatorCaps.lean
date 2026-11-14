@@ -470,42 +470,9 @@ private theorem CapStep.pending {f : Fork} {s t : BeaconState preset f}
       ∀ {deposits : List PendingDeposit} {state : BeaconState preset f} {processed : Gwei}
         {count : Nat} {postponed : Array PendingDeposit} {result},
         passPendingDeposits config checks stop nextEpoch available state processed count
-          postponed deposits = .ok result → CapStep state result.1.state := by
-    intro deposits
-    induction deposits with
-    | nil => intro state processed count postponed result ok; cases ok; exact CapStep.refl _
-    | cons deposit rest ih =>
-      intro state processed count postponed result ok
-      unfold passPendingDeposits at ok
-      simp only [bind, Except.bind, pure, Except.pure] at ok
-      split at ok
-      · cases ok; exact CapStep.refl _
-      split at ok
-      · cases ok
-      split at ok
-      · split at ok
-        · cases ok
-        rename_i credited
-        split at ok
-        · cases ok
-        cases ok
-        exact (CapStep.deposit credited).trans (ih ‹_›)
-      split at ok
-      · split at ok
-        · cases ok
-        cases ok
-        exact ih ‹_›
-      split at ok
-      · cases ok
-      split at ok
-      · cases ok; exact CapStep.refl _
-      split at ok
-      · cases ok
-      rename_i credited
-      split at ok
-      · cases ok
-      cases ok
-      exact (CapStep.deposit credited).trans (ih ‹_›)
+          postponed deposits = .ok result → CapStep state result.1.state :=
+    fun ok => passPendingDeposits_of CapStep CapStep.refl (fun one two => one.trans two)
+      (fun credited => CapStep.deposit credited) ok
   unfold processPendingDeposits at ok
   simp only [bind, Except.bind, pure, Except.pure] at ok
   repeat' (split at ok <;> try cases ok)
