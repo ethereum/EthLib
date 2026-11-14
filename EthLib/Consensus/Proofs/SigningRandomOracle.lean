@@ -1,28 +1,25 @@
 module
 
-public import EthLib.Consensus.Containers.Misc
-public import EthLib.Consensus.Signing
+public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Serialization.Proofs.Ssz.RandomOracle
-public import EthLib.Serialization.Proofs.Ssz.Typed.Root
-import EthLib.Consensus.Proofs.Containers.Signing
 import EthLib.Serialization.Proofs.Ssz.Type.Legality
 
 /-!
 # Proofs: a collision of the signing root in the random oracle model
 
-A signing root is the root of the signing data, which holds the root of the object and the domain.
+A signing root is also the root of the signing data with the object in place of its root.
 
-A container reads only the root of each field.
-
-So the signing root is also the root of the signing data with the object in place of its root.
-
-A collision of the signing root is then two different such values with one root.
+So a collision of the signing root is two different such values with one root.
 
 The two objects have one type, and their two domains may differ.
 
-In the random oracle model of the SSZ root, finding one has probability at most `Q^2 / 2^256`.
+With the node hash a random oracle, finding one has probability at most `Q^2 / 2^256`.
 
-`Q` counts every oracle call of the experiment, the adversary's and the extraction's.
+`Q` counts every call to the node hash in the experiment, the adversary's and the extraction's.
+
+Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2.
+
+<https://cseweb.ucsd.edu/~mihir/papers/ro.pdf>
 -/
 
 @[expose] public section
@@ -32,42 +29,9 @@ namespace EthLib.Consensus
 open Base Serialization.Ssz SszType Serialization.Ssz.RandomOracle
 open OracleComp OracleSpec ENNReal
 
-/-- The type of the signing data with an object of the given type in place of its root. -/
-def signingShape (shape : Desc) : Desc :=
-  .container ["object_root", "domain"] [shape, .byteVector bytesPerChunk]
-
-/-- The signing data with the object in place of its root. -/
-def signingValue (value : Value) (domain : Domain) : Value :=
-  .seq [value, .bytes domain.toArray]
-
 /-- The signing data of two objects, each with its domain. -/
 def signingValues (pair : (Value × Domain) × (Value × Domain)) : Value × Value :=
   (signingValue pair.1.1 pair.1.2, signingValue pair.2.1 pair.2.2)
-
-/-- The signing root of an object is the root of one value.
-
-That value is the signing data with the object in place of its root.
-
-The root is cut to one 32-byte node, as every typed root is.
-
-It needs the type of the object to be lawful. -/
-theorem computeSigningRoot_eq_hashTreeRoot {α : Type} [SszType α] [LawfulSszType α]
-    (object : α) (domain : Domain) :
-    computeSigningRoot object domain = (do
-      toChunk (← Serialization.Ssz.hashTreeRoot (signingShape (desc α))
-        (signingValue (toValue object) domain))) := by
-  obtain ⟨root, rooted, width⟩ := Serialization.Ssz.hashTreeRoot_total (desc α)
-    (toValue object) LawfulSszType.wellFormed (LawfulSszType.fits object)
-  -- The root of the object is its leaf, so the root in its place keeps the root of the container.
-  have summary := hashTreeRoot_summary (names := ["object_root", "domain"])
-    (fields := [desc α, .byteVector bytesPerChunk])
-    (values := [toValue object, .bytes domain.toArray]) (position := 0) rfl rfl rfl rooted
-  have objectRooted : SszType.hashTreeRoot object = .ok ⟨root, width⟩ :=
-    hashTreeRoot_ok_iff.mpr rooted
-  rw [computeSigningRoot, objectRooted]
-  show SszType.hashTreeRoot (SigningData.mk ⟨root, width⟩ domain) = _
-  rw [SszType.hashTreeRoot_eq]
-  exact congrArg (· >>= toChunk) summary
 
 /-- The signing type is well formed exactly when the type of the object is. -/
 private theorem wellFormed_signingShape_iff (shape : Desc) :
@@ -117,11 +81,11 @@ private theorem signingValue_inj {first second : Value} {firstDomain secondDomai
       first = second ∧ firstDomain = secondDomain := by
   simp [signingValue, Vector.toArray_inj]
 
-/-- A win on the signing data of two objects is a collision of the signing root.
+/-- A win on the signing data of two objects is a collision of its root.
 
 The two objects with their domains differ, and both objects fit one well-formed type.
 
-Every count in them fits its 256-bit word, and the two roots agree. -/
+Every variable-size count in them fits its 256-bit word, and the two roots agree. -/
 theorem wins_signingValue_iff {shape : Desc} {first second : Value}
     {firstDomain secondDomain : Domain} {firstRoot secondRoot : Except Err Bytes} :
     Wins (signingShape shape)
@@ -137,13 +101,17 @@ theorem wins_signingValue_iff {shape : Desc} {first second : Value}
 
 The adversary outputs two objects of one type, each with a domain, and the domains may differ.
 
-The adversary wins when the two pairs differ, fit the well-formed type, and have one signing root.
+It wins when the two pairs differ, fit the well-formed type, and their signing values share a root.
 
-Every count in them must fit its 256-bit word.
+That root is computed with the oracle as the node hash.
 
-The bound needs at most `Q` oracle calls in the whole experiment, repeats included.
+Every variable-size count in them must fit its 256-bit word.
 
-The experiment runs on the signing data with the object in place of its root. -/
+`Q` bounds the calls to the node hash in the whole experiment, repeats included.
+
+The extraction hashes every node of the padded tree of each value.
+
+So for a type with a list, `Q` grows with the capacity of the list. -/
 theorem prEvent_signingRoot_le_two_pow (shape : Desc)
     (adversary : OracleComp (unifSpec + HashOracle) ((Value × Domain) × (Value × Domain)))
     {Q : Nat}
@@ -154,13 +122,15 @@ theorem prEvent_signingRoot_le_two_pow (shape : Desc)
       Wins (signingShape shape) z.1] ≤ Q * ((Q : ℝ≥0∞) / 2 ^ 256) :=
   prEvent_wins_le_two_pow _ _ budget
 
-/-- Two messages with one signing root win on the values that the bound hashes.
+/-- Two messages with one signing root give a win on their signing values.
 
-The outcome holds the signing values of the two pairs of a message and a domain, and their roots.
+The roots of the outcome are computed with SHA-256, not with the oracle.
+
+The step from SHA-256 to the oracle is the idealisation of the model, not a theorem.
 
 It needs the type of the messages to be lawful, and the two pairs to differ.
 
-It also needs every count in both messages to fit its 256-bit word. -/
+It also needs every variable-size count in both messages to fit its 256-bit word. -/
 theorem wins_of_computeSigningRoot_eq {α : Type} [SszType α] [LawfulSszType α]
     {first second : α} {firstDomain secondDomain : Domain} {root : Root}
     (firstSized : CommitmentSized (desc α) (toValue first))
@@ -203,32 +173,5 @@ theorem wins_of_computeSigningRoot_eq {α : Type} [SszType α] [LawfulSszType α
   have back := congrArg (ofValue (α := α)) valued
   rw [LawfulSszType.ofValue_toValue, LawfulSszType.ofValue_toValue] at back
   rw [Except.ok.inj back, domained]
-
-/-- Every count of a block header fits its word, since the header has no list. -/
-theorem commitmentSized_beaconBlockHeader (header : BeaconBlockHeader) :
-    CommitmentSized (desc BeaconBlockHeader) (toValue header) := by
-  refine .container fun pair member => ?_
-  simp [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at member
-  repeat' rcases member with rfl | member
-  all_goals first | exact .byteVector _ _ | exact .uint _ _
-
-/-- Every count of a checkpoint fits its word, since the checkpoint has no list. -/
-theorem commitmentSized_checkpoint (checkpoint : Checkpoint) :
-    CommitmentSized (desc Checkpoint) (toValue checkpoint) := by
-  refine .container fun pair member => ?_
-  simp [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at member
-  repeat' rcases member with rfl | member
-  all_goals first | exact .byteVector _ _ | exact .uint _ _
-
-/-- Every count of a vote fits its word, since the vote has no list. -/
-theorem commitmentSized_attestationData (data : AttestationData) :
-    CommitmentSized (desc AttestationData) (toValue data) := by
-  refine .container fun pair member => ?_
-  simp [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at member
-  repeat' rcases member with rfl | member
-  all_goals first
-    | exact .byteVector _ _
-    | exact .uint _ _
-    | exact commitmentSized_checkpoint _
 
 end EthLib.Consensus

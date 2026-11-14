@@ -3,6 +3,8 @@ module
 public import EthLib.Consensus.Proofs.Containers.Signing
 public import EthLib.Consensus.Signing
 public import EthLib.Serialization.Proofs.Ssz.Typed.Root
+import EthLib.Serialization.Proofs.Ssz.Codec.Summary
+import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
 
 /-!
 # Proofs: domains, signing roots and fork digests
@@ -12,6 +14,8 @@ Each of them exists for every input, since the roots they hash always exist.
 A domain starts with its domain type, so two domain types never share a domain.
 
 Before Fulu, a fork digest is the first four bytes of the root of the fork data.
+
+A signing root is also the root of the signing data with the object in place of its root.
 -/
 
 @[expose] public section
@@ -70,6 +74,39 @@ theorem computeSigningRoot_total {α : Type} [SszType α] [LawfulSszType α] (ob
   obtain ⟨objectRoot, rooted⟩ := hashTreeRoot_total object
   obtain ⟨root, signed⟩ := hashTreeRoot_total (SigningData.mk objectRoot domain)
   exact ⟨root, by simp [computeSigningRoot, rooted, signed, bind, Except.bind]⟩
+
+/-- The type of the signing data with an object of the given type in place of its root. -/
+def signingShape (shape : Desc) : Desc :=
+  .container ["object_root", "domain"] [shape, .byteVector bytesPerChunk]
+
+/-- The signing data with the object in place of its root. -/
+def signingValue (value : Value) (domain : Domain) : Value :=
+  .seq [value, .bytes domain.toArray]
+
+/-- The signing root of an object is the root of one value.
+
+That value is the signing data with the object in place of its root.
+
+The root is cut to one 32-byte node, as every typed root is.
+
+It needs the type of the object to be lawful. -/
+theorem computeSigningRoot_eq_hashTreeRoot {α : Type} [SszType α] [LawfulSszType α]
+    (object : α) (domain : Domain) :
+    computeSigningRoot object domain = (do
+      toChunk (← Serialization.Ssz.hashTreeRoot (signingShape (desc α))
+        (signingValue (toValue object) domain))) := by
+  obtain ⟨root, rooted, width⟩ := Serialization.Ssz.hashTreeRoot_total (desc α)
+    (toValue object) LawfulSszType.wellFormed (LawfulSszType.fits object)
+  -- A container reads only the root of each field, so the object gives the same root as its root.
+  have summary := hashTreeRoot_summary (names := ["object_root", "domain"])
+    (fields := [desc α, .byteVector bytesPerChunk])
+    (values := [toValue object, .bytes domain.toArray]) (position := 0) rfl rfl rfl rooted
+  have objectRooted : SszType.hashTreeRoot object = .ok ⟨root, width⟩ :=
+    hashTreeRoot_ok_iff.mpr rooted
+  rw [computeSigningRoot, objectRooted]
+  show SszType.hashTreeRoot (SigningData.mk ⟨root, width⟩ domain) = _
+  rw [SszType.hashTreeRoot_eq]
+  exact congrArg (· >>= toChunk) summary
 
 /-- Before Fulu, the fork digest is the first four bytes of the root of the fork data. -/
 theorem computeForkDigest_of_lt_fulu {config : Config} {genesisValidatorsRoot root : Root}

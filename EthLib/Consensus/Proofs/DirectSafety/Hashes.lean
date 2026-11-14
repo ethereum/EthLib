@@ -114,13 +114,8 @@ private theorem header_binding (objects : List (HashObject preset)) (a b : Beaco
     (one : .header a ∈ objects) (two : .header b ∈ objects) (root : Root)
     (sameA : hashTreeRoot a = .ok root) (sameB : hashTreeRoot b = .ok root) :
     a = b ∨ HashEvidence objects := by
-  have sized (h : BeaconBlockHeader) :
-      CommitmentSized (SszType.desc BeaconBlockHeader) (SszType.toValue h) := by
-    refine .container fun pair member => ?_
-    simp [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at member
-    repeat' rcases member with rfl | member
-    all_goals first | exact .byteVector _ _ | exact .uint _ _
-  rcases SszType.hashTreeRoot_binding (sized a) (sized b) sameA sameB with same | collision
+  rcases SszType.hashTreeRoot_binding a.commitmentSized b.commitmentSized sameA sameB with
+    same | collision
   · exact .inl same
   · obtain ⟨leftTree, rightTree, leftOk, rightOk, x, y, _, leftMem, rightMem, collided⟩ :=
       collision
