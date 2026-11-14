@@ -4059,6 +4059,15 @@ A simulated block differs from a real one in these places:
 - the overrides of the accounts change the state before the block, and are not in its access list;
 - the default gas of a call follows the gas that its block has used, within a global budget of 50,000,000 that each call spends, and a call that overspends it gets `-38026`.
 
+Each simulated block follows the last block of its chain at the number that it is given (`simulateBlock_links`, `Proofs/Rpc/SimulateBlocks.lean`).
+Its parent hash is the hash of the header of that block, and its own hash is the hash of its header.
+When the view holds the hash of each header, there is one block for each planned block and each gap block before it (`simulateBlocks_links`).
+They have consecutive numbers after the base block.
+The first has the hash of the base block as parent hash, and each other the hash of the block before it.
+Without validation, a block whose base fee is not overridden has a base fee of 0, whatever the base fee of the block before it (`simulateBlock_baseFee`).
+Its body runs in the environment of its header, whose base fee is then 0, and BASEFEE reads it (`simulateBlock_environment_baseFee`).
+With validation off, every block of a simulation whose base fee is not overridden has a base fee of 0, gap blocks included (`simulateBlocks_baseFee`).
+
 Where the source is silent or conflicts with itself for the blocks, EthLib follows the fixtures, else decides:
 
 - a block keeps the gas limit of the block before it, where the notes name the base block;
