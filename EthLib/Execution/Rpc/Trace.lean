@@ -326,4 +326,40 @@ def traceTransaction {fork : Fork} (config : TraceConfig) (env : BlockEnvironmen
   let (output, tracer) ← (traceRun config env before.block included tx).mapError .aborted
   return .ofRun output tracer
 
+/-- The environment of a block on `chain`, and its body after the system calls at its start.
+
+The transactions of the block run from that body. -/
+def bodyStart (chain : BlockChain) {fork : Fork} (block : Block fork Transaction) :
+    Except BlockError (BlockEnvironment fork × BodyState) := do
+  let hashes ← recentHashes chain.recent
+  let env := blockEnvironment chain.config hashes block.header
+  let state ← daoTransfer chain.config fork block.header.number ⟨chain.state, ∅, ∅, ∅, ∅⟩
+  let body ← (startSystemCalls env block.header.parentHash (.init state)).mapError .aborted
+  return (env, body)
+
+/-- The traces of the transactions of `block` on `chain`, in order.
+
+Each transaction runs after those before it, as the body of the block runs them. -/
+def traceBlock (config : TraceConfig) (chain : BlockChain) {fork : Fork}
+    (block : Block fork Transaction) : Except BlockError (List TransactionTrace) := do
+  let (env, body) ← bodyStart chain block
+  let (_, traces) ← block.transactions.zipIdx.foldlM
+    (init := ((⟨body, .zero, 0, [], [], []⟩ : BodyOutput fork), ([] : List TransactionTrace)))
+    fun (before, traces) (tx, index) => do
+      let trace ← traceTransaction config env index before tx
+      let after ← applyTransaction env index before tx
+      return (after, traces ++ [trace])
+  return traces
+
+/-- The trace of the transaction at `index` of `block` on `chain`, or none past the last one. -/
+def traceTransactionAt (config : TraceConfig) (chain : BlockChain) {fork : Fork}
+    (block : Block fork Transaction) (index : Nat) :
+    Except BlockError (Option TransactionTrace) := do
+  match block.transactions[index]? with
+  | none => return none
+  | some tx =>
+    let (env, body) ← bodyStart chain block
+    let before ← applyTransactions env body (block.transactions.take index)
+    some <$> traceTransaction config env index before tx
+
 end EthLib.Execution.Rpc
