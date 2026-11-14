@@ -709,9 +709,9 @@ private theorem getHeadFrom_chain_reads (before : fork < .glamsterdam)
     (pending : start.payloadStatus = .pending) {startBlock : BeaconBlock preset fork}
     (found : store.blocks[start.root]? = some startBlock) :
     store.getAncestor head startBlock.slot = .ok start ∧
-      ∀ {target : Root} {targetBlock : BeaconBlock preset fork},
-        startBlock.slot ≤ targetBlock.slot →
-        store.getAncestor head targetBlock.slot = .ok ⟨target, .pending⟩ →
+      ∀ {target : Root} {targetSlot : Slot},
+        startBlock.slot ≤ targetSlot →
+        store.getAncestor head targetSlot = .ok ⟨target, .pending⟩ →
         ∃ result, store.heaviestChild config tally nodes ⟨target, .pending⟩ = .ok result := by
   induction start using getHeadFrom.induct store generalizing startBlock with
   | _ start ih =>
@@ -724,7 +724,7 @@ private theorem getHeadFrom_chain_reads (before : fork < .glamsterdam)
         simp [chosen, bind, Except.bind, pure, Except.pure] at walk
         subst walk
         refine ⟨getAncestor_of_le found (UInt64.le_refl _), ?_⟩
-        intro target targetBlock below path
+        intro target targetSlot below path
         rw [getAncestor_of_le found below] at path
         exact ⟨none, (Except.ok.inj path) ▸ chosen⟩
       | some child =>
@@ -751,8 +751,8 @@ private theorem getHeadFrom_chain_reads (before : fork < .glamsterdam)
           · rw [getAncestor_trans (UInt64.le_of_lt higher) upper,
               getAncestor_parent_of_slot_lt childFound (parent ▸ found) higher,
               parentPayloadStatus_of_lt before, parent, ← pending]
-          · intro target targetBlock below path
-            by_cases childBelow : childBlock.slot ≤ targetBlock.slot
+          · intro target targetSlot below path
+            by_cases childBelow : childBlock.slot ≤ targetSlot
             · exact reads childBelow path
             · rw [getAncestor_trans (UInt64.le_of_lt (UInt64.not_le.mp childBelow)) upper,
                 getAncestor_step childFound childBelow (parent ▸ found) higher,
@@ -778,10 +778,10 @@ theorem getAncestor_getHeadFrom (before : fork < .glamsterdam) {nodes : List For
 theorem heaviestChild_ok_of_getHeadFrom (before : fork < .glamsterdam)
     {nodes : List ForkChoiceNode} {start head : ForkChoiceNode}
     (walk : store.getHeadFrom config tally nodes start = .ok head)
-    (pending : start.payloadStatus = .pending) {startBlock targetBlock : BeaconBlock preset fork}
+    (pending : start.payloadStatus = .pending) {startBlock : BeaconBlock preset fork}
     (found : store.blocks[start.root]? = some startBlock)
-    (below : startBlock.slot ≤ targetBlock.slot) {target : Root}
-    (path : store.getAncestor head targetBlock.slot = .ok ⟨target, .pending⟩) :
+    {targetSlot : Slot} (below : startBlock.slot ≤ targetSlot) {target : Root}
+    (path : store.getAncestor head targetSlot = .ok ⟨target, .pending⟩) :
     ∃ result, store.heaviestChild config tally nodes ⟨target, .pending⟩ = .ok result :=
   (getHeadFrom_chain_reads before walk pending found).2 below path
 
