@@ -157,6 +157,8 @@ structure TransactionResult where
   output : ByteArray
   /-- The gas that it used before its refund, at least the call data floor from Pectra. -/
   gasBeforeRefund : Nat
+  /-- The error that stopped its message, or none when the message succeeded. -/
+  error : Option EvmError
 
 /-- What the body of a block gives, at `fork`. -/
 structure BodyOutput (fork : Fork) where
@@ -221,7 +223,7 @@ def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
            receipts :=
              before.receipts ++ [(tx.type, makeReceipt outcome cumulativeGasUsed out.logs.toList)]
            logs := before.logs ++ out.logs.toList
-           results := before.results ++ [⟨out.messageOutput, out.gasBeforeRefund⟩] }
+           results := before.results ++ [⟨out.messageOutput, out.gasBeforeRefund, out.error⟩] }
 
 /-- Run the transactions of a block in order, from the body so far. -/
 def applyTransactions {fork : Fork} (env : BlockEnvironment fork) (body : BodyState)
