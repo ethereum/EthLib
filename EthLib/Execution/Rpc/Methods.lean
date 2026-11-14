@@ -10,7 +10,7 @@ public import EthLib.Execution.Rpc.AccessList
 public import EthLib.Execution.Rpc.Filter
 public import EthLib.Execution.Rpc.Proof
 public import EthLib.Execution.Rpc.Request
-public import EthLib.Execution.Rpc.Simulate
+public import EthLib.Execution.Rpc.Simulate.Blocks
 public import EthLib.Execution.Rpc.TransactionInfo
 
 /-!

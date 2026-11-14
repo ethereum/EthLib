@@ -237,6 +237,10 @@ structure SimulateChoices where
   blockTime_pos : 0 < blockTime := by decide
   /-- The most blocks of a simulation, gap blocks included. -/
   maxBlocks : Nat := 256
+  /-- The gas budget of a whole simulation, which each call spends and which caps a default gas.
+
+  The fixtures take 50,000,000. -/
+  gasCap : Nat := 50000000
 
 /-- A block of the request, with its number, its time and the empty blocks before it. -/
 structure PlannedBlock where
@@ -372,13 +376,5 @@ def ChainView.planSimulate (v : ChainView) (payload : SimulatePayload) (p : Bloc
     checkMoves fork b.request.stateOverrides
     return (b, fork)
   return { base, blocks }
-
-/-- The answer of `eth_simulateV1`, which fails once the request passes its checks.
-
-The execution of the simulated blocks is not yet specified, so the node fails with `-32603`. -/
-def ChainView.simulate (v : ChainView) (payload : SimulatePayload) (p : BlockParam)
-    (choices : SimulateChoices) : Except RpcError Json := do
-  let _ ← v.planSimulate payload p choices
-  throw (callInternalError "simulated blocks are not yet specified")
 
 end EthLib.Execution.Rpc
