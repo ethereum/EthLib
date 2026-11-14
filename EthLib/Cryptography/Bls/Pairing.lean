@@ -163,14 +163,21 @@ def pairing (P : G1 F) (Q : G2 F) : Fp12 F :=
   if P.isInfinity || Q.isInfinity then Fp12.one
   else finalExponentiation (millerLoop blsX Q.toAffine P.toAffine).conjugate
 
-/-- Returns `true` iff `∏ e(P_i, Q_i) = 1`. -/
-def pairingCheck (pairs : Array (G1 F × G2 F)) : Bool := Id.run do
-  let mut acc : Fp12 F := Fp12.one
-  for (p, q) in pairs do
-    -- Identity pairs contribute 1.
-    if p.isInfinity || q.isInfinity then continue
-    let f := millerLoop blsX q.toAffine p.toAffine
-    acc := acc * f.conjugate
-  return (finalExponentiation acc).isOne
+/-- The factor that one pair adds to the product of the pairing check.
+
+It is the Miller loop of the pair, conjugated because the BLS parameter `x` is negative.
+
+A pair with a point at infinity adds no factor, since its pairing is 1. -/
+def pairFactor (pq : G1 F × G2 F) : Option (Fp12 F) :=
+  if pq.1.isInfinity || pq.2.isInfinity then none
+  else some (millerLoop blsX pq.2.toAffine pq.1.toAffine).conjugate
+
+/-- Returns `true` iff `∏ e(P_i, Q_i) = 1`.
+
+The Miller loops are multiplied first, in the order of the pairs.
+
+Then one final exponentiation serves the whole product. -/
+def pairingCheck (pairs : Array (G1 F × G2 F)) : Bool :=
+  (finalExponentiation ((pairs.filterMap pairFactor).foldl (· * ·) Fp12.one)).isOne
 
 end EthLib.Cryptography.Bls
