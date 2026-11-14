@@ -149,24 +149,10 @@ theorem HonestVoteData.target_read {store other : Store preset fork}
       unfold getBlockRoot at read
       rw [← epoch, firstOk] at read
       exact read
-    have firstAfter : anchorState.slot ≤ first := by
-      have rounded : anchorState.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH =
-          anchorState.slot := by
-        apply epoch_floor_eq_of_sub_eq_zero
-        simpa [isStartSlotAtEpoch, computeSlotsSinceEpochStart, anchorSlot,
-          computeStartSlotAtEpoch_computeEpochAtSlot, Except.mapError, bind, Except.bind,
-          pure, Except.pure] using anchorAtBoundary
-      have mono := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat
-        (Nat.div_le_div_right (c := preset.SLOTS_PER_EPOCH.toNat)
-          (UInt64.le_iff_toNat_le.mp anchorLe))
-      have a := (computeStartSlotAtEpoch_ok_iff.mp
-        (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) anchorState.slot)).2
-      have b := (computeStartSlotAtEpoch_ok_iff.mp firstOk).2
-      rw [rounded] at a
-      simp only [computeEpochAtSlot, UInt64.toNat_div] at a
-      rw [epoch] at b
-      simp only [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div] at b
-      exact UInt64.le_iff_toNat_le.mpr (by omega)
+    have firstAfter : anchorState.slot ≤ first :=
+      le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch
+        (by rw [← anchorSlot]; exact anchorAtBoundary) anchorLe
+        (computeStartSlotAtEpoch_computeEpochAtSlot state.slot)
     exact reachable.lookahead_history_ancestor_of_held (UInt64.le_of_eq anchorSlot) nonzero
       holder stored' known advanced read' firstAfter .pending
 

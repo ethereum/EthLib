@@ -53,6 +53,26 @@ open Base Uint64 Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
 
+/-- A slot at the start of an epoch is at most the first slot of the epoch of each later slot. -/
+theorem le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch {start slot first : Slot}
+    (boundary : isStartSlotAtEpoch preset start = .ok true) (le : start ≤ slot)
+    (firstOk : computeStartSlotAtEpoch preset (computeEpochAtSlot preset slot) = .ok first) :
+    start ≤ first := by
+  have rounded : start / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH = start := by
+    apply epoch_floor_eq_of_sub_eq_zero
+    simpa [isStartSlotAtEpoch, computeSlotsSinceEpochStart,
+      computeStartSlotAtEpoch_computeEpochAtSlot, Except.mapError, bind, Except.bind,
+      pure, Except.pure] using boundary
+  have a := (computeStartSlotAtEpoch_ok_iff.mp
+    (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) start)).2
+  rw [rounded] at a
+  simp only [computeEpochAtSlot, UInt64.toNat_div] at a
+  have b := (computeStartSlotAtEpoch_ok_iff.mp firstOk).2
+  simp only [computeEpochAtSlot, UInt64.toNat_div] at b
+  have mono := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat
+    (Nat.div_le_div_right (c := preset.SLOTS_PER_EPOCH.toNat) (UInt64.le_iff_toNat_le.mp le))
+  exact UInt64.le_iff_toNat_le.mpr (by omega)
+
 namespace Store
 
 /-- The finalized epoch is at most the justified epoch, for both pairs of checkpoints. -/
