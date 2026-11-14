@@ -15,6 +15,10 @@ Addition and doubling then need no inverse.
 
 Only the conversion back to `(x, y)` inverts, once.
 
+The formulas are written once, for any representation of the field.
+
+A curve can then run them on Montgomery limbs.
+
 The formulas are those of Cohen, Miyaji and Ono (1998), formulas (5) and (6).
 
 The Explicit-Formulas Database lists them as add-1998-cmo-2 and dbl-1998-cmo-2:
@@ -36,50 +40,82 @@ structure Jacobian (m : Nat) where
 
 namespace Jacobian
 
-variable {m : Nat} [NeZero m]
+/-- Three Jacobian coordinates in a field representation. -/
+structure Coords (F : Type) where
+  /-- `X`, which is `x Z^2`. -/
+  x : F
+  /-- `Y`, which is `y Z^3`. -/
+  y : F
+  /-- `Z`, which is `0` at the point at infinity. -/
+  z : F
+
+/-- Read the three modular coordinates as field coordinates. -/
+abbrev toCoords {m : Nat} (p : Jacobian m) : Coords (Fin m) :=
+  ⟨p.x, p.y, p.z⟩
+
+/-- Make a modular Jacobian form from its three field coordinates. -/
+abbrev ofCoords {m : Nat} (p : Coords (Fin m)) : Jacobian m :=
+  ⟨p.x, p.y, p.z⟩
+
+namespace Coords
+
+variable {F : Type} [OfNat F 0] [OfNat F 1]
+  [Add F] [Sub F] [Mul F] [DecidableEq F]
+
+/-- Apply a change of field representation to each coordinate. -/
+@[inline] def map {F G : Type} (f : F → G) (p : Coords F) : Coords G :=
+  ⟨f p.x, f p.y, f p.z⟩
 
 /-- The point at infinity. -/
-def infinity : Jacobian m := ⟨1, 1, 0⟩
-
-/-- The Jacobian form `(x, y, 1)` of the point `(x, y)`. -/
-def ofAffine (x y : Fin m) : Jacobian m := ⟨x, y, 1⟩
+@[inline] def infinity : Coords F := ⟨1, 1, 0⟩
 
 /-- The point `(x, y)` of a form, or nothing at infinity.
 
 This is the only inverse. -/
-def toAffine (p : Jacobian m) : Option (Fin m × Fin m) :=
+def toAffine (inverse : F → F) (p : Coords F) : Option (F × F) :=
   if p.z = 0 then none
   else
-    let zi := Fin.inverse p.z
+    let zi := inverse p.z
     let zi2 := zi * zi
     some (p.x * zi2, p.y * zi2 * zi)
 
 /-- `2 P`, by formula (6) of Cohen, Miyaji and Ono, with the curve's `a`.
 
-At a point with `y = 0`, the result has `Z = 0`, the point at infinity. -/
-def double (a : Fin m) (p : Jacobian m) : Jacobian m :=
+When `a = 0`, the term `a Z^4` is skipped.
+
+The small multiples are sums, which cost less than products. -/
+@[specialize] def double (a : F) (p : Coords F) : Coords F :=
   let xx := p.x * p.x
   let yy := p.y * p.y
-  let zz := p.z * p.z
-  let s := 4 * p.x * yy
-  let l := 3 * xx + a * zz * zz
-  let t := l * l - 2 * s
-  ⟨t, l * (s - t) - 8 * yy * yy, 2 * p.y * p.z⟩
+  let xyy := p.x * yy
+  let xyy2 := xyy + xyy
+  let s := xyy2 + xyy2
+  let l := if a = 0 then xx + xx + xx else
+    let zz := p.z * p.z
+    xx + xx + xx + a * zz * zz
+  let t := l * l - (s + s)
+  let y4 := yy * yy
+  let y4x2 := y4 + y4
+  let y4x4 := y4x2 + y4x2
+  let yz := p.y * p.z
+  ⟨t, l * (s - t) - (y4x4 + y4x4), yz + yz⟩
 
 /-- `P + Q`, by formula (5) of Cohen, Miyaji and Ono, with the curve's `a`.
 
 The formula fails when `P` or `Q` is at infinity, or when both have one `x`.
 
-So those cases come first: the other point, then `2 P` or the point at infinity. -/
-def add (a : Fin m) (p q : Jacobian m) : Jacobian m :=
+So those cases come first: the other point, then `2 P` or the point at infinity.
+
+When `Q` has `Z = 1`, the products by its `Z` are skipped. -/
+@[specialize] def add (a : F) (p q : Coords F) : Coords F :=
   if p.z = 0 then q
   else if q.z = 0 then p
   else
     let z1z1 := p.z * p.z
-    let z2z2 := q.z * q.z
-    let u1 := p.x * z2z2
+    let (u1, s1, z1z2) := if q.z = 1 then (p.x, p.y, p.z) else
+      let z2z2 := q.z * q.z
+      (p.x * z2z2, p.y * q.z * z2z2, p.z * q.z)
     let u2 := q.x * z1z1
-    let s1 := p.y * q.z * z2z2
     let s2 := q.y * p.z * z1z1
     let h := u2 - u1
     let r := s2 - s1
@@ -90,13 +126,13 @@ def add (a : Fin m) (p q : Jacobian m) : Jacobian m :=
       let hh := h * h
       let hhh := h * hh
       let v := u1 * hh
-      let x3 := r * r - hhh - 2 * v
-      ⟨x3, r * (v - x3) - s1 * hhh, p.z * q.z * h⟩
+      let x3 := r * r - hhh - (v + v)
+      ⟨x3, r * (v - x3) - s1 * hhh, z1z2 * h⟩
 
 /-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`, low bit first.
 
 It recurses on `fuel`, so the kernel can run it. -/
-def mulBits (a : Fin m) : Nat → Nat → Jacobian m → Jacobian m
+@[specialize] def mulBits (a : F) : Nat → Nat → Coords F → Coords F
   | 0, _, _ => infinity
   | fuel + 1, k, p =>
     -- `k P = (k mod 2) P + (k / 2) (2 P)`.
@@ -108,7 +144,7 @@ def mulBits (a : Fin m) : Nat → Nat → Jacobian m → Jacobian m
 `pq` is `P + Q`, which each pair of bits that are both `1` adds at once.
 
 It recurses on `fuel`, so the kernel can run it. -/
-def mulAddAux (a : Fin m) (p q pq : Jacobian m) : Nat → Nat → Nat → Jacobian m
+@[specialize] def mulAddAux (a : F) (p q pq : Coords F) : Nat → Nat → Nat → Coords F
   | 0, _, _ => infinity
   | fuel + 1, k, l =>
     -- `k P + l Q = 2 ((k / 2) P + (l / 2) Q) + (k mod 2) P + (l mod 2) Q`.
@@ -126,8 +162,47 @@ The method is Algorithm 3.48, in §3.3.3 of "Guide to Elliptic Curve Cryptograph
 Its windows here have one bit.
 
 That book is by Hankerson, Menezes and Vanstone (Springer, 2004). -/
-def mulAdd (a : Fin m) (fuel k : Nat) (p : Jacobian m) (l : Nat) (q : Jacobian m) : Jacobian m :=
+@[specialize] def mulAdd (a : F) (fuel k : Nat) (p : Coords F) (l : Nat)
+    (q : Coords F) : Coords F :=
   mulAddAux a p q (add a p q) fuel k l
+
+end Coords
+
+variable {m : Nat} [NeZero m]
+
+/-- The point at infinity. -/
+@[inline] def infinity : Jacobian m := ofCoords Coords.infinity
+
+/-- The Jacobian form `(x, y, 1)` of the point `(x, y)`. -/
+def ofAffine (x y : Fin m) : Jacobian m := ⟨x, y, 1⟩
+
+/-- The point `(x, y)` of a form, or nothing at infinity. -/
+@[inline] def toAffine (p : Jacobian m) : Option (Fin m × Fin m) :=
+  Coords.toAffine Fin.inverse p.toCoords
+
+/-- `2 P` on the integers mod `m`, with the curve's `a`.
+
+At a point with `y = 0`, the result has `Z = 0`, the point at infinity. -/
+@[inline] def double (a : Fin m) (p : Jacobian m) : Jacobian m :=
+  ofCoords (Coords.double a p.toCoords)
+
+/-- `P + Q` on the integers mod `m`, with the curve's `a`. -/
+@[inline] def add (a : Fin m) (p q : Jacobian m) : Jacobian m :=
+  ofCoords (Coords.add a p.toCoords q.toCoords)
+
+/-- `k P` on the integers mod `m`, for `k < 2^fuel`, by double and add on the bits of `k`. -/
+@[inline] def mulBits (a : Fin m) (fuel k : Nat) (p : Jacobian m) : Jacobian m :=
+  ofCoords (Coords.mulBits a fuel k p.toCoords)
+
+/-- `k P + l Q` on the integers mod `m`, for `k, l < 2^fuel`, with `pq = P + Q`. -/
+@[inline] def mulAddAux (a : Fin m) (p q pq : Jacobian m) (fuel k l : Nat) :
+    Jacobian m :=
+  ofCoords (Coords.mulAddAux a p.toCoords q.toCoords pq.toCoords fuel k l)
+
+/-- `k P + l Q` on the integers mod `m`, for `k, l < 2^fuel`, with shared doublings. -/
+@[inline] def mulAdd (a : Fin m) (fuel k : Nat) (p : Jacobian m) (l : Nat)
+    (q : Jacobian m) : Jacobian m :=
+  ofCoords (Coords.mulAdd a fuel k p.toCoords l q.toCoords)
 
 end Jacobian
 

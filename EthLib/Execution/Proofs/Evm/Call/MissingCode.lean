@@ -510,7 +510,11 @@ private theorem runFrame_ne_missingCode [LawfulGasMeter Meter] {bound : Nat}
     {evm : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
     (available : HasCodes evm.state) :
     NoMiss (runFrame (step fork) (step_decreases fork) bound runChild evm within) := by
-  fun_induction runFrame (step fork) (step_decreases fork) bound runChild evm within
+  revert available
+  refine runFrame_induct
+    (motive := fun evm _ r => HasCodes evm.state → NoMiss r)
+    ?case1 ?case2 ?case3 ?case4 ?case5 ?case6 ?case7 ?case8 evm within
+  all_goals (intros; rename_i available)
   case case1 _ _ hstep _ =>
     intro c h
     cases h
@@ -572,7 +576,7 @@ theorem processMessage_ne_missingCode_of_gas [LawfulGasMeter Meter] (n : Nat) :
         split
         · exact hasCodes_touchAccount _ available
         · exact available
-      rw [processMessage] at h
+      rw [processMessage_unfold] at h
       simp only [Except.map] at h
       split at h
       · rename_i hdo
@@ -606,7 +610,7 @@ theorem processMessage_ne_missingCode_of_gas [LawfulGasMeter Meter] (n : Nat) :
       · cases h
     refine ⟨fun message state substate meter held hn available c => call message state substate
       meter held hn available c, fun message state substate meter held hn available c h => ?_⟩
-    rw [processCreateMessage] at h
+    rw [processCreateMessage_unfold] at h
     rcases Base.bind_eq_error h with hp | ⟨prepared, hprep, h⟩
     · unfold prepareCreation at hp
       split at hp

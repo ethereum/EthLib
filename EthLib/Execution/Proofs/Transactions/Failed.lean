@@ -169,7 +169,7 @@ theorem processCreateMessage_sameOutside_of_error [LawfulGasMeter Meter]
     (h : processCreateMessage fork message state substate meter held = .ok ended)
     (herr : ended.val.error.isSome = true) :
     SameOutside [] state ended.val.state := by
-  rw [processCreateMessage] at h
+  rw [processCreateMessage_unfold] at h
   obtain ⟨prepared, hp, h⟩ := bind_ok_iff.mp h
   obtain ⟨⟨evm, used⟩, hrun, h⟩ := bind_ok_iff.mp h
   have hparent : evm.state.parent = state.parent :=
@@ -576,7 +576,7 @@ theorem processMessageCall_reads_of_error [LawfulGasMeter Meter] {chainId : Nat}
       ended.val.error.isSome = true →
       ∀ codeHash, ended.val.state.getCode codeHash = s.getCode codeHash := by
     intro m s sub meter held ended hrun herr' codeHash
-    rw [processCreateMessage] at hrun
+    rw [processCreateMessage_unfold] at hrun
     obtain ⟨prepared, hp, hrun⟩ := bind_ok_iff.mp hrun
     obtain ⟨⟨evm, used⟩, hm, hrun⟩ := bind_ok_iff.mp hrun
     have hparent : evm.state.parent = s.parent :=

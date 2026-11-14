@@ -282,19 +282,23 @@ def startState (fork : Fork) (message : Message fork) (state : TransactionState)
 
 mutual
 
-/-- Run a message at fork `fork`, from the state and the substate it starts from.
+/-- Run a message at fork `fork` in the monad `M`, from the state and the substate it starts from.
+
+The observer sees each step of its frame and of the frames of its messages.
 
 Its frame starts with a new meter, or with `meter`, which holds at most the gas of the message.
 
 The frame that ends the message has at most the gas of the message.
 
-The run fails only with an error that aborts the whole execution. -/
-def processMessage [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
-    (state : TransactionState) (substate : Substate)
+If the observer never fails, the run fails only with an error that aborts the whole execution. -/
+@[specialize]
+def processMessageWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M]
+    [MonadExceptOf EvmError M] (fork : Fork) (observe : StepObserver M fork Meter)
+    (message : Message fork) (state : TransactionState) (substate : Substate)
     (meter : Meter := GasMeter.start message.gas message.reservoir)
     (held : GasMeter.gasHeld meter ≤ message.gas := by
       exact Nat.le_of_eq (LawfulGasMeter.gasHeld_start _ _)) :
-    Except EvmError { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } :=
+    M { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } :=
   let rollback (ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }) :
       { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } :=
     ⟨rollbackOnError state ended.val, by
@@ -305,12 +309,14 @@ def processMessage [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
         · exact Nat.le_trans (LawfulGasMeter.gasHeld_rollback _) ended.property
         · exact ended.property
       · exact ended.property⟩
-  Except.map rollback do
+  rollback <$> do
     let state := startState fork message state
     let transfers := message.shouldTransferValue ∧ message.value ≠ 0
     let state ←
       if transfers then
-        (state.moveEther fork message.caller message.currentTarget message.value).mapError .state
+        liftExcept
+          ((state.moveEther fork message.caller message.currentTarget message.value).mapError
+            EvmError.state)
       else pure state
     let substate :=
       if transfers then
@@ -330,17 +336,60 @@ def processMessage [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
         | some after => pure ⟨after, Nat.le_trans (gasHeld_runPrecompile_le h) held⟩
         | none => pure ⟨{ evm with running := false }, held⟩
     | none =>
-      match h : runFrame (step fork) (step_decreases fork) message.gas
-          (fun caller child _ =>
-            match child.target with
-            | some _ => processMessage fork child caller.state caller.substate.child
-            | none => processCreateMessage fork child caller.state caller.substate.child)
-          evm held with
-      | .error e => throw e
-      | .ok after => pure ⟨after, Nat.le_trans (gasHeld_runFrame_le h) held⟩
+      runFrameWith observe (step fork) (step_decreases fork) message.gas
+        (fun caller child _ =>
+          match child.target with
+          | some _ =>
+            processMessageWith fork observe child caller.state caller.substate.child
+          | none =>
+            processCreateMessageWith fork observe child caller.state caller.substate.child)
+        evm held
 termination_by (message.gas, 0)
 
+/-- Run the creation `message` at fork `fork` in the monad `M`, from its state and substate.
+
+The observer sees each step of its frame and of the frames of its messages.
+
+Its frame starts with a new meter, or with `meter`, which holds at most the gas of the message.
+
+The frame that ends the creation has at most the gas of the message. -/
+@[specialize]
+def processCreateMessageWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M]
+    [MonadExceptOf EvmError M] (fork : Fork) (observe : StepObserver M fork Meter)
+    (message : Message fork) (state : TransactionState) (substate : Substate)
+    (meter : Meter := GasMeter.start message.gas message.reservoir)
+    (held : GasMeter.gasHeld meter ≤ message.gas := by
+      exact Nat.le_of_eq (LawfulGasMeter.gasHeld_start _ _)) :
+    M { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } := do
+  let prepared ← liftExcept (prepareCreation fork state message.currentTarget)
+  let ⟨evm, used⟩ ← processMessageWith fork observe message prepared substate meter held
+  match h : depositCode fork state evm with
+  | .error e => throw e
+  | .ok after => pure ⟨after, Nat.le_trans (gasHeld_depositCode_le h) used⟩
+termination_by (message.gas, 1)
+
+end
+
+/-- Run a message at fork `fork`, from the state and the substate it starts from.
+
+It is the run with no observer, in the monad of errors.
+
+Its frame starts with a new meter, or with `meter`, which holds at most the gas of the message.
+
+The frame that ends the message has at most the gas of the message.
+
+The run fails only with an error that aborts the whole execution. -/
+def processMessage [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
+    (state : TransactionState) (substate : Substate)
+    (meter : Meter := GasMeter.start message.gas message.reservoir)
+    (held : GasMeter.gasHeld meter ≤ message.gas := by
+      exact Nat.le_of_eq (LawfulGasMeter.gasHeld_start _ _)) :
+    Except EvmError { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } :=
+  processMessageWith fork (fun _ _ => pure ()) message state substate meter held
+
 /-- Run the creation `message` at fork `fork`, from the state and the substate it starts from.
+
+It is the run with no observer, in the monad of errors.
 
 Its frame starts with a new meter, or with `meter`, which holds at most the gas of the message.
 
@@ -350,14 +399,7 @@ def processCreateMessage [LawfulGasMeter Meter] (fork : Fork) (message : Message
     (meter : Meter := GasMeter.start message.gas message.reservoir)
     (held : GasMeter.gasHeld meter ≤ message.gas := by
       exact Nat.le_of_eq (LawfulGasMeter.gasHeld_start _ _)) :
-    Except EvmError { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } := do
-  let prepared ← prepareCreation fork state message.currentTarget
-  let ⟨evm, used⟩ ← processMessage fork message prepared substate meter held
-  match h : depositCode fork state evm with
-  | .error e => throw e
-  | .ok after => pure ⟨after, Nat.le_trans (gasHeld_depositCode_le h) used⟩
-termination_by (message.gas, 1)
-
-end
+    Except EvmError { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } :=
+  processCreateMessageWith fork (fun _ _ => pure ()) message state substate meter held
 
 end EthLib.Execution.Evm

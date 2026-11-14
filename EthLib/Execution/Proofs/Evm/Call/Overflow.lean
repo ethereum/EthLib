@@ -112,7 +112,12 @@ private theorem runFrame_ne_balanceOverflow [LawfulGasMeter Meter] {bound supply
     runFrame (step fork) (step_decreases fork) bound runChild evm within ≠
       .error (.state (.balanceOverflow address)) := by
   have T := stepRules_supplyLe (fork := fork) (Meter := Meter)
-  fun_induction runFrame (step fork) (step_decreases fork) bound runChild evm within
+  revert le
+  refine runFrame_induct
+    (motive := fun evm _ r => evm.state.supply ≤ supply →
+      r ≠ .error (.state (.balanceOverflow address)))
+    ?case1 ?case2 ?case3 ?case4 ?case5 ?case6 ?case7 ?case8 evm within
+  all_goals (intros; rename_i le)
   case case1 _ _ hstep _ =>
     intro h
     cases h
@@ -173,7 +178,7 @@ theorem processMessage_ne_balanceOverflow_of_gas [LawfulGasMeter Meter] (n : Nat
         processMessage fork message state substate meter held ≠
           .error (.state (.balanceOverflow address)) := by
       intro message state substate meter held hn room address h
-      rw [processMessage] at h
+      rw [processMessage_unfold] at h
       simp only [Except.map] at h
       split at h
       · rename_i hdo
@@ -217,7 +222,7 @@ theorem processMessage_ne_balanceOverflow_of_gas [LawfulGasMeter Meter] (n : Nat
             | (rename_i hrun; cases hdo; exact ran (Nat.le_of_eq started) hrun rfl)
       · cases h
     refine ⟨call, fun message state substate meter held hn room address h => ?_⟩
-    rw [processCreateMessage] at h
+    rw [processCreateMessage_unfold] at h
     rcases Base.bind_eq_error h with hp | ⟨prepared, hprep, h⟩
     · unfold prepareCreation at hp
       split at hp

@@ -163,7 +163,7 @@ theorem exists_rollbackOnError_processMessage [LawfulGasMeter Meter] {message : 
     {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
     (h : processMessage fork message state substate meter held = .ok ended) :
     ∃ last : Evm fork Meter, ended.val = rollbackOnError state last := by
-  rw [processMessage] at h
+  rw [processMessage_unfold] at h
   obtain ⟨ended0, -, rolled⟩ := Base.map_ok_iff.mp h
   have hval := congrArg Subtype.val rolled
   simp only at hval

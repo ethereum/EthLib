@@ -615,7 +615,7 @@ variable {step : Evm fork Meter → Except EvmError (StepResult fork Meter)}
 The step must give static steps and static touch children from a static frame.
 
 The runner must end each static child with a state that differs from its caller's by touches. -/
-theorem staticTouchStep_runFrame
+theorem staticTouchStep_runFrame [LawfulGasMeter Meter]
     (next : ∀ {evm after : Evm fork Meter}, StaticFrame evm → step evm = .ok (.next after) →
       StaticStep evm after)
     (child : ∀ {evm caller : Evm fork Meter} {message : Message fork}
@@ -678,7 +678,7 @@ theorem processMessage_touchesOnly_static [LawfulGasMeter Meter] :
   induction n using Nat.strongRecOn with
   | _ n ih =>
     intro message state substate meter held hn hmsg ended h
-    rw [processMessage] at h
+    rw [processMessage_unfold] at h
     obtain ⟨ended0, hdo, rolled⟩ := Base.map_ok_iff.mp h
     obtain ⟨t0, ht0, hpar0, hrec0⟩ := touchesOnly_startState message state
     have hmsg0 : StaticMessage (startState fork message state) message :=
