@@ -155,6 +155,24 @@ theorem processEffectiveBalanceUpdates_effectiveBalanceSum_le (matched : Balance
   rw [updated, owned]
   exact updatedEffectiveBalance_mul_le (aligned _ (Array.getElem_mem _)) scalar
 
+/-- A positive total times a factor, over its root, is at most the factor times the root plus 2. -/
+theorem mul_div_sqrt_le {total : Nat} (positive : 0 < total) (factor : Nat) :
+    total * factor / Nat.sqrt total ≤ factor * (Nat.sqrt total + 2) := by
+  have rootPositive : 0 < Nat.sqrt total := Nat.sqrt_pos.mpr positive
+  -- The total is below the square of the root plus one.
+  have below : total ≤ Nat.sqrt total * (Nat.sqrt total + 2) := by
+    have := Nat.lt_succ_sqrt total
+    rw [Nat.succ_eq_add_one, Nat.add_mul, Nat.mul_add, Nat.mul_add] at this
+    rw [Nat.mul_add]
+    omega
+  calc total * factor / Nat.sqrt total
+      ≤ Nat.sqrt total * ((Nat.sqrt total + 2) * factor) / Nat.sqrt total := by
+        refine Nat.div_le_div_right ?_
+        rw [← Nat.mul_assoc]
+        exact Nat.mul_le_mul_right _ below
+    _ = factor * (Nat.sqrt total + 2) := by
+        rw [Nat.mul_div_cancel_left _ rootPositive, Nat.mul_comm]
+
 /-- The rise of the rewards over one epoch is at most the issuance bound.
 
 The rise is one base reward per increment for each active increment, times 54/64. -/
@@ -163,13 +181,6 @@ private theorem rise_le_epochIssuance {total increment : Nat} (positive : 0 < to
       preset.epochIssuance total := by
   unfold Preset.epochIssuance
   refine Nat.div_le_div_right (Nat.mul_le_mul_right _ ?_)
-  have rootPositive : 0 < Nat.sqrt total := Nat.sqrt_pos.mpr positive
-  -- The total is below the square of the root plus one.
-  have below : total ≤ Nat.sqrt total * (Nat.sqrt total + 2) := by
-    have := Nat.lt_succ_sqrt total
-    rw [Nat.succ_eq_add_one, Nat.add_mul, Nat.mul_add, Nat.mul_add] at this
-    rw [Nat.mul_add]
-    omega
   calc total / increment * (increment * preset.BASE_REWARD_FACTOR.toNat / Nat.sqrt total)
       ≤ total / increment * (increment * preset.BASE_REWARD_FACTOR.toNat) / Nat.sqrt total :=
         Nat.mul_div_le_mul_div_assoc _ _ _
@@ -177,13 +188,7 @@ private theorem rise_le_epochIssuance {total increment : Nat} (positive : 0 < to
         refine Nat.div_le_div_right ?_
         rw [← Nat.mul_assoc]
         exact Nat.mul_le_mul_right _ (Nat.div_mul_le_self _ _)
-    _ ≤ Nat.sqrt total * ((Nat.sqrt total + 2) * preset.BASE_REWARD_FACTOR.toNat) /
-          Nat.sqrt total := by
-        refine Nat.div_le_div_right ?_
-        rw [← Nat.mul_assoc]
-        exact Nat.mul_le_mul_right _ below
-    _ = preset.BASE_REWARD_FACTOR.toNat * (Nat.sqrt total + 2) := by
-        rw [Nat.mul_div_cancel_left _ rootPositive, Nat.mul_comm]
+    _ ≤ preset.BASE_REWARD_FACTOR.toNat * (Nat.sqrt total + 2) := mul_div_sqrt_le positive _
 
 /-- The base reward per increment is the increment times the factor over the root of the total.
 
@@ -214,7 +219,7 @@ These are the total active balance, the total balance of indices and the partici
 The previous epoch is the same too.
 
 From Altair, they read the flags of both recent epochs. -/
-private theorem rewardReads_congr {other : BeaconState preset fork}
+theorem rewardReads_congr {other : BeaconState preset fork}
     (validators : other.validators = state.validators) (slot : other.slot = state.slot)
     (previous : other.previousEpochParticipation = state.previousEpochParticipation)
     (current : other.currentEpochParticipation = state.currentEpochParticipation) :
@@ -241,7 +246,7 @@ private theorem pendingDepositSum_eq_of_pendingDeposits
   rw [same]
 
 /-- A step that keeps the balances keeps their sum. -/
-private theorem balanceSum_eq_of_balances (same : after.balances = state.balances) :
+theorem balanceSum_eq_of_balances (same : after.balances = state.balances) :
     balanceSum after = balanceSum state := by
   unfold balanceSum
   rw [same]
