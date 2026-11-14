@@ -39,9 +39,11 @@ A chain that it names must be that of the node.
 
 Each number that the transaction carries must also fit in 256 bits.
 
-The blobs, the commitments and the proofs of the request are not checked, and change nothing.
-
 That transaction has the kind, the value, the recipient, the data and the lists of the request.
+
+The blobs, the commitments and the proofs of the request are not checked and change no transaction.
+
+Nor do they change the answer of the call.
 -/
 
 public section
@@ -167,13 +169,19 @@ theorem exists_toTransaction_eq_ok_iff {tx : GenericTransaction} {chainId : UInt
     rcases hto : tx.to with _ | to <;>
     simp_all [ensure, callWord, bind, Except.bind, pure, Except.pure]
 
-/-- The blobs, the commitments and the proofs of a request leave its transaction unchanged.
+/-- The blobs, commitments and proofs of a request leave the result of the conversion unchanged.
 
 So the conversion rejects none of them, whatever the kind of the request. -/
 theorem toTransaction_sidecar (tx : GenericTransaction) (chainId : UInt64) (nonce gas maxFee : Nat)
     (blobs commitments proofs : Option (List ByteArray)) :
     { tx with blobs, commitments, proofs }.toTransaction chainId nonce gas maxFee =
       tx.toTransaction chainId nonce gas maxFee :=
+  rfl
+
+/-- The blobs, commitments and proofs of a request leave the answer of the call unchanged. -/
+theorem ethCall_sidecar (v : ChainView) (tx : GenericTransaction) (p : BlockParam)
+    (choices : CallChoices) (blobs commitments proofs : Option (List ByteArray)) :
+    v.ethCall { tx with blobs, commitments, proofs } p choices = v.ethCall tx p choices :=
   rfl
 
 /-- The fields of the transaction of a request, all at once, for the lemmas below. -/
