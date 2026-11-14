@@ -11,7 +11,7 @@ This module proves that handlers preserve latest votes and never lower their ran
 
 The paper's latest-vote filter is in [arXiv 2405.00549v4, Section 3.1, LMD-GHOST][fcr].
 
-A store keeps one latest vote for each validator.
+A store keeps at most one latest vote for each validator.
 
 A vote replaces it only with a later rank: the target epoch before Gloas, the slot from Gloas.
 
@@ -19,14 +19,9 @@ So no handler removes a latest vote, and none lowers its rank.
 
 An attester slashing adds equivocators, and leaves the latest votes as they are.
 
-Along an execution of the network model, the same holds for each honest validator.
-
-For an implementation comparison, [verified-fast-confirmation][vfc] has two related declarations.
-
-They are `StoreLE` and `Execution.store_latest_message_ge_mono`.
+Along an execution of the network model, the same holds for every store.
 
 [fcr]: https://arxiv.org/abs/2405.00549v4
-[vfc]: https://github.com/fradamt/verified-fast-confirmation
 -/
 
 @[expose] public section

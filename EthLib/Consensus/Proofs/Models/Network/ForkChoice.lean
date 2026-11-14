@@ -6,15 +6,23 @@ public import EthLib.Consensus.Proofs.ForkChoice.HonestDuties
 /-!
 # Network assumptions for Ethereum fork choice
 
-The generic network execution is specialized to honest Ethereum fork-choice duties.
+The generic network execution is specialized to honest validators that run the fork choice.
 
-SignsTarget describes signing witnesses inside the honest target-vote count hypothesis.
+One definition says that a validator signed a vote for a target by a given time.
 
-DelayFits, Prompt and BlocksAdmitted are separate assumptions of the duty/head endpoints.
+The honest vote count reads it, and no theorem takes it as a separate hypothesis.
 
-Synchrony alone supplies neither timely processing nor successful block handling.
+The theorems on voting and the head take three further hypotheses.
 
-Separate handler-totality proofs could discharge BlocksAdmitted.
+The delay fits between the attestation deadline and the start of the next slot.
+
+Honest stores are up to date at each slot start and just before it.
+
+Delayed blocks that pass validation also pass the rest of the block handler.
+
+Synchrony alone gives neither of the last two.
+
+The last one restricts the adversary: a block may carry a vote that a later receiver rejects.
 -/
 
 @[expose] public section
@@ -36,7 +44,7 @@ def SignsTarget
     (v, data) ∈ statements config checks anchorState anchorBlock m ∧ data.target = target
 
 variable (fork) in
-/-- A vote sent at its deadline arrives before the next slot starts. -/
+/-- A vote sent at its deadline, delayed by the bound, arrives before the next slot starts. -/
 def DelayFits (config : Config) (genesisTimeMs : UInt64) (Δ : ℕ) : Prop :=
   (∃ due, getAttestationDueMs config fork = .ok due) ∧
   ∀ slot next start due following, addChecked slot 1 = .ok next →
@@ -60,7 +68,9 @@ def Prompt
 
 /-- Validated delayed blocks pass the receiver's remaining handler checks.
 
-Synchrony supplies view membership, not success of carried votes inside onBlockWithVotes. -/
+Synchrony puts the block in the view; it does not make the votes in the block succeed.
+
+A block that carries a vote a later receiver rejects breaks this hypothesis. -/
 def BlocksAdmitted
     (e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
       genesisTimeMs) J) (GST Δ last : ℕ) : Prop :=

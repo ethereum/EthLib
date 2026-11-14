@@ -18,15 +18,15 @@ They cover the arithmetic of the rule, how it chooses the confirmed block and th
 
 Other proofs tie the stake tests of the rule to the supporters and the committees it reads.
 
-TargetVotes instantiates an assumed honest count at an accepted checkpoint test.
+One module turns an assumed honest vote count into concrete voters when the one-third test passes.
 
-DutySupport concludes head-chain ancestry or a bounded honest-store block-collision search witness.
+Another shows that honest votes over a whole epoch keep the block on the head chain.
 
-It assumes a complete honest duty epoch, the stake margin and earlier ancestry.
+Its alternative conclusion is a hash collision between blocks of two honest stores.
 
-Finality compatibility and block admission are explicit hypotheses.
+It assumes the stake margin, the ancestry at earlier slots and a compatible finalized checkpoint.
 
-The network must handle messages promptly, with delivery delay fitting before the next slot.
+It also assumes that delayed blocks pass the handler and that stores process messages on time.
 
 No theorem here shows that the confirmed block is safe in an execution or in another store.
 -/

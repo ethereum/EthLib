@@ -266,13 +266,15 @@ private theorem blocks_or_justified_covers {Δ : ℕ} (sync : e.Synchronous Δ)
       Store.isAncestor_of_getCheckpointBlock preGloas checkpoint
     exact Store.isAncestor_trans_of_lt preGloas held known descends covered
 
-/-- A duty epoch gives support, justification coverage, or a collision in bounded honest stores.
+/-- An epoch of honest votes gives support, justification coverage, or a store collision.
 
-The finite duty premise includes committee validation for the same witnesses as `VoteAt`.
+Each honest vote it assumes also passes the committee check in its target state.
 
-This is stronger than master-only `VoteAt` and comes from the donor aggregate's vote duty.
+A compatible finalized checkpoint gives the finality check of block validation.
 
-Finality compatibility supplies validation; BlocksAdmitted supplies remaining handler success. -/
+The hypothesis on delayed blocks gives the rest of the block handler.
+
+Finalized-prefix compatibility and nonzero state roots of held blocks are assumed. -/
 theorem Execution.mem_supportersOf_of_duty_epoch {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
@@ -691,7 +693,11 @@ open scoped Classical in
 
 The parent safety induction supplies the visited parent; the head walk supplies its score read.
 
-Finalized-prefix compatibility supplies validation; BlocksAdmitted supplies handler success. -/
+A compatible finalized checkpoint gives the finality check of block validation.
+
+The hypothesis on delayed blocks gives the rest of the block handler.
+
+Finalized-prefix compatibility, nonzero state roots and the absent anchor parent are assumed. -/
 theorem Execution.isAncestor_getHead_of_duty_epoch {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)

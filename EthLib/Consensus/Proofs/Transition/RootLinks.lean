@@ -141,22 +141,6 @@ section Transition
 variable {fork : Fork} {engine : ExecutionEngine preset fork}
   {state after : BeaconState preset fork}
 
-/-- A header with a state root other than zero stays the same through any number of slots. -/
-private theorem advanceSlots_latestBlockHeader_of_ne :
-    ∀ (count : Nat) {state after : BeaconState preset fork},
-      advanceSlots config checks count state = .ok after →
-      state.latestBlockHeader.stateRoot ≠ Vector.replicate 32 0 →
-      after.latestBlockHeader = state.latestBlockHeader
-  | 0, state, after, computed, _ => by
-    simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
-    rw [← computed]
-  | count + 1, state, after, computed, filled => by
-    simp only [advanceSlots, bind_ok_iff] at computed
-    obtain ⟨next, nextOk, rest⟩ := computed
-    obtain ⟨_, -, header⟩ := advanceSlot_latestBlockHeader nextOk
-    simp only [filled, ↓reduceIte] at header
-    rw [advanceSlots_latestBlockHeader_of_ne count rest (header ▸ filled), header]
-
 /-- A header that the filling leaves with a zero state root was filled with the zero root.
 
 So the filling changed nothing. -/
@@ -191,7 +175,7 @@ theorem hashTreeRoot_latestBlockHeader_advanceSlots {count : Nat}
   · obtain ⟨zero, same⟩ := header_unfilled_of_filled header filled
     rw [same] at rooted
     exact .inr ⟨zero ▸ hashed, rooted⟩
-  · exact .inl (by rw [advanceSlots_latestBlockHeader_of_ne count rest filled]; exact rooted)
+  · exact .inl (by rw [advanceSlots_latestBlockHeader_of_nonzero filled rest]; exact rooted)
 
 /-- A root that some slots make readable was readable before them, or comes from the header.
 

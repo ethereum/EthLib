@@ -8,7 +8,9 @@ public import EthLib.Consensus.Proofs.Models.Network.ForkChoice
 
 An assumed honest count supplies a concrete set of voters for the current target.
 
-When the no-conflict test accepts its numerical branch, that set exceeds a third of the balance.
+When the no-conflict test accepts its numerical branch, that set has enough stake.
+
+Three times its stake exceeds the total balance plus the margin.
 
 Honest count remains a hypothesis, as in the aggregate safety argument.
 
@@ -99,7 +101,7 @@ private theorem quorum_of_count {u : ValidatorIndex} {n margin : ℕ}
   exact ⟨_, slot, first, last, participants, voters, targetOk,
     slotOk, epochOk, firstOk, lastOk, participantsOk, checkpointOk, members, bound⟩
 
-/-- An accepted no-conflict test names the unrealized target or a concrete honest quorum.
+/-- An accepted no-conflict test names the unrealized target or the honest set of the count.
 
 Honest count is assumed, not established by the Boolean test.
 

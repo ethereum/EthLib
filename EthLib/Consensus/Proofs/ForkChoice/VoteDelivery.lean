@@ -253,9 +253,7 @@ theorem Execution.exists_duty_boundaries {Δ : ℕ}
 
 /-- A duty inside a complete slot interval has a valid committee vote before the delivery cutoff.
 
-The finite vote premise couples committee validation to the same witnesses as `VoteAt`.
-
-It is stronger than master-only `VoteAt`, as required by the donor aggregate's vote duty. -/
+Each vote it assumes also passes the committee check in its target state. -/
 theorem Execution.exists_voteAt_of_duty_interval {Δ : ℕ} {first time : ℕ}
     (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
       assignment.committee v slot = some committeeIndex →
