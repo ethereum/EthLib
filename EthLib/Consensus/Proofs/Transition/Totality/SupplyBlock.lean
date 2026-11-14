@@ -13,7 +13,7 @@ import EthLib.Consensus.Proofs.Transition.BuilderRequests
 import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.Execution
 import EthLib.Consensus.Proofs.Transition.FfgStake
-import EthLib.Consensus.Proofs.Transition.Invariants
+public import EthLib.Consensus.Proofs.Transition.Invariants
 import EthLib.Consensus.Proofs.Transition.Operations
 import EthLib.Consensus.Proofs.Transition.ParentPayload
 import EthLib.Consensus.Proofs.Transition.Payload
@@ -1518,6 +1518,30 @@ private theorem rise_operationsInput {engine : ExecutionEngine preset fork}
     (fixed_randao randaoOk).rise.trans voted
   simpa using whole
 
+/-- The changes of credentials do not raise the supply. -/
+private theorem rise_blsToExecutionChanges {s t : BeaconState preset fork}
+    {body : BeaconBlockBody preset fork}
+    (computed : processBlsToExecutionChanges config checks s body = .ok t) : Rise 0 s t := by
+  unfold processBlsToExecutionChanges at computed
+  split at computed
+  · rw [← Array.foldlM_toList] at computed
+    exact Rise.foldlM_zero (fun _ _ _ ok => (fixed_blsChange ok).rise) computed
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ Rise.refl _
+
+/-- From Electra to Fulu, the requests of a block raise the supply by at most their deposits. -/
+private theorem rise_executionRequests {s t : BeaconState preset fork}
+    {body : BeaconBlockBody preset fork} {range : .pectra ≤ fork ∧ fork < .glamsterdam}
+    (computed : processExecutionRequests config s body range = .ok t) :
+    Rise (((body.executionRequests range).deposits.data.toList.map (·.amount.toNat)).sum) s t := by
+  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨_, requestedDeposits, _, withdrawals, consolidations⟩ := computed
+  have whole := (Rise.foldlM (amount := fun request : DepositRequest => request.amount.toNat)
+    (fun _ _ _ ok => rise_depositRequest ok) requestedDeposits).trans <|
+    (Rise.foldlM_zero (fun _ _ _ ok => (fixed_withdrawalRequest ok).rise) withdrawals).trans
+      (Rise.foldlM_zero (fun _ _ _ ok => rise_consolidationRequest ok) consolidations)
+  simpa using whole
+
 /-- The operations run the slashings, the attestations, then the steps that bring deposits.
 
 The slashings bring only their share of the new slashed balances. -/
@@ -1575,26 +1599,14 @@ private theorem rise_operations {input last : BeaconState preset fork}
     (fun _ _ _ ok => rise_deposit ok) depositedOk
   have exits := Rise.foldlM_zero (fun _ _ _ ok => (fixed_voluntaryExit ok).rise) exitsOk
   -- From Capella the changes of credentials run, and from Electra the requests.
-  have changes : Rise 0 exited changed := by
-    unfold processBlsToExecutionChanges at changesOk
-    split at changesOk
-    · rw [← Array.foldlM_toList] at changesOk
-      exact Rise.foldlM_zero (fun _ _ _ ok => (fixed_blsChange ok).rise) changesOk
-    · simp only [pure, Except.pure, Except.ok.injEq] at changesOk
-      exact changesOk ▸ Rise.refl _
+  have changes := rise_blsToExecutionChanges changesOk
   have requested : Rise (if electra : .pectra ≤ fork then
       ((body.executionRequests ⟨electra, Nat.lt_of_not_le gloas⟩).deposits.data.toList.map
         (·.amount.toNat)).sum else 0) changed last := by
     split at requestsOk
     · rename_i electra
       simp only [electra, ↓reduceDIte]
-      simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at requestsOk
-      obtain ⟨_, requestedDeposits, _, withdrawals, consolidations⟩ := requestsOk
-      have whole := (Rise.foldlM (amount := fun request : DepositRequest => request.amount.toNat)
-        (fun _ _ _ ok => rise_depositRequest ok) requestedDeposits).trans <|
-        (Rise.foldlM_zero (fun _ _ _ ok => (fixed_withdrawalRequest ok).rise) withdrawals).trans
-          (Rise.foldlM_zero (fun _ _ _ ok => rise_consolidationRequest ok) consolidations)
-      simpa using whole
+      exact rise_executionRequests requestsOk
     · rename_i electra
       simp only [electra, ↓reduceDIte]
       simp only [pure, Except.pure, Except.ok.injEq] at requestsOk
@@ -2041,5 +2053,188 @@ theorem processBlock_blockPerIncrement {engine : ExecutionEngine preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     blockPerIncrement preset after = blockPerIncrement preset state := by
   simp only [blockPerIncrement, processBlock_getTotalActiveBalance computed]
+
+/-- A withdrawal request keeps the balances. -/
+theorem processWithdrawalRequest_balances {s t : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {request : WithdrawalRequest}
+    (computed : processWithdrawalRequest config s electra request = .ok t) :
+    t.balances = s.balances :=
+  (fixed_withdrawalRequest computed).1
+
+/-- Before Heze, the operations of a block take its input to the state where its requests start.
+
+They run the slashings, the attestations, the deposits, the exits and the credential changes.
+
+The requests of the block run there from Electra to Fulu only.
+
+From Gloas they run with the parent payload instead, before the operations. -/
+def RequestsStart (config : Config) (checks : SignatureChecks) (body : BeaconBlockBody preset fork)
+    (parentSlot : Slot) (before : fork < .hegota) (input changed : BeaconState preset fork) :
+    Prop :=
+  ∃ proposersDone slashingsDone attested deposited exited : BeaconState preset fork,
+    body.proposerSlashings.data.toList.foldlM (processProposerSlashing config checks) input =
+      .ok proposersDone ∧
+    body.attesterSlashings.data.toList.foldlM (processAttesterSlashing config checks)
+      proposersDone = .ok slashingsDone ∧
+    body.attestations.data.toList.foldlM (processAttestation config checks · parentSlot ·)
+      slashingsDone = .ok attested ∧
+    (body.deposits before).data.toList.foldlM (processDeposit config checks before) attested =
+      .ok deposited ∧
+    body.voluntaryExits.data.toList.foldlM (processVoluntaryExit config checks) deposited =
+      .ok exited ∧
+    processBlsToExecutionChanges config checks exited body = .ok changed
+
+/-- From Electra to Fulu, the operations of a block reach the start of its requests and run them. -/
+theorem processOperations_requestsStart {input last : BeaconState preset fork}
+    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+    (electra : .pectra ≤ fork) (gloas : ¬ .glamsterdam ≤ fork)
+    (computed : processOperations config checks input body parentSlot = .ok last) :
+    ∃ changed, RequestsStart config checks body parentSlot
+        (Nat.lt_trans (Nat.lt_of_not_le gloas) (by decide)) input changed ∧
+      processExecutionRequests config changed body ⟨electra, Nat.lt_of_not_le gloas⟩ =
+        .ok last := by
+  unfold processOperations at computed
+  simp only [gloas, electra, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList]
+    at computed
+  obtain ⟨_, _, _, _, _, proposersOk, _, attestersOk, _, attestedOk, _, depositedOk, _,
+    exitsOk, changed, changesOk, requestsOk⟩ := computed
+  exact ⟨changed, ⟨_, _, _, _, _, proposersOk, attestersOk, attestedOk, depositedOk, exitsOk,
+    changesOk⟩, requestsOk⟩
+
+/-- The steps before the operations of a block reach one input. -/
+private theorem operationsInput_unique {engine : ExecutionEngine preset fork}
+    {state one two : BeaconState preset fork} {block : BeaconBlock preset fork}
+    (first : OperationsInput config checks engine state block one)
+    (second : OperationsInput config checks engine state block two) : one = two := by
+  obtain ⟨_, _, _, _, paid, headed, executed, revealed, voted⟩ := first
+  obtain ⟨_, _, _, _, paid', headed', executed', revealed', voted'⟩ := second
+  cases paid.symm.trans paid'
+  cases headed.symm.trans headed'
+  cases executed.symm.trans executed'
+  cases revealed.symm.trans revealed'
+  cases voted.symm.trans voted'
+  rfl
+
+/-- The operations of a block reach one start of its requests. -/
+private theorem requestsStart_unique {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+    {before : fork < .hegota} {input one two : BeaconState preset fork}
+    (first : RequestsStart config checks body parentSlot before input one)
+    (second : RequestsStart config checks body parentSlot before input two) : one = two := by
+  obtain ⟨_, _, _, _, _, proposers, attesters, attested, deposited, exited, changed⟩ := first
+  obtain ⟨_, _, _, _, _, proposers', attesters', attested', deposited', exited', changed'⟩ :=
+    second
+  cases proposers.symm.trans proposers'
+  cases attesters.symm.trans attesters'
+  cases attested.symm.trans attested'
+  cases deposited.symm.trans deposited'
+  cases exited.symm.trans exited'
+  cases changed.symm.trans changed'
+  rfl
+
+/-- The slashed balances where the requests start are at most those after the operations. -/
+private theorem slashed_requestsStart {input last changed : BeaconState preset fork}
+    {body : BeaconBlockBody preset fork} {parentSlot : Slot} {before : fork < .hegota}
+    (computed : processOperations config checks input body parentSlot = .ok last)
+    (reached : RequestsStart config checks body parentSlot before input changed) :
+    slashedBalanceSum changed ≤ slashedBalanceSum last := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · obtain ⟨_, _, _, _, _, proposersOk, attestersOk, attestedOk, depositedOk, exitsOk,
+      changesOk⟩ := reached
+    unfold processOperations processOperationsGloas at computed
+    simp only [gloas, before, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList]
+      at computed
+    obtain ⟨_, empty, _, _, _, _, _, _, _, _, _, _, _, _, _, proposers, _, attesters, _, attested,
+      _, exits, _, changes, paid⟩ := computed
+    -- From Gloas the block holds no deposit, so the requests start after the changes.
+    rw [Array.toList_eq_nil_iff.mpr (Array.size_eq_zero_iff.mp empty)] at depositedOk
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at depositedOk
+    subst depositedOk
+    unfold processBlsToExecutionChanges at changesOk
+    have capella : .shapella ≤ fork := Nat.le_trans (by decide) gloas
+    simp only [capella, ↓reduceDIte, ← Array.foldlM_toList] at changesOk
+    cases proposers.symm.trans proposersOk
+    cases attesters.symm.trans attestersOk
+    cases attested.symm.trans attestedOk
+    cases exits.symm.trans exitsOk
+    cases changes.symm.trans changesOk
+    exact (Rise.foldlM_zero (fun _ _ _ ok => (fixed_payloadAttestation ok).rise) paid).1
+  by_cases electra : .pectra ≤ fork
+  · obtain ⟨_, reached', requested⟩ := processOperations_requestsStart electra gloas computed
+    cases requestsStart_unique reached' reached
+    exact (rise_executionRequests requested).1
+  unfold processOperations at computed
+  simp only [gloas, electra, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList,
+    pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, _, proposersOk, _, attestersOk, _, attestedOk, _, depositedOk, _,
+    exitsOk, _, changesOk, rfl⟩ := computed
+  cases requestsStart_unique ⟨_, _, _, _, _, proposersOk, attestersOk, attestedOk, depositedOk,
+    exitsOk, changesOk⟩ reached
+  exact Nat.le_refl _
+
+/-- Before Heze, the supply where the requests of a block start is within the cap of the block.
+
+It is the cap that bounds the supply after the whole block. -/
+theorem processBlock_supply_le_cap_of_requestsStart {engine : ExecutionEngine preset fork}
+    {state after input changed : BeaconState preset fork} {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state block = .ok after)
+    (started : OperationsInput config checks engine state block input)
+    {before : fork < .hegota}
+    (reached : RequestsStart config checks block.body state.latestBlockHeader.slot before input
+      changed) :
+    balanceSum changed + pendingDepositSum changed ≤
+      balanceSum state + pendingDepositSum state + blockDepositAmount block.body +
+        (slashedBalanceSum after - slashedBalanceSum state) /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+        blockRewardCap preset state := by
+  obtain ⟨input', last, started', operated, -, synced⟩ := processBlock_operationsInput computed
+  cases operationsInput_unique started' started
+  obtain ⟨proposersDone, first, attested, proposersOk, slashingsOk, attestedOk, slashed, -,
+    -⟩ := rise_operations operated
+  have changedLe := slashed_requestsStart operated reached
+  obtain ⟨proposersDone', first', attested', deposited, exited, proposersOk', slashingsOk',
+    attestedOk', depositedOk, exitsOk, changesOk⟩ := reached
+  cases proposersOk.symm.trans proposersOk'
+  cases slashingsOk.symm.trans slashingsOk'
+  cases attestedOk.symm.trans attestedOk'
+  have head := rise_operationsInput started
+  have deposits := Rise.foldlM (amount := fun deposit : Deposit => deposit.data.amount.toNat)
+    (fun _ _ _ ok => rise_deposit ok) depositedOk
+  have exits := Rise.foldlM_zero (fun _ _ _ ok => (fixed_voluntaryExit ok).rise) exitsOk
+  have changes := rise_blsToExecutionChanges changesOk
+  -- The attestations pay at most the cap on the flags, and the slashed balances grow after.
+  obtain ⟨votes, ends⟩ : Rise (2 * (effectiveBalanceSum state /
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * blockPerIncrement preset state * 54 / 448)
+      first attested ∧ slashedBalanceSum last ≤ slashedBalanceSum after := by
+    by_cases altair : .altair ≤ fork
+    · simp only [altair, ↓reduceDIte] at synced
+      obtain ⟨total, perIncrement, totalOk, perIncrementOk, syncRise⟩ := rise_syncAggregate synced
+      have totalState := (syncStart_same computed altair synced).symm.trans totalOk
+      have reads : blockPerIncrement preset state = perIncrement.toNat := by
+        simp only [blockPerIncrement, altair, ↓reduceIte, totalState, perIncrementOk]
+      obtain ⟨steady, -⟩ := attestationsStart_same started proposersOk slashingsOk
+      obtain ⟨-, -, votes⟩ := rise_attestations altair
+        (steady.total.trans totalState) perIncrementOk attestedOk
+      refine ⟨votes.mono ?_, syncRise.1⟩
+      rw [reads, ← steady.effectiveBalanceSum_eq]
+      exact Nat.div_le_div_right
+        (Nat.le_trans (Nat.sub_le _ _) (potential_le altair first perIncrement.toNat attested))
+    · simp only [altair, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at synced
+      subst synced
+      exact ⟨(rise_attestations_of_lt (Nat.lt_of_not_le altair) attestedOk).mono
+        (Nat.zero_le _), Nat.le_refl _⟩
+  have whole := head.trans (slashed.trans (votes.trans (deposits.trans (exits.trans changes))))
+  have bound := whole.2
+  have amount : parentAmount block.body +
+      ((block.body.deposits before).data.toList.map (·.data.amount.toNat)).sum ≤
+        blockDepositAmount block.body := by
+    rw [blockDepositAmount_eq]
+    unfold ownAmount
+    simp only [before, ↓reduceDIte]
+    omega
+  have share := Nat.div_le_div_right (c := quotient preset fork)
+    (Nat.sub_le_sub_right (Nat.le_trans changedLe ends) (slashedBalanceSum state))
+  unfold supply quotient at bound share
+  unfold blockRewardCap
+  omega
 
 end EthLib.Consensus
