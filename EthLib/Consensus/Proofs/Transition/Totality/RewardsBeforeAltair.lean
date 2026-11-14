@@ -162,7 +162,7 @@ The proposer that included it is a validator of the registry.
 
 The epoch step moves the list of the current epoch to that of the previous epoch.
 
-The property should hold again once the slot moves into the next epoch; no theorem proves it yet. -/
+One slot keeps the property, including the step into the next epoch. -/
 def PendingWellFormed (state : BeaconState preset fork) : Prop :=
   ∀ before : fork < .altair,
     (∀ attestation ∈ (state.previousEpochAttestations before).data,
