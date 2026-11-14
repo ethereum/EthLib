@@ -248,6 +248,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Consolidations
 public import EthLib.Consensus.Proofs.Transition.Totality.EffectiveBalances
 public import EthLib.Consensus.Proofs.Transition.Totality.EpochAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.EpochElectra
+public import EthLib.Consensus.Proofs.Transition.Totality.EpochExits
 public import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 public import EthLib.Consensus.Proofs.Transition.Totality.EpochBounds
 public import EthLib.Consensus.Proofs.Transition.Totality.Genesis
