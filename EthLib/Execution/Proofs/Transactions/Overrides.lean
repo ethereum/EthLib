@@ -21,6 +21,10 @@ Without the gas caps lifted, the gas of a transaction keeps the caps of Glamster
 With the nonce check skipped, a sender at the nonce limit still fails.
 
 Lifting them makes all the gas past the intrinsic gas execution gas.
+
+Unless a simulation lowers its base fee, a transaction pays at the base fee of its block.
+
+Once it does, a transaction with a fee cap of 0 pays at a base fee of 0.
 -/
 
 @[expose] public section
@@ -115,6 +119,18 @@ theorem allocateGas_of_gasCap (fork : Fork) (tx : Transaction) (intrinsic : Nat)
     {lifted : LiftedRules} (h : lifted.gasCap = true) :
     allocateGas fork tx intrinsic lifted = ⟨tx.gas.toNat - intrinsic, 0⟩ := by
   simp [allocateGas, h]
+
+/-- Unless a simulation lowers its base fee, a transaction pays at the base fee of its block. -/
+theorem paidBaseFee_default {fork : Fork} (env : BlockEnvironment fork) (tx : Transaction)
+    {lifted : LiftedRules} (h : lifted.zeroFee = false) :
+    paidBaseFee env tx lifted = baseFeeOf env := by
+  simp [paidBaseFee, h]
+
+/-- Once a simulation lowers it, a transaction with a fee cap of 0 pays at a base fee of 0. -/
+theorem paidBaseFee_of_zeroFee {fork : Fork} (env : BlockEnvironment fork) {tx : Transaction}
+    {lifted : LiftedRules} (h : lifted.zeroFee = true) (hFee : tx.maxFeePerGas = 0) :
+    paidBaseFee env tx lifted = 0 := by
+  simp [paidBaseFee, h, hFee]
 
 /-- With the nonce check skipped, a sender at the nonce limit of EIP-2681 still fails. -/
 theorem checkSender_of_skipNonce {fork : Fork} {state : TransactionState} {sender : Address}

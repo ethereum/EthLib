@@ -29,6 +29,8 @@ From Glamsterdam, the list that a body builds is well formed and fits the gas li
 
 A block that passes the checks then commits to that list by the hash in its header.
 
+A header filled from a body passes every check against what that body gave.
+
 From Hegotá the transition fails as not yet specified.
 
 When the hash of the last recent block succeeds, the recent blocks give hashes.
@@ -760,5 +762,56 @@ theorem of_stateTransition {chain : BlockChain} {block : Block fork Transaction}
   refine ⟨hActive, ?_⟩
   rw [← (of_outputChecks hChecks).2.1]
   exact outputRoots_state hRoots
+
+/-- A header filled from a body passes every check against what that body gave.
+
+The blob gas used must fit 64 bits.
+
+From Shapella the withdrawals root must exist, and from Glamsterdam the access list hash. -/
+theorem outputChecks_fillHeader {fork : Fork} {header : Header fork} {output : BlockOutput fork}
+    {roots : OutputRoots} (hb : output.gas.blob < 2 ^ 64)
+    (hw : .shapella ≤ fork → roots.withdrawals.isSome)
+    (ha : .glamsterdam ≤ fork → output.accessListHash.isSome) :
+    firstFailure (outputChecks (fillHeader header output roots) output roots) = .ok () := by
+  rw [firstFailure_eq_ok_iff]
+  intro c hc
+  simp only [outputChecks, fillHeader, List.mem_append, List.mem_cons, List.not_mem_nil,
+    or_false] at hc
+  rcases hc with ((((hc | hc | hc | hc | hc) | hc) | hc) | hc) | hc <;>
+    (try subst hc) <;> (try simp only [decide_true])
+  · split at hc
+    · next h =>
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      subst hc
+      obtain ⟨r, hr⟩ := Option.isSome_iff_exists.mp (hw h)
+      simp [hr]
+    · simp at hc
+  · split at hc
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      subst hc
+      simp [Nat.mod_eq_of_lt hb]
+    · simp at hc
+  · split at hc
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      subst hc
+      simp
+    · simp at hc
+  · split at hc
+    · next h =>
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      subst hc
+      obtain ⟨r, hr⟩ := Option.isSome_iff_exists.mp (ha h)
+      simp [hr]
+    · simp at hc
+
+/-- The body of a block runs alike before and after its header is filled.
+
+The body reads none of the fields that the fill sets. -/
+theorem runBody_fillHeader {fork : Fork} {chain : BlockChain} {transactions : List Transaction}
+    {header : Header fork} {output : BlockOutput fork}
+    {roots : OutputRoots} {withdrawals : Since .shapella fork (List Withdrawal)} :
+    runBody chain ⟨fillHeader header output roots, transactions, [], withdrawals⟩ =
+      runBody chain ⟨header, transactions, [], withdrawals⟩ :=
+  rfl
 
 end EthLib.Execution.Blocks

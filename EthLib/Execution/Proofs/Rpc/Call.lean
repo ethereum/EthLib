@@ -150,6 +150,7 @@ private theorem buyGas_parent {fork : Fork} {env : BlockEnvironment fork}
     {st st' : TransactionState} {a : Address} {t : Transaction}
     (h : buyGas env st a t = .ok st') : st'.parent = st.parent := by
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, h1, h2⟩ := bind_ok_iff.mp h
   rw [State.TransactionState.parent_modifyState h2,
     State.TransactionState.parent_incrementNonce h1]

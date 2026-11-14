@@ -43,6 +43,8 @@ Crediting at least `2^256` fails as an overflow of the balance.
 
 Settling the gas reports the gas used that the settlement counts.
 
+With no rule lifted, a transaction pays at the base fee of its block.
+
 Buying the gas takes exactly the fee from the sender and adds one to its nonce.
 
 It fails if the sender does not hold the fee.
@@ -54,6 +56,12 @@ namespace EthLib.Execution.Transactions
 
 open EthLib.Base
 open EthLib.Execution.Fees.BlobBaseFee (calculateTotalBlobGas)
+
+/-! ## The base fee paid -/
+
+/-- With no rule lifted, a transaction pays at the base fee of its block. -/
+@[simp] theorem paidBaseFee_empty {fork : Fork} (env : Evm.BlockEnvironment fork)
+    (tx : Transaction) : paidBaseFee env tx = baseFeeOf env := rfl
 
 /-! ## The refund -/
 
@@ -338,6 +346,7 @@ theorem settleGas_gasUsed {fork : Fork} {env : Evm.BlockEnvironment fork}
     (h : settleGas env state sender tx gasLeft refundCounter = .ok (state', used)) :
     used = gasUsed fork sender tx gasLeft refundCounter := by
   unfold settleGas at h
+  rw [paidBaseFee_empty] at h
   cases h₁ : creditEther fork state sender
       (settlement fork (baseFeeOf env) sender tx gasLeft refundCounter).senderRefund with
   | error e => simp [h₁, bind, Except.bind] at h
@@ -364,6 +373,7 @@ theorem buyGas_sender {fork : Fork} {env : Evm.BlockEnvironment fork}
       (state'.getAccount sender).nonce = (state.getAccount sender).nonce + 1 := by
   subst hfee
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, hmid⟩ := TransactionState.incrementNonce_isOk fork state sender
   simp only [hmid, bind, Except.bind] at h
   obtain ⟨hself, -⟩ := TransactionState.getAccount_incrementNonce hmid
@@ -389,6 +399,7 @@ theorem buyGas_of_lt {fork : Fork} {env : Evm.BlockEnvironment fork}
         calculateTotalBlobGas tx * blobGasPriceOf env) :
     buyGas env state sender tx = .error (.insufficientBalance sender) := by
   unfold buyGas
+  rw [paidBaseFee_empty]
   obtain ⟨mid, hmid⟩ := TransactionState.incrementNonce_isOk fork state sender
   obtain ⟨hself, -⟩ := TransactionState.getAccount_incrementNonce hmid
   have hbal : (mid.getAccount sender).balance = (state.getAccount sender).balance := by

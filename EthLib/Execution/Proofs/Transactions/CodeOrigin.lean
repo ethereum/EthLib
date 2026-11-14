@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Evm.Call.CodeOrigin
 public import EthLib.Execution.Proofs.Transactions.Authorization
+public import EthLib.Execution.Proofs.Transactions.Settlement
 public import EthLib.Execution.Transactions.Process
 
 /-!
@@ -42,6 +43,7 @@ theorem keepsCodeOrigin_buyGas {env : BlockEnvironment fork}
     {state state' : TransactionState} {sender : Address} {tx : Transaction}
     (h : buyGas env state sender tx = .ok state') : KeepsCodeOrigin state state' := by
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, h1, h2⟩ := bind_ok_iff.mp h
   refine (KeepsCodeOrigin.incrementNonce h1).trans ?_
   refine KeepsCodeOrigin.modifyState_of_keeps (fun account updated hupd => ?_) h2

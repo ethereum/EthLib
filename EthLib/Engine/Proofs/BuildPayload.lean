@@ -11,8 +11,6 @@ A built block passes the state transition of its chain, with the state that the 
 
 So `engine_newPayload` answers valid for a built block whose parameters pass its checks.
 
-A header filled from a body passes every check against what that body gave.
-
 The built block carries the timestamp, RANDAO mix, withdrawals, beacon root, slot and choices.
 
 From Pectra, its header commits to the requests that the build gives.
@@ -36,56 +34,6 @@ open EthLib.Execution.Transactions (Transaction TransactionOutput checkInclusion
 
 variable {fork : Fork} {chain : BlockChain} {attributes : PayloadAttributes fork}
   {choices : BuildChoices} {transactions : List Transaction} {built : BuiltPayload fork}
-
-/-- A header filled from a body passes every check against what that body gave.
-
-The blob gas used must fit 64 bits.
-
-From Shapella the withdrawals root must exist, and from Glamsterdam the access list hash. -/
-theorem outputChecks_fillHeader {header : Header fork} {output : BlockOutput fork}
-    {roots : OutputRoots} (hb : output.gas.blob < 2 ^ 64)
-    (hw : .shapella ≤ fork → roots.withdrawals.isSome)
-    (ha : .glamsterdam ≤ fork → output.accessListHash.isSome) :
-    firstFailure (outputChecks (fillHeader header output roots) output roots) = .ok () := by
-  rw [firstFailure_eq_ok_iff]
-  intro c hc
-  simp only [outputChecks, fillHeader, List.mem_append, List.mem_cons, List.not_mem_nil,
-    or_false] at hc
-  rcases hc with ((((hc | hc | hc | hc | hc) | hc) | hc) | hc) | hc <;>
-    (try subst hc) <;> (try simp only [decide_true])
-  · split at hc
-    · next h =>
-      simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
-      subst hc
-      obtain ⟨r, hr⟩ := Option.isSome_iff_exists.mp (hw h)
-      simp [hr]
-    · simp at hc
-  · split at hc
-    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
-      subst hc
-      simp [Nat.mod_eq_of_lt hb]
-    · simp at hc
-  · split at hc
-    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
-      subst hc
-      simp
-    · simp at hc
-  · split at hc
-    · next h =>
-      simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
-      subst hc
-      obtain ⟨r, hr⟩ := Option.isSome_iff_exists.mp (ha h)
-      simp [hr]
-    · simp at hc
-
-/-- The body of a block runs alike before and after its header is filled.
-
-The body reads none of the fields that the fill sets. -/
-theorem runBody_fillHeader {header : Header fork} {output : BlockOutput fork}
-    {roots : OutputRoots} {withdrawals : Since .shapella fork (List Execution.Blocks.Withdrawal)} :
-    runBody chain ⟨fillHeader header output roots, transactions, [], withdrawals⟩ =
-      runBody chain ⟨header, transactions, [], withdrawals⟩ :=
-  rfl
 
 /-- From Hegotá a build is aborted, since the rules of that fork are not specified here yet. -/
 theorem buildPayload_eq_error_of_hegota_le (h : .hegota ≤ fork) :

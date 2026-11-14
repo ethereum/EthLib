@@ -183,6 +183,7 @@ theorem supply_buyGas {env : BlockEnvironment fork} {state state' : State.Transa
       state'.createdAccounts = state.createdAccounts := by
   have hsender := buyGas_sender rfl h
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, hnonce, hfee⟩ := bind_ok_iff.mp h
   have hmid := State.TransactionState.supply_incrementNonce hnonce
   obtain ⟨account, hf, hsum⟩ := State.TransactionState.supply_modifyState hfee
@@ -241,6 +242,7 @@ theorem supply_settleGas {env : BlockEnvironment fork} {state state' : State.Tra
     let s := settlement fork (baseFeeOf env) sender tx gasLeft refund
     state'.supply = state.supply + s.senderRefund + s.priorityFee := by
   unfold settleGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨refunded, hrefund, h⟩ := bind_ok_iff.mp h
   obtain ⟨paid, hpay, h⟩ := bind_ok_iff.mp h
   cases h

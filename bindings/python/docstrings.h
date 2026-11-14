@@ -1082,6 +1082,15 @@
 #define DOC_ssz_hash_tree_root \
   "The 32-byte hash tree root of a value of a type, both given in their tagged form."
 
+#define DOC_ssz_generalized_index \
+  "The generalized index of the node that a path selects in the tree of a type."
+
+#define DOC_ssz_merkle_proof \
+  "The branch that proves the node at a generalized index of a value against its root."
+
+#define DOC_ssz_merkleize_chunks \
+  "The root of 32-byte chunks, in a tree padded to a power of two."
+
 #define DOC_rlpx_ecies_encrypt \
   "The ciphertext `R || iv || c || d` of `m` to the public key `recipient`."
 

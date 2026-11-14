@@ -3,6 +3,7 @@ module
 public import Lean.Data.Json
 public import EthLib.Base.Exports.Proofs.PyValue
 public import EthLib.Serialization.Ssz.Codec.Json
+public import EthLib.Serialization.Ssz.Codec.Proof
 public import EthLib.Serialization.Ssz.Codec.Root
 public import EthLib.Serialization.Ssz.Type.Valid
 
@@ -181,5 +182,86 @@ def hashTreeRootOf (args : PyValue × PyValue) : Result ByteArray := do
 /-- The 32-byte hash tree root of a value of a type, both given in their tagged form. -/
 @[export eth_ssz_hash_tree_root]
 def hashTreeRootExport (args : PyValue) : Result PyValue := pyExport hashTreeRootOf args
+
+/-- The step that one part of a path names, read against the type the path has reached.
+
+A part is a position, `__len__` for the length, or the name of a field of a container. -/
+def pathStep (shape : Option Desc) (part : PyValue) : Result PathStep :=
+  match part, shape with
+  | .int position, _ => return .position position
+  | .str "__len__", _ => return .length
+  | .str name, some (.container names _) | .str name, some (.progressiveContainer _ names _) =>
+    if names.contains name then return .position (names.idxOf name)
+    else throw (0, s!"path: no field {name}")
+  | .str name, _ => throw (0, s!"path: no field {name}")
+  | _, _ => throw (0, "path: a part must be an int or a str")
+
+/-- The steps that the parts of a path name, after the steps already read.
+
+The type is the one those steps reach, or none where they leave the tree.
+
+A field name past that point gets the fault that the index gives for any step there. -/
+def pathSteps (root : Desc) (read : List PathStep) (shape : Option Desc) :
+    List PyValue → Result (List PathStep)
+  | [] => return read
+  | part :: rest => do
+    if let (.str name, none) := (part, shape) then
+      if name != "__len__" then
+        let _ ← runSsz "path rejected" (getGeneralizedIndex root (read ++ [.position 0]))
+    let step ← pathStep shape part
+    let next := shape.bind fun shape => (shape.resolveStep step).toOption.bind (·.2)
+    pathSteps root (read ++ [step]) next rest
+
+/-- The generalized index of the node that a path selects in the tree of a type. -/
+def generalizedIndexOf (args : PyValue × List PyValue) : Result Nat := do
+  let (type, path) := args
+  let shape ← readType type
+  runSsz "path rejected" (getGeneralizedIndex shape (← pathSteps shape [] (some shape) path))
+
+/-- The generalized index of the node that a path selects in the tree of a type.
+
+The type is in its tagged form.
+
+Each part of the path is a position, a field name or `__len__`. -/
+@[export eth_ssz_generalized_index]
+def generalizedIndexExport (args : PyValue) : Result PyValue := pyExport generalizedIndexOf args
+
+/-- The branch that proves the node at a generalized index of a value against its root.
+
+The value is first checked by serializing it, so a value that does not fit gets no proof. -/
+def merkleProofOf (args : PyValue × PyValue × Nat) : Result (List ByteArray) := do
+  let (type, value, gindex) := args
+  let shape ← readType type
+  let value ← readValue "value" value (valueOfJson MAX_NESTING)
+  let _ ← runSsz "value rejected" (serialize shape value)
+  let branch ← runSsz "proof rejected" (buildProof shape value gindex)
+  return branch.map fun sibling => ⟨sibling⟩
+
+/-- The branch that proves the node at a generalized index of a value against its root.
+
+The type and the value are in their tagged form.
+
+The branch lists the sibling of each node on the path, from the node up to the root.
+
+The root itself has no branch, so index 1 is refused. -/
+@[export eth_ssz_merkle_proof]
+def merkleProofExport (args : PyValue) : Result PyValue := pyExport merkleProofOf args
+
+/-- The root of 32-byte chunks, in a tree padded to a power of two.
+
+The width is the limit if one is given, and the number of chunks otherwise. -/
+def merkleizeChunksOf (args : List ByteArray × Option Nat) : Result ByteArray := do
+  let (chunks, limit) := args
+  let chunks := chunks.map (·.data)
+  runSsz "chunks rejected" (checkChunks chunks)
+  return ⟨← runSsz "chunks rejected" (merkleizeBoundedUnchecked chunks.toArray limit)⟩
+
+/-- The root of 32-byte chunks, in a tree padded to a power of two.
+
+The width is the limit if one is given, and the number of chunks otherwise.
+
+A limit below the number of chunks is refused, and so is a chunk of another width. -/
+@[export eth_ssz_merkleize_chunks]
+def merkleizeChunksExport (args : PyValue) : Result PyValue := pyExport merkleizeChunksOf args
 
 end EthLib.Serialization.Ssz.Exports
