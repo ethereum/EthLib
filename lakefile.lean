@@ -71,6 +71,20 @@ It is a separate library, so that the specification never imports an `@[export]`
 
 `precompileModules` is on, because `setup.py` links these objects.
 
+`platformIndependent` keeps the specification's shared library out of each export's trace.
+
+An export then re-elaborates only when a module it imports changes.
+
+No export module runs compiled code of the specification while it is elaborated.
+
+An `#eval` or an `initialize` in an export would do so.
+
+So that library cannot change an export's output.
+
+`derive_py` runs while export modules are elaborated, but it only reads declarations.
+
+A `by decide` in an export reduces definitions read from the `.olean` files, not compiled code.
+
 Each domain's export tree is also a root, so that its modules belong to this library. -/
 @[default_target]
 lean_lib «Exports» where
@@ -79,6 +93,7 @@ lean_lib «Exports» where
     `EthLib.Networking.Exports, `EthLib.Execution.Exports, `EthLib.Consensus.Exports,
     `EthLib.Serialization.Exports, `EthLib.Engine.Exports]
   precompileModules := true
+  platformIndependent := true
 
 /-- Checks the compiled declarations of every library.
 
