@@ -178,6 +178,19 @@ private theorem climbBranchM_queryBound (index level : Nat) (node : Bytes) (bran
       (by simp [Nat.add_comm])
     simp [combineM, queryHash]
 
+/-- The extraction makes at most `2 * depth` oracle calls, one per climbed node.
+
+It climbs at most `depth` nodes of each branch. -/
+theorem extractBranches_queryBound (depth : Nat) (claim : BranchClaim) :
+    IsQueryBoundP (extractBranches queryHash depth claim) (fun _ => True) (2 * depth) := by
+  -- Each climb takes at most `depth` branch nodes, with one call per node.
+  have climbs : ∀ (leaf : Vector UInt8 32) (branch : List (Vector UInt8 32)),
+      IsQueryBoundP (climbBranchM queryHash claim.index 0 leaf.toArray
+        ((branch.take depth).map Vector.toArray)) (fun _ => True) depth := fun _ _ =>
+    (climbBranchM_queryBound _ _ _ _).mono (by simp)
+  exact (isQueryBoundP_bind (climbs _ _) fun _ _ =>
+    isQueryBoundP_bind (climbs _ _) fun _ _ => isQueryBoundP_pure _ _ 0).mono (by omega)
+
 /-- The experiment makes the adversary's oracle calls and at most one call per climbed node.
 
 The extraction climbs at most `depth` nodes of each branch. -/
@@ -185,16 +198,9 @@ theorem experimentWith_extractBranches_queryBound (depth : Nat)
     {adversary : OracleComp (unifSpec + HashOracle) BranchClaim} {q : Nat}
     (hq : IsQueryBoundP adversary (fun t => t.isRight = true) q) :
     IsQueryBoundP (experimentWith (extractBranches queryHash depth) adversary)
-      (fun t => t.isRight = true) (q + 2 * depth) := by
-  -- Each climb takes at most `depth` branch nodes, with one call per node.
-  have climbs : ∀ (index : Nat) (leaf : Vector UInt8 32) (branch : List (Vector UInt8 32)),
-      IsQueryBoundP (climbBranchM queryHash index 0 leaf.toArray
-        ((branch.take depth).map Vector.toArray)) (fun _ => True) depth := fun _ _ _ =>
-    (climbBranchM_queryBound _ _ _ _).mono (by simp)
-  refine isQueryBoundP_bind hq fun claim _ => IsQueryBoundP.liftComp_subSpec
-    (fun _ => iff_of_true trivial rfl) ?_
-  refine (isQueryBoundP_bind (climbs _ _ _) fun _ _ =>
-    isQueryBoundP_bind (climbs _ _ _) fun _ _ => isQueryBoundP_pure _ _ 0).mono (by omega)
+      (fun t => t.isRight = true) (q + 2 * depth) :=
+  isQueryBoundP_bind hq fun claim _ => IsQueryBoundP.liftComp_subSpec
+    (fun _ => iff_of_true trivial rfl) (extractBranches_queryBound depth claim)
 
 /-- Two different leaves at one index with one root, at probability at most `Q^2 / N`.
 
