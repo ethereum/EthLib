@@ -156,6 +156,26 @@ theorem JustifiedSeparated.of_frame (frame : Frame state after)
   rw [frame.slot, frame.previousJustified]
   exact separated
 
+/-- The justified checkpoint that a link names as its source is older than its target. -/
+theorem link_source_lt {state : BeaconState preset fork}
+    (settled : JustifiedSettled state) (separated : JustifiedSeparated state)
+    (later : GENESIS_EPOCH + 1 < getCurrentEpoch state) (current : Bool) (target : Checkpoint)
+    (targetEpoch : target.epoch =
+      if current then getCurrentEpoch state else getPreviousEpoch state) :
+    (if current then state.currentJustifiedCheckpoint
+      else state.previousJustifiedCheckpoint).epoch < target.epoch := by
+  have previous := separated later
+  rw [targetEpoch]
+  cases current
+  · exact previous
+  · have settledNat := UInt64.le_iff_toNat_le.mp settled
+    have laterNat := UInt64.lt_iff_toNat_lt.mp later
+    apply UInt64.lt_iff_toNat_lt.mpr
+    simp only [getPreviousEpoch_toNat] at settledNat
+    rw [toNat_genesisEpoch_add_one] at laterNat
+    simp only [↓reduceIte]
+    omega
+
 /-- One slot keeps the previous justified epoch below the previous epoch once justification runs.
 
 In the first two epochs the two justified checkpoints must be equal.
