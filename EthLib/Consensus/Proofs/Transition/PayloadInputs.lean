@@ -370,58 +370,10 @@ theorem payloadInputs_applyExpectedWithdrawals {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (computed : applyExpectedWithdrawals state capella expected = .ok after) :
     PayloadInputs state after := by
-  unfold applyExpectedWithdrawals at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨applied, appliedOk, indexed, indexedOk, finished, sweptOk, last⟩ := computed
-  have one : PayloadInputs state applied := by
-    unfold applyWithdrawals at appliedOk
-    rw [← Array.foldlM_toList] at appliedOk
-    exact PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_applyWithdrawal ok) appliedOk
-  have two : PayloadInputs applied indexed := by
-    unfold updateNextWithdrawalIndex at indexedOk
-    split at indexedOk
-    · obtain ⟨_, _, built⟩ := bind_ok_iff.mp indexedOk
-      cases built
-      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    · cases indexedOk
-      exact PayloadInputs.refl _
-  have three : ∀ kept : BeaconState preset fork,
-      (if gloas : .glamsterdam ≤ fork then
-        updateNextWithdrawalBuilderIndex kept gloas expected.processedBuildersSweepCount
-      else pure kept) = .ok finished → PayloadInputs kept finished := by
-    intro kept ok
-    split at ok
-    · unfold updateNextWithdrawalBuilderIndex at ok
-      dsimp only at ok
-      split at ok
-      · cases ok
-        exact PayloadInputs.refl _
-      · obtain ⟨_, _, built⟩ := bind_ok_iff.mp ok
-        cases built
-        exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    · cases ok
-      exact PayloadInputs.refl _
-  have queued : PayloadInputs indexed (if electra : .pectra ≤ fork then
-      updatePendingPartialWithdrawals (if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals indexed gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else indexed) electra expected.processedPartialWithdrawalsCount
-    else if gloas : .glamsterdam ≤ fork then
-        updateBuilderPendingWithdrawals
-          (updatePayloadExpectedWithdrawals indexed gloas expected.withdrawals) gloas
-          expected.processedBuilderWithdrawalsCount
-      else indexed) := by
-    split <;> split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  have four : PayloadInputs finished after := by
-    unfold updateNextWithdrawalValidatorIndex at last
-    obtain ⟨_, _, last⟩ := bind_ok_iff.mp last
-    dsimp only at last
-    split at last
-    · cases last
-    · cases last
-      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  exact one.trans (two.trans (queued.trans ((three _ sweptOk).trans four)))
+  apply applyExpectedWithdrawals_of_setters PayloadInputs PayloadInputs.refl
+    (fun one two => one.trans two) (fun step => payloadInputs_applyWithdrawal step)
+    (computed := computed)
+  all_goals exact fun _ _ => ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- The withdrawal step changes none of the inputs of a payload. -/
 theorem payloadInputs_processWithdrawals {capella : .shapella ≤ fork}

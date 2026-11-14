@@ -1163,25 +1163,30 @@ theorem applyWithdrawal {withdrawal : Withdrawal}
     exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
   · exact laws.decreaseBalance computed
 
-omit laws in
-private theorem updateNextWithdrawalIndex_of (refl : ∀ s, R s s) {withdrawals : Array Withdrawal}
+omit laws keep in
+private theorem updateNextWithdrawalIndex_of (refl : ∀ s, R s s)
+    (setIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalIndex := value }) {withdrawals : Array Withdrawal}
     (computed : Consensus.updateNextWithdrawalIndex state withdrawals = .ok after) :
     R state after := by
   unfold Consensus.updateNextWithdrawalIndex at computed
   split at computed
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, _, rfl⟩ := computed
-    exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
+    exact setIndex _ _
   · cases computed
     exact refl _
 
 theorem updateNextWithdrawalIndex {withdrawals : Array Withdrawal}
     (computed : Consensus.updateNextWithdrawalIndex state withdrawals = .ok after) :
     R state after :=
-  updateNextWithdrawalIndex_of keep laws.refl computed
+  updateNextWithdrawalIndex_of laws.refl
+    (fun _ _ => keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl) computed
 
-omit laws in
-theorem updateNextWithdrawalValidatorIndex {capella : .shapella ≤ fork}
+omit laws keep in
+private theorem updateNextWithdrawalValidatorIndex_of
+    (setIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalValidatorIndex := value }) {capella : .shapella ≤ fork}
     {withdrawals : Array Withdrawal}
     (computed : Consensus.updateNextWithdrawalValidatorIndex state capella withdrawals =
       .ok after) :
@@ -1192,35 +1197,59 @@ theorem updateNextWithdrawalValidatorIndex {capella : .shapella ≤ fork}
   split at computed
   · cases computed
   · cases computed
-    exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
+    exact setIndex _ _
 
 omit laws in
-theorem updateNextWithdrawalBuilderIndex {gloas : .glamsterdam ≤ fork} {count : Nat}
+theorem updateNextWithdrawalValidatorIndex {capella : .shapella ≤ fork}
+    {withdrawals : Array Withdrawal}
+    (computed : Consensus.updateNextWithdrawalValidatorIndex state capella withdrawals =
+      .ok after) : R state after :=
+  updateNextWithdrawalValidatorIndex_of
+    (fun _ _ => keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl) computed
+
+omit laws keep in
+private theorem updateNextWithdrawalBuilderIndex_of (refl : ∀ s, R s s)
+    (setIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalBuilderIndex := value })
+    {gloas : .glamsterdam ≤ fork} {count : Nat}
     (computed : Consensus.updateNextWithdrawalBuilderIndex state gloas count = .ok after) :
     R state after := by
   unfold Consensus.updateNextWithdrawalBuilderIndex at computed
   dsimp only at computed
   split at computed
   · cases computed
-    exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
+    exact refl _
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, _, rfl⟩ := computed
-    exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
+    exact setIndex _ _
+
+omit laws in
+theorem updateNextWithdrawalBuilderIndex {gloas : .glamsterdam ≤ fork} {count : Nat}
+    (computed : Consensus.updateNextWithdrawalBuilderIndex state gloas count = .ok after) :
+    R state after :=
+  updateNextWithdrawalBuilderIndex_of (fun s => keep (BlockFrame.refl s) rfl)
+    (fun _ _ => keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl) computed
 
 end EpochFrameLaws
 
-/-- A reflexive, transitive relation holds across the expected withdrawals.
-
-It must hold across each single withdrawal.
-
-It must also hold across each block frame that keeps the registry. -/
-theorem applyExpectedWithdrawals_of
+/-- A relation preserved by withdrawals and each bookkeeping setter holds across their traversal. -/
+theorem applyExpectedWithdrawals_of_setters
     (R : BeaconState preset fork → BeaconState preset fork → Prop)
     (refl : ∀ s, R s s)
     (trans : ∀ {s m t}, R s m → R m t → R s t)
     (withdraw : ∀ {s t} {w : Withdrawal}, applyWithdrawal s w = .ok t → R s t)
-    (keep : ∀ {s t : BeaconState preset fork}, BlockFrame s t → t.validators = s.validators →
-      R s t)
+    (setIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalIndex := value })
+    (setValidatorIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalValidatorIndex := value })
+    (setBuilderIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalBuilderIndex := value })
+    (setPayload : ∀ (s : BeaconState preset fork) value,
+      R s { s with payloadExpectedWithdrawals := value })
+    (setBuilders : ∀ (s : BeaconState preset fork) value,
+      R s { s with builderPendingWithdrawals := value })
+    (setPartials : ∀ (s : BeaconState preset fork) value,
+      R s { s with pendingPartialWithdrawals := value })
     {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (computed : Consensus.applyExpectedWithdrawals state capella expected = .ok after) :
@@ -1240,25 +1269,48 @@ theorem applyExpectedWithdrawals_of
           expected.processedBuilderWithdrawalsCount
       else kept) := by
     intro kept
-    split <;> exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
+    split
+    · exact trans (setPayload _ _) (setBuilders _ _)
+    · exact refl _
   have partials : ∀ kept : BeaconState preset fork,
       R kept (if electra : .pectra ≤ fork then
         updatePendingPartialWithdrawals kept electra expected.processedPartialWithdrawalsCount
       else kept) := by
     intro kept
-    split <;> exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
+    split
+    · exact setPartials _ _
+    · exact refl _
   have swept : ∀ kept : BeaconState preset fork,
       (if gloas : .glamsterdam ≤ fork then
         Consensus.updateNextWithdrawalBuilderIndex kept gloas expected.processedBuildersSweepCount
       else pure kept) = .ok finished → R kept finished := by
     intro kept ok
     split at ok
-    · exact EpochFrameLaws.updateNextWithdrawalBuilderIndex keep ok
+    · exact EpochFrameLaws.updateNextWithdrawalBuilderIndex_of refl setBuilderIndex ok
     · simp only [pure, Except.pure, Except.ok.injEq] at ok
       exact ok ▸ refl _
-  exact trans one <| trans (EpochFrameLaws.updateNextWithdrawalIndex_of keep refl indexedOk) <|
+  exact trans one <| trans (EpochFrameLaws.updateNextWithdrawalIndex_of refl setIndex indexedOk) <|
     trans (queued _) <| trans (partials _) <| trans (swept _ sweptOk)
-      (EpochFrameLaws.updateNextWithdrawalValidatorIndex keep last)
+      (EpochFrameLaws.updateNextWithdrawalValidatorIndex_of setValidatorIndex last)
+
+/-- A reflexive, transitive relation holds across the expected withdrawals.
+
+It must hold across each single withdrawal.
+
+It must also hold across each block frame that keeps the registry. -/
+theorem applyExpectedWithdrawals_of
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (withdraw : ∀ {s t} {w : Withdrawal}, applyWithdrawal s w = .ok t → R s t)
+    (keep : ∀ {s t : BeaconState preset fork}, BlockFrame s t → t.validators = s.validators →
+      R s t)
+    {capella : .shapella ≤ fork}
+    {expected : ExpectedWithdrawals}
+    (computed : Consensus.applyExpectedWithdrawals state capella expected = .ok after) :
+    R state after := by
+  apply applyExpectedWithdrawals_of_setters R refl trans withdraw (computed := computed)
+  all_goals exact fun _ _ => keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
 
 namespace EpochFrameLaws
 
