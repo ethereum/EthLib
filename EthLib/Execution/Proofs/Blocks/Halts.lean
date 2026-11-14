@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Blocks.Failures
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Evm.Call.Halts
@@ -36,7 +37,7 @@ theorem error_processMessageCall {Meter : Type} [GasMeter Meter] [LawfulGasMeter
     {paid : Std.ExtTreeSet Address} {out : Transactions.CallOutput}
     (h : Transactions.processMessageCall (Meter := Meter) chainId message state substate auths
       paid = .ok out) {e : EvmError} (he : out.error = some e) : e.aborts = false := by
-  unfold Transactions.processMessageCall at h
+  rw [Transactions.processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h

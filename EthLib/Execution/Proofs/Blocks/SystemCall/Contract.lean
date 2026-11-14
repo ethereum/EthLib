@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Base.Proofs.Address
 public import EthLib.Execution.Proofs.Evm.Logic.Steps
 public import EthLib.Execution.Proofs.Evm.Logic.Callee
@@ -36,7 +37,8 @@ open EthLib.Execution.Evm
 open EthLib.Execution.Evm.Logic
 open EthLib.Execution.State (TransactionState)
 open GasCosts
-open EthLib.Execution.Transactions (prepareFirstFrame_of_value_eq_zero processMessageCall)
+open EthLib.Execution.Transactions (prepareFirstFrame_of_value_eq_zero processMessageCall
+  processMessageCall_unfold)
 
 /-! ## Words and storage -/
 
@@ -279,7 +281,7 @@ private theorem processSystemMessage_of_run (Meter : Type) [GasMeter Meter]
     rw [hc] at hp
     have hv : ended.val = stopped := Except.ok.inj hp
     have ht : (systemMessage env target data).target = some target := rfl
-    simp only [processMessageCall, hfirst, ht, hc, bind, Except.bind, pure, Except.pure,
+    simp only [processMessageCall_unfold, hfirst, ht, hc, bind, Except.bind, pure, Except.pure,
       Except.map]
     refine ⟨_, rfl, ?_⟩
     simp only [Transactions.CallOutput.ofFrame, hv, herr, Option.isSome_none,

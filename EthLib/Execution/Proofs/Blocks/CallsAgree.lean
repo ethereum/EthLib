@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Blocks.SystemCall
 public import EthLib.Execution.Blocks.Withdrawal
 public import EthLib.Execution.Proofs.Transactions.Noninterference
@@ -36,7 +37,8 @@ open EthLib.Base
 open EthLib.Execution.Evm
 open EthLib.Execution.State
 open EthLib.Execution.State.TransactionState (AgreesOn)
-open EthLib.Execution.Transactions (CallOutput prepareFirstFrame processMessageCall)
+open EthLib.Execution.Transactions (CallOutput prepareFirstFrame processMessageCall
+  processMessageCall_unfold)
 
 variable {fork : Fork} {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
   {code : Hash32 → Prop}
@@ -78,7 +80,7 @@ private theorem mem_accountReads_processMessageCall {Meter : Type} [GasMeter Met
     (h : processMessageCall (Meter := Meter) env.chainId.toNat (systemMessage env target data)
       state Substate.empty = .ok out) :
     target ∈ out.state.accountReads := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · rename_i hprep
     split at h

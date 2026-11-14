@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.Supply
 public import EthLib.Execution.Proofs.Transactions.Deletion
 
@@ -152,7 +153,7 @@ theorem supplyLe_processMessageCall [LawfulGasMeter Meter] {chainId : Nat}
     (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
       .ok output) :
     SupplyLe fork state output.state := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h
@@ -451,7 +452,7 @@ theorem processTransaction_supply {env : BlockEnvironment fork} {block : State.B
       (BurnsNone fork out.state →
         out.state.supply + burnedFees env tx out.gasUsed =
           (State.TransactionState.ofBlock block).supply) := by
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   split at h
   · cases h
   split at h

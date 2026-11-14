@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.Overflow
 public import EthLib.Execution.Proofs.Transactions.Supply
 import EthLib.Execution.Proofs.Transactions.Inclusion
@@ -235,7 +236,7 @@ theorem processMessageCall_ne_balanceOverflow [LawfulGasMeter Meter]
     processMessageCall (Meter := Meter) chainId message state substate auths paid ≠
       .error (.state (.balanceOverflow address)) := by
   intro h
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   rcases hprep : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid
     with ⟨e, read⟩ | first
   · rw [hprep] at h
@@ -266,7 +267,7 @@ private theorem runTransaction_ne_balanceOverflow [LawfulGasMeter Meter]
     (room : SupplyRoom fork (TransactionState.ofBlock block).supply) (address : Address) :
     runTransaction Meter env block included tx ≠ .error (.state (.balanceOverflow address)) := by
   intro h
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   rcases Base.bind_eq_error h with h | ⟨target, -, h⟩
   · unfold messageTarget at h
     split at h
@@ -338,7 +339,7 @@ theorem processTransaction_ne_balanceOverflow {fork : Fork} {env : BlockEnvironm
   obtain ⟨-, valid, -, -, -, fee, -⟩ := checkInclusion_ok checked
   have hMin := (validateTransaction_ok valid).2.1
   have hPrice := le_effectiveGasPrice fee
-  unfold processTransaction
+  rw [processTransaction_unfold]
   split
   · nofun
   split

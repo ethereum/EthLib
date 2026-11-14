@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.MissingCode
 public import EthLib.Execution.Proofs.Transactions.Authorization
 public import EthLib.Execution.Proofs.Transactions.Process
@@ -159,7 +160,7 @@ private theorem allCodes_processMessageCall [LawfulGasMeter Meter] {chainId : Na
     (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
       .ok output) :
     AllCodes output.state := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   rcases hprep : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid
     with ⟨e, read⟩ | first
   · rw [hprep] at h
@@ -455,7 +456,7 @@ private theorem noMiss_processMessageCall [LawfulGasMeter Meter] {chainId : Nat}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} (available : AllCodes state) :
     NoMiss (processMessageCall (Meter := Meter) chainId message state substate auths paid) := by
   intro c h
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   rcases hprep : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid
     with ⟨e, read⟩ | first
   · rw [hprep] at h
@@ -514,7 +515,7 @@ private theorem noMiss_runTransaction [LawfulGasMeter Meter] {env : BlockEnviron
     (available : HasCodes (TransactionState.ofBlock block)) :
     NoMiss (runTransaction Meter env block included tx) := by
   intro c h
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   rcases Base.bind_eq_error h with h | ⟨target, -, h⟩
   · unfold messageTarget at h
     split at h
@@ -589,7 +590,7 @@ theorem processTransaction_hasCodes {fork : Fork} {env : BlockEnvironment fork}
     (h : processTransaction env block included tx = .ok output)
     (available : HasCodes (TransactionState.ofBlock block)) :
     HasCodes output.state ∧ HasPreCodes output.state := by
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   split at h
   · cases h
   split at h
@@ -603,7 +604,7 @@ theorem processTransaction_ne_missingCode {fork : Fork} {env : BlockEnvironment 
     {block : BlockState} {included : Included} {tx : Transaction}
     (available : HasCodes (TransactionState.ofBlock block)) (codeHash : Hash32) :
     processTransaction env block included tx ≠ .error (.state (.missingCode codeHash)) := by
-  unfold processTransaction
+  rw [processTransaction_unfold]
   split
   · nofun
   split

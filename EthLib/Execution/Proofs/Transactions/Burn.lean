@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.BurnRun
 public import EthLib.Execution.Proofs.Transactions.Supply
 
@@ -105,7 +106,7 @@ theorem processMessageCall_messageCallBurns [LawfulGasMeter Meter] {chainId : Na
       .ok output) :
     ∃ log, MessageCallBurns (Meter := Meter) chainId message state substate auths paid
       output.state log := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · rename_i error read preparation
     split at h
@@ -207,7 +208,7 @@ theorem processTransaction_transactionBurns {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
     (h : processTransaction env block included tx = .ok out) :
     ∃ log deleted, TransactionBurns env block included tx out log deleted := by
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   split at h
   · cases h
   split at h

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Blocks.AccessListFollow
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Evm.Call.Rebuild
@@ -111,7 +112,7 @@ private theorem processMessageCall_systemMessage {fork : Fork} {Meter : Type} [G
       (.ofBlock block) Substate.empty = .ok out) :
     RebuildState block out.state := by
   have v0 := RebuildState.ofBlock valid delegations
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   rcases hprep : prepareFirstFrame (Meter := Meter) env.chainId.toNat
       (systemMessage env target data) (.ofBlock block) Substate.empty [] ∅ with ⟨e, read⟩ | first
   · rw [hprep] at h

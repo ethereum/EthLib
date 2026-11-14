@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.NoninterferenceRun
 public import EthLib.Execution.Proofs.Transactions.Candidate
 public import EthLib.Execution.Proofs.Transactions.CodeOrigin
@@ -65,7 +66,7 @@ theorem processMessageCall_withCode [LawfulGasMeter Meter] {chainId : Nat}
     (auths : List Authorization) (paid : Std.ExtTreeSet Address) :
     processMessageCall (Meter := Meter) chainId { message with code } state substate auths paid =
       processMessageCall (Meter := Meter) chainId message state substate auths paid := by
-  simp only [processMessageCall, prepareFirstFrame_withCode htarget]
+  simp only [processMessageCall_unfold, prepareFirstFrame_withCode htarget]
 
 /-! ## Reads and lookups -/
 
@@ -786,7 +787,7 @@ theorem processMessageCall_agrees [LawfulGasMeter Meter] {block : BlockState}
         .ok output' ∧
       output' = { output with state := output'.state } ∧
       AgreesOn account allStorage slot code output.state output'.state := by
-  unfold processMessageCall at h ⊢
+  rw [processMessageCall_unfold] at h ⊢
   rcases hprep : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid
     with ⟨e, read⟩ | first
   · rw [hprep] at h
