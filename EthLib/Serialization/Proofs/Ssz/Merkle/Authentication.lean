@@ -8,7 +8,9 @@ public import EthLib.Cryptography.Proofs.Merkle.Binding
 
 The collision sits at the lowest node where the two branches meet.
 
-Each of the two messages is one its own branch hashes, not an arbitrary hash input. -/
+Each of the two messages is one its own branch hashes, not an arbitrary hash input.
+
+The climb and the search also take another node hash, such as the answer table of an oracle. -/
 
 @[expose] public section
 
@@ -19,10 +21,19 @@ namespace EthLib.Serialization.Ssz
   -- SHA-256 produces thirty-two bytes independently of the message contents.
   exact Cryptography.Hash.Sha256.hash_size (ByteArray.mk (left ++ right))
 
-/-- The messages a branch hashes, from its starting node up: each pair of nodes, concatenated. -/
-def branchMessages (index level : Nat) (node : Bytes) (proof : List Bytes) : List Bytes :=
-  (Cryptography.Merkle.climbPairs (fun _ _ => combine) level (index >>> level) node proof).map
-    fun x => x.1 ++ x.2
+/-- The climb with SHA-256 in the identity monad is the climb of the specification. -/
+@[simp] theorem climbBranchM_sha256 (index level : Nat) (node : Bytes) (branch : List Bytes) :
+    (climbBranchM (m := Id) Cryptography.Hash.Sha256.hash index level node branch).run =
+      climbBranch index level node branch :=
+  rfl
+
+/-- The messages a branch hashes, from its starting node up: each pair of nodes, concatenated.
+
+The hash is SHA-256 unless another one is given. -/
+def branchMessages (index level : Nat) (node : Bytes) (proof : List Bytes)
+    (hash : ByteArray → ByteArray := Cryptography.Hash.Sha256.hash) : List Bytes :=
+  (Cryptography.Merkle.climbPairs (fun _ _ => combineM (m := Id) hash) level (index >>> level)
+      node proof).map fun x => x.1 ++ x.2
 
 /-- One step of the messages: the two nodes in the order the index bit gives, then the parent's. -/
 theorem branchMessages_cons (index level : Nat) (node sibling : Bytes) (rest : List Bytes) :
@@ -37,13 +48,17 @@ theorem branchMessages_cons (index level : Nat) (node sibling : Bytes) (rest : L
   rcases Nat.mod_two_eq_zero_or_one (index >>> level) with h | h <;>
     simp [Cryptography.Merkle.ordered, gindexBit_parity, h] <;> rfl
 
-/-- The SHA-256 collision two branches from one index run into, if any.
+/-- The collision two branches from one index run into, if any.
 
-It is the two messages of the lowest node where the branches hash different pairs to one parent. -/
+It is the two messages of the lowest node where the branches hash different pairs to one parent.
+
+The hash is SHA-256 unless another one is given. -/
 def findBranchCollision (index level : Nat) (left right : Bytes)
-    (leftProof rightProof : List Bytes) : Option (Bytes × Bytes) :=
-  (Cryptography.Merkle.findCollision (m := Id) (fun _ _ => combine) level (index >>> level) left
-      right leftProof rightProof).run.map fun c => (c.x.1 ++ c.x.2, c.y.1 ++ c.y.2)
+    (leftProof rightProof : List Bytes)
+    (hash : ByteArray → ByteArray := Cryptography.Hash.Sha256.hash) : Option (Bytes × Bytes) :=
+  (Cryptography.Merkle.findCollision (m := Id) (fun _ _ => combineM (m := Id) hash) level
+      (index >>> level) left right leftProof rightProof).run.map
+    fun c => (c.x.1 ++ c.x.2, c.y.1 ++ c.y.2)
 
 /-- One branch compared with itself gives no collision, so the search can fail. -/
 theorem findBranchCollision_self (index level : Nat) (node : Bytes) (proof : List Bytes) :
@@ -51,6 +66,36 @@ theorem findBranchCollision_self (index level : Nat) (node : Bytes) (proof : Lis
   unfold findBranchCollision
   rw [Cryptography.Merkle.findCollision_self]
   rfl
+
+/-- Between branches of complete nodes, the search returns two different 64-byte messages.
+
+They have one digest.
+
+It needs every digest of the hash to have 32 bytes. -/
+theorem findBranchCollision_valid_of_width (hash : ByteArray → ByteArray)
+    (width : ∀ x, (hash x).size = 32) {index level : Nat} {left right : Bytes}
+    {leftProof rightProof : List Bytes} {a b : Bytes}
+    (leftWidth : left.size = bytesPerChunk) (rightWidth : right.size = bytesPerChunk)
+    (leftWidths : ∀ node ∈ leftProof, node.size = bytesPerChunk)
+    (rightWidths : ∀ node ∈ rightProof, node.size = bytesPerChunk)
+    (found : findBranchCollision index level left right leftProof rightProof hash = some (a, b)) :
+    a.size = 2 * bytesPerChunk ∧ b.size = 2 * bytesPerChunk ∧ a ≠ b ∧
+      hash (ByteArray.mk a) = hash (ByteArray.mk b) := by
+  -- The two messages are those of a node collision.
+  obtain ⟨c, hc, pair⟩ := Option.map_eq_some_iff.mp found
+  cases pair
+  obtain ⟨⟨different, joined⟩, -⟩ := Cryptography.Merkle.findCollision_valid _ _ _ _ _ _ _ c hc
+  -- Every node the two climbs hash has 32 bytes, since a parent is a digest of the hash.
+  obtain ⟨x1, x2, y1, y2⟩ := Cryptography.Merkle.findCollision_children _
+    (fun node => node.size = bytesPerChunk) (fun _ _ x y => width (ByteArray.mk (x ++ y)))
+    leftWidth rightWidth leftWidths rightWidths hc
+  refine ⟨by simp [x1, x2, Nat.two_mul], by simp [y1, y2, Nat.two_mul],
+    fun equal => different ?_, ?_⟩
+  · -- Fixed child widths keep the boundary between the two children in place.
+    obtain ⟨h1, h2⟩ := Array.append_inj equal (x1.trans y1.symm)
+    exact Prod.ext h1 h2
+  · -- The two pairs hash to one parent, which is the digest of their messages.
+    exact ByteArray.ext joined
 
 /-- Between branches of complete nodes, the search returns two different 64-byte messages.
 
@@ -63,29 +108,16 @@ theorem findBranchCollision_valid {index level : Nat} {left right : Bytes}
     (found : findBranchCollision index level left right leftProof rightProof = some (a, b)) :
     a.size = 2 * bytesPerChunk ∧ b.size = 2 * bytesPerChunk ∧ a ≠ b ∧
       Cryptography.Hash.Sha256.hash (ByteArray.mk a)
-        = Cryptography.Hash.Sha256.hash (ByteArray.mk b) := by
-  -- The two messages are those of a node collision.
-  obtain ⟨c, hc, pair⟩ := Option.map_eq_some_iff.mp found
-  cases pair
-  obtain ⟨⟨different, joined⟩, -⟩ := Cryptography.Merkle.findCollision_valid _ _ _ _ _ _ _ c hc
-  -- Every node the two climbs hash has 32 bytes, since a parent is a SHA-256 digest.
-  obtain ⟨x1, x2, y1, y2⟩ := Cryptography.Merkle.findCollision_children _
-    (fun node => node.size = bytesPerChunk) (fun _ _ _ _ => combine_size _ _)
-    leftWidth rightWidth leftWidths rightWidths hc
-  refine ⟨by simp [x1, x2, Nat.two_mul], by simp [y1, y2, Nat.two_mul],
-    fun equal => different ?_, ?_⟩
-  · -- Fixed child widths keep the boundary between the two children in place.
-    obtain ⟨h1, h2⟩ := Array.append_inj equal (x1.trans y1.symm)
-    exact Prod.ext h1 h2
-  · -- The two pairs hash to one parent, which is the SHA-256 digest of their messages.
-    exact ByteArray.ext joined
+        = Cryptography.Hash.Sha256.hash (ByteArray.mk b) :=
+  findBranchCollision_valid_of_width _ Cryptography.Hash.Sha256.hash_size leftWidth rightWidth
+    leftWidths rightWidths found
 
 /-- Each message the search returns is one its own branch hashes. -/
-theorem findBranchCollision_mem {index level : Nat} {left right : Bytes}
-    {leftProof rightProof : List Bytes} {a b : Bytes}
-    (found : findBranchCollision index level left right leftProof rightProof = some (a, b)) :
-    a ∈ branchMessages index level left leftProof ∧
-      b ∈ branchMessages index level right rightProof := by
+theorem findBranchCollision_mem {hash : ByteArray → ByteArray} {index level : Nat}
+    {left right : Bytes} {leftProof rightProof : List Bytes} {a b : Bytes}
+    (found : findBranchCollision index level left right leftProof rightProof hash = some (a, b)) :
+    a ∈ branchMessages index level left leftProof hash ∧
+      b ∈ branchMessages index level right rightProof hash := by
   -- The two messages are those of a node collision, whose pairs the two climbs hash.
   obtain ⟨c, hc, pair⟩ := Option.map_eq_some_iff.mp found
   cases pair
@@ -94,16 +126,30 @@ theorem findBranchCollision_mem {index level : Nat} {left right : Bytes}
 
 /-- Two same-length branches from one index with the same root start from one node.
 
+Otherwise the search returns a pair of messages, for any node hash.
+
+They form a collision when every digest has 32 bytes. -/
+theorem climbBranchM_binding (hash : ByteArray → ByteArray) {index level : Nat}
+    {left right : Bytes} {leftProof rightProof : List Bytes}
+    (lengths : leftProof.length = rightProof.length)
+    (same : (climbBranchM (m := Id) hash index level left leftProof).run =
+      (climbBranchM (m := Id) hash index level right rightProof).run) :
+    left = right ∨
+      (findBranchCollision index level left right leftProof rightProof hash).isSome := by
+  rcases Cryptography.Merkle.climb_binding _ _ _ level (index >>> level) left right lengths same
+    with ⟨leaves, -⟩ | found
+  · exact .inl leaves
+  · exact .inr (by simpa [findBranchCollision, Id.run] using found)
+
+/-- Two same-length branches from one index with the same root start from one node.
+
 Otherwise the search finds a collision. -/
 theorem climbBranch_binding {index level : Nat} {left right : Bytes}
     {leftProof rightProof : List Bytes}
     (lengths : leftProof.length = rightProof.length)
     (same : climbBranch index level left leftProof = climbBranch index level right rightProof) :
-    left = right ∨ (findBranchCollision index level left right leftProof rightProof).isSome := by
-  rcases Cryptography.Merkle.climb_binding _ _ _ level (index >>> level) left right lengths same
-    with ⟨leaves, -⟩ | found
-  · exact .inl leaves
-  · exact .inr (by simpa [findBranchCollision, Id.run] using found)
+    left = right ∨ (findBranchCollision index level left right leftProof rightProof).isSome :=
+  climbBranchM_binding Cryptography.Hash.Sha256.hash lengths same
 
 /-- A branch passes width validation exactly when every supplied sibling is a full node. -/
 theorem checkChunks_ok_iff (nodes : List Bytes) :

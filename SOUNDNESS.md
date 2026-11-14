@@ -184,6 +184,8 @@ Each collision is two different 64-byte inputs with one digest, returned by an e
 Branch binding is `verifyMerkleProof_binding` (`Proofs/Ssz/Merkle/Authentication.lean`).
 Two accepted branches at one index and root open one leaf, or `findBranchCollision` returns a collision.
 It rests on `climb_binding`, above.
+`climbBranchM_binding` states the binding of the climb for any node hash.
+`findBranchCollision_valid_of_width` states the collision for any hash with 32-byte digests.
 
 Multiproof binding is `verifyMerkleMultiproof_binding` and `verifyMerkleMultiproof_overlap_binding` (`Proofs/Ssz/Merkle/MultiproofBinding.lean`).
 Two accepted requests for one root agree on every position they both claim, or `findMessageCollision` returns a collision.
@@ -202,8 +204,8 @@ Two legal progressive containers with one root have one layout, or `findMixinCol
 `hashTreeRootM_progressiveContainer_layouts_separate` states the same for any hash with 32-byte digests.
 It computes the roots of the all-zero subtrees with that hash too.
 
-No theorem bounds the probability of finding a collision in a branch or a multiproof.
-Their verifiers call SHA-256 directly, so no experiment runs them against the oracle.
+No theorem bounds the probability of finding a collision in a multiproof.
+Its verifier hashes each pair with `combine` in `foldLevelNodes`, which takes no node hash as an argument, so no experiment runs it against the oracle.
 
 `Proofs/Ssz/RandomOracle.lean` bounds whole-value binding, with the node hash a random oracle.
 The merkleization takes its hash in any monad, so the experiment runs the root of the specification with a hasher that queries the oracle.
@@ -235,6 +237,23 @@ Its proof applies `hashTreeRootM_progressiveContainer_layouts_separate` to a tab
 The extraction queried both inputs again, so the cache holds them, by `cached_of_extractLayouts`.
 `prEvent_experimentWith_le` then gives `prEvent_layoutWins_le`, which bounds a win by `Q^2 / N`, and `prEvent_layoutWins_le_two_pow` states it with `N = 2^256`.
 The layout extraction expands no padded tree, so `Q` grows with the data and with the depth of each tree, since a zero subtree costs one query per level, not with the capacity of the type.
+
+`Proofs/Ssz/BranchRandomOracle.lean` bounds the binding of `isValidMerkleBranch`, the branch check by depth and index, with the same oracle.
+The depth is fixed before the run, and an adversary outputs an index and two leaves, each with a branch.
+The extraction climbs the first `depth` nodes of each branch, as `computeMerkleBranchRoot` does.
+It climbs with `climbBranchM`, which is `climbBranch` with the node hash as an argument (`climbBranchM_sha256`), and here that hash is the oracle.
+The adversary wins when the leaves differ, both branches have `depth` nodes, and both climbs reach one root, computed by the oracle.
+`collision_of_extractBranches` shows that every win leaves two different cached inputs with one answer.
+Its proof applies `climbBranchM_binding` to a table that agrees with the cache, and takes the messages that `findBranchCollision` returns.
+The climbs queried every message they hash, so the cache holds both, by `cached_of_climbBranchM`.
+`prEvent_experimentWith_le` then gives `prEvent_branchWins_le`, which bounds a win by `Q^2 / N`, and `prEvent_branchWins_le_two_pow` states it with `N = 2^256`.
+`Q` counts the adversary's queries and one query for each branch node that a climb hashes, so the extraction adds at most `2 * depth`.
+`experimentWith_extractBranches_queryBound` proves this count.
+`prEvent_branchWins_le_of_adversary` states the bound with `Q = q + 2 * depth`, for an adversary that makes at most `q` queries.
+Beyond the adversary's own queries, `Q` grows with the depth, not with the `2^depth` leaves.
+With SHA-256 in place of the oracle, `branchWins_sha256_iff` shows that a win is two different leaves that `isValidMerkleBranch` accepts at one depth, index and root.
+The specification hashes with SHA-256, and the step from SHA-256 to the oracle is the idealisation of A4, not a theorem.
+The light client, data availability and deposit proofs bind their branches with SHA-256, and no theorem composes them with this bound.
 
 ### leanSPHINCS
 
@@ -5430,6 +5449,7 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
 - SSZ root bound: the SHA-256 node hash is a random oracle on byte strings, shared by every node of the tree.
   The roots of the all-zero subtrees, constants of the specification, are oracle answers in the model.
   The type is fixed before the run, except in the layout bound, where the adversary picks both types.
+  The branch bound fixes the depth before the run, and its adversary picks the index, the leaves and the branches.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of SHA-256.
