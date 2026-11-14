@@ -72,7 +72,8 @@ Not yet released.
   Compose the block frames of the steps first, and pass their slashed flags once.
   `slashedFlagAt_processProposerSlashing` and `slashedFlagAt_processAttesterSlashing` state that a slashing changes flags only at the positions that it names.
   `slashedFlagAt_foldlM` states the same for a fold of such steps.
-  `foldlM_ok_invariant_of_mem` moves to `EthLib.Base`, next to `foldlM_ok_invariant`.
+  `slashed_setValidatorAt` is renamed `slashedFlagAt_setValidatorAt`.
+  `foldlM_ok_invariant_of_mem` moves to `Base/Proofs/MapM.lean`, in the namespace `EthLib.Base`.
 
 - `engine_forkchoiceUpdated` checks that the most recent block of proof of work on the chain of the head is terminal, as step 3 of the method and step 2 of payload validation of Paris require.
   A head whose chain fails the check is `INVALID`, with the zero hash, and the head does not change.
