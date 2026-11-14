@@ -97,4 +97,24 @@ theorem traceTransaction_failed {fork : Fork} (config : TraceConfig)
   cases h'
   exact hr
 
+/-- The counter after one step of a frame: one more when the frame has code. -/
+def countSteps {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter)
+    (_ : Except EvmError (StepResult fork Meter)) (n : Nat) : Nat :=
+  if evm.code.size = 0 then n else n + 1
+
+/-- With no bound, the trace has one entry for each step of a frame with code.
+
+That count of steps comes from the same run, observed by a counter. -/
+theorem traceRun_count {fork : Fork} (config : TraceConfig) (unbounded : config.limit = 0)
+    (env : BlockEnvironment fork) (block : BlockState) (included : Included) (tx : Transaction)
+    (precompiles : Address → Option Address) (lifted : LiftedRules) :
+    (fun p => (p.1, p.2.logs.size)) <$> traceRun config env block included tx precompiles lifted =
+      (processTransactionWith (M := StateT Nat (Except EvmError))
+        (fun evm result => modify (countSteps evm result)) env block included tx precompiles
+        lifted).run 0 := by
+  refine processTransactionWith_map (fun tracer : Tracer => tracer.logs.size)
+    (fun evm result => Tracer.record config evm result) (fun evm result => countSteps evm result)
+    (fun evm result tracer => ?_) env block included tx precompiles lifted {}
+  by_cases empty : evm.code.size = 0 <;> simp [Tracer.record, countSteps, unbounded, empty]
+
 end EthLib.Execution.Rpc
