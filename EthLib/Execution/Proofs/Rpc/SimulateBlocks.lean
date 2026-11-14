@@ -2,7 +2,12 @@ module
 
 public import EthLib.Execution.Rpc.Simulate.Blocks
 public import EthLib.Base.Proofs.MapM
+public import EthLib.Execution.Proofs.Blocks.Codes
+public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Rpc.Simulate
+public import EthLib.Execution.Proofs.Transactions.Overrides
+public import EthLib.Execution.Proofs.Transactions.Process
+public import EthLib.Execution.Proofs.Transactions.Unsigned
 
 /-!
 # Proofs: the blocks of `eth_simulateV1`
@@ -20,6 +25,12 @@ Each other has the hash of the block before it.
 Without validation, a block whose base fee is not overridden has a base fee of 0.
 
 That holds whatever the base fee of the block before it.
+
+With validation and no overrides, a simulated block agrees with the state transition.
+
+Its calls must then be signed and the block must pass its checks.
+
+Its transition may still fail at a sender with code.
 -/
 
 @[expose] public section
@@ -459,5 +470,364 @@ theorem simulateBlocks_baseFee {v : ChainView} {payload : SimulatePayload} {p : 
           exact simulateBlock_baseFee hBlk
             (hNone _ (hx _ List.mem_cons_self) hNum.symm) hLondon
   · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-! ## Agreement with the state transition -/
+
+/-- A recovered sender passes the checks of a given sender, then the rule on its code. -/
+private theorem checkSender_signed {fork : Fork} {state : State.TransactionState}
+    {sender : Address} {tx : Transaction} {skip : Bool} :
+    checkSender fork state sender tx true skip = (do
+      checkSender fork state sender tx false skip
+      let code ← (state.getCode (state.getAccount sender).codeHash).mapError fun _ =>
+        InclusionError.missingCode (state.getAccount sender).codeHash
+      failIf ((state.getAccount sender).codeHash ≠ State.EMPTY_CODE_HASH ∧
+        !(fork ≥ .pectra ∧ Evm.isValidDelegation code)) .senderNotEoa) := by
+  cases skip <;> simp [checkSender, bind_assoc]
+
+/-- A check that recovers the sender is the check with that sender given, then the code rule. -/
+private theorem checkInclusion_none_eq {fork : Fork} {chainId : UInt64}
+    {env : Evm.BlockEnvironment fork} {used : BlockGas} {state : State.TransactionState}
+    {tx : Transaction} {sender : Address} {lifted : LiftedRules}
+    (hChain : checkChainId fork chainId tx = .ok ())
+    (hSender : recoverSender fork tx = .ok sender) :
+    checkInclusion chainId env used state tx none lifted = (do
+      let inc ← checkInclusion chainId env used state tx (some sender) lifted
+      let code ← (state.getCode (state.getAccount sender).codeHash).mapError fun _ =>
+        InclusionError.missingCode (state.getAccount sender).codeHash
+      failIf ((state.getAccount sender).codeHash ≠ State.EMPTY_CODE_HASH ∧
+        !(fork ≥ .pectra ∧ Evm.isValidDelegation code)) .senderNotEoa
+      pure inc) := by
+  have hOk : (Except.ok () : Except InclusionError Unit) = pure () := rfl
+  have hOkSender : (Except.ok sender : Except InclusionError Address) = pure sender := rfl
+  unfold checkInclusion
+  by_cases hg : fork ≥ .glamsterdam <;>
+    simp [hg, hChain, hSender, Except.mapError, checkSender_signed, bind_assoc] <;>
+    simp only [hOk, hOkSender, pure_bind, ite_self]
+
+/-- When the check with the sender given passes, the real check agrees, or the code rule fails. -/
+private theorem checkInclusion_none_of_some {fork : Fork} {chainId : UInt64}
+    {env : Evm.BlockEnvironment fork} {used : BlockGas} {state : State.TransactionState}
+    {tx : Transaction} {sender : Address} {lifted : LiftedRules} {inc : Included}
+    (hChain : checkChainId fork chainId tx = .ok ()) (hSender : recoverSender fork tx = .ok sender)
+    (h : checkInclusion chainId env used state tx (some sender) lifted = .ok inc) :
+    checkInclusion chainId env used state tx none lifted = .ok inc ∨
+      ∃ e, checkInclusion chainId env used state tx none lifted = .error e ∧
+        (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash) := by
+  rw [checkInclusion_none_eq hChain hSender, h]
+  cases hc : state.getCode (state.getAccount sender).codeHash with
+  | error _ =>
+    exact Or.inr ⟨.missingCode (state.getAccount sender).codeHash,
+      by simp [Except.mapError, bind, Except.bind], Or.inr ⟨_, rfl⟩⟩
+  | ok code =>
+    simp only [Except.mapError, bind, Except.bind, pure, Except.pure, failIf]
+    by_cases hr : decide ((state.getAccount sender).codeHash ≠ State.EMPTY_CODE_HASH ∧
+        (!decide (fork ≥ Fork.pectra ∧ Evm.isValidDelegation code = true)) = true) = true
+    · simp only [hr, ↓reduceIte]
+      exact Or.inr ⟨_, rfl, Or.inl rfl⟩
+    · simp only [hr]
+      exact Or.inl rfl
+
+/-- A transaction that enters a simulated body enters a real one alike, or fails the rule on code.
+
+The simulation gives the sender of its signature, keeps each precompile and lifts the gas cap. -/
+private theorem applyTransaction_signed {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {index : Nat} {before after : BodyOutput fork} {tx : Transaction} {sender : Address}
+    {overrides : BodyOverrides} (hs : overrides.senders index = some sender)
+    (hp : overrides.precompiles = some) (hl : overrides.lifted = { totalGasCap := true })
+    (hChain : checkChainId fork env.chainId tx = .ok ())
+    (hSender : recoverSender fork tx = .ok sender)
+    (hGas : tx.gas.toNat ≤ Evm.GasCosts.TX_MAX_TOTAL_GAS_LIMIT)
+    (h : applyTransaction env index before tx.unsigned overrides = .ok after) :
+    applyTransaction env index before tx = .ok after ∨
+      ∃ e, applyTransaction env index before tx = .error (.invalidTransaction index e) ∧
+        (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash) := by
+  unfold applyTransaction at h ⊢
+  rw [hs, hl, hp, checkInclusion_unsigned, checkInclusion_totalGasCap hGas] at h
+  simp only [processTransaction_totalGasCap, processTransaction_unsigned,
+    Transaction.type_unsigned] at h
+  dsimp only
+  cases hc : checkInclusion env.chainId env before.gas (.ofBlock before.block) tx (some sender) with
+  | error e => simp [hc, Except.mapError, bind, Except.bind] at h
+  | ok inc =>
+    rw [hc] at h
+    rcases checkInclusion_none_of_some hChain hSender hc with hEq | ⟨e, hEq, hP⟩
+    · rw [hEq]
+      exact Or.inl h
+    · rw [hEq]
+      exact Or.inr ⟨e, rfl, hP⟩
+
+/-- Transactions that enter a simulated body enter a real one alike, or one fails the rule on code.
+
+Each transaction must agree so, with indices counted from `n`. -/
+private theorem foldlM_signed {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {overrides : BodyOverrides} :
+    ∀ (txs : List Transaction) (n : Nat) (init out : BodyOutput fork),
+    (∀ tx index, (tx, index) ∈ txs.zipIdx n → ∀ before after,
+      applyTransaction env index before tx.unsigned overrides = .ok after →
+      applyTransaction env index before tx = .ok after ∨
+        ∃ e, applyTransaction env index before tx = .error (.invalidTransaction index e) ∧
+          (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash)) →
+    ((txs.map Transaction.unsigned).zipIdx n).foldlM
+      (fun before (tx, index) => applyTransaction env index before tx overrides) init = .ok out →
+    (txs.zipIdx n).foldlM (fun before (tx, index) => applyTransaction env index before tx) init =
+        .ok out ∨
+      ∃ i e, (txs.zipIdx n).foldlM
+          (fun before (tx, index) => applyTransaction env index before tx) init =
+          .error (.invalidTransaction i e) ∧
+        (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash)
+  | [], _, _, _, _, h => Or.inl h
+  | tx :: txs, n, init, out, hStep, h => by
+    simp only [List.map_cons, List.zipIdx_cons, List.foldlM_cons] at h ⊢
+    obtain ⟨mid, hMid, h⟩ := bind_ok_iff.mp h
+    rcases hStep tx n List.mem_cons_self init mid hMid with hEq | ⟨e, hEq, hP⟩
+    · rw [hEq]
+      exact foldlM_signed txs (n + 1) mid out
+        (fun tx index hm => hStep tx index (List.mem_cons_of_mem _ hm)) h
+    · rw [hEq]
+      exact Or.inr ⟨n, e, rfl, hP⟩
+
+/-- A simulated body whose transactions agree with the real ones agrees with the real body. -/
+private theorem applyBody_signed {fork : Fork} {config : ChainConfig}
+    {env : Evm.BlockEnvironment fork} {header : Header fork} {txs : List Transaction}
+    {ws : Since .shapella fork (List Withdrawal)} {start : State.BlockState}
+    {overrides : BodyOverrides} {output : BlockOutput fork}
+    (hT : ∀ body out, applyTransactions env body (txs.map Transaction.unsigned) overrides =
+      .ok out → applyTransactions env body txs = .ok out ∨
+        ∃ i e, applyTransactions env body txs = .error (.invalidTransaction i e) ∧
+          (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash))
+    (h : applyBody config env ⟨header, txs.map Transaction.unsigned, [], ws⟩ start overrides =
+      .ok output) :
+    applyBody config env ⟨header, txs, [], ws⟩ start = .ok output ∨
+      ∃ i e, applyBody config env ⟨header, txs, [], ws⟩ start = .error (.invalidTransaction i e) ∧
+        (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash) := by
+  unfold applyBody at h ⊢
+  obtain ⟨state, hState, h⟩ := bind_ok_iff.mp h
+  obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
+  obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
+  rw [List.length_map] at h
+  rcases hT body out hOut with hEq | ⟨i, e, hEq, hP⟩
+  · left
+    simp only [hState, hBody, hEq, bind, Except.bind]
+    exact h
+  · right
+    refine ⟨i, e, ?_, hP⟩
+    simp only [hState, hBody, hEq, bind, Except.bind]
+
+/-- With validation and no overrides, a simulated block runs its filled calls as a real body.
+
+The body gives each call its sender, keeps every precompile, and lifts only the cap on gas. -/
+private theorem simulateBlock_valid_spec {chain chain' : BlockChain} {base : RecentBlock}
+    {fork : Fork} {number time budget budget' : Nat} {calls : List GenericTransaction}
+    {b : SimulatedBlock}
+    (h : simulateBlock chain base fork number time { calls } true budget =
+      .ok (chain', budget', b)) :
+    ∃ (header : Header fork) (filled : List (Transaction × Address)) (result : BodyResult fork)
+      (hash : Hash32),
+      runBody chain ⟨header, filled.map (·.1), [], fun _ => []⟩
+        { senders := ((filled.map (·.2))[·]?), precompiles := some,
+          lifted := { totalGasCap := true } } = .ok result ∧
+      b = ⟨{ fork := fork
+             block := ⟨fillHeader header result.output result.roots, filled.map (·.1), [],
+               fun _ => []⟩
+             hash := hash
+             state := result.post
+             receipts := result.output.receipts
+             logs := result.output.logs }, filled.map (·.2)⟩ := by
+  have hState : overrideState fork chain.state [] = chain.state := by
+    simp [overrideState, applyOverrides]
+  have hMoves : movedPrecompiles (precompileMoves []) = some := by
+    funext a
+    rfl
+  simp only [simulateBlock] at h
+  split at h
+  · rename_i parent hP
+    simp only [bind_ok_iff, mapError_ok_iff] at h
+    obtain ⟨_, -, _, -, _, -, _, -, filled, -, result, hResult, hash, -, hEq⟩ := h
+    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at hEq
+    obtain ⟨-, -, rfl⟩ := hEq
+    rw [hState, hMoves] at hResult
+    exact ⟨_, filled.1, result, hash, hResult, rfl⟩
+  · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- The blob gas of transactions that run is the sum of the blob gas of each, from the index `n`. -/
+private theorem foldlM_blob {fork : Fork} {env : Evm.BlockEnvironment fork} :
+    ∀ (txs : List Transaction) (n : Nat) (init out : BodyOutput fork),
+    (txs.zipIdx n).foldlM (fun before (tx, index) => applyTransaction env index before tx) init =
+      .ok out →
+    out.gas.blob = init.gas.blob + (txs.map Fees.BlobBaseFee.calculateTotalBlobGas).sum
+  | [], _, _, _, h => by
+    cases h
+    simp
+  | tx :: txs, n, init, out, h => by
+    simp only [List.zipIdx_cons, List.foldlM_cons] at h
+    obtain ⟨mid, hMid, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, run, -, hRun, hGas, -⟩ := applyTransaction_eq_ok hMid
+    rw [foldlM_blob txs (n + 1) mid out h, hGas, BlockGas.add,
+      processTransaction_blockGas_blob hRun]
+    simp only [List.map_cons, List.sum_cons]
+    omega
+
+/-- Other transactions with the root `root` give the roots of an output with that root. -/
+private theorem outputRoots_of_transactionsRoot {fork : Fork} {txs txs' : List Transaction}
+    {ws : Since .shapella fork (List Withdrawal)} {output : BlockOutput fork}
+    {post : State.State} {roots : OutputRoots} {root : Hash32}
+    (h : outputRoots txs' ws output post = .ok roots) (hRoot : transactionsRoot txs = .ok root) :
+    outputRoots txs ws output post = .ok { roots with transactions := root } := by
+  have hTx : (transactionsRoot txs).mapError BlockError.trie = .ok root := by
+    rw [hRoot]
+    rfl
+  unfold outputRoots at h ⊢
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨postRoot, hPost, h⟩ := bind_ok_iff.mp h
+  obtain ⟨receiptRoot, hReceipt, h⟩ := bind_ok_iff.mp h
+  obtain ⟨withdrawalRoot, hWithdrawal, h⟩ := bind_ok_iff.mp h
+  cases h
+  simp only [hTx, hPost, hReceipt, hWithdrawal, bind, Except.bind, pure, Except.pure]
+
+/-- When a block passes its checks and its body fails, its transition fails with that error. -/
+private theorem stateTransition_of_runBody_error {fork : Fork} {chain : BlockChain}
+    {block : Block fork Transaction} {checkSeal : Bool} {e : BlockError}
+    (hFork : ¬.hegota ≤ fork)
+    (hActive :
+      chain.config.activeFork block.header.number block.header.timestamp.toNat = some fork)
+    (hCheck : checkBlock chain.config checkSeal chain.recent block = .ok ())
+    (hBody : runBody chain block = .error e) :
+    stateTransition chain block checkSeal = .error e := by
+  simp only [stateTransition, hFork, hActive, ↓reduceIte, hCheck, hBody, bind, Except.bind]
+
+/-- A simulated block agrees with the state transition, or a sender has code or lacks it.
+
+The hypotheses are those of the theorem below, without the codes of the state. -/
+private theorem stateTransition_of_simulateBlock_or {chain chain' : BlockChain} {base : RecentBlock}
+    {fork : Fork} {number time budget budget' : Nat} {calls : List GenericTransaction}
+    {b : SimulatedBlock} {txs : List Transaction} {root : Hash32}
+    (h : simulateBlock chain base fork number time { calls } true budget =
+      .ok (chain', budget', b))
+    (hFork : chain.config.activeFork b.record.block.header.number
+      b.record.block.header.timestamp.toNat = some b.record.fork)
+    (hHegota : b.record.fork < .hegota)
+    (hUnsigned : txs.map Transaction.unsigned = b.record.block.transactions)
+    (hSenders : ∀ p ∈ txs.zip b.senders, recoverSender b.record.fork p.1 = .ok p.2 ∧
+      checkChainId b.record.fork chain.config.chainId p.1 = .ok ())
+    (hGas : ∀ tx ∈ txs, tx.gas.toNat ≤ Evm.GasCosts.TX_MAX_TOTAL_GAS_LIMIT)
+    (hBlob : (txs.map Fees.BlobBaseFee.calculateTotalBlobGas).sum < 2 ^ 64)
+    (hRoot : transactionsRoot txs = .ok root)
+    (hCheck : checkBlock chain.config false chain.recent (b.withTransactions txs root) = .ok ()) :
+    stateTransition chain (b.withTransactions txs root) false = .ok b.record.state ∨
+      ∃ i e, stateTransition chain (b.withTransactions txs root) false =
+          .error (.invalidTransaction i e) ∧
+        (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash) := by
+  obtain ⟨header, filled, result, hash, hRun, rfl⟩ := simulateBlock_valid_spec h
+  dsimp only at hFork hHegota hUnsigned hSenders hCheck ⊢
+  have hLen : (filled.map (·.2)).length = txs.length := by
+    have := congrArg List.length hUnsigned
+    simp only [List.length_map] at this ⊢
+    omega
+  rw [← hUnsigned] at hRun
+  unfold runBody at hRun
+  obtain ⟨hashes, hHashes, hRun⟩ := bind_ok_iff.mp hRun
+  obtain ⟨output, hOutput, hRun⟩ := bind_ok_iff.mp hRun
+  obtain ⟨roots, hRoots, hRun⟩ := bind_ok_iff.mp hRun
+  cases hRun
+  dsimp only at hOutput hRoots
+  have hNot : ¬.hegota ≤ fork := Nat.not_le_of_lt hHegota
+  have hTxs : ∀ body out, applyTransactions (blockEnvironment chain.config hashes header) body
+      (txs.map Transaction.unsigned)
+      { senders := ((filled.map (·.2))[·]?), lifted := { totalGasCap := true } } = .ok out →
+      applyTransactions (blockEnvironment chain.config hashes header) body txs = .ok out ∨
+        ∃ i e, applyTransactions (blockEnvironment chain.config hashes header) body txs =
+            .error (.invalidTransaction i e) ∧
+          (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash) := by
+    intro body out hT
+    refine foldlM_signed txs 0 _ out (fun tx index hm before after hA => ?_) hT
+    obtain ⟨hi, hx⟩ := List.mem_zipIdx' hm
+    rw [hx] at hA ⊢
+    have hi' : index < (filled.map (·.2)).length := hLen ▸ hi
+    have hp : (txs[index], (filled.map (·.2))[index]) ∈ txs.zip (filled.map (·.2)) := by
+      have := List.getElem_mem (l := txs.zip (filled.map (·.2))) (n := index)
+        (by simp only [List.length_zip, List.length_map] at hi' ⊢; omega)
+      simpa only [List.getElem_zip] using this
+    obtain ⟨hS, hC⟩ := hSenders _ hp
+    exact applyTransaction_signed (List.getElem?_eq_getElem hi') rfl rfl hC hS
+      (hGas _ (List.getElem_mem hi)) hA
+  rcases applyBody_signed hTxs hOutput with hReal | ⟨i, e, hErr, hP⟩
+  · left
+    have hBody : runBody chain (⟨header, txs, [], fun _ => []⟩ : Block fork Transaction) =
+        .ok ⟨output, { roots with transactions := root }⟩ := by
+      unfold runBody
+      simp only [hHashes, hReal, outputRoots_of_transactionsRoot hRoots hRoot, bind, Except.bind,
+        pure, Except.pure]
+    obtain ⟨_, _, txsOut, _, _, _, _, hApply, _, _, _, _, _, _, hGasEq, _⟩ :=
+      applyBody_eq_ok hReal
+    unfold applyTransactions at hApply
+    have hb : output.gas.blob < 2 ^ 64 := by
+      rw [hGasEq, foldlM_blob txs 0 _ txsOut hApply]
+      simpa [BlockGas.zero] using hBlob
+    have hw : .shapella ≤ fork → roots.withdrawals.isSome := fun hs => by
+      obtain ⟨r, -, hr⟩ := outputRoots_withdrawals hs hRoots
+      simp [hr]
+    have ha : .glamsterdam ≤ fork → output.accessListHash.isSome := fun hg => by
+      obtain ⟨v, hv, -⟩ := applyBody_accessListHash hReal hg
+      simp [hv]
+    exact stateTransition_of_runBody (result := ⟨output, { roots with transactions := root }⟩)
+      hNot hFork hCheck (Eq.trans rfl hBody)
+      (outputChecks_fillHeader (header := header) (roots := { roots with transactions := root })
+        hb hw ha)
+  · right
+    refine ⟨i, e, ?_, hP⟩
+    have hBody : runBody chain (⟨header, txs, [], fun _ => []⟩ : Block fork Transaction) =
+        .error (.invalidTransaction i e) := by
+      unfold runBody
+      simp only [hHashes, hErr, bind, Except.bind]
+    exact stateTransition_of_runBody_error hNot hFork hCheck (Eq.trans rfl hBody)
+
+/-- With validation and no overrides, a simulated block agrees with the state transition.
+
+The fork must be the active fork at the number and time of the block, and come before Hegotá.
+
+The calls must be the transactions `txs` without their signatures.
+
+Each signature must give the sender of its call and name the chain.
+
+Each gas limit must be at most `2^32 - 1`, the cap from Glamsterdam that a simulation lifts.
+
+The blob gas must fit the 64 bits of the header, which a large blob schedule of a chain allows.
+
+The block with `txs` and their root `root` must pass the checks of a block, its parent included.
+
+That block has the gas used, the other roots and the logs Bloom of the simulated block.
+
+The state must hold the code of each of its accounts.
+
+Then its transition gives the state after the simulated block.
+
+Otherwise it fails at a sender with code, by [EIP-3607][eip-3607], which the simulation skips.
+
+[eip-3607]: https://eips.ethereum.org/EIPS/eip-3607#specification -/
+theorem stateTransition_of_simulateBlock {chain chain' : BlockChain} {base : RecentBlock}
+    {fork : Fork} {number time budget budget' : Nat} {calls : List GenericTransaction}
+    {b : SimulatedBlock} {txs : List Transaction} {root : Hash32}
+    (h : simulateBlock chain base fork number time { calls } true budget =
+      .ok (chain', budget', b))
+    (hFork : chain.config.activeFork b.record.block.header.number
+      b.record.block.header.timestamp.toNat = some b.record.fork)
+    (hHegota : b.record.fork < .hegota)
+    (hUnsigned : txs.map Transaction.unsigned = b.record.block.transactions)
+    (hSenders : ∀ p ∈ txs.zip b.senders, recoverSender b.record.fork p.1 = .ok p.2 ∧
+      checkChainId b.record.fork chain.config.chainId p.1 = .ok ())
+    (hGas : ∀ tx ∈ txs, tx.gas.toNat ≤ Evm.GasCosts.TX_MAX_TOTAL_GAS_LIMIT)
+    (hBlob : (txs.map Fees.BlobBaseFee.calculateTotalBlobGas).sum < 2 ^ 64)
+    (hRoot : transactionsRoot txs = .ok root)
+    (hCheck : checkBlock chain.config false chain.recent (b.withTransactions txs root) = .ok ())
+    (available : chain.state.HasCodes) :
+    stateTransition chain (b.withTransactions txs root) false = .ok b.record.state ∨
+      ∃ i, stateTransition chain (b.withTransactions txs root) false =
+        .error (.invalidTransaction i .senderNotEoa) := by
+  rcases stateTransition_of_simulateBlock_or h hFork hHegota hUnsigned hSenders hGas hBlob hRoot
+    hCheck with ok | ⟨i, e, he, hE⟩
+  · exact .inl ok
+  · rcases hE with rfl | ⟨c, rfl⟩
+    · exact .inr ⟨i, he⟩
+    · exact absurd he (stateTransition_ne_invalidTransaction_missingCode _ _ _ available i c)
 
 end EthLib.Execution.Rpc

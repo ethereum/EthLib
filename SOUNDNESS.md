@@ -4067,6 +4067,14 @@ The first has the hash of the base block as parent hash, and each other the hash
 Without validation, a block whose base fee is not overridden has a base fee of 0, whatever the base fee of the block before it (`simulateBlock_baseFee`).
 Its body runs in the environment of its header, whose base fee is then 0, and BASEFEE reads it (`simulateBlock_environment_baseFee`).
 With validation off, every block of a simulation whose base fee is not overridden has a base fee of 0, gap blocks included (`simulateBlocks_baseFee`).
+With validation and no overrides, a simulated block agrees with the state transition (`stateTransition_of_simulateBlock`).
+The fork must be active at the block and come before Hegotá.
+Its calls must be signed transactions whose signatures give their senders and name the chain.
+Each gas limit must be at most `2^32 - 1` at every fork, and their blob gas must fit 64 bits.
+The block with those transactions and their root must pass the checks of a block, its size and its header against its parent included, which the simulation does not run.
+When the state holds the code of each account, its transition gives the state after the simulated block, or fails at a sender with code by EIP-3607, which the simulation skips.
+The checks of a block stay a hypothesis: the size limit of a block depends on the signatures, and before Paris the simulated difficulty is that of the base block.
+The simulated header is built to pass the other checks against its parent, but no theorem states it yet.
 
 Where the source is silent or conflicts with itself for the blocks, EthLib follows the fixtures, else decides:
 
