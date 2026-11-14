@@ -26,6 +26,8 @@ It does not run in the first two epochs.
 
 So the proof needs the two justified checkpoints equal in those epochs, which the slots keep.
 
+Once justification runs, the source of each link is older than its target.
+
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
 The votes for that link carry more than 2/3 of the stake.
@@ -156,18 +158,19 @@ theorem JustifiedSeparated.of_frame (frame : Frame state after)
   rw [frame.slot, frame.previousJustified]
   exact separated
 
-/-- The justified checkpoint that a link names as its source is older than its target. -/
-theorem link_source_lt {state : BeaconState preset fork}
-    (settled : JustifiedSettled state) (separated : JustifiedSeparated state)
-    (later : GENESIS_EPOCH + 1 < getCurrentEpoch state) (current : Bool) (target : Checkpoint)
-    (targetEpoch : target.epoch =
-      if current then getCurrentEpoch state else getPreviousEpoch state) :
+/-- Once justification runs, the justified checkpoint that a link names as its source is older.
+
+The link targets the current epoch from the current justified checkpoint.
+
+Or it targets the previous epoch from the previous justified checkpoint. -/
+theorem JustifiedSeparated.source_lt {state : BeaconState preset fork}
+    (separated : JustifiedSeparated state) (settled : JustifiedSettled state)
+    (later : GENESIS_EPOCH + 1 < getCurrentEpoch state) (current : Bool) :
     (if current then state.currentJustifiedCheckpoint
-      else state.previousJustifiedCheckpoint).epoch < target.epoch := by
-  have previous := separated later
-  rw [targetEpoch]
+      else state.previousJustifiedCheckpoint).epoch <
+      if current then getCurrentEpoch state else getPreviousEpoch state := by
   cases current
-  · exact previous
+  · exact separated later
   · have settledNat := UInt64.le_iff_toNat_le.mp settled
     have laterNat := UInt64.lt_iff_toNat_lt.mp later
     apply UInt64.lt_iff_toNat_lt.mpr

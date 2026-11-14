@@ -188,9 +188,9 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
   have targetSets := sets kept
   rw [epoch] at rootOk targetSets
   have before := chain current _ rootOk
-  -- The justified checkpoint that the link names as its source is older than its target.
-  have below := UInt64.lt_iff_toNat_lt.mp (link_source_lt settled separated
-    (UInt64.lt_iff_toNat_lt.mpr (by rw [one]; exact late)) current ⟨_, 0⟩ rfl)
+  -- In both cases the source epoch of the link is below its target epoch.
+  have below := UInt64.lt_iff_toNat_lt.mp (separated.source_lt settled
+    (UInt64.lt_iff_toNat_lt.mpr (by rw [one]; exact late)) current)
   -- The new checkpoint is the checkpoint of its epoch, with the root of its first slot.
   have target : after.currentJustifiedCheckpoint.toFfg block =
       ⟨block after.currentJustifiedCheckpoint.root,

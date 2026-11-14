@@ -1105,15 +1105,16 @@ private theorem call_epochs {g a : ForkedBeaconState preset} (run : Run config c
     (call : QuorumCall run) : call.source.epoch < call.target.epoch := by
   obtain ⟨pre, _, _, frame, _⟩ := call.toEpochCall.selected_prefix
   obtain ⟨holds, _, separated⟩ := run_justified_separated pre genesis
-  exact link_source_lt (frame.invariant holds).settled (separated.of_frame frame) call.later
-    call.current call.target call.targetEpoch
+  rw [call.targetEpoch]
+  exact (separated.of_frame frame).source_lt (frame.invariant holds).settled call.later
+    call.current
 
 private theorem terminal_epochs {g a : ForkedBeaconState preset} (run : Run config checks g a)
     (genesis : Genesis config checks g) {view : TerminalView a}
     (call : TerminalQuorum view) : call.source.epoch < call.target.epoch := by
   obtain ⟨holds, _, separated⟩ := run_justified_separated run genesis
-  exact link_source_lt holds.settled separated call.later call.current call.target
-    call.targetEpoch
+  rw [call.targetEpoch]
+  exact separated.source_lt holds.settled call.later call.current
 
 /-- The first call crossing an epoch is chosen from the actual justification history. -/
 private theorem history_crossing {g a : ForkedBeaconState preset} {run : Run config checks g a}
