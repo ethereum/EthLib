@@ -208,7 +208,7 @@ theorem applyBody_tracks {config : ChainConfig} {env : BlockEnvironment fork}
     startSystemCalls_tracks hkeep hstart (AccessListBuilder.Tracks.init start) hBody
   -- The transactions run at the positions 1 to n.
   obtain ⟨hP₂, hT₂, hI₂⟩ := applyTransactions_tracks hkeep block.transactions 0
-    ⟨body, .zero, 0, [], []⟩ txs hP₁ hT₁ (by rw [hI₁]; exact Nat.le_refl _) (by omega) hTxs
+    ⟨body, .zero, 0, [], [], []⟩ txs hP₁ hT₁ (by rw [hI₁]; exact Nat.le_refl _) (by omega) hTxs
   -- The withdrawals and the requests run at position n + 1.
   have hn : block.transactions.length + 1 < 2 ^ 32 := by omega
   have hlt : txs.body.builder.index < UInt32.ofNat (block.transactions.length + 1) := by

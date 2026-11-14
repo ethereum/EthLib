@@ -794,4 +794,41 @@ theorem processTransaction_blockGas_state_of_lt {env : BlockEnvironment fork}
   obtain ⟨_, _, _, output, _, -, -, -, -, hBlock, -, -⟩ := processTransaction_eq_ok_of_lt hlt h
   rw [hBlock, transactionBlockGas_of_lt hlt]
 
+/-- A refund never raises the gas used: the gas used is at most the gas used with no refund. -/
+theorem gasUsed_le_gasUsed_zero (fork : Fork) (sender : Address) (tx : Transaction)
+    (gasLeft refundCounter : Nat) :
+    gasUsed fork sender tx gasLeft refundCounter ≤ gasUsed fork sender tx gasLeft 0 := by
+  unfold gasUsed gasRefund
+  simp only [Nat.min_zero, Nat.sub_zero]
+  split
+  · exact Nat.max_le.mpr ⟨Nat.le_trans (Nat.sub_le _ _) (Nat.le_max_left _ _), Nat.le_max_right _ _⟩
+  · exact Nat.sub_le _ _
+
+/-- A transaction that runs used at most the gas that it used before its refund.
+
+That holds for every map of the precompiles and every lifted rule of a simulation. -/
+theorem runTransaction_gasUsed_le {env : BlockEnvironment fork} {block : State.BlockState}
+    {included : Included} {out : TransactionOutput} {precompiles : Address → Option Address}
+    {lifted : LiftedRules}
+    (h : runTransaction Meter env block included tx precompiles lifted = .ok out) :
+    out.gasUsed ≤ out.gasBeforeRefund := by
+  unfold runTransaction at h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨output, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨settled, used⟩, hSettle, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  have hUsed : used = gasUsed fork included.sender tx (output.gasLeft + output.reservoir)
+      output.refund := by
+    have hs := Base.mapError_ok_iff.mp hSettle
+    unfold settleGas at hs
+    obtain ⟨_, -, hs⟩ := Base.bind_ok_iff.mp hs
+    obtain ⟨_, -, hs⟩ := Base.bind_ok_iff.mp hs
+    cases hs
+    rfl
+  rw [hUsed]
+  exact gasUsed_le_gasUsed_zero _ _ _ _ _
+
 end EthLib.Execution.Transactions

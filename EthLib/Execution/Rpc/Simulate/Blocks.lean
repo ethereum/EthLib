@@ -257,7 +257,7 @@ def fillCalls {fork : Fork} (env : BlockEnvironment fork) (validation : Bool)
     let used := after.cumulativeGasUsed - before.cumulativeGasUsed
     ensure (used ≤ budget) (clientLimitExceeded.toRpcError (some (.str "gas budget exceeded")))
     return (after, filled ++ [(tx, sender)], budget - used)
-  let (_, filled, budget) ← calls.zipIdx.foldlM step (⟨body, .zero, 0, [], []⟩, [], budget)
+  let (_, filled, budget) ← calls.zipIdx.foldlM step (⟨body, .zero, 0, [], [], []⟩, [], budget)
   return (filled, budget)
 
 /-! ## The blocks -/
