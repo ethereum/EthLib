@@ -9,15 +9,6 @@ Not yet released.
 
 ### Changes that break callers
 
-- In Lean, `slashedFlagAt state position` names the slashed flag at a position of the registry, `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
-  The results that state slashed flags at positions now read it: `slashedFlag_eq_of_slashed`, `slashed_setValidatorAt`, `slashedFlag_initiateValidatorExit`, `slashValidator_slashedFlag`, `slashIfSlashable_ok`, `foldlM_slashIfSlashable`, `UpgradeFrame.slashed`, `UpgradeFrame.trans_blockFrame` and `ElectraKept`.
-  Each statement is definitionally the same, but a `rw` with one of them now looks for `slashedFlagAt`.
-  A proof whose goal spells out the read may need to unfold the name in the lemma first.
-  For example, `have h := …`, then `simp only [slashedFlagAt] at h`, then `rw [h]`.
-  Stating the goal through `slashedFlagAt` works too.
-  `slashedFlagAt_processProposerSlashing` and `slashedFlagAt_processAttesterSlashing` state that a slashing changes flags only at the positions that it names.
-  `slashedFlagAt_foldlM` states the same for a fold of such steps.
-
 - In Lean, the shuffle, custody, keystore and discv5 callers of SHA-256 keep the digest as a `Vector UInt8 32` ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
   `Shuffle.bucketBits` and `Keystore.passwordChecksum` return one, and `Shuffle.bitAt` and `DataAvailability.firstUInt64` take one.
   A caller that needs the bytes applies `packBytes`, and `Sha256.packBytes_hash32` gives back the byte-array digest.
@@ -65,9 +56,10 @@ Not yet released.
   A caller passes `id` when the new validator copies the flag of the old one, and `fun _ => rfl` when it is slashed.
   `initiateValidatorExit_balances_eq_and_pendingConsolidations_eq` moves to `Consensus/Proofs/Transition/PendingConsolidations.lean`, which `BalanceDrift.lean` imports publicly.
 
-- In Lean, the results on slashed flags state them at each position of the registry, as `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+- In Lean, the results on slashed flags state them at each position of the registry, through `slashedFlagAt state position`, the read `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
-  `slashedFlag_initiateValidatorExit` takes a `position : Nat` in place of an index.
+  A proof whose goal spells out the read unfolds the name first, as in `simp only [slashedFlagAt] at h`.
+  `slashedFlag_initiateValidatorExit` is renamed `slashedFlagAt_initiateValidatorExit`, and it takes a `position : Nat` in place of an index.
   The second conjunct of `slashValidator_slashedFlag` holds at each position other than `slashedIndex.toNat`.
   A caller that read either at an index `i` reads it at `i.toNat`.
   The new `slashedFlag_eq_of_slashed` turns equal flags there into equal values of `slashedFlag` at `i`.
@@ -78,6 +70,9 @@ Not yet released.
   `UpgradeFrame.trans_blockFrame` takes the new premise `slashed`: the steps after the upgrade keep every slashed flag.
   A block frame alone may slash, so it cannot give the field.
   Compose the block frames of the steps first, and pass their slashed flags once.
+  `slashedFlagAt_processProposerSlashing` and `slashedFlagAt_processAttesterSlashing` state that a slashing changes flags only at the positions that it names.
+  `slashedFlagAt_foldlM` states the same for a fold of such steps.
+  `foldlM_ok_invariant_of_mem` moves to `EthLib.Base`, next to `foldlM_ok_invariant`.
 
 - `engine_forkchoiceUpdated` checks that the most recent block of proof of work on the chain of the head is terminal, as step 3 of the method and step 2 of payload validation of Paris require.
   A head whose chain fails the check is `INVALID`, with the zero hash, and the head does not change.

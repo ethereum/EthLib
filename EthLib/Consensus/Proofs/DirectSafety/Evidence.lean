@@ -102,9 +102,9 @@ private theorem SlashedKept.foldlM {fork : Fork} {α ε : Type}
 
 /-- A step keeps the keys before it and changes slashed flags only at its targets.
 
-Each target inside the registry after the step was inside it at an earlier origin.
+Each target inside the registry after the step was inside it in a second state.
 
-The step keeps the keys of the origin, and the key at each target there has evidence.
+The step keeps the keys of that state, and the key at each target there has evidence.
 
 If each slashed key before the step has evidence, so does each slashed key after it. -/
 private theorem SlashedBacked.of_flags {fork post : Fork} {origin state : BeaconState preset fork}
@@ -163,7 +163,7 @@ private theorem setValidatorAt {position : Nat} {v old : Validator}
   SlashedKept.of_flags
     (frame_setValidatorAt_of_whole set found key (fun marked => flag.trans marked) le
       whole).pubkeysPrefix
-    (slashed_setValidatorAt found set flag)
+    (slashedFlagAt_setValidatorAt found set flag)
 
 private theorem increaseBalance {index : ValidatorIndex} {amount : Gwei}
     (ok : Consensus.increaseBalance state index amount = .ok after) : SlashedKept state after :=
@@ -177,7 +177,7 @@ private theorem initiateValidatorExit {index : ValidatorIndex}
     (ok : Consensus.initiateValidatorExit config state index = .ok after) :
     SlashedKept state after :=
   SlashedKept.of_flags (frame_initiateValidatorExit ok).pubkeysPrefix
-    (slashedFlag_initiateValidatorExit ok)
+    (slashedFlagAt_initiateValidatorExit ok)
 
 private theorem append {v : Validator}
     (added : after.validators.data = state.validators.data.push v) (flag : v.slashed = false) :
@@ -319,6 +319,7 @@ private theorem block_backed {fork : Fork} {state after : BeaconState preset for
     SlashedBacked evidence after := by
   obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
   obtain ⟨keptInput, sizeInput⟩ := slashedKept_operationsInput started
+  -- The operations after the attestations keep the slashed flags.
   obtain ⟨proposed, slashed, attested, proposersOk, attestersOk, attestations, tail⟩ :=
     processOperations_folds_of (fun s t => SlashedKept s t) SlashedKept.refl
       (fun one two => one.trans two) (SlashedKept.slashedKeptLaws.processDeposit SlashedKept.keep)
@@ -337,9 +338,9 @@ private theorem block_backed {fork : Fork} {state after : BeaconState preset for
       (fun _ _ _ ok position => slashedFlagAt_processAttesterSlashing ok position) attestersOk
       position fun sl member i named equal => outside (.inr ⟨sl, member, i, named, equal⟩)).trans
     (slashedFlagAt_foldlM id (fun sl => [sl.signedHeader1.message.proposerIndex])
-      (fun _ _ _ ok position outside => slashedFlagAt_processProposerSlashing ok position
-        fun equal => outside _ List.mem_cons_self equal.symm) proposersOk
-      position fun sl member i named equal =>
+      (fun _ _ _ ok position outside =>
+        slashedFlagAt_processProposerSlashing ok position (outside _ List.mem_cons_self))
+      proposersOk position fun sl member i named equal =>
         outside (.inl ⟨sl, member, List.mem_singleton.mp named ▸ equal⟩))
   have kept := ((BlockFrame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok)
     proposersOk).trans (BlockFrame.foldlM (fun _ _ _ ok => frame_processAttesterSlashing ok)

@@ -360,34 +360,11 @@ theorem sameSizes_processProposerSlashing {config : Config} {checks : SignatureC
 theorem slashedFlagAt_processProposerSlashing {config : Config} {checks : SignatureChecks}
     {state after : BeaconState preset fork} {slashing : ProposerSlashing}
     (computed : processProposerSlashing config checks state slashing = .ok after) (position : Nat)
-    (other : position ≠ slashing.signedHeader1.message.proposerIndex.toNat) :
+    (other : slashing.signedHeader1.message.proposerIndex.toNat ≠ position) :
     slashedFlagAt after position = slashedFlagAt state position := by
   simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := computed
-  exact (slashValidator_slashedFlag slashed).2 position other
-
-/-- A fold changes no slashed flag at a position that none of its inputs names.
-
-Each step may change slashed flags only at the positions of the indices that its input names.
-
-The fold may thread more than a state, as the steps of an attester slashing do. -/
-theorem slashedFlagAt_foldlM {β α ε : Type} (toState : β → BeaconState preset fork)
-    {step : β → α → Except ε β} (named : α → List ValidatorIndex)
-    (kept : ∀ b x b', step b x = .ok b' → ∀ position,
-      (∀ index ∈ named x, index.toNat ≠ position) →
-        slashedFlagAt (toState b') position = slashedFlagAt (toState b) position) :
-    ∀ {items : List α} {start done : β}, items.foldlM step start = .ok done → ∀ position,
-      (∀ x ∈ items, ∀ index ∈ named x, index.toNat ≠ position) →
-        slashedFlagAt (toState done) position = slashedFlagAt (toState start) position
-  | [], _, _, computed, _, _ => by
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    rw [computed]
-  | x :: _, _, _, computed, position, outside => by
-    rw [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨middle, first, rest⟩ := computed
-    exact (slashedFlagAt_foldlM toState named kept rest position
-      fun y member => outside y (List.mem_cons_of_mem x member)).trans
-      (kept _ _ _ first position (outside x List.mem_cons_self))
+  exact (slashValidator_slashedFlag slashed).2 position other.symm
 
 /-! ## Attester slashings -/
 
