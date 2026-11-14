@@ -178,7 +178,7 @@ private theorem justified_below_parent (lower : store.ParentsBelow)
 
 /-- An honest duty majority in the justified state puts a viable block on the head chain.
 
-The majority exceeds half of the active, unslashed stake plus proposer boost.
+Twice the honest duty stake exceeds the active, unslashed stake plus proposer boost.
 
 The successful head walk supplies the attestation-score read at the block's visited parent. -/
 theorem isAncestor_getHead_of_duty_support

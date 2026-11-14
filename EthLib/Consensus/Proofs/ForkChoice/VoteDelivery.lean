@@ -3,6 +3,10 @@ module
 public import EthLib.Consensus.Proofs.ForkChoice.HonestDuties
 public import EthLib.Consensus.Proofs.ForkChoice.VoteRecords
 public import EthLib.Consensus.Proofs.Time
+public import EthLib.Consensus.Proofs.ForkChoice.BlockAgreement
+import EthLib.Consensus.Proofs.ForkChoice.BlockStates
+import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
+import EthLib.Consensus.Proofs.HonestAggregation
 
 /-!
 # Conditional delivery of accepted votes
@@ -34,6 +38,163 @@ variable {config : Config} {checks : SignatureChecks} {sources : BlockSources pr
   {assignment : Assignment preset} {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
+
+/-- A duty vote names the head used by its voter and a block no later than its duty slot. -/
+theorem VoteAt.data_head {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (start : ∀ u ∈ J, e.start u = anchor) {v : ValidatorIndex} (honest : v ∈ J) {slot : Slot}
+    {committeeIndex : CommitteeIndex} {time n : ℕ} {attestation : Attestation preset fork}
+    {indexed : IndexedAttestation preset fork}
+    (vote : VoteAt e v slot committeeIndex time n attestation indexed)
+    (deadline : IsAttestationDeadline fork config genesisTimeMs slot time) {due : UInt64}
+    (dueOk : getAttestationDueMs config fork = .ok due) (inSlot : due < config.SLOT_DURATION_MS) :
+    attestation.data.slot = slot ∧
+      attestation.data.target.epoch = computeEpochAtSlot preset slot ∧
+      ∃ head block, ((e.world n).state v).getHead config = .ok head ∧
+        ((e.world n).state v).blocks[head.root]? = some block ∧
+        attestation.data.beaconBlockRoot = head.root ∧ block.slot ≤ slot := by
+  obtain ⟨startTime, due', startOk, dueOk', timeEq⟩ := deadline
+  rw [dueOk, Except.ok.injEq] at dueOk'
+  subst due'
+  have current : ((e.world n).state v).getCurrentSlot config = .ok slot := by
+    unfold Store.getCurrentSlot
+    rw [vote.genesis]
+    exact mapError_ok_iff.mpr (computeSlotAtTimeMs_inside startOk
+      (vote.upToDate.1.trans timeEq) inSlot)
+  have forward := e.forwardReachable
+    (fun u hu => (start u hu) ▸ Store.ForwardReachable.anchor anchored) n v honest
+  have positive : 0 < config.SLOT_DURATION_MS := by
+    have := UInt64.lt_iff_toNat_lt.mp inSlot
+    exact UInt64.lt_iff_toNat_lt.mpr (by simp; omega)
+  obtain ⟨currentSlot, currentOk, blocks, states⟩ :=
+    forward.slots_le_current positive anchorSlot
+  rw [current, Except.ok.injEq] at currentOk
+  subst currentSlot
+  obtain ⟨head, block, headState, state, headOk, known, stateOk, advanced, made⟩ :=
+    vote.honestData
+  have stateBound : headState.slot ≤ slot :=
+    states head.root headState (Store.blockState_ok_iff.mp stateOk)
+  have atSlot : state.slot = slot := by
+    unfold lookaheadState at advanced
+    split at advanced
+    · exact (processSlots_slot (mapError_ok_iff.mp advanced)).2
+    · simp only [pure, Except.pure, Except.ok.injEq] at advanced
+      subst state
+      exact UInt64.le_antisymm stateBound (UInt64.not_lt.mp ‹¬ headState.slot < slot›)
+  obtain ⟨-, -, dataSlot, dataRoot, -, epoch⟩ := getAttestationData_eq_ok_iff.mp made
+  exact ⟨dataSlot.trans atSlot, by simpa [getCurrentEpoch, atSlot] using epoch,
+    head, block, headOk, known, dataRoot, blocks head.root block known⟩
+
+/-- An honest duty vote names the checkpoint obtained by walking its voted head.
+
+The anchor starts at an epoch boundary; nonzero state roots prevent repeated header filling. -/
+theorem VoteAt.data_target {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorAtBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (start : ∀ u ∈ J, e.start u = anchor) {v : ValidatorIndex} (honest : v ∈ J) {slot : Slot}
+    {committeeIndex : CommitteeIndex} {time n : ℕ} {attestation : Attestation preset fork}
+    {indexed : IndexedAttestation preset fork}
+    (vote : VoteAt e v slot committeeIndex time n attestation indexed)
+    (nonzero : ∀ (root : Root) (block : BeaconBlock preset fork),
+      ((e.world n).state v).blocks[root]? = some block →
+        block.stateRoot ≠ Vector.replicate 32 0) :
+    ((e.world n).state v).getCheckpointBlock attestation.data.beaconBlockRoot
+      attestation.data.target.epoch = .ok attestation.data.target.root := by
+  have reachable := e.reachable
+    (fun u hu => (start u hu) ▸ Store.Reachable.anchor anchored) n v honest
+  obtain ⟨head, block, headState, state, headOk, found, stored, advanced, made⟩ := vote.honestData
+  have stored' := Store.blockState_ok_iff.mp stored
+  obtain ⟨-, boundary, -, dataRoot, -, epoch⟩ := getAttestationData_eq_ok_iff.mp made
+  have headLe : block.slot ≤ state.slot := by
+    have le := Store.Reachable.slot_le_of_blockState
+      (UInt64.le_of_eq anchorSlot) reachable found stored'
+    unfold lookaheadState at advanced
+    split at advanced
+    · exact UInt64.le_trans le (UInt64.le_of_lt (by
+        have bounds := processSlots_slot (mapError_ok_iff.mp advanced)
+        exact bounds.2 ▸ bounds.1))
+    · simp only [pure, Except.pure, Except.ok.injEq] at advanced
+      subst state
+      exact le
+  have anchorLe : anchorState.slot ≤ state.slot := by
+    have le := reachable.anchorSlot_le_of_blockState stored'
+    unfold lookaheadState at advanced
+    split at advanced
+    · have bounds := processSlots_slot (mapError_ok_iff.mp advanced)
+      rw [bounds.2]
+      exact UInt64.le_trans le (UInt64.le_of_lt bounds.1)
+    · simp only [pure, Except.pure, Except.ok.injEq] at advanced
+      subst state
+      exact le
+  let first := state.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH
+  have firstOk : computeStartSlotAtEpoch preset attestation.data.target.epoch = .ok first := by
+    rw [epoch]
+    exact computeStartSlotAtEpoch_computeEpochAtSlot state.slot
+  have known : ∃ targetBlock,
+      ((e.world n).state v).blocks[attestation.data.target.root]? = some targetBlock := by
+    obtain ⟨withTarget, targetState, storing, reading, -⟩ := vote.reads
+    unfold Store.storeTargetCheckpointState at storing
+    split at storing
+    · simp only [pure, Except.pure, Except.ok.injEq] at storing
+      subst withTarget
+      obtain ⟨base, _, held, -⟩ := reachable.checkpointStatesFromBlocks
+        (Store.checkpointState_ok_iff.mp reading)
+      exact reachable.known_of_blockState held
+    · simp only [bind_ok_iff] at storing
+      obtain ⟨computedState, computed, -⟩ := storing
+      unfold Store.computeCheckpointState at computed
+      simp only [bind_ok_iff] at computed
+      obtain ⟨base, held, -⟩ := computed
+      exact reachable.known_of_blockState (Store.blockState_ok_iff.mp held)
+  rw [dataRoot]
+  unfold Store.getCheckpointBlock
+  rw [firstOk]
+  simp only [Except.mapError, bind, Except.bind]
+  change (·.root) <$> ((e.world n).state v).getAncestor ⟨head.root, .pending⟩ first = _
+  rcases getEpochBoundaryBlockRoot_eq_ok_iff.mp boundary with ⟨onBoundary, targetEq⟩ | ⟨-, read⟩
+  · have eq : first = state.slot := div_mul_eq_self_iff.mpr onBoundary
+    rw [eq, Store.getAncestor_of_le (node := ⟨head.root, .pending⟩) found headLe]
+    simp [targetEq]
+  · have read' : getBlockRootAtSlot state first = .ok attestation.data.target.root := by
+      unfold getBlockRoot at read
+      rw [← epoch, firstOk] at read
+      exact read
+    have firstAfter : anchorState.slot ≤ first := by
+      have rounded : anchorState.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH =
+          anchorState.slot := by
+        unfold isStartSlotAtEpoch computeSlotsSinceEpochStart at anchorAtBoundary
+        rw [anchorSlot, computeStartSlotAtEpoch_computeEpochAtSlot] at anchorAtBoundary
+        simp only [Except.mapError, bind, Except.bind, pure, Except.pure,
+          Except.ok.injEq, decide_eq_true_eq] at anchorAtBoundary
+        have h := (computeStartSlotAtEpoch_ok_iff.mp
+          (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) anchorState.slot)).2
+        have le : (anchorState.slot / preset.SLOTS_PER_EPOCH *
+            preset.SLOTS_PER_EPOCH).toNat ≤ anchorState.slot.toNat := by
+          rw [h, computeEpochAtSlot, UInt64.toNat_div]
+          exact Nat.div_mul_le_self _ _
+        have zero := congrArg UInt64.toNat anchorAtBoundary
+        simp only [UInt64.toNat_sub, UInt64.toNat_zero] at zero
+        have upper := anchorState.slot.toNat_lt
+        have lower := (anchorState.slot / preset.SLOTS_PER_EPOCH *
+          preset.SLOTS_PER_EPOCH).toNat_lt
+        apply UInt64.toNat_inj.mp
+        omega
+      have mono := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat
+        (Nat.div_le_div_right (c := preset.SLOTS_PER_EPOCH.toNat)
+          (UInt64.le_iff_toNat_le.mp anchorLe))
+      have a := (computeStartSlotAtEpoch_ok_iff.mp
+        (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) anchorState.slot)).2
+      have b := (computeStartSlotAtEpoch_ok_iff.mp firstOk).2
+      rw [rounded] at a
+      simp only [computeEpochAtSlot, UInt64.toNat_div] at a
+      rw [epoch] at b
+      simp only [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div] at b
+      exact UInt64.le_iff_toNat_le.mpr (by omega)
+    obtain ⟨targetBlock, targetKnown⟩ := known
+    exact reachable.lookahead_history_ancestor (UInt64.le_of_eq anchorSlot) nonzero
+      stored' targetKnown advanced read' firstAfter .pending
 
 variable (fork) in
 /-- A vote sent at its deadline arrives before the next slot starts. -/
@@ -126,13 +287,22 @@ theorem Execution.exists_duty_boundaries {Δ : ℕ}
   obtain ⟨k, atTime, current⟩ := preboundary startedBefore
   exact ⟨⟨k, atTime, by omega, current⟩, boundary⟩
 
-/-- A duty inside a complete slot interval has a vote before the delivery cutoff. -/
+/-- A duty inside a complete slot interval has a valid committee vote before the delivery cutoff.
+
+The finite vote premise couples committee validation to the same witnesses as `VoteAt`.
+
+It is stronger than master-only `VoteAt`, as required by the donor aggregate's vote duty. -/
 theorem Execution.exists_voteAt_of_duty_interval {Δ : ℕ} {first time : ℕ}
     (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
       assignment.committee v slot = some committeeIndex →
       IsAttestationDeadline fork config genesisTimeMs slot deadline →
       e.startTime ≤ deadline → deadline ≤ time →
-      ∃ n attestation indexed, VoteAt e v slot committeeIndex deadline n attestation indexed)
+      ∃ n attestation indexed, VoteAt e v slot committeeIndex deadline n attestation indexed ∧
+        ∀ withTarget targetState,
+          ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
+            .ok withTarget →
+          withTarget.checkpointState attestation.data.target = .ok targetState →
+          checkAttestationCommittees targetState attestation = .ok ())
     (fits : DelayFits fork config genesisTimeMs Δ)
     {begin last slot : Slot} {beginTime endTime : UInt64}
     (beginOk : computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime)
@@ -148,7 +318,12 @@ theorem Execution.exists_voteAt_of_duty_interval {Δ : ℕ} {first time : ℕ}
       computeTimeAtSlotMs config genesisTimeMs next = .ok following ∧
       IsAttestationDeadline fork config genesisTimeMs slot deadline ∧
       first ≤ deadline ∧ deadline + Δ < following.toNat ∧ following.toNat ≤ time ∧
-      VoteAt e v slot committeeIndex deadline n attestation indexed := by
+      VoteAt e v slot committeeIndex deadline n attestation indexed ∧
+      ∀ withTarget targetState,
+        ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
+          .ok withTarget →
+        withTarget.checkpointState attestation.data.target = .ok targetState →
+        checkAttestationCommittees targetState attestation = .ok () := by
   have slotLt := UInt64.lt_iff_toNat_lt.mp beforeEnd
   have lastBound := last.toNat_lt
   have nextBound : slot.toNat + (1 : UInt64).toNat < 2 ^ 64 := by simp; omega
@@ -169,12 +344,13 @@ theorem Execution.exists_voteAt_of_duty_interval {Δ : ℕ} {first time : ℕ}
   have beginLe := UInt64.le_iff_toNat_le.mp beginLe
   have followingLe := UInt64.le_iff_toNat_le.mp followingLe
   have firstLe : first ≤ startTime.toNat + due.toNat := by omega
-  obtain ⟨n, attestation, indexed, vote⟩ := votes v honest slot committeeIndex _ duty deadline
+  obtain ⟨n, attestation, indexed, vote, committees⟩ :=
+    votes v honest slot committeeIndex _ duty deadline
     (started.trans firstLe)
     (by have := fits.before_boundary nextOk startOk followingOk deadline; omega)
   exact ⟨slot + 1, startTime, following, _, n, attestation, indexed,
     nextOk, startOk, followingOk, deadline, firstLe,
-    fits.before_boundary nextOk startOk followingOk deadline, by omega, vote⟩
+    fits.before_boundary nextOk startOk followingOk deadline, by omega, vote, committees⟩
 
 /-- An up-to-date store holds a vote for each non-equivocating signer of an accepted attestation.
 
@@ -250,5 +426,194 @@ theorem VoteAt.recorded_of_le {Δ : ℕ} (sync : e.Synchronous Δ) {v u : Valida
   obtain ⟨m, found, rank⟩ := vote.recorded sync honest receiver late upToDate accepted reads counted
   obtain ⟨last, kept, grew⟩ := Execution.latestMessages_rank e le found
   exact ⟨last, kept, UInt64.le_trans rank grew⟩
+
+/-- A duty's epoch is current or previous at the next slot. -/
+private theorem epoch_recent_at_next_slot {slot next : Slot}
+    (nextOk : addChecked slot 1 = .ok next) :
+    computeEpochAtSlot preset slot = computeEpochAtSlot preset next ∨
+      computeEpochAtSlot preset slot = saturatingSub (computeEpochAtSlot preset next) 1 := by
+  have nextNat := (addChecked_ok_iff.mp nextOk).2
+  simp only [UInt64.toNat_one] at nextNat
+  have quotient : (slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat =
+      slot.toNat / preset.SLOTS_PER_EPOCH.toNat +
+        if preset.SLOTS_PER_EPOCH.toNat ∣ slot.toNat + 1 then 1 else 0 := Nat.succ_div
+  by_cases same : computeEpochAtSlot preset slot = computeEpochAtSlot preset next
+  · exact Or.inl same
+  · right
+    have different : slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≠
+        next.toNat / preset.SLOTS_PER_EPOCH.toNat := by
+      intro eq
+      exact same (UInt64.toNat_inj.mp (by simpa [computeEpochAtSlot] using eq))
+    have step : next.toNat / preset.SLOTS_PER_EPOCH.toNat =
+        slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 := by
+      rw [nextNat]
+      rw [nextNat] at different
+      split at quotient <;> omega
+    apply UInt64.toNat_inj.mp
+    simp only [computeEpochAtSlot, saturatingSub]
+    by_cases h : (1 : UInt64) < next / preset.SLOTS_PER_EPOCH
+    · simp only [h, ite_true]
+      rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_of_lt h)]
+      simp only [UInt64.toNat_div, UInt64.toNat_one]
+      rw [step]
+      exact (Nat.add_sub_cancel _ _).symm
+    · simp only [h, ite_false, UInt64.toNat_zero, UInt64.toNat_div]
+      have : (next / preset.SLOTS_PER_EPOCH).toNat ≤ 1 := by
+        simpa only [UInt64.lt_iff_toNat_lt, UInt64.toNat_one, not_lt] using h
+      simp only [UInt64.toNat_div] at this
+      rw [step] at this
+      exact Nat.eq_zero_of_le_zero (Nat.le_of_add_le_add_right this)
+
+open EthLib.Consensus.Store in
+/-- Known blocks, a recent target and a past slot discharge the wire attestation checks. -/
+private theorem validateOnAttestation_of_facts {store : Store preset fork}
+    {attestation : Attestation preset fork} {target voted : BeaconBlock preset fork}
+    {current : Slot} (currentOk : store.getCurrentSlot config = .ok current)
+    (recent : attestation.data.target.epoch = computeEpochAtSlot preset current ∨
+      attestation.data.target.epoch = saturatingSub (computeEpochAtSlot preset current) 1)
+    (epoch : attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot)
+    (targetKnown : store.blocks[attestation.data.target.root]? = some target)
+    (votedKnown : store.blocks[attestation.data.beaconBlockRoot]? = some voted)
+    (notFuture : voted.slot ≤ attestation.data.slot)
+    (payload : ∀ gloas : .glamsterdam ≤ fork,
+      store.validatePayloadVote gloas attestation voted = .ok ())
+    (checkpoint : store.getCheckpointBlock attestation.data.beaconBlockRoot
+      attestation.data.target.epoch = .ok attestation.data.target.root)
+    (past : attestation.data.slot < current) :
+    store.validateOnAttestation config attestation false = .ok () := by
+  have slotBound : attestation.data.slot.toNat + 1 < 2 ^ 64 := by
+    have := current.toNat_lt
+    have := UInt64.lt_iff_toNat_lt.mp past
+    omega
+  have dueOk := addChecked_of_lt (a := attestation.data.slot) (b := 1)
+    (by simpa using slotBound)
+  have dueBound : ¬ current < attestation.data.slot + 1 := by
+    rw [UInt64.lt_iff_toNat_lt, toNat_add_of_lt (by simpa using slotBound)]
+    have := UInt64.lt_iff_toNat_lt.mp past
+    simp only [UInt64.toNat_one]
+    omega
+  have recentOk : store.validateTargetEpochAgainstCurrentTime config attestation = .ok () := by
+    simp [validateTargetEpochAgainstCurrentTime, getCurrentStoreEpoch, currentOk, recent,
+      bind, Except.bind, pure, Except.pure]
+  have targetOk := block_ok_iff.mpr targetKnown
+  have votedOk := block_ok_iff.mpr votedKnown
+  have notEarlier := UInt64.not_lt.mpr notFuture
+  unfold validateOnAttestation
+  by_cases gloas : .glamsterdam ≤ fork <;>
+    simp [gloas, recentOk, targetOk, votedOk, notEarlier, payload,
+      ← epoch, checkpoint, dueOk, currentOk, dueBound, bind, Except.bind, pure, Except.pure,
+      Except.mapError, discard, Functor.mapConst, Except.map]
+
+private theorem Store.exists_storeTargetCheckpointState {store : Store preset fork}
+    {target : Checkpoint} {state : BeaconState preset fork}
+    (computed : store.computeCheckpointState config checks target = .ok state) :
+    ∃ withTarget targetState,
+      store.storeTargetCheckpointState config checks target = .ok withTarget ∧
+      withTarget.checkpointState target = .ok targetState := by
+  by_cases cached : store.checkpointStates.contains target
+  · have member := Std.TreeMap.contains_iff_mem.mp cached
+    have present := Std.TreeMap.mem_iff_isSome_getElem?.mp member
+    obtain ⟨targetState, found⟩ := Option.isSome_iff_exists.mp present
+    refine ⟨store, targetState, ?_, EthLib.Consensus.Store.checkpointState_ok_iff.mpr found⟩
+    simp [EthLib.Consensus.Store.storeTargetCheckpointState, cached, pure, Except.pure]
+  · refine ⟨{ store with checkpointStates := store.checkpointStates.insert target state },
+      state, ?_, EthLib.Consensus.Store.checkpointState_ok_iff.mpr (by simp)⟩
+    simp [EthLib.Consensus.Store.storeTargetCheckpointState, cached, computed, bind, Except.bind,
+      pure, Except.pure]
+
+/-- A duty attestation is accepted once its target block is held and its time checks pass. -/
+theorem VoteAt.accepted_of_target_known {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ u ∈ J, e.start u = anchor) {last : ℕ} (oneBlock : OneBlockPerRoot e last)
+    {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J)
+    {slot : Slot} {committeeIndex : CommitteeIndex} {deadline n k : ℕ}
+    {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
+    (vote : VoteAt e v slot committeeIndex deadline n attestation indexed)
+    (committees : ∀ withTarget targetState,
+      ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
+        .ok withTarget →
+      withTarget.checkpointState attestation.data.target = .ok targetState →
+      checkAttestationCommittees targetState attestation = .ok ())
+    (nBound : (e.world n).time ≤ last) (kBound : (e.world k).time ≤ last)
+    {targetBlock : BeaconBlock preset fork}
+    (known : ((e.world k).state w).blocks[attestation.data.target.root]? = some targetBlock)
+    (valid : ((e.world k).state w).validateOnAttestation config attestation false = .ok ()) :
+    (∃ after, ((e.world k).state w).onAttestation config checks attestation false = .ok after) ∧
+      ReadsAttestation config checks ((e.world k).state w) attestation indexed := by
+  obtain ⟨sourceStore, sourceState, sourceStored, sourceRead, indexedOk, signed⟩ := vote.reads
+  obtain ⟨base, boundary, baseFound, boundaryOk, ran⟩ :=
+    e.targetState_fixedChecks anchored start honest sourceStored sourceRead
+  have reached := e.reachable
+    (fun u hu => (start u hu).symm ▸ EthLib.Consensus.Store.Reachable.anchor anchored) k w receiver
+  obtain ⟨receiverBase, receiverBaseFound, _, _⟩ := reached.blockStatesFromParents known
+  have baseEq := e.blockStates_eq anchored honest receiver (start v honest) (start w receiver)
+    (oneBlock v honest w receiver n k nBound kBound) baseFound receiverBaseFound
+  subst receiverBase
+  have computed : ((e.world k).state w).computeCheckpointState config checks
+      attestation.data.target = .ok sourceState := by
+    simpa [EthLib.Consensus.Store.computeCheckpointState,
+      EthLib.Consensus.Store.blockState_ok_iff.mpr receiverBaseFound,
+      boundaryOk, lookaheadState, bind, Except.bind, Except.mapError] using ran
+  obtain ⟨withTarget, targetState, stored, read⟩ := Store.exists_storeTargetCheckpointState computed
+  have stateEq := e.targetStates_eq_of_oneBlock anchored start oneBlock honest receiver nBound
+    kBound sourceStored sourceRead stored read
+  subst targetState
+  have committees := committees sourceStore sourceState sourceStored sourceRead
+  refine ⟨⟨withTarget.updateLatestMessages indexed.attestingIndices.data.toList attestation, ?_⟩,
+    ⟨withTarget, sourceState, stored, read, indexedOk, signed⟩⟩
+  simp [EthLib.Consensus.Store.onAttestation, valid, stored, read, committees, indexedOk, signed,
+    bind, Except.bind, Except.mapError, pure, Except.pure]
+
+/-- A delivered duty is recorded at its next slot boundary and retained at later events. -/
+theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
+    (preGloas : fork < .glamsterdam) {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ u ∈ J, e.start u = anchor) {last : ℕ} (oneBlock : OneBlockPerRoot e last)
+    {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J)
+    {slot next : Slot} {committeeIndex : CommitteeIndex} {deadline n arrival endpoint : ℕ}
+    {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
+    (vote : VoteAt e v slot committeeIndex deadline n attestation indexed)
+    (committees : ∀ withTarget targetState,
+      ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
+        .ok withTarget →
+      withTarget.checkpointState attestation.data.target = .ok targetState →
+      checkAttestationCommittees targetState attestation = .ok ())
+    (dataSlot : attestation.data.slot = slot)
+    (epoch : attestation.data.target.epoch = computeEpochAtSlot preset slot)
+    (nextOk : addChecked slot 1 = .ok next)
+    (currentOk : ((e.world arrival).state w).getCurrentSlot config = .ok next)
+    (late : deadline + Δ ≤ (e.world arrival).time)
+    (upToDate : UpToDate config checks sources (e.world arrival).time
+      ((e.world arrival).view w) ((e.world arrival).state w))
+    (counted : v ∉ ((e.world arrival).state w).equivocatingIndices)
+    (later : arrival ≤ endpoint) (arrivalBound : (e.world arrival).time ≤ last)
+    {voted : BeaconBlock preset fork}
+    (votedKnown : ((e.world arrival).state w).blocks[attestation.data.beaconBlockRoot]? =
+      some voted)
+    (notFuture : voted.slot ≤ slot)
+    (checkpoint : ((e.world arrival).state w).getCheckpointBlock attestation.data.beaconBlockRoot
+      attestation.data.target.epoch = .ok attestation.data.target.root) :
+    ∃ message, ((e.world endpoint).state w).latestMessages[v]? = some message ∧
+      attestation.data.target.epoch ≤ message.rank := by
+  obtain ⟨_, target, _, targetKnown, _, _⟩ :=
+    EthLib.Consensus.Store.isAncestor_of_getCheckpointBlock preGloas checkpoint
+  have past : attestation.data.slot < next := UInt64.lt_iff_toNat_lt.mpr (by
+    have sum := (addChecked_ok_iff.mp (dataSlot ▸ nextOk)).2
+    simp only [UInt64.toNat_one] at sum
+    omega)
+  have valid := validateOnAttestation_of_facts currentOk
+    ((epoch.trans (congrArg (computeEpochAtSlot preset) dataSlot).symm) ▸
+      epoch_recent_at_next_slot (dataSlot ▸ nextOk))
+    (epoch.trans (congrArg (computeEpochAtSlot preset) dataSlot).symm)
+    targetKnown votedKnown (dataSlot ▸ notFuture)
+    (fun gloas => False.elim (Nat.not_le_of_lt preGloas gloas)) checkpoint past
+  obtain ⟨⟨after, accepted⟩, reads⟩ := vote.accepted_of_target_known anchored start oneBlock
+    honest receiver committees
+    (by have := vote.atTime; omega) arrivalBound targetKnown valid
+  obtain ⟨message, latest, rank⟩ := vote.recorded_of_le sync honest receiver late upToDate
+    accepted reads counted later
+  refine ⟨message, latest, ?_⟩
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
+  simpa [LatestMessage.rank, LatestMessage.ofAttestation, notGloas] using rank
 
 end EthLib.Consensus.Models.Network

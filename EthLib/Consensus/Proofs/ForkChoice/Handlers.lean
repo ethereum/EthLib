@@ -1158,6 +1158,44 @@ theorem validateOnBlock_merge {checks : SignatureChecks} {sources : BlockSources
   obtain ⟨_, _, _, _, _, checked, _⟩ := valid
   exact checked
 
+/-- Block validation transfers to the same parent state when the receiver passes local checks.
+
+Data availability, the transition and the merge check use the shared sources. -/
+theorem validateOnBlock_of_parent_state {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {receiver : Store preset fork}
+    {signed : SignedBeaconBlock preset fork} {root : Root}
+    {state pre : BeaconState preset fork}
+    (valid : store.validateOnBlock config checks sources signed root = .ok state)
+    (parent : store.blockStates[signed.message.parentRoot]? = some pre)
+    (otherParent : receiver.blockStates[signed.message.parentRoot]? = some pre)
+    (payload : receiver.validateParentPayload signed.message = .ok ())
+    {current finalizedSlot : Slot}
+    (clock : receiver.getCurrentSlot config = .ok current)
+    (notFuture : signed.message.slot ≤ current)
+    (start : computeStartSlotAtEpoch preset receiver.finalizedCheckpoint.epoch = .ok finalizedSlot)
+    (above : finalizedSlot < signed.message.slot)
+    (ancestor : receiver.getCheckpointBlock signed.message.parentRoot
+      receiver.finalizedCheckpoint.epoch = .ok receiver.finalizedCheckpoint.root) :
+    receiver.validateOnBlock config checks sources signed root = .ok state := by
+  obtain ⟨p, pFound, _, available, transition⟩ := validateOnBlock_ok valid
+  have same : p = pre := Option.some.inj (pFound.symm.trans parent)
+  subst p
+  have merge := fun (bellatrix : fork = .bellatrix)
+      (range : .bellatrix ≤ fork ∧ fork < .glamsterdam)
+      (h : isMergeTransitionBlock pre signed.message.body range = true) =>
+    validateOnBlock_merge bellatrix range parent h valid
+  unfold validateOnBlock
+  simp only [blockState, otherParent, pure, Except.pure, bind, Except.bind, payload, clock,
+    UInt64.not_lt.mpr notFuture, ↓reduceIte, start, Except.mapError,
+    UInt64.not_le.mpr above, ancestor, ne_eq, not_true_eq_false, available, transition]
+  split
+  · rename_i bellatrix
+    split
+    · rename_i h
+      rw [merge bellatrix _ h]
+    · rfl
+  · rfl
+
 /-- A new block enters the store with the state after it, and no epoch falls.
 
 That state is the one the state transition computes from the state after the parent. -/

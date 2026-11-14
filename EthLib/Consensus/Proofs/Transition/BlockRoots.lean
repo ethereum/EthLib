@@ -132,6 +132,61 @@ theorem advanceSlot_latestBlockHeader (computed : advanceSlot config checks stat
   rw [header]
   exact processSlot_latestBlockHeader cachedOk
 
+/-- Empty slots preserve a nonzero header. -/
+theorem advanceSlots_latestBlockHeader_of_nonzero {count : Nat}
+    (nonzero : state.latestBlockHeader.stateRoot ≠ Vector.replicate 32 0)
+    (computed : advanceSlots config checks count state = .ok after) :
+    after.latestBlockHeader = state.latestBlockHeader := by
+  induction count generalizing state with
+  | zero =>
+    cases Except.ok.inj computed
+    rfl
+  | succ count ih =>
+    simp only [advanceSlots, bind_ok_iff] at computed
+    obtain ⟨next, stepped, rest⟩ := computed
+    obtain ⟨root, -, header⟩ := advanceSlot_latestBlockHeader stepped
+    simp only [nonzero, ↓reduceIte] at header
+    exact (ih (header ▸ nonzero) rest).trans header
+
+/-- Empty slots fill a zero header once when the initial state root is nonzero. -/
+theorem processSlots_latestBlockHeader_of_zero {root : Root} {slot : Slot}
+    (zero : state.latestBlockHeader.stateRoot = Vector.replicate 32 0)
+    (hashed : SszType.hashTreeRoot state = .ok root) (nonzero : root ≠ Vector.replicate 32 0)
+    (computed : processSlots config checks state slot = .ok after) :
+    after.latestBlockHeader = { state.latestBlockHeader with stateRoot := root } := by
+  have earlier := UInt64.lt_iff_toNat_lt.mp (processSlots_slot computed).1
+  simp only [processSlots, bind_ok_iff, ensure_ok_iff] at computed
+  obtain ⟨_, -, advanced⟩ := computed
+  obtain ⟨count, eq⟩ : ∃ count, slot.toNat - state.slot.toNat = count + 1 :=
+    ⟨slot.toNat - state.slot.toNat - 1, by omega⟩
+  rw [eq] at advanced
+  simp only [advanceSlots, bind_ok_iff] at advanced
+  obtain ⟨next, stepped, rest⟩ := advanced
+  obtain ⟨filledRoot, filledHash, header⟩ := advanceSlot_latestBlockHeader stepped
+  rw [hashed, Except.ok.injEq] at filledHash
+  subst filledRoot
+  simp only [zero, ↓reduceIte] at header
+  exact (advanceSlots_latestBlockHeader_of_nonzero
+    (state := next) (by rw [header]; exact nonzero) rest).trans header
+
+/-- Two nonempty slot runs from one state finish with the same header. -/
+theorem processSlots_latestBlockHeader_eq {left right : BeaconState preset fork}
+    {leftChecks rightChecks : SignatureChecks} {leftSlot rightSlot : Slot} {root : Root}
+    (hashed : SszType.hashTreeRoot state = .ok root) (nonzero : root ≠ Vector.replicate 32 0)
+    (one : processSlots config leftChecks state leftSlot = .ok left)
+    (two : processSlots config rightChecks state rightSlot = .ok right) :
+    left.latestBlockHeader = right.latestBlockHeader := by
+  by_cases zero : state.latestBlockHeader.stateRoot = Vector.replicate 32 0
+  · rw [processSlots_latestBlockHeader_of_zero zero hashed nonzero one,
+      processSlots_latestBlockHeader_of_zero zero hashed nonzero two]
+  · have kept {checks : SignatureChecks} {slot : Slot} {after : BeaconState preset fork}
+        (ok : processSlots config checks state slot = .ok after) :
+        after.latestBlockHeader = state.latestBlockHeader := by
+      simp only [processSlots, bind_ok_iff, ensure_ok_iff] at ok
+      obtain ⟨_, -, advanced⟩ := ok
+      exact advanceSlots_latestBlockHeader_of_nonzero zero advanced
+    exact (kept one).trans (kept two).symm
+
 /-- A root that one slot makes readable was readable before, or is the root of the new header.
 
 The root of the new header is at the slot of the state before the slot step. -/
@@ -158,6 +213,92 @@ theorem getBlockRootAtSlot_advanceSlot_cases {slot : Slot} {root : Root}
     rw [readCircular_writeCircular_of_ne written other] at read
     exact .inl ⟨UInt64.lt_iff_toNat_lt.mpr earlier,
       getBlockRootAtSlot_ok_iff.mpr ⟨earlier, fits, by omega, read⟩⟩
+
+/-- A history read that predates empty slots was already in their input state. -/
+theorem getBlockRootAtSlot_of_advanceSlots {slot : Slot} {root : Root} {count : Nat}
+    (computed : advanceSlots config checks count state = .ok after)
+    (read : getBlockRootAtSlot after slot = .ok root)
+    (earlier : slot < state.slot) : getBlockRootAtSlot state slot = .ok root := by
+  induction count generalizing state with
+  | zero =>
+    cases Except.ok.inj computed
+    exact read
+  | succ count ih =>
+    simp only [advanceSlots, bind_ok_iff] at computed
+    obtain ⟨next, stepped, rest⟩ := computed
+    obtain ⟨_, _, _, _, _, _, _, nextSlot⟩ := advanceSlot_cachedRoots stepped
+    have earlierNext : slot < next.slot := by
+      have := UInt64.lt_iff_toNat_lt.mp earlier
+      exact UInt64.lt_iff_toNat_lt.mpr (by omega)
+    rcases getBlockRootAtSlot_advanceSlot_cases stepped (ih rest earlierNext) with kept | ⟨same, -⟩
+    · exact kept.2
+    · subst slot
+      exact (UInt64.lt_irrefl _ earlier).elim
+
+/-- A root written during empty slots hashes their unchanged nonzero header. -/
+private theorem getBlockRootAtSlot_advanceSlots_of_nonzero
+    {slot : Slot} {root : Root} {count : Nat}
+    (nonzero : state.latestBlockHeader.stateRoot ≠ Vector.replicate 32 0)
+    (computed : advanceSlots config checks count state = .ok after)
+    (read : getBlockRootAtSlot after slot = .ok root) (later : state.slot ≤ slot) :
+    SszType.hashTreeRoot state.latestBlockHeader = .ok root := by
+  induction count generalizing state with
+  | zero =>
+    cases Except.ok.inj computed
+    have lt := (getBlockRootAtSlot_ok_iff.mp read).1
+    have le := UInt64.le_iff_toNat_le.mp later
+    omega
+  | succ count ih =>
+    simp only [advanceSlots, bind_ok_iff] at computed
+    obtain ⟨next, stepped, rest⟩ := computed
+    obtain ⟨_, -, kept⟩ := advanceSlot_latestBlockHeader stepped
+    simp only [nonzero, ↓reduceIte] at kept
+    by_cases before : slot < next.slot
+    · rcases getBlockRootAtSlot_advanceSlot_cases stepped
+          (getBlockRootAtSlot_of_advanceSlots rest read before) with old | ⟨-, hashed⟩
+      · have lt := UInt64.lt_iff_toNat_lt.mp old.1
+        have le := UInt64.le_iff_toNat_le.mp later
+        omega
+      · rwa [kept] at hashed
+    · have hashed := ih (kept ▸ nonzero) rest (UInt64.not_lt.mp before)
+      rwa [kept] at hashed
+
+/-- A history read written in empty slots equals their final header root.
+
+A nonzero initial state root prevents the zero header sentinel from being filled twice. -/
+theorem getBlockRootAtSlot_processSlots_header {slot query : Slot} {root stateRoot : Root}
+    (hashed : SszType.hashTreeRoot state = .ok stateRoot)
+    (nonzero : stateRoot ≠ Vector.replicate 32 0)
+    (computed : processSlots config checks state slot = .ok after)
+    (read : getBlockRootAtSlot after query = .ok root) (later : state.slot ≤ query) :
+    SszType.hashTreeRoot after.latestBlockHeader = .ok root := by
+  have earlier := UInt64.lt_iff_toNat_lt.mp (processSlots_slot computed).1
+  have run := computed
+  simp only [processSlots, bind_ok_iff, ensure_ok_iff] at run
+  obtain ⟨_, -, advanced⟩ := run
+  by_cases zero : state.latestBlockHeader.stateRoot = Vector.replicate 32 0
+  · obtain ⟨count, eq⟩ : ∃ count, slot.toNat - state.slot.toNat = count + 1 :=
+      ⟨slot.toNat - state.slot.toNat - 1, by omega⟩
+    rw [eq] at advanced
+    simp only [advanceSlots, bind_ok_iff] at advanced
+    obtain ⟨next, stepped, rest⟩ := advanced
+    obtain ⟨filledRoot, filledHash, header⟩ := advanceSlot_latestBlockHeader stepped
+    rw [hashed, Except.ok.injEq] at filledHash
+    subst filledRoot
+    simp only [zero, ↓reduceIte] at header
+    rw [processSlots_latestBlockHeader_of_zero zero hashed nonzero computed]
+    by_cases before : query < next.slot
+    · rcases getBlockRootAtSlot_advanceSlot_cases stepped
+          (getBlockRootAtSlot_of_advanceSlots rest read before) with old | ⟨-, rooted⟩
+      · have lt := UInt64.lt_iff_toNat_lt.mp old.1
+        have le := UInt64.le_iff_toNat_le.mp later
+        omega
+      · rwa [header] at rooted
+    · have rooted := getBlockRootAtSlot_advanceSlots_of_nonzero
+        (state := next) (by rw [header]; exact nonzero) rest read (UInt64.not_lt.mp before)
+      rwa [header] at rooted
+  · rw [advanceSlots_latestBlockHeader_of_nonzero zero advanced]
+    exact getBlockRootAtSlot_advanceSlots_of_nonzero zero advanced read later
 
 /-- One slot keeps the root of the block at the first slot of an epoch.
 

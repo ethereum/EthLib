@@ -26,6 +26,7 @@ refinement = [
   "EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets",
   "EthLib.Consensus.Proofs.ForkChoice.Ghost",
   "EthLib.Consensus.Proofs.ForkChoice.HonestDuties",
+  "EthLib.Consensus.Proofs.ForkChoice.HonestVotes",
   "EthLib.Consensus.Proofs.ForkChoice.Network",
   "EthLib.Consensus.Proofs.ForkChoice.Optimistic",
   "EthLib.Consensus.Proofs.ForkChoice.PayloadGhost",

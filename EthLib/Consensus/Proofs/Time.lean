@@ -96,6 +96,34 @@ theorem computeStartSlotAtEpoch_le_lt {slot start : Slot}
   · have := Nat.lt_div_mul_add (a := slot.toNat) positive
     exact this
 
+/-- A time before the next slot maps to the slot whose start time it follows. -/
+theorem computeSlotAtTimeMs_inside {genesisTimeMs startTime timeMs due : UInt64} {slot : Slot}
+    (start : computeTimeAtSlotMs config genesisTimeMs slot = .ok startTime)
+    (time : timeMs.toNat = startTime.toNat + due.toNat)
+    (inside : due < config.SLOT_DURATION_MS) :
+    computeSlotAtTimeMs config genesisTimeMs timeMs = .ok slot := by
+  unfold computeTimeAtSlotMs at start
+  simp only [bind_ok_iff] at start
+  obtain ⟨offset, product, sum⟩ := start
+  have offsetValue := (mulChecked_ok_iff.mp product).2
+  have startValue := (addChecked_ok_iff.mp sum).2
+  have below := UInt64.lt_iff_toNat_lt.mp inside
+  have elapsed : subChecked timeMs genesisTimeMs = .ok (timeMs - genesisTimeMs) := by
+    apply subChecked_ok_iff.mpr
+    refine ⟨by omega, ?_⟩
+    rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by omega))]
+  have value : (timeMs - genesisTimeMs).toNat =
+      slot.toNat * config.SLOT_DURATION_MS.toNat + due.toNat := by
+    rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by omega))]
+    omega
+  have quotient : divChecked (timeMs - genesisTimeMs) config.SLOT_DURATION_MS = .ok slot := by
+    apply divChecked_ok_iff.mpr
+    refine ⟨by intro zero; simp [zero] at below, ?_⟩
+    rw [value, Nat.add_div (by omega), Nat.mul_div_cancel _ (by omega),
+      Nat.div_eq_of_lt below]
+    simp [Nat.mod_eq_of_lt below, below]
+  simp only [computeSlotAtTimeMs, elapsed, quotient, bind, Except.bind]
+
 /-- The epoch of an activation or an exit exists exactly when it fits in 64 bits.
 
 It is then one epoch, then the seed lookahead, after the given epoch. -/
@@ -492,5 +520,22 @@ theorem nextSlot_epoch_of_inside {slot next : Slot} (sum : next.toNat = slot.toN
     simpa [UInt64.toNat_mod, sum] using Nat.mod_eq_zero_of_dvd divides
   rw [sum]
   exact Nat.succ_div_of_not_dvd notDvd
+
+/-- A defined slot stays defined at a later time, and does not decrease. -/
+theorem exists_computeSlotAtTimeMs_of_le {config : Config} {g t later : UInt64} {slot : Slot}
+    (le : t ≤ later) (ok : computeSlotAtTimeMs config g t = .ok slot) :
+    ∃ next, computeSlotAtTimeMs config g later = .ok next ∧ slot ≤ next := by
+  have original := ok
+  unfold computeSlotAtTimeMs at ok
+  simp only [bind_ok_iff, Uint64.subChecked_ok_iff, Uint64.divChecked_ok_iff] at ok
+  obtain ⟨elapsed, ⟨before, _⟩, nonzero, _⟩ := ok
+  have before' : g ≤ later := UInt64.le_trans (UInt64.le_iff_toNat_le.mpr before) le
+  refine ⟨(later - g) / config.SLOT_DURATION_MS, ?_, ?_⟩
+  · simp [computeSlotAtTimeMs, Uint64.subChecked, before', Uint64.divChecked, nonzero,
+      bind, Except.bind]
+  · apply computeSlotAtTimeMs_mono le
+    · exact original
+    · simp [computeSlotAtTimeMs, Uint64.subChecked, before', Uint64.divChecked, nonzero,
+        bind, Except.bind]
 
 end EthLib.Consensus
