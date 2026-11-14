@@ -29,9 +29,11 @@ Such a request, from a sender that holds its value, never fails with code 809, i
 
 A sender that holds less than the value never gets an answer with data.
 
-A request makes a transaction exactly when its fields pass the checks of its kind.
+A request makes a transaction exactly when its fields suit its kind and its chain is the node's.
 
-That transaction has the kind of the request, and its numbers and its lists.
+Each number of that transaction must also fit in 256 bits.
+
+That transaction has the kind, the value, the recipient, the data and the lists of the request.
 -/
 
 public section
@@ -82,10 +84,8 @@ private theorem callWord_ok {what : String} {n : Nat} {x : U256}
 
 /-- A number that fits its field is below `2 ^ 256`. -/
 private theorem lt_of_callWord_ok {what : String} {n : Nat} {x : U256}
-    (h : callWord what n = .ok x) : n < 2 ^ 256 := by
-  unfold callWord at h
-  split at h <;> cases h
-  assumption
+    (h : callWord what n = .ok x) : n < 2 ^ 256 :=
+  callWord_ok h ▸ x.isLt
 
 /-- A kind of at most 4 is one of the five types. -/
 private theorem kind_cases {k : UInt8} (h : k ≤ 4) : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3 ∨ k = 4 := by
@@ -99,7 +99,7 @@ private theorem kind_eq_four {k : UInt8} (h : k ≤ 4) (h0 : ¬k = 0) (h1 : ¬k 
     (h3 : ¬k = 3) : k = 4 := by
   rcases kind_cases h with rfl | rfl | rfl | rfl | rfl <;> simp_all
 
-/-- A request makes a transaction exactly when each check of its fields passes.
+/-- A request makes a transaction exactly when it passes each check below.
 
 Its kind is at most 4.
 
@@ -155,20 +155,8 @@ theorem exists_toTransaction_eq_ok_iff {tx : GenericTransaction} {chainId : UInt
     rcases hto : tx.to with _ | to <;>
     simp_all [ensure, callWord, bind, Except.bind, pure, Except.pure]
 
-/-- The transaction of a request has the kind of the request and the fields of the request.
-
-Its nonce is `nonce` and its gas limit is `gas`.
-
-Its fee cap is the gas price of the request up to type 1, and `maxFee` from type 2.
-
-From type 2 it pays the base fee plus the priority fee of the request, within that cap.
-
-From type 1 it names the chain `chainId`.
-
-A list or a number that the request leaves out is empty or 0.
-
-Its signature is 0. -/
-theorem toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+/-- The fields of the transaction of a request, all at once, for the lemmas below. -/
+private theorem toTransaction_fields {tx : GenericTransaction} {chainId : UInt64}
     {nonce gas maxFee : Nat} {t : Transaction}
     (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
     t.type = tx.kind ∧ t.nonce.toNat = nonce ∧ t.gas.toNat = gas ∧
@@ -206,19 +194,117 @@ theorem toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
       ‹¬tx.kind = 3›
     simp_all
 
+/-- The transaction of a request has the kind of the request. -/
+theorem type_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    t.type = tx.kind :=
+  (toTransaction_fields h).1
+
+/-- The transaction of a request has the nonce that the call gives. -/
+theorem nonce_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    t.nonce.toNat = nonce :=
+  (toTransaction_fields h).2.1
+
+/-- The transaction of a request has the gas limit that the call gives. -/
+theorem gas_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    t.gas.toNat = gas :=
+  (toTransaction_fields h).2.2.1
+
+/-- The transaction of a request has the value of the request, or 0. -/
+theorem value_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    t.value.toNat = tx.value.getD 0 :=
+  (toTransaction_fields h).2.2.2.1
+
+/-- The transaction of a request has the recipient of the request. -/
+theorem to_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    t.to = tx.to :=
+  (toTransaction_fields h).2.2.2.2.1
+
+/-- The transaction of a request has the input of the request, or no data. -/
+theorem data_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    t.data = tx.input.getD .empty :=
+  (toTransaction_fields h).2.2.2.2.2.1
+
+/-- The transaction of a request has the access list of the request, or none. -/
+theorem accesses_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    t.accesses = tx.accessList.getD [] :=
+  (toTransaction_fields h).2.2.2.2.2.2.1
+
+/-- The transaction of a request has the authorizations of the request, or none. -/
+theorem authorizations_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    t.authorizations = tx.authorizationList.getD [] :=
+  (toTransaction_fields h).2.2.2.2.2.2.2.1
+
+/-- The transaction of a request has the blob hashes of the request, or none. -/
+theorem blobHashes_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    t.blobHashes = tx.blobVersionedHashes.getD [] :=
+  (toTransaction_fields h).2.2.2.2.2.2.2.2.1
+
+/-- The fee cap of the transaction is the gas price of the request up to type 1.
+
+From type 2 it is the cap that the call gives. -/
+theorem maxFeePerGas_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    t.maxFeePerGas = if tx.kind ≤ 1 then tx.gasPrice.getD 0 else maxFee :=
+  (toTransaction_fields h).2.2.2.2.2.2.2.2.2.1
+
+/-- The blob fee cap of the transaction is that of the request, or 0. -/
+theorem maxFeePerBlobGas_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    t.maxFeePerBlobGas = tx.maxFeePerBlobGas.getD 0 :=
+  (toTransaction_fields h).2.2.2.2.2.2.2.2.2.2.1
+
+/-- The price per gas of the transaction is the gas price of the request up to type 1.
+
+From type 2 it is the base fee plus the priority fee of the request.
+
+That priority fee is cut to the fee cap minus the base fee, or to 0 below the base fee. -/
+theorem effectiveGasPrice_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    ∀ baseFee, effectiveGasPrice baseFee t = if tx.kind ≤ 1 then tx.gasPrice.getD 0 else
+      min (tx.maxPriorityFeePerGas.getD 0) (maxFee - baseFee) + baseFee :=
+  (toTransaction_fields h).2.2.2.2.2.2.2.2.2.2.2.1
+
+/-- From type 1, the transaction of a request names the chain of the node at every fork. -/
+theorem chainId_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    1 ≤ tx.kind → ∀ fork, t.chainId fork = .ok (some (.ofNat 256 chainId.toNat)) :=
+  (toTransaction_fields h).2.2.2.2.2.2.2.2.2.2.2.2.1
+
+/-- The transaction of a request has a signature of 0. -/
+theorem unsigned_of_toTransaction_eq_ok {tx : GenericTransaction} {chainId : UInt64}
+    {nonce gas maxFee : Nat} {t : Transaction}
+    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
+    t.unsigned = t :=
+  (toTransaction_fields h).2.2.2.2.2.2.2.2.2.2.2.2.2
+
 /-- The transaction of a request keeps its value, its recipient and its data. -/
 private theorem toTransaction_ok {tx : GenericTransaction} {chainId : UInt64}
     {nonce gas maxFee : Nat} {t : Transaction}
     (h : tx.toTransaction chainId nonce gas maxFee = .ok t) :
     t.value.toNat = tx.value.getD 0 ∧ t.to = tx.to ∧ t.data = tx.input.getD .empty :=
-  let ⟨_, _, _, hvalue, hto, hdata, _⟩ := toTransaction_eq_ok h
-  ⟨hvalue, hto, hdata⟩
-
-/-- The transaction of a request keeps its gas limit. -/
-private theorem toTransaction_gas {tx : GenericTransaction} {chainId : UInt64}
-    {nonce gas maxFee : Nat} {t : Transaction}
-    (h : tx.toTransaction chainId nonce gas maxFee = .ok t) : t.gas.toNat = gas :=
-  (toTransaction_eq_ok h).2.2.1
+  ⟨value_of_toTransaction_eq_ok h, to_of_toTransaction_eq_ok h, data_of_toTransaction_eq_ok h⟩
 
 /-- What an error of the setup is not.
 
@@ -469,7 +555,7 @@ theorem prepareCall_gas_self {v : ChainView} {tx : GenericTransaction} {p : Bloc
     repeat' (split at hb)
     all_goals simp only [pure, Except.pure, reduceCtorEq, Except.ok.injEq] at hb
     all_goals subst hb
-    all_goals exact toTransaction_gas (by assumption)
+    all_goals exact gas_of_toTransaction_eq_ok (by assumption)
   rw [hg]
   exact hb
 
