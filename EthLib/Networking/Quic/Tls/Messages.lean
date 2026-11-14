@@ -13,7 +13,9 @@ They preserve extension order, opaque extension data and unrecognized algorithm 
 
 They check field lengths, fixed legacy fields and duplicate extension types.
 
-Extension placement, required extensions and agreement with earlier messages belong to the steps.
+Extension placement and required extensions belong to the handshake steps.
+
+So does agreement with earlier messages.
 
 The codecs select no cipher suite, group, signature scheme or libp2p authentication policy.
 
@@ -64,7 +66,7 @@ def encodeExtensions (minimum : Nat) (extensions : List Extension) :
 
 /-- The ClientHello fields whose values are not fixed by RFC 8446 §4.1.2.
 
-The legacy version is 0303 and the compression vector is 01 00.
+The legacy version is `0x0303` and the compression vector is `[1, 0]`.
 
 The codec retains the session ID; QUIC callers enforce [RFC 9001 §8.4][compat].
 
@@ -171,7 +173,7 @@ def encodeBody (hashLength : Nat) : Message → Except Error (List UInt8)
 
 /-- Read a body by its HandshakeType, RFC 8446 §4.
 
-Legacy constants are checked for TLS 1.3; version negotiation is left to the steps. -/
+Legacy constants are checked for TLS 1.3; version negotiation is left to the handshake steps. -/
 def readBody (hashLength : Nat) (kind : UInt8) : Reader Message := do
   match kind.toNat with
   | 1 =>
@@ -215,9 +217,11 @@ def readFrame : Reader (UInt8 × List UInt8) := do
 def encode (hashLength : Nat) (message : Message) : Except Error (List UInt8) := do
   frame message.type (← encodeBody hashLength message)
 
-/-- Read one complete message, excluding any TLS record header, RFC 9001 §4.
+/-- Read one complete message from input with no TLS record header, RFC 9001 §4.
 
-A truncated message reports `truncated`, so a stream caller can retain it until more data arrives.
+A truncated message reports a truncation error.
+
+A stream caller can then keep it until more data arrives.
 
 Unknown handshake types are rejected; unknown extension types and algorithm identifiers survive. -/
 def decode (hashLength : Nat) : Reader Message := do

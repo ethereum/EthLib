@@ -28,7 +28,7 @@ theorem readKeyShare_encode {share : KeyShareEntry} {encoded : List UInt8}
   obtain ⟨data, hd, rfl⟩ := written
   simp [readKeyShare, List.append_assoc, blob_encode_of_encode hd]
 
-/-- Every encoded key share consumes at least its two-byte group identifier. -/
+/-- A successful key share encoding is never empty. -/
 theorem length_encodeKeyShare {share : KeyShareEntry} {encoded : List UInt8}
     (written : encodeKeyShare share = .ok encoded) : 0 < encoded.length := by
   simp only [encodeKeyShare, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at written
@@ -107,6 +107,7 @@ theorem decodePayload_encodePayload {payload : Payload} {extension : Extension}
   simp only [encodePayload, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at written
   obtain ⟨data, hd, u, size, rfl⟩ := written
   have bound := EthLib.Base.ensure_ok_iff.mp size
-  simp [decodePayload, Base.ensure, bound, Wire.exact, readPayload_encodePayloadBody hd]
+  simp [decodePayload, Base.ensure, bound, Wire.exact, readPayload_encodePayloadBody hd,
+    Except.mapError]
 
 end EthLib.Networking.Quic.Tls

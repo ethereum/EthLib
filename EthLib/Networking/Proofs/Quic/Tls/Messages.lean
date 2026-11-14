@@ -9,6 +9,8 @@ public import EthLib.Networking.Proofs.Quic.Tls.Wire
 Framing writes exactly one type byte and three length bytes before the unchanged body.
 
 Reading the frame preserves arbitrary bytes after it.
+
+Every successfully encoded message decodes to the same fields, so encoding is injective.
 -/
 
 @[expose] public section
@@ -29,7 +31,7 @@ theorem readExtension_encode {extension : Extension} {encoded : List UInt8}
   obtain ⟨data, hd, rfl⟩ := written
   simp [readExtension, List.append_assoc, blob_encode_of_encode hd rest]
 
-/-- An encoded extension consumes its type and length header before its data. -/
+/-- A successful extension encoding is never empty. -/
 theorem length_encodeExtension {extension : Extension} {encoded : List UInt8}
     (written : encodeExtension extension = .ok encoded) : 0 < encoded.length := by
   simp only [encodeExtension, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at written
@@ -49,7 +51,7 @@ theorem readExtensions_encode {minimum : Nat} {extensions : List Extension}
     (fun _ _ rest h => readExtension_encode h rest)
     (fun _ _ h => length_encodeExtension h) encoded rest, hu]
 
-/-- A vector of two-byte identifiers preserves even identifiers with no implemented algorithm. -/
+/-- An identifier vector round trips, including identifiers that no algorithm implements. -/
 theorem codePoints_encode {width minimum maximum : Nat} {values : List CodePoint}
     {encoded : List UInt8} (written : encodeCodePoints width minimum maximum values = .ok encoded)
     (rest : List UInt8) :
@@ -73,7 +75,7 @@ theorem readCertificateEntry_encode {entry : CertificateEntry} {encoded : List U
   simp [readCertificateEntry, List.append_assoc,
     blob_encode_of_encode hd (extensions ++ rest), readExtensions_encode he rest]
 
-/-- A certificate entry's length prefix alone consumes three bytes. -/
+/-- A successful certificate entry encoding is never empty. -/
 theorem length_encodeCertificateEntry {entry : CertificateEntry} {encoded : List UInt8}
     (written : encodeCertificateEntry entry = .ok encoded) : 0 < encoded.length := by
   simp only [encodeCertificateEntry, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at written

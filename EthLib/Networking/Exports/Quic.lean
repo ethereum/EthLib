@@ -6,10 +6,12 @@ public import EthLib.Networking.Quic.Frame
 public import EthLib.Cryptography.Exports.Tls13
 public import EthLib.Networking.Quic.Keys
 public import EthLib.Networking.Quic.Tls
+public import EthLib.Networking.Quic.Tls.Extensions
+public import EthLib.Networking.Quic.Tls.Transcript
 public import EthLib.Networking.Quic.Varint
 
 /-!
-# Exports: QUIC wire encodings, packet keys and the TLS 1.3 key schedule
+# Exports: QUIC wire encodings, packet keys and TLS 1.3 handshake data
 
 The encoder rejects a value of `2^62` or more with code 0.
 
@@ -164,7 +166,7 @@ def payloadEncodeExport (args : PyValue) : Result PyValue :=
 def payloadDecodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (form, extension) => handshakeResult (Tls.decodePayload form extension)) args
 
-/-- Return SHA-256 transcript bytes and their hash from complete handshake messages (§4.4.1).
+/-- Return the SHA-256 transcript of complete handshake messages and its hash, RFC 8446 §4.4.1.
 
 A HelloRetryRequest replaces ClientHello1 with its synthetic `message_hash` message. -/
 @[export eth_quic_tls_transcript]
@@ -173,7 +175,7 @@ def transcriptExport (args : PyValue) : Result PyValue :=
     let result ← handshakeResult (Tls.transcript (messages.map ByteArray.toList))
     return ((⟨result.bytes.toArray⟩ : ByteArray), result.hash)) args
 
-/-- Build the signed content of CertificateVerify from a SHA-256 transcript hash (§4.4.3). -/
+/-- Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 8446 §4.4.3. -/
 @[export eth_quic_tls_certificate_verify_input]
 def certificateVerifyInputExport (args : PyValue) : Result PyValue :=
   pyExport (fun (server, digest) =>

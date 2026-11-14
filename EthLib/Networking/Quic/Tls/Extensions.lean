@@ -7,7 +7,7 @@ public import EthLib.Networking.Quic.Tls.Messages
 
 The caller chooses a payload form from its message context.
 
-The forms follow RFC 8446 §§4.2.1, 4.2.3, 4.2.7 and 4.2.8 and [RFC 7301 §3.1][alpn].
+The forms follow [RFC 8446 §4.2][extensions] and [RFC 7301 §3.1][alpn].
 
 QUIC transport parameters remain opaque, as [RFC 9001 §8.2][parameters] assigns them to QUIC.
 
@@ -15,6 +15,7 @@ Decoding a payload neither advertises support for an algorithm nor accepts its u
 
 The handshake steps must check placement, required extensions and the peer's selections.
 
+[extensions]: https://www.rfc-editor.org/rfc/rfc8446#section-4.2
 [alpn]: https://www.rfc-editor.org/rfc/rfc7301#section-3.1
 [parameters]: https://www.rfc-editor.org/rfc/rfc9001#section-8.2
 -/
@@ -93,7 +94,8 @@ def encodeKeyShare (share : KeyShareEntry) : Except Error (List UInt8) := do
 def encodePayloadBody : Payload → Except Error (List UInt8)
   | .supportedVersions versions => encodeCodePoints 1 2 254 versions
   | .selectedVersion version => .ok (Base.natToBytes 2 version.val)
-  | .supportedGroups groups | .signatureAlgorithms groups => encodeCodePoints 2 2 65535 groups
+  | .supportedGroups groups => encodeCodePoints 2 2 65535 groups
+  | .signatureAlgorithms algorithms => encodeCodePoints 2 2 65534 algorithms
   | .clientKeyShare shares => encodeItems 2 0 65535 encodeKeyShare shares
   | .serverKeyShare share => encodeKeyShare share
   | .retryKeyShare group => .ok (Base.natToBytes 2 group.val)
@@ -105,7 +107,7 @@ def readPayload : PayloadForm → Reader Payload
   | .supportedVersions => return .supportedVersions (← items 1 2 254 codePoint)
   | .selectedVersion => return .selectedVersion (← codePoint)
   | .supportedGroups => return .supportedGroups (← items 2 2 65535 codePoint)
-  | .signatureAlgorithms => return .signatureAlgorithms (← items 2 2 65535 codePoint)
+  | .signatureAlgorithms => return .signatureAlgorithms (← items 2 2 65534 codePoint)
   | .clientKeyShare => return .clientKeyShare (← items 2 0 65535 readKeyShare)
   | .serverKeyShare => return .serverKeyShare (← readKeyShare)
   | .retryKeyShare => return .retryKeyShare (← codePoint)
@@ -120,10 +122,15 @@ def encodePayload (payload : Payload) : Except Error Extension := do
 
 /-- Decode one extension in the form expected by its caller, consuming all its data.
 
-Unknown extensions are retained by the message codec and need no payload decoder. -/
+Unknown extensions are retained by the message codec and need no payload decoder.
+
+An incomplete field inside a complete extension is a length error, as more input cannot repair it.
+-/
 def decodePayload (form : PayloadForm) (extension : Extension) : Except Error Payload := do
   Base.ensure (extension.kind = form.type) .constant
   Base.ensure (extension.data.length ≤ 65535) .length
-  exact (readPayload form) extension.data
+  (exact (readPayload form) extension.data).mapError fun
+    | .truncated => .length
+    | error => error
 
 end EthLib.Networking.Quic.Tls

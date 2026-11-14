@@ -2,8 +2,6 @@ module
 
 public import EthLib.Networking.Quic.Tls
 public import EthLib.Cryptography.Proofs.Hash.Tls13
-public import EthLib.Networking.Proofs.Quic.Tls.Transcript
-public import EthLib.Networking.Proofs.Quic.Tls.Extensions
 -- Checking a fixed label's byte length reduces the body of String.toUTF8.
 import all Init.Data.String.Defs
 

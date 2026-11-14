@@ -6,9 +6,13 @@ public import EthLib.Networking.Proofs.Quic.Tls.Messages
 /-!
 # Proofs: handshake transcript bytes
 
-Ordinary messages preserve all received bytes, and a retry performs the replacement of §4.4.1.
+Ordinary messages keep all received bytes.
+
+A retry makes the replacement of [RFC 8446 §4.4.1][transcript].
 
 These results make no claim about message ordering beyond the retry or about authentication.
+
+[transcript]: https://www.rfc-editor.org/rfc/rfc8446#section-4.4.1
 -/
 
 @[expose] public section
@@ -17,11 +21,6 @@ namespace EthLib.Networking.Quic.Tls
 
 open Wire
 open EthLib.Cryptography.Hash
-
-/-- The synthetic message contains exactly its header and the SHA-256 of ClientHello1. -/
-theorem messageHash_eq (clientHello : List UInt8) :
-    messageHash clientHello =
-      [254, 0, 0, 32] ++ (Sha256.hash32 ⟨clientHello.toArray⟩).toList := rfl
 
 /-- The synthetic message has a four-byte header and a 32-byte hash. -/
 theorem length_messageHash (clientHello : List UInt8) : (messageHash clientHello).length = 36 := by
@@ -62,9 +61,5 @@ theorem append_error_of_decode_error (saved : Transcript) (encoded : List UInt8)
     (rejected : Wire.exact (decode 32) encoded = .error error) :
     saved.append encoded = .error error := by
   simp [Transcript.append, rejected, bind, Except.bind]
-
-/-- A transcript hash covers precisely the saved handshake bytes (§4.4.1). -/
-theorem hash_eq (saved : Transcript) :
-    saved.hash = Sha256.hash32 ⟨saved.bytes.toArray⟩ := rfl
 
 end EthLib.Networking.Quic.Tls

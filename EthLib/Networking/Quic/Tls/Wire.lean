@@ -7,13 +7,14 @@ public import EthLib.Base.ByteReader
 /-!
 # TLS presentation-language fields
 
-[RFC 8446 §§3.3 and 3.4][fields] use big-endian integers and length-prefixed vectors.
+[RFC 8446 §3.3][numbers] and [§3.4][vectors] use big-endian integers and length-prefixed vectors.
 
 Readers return the bytes after a field and reject truncated or out-of-range lengths.
 
 The errors are local codec errors, rather than TLS alerts or QUIC connection errors.
 
-[fields]: https://www.rfc-editor.org/rfc/rfc8446#section-3.3
+[numbers]: https://www.rfc-editor.org/rfc/rfc8446#section-3.3
+[vectors]: https://www.rfc-editor.org/rfc/rfc8446#section-3.4
 -/
 
 @[expose] public section

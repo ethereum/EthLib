@@ -44,6 +44,8 @@ public import EthLib.Networking.Proofs.Libp2p.YamuxSession
 public import EthLib.Networking.Proofs.Quic.Keys
 public import EthLib.Networking.Proofs.Quic.Protection
 public import EthLib.Networking.Proofs.Quic.Tls
+public import EthLib.Networking.Proofs.Quic.Tls.Extensions
+public import EthLib.Networking.Proofs.Quic.Tls.Transcript
 public import EthLib.Networking.Proofs.Quic.Varint
 public import EthLib.Networking.Proofs.ReqResp.Bounds
 public import EthLib.Networking.Proofs.ReqResp.Encoding

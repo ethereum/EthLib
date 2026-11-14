@@ -47,7 +47,7 @@ theorem encodeBlob_length_overflow (width minimum maximum : Nat) (data : List UI
     encodeBlob width minimum maximum data = .error .length := by
   simp [encodeBlob, Nat.not_lt.mpr overflow]
 
-/-- Two-byte identifiers round trip, including values unknown to the protocol implementation. -/
+/-- Two-byte identifiers round trip, including values that no registry assigns. -/
 @[simp] theorem codePoint_encode (value : CodePoint) (rest : List UInt8) :
     codePoint (Base.natToBytes 2 value.val ++ rest) = .ok (value, rest) := by
   have bound : value.val < 256 ^ 2 := value.isLt
