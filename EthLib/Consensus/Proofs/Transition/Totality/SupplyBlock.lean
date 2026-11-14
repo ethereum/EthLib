@@ -20,6 +20,7 @@ import EthLib.Consensus.Proofs.Transition.Payload
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 import EthLib.Consensus.Proofs.Transition.Requests
 import EthLib.Consensus.Proofs.Transition.Withdrawals
+import Mathlib.Data.Nat.Sqrt
 
 /-!
 # Proofs: a block raises the supply by its deposits and its rewards
@@ -41,6 +42,8 @@ That weight reads the effective balances, which the steps before the attestation
 The sync committee members that sign earn a fixed reward, and the proposer a share of it.
 
 Every other step of a block moves balances out of the supply, or within it.
+
+With the effective balances within a budget, the cap on the rewards reads only the budget.
 -/
 
 @[expose] public section
@@ -2236,5 +2239,94 @@ theorem processBlock_supply_le_cap_of_requestsStart {engine : ExecutionEngine pr
   unfold supply quotient at bound share
   unfold blockRewardCap
   omega
+
+/-- A bound on the rewards that one block pays, for a sum of effective balances within a budget.
+
+It takes the base reward of one increment at a total active balance of one increment, its largest.
+
+It puts the budget in place of the total active balance and of the sum of the effective balances.
+
+The factors 2, 54 and 448 are those of the cap on the rewards of a block. -/
+def blockRewardBound (preset : Preset) (budget : Nat) : Nat :=
+  let perIncrement := preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat /
+    preset.EFFECTIVE_BALANCE_INCREMENT.toNat.sqrt
+  let participant := budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * perIncrement *
+    SYNC_REWARD_WEIGHT.toNat / WEIGHT_DENOMINATOR.toNat / preset.SLOTS_PER_EPOCH.toNat /
+      preset.SYNC_COMMITTEE_SIZE.toNat
+  2 * (budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * perIncrement * 54 / 448 +
+    preset.SYNC_COMMITTEE_SIZE.toNat * (participant + participant * PROPOSER_WEIGHT.toNat /
+      (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat))
+
+/-- A total active balance is at least one increment.
+
+It is at most the larger of one increment and the sum of the effective balances. -/
+private theorem totalActiveBalance_bounds {state : BeaconState preset fork} {total : Gwei}
+    (computed : getTotalActiveBalance state = .ok total) :
+    preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ total.toNat ∧
+      total.toNat ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) := by
+  have ok := getTotalActiveBalance_ok computed
+  have low := UInt64.le_iff_toNat_le.mp (le_getTotalBalance ok)
+  refine ⟨low, ?_⟩
+  obtain ⟨-, fits, rfl⟩ := getTotalBalance_ok_iff.mp ok
+  have marked : sumMarked state.validators.data (markIndices state.validators.data.size
+      (getActiveValidatorIndices state (getCurrentEpoch state))) ≤ effectiveBalanceSum state := by
+    rw [sumMarked_eq_sum, effectiveBalanceSum_eq_sum_range]
+    refine sum_map_le_sum_map fun j _ => ?_
+    split <;> omega
+  rw [UInt64.max_def]
+  split
+  · rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt fits]
+    omega
+  · omega
+
+/-- A base reward of one increment at a total of at least one increment is at most its largest.
+
+That largest value is the one at a total of exactly one increment. -/
+private theorem baseRewardPerIncrement_bound {total per : Gwei}
+    (computed : getBaseRewardPerIncrement preset total = .ok per)
+    (low : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ total.toNat) :
+    per.toNat ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat /
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat.sqrt := by
+  unfold getBaseRewardPerIncrement liftArith at computed
+  cases product : Uint64.mulChecked preset.EFFECTIVE_BALANCE_INCREMENT
+      preset.BASE_REWARD_FACTOR with
+  | error => simp [product, bind, Except.bind, Except.mapError] at computed
+  | ok product' =>
+  cases divided : Uint64.divChecked product' (Uint64.integerSquareroot total) with
+  | error => simp [product, divided, bind, Except.bind, Except.mapError] at computed
+  | ok quotient =>
+  simp only [product, divided, bind, Except.bind, Except.mapError, Except.ok.injEq] at computed
+  subst computed
+  obtain ⟨-, productNat⟩ := Uint64.mulChecked_ok_iff.mp product
+  obtain ⟨-, perNat⟩ := Uint64.divChecked_ok_iff.mp divided
+  rw [perNat, productNat, Uint64.toNat_integerSquareroot]
+  by_cases zero : preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0
+  · simp [zero]
+  · exact Nat.div_le_div_left (Nat.sqrt_le_sqrt low) (Nat.sqrt_pos.mpr (Nat.pos_of_ne_zero zero))
+
+/-- The reward bound of a block covers its cap, for a sum of effective balances within the budget.
+
+The budget must cover one increment. -/
+theorem blockRewardCap_le {state : BeaconState preset fork} {budget : Nat}
+    (budgeted : max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) ≤ budget) :
+    blockRewardCap preset state ≤ blockRewardBound preset budget := by
+  have sumLe : effectiveBalanceSum state ≤ budget := le_trans (le_max_right _ _) budgeted
+  have incLe : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ budget :=
+    le_trans (le_max_left _ _) budgeted
+  unfold blockRewardCap blockRewardBound blockPerIncrement syncRewardCap
+  by_cases altair : .altair ≤ fork
+  · simp only [altair, ↓reduceIte]
+    cases totalState : getTotalActiveBalance state with
+    | error => simp
+    | ok total =>
+      obtain ⟨low, high⟩ := totalActiveBalance_bounds totalState
+      have totalLe : total.toNat ≤ budget := le_trans high (max_le incLe sumLe)
+      cases perState : getBaseRewardPerIncrement preset total with
+      | error => simp only [perState]; omega
+      | ok per =>
+        have perLe := baseRewardPerIncrement_bound perState low
+        simp only [perState]
+        gcongr
+  · simp [altair]
 
 end EthLib.Consensus

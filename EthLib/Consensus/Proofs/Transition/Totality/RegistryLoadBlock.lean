@@ -31,6 +31,8 @@ A withdrawal request and every other operation of a block add no validator and n
 
 So a block raises the count by at most its deposits, twice from Electra, plus those requests.
 
+The registry alone grows by at most one validator for each deposit of the deposit contract.
+
 [EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110#consensus-layer
 -/
 
@@ -643,5 +645,285 @@ theorem applySignedBlock_registryLoad_le {signed : SignedBeaconBlock preset fork
     (computed : applySignedBlock config checks engine state signed validateResult = .ok after) :
     registryLoad after ≤ registryLoad state + blockLoadBound signed.message.body := by
   exact processBlock_registryLoad_le (applySignedBlock_ok computed).2.1
+
+/-! ## The registry alone -/
+
+/-- A pending deposit added to the queue keeps the registry size. -/
+private theorem size_addPendingDeposit {electra : .pectra ≤ fork}
+    {deposit : PendingDeposit} (computed : addPendingDeposit state electra deposit = .ok after) :
+    after.validators.data.size = state.validators.data.size := by
+  simp only [addPendingDeposit, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, _, rfl⟩ := computed
+  rfl
+
+/-- From Electra a deposit adds at most one validator. -/
+private theorem applyDepositElectra_size_le {electra : .pectra ≤ fork}
+    {pubkey : Cryptography.Bls.BLSPubkey} {withdrawalCredentials : Bytes32} {amount : Gwei}
+    {signature : Cryptography.Bls.BLSSignature}
+    (computed : applyDepositElectra config checks state electra pubkey withdrawalCredentials
+      amount signature = .ok after) :
+    after.validators.data.size ≤ state.validators.data.size + 1 := by
+  unfold applyDepositElectra at computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · simp only [bind_ok_iff, liftAccessor_ok] at computed
+      obtain ⟨_, added, pushed⟩ := computed
+      rw [size_addPendingDeposit pushed, addValidatorToRegistry_validators_eq_push added,
+        Array.size_push]
+    · cases computed
+      omega
+  · have one := size_addPendingDeposit (liftAccessor_ok.mp computed)
+    omega
+
+/-- A fold raises the registry size by at most one for each item. -/
+private theorem foldlM_size_le {α ε : Type}
+    {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
+    (each : ∀ s x s', step s x = .ok s' → s'.validators.data.size ≤ s.validators.data.size + 1) :
+    ∀ (items : List α) {state after : BeaconState preset fork},
+      items.foldlM step state = .ok after →
+        after.validators.data.size ≤ state.validators.data.size + items.length
+  | [], _, _, computed => by
+    simp only [List.foldlM, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    simp
+  | _ :: rest, _, _, computed => by
+    simp only [List.foldlM, bind_ok_iff] at computed
+    obtain ⟨_, first, tail⟩ := computed
+    have one := each _ _ _ first
+    have more := foldlM_size_le each rest tail
+    simp only [List.length_cons]
+    omega
+
+/-- A deposit of a block adds at most one validator. -/
+private theorem processDeposit_size_le {before : fork < .hegota} {deposit : Deposit}
+    (computed : processDeposit config checks before state deposit = .ok after) :
+    after.validators.data.size ≤ state.validators.data.size + 1 := by
+  obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
+  unfold applyDeposit at applied
+  split at applied
+  · exact applyDepositElectra_size_le (state := { state with eth1DepositIndex := fun _ => next })
+      applied
+  · exact (applyPendingDeposit_validators_size_le_and_mem applied).1
+
+/-- Queueing the excess balance of a validator keeps the registry size. -/
+private theorem queueExcessActiveBalance_size {electra : .pectra ≤ fork}
+    {index : ValidatorIndex}
+    (computed : queueExcessActiveBalance state electra index = .ok after) :
+    after.validators.data.size = state.validators.data.size := by
+  simp only [queueExcessActiveBalance, bind_ok_iff] at computed
+  obtain ⟨_, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, pending, appended, _, set, rfl⟩ := computed
+    obtain ⟨_, rfl⟩ := setBalance_ok set
+    rfl
+  · cases computed
+    rfl
+
+/-- A switch to compounding credentials keeps the registry size. -/
+private theorem switchToCompoundingValidator_size {electra : .pectra ≤ fork}
+    {index : ValidatorIndex}
+    (computed : switchToCompoundingValidator state electra index = .ok after) :
+    after.validators.data.size = state.validators.data.size := by
+  simp only [switchToCompoundingValidator, bind_ok_iff] at computed
+  obtain ⟨_, _, _, set, queued⟩ := computed
+  have one := (loadKept_setValidator set).1
+  have two := queueExcessActiveBalance_size queued
+  omega
+
+/-- A consolidation request keeps the registry size. -/
+private theorem processConsolidationRequest_size {electra : .pectra ≤ fork}
+    {request : ConsolidationRequest}
+    (computed : processConsolidationRequest config state electra request = .ok after) :
+    after.validators.data.size = state.validators.data.size := by
+  unfold processConsolidationRequest at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  repeat' split at computed
+  all_goals first
+    | (cases computed; done)
+    | (cases computed; rfl)
+    | exact switchToCompoundingValidator_size (liftAccessor_ok.mp computed)
+    | exact (loadKept_queueConsolidation computed).1
+
+/-- A deposit request keeps the registry size. -/
+private theorem processDepositRequest_size {electra : .pectra ≤ fork}
+    {request : DepositRequest}
+    (computed : processDepositRequest state electra request = .ok after) :
+    after.validators.data.size = state.validators.data.size := by
+  obtain ⟨-, validators, -⟩ := processDepositRequest_ok computed
+  rw [validators]
+
+/-- A fold whose every step keeps the registry size keeps it. -/
+private theorem foldlM_size_eq {α ε : Type}
+    {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
+    (each : ∀ s x s', step s x = .ok s' → s'.validators.data.size = s.validators.data.size)
+    {items : List α} (computed : items.foldlM step state = .ok after) :
+    after.validators.data.size = state.validators.data.size :=
+  foldlM_ok_invariant (fun s => s.validators.data.size = state.validators.data.size)
+    (fun _ _ _ before ok => (each _ _ _ ok).trans before) rfl computed
+
+/-- The requests of a payload in Electra and Fulu keep the registry size. -/
+private theorem processExecutionRequests_size {body : BeaconBlockBody preset fork}
+    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
+    (computed : processExecutionRequests config state body electra = .ok after) :
+    after.validators.data.size = state.validators.data.size := by
+  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨_, depositsOk, _, withdrawalsOk, consolidationsOk⟩ := computed
+  have one := foldlM_size_eq (fun _ _ _ ok => processDepositRequest_size ok) depositsOk
+  have two := foldlM_size_eq (fun _ _ _ ok => (loadKept_processWithdrawalRequest ok).1)
+    withdrawalsOk
+  have three := foldlM_size_eq (fun _ _ _ ok => processConsolidationRequest_size ok)
+    consolidationsOk
+  omega
+
+/-- The parent payload from Gloas keeps the registry size. -/
+private theorem processParentExecutionPayload_size {gloas : .glamsterdam ≤ fork}
+    {body : BeaconBlockBody preset fork}
+    (computed : processParentExecutionPayload config checks state gloas body = .ok after) :
+    after.validators.data.size = state.validators.data.size := by
+  rcases processParentExecutionPayload_ok computed with ⟨-, -, rfl⟩ |
+    ⟨-, settled, _, _, _, _, exited, _, settledOk, depositsOk, withdrawalsOk, consolidationsOk,
+      buildersOk, exitsOk, -, final⟩
+  · rfl
+  have zero : LoadKept state settled := by
+    rw [settleParentPayment_eq settledOk]
+    exact LoadKept.of_validators
+  have one := foldlM_size_eq (fun _ _ _ ok => processDepositRequest_size ok) depositsOk
+  have two := foldlM_size_eq (fun _ _ _ ok => (loadKept_processWithdrawalRequest ok).1)
+    withdrawalsOk
+  have three := foldlM_size_eq (fun _ _ _ ok => processConsolidationRequest_size ok)
+    consolidationsOk
+  have four := foldlM_size_eq (fun _ _ _ ok => by
+    obtain ⟨_, rfl⟩ := processBuilderDepositRequest_builders ok
+    rfl) buildersOk
+  have five := foldlM_size_eq (fun _ _ _ ok => by
+    obtain ⟨_, rfl⟩ := processBuilderExitRequest_builders ok
+    rfl) exitsOk
+  have six : LoadKept exited after := by
+    rw [final]
+    exact LoadKept.of_validators
+  have seven := zero.1
+  have eight := six.1
+  omega
+
+/-- The operations add at most one validator for each deposit, and none from Gloas. -/
+private theorem processOperations_size_le {body : BeaconBlockBody preset fork}
+    {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    after.validators.data.size ≤ state.validators.data.size +
+      (if .glamsterdam ≤ fork then 0 else blockDepositCount body) := by
+  unfold processOperations at computed
+  split at computed
+  · rename_i gloas
+    unfold processOperationsGloas at computed
+    simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
+      attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
+    have same := (LoadKept.foldlM (fun _ _ _ ok => loadKept_processProposerSlashing ok)
+      proposersOk).trans <|
+      (LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttesterSlashing ok) attestersOk).trans <|
+      (LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttestation ok) attestedOk).trans <|
+      (LoadKept.foldlM (fun _ _ _ ok => loadKeptLaws.processVoluntaryExit ok) exitsOk).trans <|
+      (LoadKept.foldlM (fun _ _ _ ok => loadKeptLaws.processBlsToExecutionChange ok)
+        changesOk).trans <|
+      LoadKept.foldlM (fun _ _ _ ok => by
+        rw [processPayloadAttestation_eq ok]
+        exact LoadKept.refl _) paid
+    simp only [gloas, ↓reduceIte]
+    exact Nat.le_of_eq same.1
+  rename_i gloas
+  have early : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le gloas) (by decide)
+  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨_, _, _, _, _, proposersOk, _, attestersOk, _, attestedOk, _, depositedOk, exited,
+    exitsOk, changed, changesOk, requestsOk⟩ := computed
+  have before := (LoadKept.foldlM (fun _ _ _ ok => loadKept_processProposerSlashing ok)
+    proposersOk).trans <|
+    (LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttesterSlashing ok) attestersOk).trans <|
+    LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttestation ok) attestedOk
+  have deposited := foldlM_size_le (fun _ _ _ ok => processDeposit_size_le ok) _ depositedOk
+  have exits := (LoadKept.foldlM (fun _ _ _ ok => loadKeptLaws.processVoluntaryExit ok)
+    exitsOk).1
+  have changes : LoadKept exited changed := by
+    unfold processBlsToExecutionChanges at changesOk
+    split at changesOk
+    · rw [← Array.foldlM_toList] at changesOk
+      exact LoadKept.foldlM (fun _ _ _ ok => loadKeptLaws.processBlsToExecutionChange ok) changesOk
+    · simp only [pure, Except.pure, Except.ok.injEq] at changesOk
+      exact changesOk ▸ LoadKept.refl _
+  have requested : after.validators.data.size = changed.validators.data.size := by
+    split at requestsOk
+    · exact processExecutionRequests_size requestsOk
+    · simp only [pure, Except.pure, Except.ok.injEq] at requestsOk
+      subst requestsOk
+      rfl
+  have one := before.1
+  have two := changes.1
+  have preGloas : fork < .glamsterdam := Nat.lt_of_not_le gloas
+  simp only [gloas, ↓reduceIte, blockDepositCount, preGloas, ↓reduceDIte]
+  simp only [Array.length_toList] at deposited
+  omega
+
+/-- The steps before the operations keep the registry size, the parent payload included. -/
+private theorem operationsInput_size {block : BeaconBlock preset fork}
+    {input : BeaconState preset fork}
+    (started : OperationsInput config checks engine state block input) :
+    input.validators.data.size = state.validators.data.size := by
+  obtain ⟨parented, headed, executed, revealed, paidOk, headerOk, executionOk, randaoOk,
+    eth1Ok⟩ := started
+  have paid : parented.validators.data.size = state.validators.data.size := by
+    split at paidOk
+    · exact processParentExecutionPayload_size paidOk
+    · cases paidOk
+      rfl
+  have header : LoadKept parented headed := by
+    obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headerOk
+    exact LoadKept.of_validators
+  have execution : LoadKept headed executed := by
+    split at executionOk
+    · exact loadKept_processBlockExecution executionOk
+    · cases executionOk
+      exact LoadKept.refl _
+  have randao : LoadKept executed revealed := by
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq randaoOk
+    exact LoadKept.of_validators
+  have eth1 : LoadKept revealed input := by
+    split at eth1Ok
+    · obtain ⟨_, _, rest⟩ := processEth1Data_eq eth1Ok
+      rw [← rest]
+      exact LoadKept.of_validators
+    · cases eth1Ok
+      exact LoadKept.refl _
+  have rest := (header.trans (execution.trans (randao.trans eth1))).1
+  omega
+
+/-- A block adds at most one validator for each deposit of the deposit contract that it applies.
+
+From Electra its amount joins the pending deposits.
+
+Deposit requests and consolidation requests add no validator. -/
+theorem processBlock_validators_size_le {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state block = .ok after) :
+    after.validators.data.size ≤ state.validators.data.size + blockDepositCount block.body := by
+  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput computed
+  have one := operationsInput_size started
+  have two := processOperations_size_le operated
+  have three : LoadKept last after := by
+    split at synced
+    · exact loadKeptLaws.processSyncAggregate synced
+    · cases synced
+      exact LoadKept.refl _
+  have four := three.1
+  by_cases gloas : .glamsterdam ≤ fork
+  · have none : blockDepositCount block.body = 0 := by
+      unfold blockDepositCount
+      rw [dite_eq_right_iff]
+      exact fun below => absurd below (Nat.not_lt.mpr gloas)
+    simp only [gloas, ↓reduceIte] at two
+    rw [none]
+    omega
+  · simp only [gloas, ↓reduceIte] at two
+    omega
 
 end EthLib.Consensus
