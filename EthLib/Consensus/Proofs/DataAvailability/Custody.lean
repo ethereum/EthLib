@@ -23,7 +23,7 @@ namespace EthLib.Consensus.DataAvailability
 
 variable {config : Config}
 
-/-- The first eight of 32 bytes give one integer, least significant first, packed or not. -/
+/-- The first eight of 32 bytes give the same integer as those of their byte array. -/
 theorem firstUInt64_eq_byteRead (bytes : Base.Bytes32) :
     firstUInt64 bytes =
       (List.range 8).foldr
