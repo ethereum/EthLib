@@ -1,94 +1,18 @@
 """TLS 1.3 handshake wire formats and SHA-256 transcripts, without a negotiation policy."""
 
-from typing import Literal, TypeAlias, TypedDict
-
 from ethlib.cryptography import _native
 from ethlib.errors import TlsHandshakeError as TlsHandshakeError
-
-
-class Extension(TypedDict):
-    """An extension type and its exact data, in RFC 8446 §4.2 wire order."""
-
-    kind: int
-    data: list[int]
-
-
-class ClientHello(TypedDict):
-    """The variable fields of a TLS 1.3 ClientHello, RFC 8446 §4.1.2."""
-
-    random: bytes
-    legacy_session_id: list[int]
-    cipher_suites: list[int]
-    extensions: list[Extension]
-
-
-class ServerHello(TypedDict):
-    """The variable fields shared by ServerHello and HelloRetryRequest, RFC 8446 §4.1.3."""
-
-    random: bytes
-    legacy_session_id_echo: list[int]
-    cipher_suite: int
-    extensions: list[Extension]
-
-
-class CertificateEntry(TypedDict):
-    """Opaque certificate bytes and per-certificate extensions, RFC 8446 §4.4.2."""
-
-    data: list[int]
-    extensions: list[Extension]
-
-
-class Certificate(TypedDict):
-    """A request context and a certificate list, including an empty client list."""
-
-    context: list[int]
-    entries: list[CertificateEntry]
-
-
-class CertificateRequest(TypedDict):
-    """A certificate request context and its extensions, RFC 8446 §4.3.2."""
-
-    context: list[int]
-    extensions: list[Extension]
-
-
-class KeyShareEntry(TypedDict):
-    """A named group and its opaque key-exchange bytes, RFC 8446 §4.2.8."""
-
-    group: int
-    key_exchange: list[int]
-
-
-# Algorithm identifiers are two-byte integers, without a supported-algorithm profile.
-Message: TypeAlias = (
-    tuple[Literal["client_hello"], ClientHello]
-    | tuple[Literal["server_hello"], ServerHello]
-    | tuple[Literal["encrypted_extensions"], list[Extension]]
-    | tuple[Literal["certificate_request"], CertificateRequest]
-    | tuple[Literal["certificate"], Certificate]
-    | tuple[Literal["certificate_verify"], int, list[int]]
-    | tuple[Literal["finished"], list[int]]
-)
-
-PayloadForm: TypeAlias = Literal[
-    "supported_versions",
-    "selected_version",
-    "supported_groups",
-    "signature_algorithms",
-    "client_key_share",
-    "server_key_share",
-    "retry_key_share",
-    "alpn",
-    "quic_transport_parameters",
-]
-
-Payload: TypeAlias = (
-    tuple[Literal["supported_versions", "supported_groups", "signature_algorithms"], list[int]]
-    | tuple[Literal["selected_version", "retry_key_share"], int]
-    | tuple[Literal["client_key_share"], list[KeyShareEntry]]
-    | tuple[Literal["server_key_share"], KeyShareEntry]
-    | tuple[Literal["alpn"], list[list[int]]]
-    | tuple[Literal["quic_transport_parameters"], list[int]]
+from ethlib.networking.quic._tls_types import (
+    Certificate as Certificate,
+    CertificateEntry as CertificateEntry,
+    CertificateRequest as CertificateRequest,
+    ClientHello as ClientHello,
+    Extension as Extension,
+    KeyShareEntry as KeyShareEntry,
+    Message as Message,
+    Payload as Payload,
+    PayloadForm as PayloadForm,
+    ServerHello as ServerHello,
 )
 
 

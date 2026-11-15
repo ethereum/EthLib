@@ -3,6 +3,13 @@
 from typing import Any, Literal
 
 from ethlib.networking.noise._types import CipherState, Completion, HandshakeState, Identity, Libp2pState, Remote
+from ethlib.networking.quic._codec_types import Header as QuicHeader
+from ethlib.networking.quic._codec_types import Frame as QuicFrame
+from ethlib.networking.quic._codec_types import PacketType as QuicPacketType
+from ethlib.networking.quic._tls_types import Message as TlsMessage
+from ethlib.networking.quic._tls_types import Extension as TlsExtension
+from ethlib.networking.quic._tls_types import Payload as TlsPayload
+from ethlib.networking.quic._tls_types import PayloadForm as TlsPayloadForm
 
 
 def eth_aggregate_pubkeys(pubkeys: list[bytes]) -> bytes:
@@ -1665,19 +1672,19 @@ def quic_tls_finished(secret: bytes, transcript: bytes) -> bytes:
     """Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."""
     ...
 
-def quic_tls_message_encode(hash_length: int, message: Any) -> bytes:
+def quic_tls_message_encode(hash_length: int, message: TlsMessage) -> bytes:
     """Encode one handshake message with its header and the caller's hash length, RFC 8446 §4."""
     ...
 
-def quic_tls_message_decode(hash_length: int, data: bytes) -> tuple[Any, bytes]:
+def quic_tls_message_decode(hash_length: int, data: bytes) -> tuple[TlsMessage, bytes]:
     """Decode one complete message and return its fields and trailing bytes, RFC 8446 §4."""
     ...
 
-def quic_tls_payload_encode(payload: Any) -> Any:
+def quic_tls_payload_encode(payload: TlsPayload) -> TlsExtension:
     """Encode a structured extension payload without selecting an algorithm or protocol."""
     ...
 
-def quic_tls_payload_decode(form: str, extension: Any) -> Any:
+def quic_tls_payload_decode(form: TlsPayloadForm, extension: TlsExtension) -> TlsPayload:
     """Decode an extension in the payload form that its message context requires."""
     ...
 
@@ -1709,19 +1716,19 @@ def quic_varint_decode(data: bytes) -> tuple[int, bytes]:
     """Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."""
     ...
 
-def quic_header_encode(header: Any) -> bytes:
+def quic_header_encode(header: QuicHeader) -> bytes:
     """Encode a QUIC header, with checked lengths and packet-number bounds (RFC 9000 §17)."""
     ...
 
-def quic_header_decode(short_connection_id_length: int, data: bytes) -> tuple[Any, bytes]:
+def quic_header_decode(short_connection_id_length: int, data: bytes) -> tuple[QuicHeader, bytes]:
     """Read an authenticated header and return its fields and remaining bytes (RFC 9000 §17)."""
     ...
 
-def quic_frame_encode(frame: Any) -> bytes:
+def quic_frame_encode(frame: QuicFrame) -> bytes:
     """Encode one well-formed QUIC frame (RFC 9000 §19)."""
     ...
 
-def quic_frame_decode(packet: str, data: bytes) -> tuple[Any, bytes]:
+def quic_frame_decode(packet: QuicPacketType, data: bytes) -> tuple[QuicFrame, bytes]:
     """Read one frame allowed in the given packet type (RFC 9000 §12.4)."""
     ...
 
