@@ -2906,6 +2906,15 @@ Every block held by an honest store has a nonzero state root, so no state that s
 They also assume that every honest justified or unrealized justified checkpoint, from the finalized epoch up to the horizon, descends from every honest finalized checkpoint, a finality-safety assumption that an honest majority alone does not give.
 They also keep their duty, stake and ancestry hypotheses, and conclude their result or a hash collision between blocks held by honest stores at two points of the execution, up to the bound.
 
+`Execution.finalized_prefix_or_accountable` proves the narrower historical family used by those duty proofs: one honest store's later justified checkpoint reads back its earlier finalized checkpoint, or accountable-safety evidence exists.
+`Execution.mem_supportersOf_of_duty_epoch_or_accountable` and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` compose this family with the duty proofs, leaving the original statements unchanged.
+The companions retain the other network, duty, stake, ancestry and held-block nonzero conditions.
+They require a deposited genesis and a run to the anchor, `DirectSafety.Parameters`, held states before the next fork boundary, epoch-call and terminal stake floors, and an absent anchor parent.
+The head theorem already required the absent parent.
+Their additional conclusion supplies held states and runs for which reference unslashed stake is at most three times accountable stake plus twice the maximum derived drift, or `DirectSafety.HashEvidence` finds a node-hash collision or zero-root object.
+This alternative is outside the store-collision witnesses and provides no a priori drift bound or unconditional one-third slashing guarantee.
+The drift counts from the anchor, so on a long execution with enough churn since the anchor the alternative holds with no accountable key.
+
 `Consensus/Proofs/ForkChoice/FastConfirmation/TargetVotes.lean` states the assumed honest target-vote count, `HonestTargetVotes`.
 `SignsTarget`, in the network file above, describes a signing witness by a bounded time inside that count; it is not an additional hypothesis on its own.
 The count gives active honest voters, each of whom signs the target or lies outside the committees of the epoch so far, and three times their stake is at least three times the computed support plus the margin.
