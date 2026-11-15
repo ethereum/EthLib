@@ -11,6 +11,8 @@ Framing writes exactly one type byte and three length bytes before the unchanged
 Reading the frame preserves arbitrary bytes after it.
 
 Every successfully encoded message decodes to the same fields, so encoding is injective.
+
+Every accepted message re-encodes to exactly the bytes that decoding consumed.
 -/
 
 @[expose] public section
@@ -205,5 +207,258 @@ theorem encode_injective {hashLength : Nat} {first second : Message} {encoded : 
   have hf := decode_encode left []
   rw [decode_encode right []] at hf
   simpa using hf.symm
+
+/-- An accepted extension is exactly its numeric type and length-prefixed payload. -/
+theorem encodeExtension_of_readExtension {input rest : List UInt8} {extension : Extension}
+    (parsed : readExtension input = .ok (extension, rest)) :
+    ∃ encoded, encodeExtension extension = .ok encoded ∧ input = encoded ++ rest := by
+  change (codePoint input >>= fun (kind, suffix) =>
+    blob 2 0 65535 suffix >>= fun (data, trailing) => .ok (⟨kind, data⟩, trailing)) =
+      .ok (extension, rest) at parsed
+  simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+  obtain ⟨⟨kind, suffix⟩, kindRead, ⟨data, trailing⟩, dataRead, rfl, rfl⟩ := parsed
+  dsimp only at dataRead ⊢
+  obtain ⟨encoded, written, same⟩ := encodeBlob_of_blob dataRead
+  refine ⟨Base.natToBytes 2 kind.val ++ encoded, ?_, ?_⟩
+  · simp [encodeExtension, written]
+  · rw [eq_natToBytes_of_codePoint kindRead, same]
+    simp only [List.append_assoc]
+
+/-- An accepted extension block has the exact encoding of its returned ordered extensions. -/
+theorem encodeExtensions_of_readExtensions {minimum : Nat} {input rest : List UInt8}
+    {extensions : List Extension}
+    (parsed : readExtensions minimum input = .ok (extensions, rest)) :
+    ∃ encoded, encodeExtensions minimum extensions = .ok encoded ∧ input = encoded ++ rest := by
+  change (items 2 minimum 65535 readExtension input >>= fun (values, suffix) =>
+    require (uniqueExtensions values = true) .duplicateExtension suffix >>= fun (_, trailing) =>
+      .ok (values, trailing)) = .ok (extensions, rest) at parsed
+  simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+  obtain ⟨⟨values, suffix⟩, valuesRead, ⟨u, trailing⟩, checked, rfl, rfl⟩ := parsed
+  obtain ⟨unique, rfl⟩ := (Base.ByteReader.require_ok_iff ..).mp checked
+  obtain ⟨encoded, written, same⟩ := encodeItems_of_items encodeExtension readExtension
+    (fun _ _ _ accepted => encodeExtension_of_readExtension accepted) valuesRead
+  refine ⟨encoded, ?_, same⟩
+  simp [encodeExtensions, Base.ensure, unique, written]
+
+/-- Every accepted vector of identifiers reconstructs its exact length-prefixed encoding. -/
+theorem encodeCodePoints_of_items {width minimum maximum : Nat} {input rest : List UInt8}
+    {values : List CodePoint}
+    (parsed : items width minimum maximum codePoint input = .ok (values, rest)) :
+    ∃ encoded, encodeCodePoints width minimum maximum values = .ok encoded ∧
+      input = encoded ++ rest := by
+  apply encodeItems_of_items (fun value : CodePoint => .ok (Base.natToBytes 2 value.val))
+    codePoint _ parsed
+  intro data value trailing read
+  exact ⟨Base.natToBytes 2 value.val, rfl, eq_natToBytes_of_codePoint read⟩
+
+/-- An accepted certificate entry re-encodes its opaque bytes and extensions without change. -/
+theorem encodeCertificateEntry_of_readCertificateEntry {input rest : List UInt8}
+    {entry : CertificateEntry} (parsed : readCertificateEntry input = .ok (entry, rest)) :
+    ∃ encoded, encodeCertificateEntry entry = .ok encoded ∧ input = encoded ++ rest := by
+  change (blob 3 1 (2 ^ 24 - 1) input >>= fun (data, suffix) =>
+    readExtensions 0 suffix >>= fun (extensions, trailing) => .ok (⟨data, extensions⟩, trailing)) =
+      .ok (entry, rest) at parsed
+  simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+  obtain ⟨⟨data, suffix⟩, dataRead, ⟨extensions, trailing⟩, extensionsRead, rfl, rfl⟩ := parsed
+  dsimp only at extensionsRead ⊢
+  obtain ⟨encodedData, dataWritten, first⟩ := encodeBlob_of_blob dataRead
+  obtain ⟨encodedExtensions, extensionsWritten, last⟩ :=
+    encodeExtensions_of_readExtensions extensionsRead
+  refine ⟨encodedData ++ encodedExtensions, ?_, ?_⟩
+  · simp [encodeCertificateEntry, dataWritten, extensionsWritten]
+  · rw [first, last]
+    simp only [List.append_assoc]
+
+/-- An accepted handshake envelope reconstructs its exact type, body length and body bytes. -/
+theorem frame_of_readFrame {input rest body : List UInt8} {kind : UInt8}
+    (parsed : readFrame input = .ok ((kind, body), rest)) :
+    ∃ encoded, frame kind body = .ok encoded ∧ input = encoded ++ rest := by
+  change (uint 1 input >>= fun (tag, suffix) =>
+    blob 3 0 (2 ^ 24 - 1) suffix >>= fun (data, trailing) =>
+      .ok ((UInt8.ofNat tag, data), trailing)) = .ok ((kind, body), rest) at parsed
+  simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+  obtain ⟨⟨tag, suffix⟩, tagRead, ⟨data, trailing⟩, dataRead, ⟨rfl, rfl⟩, rfl⟩ := parsed
+  dsimp only at dataRead ⊢
+  obtain ⟨encoded, written, same⟩ := encodeBlob_of_blob dataRead
+  refine ⟨UInt8.ofNat tag :: encoded, ?_, ?_⟩
+  · simp [frame, written]
+  · rw [(Base.ByteReader.uint_ok_iff ..).mp tagRead |>.2, same]
+    rfl
+
+/-- An accepted message body re-encodes to its exact prefix and has the received type. -/
+theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : List UInt8}
+    {message : Message} (parsed : readBody hashLength kind input = .ok (message, rest)) :
+    message.type = kind ∧ ∃ encoded,
+      encodeBody hashLength message = .ok encoded ∧ input = encoded ++ rest := by
+  have cases : kind.toNat = 1 ∨ kind.toNat = 2 ∨ kind.toNat = 8 ∨ kind.toNat = 13 ∨
+      kind.toNat = 11 ∨ kind.toNat = 15 ∨ kind.toNat = 20 ∨
+      (kind.toNat ≠ 1 ∧ kind.toNat ≠ 2 ∧ kind.toNat ≠ 8 ∧ kind.toNat ≠ 13 ∧
+        kind.toNat ≠ 11 ∧ kind.toNat ≠ 15 ∧ kind.toNat ≠ 20) := by omega
+  rcases cases with tag | tag | tag | tag | tag | tag | tag | other
+  ·
+    have sameKind : kind = 1 := UInt8.toNat_inj.mp tag
+    subst kind
+    change (uint 2 input >>= fun (version, a) =>
+      require (version = 0x0303) .constant a >>= fun (_, b) =>
+      vector 32 b >>= fun (random, c) =>
+      blob 1 0 32 c >>= fun (session, d) =>
+      items 2 2 65534 codePoint d >>= fun (suites, e) =>
+      bytes 2 e >>= fun (compression, f) =>
+      require (compression = [1, 0]) .constant f >>= fun (_, g) =>
+      readExtensions 8 g >>= fun (extensions, h) =>
+        .ok (.clientHello ⟨random, session, suites, extensions⟩, h)) =
+          .ok (message, rest) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨version, a⟩, versionRead, ⟨u, b⟩, versionCheck, ⟨random, c⟩, randomRead,
+      ⟨session, d⟩, sessionRead, ⟨suites, e⟩, suitesRead, ⟨compression, f⟩, compressionRead,
+      ⟨v, g⟩, compressionCheck, ⟨extensions, h⟩, extensionsRead, rfl, rfl⟩ := parsed
+    dsimp only at *
+    obtain ⟨rfl, rfl⟩ := (Base.ByteReader.require_ok_iff ..).mp versionCheck
+    obtain ⟨rfl, rfl⟩ := (Base.ByteReader.require_ok_iff ..).mp compressionCheck
+    obtain ⟨encodedSession, sessionWritten, sessionSame⟩ := encodeBlob_of_blob sessionRead
+    obtain ⟨encodedSuites, suitesWritten, suitesSame⟩ := encodeCodePoints_of_items suitesRead
+    obtain ⟨encodedExtensions, extensionsWritten, extensionsSame⟩ :=
+      encodeExtensions_of_readExtensions extensionsRead
+    refine ⟨rfl, [3, 3] ++ random.toList ++ encodedSession ++ encodedSuites ++
+      [1, 0] ++ encodedExtensions, ?_, ?_⟩
+    · simp [encodeBody, sessionWritten, suitesWritten, extensionsWritten]
+    · rw [(Base.ByteReader.uint_ok_iff ..).mp versionRead |>.2,
+        eq_toList_append_of_vector randomRead, sessionSame, suitesSame,
+        (Base.ByteReader.bytes_ok_iff ..).mp compressionRead |>.2, extensionsSame]
+      simp only [List.append_assoc]
+      rfl
+  ·
+    have sameKind : kind = 2 := UInt8.toNat_inj.mp tag
+    subst kind
+    change (uint 2 input >>= fun (version, a) =>
+      require (version = 0x0303) .constant a >>= fun (_, b) =>
+      vector 32 b >>= fun (random, c) =>
+      blob 1 0 32 c >>= fun (session, d) =>
+      codePoint d >>= fun (suite, e) =>
+      uint 1 e >>= fun (compression, f) =>
+      require (compression = 0) .constant f >>= fun (_, g) =>
+      readExtensions 6 g >>= fun (extensions, h) =>
+        .ok (.serverHello ⟨random, session, suite, extensions⟩, h)) =
+          .ok (message, rest) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨version, a⟩, versionRead, ⟨u, b⟩, versionCheck, ⟨random, c⟩, randomRead,
+      ⟨session, d⟩, sessionRead, ⟨suite, e⟩, suiteRead, ⟨compression, f⟩, compressionRead,
+      ⟨v, g⟩, compressionCheck, ⟨extensions, h⟩, extensionsRead, rfl, rfl⟩ := parsed
+    dsimp only at *
+    obtain ⟨rfl, rfl⟩ := (Base.ByteReader.require_ok_iff ..).mp versionCheck
+    obtain ⟨rfl, rfl⟩ := (Base.ByteReader.require_ok_iff ..).mp compressionCheck
+    obtain ⟨encodedSession, sessionWritten, sessionSame⟩ := encodeBlob_of_blob sessionRead
+    obtain ⟨encodedExtensions, extensionsWritten, extensionsSame⟩ :=
+      encodeExtensions_of_readExtensions extensionsRead
+    refine ⟨rfl, [3, 3] ++ random.toList ++ encodedSession ++ Base.natToBytes 2 suite.val ++
+      [0] ++ encodedExtensions, ?_, ?_⟩
+    · simp [encodeBody, sessionWritten, extensionsWritten]
+    · rw [(Base.ByteReader.uint_ok_iff ..).mp versionRead |>.2,
+        eq_toList_append_of_vector randomRead, sessionSame,
+        eq_natToBytes_of_codePoint suiteRead,
+        (Base.ByteReader.uint_ok_iff ..).mp compressionRead |>.2, extensionsSame]
+      simp only [List.append_assoc]
+      rfl
+  ·
+    have sameKind : kind = 8 := UInt8.toNat_inj.mp tag
+    subst kind
+    change (readExtensions 0 input >>= fun (extensions, suffix) =>
+      .ok (.encryptedExtensions extensions, suffix)) = .ok (message, rest) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨extensions, suffix⟩, extensionsRead, rfl, rfl⟩ := parsed
+    exact ⟨rfl, encodeExtensions_of_readExtensions extensionsRead⟩
+  ·
+    have sameKind : kind = 13 := UInt8.toNat_inj.mp tag
+    subst kind
+    change (blob 1 0 255 input >>= fun (context, suffix) =>
+      readExtensions 2 suffix >>= fun (extensions, trailing) =>
+        .ok (.certificateRequest ⟨context, extensions⟩, trailing)) =
+          .ok (message, rest) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨context, suffix⟩, contextRead, ⟨extensions, trailing⟩,
+      extensionsRead, rfl, rfl⟩ := parsed
+    dsimp only at extensionsRead ⊢
+    obtain ⟨encodedContext, contextWritten, contextSame⟩ := encodeBlob_of_blob contextRead
+    obtain ⟨encodedExtensions, extensionsWritten, extensionsSame⟩ :=
+      encodeExtensions_of_readExtensions extensionsRead
+    refine ⟨rfl, encodedContext ++ encodedExtensions, ?_, ?_⟩
+    · simp [encodeBody, contextWritten, extensionsWritten]
+    · rw [contextSame, extensionsSame]
+      simp only [List.append_assoc]
+  ·
+    have sameKind : kind = 11 := UInt8.toNat_inj.mp tag
+    subst kind
+    change (blob 1 0 255 input >>= fun (context, suffix) =>
+      items 3 0 (2 ^ 24 - 1) readCertificateEntry suffix >>= fun (entries, trailing) =>
+        .ok (.certificate ⟨context, entries⟩, trailing)) = .ok (message, rest) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨context, suffix⟩, contextRead, ⟨entries, trailing⟩, entriesRead, rfl, rfl⟩ := parsed
+    dsimp only at entriesRead ⊢
+    obtain ⟨encodedContext, contextWritten, contextSame⟩ := encodeBlob_of_blob contextRead
+    obtain ⟨encodedEntries, entriesWritten, entriesSame⟩ :=
+      encodeItems_of_items encodeCertificateEntry readCertificateEntry
+        (fun _ _ _ accepted => encodeCertificateEntry_of_readCertificateEntry accepted) entriesRead
+    refine ⟨rfl, encodedContext ++ encodedEntries, ?_, ?_⟩
+    · simp [encodeBody, contextWritten, entriesWritten]
+    · rw [contextSame, entriesSame]
+      simp only [List.append_assoc]
+  ·
+    have sameKind : kind = 15 := UInt8.toNat_inj.mp tag
+    subst kind
+    change (codePoint input >>= fun (algorithm, suffix) =>
+      blob 2 0 65535 suffix >>= fun (signature, trailing) =>
+        .ok (.certificateVerify algorithm signature, trailing)) = .ok (message, rest) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨algorithm, suffix⟩, algorithmRead, ⟨signature, trailing⟩, signatureRead,
+      rfl, rfl⟩ := parsed
+    dsimp only at signatureRead ⊢
+    obtain ⟨encodedSignature, signatureWritten, signatureSame⟩ := encodeBlob_of_blob signatureRead
+    refine ⟨rfl, Base.natToBytes 2 algorithm.val ++ encodedSignature, ?_, ?_⟩
+    · simp [encodeBody, signatureWritten]
+    · rw [eq_natToBytes_of_codePoint algorithmRead, signatureSame]
+      simp only [List.append_assoc]
+  ·
+    have sameKind : kind = 20 := UInt8.toNat_inj.mp tag
+    subst kind
+    change (bytes hashLength input >>= fun (data, suffix) =>
+      .ok (.finished data, suffix)) = .ok (message, rest) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨data, suffix⟩, dataRead, rfl, rfl⟩ := parsed
+    obtain ⟨length, same⟩ := (Base.ByteReader.bytes_ok_iff ..).mp dataRead
+    refine ⟨rfl, data, ?_, same⟩
+    simp [encodeBody, Base.ensure, length]
+  · simp [readBody, other.1, other.2.1, other.2.2.1, other.2.2.2.1,
+      other.2.2.2.2.1, other.2.2.2.2.2.1, other.2.2.2.2.2.2,
+      throw, throwThe, MonadExceptOf.throw, StateT.lift] at parsed
+
+/-- Every accepted message is exactly one successful encoding followed by the returned suffix. -/
+theorem encode_of_decode {hashLength : Nat} {input rest : List UInt8} {message : Message}
+    (parsed : decode hashLength input = .ok (message, rest)) :
+    ∃ encoded, encode hashLength message = .ok encoded ∧ input = encoded ++ rest := by
+  change (readFrame input >>= fun ((kind, body), suffix) =>
+    (Wire.exact (readBody hashLength kind) body).mapError
+      (fun error => match error with | .truncated => .length | error => error) >>=
+        fun decoded => .ok (decoded, suffix)) = .ok (message, rest) at parsed
+  simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+  obtain ⟨⟨⟨kind, body⟩, suffix⟩, frameRead, decoded, bodyRead, rfl, rfl⟩ := parsed
+  have exactRead : Wire.exact (readBody hashLength kind) body = .ok decoded := by
+    cases result : Wire.exact (readBody hashLength kind) body <;>
+      simp_all [Except.mapError]
+  have bodyRead := (exact_eq_ok_iff ..).mp exactRead
+  obtain ⟨sameKind, encodedBody, bodyWritten, bodySame⟩ := encodeBody_of_readBody bodyRead
+  simp only [List.append_nil] at bodySame
+  subst body
+  obtain ⟨encoded, framed, inputSame⟩ := frame_of_readFrame frameRead
+  refine ⟨encoded, ?_, inputSame⟩
+  simp [encode, bodyWritten, sameKind, framed]
+
+/-- Decoding succeeds exactly for a complete encoding followed by the returned suffix. -/
+theorem decode_eq_ok_iff {hashLength : Nat} {input rest : List UInt8} {message : Message} :
+    decode hashLength input = .ok (message, rest) ↔
+      ∃ encoded, encode hashLength message = .ok encoded ∧ input = encoded ++ rest := by
+  constructor
+  · exact encode_of_decode
+  · rintro ⟨encoded, written, rfl⟩
+    exact decode_encode written rest
 
 end EthLib.Networking.Quic.Tls

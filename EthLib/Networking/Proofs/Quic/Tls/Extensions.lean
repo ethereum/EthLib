@@ -8,6 +8,8 @@ public import EthLib.Networking.Proofs.Quic.Tls.Messages
 
 Every successfully encoded payload recovers its identifiers and opaque byte fields.
 
+Every successfully decoded payload re-encodes to its original extension.
+
 The result concerns wire format, without an algorithm or protocol-selection policy.
 -/
 
@@ -109,5 +111,125 @@ theorem decodePayload_encodePayload {payload : Payload} {extension : Extension}
   have bound := EthLib.Base.ensure_ok_iff.mp size
   simp [decodePayload, Base.ensure, bound, Wire.exact, readPayload_encodePayloadBody hd,
     Except.mapError]
+
+/-- An accepted key share reconstructs its named group and length-prefixed exchange bytes. -/
+theorem encodeKeyShare_of_readKeyShare {input rest : List UInt8} {share : KeyShareEntry}
+    (parsed : readKeyShare input = .ok (share, rest)) :
+    ∃ encoded, encodeKeyShare share = .ok encoded ∧ input = encoded ++ rest := by
+  change (codePoint input >>= fun (group, suffix) =>
+    blob 2 1 65535 suffix >>= fun (data, trailing) => .ok (⟨group, data⟩, trailing)) =
+      .ok (share, rest) at parsed
+  simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+  obtain ⟨⟨group, suffix⟩, groupRead, ⟨data, trailing⟩, dataRead, rfl, rfl⟩ := parsed
+  dsimp only at dataRead ⊢
+  obtain ⟨encoded, written, same⟩ := encodeBlob_of_blob dataRead
+  refine ⟨Base.natToBytes 2 group.val ++ encoded, ?_, ?_⟩
+  · simp [encodeKeyShare, written]
+  · rw [eq_natToBytes_of_codePoint groupRead, same]
+    simp only [List.append_assoc]
+
+/-- An accepted isolated payload has the selected form and re-encodes to every input byte. -/
+theorem encodePayloadBody_of_readPayload {form : PayloadForm} {input : List UInt8}
+    {payload : Payload} (parsed : readPayload form input = .ok (payload, [])) :
+    payload.form = form ∧ encodePayloadBody payload = .ok input := by
+  cases form with
+  | supportedVersions =>
+    change (items 1 2 254 codePoint input >>= fun (values, suffix) =>
+      .ok (.supportedVersions values, suffix)) = .ok (payload, []) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨values, suffix⟩, valuesRead, rfl, rfl⟩ := parsed
+    obtain ⟨encoded, written, same⟩ := encodeCodePoints_of_items valuesRead
+    simp only [List.append_nil] at same
+    exact ⟨rfl, by simpa only [encodePayloadBody, same] using written⟩
+  | selectedVersion =>
+    change (codePoint input >>= fun (value, suffix) => .ok (.selectedVersion value, suffix)) =
+      .ok (payload, []) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨value, suffix⟩, valueRead, rfl, rfl⟩ := parsed
+    have same := eq_natToBytes_of_codePoint valueRead
+    simp only [List.append_nil] at same
+    exact ⟨rfl, by simp [encodePayloadBody, same]⟩
+  | supportedGroups =>
+    change (items 2 2 65535 codePoint input >>= fun (values, suffix) =>
+      .ok (.supportedGroups values, suffix)) = .ok (payload, []) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨values, suffix⟩, valuesRead, rfl, rfl⟩ := parsed
+    obtain ⟨encoded, written, same⟩ := encodeCodePoints_of_items valuesRead
+    simp only [List.append_nil] at same
+    exact ⟨rfl, by simpa only [encodePayloadBody, same] using written⟩
+  | signatureAlgorithms =>
+    change (items 2 2 65534 codePoint input >>= fun (values, suffix) =>
+      .ok (.signatureAlgorithms values, suffix)) = .ok (payload, []) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨values, suffix⟩, valuesRead, rfl, rfl⟩ := parsed
+    obtain ⟨encoded, written, same⟩ := encodeCodePoints_of_items valuesRead
+    simp only [List.append_nil] at same
+    exact ⟨rfl, by simpa only [encodePayloadBody, same] using written⟩
+  | clientKeyShare =>
+    change (items 2 0 65535 readKeyShare input >>= fun (values, suffix) =>
+      .ok (.clientKeyShare values, suffix)) = .ok (payload, []) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨values, suffix⟩, valuesRead, rfl, rfl⟩ := parsed
+    obtain ⟨encoded, written, same⟩ := encodeItems_of_items encodeKeyShare readKeyShare
+      (fun _ _ _ accepted => encodeKeyShare_of_readKeyShare accepted) valuesRead
+    simp only [List.append_nil] at same
+    exact ⟨rfl, by simpa only [encodePayloadBody, same] using written⟩
+  | serverKeyShare =>
+    change (readKeyShare input >>= fun (share, suffix) => .ok (.serverKeyShare share, suffix)) =
+      .ok (payload, []) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨share, suffix⟩, shareRead, rfl, rfl⟩ := parsed
+    obtain ⟨encoded, written, same⟩ := encodeKeyShare_of_readKeyShare shareRead
+    simp only [List.append_nil] at same
+    exact ⟨rfl, by simpa only [encodePayloadBody, same] using written⟩
+  | retryKeyShare =>
+    change (codePoint input >>= fun (group, suffix) => .ok (.retryKeyShare group, suffix)) =
+      .ok (payload, []) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨group, suffix⟩, groupRead, rfl, rfl⟩ := parsed
+    have same := eq_natToBytes_of_codePoint groupRead
+    simp only [List.append_nil] at same
+    exact ⟨rfl, by simp [encodePayloadBody, same]⟩
+  | alpn =>
+    change (items 2 2 65535 (blob 1 1 255) input >>= fun (values, suffix) =>
+      .ok (.alpn values, suffix)) = .ok (payload, []) at parsed
+    simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+    obtain ⟨⟨values, suffix⟩, valuesRead, rfl, rfl⟩ := parsed
+    obtain ⟨encoded, written, same⟩ := encodeItems_of_items (encodeBlob 1 1 255) (blob 1 1 255)
+      (fun _ _ _ accepted => encodeBlob_of_blob accepted) valuesRead
+    simp only [List.append_nil] at same
+    exact ⟨rfl, by simpa only [encodePayloadBody, same] using written⟩
+  | quicTransportParameters =>
+    cases parsed
+    exact ⟨rfl, rfl⟩
+
+/-- Every accepted extension payload is its original encoding in the caller-selected form. -/
+theorem encodePayload_of_decodePayload {form : PayloadForm} {extension : Extension}
+    {payload : Payload} (parsed : decodePayload form extension = .ok payload) :
+    payload.form = form ∧ encodePayload payload = .ok extension := by
+  simp only [decodePayload, bind_ok_iff] at parsed
+  obtain ⟨u, kindCheck, v, lengthCheck, bodyRead⟩ := parsed
+  have kind := Base.ensure_ok_iff.mp kindCheck
+  have length := Base.ensure_ok_iff.mp lengthCheck
+  have exactRead : Wire.exact (readPayload form) extension.data = .ok payload := by
+    cases result : Wire.exact (readPayload form) extension.data <;>
+      simp_all [Except.mapError]
+  obtain ⟨sameForm, written⟩ :=
+    encodePayloadBody_of_readPayload ((exact_eq_ok_iff ..).mp exactRead)
+  refine ⟨sameForm, ?_⟩
+  cases extension with
+  | mk originalKind data =>
+    dsimp only at kind length written ⊢
+    subst originalKind
+    simp [encodePayload, written, Base.ensure, length, sameForm]
+
+/-- Payload decoding succeeds exactly for the encoding of a payload in the selected form. -/
+theorem decodePayload_eq_ok_iff {form : PayloadForm} {extension : Extension} {payload : Payload} :
+    decodePayload form extension = .ok payload ↔
+      payload.form = form ∧ encodePayload payload = .ok extension := by
+  constructor
+  · exact encodePayload_of_decodePayload
+  · rintro ⟨rfl, written⟩
+    exact decodePayload_encodePayload written
 
 end EthLib.Networking.Quic.Tls
