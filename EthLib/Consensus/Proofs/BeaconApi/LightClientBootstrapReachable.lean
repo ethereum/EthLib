@@ -13,13 +13,15 @@ A bootstrap that the node serves from such a store starts a light client that tr
 
 The store holds the block under its own root, and the state after it with the state root it names.
 
-It needs the forks from Capella to Heze in order, a lawful state type and nonzero preset sizes.
+That result needs the forks from Capella to Heze in order.
 
-Such a store serves the bootstrap of each block of the fork of its slot.
+It also needs a lawful state type and nonzero preset sizes.
+
+Such a store also serves the bootstrap of each block of the fork of its slot.
 
 It refuses every other block.
 
-Both results need the post state of the block to be from the Altair fork epoch on.
+These served and refused cases need the post state of the block to be from the Altair fork epoch on.
 
 They need the anchor state at the slot of the anchor block, with the header of that block.
 
@@ -85,7 +87,7 @@ It needs the schedule to put Electra at or before Fulu, and Gloas at or before H
 
 It needs the state type to be lawful, and the sizes of the preset in the block to be nonzero.
 
-It holds for a store of any fork, under any schedule with those two orders. -/
+It holds for a store of any fork from Altair, under any schedule with those two orders. -/
 theorem bootstrapFor_ok_of_reachable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat]
     [NeZero preset.PTC_SIZE.toNat] [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
