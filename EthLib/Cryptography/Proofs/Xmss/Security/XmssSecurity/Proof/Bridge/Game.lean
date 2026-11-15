@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Signer
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TranscriptReduction
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Adversary
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Adversary
 
 /-!
 # EthLib's game as the model's
@@ -11,7 +11,7 @@ After key generation, EthLib's game with a signer that keeps `S` and `P` is the 
 
 The model's game uses the table signer, and the prepared cache answers EthLib's derivations.
 
-The adversary is translated as in `Unforgeability/Adversary.lean`.
+The adversary is translated as in `XmssSecurity/Adversary.lean`.
 
 The transcripts correspond entry by entry.
 

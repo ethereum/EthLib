@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.Models.Network.ForkChoice
+public import EthLib.Consensus.Proofs.ForkChoiceNetworkModel
 public import EthLib.Consensus.Proofs.ForkChoice.VoteRecords
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.ForkChoice.BlockAgreement

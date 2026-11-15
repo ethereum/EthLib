@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Fees.BlobGas
+public import EthLib.Execution.Transactions.BlobGas
 public import EthLib.Execution.Proofs.Fees.BlobBaseFee
 
 /-!

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.UntilHidden
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.GraphSampling
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.HiddenSampling
 
 /-!
 # The seed-free graph oracle reads hidden rows

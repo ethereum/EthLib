@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Containers.Operations
+public import EthLib.Cryptography.Kzg.Constants
 public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
 public import EthLib.Serialization.Proofs.Ssz.Typed.Container
@@ -26,6 +27,8 @@ A header, a checkpoint or a vote has no list, so every variable-size count in it
 namespace EthLib.Consensus
 
 open Serialization.Ssz
+
+instance : NeZero Cryptography.Kzg.Constants.BYTES_PER_BLOB := ⟨by decide⟩
 
 instance : LawfulSszType ForkVersions := .container (by decide) (fun _ => rfl) (fun _ => rfl)
 

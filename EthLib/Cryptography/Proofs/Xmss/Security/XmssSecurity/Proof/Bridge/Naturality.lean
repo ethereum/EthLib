@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 /-!
 # The model's key generation is natural in its monad

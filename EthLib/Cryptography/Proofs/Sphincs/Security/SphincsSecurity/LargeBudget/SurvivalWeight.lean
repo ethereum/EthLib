@@ -1,6 +1,7 @@
 module
 
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.InterpreterFacts
+public import
+  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.InterpreterFacts
 
 /-!
 # Weighted saturation payments

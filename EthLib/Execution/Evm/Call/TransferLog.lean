@@ -3,7 +3,7 @@ module
 public import EthLib.Base.Fork
 public import EthLib.Base.U256
 public import EthLib.Cryptography.Hash.Keccak
-public import EthLib.Execution.Blocks.Log
+public import EthLib.Execution.Evm.Log
 
 /-!
 # `Evm.Call.TransferLog`

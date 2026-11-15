@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Presample
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.Price
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ForsPrice
 
 /-!
 # The signer inside the interpreted lazy comparison

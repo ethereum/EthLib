@@ -2,11 +2,11 @@ module
 
 public import
   EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LargeBudget.WeightedPotential
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.RouteStart
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.StartValue
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.PreparedRun.RouteStart
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.PreparedRun.StartValue
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Reduction.SeedElimination
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.FairCoin
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Targeting
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Forgery.Targeting
 
 /-!
 # Proofs: the large-budget route with the weighted baseline

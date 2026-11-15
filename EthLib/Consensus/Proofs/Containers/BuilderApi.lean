@@ -2,7 +2,6 @@ module
 
 public import EthLib.Consensus.Containers.BuilderApi
 public import EthLib.Consensus.Proofs.Containers.Block
-public import EthLib.Consensus.Proofs.DataAvailability.Blob
 public import EthLib.Serialization.Proofs.Ssz.Typed.Choice
 
 /-!

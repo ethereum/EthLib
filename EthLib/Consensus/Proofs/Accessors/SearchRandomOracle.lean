@@ -1,7 +1,8 @@
 module
 
+public import EthLib.Consensus.PayloadTimeliness
 public import EthLib.Consensus.Proofs.Accessors.DrawRandomOracle
-public import EthLib.Consensus.Proofs.Transition.Totality.SyncCommittee
+public import EthLib.Consensus.Proofs.Accessors.DrawBounds
 
 /-!
 # Proofs: a balance-weighted search ends with high probability in the random oracle model

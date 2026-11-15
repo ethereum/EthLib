@@ -2866,7 +2866,7 @@ These are store-local facts: no theorem here shows that a recorded honest vote i
 `willNoConflictingCheckpointBeJustified_of_willCurrentTargetBeJustified` shows that the one-third test passes wherever the two-thirds test does, for a nonzero effective balance increment.
 No theorem relates either test to the justification of the target in a later state.
 
-`Consensus/Proofs/Models/Network/ForkChoice.lean` states the network conditions that `Execution.mem_supportersOf_of_duty_epoch` and `Execution.isAncestor_getHead_of_duty_epoch` add to synchrony.
+`Consensus/Proofs/ForkChoiceNetworkModel.lean` states the network conditions that `Execution.mem_supportersOf_of_duty_epoch` and `Execution.isAncestor_getHead_of_duty_epoch` add to synchrony.
 `DelayFits` requires a vote sent at its deadline, delayed by the bound, to arrive before the next slot; `Prompt` requires every honest store to be up to date at each slot start from the start of the execution up to the bound, and, at each slot start later than the start of the execution, one millisecond before it.
 `BlocksAdmitted` assumes that a delayed block passing `validateOnBlock` also passes the rest of `onBlockWithVotes`, including every vote and slashing the block carries.
 It restricts the adversary: a block may carry a vote or a slashing that a later honest receiver rejects, for example a vote whose target conflicts with that receiver's newer finalized checkpoint.

@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TreeCacheVocabulary
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheAgreement
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 /-!
 # Coupling key generation over two chain tables

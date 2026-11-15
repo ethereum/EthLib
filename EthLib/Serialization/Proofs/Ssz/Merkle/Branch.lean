@@ -3,7 +3,7 @@ module
 public import EthLib.Serialization.Ssz.Merkle.Branch
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Authentication
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
-public import EthLib.Serialization.Proofs.Ssz.Type.PathLaws
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Gindex
 
 /-!
 # Proofs: Merkle branches by depth and index

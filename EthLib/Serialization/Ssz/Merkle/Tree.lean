@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Hash.Sha256
-public import EthLib.Serialization.Ssz.Codec.Serialize
+public import EthLib.Serialization.Ssz.Packing
 public import EthLib.Serialization.Ssz.Merkle.Merkleize
 
 /-!

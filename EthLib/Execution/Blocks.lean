@@ -8,7 +8,7 @@ public import EthLib.Execution.Blocks.DaoFork
 public import EthLib.Execution.Blocks.Difficulty
 public import EthLib.Execution.Blocks.Genesis
 public import EthLib.Execution.Blocks.Header
-public import EthLib.Execution.Blocks.Log
+public import EthLib.Execution.Evm.Log
 public import EthLib.Execution.Blocks.Ommers
 public import EthLib.Execution.Blocks.ProofOfWork
 public import EthLib.Execution.Blocks.Receipt

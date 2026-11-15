@@ -3,7 +3,6 @@ module
 import EthLib.Base.Proofs.Bytes
 public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.G1Group
-public import EthLib.Cryptography.Proofs.Kzg.Polynomials
 -- The kernel reduces the check of the zero tail, which needs the body of the bounded `all`.
 import all Init.Data.Nat.Fold
 

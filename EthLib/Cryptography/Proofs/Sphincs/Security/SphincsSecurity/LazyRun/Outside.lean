@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Cost
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.HiddenOracle.Cost
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Seed.Guess
 
 /-!

@@ -2,10 +2,10 @@ module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.SmallBudget.Contact.Bound
 public import
-    EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.RefinedOutcome
+    EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.RefinedForgery.Outcome
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.OneCoinGame
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.StartValue
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.NearOption
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.PreparedRun.StartValue
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.SmallBudget.NearOption
 
 /-!
 # The events of one sample of the small-budget route

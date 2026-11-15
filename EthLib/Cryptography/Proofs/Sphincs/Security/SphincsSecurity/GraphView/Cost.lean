@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.Signer
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.Secrets
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.HashCalls
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Cost
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.HiddenOracle.Cost
 
 @[expose] public section
 

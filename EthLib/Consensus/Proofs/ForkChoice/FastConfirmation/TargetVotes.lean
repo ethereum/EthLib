@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Indicators
-public import EthLib.Consensus.Proofs.Models.Network.ForkChoice
+public import EthLib.Consensus.Proofs.ForkChoiceNetworkModel
 
 /-!
 # Honest count and an accepted checkpoint test

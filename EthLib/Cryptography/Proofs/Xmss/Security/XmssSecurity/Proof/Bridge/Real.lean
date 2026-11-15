@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Resolution
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 public import EthLib.Cryptography.Proofs.Xmss.Tree
 public import EthLib.Cryptography.Proofs.Xmss.KeyGen
 public import EthLib.Cryptography.Proofs.Xmss.Ots

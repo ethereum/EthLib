@@ -6,7 +6,8 @@ public import EthLib.Serialization.Ssz.Type.Value
 public import EthLib.Serialization.Ssz.Type.Valid
 public import EthLib.Serialization.Ssz.Type.Default
 public import EthLib.Serialization.Ssz.Type.Paths
-public import EthLib.Serialization.Ssz.Codec.Error
+public import EthLib.Serialization.Ssz.Error
+public import EthLib.Serialization.Ssz.Packing
 public import EthLib.Serialization.Ssz.Codec.Serialize
 public import EthLib.Serialization.Ssz.Codec.Deserialize
 public import EthLib.Serialization.Ssz.Codec.Layout

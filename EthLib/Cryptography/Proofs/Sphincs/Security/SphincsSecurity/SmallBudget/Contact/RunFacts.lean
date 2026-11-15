@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.ExposedUniform
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.SmallBudget.ExposedUniform
 public import
     EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.SmallBudget.Linear.ForsSteps
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.Scan

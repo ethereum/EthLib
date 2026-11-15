@@ -3,7 +3,7 @@ module
 public import EthLib.Base.Bytes
 public import EthLib.Base.Fork
 public import EthLib.Execution.Blocks.Bloom
-public import EthLib.Execution.Blocks.Log
+public import EthLib.Execution.Evm.Log
 public import EthLib.Execution.Transactions.Envelope
 
 /-!

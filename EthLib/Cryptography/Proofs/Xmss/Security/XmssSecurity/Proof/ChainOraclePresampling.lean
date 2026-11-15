@@ -9,7 +9,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Hidden
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.UniformFiniteTable
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenFacts
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 /-!
 # Presampling the chains of key generation

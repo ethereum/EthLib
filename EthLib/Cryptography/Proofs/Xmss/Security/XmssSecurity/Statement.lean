@@ -8,7 +8,7 @@ public import VCVio.OracleComp.QueryTracking.WriterCost
 
 The requests, forgeries and transcripts the model's game is written with.
 
-The theorem's statement is not here: it is EthLib's, in `Unforgeability/Statement.lean`.
+The theorem's statement is not here: it is EthLib's, in `XmssSecurity/ConcreteStatement.lean`.
 -/
 
 @[expose] public section

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Types
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Convert
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Convert
 public import EthLib.Cryptography.Proofs.HashSig
 
 /-!

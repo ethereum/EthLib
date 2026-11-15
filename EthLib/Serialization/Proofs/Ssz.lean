@@ -1,15 +1,15 @@
 module
 
 public import EthLib.Serialization.Ssz
-public import EthLib.Serialization.Proofs.Ssz.Type.Bounds
+public import EthLib.Serialization.Proofs.Ssz.Codec.Bounds
 public import EthLib.Serialization.Proofs.Ssz.Type.Compatibility
 public import EthLib.Serialization.Proofs.Ssz.Type.CompatibilityIndices
 public import EthLib.Serialization.Proofs.Ssz.Type.CompatibilitySymmetry
 public import EthLib.Serialization.Proofs.Ssz.Type.CompatibilityBudget
-public import EthLib.Serialization.Proofs.Ssz.Type.DefaultLaws
+public import EthLib.Serialization.Proofs.Ssz.Codec.DefaultLaws
 public import EthLib.Serialization.Proofs.Ssz.Type.Equality
 public import EthLib.Serialization.Proofs.Ssz.Type.ValueEquality
-public import EthLib.Serialization.Proofs.Ssz.Type.FitsLaws
+public import EthLib.Serialization.Proofs.Ssz.Codec.FitsLaws
 public import EthLib.Serialization.Proofs.Ssz.Type.Legality
 public import EthLib.Serialization.Proofs.Ssz.Type.PathLaws
 public import EthLib.Serialization.Proofs.Ssz.Type.PathSteps
@@ -33,7 +33,8 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalBits
 public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalComposite
 public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalStruct
 public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalTable
-public import EthLib.Serialization.Proofs.Ssz.Codec.Error
+public import EthLib.Serialization.Proofs.Ssz.Error
+public import EthLib.Serialization.Proofs.Ssz.Packing
 public import EthLib.Serialization.Proofs.Ssz.Codec.Canonicality
 public import EthLib.Serialization.Proofs.Ssz.Codec.DecodeFits
 public import EthLib.Serialization.Proofs.Ssz.Codec.Fits

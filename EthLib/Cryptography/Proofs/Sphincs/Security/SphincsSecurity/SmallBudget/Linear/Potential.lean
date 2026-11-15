@@ -1,9 +1,9 @@
 module
 
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.WinRefined
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.RefinedForgery.Win
 public import
   EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.SmallBudget.Linear.Payments
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Targeting
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Forgery.Targeting
 
 /-!
 # Proofs: a linear potential for small budgets
