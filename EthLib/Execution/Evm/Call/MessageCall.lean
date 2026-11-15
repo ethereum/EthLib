@@ -3,7 +3,7 @@ module
 public import EthLib.Execution.Evm.Interpreter
 public import EthLib.Execution.Evm.Machine.JumpDest
 public import EthLib.Execution.Evm.Precompiles.Table
-public import EthLib.Execution.Evm.Call.TransferLog
+public import EthLib.Execution.Evm.TransferLog
 
 /-!
 # `Evm.Call.MessageCall`

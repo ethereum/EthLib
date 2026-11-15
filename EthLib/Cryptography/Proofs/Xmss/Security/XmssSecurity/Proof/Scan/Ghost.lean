@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedUnifiedExpectedDigest
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingGameTrace
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Frame
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.Frame
 
 /-!
 # The adversary phase with a ghost query count

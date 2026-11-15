@@ -16,6 +16,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Evm.Call.TransferLog` becomes `Evm.TransferLog`, and the XMSS security modules `XmssSecurity.Scan.*` move to `XmssSecurity.Proof.Scan.*` ([#2629](https://github.com/ethereum/EthLib/pull/2629)).
+  The import checker now finds a cycle between directories through imports at any depth, and these moves break the two such cycles that remained.
+  Declaration names, namespaces and statements are unchanged; update the imports.
+
 - In Lean, specification modules keep only the theorems that their definitions and instances need, plus persistent `@[simp]` rules ([#2628](https://github.com/ethereum/EthLib/pull/2628)).
   55 theorems move to the matching `Proofs` modules.
   In Base, two move from `Base.BigEndian` to `Base.Proofs.BigEndian`, five from `Base.Except` to `Base.Proofs.Except`, and one from `Base.Hex` to `Base.Proofs.Hex`.

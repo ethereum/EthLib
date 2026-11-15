@@ -1,7 +1,7 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Leaves
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Selection
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.Leaves
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.Selection
 
 /-!
 # A signing request at an unsigned leaf index

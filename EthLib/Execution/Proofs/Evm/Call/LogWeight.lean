@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Evm.Call.TransferLog
+public import EthLib.Execution.Evm.TransferLog
 public import EthLib.Serialization.Proofs.Rlp.Bound
 
 /-!
