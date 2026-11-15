@@ -9,6 +9,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- Fork-choice replay returns a nonempty list of handler outcomes for each input step.
+  A block's first outcome reports admission; the rest report its attestations and slashings, in order.
+  Each successful handler commits independently, and a failed carried operation does not stop later calls.
+  Carried operations run even after rejected admission; other inputs have one outcome.
+  This changes `fork_choice`, `forkChoice`, `replayForkChoice` and `replayForkChoiceConfirming`.
+  Callers must inspect each nested outcome, not treat the input as one atomic operation.
+  `Store.onBlockWithVotes` and its nine wrapper-only lemmas are removed; call the spec handlers separately.
+
 - In Lean, `Models.Network.Handles.block` calls `Store.onBlock` without processing carried operations.
   The `blockAttestation` and `blockAttesterSlashing` constructors process them separately on receipt.
   Each requires the enclosing signed block in the view, but not its admission to the store.

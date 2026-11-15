@@ -53,25 +53,6 @@ theorem onAttestation_latestMessages_rank {checks : SignatureChecks}
     exact foldl_recordVote_rank indexed.attestingIndices.data.toList (kept ▸ found)
   · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested
 
-/-- A block with its votes keeps each latest vote, or replaces it with a vote of a later rank. -/
-theorem onBlockWithVotes_latestMessages_rank {checks : SignatureChecks}
-    {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
-    {j : ValidatorIndex} {old : LatestMessage fork}
-    (added : store.onBlockWithVotes config checks sources signed = .ok after)
-    (found : store.latestMessages[j]? = some old) :
-    ∃ m, after.latestMessages[j]? = some m ∧ old.rank ≤ m.rank := by
-  apply onBlockWithVotes_preserves
-    (P := fun s => ∃ m, s.latestMessages[j]? = some m ∧ old.rank ≤ m.rank)
-    (holds := ⟨old, found, UInt64.le_refl _⟩) (added := added)
-  · intro s s' holds step
-    simpa only [(onBlock_checkpointStates_latestMessages step).2] using holds
-  · intro s s' a holds step
-    obtain ⟨m, held, later⟩ := holds
-    obtain ⟨latest, held', later'⟩ := onAttestation_latestMessages_rank step held
-    exact ⟨latest, held', UInt64.le_trans later later'⟩
-  · intro s s' sl holds step
-    simpa only [(onAttesterSlashing_checkpointStates_latestMessages step).2] using holds
-
 end Store
 
 namespace Models.Network

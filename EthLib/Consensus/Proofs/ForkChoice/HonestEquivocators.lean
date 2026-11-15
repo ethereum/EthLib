@@ -222,39 +222,6 @@ theorem onInclusionList_equivocatingIndices {heze : .hegota ≤ fork} {signed : 
   obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
   rfl
 
-/-- A block with its votes adds an equivocator only from one of its attester slashings.
-
-That slashing holds the validator in both of its votes, and those votes can be slashed together. -/
-theorem mem_equivocatingIndices_of_onBlockWithVotes {signed : SignedBeaconBlock preset fork}
-    {i : ValidatorIndex}
-    (added : store.onBlockWithVotes config checks sources signed = .ok after)
-    (member : i ∈ after.equivocatingIndices) :
-    i ∈ store.equivocatingIndices ∨
-      ∃ slashing ∈ signed.message.body.attesterSlashings.data,
-        isSlashableAttestationData slashing.attestation1.data slashing.attestation2.data = true ∧
-        i ∈ slashing.attestation1.attestingIndices.data ∧
-        i ∈ slashing.attestation2.attestingIndices.data := by
-  unfold onBlockWithVotes at added
-  simp only [bind_ok_iff, ← Array.foldlM_toList] at added
-  obtain ⟨blocked, blockOk, voted, attested, slashed⟩ := added
-  have votes : voted.equivocatingIndices = store.equivocatingIndices :=
-    foldlM_ok_invariant (fun s : Store preset fork => s.equivocatingIndices =
-      store.equivocatingIndices) (fun _ _ _ held step =>
-        (onAttestation_equivocatingIndices step).trans held)
-      (onBlock_equivocatingIndices blockOk) attested
-  refine foldlM_ok_invariant_of_mem (fun s : Store preset fork => ∀ i ∈ s.equivocatingIndices,
-      i ∈ store.equivocatingIndices ∨
-      ∃ slashing ∈ signed.message.body.attesterSlashings.data,
-        isSlashableAttestationData slashing.attestation1.data slashing.attestation2.data = true ∧
-        i ∈ slashing.attestation1.attestingIndices.data ∧
-        i ∈ slashing.attestation2.attestingIndices.data)
-    (fun s slashing s' mem held step j member' => ?_) (fun j member' => .inl (votes ▸ member'))
-    slashed i member
-  rcases (mem_equivocatingIndices_of_onAttesterSlashing step).mp member' with old | ⟨one, two⟩
-  · exact held j old
-  · exact .inr ⟨slashing, Array.mem_toList_iff.mp mem,
-      (onAttesterSlashing_eq_ok_iff.mp step).1, one, two⟩
-
 /-- A store built from an anchor knows no equivocator. -/
 theorem getForkchoiceStore_equivocatingIndices {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}

@@ -844,8 +844,13 @@ def fork_choice(
     verify: bool = True,
     # `Any`, because `dict` is invariant in its values.
     config: dict[str, Any] | None = None,
-) -> list:
-    """The outcome of each step of a fork choice case, from an anchor state and block."""
+) -> list[list]:
+    """
+    The handler outcomes of each step of a fork choice case, from an anchor state and block.
+
+    Each input gives a nonempty list: admission first, then carried attestations and slashings.
+    A rejected handler retains the store and later handlers still run.
+    """
     # A step is (kind, data), and its data is one of these:
     # - the tick in seconds
     # - the SSZ bytes of a block, an attestation, an attester slashing or a PoW block

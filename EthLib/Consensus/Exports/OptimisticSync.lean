@@ -163,7 +163,7 @@ def isOptimisticNodeOf (args : String × String × ByteArray × ByteArray × Lis
   let (store, outcomes) ← replayForkChoice config checks anchorState anchorBlock steps
   -- Only blocks that the store accepted count, so a rejected block never looks dropped.
   let blocks ← (steps.zip outcomes).filterMapM fun
-    | (.block input, .ok _) => do
+    | (.block input, .ok _ :: _) => do
       let signed ← decodeInput (SignedBeaconBlock preset fork) input.block
       let root ← (SszType.hashTreeRoot signed.message).mapError fun e =>
         (0, s!"block rejected: {reprStr e}")

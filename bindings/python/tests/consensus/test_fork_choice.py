@@ -220,13 +220,22 @@ def run_case(preset: str, fork: str, case: Path) -> None:
     )
     for index, step in enumerate(steps):
         # A fast confirmation and the read after it make one checks step.
-        reads = [next(outcomes) for _ in inputs[index]]
+        groups = [next(outcomes) for _ in inputs[index]]
+        assert all(groups), (index, groups)
+        reads = [group[0] for group in groups]
         outcome = reads[0] if len(reads) == 1 else reads[0] | reads[1]
         if "checks" in step:
+            assert all(len(group) == 1 for group in groups), (index, groups)
             assert all(isinstance(read, dict) for read in reads), (index, reads)
             _check(outcome, step["checks"])
         else:
             assert (outcome is None) == step.get("valid", True), (index, step, outcome)
+            # The helper's valid block cases require every carried handler to succeed too.
+            if outcome is None:
+                assert all(result is None for group in groups for result in group[1:]), (
+                    index,
+                    groups,
+                )
     assert next(outcomes, None) is None
 
 
@@ -318,6 +327,75 @@ def test_anchor_state_mismatch():
     assert info.value.code == 1
 
 
+@pytest.mark.parametrize("admitted", [True, False], ids=["admitted", "rejected"])
+def test_carried_handlers_commit_independently(admitted: bool):
+    # Adapt the pinned fcr_current_epoch_02 block at slot 7, which carries two slot-6 votes.
+    # An unknown voted root fails fork choice, but only changes participation flags in transition.
+    # The second vote must still run, even when the enclosing block has a wrong state root.
+    case = (
+        FILES / "minimal/altair/fast_confirmation/current_epoch/pyspec_tests/fcr_current_epoch_02"
+    )
+    name = "block_0x0431ca898066abec9f55aa1bd0e701d14292bd6010a2e747debea04e911ff273"
+    steps = _load(case / "steps.yaml")
+    index = next(i for i, step in enumerate(steps) if step.get("block") == name)
+    anchor_state, anchor_block = _read(case, "anchor_state"), _read(case, "anchor_block")
+    signed = consensus.api_json("minimal", "altair", "SignedBeaconBlock", _read(case, name))
+    message = signed["message"]
+    message["body"]["attestations"][0]["data"]["beacon_block_root"] = "0x" + "42" * 32
+    prior = [_read(case, step["block"]) for step in steps[:index] if "block" in step]
+    state = consensus.state_transitions("minimal", "altair", anchor_state, prior, verify=False)
+    encoded = consensus.api_ssz("minimal", "altair", "BeaconBlock", message)
+    state_root = consensus.compute_new_state_root("minimal", "altair", state, encoded, verify=False)
+    message["state_root"] = "0x" + (state_root if admitted else bytes(32)).hex()
+    encoded = consensus.api_ssz("minimal", "altair", "BeaconBlock", message)
+    root = consensus.ssz_static("minimal", "altair", "BeaconBlock", encoded)[0]
+    if not admitted:
+        # Identical data cannot slash; a following double vote can, despite block rejection.
+        vote = message["body"]["attestations"][1]
+        indexed = {"attesting_indices": ["0"], "data": vote["data"], "signature": vote["signature"]}
+        conflicting = {**indexed, "data": {**vote["data"], "beacon_block_root": "0x" + "43" * 32}}
+        message["body"]["attester_slashings"] = [
+            {"attestation_1": indexed, "attestation_2": indexed},
+            {"attestation_1": indexed, "attestation_2": conflicting},
+        ]
+    block = consensus.api_ssz("minimal", "altair", "SignedBeaconBlock", signed)
+    inputs = [one for step in steps[:index] for one in _inputs(case, step)]
+    good_vote = consensus.api_ssz(
+        "minimal", "altair", "Attestation", message["body"]["attestations"][1]
+    )
+    # Repeat receipt to cover the known-block path without suppressing its carried operations.
+    # At epoch 3 the slot-6 vote is stale on the wire, but isFromBlock bypasses that clock check.
+    outcomes = consensus.fork_choice(
+        "minimal",
+        "altair",
+        anchor_state,
+        anchor_block,
+        [
+            *inputs,
+            ("block", block),
+            ("block", block),
+            ("checks", False),
+            ("tick", 144),
+            ("block", block),
+            ("attestation", good_vote),
+        ],
+        verify=False,
+    )
+    for group in [outcomes[-6], outcomes[-5], outcomes[-2]]:
+        assert len(group) == (3 if admitted else 5)
+        assert (group[0] is None) is admitted
+        assert isinstance(group[1], consensus.ForkChoiceError)
+        assert group[1].code == 2  # unknownBlock
+        assert group[2] is None
+        if not admitted:
+            assert isinstance(group[3], consensus.ForkChoiceError)
+            assert group[4] is None
+    assert isinstance(outcomes[-1][0], consensus.ForkChoiceError)
+    head = outcomes[-4][0]["head"]
+    assert head["slot"] == (7 if admitted else 6)
+    assert (head["root"] == root) is admitted
+
+
 def test_fast_confirmation_discount_bound():
     # The vector has blocks at slots 1 and 2, none at slots 3 to 6, and votes for block 2.
     case = (
@@ -379,8 +457,13 @@ def test_fast_confirmation_discount_bound():
             config={"CONFIRMATION_BYZANTINE_THRESHOLD": 0, "PROPOSER_SCORE_BOOST": boost},
         )
         assert len(outcomes) == len(inputs) + 2
-        assert all(outcome is None or isinstance(outcome, dict) for outcome in outcomes[:-1])
-        return outcomes
+        assert all(
+            outcome is None or isinstance(outcome, dict)
+            for group in outcomes[:-1]
+            for outcome in group
+        )
+        assert len(outcomes[-1]) == 1
+        return [group[0] for group in outcomes]
 
     # With no adversary and no boost, the threshold is half of the maximum minus the discount.
     # A slot holds 8 validators of 32 ETH, so the votes of slots 3 to 6 give a 1024 ETH discount.

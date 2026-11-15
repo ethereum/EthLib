@@ -8905,9 +8905,9 @@
    "docstring":
    "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.\n\nThe preset, the configuration and the target fork are named by `str`.\n\nThe upgrades are those from Altair to Heze, each from the consensus fork before it.\n\nThe signature checks of the deposits at the upgrade to Gloas run unless the last argument is false."},
   {"summary":
-   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.",
+   "The handler outcomes of each step of a fork choice case, from an anchor state and block.",
    "signature":
-   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> list",
+   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> list[list]",
    "operation": "EthLib.Consensus.Exports.forkChoiceExport",
    "method": "consensus_fork_choice",
    "errors":
@@ -8968,7 +8968,7 @@
       {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block in SSZ, and the steps.\n\nThen come whether the signature checks run, and replacements of values of the configuration.\n\nFrom Gloas the node on which a proposer builds is not yet specified here, so that read fails."},
+   "The handler outcomes of each step of a fork choice case, from an anchor state and block.\n\nEach input gives a nonempty list, with block admission before carried attestations and slashings.\n\nA rejected handler retains the store and later handlers still run.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block in SSZ, and the steps.\n\nThen come whether the signature checks run, and replacements of values of the configuration.\n\nFrom Gloas the node on which a proposer builds is not yet specified here, so that read fails."},
   {"summary":
    "Validate the messages of a topic in turn, against the store of an anchor and later blocks.",
    "signature":

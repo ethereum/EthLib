@@ -840,7 +840,7 @@
   "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."
 
 #define DOC_consensus_fork_choice \
-  "The outcome of each step of a fork choice case, from an anchor state and an anchor block."
+  "The handler outcomes of each step of a fork choice case, from an anchor state and block."
 
 #define DOC_consensus_gossip_validation \
   "Validate the messages of a topic in turn, against the store of an anchor and later blocks."
