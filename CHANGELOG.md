@@ -15,6 +15,7 @@ Not yet released.
   Carried operations run even after rejected admission; other inputs have one outcome.
   This changes `fork_choice`, `forkChoice`, `replayForkChoice` and `replayForkChoiceConfirming`.
   Callers must inspect each nested outcome, not treat the input as one atomic operation.
+  The public `runForkChoiceStep` block branch now performs bare admission only; its type is unchanged.
   `Store.onBlockWithVotes` and its nine wrapper-only lemmas are removed; call the spec handlers separately.
 
 - In Lean, `Models.Network.Handles.block` calls `Store.onBlock` without processing carried operations.
@@ -263,7 +264,7 @@ Not yet released.
   So `.2.2` of `Store.onAttestation_frame` and `Store.onAttesterSlashing_frame` becomes `.2.2.1`, and `.2.2.2.2` of `Store.onTickPerSlot_frame` becomes `.2.2.2.2.1`.
   The `.2.2.2` of the other four frames becomes `.2.2.2.1`.
   The new `Store.catchUp_preserves` states that catch-up keeps each property of the store that every tick within a slot keeps.
-  It has the form of `Store.onBlockWithVotes_preserves`.
+  It composes preservation over the individual tick steps.
   `Store.catchUp_frame`, `Store.catchUp_ordered` and the catch-up step of `Store.onTick_checkpointStates_latestMessages` now read it, with unchanged statements.
   The new `Store.onTick_ok` splits a tick into the slot of its time, the catch-up to that slot and one tick within it.
   `Store.onTick_frame`, `Store.getCurrentSlot_onTick`, `Store.onTick_ordered`, `Store.onTick_checkpointStates_latestMessages` and `Store.exists_getCurrentSlot_onTick_ge` now read it, with unchanged statements.

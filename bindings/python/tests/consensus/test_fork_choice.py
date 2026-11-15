@@ -396,6 +396,66 @@ def test_carried_handlers_commit_independently(admitted: bool):
     assert (head["root"] == root) is admitted
 
 
+def test_carried_success_survives_later_failure():
+    # Use the pinned slot-2 block's first committee vote for block 1, with no wire votes.
+    # Four validators of 32 ETH give 128 ETH; slashing those voters removes all that weight.
+    case = (
+        FILES / "minimal/altair/fast_confirmation/current_epoch/pyspec_tests/fcr_current_epoch_02"
+    )
+    blocks = [step["block"] for step in _load(case / "steps.yaml") if "block" in step]
+    anchor_state, anchor_block = _read(case, "anchor_state"), _read(case, "anchor_block")
+    signed = consensus.api_json("minimal", "altair", "SignedBeaconBlock", _read(case, blocks[1]))
+    message = signed["message"]
+    good = message["body"]["attestations"][0]
+    bad = {**good, "data": {**good["data"], "beacon_block_root": "0x" + "42" * 32}}
+    message["body"]["attestations"] = [good, bad]
+    message["state_root"] = "0x" + "00" * 32
+    voted_block = consensus.api_ssz("minimal", "altair", "SignedBeaconBlock", signed)
+    committee = consensus.api_committees(
+        "minimal", "altair", anchor_state, epoch=0, slot=1, index=0
+    )["data"][0]["validators"]
+    assert len(committee) == 4
+    indexed = {
+        "attesting_indices": sorted(committee, key=int),
+        "data": good["data"],
+        "signature": good["signature"],
+    }
+    conflicting = {**indexed, "data": bad["data"]}
+    message["body"]["attestations"] = []
+    message["body"]["attester_slashings"] = [
+        {"attestation_1": indexed, "attestation_2": conflicting},
+        {"attestation_1": indexed, "attestation_2": indexed},
+    ]
+    slashed_block = consensus.api_ssz("minimal", "altair", "SignedBeaconBlock", signed)
+    outcomes = consensus.fork_choice(
+        "minimal",
+        "altair",
+        anchor_state,
+        anchor_block,
+        [
+            ("tick", 6),
+            ("block", _read(case, blocks[0])),
+            ("tick", 12),
+            ("checks", (False, True, None)),
+            ("block", voted_block),
+            ("checks", (False, True, None)),
+            ("block", slashed_block),
+            ("checks", (False, True, None)),
+        ],
+        verify=False,
+        config={"PROPOSER_SCORE_BOOST": 0},
+    )
+    for group in [outcomes[4], outcomes[6]]:
+        assert len(group) == 3
+        assert isinstance(group[0], consensus.ForkChoiceError)
+        assert group[1] is None
+        assert isinstance(group[2], consensus.ForkChoiceError)
+    for position, weight in [(3, 0), (5, 128_000_000_000), (7, 0)]:
+        leaves = outcomes[position][0]["viable_for_head_roots_and_weights"]
+        assert len(leaves) == 1
+        assert leaves[0]["weight"] == weight
+
+
 def test_fast_confirmation_discount_bound():
     # The vector has blocks at slots 1 and 2, none at slots 3 to 6, and votes for block 2.
     case = (
