@@ -146,10 +146,10 @@ theorem Execution.exists_signed_origin_of_latestMessages {anchor : Store preset 
           (fun known => (Store.onBlock_checkpointStates_latestMessages blockOk).1 ▸ known)
           (fun slotOk => ⟨_, slotOk ▸ (Store.onBlock_sameClock blockOk).getCurrentSlot,
             UInt64.le_refl _⟩)
-      | blockAttestation seen _ _ carried handled =>
+      | blockAttestation seen carried handled =>
         exact attestationStep reachable ih
           ⟨_, seen, fun _ statement => Or.inl ⟨_, carried, statement⟩⟩ handled
-      | blockAttesterSlashing _ _ _ _ handled => exact slash ih handled
+      | blockAttesterSlashing _ _ handled => exact slash ih handled
       | payloadAttestation _ handled =>
         obtain ⟨_, _, same⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes handled
         rw [same]

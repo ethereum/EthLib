@@ -363,9 +363,9 @@ theorem Handles.mem_equivocatingIndices {time : ℕ} {view : Set (Message preset
   cases handles with
   | tick _ _ ticked => exact .inl (Store.onTick_equivocatingIndices ticked ▸ member)
   | block _ added => exact .inl (Store.onBlock_equivocatingIndices added ▸ member)
-  | blockAttestation _ _ _ _ attested =>
+  | blockAttestation _ _ attested =>
     exact .inl (Store.onAttestation_equivocatingIndices attested ▸ member)
-  | blockAttesterSlashing mem _ _ carried slashed =>
+  | blockAttesterSlashing mem carried slashed =>
     rcases (Store.mem_equivocatingIndices_of_onAttesterSlashing slashed).mp member with old |
       ⟨one, two⟩
     · exact .inl old
