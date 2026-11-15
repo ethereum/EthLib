@@ -268,16 +268,13 @@ private theorem Execution.mem_supportersOf_of_duty_epoch_core {Δ : ℕ} (sync :
     (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e time)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (_sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (start : ∀ w ∈ J, e.start w = anchor) (started : e.startTime ≤ first)
-    {horizon : Epoch}
     (chain : ∀ w ∈ J, ∀ i k, i ≤ k → (e.world k).time ≤ time →
       ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
         ((e.world i).state w).finalizedCheckpoint.epoch =
           .ok ((e.world i).state w).finalizedCheckpoint.root)
-    (_inHorizon : ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ time →
-      ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon)
     (nonzero : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
       ∀ (r : Root) (b : BeaconBlock preset fork),
         ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
@@ -547,9 +544,9 @@ theorem Execution.mem_supportersOf_of_duty_epoch {Δ : ℕ} (sync : e.Synchronou
       ∃ root collision, Store.findBlockCollision ((e.world n).state u)
         ((e.world m).state v) [root] = some collision := by
   exact e.mem_supportersOf_of_duty_epoch_core sync slots preGloas admitted votes fits prompt
-    anchored sound anchorSlot anchorBoundary start started
+    anchored anchorSlot anchorBoundary start started
     (finalized_prefix_of_chain anchored sound start slots anchorSlot chain inHorizon)
-    inHorizon nonzero beginOk nextOk beginTimeOk endTimeOk fresh complete safe receiver atTime
+    nonzero beginOk nextOk beginTimeOk endTimeOk fresh complete safe receiver atTime
     upToDate known rootFinal honest active duty
 
 end EthLib.Consensus.Models.Network
@@ -773,16 +770,13 @@ private theorem Execution.isAncestor_getHead_of_duty_epoch_core {Δ : ℕ} (sync
     (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e time)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (start : ∀ w ∈ J, e.start w = anchor) (started : e.startTime ≤ first)
-    {horizon : Epoch}
     (chain : ∀ w ∈ J, ∀ i k, i ≤ k → (e.world k).time ≤ time →
       ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
         ((e.world i).state w).finalizedCheckpoint.epoch =
           .ok ((e.world i).state w).finalizedCheckpoint.root)
-    (inHorizon : ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ time →
-      ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon)
     (nonzero : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
       ∀ (r : Root) (b : BeaconBlock preset fork),
         ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
@@ -864,7 +858,7 @@ private theorem Execution.isAncestor_getHead_of_duty_epoch_core {Δ : ℕ} (sync
     majority headOk
   intro v active honest duty
   rcases e.mem_supportersOf_of_duty_epoch_core sync slots preGloas admitted votes fits prompt
-    anchored sound anchorSlot anchorBoundary start started chain inHorizon nonzero beginOk nextOk
+    anchored anchorSlot anchorBoundary start started chain nonzero beginOk nextOk
     beginTimeOk endTimeOk fresh complete safe receiver atTime upToDate known
     (fun j le _ _ => Or.inl (rootFinal j le)) honest active duty with support | found
   · exact support.resolve_right covered
@@ -953,9 +947,9 @@ theorem Execution.isAncestor_getHead_of_duty_epoch {Δ : ℕ} (sync : e.Synchron
         ((e.world m).state v) [root] = some collision := by
   classical
   exact e.isAncestor_getHead_of_duty_epoch_core sync slots preGloas admitted votes fits prompt
-    anchored sound anchorSlot anchorBoundary start started
+    anchored anchorSlot anchorBoundary start started
     (finalized_prefix_of_chain anchored sound start slots anchorSlot chain inHorizon)
-    inHorizon nonzero anchorParent safe parentSafe receiver atTime upToDate known stateOk tree
+    nonzero anchorParent safe parentSafe receiver atTime upToDate known stateOk tree
     coverage margin headOk
 
 end EthLib.Consensus.Models.Network
