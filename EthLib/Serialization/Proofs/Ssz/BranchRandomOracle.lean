@@ -19,6 +19,10 @@ Each win exposes two different queried inputs with one answer, so the birthday b
 
 The root of 48 bytes, the size of a commitment or a public key, is one call of the oracle.
 
+The root of 96 bytes, the size of a signature, is three hashes.
+
+The roots of 32 bytes and of a 64-bit integer are their bytes padded to one node, with no hash.
+
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
 
 <https://cseweb.ucsd.edu/~mihir/papers/ro.pdf>
@@ -349,5 +353,72 @@ theorem cached_of_hashTreeRootM_bytes48 {cache : HashOracle.QueryCache}
   obtain ⟨_, hquery, -⟩ := Option.bind_eq_some_iff.mp hrun
   obtain ⟨digest, hdigest⟩ := cached_of_queryHash hquery
   exact ⟨by rw [hdigest, hf hdigest], heval.symm⟩
+
+/-- The root of 96 bytes is three hashes.
+
+The first 64 bytes form one message, and the last 32 bytes with 32 zero bytes the other.
+
+The third hash joins the two digests.
+
+It holds for a hash in any lawful monad. -/
+theorem hashTreeRootM_bytes96 {m : Type → Type} [Monad m] [LawfulMonad m]
+    (hash : ByteArray → m ByteArray) (bytes : Vector UInt8 96) :
+    (hashTreeRootM (Hasher.ofHash hash) (SszType.desc (Vector UInt8 96))
+      (SszType.toValue bytes)).run = (do
+      let low ← hash ⟨bytes.toArray.extract 0 64⟩
+      let high ← hash ⟨bytes.toArray.extract 64 96 ++ Array.replicate 32 0⟩
+      return .ok (← hash ⟨low.data ++ high.data⟩).data) := by
+  have size : bytes.toArray.size = 96 := bytes.size_toArray
+  have count : (Serialization.Ssz.packBytes bytes.toArray).size = 3 := by
+    simp [size, bytesPerChunk]
+  show (hashTreeRootAtM (Hasher.ofHash hash) 1 (.byteVector 96) (.bytes bytes.toArray)).run = _
+  simp only [hashTreeRootAtM, merkleLayout, size, bne_self_eq_false, Bool.false_eq_true,
+    ↓reduceIte, liftM_pure, pure_bind]
+  simp only [layoutChunksAtM, MerkleLayout.packing, Option.getD_none, Leaves.count,
+    Array.extract_size, pure_bind, bind_pure, merkleizeBoundedUncheckedM, Nat.lt_irrefl,
+    ↓reduceIte, ExceptT.run_lift]
+  rw [count, show depthFor 3 = 2 by simp [depthFor],
+    subtreeAtM_ofHash_four hash (by omega) (by omega)]
+  simp [combineM, padded, Serialization.Ssz.packBytes, size, bytesPerChunk, zeroChunk,
+    Array.extract_append_extract]
+
+/-- The root of 32 bytes is those bytes, with no hash.
+
+It holds for a hasher in any lawful monad. -/
+theorem hashTreeRootM_bytes32 {m : Type → Type} [Monad m] [LawfulMonad m]
+    (hasher : Hasher m) (bytes : Vector UInt8 32) :
+    (hashTreeRootM hasher (SszType.desc (Vector UInt8 32)) (SszType.toValue bytes)).run =
+      pure (.ok bytes.toArray) := by
+  have size : bytes.toArray.size = 32 := bytes.size_toArray
+  have count : (Serialization.Ssz.packBytes bytes.toArray).size = 1 := by
+    simp [size, bytesPerChunk]
+  show (hashTreeRootAtM hasher 1 (.byteVector 32) (.bytes bytes.toArray)).run = _
+  simp only [hashTreeRootAtM, merkleLayout, size, bne_self_eq_false, Bool.false_eq_true,
+    ↓reduceIte, liftM_pure, pure_bind]
+  simp only [layoutChunksAtM, MerkleLayout.packing, Option.getD_none, Leaves.count, pure_bind,
+    merkleizeBoundedUncheckedM, count, show depthFor 1 = 0 from depthFor_pow 0]
+  simp [subtreeAtM, padded, Serialization.Ssz.packBytes, size, bytesPerChunk,
+    Array.extract_eq_self_of_le]
+
+/-- The root of a 64-bit integer is its 8 bytes and 24 zero bytes, with no hash.
+
+It holds for a hasher in any lawful monad. -/
+theorem hashTreeRootM_uint64 {m : Type → Type} [Monad m] [LawfulMonad m]
+    (hasher : Hasher m) (value : UInt64) :
+    (hashTreeRootM hasher (SszType.desc UInt64) (SszType.toValue value)).run =
+      pure (.ok (uintBytes 8 value.toNat ++ Array.replicate 24 0)) := by
+  have fits : uintFits 8 value.toNat = true := (uintFits_iff 8 _).mpr value.toNat_lt
+  have size : (uintBytes 8 value.toNat).size = 8 := uintBytes_size 8 _
+  have count : (Serialization.Ssz.packBytes (uintBytes 8 value.toNat)).size = 1 := by
+    simp [size, bytesPerChunk]
+  have encoded : serialize (.uint 8) (.uint value.toNat) = pure (uintBytes 8 value.toNat) := by
+    simp only [serialize, fits, ↓reduceIte]
+    rfl
+  show (hashTreeRootAtM hasher 1 (.uint 8) (.uint value.toNat)).run = _
+  simp only [hashTreeRootAtM, merkleLayout, fixedLeaf, encoded, pure_bind, liftM_pure]
+  simp only [layoutChunksAtM, MerkleLayout.packing, Option.getD_none, Leaves.count, pure_bind,
+    merkleizeBoundedUncheckedM, count, show depthFor 1 = 0 from depthFor_pow 0]
+  simp [subtreeAtM, padded, Serialization.Ssz.packBytes, size, bytesPerChunk,
+    Array.extract_eq_self_of_le]
 
 end EthLib.Serialization.Ssz.RandomOracle

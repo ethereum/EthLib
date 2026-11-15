@@ -270,6 +270,17 @@ theorem cached_of_queryHash {cache : HashOracle.QueryCache} {x digest : ByteArra
   obtain ⟨answer, hanswer, -⟩ := Option.bind_eq_some_iff.mp hrun
   exact ⟨answer, hanswer⟩
 
+/-- The answer of a replayed query is 32 bytes. -/
+theorem size_of_queryHash {cache : HashOracle.QueryCache} {x digest : ByteArray}
+    (hrun : simulateQ cache.toPartialImpl (queryHash x) = some digest) :
+    digest.data.size = 32 := by
+  simp only [queryHash, simulateQ_bind, simulateQ_spec_query,
+    QueryCache.toPartialImpl_apply] at hrun
+  obtain ⟨answer, -, hanswer⟩ := Option.bind_eq_some_iff.mp hrun
+  simp at hanswer
+  subst hanswer
+  exact answer.size_toArray
+
 /-- A replayed rehash caches every hash input of the computation. -/
 theorem cached_of_rehash {cache : HashOracle.QueryCache} {tree : CommitmentTree}
     {result : Bytes × List Bytes}
@@ -308,6 +319,24 @@ theorem collision_of_cached {cache : HashOracle.QueryCache} {f : QueryImpl HashO
     fun h => hdistinct (congrArg ByteArray.data h), ha, ?_⟩
   rw [hb]
   exact congrArg some (Vector.toArray_inj.mp (ByteArray.mk.inj hequal)).symm
+
+/-- Two replayed queries with one answer have one input, or the cache has a collision. -/
+theorem collision_or_eq_of_queryHash {cache : HashOracle.QueryCache}
+    {x y first second : ByteArray}
+    (hx : simulateQ cache.toPartialImpl (queryHash x) = some first)
+    (hy : simulateQ cache.toPartialImpl (queryHash y) = some second)
+    (same : first.data = second.data) : Collision cache ∨ x.data = y.data := by
+  simp only [queryHash, simulateQ_bind, simulateQ_spec_query,
+    QueryCache.toPartialImpl_apply] at hx hy
+  obtain ⟨firstAnswer, hfirst, hx⟩ := Option.bind_eq_some_iff.mp hx
+  obtain ⟨secondAnswer, hsecond, hy⟩ := Option.bind_eq_some_iff.mp hy
+  simp at hx hy
+  subst hx hy
+  by_cases equal : x = y
+  · exact .inr (congrArg ByteArray.data equal)
+  · refine .inl ⟨x, y, firstAnswer, equal, hfirst, ?_⟩
+    rw [hsecond]
+    exact congrArg some (Vector.toArray_inj.mp same).symm
 
 /-- A replayed winning extraction exposes a collision of the cache.
 
