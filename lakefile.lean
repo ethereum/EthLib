@@ -71,13 +71,22 @@ It is a separate library, so that the specification never imports an `@[export]`
 
 `precompileModules` is on, because `setup.py` links these objects.
 
-Each domain's export tree is also a root, so that its modules belong to this library. -/
+One root and its initializer name make this a plugin, so the specification's plugin loads first.
+
+Lake sorts plugins by dependency, but Lean loads ordinary dynamic libraries before them.
+
+The globs assign each domain's export tree to this library. -/
 @[default_target]
 lean_lib «Exports» where
   requiresModuleSystem := true
-  roots := #[`EthLib.Exports, `EthLib.Base.Exports, `EthLib.Cryptography.Exports,
-    `EthLib.Networking.Exports, `EthLib.Execution.Exports, `EthLib.Consensus.Exports,
-    `EthLib.Serialization.Exports, `EthLib.Engine.Exports]
+  -- Lean v4.35.0, Lake/Config/LeanLib.lean, `LeanLib.isPlugin`.
+  roots := #[`EthLib.Exports]
+  libName := "EthLib_EthLib_Exports"
+  -- Lake/Build/Module.lean, `computeModuleDeps`; Lean/Elab/Frontend.lean, `runFrontend`.
+  globs := #[.one `EthLib.Exports, .andSubmodules `EthLib.Base.Exports,
+    .andSubmodules `EthLib.Cryptography.Exports, .andSubmodules `EthLib.Networking.Exports,
+    .andSubmodules `EthLib.Execution.Exports, .andSubmodules `EthLib.Consensus.Exports,
+    .andSubmodules `EthLib.Serialization.Exports, .andSubmodules `EthLib.Engine.Exports]
   precompileModules := true
 
 /-- Checks the compiled declarations of every library.
@@ -138,3 +147,22 @@ Not a default target: `scripts/test_check_accessors.sh` builds and checks it. -/
 lean_lib «CheckAccessorsTest» where
   srcDir := "scripts"
   roots := #[`CheckAccessorsTest]
+
+/-- Checks that specification theorems support definitions, instances or simplification.
+
+It compares the remaining theorems with an exact baseline that may only shrink.
+
+Run it after `lake build` with `lake exe check-theorems`. -/
+lean_exe «check-theorems» where
+  srcDir := "scripts"
+  root := `CheckTheorems
+  supportInterpreter := true
+  -- The dependency search loads private definition and proof bodies.
+  allowNonModules := true
+
+/-- Theorems the placement check must keep, report or skip.
+
+Not a default target: `scripts/test_check_theorems.sh` builds and checks it. -/
+lean_lib «CheckTheoremsTest» where
+  srcDir := "scripts"
+  roots := #[`CheckTheoremsTest]

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Sphincs.Constants
 public import EthLib.Cryptography.Sphincs.Digest
 public import EthLib.Base.Proofs.BigEndian
 

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Xmss.Constants
 public import EthLib.Consensus.PqKeys.Possession
 public import EthLib.Consensus.Proofs.PqKeys.Containers
 public import EthLib.Consensus.Proofs.Signing

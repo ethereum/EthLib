@@ -69,6 +69,25 @@ In such a file, `rfl`, `unfold`, `decide` and `decide +kernel` stop at the hidde
 A downstream file without a `module` header sees hidden bodies, so the module system does not hold it to the laws.
 
 The library, the proofs and the C exports remain three separate Lake libraries.
+The exports library has one root and a library name that matches its module initializer.
+Lake then treats it as a plugin, and Lean loads the specification plugin before it.
+The export globs still assign each domain's export modules to that library.
+This load order lets a property module import a C export.
+
+Import property theorems from the `Proofs` tree.
+The import path follows the file layout even when a theorem uses the namespace of its specification.
+For example, these imports provide the `Except` success properties and the theorem that relates the SSZ writer to its JSON reference:
+
+```lean
+module
+
+public import EthLib.Base.Proofs.Except
+public import EthLib.Serialization.Proofs.Exports.Ssz
+
+#check EthLib.Base.ensure_ok_iff
+#check EthLib.Serialization.Ssz.Exports.Proofs.pyOfValue_eq_json
+```
+
 The declaration checker loads modules at Lean's `.private` level, so that it can inspect proof bodies and private helpers.
 Its fixtures include module files, and a classic root that loads their private information.
 
@@ -76,11 +95,14 @@ After you change these boundaries, run the module regression:
 
 ```bash
 bash scripts/test_module_system.sh
+bash scripts/test_export_proofs.sh
 ```
 
-It checks ordinary imports.
+The module regression checks ordinary imports.
 It also checks that changing a private proof leaves the public artifact unchanged, so that a downstream build is skipped.
 Public metadata still changes when source positions move, so a proof edit does not always avoid downstream builds.
+
+The export proof regression checks native load order and keeps ordinary property objects out of the export build.
 
 ## CI cache and timing
 

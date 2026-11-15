@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Except
 public import EthLib.Networking.Quic.Tls.Crypto
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Cryptography.Proofs.X25519.Agreement

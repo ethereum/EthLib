@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Hex
 public import EthLib.Serialization.JsonRpc
 public import EthLib.Base.Hex
 public import EthLib.Base.Except

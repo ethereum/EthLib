@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Except
 public import EthLib.Networking.Libp2p.Tls
 public import EthLib.Networking.Proofs.Libp2p.PeerId
 public import EthLib.Base.Except

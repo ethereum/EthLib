@@ -1,0 +1,7 @@
+# Theorem placement findings awaiting migration, one defining module and declaration per line.
+# New findings and stale entries fail `lake exe check-theorems`; this list may only shrink.
+# Issue #2611 excludes moving theorems out of Cryptography/Bls.
+EthLib.Cryptography.Bls.Fp EthLib.Cryptography.Bls.Fp.modulus_pos
+EthLib.Cryptography.Bls.Fp EthLib.Cryptography.Bls.Fp.val_sqrtExponent
+EthLib.Cryptography.Bls.Fr EthLib.Cryptography.Bls.Fr.modulus_eq_blsX
+EthLib.Cryptography.Bls.Fr EthLib.Cryptography.Bls.Fr.modulus_pos
