@@ -228,7 +228,9 @@ A pull request that breaks one says why in its description.
   Each directory includes its subdirectories and its root file, such as `BuilderApi.lean` for `BuilderApi/`.
   Imports between a directory and one inside it do not count.
   The rule applies at every directory depth, so it checks both `Evm/` and `Evm/Gas/`.
+  The script reads direct imports only, so it misses a cycle that passes through a module in a parent directory.
   A shared module belongs in the parent directory or in a directory that both sides can import without a cycle.
+  A shared module in the parent directory imports neither side.
 - Execution and Consensus never import each other; only Engine imports both.
 - No module with an `Xmss` component reaches one with a `Sphincs` component through its imports, nor the reverse.
   What both hash-based signatures use lives in a neutral module, such as `HashSig` or `Wots`.

@@ -9,6 +9,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, modules move so that no two directories of a layer import each other ([#2617](https://github.com/ethereum/EthLib/pull/2617)).
+  In Execution, `Evm.Call.Delegation`, `Evm.Machine.Errors`, `Blocks.Log` and `Fees.BlobGas` become `Evm.Delegation`, `Evm.Errors`, `Evm.Log` and `Transactions.BlobGas`.
+  In Serialization, `Ssz.Codec.Error` becomes `Ssz.Error`, and the proof modules `Proofs.Ssz.Type.Bounds`, `DefaultLaws` and `FitsLaws` move to `Proofs.Ssz.Codec`.
+  In Consensus, the proof module `Models.Network.ForkChoice` becomes `Proofs.ForkChoiceNetworkModel`.
+  In Cryptography, the XMSS `Unforgeability` modules move to `Security.XmssSecurity`, with `Statement` renamed `ConcreteStatement`, and the SPHINCS+ security modules regroup under `Forgery`, `GraphView`, `HiddenOracle`, `PreparedRun`, `RefinedForgery`, `ScanSigner` and `SmallBudget`.
+  Declaration names, namespaces and statements are unchanged; update the imports.
+
 - The QUIC and TLS codecs use packed byte arrays for byte strings, as [Shared types](ARCHITECTURE.md#shared-types) requires ([#2616](https://github.com/ethereum/EthLib/pull/2616)).
   In Lean, packet-header fields, frame payloads, TLS byte fields and transcripts use `ByteArray` in place of `List UInt8`.
   `Varint`, `Packet`, `Frame` and TLS `encode` and `decode` use `ByteArray` at their byte boundaries.
