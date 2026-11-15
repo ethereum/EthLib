@@ -423,6 +423,7 @@ It prints tab-separated columns for the defining module, theorem name, source pa
 `scripts/check_theorems_baseline.txt` lists the findings awaiting migration, and may only shrink.
 A new finding or a stale baseline entry fails the check.
 The baseline check rejects entries added since the base revision, after the initial creation of the file.
+It also rejects removing a baseline that the base revision has.
 For a stacked branch, compare with its actual parent instead of `origin/master`.
 Moving a public theorem can change the imports a downstream project needs, so review that public surface too.
 
