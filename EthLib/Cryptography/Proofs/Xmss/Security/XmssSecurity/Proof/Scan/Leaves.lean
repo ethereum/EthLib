@@ -1,7 +1,7 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Ghost
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Step
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.Ghost
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.Step
 
 /-!
 # Per-leaf bookkeeping of the adversary phase

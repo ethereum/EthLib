@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.SignStep
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.SignStep
 
 /-!
 # The potentials of the adversary phase

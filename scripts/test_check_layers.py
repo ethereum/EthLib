@@ -603,6 +603,16 @@ class KindsRule(unittest.TestCase):
 
 
 class DirectoryCycles(unittest.TestCase):
+    def assert_imports(self, graph: dict[str, list[str]], expected: list[tuple[str, str]]):
+        """Check every reported import, including the absence of exempt imports."""
+        self.assertEqual(
+            [(name, imported) for name, imported, _ in layers.directory_cycles(graph, set())],
+            [
+                (f"EthLib.Execution.{name}", f"EthLib.Execution.{imported}")
+                for name, imported in expected
+            ],
+        )
+
     def cycle(self, *directories: str) -> dict[str, list[str]]:
         """A cycle of directory imports without a cycle between individual Lean modules."""
         return {
@@ -614,12 +624,12 @@ class DirectoryCycles(unittest.TestCase):
     def test_acyclic_directories(self):
         graph = self.cycle("A", "B", "C")
         graph["EthLib.Execution.C.Use"] = []
-        self.assertEqual(layers.directory_cycles(graph), [])
+        self.assertEqual(layers.directory_cycles(graph, set()), [])
 
     def test_two_directories(self):
         graph = self.cycle("A", "B")
         self.assertEqual(
-            layers.directory_cycles(graph),
+            layers.directory_cycles(graph, set()),
             [
                 (
                     "EthLib.Execution.A.Use",
@@ -636,8 +646,10 @@ class DirectoryCycles(unittest.TestCase):
 
     def test_indirect_cycle(self):
         graph = self.cycle("A", "B", "C")
-        problems = layers.directory_cycles(graph)
-        self.assertEqual(len(problems), 3)
+        self.assert_imports(
+            graph, [("A.Use", "B.Types"), ("B.Use", "C.Types"), ("C.Use", "A.Types")]
+        )
+        problems = layers.directory_cycles(graph, set())
         self.assertEqual(
             problems[0][2],
             (
@@ -649,7 +661,10 @@ class DirectoryCycles(unittest.TestCase):
         )
 
     def test_nested_directories(self):
-        self.assertEqual(len(layers.directory_cycles(self.cycle("Evm.Gas", "Evm.Machine"))), 2)
+        self.assert_imports(
+            self.cycle("Evm.Gas", "Evm.Machine"),
+            [("Evm.Gas.Use", "Evm.Machine.Types"), ("Evm.Machine.Use", "Evm.Gas.Types")],
+        )
 
     def test_ancestor_projection(self):
         # The nearest directories alone have no cycle: A.Sub1 -> B -> A.Sub2.
@@ -659,7 +674,7 @@ class DirectoryCycles(unittest.TestCase):
             "EthLib.Execution.B.Use": ["EthLib.Execution.A.Sub2.Types"],
             "EthLib.Execution.B.Types": [],
         }
-        self.assertEqual(len(layers.directory_cycles(graph)), 2)
+        self.assert_imports(graph, [("A.Sub1.Use", "B.Types"), ("B.Use", "A.Sub2.Types")])
 
     def test_root_file_imports(self):
         graph = {
@@ -668,7 +683,7 @@ class DirectoryCycles(unittest.TestCase):
             "EthLib.Execution.B.Use": ["EthLib.Execution.A.Types"],
             "EthLib.Execution.B.Types": [],
         }
-        self.assertEqual(len(layers.directory_cycles(graph)), 2)
+        self.assert_imports(graph, [("A", "B.Types"), ("B.Use", "A.Types")])
 
     def test_imported_root_file(self):
         graph = {
@@ -677,7 +692,97 @@ class DirectoryCycles(unittest.TestCase):
             "EthLib.Execution.B": ["EthLib.Execution.A.Types"],
             "EthLib.Execution.B.Types": [],
         }
-        self.assertEqual(len(layers.directory_cycles(graph)), 2)
+        self.assert_imports(graph, [("A.Use", "B"), ("B", "A.Types")])
+
+    def test_cycle_through_a_chain_in_the_parent_directory(self):
+        graph = {
+            "EthLib.Execution.P.A.Use": ["EthLib.Execution.P.Shared"],
+            "EthLib.Execution.P.Shared": ["EthLib.Execution.P.More"],
+            "EthLib.Execution.P.More": ["EthLib.Execution.P.B.Types"],
+            "EthLib.Execution.P.B.Use": ["EthLib.Execution.P.A.Types"],
+            "EthLib.Execution.P.A.Types": [],
+            "EthLib.Execution.P.B.Types": [],
+        }
+        self.assert_imports(graph, [("P.A.Use", "P.Shared"), ("P.B.Use", "P.A.Types")])
+        self.assertEqual(
+            Tree(with_modules(graph)).problems(),
+            [
+                "EthLib/Execution/P/A/Use.lean:3: imports EthLib.Execution.P.Shared, "
+                "which forms a directory cycle: EthLib/Execution/P/A/ -> EthLib/Execution/P/B/ -> "
+                "EthLib/Execution/P/A/",
+                "EthLib/Execution/P/B/Use.lean:3: imports EthLib.Execution.P.A.Types, "
+                "which forms a directory cycle: EthLib/Execution/P/B/ -> EthLib/Execution/P/A/ -> "
+                "EthLib/Execution/P/B/",
+            ],
+        )
+        reversed_graph = {
+            name: list(reversed(imported * 2)) for name, imported in reversed(graph.items())
+        }
+        self.assertEqual(
+            layers.directory_cycles(graph, set()), layers.directory_cycles(reversed_graph, set())
+        )
+        graph["EthLib.Execution.P.More"] = []
+        self.assertEqual(layers.directory_cycles(graph, set()), [])
+
+    def test_cycle_through_the_directory_root(self):
+        graph = {
+            "EthLib.Execution.P.A.Use": ["EthLib.Execution.P"],
+            "EthLib.Execution.P": ["EthLib.Execution.P.B.Types"],
+            "EthLib.Execution.P.B.Use": ["EthLib.Execution.P.A.Types"],
+            "EthLib.Execution.P.A.Types": [],
+            "EthLib.Execution.P.B.Types": [],
+        }
+        self.assert_imports(graph, [("P.A.Use", "P"), ("P.B.Use", "P.A.Types")])
+
+    def test_parent_chain_beyond_the_python_recursion_limit(self):
+        prefix = "EthLib.Execution.P."
+        chain = [f"{prefix}Shared{index:04}" for index in range(1100)] + [prefix + "B.Types"]
+        graph = {name: [target] for name, target in zip(chain[:-1], chain[1:], strict=True)}
+        graph |= {
+            prefix + "A.Use": [chain[0]],
+            prefix + "B.Use": [prefix + "A.Types"],
+            prefix + "A.Types": [],
+            prefix + "B.Types": [],
+        }
+        self.assert_imports(graph, [("P.A.Use", "P.Shared0000"), ("P.B.Use", "P.A.Types")])
+
+    def test_shared_reachable_modules_report_each_direct_import_once(self):
+        graph = {
+            "EthLib.Execution.P.A.Use": ["EthLib.Execution.P.Left", "EthLib.Execution.P.Right"],
+            "EthLib.Execution.P.Left": ["EthLib.Execution.P.Shared"],
+            "EthLib.Execution.P.Right": ["EthLib.Execution.P.Shared"],
+            "EthLib.Execution.P.Shared": ["EthLib.Execution.P.B.Types"],
+            "EthLib.Execution.P.B.Use": ["EthLib.Execution.P.A.Types"],
+            "EthLib.Execution.P.A.Types": [],
+            "EthLib.Execution.P.B.Types": [],
+        }
+        self.assert_imports(
+            graph,
+            [("P.A.Use", "P.Left"), ("P.A.Use", "P.Right"), ("P.B.Use", "P.A.Types")],
+        )
+
+    def test_reachable_endpoints_in_one_layer_are_checked(self):
+        graph = {
+            "EthLib.Execution.A.Use": ["EthLib.Consensus.Shared"],
+            "EthLib.Consensus.Shared": ["EthLib.Execution.B.Types"],
+            "EthLib.Execution.B.Use": ["EthLib.Execution.A.Types"],
+            "EthLib.Execution.A.Types": [],
+            "EthLib.Execution.B.Types": [],
+        }
+        self.assertEqual(
+            [(name, imported) for name, imported, _ in layers.directory_cycles(graph, set())],
+            [
+                ("EthLib.Execution.A.Use", "EthLib.Consensus.Shared"),
+                ("EthLib.Execution.B.Use", "EthLib.Execution.A.Types"),
+            ],
+        )
+
+    def test_broken_module_cycle_terminates(self):
+        graph = {
+            "EthLib.Execution.A.Use": ["EthLib.Execution.Shared"],
+            "EthLib.Execution.Shared": ["EthLib.Execution.A.Use"],
+        }
+        self.assertEqual(layers.directory_cycles(graph, set()), [])
 
     def test_root_directory_with_only_a_readme(self):
         for component, library in (
@@ -732,27 +837,69 @@ class DirectoryCycles(unittest.TestCase):
             "EthLib.Execution.A.Use": ["EthLib.Execution.Flat"],
             "EthLib.Execution.A.Types": [],
         }
-        self.assertEqual(layers.directory_cycles(graph), [])
+        self.assertEqual(layers.directory_cycles(graph, set()), [])
 
     def test_parent_and_child_directories(self):
-        self.assertEqual(layers.directory_cycles(self.cycle("A", "A.Child")), [])
+        self.assertEqual(layers.directory_cycles(self.cycle("A", "A.Child"), set()), [])
+
+    def test_parent_and_child_imports_are_exempt_inside_a_sibling_cycle(self):
+        graph = {
+            "EthLib.Execution.A.Use": [
+                "EthLib.Execution.A.Child.Types",
+                "EthLib.Execution.B.Types",
+            ],
+            "EthLib.Execution.A.Child.Use": [
+                "EthLib.Execution.A.Types",
+                "EthLib.Execution.B.Types",
+            ],
+            "EthLib.Execution.B.Use": ["EthLib.Execution.A.Child.Types"],
+            "EthLib.Execution.A.Types": [],
+            "EthLib.Execution.A.Child.Types": [],
+            "EthLib.Execution.B.Types": [],
+        }
+        self.assert_imports(
+            graph,
+            [("A.Child.Use", "B.Types"), ("A.Use", "B.Types"), ("B.Use", "A.Child.Types")],
+        )
 
     def test_same_directory(self):
-        self.assertEqual(layers.directory_cycles(self.cycle("A")), [])
+        self.assertEqual(layers.directory_cycles(self.cycle("A"), set()), [])
 
     def test_directory_names_with_a_common_prefix(self):
-        self.assertEqual(len(layers.directory_cycles(self.cycle("Foo", "Foobar"))), 2)
+        self.assert_imports(
+            self.cycle("Foo", "Foobar"), [("Foo.Use", "Foobar.Types"), ("Foobar.Use", "Foo.Types")]
+        )
 
     def test_literal_dots_are_not_directory_separators(self):
         graph = self.cycle("A", "«A.B»")
-        self.assertEqual(len(layers.directory_cycles(graph)), 2)
+        self.assert_imports(graph, [("A.Use", "«A.B».Types"), ("«A.B».Use", "A.Types")])
         problems = Tree(with_modules(graph)).problems()
-        self.assertEqual(len(problems), 2)
-        self.assertTrue(any("EthLib/Execution/A.B/Use.lean:3:" in item for item in problems))
+        self.assertEqual(
+            problems,
+            [
+                "EthLib/Execution/A/Use.lean:3: imports EthLib.Execution.«A.B».Types, "
+                "which forms a directory cycle: EthLib/Execution/A/ -> EthLib/Execution/A.B/ -> "
+                "EthLib/Execution/A/",
+                "EthLib/Execution/A.B/Use.lean:3: imports EthLib.Execution.A.Types, "
+                "which forms a directory cycle: EthLib/Execution/A.B/ -> EthLib/Execution/A/ -> "
+                "EthLib/Execution/A.B/",
+            ],
+        )
 
     def test_quoted_directory_with_spaces(self):
         graph = self.cycle("A", "«B C»")
-        self.assertEqual(len(Tree(with_modules(graph)).problems()), 2)
+        self.assert_imports(graph, [("A.Use", "«B C».Types"), ("«B C».Use", "A.Types")])
+        self.assertEqual(
+            Tree(with_modules(graph)).problems(),
+            [
+                "EthLib/Execution/A/Use.lean:3: imports EthLib.Execution.«B C».Types, "
+                "which forms a directory cycle: EthLib/Execution/A/ -> EthLib/Execution/B C/ -> "
+                "EthLib/Execution/A/",
+                "EthLib/Execution/B C/Use.lean:3: imports EthLib.Execution.A.Types, "
+                "which forms a directory cycle: EthLib/Execution/B C/ -> EthLib/Execution/A/ -> "
+                "EthLib/Execution/B C/",
+            ],
+        )
 
     def test_root_file_with_a_literal_dot(self):
         graph = {
@@ -762,25 +909,46 @@ class DirectoryCycles(unittest.TestCase):
             "EthLib.Execution.«A.B».Types": [],
         }
         problems = Tree(with_modules(graph)).problems()
-        self.assertEqual(len(problems), 2)
-        self.assertTrue(any("EthLib/Execution/A.B.lean:3:" in item for item in problems))
+        self.assertEqual(
+            problems,
+            [
+                "EthLib/Execution/A/Use.lean:3: imports EthLib.Execution.«A.B», "
+                "which forms a directory cycle: EthLib/Execution/A/ -> EthLib/Execution/A.B/ -> "
+                "EthLib/Execution/A/",
+                "EthLib/Execution/A.B.lean:3: imports EthLib.Execution.A.Types, "
+                "which forms a directory cycle: EthLib/Execution/A.B/ -> EthLib/Execution/A/ -> "
+                "EthLib/Execution/A.B/",
+            ],
+        )
 
     def test_properties_and_exports_are_checked(self):
         for part in ("Proofs", "Exports"):
             with self.subTest(part=part):
-                self.assertEqual(
-                    len(layers.directory_cycles(self.cycle(f"{part}.A", f"{part}.B"))), 2
+                self.assert_imports(
+                    self.cycle(f"{part}.A", f"{part}.B"),
+                    [(f"{part}.A.Use", f"{part}.B.Types"), (f"{part}.B.Use", f"{part}.A.Types")],
                 )
                 graph = self.cycle("A", f"{part}.B")
-                self.assertEqual(len(layers.directory_cycles(graph)), 2)
+                self.assert_imports(
+                    graph, [("A.Use", f"{part}.B.Types"), (f"{part}.B.Use", "A.Types")]
+                )
 
     def test_cycle_between_properties_and_exports(self):
         graph = self.cycle("Proofs.A", "Exports.B")
-        self.assertEqual(len(layers.directory_cycles(graph)), 2)
+        self.assert_imports(
+            graph, [("Exports.B.Use", "Proofs.A.Types"), ("Proofs.A.Use", "Exports.B.Types")]
+        )
 
     def test_cycle_through_all_three_kinds(self):
         graph = self.cycle("A", "Proofs.B", "Exports.C")
-        self.assertEqual(len(layers.directory_cycles(graph)), 3)
+        self.assert_imports(
+            graph,
+            [
+                ("A.Use", "Proofs.B.Types"),
+                ("Exports.C.Use", "A.Types"),
+                ("Proofs.B.Use", "Exports.C.Types"),
+            ],
+        )
 
     def test_different_layers_are_excluded(self):
         graph = {
@@ -789,12 +957,12 @@ class DirectoryCycles(unittest.TestCase):
             ]
             for name, imports in self.cycle("A", "B").items()
         }
-        self.assertEqual(layers.directory_cycles(graph), [])
+        self.assertEqual(layers.directory_cycles(graph, set()), [])
 
     def test_unknown_target_is_excluded(self):
         graph = self.cycle("A", "B")
         del graph["EthLib.Execution.B.Types"]
-        self.assertEqual(layers.directory_cycles(graph), [])
+        self.assertEqual(layers.directory_cycles(graph, set()), [])
 
     def test_diagnostics_are_deterministic(self):
         graph = self.cycle("A", "B", "C")
@@ -802,17 +970,31 @@ class DirectoryCycles(unittest.TestCase):
         reversed_graph = {
             name: list(reversed(imports)) for name, imports in reversed(graph.items())
         }
-        self.assertEqual(layers.directory_cycles(graph), layers.directory_cycles(reversed_graph))
-        self.assertEqual(len(layers.directory_cycles(graph)), 4)
+        self.assertEqual(
+            layers.directory_cycles(graph, set()), layers.directory_cycles(reversed_graph, set())
+        )
+        self.assert_imports(
+            graph,
+            [
+                ("A.Use", "B.Types"),
+                ("A.Use", "C.Types"),
+                ("B.Use", "C.Types"),
+                ("C.Use", "A.Types"),
+            ],
+        )
 
     def test_diagnostic_names_the_import_and_cycle(self):
         problems = Tree(with_modules(self.cycle("A", "B"))).problems()
-        self.assertEqual(len(problems), 2)
         self.assertEqual(
-            problems[0],
-            "EthLib/Execution/A/Use.lean:3: imports EthLib.Execution.B.Types, "
-            "which forms a directory cycle: EthLib/Execution/A/ -> EthLib/Execution/B/ -> "
-            "EthLib/Execution/A/",
+            problems,
+            [
+                "EthLib/Execution/A/Use.lean:3: imports EthLib.Execution.B.Types, "
+                "which forms a directory cycle: EthLib/Execution/A/ -> EthLib/Execution/B/ -> "
+                "EthLib/Execution/A/",
+                "EthLib/Execution/B/Use.lean:3: imports EthLib.Execution.A.Types, "
+                "which forms a directory cycle: EthLib/Execution/B/ -> EthLib/Execution/A/ -> "
+                "EthLib/Execution/B/",
+            ],
         )
 
     def test_baseline_allows_existing_cycle(self):
@@ -823,6 +1005,30 @@ class DirectoryCycles(unittest.TestCase):
         )
         self.assertEqual(Tree(with_modules(self.cycle("A", "B")), baseline=baseline).problems(), [])
 
+    def test_baseline_tracks_the_direct_import_of_a_parent_chain(self):
+        graph = {
+            "EthLib.Execution.A.Use": ["EthLib.Execution.Shared"],
+            "EthLib.Execution.Shared": ["EthLib.Execution.B.Types"],
+            "EthLib.Execution.B.Use": ["EthLib.Execution.A.Types"],
+            "EthLib.Execution.A.Types": [],
+            "EthLib.Execution.B.Types": [],
+        }
+        baseline = (
+            "EthLib.Execution.A.Use EthLib.Execution.Shared\n"
+            "EthLib.Execution.B.Use EthLib.Execution.A.Types\n"
+        )
+        self.assertEqual(Tree(with_modules(graph), baseline=baseline).problems(), [])
+        graph["EthLib.Execution.Shared"] = []
+        self.assertEqual(
+            Tree(with_modules(graph), baseline=baseline).problems(),
+            [
+                "scripts/check_layers_baseline.txt: EthLib.Execution.A.Use "
+                "EthLib.Execution.Shared breaks no rule any more; remove the entry",
+                "scripts/check_layers_baseline.txt: EthLib.Execution.B.Use "
+                "EthLib.Execution.A.Types breaks no rule any more; remove the entry",
+            ],
+        )
+
     def test_new_import_in_an_existing_cycle_fails(self):
         graph = self.cycle("A", "B")
         graph["EthLib.Execution.A.More"] = ["EthLib.Execution.B.Types"]
@@ -831,9 +1037,14 @@ class DirectoryCycles(unittest.TestCase):
             "EthLib.Execution.B.Use EthLib.Execution.A.Types\n"
         )
         problems = Tree(with_modules(graph), baseline=baseline).problems()
-        self.assertEqual(len(problems), 1)
-        self.assertIn("EthLib/Execution/A/More.lean:3: imports", problems[0])
-        self.assertIn("directory cycle", problems[0])
+        self.assertEqual(
+            problems,
+            [
+                "EthLib/Execution/A/More.lean:3: imports EthLib.Execution.B.Types, "
+                "which forms a directory cycle: EthLib/Execution/A/ -> EthLib/Execution/B/ -> "
+                "EthLib/Execution/A/"
+            ],
+        )
 
     def test_baseline_is_stale_after_breaking_the_cycle(self):
         graph = self.cycle("A", "B")

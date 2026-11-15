@@ -1,10 +1,10 @@
 module
 
 public import EthLib.Base.Proofs.Address
-public import EthLib.Execution.Evm.Call.TransferLog
+public import EthLib.Execution.Evm.TransferLog
 
 /-!
-# Proofs: `Evm.Call.TransferLog`
+# Proofs: `Evm.TransferLog`
 
 Before Glamsterdam, a move of ether writes no log.
 

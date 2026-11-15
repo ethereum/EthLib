@@ -3,7 +3,7 @@ module
 public import
   EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingExpectedBound
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LossDecomposition
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.PerKey
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.PerKey
 
 @[expose] public section
 

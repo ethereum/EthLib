@@ -30,7 +30,7 @@ The directories follow that route:
 | --- | --- |
 | `Bridge/` | EthLib's real game, step by step, to the model's game |
 | `Proof/` | the model's game, two units of `2^-128` per hash call |
-| `Scan/` | the digest term of the second lane |
+| `Proof/Scan/` | the digest term of the second lane |
 | `Scheme.lean` | the model: leanXMSS with precomputed keys |
 
 The model is a device of the proof, not a second statement.
@@ -77,7 +77,7 @@ The changes that follow from this are:
 - `Bridge/Real.lean`, `Bridge/Signer.lean` and `Bridge/Game.lean` are rewritten to reason about EthLib's `publicKeyOf`, `signDerived` and `verifyWith`.
 - `Bridge/Derivation.lean` names its inputs by the model's byte layout.
 - `Bridge/SchemeSeed.lean`, `Reduction.lean`, `Seed.lean`, `Model.lean` and `Security.lean` take EthLib's adversary and state the real game (`realGame`) directly.
-- The codeword count of `LeanXmss/Code.lean`, which `Scan/Card.lean` needs, is not copied.
+- The codeword count of `LeanXmss/Code.lean`, which `Proof/Scan/Card.lean` needs, is not copied.
   `XmssSecurity/Code.lean` reads it from the size of the code that `Proofs/Xmss/CodeSize.lean` proves.
 - The Lean documentation follows EthLib's rules for doc comments: one sentence per line, at most 100 characters, and ASCII math.
 

@@ -12,6 +12,7 @@ public import EthLib.Execution.Evm.Gas
 public import EthLib.Execution.Evm.Errors
 public import EthLib.Execution.Evm.Delegation
 public import EthLib.Execution.Evm.Log
+public import EthLib.Execution.Evm.TransferLog
 public import EthLib.Execution.Evm.Op
 public import EthLib.Execution.Evm.Machine.Stack
 public import EthLib.Execution.Evm.Environment

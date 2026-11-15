@@ -4430,7 +4430,7 @@ The body records them without changing anything else that it computes.
 From Byzantium, the status of a call result agrees with its receipt: the receipt succeeds exactly when the result has no error (`applyTransaction_status`, `Proofs/Blocks/Transition.lean`).
 A body has as many results as receipts (`applyTransactions_results_length`), and a refund never raises the gas used (`runTransaction_gasUsed_le`, `Proofs/Transactions/Process.lean`).
 
-Each frame also records the logs that a simulation reports with `traceTransfers` (`Execution/Evm/Call/TransferLog.lean`).
+Each frame also records the logs that a simulation reports with `traceTransfers` (`Execution/Evm/TransferLog.lean`).
 They are its logs, with a log from `0xeeee…eeee` before Glamsterdam for each move of ether that EIP-7708 would log, in the order of execution.
 A frame that fails drops them with its logs.
 The flag is not an input of the blocks of a simulation, so they and their headers do not depend on it (`simulateBlocks_traceTransfers`, `Proofs/Rpc/SimulateCalls.lean`).

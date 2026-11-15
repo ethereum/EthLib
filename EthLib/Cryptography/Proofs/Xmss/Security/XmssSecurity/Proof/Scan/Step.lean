@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Potential
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.Potential
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveFreshTarget
 
 /-!

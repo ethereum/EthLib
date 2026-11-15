@@ -6,6 +6,7 @@ import sys
 import tomllib
 from collections import Counter, deque
 from collections.abc import Iterable, Mapping, Sequence, Set as AbstractSet
+from functools import cache
 from pathlib import Path
 from typing import NamedTuple
 
@@ -215,12 +216,13 @@ def scheme_problems(graph: dict[str, list[str]]) -> list[tuple[str, str, str]]:
 
 def directory_cycles(
     graph: Mapping[str, Sequence[str]],
-    directory_roots: AbstractSet[str] = frozenset(),
+    directory_roots: AbstractSet[str],
 ) -> list[tuple[str, str, tuple[str, ...]]]:
     """
     Each import in a directory cycle, with one closed path of directories.
 
     `directory_roots` names root modules whose directories exist, even without Lean files.
+    Directory edges include every module reached through an import, at any depth.
     """
     directories = set(directory_roots) | {
         join_module(parts[:size])
@@ -230,6 +232,7 @@ def directory_cycles(
         for size in range(2, len(parts))
     }
 
+    @cache
     def containers(name: str) -> list[str]:
         # A root such as `BuilderApi.lean` belongs to `BuilderApi/`, when that directory exists.
         parts = module_parts(name)
@@ -237,17 +240,48 @@ def directory_cycles(
             parts = parts[:-1]
         return [join_module(parts[:size]) for size in range(3, len(parts) + 1)]
 
+    reached: dict[str, set[str]] = {}
+    module_layers = {name: layer(name) for name in graph}
+
+    def reachable(name: str) -> set[str]:
+        # Visit descendants before their importer without using Python's recursion stack.
+        stack = [(name, False)]
+        while stack:
+            current, expanded = stack.pop()
+            if expanded:
+                for imported in graph[current]:
+                    if imported in graph:
+                        reached[current].update(reached[imported])
+            elif current not in reached:
+                # Lean rejects module cycles; the mark keeps a broken tree from looping.
+                reached[current] = {imported for imported in graph[current] if imported in graph}
+                stack.append((current, True))
+                stack.extend(
+                    (imported, False) for imported in sorted(reached[current], reverse=True)
+                )
+        return reached[name]
+
+    @cache
+    def targets(name: str, source_layer: str) -> set[str]:
+        return {
+            target
+            for module in {name} | reachable(name)
+            if module_layers[module] == source_layer
+            for target in containers(module)
+        }
+
     edges: dict[tuple[str, str], list[tuple[str, str]]] = {}
     directory_graph: dict[str, set[str]] = {}
     for name in sorted(graph):
-        if layer(name) is None:
+        source_layer = module_layers[name]
+        if source_layer is None:
             continue
         for imported in sorted(set(graph[name])):
-            if imported not in graph or layer(name) != layer(imported):
+            if imported not in graph:
                 continue
             pairs = []
             for source in containers(name):
-                for target in containers(imported):
+                for target in sorted(targets(imported, source_layer)):
                     if (
                         source == target
                         or source.startswith(target + ".")

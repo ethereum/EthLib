@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Reach
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.Reach
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
 
 /-!

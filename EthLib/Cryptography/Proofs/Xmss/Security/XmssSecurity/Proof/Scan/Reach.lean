@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.LoopWalk
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.LoopWalk
 
 /-!
 # Reaching positions under one more query

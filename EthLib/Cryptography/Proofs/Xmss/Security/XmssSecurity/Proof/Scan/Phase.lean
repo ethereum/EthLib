@@ -1,8 +1,8 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Ledger
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.MomentLift
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Card
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.Ledger
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.MomentLift
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.Card
 
 /-!
 # The adversary phase, query by query

@@ -6,7 +6,7 @@ public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Execution.Evm.Log
 
 /-!
-# `Evm.Call.TransferLog`
+# `Evm.TransferLog`
 
 From Glamsterdam, every move of ether to another account writes a log, by EIP-7708.
 

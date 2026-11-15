@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedBoundedSignProbability
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.LoopWalk
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.LoopWalk
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 /-!

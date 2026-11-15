@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Moment
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.Moment
 public import Mathlib.Basic.ENNReal.Real
 public import Mathlib.Basic.ENNReal.Operations
 
