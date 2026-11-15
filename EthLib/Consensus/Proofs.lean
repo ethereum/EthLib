@@ -76,6 +76,8 @@ public import EthLib.Consensus.Proofs.DataAvailability.Blob
 public import EthLib.Consensus.Proofs.DataAvailability.BlobRandomOracle
 public import EthLib.Consensus.Proofs.DataAvailability.Column
 public import EthLib.Consensus.Proofs.DataAvailability.Custody
+public import EthLib.Consensus.Proofs.DepositRandomOracle
+public import EthLib.Consensus.Proofs.DepositRandomOracleAccepted
 public import EthLib.Consensus.Proofs.DepositTree
 public import EthLib.Consensus.Proofs.ForkChoice.AncestorRoots
 public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores

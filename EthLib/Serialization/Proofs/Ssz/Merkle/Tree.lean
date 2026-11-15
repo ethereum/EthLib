@@ -132,6 +132,19 @@ theorem subtreeAtM_ofHash_zero_eq (hash : ByteArray → ByteArray) (chunks : Arr
           (padded zeroChunk chunks) := by
   simp only [subtreeAtM_ofHash_eq_subtreeRoot hash chunks depth 0, Nat.zero_add]
 
+/-- A tree of depth 2 over three or four nodes is three hashes, with a hash in any lawful monad.
+
+A missing fourth node is the zero node. -/
+theorem subtreeAtM_ofHash_four {m : Type → Type} [Monad m] [LawfulMonad m]
+    (hash : ByteArray → m ByteArray) {chunks : Array Bytes} (more : 2 < chunks.size)
+    (fits : chunks.size ≤ 4) :
+    subtreeAtM (Hasher.ofHash hash) chunks 2 0 = (do
+      let left ← combineM hash (padded zeroChunk chunks 0) (padded zeroChunk chunks 1)
+      let right ← combineM hash (padded zeroChunk chunks 2) (padded zeroChunk chunks 3)
+      combineM hash left right) := by
+  rcases (show chunks.size = 3 ∨ chunks.size = 4 by omega) with count | count <;>
+    simp [subtreeAtM, count, Hasher.ofHash, zeroSubtreeM, padded]
+
 /-- The progressive tree of any hash agrees with the hash-independent definition. -/
 theorem merkleizeProgressiveUncheckedM_ofHash_eq (hash : ByteArray → ByteArray)
     (chunks : List Bytes) (level : Nat) :

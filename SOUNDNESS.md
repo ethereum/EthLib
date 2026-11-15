@@ -275,11 +275,36 @@ Beyond the adversary's own queries, `Q` grows with the depth only, not with the 
 With SHA-256 in place of the oracle, `blobWins_sha256_iff` shows that a win is two such sidecars that `verifyBlobSidecarInclusionProof` accepts.
 Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
 
+`Consensus/Proofs/DepositRandomOracle.lean` composes the branch bound with the deposit check of `processDeposit`, which runs before Heze.
+That check roots the deposit data, then runs `isValidMerkleBranch` from that root at the deposit index and the deposit root of the state.
+The experiment reads no preset or fork, and an adversary outputs an index, a deposit root and two deposits.
+The extraction roots the data of both deposits, then climbs both proofs from those roots at that index.
+Every hash is an oracle call, and the climbs take the depth of the check, `DEPOSIT_CONTRACT_TREE_DEPTH + 1`, which is 33.
+The adversary wins when the deposits have different data, and both climbs reach that deposit root.
+A win needs different data, so two proofs of the same data are not a win.
+
+`collision_of_extractDeposits` shows that every win leaves two different cached inputs with one answer.
+By `hashTreeRootM_depositData`, the root of deposit data is seven hashes.
+The public key takes one, by `hashTreeRootM_bytes48`, and the signature takes three, by `hashTreeRootM_bytes96`.
+The withdrawal credentials and the amount take none, by `hashTreeRootM_bytes32` and `hashTreeRootM_uint64`.
+Three more hashes join the four field roots.
+So equal roots of two different data give two such inputs, which a chase from the root down to the fields finds with `collision_or_eq_of_queryHash`.
+Two different roots that climb to one deposit root give the inputs that `collision_of_extractBranches` finds.
+`prEvent_experimentWith_le` then gives `prEvent_depositWins_le`, which bounds a win by `Q^2 / N`, and `prEvent_depositWins_le_two_pow` states it with `N = 2^256`.
+`extractDeposits_queryBound` shows that the extraction makes seven queries per root of deposit data and at most 33 per climb, 80 in all.
+`experimentWith_extractDeposits_queryBound` adds the adversary's queries, through `experimentWith_queryBound`.
+`prEvent_depositWins_le_of_adversary` bounds a win by `(q + 80)^2 / 2^256`, for an adversary that makes at most `q` queries.
+Beyond the adversary's own queries, `Q` grows by at most 80, not with the number of deposits in the tree.
+With SHA-256 in place of the oracle, `depositWins_sha256_iff` shows that a win is two deposits with different data that the check accepts.
+Both checks read the index and the deposit root of the claim.
+`depositWins_of_processDeposit` (`Consensus/Proofs/DepositRandomOracleAccepted.lean`) gives such a win for two deposits with different data that `processDeposit` accepts at one state, by `processDeposit_ok`.
+It holds at every preset and every fork before Heze.
+Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
+
 These other branch checks also hash with SHA-256, and no theorem composes their proofs with the branch bound:
 
 - The light client checks of bootstraps and updates, from Altair, and of headers, from Capella.
 - `verifyKzgCommitmentsInclusionProof`, which data column sidecars and partial data column headers read at Fulu.
-- The deposit branch check of `processDeposit`, before Heze.
 
 ### leanSPHINCS
 
@@ -5789,6 +5814,7 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   The type is fixed before the run, except in the layout bound, where the adversary picks both types.
   The branch bound fixes the depth before the run, and its adversary picks the index, the leaves and the branches.
   The blob sidecar bound fixes the preset and the fork before the run, and its adversary picks both sidecars.
+  The deposit bound reads no preset or fork, and its adversary picks the index, the deposit root and both deposits.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of SHA-256.
@@ -6029,6 +6055,8 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 <!-- generated: vcvio-users -->
 - `EthLib/Consensus/Proofs/Accessors/`
 - `EthLib/Consensus/Proofs/DataAvailability/`
+- `EthLib/Consensus/Proofs/DepositRandomOracle.lean`
+- `EthLib/Consensus/Proofs/DepositRandomOracleAccepted.lean`
 - `EthLib/Consensus/Proofs/Gossip/`
 - `EthLib/Consensus/Proofs/LightClient/`
 - `EthLib/Consensus/Proofs/PqKeys/`
