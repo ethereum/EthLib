@@ -3,8 +3,7 @@ module
 public import EthLib.Engine.PayloadBodies
 public import EthLib.Engine.Proofs.Json
 public import EthLib.Execution.Proofs.Rpc.Json
--- Showing that a written value is not `null` unfolds the null test of Lean's JSON.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: `engine_getPayloadBodiesByHash` and `engine_getPayloadBodiesByRange`
@@ -376,7 +375,7 @@ theorem bodiesByRangeParams_json (start count : UInt64) :
 /-! ## The answer as JSON -/
 
 /-- The JSON `null` is `null`. -/
-private theorem isNull_null : Lean.Json.null.isNull = true := rfl
+private theorem isNull_null : Lean.Json.null.isNull = true := Base.Toolchain.isNull_null
 
 /-- A body of version 1 reads back from its JSON, with `null` withdrawals read as absent. -/
 theorem bodyV1OfJson_json (b : ExecutionPayloadBodyV1) : bodyV1OfJson (bodyV1Json b) = .ok b := by
@@ -453,7 +452,7 @@ theorem payloadBodiesV1OfJson_json (bodies : List (Option ExecutionPayloadBodyV1
     payloadBodiesV1OfJson (payloadBodiesV1Json bodies) = .ok bodies := by
   unfold payloadBodiesV1OfJson payloadBodiesV1Json
   rw [Serialization.JsonRpc.array_listJson_of _ (Serialization.JsonRpc.nullable_optionJson
-    bodyV1OfJson_json fun _ => rfl)]
+    bodyV1OfJson_json fun _ => Base.Toolchain.isNull_mkObj _)]
   rfl
 
 /-- An answer of version 2 reads back from its JSON, with `null` at the same entries. -/
@@ -461,7 +460,7 @@ theorem payloadBodiesV2OfJson_json (bodies : List (Option ExecutionPayloadBodyV2
     payloadBodiesV2OfJson (payloadBodiesV2Json bodies) = .ok bodies := by
   unfold payloadBodiesV2OfJson payloadBodiesV2Json
   rw [Serialization.JsonRpc.array_listJson_of _ (Serialization.JsonRpc.nullable_optionJson
-    bodyV2OfJson_json fun _ => rfl)]
+    bodyV2OfJson_json fun _ => Base.Toolchain.isNull_mkObj _)]
   rfl
 
 end EthLib.Engine

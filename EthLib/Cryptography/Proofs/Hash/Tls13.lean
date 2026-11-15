@@ -3,8 +3,6 @@ module
 public import EthLib.Cryptography.Hash.Tls13
 public import EthLib.Cryptography.Proofs.Hash.Hkdf
 public import EthLib.Base.Except
--- Checking a fixed label's byte length reduces the body of String.toUTF8.
-import all Init.Data.String.Defs
 
 /-!
 # Proofs: TLS 1.3 labelled HKDF
@@ -44,6 +42,10 @@ theorem hkdfLabel_ok_iff (label context : ByteArray) (length : Nat) :
         simp [pure, Except.pure]
         omega
 
+/-- The UTF-8 encoding of a string has its byte size, which `decide` evaluates on a literal. -/
+theorem size_toUTF8 (s : String) : s.toUTF8.size = s.utf8ByteSize := by
+  rw [String.toUTF8_eq_toByteArray, String.size_toByteArray]
+
 /-- A successful label writes its two-byte output length, length-prefixed label and context. -/
 theorem hkdfLabel_eq (label context : ByteArray) (length : Nat)
     (hlabel : 0 < label.size ∧ label.size ≤ 249) (hcontext : context.size ≤ 255)
@@ -54,7 +56,7 @@ theorem hkdfLabel_eq (label context : ByteArray) (length : Nat)
         ⟨#[UInt8.ofNat context.size]⟩ ++ context) := by
   simp only [hkdfLabel, show ¬ (label.size = 0 ∨ 249 < label.size) by omega,
     show ¬ 255 < context.size by omega, show ¬ 65535 < length by omega, ↓reduceIte]
-  simp only [ByteArray.size_append, show "tls13 ".toUTF8.size = 6 from by decide,
+  simp only [ByteArray.size_append, show "tls13 ".toUTF8.size = 6 from by rw [size_toUTF8]; decide,
     ByteArray.append_assoc, pure, Except.pure]
 
 /-- A labelled expansion succeeds exactly within the label, context and SHA-256 output bounds. -/

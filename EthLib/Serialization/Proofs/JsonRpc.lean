@@ -7,10 +7,8 @@ public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Bytes
 public import Std.Data.TreeMap.Raw.WF
 public import Std.Data.TreeMap.Raw.Lemmas
--- The fields of an encoded object unfold Lean's `Json.mkObj`.
-import all Lean.Data.Json.Basic
--- The digits of `Nat.toDigits` must unfold for `decide` to read them.
-import all Init.Data.Repr
+import EthLib.Base.Proofs.Toolchain.JsonBasic
+import EthLib.Base.Proofs.Toolchain.Repr
 
 /-!
 # Proofs: the JSON form of the base types
@@ -408,6 +406,7 @@ theorem address_eq_ok_iff {what : String} {j : Lean.Json} {a : Address} :
 /-- The digit that Lean core writes for a value below sixteen is the lowercase hex digit. -/
 private theorem digitChar_eq_hexDigitChar : ∀ n (h : n < 16),
     Nat.digitChar n = hexDigitChar ⟨n, h⟩ := by
+  simp only [Base.Toolchain.digitChar_eq]
   decide
 
 /-- Each digit that `Nat.toDigits 16` writes is a lowercase hex digit, read back as its value. -/
@@ -419,6 +418,7 @@ theorem hexValue_digitChar (n : Nat) (hn : n < 16) :
 
 /-- No digit of a positive value below sixteen is the digit `0`. -/
 private theorem digitChar_ne_zero : ∀ n, n < 16 → 0 < n → ¬ Nat.digitChar n = '0' := by
+  simp only [Base.Toolchain.digitChar_eq]
   decide
 
 /-- The hex digits of a number are ASCII digits whose values, read from the first, give the number.
@@ -466,6 +466,7 @@ theorem toDigits_hex (n : Nat) :
 /-- A digit whose code is that of `0` is the digit `0`. -/
 private theorem digitChar_code_zero : ∀ n, n < 16 →
     (Nat.digitChar n).val.toUInt8 = 48 → Nat.digitChar n = '0' := by
+  simp only [Base.Toolchain.digitChar_eq]
   decide
 
 /-- A loop whose step multiplies by sixteen and adds the value of a digit computes the fold. -/
@@ -546,6 +547,7 @@ private theorem digitChar_digitValue_lt : ∀ n, n < 256 →
     (hexValue false n.toUInt8).isSome = true →
     digitValue n.toUInt8 < 16 ∧ (Nat.digitChar (digitValue n.toUInt8)).val.toUInt8 = n.toUInt8 ∧
       (n.toUInt8 ≠ 48 → 0 < digitValue n.toUInt8) := by
+  simp only [Base.Toolchain.digitChar_eq]
   decide +kernel
 
 /-- A code that the decoder reads as a hex digit is the code of the digit of its value.
@@ -1167,7 +1169,7 @@ theorem toList_mkObj {pairs : List (String × Lean.Json)}
   have keys : pairs.Pairwise (fun a b => ¬ compare a.1 b.1 = .eq) :=
     distinct.imp fun different equal => different (compare_eq_iff_eq.mp equal)
   have wf : (Std.TreeMap.Raw.ofList pairs (cmp := compare)).WF := Std.TreeMap.Raw.WF.ofList
-  refine ⟨_, rfl, ?_, ?_, ?_⟩
+  refine ⟨_, Base.Toolchain.mkObj_eq pairs, ?_, ?_, ?_⟩
   · rw [Std.TreeMap.Raw.length_toList wf, Std.TreeMap.Raw.size_ofList keys]
   · rintro ⟨k, v⟩
     rw [Std.TreeMap.Raw.mem_toList_iff_getElem?_eq_some wf]
@@ -1254,10 +1256,11 @@ theorem field_of_perm {what k : String} {v : Lean.Json} {fs pairs : List (String
   rfl
 
 /-- The JSON of a string is not `null`. -/
-theorem isNull_str (s : String) : (Lean.Json.str s).isNull = false := by rfl
+theorem isNull_str (s : String) : (Lean.Json.str s).isNull = false := Base.Toolchain.isNull_str s
 
 /-- The JSON of an array is not `null`. -/
-theorem isNull_arr (a : Array Lean.Json) : (Lean.Json.arr a).isNull = false := by rfl
+theorem isNull_arr (a : Array Lean.Json) : (Lean.Json.arr a).isNull = false :=
+  Base.Toolchain.isNull_arr a
 
 /-- The decoder of byte strings of a size reads back a vector written as data. -/
 theorem fixed_dataJson {n : Nat} (what : String) (v : Vector UInt8 n) (upper : Bool) :
@@ -1355,7 +1358,7 @@ theorem nullable_optionJson {α : Type} {f : Lean.Json → Read α} {g : α → 
     have hx := present x
     have hn : nullable f (g x) = some <$> f (g x) := by
       cases hg : g x with
-      | null => rw [hg] at hx; cases hx
+      | null => rw [hg, Base.Toolchain.isNull_null] at hx; cases hx
       | _ => rfl
     simp only [optionJson, hn, h]
     rfl

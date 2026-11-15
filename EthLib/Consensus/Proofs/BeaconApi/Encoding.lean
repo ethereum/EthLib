@@ -7,8 +7,7 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHexCase
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonRoundTrip
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonTotal
 public import EthLib.Serialization.Proofs.Ssz.Typed.Class
--- The envelope proof unfolds how Lean builds a JSON object.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: the shared encodings of the Beacon API
@@ -144,7 +143,7 @@ theorem ApiEnvelope.ofJson_toJson (envelope : ApiEnvelope) :
     (by rintro b rfl; simp [← hP]) (by rintro rfl; simp [← hP])
   have hdata : (Json.mkObj P).getObjVal? "data" = .ok data :=
     getObjVal?_mkObj distinct (by simp [← hP])
-  obtain ⟨m, hm⟩ : ∃ m, Json.mkObj P = .obj m := ⟨_, rfl⟩
+  obtain ⟨m, hm⟩ : ∃ m, Json.mkObj P = .obj m := ⟨_, Base.Toolchain.mkObj_eq P⟩
   rw [hm] at hdata k1 k2 k3 k4 ⊢
   simp only [ApiEnvelope.ofJson, hdata, k1, k2, k3, k4]
   rfl

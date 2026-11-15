@@ -3,8 +3,7 @@ module
 public import EthLib.Engine.ForkchoiceUpdated
 public import EthLib.Base.Except
 public import EthLib.Engine.Proofs.Json
--- Showing that a written field is not `null` unfolds the null test of Lean's JSON.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: the parameters, the head and the payload attributes of `engine_forkchoiceUpdated`
@@ -1255,7 +1254,7 @@ theorem forkchoiceUpdatedParams_json {fork : Fork} (version : Nat) (state : Fork
     cases attributes with
     | none => exact Or.inl ⟨rfl, rfl⟩
     | some a =>
-      obtain ⟨kvs, hk⟩ : ∃ kvs, payloadAttributesJson a = .obj kvs := ⟨_, rfl⟩
+      obtain ⟨kvs, hk⟩ : ∃ kvs, payloadAttributesJson a = .obj kvs := ⟨_, Base.Toolchain.mkObj_eq _⟩
       exact Or.inr ⟨kvs, hk, by simp [hk]⟩
   unfold forkchoiceUpdatedParamsJson
   rw [forkchoiceUpdatedParams_eq_ok_iff]
@@ -1385,9 +1384,12 @@ theorem forkchoiceUpdatedResponseOfJson_json (s : PayloadStatus) (e : Option Str
       [("payloadStatus", a), ("payloadId", b)].lookup "payloadId" = some b :=
     fun _ _ => rfl
   have l1 : fs.lookup "payloadStatus" = some (Json.payloadStatusJson s e) := by
-    rw [look, k1]; rfl
+    rw [look, k1]
+    simp [Option.filter_some, Json.payloadStatusJson, Base.Toolchain.isNull_mkObj]
   have l2 : fs.lookup "payloadId" = id.map (dataJson ·.toList) := by
-    rw [look, k2]; cases id <;> rfl
+    rw [look, k2]
+    cases id <;> simp [optionJson, dataJson, Option.filter_some, Base.Toolchain.isNull_null,
+      Base.Toolchain.isNull_str]
   have hall : (fs.all (["payloadStatus", "payloadId"].contains ·.1)) = true := by
     rw [List.all_eq_true]
     intro p hm

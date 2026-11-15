@@ -1,9 +1,6 @@
 module
 
 public import EthLib.Cryptography.Hash.Keccak
--- The kernel checks the constants by reducing `Array.map` and the finite range loop.
-import all Init.Data.Array.Basic
-import all Init.Data.Range.Basic
 
 /-!
 # Proofs: `Hash.Keccak`
@@ -32,6 +29,9 @@ theorem roundConstants_eq : RC = Vector.ofFn fun ir => Internal.roundConstant ir
 
 So no rotation offset is taken on trust. -/
 theorem rhoOffsets_eq : RHO.map UInt64.toNat = Internal.rhoOffsets := by
+  -- Lean hides the bodies of `Array.map` and of the range loop, so state both over lists first.
+  rw [← Vector.toList_inj, Vector.toList_map, Internal.rhoOffsets]
+  simp only [Std.Legacy.Range.forIn_eq_forIn_range']
   -- The walk of 24 steps, run by the kernel.
   decide +kernel
 

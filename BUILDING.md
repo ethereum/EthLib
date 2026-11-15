@@ -52,8 +52,13 @@ Lean checks a public theorem whose proof is the term `rfl` against exposed bodie
 Proofs sometimes need more than the public interface offers.
 A proof-only import can use a plain `import` when it contributes nothing to the public API.
 When you reason about a dependency, prefer its public equations.
-If a proof needs the body of a definition, a targeted `import all` can provide it, either from the same package or from a dependency that permits private imports.
+If a proof needs the body of a definition in EthLib, a targeted `import all` can provide it.
 Comment the exact definition whose body the proof needs.
+A module outside EthLib, such as one of the Lean toolchain or of Batteries, can change its private declarations and bodies in any new version.
+So only one module under `EthLib/Base/Proofs/Toolchain/` writes an `import all` of such a module, and it states the equations that the proofs need as public theorems.
+Other proofs import that module with a plain `import` and cite its theorems.
+A new version then breaks one file per module outside EthLib, apart from the exceptions below.
+`scripts/check_layers.py` checks this rule, and `scripts/check_layers_baseline.txt` lists the exceptions, each with its reason.
 EthLib does not set Lake's option `allowImportAll`, so a package that depends on EthLib cites the laws of a hidden module instead.
 Lake v4.35.0 does not enforce that option, so the build allows such an import, and this is a rule of the repository.
 Give a public definition an explicit result type when a delayed proof cannot infer it.

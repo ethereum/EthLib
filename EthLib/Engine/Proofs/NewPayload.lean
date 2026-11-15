@@ -3,8 +3,7 @@ module
 public import EthLib.Engine.NewPayload
 public import EthLib.Engine.Proofs.Block
 public import EthLib.Engine.Proofs.Json
--- Showing that a written payload is not `null` unfolds the null test of Lean's JSON.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: the checks of `engine_newPayload`
@@ -630,7 +629,8 @@ theorem newPayloadParams_json_of_structure {fork : Fork} {version : Nat}
       exact layout hlt
     have hp : payloadParam version (Json.executionPayloadJson payload) = .ok (any, none) :=
       (payloadParam_eq_ok_iff_of_lt hlt).mpr ⟨hj, hs, rfl⟩
-    exact ⟨any, newPayloadParams_arr hv rfl hp hashes beaconRoot requests, hat⟩
+    exact ⟨any,
+      newPayloadParams_arr hv (Base.Toolchain.isNull_mkObj _) hp hashes beaconRoot requests, hat⟩
   | some x =>
     -- Version 5 reads the structure of version 4, from Dencun on.
     obtain ⟨accessList, slot⟩ := x
@@ -640,7 +640,8 @@ theorem newPayloadParams_json_of_structure {fork : Fork} {version : Nat}
     have hp : payloadParam version (Json.executionPayloadV4Json payload accessList slot) =
         .ok (any, some (accessList, slot)) :=
       (payloadParam_eq_ok_iff_of_le h5).mpr ⟨accessList, slot, hj, rfl⟩
-    exact ⟨any, newPayloadParams_arr hv rfl hp hashes beaconRoot requests, hat⟩
+    exact ⟨any,
+      newPayloadParams_arr hv (Base.Toolchain.isNull_mkObj _) hp hashes beaconRoot requests, hat⟩
 
 /-- The decoder of the parameters reads back the JSON of the parameters of a version.
 

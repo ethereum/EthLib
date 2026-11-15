@@ -2,8 +2,7 @@ module
 
 public import EthLib.Execution.Rpc.Request
 public import EthLib.Serialization.Proofs.JsonRpc
--- The members of an encoded object unfold the JSON object builder of Lean.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: requests and responses

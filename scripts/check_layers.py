@@ -34,6 +34,8 @@ LAYERS = {
 AGGREGATORS = {"EthLib", "EthLib.Proofs", "EthLib.Exports"}
 # The packages of the Lean toolchain, which a specification and a C export may import.
 TOOLCHAIN = {"Init", "Std", "Lean"}
+# The only modules that may `import all` a module outside EthLib, as BUILDING.md states.
+TOOLCHAIN_HOME = ("EthLib", "Base", "Proofs", "Toolchain")
 # The first tier of Cryptography: hashes and Merkle trees, which import no other part of it.
 FIRST_TIER = ("Hash", "Merkle")
 # The two hash-based signatures, whose modules never reach each other through their imports.
@@ -43,7 +45,7 @@ KIND_NAMES = {"specification": "a specification", "property": "a property", "exp
 KINDS = "coverage/kinds.toml"
 
 HEADER_WORD = re.compile(r"\s*(module|prelude)\b")
-IMPORT = re.compile(r"\s*(?:public\s+)?(meta\s+)?import\s+(?:all\s+)?((?:«[^»]*»|[^\s«])+)")
+IMPORT = re.compile(r"\s*(?:public\s+)?(meta\s+)?import\s+(all\s+)?((?:«[^»]*»|[^\s«])+)")
 MODULE_COMPONENT = re.compile(r"«[^»]*»|[^.]+")
 LIBRARY = re.compile(r"^lean_lib\s+«?([A-Za-z0-9_]+)»?\s+where(.*?)(?=^\S|\Z)", re.M | re.S)
 ROOTS = re.compile(r"roots\s*:=\s*#\[(.*?)\]", re.S)
@@ -56,6 +58,7 @@ class Import(NamedTuple):
     module: str
     meta: bool
     line: int
+    all: bool = False
 
 
 def read_header(text: str) -> tuple[list[Import], str]:
@@ -66,10 +69,10 @@ def read_header(text: str) -> tuple[list[Import], str]:
         if word := HEADER_WORD.match(code, index):
             index = word.end()
         elif match := IMPORT.match(code, index):
-            module = join_module(module_parts(match.group(2)))
+            module = join_module(module_parts(match.group(3)))
             # `strip_lean` keeps every newline, so the line number is the one in the file.
-            line = code.count("\n", 0, match.start(2)) + 1
-            found.append(Import(module, bool(match.group(1)), line))
+            line = code.count("\n", 0, match.start(3)) + 1
+            found.append(Import(module, bool(match.group(1)), line, bool(match.group(2))))
             index = match.end()
         else:
             return found, code[index:]
@@ -342,6 +345,42 @@ def reach_problems(graph: dict[str, list[str]]) -> list[tuple[str, str, str]]:
     return problems
 
 
+def toolchain_home(module: str) -> bool:
+    """Whether a module sits in the directory of the modules that read toolchain bodies."""
+    parts = module_parts(module)
+    return (
+        len(parts) > len(TOOLCHAIN_HOME) and tuple(parts[: len(TOOLCHAIN_HOME)]) == TOOLCHAIN_HOME
+    )
+
+
+def import_all_problems(headers: dict[str, list[Import]]) -> list[tuple[str, Import, str]]:
+    """
+    Each `import all` of a module outside EthLib that the rule of BUILDING.md does not allow.
+
+    Each problem is the module that writes the import, the import, and the rule it breaks.
+
+    Such an import reads private declarations and bodies, which a new version can change.
+    So only a module under `EthLib/Base/Proofs/Toolchain/` writes it, and states public theorems.
+    Each outside module has one such module, so a change to it breaks one file.
+    """
+    homes: dict[str, list[str]] = {}
+    problems = []
+    for name in sorted(headers):
+        for found in headers[name]:
+            if not found.all or module_parts(found.module)[0] == "EthLib":
+                continue
+            if toolchain_home(name):
+                homes.setdefault(found.module, []).append(name)
+            else:
+                home = "/".join(TOOLCHAIN_HOME)
+                problems.append((name, found, f"only a module under {home}/ reads its bodies"))
+    for imported, names in sorted(homes.items()):
+        for name in names[1:]:
+            found = next(item for item in headers[name] if item.all and item.module == imported)
+            problems.append((name, found, f"{names[0]} already reads its bodies"))
+    return problems
+
+
 def library_roots(lakefile: str) -> list[str]:
     """The root modules of each `lean_lib` of the lakefile; without `roots`, the library itself."""
     roots = []
@@ -531,6 +570,15 @@ def check(root: Path) -> list[str]:
                     problems.append(
                         f"{modules[name].relative_to(root)}: imports {imported}, but {problem}"
                     )
+
+    for name, found, rule in import_all_problems(headers):
+        if (name, found.module) in baseline:
+            used.add((name, found.module))
+        else:
+            problems.append(
+                f"{modules[name].relative_to(root)}:{found.line}: "
+                f"imports all of {found.module}, but {rule}"
+            )
 
     directory_roots = {name for name, path in modules.items() if path.with_suffix("").is_dir()}
     for name, imported, cycle in directory_cycles(graph, directory_roots):
