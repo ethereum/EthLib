@@ -1,4 +1,26 @@
-{"methods":
+{"type_imports":
+ [{"name": "Header",
+   "module": "ethlib.networking.quic._codec_types",
+   "alias": "QuicHeader"},
+  {"name": "Frame",
+   "module": "ethlib.networking.quic._codec_types",
+   "alias": "QuicFrame"},
+  {"name": "PacketType",
+   "module": "ethlib.networking.quic._codec_types",
+   "alias": "QuicPacketType"},
+  {"name": "Message",
+   "module": "ethlib.networking.quic._tls_types",
+   "alias": "TlsMessage"},
+  {"name": "Extension",
+   "module": "ethlib.networking.quic._tls_types",
+   "alias": "TlsExtension"},
+  {"name": "Payload",
+   "module": "ethlib.networking.quic._tls_types",
+   "alias": "TlsPayload"},
+  {"name": "PayloadForm",
+   "module": "ethlib.networking.quic._tls_types",
+   "alias": "TlsPayloadForm"}],
+ "methods":
  [{"summary":
    "The aggregation of Ethereum public keys: the sum of the validated keys.",
    "signature": "(pubkeys: list[bytes]) -> bytes",
@@ -12685,7 +12707,7 @@
    "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4.\n\nDuring the handshake the secret is the sender's handshake traffic secret."},
   {"summary":
    "Encode one handshake message with its header and the caller's hash length, RFC 8446 §4.",
-   "signature": "(hash_length: int, message: Any) -> bytes",
+   "signature": "(hash_length: int, message: TlsMessage) -> bytes",
    "operation": "EthLib.Networking.Quic.Exports.messageEncodeExport",
    "method": "quic_tls_message_encode",
    "errors":
@@ -12703,7 +12725,7 @@
    "Encode one handshake message with its header and the caller's hash length, RFC 8446 §4."},
   {"summary":
    "Decode one complete message and return its fields and trailing bytes, RFC 8446 §4.",
-   "signature": "(hash_length: int, data: bytes) -> tuple[Any, bytes]",
+   "signature": "(hash_length: int, data: bytes) -> tuple[TlsMessage, bytes]",
    "operation": "EthLib.Networking.Quic.Exports.messageDecodeExport",
    "method": "quic_tls_message_decode",
    "errors":
@@ -12721,7 +12743,7 @@
    "Decode one complete message and return its fields and trailing bytes, RFC 8446 §4."},
   {"summary":
    "Encode a structured extension payload without selecting an algorithm or protocol.",
-   "signature": "(payload: Any) -> Any",
+   "signature": "(payload: TlsPayload) -> TlsExtension",
    "operation": "EthLib.Networking.Quic.Exports.payloadEncodeExport",
    "method": "quic_tls_payload_encode",
    "errors":
@@ -12739,7 +12761,7 @@
    "Encode a structured extension payload without selecting an algorithm or protocol."},
   {"summary":
    "Decode an extension in the payload form that its message context requires.",
-   "signature": "(form: str, extension: Any) -> Any",
+   "signature": "(form: TlsPayloadForm, extension: TlsExtension) -> TlsPayload",
    "operation": "EthLib.Networking.Quic.Exports.payloadDecodeExport",
    "method": "quic_tls_payload_decode",
    "errors":
@@ -12863,7 +12885,7 @@
    "Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."},
   {"summary":
    "Encode a QUIC header, with checked lengths and packet-number bounds (RFC 9000 §17).",
-   "signature": "(header: Any) -> bytes",
+   "signature": "(header: QuicHeader) -> bytes",
    "operation": "EthLib.Networking.Quic.Exports.headerEncodeExport",
    "method": "quic_header_encode",
    "errors":
@@ -12884,7 +12906,7 @@
   {"summary":
    "Read an authenticated header and return its fields and remaining bytes (RFC 9000 §17).",
    "signature":
-   "(short_connection_id_length: int, data: bytes) -> tuple[Any, bytes]",
+   "(short_connection_id_length: int, data: bytes) -> tuple[QuicHeader, bytes]",
    "operation": "EthLib.Networking.Quic.Exports.headerDecodeExport",
    "method": "quic_header_decode",
    "errors":
@@ -12903,7 +12925,7 @@
    "docstring":
    "Read an authenticated header and return its fields and remaining bytes (RFC 9000 §17)."},
   {"summary": "Encode one well-formed QUIC frame (RFC 9000 §19).",
-   "signature": "(frame: Any) -> bytes",
+   "signature": "(frame: QuicFrame) -> bytes",
    "operation": "EthLib.Networking.Quic.Exports.frameEncodeExport",
    "method": "quic_frame_encode",
    "errors":
@@ -12922,7 +12944,8 @@
    "docstring": "Encode one well-formed QUIC frame (RFC 9000 §19)."},
   {"summary":
    "Read one frame allowed in the given packet type (RFC 9000 §12.4).",
-   "signature": "(packet: str, data: bytes) -> tuple[Any, bytes]",
+   "signature":
+   "(packet: QuicPacketType, data: bytes) -> tuple[QuicFrame, bytes]",
    "operation": "EthLib.Networking.Quic.Exports.frameDecodeExport",
    "method": "quic_frame_decode",
    "errors":
