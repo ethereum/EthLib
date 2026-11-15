@@ -573,7 +573,37 @@ private theorem Store.Reachable.finalized_ancestor_or_accountable_between {confi
         va vb parameters genesis store.justifiedCheckpoint (enough (.inl heldA) left)
         (enough (.inr heldB) right) terminalA terminalB (.inr fieldB) (fieldA ▸ ordered) conflict⟩)
 
-/-- Finality is early, lies on the justified chain, or yields accountable stake or hash evidence. -/
+/-- The finalized checkpoint of a store is early, or on the chain of its justified checkpoint.
+
+Otherwise two runs to held states of the store bound the accountable stake, or show hash evidence.
+
+The store is reachable from an anchor whose parent it does not hold.
+
+The anchor block is at or before the slot of the anchor state, and the preset meets the parameters.
+
+We assume a run from a genesis built from deposits to the anchor state.
+
+We assume that every block of the store was imported with the signature checks of that run.
+
+We assume that no upgrade is due at a held slot, so the transitions of the store are steps of a run.
+
+The first alternative puts the finalized epoch at or before the epoch of the anchor state.
+
+The second puts the finalized checkpoint at the first slot of its epoch on the justified chain.
+
+The third gives the runs from the anchor to the held states of the two fields.
+
+Each field is that of its held state, or of the justification step that fork choice runs on it.
+
+The bound is that of direct accountable safety on the unslashed active stake at the anchor state.
+
+Its drift observes the runs up to one epoch past the justified epoch.
+
+The drift counts from the anchor, so the bound loosens as the justified epoch moves away from it.
+
+We assume a stake floor at the epoch calls of every run from the anchor to a held state.
+
+We assume it too at each held state up to one epoch past the justified epoch, for that step. -/
 theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
     {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
@@ -769,7 +799,15 @@ namespace Models.Network
 
 /-- The earlier finalized checkpoint is on the later justified chain at every honest node.
 
-Otherwise a bounded pair of events gives accountable stake or hash evidence from held states. -/
+Otherwise a bounded pair of events gives accountable stake or hash evidence from held states.
+
+The evidence is relative to the anchor.
+
+Three times the accountable stake plus twice the drift covers the unslashed reference stake.
+
+The drift counts from the anchor.
+
+With enough churn since the anchor, the evidence holds with no accountable key. -/
 theorem Execution.finalized_prefix_or_accountable {ν κ : Type*} [DecidableEq ν]
     {config : Config} {checks : SignatureChecks} {sources : BlockSources preset fork}
     {signed : Message preset fork → Set (ν × κ)}

@@ -482,7 +482,17 @@ private theorem finalized_prefix_of_chain {anchor : Store preset fork} {time : �
       (forward.reachable.finalized_le_justified sound))
     (justified_epoch_in_horizon anchored start sound slots anchorSlot inHorizon hu bounded)
 
-/-- An epoch of honest votes gives support, justification coverage, or a store collision. -/
+/-- An epoch of honest votes gives support, justification coverage, or a store collision.
+
+Each honest vote it assumes also passes the committee check in its target state.
+
+A compatible finalized checkpoint gives the finality check of block validation.
+
+The hypothesis on delayed blocks gives the rest of the block handler.
+
+The root is assumed to fit each finalized checkpoint seen since the safe interval starts.
+
+Finalized-prefix compatibility and nonzero state roots of held blocks are assumed. -/
 theorem Execution.mem_supportersOf_of_duty_epoch {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
@@ -878,7 +888,15 @@ private theorem Execution.isAncestor_getHead_of_duty_epoch_core {Δ : ℕ} (sync
   · exact False.elim (collision found)
 
 open scoped Classical in
-/-- An honest-duty margin places the safe root on the head chain, or names a store collision. -/
+/-- An honest duty majority preserves the safe head chain, or bounded stores name a collision.
+
+The parent safety induction supplies the visited parent; the head walk supplies its score read.
+
+A compatible finalized checkpoint gives the finality check of block validation.
+
+The hypothesis on delayed blocks gives the rest of the block handler.
+
+Finalized-prefix compatibility, nonzero state roots and the absent anchor parent are assumed. -/
 theorem Execution.isAncestor_getHead_of_duty_epoch {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
@@ -985,7 +1003,15 @@ private theorem duty_prefix_bounds {anchor : Store preset fork} {time : ℕ} {ho
   intro u hu j before
   exact justified_epoch_in_horizon anchored start sound slots anchorSlot inHorizon hu before
 
-/-- Honest duties give support or coverage, a store collision, or accountable safety evidence. -/
+/-- Honest duties give support or coverage, a store collision, or accountable safety evidence.
+
+The evidence is relative to the anchor.
+
+Three times the accountable stake plus twice the drift covers the unslashed reference stake.
+
+The drift counts from the anchor.
+
+With enough churn since the anchor, the evidence holds with no accountable key. -/
 theorem Execution.mem_supportersOf_of_duty_epoch_or_accountable {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
@@ -1102,7 +1128,15 @@ theorem Execution.mem_supportersOf_of_duty_epoch_or_accountable {Δ : ℕ} (sync
   · exact .inr evidence
 
 open scoped Classical in
-/-- An honest-duty margin gives head ancestry, a store collision, or accountable safety evidence. -/
+/-- An honest-duty margin gives head ancestry, a store collision, or accountable safety evidence.
+
+The evidence is relative to the anchor.
+
+Three times the accountable stake plus twice the drift covers the unslashed reference stake.
+
+The drift counts from the anchor.
+
+With enough churn since the anchor, the evidence holds with no accountable key. -/
 theorem Execution.isAncestor_getHead_of_duty_epoch_or_accountable {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)

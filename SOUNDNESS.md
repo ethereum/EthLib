@@ -2913,6 +2913,7 @@ They require a deposited genesis and a run to the anchor, `DirectSafety.Paramete
 The head theorem already required the absent parent.
 Their additional conclusion supplies held states and runs for which reference unslashed stake is at most three times accountable stake plus twice the maximum derived drift, or `DirectSafety.HashEvidence` finds a node-hash collision or zero-root object.
 This alternative is outside the store-collision witnesses and provides no a priori drift bound or unconditional one-third slashing guarantee.
+The drift counts from the anchor, so on a long execution with enough churn since the anchor the alternative holds with no accountable key.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/TargetVotes.lean` states the assumed honest target-vote count, `HonestTargetVotes`.
 `SignsTarget`, in the network file above, describes a signing witness by a bounded time inside that count; it is not an additional hypothesis on its own.
