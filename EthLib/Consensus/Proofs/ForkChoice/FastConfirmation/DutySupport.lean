@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Supporters
 public import EthLib.Consensus.Proofs.ForkChoice.VoteDelivery
+public import EthLib.Consensus.Proofs.ForkChoice.CheckpointAncestry
 import EthLib.Consensus.Proofs.ForkChoice.HonestVotes
 import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
 import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
@@ -435,6 +436,24 @@ private theorem Execution.mem_supportersOf_of_duty_epoch_core {Δ : ℕ} (sync :
     (fun earlier hfirst htime => safe earlier hfirst (by omega)) known rootAbove active).imp
       Or.inl id
 
+private theorem justified_epoch_in_horizon {anchor : Store preset fork} {time : ℕ} {horizon : Epoch}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ u ∈ J, e.start u = anchor) (sound : Invariant anchorState)
+    (slots : 0 < config.SLOT_DURATION_MS) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (inHorizon : ∀ u ∈ J, ∀ j epoch, (e.world j).time ≤ time →
+      ((e.world j).state u).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon)
+    {u : ValidatorIndex} (honest : u ∈ J) {j : ℕ} (before : (e.world j).time ≤ time) :
+    ((e.world j).state u).justifiedCheckpoint.epoch ≤ horizon := by
+  have forward := e.forwardReachable
+    (fun u hu => (start u hu) ▸ Store.ForwardReachable.anchor anchored) j u honest
+  obtain ⟨current, currentOk, _, _⟩ :=
+    forward.slots_le_current slots (UInt64.le_of_eq anchorSlot)
+  have epochOk : ((e.world j).state u).getCurrentStoreEpoch config =
+      .ok (computeEpochAtSlot preset current) := by
+    simp [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
+  exact UInt64.le_trans (forward.justified_epoch_le_current sound slots
+    (UInt64.le_of_eq anchorSlot) epochOk).1 (inHorizon u honest j _ before epochOk)
+
 /-- Restrict finalized-prefix compatibility to ordered events of one honest validator. -/
 private theorem finalized_prefix_of_chain {anchor : Store preset fork} {time : ℕ} {horizon : Epoch}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -458,16 +477,10 @@ private theorem finalized_prefix_of_chain {anchor : Store preset fork} {time : �
   intro u hu i j le bounded
   have forward := e.forwardReachable
     (fun u hu => (start u hu) ▸ Store.ForwardReachable.anchor anchored) j u hu
-  obtain ⟨current, currentOk, _, _⟩ :=
-    forward.slots_le_current slots (UInt64.le_of_eq anchorSlot)
-  have epochOk : ((e.world j).state u).getCurrentStoreEpoch config =
-      .ok (computeEpochAtSlot preset current) := by
-    simp [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
   exact chain u hu u hu i j ((e.monotone_time le).trans bounded) bounded _ (.inl rfl)
     (UInt64.le_trans (e.checkpointsAdvance_of_le u le).2.epoch_le
       (forward.reachable.finalized_le_justified sound))
-    (UInt64.le_trans (forward.justified_epoch_le_current sound slots
-      (UInt64.le_of_eq anchorSlot) epochOk).1 (inHorizon u hu j _ bounded epochOk))
+    (justified_epoch_in_horizon anchored start sound slots anchorSlot inHorizon hu bounded)
 
 /-- An epoch of honest votes gives support, justification coverage, or a store collision. -/
 theorem Execution.mem_supportersOf_of_duty_epoch {Δ : ℕ} (sync : e.Synchronous Δ)
@@ -951,5 +964,264 @@ theorem Execution.isAncestor_getHead_of_duty_epoch {Δ : ℕ} (sync : e.Synchron
     (finalized_prefix_of_chain anchored sound start slots anchorSlot chain inHorizon)
     nonzero anchorParent safe parentSafe receiver atTime upToDate known stateOk tree
     coverage margin headOk
+
+private theorem duty_prefix_bounds {anchor : Store preset fork} {time : ℕ} {horizon : Epoch}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ u ∈ J, e.start u = anchor) (sound : Invariant anchorState)
+    (slots : 0 < config.SLOT_DURATION_MS) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (inHorizon : ∀ u ∈ J, ∀ j epoch, (e.world j).time ≤ time →
+      ((e.world j).state u).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon)
+    (nonzero : ∀ u ∈ J, ∀ j, (e.world j).time ≤ time →
+      ∀ (r : Root) (b : BeaconBlock preset fork),
+        ((e.world j).state u).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
+    {w : ValidatorIndex} (receiver : w ∈ J) {k : ℕ} (atTime : (e.world k).time = time) :
+    anchorBlock.stateRoot ≠ Vector.replicate 32 0 ∧
+    ∀ u ∈ J, ∀ j, (e.world j).time ≤ time →
+      ((e.world j).state u).justifiedCheckpoint.epoch ≤ horizon := by
+  have forward := fun u hu j => e.forwardReachable
+    (fun u hu => (start u hu) ▸ Store.ForwardReachable.anchor anchored) j u hu
+  obtain ⟨anchorRoot, _, anchorKnown⟩ := (forward w receiver k).reachable.anchor_known
+  refine ⟨nonzero w receiver k (by omega) anchorRoot anchorBlock anchorKnown, ?_⟩
+  intro u hu j before
+  exact justified_epoch_in_horizon anchored start sound slots anchorSlot inHorizon hu before
+
+/-- Honest duties give support or coverage, a store collision, or accountable safety evidence. -/
+theorem Execution.mem_supportersOf_of_duty_epoch_or_accountable {Δ : ℕ} (sync : e.Synchronous Δ)
+    (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
+    {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
+    (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
+      assignment.committee v slot = some committeeIndex →
+      IsAttestationDeadline fork config genesisTimeMs slot deadline →
+      e.startTime ≤ deadline → deadline ≤ time →
+      ∃ n attestation indexed, VoteAt e v slot committeeIndex deadline n attestation indexed ∧
+        ∀ withTarget targetState,
+          ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
+            .ok withTarget →
+          withTarget.checkpointState attestation.data.target = .ok targetState →
+          checkAttestationCommittees targetState attestation = .ok ())
+    (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e time)
+    {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (start : ∀ w ∈ J, e.start w = anchor) (started : e.startTime ≤ first)
+    {horizon : Epoch}
+    (parameters : DirectSafety.Parameters preset)
+    {g : ForkedBeaconState preset} (genesis : Genesis config checks g)
+    (pre : Run config checks g ⟨fork, anchorState⟩)
+    (early : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ next ∈ config.nextFork fork, ∀ (root : Root) (state : BeaconState preset fork),
+      ((e.world k).state w).blockStates[root]? = some state →
+      state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (enough : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ (root : Root) (state : BeaconState preset fork),
+      ((e.world k).state w).blockStates[root]? = some state →
+      ∀ tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩,
+      DirectSafety.EnoughStake (pre.append tail) horizon.toNat)
+    (heldEnough : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ (root : Root) (state : BeaconState preset fork),
+      ((e.world k).state w).blockStates[root]? = some state →
+      (getCurrentEpoch state).toNat ≤ horizon.toNat + 1 →
+      GENESIS_EPOCH + 1 < getCurrentEpoch state →
+      3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+        2 * Models.stake (DirectSafety.effectiveWeight state) (DirectSafety.activeKeys state))
+    (anchorParent : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ((e.world k).state w).blocks[anchorBlock.parentRoot]? = none)
+    (inHorizon : ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ time →
+      ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon)
+    (nonzero : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ (r : Root) (b : BeaconBlock preset fork),
+        ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
+    {epoch : Epoch} {begin next : Slot} {beginTime endTime : UInt64}
+    (beginOk : computeStartSlotAtEpoch preset epoch = .ok begin)
+    (nextOk : addChecked begin preset.SLOTS_PER_EPOCH = .ok next)
+    (beginTimeOk : computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime)
+    (endTimeOk : computeTimeAtSlotMs config genesisTimeMs next = .ok endTime)
+    (fresh : first ≤ beginTime.toNat) (complete : endTime.toNat ≤ time) {root : Root}
+    (safe : ∀ earlier, first ≤ earlier → earlier < time → ∀ u ∈ J, ∀ n head,
+      (e.world n).time = earlier →
+      UpToDate config checks sources (e.world n).time ((e.world n).view u)
+        ((e.world n).state u) →
+      ((e.world n).state u).getHead config = .ok head →
+      ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true)
+    {w : ValidatorIndex} (receiver : w ∈ J) {k : ℕ} (atTime : (e.world k).time = time)
+    (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view w)
+      ((e.world k).state w)) {rootBlock : BeaconBlock preset fork}
+    (known : ((e.world k).state w).blocks[root]? = some rootBlock)
+    (rootFinal : ∀ k' ≤ k, first ≤ (e.world k').time →
+      UpToDate config checks sources (e.world k').time ((e.world k').view w)
+        ((e.world k').state w) →
+      (∃ boundary,
+        computeStartSlotAtEpoch preset ((e.world k').state w).finalizedCheckpoint.epoch =
+          .ok boundary ∧ boundary ≤ rootBlock.slot ∧
+        ((e.world k).state w).getCheckpointBlock root
+          ((e.world k').state w).finalizedCheckpoint.epoch =
+            .ok ((e.world k').state w).finalizedCheckpoint.root) ∨
+      ((e.world k).state w).isAncestor
+        ⟨((e.world k').state w).finalizedCheckpoint.root, .pending⟩
+        ⟨root, .pending⟩ = .ok true)
+    {state : BeaconState preset fork} {v : ValidatorIndex} (honest : v ∈ J)
+    (active : v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset)
+    (duty : ∃ slot committeeIndex, begin ≤ slot ∧ slot < next ∧
+      assignment.committee v slot = some committeeIndex) :
+    ((v ∈ ((e.world k).state w).supportersOf state ⟨root, .pending⟩ ∨
+      ((e.world k).state w).isAncestor
+        ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩
+        ⟨root, .pending⟩ = .ok true) ∨
+    ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ time ∧ (e.world m).time ≤ time ∧
+      ∃ root collision, Store.findBlockCollision ((e.world n).state u)
+        ((e.world m).state v) [root] = some collision) ∨
+    ∃ w ∈ J, ∃ i k, i ≤ k ∧ (e.world k).time ≤ time ∧
+      ∃ (stateA stateB : BeaconState preset fork)
+        (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
+        (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
+        (va : DirectSafety.TerminalView ⟨fork, stateA⟩)
+        (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
+        (∃ rootA : Root, ((e.world i).state w).blockStates[rootA]? = some stateA) ∧
+        (∃ rootB : Root, ((e.world k).state w).blockStates[rootB]? = some stateB) ∧
+        va.state.finalizedCheckpoint = ((e.world i).state w).finalizedCheckpoint ∧
+        vb.state.currentJustifiedCheckpoint = ((e.world k).state w).justifiedCheckpoint ∧
+        (Models.stake (DirectSafety.effectiveWeight anchorState)
+            (DirectSafety.unslashedKeys anchorState) ≤
+          3 * Models.stake (DirectSafety.effectiveWeight anchorState)
+            (DirectSafety.accountableKeys pre left right) +
+          2 * max
+            (DirectSafety.derivedDrift ((e.world k).state w).justifiedCheckpoint.epoch.toNat left)
+            (DirectSafety.derivedDrift
+              ((e.world k).state w).justifiedCheckpoint.epoch.toNat right) ∨
+        DirectSafety.HashEvidence
+          ((pre.append left).hashObjects ++ (pre.append right).hashObjects)) := by
+  obtain ⟨anchorNonzero, bounded⟩ := duty_prefix_bounds anchored start sound slots anchorSlot
+    inHorizon nonzero receiver atTime
+  rcases e.finalized_prefix_or_accountable anchored start parameters genesis pre anchorSlot
+      anchorBoundary anchorNonzero anchorParent bounded early enough heldEnough with
+    chain | evidence
+  · exact .inl (e.mem_supportersOf_of_duty_epoch_core sync slots preGloas admitted votes fits prompt
+      anchored anchorSlot anchorBoundary start started chain nonzero beginOk nextOk beginTimeOk
+      endTimeOk fresh complete safe receiver atTime upToDate known rootFinal honest active duty)
+  · exact .inr evidence
+
+open scoped Classical in
+/-- An honest-duty margin gives head ancestry, a store collision, or accountable safety evidence. -/
+theorem Execution.isAncestor_getHead_of_duty_epoch_or_accountable {Δ : ℕ} (sync : e.Synchronous Δ)
+    (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
+    {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
+    (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
+      assignment.committee v slot = some committeeIndex →
+      IsAttestationDeadline fork config genesisTimeMs slot deadline →
+      e.startTime ≤ deadline → deadline ≤ time →
+      ∃ n attestation indexed, VoteAt e v slot committeeIndex deadline n attestation indexed ∧
+        ∀ withTarget targetState,
+          ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
+            .ok withTarget →
+          withTarget.checkpointState attestation.data.target = .ok targetState →
+          checkAttestationCommittees targetState attestation = .ok ())
+    (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e time)
+    {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (start : ∀ w ∈ J, e.start w = anchor) (started : e.startTime ≤ first)
+    {horizon : Epoch}
+    (parameters : DirectSafety.Parameters preset)
+    {g : ForkedBeaconState preset} (genesis : Genesis config checks g)
+    (pre : Run config checks g ⟨fork, anchorState⟩)
+    (early : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ next ∈ config.nextFork fork, ∀ (root : Root) (state : BeaconState preset fork),
+      ((e.world k).state w).blockStates[root]? = some state →
+      state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (enough : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ (root : Root) (state : BeaconState preset fork),
+      ((e.world k).state w).blockStates[root]? = some state →
+      ∀ tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩,
+      DirectSafety.EnoughStake (pre.append tail) horizon.toNat)
+    (heldEnough : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ (root : Root) (state : BeaconState preset fork),
+      ((e.world k).state w).blockStates[root]? = some state →
+      (getCurrentEpoch state).toNat ≤ horizon.toNat + 1 →
+      GENESIS_EPOCH + 1 < getCurrentEpoch state →
+      3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+        2 * Models.stake (DirectSafety.effectiveWeight state) (DirectSafety.activeKeys state))
+    (inHorizon : ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ time →
+      ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon)
+    (nonzero : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ (r : Root) (b : BeaconBlock preset fork),
+        ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
+    (anchorParent : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ((e.world k).state w).blocks[anchorBlock.parentRoot]? = none)
+    {root : Root}
+    (safe : ∀ earlier, first ≤ earlier → earlier < time → ∀ u ∈ J, ∀ n head,
+      (e.world n).time = earlier →
+      UpToDate config checks sources (e.world n).time ((e.world n).view u)
+        ((e.world n).state u) →
+      ((e.world n).state u).getHead config = .ok head →
+      ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true)
+    {block : BeaconBlock preset fork}
+    (parentSafe : ∀ u ∈ J, ∀ n head, (e.world n).time = time →
+      UpToDate config checks sources (e.world n).time ((e.world n).view u)
+        ((e.world n).state u) →
+      ((e.world n).state u).getHead config = .ok head →
+      ((e.world n).state u).isAncestor head ⟨block.parentRoot, .pending⟩ = .ok true)
+    {w : ValidatorIndex} (receiver : w ∈ J) {k : ℕ} (atTime : (e.world k).time = time)
+    (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view w)
+      ((e.world k).state w))
+    (known : ((e.world k).state w).blocks[root]? = some block)
+    {state : BeaconState preset fork} {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
+    (stateOk : ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint =
+      .ok state)
+    (tree : ((e.world k).state w).getFilteredNodeTree config = .ok nodes)
+    (coverage : ((e.world k).state w).isAncestor
+      ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
+      (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes)
+    [DecidablePred (· ∈ J)]
+    (margin : ∃ (epoch : Epoch) (begin next : Slot) (beginTime endTime : UInt64),
+      computeStartSlotAtEpoch preset epoch = .ok begin ∧
+      addChecked begin preset.SLOTS_PER_EPOCH = .ok next ∧
+      computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime ∧
+      computeTimeAtSlotMs config genesisTimeMs next = .ok endTime ∧
+      first ≤ beginTime.toNat ∧ endTime.toNat ≤ time ∧
+      Models.stake (fun v => balanceAt state v.toNat)
+          ((unslashedActiveBalances state).map (·.1)).toFinset +
+          ((e.world k).state w).boostScore config <
+        2 * Models.stake (fun v => balanceAt state v.toNat)
+          {v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset | v ∈ J ∧
+            ∃ slot committeeIndex, begin ≤ slot ∧ slot < next ∧
+              assignment.committee v slot = some committeeIndex})
+    (headOk : ((e.world k).state w).getHead config = .ok head) :
+    (((e.world k).state w).isAncestor head ⟨root, .pending⟩ = .ok true ∨
+    ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ time ∧ (e.world m).time ≤ time ∧
+      ∃ root collision, Store.findBlockCollision ((e.world n).state u)
+        ((e.world m).state v) [root] = some collision) ∨
+    ∃ w ∈ J, ∃ i k, i ≤ k ∧ (e.world k).time ≤ time ∧
+      ∃ (stateA stateB : BeaconState preset fork)
+        (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
+        (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
+        (va : DirectSafety.TerminalView ⟨fork, stateA⟩)
+        (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
+        (∃ rootA : Root, ((e.world i).state w).blockStates[rootA]? = some stateA) ∧
+        (∃ rootB : Root, ((e.world k).state w).blockStates[rootB]? = some stateB) ∧
+        va.state.finalizedCheckpoint = ((e.world i).state w).finalizedCheckpoint ∧
+        vb.state.currentJustifiedCheckpoint = ((e.world k).state w).justifiedCheckpoint ∧
+        (Models.stake (DirectSafety.effectiveWeight anchorState)
+            (DirectSafety.unslashedKeys anchorState) ≤
+          3 * Models.stake (DirectSafety.effectiveWeight anchorState)
+            (DirectSafety.accountableKeys pre left right) +
+          2 * max
+            (DirectSafety.derivedDrift ((e.world k).state w).justifiedCheckpoint.epoch.toNat left)
+            (DirectSafety.derivedDrift
+              ((e.world k).state w).justifiedCheckpoint.epoch.toNat right) ∨
+        DirectSafety.HashEvidence
+          ((pre.append left).hashObjects ++ (pre.append right).hashObjects)) := by
+  classical
+  obtain ⟨anchorNonzero, bounded⟩ := duty_prefix_bounds anchored start sound slots anchorSlot
+    inHorizon nonzero receiver atTime
+  rcases e.finalized_prefix_or_accountable anchored start parameters genesis pre anchorSlot
+      anchorBoundary anchorNonzero anchorParent bounded early enough heldEnough with
+    chain | evidence
+  · exact .inl (e.isAncestor_getHead_of_duty_epoch_core sync slots preGloas admitted votes fits
+      prompt
+      anchored anchorSlot anchorBoundary start started chain nonzero anchorParent safe parentSafe
+      receiver atTime upToDate known stateOk tree coverage margin headOk)
+  · exact .inr evidence
 
 end EthLib.Consensus.Models.Network
