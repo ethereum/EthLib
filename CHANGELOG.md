@@ -9,6 +9,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Models.Network.Handles.block` calls `Store.onBlock` without processing carried operations.
+  The `blockAttestation` and `blockAttesterSlashing` constructors process them separately after admission.
+  Each requires the enclosing signed block in the view and its exact message in the store.
+  Update case analyses of `Handles` to cover both constructors.
+  `BlocksAdmitted` requires only bare `onBlock` success, with its other conditions unchanged.
+
 - In Lean, modules move so that no two directories of a layer import each other ([#2617](https://github.com/ethereum/EthLib/pull/2617)).
   In Execution, `Evm.Call.Delegation`, `Evm.Machine.Errors`, `Blocks.Log` and `Fees.BlobGas` become `Evm.Delegation`, `Evm.Errors`, `Evm.Log` and `Transactions.BlobGas`.
   In Serialization, `Ssz.Codec.Error` becomes `Ssz.Error`, and the proof modules `Proofs.Ssz.Type.Bounds`, `DefaultLaws` and `FitsLaws` move to `Proofs.Ssz.Codec`.

@@ -87,7 +87,15 @@ theorem Handles.latestMessages_rank {config : Config} {checks : SignatureChecks}
   | tick _ _ ticked =>
     exact ⟨old, by simpa only [(Store.onTick_checkpointStates_latestMessages ticked).2]
       using found, UInt64.le_refl _⟩
-  | block _ added => exact Store.onBlockWithVotes_latestMessages_rank added found
+  | block _ added =>
+    exact ⟨old, by simpa only [(Store.onBlock_checkpointStates_latestMessages added).2]
+      using found, UInt64.le_refl _⟩
+  | blockAttestation _ _ _ _ attested =>
+    exact Store.onAttestation_latestMessages_rank attested found
+  | blockAttesterSlashing _ _ _ _ slashed =>
+    exact ⟨old, by
+      simpa only [(Store.onAttesterSlashing_checkpointStates_latestMessages slashed).2]
+        using found, UInt64.le_refl _⟩
   | attestation _ attested => exact Store.onAttestation_latestMessages_rank attested found
   | attesterSlashing _ slashed =>
     exact ⟨old, by

@@ -362,13 +362,16 @@ theorem Handles.mem_equivocatingIndices {time : ℕ} {view : Set (Message preset
         isSlashableAttestationData first second = true := by
   cases handles with
   | tick _ _ ticked => exact .inl (Store.onTick_equivocatingIndices ticked ▸ member)
-  | block mem added =>
-    rcases Store.mem_equivocatingIndices_of_onBlockWithVotes added member with old |
-      ⟨slashing, carried, slashable, one, two⟩
+  | block _ added => exact .inl (Store.onBlock_equivocatingIndices added ▸ member)
+  | blockAttestation _ _ _ _ attested =>
+    exact .inl (Store.onAttestation_equivocatingIndices attested ▸ member)
+  | blockAttesterSlashing mem _ _ carried slashed =>
+    rcases (Store.mem_equivocatingIndices_of_onAttesterSlashing slashed).mp member with old |
+      ⟨one, two⟩
     · exact .inl old
-    · exact .inr ⟨_, mem, slashing.attestation1.data, slashing.attestation2.data,
-        .inr ⟨slashing, carried, .inl ⟨one, rfl⟩⟩, .inr ⟨slashing, carried, .inr ⟨two, rfl⟩⟩,
-        slashable⟩
+    · exact .inr ⟨_, mem, _, _,
+        .inr ⟨_, carried, .inl ⟨one, rfl⟩⟩, .inr ⟨_, carried, .inr ⟨two, rfl⟩⟩,
+        (Store.onAttesterSlashing_eq_ok_iff.mp slashed).1⟩
   | attestation _ attested =>
     exact .inl (Store.onAttestation_equivocatingIndices attested ▸ member)
   | attesterSlashing mem slashed =>
