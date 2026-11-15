@@ -50,6 +50,26 @@ From Fulu, under the same bounds, a proposer answer gets code 500 exactly at a l
 That entry lies at a slot of the requested epoch, and names no validator.
 
 Under those bounds, if each lookahead entry names a validator, the answer fails only with code 400.
+
+An attester answer gets code 500 exactly when a requested committee assignment fails.
+
+The epoch must also pass the check of the answer.
+
+That statement needs each index to name a validator, and the dependent root's bound on the slot.
+
+Under bounds, an attester answer fails only with code 400.
+
+Those bounds are on the epoch, the registry and the slot of the state.
+
+From Gloas, a PTC answer gets code 500 exactly when a requested PTC assignment fails.
+
+The epoch must also lie in the window of the answer and the seed lookahead, with no repeated index.
+
+That statement needs the same two conditions as the attester one.
+
+Under bounds, a PTC answer fails only with code 400, even past the seed lookahead.
+
+Those bounds are on the epoch, the lookahead, the window and the slot of the state.
 -/
 
 @[expose] public section
@@ -1278,5 +1298,415 @@ theorem dutiesResponse_proposer_error_code {config : Config}
     error.code = 400 := by
   rw [dutiesResponse_proposer_error fulu version slotsFit room known failed]
   rfl
+
+/-- The epoch check passes only an epoch at most the next one, whose seed the mixes still hold. -/
+private theorem checkDutyEpoch_bounds {state : BeaconState preset fork} {epoch : Epoch}
+    (passed : checkDutyEpoch state epoch = .ok ()) :
+    epoch.toNat ≤ (getCurrentEpoch state).toNat + 1 ∧
+      (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+        epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
+  refine ⟨Nat.le_of_not_lt fun far => ?_, Nat.lt_of_not_le fun gone => ?_⟩
+  · rw [checkDutyEpoch_far far] at passed
+    cases passed
+  · rw [checkDutyEpoch_seed_gone gone] at passed
+    cases passed
+
+/-- The dependent root of an epoch at most the next one fails only with the invalid epoch error.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+private theorem dependentRoot_next_error {state : BeaconState preset fork} {epoch : Epoch}
+    {genesisRoot : Root} {error : ErrorMessage}
+    (near : epoch.toNat ≤ (getCurrentEpoch state).toNat + 1)
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    (failed : dependentRoot state 1 epoch genesisRoot = .error error) :
+    error = invalidEpoch epoch := by
+  -- The epoch before the requested one starts at most at the slot of the state.
+  have before := Nat.div_mul_le_self state.slot.toNat preset.SLOTS_PER_EPOCH.toNat
+  rw [← getCurrentEpoch_toNat state] at before
+  have slotSmall := state.slot.toNat_lt
+  refine dependentRoot_error (Nat.lt_of_le_of_lt ?_ (Nat.lt_of_le_of_lt before slotSmall)) room
+    failed
+  exact Nat.mul_le_mul_right _ (by omega)
+
+/-- An attester duty fails at an index that names no validator, or at its committee assignment. -/
+private theorem attesterDuty_error {state : BeaconState preset fork} {epoch : Epoch}
+    {index : ValidatorIndex} {error : ErrorMessage}
+    (failed : attesterDuty state epoch index = .error error) :
+    (∃ fault, getValidator state index = .error fault) ∧ error = invalidIndex index ∨
+      ∃ fault, getCommitteeAssignment state epoch index = .error fault ∧
+        error = dutyError epoch fault := by
+  unfold attesterDuty at failed
+  rcases bind_eq_error failed with unknown | ⟨_, -, failed⟩
+  · obtain ⟨fault, read, rfl⟩ := mapError_eq_error unknown
+    exact .inl ⟨⟨fault, read⟩, rfl⟩
+  rcases bind_eq_error failed with refused | ⟨assignment, -, failed⟩
+  · obtain ⟨fault, assigned, rfl⟩ := mapError_eq_error refused
+    exact .inr ⟨fault, assigned, rfl⟩
+  · rcases assignment with _ | ⟨_, _, _⟩ <;> cases failed
+
+/-- Attester duties fail at an empty request or at the epoch check.
+
+Past the check, they fail with the error of the duty of a requested index. -/
+private theorem attesterDuties_error {state : BeaconState preset fork} {epoch : Epoch}
+    {indices : List ValidatorIndex} {error : ErrorMessage}
+    (failed : attesterDuties state epoch indices = .error error) :
+    error = emptyIndices ∨ error = invalidEpoch epoch ∨
+      checkDutyEpoch state epoch = .ok () ∧
+        ∃ index ∈ indices, attesterDuty state epoch index = .error error := by
+  unfold attesterDuties at failed
+  by_cases empty : indices.isEmpty
+  · simp [empty, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at failed
+    exact .inl failed.symm
+  simp only [empty, Bool.false_eq_true, ↓reduceIte] at failed
+  rcases bind_eq_error failed with refused | ⟨⟨⟩, checked, failed⟩
+  · rcases checkDutyEpoch_cases state epoch with passed | refusedEq
+    · rw [passed] at refused
+      cases refused
+    · rw [refusedEq] at refused
+      cases refused
+      exact .inr (.inl rfl)
+  rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+  · exact .inr (.inr ⟨checked, exists_mem_of_mapM_error refused⟩)
+  · cases failed
+
+/-- An attester answer gets code 500 exactly when a requested committee assignment fails.
+
+The epoch must also be at most the next one, with its seed still in the mixes of the state.
+
+It needs each requested index to name a validator of the state.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+theorem dutiesResponse_attester_internal_iff {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root}
+    (known : ∀ index ∈ indices, ∃ validator, getValidator state index = .ok validator)
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64) :
+    (∃ error, dutiesResponse config state .attester epoch indices genesisRoot = .error error ∧
+        error.code = 500) ↔
+      epoch.toNat ≤ (getCurrentEpoch state).toNat + 1 ∧
+        (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+          epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat ∧
+        ∃ index ∈ indices, ∃ fault, getCommitteeAssignment state epoch index = .error fault := by
+  constructor
+  · rintro ⟨error, failed, code⟩
+    simp only [dutiesResponse] at failed
+    rcases bind_eq_error failed with refused | ⟨_, dutiesOk, failed⟩
+    · rcases attesterDuties_error refused with rfl | rfl | ⟨passed, index, member, step⟩
+      · simp [emptyIndices] at code
+      · simp [invalidEpoch] at code
+      obtain ⟨near, seeded⟩ := checkDutyEpoch_bounds passed
+      rcases attesterDuty_error step with ⟨-, rfl⟩ | ⟨fault, assigned, -⟩
+      · simp [invalidIndex] at code
+      · exact ⟨near, seeded, index, member, fault, assigned⟩
+    -- With the duties, only the dependent root can fail, with code 400.
+    rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+    · obtain ⟨passed, -⟩ := attesterDuties_ok dutiesOk
+      rw [dependentRoot_next_error (checkDutyEpoch_bounds passed).1 room refused] at code
+      simp [invalidEpoch] at code
+    · cases failed
+  · rintro ⟨near, seeded, index, member, fault, assigned⟩
+    obtain ⟨validator, validatorOk⟩ := known index member
+    have stepFailed : attesterDuty state epoch index = .error (dutyError epoch fault) := by
+      simp [attesterDuty, requestedValidator, validatorOk, assigned, Except.mapError, bind,
+        Except.bind]
+    -- The duties fail at a first index, which names a validator, so its assignment fails.
+    cases mapped : indices.mapM (attesterDuty state epoch) with
+    | ok found =>
+      obtain ⟨_, stepOk⟩ := mapM_ok_of_mem mapped index member
+      rw [stepFailed] at stepOk
+      cases stepOk
+    | error error =>
+      obtain ⟨other, otherMember, otherStep⟩ := exists_mem_of_mapM_error mapped
+      rcases attesterDuty_error otherStep with ⟨⟨_, unknown⟩, -⟩ | ⟨otherFault, otherAssigned, rfl⟩
+      · obtain ⟨_, otherOk⟩ := known other otherMember
+        rw [otherOk] at unknown
+        cases unknown
+      have notEmpty : indices.isEmpty = false :=
+        List.isEmpty_eq_false_iff.mpr (List.ne_nil_of_mem member)
+      refine ⟨dutyError epoch otherFault, ?_, ?_⟩
+      · simp [dutiesResponse, attesterDuties, notEmpty, checkDutyEpoch_ok near seeded, mapped,
+          bind, Except.bind]
+      · rcases getCommitteeAssignment_error otherAssigned with ⟨_, rfl⟩ | ⟨_, rfl⟩ | ⟨far, -⟩
+        · rfl
+        · rfl
+        · omega
+
+/-- Each refusal of the attester answer is one of three errors, all with code 400.
+
+They are the errors of an empty request, of an invalid epoch and of an invalid index.
+
+It needs the first slot after the epoch to fit in 64 bits.
+
+It needs the epoch plus the length of the history of mixes to fit as well.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
+
+It needs at most `2^40` validators in the registry.
+
+It needs their number times a bound on the committees of an epoch to be below `2^64`.
+
+The bound is one more than the most committees of a slot, times the slots of an epoch. -/
+theorem dutiesResponse_attester_error {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (seedRoom : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    (few : state.validators.data.size ≤ 2 ^ 40)
+    (committeeRoom : state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
+      preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (failed : dutiesResponse config state .attester epoch indices genesisRoot = .error error) :
+    error = emptyIndices ∨ error = invalidEpoch epoch ∨
+      ∃ index ∈ indices, error = invalidIndex index := by
+  simp only [dutiesResponse] at failed
+  rcases bind_eq_error failed with refused | ⟨_, dutiesOk, failed⟩
+  · rcases attesterDuties_error refused with rfl | rfl | ⟨passed, index, member, step⟩
+    · exact .inl rfl
+    · exact .inr (.inl rfl)
+    obtain ⟨near, seeded⟩ := checkDutyEpoch_bounds passed
+    rcases attesterDuty_error step with ⟨-, rfl⟩ | ⟨fault, assigned, -⟩
+    · exact .inr (.inr ⟨index, member, rfl⟩)
+    -- The check leaves a seed lookahead shorter than the history, and a next epoch that fits.
+    obtain ⟨_, assignedOk⟩ := getCommitteeAssignment_exists (validatorIndex := index)
+      (by omega) near slotsFit seedRoom (by omega) few committeeRoom
+    rw [assignedOk] at assigned
+    cases assigned
+  rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+  · obtain ⟨passed, -⟩ := attesterDuties_ok dutiesOk
+    exact .inr (.inl (dependentRoot_next_error (checkDutyEpoch_bounds passed).1 room refused))
+  · cases failed
+
+/-- An attester answer fails only with code 400.
+
+It needs the first slot after the epoch to fit in 64 bits.
+
+It needs the epoch plus the length of the history of mixes to fit as well.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
+
+It needs at most `2^40` validators in the registry.
+
+It needs their number times a bound on the committees of an epoch to be below `2^64`.
+
+The bound is one more than the most committees of a slot, times the slots of an epoch. -/
+theorem dutiesResponse_attester_error_code {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (seedRoom : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    (few : state.validators.data.size ≤ 2 ^ 40)
+    (committeeRoom : state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
+      preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (failed : dutiesResponse config state .attester epoch indices genesisRoot = .error error) :
+    error.code = 400 := by
+  rcases dutiesResponse_attester_error slotsFit seedRoom room few committeeRoom failed with
+    rfl | rfl | ⟨_, -, rfl⟩ <;> rfl
+
+/-- From Gloas, PTC duties that succeed come from an epoch at most the next one. -/
+private theorem ptcDuties_ok_near {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {indices : List ValidatorIndex}
+    {duties : List PtcDuty} (computed : ptcDuties config state gloas epoch indices = .ok duties) :
+    epoch.toNat ≤ (getCurrentEpoch state).toNat + 1 := by
+  rw [ptcDuties_eq] at computed
+  split at computed
+  · cases computed
+  split at computed
+  · rename_i window
+    exact window.2.1
+  · cases computed
+
+/-- A PTC duty fails at an index that names no validator, or at its PTC assignment. -/
+private theorem ptcDuty_error {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {index : ValidatorIndex} {error : ErrorMessage}
+    (failed : ptcDuty config state gloas epoch index = .error error) :
+    (∃ fault, getValidator state index = .error fault) ∧ error = invalidIndex index ∨
+      ∃ fault, getPtcAssignment config state gloas epoch index = .error fault ∧
+        error = dutyError epoch fault := by
+  unfold ptcDuty at failed
+  rcases bind_eq_error failed with unknown | ⟨_, -, failed⟩
+  · obtain ⟨fault, read, rfl⟩ := mapError_eq_error unknown
+    exact .inl ⟨⟨fault, read⟩, rfl⟩
+  rcases bind_eq_error failed with refused | ⟨slot, -, failed⟩
+  · obtain ⟨fault, assigned, rfl⟩ := mapError_eq_error refused
+    exact .inr ⟨fault, assigned, rfl⟩
+  · rcases slot with _ | _ <;> cases failed
+
+/-- From Gloas, PTC duties fail at an empty request, at the epoch window or at a repeated index.
+
+In that window and with no repeat, they fail with the error of the duty of a requested index. -/
+private theorem ptcDuties_error {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {indices : List ValidatorIndex}
+    {error : ErrorMessage} (failed : ptcDuties config state gloas epoch indices = .error error) :
+    error = emptyIndices ∨ error = invalidEpoch epoch ∨
+      error = { code := 400, message := "Repeated validator index" } ∨
+      ((getCurrentEpoch state).toNat ≤ epoch.toNat + 1 ∧
+        epoch.toNat ≤ (getCurrentEpoch state).toNat + 1 ∧
+        config.GLOAS_FORK_EPOCH.toNat ≤ epoch.toNat ∧
+        (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+          epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) ∧ indices.Nodup ∧
+        ∃ index ∈ indices, ptcDuty config state gloas epoch index = .error error := by
+  rw [ptcDuties_eq] at failed
+  split at failed
+  · cases failed
+    exact .inl rfl
+  split at failed
+  · rename_i window
+    split at failed
+    · rename_i distinct
+      cases mapped : indices.mapM (ptcDuty config state gloas epoch) with
+      | ok found =>
+        rw [mapped] at failed
+        cases failed
+      | error refused =>
+        rw [mapped] at failed
+        cases failed
+        exact .inr (.inr (.inr ⟨window, distinct, exists_mem_of_mapM_error mapped⟩))
+    · cases failed
+      exact .inr (.inr (.inl rfl))
+  · cases failed
+    exact .inr (.inl rfl)
+
+/-- A PTC answer gets code 500 exactly when a requested PTC assignment fails.
+
+The epoch must also lie from the previous epoch to the next, from the Gloas fork epoch on.
+
+Its seed must still be in the mixes of the state, and the request must repeat no index.
+
+The epoch must also be at most the last epoch of the seed lookahead.
+
+It needs a fork from Gloas, and each requested index to name a validator of the state.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+theorem dutiesResponse_ptc_internal_iff {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root}
+    (gloas : .glamsterdam ≤ fork)
+    (known : ∀ index ∈ indices, ∃ validator, getValidator state index = .ok validator)
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64) :
+    (∃ error, dutiesResponse config state .ptc epoch indices genesisRoot = .error error ∧
+        error.code = 500) ↔
+      ((getCurrentEpoch state).toNat ≤ epoch.toNat + 1 ∧
+        epoch.toNat ≤ (getCurrentEpoch state).toNat + 1 ∧
+        config.GLOAS_FORK_EPOCH.toNat ≤ epoch.toNat ∧
+        (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+          epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) ∧ indices.Nodup ∧
+        epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat ∧
+        ∃ index ∈ indices, ∃ fault,
+          getPtcAssignment config state gloas epoch index = .error fault := by
+  constructor
+  · rintro ⟨error, failed, code⟩
+    simp only [dutiesResponse, gloas, ↓reduceDIte] at failed
+    rcases bind_eq_error failed with refused | ⟨_, dutiesOk, failed⟩
+    · rcases ptcDuties_error refused with rfl | rfl | rfl | ⟨window, distinct, index, member, step⟩
+      · simp [emptyIndices] at code
+      · simp [invalidEpoch] at code
+      · simp at code
+      rcases ptcDuty_error step with ⟨-, rfl⟩ | ⟨fault, assigned, rfl⟩
+      · simp [invalidIndex] at code
+      -- Past the seed lookahead, the assignment fails with the error of an invalid epoch.
+      refine ⟨window, distinct, Nat.le_of_not_lt fun late => ?_, index, member, fault, assigned⟩
+      rw [getPtcAssignment_too_far late] at assigned
+      cases assigned
+      simp [dutyError, invalidEpoch] at code
+    rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+    · rw [dependentRoot_next_error (ptcDuties_ok_near dutiesOk) room refused] at code
+      simp [invalidEpoch] at code
+    · cases failed
+  · rintro ⟨window, distinct, served, index, member, fault, assigned⟩
+    obtain ⟨validator, validatorOk⟩ := known index member
+    have stepFailed : ptcDuty config state gloas epoch index = .error (dutyError epoch fault) := by
+      simp [ptcDuty, requestedValidator, validatorOk, assigned, Except.mapError, bind,
+        Except.bind]
+    -- The duties fail at a first index, which names a validator, so its assignment fails.
+    cases mapped : indices.mapM (ptcDuty config state gloas epoch) with
+    | ok found =>
+      obtain ⟨_, stepOk⟩ := mapM_ok_of_mem mapped index member
+      rw [stepFailed] at stepOk
+      cases stepOk
+    | error error =>
+      obtain ⟨other, otherMember, otherStep⟩ := exists_mem_of_mapM_error mapped
+      rcases ptcDuty_error otherStep with ⟨⟨_, unknown⟩, -⟩ | ⟨otherFault, otherAssigned, rfl⟩
+      · obtain ⟨_, otherOk⟩ := known other otherMember
+        rw [otherOk] at unknown
+        cases unknown
+      have refused : ptcDuties config state gloas epoch indices =
+          .error (dutyError epoch otherFault) := by
+        rw [ptcDuties_eq, ite_eq_right (List.ne_nil_of_mem member), ite_eq_left window,
+          ite_eq_left distinct, mapped]
+        rfl
+      refine ⟨dutyError epoch otherFault,
+        by simp [dutiesResponse, gloas, refused, bind, Except.bind], ?_⟩
+      rcases getPtcAssignment_error otherAssigned with ⟨_, rfl⟩ | ⟨_, rfl⟩ | ⟨late, -⟩
+      · rfl
+      · rfl
+      · omega
+
+/-- Each refusal of the PTC answer is one of five errors, all with code 400.
+
+Two are the errors of a state before Gloas and of an empty request.
+
+The others are the errors of an invalid epoch, of a repeated index and of an invalid index.
+
+It needs the last epoch of the seed lookahead and the length of the window to fit in 64 bits.
+
+It needs the first slot after the epoch to fit as well.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
+
+It holds past the seed lookahead too, where the answer gets the error of an invalid epoch. -/
+theorem dutiesResponse_ptc_error {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    (fits : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < 2 ^ 64)
+    (windowFits :
+      (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    (failed : dutiesResponse config state .ptc epoch indices genesisRoot = .error error) :
+    error = beforeFork "PTC duties" .glamsterdam ∨ error = emptyIndices ∨
+      error = invalidEpoch epoch ∨
+      error = { code := 400, message := "Repeated validator index" } ∨
+      ∃ index ∈ indices, error = invalidIndex index := by
+  by_cases gloas : .glamsterdam ≤ fork
+  case neg =>
+    rw [dutiesResponse_ptc_of_lt_gloas (Nat.lt_of_not_le gloas)] at failed
+    cases failed
+    exact .inl rfl
+  simp only [dutiesResponse, gloas, ↓reduceDIte] at failed
+  rcases bind_eq_error failed with refused | ⟨_, dutiesOk, failed⟩
+  · rcases ptcDuties_error refused with rfl | rfl | rfl | ⟨window, -, index, member, step⟩
+    · exact .inr (.inl rfl)
+    · exact .inr (.inr (.inl rfl))
+    · exact .inr (.inr (.inr (.inl rfl)))
+    rcases ptcDuty_error step with ⟨-, rfl⟩ | ⟨fault, assigned, rfl⟩
+    · exact .inr (.inr (.inr (.inr ⟨index, member, rfl⟩)))
+    obtain ⟨recent, -, forkLe, -⟩ := window
+    by_cases late : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < epoch.toNat
+    · rw [getPtcAssignment_too_far late] at assigned
+      cases assigned
+      exact .inr (.inr (.inl rfl))
+    · obtain ⟨_, assignedOk⟩ := getPtcAssignment_exists (config := config) (gloas := gloas)
+        (validatorIndex := index) (UInt64.le_iff_toNat_le.mpr forkLe) recent
+        (Nat.le_of_not_lt late) fits windowFits slotsFit
+      rw [assignedOk] at assigned
+      cases assigned
+  rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+  · exact .inr (.inr (.inl (dependentRoot_next_error (ptcDuties_ok_near dutiesOk) room refused)))
+  · cases failed
+
+/-- A PTC answer fails only with code 400.
+
+It needs the last epoch of the seed lookahead and the length of the window to fit in 64 bits.
+
+It needs the first slot after the epoch to fit as well.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+theorem dutiesResponse_ptc_error_code {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    (fits : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < 2 ^ 64)
+    (windowFits :
+      (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    (failed : dutiesResponse config state .ptc epoch indices genesisRoot = .error error) :
+    error.code = 400 := by
+  rcases dutiesResponse_ptc_error fits windowFits slotsFit room failed with
+    rfl | rfl | rfl | rfl | ⟨_, -, rfl⟩ <;> rfl
 
 end EthLib.Consensus.BeaconApi

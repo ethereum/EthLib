@@ -380,47 +380,6 @@ private theorem ptcWindowPosition_error_of {config : Config} {state : BeaconStat
       Except.mapError, bind, Except.bind, notLe, ite_true, ite_false]
     exact ⟨_, rfl⟩
 
-/-- The window has a position for a slot from the fork, from the epoch before the state's on.
-
-Its position is inside the window. -/
-private theorem ptcWindowPosition_ok_of {config : Config} {state : BeaconState preset fork}
-    {slot : Slot} (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
-    (fits : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < 2 ^ 64)
-    (windowFits :
-      (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
-    (forkLe : config.GLOAS_FORK_EPOCH ≤ computeEpochAtSlot preset slot)
-    (recent : (getCurrentEpoch state).toNat ≤ (computeEpochAtSlot preset slot).toNat + 1)
-    (lookahead : (computeEpochAtSlot preset slot).toNat ≤
-      (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat) :
-    ∃ position, ptcWindowPosition config state slot = .ok position ∧
-      position.toNat < (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat := by
-  have remainder := Nat.mod_lt slot.toNat positive
-  by_cases lt : computeEpochAtSlot preset slot < getCurrentEpoch state
-  · -- The epoch just before that of the state.
-    have ltNat := UInt64.lt_iff_toNat_lt.mp lt
-    have next : computeEpochAtSlot preset slot + 1 = getCurrentEpoch state := by
-      apply UInt64.toNat_inj.mp
-      rw [Uint64.toNat_add_of_lt (by simp; omega)]
-      simp
-      omega
-    refine ⟨slot % preset.SLOTS_PER_EPOCH, ?_, ?_⟩
-    · simp only [ptcWindowPosition, forkLe, lt, next]
-      rfl
-    · rw [UInt64.toNat_mod, Nat.succ_mul]
-      omega
-  · -- The epoch of the state or one of its lookahead.
-    have current : getCurrentEpoch state ≤ computeEpochAtSlot preset slot := UInt64.not_lt.mp lt
-    obtain ⟨position, positionOk, positionNat⟩ :=
-      ptcWindowPosition_of_le (state := state) positive forkLe current lookahead fits windowFits
-    refine ⟨position, positionOk, ?_⟩
-    have currentNat := UInt64.le_iff_toNat_le.mp current
-    have spread : ((computeEpochAtSlot preset slot).toNat - (getCurrentEpoch state).toNat + 1) *
-        preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat ≤
-        (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat := by
-      rw [← Nat.succ_mul]
-      exact Nat.mul_le_mul_right _ (by omega)
-    omega
-
 /-- From Gloas, an answer is the committee that the window of the state holds for the slot. -/
 theorem statePtc_ok_iff {config : Config} {state : BeaconState preset fork}
     (gloas : .glamsterdam ≤ fork) {slot : Option Slot} {answer : PtcResponse preset} :
@@ -475,10 +434,8 @@ theorem statePtc_error_iff {config : Config} {state : BeaconState preset fork}
     refine Classical.byContradiction fun inside => ?_
     simp only [not_or, UInt64.not_lt, Nat.not_lt] at inside
     obtain ⟨forkLe, recent, lookahead⟩ := inside
-    obtain ⟨position, positionOk, positionLt⟩ :=
-      ptcWindowPosition_ok_of positive fits windowFits forkLe recent lookahead
-    simp only [getPtc, positionOk, bind, Except.bind, Vector.getElem?_eq_getElem positionLt]
-      at committeeFailed
+    obtain ⟨_, committeeOk⟩ := getPtc_exists gloas positive fits windowFits forkLe recent lookahead
+    rw [committeeOk] at committeeFailed
     cases committeeFailed
   · intro outside
     obtain ⟨fault, positionFailed⟩ := ptcWindowPosition_error_of fits outside
