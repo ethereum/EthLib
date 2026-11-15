@@ -7,6 +7,13 @@ The version is the same in `pyproject.toml` and `lakefile.lean`.
 
 Not yet released.
 
+### Proof additions
+
+- `Execution.mem_supportersOf_of_duty_epoch_or_accountable` and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` add accountable companions to the honest-duty results.
+  They use a proved historical finalized-prefix family instead of assumed compatibility, while preserving the original theorems.
+  They retain the network and duty conditions and require deposited genesis history, preset bounds, a fixed-fork horizon, stake floors and an absent anchor parent.
+  The alternative is the reference-stake inequality with derived drift, or `DirectSafety.HashEvidence`, not an a priori drift bound.
+
 ### Changes that break callers
 
 - In Lean, modules move so that no two directories of a layer import each other ([#2617](https://github.com/ethereum/EthLib/pull/2617)).
