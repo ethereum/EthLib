@@ -526,7 +526,9 @@ def test_gloas_invalid_payload_drops_the_blocks_built_on_it(latest_valid_hash: b
         verify=False,
     )
     # Block 2 left with the payload of block 1, and block 1 without it is the head.
-    assert reads[-1][0]["head"] == {"slot": 1, "root": BLOCK_1, "payload_status": EMPTY}
+    read = reads[-1][0]
+    assert isinstance(read, dict)
+    assert read["head"] == {"slot": 1, "root": BLOCK_1, "payload_status": EMPTY}
 
 
 # The offset of the block hash in the fixed part of a Gloas payload.
@@ -552,7 +554,9 @@ def test_gloas_hash_of_the_payload_itself_removes_nothing():
         [*_gloas_invalid_steps(_envelope_block_hash(GLOAS_ENVELOPE_1)), ("checks", False)],
         verify=False,
     )
-    assert reads[-1][0]["head"] == {"slot": 2, "root": BLOCK_2, "payload_status": EMPTY}
+    read = reads[-1][0]
+    assert isinstance(read, dict)
+    assert read["head"] == {"slot": 2, "root": BLOCK_2, "payload_status": EMPTY}
 
 
 def test_gloas_dropped_block_leaves_a_viable_branch():

@@ -149,9 +149,15 @@ def invalidStatuses : List String := ["INVALID", "INVALID_BLOCK_HASH"]
 
 /-- The store after the steps of a fork choice case, and the handler outcomes of each step.
 
-A block gives its admission outcome, then the outcomes of its carried attestations and slashings.
+An admitted block gives its admission outcome, then the outcomes of its attestations and slashings.
 
-Each handler commits independently, including carried operations when admission fails.
+Each of these handlers commits independently, so a rejected one undoes no earlier one.
+
+A rejected block gives only its error, and its attestations and slashings do not run.
+
+An invalid verdict on a block removes it after its attestations and slashings.
+
+If that removal fails, the step gives only the error and leaves the store as it was.
 
 Other steps give one outcome.
 
@@ -229,6 +235,24 @@ def replayForkChoiceConfirming {preset : Preset} {fork : Fork} (config : Config)
       -- The execution layer of the vectors finds that every payload satisfies its lists.
       inclusionListSatisfied := fun _ _ => true }
     let mut outcome ← runForkChoiceStep config checks (adjust sources) store step
+    -- The operations of a block run only once the store admits it, before any verdict on it.
+    let mut carried : Array StepOutcome := #[]
+    if let (.block input, .ok (admitted, read)) := (step, outcome) then
+      let signed ← decodeInput (SignedBeaconBlock preset fork) input.block
+      let mut next := admitted
+      for attestation in signed.message.body.attestations.data do
+        match next.onAttestation config checks attestation true with
+        | .ok voted =>
+          next := voted
+          carried := carried.push (.ok none)
+        | .error e => carried := carried.push (rejected e)
+      for slashing in signed.message.body.attesterSlashings.data do
+        match next.onAttesterSlashing config checks slashing with
+        | .ok slashed =>
+          next := slashed
+          carried := carried.push (.ok none)
+        | .error e => carried := carried.push (rejected e)
+      outcome := .ok (next, read)
     -- An invalid verdict removes blocks, whether the step itself fails or not.
     if let some latestValidHash := invalid then
       let after := match outcome with
@@ -252,28 +276,11 @@ def replayForkChoiceConfirming {preset : Preset} {fork : Fork} (config : Config)
           store := removed
           outcome := outcome.map fun (_, read) => (removed, read)
         | .error e => outcome := .error e
-    let mut results : Array StepOutcome := #[]
     match outcome with
     | .ok (next, read) =>
       store := next
-      results := results.push (.ok read)
-    | .error e => results := results.push (rejected e)
-    if let .block input := step then
-      let signed ← decodeInput (SignedBeaconBlock preset fork) input.block
-      -- Receipt of a carried operation does not depend on admission of its enclosing block.
-      for attestation in signed.message.body.attestations.data do
-        match store.onAttestation config checks attestation true with
-        | .ok voted =>
-          store := voted
-          results := results.push (.ok none)
-        | .error e => results := results.push (rejected e)
-      for slashing in signed.message.body.attesterSlashings.data do
-        match store.onAttesterSlashing config checks slashing with
-        | .ok slashed =>
-          store := slashed
-          results := results.push (.ok none)
-        | .error e => results := results.push (rejected e)
-    outcomes := outcomes.push results.toList
+      outcomes := outcomes.push (.ok read :: carried.toList)
+    | .error e => outcomes := outcomes.push [rejected e]
   return (store, lastRun, outcomes.toList)
 
 /-- The store after the steps of a fork choice case, and the handler outcomes of each step. -/
@@ -304,9 +311,13 @@ def forkChoice (args : String × String × ByteArray × ByteArray × List ForkCh
 
 /-- The handler outcomes of each step of a fork choice case, from an anchor state and block.
 
-Each input gives a nonempty list, with block admission before carried attestations and slashings.
+Each input gives a nonempty list of outcomes.
 
-A rejected handler retains the store and later handlers still run.
+An admitted block gives its admission, then its attestations and slashings.
+
+A rejected block gives only its error.
+
+A rejected handler leaves the store unchanged, and later handlers still run.
 
 The arguments are the preset, the fork, the anchor state and the anchor block in SSZ, and the steps.
 

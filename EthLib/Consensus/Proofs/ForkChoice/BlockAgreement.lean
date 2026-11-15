@@ -122,10 +122,10 @@ theorem Execution.exists_signed_of_blocks
           (Store.onTick_frame ticked).2.2.2
       | block mem added =>
         exact step ih' (incl mem) added
-      | blockAttestation _ _ a =>
+      | blockAttestation _ _ _ _ a =>
         exact maps ih' (fun _ h => h) (Store.onAttestation_frame a).2.1
           (Store.onAttestation_frame a).2.2.1
-      | blockAttesterSlashing _ _ a =>
+      | blockAttesterSlashing _ _ _ _ a =>
         exact maps ih' (fun _ h => h) (Store.onAttesterSlashing_frame a).2.1
           (Store.onAttesterSlashing_frame a).2.2.1
       | attestation _ a =>
@@ -199,9 +199,9 @@ theorem Execution.blockStates_eq (e : Execution (forkChoice config checks source
       cases moved with
       | tick _ _ a => exact maps ih (Store.onTick_frame a).2.2.1 (Store.onTick_frame a).2.2.2
       | block _ a => exact blockStep ih a
-      | blockAttestation _ _ a =>
+      | blockAttestation _ _ _ _ a =>
         exact maps ih (Store.onAttestation_frame a).2.1 (Store.onAttestation_frame a).2.2.1
-      | blockAttesterSlashing _ _ a =>
+      | blockAttesterSlashing _ _ _ _ a =>
         exact maps ih (Store.onAttesterSlashing_frame a).2.1
           (Store.onAttesterSlashing_frame a).2.2.1
       | attestation _ a =>

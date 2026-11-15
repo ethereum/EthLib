@@ -10,8 +10,6 @@ public import EthLib.Consensus.Proofs.Time
 
 No handler lowers the epoch of the justified or of the finalized checkpoint.
 
-Nor does a block together with the votes that it carries.
-
 Each of these checkpoints stays as it was, or changes to one at a greater epoch.
 
 A tick sets the clock to its time, and the catch-up loop never stalls.

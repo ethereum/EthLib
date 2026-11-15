@@ -223,12 +223,14 @@ def run_case(preset: str, fork: str, case: Path) -> None:
         groups = [next(outcomes) for _ in inputs[index]]
         assert all(groups), (index, groups)
         reads = [group[0] for group in groups]
-        outcome = reads[0] if len(reads) == 1 else reads[0] | reads[1]
         if "checks" in step:
             assert all(len(group) == 1 for group in groups), (index, groups)
-            assert all(isinstance(read, dict) for read in reads), (index, reads)
-            _check(outcome, step["checks"])
+            found = [read for read in reads if isinstance(read, dict)]
+            assert len(found) == len(reads), (index, reads)
+            _check(found[0] if len(found) == 1 else found[0] | found[1], step["checks"])
         else:
+            assert len(reads) == 1, (index, reads)
+            outcome = reads[0]
             assert (outcome is None) == step.get("valid", True), (index, step, outcome)
             # The helper's valid block cases require every carried handler to succeed too.
             if outcome is None:
@@ -327,14 +329,140 @@ def test_anchor_state_mismatch():
     assert info.value.code == 1
 
 
-@pytest.mark.parametrize("admitted", [True, False], ids=["admitted", "rejected"])
-def test_carried_handlers_commit_independently(admitted: bool):
-    # Adapt the pinned fcr_current_epoch_02 block at slot 7, which carries two slot-6 votes.
-    # An unknown voted root fails fork choice, but only changes participation flags in transition.
-    # The second vote must still run, even when the enclosing block has a wrong state root.
-    case = (
-        FILES / "minimal/altair/fast_confirmation/current_epoch/pyspec_tests/fcr_current_epoch_02"
+# A case with blocks at slots 1, 2 and 3, each built on the one before.
+_CARRIED_CASE = (
+    FILES / "minimal/altair/fast_confirmation/current_epoch/pyspec_tests/fcr_current_epoch_02"
+)
+
+
+def _sealed(signed: dict, state: bytes, admitted: bool) -> bytes:
+    """A signed block with its true state root, or with the zero root that the store rejects."""
+    message = signed["message"]
+    encoded = consensus.api_ssz("minimal", "altair", "BeaconBlock", message)
+    root = consensus.compute_new_state_root("minimal", "altair", state, encoded, verify=False)
+    message["state_root"] = "0x" + (root if admitted else bytes(32)).hex()
+    return consensus.api_ssz("minimal", "altair", "SignedBeaconBlock", signed)
+
+
+def _carried_replay(voted_admitted: bool, slashed_admitted: bool) -> tuple[list, bytes]:
+    """The outcomes of a block that votes for block 1, then of one that slashes those voters."""
+    # The pinned slot-2 block moves onto the anchor, so block 1 stays a leaf with its own weight.
+    # Its first attestation is the vote of the four validators of the slot-1 committee.
+    # A copy with an unknown root follows: the transition accepts it and the fork choice rejects it.
+    # The slot-3 block moves onto the slot-2 block and carries a double vote of those four.
+    # Proposers in epoch 0 do not depend on the branch, so both blocks keep theirs.
+    case = _CARRIED_CASE
+    names = [step["block"] for step in _load(case / "steps.yaml") if "block" in step]
+    anchor_state, anchor_block = _read(case, "anchor_state"), _read(case, "anchor_block")
+    anchor_root = consensus.ssz_static("minimal", "altair", "BeaconBlock", anchor_block)[0]
+    first = _read(case, names[0])
+    first_root = _hex(names[0].removeprefix("block_"))
+    voted = consensus.api_json("minimal", "altair", "SignedBeaconBlock", _read(case, names[1]))
+    message = voted["message"]
+    assert message["slot"] == "2"
+    message["parent_root"] = "0x" + anchor_root.hex()
+    good = message["body"]["attestations"][0]
+    bad = {**good, "data": {**good["data"], "beacon_block_root": "0x" + "42" * 32}}
+    message["body"]["attestations"] = [good, bad]
+    committee = consensus.api_committees(
+        "minimal", "altair", anchor_state, epoch=0, slot=1, index=0
+    )["data"][0]["validators"]
+    assert len(committee) == 4
+    voted_block = _sealed(voted, anchor_state, True)
+    encoded = consensus.api_ssz("minimal", "altair", "BeaconBlock", message)
+    voted_root = consensus.ssz_static("minimal", "altair", "BeaconBlock", encoded)[0]
+    state = consensus.state_transitions(
+        "minimal", "altair", anchor_state, [voted_block], verify=False
     )
+    if not voted_admitted:
+        voted_block = _sealed(voted, anchor_state, False)
+    slashed = consensus.api_json("minimal", "altair", "SignedBeaconBlock", _read(case, names[2]))
+    message = slashed["message"]
+    assert message["slot"] == "3"
+    message["parent_root"] = "0x" + voted_root.hex()
+    indexed = {
+        "attesting_indices": sorted(committee, key=int),
+        "data": good["data"],
+        "signature": good["signature"],
+    }
+    message["body"]["attestations"] = []
+    message["body"]["attester_slashings"] = [
+        {"attestation_1": indexed, "attestation_2": {**indexed, "data": bad["data"]}}
+    ]
+    slashed_block = _sealed(slashed, state, slashed_admitted)
+    outcomes = consensus.fork_choice(
+        "minimal",
+        "altair",
+        anchor_state,
+        anchor_block,
+        [
+            ("tick", 6),
+            ("block", first),
+            ("tick", 18),
+            ("checks", (False, True, None)),
+            ("block", voted_block),
+            ("checks", (False, True, None)),
+            ("block", slashed_block),
+            ("checks", (False, True, None)),
+        ],
+        verify=False,
+        config={"PROPOSER_SCORE_BOOST": 0},
+    )
+    return outcomes, first_root
+
+
+def _weight(read: dict, root: bytes) -> int:
+    """The weight of a viable leaf of the block tree, from a read of the store."""
+    leaves = read["viable_for_head_roots_and_weights"]
+    return next(leaf["weight"] for leaf in leaves if leaf["root"] == root)
+
+
+def _wrong_state_root(outcome: object) -> bool:
+    """Whether an outcome is the rejection of a block whose state root is wrong."""
+    return isinstance(outcome, consensus.ForkChoiceError) and str(outcome) == (
+        "EthLib.Consensus.ForkChoiceError.transition "
+        "(EthLib.Consensus.TransitionError.wrongStateRoot)"
+    )
+
+
+# The four votes for block 1 weigh four effective balances of 32 ETH, in Gwei.
+_FOUR_VOTES = 128_000_000_000
+
+
+def test_rejected_block_runs_no_carried_handlers():
+    # Had the carried votes run, block 1 would weigh 128 ETH.
+    outcomes, first = _carried_replay(voted_admitted=False, slashed_admitted=True)
+    assert outcomes[4] == [outcomes[4][0]]
+    assert _wrong_state_root(outcomes[4][0])
+    assert _weight(outcomes[5][0], first) == 0
+    # Had the carried slashing run, block 1 would weigh nothing.
+    outcomes, first = _carried_replay(voted_admitted=True, slashed_admitted=False)
+    assert outcomes[4][:2] == [None, None]
+    assert _weight(outcomes[5][0], first) == _FOUR_VOTES
+    assert outcomes[6] == [outcomes[6][0]]
+    assert _wrong_state_root(outcomes[6][0])
+    assert _weight(outcomes[7][0], first) == _FOUR_VOTES
+
+
+def test_carried_handlers_commit_independently():
+    outcomes, first = _carried_replay(voted_admitted=True, slashed_admitted=True)
+    assert outcomes[3] == [{**outcomes[3][0]}]
+    assert _weight(outcomes[3][0], first) == 0
+    # The vote for an unknown block fails after the good vote, which keeps its weight.
+    assert len(outcomes[4]) == 3
+    assert outcomes[4][:2] == [None, None]
+    assert isinstance(outcomes[4][2], consensus.ForkChoiceError)
+    assert outcomes[4][2].code == 2  # unknownBlock
+    assert _weight(outcomes[5][0], first) == _FOUR_VOTES
+    # Slashing the four voters removes their weight.
+    assert outcomes[6] == [None, None]
+    assert _weight(outcomes[7][0], first) == 0
+
+
+def test_carried_handlers_run_on_each_receipt():
+    # Adapt the pinned slot-7 block, which carries two slot-6 votes, and keep its true state root.
+    # The transition accepts a vote for an unknown root, and the fork choice rejects it.
+    case = _CARRIED_CASE
     name = "block_0x0431ca898066abec9f55aa1bd0e701d14292bd6010a2e747debea04e911ff273"
     steps = _load(case / "steps.yaml")
     index = next(i for i, step in enumerate(steps) if step.get("block") == name)
@@ -344,27 +472,15 @@ def test_carried_handlers_commit_independently(admitted: bool):
     message["body"]["attestations"][0]["data"]["beacon_block_root"] = "0x" + "42" * 32
     prior = [_read(case, step["block"]) for step in steps[:index] if "block" in step]
     state = consensus.state_transitions("minimal", "altair", anchor_state, prior, verify=False)
-    encoded = consensus.api_ssz("minimal", "altair", "BeaconBlock", message)
-    state_root = consensus.compute_new_state_root("minimal", "altair", state, encoded, verify=False)
-    message["state_root"] = "0x" + (state_root if admitted else bytes(32)).hex()
+    block = _sealed(signed, state, True)
     encoded = consensus.api_ssz("minimal", "altair", "BeaconBlock", message)
     root = consensus.ssz_static("minimal", "altair", "BeaconBlock", encoded)[0]
-    if not admitted:
-        # Identical data cannot slash; a following double vote can, despite block rejection.
-        vote = message["body"]["attestations"][1]
-        indexed = {"attesting_indices": ["0"], "data": vote["data"], "signature": vote["signature"]}
-        conflicting = {**indexed, "data": {**vote["data"], "beacon_block_root": "0x" + "43" * 32}}
-        message["body"]["attester_slashings"] = [
-            {"attestation_1": indexed, "attestation_2": indexed},
-            {"attestation_1": indexed, "attestation_2": conflicting},
-        ]
-    block = consensus.api_ssz("minimal", "altair", "SignedBeaconBlock", signed)
     inputs = [one for step in steps[:index] for one in _inputs(case, step)]
     good_vote = consensus.api_ssz(
         "minimal", "altair", "Attestation", message["body"]["attestations"][1]
     )
-    # Repeat receipt to cover the known-block path without suppressing its carried operations.
-    # At epoch 3 the slot-6 vote is stale on the wire, but isFromBlock bypasses that clock check.
+    # A known block is admitted again, and its carried operations run again.
+    # At epoch 3 the slot-6 vote is stale on the wire, but a vote from a block skips that check.
     outcomes = consensus.fork_choice(
         "minimal",
         "altair",
@@ -382,78 +498,18 @@ def test_carried_handlers_commit_independently(admitted: bool):
         verify=False,
     )
     for group in [outcomes[-6], outcomes[-5], outcomes[-2]]:
-        assert len(group) == (3 if admitted else 5)
-        assert (group[0] is None) is admitted
+        assert len(group) == 3
+        assert group[0] is None
         assert isinstance(group[1], consensus.ForkChoiceError)
         assert group[1].code == 2  # unknownBlock
         assert group[2] is None
-        if not admitted:
-            assert isinstance(group[3], consensus.ForkChoiceError)
-            assert group[4] is None
+    assert len(outcomes[-1]) == 1
     assert isinstance(outcomes[-1][0], consensus.ForkChoiceError)
-    head = outcomes[-4][0]["head"]
-    assert head["slot"] == (7 if admitted else 6)
-    assert (head["root"] == root) is admitted
-
-
-def test_carried_success_survives_later_failure():
-    # Use the pinned slot-2 block's first committee vote for block 1, with no wire votes.
-    # Four validators of 32 ETH give 128 ETH; slashing those voters removes all that weight.
-    case = (
-        FILES / "minimal/altair/fast_confirmation/current_epoch/pyspec_tests/fcr_current_epoch_02"
-    )
-    blocks = [step["block"] for step in _load(case / "steps.yaml") if "block" in step]
-    anchor_state, anchor_block = _read(case, "anchor_state"), _read(case, "anchor_block")
-    signed = consensus.api_json("minimal", "altair", "SignedBeaconBlock", _read(case, blocks[1]))
-    message = signed["message"]
-    good = message["body"]["attestations"][0]
-    bad = {**good, "data": {**good["data"], "beacon_block_root": "0x" + "42" * 32}}
-    message["body"]["attestations"] = [good, bad]
-    message["state_root"] = "0x" + "00" * 32
-    voted_block = consensus.api_ssz("minimal", "altair", "SignedBeaconBlock", signed)
-    committee = consensus.api_committees(
-        "minimal", "altair", anchor_state, epoch=0, slot=1, index=0
-    )["data"][0]["validators"]
-    assert len(committee) == 4
-    indexed = {
-        "attesting_indices": sorted(committee, key=int),
-        "data": good["data"],
-        "signature": good["signature"],
-    }
-    conflicting = {**indexed, "data": bad["data"]}
-    message["body"]["attestations"] = []
-    message["body"]["attester_slashings"] = [
-        {"attestation_1": indexed, "attestation_2": conflicting},
-        {"attestation_1": indexed, "attestation_2": indexed},
-    ]
-    slashed_block = consensus.api_ssz("minimal", "altair", "SignedBeaconBlock", signed)
-    outcomes = consensus.fork_choice(
-        "minimal",
-        "altair",
-        anchor_state,
-        anchor_block,
-        [
-            ("tick", 6),
-            ("block", _read(case, blocks[0])),
-            ("tick", 12),
-            ("checks", (False, True, None)),
-            ("block", voted_block),
-            ("checks", (False, True, None)),
-            ("block", slashed_block),
-            ("checks", (False, True, None)),
-        ],
-        verify=False,
-        config={"PROPOSER_SCORE_BOOST": 0},
-    )
-    for group in [outcomes[4], outcomes[6]]:
-        assert len(group) == 3
-        assert isinstance(group[0], consensus.ForkChoiceError)
-        assert group[1] is None
-        assert isinstance(group[2], consensus.ForkChoiceError)
-    for position, weight in [(3, 0), (5, 128_000_000_000), (7, 0)]:
-        leaves = outcomes[position][0]["viable_for_head_roots_and_weights"]
-        assert len(leaves) == 1
-        assert leaves[0]["weight"] == weight
+    read = outcomes[-4][0]
+    assert isinstance(read, dict)
+    head = read["head"]
+    assert head["slot"] == 7
+    assert head["root"] == root
 
 
 def test_fast_confirmation_discount_bound():

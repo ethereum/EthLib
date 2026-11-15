@@ -844,12 +844,14 @@ def fork_choice(
     verify: bool = True,
     # `Any`, because `dict` is invariant in its values.
     config: dict[str, Any] | None = None,
-) -> list[list]:
+) -> list[list[dict[str, Any] | ForkChoiceError | None]]:
     """
     The handler outcomes of each step of a fork choice case, from an anchor state and block.
 
-    Each input gives a nonempty list: admission first, then carried attestations and slashings.
-    A rejected handler retains the store and later handlers still run.
+    Each input gives a list of outcomes: a read as a dict, None for success, or the rejection.
+    An admitted block gives its outcome, then those of its attestations and attester slashings.
+    A rejected block gives only its rejection, and its carried operations do not run.
+    Rejections are returned, not raised: each leaves the store unchanged, and later handlers run.
     """
     # A step is (kind, data), and its data is one of these:
     # - the tick in seconds

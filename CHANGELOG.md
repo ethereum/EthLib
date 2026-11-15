@@ -9,19 +9,22 @@ Not yet released.
 
 ### Changes that break callers
 
-- Fork-choice replay returns a nonempty list of handler outcomes for each input step.
-  A block's first outcome reports admission; the rest report its attestations and slashings, in order.
+- Fork-choice replay returns a nonempty list of handler outcomes for each input step ([#2622](https://github.com/ethereum/EthLib/pull/2622)).
+  An admitted block's first outcome reports admission; the rest report its attestations and attester slashings, in order.
+  Carried operations run only for an admitted block, so a rejected block gives one outcome, its error.
   Each successful handler commits independently, and a failed carried operation does not stop later calls.
-  Carried operations run even after rejected admission; other inputs have one outcome.
+  An invalid payload verdict removes the block after its carried operations run.
+  Other inputs have one outcome.
   This changes `fork_choice`, `forkChoice`, `replayForkChoice` and `replayForkChoiceConfirming`.
+  Every export that takes fork-choice steps replays blocks this way.
   Callers must inspect each nested outcome, not treat the input as one atomic operation.
   The public `runForkChoiceStep` block branch now performs bare admission only; its type is unchanged.
   `Store.onBlockWithVotes` and its nine wrapper-only lemmas are removed; call the spec handlers separately.
 
-- In Lean, `Models.Network.Handles.block` calls `Store.onBlock` without processing carried operations.
-  The `blockAttestation` and `blockAttesterSlashing` constructors process them separately on receipt.
-  Each requires the enclosing signed block in the view, but not its admission to the store.
-  Update case analyses of `Handles` to cover both constructors.
+- In Lean, `Models.Network.Handles.block` calls `Store.onBlock` without processing carried operations ([#2622](https://github.com/ethereum/EthLib/pull/2622)).
+  The `blockAttestation` and `blockAttesterSlashing` constructors process them separately.
+  Each requires the enclosing signed block in the view and its root among the blocks of the receiving store, so carried operations run only for an admitted block.
+  Update case analyses of `Handles` to cover both constructors and their two new premises.
   This changes `forkChoice` executions and `UpToDate`, and transitively `Prompt` and `VoteAt`, even where their signatures are unchanged.
   `BlocksAdmitted` requires only bare `onBlock` success, with its other conditions unchanged.
 

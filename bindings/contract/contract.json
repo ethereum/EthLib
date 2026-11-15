@@ -8968,7 +8968,7 @@
       {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "The handler outcomes of each step of a fork choice case, from an anchor state and block.\n\nEach input gives a nonempty list, with block admission before carried attestations and slashings.\n\nA rejected handler retains the store and later handlers still run.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block in SSZ, and the steps.\n\nThen come whether the signature checks run, and replacements of values of the configuration.\n\nFrom Gloas the node on which a proposer builds is not yet specified here, so that read fails."},
+   "The handler outcomes of each step of a fork choice case, from an anchor state and block.\n\nEach input gives a nonempty list of outcomes.\n\nAn admitted block gives its admission, then its attestations and slashings.\n\nA rejected block gives only its error.\n\nA rejected handler leaves the store unchanged, and later handlers still run.\n\nThe arguments are the preset, the fork, the anchor state and the anchor block in SSZ, and the steps.\n\nThen come whether the signature checks run, and replacements of values of the configuration.\n\nFrom Gloas the node on which a proposer builds is not yet specified here, so that read fails."},
   {"summary":
    "Validate the messages of a topic in turn, against the store of an anchor and later blocks.",
    "signature":

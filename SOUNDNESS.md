@@ -2895,9 +2895,11 @@ No theorem relates either test to the justification of the target in a later sta
 `DelayFits` requires a vote sent at its deadline, delayed by the bound, to arrive before the next slot; `Prompt` requires every honest store to be up to date at each slot start from the start of the execution up to the bound, and, at each slot start later than the start of the execution, one millisecond before it.
 `BlocksAdmitted` assumes that a delayed block passing `validateOnBlock` also passes the rest of `onBlock`.
 Success of the receiver's head, cache, proposer-boost, shuffling and pulled-up-checkpoint computations remains unproved.
-The network model handles carried attestations and attester slashings as separate moves on receipt, regardless of whether the enclosing block is admitted.
+The network model handles carried attestations and attester slashings as separate moves, each available only once the receiving store holds the enclosing block.
 Their rejection does not undo earlier successful moves.
-These moves change the meaning of `forkChoice` executions and of `UpToDate`, which quantifies over `Handles`, and transitively of `Prompt` and `VoteAt`, even where their signatures are unchanged.
+These moves change the meaning of `forkChoice` executions and of `UpToDate`, which quantifies over `Handles`, and transitively of `Prompt`, `MaySign` and `VoteAt`, even where their signatures are unchanged.
+`BlocksAdmitted` is weaker than before, but `UpToDate`, and with it `Prompt`, `MaySign` and `VoteAt`, is stronger, so these theorems neither imply nor follow from their earlier forms.
+`UpToDate` is stronger because a store that every bare block move and every carried move leaves unchanged is also left unchanged by a block processed together with its carried operations.
 The assumption requires no carried-operation success, but synchrony and the validation proof alone do not discharge the remaining block-handler obligation.
 The two theorems on voting and the head also assume facts that hashing makes hard to break, without naming a witness for them.
 Every block held by an honest store has a nonzero state root, so no state that such a block commits to hashes to the zero root; the theorem on the head also assumes that no honest store holds a block at the root of the anchor's parent, which needs a preimage of that root.

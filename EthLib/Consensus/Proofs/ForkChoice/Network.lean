@@ -15,7 +15,9 @@ The messages are those of the fork choice handlers.
 
 A received block and its carried votes and slashings are processed separately.
 
-A rejected carried operation leaves the admitted block and earlier updates intact.
+A carried vote or slashing is processed only once the store holds its block.
+
+A rejected carried operation leaves the block and earlier updates in the store.
 
 A message that the handler rejects leaves the store as it was, and may be processed later.
 
@@ -59,6 +61,8 @@ That time must not lie before the clock of the store.
 
 Every other move processes a message of the view, or one operation of a block in the view.
 
+An operation of a block is processed only when the store holds that block.
+
 Carried operations can be retried and interleaved with other moves, without an ordered queue.
 
 Blocks and envelopes are judged with the given sources outside the beacon chain. -/
@@ -73,19 +77,21 @@ inductive Handles (config : Config) (checks : SignatureChecks) (sources : BlockS
   | block {after : Store preset fork} {signed : SignedBeaconBlock preset fork} :
     .block signed ∈ view → store.onBlock config checks sources signed = .ok after →
       Handles config checks sources time view store after
-  /-- The store after an attestation carried by a block of the view. -/
+  /-- The store after an attestation carried by a block of the view that the store holds. -/
   | blockAttestation {after : Store preset fork}
-      {signed : SignedBeaconBlock preset fork}
+      {signed : SignedBeaconBlock preset fork} {blockRoot : Root}
       {attestation : Attestation preset fork} :
     .block signed ∈ view →
+      SszType.hashTreeRoot signed.message = .ok blockRoot → store.blocks.contains blockRoot →
       attestation ∈ signed.message.body.attestations.data →
       store.onAttestation config checks attestation true = .ok after →
       Handles config checks sources time view store after
-  /-- The store after a slashing carried by a block of the view. -/
+  /-- The store after a slashing carried by a block of the view that the store holds. -/
   | blockAttesterSlashing {after : Store preset fork}
-      {signed : SignedBeaconBlock preset fork}
+      {signed : SignedBeaconBlock preset fork} {blockRoot : Root}
       {slashing : AttesterSlashing preset fork} :
     .block signed ∈ view →
+      SszType.hashTreeRoot signed.message = .ok blockRoot → store.blocks.contains blockRoot →
       slashing ∈ signed.message.body.attesterSlashings.data →
       store.onAttesterSlashing config checks slashing = .ok after →
       Handles config checks sources time view store after
@@ -143,8 +149,8 @@ theorem Handles.reachable {checks : SignatureChecks} {sources : BlockSources pre
   cases handles with
   | tick _ _ ticked => exact reachable.tick ticked
   | block _ added => exact reachable.block added
-  | blockAttestation _ _ attested => exact reachable.attestation attested
-  | blockAttesterSlashing _ _ slashed => exact reachable.attesterSlashing slashed
+  | blockAttestation _ _ _ _ attested => exact reachable.attestation attested
+  | blockAttesterSlashing _ _ _ _ slashed => exact reachable.attesterSlashing slashed
   | attestation _ attested => exact reachable.attestation attested
   | attesterSlashing _ slashed => exact reachable.attesterSlashing slashed
   | payloadAttestation _ voted => exact reachable.payloadAttestation voted
@@ -167,8 +173,8 @@ theorem Execution.blocks_of_le {ν κ : Type*} [DecidableEq ν] {checks : Signat
     · cases moved with
       | tick _ _ step => exact (Store.onTick_frame step).2.2.1 ▸ ih
       | block _ step => exact Store.onBlock_blocks_of_found step ih
-      | blockAttestation _ _ step => exact (Store.onAttestation_frame step).2.1 ▸ ih
-      | blockAttesterSlashing _ _ step => exact (Store.onAttesterSlashing_frame step).2.1 ▸ ih
+      | blockAttestation _ _ _ _ step => exact (Store.onAttestation_frame step).2.1 ▸ ih
+      | blockAttesterSlashing _ _ _ _ step => exact (Store.onAttesterSlashing_frame step).2.1 ▸ ih
       | attestation _ step => exact (Store.onAttestation_frame step).2.1 ▸ ih
       | attesterSlashing _ step => exact (Store.onAttesterSlashing_frame step).2.1 ▸ ih
       | payloadAttestation _ step =>
@@ -185,8 +191,8 @@ theorem Handles.checkpointsAdvance {checks : SignatureChecks}
   cases handles with
   | tick _ _ ticked => exact (Store.onTick_frame ticked).2.1
   | block _ added => exact Store.onBlock_checkpointsAdvance added
-  | blockAttestation _ _ attested => exact (Store.onAttestation_frame attested).1
-  | blockAttesterSlashing _ _ slashed => exact (Store.onAttesterSlashing_frame slashed).1
+  | blockAttestation _ _ _ _ attested => exact (Store.onAttestation_frame attested).1
+  | blockAttesterSlashing _ _ _ _ slashed => exact (Store.onAttesterSlashing_frame slashed).1
   | attestation _ attested => exact (Store.onAttestation_frame attested).1
   | attesterSlashing _ slashed => exact (Store.onAttesterSlashing_frame slashed).1
   | payloadAttestation _ voted =>
@@ -241,8 +247,8 @@ theorem Execution.clock_bounds {ν κ : Type*} [DecidableEq ν] {checks : Signat
         exact UInt64.toNat_ofNat_of_lt' fits
       exact ⟨g, UInt64.le_iff_toNat_le.mpr (tm ▸ le), by rw [tm]; omega⟩
     | block _ h => exact same (Store.onBlock_sameClock h)
-    | blockAttestation _ _ h => exact same (Store.onAttestation_sameClock h)
-    | blockAttesterSlashing _ _ h => exact same (Store.onAttesterSlashing_sameClock h)
+    | blockAttestation _ _ _ _ h => exact same (Store.onAttestation_sameClock h)
+    | blockAttesterSlashing _ _ _ _ h => exact same (Store.onAttesterSlashing_sameClock h)
     | attestation _ h => exact same (Store.onAttestation_sameClock h)
     | attesterSlashing _ h => exact same (Store.onAttesterSlashing_sameClock h)
     | payloadAttestation _ h => exact same (Store.onPayloadAttestationMessage_sameClock h)
@@ -288,9 +294,9 @@ theorem Execution.exists_validated_of_blocks {ν κ : Type*} [DecidableEq ν]
     · exact False.elim (held (same ▸ found))
     cases moved with
     | tick _ _ h => exact False.elim (frames (Store.onTick_frame h).2.2.1 rfl rfl)
-    | blockAttestation _ _ h =>
+    | blockAttestation _ _ _ _ h =>
       exact False.elim (frames (Store.onAttestation_frame h).2.1 rfl rfl)
-    | blockAttesterSlashing _ _ h =>
+    | blockAttesterSlashing _ _ _ _ h =>
       exact False.elim (frames (Store.onAttesterSlashing_frame h).2.1 rfl rfl)
     | attestation _ h => exact False.elim (frames (Store.onAttestation_frame h).2.1 rfl rfl)
     | attesterSlashing _ h =>
@@ -345,8 +351,8 @@ theorem Handles.forwardReachable {checks : SignatureChecks} {sources : BlockSour
     rw [UInt64.le_iff_toNat_le, Nat.toUInt64, UInt64.toNat_ofNat_of_lt' lt]
     exact le
   | block _ added => exact forward.block added
-  | blockAttestation _ _ attested => exact forward.attestation attested
-  | blockAttesterSlashing _ _ slashed => exact forward.attesterSlashing slashed
+  | blockAttestation _ _ _ _ attested => exact forward.attestation attested
+  | blockAttesterSlashing _ _ _ _ slashed => exact forward.attesterSlashing slashed
   | attestation _ attested => exact forward.attestation attested
   | attesterSlashing _ slashed => exact forward.attesterSlashing slashed
   | payloadAttestation _ voted => exact forward.payloadAttestation voted
@@ -379,8 +385,8 @@ theorem Handles.forwardReachableWith {checks : SignatureChecks}
     rw [UInt64.le_iff_toNat_le, Nat.toUInt64, UInt64.toNat_ofNat_of_lt' lt]
     exact le
   | block _ added => exact reached.block added
-  | blockAttestation _ _ attested => exact reached.attestation attested
-  | blockAttesterSlashing _ _ slashed => exact reached.attesterSlashing slashed
+  | blockAttestation _ _ _ _ attested => exact reached.attestation attested
+  | blockAttesterSlashing _ _ _ _ slashed => exact reached.attesterSlashing slashed
   | attestation _ attested => exact reached.attestation attested
   | attesterSlashing _ slashed => exact reached.attesterSlashing slashed
   | payloadAttestation _ voted => exact reached.payloadAttestation voted
