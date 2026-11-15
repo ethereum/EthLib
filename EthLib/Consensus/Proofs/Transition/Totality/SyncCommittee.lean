@@ -201,37 +201,6 @@ theorem computeBalanceWeightedSelection_ok {state : BeaconState preset fork}
   · exact search _ (fun _ lt => Shuffle.shuffledIndex_lt lt)
       ⟨_, Shuffle.unshuffledIndex_lt pLt, Shuffle.shuffledIndex_unshuffledIndex pLt⟩
 
-/-- The seed of an epoch exists when the epoch plus the length of the history of mixes fits.
-
-The seed lookahead must also be shorter than that history. -/
-theorem getSeed_ok {state : BeaconState preset fork} {epoch : Epoch}
-    (domain : DomainType)
-    (epochRoom : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
-    (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
-    ∃ seed, getSeed state epoch domain = .ok seed := by
-  have subOk : ∀ a b : UInt64, b.toNat ≤ a.toNat → Uint64.subChecked a b = .ok (a - b) :=
-    fun a b le => by simp [Uint64.subChecked, UInt64.le_iff_toNat_le, le]
-  have sum := Uint64.toNat_add_of_lt epochRoom
-  have first := subOk (epoch + preset.EPOCHS_PER_HISTORICAL_VECTOR) preset.MIN_SEED_LOOKAHEAD
-    (by omega)
-  have second := subOk (epoch + preset.EPOCHS_PER_HISTORICAL_VECTOR - preset.MIN_SEED_LOOKAHEAD) 1
-    (by rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by omega))]; simp; omega)
-  have nonzero : preset.EPOCHS_PER_HISTORICAL_VECTOR ≠ 0 := by
-    intro zero
-    rw [zero] at lookahead
-    simp at lookahead
-  simp only [getSeed, getRandaoMix, readCircular, liftArith, Uint64.addChecked_of_lt epochRoom,
-    first, second, nonzero, bind, Except.bind, Except.mapError, pure, Except.pure, dite_false]
-  exact ⟨_, rfl⟩
-
-/-- No more validators are active in an epoch than the registry holds. -/
-theorem length_getActiveValidatorIndices_le (state : BeaconState preset fork)
-    (epoch : Epoch) :
-    (getActiveValidatorIndices state epoch).length ≤ state.validators.data.size := by
-  unfold getActiveValidatorIndices
-  refine Nat.le_trans (List.length_filterMap_le _ _) ?_
-  simp only [List.length_zipIdx, Array.length_toList, Nat.le_refl]
-
 /-! ## The draw on a state of another fork -/
 
 /-- A draw reads the same bytes and compares the same products at two forks.

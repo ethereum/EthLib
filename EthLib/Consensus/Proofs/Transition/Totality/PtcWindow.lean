@@ -114,24 +114,6 @@ private theorem size_of_shuffledCommittee {indices : Array ValidatorIndex}
   · simp [zero, fits, bind, Except.bind, throw, throwThe, MonadExcept.throw,
       MonadExceptOf.throw] at cut
 
-/-- A committee with a nonzero count and a position below it is cut when its bounds fit. -/
-private theorem shuffledCommittee_ok {indices : Array ValidatorIndex} {shuffled : Array UInt64}
-    {index count : UInt64} (inside : index < count)
-    (fits : indices.size * (index.toNat + 1) < 2 ^ 64) :
-    ∃ committee, shuffledCommittee indices shuffled index count = .ok committee := by
-  have natLt : index.toNat < count.toNat := UInt64.lt_iff_toNat_lt.mp inside
-  have positive : count ≠ 0 := by
-    intro zero
-    simp [zero] at natLt
-  have bound : indices.size * (index.toNat + 1) ≤ indices.size * count.toNat :=
-    Nat.mul_le_mul_left _ natLt
-  have stopLe : indices.size * (index.toNat + 1) / count.toNat ≤ indices.size :=
-    Nat.div_le_of_le_mul (Nat.le_trans bound (Nat.le_of_eq (Nat.mul_comm _ _)))
-  have below : index.toNat + 1 < 2 ^ 64 := Nat.lt_of_le_of_lt natLt count.toNat_lt
-  simp only [shuffledCommittee, positive, below, fits, and_self, Nat.not_lt.mpr stopLe, and_false,
-    ↓reduceIte]
-  exact ⟨_, rfl⟩
-
 /-- A beacon committee that is cut has the size of its range of positions in the epoch. -/
 private theorem size_beaconCommitteeOf {slot : Slot} {index : CommitteeIndex} {perSlot : UInt64}
     {active : Array ValidatorIndex} {shuffled : Array UInt64} {committee : Array ValidatorIndex}
@@ -252,61 +234,6 @@ theorem PtcDrawsEnd.of_atCap {state : BeaconState preset fork} {epoch : Epoch}
     (full slot inEpoch members found) (by omega)
     (Nat.lt_of_le_of_lt (Nat.mul_le_mul_left _ membersLe) room)
 
-/-- The shuffle of an epoch succeeds when the registry holds at most `2^40` validators. -/
-private theorem attesterShuffle_ok_of_le {state : BeaconState preset fork} {epoch : Epoch}
-    (seedRoom : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
-    (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (few : state.validators.data.size ≤ 2 ^ 40) :
-    ∃ shuffled, attesterShuffle state epoch =
-      .ok ((getActiveValidatorIndices state epoch).toArray, shuffled) := by
-  obtain ⟨seed, seedOk⟩ := getSeed_ok (state := state) (epoch := epoch) DOMAIN_BEACON_ATTESTER
-    seedRoom lookahead
-  have checked := getActiveValidatorIndicesChecked_of_size_le (state := state) (by omega) epoch
-  have lengthLe := length_getActiveValidatorIndices_le state epoch
-  have lt : (getActiveValidatorIndices state epoch).toArray.size < 2 ^ 64 := by
-    simp only [List.size_toArray]
-    omega
-  have countNat := UInt64.toNat_ofNat_of_lt' lt
-  have permuted := computeShuffledPermutation_eq (preset := preset) (seed := seed)
-    (count := UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size)
-    (by rw [countNat]; simp only [List.size_toArray]; omega)
-  refine ⟨Shuffle.shuffledPositions preset.SHUFFLE_ROUND_COUNT.toNat seed
-    (UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size).toNat, ?_⟩
-  simp only [attesterShuffle, seedOk, checked, liftArith, bind, Except.bind, Except.mapError,
-    Base.Uint64.ofNatChecked_of_lt lt, Nat.toUInt64_eq, permuted, pure, Except.pure]
-
-/-- A beacon committee is cut when its position is below the count of the epoch. -/
-private theorem beaconCommitteeOf_ok {slot : Slot} {index : CommitteeIndex} {perSlot : UInt64}
-    {active : Array ValidatorIndex} {shuffled : Array UInt64}
-    (count : perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
-    (inside : (slot % preset.SLOTS_PER_EPOCH).toNat * perSlot.toNat + index.toNat <
-      perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat)
-    (fits : active.size * (perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64) :
-    ∃ committee, beaconCommitteeOf preset slot index perSlot active shuffled = .ok committee := by
-  have productFits : (slot % preset.SLOTS_PER_EPOCH).toNat * perSlot.toNat < 2 ^ 64 := by omega
-  have sumFits : ((slot % preset.SLOTS_PER_EPOCH) * perSlot).toNat + index.toNat < 2 ^ 64 := by
-    rw [UInt64.toNat_mul, Nat.mod_eq_of_lt productFits]
-    omega
-  have positionNat : ((slot % preset.SLOTS_PER_EPOCH) * perSlot + index).toNat =
-      (slot % preset.SLOTS_PER_EPOCH).toNat * perSlot.toNat + index.toNat := by
-    rw [Base.Uint64.toNat_add_of_lt sumFits, UInt64.toNat_mul, Nat.mod_eq_of_lt productFits]
-  have countFits : perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := count
-  have countNat : (perSlot * preset.SLOTS_PER_EPOCH).toNat =
-      perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat := by
-    rw [UInt64.toNat_mul, Nat.mod_eq_of_lt countFits]
-  obtain ⟨committee, cut⟩ := shuffledCommittee_ok (indices := active) (shuffled := shuffled)
-    (index := (slot % preset.SLOTS_PER_EPOCH) * perSlot + index)
-    (count := perSlot * preset.SLOTS_PER_EPOCH) (by
-      rw [UInt64.lt_iff_toNat_lt, positionNat, countNat]
-      exact inside) (by
-      rw [positionNat]
-      exact Nat.lt_of_le_of_lt (Nat.mul_le_mul_left _ (by omega)) fits)
-  refine ⟨committee, ?_⟩
-  simp only [beaconCommitteeOf, liftArith, Base.Uint64.mulChecked_of_lt
-    (by simpa only using productFits : (slot % preset.SLOTS_PER_EPOCH).toNat * perSlot.toNat <
-      2 ^ 64), Base.Uint64.addChecked_of_lt sumFits,
-    Base.Uint64.mulChecked_of_lt countFits, bind, Except.bind, Except.mapError, cut]
-
 /-- The committees of a slot are all cut when each one is. -/
 private theorem foldlM_committees_ok {slot : Slot} {perSlot : UInt64}
     {active : Array ValidatorIndex} {shuffled : Array UInt64} (m : Nat)
@@ -349,47 +276,11 @@ theorem computePtc_ok {state : BeaconState preset fork} {slot : Slot}
     (committeeRoom : state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
       preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64) :
     ∃ committee, computePtc state slot = .ok committee := by
-  have perSlotPos := UInt64.le_iff_toNat_le.mp
-    (one_le_getCommitteeCountPerSlot state (computeEpochAtSlot preset slot))
-  have perSlotMax := UInt64.le_iff_toNat_le.mp
-    (getCommitteeCountPerSlot_le state (computeEpochAtSlot preset slot))
-  have lengthLe := length_getActiveValidatorIndices_le state (computeEpochAtSlot preset slot)
   have epochPos : 0 < preset.SLOTS_PER_EPOCH.toNat := by
     refine Nat.pos_of_ne_zero fun zero => perEpoch ?_
     exact UInt64.toNat_inj.mp zero
-  simp only [Base.Uint64.toNat_max] at perSlotMax
-  have one : (1 : UInt64).toNat = 1 := rfl
-  have empty : state.validators.data.size = 0 →
-      getCommitteeCountPerSlot state (computeEpochAtSlot preset slot) = 1 := by
-    intro zero
-    have hlen : (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).length = 0 := by
-      omega
-    simp [getCommitteeCountPerSlot, committeeCountOf, hlen]
-    apply UInt64.toNat_inj.mp
-    simp [Base.Uint64.toNat_max, Base.Uint64.toNat_min]
-  have perSlotLe : (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat ≤
-      preset.MAX_COMMITTEES_PER_SLOT.toNat + 1 := by omega
-  have slotsSmall := preset.SLOTS_PER_EPOCH.toNat_lt
-  have countFits : (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat *
-      preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by
-    rcases Nat.eq_zero_or_pos state.validators.data.size with zero | pos
-    · rw [empty zero, one]
-      omega
-    · calc _ ≤ (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat :=
-            Nat.mul_le_mul_right _ perSlotLe
-        _ ≤ state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
-            preset.SLOTS_PER_EPOCH.toNat :=
-            Nat.mul_le_mul_right _ (Nat.le_mul_of_pos_left _ pos)
-        _ < 2 ^ 64 := committeeRoom
-  have activeFits : (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).length *
-      ((getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat *
-        preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64 :=
-    calc _ ≤ state.validators.data.size * ((preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
-            preset.SLOTS_PER_EPOCH.toNat) :=
-          Nat.mul_le_mul lengthLe (Nat.mul_le_mul_right _ perSlotLe)
-      _ = state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
-            preset.SLOTS_PER_EPOCH.toNat := (Nat.mul_assoc _ _ _).symm
-      _ < 2 ^ 64 := committeeRoom
+  obtain ⟨countFits, activeFits⟩ := committeeCount_fits (state := state)
+    (computeEpochAtSlot preset slot) committeeRoom
   obtain ⟨seed, seedOk⟩ := getSeed_ok (state := state) (epoch := computeEpochAtSlot preset slot)
     DOMAIN_PTC_ATTESTER seedRoom lookahead
   obtain ⟨shuffled, shuffleOk⟩ := attesterShuffle_ok_of_le (state := state)
