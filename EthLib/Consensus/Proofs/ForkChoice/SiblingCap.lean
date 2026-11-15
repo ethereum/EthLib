@@ -314,6 +314,108 @@ private theorem not_mem_supporters_of_latest {lower : store.ParentsBelow}
   rw [voteRoot] at above
   exact absurd isChild.height_lt (Nat.not_lt.mpr above.height_le)
 
+/-- Each model voter is a registry index that is active in the balance state. -/
+private theorem active_of_mem_voters {state : BeaconState preset fork} {i : ℕ}
+    (member : i ∈ Store.voters state) :
+    i < state.validators.data.size ∧ ∃ validator,
+      state.validators.data[i]? = some validator ∧
+        isActiveValidator validator (getCurrentEpoch state) = true := by
+  simp only [Store.voters, Finset.mem_filter, Finset.mem_range] at member
+  obtain ⟨lt, countsOk⟩ := member
+  unfold Store.counts at countsOk
+  cases atIndex : state.validators.data[i]? with
+  | none => simp [atIndex] at countsOk
+  | some validator =>
+    simp only [atIndex, Bool.and_eq_true] at countsOk
+    exact ⟨lt, validator, rfl, countsOk.1⟩
+
+/-- Two siblings and a set supporting neither weigh at most a finite window, plus one boost.
+
+The window contains every supporter index and every member of the additional set.
+
+The registry limit makes the conversion of supporter indices to validator indices injective.
+
+This is the disjoint-set bound used in Lemma 2 of [arXiv 2405.00549v4][fcr], Appendix A.1.
+
+It needs no committee read or history of the store.
+
+[fcr]: https://arxiv.org/abs/2405.00549v4
+-/
+theorem Store.weight_add_weight_add_stake_le_stake_withBoost
+    (lower : store.ParentsBelow) {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit)
+    (nodes : List ForkChoiceNode) (boosted : Option (Option Root)) (score : ℕ)
+    {root parent : Root} {sibling : Option Root} {block : BeaconBlock preset fork}
+    {N window : Finset ValidatorIndex}
+    (found : store.blocks[root]? = some block) (parentRoot : block.parentRoot = parent)
+    (siblingChild : sibling ∈ children (view lower nodes) (some parent))
+    (distinct : sibling ≠ some root)
+    (supportersInside : ∀ i ∈ supporters (voters state) (view lower nodes) (some root) ∪
+      supporters (voters state) (view lower nodes) sibling, i.toUInt64 ∈ window)
+    (inside : N ⊆ window)
+    (neither : ∀ v ∈ N, v.toNat ∉ supporters (voters state) (view lower nodes) (some root) ∧
+      v.toNat ∉ supporters (voters state) (view lower nodes) sibling) :
+    weight (voters state).insertNone (boostStake (balanceAt state) score)
+        ((view lower nodes).withBoost boosted) (some root) +
+      weight (voters state).insertNone (boostStake (balanceAt state) score)
+        ((view lower nodes).withBoost boosted) sibling +
+      stake (fun v => balanceAt state v.toNat) N ≤
+    stake (fun v => balanceAt state v.toNat) window + score := by
+  classical
+  have isChild : (Store.blockTree lower).IsChild (some root) (some parent) :=
+    Store.blockTree_isChild_iff.mpr ⟨block, found, parentRoot⟩
+  have siblingIsChild := (mem_children.mp siblingChild).2
+  refine (Nat.add_le_add_right (weight_withBoost_add_le isChild siblingIsChild (Ne.symm distinct)
+    boosted score) _).trans ?_
+  suffices key :
+      weight (Store.voters state) (balanceAt state) (Store.view lower nodes) (some root) +
+      weight (Store.voters state) (balanceAt state) (Store.view lower nodes) sibling +
+      stake (fun v => balanceAt state v.toNat) N ≤
+        stake (fun v => balanceAt state v.toNat) window by omega
+  set S := supporters (Store.voters state) (Store.view lower nodes) (some root) with hS
+  set S' := supporters (Store.voters state) (Store.view lower nodes) sibling with hS'
+  -- The registry bound makes each conversion to UInt64 reversible on these supporters.
+  have back : ∀ i ∈ S ∪ S', i.toUInt64.toNat = i := by
+    intro i member
+    have member : i ∈ Store.voters state := by
+      rcases Finset.mem_union.mp member with h | h <;> exact Finset.mem_of_mem_filter _ h
+    exact toNat_toUInt64_of_lt within (active_of_mem_voters member).1
+  -- A latest vote cannot lie in the subtrees of two distinct children.
+  have apart : Disjoint S S' := by
+    refine Finset.disjoint_left.mpr fun v hv hv' => ?_
+    simp only [hS, hS', supporters, Finset.mem_filter] at hv hv'
+    obtain ⟨-, m, hm, hcm⟩ := hv
+    obtain ⟨-, m', hm', hcm'⟩ := hv'
+    rw [hm, Option.some_inj] at hm'
+    subst hm'
+    exact isChild.disjoint siblingIsChild (Ne.symm distinct) hcm hcm'
+  have apartN : Disjoint ((S ∪ S').image Nat.toUInt64) N := by
+    refine Finset.disjoint_left.mpr fun v hv hN => ?_
+    obtain ⟨i, hi, rfl⟩ := Finset.mem_image.mp hv
+    obtain ⟨n, n'⟩ := neither _ hN
+    rw [back i hi] at n n'
+    rcases Finset.mem_union.mp hi with h | h
+    exacts [n h, n' h]
+  have injective : Set.InjOn Nat.toUInt64 ↑(S ∪ S') := fun i hi j hj same => by
+    have := congrArg UInt64.toNat same
+    rwa [back i hi, back j hj] at this
+  -- Sum the disjoint supporter images and the additional set before enlarging to the window.
+  have split : weight (Store.voters state) (balanceAt state) (Store.view lower nodes) (some root) +
+      weight (Store.voters state) (balanceAt state) (Store.view lower nodes) sibling +
+      stake (fun v => balanceAt state v.toNat) N =
+      stake (fun v => balanceAt state v.toNat) ((S ∪ S').image Nat.toUInt64 ∪ N) := by
+    simp only [weight, stake]
+    rw [Finset.sum_union apartN, Finset.sum_image injective, ← hS, ← hS',
+      ← Finset.sum_union apart]
+    congr 1
+    exact Finset.sum_congr rfl fun i hi => by rw [back i hi]
+  rw [split]
+  refine stake_mono fun v member => ?_
+  rcases Finset.mem_union.mp member with image | hN
+  · obtain ⟨i, hi, rfl⟩ := Finset.mem_image.mp image
+    exact supportersInside i hi
+  · exact inside hN
+
 /-- Two children of a block weigh together at most the rule's count, plus the score of the boost.
 
 The count is the weight of the committees from the slot after the parent to the slot before now.
@@ -378,60 +480,25 @@ theorem Store.ForwardReachableWith.weight_add_weight_add_stake_le_withBoost
   have isChild : (Store.blockTree lower).IsChild (some root) (some block.parentRoot) :=
     Store.blockTree_isChild_iff.mpr ⟨block, found, rfl⟩
   have siblingIsChild := (mem_children.mp siblingChild).2
-  refine (Nat.add_le_add_right (weight_withBoost_add_le isChild siblingIsChild (Ne.symm distinct)
-    boosted score) _).trans ?_
-  suffices key :
-      weight (Store.voters state) (balanceAt state) (Store.view lower nodes) (some root) +
-      weight (Store.voters state) (balanceAt state) (Store.view lower nodes) sibling +
-      stake (fun v => balanceAt state v.toNat) N ≤ maximumSupport.toNat by omega
   set S := supporters (Store.voters state) (Store.view lower nodes) (some root) with hS
   set S' := supporters (Store.voters state) (Store.view lower nodes) sibling with hS'
+  -- The finite window holds both supporter images and the validators supporting neither child.
+  set window := (S ∪ S').image Nat.toUInt64 ∪ N with hWindow
+  have cap := Store.weight_add_weight_add_stake_le_stake_withBoost lower within nodes boosted
+    score found rfl siblingChild distinct
+    (window := window) (fun i hi => Finset.mem_union_left _ (Finset.mem_image.mpr ⟨i, hi, rfl⟩))
+    (fun _ member => Finset.mem_union_right _ member) neither
+  suffices bound : stake (fun v => balanceAt state v.toNat) window ≤ maximumSupport.toNat by
+    exact cap.trans (Nat.add_le_add_right bound score)
   -- Each supporter counts in the state: it is in the registry and active there.
   have voter : ∀ i ∈ S ∪ S', i < state.validators.data.size ∧ ∃ validator,
       state.validators.data[i]? = some validator ∧
         isActiveValidator validator (getCurrentEpoch state) = true := by
     intro i member
-    have member : i ∈ Store.voters state := by
-      rcases Finset.mem_union.mp member with h | h <;> exact Finset.mem_of_mem_filter _ h
-    simp only [Store.voters, Finset.mem_filter, Finset.mem_range] at member
-    obtain ⟨lt, countsOk⟩ := member
-    unfold Store.counts at countsOk
-    cases atIndex : state.validators.data[i]? with
-    | none => simp [atIndex] at countsOk
-    | some validator =>
-      simp only [atIndex, Bool.and_eq_true] at countsOk
-      exact ⟨lt, validator, rfl, countsOk.1⟩
+    apply active_of_mem_voters
+    rcases Finset.mem_union.mp member with h | h <;> exact Finset.mem_of_mem_filter _ h
   have back : ∀ i ∈ S ∪ S', i.toUInt64.toNat = i := fun i member =>
     toNat_toUInt64_of_lt within (voter i member).1
-  -- The supporters of the two children and the set are pairwise disjoint.
-  have apart : Disjoint S S' := by
-    refine Finset.disjoint_left.mpr fun v hv hv' => ?_
-    simp only [hS, hS', supporters, Finset.mem_filter] at hv hv'
-    obtain ⟨-, m, hm, hcm⟩ := hv
-    obtain ⟨-, m', hm', hcm'⟩ := hv'
-    rw [hm, Option.some_inj] at hm'
-    subst hm'
-    exact isChild.disjoint siblingIsChild (Ne.symm distinct) hcm hcm'
-  have apartN : Disjoint ((S ∪ S').image Nat.toUInt64) N := by
-    refine Finset.disjoint_left.mpr fun v hv hN => ?_
-    obtain ⟨i, hi, rfl⟩ := Finset.mem_image.mp hv
-    obtain ⟨n, n'⟩ := neither _ hN
-    rw [back i hi] at n n'
-    rcases Finset.mem_union.mp hi with h | h
-    exacts [n h, n' h]
-  have injective : Set.InjOn Nat.toUInt64 ↑(S ∪ S') := fun i hi j hj same => by
-    have := congrArg UInt64.toNat same
-    rwa [back i hi, back j hj] at this
-  have split : weight (Store.voters state) (balanceAt state) (Store.view lower nodes) (some root) +
-      weight (Store.voters state) (balanceAt state) (Store.view lower nodes) sibling +
-      stake (fun v => balanceAt state v.toNat) N =
-      stake (fun v => balanceAt state v.toNat) ((S ∪ S').image Nat.toUInt64 ∪ N) := by
-    simp only [weight, stake]
-    rw [Finset.sum_union apartN, Finset.sum_image injective, ← hS, ← hS',
-      ← Finset.sum_union apart]
-    congr 1
-    exact Finset.sum_congr rfl fun i hi => by rw [back i hi]
-  rw [split]
   refine stake_le_of_active_of_reads maximumOk (fun v member => ?_) (fun whole v member => ?_)
   · rcases Finset.mem_union.mp member with image | hN
     · obtain ⟨i, hi, rfl⟩ := Finset.mem_image.mp image
