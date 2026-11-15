@@ -603,7 +603,7 @@ class KindsRule(unittest.TestCase):
 
 
 class DirectoryCycles(unittest.TestCase):
-    def assert_imports(self, graph: dict[str, list[str]], expected: list[tuple[str, str]]):
+    def assert_imports(self, graph: dict[str, list[str]], expected: list[tuple[str, str]]) -> None:
         """Check every reported import, including the absence of exempt imports."""
         self.assertEqual(
             [(name, imported) for name, imported, _ in layers.directory_cycles(graph, set())],
@@ -723,6 +723,17 @@ class DirectoryCycles(unittest.TestCase):
         )
         graph["EthLib.Execution.P.More"] = []
         self.assertEqual(layers.directory_cycles(graph, set()), [])
+
+    def test_imports_inside_a_directory_are_not_reported(self):
+        graph = {
+            "EthLib.Execution.A.Top": ["EthLib.Execution.A.Use"],
+            "EthLib.Execution.A.Use": ["EthLib.Execution.A.Helper"],
+            "EthLib.Execution.A.Helper": ["EthLib.Execution.B.Types"],
+            "EthLib.Execution.B.Use": ["EthLib.Execution.A.Types"],
+            "EthLib.Execution.A.Types": [],
+            "EthLib.Execution.B.Types": [],
+        }
+        self.assert_imports(graph, [("A.Helper", "B.Types"), ("B.Use", "A.Types")])
 
     def test_cycle_through_the_directory_root(self):
         graph = {

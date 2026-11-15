@@ -281,6 +281,10 @@ def directory_cycles(
                 continue
             pairs = []
             for source in containers(name):
+                # An import inside `source` adds nothing: the imported module's own imports
+                # give every pair from `source`, on the line that leaves it.
+                if source in containers(imported):
+                    continue
                 for target in sorted(targets(imported, source_layer)):
                     if (
                         source == target
