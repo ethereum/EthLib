@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.DirectSafety.Safety
 public import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
+public import EthLib.Consensus.Proofs.ForkChoice.Network
 
 /-!
 # Proofs: the ancestry of the checkpoints of a store
@@ -375,19 +376,19 @@ theorem Store.Reachable.checkpoint_terminalView {config : Config}
       (reachable.linked_of_unknown anchorSlot unknownParent) imported early pre held
     exact .inr ⟨root, state, tail, view, held, eq, extra, headers, last⟩
 
-/-- The finalized checkpoint of a store is early, or on the chain of its justified checkpoint.
+/-- One store's finalized checkpoint is early, or on the justified chain of another store.
 
-Otherwise two runs to held states of the store bound the accountable stake, or show hash evidence.
+Otherwise runs to held states of the two stores bound accountable stake, or show hash evidence.
 
-The store is reachable from an anchor whose parent it does not hold.
+Both stores are reachable from an anchor whose parent neither holds.
 
 The anchor block is at or before the slot of the anchor state, and the preset meets the parameters.
 
 We assume a run from a genesis built from deposits to the anchor state.
 
-We assume that every block of the store was imported with the signature checks of that run.
+We assume that every block of either store was imported with the signature checks of that run.
 
-We assume that no upgrade is due at a held slot, so the transitions of the store are steps of a run.
+We assume that no upgrade is due at a held slot, so the stores' transitions are steps of a run.
 
 The first alternative puts the finalized epoch at or before the epoch of the anchor state.
 
@@ -406,6 +407,173 @@ The drift counts from the anchor, so the bound loosens as the justified epoch mo
 We assume a stake floor at the epoch calls of every run from the anchor to a held state.
 
 We assume it too at each held state up to one epoch past the justified epoch, for that step. -/
+private theorem Store.Reachable.finalized_ancestor_or_accountable_between {config : Config}
+    {checks : SignatureChecks}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store earlier : Store preset fork} {g : ForkedBeaconState preset}
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (reachableEarlier : Store.Reachable config anchorState anchorBlock earlier)
+    (parameters : DirectSafety.Parameters preset)
+    (genesis : Genesis config checks g)
+    (pre : Run config checks g ⟨fork, anchorState⟩)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (unknownParent : store.blocks[anchorBlock.parentRoot]? = none)
+    (unknownEarlier : earlier.blocks[anchorBlock.parentRoot]? = none)
+    (imported : store.BlockStatesFromParents config (· = checks) anchorState anchorBlock)
+    (importedEarlier : earlier.BlockStatesFromParents config (· = checks) anchorState anchorBlock)
+    (early : ∀ next ∈ config.nextFork fork, ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+      store.blockStates[root]? = some state →
+      state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (earlyEarlier : ∀ next ∈ config.nextFork fork,
+      ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+      earlier.blockStates[root]? = some state →
+      state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (ordered : earlier.finalizedCheckpoint.epoch ≤ store.justifiedCheckpoint.epoch)
+    (enough : ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+      (earlier.blockStates[root]? = some state ∨ store.blockStates[root]? = some state) →
+      ∀ tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩,
+        DirectSafety.EnoughStake (pre.append tail) store.justifiedCheckpoint.epoch.toNat)
+    (heldEnough : ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+      (earlier.blockStates[root]? = some state ∨ store.blockStates[root]? = some state) →
+      (getCurrentEpoch state).toNat ≤ store.justifiedCheckpoint.epoch.toNat + 1 →
+      GENESIS_EPOCH + 1 < getCurrentEpoch state →
+      3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+        2 * Models.stake (DirectSafety.effectiveWeight state) (DirectSafety.activeKeys state)) :
+    earlier.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState ∨
+    (store.isAncestor ⟨store.justifiedCheckpoint.root, .pending⟩
+        ⟨earlier.finalizedCheckpoint.root, .pending⟩ = .ok true ∧
+      store.getCheckpointBlock store.justifiedCheckpoint.root
+        earlier.finalizedCheckpoint.epoch = .ok earlier.finalizedCheckpoint.root) ∨
+    ∃ (stateA stateB : BeaconState preset fork)
+      (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
+      (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
+      (va : DirectSafety.TerminalView ⟨fork, stateA⟩)
+      (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
+      (∃ rootA : Root, earlier.blockStates[rootA]? = some stateA) ∧
+      (∃ rootB : Root, store.blockStates[rootB]? = some stateB) ∧
+      va.state.finalizedCheckpoint = earlier.finalizedCheckpoint ∧
+      vb.state.currentJustifiedCheckpoint = store.justifiedCheckpoint ∧
+      (Models.stake (DirectSafety.effectiveWeight anchorState)
+          (DirectSafety.unslashedKeys anchorState) ≤
+        3 * Models.stake (DirectSafety.effectiveWeight anchorState)
+          (DirectSafety.accountableKeys pre left right) +
+        2 * max (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat left)
+          (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat right) ∨
+      DirectSafety.HashEvidence ((pre.append left).hashObjects ++
+        (pre.append right).hashObjects)) := by
+  -- The run from genesis gives the anchor its invariant, and the parameters give the window.
+  have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
+  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by have := parameters.slots; omega
+  have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+    have := parameters.roots
+    omega
+  have lower := reachable.parentsBelow anchorSlot unknownParent
+  by_cases atAnchor : earlier.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState
+  · exact .inl atAnchor
+  have afterF : getCurrentEpoch anchorState < earlier.finalizedCheckpoint.epoch :=
+    UInt64.not_le.mp atAnchor
+  have afterJ : getCurrentEpoch anchorState < store.justifiedCheckpoint.epoch :=
+    UInt64.lt_iff_toNat_lt.mpr (Nat.lt_of_lt_of_le (UInt64.lt_iff_toNat_lt.mp afterF)
+      (UInt64.le_iff_toNat_le.mp ordered))
+  -- After the anchor epoch, a field comes from a held state or from the step on it.
+  have source {selectedStore : Store preset fork}
+      (selectedReachable : Store.Reachable config anchorState anchorBlock selectedStore)
+      (unknown : selectedStore.blocks[anchorBlock.parentRoot]? = none)
+      (imports : selectedStore.BlockStatesFromParents config (· = checks) anchorState anchorBlock)
+      (before : ∀ next ∈ config.nextFork fork,
+        ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+        selectedStore.blockStates[root]? = some state →
+        state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)
+      (heldIn : ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+        selectedStore.blockStates[root]? = some state →
+        earlier.blockStates[root]? = some state ∨ store.blockStates[root]? = some state)
+      (field : BeaconState preset fork → Checkpoint) (checkpoint : Checkpoint)
+      (after : getCurrentEpoch anchorState < checkpoint.epoch)
+      (selected : (field = (·.currentJustifiedCheckpoint) ∧
+          (checkpoint = selectedStore.justifiedCheckpoint ∨
+            checkpoint = selectedStore.unrealizedJustifiedCheckpoint)) ∨
+        (field = (·.finalizedCheckpoint) ∧
+          (checkpoint = selectedStore.finalizedCheckpoint ∨
+            checkpoint = selectedStore.unrealizedFinalizedCheckpoint))) :
+      ∃ (root : Root) (state : BeaconState preset fork)
+        (tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩)
+        (view : DirectSafety.TerminalView ⟨fork, state⟩),
+        selectedStore.blockStates[root]? = some state ∧ checkpoint = field view.state ∧
+        (view.state = state ∨ processJustificationAndFinalization state = .ok view.state) ∧
+        view.enough store.justifiedCheckpoint.epoch.toNat ∧
+        ∃ extra : List BeaconBlockHeader,
+          (pre.append tail).headers = pre.headers ++ extra ∧
+          ∀ slot : Slot, anchorBlock.slot ≤ slot → ∃ reached : Root,
+            selectedStore.ancestorRoots root slot reached ∧
+            (((extra.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? = none ∧
+                SszType.hashTreeRoot anchorBlock = .ok reached) ∨
+              ∃ header, (extra.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? =
+                  some header ∧ SszType.hashTreeRoot header = .ok reached) := by
+    rcases selectedReachable.checkpoint_terminalView anchorSlot unknown imports before pre
+        field checkpoint selected with ⟨root, -, rfl⟩ |
+      ⟨root, state, tail, view, held, eq, headers⟩
+    · exact absurd (UInt64.lt_iff_toNat_lt.mp after) (Nat.lt_irrefl _)
+    · cases view with
+      | realized => exact ⟨root, state, tail, .realized, held, eq, .inl rfl, trivial, headers⟩
+      | pulled pulled ok => exact ⟨root, state, tail, .pulled pulled ok, held, eq, .inr ok,
+          (fun horizon later => heldEnough (heldIn held) horizon later), headers⟩
+  obtain ⟨rootA, stateA, left, va, heldA, fieldA, selectedA, terminalA,
+    extraA, headersA, lastA⟩ :=
+    source reachableEarlier unknownEarlier importedEarlier earlyEarlier (fun _ _ h => .inl h)
+      (·.finalizedCheckpoint) _ afterF (.inr ⟨rfl, .inl rfl⟩)
+  obtain ⟨rootB, stateB, right, vb, heldB, fieldB, selectedB, terminalB,
+    extraB, headersB, lastB⟩ :=
+    source reachable unknownParent imported early (fun _ _ h => .inr h)
+      (·.currentJustifiedCheckpoint) _ afterJ (.inl ⟨rfl, .inl rfl⟩)
+  -- Each field of a view is one of the three checkpoints of its held state or of the step on it.
+  have member {state : BeaconState preset fork} {view : BeaconState preset fork}
+      {checkpoint : Checkpoint}
+      (selected : view = state ∨ processJustificationAndFinalization state = .ok view)
+      (field : checkpoint = view.currentJustifiedCheckpoint ∨
+        checkpoint = view.finalizedCheckpoint) :
+      checkpoint ∈ [state.currentJustifiedCheckpoint, state.previousJustifiedCheckpoint,
+          state.finalizedCheckpoint] ∨
+        ∃ pulled, processJustificationAndFinalization state = .ok pulled ∧
+          checkpoint ∈ [pulled.currentJustifiedCheckpoint, pulled.previousJustifiedCheckpoint,
+            pulled.finalizedCheckpoint] := by
+    rcases selected with rfl | ok
+    · exact .inl (by rcases field with rfl | rfl <;> simp)
+    · exact .inr ⟨view, ok, by rcases field with rfl | rfl <;> simp⟩
+  -- An anchor state that hashes to zero is hash evidence of the run through it.
+  have evidence (zero : SszType.hashTreeRoot anchorState = .ok (Vector.replicate 32 0)) :
+      DirectSafety.HashEvidence ((pre.append left).hashObjects ++
+        (pre.append right).hashObjects) :=
+    DirectSafety.hashEvidence_iff.mpr (.inr ⟨_,
+      List.mem_append_left _ (state_mem_hashObjects_append pre left),
+      by simp [DirectSafety.HashObject.root, zero, Except.toOption]⟩)
+  by_cases paths : (pre.append left).checkpointPath earlier.finalizedCheckpoint.epoch =
+      (pre.append right).checkpointPath earlier.finalizedCheckpoint.epoch
+  · -- Equal paths put the finalized block of the left chain on the justified chain.
+    rcases reachableEarlier.getCheckpointBlock_of_blockState sound anchorSlot positive window heldA
+        (member selectedA (.inr fieldA)) afterF with ⟨blockA, -⟩ | zero
+    · rcases reachable.getCheckpointBlock_of_blockState sound anchorSlot positive window heldB
+          (member selectedB (.inl fieldB)) afterJ with ⟨blockB, -⟩ | zero
+      · obtain ⟨start, startOk, -⟩ := Store.getCheckpointBlock_ok_iff.mp blockA
+        have later : anchorBlock.slot ≤ start :=
+          UInt64.le_trans anchorSlot (slot_le_of_getCurrentEpoch_lt positive afterF startOk)
+        have blockBF := getCheckpointBlock_eq_of_checkpointPath headersA headersB lastA lastB
+          startOk later paths blockA
+        exact .inr (.inl (Store.getCheckpointBlock_of_le lower ordered blockBF blockB))
+      · exact .inr (.inr ⟨stateA, stateB, left, right, va, vb, ⟨rootA, heldA⟩, ⟨rootB, heldB⟩,
+          fieldA.symm, fieldB.symm, .inr (evidence zero)⟩)
+    · exact .inr (.inr ⟨stateA, stateB, left, right, va, vb, ⟨rootA, heldA⟩, ⟨rootB, heldB⟩,
+        fieldA.symm, fieldB.symm, .inr (evidence zero)⟩)
+  · -- Different paths conflict, and direct accountable safety covers the two views.
+    have conflict : DirectSafety.Conflict (pre.append left) (pre.append right)
+        va.state.finalizedCheckpoint store.justifiedCheckpoint := by
+      rw [← fieldA]
+      simpa only [DirectSafety.Conflict, UInt64.min_def, ite_eq_left ordered] using paths
+    exact .inr (.inr ⟨stateA, stateB, left, right, va, vb, ⟨rootA, heldA⟩, ⟨rootB, heldB⟩,
+      fieldA.symm, fieldB.symm, DirectSafety.accountable_safety_justified_terminal pre left right
+        va vb parameters genesis store.justifiedCheckpoint (enough (.inl heldA) left)
+        (enough (.inr heldB) right) terminalA terminalB (.inr fieldB) (fieldA ▸ ordered) conflict⟩)
+
+/-- Finality is early, lies on the justified chain, or yields accountable stake or hash evidence. -/
 theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
     {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
@@ -452,105 +620,259 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
           (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat right) ∨
       DirectSafety.HashEvidence ((pre.append left).hashObjects ++
         (pre.append right).hashObjects)) := by
-  -- The run from genesis gives the anchor its invariant, and the parameters give the window.
-  have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
-  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by have := parameters.slots; omega
-  have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
-    have := parameters.roots
+  exact reachable.finalized_ancestor_or_accountable_between reachable parameters genesis pre
+    anchorSlot unknownParent unknownParent imported imported early early
+    (Store.Reachable.ordered (DirectSafety.run_justified_separated pre genesis).1 reachable).1.1
+    (fun _ _ held => enough (held.elim id id))
+    (fun _ _ held => heldEnough (held.elim id id))
+
+private theorem Store.Reachable.getCheckpointBlock_anchor {config : Config}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork}
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (unknown : store.blocks[anchorBlock.parentRoot]? = none)
+    {root anchorRoot : Root} {block : BeaconBlock preset fork}
+    (found : store.blocks[root]? = some block)
+    (hashed : SszType.hashTreeRoot anchorBlock = .ok anchorRoot) :
+    store.getCheckpointBlock root (getCurrentEpoch anchorState) = .ok anchorRoot := by
+  obtain ⟨knownRoot, knownHash, anchorFound⟩ := reachable.anchor_known
+  have sameRoot := Except.ok.inj (knownHash.symm.trans hashed)
+  subst knownRoot
+  have lower := reachable.parentsBelow (UInt64.le_of_eq anchorSlot) unknown
+  obtain ⟨node, walk⟩ := Store.getAncestor_ok_of_orphans_le lower
+    (fun _ _ held orphan => reachable.orphans_le (UInt64.le_of_eq anchorSlot)
+      held orphan anchorFound) (node := ⟨root, .pending⟩) found
+  obtain ⟨reached, held, below⟩ := Store.getAncestor_le walk
+  have eq : reached = anchorBlock := by
+    by_contra different
+    obtain ⟨state, stateHeld, -, provenance⟩ := reachable.blockStatesFromParents held
+    obtain ⟨parent, checks, engine, signed, -, message, parentHeld, transition⟩ :=
+      provenance different
+    obtain ⟨parentBlock, parentFound⟩ := reachable.known_of_blockState parentHeld
+    have parentLower := lower _ _ _ held parentFound
+    have anchorLower := reachable.orphans_le (UInt64.le_of_eq anchorSlot)
+      anchorFound unknown parentFound
+    have lo := UInt64.le_iff_toNat_le.mp anchorLower
+    have hi := UInt64.le_iff_toNat_le.mp below
+    have strict := UInt64.lt_iff_toNat_lt.mp parentLower
     omega
-  have lower := reachable.parentsBelow anchorSlot unknownParent
-  have ordered : store.finalizedCheckpoint.epoch ≤ store.justifiedCheckpoint.epoch :=
-    (Store.Reachable.ordered sound reachable).1.1
-  by_cases atAnchor : store.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState
-  · exact .inl atAnchor
-  have afterF : getCurrentEpoch anchorState < store.finalizedCheckpoint.epoch :=
-    UInt64.not_le.mp atAnchor
-  have afterJ : getCurrentEpoch anchorState < store.justifiedCheckpoint.epoch :=
-    UInt64.lt_iff_toNat_lt.mpr (Nat.lt_of_lt_of_le (UInt64.lt_iff_toNat_lt.mp afterF)
-      (UInt64.le_iff_toNat_le.mp ordered))
-  -- After the anchor epoch, a field comes from a held state or from the step on it.
-  have source (field : BeaconState preset fork → Checkpoint) (checkpoint : Checkpoint)
-      (after : getCurrentEpoch anchorState < checkpoint.epoch)
-      (selected : (field = (·.currentJustifiedCheckpoint) ∧
-          (checkpoint = store.justifiedCheckpoint ∨
-            checkpoint = store.unrealizedJustifiedCheckpoint)) ∨
-        (field = (·.finalizedCheckpoint) ∧
-          (checkpoint = store.finalizedCheckpoint ∨
-            checkpoint = store.unrealizedFinalizedCheckpoint))) :
-      ∃ (root : Root) (state : BeaconState preset fork)
-        (tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩)
-        (view : DirectSafety.TerminalView ⟨fork, state⟩),
-        store.blockStates[root]? = some state ∧ checkpoint = field view.state ∧
-        (view.state = state ∨ processJustificationAndFinalization state = .ok view.state) ∧
-        view.enough store.justifiedCheckpoint.epoch.toNat ∧
-        ∃ extra : List BeaconBlockHeader,
-          (pre.append tail).headers = pre.headers ++ extra ∧
-          ∀ slot : Slot, anchorBlock.slot ≤ slot → ∃ reached : Root,
-            store.ancestorRoots root slot reached ∧
-            (((extra.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? = none ∧
-                SszType.hashTreeRoot anchorBlock = .ok reached) ∨
-              ∃ header, (extra.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? =
-                  some header ∧ SszType.hashTreeRoot header = .ok reached) := by
-    rcases reachable.checkpoint_terminalView anchorSlot unknownParent imported early pre
-        field checkpoint selected with ⟨root, -, rfl⟩ |
-      ⟨root, state, tail, view, held, eq, headers⟩
-    · exact absurd (UInt64.lt_iff_toNat_lt.mp after) (Nat.lt_irrefl _)
-    · cases view with
-      | realized => exact ⟨root, state, tail, .realized, held, eq, .inl rfl, trivial, headers⟩
-      | pulled pulled ok => exact ⟨root, state, tail, .pulled pulled ok, held, eq, .inr ok,
-          (fun horizon later => heldEnough held horizon later), headers⟩
-  obtain ⟨rootA, stateA, left, va, heldA, fieldA, selectedA, terminalA,
-    extraA, headersA, lastA⟩ :=
-    source (·.finalizedCheckpoint) _ afterF (.inr ⟨rfl, .inl rfl⟩)
-  obtain ⟨rootB, stateB, right, vb, heldB, fieldB, selectedB, terminalB,
-    extraB, headersB, lastB⟩ :=
-    source (·.currentJustifiedCheckpoint) _ afterJ (.inl ⟨rfl, .inl rfl⟩)
-  -- Each field of a view is one of the three checkpoints of its held state or of the step on it.
-  have member {state : BeaconState preset fork} {view : BeaconState preset fork}
-      {checkpoint : Checkpoint}
-      (selected : view = state ∨ processJustificationAndFinalization state = .ok view)
-      (field : checkpoint = view.currentJustifiedCheckpoint ∨
-        checkpoint = view.finalizedCheckpoint) :
-      checkpoint ∈ [state.currentJustifiedCheckpoint, state.previousJustifiedCheckpoint,
-          state.finalizedCheckpoint] ∨
-        ∃ pulled, processJustificationAndFinalization state = .ok pulled ∧
-          checkpoint ∈ [pulled.currentJustifiedCheckpoint, pulled.previousJustifiedCheckpoint,
-            pulled.finalizedCheckpoint] := by
-    rcases selected with rfl | ok
-    · exact .inl (by rcases field with rfl | rfl <;> simp)
-    · exact .inr ⟨view, ok, by rcases field with rfl | rfl <;> simp⟩
-  -- An anchor state that hashes to zero is hash evidence of the run through it.
-  have evidence (zero : SszType.hashTreeRoot anchorState = .ok (Vector.replicate 32 0)) :
+  have rooted : node.root = anchorRoot := by
+    have roots := reachable.root held
+    rw [eq, hashed, Except.ok.injEq] at roots
+    exact roots.symm
+  have rounded : anchorState.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH =
+      anchorState.slot := by
+    apply epoch_floor_eq_of_sub_eq_zero
+    simpa [isStartSlotAtEpoch, computeSlotsSinceEpochStart, anchorSlot,
+      computeStartSlotAtEpoch_computeEpochAtSlot, Except.mapError, bind, Except.bind,
+      pure, Except.pure] using boundary
+  have start : computeStartSlotAtEpoch preset (getCurrentEpoch anchorState) =
+      .ok anchorBlock.slot := by
+    simpa [getCurrentEpoch, rounded, anchorSlot] using
+      computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) anchorState.slot
+  exact Store.getCheckpointBlock_ok_iff.mpr ⟨anchorBlock.slot, start, node, walk, rooted⟩
+
+/-- An ordered earlier finality is on the justified chain, or the two stores give safety evidence.
+
+Both stores start at the same epoch-boundary anchor with a nonzero state root.
+
+The evidence is accountable stake relative to the anchor, or hash evidence of the two runs. -/
+theorem Store.Reachable.finalized_prefix_or_accountable {config : Config}
+    {checks : SignatureChecks}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store earlier : Store preset fork} {g : ForkedBeaconState preset}
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (reachableEarlier : Store.Reachable config anchorState anchorBlock earlier)
+    (parameters : DirectSafety.Parameters preset)
+    (genesis : Genesis config checks g)
+    (pre : Run config checks g ⟨fork, anchorState⟩)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (nonzero : anchorBlock.stateRoot ≠ Vector.replicate 32 0)
+    (unknownParent : store.blocks[anchorBlock.parentRoot]? = none)
+    (unknownEarlier : earlier.blocks[anchorBlock.parentRoot]? = none)
+    (imported : store.BlockStatesFromParents config (· = checks) anchorState anchorBlock)
+    (importedEarlier : earlier.BlockStatesFromParents config (· = checks) anchorState anchorBlock)
+    (early : ∀ next ∈ config.nextFork fork, ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+      store.blockStates[root]? = some state →
+      state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (earlyEarlier : ∀ next ∈ config.nextFork fork,
+      ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+      earlier.blockStates[root]? = some state →
+      state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (ordered : earlier.finalizedCheckpoint.epoch ≤ store.justifiedCheckpoint.epoch)
+    (enough : ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+      (earlier.blockStates[root]? = some state ∨ store.blockStates[root]? = some state) →
+      ∀ tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩,
+        DirectSafety.EnoughStake (pre.append tail) store.justifiedCheckpoint.epoch.toNat)
+    (heldEnough : ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+      (earlier.blockStates[root]? = some state ∨ store.blockStates[root]? = some state) →
+      (getCurrentEpoch state).toNat ≤ store.justifiedCheckpoint.epoch.toNat + 1 →
+      GENESIS_EPOCH + 1 < getCurrentEpoch state →
+      3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+        2 * Models.stake (DirectSafety.effectiveWeight state) (DirectSafety.activeKeys state)) :
+    store.getCheckpointBlock store.justifiedCheckpoint.root
+      earlier.finalizedCheckpoint.epoch = .ok earlier.finalizedCheckpoint.root ∨
+    ∃ (stateA stateB : BeaconState preset fork)
+      (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
+      (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
+      (va : DirectSafety.TerminalView ⟨fork, stateA⟩)
+      (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
+      (∃ rootA : Root, earlier.blockStates[rootA]? = some stateA) ∧
+      (∃ rootB : Root, store.blockStates[rootB]? = some stateB) ∧
+      va.state.finalizedCheckpoint = earlier.finalizedCheckpoint ∧
+      vb.state.currentJustifiedCheckpoint = store.justifiedCheckpoint ∧
+      (Models.stake (DirectSafety.effectiveWeight anchorState)
+          (DirectSafety.unslashedKeys anchorState) ≤
+        3 * Models.stake (DirectSafety.effectiveWeight anchorState)
+          (DirectSafety.accountableKeys pre left right) +
+        2 * max (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat left)
+          (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat right) ∨
       DirectSafety.HashEvidence ((pre.append left).hashObjects ++
-        (pre.append right).hashObjects) :=
-    DirectSafety.hashEvidence_iff.mpr (.inr ⟨_,
-      List.mem_append_left _ (state_mem_hashObjects_append pre left),
-      by simp [DirectSafety.HashObject.root, zero, Except.toOption]⟩)
-  by_cases paths : (pre.append left).checkpointPath store.finalizedCheckpoint.epoch =
-      (pre.append right).checkpointPath store.finalizedCheckpoint.epoch
-  · -- Equal paths put the finalized block of the left chain on the justified chain.
-    rcases reachable.getCheckpointBlock_of_blockState sound anchorSlot positive window heldA
-        (member selectedA (.inr fieldA)) afterF with ⟨blockA, -⟩ | zero
-    · rcases reachable.getCheckpointBlock_of_blockState sound anchorSlot positive window heldB
-          (member selectedB (.inl fieldB)) afterJ with ⟨blockB, -⟩ | zero
-      · obtain ⟨start, startOk, -⟩ := Store.getCheckpointBlock_ok_iff.mp blockA
-        have later : anchorBlock.slot ≤ start :=
-          UInt64.le_trans anchorSlot (slot_le_of_getCurrentEpoch_lt positive afterF startOk)
-        have blockBF := getCheckpointBlock_eq_of_checkpointPath headersA headersB lastA lastB
-          startOk later paths blockA
-        exact .inr (.inl (Store.getCheckpointBlock_of_le lower ordered blockBF blockB))
-      · exact .inr (.inr ⟨stateA, stateB, left, right, va, vb, ⟨rootA, heldA⟩, ⟨rootB, heldB⟩,
-          fieldA.symm, fieldB.symm, .inr (evidence zero)⟩)
-    · exact .inr (.inr ⟨stateA, stateB, left, right, va, vb, ⟨rootA, heldA⟩, ⟨rootB, heldB⟩,
-        fieldA.symm, fieldB.symm, .inr (evidence zero)⟩)
-  · -- Different paths conflict, and direct accountable safety covers the two views.
-    have conflict : DirectSafety.Conflict (pre.append left) (pre.append right)
-        va.state.finalizedCheckpoint store.justifiedCheckpoint := by
-      rw [← fieldA]
-      simpa only [DirectSafety.Conflict, UInt64.min_def, ite_eq_left ordered] using paths
-    exact .inr (.inr ⟨stateA, stateB, left, right, va, vb, ⟨rootA, heldA⟩, ⟨rootB, heldB⟩,
-      fieldA.symm, fieldB.symm, DirectSafety.accountable_safety_justified_terminal pre left right
-        va vb parameters genesis store.justifiedCheckpoint (enough heldA left)
-        (enough heldB right) terminalA terminalB (.inr fieldB) (fieldA ▸ ordered) conflict⟩)
+        (pre.append right).hashObjects)) := by
+  rcases reachable.finalized_ancestor_or_accountable_between reachableEarlier parameters genesis
+      pre (UInt64.le_of_eq anchorSlot) unknownParent unknownEarlier imported importedEarlier
+      early earlyEarlier ordered enough heldEnough with atAnchor | ⟨-, read⟩ | evidence
+  · have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
+    have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by have := parameters.slots; omega
+    have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+      have := parameters.roots
+      omega
+    have notZero : SszType.hashTreeRoot anchorState ≠ .ok (Vector.replicate 32 0) := by
+      rw [reachable.anchorState_root]
+      exact fun eq => nonzero (Except.ok.inj eq)
+    obtain ⟨epoch, hashed, -⟩ :=
+      (reachableEarlier.checkpoints_known sound (UInt64.le_of_eq anchorSlot) positive window
+        (checkpoint := earlier.finalizedCheckpoint) (by simp)).resolve_right (by
+          rintro (⟨later, -⟩ | zero)
+          · have lo := UInt64.le_iff_toNat_le.mp atAnchor
+            have hi := UInt64.lt_iff_toNat_lt.mp later
+            omega
+          · exact notZero zero)
+    have known : store.blocks.contains store.justifiedCheckpoint.root := by
+      rcases reachable.checkpoints_known sound (UInt64.le_of_eq anchorSlot) positive window
+          (checkpoint := store.justifiedCheckpoint) (by simp) with ⟨-, -, held⟩ |
+        ⟨-, held⟩ | zero
+      · exact held
+      · exact held
+      · exact False.elim (notZero zero)
+    rw [Std.TreeMap.contains_eq_isSome_getElem?] at known
+    obtain ⟨block, found⟩ := Option.isSome_iff_exists.mp known
+    exact .inl (epoch ▸ reachable.getCheckpointBlock_anchor anchorSlot boundary unknownParent
+      found hashed)
+  · exact .inl read
+  · exact .inr evidence
+
+namespace Models.Network
+
+/-- The earlier finalized checkpoint is on the later justified chain at every honest node.
+
+Otherwise a bounded pair of events gives accountable stake or hash evidence from held states. -/
+theorem Execution.finalized_prefix_or_accountable {ν κ : Type*} [DecidableEq ν]
+    {config : Config} {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {anchor : Store preset fork} {g : ForkedBeaconState preset} {time : ℕ} {horizon : Epoch}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor)
+    (parameters : DirectSafety.Parameters preset) (genesis : Genesis config checks g)
+    (pre : Run config checks g ⟨fork, anchorState⟩)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (nonzero : anchorBlock.stateRoot ≠ Vector.replicate 32 0)
+    (unknown : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ((e.world k).state w).blocks[anchorBlock.parentRoot]? = none)
+    (bounded : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ((e.world k).state w).justifiedCheckpoint.epoch ≤ horizon)
+    (early : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ next ∈ config.nextFork fork, ∀ (root : Root) (state : BeaconState preset fork),
+      ((e.world k).state w).blockStates[root]? = some state →
+      state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (enough : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ (root : Root) (state : BeaconState preset fork),
+      ((e.world k).state w).blockStates[root]? = some state →
+      ∀ tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩,
+      DirectSafety.EnoughStake (pre.append tail) horizon.toNat)
+    (heldEnough : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ (root : Root) (state : BeaconState preset fork),
+      ((e.world k).state w).blockStates[root]? = some state →
+      (getCurrentEpoch state).toNat ≤ horizon.toNat + 1 →
+      GENESIS_EPOCH + 1 < getCurrentEpoch state →
+      3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+        2 * Models.stake (DirectSafety.effectiveWeight state) (DirectSafety.activeKeys state)) :
+    (∀ w ∈ J, ∀ i k, i ≤ k → (e.world k).time ≤ time →
+      ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
+        ((e.world i).state w).finalizedCheckpoint.epoch =
+          .ok ((e.world i).state w).finalizedCheckpoint.root) ∨
+    ∃ w ∈ J, ∃ i k, i ≤ k ∧ (e.world k).time ≤ time ∧
+      ∃ (stateA stateB : BeaconState preset fork)
+        (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
+        (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
+        (va : DirectSafety.TerminalView ⟨fork, stateA⟩)
+        (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
+        (∃ rootA : Root, ((e.world i).state w).blockStates[rootA]? = some stateA) ∧
+        (∃ rootB : Root, ((e.world k).state w).blockStates[rootB]? = some stateB) ∧
+        va.state.finalizedCheckpoint = ((e.world i).state w).finalizedCheckpoint ∧
+        vb.state.currentJustifiedCheckpoint = ((e.world k).state w).justifiedCheckpoint ∧
+        (Models.stake (DirectSafety.effectiveWeight anchorState)
+            (DirectSafety.unslashedKeys anchorState) ≤
+          3 * Models.stake (DirectSafety.effectiveWeight anchorState)
+            (DirectSafety.accountableKeys pre left right) +
+          2 * max
+            (DirectSafety.derivedDrift ((e.world k).state w).justifiedCheckpoint.epoch.toNat left)
+            (DirectSafety.derivedDrift
+              ((e.world k).state w).justifiedCheckpoint.epoch.toNat right) ∨
+        DirectSafety.HashEvidence
+          ((pre.append left).hashObjects ++ (pre.append right).hashObjects)) := by
+  classical
+  by_cases family : ∀ w ∈ J, ∀ i k, i ≤ k → (e.world k).time ≤ time →
+      ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
+        ((e.world i).state w).finalizedCheckpoint.epoch =
+          .ok ((e.world i).state w).finalizedCheckpoint.root
+  · exact .inl family
+  push Not at family
+  obtain ⟨w, honest, i, k, later, inTime, failed⟩ := family
+  have earlyTime := (e.monotone_time later).trans inTime
+  have forward (n : ℕ) := e.forwardReachableWith
+    (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) n w honest
+  have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
+  have ordered := UInt64.le_trans (e.checkpointsAdvance_of_le w later).2.epoch_le
+    ((forward k).reachable.finalized_le_justified sound)
+  have horizonLe := UInt64.le_iff_toNat_le.mp (bounded w honest k inTime)
+  have calls ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄
+      (held : ((e.world i).state w).blockStates[root]? = some state ∨
+        ((e.world k).state w).blockStates[root]? = some state)
+      (tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩) :
+      DirectSafety.EnoughStake (pre.append tail)
+        ((e.world k).state w).justifiedCheckpoint.epoch.toNat := by
+    intro call before
+    have upper : (getCurrentEpoch call.cached).toNat ≤ horizon.toNat + 1 := by omega
+    rcases held with held | held
+    · exact enough w honest i earlyTime root state held tail call upper
+    · exact enough w honest k inTime root state held tail call upper
+  have terminal ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄
+      (held : ((e.world i).state w).blockStates[root]? = some state ∨
+        ((e.world k).state w).blockStates[root]? = some state)
+      (before : (getCurrentEpoch state).toNat ≤
+        ((e.world k).state w).justifiedCheckpoint.epoch.toNat + 1)
+      (after : GENESIS_EPOCH + 1 < getCurrentEpoch state) :
+      3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+        2 * Models.stake (DirectSafety.effectiveWeight state) (DirectSafety.activeKeys state) := by
+    have upper : (getCurrentEpoch state).toNat ≤ horizon.toNat + 1 := by omega
+    rcases held with held | held
+    · exact heldEnough w honest i earlyTime root state held upper after
+    · exact heldEnough w honest k inTime root state held upper after
+  have result := (forward k).reachable.finalized_prefix_or_accountable (forward i).reachable
+    parameters genesis pre anchorSlot boundary nonzero (unknown w honest k inTime)
+    (unknown w honest i earlyTime) (forward k).blockStatesFromParents
+    (forward i).blockStatesFromParents (early w honest k inTime)
+    (early w honest i earlyTime) ordered calls terminal
+  exact .inr ⟨w, honest, i, k, later, inTime, result.resolve_left failed⟩
+
+end Models.Network
 
 end EthLib.Consensus
