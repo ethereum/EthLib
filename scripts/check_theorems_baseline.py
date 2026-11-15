@@ -48,17 +48,12 @@ def baseline_at(root: Path, commit: str) -> str | None:
     record = git(root, "ls-tree", "-z", commit, "--", BASELINE.as_posix())
     if not record:
         return None
-    metadata, separator, path = record.rstrip("\0").partition("\t")
-    fields = metadata.split()
-    if (
-        not separator
-        or path != BASELINE.as_posix()
-        or len(fields) != 3
-        or fields[0] not in {"100644", "100755"}
-        or fields[1] != "blob"
-    ):
+    # The exact pathspec yields one record, `<mode> <type> <object>\t<path>`.
+    mode, _, blob = record.partition("\t")[0].split()
+    # Only these two modes name a regular file; each implies the blob type.
+    if mode not in {"100644", "100755"}:
         raise BaselineError(f"{BASELINE} at {commit}: expected a regular file")
-    return git(root, "cat-file", "blob", fields[2])
+    return git(root, "cat-file", "blob", blob)
 
 
 def comparison(root: Path, base: str) -> tuple[list[str], bool]:
@@ -85,6 +80,8 @@ def comparison(root: Path, base: str) -> tuple[list[str], bool]:
     previous = baseline_at(root, commit)
     if previous is None:
         return [], current is not None
+    if current is None:
+        raise BaselineError(f"{BASELINE}: missing from the working tree but present at {base}")
     previous_entries = entries(previous, f"{BASELINE} at {base}")
     added = sorted(current_entries - previous_entries)
     problems = [f"{BASELINE}: entry added since {base}: {module} {decl}" for module, decl in added]

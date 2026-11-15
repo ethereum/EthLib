@@ -4,6 +4,7 @@ import contextlib
 import importlib.util
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -23,10 +24,11 @@ SPEC.loader.exec_module(guard)
 ONE = "EthLib.Base.Sample EthLib.Base.first\n"
 TWO = "EthLib.Base.Sample EthLib.Base.second\n"
 THREE = "EthLib.Base.Sample EthLib.Base.third\n"
+MALFORMED = "1: expected a module and a declaration name"
 
 
 class BaselineTests(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -82,6 +84,15 @@ class BaselineTests(unittest.TestCase):
             status = guard.main(list(args))
         return status, output.getvalue(), errors.getvalue()
 
+    def assert_error(self, base: str, message: str) -> None:
+        """Check that the guard rejects this base with exactly this message."""
+        with self.assertRaisesRegex(guard.BaselineError, f"^{re.escape(message)}$"):
+            guard.check(self.root, base)
+
+    def added(self, base: str) -> str:
+        """Return the report line for the third entry added since this base."""
+        return f"{guard.BASELINE}: entry added since {base}: EthLib.Base.Sample EthLib.Base.third"
+
     def workflow_command(self) -> str:
         lines = (HERE.parent / ".github/workflows/ci.yml").read_text().splitlines()
         start = lines.index("      - name: theorem baseline")
@@ -122,77 +133,79 @@ class BaselineTests(unittest.TestCase):
                 check=False,
             )
 
-    def test_unchanged_baseline_passes(self):
+    def test_unchanged_baseline_passes(self) -> None:
         self.assertEqual(guard.check(self.root, self.base), [])
 
-    def test_deleting_entries_passes(self):
+    def test_deleting_entries_passes(self) -> None:
         self.write(ONE)
         self.assertEqual(guard.check(self.root, self.base), [])
         self.write("")
         self.assertEqual(guard.check(self.root, self.base), [])
 
-    def test_order_comments_and_whitespace_do_not_add_entries(self):
+    def test_order_comments_and_whitespace_do_not_add_entries(self) -> None:
         self.write("# The same two entries.\n\n" + TWO + "\t" + ONE.replace(" ", "\t") + "# End.\n")
         self.assertEqual(guard.check(self.root, self.base), [])
 
-    def test_an_added_entry_fails(self):
+    def test_an_added_entry_fails(self) -> None:
         self.write(ONE + TWO + THREE)
-        self.assertEqual(
-            guard.check(self.root, self.base),
-            [
-                f"{guard.BASELINE}: entry added since {self.base}: "
-                "EthLib.Base.Sample EthLib.Base.third"
-            ],
-        )
+        self.assertEqual(guard.check(self.root, self.base), [self.added(self.base)])
         status, output, errors = self.run_main("--base", self.base)
         self.assertEqual(status, 1)
-        self.assertIn("added entries: 1", output)
+        self.assertEqual(
+            output, self.added(self.base) + "\ncheck-theorems-baseline: added entries: 1\n"
+        )
         self.assertEqual(errors, "")
 
-    def test_renaming_an_entry_also_fails(self):
+    def test_renaming_an_entry_also_fails(self) -> None:
         self.write(ONE + THREE)
-        self.assertEqual(len(guard.check(self.root, self.base)), 1)
+        self.assertEqual(guard.check(self.root, self.base), [self.added(self.base)])
 
-    def test_adding_to_an_empty_existing_baseline_fails(self):
+    def test_adding_to_an_empty_existing_baseline_fails(self) -> None:
         self.write("# Empty baseline.\n")
         empty = self.commit()
         self.write(THREE)
-        self.assertEqual(len(guard.check(self.root, empty)), 1)
+        self.assertEqual(guard.check(self.root, empty), [self.added(empty)])
 
-    def test_first_creation_is_allowed_and_reported(self):
+    def test_first_creation_is_allowed_and_reported(self) -> None:
         self.write(ONE + TWO + THREE)
         self.assertEqual(guard.check(self.root, self.before), [])
         status, output, errors = self.run_main("--base", self.before)
         self.assertEqual(status, 0)
-        self.assertIn("initial baseline creation allowed", output)
+        self.assertEqual(
+            output,
+            "check-theorems-baseline: initial baseline creation allowed "
+            f"(no baseline at {self.before})\n",
+        )
         self.assertEqual(errors, "")
 
-    def test_missing_current_baseline_is_empty(self):
+    def test_deleting_an_existing_baseline_fails(self) -> None:
         self.path.unlink()
-        self.assertEqual(guard.check(self.root, self.base), [])
+        message = f"{guard.BASELINE}: missing from the working tree but present at {self.base}"
+        self.assert_error(self.base, message)
+        status, output, errors = self.run_main("--base", self.base)
+        self.assertEqual(status, 2)
+        self.assertEqual(output, "")
+        self.assertEqual(errors, f"check-theorems-baseline: {message}\n")
 
-    def test_missing_baseline_at_both_revisions_passes(self):
+    def test_missing_baseline_at_both_revisions_passes(self) -> None:
         self.path.unlink()
         status, output, errors = self.run_main("--base", self.before)
         self.assertEqual(status, 0)
-        self.assertIn("no entries added", output)
-        self.assertNotIn("initial baseline creation", output)
+        self.assertEqual(output, f"check-theorems-baseline: no entries added since {self.before}\n")
         self.assertEqual(errors, "")
 
-    def test_current_baseline_must_be_a_file(self):
+    def test_current_baseline_must_be_a_file(self) -> None:
         self.path.unlink()
         self.path.mkdir()
-        with self.assertRaisesRegex(guard.BaselineError, "check_theorems_baseline.txt"):
-            guard.check(self.root, self.base)
+        self.assert_error(self.base, f"{self.path}: expected a regular file")
 
-    def test_current_baseline_must_not_be_a_symlink(self):
+    def test_current_baseline_must_not_be_a_symlink(self) -> None:
         (self.root / "contents.txt").write_text(ONE + TWO, encoding="utf-8")
         self.path.unlink()
         self.path.symlink_to("../contents.txt")
-        with self.assertRaisesRegex(guard.BaselineError, "expected a regular file"):
-            guard.check(self.root, self.base)
+        self.assert_error(self.base, f"{self.path}: expected a regular file")
 
-    def test_base_baseline_must_be_a_regular_file(self):
+    def test_base_baseline_must_be_a_regular_file(self) -> None:
         self.path.unlink()
         self.path.mkdir()
         child = self.path / "entry"
@@ -201,67 +214,98 @@ class BaselineTests(unittest.TestCase):
         child.unlink()
         self.path.rmdir()
         self.write(ONE)
-        with self.assertRaisesRegex(guard.BaselineError, "expected a regular file"):
-            guard.check(self.root, directory_base)
+        self.assert_error(
+            directory_base, f"{guard.BASELINE} at {directory_base}: expected a regular file"
+        )
 
-    def test_current_baseline_must_be_utf8(self):
+    def test_base_baseline_must_not_be_a_symlink(self) -> None:
+        (self.root / "contents.txt").write_text(ONE, encoding="utf-8")
+        self.path.unlink()
+        self.path.symlink_to("../contents.txt")
+        link_base = self.commit()
+        self.path.unlink()
+        self.write(ONE)
+        self.assert_error(link_base, f"{guard.BASELINE} at {link_base}: expected a regular file")
+
+    def test_executable_base_baseline_is_compared(self) -> None:
+        self.path.chmod(0o755)
+        executable_base = self.commit()
+        self.assertEqual(
+            self.git("ls-tree", executable_base, "--", guard.BASELINE.as_posix()).split()[0],
+            "100755",
+        )
+        self.write(ONE + TWO + THREE)
+        self.assertEqual(guard.check(self.root, executable_base), [self.added(executable_base)])
+
+    def test_current_baseline_must_be_utf8(self) -> None:
         self.path.write_bytes(b"\xff")
-        with self.assertRaises(guard.BaselineError):
-            guard.check(self.root, self.base)
+        self.assert_error(
+            self.base,
+            f"{self.path}: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte",
+        )
 
-    def test_malformed_current_baseline_fails_even_on_first_creation(self):
+    def test_malformed_current_baseline_fails_even_on_first_creation(self) -> None:
         for text in ("one_column\n", ONE.rstrip() + " extra\n"):
             with self.subTest(text=text):
                 self.write(text)
-                with self.assertRaisesRegex(guard.BaselineError, "expected a module"):
-                    guard.check(self.root, self.base)
-                with self.assertRaisesRegex(guard.BaselineError, "expected a module"):
-                    guard.check(self.root, self.before)
+                self.assert_error(self.base, f"{guard.BASELINE}:{MALFORMED}")
+                self.assert_error(self.before, f"{guard.BASELINE}:{MALFORMED}")
 
-    def test_duplicate_current_entries_fail(self):
+    def test_duplicate_current_entries_fail(self) -> None:
         self.write(ONE + ONE)
-        with self.assertRaisesRegex(guard.BaselineError, "duplicate baseline entry"):
-            guard.check(self.root, self.base)
+        self.assert_error(self.base, f"{guard.BASELINE}:2: duplicate baseline entry")
 
-    def test_malformed_base_baseline_fails(self):
+    def test_malformed_base_baseline_fails(self) -> None:
         self.write("one_column\n")
         bad_base = self.commit()
         self.write(ONE)
-        with self.assertRaisesRegex(guard.BaselineError, "at .*:1: expected a module"):
-            guard.check(self.root, bad_base)
+        self.assert_error(bad_base, f"{guard.BASELINE} at {bad_base}:{MALFORMED}")
 
-    def test_duplicate_base_entries_fail(self):
+    def test_duplicate_base_entries_fail(self) -> None:
         self.write(ONE + ONE)
         bad_base = self.commit()
         self.write(ONE)
-        with self.assertRaisesRegex(guard.BaselineError, "duplicate baseline entry"):
-            guard.check(self.root, bad_base)
+        self.assert_error(bad_base, f"{guard.BASELINE} at {bad_base}:2: duplicate baseline entry")
 
-    def test_invalid_base_references_fail(self):
-        for base in ("", "does-not-exist", "--help"):
-            with self.subTest(base=base), self.assertRaises(guard.BaselineError):
-                guard.check(self.root, base)
+    def test_empty_base_reference_fails(self) -> None:
+        self.assert_error("", "the base revision must name a commit")
+
+    def test_invalid_base_references_fail(self) -> None:
+        for base in ("does-not-exist", "--help"):
+            with self.subTest(base=base):
+                self.assert_error(
+                    base, f"invalid base revision {base!r}: fatal: Needed a single revision"
+                )
         blob = self.git("hash-object", str(self.path))
-        with self.assertRaisesRegex(guard.BaselineError, "invalid base revision"):
-            guard.check(self.root, blob)
+        self.assert_error(
+            blob,
+            f"invalid base revision {blob!r}: error: {blob}^{{commit}}: expected commit type, "
+            "but the object dereferences to blob type\nfatal: Needed a single revision",
+        )
 
-    def test_named_commit_reference_passes(self):
+    def test_named_commit_reference_passes(self) -> None:
         self.git("tag", "baseline-snapshot", self.base)
         self.assertEqual(guard.check(self.root, "baseline-snapshot"), [])
 
-    def test_cli_reports_errors(self):
+    def test_cli_reports_errors(self) -> None:
         self.write("broken\n")
         status, output, errors = self.run_main("--base", self.base)
         self.assertEqual(status, 2)
         self.assertEqual(output, "")
-        self.assertIn("check-theorems-baseline:", errors)
+        self.assertEqual(errors, f"check-theorems-baseline: {guard.BASELINE}:{MALFORMED}\n")
 
-    def test_cli_requires_a_base(self):
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+    def test_cli_requires_a_base(self) -> None:
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors), self.assertRaises(SystemExit) as error:
             guard.main([])
         self.assertEqual(error.exception.code, 2)
+        self.assertEqual(
+            errors.getvalue(),
+            "usage: check-theorems-baseline [-h] --base BASE\n"
+            "check-theorems-baseline: error: the following arguments are required: --base\n",
+        )
 
-    def test_ci_checks_the_whole_push(self):
+    def test_ci_checks_the_whole_push(self) -> None:
         self.write(ONE + TWO + THREE)
         self.commit()
         (self.root / "README").write_text("An unrelated final commit.\n", encoding="utf-8")
@@ -269,9 +313,11 @@ class BaselineTests(unittest.TestCase):
         self.assertEqual(guard.check(self.root, "HEAD^1"), [])
         result = self.run_workflow(self.base)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn(f"entry added since {self.base}", result.stdout)
+        self.assertEqual(
+            result.stdout, self.added(self.base) + "\ncheck-theorems-baseline: added entries: 1\n"
+        )
 
-    def test_ci_pull_request_checks_the_merge_first_parent(self):
+    def test_ci_pull_request_checks_the_merge_first_parent(self) -> None:
         self.git("checkout", "--quiet", "-b", "proposal")
         self.write(ONE + TWO + THREE)
         self.commit()
@@ -279,16 +325,18 @@ class BaselineTests(unittest.TestCase):
         self.git("merge", "--quiet", "--no-ff", "-m", "Merge proposal", "proposal")
         result = self.run_workflow("")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("entry added since HEAD^1", result.stdout)
+        self.assertEqual(
+            result.stdout, self.added("HEAD^1") + "\ncheck-theorems-baseline: added entries: 1\n"
+        )
 
-    def test_ci_new_branch_uses_the_first_parent(self):
+    def test_ci_new_branch_uses_the_first_parent(self) -> None:
         (self.root / "README").write_text("A newly created branch.\n", encoding="utf-8")
         self.commit()
         result = self.run_workflow("0" * 40)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("no entries added since HEAD^1", result.stdout)
+        self.assertEqual(result.stdout, "check-theorems-baseline: no entries added since HEAD^1\n")
 
-    def test_ci_fetches_a_before_commit_outside_the_shallow_clone(self):
+    def test_ci_fetches_a_before_commit_outside_the_shallow_clone(self) -> None:
         self.write(ONE + TWO + THREE)
         self.commit()
         (self.root / "README").write_text("An unrelated final commit.\n", encoding="utf-8")
@@ -313,14 +361,21 @@ class BaselineTests(unittest.TestCase):
         self.assertNotEqual(missing.returncode, 0)
         result = self.run_workflow(self.base, clone)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn(f"entry added since {self.base}", result.stdout)
+        self.assertEqual(
+            result.stdout, self.added(self.base) + "\ncheck-theorems-baseline: added entries: 1\n"
+        )
         subprocess.run(["git", "cat-file", "-e", f"{self.base}^{{commit}}"], cwd=clone, check=True)
 
-    def test_ci_stops_when_the_before_commit_cannot_be_fetched(self):
-        self.git("remote", "add", "origin", str(self.root / "missing-remote.git"))
+    def test_ci_stops_when_the_before_commit_cannot_be_fetched(self) -> None:
+        remote = self.root / "missing-remote.git"
+        self.git("remote", "add", "origin", str(remote))
         result = self.run_workflow("f" * 40)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn("check-theorems-baseline:", result.stdout + result.stderr)
+        self.assertEqual(result.returncode, 128, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(
+            result.stderr.splitlines()[0],
+            f"fatal: '{remote}' does not appear to be a git repository",
+        )
 
 
 if __name__ == "__main__":
