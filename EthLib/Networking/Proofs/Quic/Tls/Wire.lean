@@ -9,6 +9,8 @@ public import EthLib.Base.Proofs.ByteReader
 
 The readers recover written fields and preserve arbitrary trailing bytes.
 
+A successful length-prefixed field re-encodes to its exact consumed prefix.
+
 Vector encoders reject lengths that do not fit, rather than reducing them modulo the field width.
 -/
 
@@ -136,5 +138,120 @@ theorem items_encodeItems (encoder : α → Except Error (List UInt8)) (reader :
   simp [items, blob_encode_of_encode he rest,
     entries_encodeEntries encoder reader reads positive values data hd,
     StateT.bind, StateT.lift, bind, Except.bind, pure, Except.pure]
+
+/-- An isolated reader succeeds exactly when it consumes the whole input. -/
+theorem exact_eq_ok_iff (reader : Reader α) (input : List UInt8) (value : α) :
+    exact reader input = .ok value ↔ reader input = .ok (value, []) := by
+  simp only [exact, bind_ok_iff]
+  constructor
+  · rintro ⟨⟨result, rest⟩, parsed, checked⟩
+    by_cases empty : rest = []
+    · have same : result = value := by
+        simpa [empty, pure, Except.pure] using checked
+      simpa only [same, empty] using parsed
+    · simp [empty, throw, throwThe, MonadExceptOf.throw] at checked
+  · intro parsed
+    exact ⟨(value, []), parsed, rfl⟩
+
+/-- Every accepted entry list is exactly the concatenation of its entries' encodings. -/
+theorem encodeEntries_of_many (encoder : α → Except Error (List UInt8)) (reader : Reader α)
+    (reconstructs : ∀ input value rest, reader input = .ok (value, rest) →
+      ∃ encoded, encoder value = .ok encoded ∧ input = encoded ++ rest)
+    {fuel : Nat} {input : List UInt8} {values : List α}
+    (parsed : many reader fuel input = .ok values) :
+    encodeEntries encoder values = .ok input := by
+  induction fuel generalizing input values with
+  | zero =>
+    cases input with
+    | nil => cases parsed; rfl
+    | cons byte rest => cases parsed
+  | succ fuel ih =>
+    cases input with
+    | nil => cases parsed; rfl
+    | cons byte rest =>
+      simp only [many, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at parsed
+      obtain ⟨⟨value, suffix⟩, headRead, tail, tailRead, rfl⟩ := parsed
+      obtain ⟨encoded, headWritten, same⟩ := reconstructs _ _ _ headRead
+      simp [encodeEntries, headWritten, ih tailRead, same, bind, Except.bind,
+        pure, Except.pure]
+
+/-- Parsing an isolated entry list leaves exactly the encodings of the returned entries. -/
+theorem encodeEntries_of_entries (encoder : α → Except Error (List UInt8)) (reader : Reader α)
+    (reconstructs : ∀ input value rest, reader input = .ok (value, rest) →
+      ∃ encoded, encoder value = .ok encoded ∧ input = encoded ++ rest)
+    {input : List UInt8} {values : List α} (parsed : entries reader input = .ok values) :
+    encodeEntries encoder values = .ok input :=
+  encodeEntries_of_many encoder reader reconstructs parsed
+
+/-- An accepted identifier occupies exactly its two-byte big-endian encoding. -/
+theorem eq_natToBytes_of_codePoint {input rest : List UInt8} {value : CodePoint}
+    (parsed : codePoint input = .ok (value, rest)) :
+    input = Base.natToBytes 2 value.val ++ rest := by
+  cases numberRead : uint 2 input with
+  | error error => simp [codePoint, numberRead, bind, StateT.bind, Except.bind] at parsed
+  | ok result =>
+    obtain ⟨number, suffix⟩ := result
+    by_cases bound : number < 2 ^ 16
+    · have checked : (⟨number, bound⟩ : CodePoint) = value ∧ suffix = rest := by
+        simpa [codePoint, numberRead, bound, bind, StateT.bind, Except.bind,
+          pure, StateT.pure, Except.pure] using parsed
+      obtain ⟨rfl, rfl⟩ := checked
+      exact (Base.ByteReader.uint_ok_iff ..).mp numberRead |>.2
+    · simp [codePoint, numberRead, bound, bind, StateT.bind, Except.bind,
+        throw, throwThe, MonadExceptOf.throw, StateT.lift] at parsed
+
+/-- A fixed-size vector retains every consumed byte and the exact remaining suffix. -/
+theorem eq_toList_append_of_vector {n : Nat} {input rest : List UInt8}
+    {value : Vector UInt8 n} (parsed : vector n input = .ok (value, rest)) :
+    input = value.toList ++ rest := by
+  cases dataRead : bytes n input with
+  | error error => simp [vector, dataRead, bind, StateT.bind, Except.bind] at parsed
+  | ok result =>
+    obtain ⟨data, suffix⟩ := result
+    by_cases length : data.length = n
+    · have checked : (⟨data.toArray, by simpa using length⟩ : Vector UInt8 n) = value ∧
+          suffix = rest := by
+        simpa [vector, dataRead, length, bind, StateT.bind, Except.bind,
+          pure, StateT.pure, Except.pure] using parsed
+      obtain ⟨rfl, rfl⟩ := checked
+      simpa using (Base.ByteReader.bytes_ok_iff ..).mp dataRead |>.2
+    · simp [vector, dataRead, length, bind, StateT.bind, Except.bind,
+        throw, throwThe, MonadExceptOf.throw, StateT.lift] at parsed
+
+/-- Every accepted length-prefixed byte vector is the encoding of the returned data. -/
+theorem encodeBlob_of_blob {width minimum maximum : Nat} {input data rest : List UInt8}
+    (parsed : blob width minimum maximum input = .ok (data, rest)) :
+    ∃ encoded, encodeBlob width minimum maximum data = .ok encoded ∧ input = encoded ++ rest := by
+  change (uint width input >>= fun (size, afterLength) =>
+    require (minimum ≤ size ∧ size ≤ maximum) .length afterLength >>= fun (_, afterCheck) =>
+      bytes size afterCheck) = .ok (data, rest) at parsed
+  simp only [bind_ok_iff] at parsed
+  obtain ⟨⟨size, afterLength⟩, sizeRead, ⟨u, afterCheck⟩, checked, dataRead⟩ := parsed
+  obtain ⟨bounds, same⟩ := (Base.ByteReader.require_ok_iff ..).mp checked
+  obtain ⟨length, suffix⟩ := (Base.ByteReader.bytes_ok_iff ..).mp dataRead
+  obtain ⟨capacity, before⟩ := (Base.ByteReader.uint_ok_iff ..).mp sizeRead
+  refine ⟨Base.natToBytes width data.length ++ data, ?_, ?_⟩
+  · apply (encodeBlob_eq_ok_iff ..).mpr
+    exact ⟨by omega, by omega, by omega, rfl⟩
+  · have after : afterLength = data ++ rest := same.trans suffix
+    rw [after] at before
+    simpa only [length, List.append_assoc] using before
+
+/-- Every accepted vector of entries re-encodes to its exact consumed prefix. -/
+theorem encodeItems_of_items (encoder : α → Except Error (List UInt8)) (reader : Reader α)
+    (reconstructs : ∀ input value rest, reader input = .ok (value, rest) →
+      ∃ encoded, encoder value = .ok encoded ∧ input = encoded ++ rest)
+    {width minimum maximum : Nat} {input rest : List UInt8} {values : List α}
+    (parsed : items width minimum maximum reader input = .ok (values, rest)) :
+    ∃ encoded, encodeItems width minimum maximum encoder values = .ok encoded ∧
+      input = encoded ++ rest := by
+  change (blob width minimum maximum input >>= fun (data, suffix) =>
+    entries reader data >>= fun decoded => .ok (decoded, suffix)) = .ok (values, rest) at parsed
+  simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+  obtain ⟨⟨data, suffix⟩, dataRead, decoded, entriesRead, rfl, rfl⟩ := parsed
+  obtain ⟨encoded, written, same⟩ := encodeBlob_of_blob dataRead
+  refine ⟨encoded, ?_, same⟩
+  simp [encodeItems, encodeEntries_of_entries encoder reader reconstructs entriesRead,
+    written, bind, Except.bind]
 
 end EthLib.Networking.Quic.Tls.Wire
