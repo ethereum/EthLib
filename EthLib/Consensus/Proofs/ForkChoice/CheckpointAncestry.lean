@@ -163,7 +163,7 @@ private theorem exists_run_of_advanceSlots {config : Config} {checks : Signature
 
 The runs extend one run to the anchor, and the epoch starts at or after the anchor block. -/
 private theorem getCheckpointBlock_eq_of_checkpointPath {config : Config}
-    {checks : SignatureChecks} {store : Store preset fork}
+    {checks : SignatureChecks} {store other : Store preset fork}
     {anchorBlock : BeaconBlock preset fork} {g x a b : ForkedBeaconState preset}
     {pre : Run config checks g x} {left : Run config checks x a} {right : Run config checks x b}
     {extraLeft extraRight : List BeaconBlockHeader} {rootLeft rootRight : Root}
@@ -177,7 +177,7 @@ private theorem getCheckpointBlock_eq_of_checkpointPath {config : Config}
         ∃ header, (extraLeft.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? =
             some header ∧ SszType.hashTreeRoot header = .ok reached))
     (lastRight : ∀ slot : Slot, anchorBlock.slot ≤ slot → ∃ reached : Root,
-      store.ancestorRoots rootRight slot reached ∧
+      other.ancestorRoots rootRight slot reached ∧
       (((extraRight.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? = none ∧
           SszType.hashTreeRoot anchorBlock = .ok reached) ∨
         ∃ header, (extraRight.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? =
@@ -186,7 +186,7 @@ private theorem getCheckpointBlock_eq_of_checkpointPath {config : Config}
     (later : anchorBlock.slot ≤ start)
     (paths : (pre.append left).checkpointPath epoch = (pre.append right).checkpointPath epoch)
     (found : store.getCheckpointBlock rootLeft epoch = .ok checkpoint) :
-    store.getCheckpointBlock rootRight epoch = .ok checkpoint := by
+    other.getCheckpointBlock rootRight epoch = .ok checkpoint := by
   have startEq := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
   -- Past the shared run to the anchor, the two runs have the same headers up to the epoch.
   have same : (extraLeft.filter fun header => header.slot.toNat ≤ start.toNat) =
@@ -311,6 +311,70 @@ decreasing_by
   rw [bounds.2]
   exact UInt64.lt_iff_toNat_lt.mp bounds.1
 
+/-- A store checkpoint is the anchor checkpoint or a field of a terminal view of a run.
+
+The field is current justification or finality, realized or unrealized in the store.
+
+The run extends the given run to the anchor, with headers describing the held block's chain.
+
+The anchor checkpoint need not be a checkpoint field of the anchor state. -/
+theorem Store.Reachable.checkpoint_terminalView {config : Config}
+    {checks : SignatureChecks} {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
+    {g : ForkedBeaconState preset}
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (unknownParent : store.blocks[anchorBlock.parentRoot]? = none)
+    (imported : store.BlockStatesFromParents config (· = checks) anchorState anchorBlock)
+    (early : ∀ next ∈ config.nextFork fork, ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+      store.blockStates[root]? = some state →
+      state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (pre : Run config checks g ⟨fork, anchorState⟩)
+    (field : BeaconState preset fork → Checkpoint) (checkpoint : Checkpoint)
+    (selected : (field = (·.currentJustifiedCheckpoint) ∧
+        (checkpoint = store.justifiedCheckpoint ∨
+          checkpoint = store.unrealizedJustifiedCheckpoint)) ∨
+      (field = (·.finalizedCheckpoint) ∧
+        (checkpoint = store.finalizedCheckpoint ∨
+          checkpoint = store.unrealizedFinalizedCheckpoint))) :
+    (∃ root, SszType.hashTreeRoot anchorBlock = .ok root ∧
+      checkpoint = (⟨getCurrentEpoch anchorState, root⟩ : Checkpoint)) ∨
+    ∃ (root : Root) (state : BeaconState preset fork)
+      (tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩)
+      (view : DirectSafety.TerminalView ⟨fork, state⟩),
+      store.blockStates[root]? = some state ∧ checkpoint = field view.state ∧
+      ∃ extra : List BeaconBlockHeader,
+        (pre.append tail).headers = pre.headers ++ extra ∧
+        ∀ slot : Slot, anchorBlock.slot ≤ slot → ∃ reached : Root,
+          store.ancestorRoots root slot reached ∧
+          (((extra.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? = none ∧
+              SszType.hashTreeRoot anchorBlock = .ok reached) ∨
+            ∃ header, (extra.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? =
+                some header ∧ SszType.hashTreeRoot header = .ok reached) := by
+  have origin :
+      (∃ root, SszType.hashTreeRoot anchorBlock = .ok root ∧
+        checkpoint = (⟨getCurrentEpoch anchorState, root⟩ : Checkpoint)) ∨
+      (∃ (root : Root) (state : BeaconState preset fork),
+        store.blockStates[root]? = some state ∧ checkpoint = field state) ∨
+      ∃ (root : Root) (state pulled : BeaconState preset fork),
+        store.blockStates[root]? = some state ∧
+        processJustificationAndFinalization state = .ok pulled ∧ checkpoint = field pulled := by
+    rcases selected with ⟨rfl, selected⟩ | ⟨rfl, selected⟩
+    · exact reachable.justified_origins checkpoint selected
+    · exact reachable.finalized_origins checkpoint selected
+  rcases origin with anchor | origin
+  · exact .inl anchor
+  · have viewed : ∃ (root : Root) (state : BeaconState preset fork)
+        (view : DirectSafety.TerminalView ⟨fork, state⟩),
+        store.blockStates[root]? = some state ∧ checkpoint = field view.state := by
+      rcases origin with ⟨root, state, held, eq⟩ | ⟨root, state, pulled, held, ok, eq⟩
+      · exact ⟨root, state, .realized, held, eq⟩
+      · exact ⟨root, state, .pulled pulled ok, held, eq⟩
+    obtain ⟨root, state, view, held, eq⟩ := viewed
+    obtain ⟨tail, extra, headers, last⟩ := reachable.exists_run_of_blockState
+      (reachable.linked_of_unknown anchorSlot unknownParent) imported early pre held
+    exact .inr ⟨root, state, tail, view, held, eq, extra, headers, last⟩
+
 /-- The finalized checkpoint of a store is early, or on the chain of its justified checkpoint.
 
 Otherwise two runs to held states of the store bound the accountable stake, or show hash evidence.
@@ -394,7 +458,6 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
   have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
     have := parameters.roots
     omega
-  have linked := reachable.linked_of_unknown anchorSlot unknownParent
   have lower := reachable.parentsBelow anchorSlot unknownParent
   have ordered : store.finalizedCheckpoint.epoch ≤ store.justifiedCheckpoint.epoch :=
     (Store.Reachable.ordered sound reachable).1.1
@@ -408,33 +471,40 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
   -- After the anchor epoch, a field comes from a held state or from the step on it.
   have source (field : BeaconState preset fork → Checkpoint) (checkpoint : Checkpoint)
       (after : getCurrentEpoch anchorState < checkpoint.epoch)
-      (origin : (∃ root, SszType.hashTreeRoot anchorBlock = .ok root ∧
-          checkpoint = (⟨getCurrentEpoch anchorState, root⟩ : Checkpoint)) ∨
-        (∃ (root : Root) (state : BeaconState preset fork),
-          store.blockStates[root]? = some state ∧ checkpoint = field state) ∨
-        ∃ (root : Root) (state pulled : BeaconState preset fork),
-          store.blockStates[root]? = some state ∧
-          processJustificationAndFinalization state = .ok pulled ∧ checkpoint = field pulled) :
+      (selected : (field = (·.currentJustifiedCheckpoint) ∧
+          (checkpoint = store.justifiedCheckpoint ∨
+            checkpoint = store.unrealizedJustifiedCheckpoint)) ∨
+        (field = (·.finalizedCheckpoint) ∧
+          (checkpoint = store.finalizedCheckpoint ∨
+            checkpoint = store.unrealizedFinalizedCheckpoint))) :
       ∃ (root : Root) (state : BeaconState preset fork)
+        (tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩)
         (view : DirectSafety.TerminalView ⟨fork, state⟩),
         store.blockStates[root]? = some state ∧ checkpoint = field view.state ∧
         (view.state = state ∨ processJustificationAndFinalization state = .ok view.state) ∧
-        view.enough store.justifiedCheckpoint.epoch.toNat := by
-    rcases origin with ⟨root, -, rfl⟩ | ⟨root, state, held, rfl⟩ |
-      ⟨root, state, pulled, held, ok, rfl⟩
+        view.enough store.justifiedCheckpoint.epoch.toNat ∧
+        ∃ extra : List BeaconBlockHeader,
+          (pre.append tail).headers = pre.headers ++ extra ∧
+          ∀ slot : Slot, anchorBlock.slot ≤ slot → ∃ reached : Root,
+            store.ancestorRoots root slot reached ∧
+            (((extra.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? = none ∧
+                SszType.hashTreeRoot anchorBlock = .ok reached) ∨
+              ∃ header, (extra.filter fun header => header.slot.toNat ≤ slot.toNat).getLast? =
+                  some header ∧ SszType.hashTreeRoot header = .ok reached) := by
+    rcases reachable.checkpoint_terminalView anchorSlot unknownParent imported early pre
+        field checkpoint selected with ⟨root, -, rfl⟩ |
+      ⟨root, state, tail, view, held, eq, headers⟩
     · exact absurd (UInt64.lt_iff_toNat_lt.mp after) (Nat.lt_irrefl _)
-    · exact ⟨root, state, .realized, held, rfl, .inl rfl, trivial⟩
-    · exact ⟨root, state, .pulled pulled ok, held, rfl, .inr ok,
-        fun horizon later => heldEnough held horizon later⟩
-  obtain ⟨rootA, stateA, va, heldA, fieldA, selectedA, terminalA⟩ :=
-    source (·.finalizedCheckpoint) _ afterF (reachable.finalized_origins _ (.inl rfl))
-  obtain ⟨rootB, stateB, vb, heldB, fieldB, selectedB, terminalB⟩ :=
-    source (·.currentJustifiedCheckpoint) _ afterJ (reachable.justified_origins _ (.inl rfl))
-  -- The runs from the anchor to the two held states.
-  obtain ⟨left, extraA, headersA, lastA⟩ :=
-    reachable.exists_run_of_blockState linked imported early pre heldA
-  obtain ⟨right, extraB, headersB, lastB⟩ :=
-    reachable.exists_run_of_blockState linked imported early pre heldB
+    · cases view with
+      | realized => exact ⟨root, state, tail, .realized, held, eq, .inl rfl, trivial, headers⟩
+      | pulled pulled ok => exact ⟨root, state, tail, .pulled pulled ok, held, eq, .inr ok,
+          (fun horizon later => heldEnough held horizon later), headers⟩
+  obtain ⟨rootA, stateA, left, va, heldA, fieldA, selectedA, terminalA,
+    extraA, headersA, lastA⟩ :=
+    source (·.finalizedCheckpoint) _ afterF (.inr ⟨rfl, .inl rfl⟩)
+  obtain ⟨rootB, stateB, right, vb, heldB, fieldB, selectedB, terminalB,
+    extraB, headersB, lastB⟩ :=
+    source (·.currentJustifiedCheckpoint) _ afterJ (.inl ⟨rfl, .inl rfl⟩)
   -- Each field of a view is one of the three checkpoints of its held state or of the step on it.
   have member {state : BeaconState preset fork} {view : BeaconState preset fork}
       {checkpoint : Checkpoint}
