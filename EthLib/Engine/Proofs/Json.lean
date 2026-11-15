@@ -5,8 +5,7 @@ public import EthLib.Serialization.Proofs.JsonRpc
 public import EthLib.Execution.Proofs.Rpc.Json
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.Fork
--- Showing that a payload field is not `null` unfolds the null test of Lean's JSON.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: the JSON decoders of the Engine API
@@ -517,11 +516,13 @@ theorem payloadStatusOfJson_json (s : PayloadStatus) (e : Option String) :
       [("status", a), ("latestValidHash", b), ("validationError", c)].lookup "validationError" =
         some c := fun _ _ _ => rfl
   have l1 : fs.lookup "status" = some (.str s.status.name) := by
-    rw [look, k1]; rfl
+    rw [look, k1]; simp [Option.filter_some, isNull_str]
   have l2 : fs.lookup "latestValidHash" = s.latestValidHash.map (dataJson ·.toList) := by
-    rw [look, k2]; cases s.latestValidHash <;> rfl
+    rw [look, k2]; cases s.latestValidHash <;> simp [optionJson, dataJson, Option.filter_some,
+      Base.Toolchain.isNull_null, isNull_str]
   have l3 : fs.lookup "validationError" = e.map .str := by
-    rw [look, k3]; cases e <;> rfl
+    rw [look, k3]; cases e <;> simp [optionJson, Option.filter_some,
+      Base.Toolchain.isNull_null, isNull_str]
   have hall : (fs.all (payloadStatusFields.contains ·.1)) = true := by
     rw [List.all_eq_true]
     intro p hm

@@ -3,8 +3,7 @@ module
 public import EthLib.Execution.Rpc.Header
 public import EthLib.Serialization.Proofs.JsonRpc
 public import EthLib.Execution.Proofs.Rpc.Base
--- The fields of an encoded object unfold Lean's `Json.mkObj` and `Json.isNull`.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: the JSON form of a header

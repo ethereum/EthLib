@@ -5,7 +5,7 @@ public import EthLib.Execution.Proofs.Rpc.Base
 public import EthLib.Execution.Proofs.Rpc.Raw
 public import EthLib.Execution.Proofs.Blocks.BlockAccessList
 public import EthLib.Base.Proofs.U256
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: block access-list queries

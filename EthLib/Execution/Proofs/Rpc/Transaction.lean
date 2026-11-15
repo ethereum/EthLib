@@ -4,8 +4,7 @@ public import EthLib.Execution.Rpc.Transaction
 public import EthLib.Execution.Proofs.Rpc.Base
 public import EthLib.Execution.Rpc.TransactionInfo
 public import EthLib.Base.Except
--- The fields of an encoded object unfold Lean's `Json.mkObj` and `Json.isNull`.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: the JSON form of a signed transaction
@@ -170,7 +169,9 @@ private theorem recipient_of {fs : List (String × Lean.Json)} (o : Option Addre
     recipient fs = .ok o := by
   unfold recipient
   cases o with
-  | none => rw [h]; rfl
+  | none =>
+    rw [h]
+    simp [optionJson, Option.filter_some, Base.Toolchain.isNull_null, pure, Except.pure]
   | some a =>
     rw [h]
     simp only [optionJson, Option.filter_some, isNull_dataJson, Bool.not_false, ite_true]

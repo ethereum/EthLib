@@ -912,8 +912,16 @@ class Header(unittest.TestCase):
         )
         self.assertEqual(
             layers.header_imports(text),
-            [("EthLib.A", False, 3), ("EthLib.B", True, 4), ("EthLib.C", True, 5)],
+            [
+                ("EthLib.A", False, 3, False),
+                ("EthLib.B", True, 4, False),
+                ("EthLib.C", True, 5, True),
+            ],
         )
+
+    def test_import_all(self):
+        text = "module\n\nimport all Lean.A\npublic import Lean.B\npublic import all Lean.C\n"
+        self.assertEqual([found.all for found in layers.header_imports(text)], [True, False, True])
 
     def test_header_ends_at_the_first_command(self):
         self.assertEqual(layers.imports("module\nimport A\ndef x := 1\nimport B\n"), ["A"])
@@ -940,6 +948,86 @@ class Baseline(unittest.TestCase):
         problems = Tree(GOOD, baseline="EthLib.Base.A EthLib.Cryptography.A\n").problems()
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("breaks no rule any more", problems[0])
+
+
+HOME = "EthLib.Base.Proofs.Toolchain.Json"
+
+
+def reading(*bodies: tuple[str, str]) -> dict[str, list[str] | str]:
+    """The good tree with property modules, each with a header of its own."""
+    modules: list[dict[str, list[str] | str]] = [
+        {name: f"module\n\n{body}\ntheorem x : True := trivial\n"} for name, body in bodies
+    ]
+    return with_proofs(*modules)
+
+
+class ImportAll(unittest.TestCase):
+    def test_toolchain_home_reads_a_body(self):
+        tree = reading((HOME, "import all Lean.Data.Json.Basic"))
+        self.assertEqual(Tree(tree).problems(), [])
+
+    def test_property_reads_a_body_of_the_toolchain(self):
+        tree = reading(("EthLib.Execution.Proofs.B", "import all Lean.Data.Json.Basic"))
+        self.assertEqual(
+            Tree(tree).problems(),
+            [
+                "EthLib/Execution/Proofs/B.lean:3: imports all of Lean.Data.Json.Basic, "
+                "but only a module under EthLib/Base/Proofs/Toolchain/ reads its bodies"
+            ],
+        )
+
+    def test_property_reads_a_body_of_another_package(self):
+        tree = reading(("EthLib.Execution.Proofs.B", "import all Batteries.Data.Except"))
+        problems = Tree(tree).problems()
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("imports all of Batteries.Data.Except", problems[0])
+
+    def test_property_reads_a_body_of_ethlib(self):
+        tree = reading(("EthLib.Execution.Proofs.B", "import all EthLib.Execution.A"))
+        self.assertEqual(Tree(tree).problems(), [])
+
+    def test_plain_import_of_the_toolchain(self):
+        tree = reading(("EthLib.Execution.Proofs.B", "import Lean.Data.Json.Basic"))
+        self.assertEqual(Tree(tree).problems(), [])
+
+    def test_two_homes_read_one_module(self):
+        tree = reading(
+            (HOME, "import all Lean.Data.Json.Basic"),
+            ("EthLib.Base.Proofs.Toolchain.Other", "import all Lean.Data.Json.Basic"),
+        )
+        self.assertEqual(
+            Tree(tree).problems(),
+            [
+                "EthLib/Base/Proofs/Toolchain/Other.lean:3: imports all of Lean.Data.Json.Basic, "
+                f"but {HOME} already reads its bodies"
+            ],
+        )
+
+    def test_home_reads_two_modules(self):
+        tree = reading((HOME, "import all Lean.Data.Json.Basic\nimport all Init.Data.Repr"))
+        self.assertEqual(Tree(tree).problems(), [])
+
+    def test_directory_itself_is_not_a_home(self):
+        tree = reading(("EthLib.Base.Proofs.Toolchain", "import all Lean.Data.Json.Basic"))
+        problems = Tree(tree).problems()
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("only a module under EthLib/Base/Proofs/Toolchain/", problems[0])
+
+    def test_baseline_allows_an_import(self):
+        tree = reading(("EthLib.Execution.Proofs.B", "import all Init.Data.Nat.Fold"))
+        baseline = "# Why.\nEthLib.Execution.Proofs.B Init.Data.Nat.Fold\n"
+        self.assertEqual(Tree(tree, baseline=baseline).problems(), [])
+
+    def test_baseline_entry_is_stale_after_the_move(self):
+        tree = reading((HOME, "import all Init.Data.Nat.Fold"))
+        baseline = "EthLib.Execution.Proofs.B Init.Data.Nat.Fold\n"
+        self.assertEqual(
+            Tree(tree, baseline=baseline).problems(),
+            [
+                "scripts/check_layers_baseline.txt: EthLib.Execution.Proofs.B "
+                "Init.Data.Nat.Fold breaks no rule any more; remove the entry"
+            ],
+        )
 
 
 class Configuration(unittest.TestCase):

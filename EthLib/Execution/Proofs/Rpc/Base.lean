@@ -3,8 +3,7 @@ module
 public import EthLib.Execution.Rpc.Base
 public import EthLib.Serialization.Proofs.JsonRpc
 import EthLib.Base.Proofs.BigEndian
--- The hex digits of a number must unfold for the decision procedure to read them.
-import all Init.Data.Repr
+import EthLib.Base.Proofs.Toolchain.Repr
 
 /-!
 # Proofs: the base types of the execution JSON-RPC API
@@ -25,6 +24,15 @@ namespace EthLib.Execution.Rpc
 open EthLib.Base
 open EthLib.Serialization.JsonRpc
 
+/-- A byte has one hex digit below sixteen and two from sixteen on. -/
+private theorem toDigits_byte (n : Nat) (hn : n < 256) :
+    Nat.toDigits 16 n =
+      if n < 16 then [n.digitChar] else [(n / 16).digitChar, (n % 16).digitChar] := by
+  rw [Nat.toDigits_eq_ite (by decide)]
+  split
+  · rfl
+  · rw [Nat.toDigits_of_lt_base (by omega)]; rfl
+
 /-- The hex digits of a byte are one or two ASCII characters, and they read back as the byte. -/
 private theorem byte_digits : ∀ n, n < 256 →
     (∀ c ∈ Nat.toDigits 16 n, c.val ≤ 0x7F) ∧
@@ -32,6 +40,10 @@ private theorem byte_digits : ∀ n, n < 256 →
       (∀ c ∈ (Nat.toDigits 16 n).map (fun c => c.val.toUInt8), (hexValue false c).isSome) ∧
       ((Nat.toDigits 16 n).map (fun c => c.val.toUInt8)).foldl
         (fun a c => 16 * a + (hexValue false c).getD 0) (0 : UInt8) = n.toUInt8 := by
+  intro n hn
+  rw [toDigits_byte n hn]
+  revert n
+  simp only [Base.Toolchain.digitChar_eq]
   decide +kernel
 
 /-- A loop whose step multiplies by sixteen and adds the digit of a code computes the fold. -/
@@ -73,6 +85,7 @@ private theorem digitChar_dec : ∀ d, d < 10 →
     (Nat.digitChar d).val ≤ 0x7F ∧ 48 ≤ (Nat.digitChar d).val.toUInt8 ∧
       (Nat.digitChar d).val.toUInt8 ≤ 57 ∧
       ((Nat.digitChar d).val.toUInt8 - 48).toNat = d ∧ (0 < d → Nat.digitChar d ≠ '0') := by
+  simp only [Base.Toolchain.digitChar_eq]
   decide
 
 /-- The decimal digits of a number are ASCII digits whose values, read from the first, give it.
@@ -185,6 +198,7 @@ theorem uintDecimal_uintDecimalJson (what : String) (n : Nat) :
     exact hhead hpos (by
       rw [hx]
       have key : ∀ d, d < 10 → (Nat.digitChar d).val.toUInt8 = 48 → Nat.digitChar d = '0' := by
+        simp only [Base.Toolchain.digitChar_eq]
         decide
       have h0 : Nat.digitChar d = '0' := key d hd hx48
       simp [h0])

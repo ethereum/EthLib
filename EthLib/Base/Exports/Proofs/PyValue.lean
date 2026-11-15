@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Base.Exports.PyValue
-import all Init.Data.Nat.ToString
 
 /-!
 # Proofs: `Base.Exports.PyValue`
@@ -220,10 +219,17 @@ theorem pyExport_items {α β : Type} [ToPyItems α] [FromPyItems α] [LawfulPyI
 
 /-- The digit that a value below 16 writes reads back as that value. -/
 theorem hexDigit_digitChar (m : Nat) (h : m < 16) : hexDigit (Nat.digitChar m) = m := by
-  have : m = 0 ∨ m = 1 ∨ m = 2 ∨ m = 3 ∨ m = 4 ∨ m = 5 ∨ m = 6 ∨ m = 7 ∨ m = 8 ∨ m = 9 ∨
-      m = 10 ∨ m = 11 ∨ m = 12 ∨ m = 13 ∨ m = 14 ∨ m = 15 := by omega
-  rcases this with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl |
-    rfl | rfl | rfl <;> simp [hexDigit, Nat.digitChar, Char.isDigit]
+  by_cases low : m < 10
+  · simp [hexDigit, Nat.isDigit_digitChar, low, Nat.toNat_digitChar_sub_48_of_lt_ten low]
+  · -- Lean states each letter digit by one equivalence, so name the digit of each value.
+    have : m = 10 ∨ m = 11 ∨ m = 12 ∨ m = 13 ∨ m = 14 ∨ m = 15 := by omega
+    rcases this with rfl | rfl | rfl | rfl | rfl | rfl
+    · rw [Nat.digitChar_eq_a.mpr rfl]; rfl
+    · rw [Nat.digitChar_eq_b.mpr rfl]; rfl
+    · rw [Nat.digitChar_eq_c.mpr rfl]; rfl
+    · rw [Nat.digitChar_eq_d.mpr rfl]; rfl
+    · rw [Nat.digitChar_eq_e.mpr rfl]; rfl
+    · rw [Nat.digitChar_eq_f.mpr rfl]; rfl
 
 /-- Reading digits after a value shifts that value by one place per digit. -/
 theorem foldl_hexDigit (a : Nat) (cs : List Char) :

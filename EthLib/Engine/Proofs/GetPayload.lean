@@ -3,8 +3,7 @@ module
 public import EthLib.Engine.GetPayload
 public import EthLib.Engine.Proofs.Json
 public import EthLib.Execution.Proofs.Transactions.Network
--- Showing that a written result is not `null` unfolds the null test of Lean's JSON.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: `engine_getPayload`
@@ -360,7 +359,7 @@ private theorem fork_of_accepts {version : Nat} {fork : Fork}
 private theorem payloadJson_isNull {fork : Fork} (r : GetPayloadResult fork) :
     r.payloadJson.isNull = false := by
   unfold GetPayloadResult.payloadJson Json.executionPayloadV4Json Json.executionPayloadJson
-  split <;> rfl
+  split <;> exact Base.Toolchain.isNull_mkObj _
 
 /-- The result of a response, written and read back at its version and its fork, is that result.
 
@@ -414,8 +413,8 @@ theorem getPayloadResultOfJson_json {r : GetPayloadResponse}
   have hd : L.Pairwise fun a b => a.1 ≠ b.1 := by
     by_cases h3 : 3 ≤ version <;> by_cases h4 : 4 ≤ version <;> simp [hL, hbb, hso, her, h3, h4]
   have hbn : (blobsBundleJson r.stored.bundle).isNull = false := by
-    unfold blobsBundleJson; rfl
-  have hbo : ∀ o : Bool, (Lean.Json.bool o).isNull = false := fun _ => rfl
+    unfold blobsBundleJson; exact Base.Toolchain.isNull_mkObj _
+  have hbo : ∀ o : Bool, (Lean.Json.bool o).isNull = false := Base.Toolchain.isNull_bool
   have hpres : ∀ p ∈ L, p.2.isNull = false := by
     by_cases h3 : 3 ≤ version <;> by_cases h4 : 4 ≤ version <;>
       simp [hL, hbb, hso, her, h3, h4, hbn, hbo, payloadJson_isNull,

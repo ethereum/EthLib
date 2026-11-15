@@ -2,10 +2,8 @@ module
 
 public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
--- Shape-specific round trips unfold Lean's `Json.mkObj` implementation.
-import all Lean.Data.Json.Basic
--- The two literal union-field names are ordered by `String.compare`.
-import all Init.Data.Ord.String
+import EthLib.Base.Proofs.Toolchain.JsonBasic
+import EthLib.Base.Proofs.Toolchain.OrdString
 
 /-! A JSON document written for a value reads back as that value, at every shape. -/
 
@@ -255,6 +253,30 @@ theorem findIdx?_of_lookupOption {selectors : List Nat} {options : List Desc} {s
     rw [List.findIdx?_eq_none_iff] at place
     exact absurd (place selector (lookupOption_selector _ _ _ _ named)) (by simp)
 
+/-- The names of a two-member object come out in the order of `compare`, whatever the values. -/
+private theorem keys_ofList_pair {a b : String} (x y : Json) (lt : compare b a = .lt) :
+    (Std.TreeMap.Raw.ofList [(a, x), (b, y)] (cmp := compare)).keys = [b, a] := by
+  have wf : (Std.TreeMap.Raw.ofList [(a, x), (b, y)] (cmp := compare)).WF :=
+    Std.TreeMap.Raw.WF.ofList
+  have gt : compare a b = .gt := Std.OrientedCmp.gt_of_lt lt
+  have ne : a ≠ b := fun same => by subst same; simp [Std.ReflCmp.compare_self] at gt
+  have size := Std.TreeMap.Raw.length_keys wf
+  rw [Std.TreeMap.Raw.size_ofList (by simpa using ne)] at size
+  have mem : ∀ k, k ∈ (Std.TreeMap.Raw.ofList [(a, x), (b, y)] (cmp := compare)).keys ↔
+      k = a ∨ k = b := by
+    intro k; rw [Std.TreeMap.Raw.mem_keys wf, Std.TreeMap.Raw.mem_ofList]; simp
+  have ordered := Std.TreeMap.Raw.ordered_keys wf
+  revert size mem ordered
+  generalize (Std.TreeMap.Raw.ofList [(a, x), (b, y)] (cmp := compare)).keys = keys
+  intro size mem ordered
+  match keys, size with
+  | [c, d], _ =>
+    have hc := (mem c).mp (by simp)
+    have hd := (mem d).mp (by simp)
+    simp only [List.pairwise_cons, List.mem_cons, List.not_mem_nil, or_false, forall_eq,
+      List.Pairwise.nil, and_true] at ordered
+    rcases hc with rfl | rfl <;> rcases hd with rfl | rfl <;> simp_all [Std.ReflCmp.compare_self]
+
 /-- A union object reads back as the value it was written from, under its own selector. -/
 theorem valueOf_union {selectors : List Nat} {options : List Desc} {spelling : Spelling}
     {selector : Nat} {option : Desc} {data : Value} {payload : Json}
@@ -268,7 +290,10 @@ theorem valueOf_union {selectors : List Nat} {options : List Desc} {spelling : S
   obtain ⟨slot, place⟩ := findIdx?_of_lookupOption named
   rw [place] at wrote
   have names : objectNames (Json.mkObj [("selector", decimal selector), ("data", payload)])
-      = ["data", "selector"] := by rfl
+      = ["data", "selector"] := by
+    rw [Base.Toolchain.mkObj_eq]
+    simpa [objectNames] using
+      keys_ofList_pair (decimal selector) payload (by rw [Base.Toolchain.compare_eq]; decide)
   have carried : (Json.mkObj [("selector", decimal selector), ("data", payload)]).getObjVal? "data"
       = .ok payload := getObjVal?_mkObj (by simp) (by simp)
   have tagged :
@@ -276,8 +301,8 @@ theorem valueOf_union {selectors : List Nat} {options : List Desc} {spelling : S
       = .ok (decimal selector) := getObjVal?_mkObj (by simp) (by simp)
   have inner : valueOf option (spelling.part (0 + slot)) payload = .ok data :=
     back _ data payload fitted (by simpa using wrote)
-  rw [Json.mkObj, valueOf]
-  simp only [Json.mkObj] at names tagged carried
+  rw [Base.Toolchain.mkObj_eq, valueOf]
+  simp only [Base.Toolchain.mkObj_eq] at names tagged carried
   simp only [names, List.isEmpty_cons, Bool.false_eq_true, ite_false, tagged, carried,
     Except.toOption, Bind.bind, Except.bind, readNat_decimal]
   exact valueOfOption_found spelling payload option data selectors options 0 selector slot
@@ -383,8 +408,8 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
       subst wrote
       obtain ⟨undeclared, read⟩ := valueOf_struct (ih (wellFormed_container sound))
         (nodup_of_firstDuplicate names once) counted paired each parts
-      rw [Json.mkObj, valueOf]
-      simp only [Json.mkObj] at undeclared read
+      rw [Base.Toolchain.mkObj_eq, valueOf]
+      simp only [Base.Toolchain.mkObj_eq] at undeclared read
       simp only [undeclared, read, Bind.bind, Except.bind]
       rfl
   | progressiveContainer active names fields ih =>
@@ -399,8 +424,8 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
       subst wrote
       obtain ⟨undeclared, read⟩ := valueOf_struct (ih (wellFormed_progressiveContainer sound))
         (nodup_of_firstDuplicate names once) counted paired each parts
-      rw [Json.mkObj, valueOf]
-      simp only [Json.mkObj] at undeclared read
+      rw [Base.Toolchain.mkObj_eq, valueOf]
+      simp only [Base.Toolchain.mkObj_eq] at undeclared read
       simp only [undeclared, read, Bind.bind, Except.bind]
       rfl
   | compatibleUnion selectors options ih =>
