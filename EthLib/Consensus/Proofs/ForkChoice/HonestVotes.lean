@@ -140,27 +140,16 @@ theorem Execution.exists_signed_origin_of_latestMessages {anchor : Store preset 
       | attestation seen handled =>
         exact attestationStep reachable ih ⟨_, seen, fun _ h => h⟩ handled
       | attesterSlashing _ handled => exact slash ih handled
-      | block seen handled =>
-        rename_i signed
-        unfold Store.onBlockWithVotes at handled
-        simp only [bind_ok_iff, ← Array.foldlM_toList] at handled
-        obtain ⟨blocked, blockOk, voted, votedOk, slashedOk⟩ := handled
-        let P := fun s => Store.Reachable config anchorState anchorBlock s ∧
-          Origin ((e.world n).view u) s
-        have blockedP : P blocked := ⟨reachable.block blockOk,
-          keep ih (Store.onBlock_checkpointStates_latestMessages blockOk).2
-            (Store.onBlock_blocks_of_found blockOk)
-            (fun known => (Store.onBlock_checkpointStates_latestMessages blockOk).1 ▸ known)
-            (fun slotOk => ⟨_, slotOk ▸ (Store.onBlock_sameClock blockOk).getCurrentSlot,
-              UInt64.le_refl _⟩)⟩
-        have votedP : P voted := foldlM_ok_invariant_of_mem P
-          (fun s a s' mem holds step =>
-            ⟨holds.1.attestation step, attestationStep holds.1 holds.2
-              ⟨.block signed, seen, fun _ statement =>
-                Or.inl ⟨a, by simpa using mem, statement⟩⟩ step⟩) blockedP votedOk
-        exact (foldlM_ok_invariant P
-          (fun s sl s' holds step =>
-            ⟨holds.1.attesterSlashing step, slash holds.2 step⟩) votedP slashedOk).2
+      | block _ blockOk =>
+        exact keep ih (Store.onBlock_checkpointStates_latestMessages blockOk).2
+          (Store.onBlock_blocks_of_found blockOk)
+          (fun known => (Store.onBlock_checkpointStates_latestMessages blockOk).1 ▸ known)
+          (fun slotOk => ⟨_, slotOk ▸ (Store.onBlock_sameClock blockOk).getCurrentSlot,
+            UInt64.le_refl _⟩)
+      | blockAttestation seen _ _ carried handled =>
+        exact attestationStep reachable ih
+          ⟨_, seen, fun _ statement => Or.inl ⟨_, carried, statement⟩⟩ handled
+      | blockAttesterSlashing _ _ _ _ handled => exact slash ih handled
       | payloadAttestation _ handled =>
         obtain ⟨_, _, same⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes handled
         rw [same]

@@ -22,7 +22,7 @@ Delayed blocks that pass validation also pass the rest of the block handler.
 
 Synchrony alone gives neither of the last two.
 
-The last one restricts the adversary: a block may carry a vote that a later receiver rejects.
+Carried operations are separate moves and need not succeed for a block to be admitted.
 -/
 
 @[expose] public section
@@ -66,11 +66,11 @@ def Prompt
     (e.startTime < start.toNat → ∃ k, (e.world k).time + 1 = start.toNat ∧
       UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w))
 
-/-- Validated delayed blocks pass the receiver's remaining handler checks.
+/-- Validated delayed blocks pass the receiver's remaining block-handler checks.
 
-Synchrony puts the block in the view; it does not make the votes in the block succeed.
+Synchrony puts the block in the view; success of the remaining block handler is assumed.
 
-A block that carries a vote a later receiver rejects breaks this hypothesis. -/
+The votes and slashings carried by the block need not succeed. -/
 def BlocksAdmitted
     (e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
       genesisTimeMs) J) (GST Δ last : ℕ) : Prop :=
@@ -83,6 +83,6 @@ def BlocksAdmitted
     SszType.hashTreeRoot signedBlock.message = .ok blockRoot →
     ((e.world k).state u).validateOnBlock config checks sources signedBlock blockRoot =
       .ok state →
-    ∃ after, ((e.world k).state u).onBlockWithVotes config checks sources signedBlock = .ok after
+    ∃ after, ((e.world k).state u).onBlock config checks sources signedBlock = .ok after
 
 end EthLib.Consensus.Models.Network

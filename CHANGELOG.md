@@ -16,6 +16,25 @@ Not yet released.
 
 ### Changes that break callers
 
+- Fork-choice replay returns a nonempty list of handler outcomes for each input step ([#2622](https://github.com/ethereum/EthLib/pull/2622)).
+  An admitted block's first outcome reports admission; the rest report its attestations and attester slashings, in order.
+  Carried operations run only for an admitted block, so a rejected block gives one outcome, its error.
+  Each successful handler commits independently, and a failed carried operation does not stop later calls.
+  An invalid payload verdict applies its removal after the step, even a rejected one, and after the carried operations of an admitted block.
+  Other inputs have one outcome.
+  This changes `fork_choice`, `forkChoice`, `replayForkChoice` and `replayForkChoiceConfirming`.
+  Every export that takes fork-choice steps replays blocks this way.
+  Callers must inspect each nested outcome, not treat the input as one atomic operation.
+  The public `runForkChoiceStep` block branch now performs bare admission only; its type is unchanged.
+  `Store.onBlockWithVotes` and its nine wrapper-only lemmas are removed; call the spec handlers separately.
+
+- In Lean, `Models.Network.Handles.block` calls `Store.onBlock` without processing carried operations ([#2622](https://github.com/ethereum/EthLib/pull/2622)).
+  The `blockAttestation` and `blockAttesterSlashing` constructors process them separately.
+  Each requires the enclosing signed block in the view and its root among the blocks of the receiving store, so carried operations run only for an admitted block.
+  Update case analyses of `Handles` to cover both constructors and their two new premises.
+  This changes `forkChoice` executions and `UpToDate`, and transitively `Prompt` and `VoteAt`, even where their signatures are unchanged.
+  `BlocksAdmitted` requires only bare `onBlock` success, with its other conditions unchanged.
+
 - In Lean, modules move so that no two directories of a layer import each other ([#2617](https://github.com/ethereum/EthLib/pull/2617)).
   In Execution, `Evm.Call.Delegation`, `Evm.Machine.Errors`, `Blocks.Log` and `Fees.BlobGas` become `Evm.Delegation`, `Evm.Errors`, `Evm.Log` and `Transactions.BlobGas`.
   In Serialization, `Ssz.Codec.Error` becomes `Ssz.Error`, and the proof modules `Proofs.Ssz.Type.Bounds`, `DefaultLaws` and `FitsLaws` move to `Proofs.Ssz.Codec`.
@@ -255,7 +274,7 @@ Not yet released.
   So `.2.2` of `Store.onAttestation_frame` and `Store.onAttesterSlashing_frame` becomes `.2.2.1`, and `.2.2.2.2` of `Store.onTickPerSlot_frame` becomes `.2.2.2.2.1`.
   The `.2.2.2` of the other four frames becomes `.2.2.2.1`.
   The new `Store.catchUp_preserves` states that catch-up keeps each property of the store that every tick within a slot keeps.
-  It has the form of `Store.onBlockWithVotes_preserves`.
+  It composes preservation over the individual tick steps.
   `Store.catchUp_frame`, `Store.catchUp_ordered` and the catch-up step of `Store.onTick_checkpointStates_latestMessages` now read it, with unchanged statements.
   The new `Store.onTick_ok` splits a tick into the slot of its time, the catch-up to that slot and one tick within it.
   `Store.onTick_frame`, `Store.getCurrentSlot_onTick`, `Store.onTick_ordered`, `Store.onTick_checkpointStates_latestMessages` and `Store.exists_getCurrentSlot_onTick_ge` now read it, with unchanged statements.

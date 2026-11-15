@@ -155,16 +155,6 @@ theorem ForwardReachable.reachable
   | envelope _ accepted holds => exact holds.envelope accepted
   | inclusionList _ accepted holds => exact holds.inclusionList accepted
 
-/-- A block with the votes that it carries keeps a store reachable with a forward clock. -/
-theorem ForwardReachable.onBlockWithVotes {checks : SignatureChecks}
-    {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
-    (forward : ForwardReachable config anchorState anchorBlock store)
-    (added : store.onBlockWithVotes config checks sources signed = .ok after) :
-    ForwardReachable config anchorState anchorBlock after :=
-  onBlockWithVotes_preserves (fun reached step => reached.block step)
-    (fun _ reached step => reached.attestation step)
-    (fun _ reached step => reached.attesterSlashing step) forward added
-
 /-- A store built with one setting of the checks has a forward clock. -/
 theorem ForwardReachableWith.forwardReachable {checks : SignatureChecks}
     (reached : ForwardReachableWith config checks anchorState anchorBlock store) :
@@ -184,18 +174,6 @@ theorem ForwardReachableWith.reachable {checks : SignatureChecks}
     (reached : ForwardReachableWith config checks anchorState anchorBlock store) :
     Reachable config anchorState anchorBlock store :=
   reached.forwardReachable.reachable
-
-/-- A block with the votes that it carries keeps a store built with one setting of the checks.
-
-The block and its votes must be handled with that setting. -/
-theorem ForwardReachableWith.onBlockWithVotes {checks : SignatureChecks}
-    {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
-    (reached : ForwardReachableWith config checks anchorState anchorBlock store)
-    (added : store.onBlockWithVotes config checks sources signed = .ok after) :
-    ForwardReachableWith config checks anchorState anchorBlock after :=
-  onBlockWithVotes_preserves (fun reached step => reached.block step)
-    (fun _ reached step => reached.attestation step)
-    (fun _ reached step => reached.attesterSlashing step) reached added
 
 /-- A tick to a time no earlier than that of the store does not lower its current slot. -/
 theorem getCurrentSlot_le_of_onTick {timeMs : UInt64} {slot later : Slot}
