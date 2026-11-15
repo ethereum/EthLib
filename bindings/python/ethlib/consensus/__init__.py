@@ -851,7 +851,7 @@ def fork_choice(
     Each input gives a list of outcomes: a read as a dict, None for success, or the rejection.
     An admitted block gives its outcome, then those of its attestations and attester slashings.
     A rejected block gives only its rejection, and its carried operations do not run.
-    Rejections are returned, not raised: each leaves the store unchanged, and later handlers run.
+    Rejections are returned, not raised: a rejected handler changes nothing itself, and later handlers run.
     """
     # A step is (kind, data), and its data is one of these:
     # - the tick in seconds

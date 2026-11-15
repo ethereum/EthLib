@@ -155,7 +155,9 @@ Each of these handlers commits independently, so a rejected one undoes no earlie
 
 A rejected block gives only its error, and its attestations and slashings do not run.
 
-An invalid verdict on a block removes it after its attestations and slashings.
+An invalid verdict applies its removal after the step, whether the step is admitted or not.
+
+For an admitted block, that removal follows its attestations and slashings.
 
 If that removal fails, the step gives only the error and leaves the store as it was.
 
@@ -317,7 +319,9 @@ An admitted block gives its admission, then its attestations and slashings.
 
 A rejected block gives only its error.
 
-A rejected handler leaves the store unchanged, and later handlers still run.
+A rejected handler changes nothing itself, and later handlers still run.
+
+An invalid verdict still applies its removal, even when the step is rejected.
 
 The arguments are the preset, the fork, the anchor state and the anchor block in SSZ, and the steps.
 

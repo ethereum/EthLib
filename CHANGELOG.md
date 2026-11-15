@@ -13,7 +13,7 @@ Not yet released.
   An admitted block's first outcome reports admission; the rest report its attestations and attester slashings, in order.
   Carried operations run only for an admitted block, so a rejected block gives one outcome, its error.
   Each successful handler commits independently, and a failed carried operation does not stop later calls.
-  An invalid payload verdict removes the block after its carried operations run.
+  An invalid payload verdict applies its removal after the step, even a rejected one, and after the carried operations of an admitted block.
   Other inputs have one outcome.
   This changes `fork_choice`, `forkChoice`, `replayForkChoice` and `replayForkChoiceConfirming`.
   Every export that takes fork-choice steps replays blocks this way.
