@@ -548,6 +548,8 @@ Only the properties and the models may import them, or Batteries.
 A specification or an export imports nothing beyond the Lean toolchain.
 So the code that clients and the bindings run depends on no other library.
 Lake still downloads Mathlib and VCVio for a project that requires EthLib, because a requirement holds for the whole package.
+Mathlib also runs a hook on `lake update`: it builds Mathlib's `cache` tool and downloads Mathlib's build files, which the specification and the exports never use.
+A project that imports only the specification or the exports can set `MATHLIB_NO_CACHE_ON_UPDATE=1` to skip it.
 
 A model is a module under `Proofs/`, like a property.
 The rule that, among the properties, only a refinement module imports a model directly is a rule between modules, not between packages.
