@@ -36,17 +36,17 @@ open Wire
 /-- An extension's numeric type and exact data, RFC 8446 §4.2. -/
 structure Extension where
   kind : CodePoint
-  data : List UInt8
+  data : ByteArray
   deriving Repr, DecidableEq
 
 /-- Read an extension without interpreting its payload (§4.2). -/
 def readExtension : Reader Extension := do
   let kind ← codePoint
-  return ⟨kind, ← blob 2 0 65535⟩
+  return ⟨kind, (← blob 2 0 65535).toByteArray⟩
 
 /-- Encode an extension without selecting an algorithm (§4.2). -/
 def encodeExtension (extension : Extension) : Except Error (List UInt8) := do
-  return Base.natToBytes 2 extension.kind.val ++ (← encodeBlob 2 0 65535 extension.data)
+  return Base.natToBytes 2 extension.kind.val ++ (← encodeBlob 2 0 65535 extension.data.data.toList)
 
 /-- No extension type occurs twice in one block, RFC 8446 §4.2. -/
 def uniqueExtensions (extensions : List Extension) : Bool :=
@@ -74,7 +74,7 @@ The codec retains the session ID; QUIC callers enforce [RFC 9001 §8.4][compat].
 -/
 structure ClientHello where
   random : Vector UInt8 32
-  legacySessionId : List UInt8
+  legacySessionId : ByteArray
   cipherSuites : List CodePoint
   extensions : List Extension
   deriving Repr, DecidableEq
@@ -82,26 +82,26 @@ structure ClientHello where
 /-- The variable ServerHello fields, also used by HelloRetryRequest (§§4.1.3 and 4.1.4). -/
 structure ServerHello where
   random : Vector UInt8 32
-  legacySessionIdEcho : List UInt8
+  legacySessionIdEcho : ByteArray
   cipherSuite : CodePoint
   extensions : List Extension
   deriving Repr, DecidableEq
 
 /-- One certificate's exact bytes and extensions, without certificate validation (§4.4.2). -/
 structure CertificateEntry where
-  data : List UInt8
+  data : ByteArray
   extensions : List Extension
   deriving Repr, DecidableEq
 
 /-- The certificate request context and chain, including the empty client chain (§4.4.2). -/
 structure CertificateMessage where
-  context : List UInt8
+  context : ByteArray
   entries : List CertificateEntry
   deriving Repr, DecidableEq
 
 /-- The certificate request context and extensions, RFC 8446 §4.3.2. -/
 structure CertificateRequest where
-  context : List UInt8
+  context : ByteArray
   extensions : List Extension
   deriving Repr, DecidableEq
 
@@ -116,8 +116,8 @@ inductive Message where
   | encryptedExtensions (extensions : List Extension)
   | certificateRequest (fields : CertificateRequest)
   | certificate (fields : CertificateMessage)
-  | certificateVerify (algorithm : CodePoint) (signature : List UInt8)
-  | finished (verifyData : List UInt8)
+  | certificateVerify (algorithm : CodePoint) (signature : ByteArray)
+  | finished (verifyData : ByteArray)
   deriving Repr, DecidableEq
 
 /-- The HandshakeType tag of RFC 8446 §4. -/
@@ -138,38 +138,38 @@ def encodeCodePoints (width minimum maximum : Nat) (values : List CodePoint) :
 /-- Read a certificate entry, keeping its DER bytes opaque (§4.4.2). -/
 def readCertificateEntry : Reader CertificateEntry := do
   let data ← blob 3 1 (2 ^ 24 - 1)
-  return ⟨data, ← readExtensions 0⟩
+  return ⟨data.toByteArray, ← readExtensions 0⟩
 
 /-- Encode a certificate entry with a nonempty certificate (§4.4.2). -/
 def encodeCertificateEntry (entry : CertificateEntry) : Except Error (List UInt8) := do
-  let certificate ← encodeBlob 3 1 (2 ^ 24 - 1) entry.data
+  let certificate ← encodeBlob 3 1 (2 ^ 24 - 1) entry.data.data.toList
   return certificate ++ (← encodeExtensions 0 entry.extensions)
 
 /-- Encode the body fields, checking each presentation-language bound. -/
 def encodeBody (hashLength : Nat) : Message → Except Error (List UInt8)
   | .clientHello h => do
-    let session ← encodeBlob 1 0 32 h.legacySessionId
+    let session ← encodeBlob 1 0 32 h.legacySessionId.data.toList
     let suites ← encodeCodePoints 2 2 65534 h.cipherSuites
     let extensions ← encodeExtensions 8 h.extensions
     return [3, 3] ++ h.random.toList ++ session ++ suites ++ [1, 0] ++ extensions
   | .serverHello h => do
-    let session ← encodeBlob 1 0 32 h.legacySessionIdEcho
+    let session ← encodeBlob 1 0 32 h.legacySessionIdEcho.data.toList
     let extensions ← encodeExtensions 6 h.extensions
     return [3, 3] ++ h.random.toList ++ session ++
       Base.natToBytes 2 h.cipherSuite.val ++ [0] ++ extensions
   | .encryptedExtensions extensions => encodeExtensions 0 extensions
   | .certificateRequest request => do
-    let context ← encodeBlob 1 0 255 request.context
+    let context ← encodeBlob 1 0 255 request.context.data.toList
     return context ++ (← encodeExtensions 2 request.extensions)
   | .certificate certificate => do
-    let context ← encodeBlob 1 0 255 certificate.context
+    let context ← encodeBlob 1 0 255 certificate.context.data.toList
     return context ++ (← encodeItems 3 0 (2 ^ 24 - 1)
       encodeCertificateEntry certificate.entries)
   | .certificateVerify algorithm signature => do
-    return Base.natToBytes 2 algorithm.val ++ (← encodeBlob 2 0 65535 signature)
+    return Base.natToBytes 2 algorithm.val ++ (← encodeBlob 2 0 65535 signature.data.toList)
   | .finished verifyData => do
-    Base.ensure (verifyData.length = hashLength) .length
-    return verifyData
+    Base.ensure (verifyData.size = hashLength) .length
+    return verifyData.data.toList
 
 /-- Read a body by its HandshakeType, RFC 8446 §4.
 
@@ -182,29 +182,29 @@ def readBody (hashLength : Nat) (kind : UInt8) : Reader Message := do
     let session ← blob 1 0 32
     let suites ← items 2 2 65534 codePoint
     require ((← bytes 2) = [1, 0]) .constant
-    return .clientHello ⟨random, session, suites, ← readExtensions 8⟩
+    return .clientHello ⟨random, session.toByteArray, suites, ← readExtensions 8⟩
   | 2 =>
     require ((← uint 2) = 0x0303) .constant
     let random ← vector 32
     let session ← blob 1 0 32
     let suite ← codePoint
     require ((← uint 1) = 0) .constant
-    return .serverHello ⟨random, session, suite, ← readExtensions 6⟩
+    return .serverHello ⟨random, session.toByteArray, suite, ← readExtensions 6⟩
   | 8 => return .encryptedExtensions (← readExtensions 0)
   | 13 =>
     let context ← blob 1 0 255
-    return .certificateRequest ⟨context, ← readExtensions 2⟩
+    return .certificateRequest ⟨context.toByteArray, ← readExtensions 2⟩
   | 11 =>
     let context ← blob 1 0 255
-    return .certificate ⟨context, ← items 3 0 (2 ^ 24 - 1) readCertificateEntry⟩
+    return .certificate ⟨context.toByteArray, ← items 3 0 (2 ^ 24 - 1) readCertificateEntry⟩
   | 15 =>
     let algorithm ← codePoint
-    return .certificateVerify algorithm (← blob 2 0 65535)
-  | 20 => return .finished (← bytes hashLength)
+    return .certificateVerify algorithm (← blob 2 0 65535).toByteArray
+  | 20 => return .finished (← bytes hashLength).toByteArray
   | _ => throw .messageType
 
 /-- Add the type and uint24 body length, RFC 8446 §4. -/
-def frame (kind : UInt8) (body : List UInt8) : Except Error (List UInt8) := do
+def frameList (kind : UInt8) (body : List UInt8) : Except Error (List UInt8) := do
   return kind :: (← encodeBlob 3 0 (2 ^ 24 - 1) body)
 
 /-- Read a handshake envelope, preserving arbitrary bytes after that message (§4). -/
@@ -214,8 +214,8 @@ def readFrame : Reader (UInt8 × List UInt8) := do
   return (UInt8.ofNat kind, body)
 
 /-- Encode one complete handshake message with the caller's negotiated hash length. -/
-def encode (hashLength : Nat) (message : Message) : Except Error (List UInt8) := do
-  frame message.type (← encodeBody hashLength message)
+def encodeList (hashLength : Nat) (message : Message) : Except Error (List UInt8) := do
+  frameList message.type (← encodeBody hashLength message)
 
 /-- Read one complete message from input with no TLS record header, RFC 9001 §4.
 
@@ -226,7 +226,7 @@ A stream caller can then keep it until more data arrives.
 Handshake types other than these seven are rejected.
 
 Unknown extension types and algorithm identifiers survive. -/
-def decode (hashLength : Nat) : Reader Message := do
+def decodeList (hashLength : Nat) : Reader Message := do
   let (kind, body) ← readFrame
   -- An incomplete field inside an already complete envelope cannot be repaired by more input.
   StateT.lift ((exact (readBody hashLength kind) body).mapError fun
@@ -244,5 +244,17 @@ def retryRandom : Vector UInt8 32 :=
 def Message.isRetry : Message → Bool
   | .serverHello h => h.random == retryRandom
   | _ => false
+
+/-- Encode one complete handshake message as packed bytes. -/
+def encode (hashLength : Nat) (message : Message) : Except Error ByteArray :=
+  (encodeList hashLength message).map List.toByteArray
+
+/-- Decode one complete handshake message and return its packed trailing bytes. -/
+def decode (hashLength : Nat) (input : ByteArray) : Except Error (Message × ByteArray) :=
+  (decodeList hashLength input.data.toList).map fun (message, rest) => (message, rest.toByteArray)
+
+/-- Add the handshake header to a packed body. -/
+def frame (kind : UInt8) (body : ByteArray) : Except Error ByteArray :=
+  (frameList kind body.data.toList).map List.toByteArray
 
 end EthLib.Networking.Quic.Tls

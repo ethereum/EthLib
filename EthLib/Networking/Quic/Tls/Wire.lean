@@ -3,6 +3,7 @@ module
 public import EthLib.Base.BigEndian
 public import EthLib.Base.Except
 public import EthLib.Base.ByteReader
+public import EthLib.Base.Bytes
 
 /-!
 # TLS presentation-language fields

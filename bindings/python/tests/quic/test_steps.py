@@ -260,18 +260,17 @@ def reference_signature(server: bool, transcript: bytes) -> bytes:
     return b"\x30" + bytes([len(body)]) + body
 
 
-def signature_r(signature: list[int]) -> int:
+def signature_r(signature: bytes) -> int:
     # The first INTEGER of the RFC 3279 §2.2.3 sequence, whose lengths fit one byte for P-256.
-    data = bytes(signature)
-    assert data[0] == 0x30 and data[1] == len(data) - 2 and data[2] == 0x02
-    return int.from_bytes(data[4 : 4 + data[3]], "big")
+    assert signature[0] == 0x30 and signature[1] == len(signature) - 2 and signature[2] == 0x02
+    return int.from_bytes(signature[4 : 4 + signature[3]], "big")
 
 
-def p256_public(scalar: int) -> list[int]:
+def p256_public(scalar: int) -> bytes:
     # SEC 1 v2 §2.3.3: the uncompressed encoding of scalar times G.
     point = p256_multiply(scalar, P256_GENERATOR)
     assert point is not None
-    return list(b"\x04" + point[0].to_bytes(32, "big") + point[1].to_bytes(32, "big"))
+    return b"\x04" + point[0].to_bytes(32, "big") + point[1].to_bytes(32, "big")
 
 
 def test_reference_ecdsa_matches_rfc6979_p256_sha256_sample() -> None:
@@ -306,12 +305,12 @@ def assert_flight_authentication(
             assert fields == (
                 "certificate_verify",
                 0x0403,
-                list(reference_signature(server, transcript)),
+                reference_signature(server, transcript),
             )
         elif fields[0] == "finished":
             key = expand(secret, b"finished", b"")
             expected = hmac.digest(key, hashlib.sha256(transcript).digest(), "sha256")
-            assert fields == ("finished", list(expected))
+            assert fields == ("finished", expected)
         transcript += outgoing["data"]
 
 
@@ -401,7 +400,7 @@ def client_before(index: int) -> tuple[hs.Config, hs.Step, list[hs.FlightMessage
     return client_config, client, server["output"]
 
 
-def server_certificate_verify(client_random: int) -> tuple[hs.Step, list[int]]:
+def server_certificate_verify(client_random: int) -> tuple[hs.Step, bytes]:
     client_config, server_config = config(False), config(True)
     client_config["random"] = bytes([client_random]) * 32
     hello = hs.client_start(client_config)["output"][0]
@@ -424,7 +423,7 @@ def test_certificate_verify_is_deterministic_for_one_transcript() -> None:
     assert first == second
     transcript = b"".join(item["data"] for item in first["output"][:4])
     hello = hs.client_start(config(False))["output"][0]["data"]
-    assert bytes(signature) == reference_signature(True, hello + transcript)
+    assert signature == reference_signature(True, hello + transcript)
 
 
 @pytest.mark.parametrize("field", ["cipher_suites", "groups", "signature_schemes"])
@@ -499,8 +498,8 @@ def test_invalid_local_p256_ephemeral_key_is_an_internal_error(secret: bytes) ->
     assert error.value.code == 0x150
 
 
-@pytest.mark.parametrize("protocols", [[list(b"h3")], []])
-def test_server_rejects_client_without_libp2p_alpn(protocols: list[list[int]]) -> None:
+@pytest.mark.parametrize("protocols", [[b"h3"], []])
+def test_server_rejects_client_without_libp2p_alpn(protocols: list[bytes]) -> None:
     client_config, server_config = config(False), config(True)
     client = hs.client_start(client_config)
     hello = decoded(client["output"][0])
@@ -511,7 +510,7 @@ def test_server_rejects_client_without_libp2p_alpn(protocols: list[list[int]]) -
         alpn_extension = tls.encode_payload(("alpn", protocols))
         expected, code = "noApplicationProtocol", 0x178
     else:
-        alpn_extension = {"kind": 16, "data": [0, 0]}
+        alpn_extension = {"kind": 16, "data": bytes([0, 0])}
         expected, code = "decodeError", 0x132
     replace_extension(hello[1]["extensions"], 16, alpn_extension)
     with raises(hs.TlsStepError, PREFIX + expected) as error:
@@ -523,16 +522,14 @@ def test_server_selects_libp2p_from_a_longer_alpn_offer() -> None:
     client_config, server_config = config(False), config(True)
     hello = decoded(hs.client_start(client_config)["output"][0])
     assert hello[0] == "client_hello"
-    replace_extension(
-        hello[1]["extensions"], 16, tls.encode_payload(("alpn", [list(b"h3"), list(b"libp2p")]))
-    )
+    replace_extension(hello[1]["extensions"], 16, tls.encode_payload(("alpn", [b"h3", b"libp2p"])))
     server = hs.server_step(
         server_config, hs.server_start(server_config), message("initial", hello)
     )
     encrypted = decoded(server["output"][1])
     assert encrypted[0] == "encrypted_extensions"
     alpn = [ext for ext in encrypted[1] if ext["kind"] == 16]
-    assert alpn == [tls.encode_payload(("alpn", [list(b"libp2p")]))]
+    assert alpn == [tls.encode_payload(("alpn", [b"libp2p"]))]
 
 
 @pytest.mark.parametrize("kind", [16, 43, 57, 10, 13, 51])
@@ -557,7 +554,7 @@ def test_server_ignores_received_sni() -> None:
     hello = decoded(client["output"][0])
     assert hello[0] == "client_hello"
     # Pinned libp2p TLS Future Extensibility requires servers to ignore received SNI.
-    hello[1]["extensions"].append({"kind": 0, "data": list(b"ignored")})
+    hello[1]["extensions"].append({"kind": 0, "data": b"ignored"})
     server = hs.server_step(
         server_config, hs.server_start(server_config), message("initial", hello)
     )
@@ -586,7 +583,7 @@ def test_server_session_id_rule_is_explicit(reject: bool) -> None:
     server_config["policy"]["reject_legacy_session_id"] = reject
     hello = decoded(hs.client_start(client_config)["output"][0])
     assert hello[0] == "client_hello"
-    hello[1]["legacy_session_id"] = [1]
+    hello[1]["legacy_session_id"] = bytes([1])
     if reject:
         with raises(hs.TlsStepError, PREFIX + "protocolViolation") as error:
             hs.server_step(server_config, hs.server_start(server_config), message("initial", hello))
@@ -597,7 +594,7 @@ def test_server_session_id_rule_is_explicit(reject: bool) -> None:
         )
         server_hello = decoded(server["output"][0])
         assert server_hello[0] == "server_hello"
-        assert server_hello[1]["legacy_session_id_echo"] == [1]
+        assert server_hello[1]["legacy_session_id_echo"] == b"\x01"
 
 
 @pytest.mark.parametrize("suite", [0x1302, 0x7A7A])
@@ -636,7 +633,7 @@ def test_client_checks_server_hello_version_and_session_id(
         replace_extension(extensions, 43, None)
     else:
         # RFC 8446 §4.1.3: the server echoes the client's legacy_session_id unchanged.
-        server_hello[1]["legacy_session_id_echo"] = [1]
+        server_hello[1]["legacy_session_id_echo"] = bytes([1])
     with raises(hs.TlsStepError, PREFIX + expected) as error:
         hs.client_step(
             client_config, SERVER_PEER_ID, client["state"], message("initial", server_hello)
@@ -646,9 +643,9 @@ def test_client_checks_server_hello_version_and_session_id(
 
 @pytest.mark.parametrize(
     "protocols",
-    [[list(b"h3")], [list(b"libp2p"), list(b"h3")], [list(b"h3"), list(b"libp2p")]],
+    [[b"h3"], [b"libp2p", b"h3"], [b"h3", b"libp2p"]],
 )
-def test_client_requires_libp2p_alpn_selection(protocols: list[list[int]]) -> None:
+def test_client_requires_libp2p_alpn_selection(protocols: list[bytes]) -> None:
     client_config, client, flight = client_before(1)
     encrypted = decoded(flight[1])
     assert encrypted[0] == "encrypted_extensions"
@@ -708,10 +705,10 @@ def test_client_checks_the_certificate_request(
     assert request[0] == "certificate_request"
     if change == "context":
         # RFC 8446 §4.3.2: the context of a handshake CertificateRequest is empty.
-        request[1]["context"] = [1]
+        request[1]["context"] = bytes([1])
     elif change == "no_signature_algorithms":
         # RFC 8446 §4.3.2: signature_algorithms MUST be present; unknown extensions are ignored.
-        request[1]["extensions"] = [{"kind": 0xAAAA, "data": []}]
+        request[1]["extensions"] = [{"kind": 0xAAAA, "data": b""}]
     elif change == "no_common_scheme":
         replace_extension(
             request[1]["extensions"], 13, tls.encode_payload(("signature_algorithms", [0x0804]))
@@ -751,7 +748,7 @@ def test_client_rejects_changed_signature_or_finished(index: int) -> None:
 
 def test_server_requires_a_nonempty_client_certificate() -> None:
     _, server_config, _, server = server_flight()
-    empty = message("handshake", ("certificate", {"context": [], "entries": []}))
+    empty = message("handshake", ("certificate", {"context": b"", "entries": []}))
     with raises(hs.TlsStepError, PREFIX + "certificateRequired") as error:
         hs.server_step(server_config, server["state"], empty)
     assert error.value.code == 0x174
@@ -790,7 +787,7 @@ def test_invalid_early_share_is_not_used_as_a_shared_secret() -> None:
     replace_extension(
         hello[1]["extensions"],
         51,
-        tls.encode_payload(("client_key_share", [{"group": 0x001D, "key_exchange": [0] * 32}])),
+        tls.encode_payload(("client_key_share", [{"group": 0x001D, "key_exchange": bytes(32)}])),
     )
     with raises(
         hs.TlsStepError, PREFIX + "crypto (EthLib.Networking.Quic.Tls.Crypto.Error.sharedSecret)"
@@ -962,8 +959,8 @@ def test_psk_offer_requires_modes_and_valid_framing(modes: list[int] | None) -> 
     hello = decoded(hs.client_start(client_config)["output"][0])
     assert hello[0] == "client_hello"
     if modes is not None:
-        hello[1]["extensions"].append({"kind": 45, "data": modes})
-    hello[1]["extensions"].append({"kind": 41, "data": []})
+        hello[1]["extensions"].append({"kind": 45, "data": bytes(modes)})
+    hello[1]["extensions"].append({"kind": 41, "data": b""})
     expected, code = ("missingExtension", 0x16D) if modes is None else ("decodeError", 0x132)
     with raises(hs.TlsStepError, PREFIX + expected) as error:
         hs.server_step(server_config, hs.server_start(server_config), message("initial", hello))
@@ -978,8 +975,8 @@ def test_server_can_decline_a_well_formed_psk_offer() -> None:
     psk = bytes.fromhex("000700017800000000002120") + bytes(32)
     hello[1]["extensions"].extend(
         [
-            {"kind": 45, "data": [1, 1]},
-            {"kind": 41, "data": list(psk)},
+            {"kind": 45, "data": bytes([1, 1])},
+            {"kind": 41, "data": psk},
         ]
     )
     server = hs.server_step(
@@ -1022,7 +1019,7 @@ def test_client_rejects_a_response_to_an_unoffered_extension() -> None:
     client_config, client, flight = client_before(1)
     encrypted = decoded(flight[1])
     assert encrypted[0] == "encrypted_extensions"
-    encrypted[1].append({"kind": 0xAAAA, "data": []})
+    encrypted[1].append({"kind": 0xAAAA, "data": b""})
     with raises(hs.TlsStepError, PREFIX + "unsupportedExtension") as error:
         hs.client_step(
             client_config, SERVER_PEER_ID, client["state"], message("handshake", encrypted)
@@ -1051,7 +1048,7 @@ def test_client_rejects_a_retry_for_a_group_already_shared() -> None:
 
 
 # RFC 8446 §4.2.2: a cookie<1..2^16-1> holding one opaque byte.
-COOKIE: tls.Extension = {"kind": 44, "data": [0, 1, 7]}
+COOKIE: tls.Extension = {"kind": 44, "data": bytes([0, 1, 7])}
 
 
 @pytest.mark.parametrize(
@@ -1067,16 +1064,18 @@ COOKIE: tls.Extension = {"kind": 44, "data": [0, 1, 7]}
         ),
         # RFC 8446 §4.2: early_data is not specified for HelloRetryRequest.
         pytest.param(
-            [COOKIE, {"kind": 42, "data": []}], "illegalParameter", 0x12F, id="early-data"
+            [COOKIE, {"kind": 42, "data": b""}], "illegalParameter", 0x12F, id="early-data"
         ),
         # RFC 8446 §4.1.4: an extension that the client did not offer is unsupported_extension.
         pytest.param(
-            [COOKIE, {"kind": 0xAAAA, "data": []}],
+            [COOKIE, {"kind": 0xAAAA, "data": b""}],
             "unsupportedExtension",
             0x16E,
             id="unoffered-extension",
         ),
-        pytest.param([{"kind": 44, "data": [0, 0]}], "decodeError", 0x132, id="empty-cookie"),
+        pytest.param(
+            [{"kind": 44, "data": bytes([0, 0])}], "decodeError", 0x132, id="empty-cookie"
+        ),
     ],
 )
 def test_client_checks_the_hello_retry_request(
@@ -1113,16 +1112,14 @@ def test_server_checks_the_second_client_hello(
     assert first[0] == "client_hello"
     psk = psk_offer([(b"x", 0)], 0)
     if change == "early_data":
-        first[1]["extensions"].extend([{"kind": 45, "data": [1, 1]}, psk])
+        first[1]["extensions"].extend([{"kind": 45, "data": bytes([1, 1])}, psk])
     server = hs.server_step(
         server_config, hs.server_start(server_config), message("initial", first)
     )
     retry = decoded(server["output"][0])
     assert retry[0] == "server_hello"
     assert retry[1]["random"] == HELLO_RETRY_RANDOM
-    shares: list[tls.KeyShareEntry] = [
-        {"group": 0x001D, "key_exchange": list(X25519_CLIENT_PUBLIC)}
-    ]
+    shares: list[tls.KeyShareEntry] = [{"group": 0x001D, "key_exchange": X25519_CLIENT_PUBLIC}]
     second: tls.ClientHello = {**first[1], "extensions": list(first[1]["extensions"])}
     if change == "extra_share":
         # RFC 8446 §4.1.2: the second ClientHello holds exactly the one requested share.
@@ -1130,7 +1127,7 @@ def test_server_checks_the_second_client_hello(
     replace_extension(second["extensions"], 51, tls.encode_payload(("client_key_share", shares)))
     if change == "early_data":
         # RFC 8446 §4.1.2: a client removes early_data after a retry.
-        replace_extension(second["extensions"], 41, {"kind": 42, "data": []})
+        replace_extension(second["extensions"], 41, {"kind": 42, "data": b""})
         second["extensions"].append(psk)
     elif change == "cookie":
         # RFC 8446 §4.1.2: a cookie is echoed only when the retry carried one.
@@ -1177,10 +1174,10 @@ def changed_certificate(original: hs.FlightMessage, change: CertificateChange) -
     certificate = decoded(original)
     assert certificate[0] == "certificate"
     if change == "context":
-        certificate[1]["context"] = [1]
+        certificate[1]["context"] = bytes([1])
     else:
         # status_request (5) is valid in Certificate, but no endpoint here offers it.
-        certificate[1]["entries"][0]["extensions"] = [{"kind": 5, "data": []}]
+        certificate[1]["entries"][0]["extensions"] = [{"kind": 5, "data": b""}]
     return message("handshake", certificate)
 
 
@@ -1220,7 +1217,7 @@ def test_certificate_key_usage_must_allow_signing(
         client_config, client, flight = client_before(3)
         certificate = decoded(flight[3])
         assert certificate[0] == "certificate"
-        certificate[1]["entries"][0]["data"] = list(BAD_KEY_USAGE_CERTIFICATE)
+        certificate[1]["entries"][0]["data"] = BAD_KEY_USAGE_CERTIFICATE
         with raises(hs.TlsStepError, expected) as error:
             hs.client_step(
                 client_config, SERVER_PEER_ID, client["state"], message("handshake", certificate)
@@ -1230,7 +1227,7 @@ def test_certificate_key_usage_must_allow_signing(
         _, server_config, client, server = client_flight()
         certificate = decoded(client["output"][0])
         assert certificate[0] == "certificate"
-        certificate[1]["entries"][0]["data"] = list(BAD_KEY_USAGE_CERTIFICATE)
+        certificate[1]["entries"][0]["data"] = BAD_KEY_USAGE_CERTIFICATE
         with raises(hs.TlsStepError, expected) as error:
             hs.server_step(server_config, server["state"], message("handshake", certificate))
     assert error.value.code == 0x12A
@@ -1245,7 +1242,7 @@ def psk_offer(identities: list[tuple[bytes, int]], binder_byte: int) -> tls.Exte
     binders = (b"\x20" + bytes([binder_byte]) * 32) * len(identities)
     data = len(encoded_identities).to_bytes(2, "big") + encoded_identities
     data += len(binders).to_bytes(2, "big") + binders
-    return {"kind": 41, "data": list(data)}
+    return {"kind": 41, "data": data}
 
 
 @pytest.mark.parametrize("identities", [[b"x"], [b"y"], [b"x", b"y"]])
@@ -1256,13 +1253,13 @@ def test_retry_preserves_psk_identities_but_allows_updated_ages_and_binders(
     client_config["initial_shares"] = []
     first = decoded(hs.client_start(client_config)["output"][0])
     assert first[0] == "client_hello"
-    first[1]["extensions"].extend([{"kind": 45, "data": [1, 1]}, psk_offer([(b"x", 0)], 0)])
+    first[1]["extensions"].extend([{"kind": 45, "data": bytes([1, 1])}, psk_offer([(b"x", 0)], 0)])
     server = hs.server_step(
         server_config, hs.server_start(server_config), message("initial", first)
     )
     assert len(server["output"]) == 1
     key_share = tls.encode_payload(
-        ("client_key_share", [{"group": 0x001D, "key_exchange": list(X25519_CLIENT_PUBLIC)}])
+        ("client_key_share", [{"group": 0x001D, "key_exchange": X25519_CLIENT_PUBLIC}])
     )
     second: tls.ClientHello = {**first[1], "extensions": list(first[1]["extensions"])}
     replace_extension(second["extensions"], 51, key_share)
@@ -1313,8 +1310,8 @@ def test_server_checks_client_hello_consistency(
     hello = decoded(hs.client_start(client_config)["output"][0])
     assert hello[0] == "client_hello"
     extensions = hello[1]["extensions"]
-    x25519_share: tls.KeyShareEntry = {"group": 0x001D, "key_exchange": list(X25519_CLIENT_PUBLIC)}
-    modes: tls.Extension = {"kind": 45, "data": [1, 1]}
+    x25519_share: tls.KeyShareEntry = {"group": 0x001D, "key_exchange": X25519_CLIENT_PUBLIC}
+    modes: tls.Extension = {"kind": 45, "data": bytes([1, 1])}
     psk = psk_offer([(b"x", 0)], 0)
     if change == "duplicate_share":
         replacement = tls.encode_payload(("client_key_share", [x25519_share, x25519_share]))
@@ -1323,13 +1320,13 @@ def test_server_checks_client_hello_consistency(
         p256_share: tls.KeyShareEntry = {"group": 0x0017, "key_exchange": p256_public(1)}
         replace_extension(extensions, 51, tls.encode_payload(("client_key_share", [p256_share])))
     elif change == "psk_not_last":
-        extensions.extend([modes, psk, {"kind": 0, "data": list(b"ignored")}])
+        extensions.extend([modes, psk, {"kind": 0, "data": b"ignored"}])
     elif change == "early_data_without_psk":
-        extensions.append({"kind": 42, "data": []})
+        extensions.append({"kind": 42, "data": b""})
     elif change == "nonempty_early_data":
-        extensions.extend([modes, {"kind": 42, "data": [0]}, psk])
+        extensions.extend([modes, {"kind": 42, "data": bytes([0])}, psk])
     else:
-        extensions.extend([{"kind": 45, "data": [0]}, psk])
+        extensions.extend([{"kind": 45, "data": bytes([0])}, psk])
     with raises(hs.TlsStepError, PREFIX + expected) as error:
         hs.server_step(server_config, hs.server_start(server_config), message("initial", hello))
     assert error.value.code == code
@@ -1342,7 +1339,7 @@ def test_cookie_only_retry_echoes_exact_cookie_and_preserves_key_share() -> None
     server_hello = decoded(server["output"][0])
     assert server_hello[0] == "server_hello"
     # RFC 8446 §4.2.2: a retry cookie is echoed unchanged, including opaque zero bytes.
-    cookie: tls.Extension = {"kind": 44, "data": [0, 5, 255, 0, 1, 0, 255]}
+    cookie: tls.Extension = {"kind": 44, "data": bytes([0, 5, 255, 0, 1, 0, 255])}
     retry: tls.ServerHello = {
         **server_hello[1],
         "random": HELLO_RETRY_RANDOM,
@@ -1360,7 +1357,7 @@ def test_cookie_only_retry_echoes_exact_cookie_and_preserves_key_share() -> None
         + incoming["data"]
         + result["output"][0]["data"]
     )
-    assert bytes(result["state"]["transcript"]["bytes"]) == expected_transcript
+    assert result["state"]["transcript"]["bytes"] == expected_transcript
     # A cookie-only retry does not force a different group in the final ServerHello.
     accepted = hs.client_step(client_config, SERVER_PEER_ID, result["state"], server["output"][0])
     assert accepted["state"]["phase"] == "encrypted_extensions"
@@ -1426,7 +1423,7 @@ def test_p256_peer_share_requires_a_valid_uncompressed_point(
         incoming = decoded(server["output"][0])
         assert incoming[0] == "server_hello"
         replacement = tls.encode_payload(
-            ("server_key_share", {"group": 0x0017, "key_exchange": list(public)})
+            ("server_key_share", {"group": 0x0017, "key_exchange": public})
         )
         incoming[1]["extensions"] = [
             replacement if ext["kind"] == 51 else ext for ext in incoming[1]["extensions"]
@@ -1437,9 +1434,7 @@ def test_p256_peer_share_requires_a_valid_uncompressed_point(
         replace_extension(
             incoming[1]["extensions"],
             51,
-            tls.encode_payload(
-                ("client_key_share", [{"group": 0x0017, "key_exchange": list(public)}])
-            ),
+            tls.encode_payload(("client_key_share", [{"group": 0x0017, "key_exchange": public}])),
         )
     expected = PREFIX + "crypto (EthLib.Networking.Quic.Tls.Crypto.Error.keyShare)"
     with raises(hs.TlsStepError, expected) as error:
@@ -1457,7 +1452,7 @@ def test_p256_peer_share_requires_a_valid_uncompressed_point(
 def test_client_rejects_an_empty_server_certificate_with_decode_error() -> None:
     client_config, client, _ = client_before(3)
     # RFC 8446 §4.4.2.4 requires decode_error for an empty server certificate list.
-    empty = message("handshake", ("certificate", {"context": [], "entries": []}))
+    empty = message("handshake", ("certificate", {"context": b"", "entries": []}))
     with raises(hs.TlsStepError, PREFIX + "decodeError") as error:
         hs.client_step(client_config, SERVER_PEER_ID, client["state"], empty)
     assert error.value.code == 0x132
@@ -1509,7 +1504,7 @@ def test_psk_identity_and_binder_counts_must_agree() -> None:
     # Unequal counts are inconsistent fields: illegal_parameter under §6.2.
     # Both vectors are well-framed: two one-byte identities and a single 32-byte binder.
     psk = bytes.fromhex("000e0001780000000000017900000000002120") + bytes(32)
-    hello[1]["extensions"].extend([{"kind": 45, "data": [1, 1]}, {"kind": 41, "data": list(psk)}])
+    hello[1]["extensions"].extend([{"kind": 45, "data": bytes([1, 1])}, {"kind": 41, "data": psk}])
     with raises(hs.TlsStepError, PREFIX + "illegalParameter") as error:
         hs.server_step(server_config, hs.server_start(server_config), message("initial", hello))
     assert error.value.code == 0x12F

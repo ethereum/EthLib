@@ -190,7 +190,7 @@ structure Step where
   completion : Option Completion
 
 /-- The ALPN protocol name that the ALPN section of libp2p TLS fixes. -/
-def libp2p : List UInt8 := "libp2p".toUTF8.toList
+def libp2p : ByteArray := "libp2p".toUTF8
 
 /-- The two implemented SHA-256 suites; other transcript hashes are unavailable. -/
 def supportedSuite (suite : CodePoint) : Bool :=
@@ -223,7 +223,7 @@ def payload (form : PayloadForm) (extensions : List Extension) : Except Error Pa
   wire (decodePayload form value)
 
 /-- Read an ALPN list without selecting a protocol, RFC 7301 §3.1. -/
-def alpn (extensions : List Extension) : Except Error (List (List UInt8)) := do
+def alpn (extensions : List Extension) : Except Error (List ByteArray) := do
   let value ← required .noApplicationProtocol (extension PayloadForm.alpn.type extensions)
   match ← wire (decodePayload .alpn value) with
   | .alpn protocols => return protocols
@@ -298,11 +298,11 @@ def emit (state : State) (level : Level) (message : Message) :
     Except Error (State × FlightMessage) := do
   let data ← wire (encode 32 message)
   let transcript ← wire (state.transcript.append data)
-  return ({ state with transcript }, ⟨level, ⟨data.toArray⟩⟩)
+  return ({ state with transcript }, ⟨level, data⟩)
 
 /-- Preserve an accepted incoming message byte for byte, RFC 8446 §4.4.1. -/
 def receive (state : State) (input : FlightMessage) : Except Error State := do
-  return { state with transcript := ← wire (state.transcript.append input.data.toList) }
+  return { state with transcript := ← wire (state.transcript.append input.data) }
 
 /-- Check that a message arrived at its required QUIC encryption level, RFC 9001 §4.
 
@@ -316,7 +316,7 @@ def checkLevel (expected : Level) (input : FlightMessage) : Except Error Unit :=
 /-- Decode one complete message at its required QUIC encryption level, RFC 9001 §4. -/
 def readMessage (expected : Level) (input : FlightMessage) : Except Error Message := do
   checkLevel expected input
-  wire (Wire.exact (decode 32) input.data.toList)
+  wire (Wire.exact (decodeList 32) input.data.data.toList)
 
 /-- Empty saved inputs before either endpoint receives a message. -/
 def initialState (phase : Phase) : State := ⟨phase, {}, none, none, none, [], none⟩
@@ -325,7 +325,7 @@ def initialState (phase : Phase) : State := ⟨phase, {}, none, none, none, [], 
 def localShare (config : Config) (group : CodePoint) : Except Error KeyShareEntry := do
   let secret ← ephemeral config group
   let bytes ← (Crypto.keyShare group secret).mapError Error.crypto
-  return ⟨group, bytes.toList⟩
+  return ⟨group, bytes⟩
 
 /-- Generate a TLS 1.3-only ClientHello without SNI, libp2p TLS Future Extensibility. -/
 def makeClientHello (config : Config) : Except Error ClientHello := do
@@ -333,8 +333,8 @@ def makeClientHello (config : Config) : Except Error ClientHello := do
   let extensions ← [Payload.supportedVersions [0x0304],
     .supportedGroups config.policy.groups, .signatureAlgorithms config.policy.signatureSchemes,
     .clientKeyShare keyShares, .alpn [libp2p],
-    .quicTransportParameters config.transportParameters.toList].mapM encodedPayload
-  return ⟨config.random, [], config.policy.cipherSuites, extensions⟩
+    .quicTransportParameters config.transportParameters].mapM encodedPayload
+  return ⟨config.random, .empty, config.policy.cipherSuites, extensions⟩
 
 /-- Send ClientHello and wait for ServerHello or one retry, RFC 8446 §4.1.2. -/
 def clientStart (config : Config) : Except Error Step := do
@@ -386,27 +386,27 @@ def checkExtensions (context : Context) (offered : Option (List Extension))
         (offered.any (fun request => request.kind == value.kind)) = true) .unsupportedExtension
 
 /-- Read PSK identities while checking offer framing and binder count, RFC 8446 §4.2.11. -/
-def pskIdentities (extensions : List Extension) : Except Error (List (List UInt8)) := do
+def pskIdentities (extensions : List Extension) : Except Error (List ByteArray) := do
   match extension 41 extensions with
   | none => return []
   | some psk =>
-    let identity : Wire.Reader (List UInt8) := do
+    let identity : Wire.Reader ByteArray := do
       let name ← blob 2 1 65535
       let _ ← uint 4
-      return name
-    let reader : Wire.Reader (List (List UInt8)) := do
+      return name.toByteArray
+    let reader : Wire.Reader (List ByteArray) := do
       let identities ← items 2 7 65535 identity
       let binders ← items 2 33 65535 (blob 1 32 255)
       require (identities.length = binders.length) .constant
       return identities
-    wire (Wire.exact reader psk.data)
+    wire (Wire.exact reader psk.data.data.toList)
 
 /-- Check the PSK offer's framing while declining to select it, RFC 8446 §§4.2.9 and 4.2.11. -/
 def checkPskOffer (extensions : List Extension) : Except Error Unit := do
   match extension 45 extensions with
   | none => pure ()
   | some modes =>
-    let _ ← wire (Wire.exact (Wire.blob 1 1 255) modes.data)
+    let _ ← wire (Wire.exact (Wire.blob 1 1 255) modes.data.data.toList)
     pure ()
   match extension 41 extensions with
   | none => ensure (extension 42 extensions = none) .illegalParameter
@@ -416,7 +416,7 @@ def checkPskOffer (extensions : List Extension) : Except Error Unit := do
     let _ ← pskIdentities extensions
     match extension 42 extensions with
     | none => pure ()
-    | some early => ensure (early.data = []) .decodeError
+    | some early => ensure (early.data = ByteArray.empty) .decodeError
 
 /-- Validate the client offer; libp2p servers ignore SNI, including its opaque contents.
 
@@ -425,7 +425,7 @@ Duplicate or unordered key shares are rejected under RFC 8446 §4.2.8's server M
 A PSK offer is never selected, and early data is never accepted. -/
 def checkClientHello (config : Config) (hello : ClientHello) : Except Error Unit := do
   checkExtensions .clientHello none hello.extensions
-  ensure (config.policy.rejectLegacySessionId = false ∨ hello.legacySessionId = [])
+  ensure (config.policy.rejectLegacySessionId = false ∨ hello.legacySessionId = ByteArray.empty)
     .protocolViolation
   -- Appendix D.2: a ClientHello without supported_versions offers only TLS 1.2 or earlier.
   ensure (extension PayloadForm.supportedVersions.type hello.extensions).isSome .protocolVersion
@@ -498,21 +498,21 @@ def complete (config : Config) (expected : Option ByteArray) (state : State)
 /-- Start handshake traffic derivation at the exact ServerHello transcript boundary. -/
 def negotiate (state : State) (suite group : CodePoint) (shared : Vector UInt8 32) :
     Except Error State := do
-  let hello : ByteArray := ⟨state.transcript.bytes.toArray⟩
+  let hello := state.transcript.bytes
   let secrets ← (keySchedule (packBytes shared) hello .empty).mapError fun _ => Error.configuration
   return { state with negotiated := some ⟨suite, group, shared, hello, .empty, secrets⟩ }
 
 /-- Retain the transcript through server Finished before deriving application traffic secrets. -/
 def serverBoundary (state : State) : Except Error State := do
   let negotiated ← saved state.negotiated
-  let server : ByteArray := ⟨state.transcript.bytes.toArray⟩
+  let server := state.transcript.bytes
   let secrets ← (keySchedule (packBytes negotiated.sharedSecret)
     negotiated.helloTranscript server).mapError fun _ => Error.configuration
   return { state with negotiated := some { negotiated with serverTranscript := server, secrets } }
 
 /-- Encode the configured chain with an empty request context, RFC 8446 §4.4.2. -/
 def certificateMessage (config : Config) : Message :=
-  .certificate ⟨[], config.certificates.map fun data => ⟨data.toList, []⟩⟩
+  .certificate ⟨.empty, config.certificates.map fun data => ⟨data, []⟩⟩
 
 /-- Sign the transcript through Certificate, with the sender's role, RFC 8446 §4.4.3.
 
@@ -520,47 +520,47 @@ The signature is a function of the signing key and the signed content alone. -/
 def sendCertificateVerify (config : Config) (server : Bool) (offered : List CodePoint)
     (state : State) : Except Error (State × FlightMessage) := do
   let algorithm ← select config.policy.signatureSchemes offered
-  let content : ByteArray := ⟨(certificateVerifyInput server state.transcript.hash).toArray⟩
+  let content := certificateVerifyInput server state.transcript.hash
   let signature ← (Crypto.signCertificateVerify algorithm config.signingKey content).mapError
     Error.crypto
-  emit state .handshake (.certificateVerify algorithm signature.toList)
+  emit state .handshake (.certificateVerify algorithm signature)
 
 /-- Compute Finished before including its own encoding in the transcript, RFC 8446 §4.4.4. -/
 def sendFinished (server : Bool) (state : State) : Except Error (State × FlightMessage) := do
   let negotiated ← saved state.negotiated
   let secret := if server then negotiated.secrets.serverHandshake
     else negotiated.secrets.clientHandshake
-  let value ← (finished secret ⟨state.transcript.bytes.toArray⟩).mapError
+  let value ← (finished secret state.transcript.bytes).mapError
     fun _ => Error.configuration
-  emit state .handshake (.finished value.toList)
+  emit state .handshake (.finished (packBytes value))
 
 /-- Verify the peer's CertificateVerify before appending it to the transcript, RFC 8446 §4.4.3. -/
 def checkCertificateVerify (config : Config) (expected : Option ByteArray) (server : Bool)
     (offered : List CodePoint) (state : State) (algorithm : CodePoint)
-    (signature : List UInt8) : Except Error Unit := do
+    (signature : ByteArray) : Except Error Unit := do
   ensure (algorithm ∈ offered ∧ algorithm ∈ config.policy.signatureSchemes) .illegalParameter
   let peer ← authenticate config expected state.peerChain
-  let content : ByteArray := ⟨(certificateVerifyInput server state.transcript.hash).toArray⟩
+  let content := certificateVerifyInput server state.transcript.hash
   ensure (Crypto.verifyCertificateVerify algorithm peer.certificate.spki content
-    ⟨signature.toArray⟩ = true) .decryptError
+    signature = true) .decryptError
 
 /-- Verify Finished against the saved transcript, RFC 8446 §4.4.4. -/
-def checkFinished (server : Bool) (state : State) (value : List UInt8) : Except Error Unit := do
+def checkFinished (server : Bool) (state : State) (value : ByteArray) : Except Error Unit := do
   let negotiated ← saved state.negotiated
   let secret := if server then negotiated.secrets.serverHandshake
     else negotiated.secrets.clientHandshake
-  let expected ← (finished secret ⟨state.transcript.bytes.toArray⟩).mapError
+  let expected ← (finished secret state.transcript.bytes).mapError
     fun _ => Error.configuration
-  ensure (value = expected.toList) .decryptError
+  ensure (value = packBytes expected) .decryptError
 
 /-- Validate a certificate message and save its exact chain for later signature checks. -/
 def receiveCertificate (config : Config) (expected : Option ByteArray) (offered : List Extension)
     (state : State) (certificate : CertificateMessage) : Except Error State := do
   let emptyError := if expected.isSome then Error.decodeError else .certificateRequired
   ensure (certificate.entries ≠ []) emptyError
-  ensure (certificate.context = []) .illegalParameter
+  ensure (certificate.context = ByteArray.empty) .illegalParameter
   certificate.entries.forM fun entry => checkExtensions .certificate (some offered) entry.extensions
-  let chain := certificate.entries.map fun entry => (⟨entry.data.toArray⟩ : ByteArray)
+  let chain := certificate.entries.map (·.data)
   let _ ← authenticate config expected chain
   return { state with peerChain := chain }
 
@@ -568,18 +568,18 @@ def receiveCertificate (config : Config) (expected : Option ByteArray) (offered 
 def serverFlight (config : Config) (state : State) (hello : ClientHello)
     (suite group : CodePoint) (share : KeyShareEntry) : Except Error Step := do
   let secret ← ephemeral config group
-  let shared ← (Crypto.sharedSecret group secret ⟨share.keyExchange.toArray⟩).mapError Error.crypto
+  let shared ← (Crypto.sharedSecret group secret share.keyExchange).mapError Error.crypto
   let ownShare ← localShare config group
   let extensions ← [Payload.selectedVersion 0x0304, .serverKeyShare ownShare].mapM encodedPayload
   let (state, sh) ← emit state .initial
     (.serverHello ⟨config.random, hello.legacySessionId, suite, extensions⟩)
   let state ← negotiate state suite group shared
   let extensions ← [Payload.alpn [libp2p],
-    .quicTransportParameters config.transportParameters.toList].mapM encodedPayload
+    .quicTransportParameters config.transportParameters].mapM encodedPayload
   let (state, ee) ← emit state .handshake (.encryptedExtensions extensions)
   let requestExtensions ← [Payload.signatureAlgorithms config.policy.signatureSchemes].mapM
     encodedPayload
-  let request : CertificateRequest := ⟨[], requestExtensions⟩
+  let request : CertificateRequest := ⟨.empty, requestExtensions⟩
   let (state, cr) ← emit { state with request := some request } .handshake
     (.certificateRequest request)
   let (state, certificate) ← emit state .handshake (certificateMessage config)
@@ -633,7 +633,7 @@ def retryCookie (extensions : List Extension) : Except Error (Option Extension) 
   match extension 44 extensions with
   | none => return none
   | some value =>
-    let _ ← wire (Wire.exact (Wire.blob 2 1 65535) value.data)
+    let _ ← wire (Wire.exact (Wire.blob 2 1 65535) value.data.data.toList)
     return some value
 
 /-- Respond to one effective retry while retaining the first ClientHello's other fields. -/
@@ -689,7 +689,7 @@ def clientServerHello (config : Config) (state : State) (server : ServerHello)
       ensure (server.cipherSuite = retry.suite ∧
         (retry.group = none ∨ retry.group = some share.group)) .illegalParameter
     let secret ← ephemeral config share.group
-    let shared ← (Crypto.sharedSecret share.group secret ⟨share.keyExchange.toArray⟩).mapError
+    let shared ← (Crypto.sharedSecret share.group secret share.keyExchange).mapError
       Error.crypto
     let state ← receive state input
     let state ← negotiate state server.cipherSuite share.group shared
@@ -710,7 +710,7 @@ def clientEncryptedExtensions (state : State) (extensions : List Extension)
 def clientCertificateRequest (config : Config) (state : State) (request : CertificateRequest)
     (input : FlightMessage) : Except Error Step := do
   checkExtensions .certificateRequest none request.extensions
-  ensure (request.context = []) .illegalParameter
+  ensure (request.context = ByteArray.empty) .illegalParameter
   let offered ← signatures request.extensions
   let _ ← select config.policy.signatureSchemes offered
   let state ← receive state input
@@ -718,7 +718,7 @@ def clientCertificateRequest (config : Config) (state : State) (request : Certif
 
 /-- Verify server Finished, then send the client's Certificate, CertificateVerify and Finished. -/
 def clientFinished (config : Config) (expected : ByteArray) (state : State)
-    (value : List UInt8) (input : FlightMessage) : Except Error Step := do
+    (value : ByteArray) (input : FlightMessage) : Except Error Step := do
   checkFinished true state value
   let state ← receive state input
   let state ← serverBoundary state
@@ -734,7 +734,7 @@ def clientFinished (config : Config) (expected : ByteArray) (state : State)
 RFC 9001 §§4.5 and 4.6.1 allow tickets and constrain their early_data sentinel. -/
 def receiveTicket (input : FlightMessage) : Except Error Unit := do
   checkLevel .application input
-  let (kind, body) ← wire (Wire.exact readFrame input.data.toList)
+  let (kind, body) ← wire (Wire.exact readFrame input.data.data.toList)
   if kind = 13 then throw .protocolViolation
   ensure (kind = 4) .unexpectedMessage
   let reader : Wire.Reader (List Extension) := do
@@ -747,7 +747,7 @@ def receiveTicket (input : FlightMessage) : Except Error Unit := do
   checkExtensions .newSessionTicket none extensions
   match extension 42 extensions with
   | none => pure ()
-  | some value => ensure (value.data = [255, 255, 255, 255]) .protocolViolation
+  | some value => ensure (value.data = [255, 255, 255, 255].toByteArray) .protocolViolation
 
 /-- Advance the dialer's certificate handshake by one complete message.
 

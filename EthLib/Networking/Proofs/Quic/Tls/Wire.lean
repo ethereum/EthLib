@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Networking.Quic.Tls.Wire
+public import EthLib.Base.Proofs.Bytes
 public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Base.Proofs.ByteReader
 

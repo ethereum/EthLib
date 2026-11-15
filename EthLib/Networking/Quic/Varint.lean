@@ -56,7 +56,7 @@ def VarintError.code : VarintError → UInt32
 RFC 9000 §16 permits a longer form everywhere except in frame types.
 
 The value must be below the width's capacity, so its high bits fit under the two selector bits. -/
-def encodeWith (width : Width) (value : Varint) (_ : value.val < capacity width) : List UInt8 :=
+def encodeWithList (width : Width) (value : Varint) (_ : value.val < capacity width) : List UInt8 :=
   UInt8.ofNat (width.val * 64 + value.val / 256 ^ tailLength width) ::
     natToBytes (tailLength width) value.val
 
@@ -79,8 +79,8 @@ theorem lt_capacity_minWidth (value : Varint) : value.val < capacity (minWidth v
       · exact value.isLt
 
 /-- Write the shortest representation of a QUIC integer. -/
-def encode (value : Varint) : List UInt8 :=
-  encodeWith (minWidth value) value (lt_capacity_minWidth value)
+def encodeList (value : Varint) : List UInt8 :=
+  encodeWithList (minWidth value) value (lt_capacity_minWidth value)
 
 /-- The width that the high two bits of a first byte select. -/
 def selector (head : UInt8) : Width :=
@@ -110,7 +110,7 @@ theorem valueOf_lt (head : UInt8) (tail : List UInt8)
 RFC 9000 §16 gives the length in the high two bits of the first byte.
 
 Only the bytes of the integer are measured, so reading many integers stays linear. -/
-def decode : List UInt8 → Except VarintError (Varint × List UInt8)
+def decodeList : List UInt8 → Except VarintError (Varint × List UInt8)
   | [] => .error .truncated
   | head :: rest =>
     let count := tailLength (selector head)
@@ -118,6 +118,18 @@ def decode : List UInt8 → Except VarintError (Varint × List UInt8)
     if h : tail.length = count then
       .ok (⟨valueOf head tail, valueOf_lt head tail h⟩, rest.drop count)
     else .error .truncated
+
+/-- Write a value at a chosen width as bytes, including longer representations. -/
+def encodeWith (width : Width) (value : Varint) (bound : value.val < capacity width) :
+    ByteArray := (encodeWithList width value bound).toByteArray
+
+/-- Write the shortest representation of a QUIC integer as bytes. -/
+def encode (value : Varint) : ByteArray := (encodeList value).toByteArray
+
+/-- Read one integer from bytes, preserving any bytes after it. -/
+def decode (input : ByteArray) : Except VarintError (Varint × ByteArray) := do
+  let (value, rest) ← decodeList input.data.toList
+  return (value, rest.toByteArray)
 
 end Varint
 end EthLib.Networking.Quic

@@ -18,47 +18,48 @@ open Wire
 open EthLib.Base.ByteReader (bytes_append uint_encode require_true)
 
 /-- The truncated packet number is the original number modulo the selected window. -/
-theorem bytesToNat_encodePacketNumber (width : PacketNumberLength) (number : Varint) :
-    Base.bytesToNat (encodePacketNumber width number) =
+theorem bytesToNat_encodePacketNumberList (width : PacketNumberLength) (number : Varint) :
+    Base.bytesToNat (encodePacketNumberList width number) =
       number.val % 256 ^ numberLength width :=
   Base.bytesToNat_natToBytes _ _
 
 /-- Packet-number encoding uses exactly the byte count selected by its two-bit length. -/
-theorem length_encodePacketNumber (width : PacketNumberLength) (number : Varint) :
-    (encodePacketNumber width number).length = numberLength width :=
+theorem length_encodePacketNumberList (width : PacketNumberLength) (number : Varint) :
+    (encodePacketNumberList width number).length = numberLength width :=
   Base.natToBytes_length _ _
 
 /-- Unsigned distance between packet numbers. -/
 def distance (a b : Nat) : Nat := a - b + (b - a)
 
 /-- Reading a length-prefixed connection ID recovers it and the following bytes. -/
-theorem connectionId_encode (cid rest : List UInt8) (maximum : Nat)
-    (hcid : cid.length ≤ maximum) (hmaximum : maximum < 256) :
-    connectionId maximum (UInt8.ofNat cid.length :: (cid ++ rest)) = .ok (cid, rest) := by
-  have hbyte : (UInt8.ofNat cid.length).toNat = cid.length := by
-    exact UInt8.toNat_ofNat_of_lt' (by simpa only [UInt8.size] using (by omega : cid.length < 256))
-  simp only [bind, connectionId, StateT.bind, Except.bind,
-    byte, hbyte, require, Base.ByteReader.require, hcid, ↓reduceIte, bytes,
-    Base.ByteReader.bytes, List.take_left, List.drop_left]
+theorem connectionId_encode (cid : ByteArray) (rest : List UInt8) (maximum : Nat)
+    (hcid : cid.size ≤ maximum) (hmaximum : maximum < 256) :
+    connectionId maximum (UInt8.ofNat cid.size :: (cid.data.toList ++ rest)) = .ok (cid, rest) := by
+  have hbyte : (UInt8.ofNat cid.size).toNat = cid.size := by
+    exact UInt8.toNat_ofNat_of_lt' (by simpa only [UInt8.size] using (by omega : cid.size < 256))
+  simp [connectionId, hbyte, hcid, bytes_byteArray_append,
+    bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure,
+    require, Base.ByteReader.require]
+
 
 /-- Reading the length and packet number undoes their encoding. -/
 theorem lengthAndNumber_encode (width : PacketNumberLength) (length : Varint)
     (number : Nat) (rest : List UInt8) (hl : numberLength width ≤ length.val)
     (hn : number < 256 ^ numberLength width) :
     lengthAndNumber width
-      (Varint.encode length ++ (Base.natToBytes (numberLength width) number ++ rest)) =
+      (Varint.encodeList length ++ (Base.natToBytes (numberLength width) number ++ rest)) =
       .ok ((length, number), rest) := by
   simp only [bind, pure, lengthAndNumber, StateT.bind, StateT.pure, Except.bind, Except.pure,
     varint_encode, require, Base.ByteReader.require, hl, uint_encode, Nat.mod_eq_of_lt hn,
     ↓reduceIte]
 
 /-- Reading an Initial header recovers its fields and leaves the payload untouched. -/
-theorem decode_initial (d s t rest : List UInt8) (w : PacketNumberLength)
-    (l : Varint) (n : Nat) (hd : d.length ≤ 20) (hs : s.length ≤ 20)
-    (ht : t.length < 2 ^ 62) (hl : numberLength w ≤ l.val)
+theorem decodeList_initial (d s t : ByteArray) (rest : List UInt8) (w : PacketNumberLength)
+    (l : Varint) (n : Nat) (hd : d.size ≤ 20) (hs : s.size ≤ 20)
+    (ht : t.size < 2 ^ 62) (hl : numberLength w ≤ l.val)
     (hn : n < 256 ^ numberLength w) (shortLength : Nat) :
-    decode shortLength (longPrefix (UInt8.ofNat (192 + w.val)) 1 d s ++
-      Varint.encode ⟨t.length, ht⟩ ++ t ++ Varint.encode l ++
+    decodeList shortLength (longPrefixList (UInt8.ofNat (192 + w.val)) 1 d s ++
+      Varint.encodeList ⟨t.size, ht⟩ ++ t.data.toList ++ Varint.encodeList l ++
         Base.natToBytes (numberLength w) n ++ rest) =
       .ok (.initial d s t w l n, rest) := by
   have hw := w.isLt
@@ -70,20 +71,21 @@ theorem decode_initial (d s t rest : List UInt8) (w : PacketNumberLength)
   have hf16 : (192 + w.val) / 16 % 4 = 0 := by omega
   have hf4 : (192 + w.val) / 4 % 4 = 0 := by omega
   simp only [show (1 : Nat) ≠ 0 by decide, show (0 : Nat) ≠ 3 by decide,
-    decode, widthOfFirst, longPrefix, List.append_assoc, List.cons_append, List.nil_append,
+    decodeList, widthOfFirst, longPrefixList, List.append_assoc, List.cons_append, List.nil_append,
     bind, pure, StateT.bind, StateT.pure,
     Except.bind, Except.pure, byte, hf, hm, hf128, ↓reduceIte,
     uint_encode, Nat.one_mod, connectionId_encode _ _ 20 hd (by decide),
     connectionId_encode _ _ 20 hs (by decide), require, Base.ByteReader.require, hf64, hf16, hf4,
-    Fin.eta, blob_encode, lengthAndNumber_encode _ _ _ _ hl hn]
+    Fin.eta, blob_byteArray_encode, Base.toByteArray_data_toList,
+    lengthAndNumber_encode _ _ _ _ hl hn]
 
 /-- Reading a 0-RTT header recovers its fields and leaves the payload untouched. -/
-theorem decode_zeroRtt (d s rest : List UInt8) (w : PacketNumberLength)
-    (l : Varint) (n : Nat) (hd : d.length ≤ 20) (hs : s.length ≤ 20)
+theorem decodeList_zeroRtt (d s : ByteArray) (rest : List UInt8) (w : PacketNumberLength)
+    (l : Varint) (n : Nat) (hd : d.size ≤ 20) (hs : s.size ≤ 20)
     (hl : numberLength w ≤ l.val)
     (hn : n < 256 ^ numberLength w) (shortLength : Nat) :
-    decode shortLength (longPrefix (UInt8.ofNat (208 + w.val)) 1 d s ++
-      Varint.encode l ++
+    decodeList shortLength (longPrefixList (UInt8.ofNat (208 + w.val)) 1 d s ++
+      Varint.encodeList l ++
         Base.natToBytes (numberLength w) n ++ rest) =
       .ok (.zeroRtt d s w l n, rest) := by
   have hw := w.isLt
@@ -95,7 +97,7 @@ theorem decode_zeroRtt (d s rest : List UInt8) (w : PacketNumberLength)
   have hf16 : (208 + w.val) / 16 % 4 = 1 := by omega
   have hf4 : (208 + w.val) / 4 % 4 = 0 := by omega
   simp only [show (1 : Nat) ≠ 0 by decide, show (1 : Nat) ≠ 3 by decide,
-    decode, widthOfFirst, longPrefix, List.append_assoc, List.cons_append, List.nil_append,
+    decodeList, widthOfFirst, longPrefixList, List.append_assoc, List.cons_append, List.nil_append,
     bind, pure, StateT.bind, StateT.pure,
     Except.bind, Except.pure, byte, hf, hm, hf128, ↓reduceIte,
     uint_encode, Nat.one_mod, connectionId_encode _ _ 20 hd (by decide),
@@ -103,12 +105,12 @@ theorem decode_zeroRtt (d s rest : List UInt8) (w : PacketNumberLength)
     Fin.eta, lengthAndNumber_encode _ _ _ _ hl hn, ↓reduceIte]
 
 /-- Reading a Handshake header recovers its fields and leaves the payload untouched. -/
-theorem decode_handshake (d s rest : List UInt8) (w : PacketNumberLength)
-    (l : Varint) (n : Nat) (hd : d.length ≤ 20) (hs : s.length ≤ 20)
+theorem decodeList_handshake (d s : ByteArray) (rest : List UInt8) (w : PacketNumberLength)
+    (l : Varint) (n : Nat) (hd : d.size ≤ 20) (hs : s.size ≤ 20)
     (hl : numberLength w ≤ l.val)
     (hn : n < 256 ^ numberLength w) (shortLength : Nat) :
-    decode shortLength (longPrefix (UInt8.ofNat (224 + w.val)) 1 d s ++
-      Varint.encode l ++
+    decodeList shortLength (longPrefixList (UInt8.ofNat (224 + w.val)) 1 d s ++
+      Varint.encodeList l ++
         Base.natToBytes (numberLength w) n ++ rest) =
       .ok (.handshake d s w l n, rest) := by
   have hw := w.isLt
@@ -121,7 +123,7 @@ theorem decode_handshake (d s rest : List UInt8) (w : PacketNumberLength)
   have hf4 : (224 + w.val) / 4 % 4 = 0 := by omega
   simp only [show (1 : Nat) ≠ 0 by decide, show (2 : Nat) ≠ 3 by decide,
     show (2 : Nat) ≠ 0 by decide, show (2 : Nat) ≠ 1 by decide,
-    decode, widthOfFirst, longPrefix, List.append_assoc, List.cons_append, List.nil_append,
+    decodeList, widthOfFirst, longPrefixList, List.append_assoc, List.cons_append, List.nil_append,
     bind, pure, StateT.bind, StateT.pure,
     Except.bind, Except.pure, byte, hf, hm, hf128, ↓reduceIte,
     uint_encode, Nat.one_mod, connectionId_encode _ _ 20 hd (by decide),
@@ -129,11 +131,11 @@ theorem decode_handshake (d s rest : List UInt8) (w : PacketNumberLength)
     Fin.eta, lengthAndNumber_encode _ _ _ _ hl hn, ↓reduceIte]
 
 /-- Reading a short header recovers the spin bit, key phase and packet-number bytes. -/
-theorem decode_oneRtt (d rest : List UInt8) (spin keyPhase : Bool)
-    (w : PacketNumberLength) (n : Nat) (hd : d.length ≤ 20)
+theorem decodeList_oneRtt (d : ByteArray) (rest : List UInt8) (spin keyPhase : Bool)
+    (w : PacketNumberLength) (n : Nat) (hd : d.size ≤ 20)
     (hn : n < 256 ^ numberLength w) :
-    decode d.length ([UInt8.ofNat (64 + (if spin then 32 else 0) +
-      (if keyPhase then 4 else 0) + w.val)] ++ d ++
+    decodeList d.size ([UInt8.ofNat (64 + (if spin then 32 else 0) +
+      (if keyPhase then 4 else 0) + w.val)] ++ d.data.toList ++
       Base.natToBytes (numberLength w) n ++ rest) =
       .ok (.oneRtt d spin keyPhase w n, rest) := by
   let first := 64 + (if spin then 32 else 0) + (if keyPhase then 4 else 0) + w.val
@@ -169,18 +171,19 @@ theorem decode_oneRtt (d rest : List UInt8) (spin keyPhase : Bool)
       apply Bool.eq_iff_iff.mpr
       simp only [decide_eq_true_eq, Bool.false_eq_true, iff_false, iff_true]
       omega
-  change decode d.length ([UInt8.ofNat first] ++ d ++
+  change decodeList d.size ([UInt8.ofNat first] ++ d.data.toList ++
     Base.natToBytes (numberLength w) n ++ rest) = _
-  simp only [decode, widthOfFirst, List.append_assoc, List.cons_append, List.nil_append,
+  simp only [decodeList, widthOfFirst, List.append_assoc, List.cons_append, List.nil_append,
     bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure, byte,
     hfirst, hm, hf128, ↓reduceIte, Fin.eta, require, Base.ByteReader.require, hf64, hf8, hd,
-    bytes_append, uint_encode, Nat.mod_eq_of_lt hn, hspin, hkey]
+    bytes_byteArray_append, Base.toByteArray_data_toList,
+    uint_encode, Nat.mod_eq_of_lt hn, hspin, hkey]
 
 /-- Retry decoding separates the token from the final 16-byte integrity tag (§17.2.5). -/
-theorem decode_retry (d s t : List UInt8) (tag : Vector UInt8 16) (unused : Fin 16)
-    (hd : d.length ≤ 20) (hs : s.length ≤ 20) (ht : t ≠ []) (shortLength : Nat) :
-    decode shortLength
-      (longPrefix (UInt8.ofNat (240 + unused.val)) 1 d s ++ t ++ tag.toList) =
+theorem decodeList_retry (d s t : ByteArray) (tag : Vector UInt8 16) (unused : Fin 16)
+    (hd : d.size ≤ 20) (hs : s.size ≤ 20) (ht : t ≠ ByteArray.empty) (shortLength : Nat) :
+    decodeList shortLength
+      (longPrefixList (UInt8.ofNat (240 + unused.val)) 1 d s ++ t.data.toList ++ tag.toList) =
       .ok (.retry d s t tag unused, []) := by
   have hu := unused.isLt
   have hf : (UInt8.ofNat (240 + unused.val)).toNat = 240 + unused.val :=
@@ -190,19 +193,27 @@ theorem decode_retry (d s t : List UInt8) (tag : Vector UInt8 16) (unused : Fin 
   have hf16 : (240 + unused.val) / 16 % 4 = 3 := by omega
   have hm : (240 + unused.val) % 16 = unused.val := by omega
   have htag : tag.toList.length = 16 := by simp
-  have hlength : 16 < (t ++ tag.toList).length := by
-    have : 0 < t.length := List.length_pos_iff.mpr ht
-    simp only [List.length_append, htag]
+  have hlength : 16 < (t.data.toList ++ tag.toList).length := by
+    have : 0 < t.size := by
+      have nonempty : t.size ≠ 0 := fun empty => ht (ByteArray.size_eq_zero_iff.mp empty)
+      omega
+    simp only [List.length_append, Array.length_toList, htag]
+    change 16 < t.size + 16
     omega
-  have hsplit : (t ++ tag.toList).length - 16 = t.length := by
-    simp only [List.length_append, htag, Nat.add_sub_cancel]
-  simp only [decode, longPrefix, List.append_assoc, List.cons_append, List.nil_append,
+  have hsplit : (t.data.toList ++ tag.toList).length - 16 = t.size := by
+    simp only [List.length_append, Array.length_toList, htag, Nat.add_sub_cancel]
+    rfl
+  have htake : (t.data.toList ++ tag.toList).take t.size = t.data.toList := by
+    simp
+  have hdrop : (t.data.toList ++ tag.toList).drop t.size = tag.toList := by
+    simp
+  simp only [decodeList, longPrefixList, List.append_assoc, List.cons_append, List.nil_append,
     bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure, byte, hf,
     hf128, ↓reduceIte, uint_encode, Nat.one_mod, show (1 : Nat) ≠ 0 by decide,
     connectionId_encode _ _ 20 hd (by decide), connectionId_encode _ _ 20 hs (by decide),
-    require, Base.ByteReader.require, hf64, hf16, remainder, hlength, hsplit, List.take_left,
-    List.drop_left,
-    htag, ↓reduceDIte, hm, Fin.eta, Vector.toArray_toList, Vector.mk_toArray]
+    require, Base.ByteReader.require, hf64, hf16, remainder, hlength, hsplit, htake, hdrop,
+    htag, ↓reduceDIte, hm, Fin.eta, Vector.toArray_toList, Vector.mk_toArray,
+    Base.toByteArray_data_toList]
 
 /-- Reading four version bytes recovers a version and then reads the remaining versions. -/
 private theorem versions_word (version : UInt32) (rest : List UInt8) :
@@ -229,9 +240,9 @@ theorem versions_encode (values : List UInt32) :
     simp only [List.flatMap_cons, versions_word, ih, Except.map]
 
 /-- Version Negotiation decoding preserves arbitrary unused bits and both connection IDs. -/
-theorem decode_versionNegotiation (d s : List UInt8) (unused : Fin 128)
-    (vs : List UInt32) (hd : d.length ≤ 255) (hs : s.length ≤ 255) (shortLength : Nat) :
-    decode shortLength (longPrefix (UInt8.ofNat (128 + unused.val)) 0 d s ++
+theorem decodeList_versionNegotiation (d s : ByteArray) (unused : Fin 128)
+    (vs : List UInt32) (hd : d.size ≤ 255) (hs : s.size ≤ 255) (shortLength : Nat) :
+    decodeList shortLength (longPrefixList (UInt8.ofNat (128 + unused.val)) 0 d s ++
       vs.flatMap (fun v => Base.natToBytes 4 v.toNat)) =
       .ok (.versionNegotiation d s unused vs, []) := by
   have hu := unused.isLt
@@ -239,7 +250,7 @@ theorem decode_versionNegotiation (d s : List UInt8) (unused : Fin 128)
     UInt8.toNat_ofNat_of_lt' (by simp only [UInt8.size]; omega)
   have hf128 : ¬128 + unused.val < 128 := by omega
   have hm : (128 + unused.val) % 128 = unused.val := by omega
-  simp only [decode, longPrefix, List.append_assoc, List.cons_append, List.nil_append,
+  simp only [decodeList, longPrefixList, List.append_assoc, List.cons_append, List.nil_append,
     bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure, byte, hf,
     hf128, ↓reduceIte, uint_encode, Nat.zero_mod, show (0 : Nat) ≠ 1 by decide,
     connectionId_encode _ _ 255 hd (by decide), connectionId_encode _ _ 255 hs (by decide),
@@ -247,62 +258,119 @@ theorem decode_versionNegotiation (d s : List UInt8) (unused : Fin 128)
 
 /-- The connection supplies only a short header's destination-ID length. -/
 def shortConnectionIdLength : Header → Nat
-  | .oneRtt destination _ _ _ _ => destination.length
+  | .oneRtt destination _ _ _ _ => destination.size
   | _ => 0
 
 /-- Retry and Version Negotiation exhaust their containing datagram. -/
-def permitsFollowing (header : Header) (rest : List UInt8) : Prop :=
+def permitsFollowingList (header : Header) (rest : List UInt8) : Prop :=
   match header with
   | .retry .. | .versionNegotiation .. => rest = []
   | _ => True
 
 /-- Every well-formed header round trips, preserving bytes after a protected header. -/
-theorem decode_encode (header : Header) (encoded rest : List UInt8)
-    (valid : header.Valid) (written : encode header = .ok encoded)
-    (follows : permitsFollowing header rest) :
-    decode (shortConnectionIdLength header) (encoded ++ rest) = .ok (header, rest) := by
+theorem decodeList_encodeList (header : Header) (encoded rest : List UInt8)
+    (valid : header.Valid) (written : encodeList header = .ok encoded)
+    (follows : permitsFollowingList header rest) :
+    decodeList (shortConnectionIdLength header) (encoded ++ rest) = .ok (header, rest) := by
   have checked : ¬¬header.Valid := not_not_intro valid
   cases header with
   | initial d s t w l n =>
     rcases valid with ⟨hd, hs, ht, hl, hn⟩
-    simp only [encode, checked, ↓reduceIte, checkedVarint, ht, ↓reduceDIte,
+    simp only [encodeList, checked, ↓reduceIte, checkedVarint, ht, ↓reduceDIte,
       bind, pure, Except.bind, Except.pure, Except.ok.injEq] at written
     subst encoded
-    exact decode_initial d s t rest w l n hd hs ht hl hn 0
+    exact decodeList_initial d s t rest w l n hd hs ht hl hn 0
   | zeroRtt d s w l n =>
     rcases valid with ⟨hd, hs, hl, hn⟩
-    simp only [encode, checked, ↓reduceIte, pure, Except.pure,
+    simp only [encodeList, checked, ↓reduceIte, pure, Except.pure,
       Except.ok.injEq] at written
     subst encoded
-    exact decode_zeroRtt d s rest w l n hd hs hl hn 0
+    exact decodeList_zeroRtt d s rest w l n hd hs hl hn 0
   | handshake d s w l n =>
     rcases valid with ⟨hd, hs, hl, hn⟩
-    simp only [encode, checked, ↓reduceIte, pure, Except.pure,
+    simp only [encodeList, checked, ↓reduceIte, pure, Except.pure,
       Except.ok.injEq] at written
     subst encoded
-    exact decode_handshake d s rest w l n hd hs hl hn 0
+    exact decodeList_handshake d s rest w l n hd hs hl hn 0
   | oneRtt d spin keyPhase w n =>
     rcases valid with ⟨hd, hn⟩
-    simp only [encode, checked, ↓reduceIte, pure, Except.pure,
+    simp only [encodeList, checked, ↓reduceIte, pure, Except.pure,
       Except.ok.injEq] at written
     subst encoded
-    exact decode_oneRtt d rest spin keyPhase w n hd hn
+    exact decodeList_oneRtt d rest spin keyPhase w n hd hn
   | retry d s t tag unused =>
     rcases valid with ⟨hd, hs, ht⟩
-    simp only [encode, checked, ↓reduceIte, pure, Except.pure,
+    simp only [encodeList, checked, ↓reduceIte, pure, Except.pure,
       Except.ok.injEq] at written
     subst encoded
     subst rest
     simpa only [List.append_nil, shortConnectionIdLength] using
-      decode_retry d s t tag unused hd hs ht 0
+      decodeList_retry d s t tag unused hd hs ht 0
   | versionNegotiation d s unused vs =>
     rcases valid with ⟨hd, hs⟩
-    simp only [encode, checked, ↓reduceIte, pure, Except.pure,
+    simp only [encodeList, checked, ↓reduceIte, pure, Except.pure,
       Except.ok.injEq] at written
     subst encoded
     subst rest
     simpa only [List.append_nil, shortConnectionIdLength] using
-      decode_versionNegotiation d s unused vs hd hs 0
+      decodeList_versionNegotiation d s unused vs hd hs 0
+
+/-- The packet-number bytes retain exactly the low bytes of the original number. -/
+theorem bytesToNat_encodePacketNumber (width : PacketNumberLength) (number : Varint) :
+    Base.bytesToNat (encodePacketNumber width number).data.toList =
+      number.val % 256 ^ numberLength width := by
+  simpa [encodePacketNumber] using bytesToNat_encodePacketNumberList width number
+
+/-- Packet-number encoding uses exactly the selected byte count. -/
+theorem size_encodePacketNumber (width : PacketNumberLength) (number : Varint) :
+    (encodePacketNumber width number).size = numberLength width := by
+  simpa [encodePacketNumber] using length_encodePacketNumberList width number
+
+/-- Encoding to a byte array preserves the list encoder's result. -/
+theorem encode_ok_iff (header : Header) (encoded : ByteArray) :
+    encode header = .ok encoded ↔ encodeList header = .ok encoded.data.toList := by
+  cases written : encodeList header with
+  | error error => simp [encode, written, Except.map]
+  | ok data =>
+    simp only [encode, written, Except.map, Except.ok.injEq]
+    constructor
+    · intro same
+      simpa using congrArg (fun bytes : ByteArray => bytes.data.toList) same
+    · intro same
+      rw [same, Base.toByteArray_data_toList]
+
+/-- Decoding a byte array preserves the list reader's result and suffix. -/
+theorem decode_ok_iff (shortLength : Nat) (input rest : ByteArray) (header : Header) :
+    decode shortLength input = .ok (header, rest) ↔
+      decodeList shortLength input.data.toList = .ok (header, rest.data.toList) := by
+  cases read : decodeList shortLength input.data.toList with
+  | error error => simp [decode, read, Except.map]
+  | ok result =>
+    rcases result with ⟨value, trailing⟩
+    simp only [decode, read, Except.map, Except.ok.injEq, Prod.mk.injEq]
+    constructor
+    · rintro ⟨rfl, same⟩
+      exact ⟨rfl, by simpa using congrArg (fun bytes : ByteArray => bytes.data.toList) same⟩
+    · rintro ⟨rfl, same⟩
+      exact ⟨rfl, by rw [same, Base.toByteArray_data_toList]⟩
+
+/-- Retry and Version Negotiation exhaust their containing datagram. -/
+def permitsFollowing (header : Header) (rest : ByteArray) : Prop :=
+  match header with
+  | .retry .. | .versionNegotiation .. => rest = ByteArray.empty
+  | _ => True
+
+/-- Every well-formed header round trips, preserving bytes after a protected header. -/
+theorem decode_encode (header : Header) (encoded rest : ByteArray)
+    (valid : header.Valid) (written : encode header = .ok encoded)
+    (follows : permitsFollowing header rest) :
+    decode (shortConnectionIdLength header) (encoded ++ rest) = .ok (header, rest) := by
+  have writtenList := (encode_ok_iff header encoded).mp written
+  have followsList : permitsFollowingList header rest.data.toList := by
+    cases header <;> simp_all [permitsFollowing, permitsFollowingList]
+  apply (decode_ok_iff _ _ _ _).mpr
+  simpa [ByteArray.data_append] using
+    decodeList_encodeList header encoded.data.toList rest.data.toList valid writtenList followsList
 
 /-- A reconstructed number is at least as close to the expectation as any valid alternative.
 

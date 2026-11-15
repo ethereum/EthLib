@@ -9,11 +9,11 @@ PacketType: TypeAlias = Literal["initial", "zero_rtt", "handshake", "one_rtt"]
 # Width is the two-bit packet-number length, 0 to 3 for 1 to 4 bytes.
 # The number is the truncated packet number, and the Length counts it and the payload.
 Header: TypeAlias = (
-    tuple[Literal["initial"], list[int], list[int], list[int], int, int, int]
-    | tuple[Literal["zero_rtt", "handshake"], list[int], list[int], int, int, int]
-    | tuple[Literal["one_rtt"], list[int], bool, bool, int, int]
-    | tuple[Literal["retry"], list[int], list[int], list[int], bytes, int]
-    | tuple[Literal["version_negotiation"], list[int], list[int], int, list[int]]
+    tuple[Literal["initial"], bytes, bytes, bytes, int, int, int]
+    | tuple[Literal["zero_rtt", "handshake"], bytes, bytes, int, int, int]
+    | tuple[Literal["one_rtt"], bytes, bool, bool, int, int]
+    | tuple[Literal["retry"], bytes, bytes, bytes, bytes, int]
+    | tuple[Literal["version_negotiation"], bytes, bytes, int, list[int]]
 )
 
 
@@ -33,14 +33,14 @@ Frame: TypeAlias = (
     | tuple[Literal["ack"], Ack]
     | tuple[Literal["reset_stream"], int, int, int]
     | tuple[Literal["stop_sending", "max_stream_data", "stream_data_blocked"], int, int]
-    | tuple[Literal["crypto"], int, list[int]]
-    | tuple[Literal["new_token"], list[int]]
-    | tuple[Literal["stream"], int, int | None, bool, bool, list[int]]
+    | tuple[Literal["crypto"], int, bytes]
+    | tuple[Literal["new_token"], bytes]
+    | tuple[Literal["stream"], int, int | None, bool, bool, bytes]
     | tuple[Literal["max_data", "data_blocked", "retire_connection_id"], int]
     | tuple[Literal["max_streams", "streams_blocked"], bool, int]
-    | tuple[Literal["new_connection_id"], int, int, list[int], bytes]
+    | tuple[Literal["new_connection_id"], int, int, bytes, bytes]
     | tuple[Literal["path_challenge", "path_response"], bytes]
-    | tuple[Literal["connection_close"], int, int | None, list[int]]
+    | tuple[Literal["connection_close"], int, int | None, bytes]
 )
 
 

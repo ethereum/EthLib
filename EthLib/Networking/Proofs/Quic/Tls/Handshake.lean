@@ -69,14 +69,14 @@ theorem complete_keySchedule (config : Config) (expected : Option ByteArray) (st
 
 /-- ALPN rejects a parsed client offer without the libp2p application protocol. -/
 theorem serverClientHello_alpn (config : Config) (state : State) (hello : ClientHello)
-    (input : FlightMessage) (protocols : List (List UInt8))
+    (input : FlightMessage) (protocols : List ByteArray)
     (parsed : alpn hello.extensions = .ok protocols) (missing : libp2p ∉ protocols) :
     serverClientHello config state hello input = .error .noApplicationProtocol := by
   simp [serverClientHello, parsed, ensure, missing, bind, Except.bind]
 
 /-- A listener rejects a ClientHello whose parsed ALPN list omits libp2p. -/
 theorem serverStep_alpn (config : Config) (state : State) (hello : ClientHello)
-    (input : FlightMessage) (protocols : List (List UInt8))
+    (input : FlightMessage) (protocols : List ByteArray)
     (phase : state.phase = .clientHello)
     (message : readMessage .initial input = .ok (.clientHello hello))
     (parsed : alpn hello.extensions = .ok protocols) (missing : libp2p ∉ protocols) :
@@ -116,12 +116,12 @@ theorem clientStep_rejects_sha384 (config : Config) (expected : ByteArray) (stat
   simp [supportedSuite, sha384] at supported
 
 /-- Finished succeeds exactly for its derived HMAC under the saved sender's traffic secret. -/
-theorem checkFinished_eq_ok_iff (server : Bool) (state : State) (value : List UInt8) :
+theorem checkFinished_eq_ok_iff (server : Bool) (state : State) (value : ByteArray) :
     checkFinished server state value = .ok () ↔
       ∃ negotiated verifyData, state.negotiated = some negotiated ∧
         finished (if server then negotiated.secrets.serverHandshake
-          else negotiated.secrets.clientHandshake) ⟨state.transcript.bytes.toArray⟩ =
-            .ok verifyData ∧ value = verifyData.toList := by
+          else negotiated.secrets.clientHandshake) state.transcript.bytes =
+            .ok verifyData ∧ value = packBytes verifyData := by
   simp only [checkFinished, bind_ok_iff, ensure_ok_iff, saved_eq_ok_iff, mapError_ok_iff]
   aesop
 
@@ -130,21 +130,21 @@ theorem checkFinished_eq_ok_iff (server : Bool) (state : State) (value : List UI
 The certificate and its signing-use check come from peer authentication. -/
 theorem checkCertificateVerify_eq_ok_iff (config : Config) (expected : Option ByteArray)
     (server : Bool) (offered : List Wire.CodePoint) (state : State) (algorithm : Wire.CodePoint)
-    (signature : List UInt8) :
+    (signature : ByteArray) :
     checkCertificateVerify config expected server offered state algorithm signature = .ok () ↔
       algorithm ∈ offered ∧ algorithm ∈ config.policy.signatureSchemes ∧
         algorithm.val = 0x0403 ∧ ∃ peer,
           authenticate config expected state.peerChain = .ok peer ∧
           Libp2p.Tls.verifyP256 peer.certificate.spki
-            ⟨(certificateVerifyInput server state.transcript.hash).toArray⟩
-            ⟨signature.toArray⟩ = true := by
+            (certificateVerifyInput server state.transcript.hash)
+            signature = true := by
   simp only [checkCertificateVerify, ensure_ok_iff, bind_ok_iff,
     Crypto.verifyCertificateVerify_eq_true_iff]
   aesop
 
 /-- Accepting the server's CertificateVerify checks its exact role and pre-message transcript. -/
 theorem clientStep_certificateVerify (config : Config) (expected : ByteArray) (state : State)
-    (input : FlightMessage) (algorithm : Wire.CodePoint) (signature : List UInt8) (step : Step)
+    (input : FlightMessage) (algorithm : Wire.CodePoint) (signature : ByteArray) (step : Step)
     (phase : state.phase = .serverCertificateVerify)
     (message : readMessage .handshake input = .ok (.certificateVerify algorithm signature))
     (accepted : clientStep config expected state input = .ok step) :
@@ -153,8 +153,8 @@ theorem clientStep_certificateVerify (config : Config) (expected : ByteArray) (s
         algorithm.val = 0x0403 ∧ ∃ peer,
           authenticate config (some expected) state.peerChain = .ok peer ∧
           Libp2p.Tls.verifyP256 peer.certificate.spki
-            ⟨(certificateVerifyInput true state.transcript.hash).toArray⟩
-            ⟨signature.toArray⟩ = true := by
+            (certificateVerifyInput true state.transcript.hash)
+            signature = true := by
   simp only [clientStep, phase, bind_ok_iff, message, Except.ok.injEq] at accepted
   obtain ⟨_, rfl, accepted⟩ := accepted
   simp only [bind_ok_iff] at accepted
@@ -166,7 +166,7 @@ theorem clientStep_certificateVerify (config : Config) (expected : ByteArray) (s
 
 /-- Accepting the client's CertificateVerify checks its exact role and pre-message transcript. -/
 theorem serverStep_certificateVerify (config : Config) (state : State) (input : FlightMessage)
-    (algorithm : Wire.CodePoint) (signature : List UInt8) (step : Step)
+    (algorithm : Wire.CodePoint) (signature : ByteArray) (step : Step)
     (phase : state.phase = .clientCertificateVerify)
     (message : readMessage .handshake input = .ok (.certificateVerify algorithm signature))
     (accepted : serverStep config state input = .ok step) :
@@ -175,8 +175,8 @@ theorem serverStep_certificateVerify (config : Config) (state : State) (input : 
         algorithm.val = 0x0403 ∧ ∃ peer,
           authenticate config none state.peerChain = .ok peer ∧
           Libp2p.Tls.verifyP256 peer.certificate.spki
-            ⟨(certificateVerifyInput false state.transcript.hash).toArray⟩
-            ⟨signature.toArray⟩ = true := by
+            (certificateVerifyInput false state.transcript.hash)
+            signature = true := by
   simp only [serverStep, phase, bind_ok_iff, message, Except.ok.injEq] at accepted
   obtain ⟨_, rfl, accepted⟩ := accepted
   simp only [bind_ok_iff] at accepted
@@ -188,13 +188,13 @@ theorem serverStep_certificateVerify (config : Config) (state : State) (input : 
 
 /-- Accepting server Finished requires its derived HMAC on the pre-message transcript. -/
 theorem clientStep_finished_eq (config : Config) (expected : ByteArray) (state : State)
-    (input : FlightMessage) (value : List UInt8) (step : Step)
+    (input : FlightMessage) (value : ByteArray) (step : Step)
     (phase : state.phase = .serverFinished)
     (message : readMessage .handshake input = .ok (.finished value))
     (accepted : clientStep config expected state input = .ok step) :
     ∃ negotiated verifyData, state.negotiated = some negotiated ∧
-      finished negotiated.secrets.serverHandshake ⟨state.transcript.bytes.toArray⟩ =
-        .ok verifyData ∧ value = verifyData.toList := by
+      finished negotiated.secrets.serverHandshake state.transcript.bytes =
+        .ok verifyData ∧ value = packBytes verifyData := by
   have final : clientFinished config expected state value input = .ok step := by
     simpa only [clientStep, phase, message, bind, Except.bind] using accepted
   simp only [clientFinished, bind_ok_iff] at final
@@ -204,12 +204,12 @@ theorem clientStep_finished_eq (config : Config) (expected : ByteArray) (state :
 
 /-- Accepting client Finished requires its derived HMAC on the pre-message transcript. -/
 theorem serverStep_finished_eq (config : Config) (state : State) (input : FlightMessage)
-    (value : List UInt8) (step : Step) (phase : state.phase = .clientFinished)
+    (value : ByteArray) (step : Step) (phase : state.phase = .clientFinished)
     (message : readMessage .handshake input = .ok (.finished value))
     (accepted : serverStep config state input = .ok step) :
     ∃ negotiated verifyData, state.negotiated = some negotiated ∧
-      finished negotiated.secrets.clientHandshake ⟨state.transcript.bytes.toArray⟩ =
-        .ok verifyData ∧ value = verifyData.toList := by
+      finished negotiated.secrets.clientHandshake state.transcript.bytes =
+        .ok verifyData ∧ value = packBytes verifyData := by
   simp only [serverStep, phase, bind_ok_iff, message, Except.ok.injEq] at accepted
   obtain ⟨_, rfl, accepted⟩ := accepted
   simp only [bind_ok_iff] at accepted
@@ -219,18 +219,18 @@ theorem serverStep_finished_eq (config : Config) (state : State) (input : Flight
 
 /-- A Finished value different from the derived HMAC is rejected, RFC 8446 §4.4.4. -/
 theorem checkFinished_rejects (server : Bool) (state : State) (negotiated : Negotiated)
-    (value : List UInt8) (verifyData : Vector UInt8 32)
+    (value : ByteArray) (verifyData : Vector UInt8 32)
     (stored : state.negotiated = some negotiated)
     (computed : finished (if server then negotiated.secrets.serverHandshake
-        else negotiated.secrets.clientHandshake) ⟨state.transcript.bytes.toArray⟩ = .ok verifyData)
-    (different : value ≠ verifyData.toList) :
+        else negotiated.secrets.clientHandshake) state.transcript.bytes = .ok verifyData)
+    (different : value ≠ packBytes verifyData) :
     checkFinished server state value = .error .decryptError := by
   simp [checkFinished, stored, saved, computed, Except.mapError,
     ensure, different, bind, Except.bind]
 
 /-- A dialer rejects a mismatching server Finished before emitting its final flight. -/
 theorem clientStep_finished (config : Config) (expected : ByteArray) (state : State)
-    (input : FlightMessage) (value : List UInt8)
+    (input : FlightMessage) (value : ByteArray)
     (phase : state.phase = .serverFinished)
     (message : readMessage .handshake input = .ok (.finished value))
     (rejected : checkFinished true state value = .error .decryptError) :
@@ -239,7 +239,7 @@ theorem clientStep_finished (config : Config) (expected : ByteArray) (state : St
 
 /-- A listener rejects a mismatching client Finished before reporting completion. -/
 theorem serverStep_finished (config : Config) (state : State) (input : FlightMessage)
-    (value : List UInt8) (phase : state.phase = .clientFinished)
+    (value : ByteArray) (phase : state.phase = .clientFinished)
     (message : readMessage .handshake input = .ok (.finished value))
     (rejected : checkFinished false state value = .error .decryptError) :
     serverStep config state input = .error .decryptError := by
@@ -306,7 +306,7 @@ private theorem serverClientHello_completion (config : Config) (state : State) (
 
 /-- A dialer's final flight reports only the completion boundary's result. -/
 private theorem clientFinished_complete (config : Config) (expected : ByteArray) (state : State)
-    (value : List UInt8) (input : FlightMessage) (step : Step)
+    (value : ByteArray) (input : FlightMessage) (step : Step)
     (accepted : clientFinished config expected state value input = .ok step) :
     ∃ final output, complete config (some expected) final output = .ok step := by
   simp only [clientFinished, bind_ok_iff] at accepted

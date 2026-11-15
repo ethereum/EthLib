@@ -23,6 +23,8 @@ open Wire
 open EthLib.Base.ByteReader (bytes_append uint_encode require_true)
 open EthLib.Base (bind_ok_iff)
 
+attribute [local simp] EthLib.Base.toByteArray_data_toList
+
 attribute [local simp] bind pure StateT.bind StateT.pure StateT.lift Except.bind Except.pure
 
 /-- An extension recovers its numeric type, opaque bytes and arbitrary trailing bytes. -/
@@ -96,27 +98,27 @@ theorem certificateEntries_encode {values : List CertificateEntry} {encoded : Li
     (fun _ _ h => length_encodeCertificateEntry h) written rest
 
 /-- A body within the uint24 bound gets its exact four-byte handshake header. -/
-theorem frame_eq_ok (kind : UInt8) (body : List UInt8) (bound : body.length < 2 ^ 24) :
-    frame kind body = .ok (kind :: (Base.natToBytes 3 body.length ++ body)) := by
+theorem frameList_eq_ok (kind : UInt8) (body : List UInt8) (bound : body.length < 2 ^ 24) :
+    frameList kind body = .ok (kind :: (Base.natToBytes 3 body.length ++ body)) := by
   have upper : body.length ≤ 2 ^ 24 - 1 := by omega
   have capacity : body.length < 256 ^ 3 := bound
-  simp [frame, encodeBlob, upper, capacity, bind, Except.bind, pure, Except.pure]
+  simp [frameList, encodeBlob, upper, capacity, bind, Except.bind, pure, Except.pure]
 
 /-- A handshake envelope round trips without consuming a following message. -/
-theorem readFrame_frame (kind : UInt8) (body rest : List UInt8)
+theorem readFrame_frameList (kind : UInt8) (body rest : List UInt8)
     (bound : body.length < 2 ^ 24) :
-    (frame kind body >>= fun encoded => readFrame (encoded ++ rest)) =
+    (frameList kind body >>= fun encoded => readFrame (encoded ++ rest)) =
       .ok ((kind, body), rest) := by
   have upper : body.length ≤ 2 ^ 24 - 1 := by omega
   have capacity : body.length < 256 ^ 3 := bound
-  simp [frame_eq_ok kind body bound, readFrame, List.append_assoc,
+  simp [frameList_eq_ok kind body bound, readFrame, List.append_assoc,
     blob_encode 3 0 (2 ^ 24 - 1) body rest (Nat.zero_le _) upper capacity,
     bind, Except.bind, StateT.bind, pure, Except.pure, StateT.pure]
 
 /-- A framed message has its body length plus the four header bytes. -/
-theorem length_frame {kind : UInt8} {body encoded : List UInt8}
-    (accepted : frame kind body = .ok encoded) : encoded.length = body.length + 4 := by
-  simp only [frame, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at accepted
+theorem length_frameList {kind : UInt8} {body encoded : List UInt8}
+    (accepted : frameList kind body = .ok encoded) : encoded.length = body.length + 4 := by
+  simp only [frameList, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at accepted
   obtain ⟨data, written, rfl⟩ := accepted
   obtain ⟨_, _, _, rfl⟩ := (encodeBlob_eq_ok_iff ..).mp written
   simp only [List.length_cons, List.length_append, Base.natToBytes_length]
@@ -129,8 +131,8 @@ theorem encodeExtensions_duplicate (minimum : Nat) (extensions : List Extension)
   simp [encodeExtensions, Base.ensure, duplicate, bind, Except.bind]
 
 /-- A Finished message with the wrong hash length cannot be encoded (§4.4.4). -/
-theorem encodeBody_finished_length (hashLength : Nat) (data : List UInt8)
-    (wrong : data.length ≠ hashLength) :
+theorem encodeBody_finished_length (hashLength : Nat) (data : ByteArray)
+    (wrong : data.size ≠ hashLength) :
     encodeBody hashLength (.finished data) = .error .length := by
   simp [encodeBody, Base.ensure, wrong, bind, Except.bind]
 
@@ -179,33 +181,36 @@ theorem readBody_encodeBody {hashLength : Nat} {message : Message} {body : List 
     simp only [encodeBody, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at written
     obtain ⟨u, size, rfl⟩ := written
     have length := EthLib.Base.ensure_ok_iff.mp size
-    simp [readBody, Message.type, ← length]
+    have read : bytes data.size (data.data.toList ++ rest) =
+        .ok (data.data.toList, rest) := by
+      simpa using bytes_append Wire.Error.truncated data.data.toList rest
+    simp [readBody, Message.type, ← length, read]
 
 /-- A successful frame always has a body within the uint24 bound. -/
-theorem bound_of_frame {kind : UInt8} {body encoded : List UInt8}
-    (written : frame kind body = .ok encoded) : body.length < 2 ^ 24 := by
-  simp only [frame, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at written
+theorem bound_of_frameList {kind : UInt8} {body encoded : List UInt8}
+    (written : frameList kind body = .ok encoded) : body.length < 2 ^ 24 := by
+  simp only [frameList, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at written
   obtain ⟨data, hd, _⟩ := written
   exact ((encodeBlob_eq_ok_iff ..).mp hd).2.2.1
 
 /-- All seven message encoders round trip, preserving arbitrary bytes after the message. -/
-theorem decode_encode {hashLength : Nat} {message : Message} {encoded : List UInt8}
-    (written : encode hashLength message = .ok encoded) (rest : List UInt8) :
-    decode hashLength (encoded ++ rest) = .ok (message, rest) := by
-  simp only [encode, bind_ok_iff] at written
+theorem decodeList_encodeList {hashLength : Nat} {message : Message} {encoded : List UInt8}
+    (written : encodeList hashLength message = .ok encoded) (rest : List UInt8) :
+    decodeList hashLength (encoded ++ rest) = .ok (message, rest) := by
+  simp only [encodeList, bind_ok_iff] at written
   obtain ⟨body, hb, hf⟩ := written
-  have framed := readFrame_frame message.type body rest (bound_of_frame hf)
+  have framed := readFrame_frameList message.type body rest (bound_of_frameList hf)
   simp only [hf, bind, Except.bind] at framed
   have decoded := readBody_encodeBody hb []
   simp only [List.append_nil] at decoded
-  simp [decode, framed, Wire.exact, decoded, Except.mapError]
+  simp [decodeList, framed, Wire.exact, decoded, Except.mapError]
 
 /-- Two successfully encoded messages with the same bytes have the same fields. -/
-theorem encode_injective {hashLength : Nat} {first second : Message} {encoded : List UInt8}
-    (left : encode hashLength first = .ok encoded)
-    (right : encode hashLength second = .ok encoded) : first = second := by
-  have hf := decode_encode left []
-  rw [decode_encode right []] at hf
+theorem encodeList_injective {hashLength : Nat} {first second : Message} {encoded : List UInt8}
+    (left : encodeList hashLength first = .ok encoded)
+    (right : encodeList hashLength second = .ok encoded) : first = second := by
+  have hf := decodeList_encodeList left []
+  rw [decodeList_encodeList right []] at hf
   simpa using hf.symm
 
 /-- An accepted extension is exactly its numeric type and length-prefixed payload. -/
@@ -213,7 +218,7 @@ theorem encodeExtension_of_readExtension {input rest : List UInt8} {extension : 
     (parsed : readExtension input = .ok (extension, rest)) :
     ∃ encoded, encodeExtension extension = .ok encoded ∧ input = encoded ++ rest := by
   change (codePoint input >>= fun (kind, suffix) =>
-    blob 2 0 65535 suffix >>= fun (data, trailing) => .ok (⟨kind, data⟩, trailing)) =
+    blob 2 0 65535 suffix >>= fun (data, trailing) => .ok (⟨kind, data.toByteArray⟩, trailing)) =
       .ok (extension, rest) at parsed
   simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
   obtain ⟨⟨kind, suffix⟩, kindRead, ⟨data, trailing⟩, dataRead, rfl, rfl⟩ := parsed
@@ -256,7 +261,8 @@ theorem encodeCertificateEntry_of_readCertificateEntry {input rest : List UInt8}
     {entry : CertificateEntry} (parsed : readCertificateEntry input = .ok (entry, rest)) :
     ∃ encoded, encodeCertificateEntry entry = .ok encoded ∧ input = encoded ++ rest := by
   change (blob 3 1 (2 ^ 24 - 1) input >>= fun (data, suffix) =>
-    readExtensions 0 suffix >>= fun (extensions, trailing) => .ok (⟨data, extensions⟩, trailing)) =
+    readExtensions 0 suffix >>= fun (extensions, trailing) =>
+      .ok (⟨data.toByteArray, extensions⟩, trailing)) =
       .ok (entry, rest) at parsed
   simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
   obtain ⟨⟨data, suffix⟩, dataRead, ⟨extensions, trailing⟩, extensionsRead, rfl, rfl⟩ := parsed
@@ -270,9 +276,9 @@ theorem encodeCertificateEntry_of_readCertificateEntry {input rest : List UInt8}
     simp only [List.append_assoc]
 
 /-- An accepted handshake envelope reconstructs its exact type, body length and body bytes. -/
-theorem frame_of_readFrame {input rest body : List UInt8} {kind : UInt8}
+theorem frameList_of_readFrame {input rest body : List UInt8} {kind : UInt8}
     (parsed : readFrame input = .ok ((kind, body), rest)) :
-    ∃ encoded, frame kind body = .ok encoded ∧ input = encoded ++ rest := by
+    ∃ encoded, frameList kind body = .ok encoded ∧ input = encoded ++ rest := by
   change (uint 1 input >>= fun (tag, suffix) =>
     blob 3 0 (2 ^ 24 - 1) suffix >>= fun (data, trailing) =>
       .ok ((UInt8.ofNat tag, data), trailing)) = .ok ((kind, body), rest) at parsed
@@ -281,7 +287,7 @@ theorem frame_of_readFrame {input rest body : List UInt8} {kind : UInt8}
   dsimp only at dataRead ⊢
   obtain ⟨encoded, written, same⟩ := encodeBlob_of_blob dataRead
   refine ⟨UInt8.ofNat tag :: encoded, ?_, ?_⟩
-  · simp [frame, written]
+  · simp [frameList, written]
   · rw [(Base.ByteReader.uint_ok_iff ..).mp tagRead |>.2, same]
     rfl
 
@@ -306,7 +312,7 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
       bytes 2 e >>= fun (compression, f) =>
       require (compression = [1, 0]) .constant f >>= fun (_, g) =>
       readExtensions 8 g >>= fun (extensions, h) =>
-        .ok (.clientHello ⟨random, session, suites, extensions⟩, h)) =
+        .ok (.clientHello ⟨random, session.toByteArray, suites, extensions⟩, h)) =
           .ok (message, rest) at parsed
     simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
     obtain ⟨⟨version, a⟩, versionRead, ⟨u, b⟩, versionCheck, ⟨random, c⟩, randomRead,
@@ -338,7 +344,7 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
       uint 1 e >>= fun (compression, f) =>
       require (compression = 0) .constant f >>= fun (_, g) =>
       readExtensions 6 g >>= fun (extensions, h) =>
-        .ok (.serverHello ⟨random, session, suite, extensions⟩, h)) =
+        .ok (.serverHello ⟨random, session.toByteArray, suite, extensions⟩, h)) =
           .ok (message, rest) at parsed
     simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
     obtain ⟨⟨version, a⟩, versionRead, ⟨u, b⟩, versionCheck, ⟨random, c⟩, randomRead,
@@ -372,7 +378,7 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
     subst kind
     change (blob 1 0 255 input >>= fun (context, suffix) =>
       readExtensions 2 suffix >>= fun (extensions, trailing) =>
-        .ok (.certificateRequest ⟨context, extensions⟩, trailing)) =
+        .ok (.certificateRequest ⟨context.toByteArray, extensions⟩, trailing)) =
           .ok (message, rest) at parsed
     simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
     obtain ⟨⟨context, suffix⟩, contextRead, ⟨extensions, trailing⟩,
@@ -390,7 +396,7 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
     subst kind
     change (blob 1 0 255 input >>= fun (context, suffix) =>
       items 3 0 (2 ^ 24 - 1) readCertificateEntry suffix >>= fun (entries, trailing) =>
-        .ok (.certificate ⟨context, entries⟩, trailing)) = .ok (message, rest) at parsed
+        .ok (.certificate ⟨context.toByteArray, entries⟩, trailing)) = .ok (message, rest) at parsed
     simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
     obtain ⟨⟨context, suffix⟩, contextRead, ⟨entries, trailing⟩, entriesRead, rfl, rfl⟩ := parsed
     dsimp only at entriesRead ⊢
@@ -407,7 +413,8 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
     subst kind
     change (codePoint input >>= fun (algorithm, suffix) =>
       blob 2 0 65535 suffix >>= fun (signature, trailing) =>
-        .ok (.certificateVerify algorithm signature, trailing)) = .ok (message, rest) at parsed
+        .ok (.certificateVerify algorithm signature.toByteArray, trailing)) =
+          .ok (message, rest) at parsed
     simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
     obtain ⟨⟨algorithm, suffix⟩, algorithmRead, ⟨signature, trailing⟩, signatureRead,
       rfl, rfl⟩ := parsed
@@ -421,7 +428,7 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
     have sameKind : kind = 20 := UInt8.toNat_inj.mp tag
     subst kind
     change (bytes hashLength input >>= fun (data, suffix) =>
-      .ok (.finished data, suffix)) = .ok (message, rest) at parsed
+      .ok (.finished data.toByteArray, suffix)) = .ok (message, rest) at parsed
     simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
     obtain ⟨⟨data, suffix⟩, dataRead, rfl, rfl⟩ := parsed
     obtain ⟨length, same⟩ := (Base.ByteReader.bytes_ok_iff ..).mp dataRead
@@ -432,9 +439,9 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
       throw, throwThe, MonadExceptOf.throw, StateT.lift] at parsed
 
 /-- Every accepted message is exactly one successful encoding followed by the returned suffix. -/
-theorem encode_of_decode {hashLength : Nat} {input rest : List UInt8} {message : Message}
-    (parsed : decode hashLength input = .ok (message, rest)) :
-    ∃ encoded, encode hashLength message = .ok encoded ∧ input = encoded ++ rest := by
+theorem encodeList_of_decodeList {hashLength : Nat} {input rest : List UInt8} {message : Message}
+    (parsed : decodeList hashLength input = .ok (message, rest)) :
+    ∃ encoded, encodeList hashLength message = .ok encoded ∧ input = encoded ++ rest := by
   change (readFrame input >>= fun ((kind, body), suffix) =>
     (Wire.exact (readBody hashLength kind) body).mapError
       (fun error => match error with | .truncated => .length | error => error) >>=
@@ -448,12 +455,108 @@ theorem encode_of_decode {hashLength : Nat} {input rest : List UInt8} {message :
   obtain ⟨sameKind, encodedBody, bodyWritten, bodySame⟩ := encodeBody_of_readBody bodyRead
   simp only [List.append_nil] at bodySame
   subst body
-  obtain ⟨encoded, framed, inputSame⟩ := frame_of_readFrame frameRead
+  obtain ⟨encoded, framed, inputSame⟩ := frameList_of_readFrame frameRead
   refine ⟨encoded, ?_, inputSame⟩
-  simp [encode, bodyWritten, sameKind, framed]
+  simp [encodeList, bodyWritten, sameKind, framed]
 
 /-- Decoding succeeds exactly for a complete encoding followed by the returned suffix. -/
-theorem decode_eq_ok_iff {hashLength : Nat} {input rest : List UInt8} {message : Message} :
+theorem decodeList_eq_ok_iff {hashLength : Nat} {input rest : List UInt8} {message : Message} :
+    decodeList hashLength input = .ok (message, rest) ↔
+      ∃ encoded, encodeList hashLength message = .ok encoded ∧ input = encoded ++ rest := by
+  constructor
+  · exact encodeList_of_decodeList
+  · rintro ⟨encoded, written, rfl⟩
+    exact decodeList_encodeList written rest
+
+/-- A packed body within the uint24 bound gets its exact four-byte handshake header. -/
+theorem frame_eq_ok (kind : UInt8) (body : ByteArray) (bound : body.size < 2 ^ 24) :
+    frame kind body =
+      .ok ((kind :: (Base.natToBytes 3 body.size ++ body.data.toList)).toByteArray) := by
+  have capacity : body.data.toList.length < 2 ^ 24 := by simpa using bound
+  simp [frame, frameList_eq_ok kind body.data.toList capacity, Except.map]
+
+/-- A successfully framed packed body has its size plus the four header bytes. -/
+theorem size_frame {kind : UInt8} {body encoded : ByteArray}
+    (written : frame kind body = .ok encoded) : encoded.size = body.size + 4 := by
+  cases original : frameList kind body.data.toList with
+  | error error => simp [frame, original, Except.map] at written
+  | ok bytes =>
+    have same : bytes.toByteArray = encoded := by simpa [frame, original, Except.map] using written
+    subst encoded
+    simpa using length_frameList original
+
+/-- A successfully framed packed body fits the uint24 length bound. -/
+theorem bound_of_frame {kind : UInt8} {body encoded : ByteArray}
+    (written : frame kind body = .ok encoded) : body.size < 2 ^ 24 := by
+  cases original : frameList kind body.data.toList with
+  | error error => simp [frame, original, Except.map] at written
+  | ok bytes => simpa using bound_of_frameList original
+
+/-- Every packed encoding decodes to its message and preserves packed trailing bytes. -/
+theorem decode_encode {hashLength : Nat} {message : Message} {encoded : ByteArray}
+    (written : encode hashLength message = .ok encoded) (rest : ByteArray) :
+    decode hashLength (encoded ++ rest) = .ok (message, rest) := by
+  cases original : encodeList hashLength message with
+  | error error => simp [encode, original, Except.map] at written
+  | ok bytes =>
+    have same : bytes.toByteArray = encoded := by simpa [encode, original, Except.map] using written
+    subst encoded
+    simpa [decode, Except.map, EthLib.Base.toByteArray_data_toList] using
+      congrArg (Except.map fun (pair : Message × List UInt8) =>
+        (pair.1, pair.2.toByteArray)) (decodeList_encodeList original rest.data.toList)
+
+/-- Two messages with the same successful packed encoding are equal. -/
+theorem encode_injective {hashLength : Nat} {first second : Message} {encoded : ByteArray}
+    (left : encode hashLength first = .ok encoded)
+    (right : encode hashLength second = .ok encoded) : first = second := by
+  have l := decode_encode left ByteArray.empty
+  have r := decode_encode right ByteArray.empty
+  rw [l] at r
+  exact (Prod.mk.inj (Except.ok.inj r)).1
+
+/-- Packing a message encoding preserves exactly the list encoder's successful result. -/
+theorem encode_ok_iff (hashLength : Nat) (message : Message) (encoded : ByteArray) :
+    encode hashLength message = .ok encoded ↔
+      encodeList hashLength message = .ok encoded.data.toList := by
+  cases written : encodeList hashLength message with
+  | error error => simp [encode, written, Except.map]
+  | ok data =>
+    simp only [encode, written, Except.map, Except.ok.injEq]
+    constructor
+    · intro same
+      simpa using congrArg (fun bytes : ByteArray => bytes.data.toList) same
+    · intro same
+      rw [same, Base.toByteArray_data_toList]
+
+/-- Packing a decoded message preserves its fields and every trailing byte. -/
+theorem decode_ok_iff (hashLength : Nat) (input rest : ByteArray) (message : Message) :
+    decode hashLength input = .ok (message, rest) ↔
+      decodeList hashLength input.data.toList = .ok (message, rest.data.toList) := by
+  cases read : decodeList hashLength input.data.toList with
+  | error error => simp [decode, read, Except.map]
+  | ok result =>
+    rcases result with ⟨value, trailing⟩
+    simp only [decode, read, Except.map, Except.ok.injEq, Prod.mk.injEq]
+    constructor
+    · rintro ⟨rfl, same⟩
+      exact ⟨rfl, by simpa using congrArg (fun bytes : ByteArray => bytes.data.toList) same⟩
+    · rintro ⟨rfl, same⟩
+      exact ⟨rfl, by rw [same, Base.toByteArray_data_toList]⟩
+
+/-- Every accepted packed message is its encoding followed by the exact returned suffix. -/
+theorem encode_of_decode {hashLength : Nat} {input rest : ByteArray} {message : Message}
+    (parsed : decode hashLength input = .ok (message, rest)) :
+    ∃ encoded, encode hashLength message = .ok encoded ∧ input = encoded ++ rest := by
+  have read := (decode_ok_iff hashLength input rest message).mp parsed
+  obtain ⟨data, written, same⟩ := encodeList_of_decodeList read
+  refine ⟨data.toByteArray, ?_, ?_⟩
+  · simp [encode, written, Except.map]
+  · apply ByteArray.ext
+    apply Array.toList_inj.mp
+    simpa [ByteArray.data_append] using same
+
+/-- Packed message decoding succeeds exactly for one encoding followed by its returned suffix. -/
+theorem decode_eq_ok_iff {hashLength : Nat} {input rest : ByteArray} {message : Message} :
     decode hashLength input = .ok (message, rest) ↔
       ∃ encoded, encode hashLength message = .ok encoded ∧ input = encoded ++ rest := by
   constructor

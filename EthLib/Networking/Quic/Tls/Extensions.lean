@@ -29,7 +29,7 @@ open Wire
 /-- A named group and its opaque key-exchange bytes, RFC 8446 §4.2.8. -/
 structure KeyShareEntry where
   group : CodePoint
-  keyExchange : List UInt8
+  keyExchange : ByteArray
   deriving Repr, DecidableEq
 
 /-- The form of one extension payload, selected by the enclosing message. -/
@@ -65,8 +65,8 @@ inductive Payload where
   | clientKeyShare (shares : List KeyShareEntry)
   | serverKeyShare (share : KeyShareEntry)
   | retryKeyShare (group : CodePoint)
-  | alpn (protocols : List (List UInt8))
-  | quicTransportParameters (data : List UInt8)
+  | alpn (protocols : List ByteArray)
+  | quicTransportParameters (data : ByteArray)
   deriving Repr, DecidableEq
 
 /-- The presentation-language form of a structured payload. -/
@@ -84,11 +84,11 @@ def Payload.form : Payload → PayloadForm
 /-- Read a key share, requiring nonempty exchange bytes, RFC 8446 §4.2.8. -/
 def readKeyShare : Reader KeyShareEntry := do
   let group ← codePoint
-  return ⟨group, ← blob 2 1 65535⟩
+  return ⟨group, (← blob 2 1 65535).toByteArray⟩
 
 /-- Encode one key share without checking its group element (§4.2.8). -/
 def encodeKeyShare (share : KeyShareEntry) : Except Error (List UInt8) := do
-  return Base.natToBytes 2 share.group.val ++ (← encodeBlob 2 1 65535 share.keyExchange)
+  return Base.natToBytes 2 share.group.val ++ (← encodeBlob 2 1 65535 share.keyExchange.data.toList)
 
 /-- Encode the selected presentation-language form with its specified length bounds. -/
 def encodePayloadBody : Payload → Except Error (List UInt8)
@@ -99,8 +99,13 @@ def encodePayloadBody : Payload → Except Error (List UInt8)
   | .clientKeyShare shares => encodeItems 2 0 65535 encodeKeyShare shares
   | .serverKeyShare share => encodeKeyShare share
   | .retryKeyShare group => .ok (Base.natToBytes 2 group.val)
-  | .alpn protocols => encodeItems 2 2 65535 (encodeBlob 1 1 255) protocols
-  | .quicTransportParameters data => .ok data
+  | .alpn protocols =>
+    encodeItems 2 2 65535 (fun data => encodeBlob 1 1 255 data.data.toList) protocols
+  | .quicTransportParameters data => .ok data.data.toList
+
+/-- Read one packed ALPN name, RFC 7301 §3.1. -/
+def readAlpnName : Reader ByteArray := do
+  return (← blob 1 1 255).toByteArray
 
 /-- Read a payload form, without interpreting algorithm identifiers or QUIC parameters. -/
 def readPayload : PayloadForm → Reader Payload
@@ -111,14 +116,14 @@ def readPayload : PayloadForm → Reader Payload
   | .clientKeyShare => return .clientKeyShare (← items 2 0 65535 readKeyShare)
   | .serverKeyShare => return .serverKeyShare (← readKeyShare)
   | .retryKeyShare => return .retryKeyShare (← codePoint)
-  | .alpn => return .alpn (← items 2 2 65535 (blob 1 1 255))
-  | .quicTransportParameters => fun input => .ok (.quicTransportParameters input, [])
+  | .alpn => return .alpn (← items 2 2 65535 readAlpnName)
+  | .quicTransportParameters => fun input => .ok (.quicTransportParameters input.toByteArray, [])
 
 /-- Encode a payload as an extension, checking the extension's own uint16 length too (§4.2). -/
 def encodePayload (payload : Payload) : Except Error Extension := do
   let data ← encodePayloadBody payload
   Base.ensure (data.length ≤ 65535) .length
-  return ⟨payload.form.type, data⟩
+  return ⟨payload.form.type, data.toByteArray⟩
 
 /-- Decode one extension in the form expected by its caller, consuming all its data.
 
@@ -128,8 +133,8 @@ An incomplete field inside a complete extension is a length error, as more input
 -/
 def decodePayload (form : PayloadForm) (extension : Extension) : Except Error Payload := do
   Base.ensure (extension.kind = form.type) .constant
-  Base.ensure (extension.data.length ≤ 65535) .length
-  (exact (readPayload form) extension.data).mapError fun
+  Base.ensure (extension.data.size ≤ 65535) .length
+  (exact (readPayload form) extension.data.data.toList).mapError fun
     | .truncated => .length
     | error => error
 

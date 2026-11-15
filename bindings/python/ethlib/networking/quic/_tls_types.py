@@ -7,14 +7,14 @@ class Extension(TypedDict):
     """An extension type and its exact data, in RFC 8446 §4.2 wire order."""
 
     kind: int
-    data: list[int]
+    data: bytes
 
 
 class ClientHello(TypedDict):
     """The variable fields of a TLS 1.3 ClientHello, RFC 8446 §4.1.2."""
 
     random: bytes
-    legacy_session_id: list[int]
+    legacy_session_id: bytes
     cipher_suites: list[int]
     extensions: list[Extension]
 
@@ -23,7 +23,7 @@ class ServerHello(TypedDict):
     """The variable fields shared by ServerHello and HelloRetryRequest, RFC 8446 §4.1.3."""
 
     random: bytes
-    legacy_session_id_echo: list[int]
+    legacy_session_id_echo: bytes
     cipher_suite: int
     extensions: list[Extension]
 
@@ -31,21 +31,21 @@ class ServerHello(TypedDict):
 class CertificateEntry(TypedDict):
     """Opaque certificate bytes and per-certificate extensions, RFC 8446 §4.4.2."""
 
-    data: list[int]
+    data: bytes
     extensions: list[Extension]
 
 
 class Certificate(TypedDict):
     """A request context and a certificate list, including an empty client list."""
 
-    context: list[int]
+    context: bytes
     entries: list[CertificateEntry]
 
 
 class CertificateRequest(TypedDict):
     """A certificate request context and its extensions, RFC 8446 §4.3.2."""
 
-    context: list[int]
+    context: bytes
     extensions: list[Extension]
 
 
@@ -53,7 +53,7 @@ class KeyShareEntry(TypedDict):
     """A named group and its opaque key-exchange bytes, RFC 8446 §4.2.8."""
 
     group: int
-    key_exchange: list[int]
+    key_exchange: bytes
 
 
 # Algorithm identifiers are two-byte integers, without a supported-algorithm profile.
@@ -63,8 +63,8 @@ Message: TypeAlias = (
     | tuple[Literal["encrypted_extensions"], list[Extension]]
     | tuple[Literal["certificate_request"], CertificateRequest]
     | tuple[Literal["certificate"], Certificate]
-    | tuple[Literal["certificate_verify"], int, list[int]]
-    | tuple[Literal["finished"], list[int]]
+    | tuple[Literal["certificate_verify"], int, bytes]
+    | tuple[Literal["finished"], bytes]
 )
 
 PayloadForm: TypeAlias = Literal[
@@ -84,8 +84,8 @@ Payload: TypeAlias = (
     | tuple[Literal["selected_version", "retry_key_share"], int]
     | tuple[Literal["client_key_share"], list[KeyShareEntry]]
     | tuple[Literal["server_key_share"], KeyShareEntry]
-    | tuple[Literal["alpn"], list[list[int]]]
-    | tuple[Literal["quic_transport_parameters"], list[int]]
+    | tuple[Literal["alpn"], list[bytes]]
+    | tuple[Literal["quic_transport_parameters"], bytes]
 )
 
 

@@ -23,19 +23,19 @@ CODES = {
 # Source: RFC 8446 §§4.1.2, 4.1.3, 4.3.1, 4.3.2 and 4.4.2–4.4.4.
 # These small layouts are derived by hand from the field widths and bounds.
 # They pin wire syntax, with opaque certificate and signature bytes, rather than authentication.
-VERSIONS: tls.Extension = {"kind": 43, "data": [2, 3, 4]}
-SELECTED_VERSION: tls.Extension = {"kind": 43, "data": [3, 4]}
-PARAMETERS: tls.Extension = {"kind": 57, "data": []}
-SIGNATURES: tls.Extension = {"kind": 13, "data": [0, 2, 4, 3]}
+VERSIONS: tls.Extension = {"kind": 43, "data": bytes([2, 3, 4])}
+SELECTED_VERSION: tls.Extension = {"kind": 43, "data": bytes([3, 4])}
+PARAMETERS: tls.Extension = {"kind": 57, "data": b""}
+SIGNATURES: tls.Extension = {"kind": 13, "data": bytes([0, 2, 4, 3])}
 SMALL_CLIENT: tls.ClientHello = {
     "random": bytes(32),
-    "legacy_session_id": [],
+    "legacy_session_id": b"",
     "cipher_suites": [0x1301],
     "extensions": [VERSIONS, PARAMETERS],
 }
 SMALL_SERVER: tls.ServerHello = {
     "random": bytes(32),
-    "legacy_session_id_echo": [],
+    "legacy_session_id_echo": b"",
     "cipher_suite": 0x1301,
     "extensions": [SELECTED_VERSION],
 }
@@ -50,19 +50,19 @@ MESSAGES: list[tuple[tls.Message, str]] = [
     ),
     (("encrypted_extensions", []), "080000020000"),
     (
-        ("certificate_request", {"context": [], "extensions": [SIGNATURES]}),
+        ("certificate_request", {"context": b"", "extensions": [SIGNATURES]}),
         "0d00000b000008000d000400020403",
     ),
-    (("certificate", {"context": [], "entries": []}), "0b00000400000000"),
+    (("certificate", {"context": b"", "entries": []}), "0b00000400000000"),
     (
         (
             "certificate",
-            {"context": [], "entries": [{"data": [0xAA, 0xBB], "extensions": []}]},
+            {"context": b"", "entries": [{"data": bytes([0xAA, 0xBB]), "extensions": []}]},
         ),
         "0b00000b00000007000002aabb0000",
     ),
-    (("certificate_verify", 0x0403, [0xAB]), "0f00000504030001ab"),
-    (("finished", [0] * 32), "14000020" + "00" * 32),
+    (("certificate_verify", 0x0403, bytes([0xAB])), "0f00000504030001ab"),
+    (("finished", bytes(32)), "14000020" + "00" * 32),
 ]
 
 
@@ -92,19 +92,23 @@ def test_incomplete_envelope(message: tls.Message, encoded: str) -> None:
         (("signature_algorithms", [0x0403, 0x0804]), 13, "000404030804"),
         (("client_key_share", []), 51, "0000"),
         (
-            ("client_key_share", [{"group": 0x001D, "key_exchange": [0xAB]}]),
+            ("client_key_share", [{"group": 0x001D, "key_exchange": bytes([0xAB])}]),
             51,
             "0005001d0001ab",
         ),
-        (("server_key_share", {"group": 0x0017, "key_exchange": [0xAB]}), 51, "00170001ab"),
+        (("server_key_share", {"group": 0x0017, "key_exchange": bytes([0xAB])}), 51, "00170001ab"),
         (("retry_key_share", 0x0017), 51, "0017"),
-        (("alpn", [[108, 105, 98, 112, 50, 112], [0xFF]]), 16, "0009066c696270327001ff"),
-        (("quic_transport_parameters", [1, 0]), 57, "0100"),
+        (
+            ("alpn", [bytes([108, 105, 98, 112, 50, 112]), bytes([0xFF])]),
+            16,
+            "0009066c696270327001ff",
+        ),
+        (("quic_transport_parameters", bytes([1, 0])), 57, "0100"),
     ],
 )
 def test_extension_payload(payload: tls.Payload, kind: int, encoded: str) -> None:
     # Sources: RFC 8446 §§4.2.1, 4.2.3, 4.2.7, 4.2.8; RFC 7301 §3.1; RFC 9001 §8.2.
-    extension: tls.Extension = {"kind": kind, "data": list(bytes.fromhex(encoded))}
+    extension: tls.Extension = {"kind": kind, "data": bytes.fromhex(encoded)}
     assert tls.encode_payload(payload) == extension
     assert tls.decode_payload(payload[0], extension) == payload
 
@@ -117,10 +121,10 @@ def test_extension_payload(payload: tls.Payload, kind: int, encoded: str) -> Non
         ("supported_groups", []),
         ("signature_algorithms", []),
         ("alpn", []),
-        ("alpn", [[]]),
-        ("alpn", [[0] * 256]),
-        ("server_key_share", {"group": 0x0017, "key_exchange": []}),
-        ("quic_transport_parameters", [0] * 65536),
+        ("alpn", [b""]),
+        ("alpn", [bytes(256)]),
+        ("server_key_share", {"group": 0x0017, "key_exchange": b""}),
+        ("quic_transport_parameters", bytes(65536)),
     ],
 )
 def test_payload_length_rejected(payload: tls.Payload) -> None:
@@ -147,7 +151,7 @@ def test_payload_length_rejected(payload: tls.Payload) -> None:
 )
 def test_bad_payload(form: tls.PayloadForm, kind: int, data: str, error: str) -> None:
     with raises(tls.TlsHandshakeError, f"{PREFIX}{error}") as info:
-        tls.decode_payload(form, {"kind": kind, "data": list(bytes.fromhex(data))})
+        tls.decode_payload(form, {"kind": kind, "data": bytes.fromhex(data)})
     assert info.value.code == CODES[error]
 
 
@@ -182,8 +186,8 @@ def test_legacy_constants() -> None:
 
 def test_unknown_extensions_keep_their_order() -> None:
     extensions: list[tls.Extension] = [
-        {"kind": 0xAAAA, "data": [0xFF, 0]},
-        {"kind": 0xBBBB, "data": []},
+        {"kind": 0xAAAA, "data": bytes([0xFF, 0])},
+        {"kind": 0xBBBB, "data": b""},
     ]
     encoded = bytes.fromhex("0800000c000aaaaa0002ff00bbbb0000")
     message: tls.Message = ("encrypted_extensions", extensions)
@@ -200,8 +204,8 @@ def test_duplicate_extension_encoding() -> None:
 def test_duplicate_extension_type_with_different_data() -> None:
     # RFC 8446 §4.2 forbids repeated extension types even when their data differs.
     extensions: list[tls.Extension] = [
-        {"kind": 0xAAAA, "data": [0xAB]},
-        {"kind": 0xAAAA, "data": [0xCD]},
+        {"kind": 0xAAAA, "data": bytes([0xAB])},
+        {"kind": 0xAAAA, "data": bytes([0xCD])},
     ]
     error = f"{PREFIX}duplicateExtension"
     with raises(tls.TlsHandshakeError, error) as info:
@@ -215,10 +219,10 @@ def test_duplicate_extension_type_with_different_data() -> None:
 
 def test_caller_supplies_finished_hash_length() -> None:
     data = bytes.fromhex("14000030") + bytes(48)
-    assert tls.encode_message(48, ("finished", [0] * 48)) == data
-    assert tls.decode_message(48, data) == (("finished", [0] * 48), b"")
+    assert tls.encode_message(48, ("finished", bytes(48))) == data
+    assert tls.decode_message(48, data) == (("finished", bytes(48)), b"")
     with raises(tls.TlsHandshakeError, f"{PREFIX}length") as info:
-        tls.encode_message(32, ("finished", [0] * 48))
+        tls.encode_message(32, ("finished", bytes(48)))
     assert info.value.code == CODES["length"]
 
 

@@ -239,3 +239,13 @@ theorem forIn_eq_forIn_toList {β : Type} {m : Type → Type} [Monad m] [LawfulM
   rw [forIn_loop_eq_forIn_drop, Nat.sub_self, List.drop_zero]
 
 end EthLib.Base
+
+namespace EthLib.Base
+
+/-- Packing the list view of a byte array recovers that array. -/
+@[simp] theorem toByteArray_data_toList (bytes : ByteArray) :
+    bytes.data.toList.toByteArray = bytes := by
+  apply ByteArray.ext
+  simp
+
+end EthLib.Base
