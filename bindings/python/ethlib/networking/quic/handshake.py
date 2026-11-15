@@ -63,7 +63,7 @@ class Config(TypedDict):
 class Transcript(TypedDict):
     """The exact sent and received handshake bytes, and whether a retry occurred."""
 
-    bytes: list[int]
+    bytes: bytes
     retried: bool
 
 

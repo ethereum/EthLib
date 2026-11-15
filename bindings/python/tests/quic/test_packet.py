@@ -15,28 +15,28 @@ RETRY = "ff000000010008f067a5502a4262b5746f6b656e04a265ba2eff4d829058fb3f0f2496b
 @pytest.mark.parametrize(
     ("header", "encoded", "short_length"),
     [
-        (("initial", [131, 148, 200, 240, 62, 81, 87, 8], [], [], 3, 1182, 2), INITIAL, 0),
-        (("zero_rtt", [], [], 0, 1, 1), "d00000000100000101", 0),
-        (("handshake", [], [], 0, 1, 1), "e00000000100000101", 0),
+        (("initial", bytes([131, 148, 200, 240, 62, 81, 87, 8]), b"", b"", 3, 1182, 2), INITIAL, 0),
+        (("zero_rtt", b"", b"", 0, 1, 1), "d00000000100000101", 0),
+        (("handshake", b"", b"", 0, 1, 1), "e00000000100000101", 0),
         # RFC 9001 Appendix A.5: the unprotected short header.
-        (("one_rtt", [], False, False, 2, 49140), "4200bff4", 0),
+        (("one_rtt", b"", False, False, 2, 49140), "4200bff4", 0),
         # Fixed, spin and key-phase bits, an 8-byte connection ID known from the connection.
-        (("one_rtt", [1] * 8, True, True, 0, 7), "64" + "01" * 8 + "07", 8),
+        (("one_rtt", bytes([1] * 8), True, True, 0, 7), "64" + "01" * 8 + "07", 8),
         (
             (
                 "retry",
-                [],
-                [240, 103, 165, 80, 42, 66, 98, 181],
-                [116, 111, 107, 101, 110],
+                b"",
+                bytes([240, 103, 165, 80, 42, 66, 98, 181]),
+                bytes([116, 111, 107, 101, 110]),
                 bytes.fromhex("04a265ba2eff4d829058fb3f0f2496ba"),
                 15,
             ),
             RETRY,
             0,
         ),
-        (("version_negotiation", [], [], 0, [1]), "8000000000000000000001", 0),
+        (("version_negotiation", b"", b"", 0, [1]), "8000000000000000000001", 0),
         # Figure 14 repeats Supported Version zero or more times.
-        (("version_negotiation", [], [], 0, []), "80000000000000", 0),
+        (("version_negotiation", b"", b"", 0, []), "80000000000000", 0),
     ],
 )
 def test_headers(header: quic.Header, encoded: str, short_length: int) -> None:
@@ -53,7 +53,7 @@ def test_header_preserves_payload() -> None:
 
 def test_version_negotiation_connection_ids_are_version_independent() -> None:
     # RFC 9000 §17.2.1 permits up to 255 bytes, independently of version 1's 20-byte bound.
-    header = ("version_negotiation", [0] * 255, [1] * 21, 127, [1])
+    header = ("version_negotiation", bytes(255), bytes([1] * 21), 127, [1])
     assert quic.decode_header(0, quic.encode_header(header)) == (header, b"")
 
 
@@ -104,10 +104,10 @@ def test_malformed_headers(encoded: str, error: str, code: int) -> None:
 @pytest.mark.parametrize(
     "header",
     [
-        ("one_rtt", [0] * 21, False, False, 0, 0),
-        ("one_rtt", [], False, False, 0, 256),
-        ("handshake", [], [], 1, 1, 0),
-        ("retry", [], [], [], bytes(16), 0),
+        ("one_rtt", bytes(21), False, False, 0, 0),
+        ("one_rtt", b"", False, False, 0, 256),
+        ("handshake", b"", b"", 1, 1, 0),
+        ("retry", b"", b"", b"", bytes(16), 0),
     ],
 )
 def test_encoder_rejects_invalid_headers(header: quic.Header) -> None:

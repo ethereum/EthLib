@@ -23,8 +23,8 @@ FRAMES = [
     ),
     (("reset_stream", 1, 2, 3), "04010203"),
     (("stop_sending", 1, 2), "050102"),
-    (("crypto", 0, [171]), "060001ab"),
-    (("new_token", [171]), "0701ab"),
+    (("crypto", 0, bytes([171])), "060001ab"),
+    (("new_token", bytes([171])), "0701ab"),
     (("max_data", 1), "1001"),
     (("max_stream_data", 1, 2), "110102"),
     (("max_streams", False, 1), "1201"),
@@ -33,12 +33,12 @@ FRAMES = [
     (("stream_data_blocked", 1, 2), "150102"),
     (("streams_blocked", False, 1), "1601"),
     (("streams_blocked", True, 1), "1701"),
-    (("new_connection_id", 2, 1, [171], bytes(16)), "18020101ab" + "00" * 16),
+    (("new_connection_id", 2, 1, bytes([171]), bytes(16)), "18020101ab" + "00" * 16),
     (("retire_connection_id", 1), "1901"),
     (("path_challenge", bytes.fromhex("0001020304050607")), "1a0001020304050607"),
     (("path_response", bytes.fromhex("0001020304050607")), "1b0001020304050607"),
-    (("connection_close", 1, 0, [104, 105]), "1c0100026869"),
-    (("connection_close", 1, None, [104, 105]), "1d01026869"),
+    (("connection_close", 1, 0, bytes([104, 105])), "1c0100026869"),
+    (("connection_close", 1, None, bytes([104, 105])), "1d01026869"),
     ("handshake_done", "1e"),
 ]
 
@@ -56,14 +56,14 @@ def test_stream_flag_layouts(kind: int) -> None:
     # Without LEN the data ends at the packet boundary.
     offset = 2 if kind & 4 else None
     length_present = bool(kind & 2)
-    frame = ("stream", 1, offset, length_present, bool(kind & 1), [171])
+    frame = ("stream", 1, offset, length_present, bool(kind & 1), bytes([171]))
     encoded = bytes([kind, 1] + ([2] if kind & 4 else []) + ([1] if length_present else []) + [171])
     assert quic.encode_frame(frame) == encoded
     assert quic.decode_frame("one_rtt", encoded) == (frame, b"")
 
 
 def test_stream_without_length_consumes_the_packet() -> None:
-    frame = ("stream", 1, None, False, False, [171, 205])
+    frame = ("stream", 1, None, False, False, bytes([171, 205]))
     assert quic.decode_frame("one_rtt", bytes.fromhex("0801abcd")) == (frame, b"")
 
 
@@ -132,9 +132,9 @@ def test_table_3(frame: quic.Frame, encoded: str, packet: quic.PacketType) -> No
 @pytest.mark.parametrize(
     "frame",
     [
-        ("new_token", []),
+        ("new_token", b""),
         ("max_streams", False, 2**60 + 1),
-        ("new_connection_id", 1, 2, [171], bytes(16)),
+        ("new_connection_id", 1, 2, bytes([171]), bytes(16)),
     ],
 )
 def test_encoder_rejects_malformed_frames(frame: quic.Frame) -> None:

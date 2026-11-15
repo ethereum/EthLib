@@ -163,7 +163,7 @@ theorem removeHeaderProtection_applyMask (suite : CipherSuite)
 
 
 /-- An Initial packet's suite check accepts exactly AES-128-GCM, RFC 9001 §5. -/
-theorem checkSuite_initial_ok_iff (suite : CipherSuite) (destination source token : List UInt8)
+theorem checkSuite_initial_ok_iff (suite : CipherSuite) (destination source token : ByteArray)
     (width : Packet.PacketNumberLength) (length : Varint) (number : Nat) :
     checkSuite suite (.initial destination source token width length number) = .ok () ↔
       suite = .aes128GcmSha256 := by

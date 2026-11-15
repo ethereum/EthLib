@@ -35,7 +35,7 @@ def numberLength (width : PacketNumberLength) : Nat := width.val + 1
 /-- Keep the low packet-number bytes of the chosen width (§17.1).
 
 The sender chooses a width that covers more than twice its unacknowledged range (§17.1). -/
-def encodePacketNumber (width : PacketNumberLength) (number : Varint) : List UInt8 :=
+def encodePacketNumberList (width : PacketNumberLength) (number : Varint) : List UInt8 :=
   Base.natToBytes (numberLength width) number.val
 
 /-- Reconstruct a packet number using RFC 9000 Appendix A.3.
@@ -76,70 +76,71 @@ The Length field of a long header counts the packet-number bytes and the encrypt
 Version Negotiation permits connection IDs through 255 bytes, independently of version 1 (§17.2.1).
 -/
 inductive Header where
-  | initial (destination source token : List UInt8) (width : PacketNumberLength)
+  | initial (destination source token : ByteArray) (width : PacketNumberLength)
       (length : Varint) (number : Nat)
-  | zeroRtt (destination source : List UInt8) (width : PacketNumberLength)
+  | zeroRtt (destination source : ByteArray) (width : PacketNumberLength)
       (length : Varint) (number : Nat)
-  | handshake (destination source : List UInt8) (width : PacketNumberLength)
+  | handshake (destination source : ByteArray) (width : PacketNumberLength)
       (length : Varint) (number : Nat)
-  | oneRtt (destination : List UInt8) (spin keyPhase : Bool)
+  | oneRtt (destination : ByteArray) (spin keyPhase : Bool)
       (width : PacketNumberLength) (number : Nat)
-  | retry (destination source token : List UInt8) (tag : Vector UInt8 16) (unused : Fin 16)
-  | versionNegotiation (destination source : List UInt8) (unused : Fin 128)
+  | retry (destination source token : ByteArray) (tag : Vector UInt8 16) (unused : Fin 16)
+  | versionNegotiation (destination source : ByteArray) (unused : Fin 128)
       (versions : List UInt32)
   deriving Repr, DecidableEq
 
 /-- Conditions that prevent an encoder from truncating fields or emitting malformed headers. -/
 def Header.Valid : Header → Prop
-  | .initial d s t w l n => d.length ≤ 20 ∧ s.length ≤ 20 ∧ t.length < 2 ^ 62 ∧
+  | .initial d s t w l n => d.size ≤ 20 ∧ s.size ≤ 20 ∧ t.size < 2 ^ 62 ∧
       numberLength w ≤ l.val ∧ n < 256 ^ numberLength w
   | .zeroRtt d s w l n | .handshake d s w l n =>
-      d.length ≤ 20 ∧ s.length ≤ 20 ∧ numberLength w ≤ l.val ∧
+      d.size ≤ 20 ∧ s.size ≤ 20 ∧ numberLength w ≤ l.val ∧
       n < 256 ^ numberLength w
-  | .oneRtt d _ _ w n => d.length ≤ 20 ∧ n < 256 ^ numberLength w
-  | .retry d s t _ _ => d.length ≤ 20 ∧ s.length ≤ 20 ∧ t ≠ []
-  | .versionNegotiation d s _ _ => d.length ≤ 255 ∧ s.length ≤ 255
+  | .oneRtt d _ _ w n => d.size ≤ 20 ∧ n < 256 ^ numberLength w
+  | .retry d s t _ _ => d.size ≤ 20 ∧ s.size ≤ 20 ∧ t ≠ ByteArray.empty
+  | .versionNegotiation d s _ _ => d.size ≤ 255 ∧ s.size ≤ 255
 
 instance (header : Header) : Decidable header.Valid := by
   cases header <;> unfold Header.Valid <;> infer_instance
 
 /-- The version-independent connection-ID prefix of a long header (§17.2). -/
-def longPrefix (first : UInt8) (version : Nat) (destination source : List UInt8) :
+def longPrefixList (first : UInt8) (version : Nat) (destination source : ByteArray) :
     List UInt8 :=
-  [first] ++ Base.natToBytes 4 version ++ [UInt8.ofNat destination.length] ++
-    destination ++ [UInt8.ofNat source.length] ++ source
+  [first] ++ Base.natToBytes 4 version ++ [UInt8.ofNat destination.size] ++
+    destination.data.toList ++ [UInt8.ofNat source.size] ++ source.data.toList
 
 /-- Encode a header after checking all field bounds (§§17.2–17.3).
 
 The version 1 encoder sets the reserved bits to zero.
 -/
-def encode (header : Header) : Except Error (List UInt8) := do
+def encodeList (header : Header) : Except Error (List UInt8) := do
   if ¬header.Valid then throw .packetLength
   match header with
   | .initial d s t w l n =>
-    let tlen ← checkedVarint t.length
-    return longPrefix (UInt8.ofNat (192 + w.val)) 1 d s ++
-      Varint.encode tlen ++ t ++ Varint.encode l ++ Base.natToBytes (numberLength w) n
+    let tlen ← checkedVarint t.size
+    return longPrefixList (UInt8.ofNat (192 + w.val)) 1 d s ++
+      Varint.encodeList tlen ++ t.data.toList ++ Varint.encodeList l ++
+        Base.natToBytes (numberLength w) n
   | .zeroRtt d s w l n =>
-    return longPrefix (UInt8.ofNat (208 + w.val)) 1 d s ++
-      Varint.encode l ++ Base.natToBytes (numberLength w) n
+    return longPrefixList (UInt8.ofNat (208 + w.val)) 1 d s ++
+      Varint.encodeList l ++ Base.natToBytes (numberLength w) n
   | .handshake d s w l n =>
-    return longPrefix (UInt8.ofNat (224 + w.val)) 1 d s ++
-      Varint.encode l ++ Base.natToBytes (numberLength w) n
+    return longPrefixList (UInt8.ofNat (224 + w.val)) 1 d s ++
+      Varint.encodeList l ++ Base.natToBytes (numberLength w) n
   | .oneRtt d spin keyPhase w n =>
     return [UInt8.ofNat (64 + (if spin then 32 else 0) +
-      (if keyPhase then 4 else 0) + w.val)] ++ d ++ Base.natToBytes (numberLength w) n
+      (if keyPhase then 4 else 0) + w.val)] ++ d.data.toList ++ Base.natToBytes (numberLength w) n
   | .retry d s t tag unused =>
-    return longPrefix (UInt8.ofNat (240 + unused.val)) 1 d s ++ t ++ tag.toList
+    return longPrefixList (UInt8.ofNat (240 + unused.val)) 1 d s ++ t.data.toList ++ tag.toList
   | .versionNegotiation d s unused versions =>
-    return longPrefix (UInt8.ofNat (128 + unused.val)) 0 d s ++
+    return longPrefixList (UInt8.ofNat (128 + unused.val)) 0 d s ++
       versions.flatMap fun v => Base.natToBytes 4 v.toNat
 
 /-- Read a connection ID with its one-byte length (§17.2). -/
-def connectionId (maximum : Nat) : Reader (List UInt8) := do
+def connectionId (maximum : Nat) : Reader ByteArray := do
   let n ← byte
   require (n.toNat ≤ maximum) .connectionIdLength
-  bytes n.toNat
+  return (← bytes n.toNat).toByteArray
 
 /-- Read the Length and truncated Packet Number fields (§17.2). -/
 def lengthAndNumber (width : PacketNumberLength) : Reader (Varint × Nat) := do
@@ -162,14 +163,14 @@ The short-header connection-ID length comes from the connection, not from the wi
 
 Retry and Version Negotiation consume the remaining datagram.
 -/
-def decode (shortConnectionIdLength : Nat) : Reader Header := do
+def decodeList (shortConnectionIdLength : Nat) : Reader Header := do
   let first ← byte
   let width := widthOfFirst first
   if first.toNat < 128 then
     require (first.toNat / 64 = 1) .fixedBit
     require (first.toNat / 8 % 4 = 0) .reservedBits
     require (shortConnectionIdLength ≤ 20) .connectionIdLength
-    let destination ← bytes shortConnectionIdLength
+    let destination := (← bytes shortConnectionIdLength).toByteArray
     let number ← uint (numberLength width)
     return .oneRtt destination (first.toNat / 32 % 2 = 1)
       (first.toNat / 4 % 2 = 1) width number
@@ -192,7 +193,7 @@ def decode (shortConnectionIdLength : Nat) : Reader Header := do
         let token := rest.take (rest.length - 16)
         let tag := rest.drop (rest.length - 16)
         if h : tag.length = 16 then
-          return .retry destination source token
+          return .retry destination source token.toByteArray
             ⟨tag.toArray, by simpa using h⟩
             ⟨first.toNat % 16, Nat.mod_lt _ (by decide)⟩
         else throw .truncated
@@ -201,11 +202,26 @@ def decode (shortConnectionIdLength : Nat) : Reader Header := do
         if first.toNat / 16 % 4 = 0 then
           let token ← blob
           let (length, number) ← lengthAndNumber width
-          return .initial destination source token width length number
+          return .initial destination source token.toByteArray width length number
         else
           let (length, number) ← lengthAndNumber width
           if first.toNat / 16 % 4 = 1 then
             return .zeroRtt destination source width length number
           else return .handshake destination source width length number
+
+
+/-- Keep the low packet-number bytes in their packed representation. -/
+def encodePacketNumber (width : PacketNumberLength) (number : Varint) : ByteArray :=
+  (encodePacketNumberList width number).toByteArray
+
+/-- Encode a header as packed bytes without changing its wire format. -/
+def encode (header : Header) : Except Error ByteArray :=
+  (encodeList header).map List.toByteArray
+
+/-- Read one authenticated header and preserve the packed trailing bytes. -/
+def decode (shortConnectionIdLength : Nat) (input : ByteArray) :
+    Except Error (Header × ByteArray) :=
+  (decodeList shortConnectionIdLength input.data.toList).map fun (header, rest) =>
+    (header, rest.toByteArray)
 
 end EthLib.Networking.Quic.Packet

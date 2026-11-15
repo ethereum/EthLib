@@ -20,6 +20,8 @@ namespace EthLib.Networking.Quic.Tls
 open Wire
 open EthLib.Base (bind_ok_iff)
 
+attribute [local simp] EthLib.Base.toByteArray_data_toList
+
 attribute [local simp] bind pure StateT.bind StateT.pure StateT.lift Except.bind Except.pure
 
 /-- A key share retains its named group and exchange bytes, without validating the group element. -/
@@ -48,13 +50,15 @@ theorem keyShares_encode {values : List KeyShareEntry} {encoded : List UInt8}
     (fun _ _ h => length_encodeKeyShare h) written rest
 
 /-- An ALPN vector retains every opaque protocol name without truncating it. -/
-theorem alpn_encode {values : List (List UInt8)} {encoded : List UInt8}
-    (written : encodeItems 2 2 65535 (encodeBlob 1 1 255) values = .ok encoded)
+theorem alpn_encode {values : List ByteArray} {encoded : List UInt8}
+    (written : encodeItems 2 2 65535 (fun data => encodeBlob 1 1 255 data.data.toList) values =
+      .ok encoded)
     (rest : List UInt8) :
-    items 2 2 65535 (blob 1 1 255) (encoded ++ rest) = .ok (values, rest) := by
-  apply items_encodeItems (encodeBlob 1 1 255) (blob 1 1 255) _ _ written rest
+    items 2 2 65535 readAlpnName (encoded ++ rest) = .ok (values, rest) := by
+  apply items_encodeItems (fun (data : ByteArray) => encodeBlob 1 1 255 data.data.toList)
+    readAlpnName _ _ written rest
   · intro value data rest h
-    exact blob_encode_of_encode h rest
+    simp [readAlpnName, blob_encode_of_encode h rest]
   · intro value data h
     have length := length_encodeBlob h
     omega
@@ -100,7 +104,7 @@ theorem readPayload_encodePayloadBody {payload : Payload} {encoded : List UInt8}
     simp [readPayload, Payload.form, parsed]
   | quicTransportParameters data =>
     cases written
-    rfl
+    simp [readPayload, Payload.form]
 
 /-- Every successfully encoded extension payload decodes in its caller-selected form. -/
 theorem decodePayload_encodePayload {payload : Payload} {extension : Extension}
@@ -117,7 +121,8 @@ theorem encodeKeyShare_of_readKeyShare {input rest : List UInt8} {share : KeySha
     (parsed : readKeyShare input = .ok (share, rest)) :
     ∃ encoded, encodeKeyShare share = .ok encoded ∧ input = encoded ++ rest := by
   change (codePoint input >>= fun (group, suffix) =>
-    blob 2 1 65535 suffix >>= fun (data, trailing) => .ok (⟨group, data⟩, trailing)) =
+    blob 2 1 65535 suffix >>= fun (data, trailing) =>
+      .ok (⟨group, data.toByteArray⟩, trailing)) =
       .ok (share, rest) at parsed
   simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
   obtain ⟨⟨group, suffix⟩, groupRead, ⟨data, trailing⟩, dataRead, rfl, rfl⟩ := parsed
@@ -127,6 +132,16 @@ theorem encodeKeyShare_of_readKeyShare {input rest : List UInt8} {share : KeySha
   · simp [encodeKeyShare, written]
   · rw [eq_natToBytes_of_codePoint groupRead, same]
     simp only [List.append_assoc]
+
+/-- An accepted packed ALPN name reconstructs every byte of its length-prefixed encoding. -/
+theorem encodeBlob_of_readAlpnName {input rest : List UInt8} {name : ByteArray}
+    (parsed : readAlpnName input = .ok (name, rest)) :
+    ∃ encoded, encodeBlob 1 1 255 name.data.toList = .ok encoded ∧ input = encoded ++ rest := by
+  change (blob 1 1 255 input >>= fun (data, suffix) => .ok (data.toByteArray, suffix)) =
+    .ok (name, rest) at parsed
+  simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
+  obtain ⟨⟨data, suffix⟩, dataRead, rfl, rfl⟩ := parsed
+  simpa using encodeBlob_of_blob dataRead
 
 /-- An accepted isolated payload has the selected form and re-encodes to every input byte. -/
 theorem encodePayloadBody_of_readPayload {form : PayloadForm} {input : List UInt8}
@@ -191,17 +206,18 @@ theorem encodePayloadBody_of_readPayload {form : PayloadForm} {input : List UInt
     simp only [List.append_nil] at same
     exact ⟨rfl, by simp [encodePayloadBody, same]⟩
   | alpn =>
-    change (items 2 2 65535 (blob 1 1 255) input >>= fun (values, suffix) =>
+    change (items 2 2 65535 readAlpnName input >>= fun (values, suffix) =>
       .ok (.alpn values, suffix)) = .ok (payload, []) at parsed
     simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
     obtain ⟨⟨values, suffix⟩, valuesRead, rfl, rfl⟩ := parsed
-    obtain ⟨encoded, written, same⟩ := encodeItems_of_items (encodeBlob 1 1 255) (blob 1 1 255)
-      (fun _ _ _ accepted => encodeBlob_of_blob accepted) valuesRead
+    obtain ⟨encoded, written, same⟩ := encodeItems_of_items
+      (fun name : ByteArray => encodeBlob 1 1 255 name.data.toList) readAlpnName
+      (fun _ _ _ accepted => encodeBlob_of_readAlpnName accepted) valuesRead
     simp only [List.append_nil] at same
     exact ⟨rfl, by simpa only [encodePayloadBody, same] using written⟩
   | quicTransportParameters =>
     cases parsed
-    exact ⟨rfl, rfl⟩
+    exact ⟨rfl, by simp [encodePayloadBody]⟩
 
 /-- Every accepted extension payload is its original encoding in the caller-selected form. -/
 theorem encodePayload_of_decodePayload {form : PayloadForm} {extension : Extension}
@@ -211,8 +227,8 @@ theorem encodePayload_of_decodePayload {form : PayloadForm} {extension : Extensi
   obtain ⟨u, kindCheck, v, lengthCheck, bodyRead⟩ := parsed
   have kind := Base.ensure_ok_iff.mp kindCheck
   have length := Base.ensure_ok_iff.mp lengthCheck
-  have exactRead : Wire.exact (readPayload form) extension.data = .ok payload := by
-    cases result : Wire.exact (readPayload form) extension.data <;>
+  have exactRead : Wire.exact (readPayload form) extension.data.data.toList = .ok payload := by
+    cases result : Wire.exact (readPayload form) extension.data.data.toList <;>
       simp_all [Except.mapError]
   obtain ⟨sameForm, written⟩ :=
     encodePayloadBody_of_readPayload ((exact_eq_ok_iff ..).mp exactRead)

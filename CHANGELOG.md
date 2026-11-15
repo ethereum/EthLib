@@ -9,6 +9,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- The QUIC and TLS codecs use packed byte arrays for byte strings, as [Shared types](ARCHITECTURE.md#shared-types) requires.
+  In Lean, packet-header fields, frame payloads, TLS byte fields and transcripts use `ByteArray` in place of `List UInt8`.
+  `Varint`, `Packet`, `Frame` and TLS `encode` and `decode` use `ByteArray` at their byte boundaries.
+  Use `.size` for a byte length and `.data.toList` only when calling the internal list readers.
+  In Python, these fields use `bytes` in place of `list[int]`; convert an existing byte list with `bytes(value)` and write an empty byte string as `b""`.
+  Collections of messages, extensions, key shares and ALPN protocol names remain lists.
+  Encoded wire bytes and rejection codes are unchanged.
+
 - In Lean, the proof modules `FastConfirmationCommittees`, `FastConfirmationConfirmedRoot`, `FastConfirmationIndicators`, `FastConfirmationSets` and `FastConfirmationSupporters` move under `EthLib.Consensus.Proofs.ForkChoice.FastConfirmation` as `Committees`, `ConfirmedRoot`, `Indicators`, `Sets` and `Supporters` ([#2566](https://github.com/ethereum/EthLib/pull/2566)).
   The declarations of the former `FastConfirmation` module move to `FastConfirmation.Basic`, and importing `FastConfirmation` still provides them and all five leaves.
   Declaration namespaces and statements are unchanged.

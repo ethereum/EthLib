@@ -37,16 +37,16 @@ open EthLib.Cryptography.Hash.Tls13.Exports (ofExcept)
 def encodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (value : Nat) => do
     if h : value < 2 ^ 62 then
-      return (⟨(Varint.encode ⟨value, h⟩).toArray⟩ : ByteArray)
+      return Varint.encode ⟨value, h⟩
     else throw (0, "value must be below 2^62")) args
 
 /-- Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16. -/
 @[export eth_quic_varint_decode]
 def decodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (data : ByteArray) => do
-    let (value, rest) ← (Varint.decode data.data.toList).mapError
+    let (value, rest) ← (Varint.decode data).mapError
       fun e => (e.code, s!"QUIC integer rejected: {reprStr e}")
-    return (value.val, (⟨rest.toArray⟩ : ByteArray))) args
+    return (value.val, rest)) args
 
 /-- Derive the client and server Initial secrets for QUIC v1, RFC 9001 §5.2. -/
 @[export eth_quic_initial_secrets]
@@ -135,15 +135,15 @@ def handshakeResult {α : Type} (value : Except Tls.Wire.Error α) : Result α :
 def messageEncodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (hashLength, message) => do
     let data ← handshakeResult (Tls.encode hashLength message)
-    return (⟨data.toArray⟩ : ByteArray)) args
+    return data) args
 
 /-- Decode one complete message and return its fields and trailing bytes, RFC 8446 §4. -/
 @[export eth_quic_tls_message_decode]
 def messageDecodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (input : Nat × ByteArray) => do
     let (hashLength, data) := input
-    let (message, rest) ← handshakeResult (Tls.decode hashLength data.toList)
-    return (message, (⟨rest.toArray⟩ : ByteArray))) args
+    let (message, rest) ← handshakeResult (Tls.decode hashLength data)
+    return (message, rest)) args
 
 /-- Encode a structured extension payload without selecting an algorithm or protocol. -/
 @[export eth_quic_tls_payload_encode]
@@ -161,14 +161,14 @@ A HelloRetryRequest replaces ClientHello1 with its synthetic `message_hash` mess
 @[export eth_quic_tls_transcript]
 def transcriptExport (args : PyValue) : Result PyValue :=
   pyExport (fun (messages : List ByteArray) => do
-    let result ← handshakeResult (Tls.transcript (messages.map ByteArray.toList))
-    return ((⟨result.bytes.toArray⟩ : ByteArray), result.hash)) args
+    let result ← handshakeResult (Tls.transcript messages)
+    return (result.bytes, result.hash)) args
 
 /-- Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 8446 §4.4.3. -/
 @[export eth_quic_tls_certificate_verify_input]
 def certificateVerifyInputExport (args : PyValue) : Result PyValue :=
   pyExport (fun (server, digest) =>
-    pure (⟨(Tls.certificateVerifyInput server digest).toArray⟩ : ByteArray)) args
+    pure (Tls.certificateVerifyInput server digest)) args
 
 /-- Encode a QUIC header, with checked lengths and packet-number bounds (RFC 9000 §17). -/
 @[export eth_quic_header_encode]
@@ -176,16 +176,16 @@ def headerEncodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (header : Packet.Header) => do
     let encoded ← (Packet.encode header).mapError
       fun e => (e.code, s!"QUIC header rejected: {reprStr e}")
-    return (⟨encoded.toArray⟩ : ByteArray)) args
+    return encoded) args
 
 /-- Read an authenticated header and return its fields and remaining bytes (RFC 9000 §17). -/
 @[export eth_quic_header_decode]
 def headerDecodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (input : Nat × ByteArray) => do
     let (shortConnectionIdLength, data) := input
-    let (header, rest) ← (Packet.decode shortConnectionIdLength data.toList).mapError
+    let (header, rest) ← (Packet.decode shortConnectionIdLength data).mapError
       fun e => (e.code, s!"QUIC header rejected: {reprStr e}")
-    return (header, (⟨rest.toArray⟩ : ByteArray))) args
+    return (header, rest)) args
 
 /-- Encode one well-formed QUIC frame (RFC 9000 §19). -/
 @[export eth_quic_frame_encode]
@@ -193,23 +193,23 @@ def frameEncodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (frame : Frame.Frame) => do
     let encoded ← (Frame.encode frame).mapError
       fun e => (e.code, s!"QUIC frame rejected: {reprStr e}")
-    return (⟨encoded.toArray⟩ : ByteArray)) args
+    return encoded) args
 
 /-- Read one frame allowed in the given packet type (RFC 9000 §12.4). -/
 @[export eth_quic_frame_decode]
 def frameDecodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (input : Packet.PacketType × ByteArray) => do
     let (packet, data) := input
-    let (frame, rest) ← (Frame.decode packet data.toList).mapError
+    let (frame, rest) ← (Frame.decode packet data).mapError
       fun e => (e.code, s!"QUIC frame rejected: {reprStr e}")
-    return (frame, (⟨rest.toArray⟩ : ByteArray))) args
+    return (frame, rest)) args
 
 /-- Write the low packet-number bytes (RFC 9000 §17.1). -/
 @[export eth_quic_packet_number_encode]
 def packetNumberEncodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (input : Fin 4 × Fin (2 ^ 62)) => do
     let (width, number) := input
-    pure (⟨(Packet.encodePacketNumber width number).toArray⟩ : ByteArray)) args
+    pure (Packet.encodePacketNumber width number)) args
 
 /-- Reconstruct a packet number from its low bytes (RFC 9000 Appendix A.3). -/
 @[export eth_quic_packet_number_decode]

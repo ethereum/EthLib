@@ -29,10 +29,10 @@ if TYPE_CHECKING:
         assert_type(_native.quic_tls_payload_decode(form, extension), tls.Payload)
 
         # These malformed tags or fields must remain type errors at the native boundary.
-        _native.quic_header_encode(("initial", [], [], [], 0, 0))  # ty: ignore[invalid-argument-type]
-        _native.quic_frame_encode(("crypto", 0, b""))  # ty: ignore[invalid-argument-type]
+        _native.quic_header_encode(("initial", b"", b"", b"", 0, 0))  # ty: ignore[invalid-argument-type]
+        _native.quic_frame_encode(("crypto", 0, []))  # ty: ignore[invalid-argument-type]
         _native.quic_frame_decode("retry", b"")  # ty: ignore[invalid-argument-type]
-        _native.quic_tls_message_encode(32, ("finished", b""))  # ty: ignore[invalid-argument-type]
+        _native.quic_tls_message_encode(32, ("finished", []))  # ty: ignore[invalid-argument-type]
         _native.quic_tls_payload_encode(("key_share", []))  # ty: ignore[invalid-argument-type]
         _native.quic_tls_payload_decode("alpn", b"")  # ty: ignore[invalid-argument-type]
         _native.quic_tls_payload_decode("unknown", extension)  # ty: ignore[invalid-argument-type]

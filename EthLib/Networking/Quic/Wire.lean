@@ -2,6 +2,7 @@ module
 
 public import EthLib.Networking.Quic.Varint
 public import EthLib.Base.ByteReader
+public import EthLib.Base.Bytes
 
 /-!
 # QUIC wire fields
@@ -59,7 +60,7 @@ def byte : Reader UInt8 := fun input =>
 
 /-- Read a QUIC integer, accepting the nonminimal forms permitted by RFC 9000 §16. -/
 def varint : Reader Varint := fun input =>
-  (Varint.decode input).mapError fun _ => .truncated
+  (Varint.decodeList input).mapError fun _ => .truncated
 
 /-- Reject a field that does not meet its format constraint. -/
 abbrev require (condition : Prop) [Decidable condition] (error : Error) : Reader Unit :=
@@ -80,6 +81,6 @@ def blob : Reader (List UInt8) := do
 /-- Encode a byte string whose length fits a QUIC integer. -/
 def encodeBlob (data : List UInt8) : Except Error (List UInt8) := do
   let n ← checkedVarint data.length
-  return Varint.encode n ++ data
+  return Varint.encodeList n ++ data
 
 end EthLib.Networking.Quic.Wire

@@ -58,10 +58,10 @@ inductive Frame where
   | ack (fields : Ack)
   | resetStream (streamId errorCode finalSize : Varint)
   | stopSending (streamId errorCode : Varint)
-  | crypto (offset : Varint) (data : List UInt8)
-  | newToken (token : List UInt8)
+  | crypto (offset : Varint) (data : ByteArray)
+  | newToken (token : ByteArray)
   | stream (streamId : Varint) (offset : Option Varint) (lengthPresent fin : Bool)
-      (data : List UInt8)
+      (data : ByteArray)
   | maxData (maximum : Varint)
   | maxStreamData (streamId maximum : Varint)
   | maxStreams (unidirectional : Bool) (maximum : Varint)
@@ -69,11 +69,11 @@ inductive Frame where
   | streamDataBlocked (streamId limit : Varint)
   | streamsBlocked (unidirectional : Bool) (limit : Varint)
   | newConnectionId (sequenceNumber retirePriorTo : Varint)
-      (connectionId : List UInt8) (resetToken : Vector UInt8 16)
+      (connectionId : ByteArray) (resetToken : Vector UInt8 16)
   | retireConnectionId (sequenceNumber : Varint)
   | pathChallenge (data : Vector UInt8 8)
   | pathResponse (data : Vector UInt8 8)
-  | connectionClose (errorCode : Varint) (frameType : Option Varint) (reason : List UInt8)
+  | connectionClose (errorCode : Varint) (frameType : Option Varint) (reason : ByteArray)
   | handshakeDone
   deriving Repr, DecidableEq
 
@@ -109,13 +109,13 @@ The count and length bounds also keep each encoded length below `2^62`.
 def Frame.Valid : Frame → Prop
   | .ack a => a.ranges.length < 2 ^ 62 ∧ a.firstRange.val ≤ a.largest.val ∧
       ackRangesValid (a.largest.val - a.firstRange.val) a.ranges
-  | .crypto offset data => offset.val + data.length < 2 ^ 62
-  | .newToken token => token ≠ [] ∧ token.length < 2 ^ 62
-  | .stream _ offset _ _ data => (offset.map Fin.val).getD 0 + data.length < 2 ^ 62
+  | .crypto offset data => offset.val + data.size < 2 ^ 62
+  | .newToken token => token ≠ ByteArray.empty ∧ token.size < 2 ^ 62
+  | .stream _ offset _ _ data => (offset.map Fin.val).getD 0 + data.size < 2 ^ 62
   | .maxStreams _ maximum | .streamsBlocked _ maximum => maximum.val ≤ 2 ^ 60
   | .newConnectionId seq retire cid _ =>
-      1 ≤ cid.length ∧ cid.length ≤ 20 ∧ retire.val ≤ seq.val
-  | .connectionClose _ _ reason => reason.length < 2 ^ 62
+      1 ≤ cid.size ∧ cid.size ≤ 20 ∧ retire.val ≤ seq.val
+  | .connectionClose _ _ reason => reason.size < 2 ^ 62
   | _ => True
 
 instance (frame : Frame) : Decidable frame.Valid := by
@@ -137,47 +137,49 @@ def validate (frame : Frame) : Except Error Unit :=
 /-- Encode an optional integer without a presence marker. -/
 def encodeOptional : Option Varint → List UInt8
   | none => []
-  | some v => Varint.encode v
+  | some v => Varint.encodeList v
 
 /-- Encode the additional ACK ranges in their wire order (§19.3). -/
 def encodeRanges (ranges : List AckRange) : List UInt8 :=
-  ranges.flatMap fun (gap, length) => Varint.encode gap ++ Varint.encode length
+  ranges.flatMap fun (gap, length) => Varint.encodeList gap ++ Varint.encodeList length
 
 /-- Encode the fields after the frame type (§19).
 
 `encode` checks the format constraints before calling this helper. -/
-def encodeBody : Frame → Except Error (List UInt8)
+def encodeBodyList : Frame → Except Error (List UInt8)
   | .padding | .ping | .handshakeDone => .ok []
   | .ack a => do
     let count ← checkedVarint a.ranges.length
     let ecn := match a.ecn with
       | none => []
       | some (ect0, ect1, ce) =>
-        Varint.encode ect0 ++ Varint.encode ect1 ++ Varint.encode ce
-    return Varint.encode a.largest ++ Varint.encode a.delay ++ Varint.encode count ++
-      Varint.encode a.firstRange ++ encodeRanges a.ranges ++ ecn
-  | .resetStream id code size => .ok (Varint.encode id ++ Varint.encode code ++ Varint.encode size)
-  | .stopSending id code => .ok (Varint.encode id ++ Varint.encode code)
+        Varint.encodeList ect0 ++ Varint.encodeList ect1 ++ Varint.encodeList ce
+    return Varint.encodeList a.largest ++ Varint.encodeList a.delay ++ Varint.encodeList count ++
+      Varint.encodeList a.firstRange ++ encodeRanges a.ranges ++ ecn
+  | .resetStream id code size =>
+    .ok (Varint.encodeList id ++ Varint.encodeList code ++ Varint.encodeList size)
+  | .stopSending id code => .ok (Varint.encodeList id ++ Varint.encodeList code)
   | .crypto offset data => do
-    return Varint.encode offset ++ (← encodeBlob data)
-  | .newToken token => encodeBlob token
+    return Varint.encodeList offset ++ (← encodeBlob data.data.toList)
+  | .newToken token => encodeBlob token.data.toList
   | .stream id offset lengthPresent _ data => do
-    let body ← if lengthPresent then encodeBlob data else .ok data
-    return Varint.encode id ++ encodeOptional offset ++ body
+    let body ← if lengthPresent then encodeBlob data.data.toList else .ok data.data.toList
+    return Varint.encodeList id ++ encodeOptional offset ++ body
   | .maxData n | .maxStreams _ n | .dataBlocked n | .streamsBlocked _ n |
-      .retireConnectionId n => .ok (Varint.encode n)
-  | .maxStreamData id n | .streamDataBlocked id n => .ok (Varint.encode id ++ Varint.encode n)
+      .retireConnectionId n => .ok (Varint.encodeList n)
+  | .maxStreamData id n | .streamDataBlocked id n =>
+    .ok (Varint.encodeList id ++ Varint.encodeList n)
   | .newConnectionId seq retire cid token =>
-    .ok (Varint.encode seq ++ Varint.encode retire ++ [UInt8.ofNat cid.length] ++
-      cid ++ token.toList)
+    .ok (Varint.encodeList seq ++ Varint.encodeList retire ++ [UInt8.ofNat cid.size] ++
+      cid.data.toList ++ token.toList)
   | .pathChallenge data | .pathResponse data => .ok data.toList
   | .connectionClose code frameType reason => do
-    return Varint.encode code ++ encodeOptional frameType ++ (← encodeBlob reason)
+    return Varint.encodeList code ++ encodeOptional frameType ++ (← encodeBlob reason.data.toList)
 
 /-- Encode one well-formed frame with its shortest frame type (§12.4). -/
-def encode (frame : Frame) : Except Error (List UInt8) := do
+def encodeList (frame : Frame) : Except Error (List UInt8) := do
   validate frame
-  let body ← encodeBody frame
+  let body ← encodeBodyList frame
   return UInt8.ofNat frame.type :: body
 
 /-- Read an optional field when its flag is set. -/
@@ -229,13 +231,13 @@ def decodeBody (kind : Nat) : Reader Frame := do
     return .stopSending id (← varint)
   | 6 =>
     let offset ← varint
-    return .crypto offset (← blob)
-  | 7 => return .newToken (← blob)
+    return .crypto offset (← blob).toByteArray
+  | 7 => return .newToken (← blob).toByteArray
   | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 =>
     let id ← varint
     let offset ← optional (kind / 4 % 2 = 1)
     let data ← if kind / 2 % 2 = 1 then blob else remainder
-    return .stream id offset (kind / 2 % 2 = 1) (kind % 2 = 1) data
+    return .stream id offset (kind / 2 % 2 = 1) (kind % 2 = 1) data.toByteArray
   | 16 => return .maxData (← varint)
   | 17 =>
     let id ← varint
@@ -257,7 +259,7 @@ def decodeBody (kind : Nat) : Reader Frame := do
   | 28 | 29 =>
     let code ← varint
     let frameType ← optional (kind = 28)
-    return .connectionClose code frameType (← blob)
+    return .connectionClose code frameType (← blob).toByteArray
   | 30 => return .handshakeDone
   | _ => throw .frameEncoding
 
@@ -269,11 +271,20 @@ A body that ends early or breaks a field bound is FRAME_ENCODING_ERROR (§20.1).
 
 A STREAM frame without LEN consumes all remaining packet bytes (§19.8).
 -/
-def decode (packet : Packet.PacketType) : Reader Frame := do
+def decodeList (packet : Packet.PacketType) : Reader Frame := do
   let kind ← byte
   let frame ← fun input => (decodeBody kind.toNat input).mapError fun _ => .frameEncoding
   let _ ← StateT.lift (validate frame)
   require (frame.allowed packet = true) .protocolViolation
   return frame
+
+
+/-- Encode one well-formed frame as packed bytes. -/
+def encode (frame : Frame) : Except Error ByteArray :=
+  (encodeList frame).map List.toByteArray
+
+/-- Read one frame and return its packed trailing bytes. -/
+def decode (packet : Packet.PacketType) (input : ByteArray) : Except Error (Frame × ByteArray) :=
+  (decodeList packet input.data.toList).map fun (frame, rest) => (frame, rest.toByteArray)
 
 end EthLib.Networking.Quic.Frame

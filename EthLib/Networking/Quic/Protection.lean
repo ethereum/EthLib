@@ -187,8 +187,8 @@ def checkHeader (suite : CipherSuite) (header : ByteArray) (protectedLength : Na
   if h : 0 < header.size then
     let width := Packet.widthOfFirst header[0]
     let (decoded, trailing) ← (Packet.decode (header.size - (width.val + 1) - 1)
-      header.data.toList).mapError fun _ => .header
-    ensure (trailing = []) .header
+      header).mapError fun _ => .header
+    ensure (trailing = ByteArray.empty) .header
     checkSuite suite decoded
     match decoded with
     | .initial _ _ _ w length _ | .zeroRtt _ _ w length _ | .handshake _ _ w length _ =>

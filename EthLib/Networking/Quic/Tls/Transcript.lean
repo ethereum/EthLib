@@ -32,19 +32,19 @@ open EthLib.Cryptography.Hash
 
 These bytes exclude record headers, CRYPTO frame headers and QUIC packet headers. -/
 structure Transcript where
-  bytes : List UInt8 := []
+  bytes : ByteArray := .empty
   retried : Bool := false
   deriving Repr, DecidableEq
 
 /-- The SHA-256 synthetic handshake message of RFC 8446 §4.4.1.
 
 The uint24 length is 32 and the type is 254. -/
-def messageHash (clientHello : List UInt8) : List UInt8 :=
-  [254, 0, 0, 32] ++ (Sha256.hash32 ⟨clientHello.toArray⟩).toList
+def messageHash (clientHello : ByteArray) : ByteArray :=
+  [254, 0, 0, 32].toByteArray ++ Base.packBytes (Sha256.hash32 clientHello)
 
 /-- Check that the saved bytes are exactly one ClientHello, as the retry replacement requires. -/
-def singleClientHello (input : List UInt8) : Bool :=
-  match exact (decode 32) input with
+def singleClientHello (input : ByteArray) : Bool :=
+  match exact (decodeList 32) input.data.toList with
   | .ok (.clientHello _) => true
   | _ => false
 
@@ -53,9 +53,9 @@ def singleClientHello (input : List UInt8) : Bool :=
 A retry rewrites ClientHello1 as §4.4.1 requires; another retry is rejected (§4.1.4).
 
 The result records framing and retry handling, without authenticating the handshake. -/
-def Transcript.append (transcript : Transcript) (encoded : List UInt8) :
+def Transcript.append (transcript : Transcript) (encoded : ByteArray) :
     Except Error Transcript := do
-  let message ← exact (decode 32) encoded
+  let message ← exact (decodeList 32) encoded.data.toList
   if message.isRetry then
     Base.ensure (transcript.retried = false ∧ singleClientHello transcript.bytes = true) .retry
     return ⟨messageHash transcript.bytes ++ encoded, true⟩
@@ -63,21 +63,22 @@ def Transcript.append (transcript : Transcript) (encoded : List UInt8) :
     return ⟨transcript.bytes ++ encoded, transcript.retried⟩
 
 /-- Build a SHA-256 transcript from complete messages, rejecting framing and retry errors. -/
-def transcript (messages : List (List UInt8)) : Except Error Transcript :=
+def transcript (messages : List ByteArray) : Except Error Transcript :=
   messages.foldlM Transcript.append {}
 
 /-- Hash the saved handshake bytes, RFC 8446 §4.4.1. -/
 def Transcript.hash (transcript : Transcript) : Vector UInt8 32 :=
-  Sha256.hash32 ⟨transcript.bytes.toArray⟩
+  Sha256.hash32 transcript.bytes
 
 /-- CertificateVerify's signed content, RFC 8446 §4.4.3.
 
 It contains 64 spaces, the role's context string, a zero separator and the transcript hash.
 
 The caller hashes the transcript through Certificate, before CertificateVerify. -/
-def certificateVerifyInput (server : Bool) (digest : Vector UInt8 32) : List UInt8 :=
-  List.replicate 64 32 ++
+def certificateVerifyInput (server : Bool) (digest : Vector UInt8 32) : ByteArray :=
+  (List.replicate 64 32 ++
     (if server then "TLS 1.3, server CertificateVerify"
-      else "TLS 1.3, client CertificateVerify").toUTF8.toList ++ [0] ++ digest.toList
+      else "TLS 1.3, client CertificateVerify").toUTF8.data.toList ++
+    [0] ++ digest.toList).toByteArray
 
 end EthLib.Networking.Quic.Tls
