@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Bytes
 public import EthLib.Cryptography.Proofs.Bls.Security.Reduction
 public import EthLib.Cryptography.Proofs.Bls.SignaturesUnique
 public import Mathlib.Algebra.Module.ZMod
@@ -273,8 +274,7 @@ theorem verify_iff (sk : SecretKey) (msg : ByteArray) (sig : BLSSignature) :
   obtain ⟨P, hP, hPrep⟩ := G1.keyValidatePoint_compress_mul sk.property
   obtain ⟨hQ, hv, hs⟩ := hashRep_spec msg
   obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hv).mp hs
-  refine (coreVerify_iff (pk := packBytes (skToPk sk)) ((packBytes_skToPk sk).symm ▸ hP) hPrep hQ
-    hb).trans
+  refine (coreVerify_iff (pk := skToPk sk) hP hPrep hQ hb).trans
     (exists_congr fun R => and_congr_right fun hR => ?_)
   have hpt : G2.toPoint (G2.mul G2.generator (sk.val * b)) =
       (Scalar.ofFr sk.val • hashPoint msg : G2Sub) := by
@@ -317,7 +317,7 @@ The format is Zcash's "BLS12-381 serialization", including its three flag bits.
 
 <https://docs.rs/bls12_381/0.8.0/bls12_381/notes/serialization/index.html>
 -/
-noncomputable def G1Sub.encode (P : G1Sub) : ByteArray := G1.compress (G1Sub.rep P)
+noncomputable def G1Sub.encode (P : G1Sub) : ByteArray := packBytes (G1.compress (G1Sub.rep P))
 
 /-- The canonical bytes of a subgroup element of `G2`, in the same Zcash format. -/
 noncomputable def G2Sub.encode (Q : G2Sub) : ByteArray := G2.compress (G2Sub.rep Q)
@@ -355,8 +355,9 @@ theorem G1Sub.toPoint_rep (x : G1Sub) : G1.toPoint (G1Sub.rep x) = x := by
 So the encoded key is computable from a point, without its discrete logarithm.
 -/
 theorem G1Sub.encode_eq_compress {P : G1} {x : G1Sub} (hP : G1.Valid P)
-    (hx : G1.toPoint P = x) : G1Sub.encode x = G1.compress P :=
-  G1.compress_congr (G1Sub.represents_rep x).1 hP ((G1Sub.toPoint_rep x).trans hx.symm)
+    (hx : G1.toPoint P = x) : G1Sub.encode x = packBytes (G1.compress P) :=
+  congrArg packBytes
+    (G1.compress_congr (G1Sub.represents_rep x).1 hP ((G1Sub.toPoint_rep x).trans hx.symm))
 
 /-- The encoded signing answer is the compressed point that EthLib signs with. -/
 theorem encode_signature (sk : SecretKey) (msg : ByteArray) :
@@ -415,18 +416,23 @@ theorem encode_eq_of_decodeSignature {sig : ByteArray} {Q : G2Sub}
 
 Unlike key validation, it accepts the point at infinity, as the zero of the group. -/
 noncomputable def decodeKey (pk : ByteArray) : Option G1Sub :=
-  match hu : G1.uncompress pk with
-  | .error _ => none
-  | .ok P =>
-    if hs : G1.inSubgroup P = true then
-      some ⟨G1.toPoint P, G1Sub.toPoint_mem_of_inSubgroup (G1.uncompress_valid hu) hs⟩
-    else none
+  match exactBytes? 48 pk with
+  | none => none
+  | some pk =>
+    match hu : G1.uncompress pk with
+    | .error _ => none
+    | .ok P =>
+      if hs : G1.inSubgroup P = true then
+        some ⟨G1.toPoint P, G1Sub.toPoint_mem_of_inSubgroup (G1.uncompress_valid hu) hs⟩
+      else none
 
 /-- Successful decompression and a subgroup check give the decoded group element. -/
-private theorem decodeKey_of_uncompress {pk : ByteArray} {P : G1}
+private theorem decodeKey_of_uncompress {pk : Vector UInt8 48} {P : G1}
     (hu : G1.uncompress pk = .ok P) (hs : G1.inSubgroup P = true)
-    (x : G1Sub) (hp : G1.toPoint P = x) : decodeKey pk = some x := by
+    (x : G1Sub) (hp : G1.toPoint P = x) : decodeKey (packBytes pk) = some x := by
   unfold decodeKey
+  rw [exactBytes?_packBytes]
+  dsimp only
   split
   · rename_i he'
     rw [hu] at he'
@@ -454,18 +460,25 @@ theorem encode_eq_of_decodeKey {pk : ByteArray} {x : G1Sub} (hd : decodeKey pk =
   unfold decodeKey at hd
   split at hd
   · cases hd
+  rename_i v hv
+  -- The bytes are the 48 bytes that the key decodes from.
+  rw [← packBytes_of_exactBytes? hv]
+  split at hd
+  · cases hd
   · rename_i R hu
     split at hd
     · have hp : G1.toPoint R = x := congrArg Subtype.val (Option.some.inj hd)
-      change G1.compress (G1Sub.rep x) = pk
+      change packBytes (G1.compress (G1Sub.rep x)) = packBytes v
+      apply congrArg packBytes
       apply Eq.trans _ (G1.compress_uncompress hu)
       apply G1.compress_congr (G1Sub.represents_rep x).1 (G1.uncompress_valid hu)
       exact (G1Sub.toPoint_rep x).trans hp.symm
     · cases hd
 
 /-- A decoded point in the subgroup is a group element that its bytes decode to. -/
-theorem exists_decodeKey_of_uncompress {pk : ByteArray} {P : G1} (hu : G1.uncompress pk = .ok P)
-    (hs : G1.inSubgroup P = true) : ∃ x, decodeKey pk = some x ∧ G1.toPoint P = x :=
+theorem exists_decodeKey_of_uncompress {pk : Vector UInt8 48} {P : G1}
+    (hu : G1.uncompress pk = .ok P) (hs : G1.inSubgroup P = true) :
+    ∃ x, decodeKey (packBytes pk) = some x ∧ G1.toPoint P = x :=
   ⟨⟨G1.toPoint P, G1Sub.toPoint_mem_of_inSubgroup (G1.uncompress_valid hu) hs⟩,
     decodeKey_of_uncompress hu hs _ rfl, rfl⟩
 
@@ -505,9 +518,12 @@ noncomputable def byteVerify (pk sig : ByteArray) (h : G2Sub) : Bool :=
   match G2.uncompress sig with
   | .error _ => false
   | .ok R => signatureSubgroupCheck R &&
-    match G1.keyValidatePoint pk with
-    | .error _ => false
-    | .ok P => pairingCheck #[(G1.generator, R), (G1.neg P, G2Sub.rep h)]
+    match exactBytes? 48 pk with
+    | none => false
+    | some pk =>
+      match G1.keyValidatePoint pk with
+      | .error _ => false
+      | .ok P => pairingCheck #[(G1.generator, R), (G1.neg P, G2Sub.rep h)]
 
 /-- The pairing check of verification reads only the group elements of its valid points. -/
 theorem two_pairs_congr {P P' : G1} {R R' Q Q' : G2}
@@ -540,7 +556,11 @@ theorem byteVerify_hashPointWith (dst pk msg sig : ByteArray) :
   cases hu : G2.uncompress sig with
   | error e => rfl
   | ok R =>
-    cases hp : G1.keyValidatePoint pk with
+    cases hx : exactBytes? 48 pk with
+    | none => rfl
+    | some v =>
+    dsimp only
+    cases hp : G1.keyValidatePoint v with
     | error e => rfl
     | ok P =>
       apply congrArg (fun b => signatureSubgroupCheck R && b)
@@ -615,15 +635,19 @@ theorem exists_decodeKey_isDh_of_byteVerify {pk sig : ByteArray} {h : G2Sub}
     have hs : G2.inSubgroup R = true :=
       (Bool.and_eq_true_iff.mp
         (by simpa only [byteVerify, hu, signatureSubgroupCheck] using hv)).1
-    cases hp : G1.keyValidatePoint pk with
-    | error e => simp [byteVerify, hu, hp] at hv
+    cases hx : exactBytes? 48 pk with
+    | none => simp [byteVerify, hu, hx] at hv
+    | some v =>
+    obtain rfl := packBytes_of_exactBytes? hx
+    cases hp : G1.keyValidatePoint v with
+    | error e => simp [byteVerify, hu, hx, hp] at hv
     | ok P =>
       obtain ⟨hpu, hPv, -, hord⟩ := G1.keyValidatePoint_eq_ok_iff.mp hp
       have hsP : G1.inSubgroup P = true :=
         (G1.inSubgroup_iff_modulus_smul_eq_zero hPv).mpr hord
       obtain ⟨x, hdk, hx⟩ := exists_decodeKey_of_uncompress hpu hsP
       have hv' : pairingCheck #[(G1.generator, R), (G1.neg P, G2Sub.rep h)] = true := by
-        simpa [byteVerify, hu, hp, signatureSubgroupCheck, hs] using hv
+        simpa [byteVerify, hu, hx, hp, signatureSubgroupCheck, hs] using hv
       exact ⟨x, hdk, isDh_of_check hu hs hPv hx hv'⟩
 
 /-- Every accepted byte signature gives a winning group signature for the same key and hash. -/
@@ -734,27 +758,46 @@ noncomputable def nonzeroByteExperiment (adversary : ByteAdversary) :
 noncomputable def nonzeroByteForgeAdvantage (adversary : ByteAdversary) : ℝ≥0∞ :=
   Pr{let z ← nonzeroByteExperiment adversary}[z.1 = true]
 
+/-- The encoding of a subgroup element is the bytes of its compressed representative. -/
+theorem G1Sub.encode_def (P : G1Sub) : G1Sub.encode P = packBytes (G1.compress (G1Sub.rep P)) :=
+  rfl
+
+/-- A key that decompresses to the zero point fails the byte check of every signature.
+
+Key validation rejects the point at infinity. -/
+private theorem byteVerify_of_uncompress_zero {k : Vector UInt8 48} {P' : G1}
+    (hp' : G1.uncompress k = .ok P') (hz : G1.toPoint P' = 0) (sig : ByteArray) (h : G2Sub) :
+    byteVerify (packBytes k) sig h = false := by
+  by_contra hne
+  have hv := Bool.eq_true_of_not_eq_false hne
+  cases hu : G2.uncompress sig with
+  | error e => simp only [byteVerify, hu] at hv; cases hv
+  | ok R =>
+    cases hp : G1.keyValidatePoint k with
+    | error e =>
+      simp only [byteVerify, hu, exactBytes?_packBytes, hp, Bool.and_false] at hv
+      cases hv
+    | ok P =>
+      obtain ⟨hPu, -, hne0, -⟩ := G1.keyValidatePoint_eq_ok_iff.mp hp
+      have hPP : P = P' := Except.ok.inj (hPu.symm.trans hp')
+      exact hne0 (hPP ▸ hz)
+
+/-- The encoding of the zero key fails the byte check of every signature. -/
+private theorem byteVerify_encode_zero (sig : ByteArray) (h : G2Sub) :
+    byteVerify (G1Sub.encode ((0 : Scalar) • g1)) sig h = false := by
+  have hrep := G1Sub.represents_rep ((0 : Scalar) • g1)
+  obtain ⟨P', hp', he⟩ := G1.uncompress_compress hrep.1
+  have hz : G1.toPoint P' = 0 := by
+    rw [he, hrep.2, G1Sub.dlog_smul_g1]
+    simp [G1.toPoint_mul G1.valid_generator]
+  rw [G1Sub.encode_def]
+  exact byteVerify_of_uncompress_zero hp' hz sig h
+
 /-- Every run of the byte game with the zero scalar loses. -/
 theorem byteExperimentAt_zero (adversary : ByteAdversary) :
     ∀ z ∈ support (byteExperimentAt adversary 0), z.1 = false := by
   classical
-  have hver : ∀ sig h, byteVerify (G1Sub.encode ((0 : Scalar) • g1)) sig h = false := by
-    intro sig h
-    by_contra hne
-    have hv := Bool.eq_true_of_not_eq_false hne
-    cases hu : G2.uncompress sig with
-    | error e => simp only [byteVerify, hu] at hv; cases hv
-    | ok R =>
-      cases hp : G1.keyValidatePoint (G1Sub.encode ((0 : Scalar) • g1)) with
-      | error e => simp only [byteVerify, hu, hp, Bool.and_false] at hv; cases hv
-      | ok P =>
-        obtain ⟨hPu, hPv, hne0, -⟩ := G1.keyValidatePoint_eq_ok_iff.mp hp
-        have hrep := G1Sub.represents_rep ((0 : Scalar) • g1)
-        obtain ⟨P', hp', he⟩ := G1.uncompress_compress hrep.1
-        have hPP : P = P' := Except.ok.inj (hPu.symm.trans hp')
-        apply hne0
-        rw [hPP, he, hrep.2, G1Sub.dlog_smul_g1]
-        simp [G1.toPoint_mul G1.valid_generator]
+  have hver := byteVerify_encode_zero
   intro z hz
   unfold byteExperimentAt at hz
   simp only [support_bind, support_pure, Set.mem_iUnion, Set.mem_singleton_iff] at hz

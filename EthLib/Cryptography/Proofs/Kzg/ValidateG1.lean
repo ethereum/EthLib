@@ -20,14 +20,14 @@ open EthLib.Cryptography.Kzg.Constants
 
 /-- The encoding of the point at infinity decodes to the zero triple. -/
 theorem uncompress_G1_POINT_AT_INFINITY :
-    G1.uncompress ⟨G1_POINT_AT_INFINITY.toArray⟩ = .ok G1.zero := by
+    G1.uncompress G1_POINT_AT_INFINITY = .ok G1.zero := by
   change G1.uncompress G1.infinityBytes = .ok G1.zero
   exact G1.uncompress_infinityBytes
 
 /-- KZG validation accepts exactly the decodable points of order dividing `r`. -/
 theorem validateKzgG1Point_eq_ok_iff {b : Bytes48} {P : G1} :
     validateKzgG1Point b = .ok P ↔
-      G1.uncompress ⟨b.toArray⟩ = .ok P ∧ Fr.modulus • G1.toPoint P = 0 := by
+      G1.uncompress b = .ok P ∧ Fr.modulus • G1.toPoint P = 0 := by
   unfold validateKzgG1Point
   by_cases hb : (b == G1_POINT_AT_INFINITY) = true
   · rw [ite_eq_left hb, beq_iff_eq.mp hb, uncompress_G1_POINT_AT_INFINITY]
@@ -39,8 +39,8 @@ theorem validateKzgG1Point_eq_ok_iff {b : Bytes48} {P : G1} :
       exact (Except.ok.inj h.1).symm ▸ rfl
   · rw [ite_eq_right hb]
     -- Away from the encoding of infinity, a decoded point of order dividing `r` is nonzero.
-    have key : G1.keyValidatePoint ⟨b.toArray⟩ = .ok P ↔
-        G1.uncompress ⟨b.toArray⟩ = .ok P ∧ Fr.modulus • G1.toPoint P = 0 := by
+    have key : G1.keyValidatePoint b = .ok P ↔
+        G1.uncompress b = .ok P ∧ Fr.modulus • G1.toPoint P = 0 := by
       rw [G1.keyValidatePoint_eq_ok_iff]
       refine ⟨fun h => ⟨h.1, h.2.2.2⟩, fun ⟨hu, hr⟩ => ⟨hu, G1.uncompress_valid hu, ?_, hr⟩⟩
       intro h0
@@ -48,10 +48,9 @@ theorem validateKzgG1Point_eq_ok_iff {b : Bytes48} {P : G1} :
       have hc := G1.compress_uncompress hu
       unfold G1.compress at hc
       simp only [Id.run, hinf, ite_true] at hc
-      have hdata := (congrArg ByteArray.data hc).symm.trans rfl
-      exact hb (beq_iff_eq.mpr (Vector.toArray_inj.mp hdata))
+      exact hb (beq_iff_eq.mpr hc.symm)
     rw [← key]
-    cases G1.keyValidatePoint ⟨b.toArray⟩ with
+    cases G1.keyValidatePoint b with
     | error e => exact iff_of_false (fun h => by cases h) (fun h => by cases h)
     | ok q => exact ⟨fun h => by cases h; rfl, fun h => by cases h; rfl⟩
 
@@ -63,7 +62,7 @@ theorem exists_validateKzgG1Point_of_validateKzgG1 {b : Bytes48} (h : validateKz
   by_cases hb : (b == G1_POINT_AT_INFINITY) = true
   · exact ⟨_, ite_eq_left hb⟩
   · rw [ite_eq_right hb] at h ⊢
-    cases hk : G1.keyValidatePoint ⟨b.toArray⟩ with
+    cases hk : G1.keyValidatePoint b with
     | error e =>
       simp [G1.keyValidate, hk, bind, Except.bind, Except.isOk, Except.toBool] at h
     | ok q => exact ⟨q, rfl⟩
@@ -76,7 +75,7 @@ theorem validateKzgG1_of_validateKzgG1Point {b : Bytes48} {P : G1}
   by_cases hb : (b == G1_POINT_AT_INFINITY) = true
   · rw [ite_eq_left hb]
   · rw [ite_eq_right hb] at h ⊢
-    cases hk : G1.keyValidatePoint ⟨b.toArray⟩ with
+    cases hk : G1.keyValidatePoint b with
     | error e => rw [hk] at h; cases h
     | ok q =>
       simp only [G1.keyValidate, hk, bind, Except.bind, Except.isOk, Except.toBool]

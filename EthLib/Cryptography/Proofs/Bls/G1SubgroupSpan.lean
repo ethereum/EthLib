@@ -150,7 +150,7 @@ theorem mul_generator_isInfinity_iff (s : Fr) :
     exact Nat.dvd_zero _
 
 /-- `KeyValidate` (`IRTF draft-irtf-cfrg-bls-signature-04 §2.5`) rejects `0` and requires `inSubgroup` so `a != 0`. -/
-theorem exists_mul_generator_of_keyValidatePoint {bytes : ByteArray} {P : G1}
+theorem exists_mul_generator_of_keyValidatePoint {bytes : Vector UInt8 48} {P : G1}
     (h : keyValidatePoint bytes = .ok P) :
     Valid P ∧ ∃ a : Fr, a ≠ 0 ∧ toPoint P = toPoint (mul generator a) := by
   unfold keyValidatePoint at h

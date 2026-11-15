@@ -142,8 +142,7 @@ theorem blobToKzgCommitment_represents {s : TrustedSetup} {τ : Fr} (hs : s.Well
 theorem toPoint_eq_of_compressG1_eq {P Q : G1} (hP : G1.Valid P) (hQ : G1.Valid Q)
     (heq : compressG1 P = compressG1 Q) :
     G1.toPoint P = G1.toPoint Q := by
-  have hcomp : G1.compress P = G1.compress Q :=
-    ByteArray.ext (congrArg Vector.toArray heq)
+  have hcomp : G1.compress P = G1.compress Q := heq
   obtain ⟨p, hp, hptP⟩ := G1.uncompress_compress hP
   obtain ⟨q, hq, hptQ⟩ := G1.uncompress_compress hQ
   rw [hcomp, hq] at hp

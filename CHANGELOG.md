@@ -16,6 +16,17 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the compressed encoding of a point of `G1` has its 48 bytes in its type ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  `G1.compress` returns a `Vector UInt8 48`, and `G1.uncompress`, `G1.keyValidatePoint` and `G1.keyValidate` take one.
+  A caller that holds bytes of another length reads them with `exactBytes? 48`, now in `EthLib.Base`, and rejects `none` as decompression did.
+  `G1.size_compress` and `keyValidatePoint_size_ne` are removed, since the type states the length.
+  `G1.uncompress_ok_cases` no longer states the size, and `uncompress_ok_cases_bytes` and `uncompress_eq_zero_or_bytes` state its facts on the bytes of the input.
+  `TrustedSetup.decodeG1` and `TrustedSetup.decodeG2` decode one point of a setup, and the theorems on decoded setups state their facts through them.
+  `Signatures.keyMessagePair` is the pair of one key and one message in the core aggregate verification.
+  `coreVerify_iff` takes the key as a vector, and `packBytes_pointToPubkey` and `packBytes_skToPk` become `pointToPubkey_eq` and `skToPk_eq`.
+  `SyncDrawable.keys` states key validation of each key as a vector.
+  No C export or Python function changes.
+
 - In Lean, `Evm.Call.TransferLog` becomes `Evm.TransferLog`, and the XMSS security modules `XmssSecurity.Scan.*` move to `XmssSecurity.Proof.Scan.*` ([#2629](https://github.com/ethereum/EthLib/pull/2629)).
   The import checker now finds a cycle between directories through imports at any depth, and these moves break the two such cycles that remained.
   Declaration names, namespaces and statements are unchanged; update the imports.

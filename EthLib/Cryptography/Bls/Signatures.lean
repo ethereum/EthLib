@@ -68,7 +68,7 @@ def SecretKey.fromBytes (bytes : ByteArray) : Except BlsError SecretKey :=
   | .ok sk => if h : sk = 0 then .error .invalidSecretKey else .ok ⟨sk, h⟩
 
 /-- The public key of a point, in the minimal-pubkey-size variant (§2.2). -/
-def pointToPubkey (p : G1) : BLSPubkey := ⟨(G1.compress p).data, G1.size_compress p⟩
+def pointToPubkey (p : G1) : BLSPubkey := G1.compress p
 
 /-- The signature of a point, in the minimal-pubkey-size variant (§2.2). -/
 def pointToSignature (p : G2) : BLSSignature := ⟨(G2.compress p).data, G2.size_compress p⟩
@@ -100,13 +100,16 @@ def coreVerify (pk msg sig dst : ByteArray) : Bool :=
   | .error _ => false
   | .ok r =>
     signatureSubgroupCheck r &&
-    -- Key validation returns the public key as a point.
-    match G1.keyValidatePoint pk with
-    | .error _ => false
-    | .ok xP =>
-      match HashToCurve.hashToG2 msg dst with
+    -- A public key has 48 bytes, and key validation returns it as a point.
+    match exactBytes? 48 pk with
+    | none => false
+    | some pk =>
+      match G1.keyValidatePoint pk with
       | .error _ => false
-      | .ok q => pairingCheck #[(G1.generator, r), (G1.neg xP, q)]
+      | .ok xP =>
+        match HashToCurve.hashToG2 msg dst with
+        | .error _ => false
+        | .ok q => pairingCheck #[(G1.generator, r), (G1.neg xP, q)]
 
 /-- The compressed sum of the signatures (§2.8).
 
@@ -120,6 +123,16 @@ def aggregate (sigs : Array BLSSignature) : Except BlsError BLSSignature := do
     (fun agg sig => return G2.add agg (← G2.uncompress (packBytes sig))) G2.zero
   return pointToSignature agg
 
+/-- The pair `(-PK, H(message))` of one key and its message in the aggregate verification (§2.9).
+
+It fails when the key is not 48 bytes or fails key validation. -/
+def keyMessagePair (dst : ByteArray) (entry : ByteArray × ByteArray) :
+    Except BlsError (G1 × G2) := do
+  let some pk := exactBytes? 48 entry.1 | throw .invalidG1Point
+  let xP ← G1.keyValidatePoint pk
+  let q ← HashToCurve.hashToG2 entry.2 dst
+  return (G1.neg xP, q)
+
 /-- The core aggregate verification: check `e(P, R) = prod_i e(PK_i, H(message_i))` (§2.9).
 
 It returns `false` on an empty list, on lists of two sizes and on any invalid input. -/
@@ -130,10 +143,7 @@ def coreAggregateVerify (pks msgs : Array ByteArray) (sig dst : ByteArray) : Boo
   | .ok r =>
     signatureSubgroupCheck r &&
     -- One pair `(-PK_i, H(message_i))` for each key, so that the product of all pairs is 1.
-    match (pks.zip msgs).mapM (fun (pk, msg) => do
-        let xP ← G1.keyValidatePoint pk
-        let q ← HashToCurve.hashToG2 msg dst
-        return (G1.neg xP, q)) with
+    match (pks.zip msgs).mapM (keyMessagePair dst) with
     | .error _ => false
     | .ok pairs => pairingCheck (#[(G1.generator, r)] ++ pairs)
 
@@ -176,7 +186,7 @@ def popVerify (pk : BLSPubkey) (proof : BLSSignature) : Bool :=
 It rejects a key that fails key validation (§2.5), and reports its position in the list. -/
 def addPubkeyPoint (agg : G1) (entry : BLSPubkey × Nat) : Except BlsError G1 := do
   let (pk, i) := entry
-  match G1.keyValidatePoint (packBytes pk) with
+  match G1.keyValidatePoint pk with
   | .error _ => throw (.invalidPubkey (some i))
   | .ok p => return G1.add agg p
 
