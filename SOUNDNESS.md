@@ -4876,12 +4876,29 @@ The file `apis/beacon/light_client/bootstrap.yaml` of release `v5.0.0-beta.0` li
 `bootstrapResponse_of_error` shows that the JSON answer passes each refusal on unchanged.
 `bootstrapFor_of_missing` shows that a root whose block or post state the store lacks gets that error.
 `bootstrapFor_of_lt_altair` shows that error for a root whose post state is before the Altair fork epoch, for a store of any fork and under any schedule.
-These points of the bootstrap answer have no theorem:
+No theorem states whether a served bootstrap can get code 500, when it is written in JSON or in SSZ.
 
-- which roots it refuses when their post state is from the Altair fork epoch on;
-- whether a served bootstrap can get code 500, when it is written in JSON or in SSZ.
-
-One such root is a block whose fork is not the fork that the schedule gives at its slot.
+`bootstrapFor_error_iff_of_reachable` (`Consensus/Proofs/BeaconApi/LightClientBootstrapReachable.lean`) is about a store that the handlers reach from an anchor that the fork choice accepts.
+It covers each root whose block and post state such a store holds, with that state from the Altair fork epoch on.
+Such a root gets the error with code 404 that names it in one case only.
+That case is a block whose fork is not the fork that the schedule gives at its slot.
+`bootstrapFor_ok_of_reachable` shows that the store serves the bootstrap of every other such root.
+Both theorems assume that the anchor state sits at the slot of the anchor block.
+They also assume that its latest block header matches that block but for the state root.
+`getForkchoiceStore` checks that the anchor block names the root of the anchor state, but neither of these facts.
+`Store.Reachable.blockState_header` shows both facts for every other kept state and its block.
+So each kept state passes the check whose error is `stateNotAtBlock`.
+By `stateRoot_blockStates` and `BeaconBlock.hashTreeRoot_header`, it also passes the check whose error is `stateNotOfBlock`.
+By `Config.le_forkAtEpoch`, a fork that the schedule gives from the Altair fork epoch on passes the check whose error is `forkNotSpecified`.
+Both theorems also assume that the schedule puts Electra at or before Fulu, and Gloas at or before Heze.
+`stateForkAtSlot_gindices` then gives the index of the current sync committee of the fork of the store, at the slot of the block.
+From these checks, `createLightClientBootstrap_exists` (`Consensus/Proofs/BeaconApi/LightClientBootstrap.lean`) gives the bootstrap, with the header of `blockToLightClientHeader_exists`.
+With Electra after Fulu, a Fulu store can refuse a root before the Electra fork epoch.
+With Gloas after Heze, a Heze store can refuse a root before the Gloas fork epoch.
+No theorem states these refusals.
+Both theorems assume a lawful state type and a preset whose sizes in the block are nonzero.
+After either step that `Store.Reachable` leaves out, each root that the store still holds keeps its answer.
+No theorem states that yet.
 
 `IsUpdatesAnswer` is the rule of the source for the updates answer: known updates of the range, in increasing period order, starting with the earliest known one, at most `min(128, count)` of them.
 `updatesInRange_answer` (`Consensus/Proofs/BeaconApi/LightClient.lean`) shows that the known updates of the range, cut to that limit, form such an answer.
