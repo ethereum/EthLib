@@ -9,7 +9,7 @@ Not yet released.
 
 ### Changes that break callers
 
-- The QUIC and TLS codecs use packed byte arrays for byte strings, as [Shared types](ARCHITECTURE.md#shared-types) requires.
+- The QUIC and TLS codecs use packed byte arrays for byte strings, as [Shared types](ARCHITECTURE.md#shared-types) requires ([#2616](https://github.com/ethereum/EthLib/pull/2616)).
   In Lean, packet-header fields, frame payloads, TLS byte fields and transcripts use `ByteArray` in place of `List UInt8`.
   `Varint`, `Packet`, `Frame` and TLS `encode` and `decode` use `ByteArray` at their byte boundaries.
   Use `.size` for a byte length and `.data.toList` only when calling the internal list readers.

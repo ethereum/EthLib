@@ -262,9 +262,8 @@ def reference_signature(server: bool, transcript: bytes) -> bytes:
 
 def signature_r(signature: bytes) -> int:
     # The first INTEGER of the RFC 3279 §2.2.3 sequence, whose lengths fit one byte for P-256.
-    data = signature
-    assert data[0] == 0x30 and data[1] == len(data) - 2 and data[2] == 0x02
-    return int.from_bytes(data[4 : 4 + data[3]], "big")
+    assert signature[0] == 0x30 and signature[1] == len(signature) - 2 and signature[2] == 0x02
+    return int.from_bytes(signature[4 : 4 + signature[3]], "big")
 
 
 def p256_public(scalar: int) -> bytes:
