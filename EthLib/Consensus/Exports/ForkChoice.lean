@@ -116,7 +116,7 @@ def runForkChoiceStep {preset : Preset} {fork : Fork} (config : Config) (checks 
   | .tick seconds => return (·, none) <$> store.onTick config (secondsToMilliseconds seconds)
   | .block input => do
     let signed ← decodeInput (SignedBeaconBlock preset fork) input.block
-    return (·, none) <$> store.onBlockWithVotes config checks sources signed
+    return (·, none) <$> store.onBlock config checks sources signed
   | .attestation data => do
     let attestation ← decodeInput (Attestation preset fork) data
     return (·, none) <$> store.onAttestation config checks attestation false
@@ -147,7 +147,21 @@ def heldBlobs (blobs proofs : List ByteArray) :
 /-- The verdicts of the execution layer that find a payload invalid, by their Engine API names. -/
 def invalidStatuses : List String := ["INVALID", "INVALID_BLOCK_HASH"]
 
-/-- The store after the steps of a fork choice case, and the outcome of each step.
+/-- The store after the steps of a fork choice case, and the handler outcomes of each step.
+
+An admitted block gives its admission outcome, then the outcomes of its attestations and slashings.
+
+Each of these handlers commits independently, so a rejected one undoes no earlier one.
+
+A rejected block gives only its error, and its attestations and slashings do not run.
+
+An invalid verdict applies its removal after the step, whether the step is admitted or not.
+
+For an admitted block, that removal follows its attestations and slashings.
+
+If that removal fails, the step gives only the error and leaves the store as it was.
+
+Other steps give one outcome.
 
 It also gives the store at the last run of the fast confirmation rule that passed, if any.
 
@@ -167,11 +181,11 @@ def replayForkChoiceConfirming {preset : Preset} {fork : Fork} (config : Config)
     (anchorBlock : BeaconBlock preset fork) (steps : List ForkChoiceStep)
     (adjust : BlockSources preset fork → BlockSources preset fork := id) :
     Result (Store preset fork × Option (Store preset fork × FastConfirmationStore) ×
-      List StepOutcome) := do
+      List (List StepOutcome)) := do
   let mut store ← runForkChoice (getForkchoiceStore config anchorState anchorBlock)
   let mut fcr := getFastConfirmationStore store
   let mut lastRun : Option (Store preset fork × FastConfirmationStore) := none
-  let mut outcomes : Array StepOutcome := #[]
+  let mut outcomes : Array (List StepOutcome) := #[]
   let mut powBlocks : List PowBlock := []
   let mut verdict : Option (Option Hash32) := none
   let setup ← (Cryptography.Kzg.Exports.embeddedSetup ()).mapError fun e => (0, e.message)
@@ -179,11 +193,11 @@ def replayForkChoiceConfirming {preset : Preset} {fork : Fork} (config : Config)
     match step with
     | .powBlock data =>
       powBlocks := (← decodeInput PowBlock data) :: powBlocks
-      outcomes := outcomes.push (.ok none)
+      outcomes := outcomes.push [.ok none]
       continue
     | .payload ⟨status, latestValidHash⟩ =>
       verdict := if status ∈ invalidStatuses then some latestValidHash else none
-      outcomes := outcomes.push (.ok none)
+      outcomes := outcomes.push [.ok none]
       continue
     | .fastConfirmation () =>
       match do
@@ -192,8 +206,8 @@ def replayForkChoiceConfirming {preset : Preset} {fork : Fork} (config : Config)
       | .ok (next, read) =>
         fcr := next
         lastRun := some (store, next)
-        outcomes := outcomes.push (.ok (some (.fastConfirmation read)))
-      | .error e => outcomes := outcomes.push (rejected e)
+        outcomes := outcomes.push [.ok (some (.fastConfirmation read))]
+      | .error e => outcomes := outcomes.push [rejected e]
       continue
     | _ => pure ()
     -- The blobs, the columns and the verdict of a block serve only that block.
@@ -223,6 +237,24 @@ def replayForkChoiceConfirming {preset : Preset} {fork : Fork} (config : Config)
       -- The execution layer of the vectors finds that every payload satisfies its lists.
       inclusionListSatisfied := fun _ _ => true }
     let mut outcome ← runForkChoiceStep config checks (adjust sources) store step
+    -- The operations of a block run only once the store admits it, before any verdict on it.
+    let mut carried : Array StepOutcome := #[]
+    if let (.block input, .ok (admitted, read)) := (step, outcome) then
+      let signed ← decodeInput (SignedBeaconBlock preset fork) input.block
+      let mut next := admitted
+      for attestation in signed.message.body.attestations.data do
+        match next.onAttestation config checks attestation true with
+        | .ok voted =>
+          next := voted
+          carried := carried.push (.ok none)
+        | .error e => carried := carried.push (rejected e)
+      for slashing in signed.message.body.attesterSlashings.data do
+        match next.onAttesterSlashing config checks slashing with
+        | .ok slashed =>
+          next := slashed
+          carried := carried.push (.ok none)
+        | .error e => carried := carried.push (rejected e)
+      outcome := .ok (next, read)
     -- An invalid verdict removes blocks, whether the step itself fails or not.
     if let some latestValidHash := invalid then
       let after := match outcome with
@@ -249,27 +281,27 @@ def replayForkChoiceConfirming {preset : Preset} {fork : Fork} (config : Config)
     match outcome with
     | .ok (next, read) =>
       store := next
-      outcomes := outcomes.push (.ok read)
-    | .error e => outcomes := outcomes.push (rejected e)
+      outcomes := outcomes.push (.ok read :: carried.toList)
+    | .error e => outcomes := outcomes.push [rejected e]
   return (store, lastRun, outcomes.toList)
 
-/-- The store after the steps of a fork choice case, and the outcome of each step. -/
+/-- The store after the steps of a fork choice case, and the handler outcomes of each step. -/
 def replayForkChoice {preset : Preset} {fork : Fork} (config : Config) (checks : SignatureChecks)
     (anchorState : BeaconState preset fork) (anchorBlock : BeaconBlock preset fork)
     (steps : List ForkChoiceStep)
     (adjust : BlockSources preset fork → BlockSources preset fork := id) :
-    Result (Store preset fork × List StepOutcome) := do
+    Result (Store preset fork × List (List StepOutcome)) := do
   let (store, _, outcomes) ←
     replayForkChoiceConfirming config checks anchorState anchorBlock steps adjust
   return (store, outcomes)
 
-/-- The outcome of each step of a fork choice case, from an anchor state and an anchor block.
+/-- The handler outcomes of each step of a fork choice case, from an anchor state and block.
 
 A step that the store rejects gives the error as its outcome, and the run goes on.
 
 From Gloas the node on which a proposer builds is not yet specified here, so that read fails. -/
 def forkChoice (args : String × String × ByteArray × ByteArray × List ForkChoiceStep × Bool ×
-    Option PyValue) : Result (List StepOutcome) := do
+    Option PyValue) : Result (List (List StepOutcome)) := do
   let (name, fork, anchorState, anchorBlock, steps, verify, replacements) := args
   let preset ← presetOf name
   let fork ← forkOf fork.toUTF8
@@ -279,7 +311,17 @@ def forkChoice (args : String × String × ByteArray × ByteArray × List ForkCh
   let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
   return (← replayForkChoice config checks anchorState anchorBlock steps).2
 
-/-- The outcome of each step of a fork choice case, from an anchor state and an anchor block.
+/-- The handler outcomes of each step of a fork choice case, from an anchor state and block.
+
+Each input gives a nonempty list of outcomes.
+
+An admitted block gives its admission, then its attestations and slashings.
+
+A rejected block gives only its error.
+
+A rejected handler changes nothing itself, and later handlers still run.
+
+An invalid verdict still applies its removal, even when the step is rejected.
 
 The arguments are the preset, the fork, the anchor state and the anchor block in SSZ, and the steps.
 

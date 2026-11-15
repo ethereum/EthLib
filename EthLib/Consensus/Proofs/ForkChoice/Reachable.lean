@@ -279,16 +279,6 @@ inductive Reachable (config : Config) (anchorState : BeaconState preset fork)
 variable {config : Config} {anchorState : BeaconState preset fork}
   {anchorBlock : BeaconBlock preset fork}
 
-/-- A block with the votes that it carries leads from a reachable store to a reachable store. -/
-theorem Reachable.onBlockWithVotes {checks : SignatureChecks} {sources : BlockSources preset fork}
-    {signed : SignedBeaconBlock preset fork}
-    (reachable : Reachable config anchorState anchorBlock store)
-    (added : store.onBlockWithVotes config checks sources signed = .ok after) :
-    Reachable config anchorState anchorBlock after :=
-  onBlockWithVotes_preserves (fun reached step => reached.block step)
-    (fun _ reached step => reached.attestation step)
-    (fun _ reached step => reached.attesterSlashing step) reachable added
-
 /-- Each known block of a reachable store has its own root as its key. -/
 theorem Reachable.root (reachable : Reachable config anchorState anchorBlock store)
     {root : Root} {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block) :

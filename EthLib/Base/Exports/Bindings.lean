@@ -1117,7 +1117,7 @@ def bindings : List Binding := [
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_fork_choice", `EthLib.Consensus.Exports.forkChoiceExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
-      "verify: bool, config: dict | None) -> list",
+      "verify: bool, config: dict | None) -> list[list]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_gossip_validation", `EthLib.Consensus.Exports.gossipValidationExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, " ++

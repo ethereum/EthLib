@@ -638,21 +638,6 @@ def onBlock (checks : SignatureChecks) (sources : BlockSources preset fork)
   if store.blocks.contains blockRoot then pure store
   else store.addBlock config checks sources signed blockRoot
 
-/-- The store after a signed block and the votes that it carries.
-
-The block comes first, then its attestations, then its attester slashings.
-
-The attestations come from a block, so the clock does not bound their epoch.
-
-From Gloas the block itself passes on the votes of the payload committee that it carries. -/
-def onBlockWithVotes (checks : SignatureChecks) (sources : BlockSources preset fork)
-    (signed : SignedBeaconBlock preset fork) : Except ForkChoiceError (Store preset fork) := do
-  let store ← store.onBlock config checks sources signed
-  let store ← signed.message.body.attestations.data.foldlM
-    (fun store attestation => store.onAttestation config checks attestation true) store
-  signed.message.body.attesterSlashings.data.foldlM
-    (fun store slashing => store.onAttesterSlashing config checks slashing) store
-
 /-- From Gloas: check that the node gets the data of the payload of a block.
 
 Each column that it samples must be valid against the commitments of the bid of the block. -/

@@ -1128,8 +1128,8 @@ def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: dict[str, 
     """The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."""
     ...
 
-def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> list:
-    """The outcome of each step of a fork choice case, from an anchor state and an anchor block."""
+def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> list[list]:
+    """The handler outcomes of each step of a fork choice case, from an anchor state and block."""
     ...
 
 def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, topic: str, messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]:

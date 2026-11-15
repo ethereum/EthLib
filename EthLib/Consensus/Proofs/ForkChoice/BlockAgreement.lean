@@ -121,11 +121,13 @@ theorem Execution.exists_signed_of_blocks
         exact maps ih' (fun _ h => h) (Store.onTick_frame ticked).2.2.1
           (Store.onTick_frame ticked).2.2.2
       | block mem added =>
-        exact Store.onBlockWithVotes_preserves (fun h added => step h (incl mem) added)
-          (fun _ h a => maps h (fun _ h => h) (Store.onAttestation_frame a).2.1
-            (Store.onAttestation_frame a).2.2.1)
-          (fun _ h a => maps h (fun _ h => h) (Store.onAttesterSlashing_frame a).2.1
-            (Store.onAttesterSlashing_frame a).2.2.1) ih' added
+        exact step ih' (incl mem) added
+      | blockAttestation _ _ _ _ a =>
+        exact maps ih' (fun _ h => h) (Store.onAttestation_frame a).2.1
+          (Store.onAttestation_frame a).2.2.1
+      | blockAttesterSlashing _ _ _ _ a =>
+        exact maps ih' (fun _ h => h) (Store.onAttesterSlashing_frame a).2.1
+          (Store.onAttesterSlashing_frame a).2.2.1
       | attestation _ a =>
         exact maps ih' (fun _ h => h) (Store.onAttestation_frame a).2.1
           (Store.onAttestation_frame a).2.2.1
@@ -196,12 +198,12 @@ theorem Execution.blockStates_eq (e : Execution (forkChoice config checks source
       · exact same ▸ ih
       cases moved with
       | tick _ _ a => exact maps ih (Store.onTick_frame a).2.2.1 (Store.onTick_frame a).2.2.2
-      | block _ a =>
-        exact Store.onBlockWithVotes_preserves blockStep
-          (fun _ h a => maps h (Store.onAttestation_frame a).2.1
-            (Store.onAttestation_frame a).2.2.1)
-          (fun _ h a => maps h (Store.onAttesterSlashing_frame a).2.1
-            (Store.onAttesterSlashing_frame a).2.2.1) ih a
+      | block _ a => exact blockStep ih a
+      | blockAttestation _ _ _ _ a =>
+        exact maps ih (Store.onAttestation_frame a).2.1 (Store.onAttestation_frame a).2.2.1
+      | blockAttesterSlashing _ _ _ _ a =>
+        exact maps ih (Store.onAttesterSlashing_frame a).2.1
+          (Store.onAttesterSlashing_frame a).2.2.1
       | attestation _ a =>
         exact maps ih (Store.onAttestation_frame a).2.1 (Store.onAttestation_frame a).2.2.1
       | attesterSlashing _ a =>
@@ -462,21 +464,16 @@ theorem Execution.blocks_of_partiallySynchronous {GST Δ last : ℕ}
       (msg ▸ bf) late upToDate hash validated
     have fixed := upToDate.2 after (.block memK added)
     have inserted : after.blocks[r]? = some sb.message := by
-      apply Store.onBlockWithVotes_establishes
-        (attestation := fun _ h step => (Store.onAttestation_frame step).2.1 ▸ h)
-        (slashing := fun _ h step => (Store.onAttesterSlashing_frame step).2.1 ▸ h)
-        (added := added)
-      intro blocked blockedOk
       by_cases known : ((e.world k).state u).blocks.contains r
       · have same := Store.onBlock_known (config := config) (checks := checks)
           (sources := sources) hash known
-        rw [same] at blockedOk
-        cases blockedOk
+        rw [same] at added
+        cases added
         obtain ⟨existing, existingFound⟩ := Option.isSome_iff_exists.mp
           (by rwa [Std.TreeMap.contains_eq_isSome_getElem?] at known)
         have eq := oneBlock v honest u receiver n k nBound bounded r b existing bf existingFound
         simpa [msg, eq] using existingFound
-      · exact (Store.onBlock_new hash known blockedOk).2.1
+      · exact (Store.onBlock_new hash known added).2.1
     simpa [fixed, msg] using inserted
   obtain ⟨⟨b, bf, bk⟩, agree⟩ := Store.getAncestor_of_admission
     (oneBlock v honest u receiver n k nBound bounded) base admission walk
