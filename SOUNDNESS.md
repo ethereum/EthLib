@@ -896,10 +896,10 @@ The caller supplies the hash length of Finished.
 The decoders check field bounds, the fixed TLS 1.3 legacy fields and duplicate extension types.
 `encode_of_decode` proves that every accepted input is the message's successful encoding followed by the returned suffix.
 `decode_eq_ok_iff` states both directions of this correspondence with the Lean encoder.
-They preserve extension order, opaque certificate bytes, opaque extension data and unrecognized two-byte identifiers.
+The decoders preserve extension order, opaque certificate bytes, opaque extension data and unrecognized two-byte identifiers.
 
 `decodePayload_encodePayload` (`Networking/Proofs/Quic/Tls/Extensions.lean`) proves the round trip for every payload form.
-`decodePayload_eq_ok_iff` proves that an accepted extension is exactly the successful encoding of a payload in the caller-selected form.
+`decodePayload_eq_ok_iff` states that payload decoding succeeds exactly for the successful encoding of a payload in the caller-selected form.
 The forms are supported and selected versions, supported groups, signature algorithms, the three key-share forms, ALPN and opaque QUIC transport parameters.
 The caller chooses the payload form from its message context; parsing a message alone does not validate these opaque payloads.
 
