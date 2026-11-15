@@ -1,6 +1,8 @@
 module
 
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
+import EthLib.Consensus.Proofs.ForkChoice.HonestVotes
+import EthLib.Consensus.Proofs.ForkChoice.HonestEquivocators
 import EthLib.Consensus.Proofs.Transition.FfgStake
 
 /-!
@@ -159,5 +161,82 @@ private theorem receiver_oldMaximum {caller receiver : Store preset fork}
     (mapError_ok_iff.mp afterOk)
   exact maximum_exists_of_total coverage membersOk totalOk
     (fun v member => inside v (subset v member))
+
+namespace Models.Network
+
+variable {config : Config} {checks : SignatureChecks} {sources : BlockSources preset fork}
+  {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+  {assignment : Assignment preset} {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
+  {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
+    genesisTimeMs) J}
+
+/-- Honest signatures for one target epoch carry the same attestation data. -/
+private theorem data_eq_of_signed_of_target_epoch (slots : 0 < config.SLOT_DURATION_MS)
+    {n k : ℕ} {first second : Message preset fork} (sentFirst : first ∈ (e.world n).sent)
+    (sentSecond : second ∈ (e.world k).sent) {v : ValidatorIndex} {data other : AttestationData}
+    (signedFirst : (v, data) ∈ statements config checks anchorState anchorBlock first)
+    (signedSecond : (v, other) ∈ statements config checks anchorState anchorBlock second)
+    (honest : v ∈ J) (epoch : data.target.epoch = other.target.epoch) : data = other := by
+  have nonslashable := e.isSlashableAttestationData_honest slots (max n k) honest
+    (e.monotone_sent (Nat.le_max_left n k) sentFirst)
+    (e.monotone_sent (Nat.le_max_right n k) sentSecond) signedFirst signedSecond
+  by_contra different
+  simp [isSlashableAttestationData, different, epoch] at nonslashable
+
+/-- Equal-rank honest latest votes agree before Gloas, even across different stores. -/
+private theorem latest_eq_of_rank_eq (slots : 0 < config.SLOT_DURATION_MS)
+    (preGloas : fork < .glamsterdam) {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    {u w v : ValidatorIndex} (caller : u ∈ J) (receiver : w ∈ J) (honest : v ∈ J)
+    {n k : ℕ} {first second : LatestMessage fork}
+    (firstOk : ((e.world n).state u).latestMessages[v]? = some first)
+    (secondOk : ((e.world k).state w).latestMessages[v]? = some second)
+    (rank : first.rank = second.rank) : first = second := by
+  obtain ⟨a, firstMessage, seenFirst, rfl, signedFirst, _⟩ :=
+    e.exists_signed_origin_of_latestMessages anchorStore anchored caller firstOk
+  obtain ⟨b, secondMessage, seenSecond, rfl, signedSecond, _⟩ :=
+    e.exists_signed_origin_of_latestMessages anchorStore anchored receiver secondOk
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
+  have epoch : a.data.target.epoch = b.data.target.epoch := by
+    simpa [LatestMessage.rank, LatestMessage.ofAttestation, notGloas] using rank
+  have same := data_eq_of_signed_of_target_epoch slots
+    (e.view_subset_sent n u seenFirst) (e.view_subset_sent k w seenSecond)
+    signedFirst signedSecond honest epoch
+  simp only [LatestMessage.ofAttestation, same]
+
+/-- A latest vote at or above a signed vote's rank cannot come from an older slot. -/
+private theorem latest_slot_floor_of_signed_rank
+    (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
+    {v : ValidatorIndex} (honest : v ∈ J) {n k : ℕ}
+    {message other : Message preset fork}
+    (sent : message ∈ (e.world n).sent) (sentOther : other ∈ (e.world k).sent)
+    {data : AttestationData} {attestation : Attestation preset fork}
+    (signed : (v, data) ∈ statements config checks anchorState anchorBlock message)
+    (signedOther : (v, attestation.data) ∈
+      statements config checks anchorState anchorBlock other)
+    {store : Store preset fork} (origin : store.VoteOrigin config v attestation)
+    (epoch : data.target.epoch = computeEpochAtSlot preset data.slot)
+    (rank : (LatestMessage.ofAttestation (fork := fork) attestation).rank ≥ data.target.epoch)
+    {slot : Slot} (floor : slot ≤ data.slot) : slot ≤ attestation.data.slot := by
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
+  have targetLe : data.target.epoch ≤ attestation.data.target.epoch := by
+    simpa [LatestMessage.rank, LatestMessage.ofAttestation, notGloas] using rank
+  by_cases same : data.target.epoch = attestation.data.target.epoch
+  · have dataEq := data_eq_of_signed_of_target_epoch slots sent sentOther
+      signed signedOther honest same
+    exact dataEq ▸ floor
+  · have targetLt := UInt64.lt_of_le_of_ne targetLe same
+    have slotLe : data.slot ≤ attestation.data.slot := by
+      by_contra h
+      have reversed := Nat.div_le_div_right (c := preset.SLOTS_PER_EPOCH.toNat)
+        (UInt64.le_iff_toNat_le.mp (UInt64.le_of_lt (UInt64.not_le.mp h)))
+      rw [epoch, origin.targetEpoch] at targetLt
+      have strict := UInt64.lt_iff_toNat_lt.mp targetLt
+      simp only [computeEpochAtSlot, UInt64.toNat_div] at strict
+      omega
+    exact UInt64.le_trans floor slotLe
+
+end Models.Network
 
 end EthLib.Consensus
