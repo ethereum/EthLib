@@ -2,7 +2,7 @@ module
 
 public import EthLib.Networking.ReqResp.Bounds
 public import EthLib.Networking.Proofs.ReqResp.Encoding
-public import EthLib.Serialization.Proofs.Ssz.Type.Bounds
+public import EthLib.Serialization.Proofs.Ssz.Codec.Bounds
 
 /-!
 # `Networking.Proofs.ReqResp.Bounds`

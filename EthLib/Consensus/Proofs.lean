@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Accessors.Draw
+public import EthLib.Consensus.Proofs.Accessors.DrawBounds
 public import EthLib.Consensus.Proofs.Accessors.DrawProbability
 public import EthLib.Consensus.Proofs.Accessors.DrawRandomOracle
 public import EthLib.Consensus.Proofs.Accessors.SearchRandomOracle

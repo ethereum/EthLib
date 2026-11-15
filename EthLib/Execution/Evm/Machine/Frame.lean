@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Blocks.Log
+public import EthLib.Execution.Evm.Log
 public import EthLib.Execution.Evm.Environment
 public import EthLib.Execution.Evm.Machine.Stack
 public import EthLib.Execution.Evm.Gas.StateGas

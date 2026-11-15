@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.SecondMoment
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.Price
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ForsPrice
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.Basic
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Base.Split
 

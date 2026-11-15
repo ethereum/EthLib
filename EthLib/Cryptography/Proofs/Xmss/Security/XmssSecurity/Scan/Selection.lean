@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Precom
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.LoopWalk
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 /-!
 # The selection law of the scan signer

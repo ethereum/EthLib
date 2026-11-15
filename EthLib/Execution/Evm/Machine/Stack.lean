@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.U256
-public import EthLib.Execution.Evm.Machine.Errors
+public import EthLib.Execution.Evm.Errors
 
 /-!
 # `Evm.Machine.Stack`

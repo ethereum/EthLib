@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Bls.Signatures
+public import EthLib.Cryptography.Proofs.Bls.Fr
 public import EthLib.Cryptography.Proofs.Bls.HashToCurveValidity
 
 /-!

@@ -1,8 +1,8 @@
 module
 
+public import EthLib.Execution.Blocks.Receipt
 public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.LogsPaid
-public import EthLib.Execution.Proofs.Blocks.Receipt
 public import EthLib.Execution.Proofs.Transactions.Replay
 
 /-!

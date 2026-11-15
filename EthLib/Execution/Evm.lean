@@ -9,7 +9,9 @@ public import EthLib.Execution.Evm.Machine.Memory
 public import EthLib.Execution.Evm.PowMod
 public import EthLib.Execution.Evm.Words
 public import EthLib.Execution.Evm.Gas
-public import EthLib.Execution.Evm.Machine.Errors
+public import EthLib.Execution.Evm.Errors
+public import EthLib.Execution.Evm.Delegation
+public import EthLib.Execution.Evm.Log
 public import EthLib.Execution.Evm.Op
 public import EthLib.Execution.Evm.Machine.Stack
 public import EthLib.Execution.Evm.Environment

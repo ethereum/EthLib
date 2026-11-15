@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Capped
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneOracleSimulation
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingActionTrace
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneEagerSimulation
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 @[expose] public section
 

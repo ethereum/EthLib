@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Serialization.Ssz.Type.Desc
-public import EthLib.Serialization.Ssz.Codec.Error
+public import EthLib.Serialization.Ssz.Error
 
 /-! Declaration validity and compatibility of Merkle layouts. -/
 

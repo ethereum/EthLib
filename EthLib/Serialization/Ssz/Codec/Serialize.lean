@@ -1,42 +1,13 @@
 module
 
-public import EthLib.Base.LittleEndian
+public import EthLib.Serialization.Ssz.Packing
 public import EthLib.Serialization.Ssz.Type.Value
-public import EthLib.Serialization.Ssz.Codec.Error
 
 /-! Turning a value into bytes. -/
 
 @[expose] public section
 
 namespace EthLib.Serialization.Ssz
-
-/--
-An unsigned integer as little-endian bytes of the given width.
-
-A value wider than the given width is truncated.
-
-A caller needing exact recovery has to check the range itself.
--/
-def uintBytes (width value : Nat) : Bytes := (Base.uintToBytes width value).toArray
-
-/-- The eight bits that land in one byte, gathered into it. -/
-def packByte (bits : Array Bool) (byteIndex : Nat) : UInt8 :=
-  let held (offset : Nat) : UInt8 :=
-    -- An absent bit contributes zero, which is also the high padding of the last byte.
-    if bits[byteIndex * 8 + offset]?.getD false then (1 : UInt8) <<< UInt8.ofNat offset else 0
-  held 0 ||| held 1 ||| held 2 ||| held 3 ||| held 4 ||| held 5 ||| held 6 ||| held 7
-
-/--
-Bits packed into bytes, the first bit lowest in the first byte.
-
-    bits [1, 0, 1, 1]  ->  byte 0 = 0b00001101
-
-Each byte is built from the bits that land in it, rather than one bit at a time into a buffer.
-
-A byte then stands on its own, which is what lets a bit be read back where it was put.
--/
-def packBits (bits : Array Bool) (byteCount : Nat) : Bytes :=
-  Array.ofFn (n := byteCount) fun byteIndex => packByte bits byteIndex.val
 
 /--
 Bits packed into bytes, closed by a set bit one past the last of them.

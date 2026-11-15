@@ -3,7 +3,7 @@ module
 public import EthLib.Base.BigEndian
 public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Hash.Keccak
-public import EthLib.Execution.Blocks.Log
+public import EthLib.Execution.Evm.Log
 
 /-!
 # `Blocks.Bloom`

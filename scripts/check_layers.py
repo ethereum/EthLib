@@ -43,7 +43,8 @@ KIND_NAMES = {"specification": "a specification", "property": "a property", "exp
 KINDS = "coverage/kinds.toml"
 
 HEADER_WORD = re.compile(r"\s*(module|prelude)\b")
-IMPORT = re.compile(r"\s*(?:public\s+)?(meta\s+)?import\s+(?:all\s+)?([^\s]+)")
+IMPORT = re.compile(r"\s*(?:public\s+)?(meta\s+)?import\s+(?:all\s+)?((?:«[^»]*»|[^\s«])+)")
+MODULE_COMPONENT = re.compile(r"«[^»]*»|[^.]+")
 LIBRARY = re.compile(r"^lean_lib\s+«?([A-Za-z0-9_]+)»?\s+where(.*?)(?=^\S|\Z)", re.M | re.S)
 ROOTS = re.compile(r"roots\s*:=\s*#\[(.*?)\]", re.S)
 LAYER_ROW = re.compile(r"^\|\s*([A-Za-z]+)\s*\|.*\|\s*`EthLib/([A-Za-z]+)/`\s*\|\s*$", re.M)
@@ -65,7 +66,7 @@ def read_header(text: str) -> tuple[list[Import], str]:
         if word := HEADER_WORD.match(code, index):
             index = word.end()
         elif match := IMPORT.match(code, index):
-            module = match.group(2).replace("«", "").replace("»", "")
+            module = join_module(module_parts(match.group(2)))
             # `strip_lean` keeps every newline, so the line number is the one in the file.
             line = code.count("\n", 0, match.start(2)) + 1
             found.append(Import(module, bool(match.group(1)), line))
@@ -114,7 +115,7 @@ def meta_problems(
         return reaches[module]
 
     # Walk breadth first, and remember an export that reaches each module.
-    exports = [name for name in sorted(graph) if "Exports" in name.split(".")]
+    exports = [name for name in sorted(graph) if "Exports" in module_parts(name)]
     reached = {name: name for name in exports}
     queue = deque(exports)
     while queue:
@@ -138,14 +139,29 @@ def meta_problems(
     return problems
 
 
+def module_parts(module: str) -> list[str]:
+    """The name components, keeping a dot inside a quoted identifier inside its component."""
+    return [
+        part[1:-1] if part.startswith("«") else part for part in MODULE_COMPONENT.findall(module)
+    ]
+
+
+def join_module(parts: Sequence[str]) -> str:
+    """Join name components without treating a literal dot as a directory separator."""
+    return ".".join(
+        f"«{part}»" if "." in part or any(char.isspace() for char in part) else part
+        for part in parts
+    )
+
+
 def module_name(path: Path, root: Path) -> str:
     """The Lean module name of a file under `root`."""
-    return ".".join(path.relative_to(root).with_suffix("").parts)
+    return join_module(path.relative_to(root).with_suffix("").parts)
 
 
 def kind(module: str) -> str:
     """The kind of a module: a property, an export or a specification."""
-    parts = module.split(".")
+    parts = module_parts(module)
     if "Proofs" in parts:
         return "property"
     if "Exports" in parts:
@@ -155,19 +171,19 @@ def kind(module: str) -> str:
 
 def layer(module: str) -> str | None:
     """The layer of an `EthLib` module, or None outside the layers."""
-    parts = module.split(".")
+    parts = module_parts(module)
     return parts[1] if len(parts) > 1 and parts[0] == "EthLib" and parts[1] in LAYERS else None
 
 
 def first_tier(module: str) -> bool:
     """Whether a module sits in the first tier of Cryptography."""
-    parts = module.split(".")
+    parts = module_parts(module)
     return parts[:2] == ["EthLib", "Cryptography"] and len(parts) > 2 and parts[2] in FIRST_TIER
 
 
 def scheme(module: str) -> str | None:
     """The hash-based signature whose tree holds a module, if exactly one does."""
-    found = [name for name in SCHEMES if name in module.split(".")]
+    found = [name for name in SCHEMES if name in module_parts(module)]
     return found[0] if len(found) == 1 else None
 
 
@@ -194,6 +210,86 @@ def scheme_problems(graph: dict[str, list[str]]) -> list[tuple[str, str, str]]:
     return problems
 
 
+def directory_cycles(
+    graph: Mapping[str, Sequence[str]],
+    directory_roots: AbstractSet[str] = frozenset(),
+) -> list[tuple[str, str, tuple[str, ...]]]:
+    """
+    Each import in a directory cycle, with one closed path of directories.
+
+    `directory_roots` names root modules whose directories exist, even without Lean files.
+    """
+    directories = set(directory_roots) | {
+        join_module(parts[:size])
+        for name in graph
+        if layer(name) is not None
+        for parts in [module_parts(name)]
+        for size in range(2, len(parts))
+    }
+
+    def containers(name: str) -> list[str]:
+        # A root such as `BuilderApi.lean` belongs to `BuilderApi/`, when that directory exists.
+        parts = module_parts(name)
+        if name not in directories:
+            parts = parts[:-1]
+        return [join_module(parts[:size]) for size in range(3, len(parts) + 1)]
+
+    edges: dict[tuple[str, str], list[tuple[str, str]]] = {}
+    directory_graph: dict[str, set[str]] = {}
+    for name in sorted(graph):
+        if layer(name) is None:
+            continue
+        for imported in sorted(set(graph[name])):
+            if imported not in graph or layer(name) != layer(imported):
+                continue
+            pairs = []
+            for source in containers(name):
+                for target in containers(imported):
+                    if (
+                        source == target
+                        or source.startswith(target + ".")
+                        or target.startswith(source + ".")
+                    ):
+                        continue
+                    # Project onto ancestors too: `Evm/Call/` can depend on all of `Blocks/`.
+                    pairs.append((source, target))
+                    directory_graph.setdefault(source, set()).add(target)
+                    directory_graph.setdefault(target, set())
+            if pairs:
+                edges[name, imported] = pairs
+
+    # Cache a breadth-first search from each target, including the predecessor for a witness.
+    searches: dict[str, dict[str, str | None]] = {}
+
+    def predecessors(start: str) -> dict[str, str | None]:
+        if start not in searches:
+            found: dict[str, str | None] = {start: None}
+            queue = deque([start])
+            while queue:
+                current = queue.popleft()
+                for target in sorted(directory_graph[current]):
+                    if target not in found:
+                        found[target] = current
+                        queue.append(target)
+            searches[start] = found
+        return searches[start]
+
+    problems = []
+    for (name, imported), pairs in edges.items():
+        for source, target in pairs:
+            previous = predecessors(target)
+            if source not in previous:
+                continue
+            path = []
+            current: str | None = source
+            while current is not None:
+                path.append(current)
+                current = previous[current]
+            problems.append((name, imported, (source, *reversed(path))))
+            break
+    return problems
+
+
 def external_reached(graph: dict[str, list[str]]) -> dict[str, str]:
     """
     The first module outside EthLib and the toolchain that each property reaches, if any.
@@ -210,7 +306,7 @@ def external_reached(graph: dict[str, list[str]]) -> dict[str, str]:
         # Lean rejects a cycle of imports; the mark only keeps a broken tree from looping.
         found[name] = None
         for imported in graph[name]:
-            package = imported.split(".")[0]
+            package = module_parts(imported)[0]
             if package != "EthLib":
                 reached = None if package in TOOLCHAIN else imported
             elif imported in graph and kind(imported) == "property":
@@ -261,7 +357,7 @@ def import_problems(module: str, imported: str) -> list[str]:
     """Why one import breaks a rule, if it does."""
     problems = []
     source, target = kind(module), kind(imported)
-    package = imported.split(".")[0]
+    package = module_parts(imported)[0]
     if package != "EthLib":
         if source != "property" and package not in TOOLCHAIN:
             problems.append(f"{KIND_NAMES[source]} imports only EthLib and the toolchain")
@@ -435,6 +531,18 @@ def check(root: Path) -> list[str]:
                     problems.append(
                         f"{modules[name].relative_to(root)}: imports {imported}, but {problem}"
                     )
+
+    directory_roots = {name for name, path in modules.items() if path.with_suffix("").is_dir()}
+    for name, imported, cycle in directory_cycles(graph, directory_roots):
+        if (name, imported) in baseline:
+            used.add((name, imported))
+        else:
+            line = next(found.line for found in headers[name] if found.module == imported)
+            path = " -> ".join("/".join(module_parts(directory)) + "/" for directory in cycle)
+            problems.append(
+                f"{modules[name].relative_to(root)}:{line}: imports {imported}, "
+                f"which forms a directory cycle: {path}"
+            )
 
     kinds_path = root / KINDS
     kinds = None

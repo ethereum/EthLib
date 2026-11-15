@@ -6,7 +6,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Capped
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.DirectQueryAccounting
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StateLens
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EagerTraceInvariant
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 @[expose] public section
 

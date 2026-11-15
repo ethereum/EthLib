@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Precom
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteForgery
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenQueryBound
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopVerificationQueryPresence
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 /-!
 # Key generation's cache: the bottom forest's nodes and the top layer

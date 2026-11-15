@@ -10,15 +10,6 @@ public import EthLib.Serialization.Ssz.Codec.Deserialize
 
 namespace EthLib.Serialization.Ssz
 
-/-- An integer takes exactly the width it was written at. -/
-theorem uintBytes_size (width value : Nat) : (uintBytes width value).size = width := by
-  -- The value shrinks by a factor of 256 at every step, so it stays quantified over.
-  induction width generalizing value with
-  -- No bytes were asked for, and none were written.
-  | zero => rfl
-  -- One byte was written and the rest is the same claim one width down.
-  | succ width ih => simp only [uintBytes_succ, Array.size_append, Array.size_singleton, ih]; omega
-
 /-- Reading past a byte put on the front is reading the rest from one place earlier. -/
 theorem readUint_shift (data : Bytes) (byte : UInt8) (start width : Nat) :
     readUint (#[byte] ++ data) (start + 1) width = readUint data start width := by

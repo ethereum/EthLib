@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Xmss.CodeSize
 public import EthLib.Cryptography.Proofs.Xmss.TweakableHash
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Convert
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Convert
 
 /-!
 # Proofs: the codeword search rarely fails, in the random-oracle model

@@ -113,4 +113,61 @@ theorem rejectRelated_empty : rejectRelated [] = .error .emptyRequest :=
   -- With no claimed position, verification would establish nothing about the root.
   rfl
 
+/-- Joining two valid node indices removes only the inner leading bit. -/
+theorem gindexConcat_eq {outer inner : Nat} (outerNamed : 1 ≤ outer) (innerNamed : 1 ≤ inner) :
+    gindexConcat outer inner = .ok (outer * 2 ^ Nat.log2 inner + (inner - 2 ^ Nat.log2 inner)) := by
+  -- A generalized index consists of a leading root bit followed by its left and right turns.
+  simp [gindexConcat, gindexDepth, Nat.not_lt.mpr outerNamed, Nat.not_lt.mpr innerNamed,
+    Bind.bind, Except.bind, pure, Except.pure]
+
+/-- Appending an empty subtree path preserves the outer node. -/
+theorem gindexConcat_root_right {outer : Nat} (named : 1 ≤ outer) :
+    gindexConcat outer 1 = .ok outer := by
+  -- The index one has no path turns to append.
+  simp [gindexConcat_eq named (Nat.le_refl 1), show Nat.log2 1 = 0 from rfl]
+
+/-- A successful splice has two valid operands and the prescribed leading-bit arithmetic. -/
+theorem gindexConcat_facts {outer inner result : Nat}
+    (joined : gindexConcat outer inner = .ok result) :
+    1 ≤ outer ∧ 1 ≤ inner ∧ result = outer * 2 ^ Nat.log2 inner + (inner - 2 ^ Nat.log2 inner) := by
+  -- Neither operand may be zero, because zero has no root bit to preserve.
+  simp only [gindexConcat, gindexDepth] at joined
+  split at joined <;> split at joined <;>
+    simp_all [Bind.bind, Except.bind, pure, Except.pure]
+  omega
+
+/-- Successful splicing always names a real node. -/
+theorem gindexConcat_positive {outer inner result : Nat}
+    (joined : gindexConcat outer inner = .ok result) : 1 ≤ result := by
+  -- The retained leading bit contributes a strictly positive value to the joined index.
+  obtain ⟨outerNamed, -, rfl⟩ := gindexConcat_facts joined
+  have := Nat.mul_le_mul_right (2 ^ Nat.log2 inner) outerNamed
+  have := Nat.two_pow_pos (Nat.log2 inner)
+  omega
+
+/-- Splicing paths adds their depths, so each child turn is retained exactly once. -/
+theorem gindexConcat_depth {outer inner result : Nat}
+    (joined : gindexConcat outer inner = .ok result) :
+    Nat.log2 result = Nat.log2 outer + Nat.log2 inner := by
+  -- The two valid operands determine both the joined index and its leading-bit bounds.
+  obtain ⟨outerNamed, innerNamed, value⟩ := gindexConcat_facts joined
+  obtain ⟨outerLow, outerHigh⟩ := gindexDepth_bounds outerNamed
+  obtain ⟨innerLow, innerHigh⟩ := gindexDepth_bounds innerNamed
+  have positive := gindexConcat_positive joined
+  -- Bounding the result between successive powers of two determines its exact depth.
+  apply (Nat.log2_eq_iff (by omega)).mpr
+  constructor
+  · rw [Nat.pow_add, value]
+    exact Nat.le_trans (Nat.mul_le_mul_right _ outerLow) (Nat.le_add_right _ _)
+  -- The inner suffix fits strictly below its own next leading bit.
+  · calc
+      result < (outer + 1) * 2 ^ Nat.log2 inner := by
+        rw [Nat.pow_succ] at innerHigh
+        rw [value, Nat.add_mul, Nat.one_mul]
+        omega
+      _ ≤ 2 ^ (Nat.log2 outer + 1) * 2 ^ Nat.log2 inner :=
+        Nat.mul_le_mul_right _ (by omega)
+      _ = 2 ^ (Nat.log2 outer + Nat.log2 inner + 1) := by
+        simp [Nat.pow_add, Nat.pow_succ, Nat.mul_right_comm]
+
 end EthLib.Serialization.Ssz

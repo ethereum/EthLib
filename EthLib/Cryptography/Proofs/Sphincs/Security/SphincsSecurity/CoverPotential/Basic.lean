@@ -1,9 +1,9 @@
 module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.AfterSigning
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.Presample
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.PresampleLaws
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Base.VirtualMono
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Win
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Forgery.Win
 
 /-!
 # Ingredients of the FORS potential of the lazy run

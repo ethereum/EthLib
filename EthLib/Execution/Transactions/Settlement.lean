@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Environment
-public import EthLib.Execution.Fees.BlobGas
+public import EthLib.Execution.Transactions.BlobGas
 public import EthLib.Execution.State.Tracker
 public import EthLib.Execution.Transactions.Validity
 

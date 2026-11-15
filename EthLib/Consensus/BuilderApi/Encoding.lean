@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.BeaconApi.Encoding
+public import EthLib.Consensus.ConsensusVersion
 public import EthLib.Consensus.Containers.BuilderApi
 
 /-!
@@ -24,7 +24,7 @@ The [Gloas builder] document requires the header on every request with a body.
 
 namespace EthLib.Consensus.BuilderApi
 
-open Base Serialization.Ssz BeaconApi
+open Base Serialization.Ssz
 
 /-- The consensus version that the Builder API gives a fork, if it gives one.
 

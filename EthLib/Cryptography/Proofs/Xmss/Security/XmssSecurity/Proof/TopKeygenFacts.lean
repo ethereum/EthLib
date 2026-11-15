@@ -5,7 +5,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainK
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenQueryBound
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryPresence
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 /-!
 # Key generation's top layer

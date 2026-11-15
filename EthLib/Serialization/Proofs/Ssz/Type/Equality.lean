@@ -27,6 +27,12 @@ theorem Desc.nesting_pos (shape : Desc) : 0 < shape.nesting := by
   -- Every constructor contributes one level above any nested components.
   cases shape <;> simp [Desc.nesting]
 
+/-- A type in a list is nested no deeper than the deepest type in that list. -/
+theorem nesting_le_deepest (shape : Desc) (fields : List Desc)
+    (member : shape ∈ fields) : shape.nesting ≤ Desc.deepestNesting fields := by
+  -- The maximum over fields bounds each individual field depth.
+  induction fields <;> grind [Desc.deepestNesting]
+
 /-- One remaining comparison step suffices to recognize the same declaration. -/
 @[simp] theorem compatibleAt_self (budget : Nat) (shape : Desc) :
     compatibleAt (budget + 1) shape shape = true := by

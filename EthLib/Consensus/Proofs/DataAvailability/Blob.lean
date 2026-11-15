@@ -35,8 +35,6 @@ namespace EthLib.Consensus
 
 open Base Serialization.Ssz
 
-instance : NeZero Cryptography.Kzg.Constants.BYTES_PER_BLOB := ⟨by decide⟩
-
 instance {preset : Preset} [NeZero preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat] :
     LawfulSszType (BlobSidecar preset) :=
   .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)

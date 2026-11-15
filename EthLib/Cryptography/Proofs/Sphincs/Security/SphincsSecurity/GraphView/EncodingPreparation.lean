@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Reference
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.Reference
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.Cache
 
 /-!

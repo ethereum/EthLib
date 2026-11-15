@@ -2,7 +2,7 @@ module
 
 public import
   EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.EncodingPreparation
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.GraphRows
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.Coordinates
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.Correctness
 
 /-!

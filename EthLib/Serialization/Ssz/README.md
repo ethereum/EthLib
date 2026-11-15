@@ -89,7 +89,7 @@ By [admissibility](../Proofs/Ssz/Codec/DecodeFits.lean), successful decoding pro
 [Encoding sizes](../Proofs/Ssz/Codec/Size.lean) characterizes successful serialization of admissible values by structural byte counts and the four-byte offset bounds, and the encoding has exactly the predicted size.
 An admissible value can fail to serialize only through an offset overflow.
 
-For [defaults](../Proofs/Ssz/Type/DefaultLaws.lean), every successfully constructed default fits its declaration.
+For [defaults](../Proofs/Ssz/Codec/DefaultLaws.lean), every successfully constructed default fits its declaration.
 The executable admissibility check agrees with the logical predicate for well-formed declarations.
 
 [Byte aliases](../Proofs/Ssz/Codec/Aliases.lean) shows that byte arrays and sequences of eight-bit integers encode, decode, and root alike, refusals included.

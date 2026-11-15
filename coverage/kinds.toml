@@ -14,6 +14,7 @@
 models = [
   # Casper FFG, LMD-GHOST, the payload tree of Gloas, the network and the stake.
   "EthLib.Consensus.Proofs.Models",
+  "EthLib.Consensus.Proofs.ForkChoiceNetworkModel",
   # Keccak-f[1600] over bit vectors.
   "EthLib.Cryptography.Proofs.Models",
 ]
