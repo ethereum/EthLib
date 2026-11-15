@@ -107,9 +107,6 @@ def State.bytes (s : State) : ByteArray :=
     uint32Byte s.x14 0, uint32Byte s.x14 1, uint32Byte s.x14 2, uint32Byte s.x14 3,
     uint32Byte s.x15 0, uint32Byte s.x15 1, uint32Byte s.x15 2, uint32Byte s.x15 3]⟩
 
-/-- Every encoded state has the 64 bytes required by BlockMix. -/
-theorem State.bytes_size (s : State) : s.bytes.size = 64 := rfl
-
 /-- A double round: one round on the columns, then one round on the rows, RFC 7914 §3.
 
 Each round applies four quarter-rounds, one per column or row. -/
@@ -210,11 +207,12 @@ theorem blockMixLoop_size (input : ByteArray) (count i : Nat)
     (whole : 64 * i + 64 * count ≤ input.size) (previous : State) (even odd : ByteArray) :
     (blockMixLoop input count i whole previous even odd).size =
       even.size + odd.size + 64 * count := by
+  have bytes_size (s : State) : s.bytes.size = 64 := rfl
   induction count generalizing i previous even odd with
   | zero => simp [blockMixLoop]
   | succ count ih =>
     simp only [blockMixLoop]
-    split <;> rw [ih] <;> simp only [ByteArray.size_append, State.bytes_size] <;> omega
+    split <;> rw [ih] <;> simp only [ByteArray.size_append, bytes_size] <;> omega
 
 /-- BlockMix with its `128 * r` byte length preserved, RFC 7914 §4. -/
 def blockMixCore (r : Nat) (positive : 0 < r) (input : MixBlock r) : MixBlock r :=

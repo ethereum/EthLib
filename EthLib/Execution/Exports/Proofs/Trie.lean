@@ -10,7 +10,6 @@ The root export returns the root of the trie that sets the decoded pairs in orde
 
 So the binding and soundness theorems for such tries apply to its output.
 
-The library of the exports holds this module, since a proof module fails to load compiled exports.
 -/
 
 @[expose] public section

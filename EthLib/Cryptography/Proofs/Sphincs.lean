@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Sphincs.Constants
 public import EthLib.Cryptography.Proofs.Sphincs.Address
 public import EthLib.Cryptography.Proofs.Sphincs.TweakableHash
 public import EthLib.Cryptography.Proofs.Sphincs.Encoding

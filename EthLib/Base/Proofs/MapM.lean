@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Except
 public import EthLib.Base.Except
 
 /-!

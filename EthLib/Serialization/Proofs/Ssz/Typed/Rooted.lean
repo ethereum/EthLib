@@ -90,6 +90,22 @@ namespace RootedVector
 
 variable {α : Type} [SszType α] {length : Nat}
 
+/-- Each element after a shift is the one `count` places later, or else a fresh one. -/
+theorem getElem_shiftElements (v : RootedVector α length) {count : Nat} (fresh : Vector α count)
+    (le : count ≤ length) (index : Nat) (inside : index < length) :
+    (v.shiftElements fresh le)[index] =
+      if kept : index + count < length then v.elements[index + count]
+      else fresh[index + count - length]'(by omega) := by
+  have size : (v.elements.toArray.extract count length).size = length - count := by simp
+  simp only [shiftElements, Vector.getElem_mk, Array.getElem_append, size]
+  split <;> split
+  · simp [Array.getElem_extract, Nat.add_comm count index]
+  · omega
+  · omega
+  · simp only [Vector.getElem_toArray]
+    congr 1
+    omega
+
 /-- The elements of the vector built from a vector are that vector. -/
 @[simp] theorem elements_ofVector (elements : Vector α length) :
     (ofVector elements).elements = elements := rfl

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Xmss.Constants
 public import EthLib.Cryptography.Proofs.QueryAvoidance
 public import EthLib.Cryptography.Proofs.Xmss.Address
 public import EthLib.Cryptography.Proofs.Xmss.CodewordSearch

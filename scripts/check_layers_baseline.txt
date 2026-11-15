@@ -10,7 +10,3 @@ EthLib.Cryptography.Proofs.Bls.Compress Init.Data.Nat.Fold
 EthLib.Cryptography.Proofs.Bls.G2Compress Init.Data.Nat.Fold
 # The closed infinity check of G2 also reduces the derived equality of `Except`.
 EthLib.Cryptography.Proofs.Bls.G2Compress Batteries.Data.Except
-# The proofs of the SSZ exports unfold the JSON builder and accessors, and Lean states no lemma about them.
-# With Lake v4.35.0, an import of `EthLib.Base.Proofs.Toolchain.JsonBasic` here makes Lake build the
-# shared library of the whole Proofs library, which then fails to load with a missing symbol.
-EthLib.Serialization.Exports.Proofs.Ssz Lean.Data.Json.Basic

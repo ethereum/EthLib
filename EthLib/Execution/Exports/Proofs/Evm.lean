@@ -13,7 +13,6 @@ Arguments of the right lengths or counts give the result that the operation comp
 
 The codes of these errors never meet the codes of an RLP error, so one Python class carries both.
 
-The library of the exports holds this module, since a proof module fails to load compiled exports.
 -/
 
 @[expose] public section

@@ -547,9 +547,12 @@ EthLib is one Lake package, and three libraries hold its code.
 - The library `Proofs` holds the properties and the models, in the `Proofs/` directory of each layer.
 - The library `Exports` holds the C exports that the Python bindings call.
 
-The package also builds three executables: `check-decls`, which checks the compiled declarations, `check-accessors`, which lists the defaulting accessors of the specification, and `gen-bindings`, which writes the binding contract from Lean.
-Two more libraries hold test cases, in `scripts/`: `CheckDeclsTest` for `check-decls`, and `CheckAccessorsTest` for `check-accessors`.
-They are not default targets, and `scripts/test_check_decls.sh` and `scripts/test_check_accessors.sh` build them.
+The executables `check-decls`, `check-accessors` and `check-theorems` inspect the compiled declarations.
+They check which constructs the declarations use, which defaulting accessors the specification calls, and which theorems it needs.
+`gen-bindings` writes the binding contract from Lean, and `known-answers` runs pinned test vectors.
+Three more libraries hold test cases in `scripts/`: `CheckDeclsTest`, `CheckAccessorsTest` and `CheckTheoremsTest`.
+They are not default targets.
+Their test scripts, `scripts/test_check_decls.sh`, `scripts/test_check_accessors.sh` and `scripts/test_check_theorems.sh`, build them.
 
 The package requires Mathlib and VCVio, a library of probabilistic computations.
 Only the properties and the models may import them, or Batteries.
@@ -580,12 +583,25 @@ Then the module follows the layout of `CONTRIBUTING.md`: the specification in `E
 A theorem stays in the specification file in two cases, because a specification never imports a property:
 
 - A definition or an instance of the specification uses it.
-  `gasHeld_runFrame_le` in `EthLib/Execution/Evm/Interpreter.lean` is one, since the recursion of messages needs its bound.
+  `gasHeld_le_of_measure_lt` in `EthLib/Execution/Evm/Interpreter.lean` is one, since `runFrameWith` needs its bound.
 - The users of a definition rely on it, such as a `@[simp]` lemma.
   A project that imports only the specification can then still use it.
 
-Every other theorem goes under `Proofs/`.
-Specification files already hold theorems that fit neither case, and a later change sorts them.
+`lake exe check-theorems` decides these cases from the compiled environment, including private bodies.
+Starting from definitions and instances, it follows constants used in their types and bodies, through other theorems too.
+A theorem outside that dependency set stays only when it has a persistent `@[simp]` attribute.
+An untagged helper used only to prove a simplification theorem is still a finding.
+The search covers the specification modules and `EthLib.lean`, and identifies a declaration by its defining module, not its namespace.
+Definitions local to theorem proofs are not independent roots, but executable `where` helpers are.
+Generated theorems are not migration findings.
+Every other theorem goes under `Proofs/`, even when a property uses it through a specification import.
+
+`scripts/check_theorems_baseline.txt` records the findings awaiting migration.
+The check fails on a finding absent from the baseline and on a baseline entry absent from its findings.
+The baseline may only shrink.
+CI compares it with the base revision using `scripts/check_theorems_baseline.py` and rejects added entries.
+The first change that creates the baseline initializes it from the existing findings.
+It keeps the findings in `EthLib/Cryptography/Bls/` because their migration is outside the scope of issue [#2611](https://github.com/ethereum/EthLib/issues/2611).
 A model goes under `Proofs/` too, as the models of Casper FFG and LMD-GHOST do in `EthLib/Consensus/Proofs/Models/`.
 Modules of one kind share a directory, under the part of the layer that uses them.
 The precompiles are one kind, and only the EVM calls them, so ECRECOVER sits in `EthLib/Execution/Evm/Precompiles/Ecrecover.lean`, and its theorems in `EthLib/Execution/Proofs/Evm/Precompiles/Ecrecover.lean`.

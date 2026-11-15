@@ -78,9 +78,6 @@ theorem natToBytes.go_append (len n : Nat) (written : List UInt8) :
     rw [natToBytes, go, go, ih, ih (written := [_]), List.append_assoc]
     rfl
 
-/-- Zero bytes write nothing. -/
-theorem natToBytes_zero (n : Nat) : natToBytes 0 n = [] := rfl
-
 /-- On `len + 1` bytes, the higher bytes come first and the lowest byte last. -/
 theorem natToBytes_succ (len n : Nat) :
     natToBytes (len + 1) n = natToBytes len (n / 256) ++ [UInt8.ofNat (n % 256)] := by
@@ -96,9 +93,5 @@ theorem natToBytes_length (len n : Nat) : (natToBytes len n).length = len := by
 /-- `n` as four big-endian bytes, keeping only `n mod 2^32`, such as a 32-bit block counter. -/
 def natToBytes4 (n : Nat) : ByteArray :=
   ⟨(natToBytes 4 n).toArray⟩
-
-/-- The counter is always four bytes. -/
-theorem natToBytes4_size (n : Nat) : (natToBytes4 n).size = 4 := by
-  simp [natToBytes4, ByteArray.size, natToBytes_length]
 
 end EthLib.Base

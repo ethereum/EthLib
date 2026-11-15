@@ -7,7 +7,7 @@ import all Lean.Data.Json.Basic
 /-!
 # `Base.Proofs.Toolchain.JsonBasic`
 
-The equations of the JSON object builder, null test and member lookup, from `Lean.Data.Json.Basic`.
+The equations of the JSON object builder, null test and accessors, from `Lean.Data.Json.Basic`.
 
 Lean does not expose these bodies.
 
@@ -55,6 +55,30 @@ theorem isNull_obj (kvs : Std.TreeMap.Raw String Json compare) :
 /-- An object built from a list of pairs is not null. -/
 theorem isNull_mkObj (pairs : List (String × Json)) : (Json.mkObj pairs).isNull = false := by
   rw [mkObj_eq, isNull_obj]
+
+/-- Reading array items succeeds exactly for an array. -/
+theorem getArr?_eq (j : Json) : j.getArr? = match j with
+    | .arr items => .ok items
+    | _ => .error "array expected" := by
+  cases j <;> rfl
+
+/-- Reading a string succeeds exactly for a string. -/
+theorem getStr?_eq (j : Json) : j.getStr? = match j with
+    | .str text => .ok text
+    | _ => .error "String expected" := by
+  cases j <;> rfl
+
+/-- Reading a natural number succeeds exactly for its JSON representation. -/
+theorem getNat?_eq (j : Json) : j.getNat? = match j with
+    | (n : Nat) => .ok n
+    | _ => .error "Natural number expected" := by
+  cases j <;> rfl
+
+/-- Reading a Boolean succeeds exactly for a Boolean. -/
+theorem getBool?_eq (j : Json) : j.getBool? = match j with
+    | (b : Bool) => .ok b
+    | _ => .error "Bool expected" := by
+  cases j <;> rfl
 
 /-- Reading a member of an object looks its name up in the tree map. -/
 theorem getObjVal?_eq (j : Json) (k : String) :

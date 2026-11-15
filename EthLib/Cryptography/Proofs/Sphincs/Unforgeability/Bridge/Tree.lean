@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Sphincs.Tree
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Ots
 
 /-!

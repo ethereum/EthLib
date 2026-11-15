@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Sphincs.Constants
 public import EthLib.Cryptography.Proofs.HashSig
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
 public import EthLib.Cryptography.Proofs.Sphincs.Encoding
