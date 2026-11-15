@@ -4784,6 +4784,32 @@ It needs the lookahead to name only validators of the state, the slots of the ep
 It covers every epoch whose slots fit, not only those of `dutiesResponse_proposer_internal_iff`, since the answers refuse the others with that error.
 `dutiesResponse_proposer_error_code` follows: such an answer fails only with code 400.
 That result holds even with no active validator, unlike the answers before Fulu.
+`dutiesResponse_attester_internal_iff` shows that an attester answer gets code 500 exactly when a requested committee assignment fails.
+The epoch must also pass the check of `checkDutyEpoch`.
+It reads the last clause of `dutyError`, which gives code 500 to every fault but an epoch or a period out of range.
+`getCommitteeAssignment_error` (`Consensus/Proofs/HonestValidator.lean`) shows that the assignment gives an epoch out of range only after the next epoch, which the check refuses first.
+It needs each requested index to name a validator, and the bound of `dependentRoot_error` on the slot of the state.
+`dutiesResponse_attester_error` shows that each refusal of the attester answer is the error of an empty request, an invalid epoch or an invalid index.
+It needs at most `2^40` validators in the registry.
+Their number times one more than the most committees of a slot, times the slots of an epoch, must be below `2^64`.
+It also needs the first slot after the epoch to fit in 64 bits.
+The epoch plus the length of the history of mixes must fit too, and the bound on the slot of the state must hold.
+`getCommitteeAssignment_exists` shows that the assignment succeeds under those bounds, for an epoch that passes the check.
+`dutiesResponse_attester_error_code` follows: such an answer fails only with code 400.
+`dutiesResponse_ptc_internal_iff` shows that from Gloas a PTC answer gets code 500 exactly when a requested PTC assignment fails.
+The epoch must also lie in the window of `ptcDuties_eq`, and at most at the end of the seed lookahead.
+The request must repeat no index.
+`getPtcAssignment_error` shows that the assignment gives an epoch out of range only past the seed lookahead.
+`getPtcAssignment_too_far` shows that it always does there, and `dutyError` gives that error code 400.
+It needs each requested index to name a validator, and the bound on the slot of the state.
+`dutiesResponse_ptc_error` shows that each refusal of the PTC answer is one of five errors, all with code 400.
+They are the errors of a state before Gloas, an empty request, an invalid epoch, a repeated index and an invalid index.
+It needs the last epoch of the seed lookahead and the length of the window to fit in 64 bits.
+It also needs the first slot after the epoch to fit, and the bound on the slot of the state.
+`getPtcAssignment_exists` shows that the assignment succeeds under those bounds, for an epoch that the window covers.
+`dutiesResponse_ptc_error_code` follows: such an answer fails only with code 400.
+`dutiesResponse_ptc_error` does not ask the epoch to be within the seed lookahead, so it covers the code 400 that an epoch past it gets.
+That error is reachable only at the next epoch, under a preset whose seed lookahead is zero.
 These cases of code 500 remain without a theorem:
 
 - No theorem bounds the entries of the lookahead by the registry along a chain from the Phase 0 genesis state of deposits.
@@ -4797,16 +4823,15 @@ These cases of code 500 remain without a theorem:
   The draw also fails for an epoch within `EPOCHS_PER_HISTORICAL_VECTOR` of `2^64`, which the current epoch of a mainnet or minimal state never is.
   `getBeaconProposerIndices_ok` shows that the draw succeeds under bounds when the draws of the epoch end (`ProposersDrawEnd`), as they do when an active validator is at the cap of the draw.
   No theorem carries that to the answers yet.
-- The committee assignment of the attester answer and the PTC assignment give code 500 for any fault but an epoch out of range.
-  On mainnet and minimal the attester fault needs more than `2^40` active validators, or an epoch or a slot near `2^64`.
-  The PTC fault needs an epoch or a slot near `2^64`.
+- No theorem excludes code 500 from the attester and PTC answers where a bound of their error theorems fails.
+  On mainnet and minimal, code 500 from a PTC assignment needs a slot of the state within two epochs of `2^64`.
+  Code 500 from an attester assignment needs such a slot, or a registry of more than `2^40` validators.
+  `getCommitteeAssignment_eq_error_of_overflow` shows that the assignment overflows at an epoch up to the next one whose slots pass 64 bits.
   Before Gloas the registry holds at most `2^40` validators on those presets by its type (`BeaconState.registryWithinLimit_of_lt`).
   From Gloas, `Run.registryWithinLimit` bounds it the same way along a run whose start and blocks leave room.
+  On those presets `ptcRoom_presets` gives the other bound on the registry from that one.
 - A dependent root can get code 500, by an overflow, at a slot of the state within `SLOTS_PER_HISTORICAL_ROOT` of `2^64`.
   So can a proposer answer for an epoch whose slots pass 64 bits.
-
-No theorem states the code 400 that the PTC assignment gives to an epoch past the seed lookahead.
-It is reachable only at the next epoch, under a preset whose seed lookahead is zero.
 
 The answers that hand a validator its data are in `Consensus/BeaconApi/ValidatorData.lean`: attestation data, payload attestation data, aggregates and sync committee contributions.
 `produceAttestationData_head` (`Consensus/Proofs/BeaconApi/ValidatorData.lean`) shows that the attestation data votes for the head of the store, at the requested slot, and that the head is not optimistic.

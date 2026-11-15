@@ -19,6 +19,8 @@ So each entry of the list is in one of the committees.
 When the list has no repeat, no entry is in two committees.
 
 Each member of any committee that has a value is one of the indices.
+
+A committee whose position is below the count is cut, when the list times one past it fits.
 -/
 
 @[expose] public section
@@ -262,6 +264,26 @@ theorem computeCommittee_eq {preset : Preset} {indices : Array ValidatorIndex} {
   apply List.ext_getElem (by simp [Shuffle.shuffledIndices]; omega)
   intro place lt _
   simp [Shuffle.shuffledIndices]
+
+/-- A committee whose position is below the count is cut.
+
+It needs the number of indices times one more than the position to be below `2^64`. -/
+theorem shuffledCommittee_ok {indices : Array ValidatorIndex} {shuffled : Array UInt64}
+    {index count : UInt64} (inside : index < count)
+    (fits : indices.size * (index.toNat + 1) < 2 ^ 64) :
+    ∃ committee, shuffledCommittee indices shuffled index count = .ok committee := by
+  have natLt : index.toNat < count.toNat := UInt64.lt_iff_toNat_lt.mp inside
+  have positive : count ≠ 0 := by
+    intro zero
+    simp [zero] at natLt
+  have bound : indices.size * (index.toNat + 1) ≤ indices.size * count.toNat :=
+    Nat.mul_le_mul_left _ natLt
+  have stopLe : indices.size * (index.toNat + 1) / count.toNat ≤ indices.size :=
+    Nat.div_le_of_le_mul (Nat.le_trans bound (Nat.le_of_eq (Nat.mul_comm _ _)))
+  have below : index.toNat + 1 < 2 ^ 64 := Nat.lt_of_le_of_lt natLt count.toNat_lt
+  simp only [shuffledCommittee, positive, below, fits, and_self, Nat.not_lt.mpr stopLe, and_false,
+    ↓reduceIte]
+  exact ⟨_, rfl⟩
 
 /-- A committee with a position past the length of the indices fails.
 
