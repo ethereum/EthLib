@@ -25,6 +25,47 @@ open Base Uint64 Models
 
 variable {preset : Preset} {fork : Fork}
 
+/-- Activity at any queried epoch requires a finite activation epoch. -/
+private theorem finiteActivation {state : BeaconState preset fork} {epoch : Epoch}
+    {position : Nat} (active : isActiveAt state epoch position = true) :
+    ∃ validator, state.validators.data[position]? = some validator ∧
+      validator.activationEpoch ≠ FAR_FUTURE_EPOCH := by
+  obtain ⟨validator, found, active⟩ := isActiveAt_eq_true_iff.mp active
+  refine ⟨validator, found, ?_⟩
+  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
+  intro far
+  have below := UInt64.lt_iff_toNat_lt.mp active.2
+  have above := UInt64.le_iff_toNat_le.mp active.1
+  rw [far] at above
+  have bound := validator.exitEpoch.toNat_lt
+  change 18446744073709551615 ≤ epoch.toNat at above
+  omega
+
+/-- Entries beyond a historical registry boundary still await activation eligibility. -/
+private def PendingTail (count : Nat) (epoch : Epoch) (state : BeaconState preset fork) : Prop :=
+  ∀ index validator, count ≤ index → state.validators.data[index]? = some validator →
+    epoch < validator.activationEligibilityEpoch ∧ validator.activationEpoch = FAR_FUTURE_EPOCH
+
+/-- An active entry cannot belong to the unassigned suffix, even for a future query epoch. -/
+private theorem active_before_pendingTail {state : BeaconState preset fork}
+    {epoch boundary : Epoch} {count position : Nat}
+    (tail : PendingTail count boundary state)
+    (active : isActiveAt state epoch position = true) : position < count := by
+  obtain ⟨validator, found, finite⟩ := finiteActivation active
+  by_contra outside
+  exact finite (tail position validator (Nat.le_of_not_gt outside) found).2
+
+/-- A registry containing the historical prefix contains every active queried position.
+
+The prefix inclusion remains a separate input; default-false slashing flags do not supply it. -/
+private theorem active_registry_of_pendingTail {state cached : BeaconState preset fork}
+    {epoch boundary : Epoch} {count : Nat}
+    (tail : PendingTail count boundary state) (contains : count ≤ cached.validators.data.size)
+    {position : Nat} (active : isActiveAt state epoch position = true) :
+    ∃ validator, cached.validators.data[position]? = some validator := by
+  have inside := Nat.lt_of_lt_of_le (active_before_pendingTail tail active) contains
+  exact ⟨cached.validators.data[position], Array.getElem?_eq_getElem inside⟩
+
 /-- A successful total also bounds a subset, without bounding inactive balances. -/
 private theorem totalBalance_exists_of_subset {state : BeaconState preset fork}
     {indices all : List ValidatorIndex} {total : Gwei}
@@ -64,6 +105,24 @@ private theorem filteredTotal_exists {state : BeaconState preset fork}
       exact mem_getActiveValidatorIndices_of_isActiveAt
         (isActiveAt_eq_true_iff.mpr ⟨validator, validatorAt_ok_iff.mp found, isActive⟩))
   exact ⟨active, result, filtered, resultOk⟩
+
+/-- Historical activity supplies checked receiver lookups through a pending-tail boundary.
+
+The receiver filters at its own epoch; the epoch proving membership is unrestricted. -/
+private theorem filteredTotal_of_pendingTail {source state : BeaconState preset fork}
+    {epoch boundary : Epoch} {count : Nat} {participants : Std.TreeSet ValidatorIndex}
+    {total : Gwei} (tail : PendingTail count boundary source)
+    (contains : count ≤ state.validators.data.size)
+    (active : ∀ v ∈ participants, isActiveAt source epoch v.toNat = true)
+    (read : getTotalActiveBalance state = .ok total) :
+    ∃ selected result,
+      participants.toList.filterM (fun index => do
+        return isActiveValidator (← validatorAt state index) (getCurrentEpoch state)) =
+        .ok selected ∧ getTotalBalance state selected = .ok result := by
+  apply filteredTotal_exists read
+  intro v member
+  obtain ⟨validator, found⟩ := active_registry_of_pendingTail tail contains (active v member)
+  exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
 /-- The maximum succeeds when its arithmetic, committee, registry and total reads succeed. -/
 private theorem maximum_exists_of_total {store : Store preset fork} {head : Root}
