@@ -400,6 +400,35 @@ theorem Store.Reachable.blockState_root
     exact reachable.anchorState_root
   · exact (reachable.blockState_header found stored same).2.1
 
+/-- In a reachable store, the state kept for a known block sits at the slot of that block.
+
+Its latest block header matches that block in every field but the state root.
+
+It needs the anchor state and the anchor block to agree in the same two ways. -/
+theorem Store.Reachable.blockState_latestBlockHeader
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorHeader : anchorState.latestBlockHeader.slot = anchorBlock.slot ∧
+      anchorState.latestBlockHeader.proposerIndex = anchorBlock.proposerIndex ∧
+      anchorState.latestBlockHeader.parentRoot = anchorBlock.parentRoot ∧
+      SszType.hashTreeRoot anchorBlock.body = .ok anchorState.latestBlockHeader.bodyRoot)
+    {root : Root} {block : BeaconBlock preset fork} {state : BeaconState preset fork}
+    (found : store.blocks[root]? = some block) (stored : store.blockStates[root]? = some state) :
+    state.slot = block.slot ∧ state.latestBlockHeader.slot = block.slot ∧
+      state.latestBlockHeader.proposerIndex = block.proposerIndex ∧
+      state.latestBlockHeader.parentRoot = block.parentRoot ∧
+      SszType.hashTreeRoot block.body = .ok state.latestBlockHeader.bodyRoot := by
+  by_cases same : block = anchorBlock
+  · obtain ⟨kept, keptFound, isAnchor, -⟩ := reachable.blockStatesFromParents found
+    rw [stored, Option.some.injEq] at keptFound
+    subst keptFound
+    rw [isAnchor same, same]
+    exact ⟨anchorSlot.symm, anchorHeader⟩
+  · obtain ⟨atSlot, -, bodyRoot, bodyRooted, header⟩ :=
+      reachable.blockState_header found stored same
+    rw [header]
+    exact ⟨atSlot, rfl, rfl, rfl, bodyRooted⟩
+
 /-- A history read after the anchor state agrees with the store's ancestor walk. -/
 theorem Store.Reachable.blockState_history_ancestor
     (reachable : Store.Reachable config anchorState anchorBlock store)
