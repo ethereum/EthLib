@@ -145,6 +145,7 @@ public import EthLib.Consensus.Proofs.LightClient.Containers
 public import EthLib.Consensus.Proofs.LightClient.Execution
 public import EthLib.Consensus.Proofs.LightClient.FullNode
 public import EthLib.Consensus.Proofs.LightClient.Sync
+public import EthLib.Consensus.Proofs.LightClient.SyncCommitteeRandomOracle
 public import EthLib.Consensus.Proofs.LightClient.Unforgeable
 public import EthLib.Consensus.Proofs.LightClient.Upgrade
 public import EthLib.Consensus.Proofs.Models.Ffg.AccountableSafety
