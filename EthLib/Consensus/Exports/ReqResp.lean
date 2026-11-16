@@ -207,6 +207,12 @@ def reqRespResponseValidOf
   | .beaconBlocksByRoot =>
     return isValidBlocksByRootResponse
       (← decodeRequest (BeaconBlocksByRootRequest config fork) request) (← block items)
+  | .lightClientUpdatesByRange =>
+    let request ← decodeRequest LightClientUpdatesByRangeRequest request
+    let fields ← decodeItems (Slot × String) (fun fields => fields) items
+    let updates ← fields.mapM fun (attestedSlot, chunkFork) => do
+      return ResponseUpdate.mk attestedSlot (← forkUpTo .hegota chunkFork.toUTF8)
+    return isValidLightClientUpdatesByRangeResponse preset config request updates
   | .blobSidecarsByRange =>
     return isValidBlobSidecarsByRangeResponse config fork
       (← decodeRequest BlobSidecarsByRangeRequest request) (← sidecar items)
@@ -252,6 +258,8 @@ A block is its slot, parent root and root; a sidecar its slot, block root and in
 An envelope is its slot, block root, parent hash and block hash.
 
 An inclusion list is its slot, validator index and dependent root.
+
+A light client update is the slot of its attested header and the name of the fork of its chunk.
 
 The committee is read only for inclusion lists, and must then have one validator per seat.
 

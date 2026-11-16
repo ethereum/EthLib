@@ -13,6 +13,9 @@ What the validity of a response says about its blocks or sidecars.
 - When the step is 1, each block names the one before it as its parent, so the blocks form a chain.
 - A valid response to a request for blocks by root has at most as many blocks as requested roots.
 - The root of each of its blocks is a requested root.
+- A valid response to a request for light client updates by range has at most 128 updates.
+- Their periods lie in the requested periods, and increase along the whole list.
+- The fork of each update is the fork of the epoch of its attested header, from Altair.
 - A valid response to a request for sidecars by range lies in the requested slots.
 - Along the whole list, its sidecars increase in slot, then in index within one block.
 - Two of its sidecars at the same slot name the same block.
@@ -139,6 +142,40 @@ theorem isValidBlocksByRootResponse_iff {config : Config} {fork : Base.Fork}
     isValidBlocksByRootResponse request blocks = true ↔
       blocks.length ≤ request.data.size ∧ ∀ block ∈ blocks, block.root ∈ request.data := by
   simp [isValidBlocksByRootResponse, List.all_eq_true]
+
+/-- The rules that a valid response for light client updates by range meets, and no others. -/
+theorem isValidLightClientUpdatesByRangeResponse_iff (preset : Preset) (config : Config)
+    (request : LightClientUpdatesByRangeRequest) (updates : List ResponseUpdate) :
+    isValidLightClientUpdatesByRangeResponse preset config request updates = true ↔
+      updates.length ≤ request.count.toNat ∧ updates.length ≤ 128 ∧
+      (∀ update ∈ updates,
+        (request.startPeriod.toNat ≤
+            (computeSyncCommitteePeriodAtSlot preset update.attestedSlot).toNat ∧
+          (computeSyncCommitteePeriodAtSlot preset update.attestedSlot).toNat <
+            request.startPeriod.toNat + request.count.toNat) ∧
+        Base.Fork.altair ≤ update.fork ∧
+        update.fork = config.forkAtEpoch (computeEpochAtSlot preset update.attestedSlot)) ∧
+      (∀ i (h : i + 1 < updates.length),
+        computeSyncCommitteePeriodAtSlot preset updates[i].attestedSlot <
+          computeSyncCommitteePeriodAtSlot preset updates[i + 1].attestedSlot) := by
+  have limit : MAX_REQUEST_LIGHT_CLIENT_UPDATES.toNat = 128 := rfl
+  simp only [isValidLightClientUpdatesByRangeResponse, ResponseUpdate.forkMatches,
+    Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, allAdjacent_iff, beq_iff_eq]
+  simp only [ResponseUpdate.period, UInt64.le_iff_toNat_le, limit, and_assoc]
+
+/-- In a valid response for light client updates by range, periods increase along the whole list.
+
+So no two of its updates have the same period. -/
+theorem pairwise_of_isValidLightClientUpdatesByRangeResponse {preset : Preset} {config : Config}
+    {request : LightClientUpdatesByRangeRequest} {updates : List ResponseUpdate}
+    (valid : isValidLightClientUpdatesByRangeResponse preset config request updates = true) :
+    updates.Pairwise (fun a b => computeSyncCommitteePeriodAtSlot preset a.attestedSlot <
+      computeSyncCommitteePeriodAtSlot preset b.attestedSlot) := by
+  simp only [isValidLightClientUpdatesByRangeResponse, Bool.and_eq_true] at valid
+  exact pairwise_of_allAdjacent (s := fun (a b : ResponseUpdate) =>
+      computeSyncCommitteePeriodAtSlot preset a.attestedSlot <
+        computeSyncCommitteePeriodAtSlot preset b.attestedSlot)
+    (fun _ _ h => of_decide_eq_true h) (fun _ _ _ => UInt64.lt_trans) valid.2
 
 /-- A blob sidecar may follow another when it is the next blob of its block or opens a later one.
 
