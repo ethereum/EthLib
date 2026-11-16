@@ -98,7 +98,7 @@ namespace EthLib.Engine
 open EthLib.Base
 open EthLib.Serialization.JsonRpc (field field_eq_ok_iff fields fixed hasExactly paramsArray
   dataJson quantityJson listJson optionJson fields_mkObj hasExactly_of_perm field_of_perm
-  lookup_of_mem fixed_hexString uint64 uint64_toDigits address array isNull_str isNull_arr
+  lookup_of_mem fixed_hexString uint64 uint64_toDigits address array
   fixed_dataJson address_dataJson lookup_of_perm)
 open EthLib.Execution.Rpc (withdrawal withdrawalJson)
 open EthLib.Engine.Json (liftM_ok exists_since_iff sinceValue_of_since)
@@ -962,7 +962,7 @@ theorem forkchoiceStateOfJson_json (state : ForkchoiceState) :
       ("finalizedBlockHash", dataJson state.finalizedBlockHash.toList)].Pairwise
       fun a b => a.1 ≠ b.1 := by simp
   obtain ⟨fs, hfs, hp⟩ := fields_mkObj "forkchoiceState" hd
-    (by simp [dataJson, isNull_str])
+    (by simp [dataJson])
   refine forkchoiceStateOfJson_eq_ok_iff.mpr ⟨fs, hfs, hasExactly_of_perm hp,
     dataJson state.headBlockHash.toList, dataJson state.safeBlockHash.toList,
     dataJson state.finalizedBlockHash.toList,
@@ -1001,7 +1001,7 @@ private theorem attributePairs_present {fork : Fork} (a : PayloadAttributes fork
   unfold attributePairs
   by_cases h1 : Fork.shapella ≤ fork <;> by_cases h2 : Fork.dencun ≤ fork <;>
     by_cases h3 : Fork.glamsterdam ≤ fork <;>
-    simp [h1, h2, h3, dataJson, quantityJson, listJson, isNull_str, isNull_arr]
+    simp [h1, h2, h3, dataJson, quantityJson, listJson]
 
 /-- When a version has the fork of the attributes, its fields are the names of the pairs. -/
 private theorem attributesFields_eq {fork : Fork} (a : PayloadAttributes fork) {v : Nat}
@@ -1254,7 +1254,8 @@ theorem forkchoiceUpdatedParams_json {fork : Fork} (version : Nat) (state : Fork
     cases attributes with
     | none => exact Or.inl ⟨rfl, rfl⟩
     | some a =>
-      obtain ⟨kvs, hk⟩ : ∃ kvs, payloadAttributesJson a = .obj kvs := ⟨_, Base.Toolchain.mkObj_eq _⟩
+      obtain ⟨kvs, hk⟩ : ∃ kvs, payloadAttributesJson a = .obj kvs :=
+        ⟨_, Base.Toolchain.Json.mkObj_eq _⟩
       exact Or.inr ⟨kvs, hk, by simp [hk]⟩
   unfold forkchoiceUpdatedParamsJson
   rw [forkchoiceUpdatedParams_eq_ok_iff]
@@ -1385,11 +1386,10 @@ theorem forkchoiceUpdatedResponseOfJson_json (s : PayloadStatus) (e : Option Str
     fun _ _ => rfl
   have l1 : fs.lookup "payloadStatus" = some (Json.payloadStatusJson s e) := by
     rw [look, k1]
-    simp [Option.filter_some, Json.payloadStatusJson, Base.Toolchain.isNull_mkObj]
+    simp [Option.filter_some, Json.payloadStatusJson]
   have l2 : fs.lookup "payloadId" = id.map (dataJson ·.toList) := by
     rw [look, k2]
-    cases id <;> simp [optionJson, dataJson, Option.filter_some, Base.Toolchain.isNull_null,
-      Base.Toolchain.isNull_str]
+    cases id <;> simp [optionJson, dataJson, Option.filter_some]
   have hall : (fs.all (["payloadStatus", "payloadId"].contains ·.1)) = true := by
     rw [List.all_eq_true]
     intro p hm

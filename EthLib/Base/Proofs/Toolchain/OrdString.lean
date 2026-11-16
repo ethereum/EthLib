@@ -17,11 +17,11 @@ Other proofs cite this theorem, so a Lean release that changes the body breaks t
 
 @[expose] public section
 
-namespace EthLib.Base.Toolchain
+namespace EthLib.Base.Toolchain.String
 
 /-- Strings compare by their lexicographic order `<`. -/
 theorem compare_eq (s t : String) : compare s t = compareOfLessAndEq s t := by
   show String.compare s t = _
   unfold String.compare; rfl
 
-end EthLib.Base.Toolchain
+end EthLib.Base.Toolchain.String

@@ -3,6 +3,7 @@ module
 public import EthLib.Engine.TransitionConfiguration
 public import EthLib.Engine.Proofs.Json
 public import EthLib.Consensus.ForkChoice.Handlers
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: `engine_exchangeTransitionConfigurationV1`
@@ -41,7 +42,7 @@ theorem transitionConfigurationOfJson_json (c : TransitionConfiguration) :
       ("terminalBlockNumber", quantityJson c.terminalBlockNumber.toNat)].Pairwise
       fun a b => a.1 ≠ b.1 := by simp
   obtain ⟨fs, hfs, hp⟩ := fields_mkObj "transitionConfiguration" hd
-    (by simp [quantityJson, dataJson, isNull_str])
+    (by simp [quantityJson, dataJson])
   have hex : hasExactly fs transitionConfigurationFields = true := hasExactly_of_perm hp
   have r1 := field_of_perm (what := "transitionConfiguration") hp hd (List.mem_cons_self ..)
   have r2 := field_of_perm (what := "transitionConfiguration") hp hd

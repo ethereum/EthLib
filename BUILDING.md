@@ -58,7 +58,7 @@ A module outside EthLib, such as one of the Lean toolchain or of Batteries, can 
 So only one module under `EthLib/Base/Proofs/Toolchain/` writes an `import all` of such a module, and it states the equations that the proofs need as public theorems.
 Other proofs import that module with a plain `import` and cite its theorems.
 A new version then breaks one file per module outside EthLib, apart from the exceptions below.
-`scripts/check_layers.py` checks this rule, and `scripts/check_layers_baseline.txt` lists the exceptions, each with its reason.
+`scripts/check_layers.py` checks this rule, and `scripts/check_layers_baseline.txt` lists the exceptions under the label `import-all`, each with its reason.
 EthLib does not set Lake's option `allowImportAll`, so a package that depends on EthLib cites the laws of a hidden module instead.
 Lake v4.35.0 does not enforce that option, so the build allows such an import, and this is a rule of the repository.
 Give a public definition an explicit result type when a delayed proof cannot infer it.

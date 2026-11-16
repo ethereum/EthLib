@@ -38,7 +38,7 @@ theorem deriveSecret_ok (secret : Secret) (label messages : ByteArray)
 theorem handshakeSecret_ok (sharedSecret : ByteArray) :
     ∃ output, handshakeSecret sharedSecret = .ok output := by
   obtain ⟨derived, hd⟩ := deriveSecret_ok earlySecret "derived".toUTF8 .empty
-    (by rw [Tls13.size_toUTF8]; decide)
+    (by simp; decide)
   refine ⟨Tls13.extract (packBytes derived) sharedSecret, ?_⟩
   simp only [handshakeSecret, hd, bind, Except.bind, pure, Except.pure]
 
@@ -46,7 +46,7 @@ theorem handshakeSecret_ok (sharedSecret : ByteArray) :
 theorem masterSecret_ok (handshake : Secret) :
     ∃ output, masterSecret handshake = .ok output := by
   obtain ⟨derived, hd⟩ := deriveSecret_ok handshake "derived".toUTF8 .empty
-    (by rw [Tls13.size_toUTF8]; decide)
+    (by simp; decide)
   refine ⟨Tls13.extract (packBytes derived) (packBytes zeros), ?_⟩
   simp only [masterSecret, hd, bind, Except.bind, pure, Except.pure]
 
@@ -56,13 +56,13 @@ theorem keySchedule_ok (sharedSecret helloTranscript serverTranscript : ByteArra
   obtain ⟨handshake, hh⟩ := handshakeSecret_ok sharedSecret
   obtain ⟨master, hm⟩ := masterSecret_ok handshake
   obtain ⟨ch, hch⟩ := deriveSecret_ok handshake "c hs traffic".toUTF8 helloTranscript
-    (by rw [Tls13.size_toUTF8]; decide)
+    (by simp; decide)
   obtain ⟨sh, hsh⟩ := deriveSecret_ok handshake "s hs traffic".toUTF8 helloTranscript
-    (by rw [Tls13.size_toUTF8]; decide)
+    (by simp; decide)
   obtain ⟨ca, hca⟩ := deriveSecret_ok master "c ap traffic".toUTF8 serverTranscript
-    (by rw [Tls13.size_toUTF8]; decide)
+    (by simp; decide)
   obtain ⟨sa, hsa⟩ := deriveSecret_ok master "s ap traffic".toUTF8 serverTranscript
-    (by rw [Tls13.size_toUTF8]; decide)
+    (by simp; decide)
   refine ⟨⟨earlySecret, handshake, master, ch, sh, ca, sa⟩, ?_⟩
   simp only [keySchedule, hh, hm, hch, hsh, hca, hsa, bind, Except.bind, pure, Except.pure]
 
@@ -102,7 +102,7 @@ theorem keySchedule_congr_hash (shared hello hello' server server' : ByteArray)
 theorem finished_ok (secret : Secret) (transcript : ByteArray) :
     ∃ output, finished secret transcript = .ok output := by
   obtain ⟨key, hk⟩ := Tls13.expandLabel_ok secret "finished".toUTF8 .empty 32
-    (by rw [Tls13.size_toUTF8]; decide) (by decide) (by decide)
+    (by simp; decide) (by decide) (by decide)
   refine ⟨Hmac.hmac32 (packBytes key) (packBytes (Sha256.hash32 transcript)), ?_⟩
   simp only [finished, hk, bind, Except.bind, pure, Except.pure]
 

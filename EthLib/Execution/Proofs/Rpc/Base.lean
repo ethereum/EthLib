@@ -3,7 +3,7 @@ module
 public import EthLib.Execution.Rpc.Base
 public import EthLib.Serialization.Proofs.JsonRpc
 import EthLib.Base.Proofs.BigEndian
-import EthLib.Base.Proofs.Toolchain.Repr
+import EthLib.Base.Proofs.Nat
 
 /-!
 # Proofs: the base types of the execution JSON-RPC API
@@ -43,7 +43,7 @@ private theorem byte_digits : ∀ n, n < 256 →
   intro n hn
   rw [toDigits_byte n hn]
   revert n
-  simp only [Base.Toolchain.digitChar_eq]
+  simp only [Base.digitChar_eq]
   decide +kernel
 
 /-- A loop whose step multiplies by sixteen and adds the digit of a code computes the fold. -/
@@ -85,7 +85,7 @@ private theorem digitChar_dec : ∀ d, d < 10 →
     (Nat.digitChar d).val ≤ 0x7F ∧ 48 ≤ (Nat.digitChar d).val.toUInt8 ∧
       (Nat.digitChar d).val.toUInt8 ≤ 57 ∧
       ((Nat.digitChar d).val.toUInt8 - 48).toNat = d ∧ (0 < d → Nat.digitChar d ≠ '0') := by
-  simp only [Base.Toolchain.digitChar_eq]
+  simp only [Base.digitChar_eq]
   decide
 
 /-- The decimal digits of a number are ASCII digits whose values, read from the first, give it.
@@ -198,7 +198,7 @@ theorem uintDecimal_uintDecimalJson (what : String) (n : Nat) :
     exact hhead hpos (by
       rw [hx]
       have key : ∀ d, d < 10 → (Nat.digitChar d).val.toUInt8 = 48 → Nat.digitChar d = '0' := by
-        simp only [Base.Toolchain.digitChar_eq]
+        simp only [Base.digitChar_eq]
         decide
       have h0 : Nat.digitChar d = '0' := key d hd hx48
       simp [h0])

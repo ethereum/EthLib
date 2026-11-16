@@ -24,7 +24,6 @@ public import EthLib.Base.Proofs.Nat
 public import EthLib.Base.Proofs.Toolchain.JsonBasic
 public import EthLib.Base.Proofs.Toolchain.ListControl
 public import EthLib.Base.Proofs.Toolchain.OrdString
-public import EthLib.Base.Proofs.Toolchain.Repr
 public import EthLib.Base.Proofs.U256
 public import EthLib.Base.Proofs.Uint64
 

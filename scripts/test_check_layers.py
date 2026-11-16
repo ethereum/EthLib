@@ -523,26 +523,26 @@ class KindsRule(unittest.TestCase):
         )
 
     def test_listed_import_passes(self):
-        baseline = f"# Why.\nEthLib.Execution.Proofs.R {MODEL}\n"
+        baseline = f"# Why.\nmodel EthLib.Execution.Proofs.R {MODEL}\n"
         self.assertEqual(self.problems(MODELLED, [], baseline=baseline), [])
 
     def test_listed_import_of_a_refinement_module_is_stale(self):
-        baseline = f"# Why.\nEthLib.Execution.Proofs.R {MODEL}\n"
+        baseline = f"# Why.\nmodel EthLib.Execution.Proofs.R {MODEL}\n"
         self.assertEqual(
             self.problems(MODELLED, [REFINEMENT], baseline=baseline),
             [
-                f"scripts/check_layers_baseline.txt: EthLib.Execution.Proofs.R {MODEL} "
-                "breaks no rule any more; remove the entry"
+                f"scripts/check_layers_baseline.txt:2: model EthLib.Execution.Proofs.R {MODEL} "
+                "no longer breaks the rule of models; remove the entry"
             ],
         )
 
     def test_listed_transitive_import_is_stale(self):
-        baseline = "# Why.\nEthLib.Execution.Proofs.S EthLib.Execution.Proofs.R\n"
+        baseline = "# Why.\nmodel EthLib.Execution.Proofs.S EthLib.Execution.Proofs.R\n"
         self.assertEqual(
             self.problems(MODELLED, [REFINEMENT], baseline=baseline),
             [
-                "scripts/check_layers_baseline.txt: EthLib.Execution.Proofs.S "
-                "EthLib.Execution.Proofs.R breaks no rule any more; remove the entry"
+                "scripts/check_layers_baseline.txt:2: model EthLib.Execution.Proofs.S "
+                "EthLib.Execution.Proofs.R no longer breaks the rule of models; remove the entry"
             ],
         )
 
@@ -606,13 +606,25 @@ class KindsRule(unittest.TestCase):
 
     def test_unreadable_file_keeps_the_baseline_of_the_rule(self):
         # Without the declarations, the check cannot tell whether the entry is still needed.
-        baseline = f"# Why.\nEthLib.Execution.Proofs.R {MODEL}\n"
+        baseline = f"# Why.\nmodel EthLib.Execution.Proofs.R {MODEL}\n"
         cases = {None: r"missing", "models = [": r"not valid TOML: .+"}
         for declared, message in cases.items():
             with self.subTest(declared=declared):
                 problems = Tree(MODELLED, kinds=declared, baseline=baseline).problems()
                 self.assertEqual(len(problems), 1, problems)
                 self.assertRegex(problems[0], f"^coverage/kinds\\.toml: {message}$")
+
+    def test_missing_file_still_reports_a_stale_entry_of_another_rule(self):
+        # Only the model rule reads the declarations, so the other rules still check their entries.
+        baseline = "# Why.\nlayer EthLib.Base.A EthLib.Cryptography.A\n"
+        self.assertEqual(
+            Tree(GOOD, kinds=None, baseline=baseline).problems(),
+            [
+                "coverage/kinds.toml: missing",
+                "scripts/check_layers_baseline.txt:2: layer EthLib.Base.A EthLib.Cryptography.A "
+                "no longer breaks the rules of layers and kinds of module; remove the entry",
+            ],
+        )
 
     def test_invalid_file_is_reported(self):
         problems = Tree(GOOD, kinds='models = []\nrefinement = "EthLib.Proofs"\n').problems()
@@ -1031,8 +1043,8 @@ class DirectoryCycles(unittest.TestCase):
     def test_baseline_allows_existing_cycle(self):
         baseline = (
             "# Shared types await a move.\n"
-            "EthLib.Execution.A.Use EthLib.Execution.B.Types\n"
-            "EthLib.Execution.B.Use EthLib.Execution.A.Types\n"
+            "cycle EthLib.Execution.A.Use EthLib.Execution.B.Types\n"
+            "cycle EthLib.Execution.B.Use EthLib.Execution.A.Types\n"
         )
         self.assertEqual(Tree(with_modules(self.cycle("A", "B")), baseline=baseline).problems(), [])
 
@@ -1045,18 +1057,20 @@ class DirectoryCycles(unittest.TestCase):
             "EthLib.Execution.B.Types": [],
         }
         baseline = (
-            "EthLib.Execution.A.Use EthLib.Execution.Shared\n"
-            "EthLib.Execution.B.Use EthLib.Execution.A.Types\n"
+            "cycle EthLib.Execution.A.Use EthLib.Execution.Shared\n"
+            "cycle EthLib.Execution.B.Use EthLib.Execution.A.Types\n"
         )
         self.assertEqual(Tree(with_modules(graph), baseline=baseline).problems(), [])
         graph["EthLib.Execution.Shared"] = []
         self.assertEqual(
             Tree(with_modules(graph), baseline=baseline).problems(),
             [
-                "scripts/check_layers_baseline.txt: EthLib.Execution.A.Use "
-                "EthLib.Execution.Shared breaks no rule any more; remove the entry",
-                "scripts/check_layers_baseline.txt: EthLib.Execution.B.Use "
-                "EthLib.Execution.A.Types breaks no rule any more; remove the entry",
+                "scripts/check_layers_baseline.txt:1: cycle EthLib.Execution.A.Use "
+                "EthLib.Execution.Shared no longer breaks the rule of directory cycles; "
+                "remove the entry",
+                "scripts/check_layers_baseline.txt:2: cycle EthLib.Execution.B.Use "
+                "EthLib.Execution.A.Types no longer breaks the rule of directory cycles; "
+                "remove the entry",
             ],
         )
 
@@ -1064,8 +1078,8 @@ class DirectoryCycles(unittest.TestCase):
         graph = self.cycle("A", "B")
         graph["EthLib.Execution.A.More"] = ["EthLib.Execution.B.Types"]
         baseline = (
-            "EthLib.Execution.A.Use EthLib.Execution.B.Types\n"
-            "EthLib.Execution.B.Use EthLib.Execution.A.Types\n"
+            "cycle EthLib.Execution.A.Use EthLib.Execution.B.Types\n"
+            "cycle EthLib.Execution.B.Use EthLib.Execution.A.Types\n"
         )
         problems = Tree(with_modules(graph), baseline=baseline).problems()
         self.assertEqual(
@@ -1080,12 +1094,13 @@ class DirectoryCycles(unittest.TestCase):
     def test_baseline_is_stale_after_breaking_the_cycle(self):
         graph = self.cycle("A", "B")
         graph["EthLib.Execution.B.Use"] = []
-        baseline = "EthLib.Execution.A.Use EthLib.Execution.B.Types\n"
+        baseline = "cycle EthLib.Execution.A.Use EthLib.Execution.B.Types\n"
         self.assertEqual(
             Tree(with_modules(graph), baseline=baseline).problems(),
             [
-                "scripts/check_layers_baseline.txt: EthLib.Execution.A.Use "
-                "EthLib.Execution.B.Types breaks no rule any more; remove the entry"
+                "scripts/check_layers_baseline.txt:1: cycle EthLib.Execution.A.Use "
+                "EthLib.Execution.B.Types no longer breaks the rule of directory cycles; "
+                "remove the entry"
             ],
         )
 
@@ -1183,13 +1198,147 @@ class Header(unittest.TestCase):
 class Baseline(unittest.TestCase):
     def test_listed_import_passes(self):
         tree = with_imports("EthLib.Base.A", "EthLib.Cryptography.A")
-        baseline = "# Why.\nEthLib.Base.A EthLib.Cryptography.A\n"
+        baseline = "# Why.\nlayer EthLib.Base.A EthLib.Cryptography.A\n"
         self.assertEqual(Tree(tree, baseline=baseline).problems(), [])
 
     def test_stale_entry_fails(self):
-        problems = Tree(GOOD, baseline="EthLib.Base.A EthLib.Cryptography.A\n").problems()
-        self.assertEqual(len(problems), 1, problems)
-        self.assertIn("breaks no rule any more", problems[0])
+        problems = Tree(GOOD, baseline="layer EthLib.Base.A EthLib.Cryptography.A\n").problems()
+        self.assertEqual(
+            problems,
+            [
+                "scripts/check_layers_baseline.txt:1: layer EthLib.Base.A EthLib.Cryptography.A "
+                "no longer breaks the rules of layers and kinds of module; remove the entry"
+            ],
+        )
+
+    def test_entry_of_another_rule_does_not_allow_a_layer_problem(self):
+        tree = with_imports("EthLib.Base.A", "EthLib.Cryptography.A")
+        for rule in ("import-all", "cycle", "model"):
+            with self.subTest(rule=rule):
+                baseline = f"{rule} EthLib.Base.A EthLib.Cryptography.A\n"
+                self.assertEqual(
+                    Tree(tree, baseline=baseline).problems(),
+                    [
+                        "EthLib/Base/A.lean: imports EthLib.Cryptography.A, "
+                        "but Base sits below Cryptography",
+                        f"scripts/check_layers_baseline.txt:1: {rule} EthLib.Base.A "
+                        f"EthLib.Cryptography.A no longer breaks {layers.BASELINE_RULES[rule]}; "
+                        "remove the entry",
+                    ],
+                )
+
+    def test_entry_of_another_rule_does_not_allow_an_import_all(self):
+        tree = reading(("EthLib.Execution.Proofs.B", "import all Init.Data.Nat.Fold"))
+        baseline = "layer EthLib.Execution.Proofs.B Init.Data.Nat.Fold\n"
+        self.assertEqual(
+            Tree(tree, baseline=baseline).problems(),
+            [
+                "EthLib/Execution/Proofs/B.lean:3: imports all of Init.Data.Nat.Fold, "
+                "but only a module under EthLib/Base/Proofs/Toolchain/ reads its bodies",
+                "scripts/check_layers_baseline.txt:1: layer EthLib.Execution.Proofs.B "
+                "Init.Data.Nat.Fold no longer breaks the rules of layers and kinds of module; "
+                "remove the entry",
+            ],
+        )
+
+    def test_entry_of_another_rule_does_not_allow_a_cycle(self):
+        tree = with_modules(
+            {
+                "EthLib.Execution.A.Use": ["EthLib.Execution.B.Types"],
+                "EthLib.Execution.A.Types": [],
+                "EthLib.Execution.B.Use": ["EthLib.Execution.A.Types"],
+                "EthLib.Execution.B.Types": [],
+            }
+        )
+        baseline = (
+            "cycle EthLib.Execution.A.Use EthLib.Execution.B.Types\n"
+            "layer EthLib.Execution.B.Use EthLib.Execution.A.Types\n"
+        )
+        problems = Tree(tree, baseline=baseline).problems()
+        self.assertEqual(
+            problems,
+            [
+                "EthLib/Execution/B/Use.lean:3: imports EthLib.Execution.A.Types, "
+                "which forms a directory cycle: EthLib/Execution/B/ -> EthLib/Execution/A/ -> "
+                "EthLib/Execution/B/",
+                "scripts/check_layers_baseline.txt:2: layer EthLib.Execution.B.Use "
+                "EthLib.Execution.A.Types no longer breaks the rules of layers and kinds of "
+                "module; remove the entry",
+            ],
+        )
+
+    def test_entry_of_another_rule_does_not_allow_a_model_import(self):
+        declared = kinds([MODEL], [])
+        baseline = f"cycle EthLib.Execution.Proofs.R {MODEL}\n"
+        self.assertEqual(
+            Tree(MODELLED, kinds=declared, baseline=baseline).problems(),
+            [
+                f"EthLib/Execution/Proofs/R.lean: imports the model {MODEL}, "
+                "but coverage/kinds.toml does not declare it a refinement module",
+                f"scripts/check_layers_baseline.txt:1: cycle EthLib.Execution.Proofs.R {MODEL} "
+                "no longer breaks the rule of directory cycles; remove the entry",
+            ],
+        )
+
+    def test_import_that_breaks_two_rules_needs_two_entries(self):
+        # A C export may import only EthLib and the toolchain, and may not read outside bodies.
+        tree = reading(("EthLib.Execution.Exports.B", "import all Batteries.Data.Except"))
+        both = (
+            "layer EthLib.Execution.Exports.B Batteries.Data.Except\n"
+            "import-all EthLib.Execution.Exports.B Batteries.Data.Except\n"
+        )
+        self.assertEqual(Tree(tree, baseline=both).problems(), [])
+        # Each entry allows only its rule, so the other rule still reports the import.
+        cases = {
+            "layer EthLib.Execution.Exports.B Batteries.Data.Except": (
+                "EthLib/Execution/Exports/B.lean:3: imports all of Batteries.Data.Except, "
+                "but only a module under EthLib/Base/Proofs/Toolchain/ reads its bodies"
+            ),
+            "import-all EthLib.Execution.Exports.B Batteries.Data.Except": (
+                "EthLib/Execution/Exports/B.lean: imports Batteries.Data.Except, "
+                "but a C export imports only EthLib and the toolchain"
+            ),
+        }
+        for line, message in cases.items():
+            with self.subTest(line=line):
+                self.assertEqual(Tree(tree, baseline=line + "\n").problems(), [message])
+
+    def test_line_of_another_form_fails(self):
+        cases = {
+            "EthLib.Base.A EthLib.Cryptography.A": "EthLib.Base.A EthLib.Cryptography.A",
+            "layer EthLib.Base.A": "layer EthLib.Base.A",
+            "layer EthLib.Base.A EthLib.Cryptography.A extra": (
+                "layer EthLib.Base.A EthLib.Cryptography.A extra"
+            ),
+            "kind EthLib.Base.A EthLib.Cryptography.A  # Unknown rule.": (
+                "kind EthLib.Base.A EthLib.Cryptography.A"
+            ),
+        }
+        for line, shown in cases.items():
+            with self.subTest(line=line):
+                self.assertEqual(
+                    Tree(GOOD, baseline=f"# Why.\n\n{line}\n").problems(),
+                    [
+                        "scripts/check_layers_baseline.txt:3: write "
+                        "<rule> <module> <imported module>, with the rule one of "
+                        f"layer, import-all, cycle, model, not: {shown}"
+                    ],
+                )
+
+    def test_repeated_entry_fails(self):
+        tree = with_imports("EthLib.Base.A", "EthLib.Cryptography.A")
+        entry = "layer EthLib.Base.A EthLib.Cryptography.A"
+        self.assertEqual(
+            Tree(tree, baseline=f"{entry}\n# Again.\n{entry}\n").problems(),
+            [f"scripts/check_layers_baseline.txt:3: {entry} repeats line 1; remove it"],
+        )
+
+    def test_read_baseline(self):
+        text = "# Why.\ncycle A B  # Trailing comment.\n\nmodel C D\n"
+        self.assertEqual(
+            layers.read_baseline(text),
+            ({layers.Entry("cycle", "A", "B"): 2, layers.Entry("model", "C", "D"): 4}, []),
+        )
 
 
 HOME = "EthLib.Base.Proofs.Toolchain.Json"
@@ -1257,17 +1406,17 @@ class ImportAll(unittest.TestCase):
 
     def test_baseline_allows_an_import(self):
         tree = reading(("EthLib.Execution.Proofs.B", "import all Init.Data.Nat.Fold"))
-        baseline = "# Why.\nEthLib.Execution.Proofs.B Init.Data.Nat.Fold\n"
+        baseline = "# Why.\nimport-all EthLib.Execution.Proofs.B Init.Data.Nat.Fold\n"
         self.assertEqual(Tree(tree, baseline=baseline).problems(), [])
 
     def test_baseline_entry_is_stale_after_the_move(self):
         tree = reading((HOME, "import all Init.Data.Nat.Fold"))
-        baseline = "EthLib.Execution.Proofs.B Init.Data.Nat.Fold\n"
+        baseline = "import-all EthLib.Execution.Proofs.B Init.Data.Nat.Fold\n"
         self.assertEqual(
             Tree(tree, baseline=baseline).problems(),
             [
-                "scripts/check_layers_baseline.txt: EthLib.Execution.Proofs.B "
-                "Init.Data.Nat.Fold breaks no rule any more; remove the entry"
+                "scripts/check_layers_baseline.txt:1: import-all EthLib.Execution.Proofs.B "
+                "Init.Data.Nat.Fold no longer breaks the rule of `import all`; remove the entry"
             ],
         )
 

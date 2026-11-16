@@ -109,7 +109,7 @@ private theorem toApiJson_bid_obj (x : BidTraceV2) {document : Lean.Json}
     simp only [Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq] at wrote
     subst wrote
     refine ⟨Std.TreeMap.Raw.ofList ((BidTrace.names ++ ["block_number", "num_tx"]).zip parts)
-      (cmp := compare), by simp only [Base.Toolchain.mkObj_eq], Std.TreeMap.Raw.WF.ofList,
+      (cmp := compare), by simp only [Base.Toolchain.Json.mkObj_eq], Std.TreeMap.Raw.WF.ofList,
       fun name member => ?_⟩
     obtain ⟨pair, mem, rfl⟩ := List.mem_map.mp (objectNames_mkObj member)
     exact (List.of_mem_zip mem).1
@@ -193,12 +193,12 @@ theorem ofJson_toJson {entry : BidTraceV2WithTimestamp} {document : Lean.Json}
   have gMs : (Lean.Json.obj ((m.insert "timestamp" (int64Json entry.timestamp)).insert
       "timestamp_ms" (int64Json entry.timestampMs))).getObjVal? "timestamp_ms"
         = .ok (int64Json entry.timestampMs) := by
-    simp [Base.Toolchain.getObjVal?_eq, Std.TreeMap.Raw.get?_eq_getElem?,
+    simp [Base.Toolchain.Json.getObjVal?_eq, Std.TreeMap.Raw.get?_eq_getElem?,
       Std.TreeMap.Raw.getElem?_insert_self wf₁]
   have gTs : (Lean.Json.obj ((m.insert "timestamp" (int64Json entry.timestamp)).insert
       "timestamp_ms" (int64Json entry.timestampMs))).getObjVal? "timestamp"
         = .ok (int64Json entry.timestamp) := by
-    simp [Base.Toolchain.getObjVal?_eq, Std.TreeMap.Raw.get?_eq_getElem?,
+    simp [Base.Toolchain.Json.getObjVal?_eq, Std.TreeMap.Raw.get?_eq_getElem?,
       Std.TreeMap.Raw.getElem?_insert wf₁, Std.TreeMap.Raw.getElem?_insert_self wf]
   have wfe := (wf₂.erase (a := "timestamp_ms")).erase (a := "timestamp")
   have back : BeaconApi.ofApiJson BidTraceV2 (.obj ((((m.insert "timestamp"

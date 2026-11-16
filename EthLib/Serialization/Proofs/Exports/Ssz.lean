@@ -140,7 +140,7 @@ end
 private theorem ofJson_mkObj_single (key : String) (j : Json) :
     PyValue.ofJson (Json.mkObj [(key, j)]) = .dict #[(key, PyValue.ofJson j)] := by
   have h : Json.mkObj [(key, j)] = .obj ⟨⟨.inner 1 key j .leaf .leaf⟩⟩ := by
-    rw [Base.Toolchain.mkObj_eq]
+    rw [Base.Toolchain.Json.mkObj_eq]
     rfl
   rw [h, PyValue.ofJson]
   rfl
@@ -230,23 +230,26 @@ private theorem toJsonEntries_eq (entries : Array (String × PyValue)) :
 /-- Reading a natural number from JSON reads it from the Python value. -/
 private theorem getNat?_toJson (value : PyValue) : value.toJson.getNat? = natOf value := by
   cases value <;>
-    simp [PyValue.toJson, natOf, Base.Toolchain.getNat?_eq, Base.Toolchain.mkObj_eq] <;> rfl
+    simp [PyValue.toJson, natOf, Base.Toolchain.Json.getNat?_eq, Base.Toolchain.Json.mkObj_eq] <;>
+      rfl
 
 /-- Reading a boolean from JSON reads it from the Python value. -/
 private theorem getBool?_toJson (value : PyValue) : value.toJson.getBool? = boolOf value := by
   cases value <;>
-    simp [PyValue.toJson, boolOf, Base.Toolchain.getBool?_eq, Base.Toolchain.mkObj_eq] <;> rfl
+    simp [PyValue.toJson, boolOf, Base.Toolchain.Json.getBool?_eq, Base.Toolchain.Json.mkObj_eq] <;>
+      rfl
 
 /-- Reading a text from JSON reads it from the Python value. -/
 private theorem getStr?_toJson (value : PyValue) : value.toJson.getStr? = strOf value := by
   cases value <;>
-    simp [PyValue.toJson, strOf, Base.Toolchain.getStr?_eq, Base.Toolchain.mkObj_eq] <;> rfl
+    simp [PyValue.toJson, strOf, Base.Toolchain.Json.getStr?_eq, Base.Toolchain.Json.mkObj_eq] <;>
+      rfl
 
 /-- Reading an array from JSON reads the items of the Python value, as JSON. -/
 private theorem getArr?_toJson (value : PyValue) :
     value.toJson.getArr? = (·.map PyValue.toJson) <$> itemsOf value := by
   cases value <;>
-    simp [PyValue.toJson, itemsOf, Base.Toolchain.getArr?_eq, Base.Toolchain.mkObj_eq,
+    simp [PyValue.toJson, itemsOf, Base.Toolchain.Json.getArr?_eq, Base.Toolchain.Json.mkObj_eq,
       toJsonArray_eq] <;> rfl
 
 /-- Reading a pair from JSON reads the pair of the Python value, as JSON. -/
@@ -291,7 +294,7 @@ private theorem jsonTagged_mkObj_same (key : String) (first : Json)
       .ok (key, (rest.getLast?.map (·.2)).getD first) := by
   have single : (∅ : Std.TreeMap.Raw String Json compare).insert key first =
       ⟨⟨.inner 1 key first .leaf .leaf⟩⟩ := rfl
-  rw [Base.Toolchain.mkObj_eq, Std.TreeMap.Raw.ofList_cons, single,
+  rw [Base.Toolchain.Json.mkObj_eq, Std.TreeMap.Raw.ofList_cons, single,
     insertMany_single _ _ _ same]
   rfl
 
@@ -313,7 +316,7 @@ private theorem jsonTagged_mkObj_two (l : List (String × Json)) (a b : String)
     (ha : a ∈ l.map Prod.fst) (hb : b ∈ l.map Prod.fst) (ne : a ≠ b) :
     jsonTagged (Json.mkObj l) = .error "expected an object with one key" := by
   unfold jsonTagged
-  rw [Base.Toolchain.mkObj_eq]
+  rw [Base.Toolchain.Json.mkObj_eq]
   rcases entries : (Std.TreeMap.Raw.ofList l compare).toArray with
     ⟨_ | ⟨⟨k, v⟩, _ | ⟨x, rest⟩⟩⟩
   · dsimp only
@@ -334,7 +337,7 @@ private theorem jsonTagged_toJson (value : PyValue) :
     rcases entries with ⟨l⟩
     rw [Array.toList_map]
     rcases List.eq_nil_or_concat l with rfl | ⟨init, ⟨key, value⟩, rfl⟩
-    · rw [Base.Toolchain.mkObj_eq]
+    · rw [Base.Toolchain.Json.mkObj_eq]
       rfl
     · simp only [List.concat_eq_append]
       simp [tagged]
@@ -463,15 +466,15 @@ private theorem toJson_ne_bool (type : PyValue) (word : type ≠ .str "bool") :
     rw [Base.toList_hexString] at chars
     simp at chars
   | str s => simpa [PyValue.toJson] using word
-  | dict entries => simp [PyValue.toJson, Base.Toolchain.mkObj_eq]
+  | dict entries => simp [PyValue.toJson, Base.Toolchain.Json.mkObj_eq]
   | _ => simp [PyValue.toJson]
 
 /-- Reading an optional natural number from JSON reads it from the Python value. -/
 private theorem jsonOptionalNat_toJson (value : PyValue) :
     jsonOptionalNat value.toJson = optionalNat value := by
   cases value <;>
-    simp [jsonOptionalNat, PyValue.toJson, optionalNat, Base.Toolchain.isNull_eq,
-      Base.Toolchain.mkObj_eq, Base.Toolchain.getNat?_eq, natOf] <;> rfl
+    simp [jsonOptionalNat, PyValue.toJson, optionalNat, Base.Toolchain.Json.isNull_eq,
+      Base.Toolchain.Json.mkObj_eq, Base.Toolchain.Json.getNat?_eq, natOf] <;> rfl
 
 /-- Reading pairs from JSON reads the pairs of the Python values, as JSON. -/
 private theorem mapM_jsonPair (items : List PyValue) :

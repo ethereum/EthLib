@@ -143,7 +143,7 @@ theorem ApiEnvelope.ofJson_toJson (envelope : ApiEnvelope) :
     (by rintro b rfl; simp [← hP]) (by rintro rfl; simp [← hP])
   have hdata : (Json.mkObj P).getObjVal? "data" = .ok data :=
     getObjVal?_mkObj distinct (by simp [← hP])
-  obtain ⟨m, hm⟩ : ∃ m, Json.mkObj P = .obj m := ⟨_, Base.Toolchain.mkObj_eq P⟩
+  obtain ⟨m, hm⟩ : ∃ m, Json.mkObj P = .obj m := ⟨_, Base.Toolchain.Json.mkObj_eq P⟩
   rw [hm] at hdata k1 k2 k3 k4 ⊢
   simp only [ApiEnvelope.ofJson, hdata, k1, k2, k3, k4]
   rfl

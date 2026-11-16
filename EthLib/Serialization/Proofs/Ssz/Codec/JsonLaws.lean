@@ -27,7 +27,7 @@ theorem getObjVal?_mkObj {pairs : List (String × Json)} {name : String} {value 
   have keys : pairs.Pairwise (fun a b => ¬ compare a.1 b.1 = .eq) := by
     exact distinct.imp fun different equal => different (compare_eq_iff_eq.mp equal)
   have read := Std.TreeMap.Raw.getElem?_ofList_of_mem (cmp := compare) compare_self keys member
-  simp only [Base.Toolchain.mkObj_eq, Base.Toolchain.getObjVal?_eq,
+  simp only [Base.Toolchain.Json.mkObj_eq, Base.Toolchain.Json.getObjVal?_eq,
     Std.TreeMap.Raw.get?_eq_getElem?, read]
 
 /-- A name that was not written into an object is not found in it.
@@ -38,7 +38,7 @@ theorem getObjVal?_mkObj_of_not_mem {pairs : List (String × Json)} {name : Stri
     (Json.mkObj pairs).getObjVal? name = .error s!"property not found: {name}" := by
   have none : (Std.TreeMap.Raw.ofList pairs (cmp := compare))[name]? = none :=
     Std.TreeMap.Raw.getElem?_ofList_of_contains_eq_false (by simpa using absent)
-  simp only [Base.Toolchain.mkObj_eq, Base.Toolchain.getObjVal?_eq,
+  simp only [Base.Toolchain.Json.mkObj_eq, Base.Toolchain.Json.getObjVal?_eq,
     Std.TreeMap.Raw.get?_eq_getElem?, none]
 
 /--
@@ -49,7 +49,7 @@ A written struct therefore never trips the undeclared-field refusal.
 theorem objectNames_mkObj {pairs : List (String × Json)} {name : String}
     (member : name ∈ objectNames (Json.mkObj pairs)) : name ∈ pairs.map Prod.fst := by
   have wf : (Std.TreeMap.Raw.ofList pairs (cmp := compare)).WF := Std.TreeMap.Raw.WF.ofList
-  simp only [objectNames, Base.Toolchain.mkObj_eq] at member
+  simp only [objectNames, Base.Toolchain.Json.mkObj_eq] at member
   rw [Std.TreeMap.Raw.map_fst_toList_eq_keys] at member
   simpa using Std.TreeMap.Raw.mem_ofList.mp ((Std.TreeMap.Raw.mem_keys wf).mp member)
 
@@ -352,7 +352,7 @@ theorem erase_insert_equiv {fields : TreeMap.Raw String Json} (wf : fields.WF) {
 theorem getObjVal?_obj_of_equiv {first second : TreeMap.Raw String Json} (wf₁ : first.WF)
     (wf₂ : second.WF) (same : first.Equiv second) (name : String) :
     (Json.obj first).getObjVal? name = (Json.obj second).getObjVal? name := by
-  simp only [Base.Toolchain.getObjVal?_eq, Std.TreeMap.Raw.get?_eq_getElem?]
+  simp only [Base.Toolchain.Json.getObjVal?_eq, Std.TreeMap.Raw.get?_eq_getElem?]
   rw [Std.TreeMap.Raw.Equiv.getElem?_eq wf₁ wf₂ same]
 
 /-- Two objects with the same fields carry the same names, in the same order. -/

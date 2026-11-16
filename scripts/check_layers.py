@@ -44,6 +44,15 @@ SCHEMES = ("Xmss", "Sphincs")
 KIND_NAMES = {"specification": "a specification", "property": "a property", "export": "a C export"}
 # The models and the refinement modules of ARCHITECTURE.md "Three kinds of content".
 KINDS = "coverage/kinds.toml"
+# The imports that break a rule on purpose, each listed with the rule it breaks.
+BASELINE = "scripts/check_layers_baseline.txt"
+# The rules that an entry of the baseline file can allow, each by its label.
+BASELINE_RULES = {
+    "layer": "the rules of layers and kinds of module",
+    "import-all": "the rule of `import all`",
+    "cycle": "the rule of directory cycles",
+    "model": "the rule of models",
+}
 
 HEADER_WORD = re.compile(r"\s*(module|prelude)\b")
 IMPORT = re.compile(r"\s*(?:public\s+)?(meta\s+)?import\s+(all\s+)?((?:«[^»]*»|[^\s«])+)")
@@ -570,15 +579,44 @@ def model_imports(
     ]
 
 
-def read_baseline(path: Path) -> set[tuple[str, str]]:
-    """The (module, import) pairs that the baseline file allows."""
-    entries = set()
-    if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            fields = line.split("#", 1)[0].split()
-            if len(fields) == 2:
-                entries.add((fields[0], fields[1]))
-    return entries
+class Entry(NamedTuple):
+    """One entry of the baseline file: the rule it allows, the importing and imported modules."""
+
+    rule: str
+    module: str
+    imported: str
+
+    def __str__(self) -> str:
+        """The entry as a line of the baseline file."""
+        return f"{self.rule} {self.module} {self.imported}"
+
+
+def read_baseline(text: str) -> tuple[dict[Entry, int], list[str]]:
+    """
+    The entries of a baseline file, each with its line number, and a problem for each bad line.
+
+    Each entry allows one import to break only the rule that its label names.
+    """
+    entries: dict[Entry, int] = {}
+    problems = []
+    labels = ", ".join(BASELINE_RULES)
+    for number, line in enumerate(text.splitlines(), start=1):
+        fields = line.split("#", 1)[0].split()
+        if not fields:
+            continue
+        where = f"{BASELINE}:{number}"
+        if len(fields) != 3 or fields[0] not in BASELINE_RULES:
+            problems.append(
+                f"{where}: write <rule> <module> <imported module>, "
+                f"with the rule one of {labels}, not: {' '.join(fields)}"
+            )
+            continue
+        entry = Entry(*fields)
+        if entry in entries:
+            problems.append(f"{where}: {entry} repeats line {entries[entry]}; remove it")
+            continue
+        entries[entry] = number
+    return entries, problems
 
 
 def check(root: Path) -> list[str]:
@@ -595,23 +633,32 @@ def check(root: Path) -> list[str]:
         if name not in AGGREGATORS and layer(name) is None:
             problems.append(f"{path.relative_to(root)}: not in a layer of ARCHITECTURE.md")
 
-    baseline = read_baseline(root / "scripts" / "check_layers_baseline.txt")
-    used = set()
+    baseline_path = root / BASELINE
+    baseline: dict[Entry, int] = {}
+    if baseline_path.exists():
+        baseline, bad_lines = read_baseline(baseline_path.read_text(encoding="utf-8"))
+        problems += bad_lines
+    used: set[Entry] = set()
+
+    def allowed(rule: str, name: str, imported: str) -> bool:
+        """Whether the baseline allows the import to break the rule; mark the entry used if so."""
+        entry = Entry(rule, name, imported)
+        if entry in baseline:
+            used.add(entry)
+            return True
+        return False
+
     for name, imported_list in graph.items():
         for imported in imported_list:
             found = import_problems(name, imported)
-            if found and (name, imported) in baseline:
-                used.add((name, imported))
-            elif found:
+            if found and not allowed("layer", name, imported):
                 for problem in found:
                     problems.append(
                         f"{modules[name].relative_to(root)}: imports {imported}, but {problem}"
                     )
 
     for name, found, rule in import_all_problems(headers):
-        if (name, found.module) in baseline:
-            used.add((name, found.module))
-        else:
+        if not allowed("import-all", name, found.module):
             problems.append(
                 f"{modules[name].relative_to(root)}:{found.line}: "
                 f"imports all of {found.module}, but {rule}"
@@ -630,9 +677,7 @@ def check(root: Path) -> list[str]:
         for name in graph
     }
     for name, imported, cycle in directory_cycles(directory_graph, directory_roots):
-        if (name, imported) in baseline:
-            used.add((name, imported))
-        else:
+        if not allowed("cycle", name, imported):
             line = next(found.line for found in headers[name] if found.module == imported)
             path = " -> ".join("/".join(module_parts(directory)) + "/" for directory in cycle)
             problems.append(
@@ -652,20 +697,18 @@ def check(root: Path) -> list[str]:
     if kinds is not None:
         problems += stale_kinds(graph, gatherers, kinds)
         for name, model in model_imports(graph, gatherers, kinds):
-            if (name, model) in baseline:
-                used.add((name, model))
-            else:
+            if not allowed("model", name, model):
                 problems.append(
                     f"{modules[name].relative_to(root)}: imports the model {model}, "
                     f"but {KINDS} does not declare it a refinement module"
                 )
-    for name, imported in sorted(baseline - used):
-        # Without the kinds file, an entry between two properties may still be needed.
-        if kinds is None and kind(name) == kind(imported) == "property":
+    for entry, number in sorted(baseline.items(), key=lambda item: item[1]):
+        # Without the kinds file, the check cannot tell whether a model entry is still needed.
+        if entry in used or (kinds is None and entry.rule == "model"):
             continue
         problems.append(
-            f"scripts/check_layers_baseline.txt: {name} {imported} "
-            "breaks no rule any more; remove the entry"
+            f"{BASELINE}:{number}: {entry} no longer breaks "
+            f"{BASELINE_RULES[entry.rule]}; remove the entry"
         )
 
     for name, found, rule in meta_problems(headers, graph):

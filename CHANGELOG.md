@@ -16,6 +16,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the theorems of the `Toolchain` proof modules move to sub-namespaces, and the theorems that repeat them are removed ([#2627](https://github.com/ethereum/EthLib/issues/2627)).
+  `Base.Toolchain.mkObj_eq`, `isNull_eq`, the `isNull` theorem of each constructor, and `getArr?_eq`, `getStr?_eq`, `getNat?_eq`, `getBool?_eq` and `getObjVal?_eq` move to `Base.Toolchain.Json`.
+  `Base.Toolchain.compare_eq` becomes `Base.Toolchain.String.compare_eq`, and `filterM_eq`, `filterAuxM_nil` and `filterAuxM_cons` move to `Base.Toolchain.List`.
+  `EthLib.Base.Proofs.Toolchain.Repr` is removed; import `EthLib.Base.Proofs.Nat` and use `Base.digitChar_eq` in place of `Base.Toolchain.digitChar_eq`.
+  `Serialization.JsonRpc.isNull_str` and `isNull_arr` are removed; use `Base.Toolchain.Json.isNull_str` and `isNull_arr`.
+  `Tls13.size_toUTF8` is removed; use `String.toUTF8_eq_toByteArray` and `String.size_toByteArray`.
+  Statements are unchanged.
+  The `isNull` theorems on `Json.null`, `bool`, `str`, `arr`, `obj` and `mkObj` are now `@[simp]` rules, so `simp` can close goals that it left open before.
+  Each entry of `scripts/check_layers_baseline.txt` now starts with the label of the rule that it allows.
+
 - In Lean, the Python conversion laws and properties move from `EthLib.Base.Exports.Proofs.PyValue` to `EthLib.Base.Proofs.Exports.PyValue` ([#2630](https://github.com/ethereum/EthLib/issues/2630)).
   Update imports for `pyExport_items` and the hexadecimal conversion theorems; their statements are unchanged.
   `EthLib.Base.Exports.PyValue` imports the law instances at compile time, and `pyExport` keeps the same law constraints.
