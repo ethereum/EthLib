@@ -2028,11 +2028,8 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     (stateRead : ((e.world n).state u).checkpointState
       ((e.world n).state u).justifiedCheckpoint = .ok state)
     (tree : ((e.world n).state u).getFilteredNodeTree config = .ok nodes)
-    (viable : (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes)
     (found : ((e.world n).state u).blocks[root]? = some block)
     (parentFound : ((e.world n).state u).blocks[block.parentRoot]? = some parent)
-    (descends : ((e.world n).state u).isAncestor ⟨head.root, .pending⟩
-      ⟨block.parentRoot, .pending⟩ = .ok true)
     (slotRead : ((e.world n).state u).getCurrentSlot config = .ok current)
     (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok epoch)
     (horizon : epoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2)
@@ -2043,19 +2040,21 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     (shortWindow : ((e.world n).state u).getCommitteesBetweenSlots head.root first shortLast =
       .ok participants)
     (shortLastOk : subChecked block.slot 1 = .ok shortLast)
-    (margin : (Models.stake (fun v => balanceAt state v.toNat)
+    (route : (((e.world n).state u).isAncestor
+        ⟨((e.world n).state u).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true) ∨
+      ((⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes ∧
+        ((e.world n).state u).isAncestor ⟨head.root, .pending⟩
+          ⟨block.parentRoot, .pending⟩ = .ok true ∧
+        Models.stake (fun v => balanceAt state v.toNat)
         (Store.activeMembers state members) + score.toNat <
       2 * Models.stake (fun v => balanceAt state v.toNat)
         {v ∈ ((e.world n).state u).supportersOf state ⟨root, .pending⟩ | v ∈ J} +
       Models.stake (fun v => balanceAt state v.toNat)
-        {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J}) ∨
-      ((e.world n).state u).isAncestor
-        ⟨((e.world n).state u).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true)
+        {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J}))
     (scoreOk : computeProposerScore config state = .ok (score : Gwei)) :
     ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true := by
   classical
-  rcases margin with margin | justifiedAbove
-  swap
+  rcases route with justifiedAbove | ⟨viable, descends, margin⟩
   · obtain ⟨justified, justifiedKnown⟩ := Store.filterNodeTree_known tree
     exact Store.isAncestor_trans_of_lt before justifiedKnown found
       (Store.isAncestor_getHead_of_lt_gloas before headRead) justifiedAbove
