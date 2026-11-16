@@ -47,6 +47,74 @@ private def PendingTail (count : Nat) (epoch : Epoch) (state : BeaconState prese
   ∀ index validator, count ≤ index → state.validators.data[index]? = some validator →
     epoch < validator.activationEligibilityEpoch ∧ validator.activationEpoch = FAR_FUTURE_EPOCH
 
+/-- Equal registries preserve the pending suffix without any slot condition. -/
+private theorem pendingTail_of_validators {state after : BeaconState preset fork}
+    {count : Nat} {epoch : Epoch} (same : after.validators.data = state.validators.data)
+    (tail : PendingTail count epoch state) : PendingTail count epoch after := by
+  intro index validator lower found
+  exact tail index validator lower (same ▸ found)
+
+/-- A newly deposited validator is pending beyond every finite boundary epoch. -/
+private theorem pendingTail_addValidator {state after : BeaconState preset fork}
+    {count : Nat} {epoch : Epoch} {pubkey : Cryptography.Bls.BLSPubkey}
+    {credentials : Bytes32} {amount : Gwei}
+    (run : addValidatorToRegistry state pubkey credentials amount = .ok after)
+    (finite : epoch < FAR_FUTURE_EPOCH) (tail : PendingTail count epoch state) :
+    PendingTail count epoch after := by
+  have added := addValidatorToRegistry_validators_eq_push run
+  intro index validator lower found
+  rw [added, Array.getElem?_push] at found
+  split at found
+  · cases found
+    exact ⟨finite, rfl⟩
+  · exact tail index validator lower found
+
+/-- A pending deposit cannot assign either activation epoch. -/
+private theorem pendingTail_applyPendingDeposit {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork} {deposit : PendingDeposit}
+    {count : Nat} {epoch : Epoch}
+    (run : applyPendingDeposit config checks state deposit = .ok after)
+    (finite : epoch < FAR_FUTURE_EPOCH) (tail : PendingTail count epoch state) :
+    PendingTail count epoch after := by
+  unfold applyPendingDeposit at run
+  split at run
+  · split at run
+    · cases run; exact tail
+    simp only [bind_ok_iff] at run
+    obtain ⟨_, _, run⟩ := run
+    split at run
+    · exact pendingTail_addValidator run finite tail
+    · cases run; exact tail
+  · simp only [liftAccessor_ok, bind_ok_iff] at run
+    obtain ⟨_, _, run⟩ := run
+    exact pendingTail_of_validators (congrArg (·.data) (increaseBalance_validators run)) tail
+
+/-- The existing pending-deposit pass transports the suffix through all applied deposits. -/
+private theorem pendingTail_passPendingDeposits {config : Config} {checks : SignatureChecks}
+    {stop : PendingDeposit → Bool} {nextEpoch : Epoch} {available : Gwei}
+    {deposits : List PendingDeposit} {state : BeaconState preset fork}
+    {processed : Gwei} {count : Nat} {postponed : Array PendingDeposit} {pass}
+    {boundary : Nat} {epoch : Epoch}
+    (run : passPendingDeposits config checks stop nextEpoch available state processed count
+      postponed deposits = .ok pass) (finite : epoch < FAR_FUTURE_EPOCH)
+    (tail : PendingTail boundary epoch state) : PendingTail boundary epoch pass.1.state :=
+  passPendingDeposits_of (fun s t => PendingTail boundary epoch s → PendingTail boundary epoch t)
+    (fun _ holds => holds) (fun one two holds => two (one holds))
+    (fun ok holds => pendingTail_applyPendingDeposit ok finite holds) run tail
+
+/-- Processing an epoch's pending deposits preserves the pending suffix. -/
+private theorem pendingTail_processPendingDeposits {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork} {electra : .pectra ≤ fork}
+    {count : Nat} {epoch : Epoch}
+    (run : processPendingDeposits config checks state electra = .ok after)
+    (finite : epoch < FAR_FUTURE_EPOCH) (tail : PendingTail count epoch state) :
+    PendingTail count epoch after := by
+  unfold processPendingDeposits at run
+  simp only [bind, Except.bind, pure, Except.pure] at run
+  repeat' (split at run <;> try cases run)
+  all_goals
+    exact pendingTail_of_validators rfl (pendingTail_passPendingDeposits ‹_› finite tail)
+
 /-- An active entry cannot belong to the unassigned suffix, even for a future query epoch. -/
 private theorem active_before_pendingTail {state : BeaconState preset fork}
     {epoch boundary : Epoch} {count position : Nat}
@@ -124,6 +192,22 @@ private theorem filteredTotal_of_pendingTail {source state : BeaconState preset 
   intro v member
   obtain ⟨validator, found⟩ := active_registry_of_pendingTail tail contains (active v member)
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
+
+/-- Activity after pending deposits still gives checked reads through the earlier boundary. -/
+private theorem filteredTotal_of_pendingDeposits {config : Config} {checks : SignatureChecks}
+    {source after cached : BeaconState preset fork} {electra : .pectra ≤ fork}
+    {epoch boundEpoch : Epoch} {count : Nat} {participants : Std.TreeSet ValidatorIndex}
+    {total : Gwei} (run : processPendingDeposits config checks source electra = .ok after)
+    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source)
+    (contains : count ≤ cached.validators.data.size)
+    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
+    (read : getTotalActiveBalance cached = .ok total) :
+    ∃ selected result,
+      participants.toList.filterM (fun index => do
+        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
+        .ok selected ∧ getTotalBalance cached selected = .ok result :=
+  filteredTotal_of_pendingTail (pendingTail_processPendingDeposits run finite tail)
+    contains active read
 
 /-- Lookahead extends a run without assuming a registry-size bound. -/
 private theorem runKept_lookahead {config : Config} {checks : SignatureChecks}
