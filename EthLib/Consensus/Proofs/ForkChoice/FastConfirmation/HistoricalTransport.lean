@@ -283,6 +283,31 @@ private theorem pendingTail_applyPendingDeposit {config : Config} {checks : Sign
     obtain ⟨_, _, run⟩ := run
     exact pendingTail_of_validators (congrArg (·.data) (increaseBalance_validators run)) tail
 
+/-- Both deposit rules preserve pending activation fields, including a newly appended entry. -/
+private theorem pendingTail_applyDeposit {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork} {pubkey : Cryptography.Bls.BLSPubkey}
+    {credentials : Bytes32} {amount : Gwei} {signature : Cryptography.Bls.BLSSignature}
+    {count : Nat} {epoch : Epoch}
+    (run : applyDeposit config checks state pubkey credentials amount signature = .ok after)
+    (finite : epoch < FAR_FUTURE_EPOCH) (tail : PendingTail count epoch state) :
+    PendingTail count epoch after := by
+  rcases applyDeposit_cases run with rfl | ⟨_, middle, _, rfl | added, rfl⟩ | ⟨_, applied⟩
+  · exact tail
+  · exact pendingTail_of_validators rfl tail
+  · exact pendingTail_of_validators (state := middle) rfl
+      (pendingTail_addValidator added finite tail)
+  · exact pendingTail_applyPendingDeposit applied finite tail
+
+/-- Checking a block deposit and advancing its deposit index do not change the pending suffix. -/
+private theorem pendingTail_processDeposit {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork} {before : fork < .hegota} {deposit : Deposit}
+    {count : Nat} {epoch : Epoch}
+    (run : processDeposit config checks before state deposit = .ok after)
+    (finite : epoch < FAR_FUTURE_EPOCH) (tail : PendingTail count epoch state) :
+    PendingTail count epoch after := by
+  obtain ⟨_, _, _, _, applied⟩ := processDeposit_ok run
+  exact pendingTail_applyDeposit applied finite (pendingTail_of_validators rfl tail)
+
 /-- The existing pending-deposit pass transports the suffix through all applied deposits. -/
 private theorem pendingTail_passPendingDeposits {config : Config} {checks : SignatureChecks}
     {stop : PendingDeposit → Bool} {nextEpoch : Epoch} {available : Gwei}
@@ -386,6 +411,25 @@ private theorem filteredTotal_of_pendingTail {source state : BeaconState preset 
   intro v member
   obtain ⟨validator, found⟩ := active_registry_of_pendingTail tail contains (active v member)
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
+
+/-- A checked block-deposit fold supplies historical participant reads in the cached prefix. -/
+private theorem filteredTotal_of_deposits {config : Config} {checks : SignatureChecks}
+    {source after cached : BeaconState preset fork} {before : fork < .hegota}
+    {deposits : List Deposit} {epoch boundary : Epoch} {count : Nat}
+    {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
+    (run : deposits.foldlM (processDeposit config checks before) source = .ok after)
+    (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source)
+    (contains : count ≤ cached.validators.data.size)
+    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
+    (read : getTotalActiveBalance cached = .ok total) :
+    ∃ selected result,
+      participants.toList.filterM (fun index => do
+        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
+        .ok selected ∧ getTotalBalance cached selected = .ok result :=
+  filteredTotal_of_pendingTail
+    (foldlM_ok_invariant (PendingTail count boundary)
+      (fun _ _ _ holds ok => pendingTail_processDeposit ok finite holds) tail run)
+    contains active read
 
 /-- Every non-registry stage preserves the pending tail, including intervening epoch stages. -/
 private theorem pendingTail_epochStage {config : Config} {checks : SignatureChecks}
