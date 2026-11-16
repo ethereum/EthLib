@@ -225,6 +225,8 @@ A pull request that breaks one says why in its description.
 - A module imports only from its own layer or from a lower one.
 - Within a layer, imports between directories form no cycle.
   This includes specification, property, model and C export modules.
+  A C export's `meta import` of a property is a compile-time dependency and does not enter this runtime directory graph.
+  Lean rejects executable uses of that property's declarations in runtime definitions.
   Each directory includes its subdirectories and its root file, such as `BuilderApi.lean` for `BuilderApi/`.
   Imports between a directory and one inside it do not count.
   The rule applies at every directory depth, so it checks both `Evm/` and `Evm/Gas/`.
@@ -331,7 +333,9 @@ New operation boundaries carry a card.
 Existing ones, such as `ExecutionEngine`, `SignatureChecks` and `BlockSources`, do not yet carry cards.
 
 The conversions between Lean values and Python values, `ToPy`, `FromPy`, `ToPyItems` and `FromPyItems`, are not operation boundaries.
-No specification takes them as an argument, so their laws `LawfulPy` and `LawfulPyItems` stay with them in the Lake library `Exports`.
+No specification takes them as an argument, so the conversion types and the classes `LawfulPy` and `LawfulPyItems` that state their laws belong to `PythonConversions`.
+Their instances live in `Base/Proofs/Exports/PyValue.lean` and enter the exports through `public meta import`.
+They check the conversions during elaboration and produce no runtime dependency on that property module.
 
 The card is a list in the doc comment, with one item per field, in this order:
 
@@ -542,11 +546,18 @@ Update the pin in one pull request, and check every test that reads from the rep
 
 ## Packages
 
-EthLib is one Lake package, and three libraries hold its code.
+EthLib is one Lake package, and four libraries hold its code.
 
 - The library `EthLib` holds the specifications.
 - The library `Proofs` holds the properties and the models, in the `Proofs/` directory of each layer.
 - The library `Exports` holds the C exports that the Python bindings call.
+- The library `PythonConversions` holds the Python conversion core and its law proofs, which import only that core and the Lean toolchain.
+  Separate ownership lets both `Exports` and `Proofs` import them without a cycle between native libraries.
+
+The bindings initialize the runtime phase of `EthLib.Exports` and link the objects reached through its ordinary imports.
+The linker hides EthLib's compile-time and legacy initializers so that their unused sections can be discarded.
+Runtime initializers and C exports remain public.
+So conversion proofs can enter through `meta import` without linking their objects into the extension.
 
 The executables `check-decls`, `check-accessors` and `check-theorems` inspect the compiled declarations.
 They check which constructs the declarations use, which defaulting accessors the specification calls, and which theorems it needs.
@@ -593,8 +604,16 @@ A theorem stays in the specification file in two cases, because a specification 
 It follows constants in their types and private bodies, and resolved references recorded in Lean's `.ilean` files.
 These references retain a named lemma even when simplification erases its proof term.
 The search follows the helpers of every retained theorem, including simplification rules.
+
+Lean's `.ilean` files keep references attached to original source syntax.
+A lemma named only in a tactic macro can disappear from both those references and the compiled proof term.
+The checker can then report the lemma as movable despite a retained proof using it.
+No specification module defines a tactic macro.
+If one is added, review its hidden lemma dependencies before moving a reported theorem.
+
 The check reads persistent theorem attributes written in declarations or `attribute` commands.
-An attribute other than `@[simp]` stops the check until it has a placement rule.
+It permits `simp`, `deprecated` and `inherit_doc`; another attribute stops the check until it has a placement rule.
+The last two attributes carry deprecation or documentation metadata and do not retain a theorem by themselves.
 This guard parses declaration modifiers and standalone `attribute` commands, since Lean's compiled environment has no general query for applied attributes.
 It does not reparse bodies, whose local notation can disappear after import.
 The guard does not inspect attributes that custom command macros generate without an explicit source application.

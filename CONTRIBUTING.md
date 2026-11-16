@@ -77,7 +77,10 @@ The C exports live in a third library, `Exports`, so a Lean project that imports
 A new domain with exports adds its export tree to the `globs` of the `Exports` library in `lakefile.lean`.
 Keep `EthLib.Exports` as its only root so that it remains a native plugin.
 
-These three libraries form one package, `EthLib`.
+The Python conversion core and its law proofs form `PythonConversions`, which both the exports and the remaining proofs can import without a cycle between native libraries.
+Its law module lives under `Base/Proofs/Exports/` and enters the exports through `meta import`, so its object does not link into the Python extension.
+
+These four libraries form one package, `EthLib`.
 A property or a model may import Mathlib, Batteries or VCVio, and it goes in `EthLib/<Domain>/Proofs/<Module>/` like any other property.
 Among the properties, only a refinement module imports a model directly, as [`ARCHITECTURE.md`](ARCHITECTURE.md#three-kinds-of-content) explains.
 The specification and the exports import nothing beyond the Lean toolchain.
@@ -416,6 +419,9 @@ uv run --no-project --python 3.12 python scripts/check_theorems_baseline.py --ba
 The check follows the dependencies of definitions, instances and persistent `@[simp]` theorems.
 It reads private proof terms and resolved references from Lean's `.ilean` files, including named lemmas that simplification erases from a proof term.
 Helpers of retained theorems stay with their consumers.
+The `.ilean` references can miss a lemma named only in a tactic macro; review those dependencies before moving a reported theorem.
+The attribute guard permits `simp`, `deprecated` and `inherit_doc`.
+Deprecation and documentation metadata do not retain an otherwise unused theorem.
 An unsupported persistent attribute written on a theorem or in an `attribute` command stops the check.
 Review custom command macros for attributes they generate, since the source guard does not expand them.
 Other theorems belong under `Proofs/`, as [`ARCHITECTURE.md`](ARCHITECTURE.md#where-a-new-module-goes) explains.

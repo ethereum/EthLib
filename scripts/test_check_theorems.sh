@@ -134,9 +134,11 @@ LC_ALL=C sort >"$WORK/expected" <<'END'
 CheckTheoremsTest root_unused
 CheckTheoremsTest.Hidden CheckTheoremsTest.Spec.private_unused
 CheckTheoremsTest.PrivateDependency CheckTheoremsTest.PrivateDependency.imported_unused
+CheckTheoremsTest.Spec CheckTheoremsTest.Spec.deprecated_unused
 CheckTheoremsTest.Spec CheckTheoremsTest.Spec.direct._proof_99
 CheckTheoremsTest.Spec CheckTheoremsTest.Spec.erased_unused
 CheckTheoremsTest.Spec CheckTheoremsTest.Spec.erased_unused_helper
+CheckTheoremsTest.Spec CheckTheoremsTest.Spec.inherited_unused
 CheckTheoremsTest.Spec CheckTheoremsTest.Spec.local_eq
 CheckTheoremsTest.Spec CheckTheoremsTest.Spec.orphan._proof_1
 CheckTheoremsTest.Spec CheckTheoremsTest.Spec.orphan.eq_1
@@ -162,7 +164,7 @@ else
   FAIL=1
 fi
 
-printf '%s\n' 'check-theorems: 5 modules, 20 findings, 0 new, 0 stale' >"$WORK/report"
+printf '%s\n' 'check-theorems: 5 modules, 22 findings, 0 new, 0 stale' >"$WORK/report"
 if check --baseline "$WORK/expected" >"$WORK/out" && [ ! -s "$WORK/err" ] &&
     diff -u "$WORK/report" "$WORK/out"; then
   echo "ok:   an exact baseline passes"
@@ -207,7 +209,7 @@ expect_finding() {
   got=$?
   {
     printf '%s\n' "$expected"
-    printf 'check-theorems: 5 modules, 20 findings, %s new, %s stale\n' "$fresh" "$stale"
+    printf 'check-theorems: 5 modules, 22 findings, %s new, %s stale\n' "$fresh" "$stale"
   } >"$WORK/report"
   if [ "$got" -eq 1 ] && [ ! -s "$WORK/err" ] &&
       diff -u "$WORK/report" "$WORK/out"; then
@@ -321,6 +323,7 @@ scripts/CheckTheoremsAttributesTest/Spec.lean:73: unsupported persistent attribu
 scripts/CheckTheoremsAttributesTest/Spec.lean:103: unsupported persistent attribute [placement_tag] on theorem CheckTheoremsAttributesTest.localSyntax_rule
 scripts/CheckTheoremsAttributesTest/Spec.lean:123: unsupported persistent attribute [placement_tag] on theorem CheckTheoremsAttributesTest.localCommand_rule
 scripts/CheckTheoremsAttributesTest/Spec.lean:126: unsupported persistent attribute [placement_tag] on theorem CheckTheoremsAttributesTest.identity
+scripts/CheckTheoremsAttributesTest/Spec.lean:129: unsupported persistent attribute [placement_tag] on theorem CheckTheoremsAttributesTest.metadata_mixed_rule
 END
 )
 expect_error "unsupported persistent attributes" 2 "$attribute_diagnostics" \

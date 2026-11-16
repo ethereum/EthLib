@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Execution.Blocks.Difficulty
 public import EthLib.Execution.Blocks.ProofOfWork
 public import EthLib.Execution.Blocks.Ommers

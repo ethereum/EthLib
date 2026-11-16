@@ -618,7 +618,18 @@ def check(root: Path) -> list[str]:
             )
 
     directory_roots = {name for name, path in modules.items() if path.with_suffix("").is_dir()}
-    for name, imported, cycle in directory_cycles(graph, directory_roots):
+    # A meta-imported property supplies erased proofs, not runtime dependencies of an export.
+    # Lean's phase check rejects a runtime definition that uses its executable declarations.
+    # The separate meta-import check still forbids reaching specification code this way.
+    directory_graph = {
+        name: [
+            found.module
+            for found in headers[name]
+            if not (found.meta and kind(name) == "export" and kind(found.module) == "property")
+        ]
+        for name in graph
+    }
+    for name, imported, cycle in directory_cycles(directory_graph, directory_roots):
         if (name, imported) in baseline:
             used.add((name, imported))
         else:

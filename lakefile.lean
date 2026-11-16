@@ -13,15 +13,15 @@ Lake produces:
 
 `setup.py` builds the Python C extension under `bindings/python/`, not Lake.
 
-It enumerates the `.c.o.export` files and the Lean toolchain's static archives.
+It selects `.c.o.export` files through the ordinary imports of `EthLib.Exports`.
 
-It links them all statically into a single self-contained Python extension.
+It links these objects into one Python extension beside the shared Lean runtime.
 -/
 
 package «EthLib» where
   -- The release version, the same as in `pyproject.toml` (`scripts/release_manifest.py`).
   version := v!"0.3.0"
-  moreLeancArgs := #["-fPIC"]
+  moreLeancArgs := #["-fPIC", "-ffunction-sections", "-fdata-sections"]
 
 require "leanprover-community" / "mathlib" @ git "v4.35.0"
 
@@ -48,9 +48,9 @@ lean_lib «EthLib» where
 
 The executable specification never depends on this library.
 
-Theorems produce no code, so `precompileModules` is off.
+`precompileModules` is off, since default targets need no native proof objects.
 
-Proof object files then stay out of the Python extension link.
+The Python extension links only the runtime imports of `EthLib.Exports`.
 
 `platformIndependent` keeps the specification's shared library out of each proof's trace.
 
@@ -69,24 +69,46 @@ lean_lib «Proofs» where
 
 It is a separate library, so that the specification never imports an `@[export]` symbol.
 
-`precompileModules` is on, because `setup.py` links these objects.
+`precompileModules` builds the objects that `setup.py` links.
 
 One root and its initializer name make this a plugin, so the specification's plugin loads first.
 
-Lake sorts plugins by dependency, but Lean loads ordinary dynamic libraries before them.
+The extension initializes only runtime imports.
+
+The linker discards EthLib's unused compile-time and legacy initializers.
 
 The globs assign each domain's export tree to this library. -/
 @[default_target]
 lean_lib «Exports» where
   requiresModuleSystem := true
-  -- Lean v4.35.0, Lake/Config/LeanLib.lean, `LeanLib.isPlugin`.
   roots := #[`EthLib.Exports]
   libName := "EthLib_EthLib_Exports"
-  -- Lake/Build/Module.lean, `computeModuleDeps`; Lean/Elab/Frontend.lean, `runFrontend`.
-  globs := #[.one `EthLib.Exports, .andSubmodules `EthLib.Base.Exports,
+  -- The conversion core and its laws belong to `PythonConversions` below.
+  globs := #[.one `EthLib.Exports, .one `EthLib.Base.Exports,
+    .one `EthLib.Base.Exports.Bindings, .one `EthLib.Base.Exports.ChainConfig,
+    .one `EthLib.Base.Exports.Echo, .one `EthLib.Base.Exports.Fin,
+    .one `EthLib.Base.Exports.PyDerive, .one `EthLib.Base.Exports.PyValue,
+    .one `EthLib.Base.Exports.PyValueJson,
     .andSubmodules `EthLib.Cryptography.Exports, .andSubmodules `EthLib.Networking.Exports,
     .andSubmodules `EthLib.Execution.Exports, .andSubmodules `EthLib.Consensus.Exports,
     .andSubmodules `EthLib.Serialization.Exports, .andSubmodules `EthLib.Engine.Exports]
+  precompileModules := true
+  defaultFacets := #[LeanLib.leanArtsFacet, LeanLib.staticExportFacet]
+
+/-- Python conversion types and the proofs of their laws.
+
+The core imports only the Lean toolchain, and the law module imports only the core.
+
+These modules belong to neither `Exports` nor `Proofs`.
+
+A downstream project can then precompile the exports without a native library cycle.
+
+The bindings link the core's runtime objects, but not the meta-imported law module. -/
+lean_lib «PythonConversions» where
+  requiresModuleSystem := true
+  roots := #[`EthLib.Base.Exports.Result, `EthLib.Base.Exports.PyValueCore,
+    `EthLib.Base.Proofs.Exports.PyValue]
+  libName := "EthLib_PythonConversions"
   precompileModules := true
 
 /-- Checks the compiled declarations of every library.

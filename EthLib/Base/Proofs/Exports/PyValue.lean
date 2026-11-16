@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.PyValue
+public import EthLib.Base.Exports.PyValueCore
 
 /-!
 # Proofs: `Base.Exports.PyValue`

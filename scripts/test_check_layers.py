@@ -338,6 +338,26 @@ class Rules(unittest.TestCase):
         )
         self.assertEqual(Tree(tree).problems(), [])
 
+    def test_export_meta_imports_conversion_proofs_without_a_runtime_directory_cycle(self):
+        tree: dict[str, list[str] | str] = dict(GOOD)
+        tree["EthLib.Base.Exports.Core"] = ["Lean.Data.Json"]
+        tree["EthLib.Base.Proofs.Exports.Laws"] = ["EthLib.Base.Exports.Core"]
+        tree["EthLib.Base.Exports.Value"] = (
+            "module\npublic import EthLib.Base.Exports.Core\n"
+            "public meta import EthLib.Base.Proofs.Exports.Laws\n"
+        )
+        tree["EthLib.Exports"] = [*GOOD["EthLib.Exports"], "EthLib.Base.Exports.Value"]
+        tree["EthLib.Proofs"] = [*GOOD["EthLib.Proofs"], "EthLib.Base.Proofs.Exports.Laws"]
+        self.assertEqual(Tree(tree).problems(), [])
+
+        # An ordinary import restores the runtime dependency and the directory cycle.
+        tree["EthLib.Base.Exports.Value"] = tree["EthLib.Base.Exports.Value"].replace(
+            "meta import", "import"
+        )
+        problems = Tree(tree).problems()
+        self.assertEqual(len(problems), 2, problems)
+        self.assertTrue(all("which forms a directory cycle" in problem for problem in problems))
+
     def test_export_meta_imports_an_export_of_the_toolchain(self):
         # As `derive_py` would be, if its module imported only the toolchain.
         tree: dict[str, list[str] | str] = dict(

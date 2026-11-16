@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Execution.Trie.HexPrefix
 public import EthLib.Execution.Trie.Proof

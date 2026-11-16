@@ -172,3 +172,30 @@ namespace UnrelatedNamespace
 theorem unused (n : Nat) : n + 0 = n := Nat.add_zero n
 
 end UnrelatedNamespace
+
+namespace CheckTheoremsTest.Spec
+
+/-- A definition retains this bound independently of its deprecation metadata. -/
+theorem deprecated_bound (n : Nat) : n < n + 1 := Nat.lt_succ_self n
+
+/-- Use the bound before deprecating it, so the fixture produces no deprecation warning. -/
+def deprecated (n : Nat) : Fin (n + 1) := ⟨n, deprecated_bound n⟩
+
+attribute [deprecated direct_bound (since := "2026-11-15")] deprecated_bound
+
+-- The inherited docstring replaces a declaration doc comment for this fixture.
+@[inherit_doc direct_bound] theorem inherited_bound (n : Nat) : n < n + 1 := Nat.lt_succ_self n
+
+/-- Inherited documentation does not stop a retained theorem from supporting its definition. -/
+def inherited (n : Nat) : Fin (n + 1) := ⟨n, inherited_bound n⟩
+
+/-- A deprecated alias with no retained consumer is still a movable theorem. -/
+@[deprecated direct_bound (since := "2026-11-15")]
+theorem deprecated_unused (n : Nat) : n < n + 1 := direct_bound n
+
+-- Documentation inherited by a command does not itself retain this theorem.
+theorem inherited_unused (n : Nat) : n < n + 1 := Nat.lt_succ_self n
+
+attribute [inherit_doc direct_bound] inherited_unused
+
+end CheckTheoremsTest.Spec

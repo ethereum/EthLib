@@ -219,6 +219,10 @@ jobs:
         if: ${{ !cancelled() && steps.bindings.outcome == 'success' }}
         run: uv run --no-sync python -m unittest discover -s scripts -p 'test_build_pipeline.py'
 
+      - name: runtime object selection regressions
+        if: ${{ !cancelled() }}
+        run: uv run --no-project --python 3.12 python -m unittest scripts/test_setup_runtime.py
+
       # A failed run still publishes its logs and the status of each measured command.
       - name: build timing report
         if: ${{ always() }}
