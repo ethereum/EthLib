@@ -1959,6 +1959,32 @@ private theorem registry_of_runKept {state after : BeaconState preset fork}
   have inside := Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp held).1 run.grows
   exact ⟨after.validators.data[position], Array.getElem?_eq_getElem inside⟩
 
+/-- A window at the justified root has successful registry reads in its actual cached state.
+
+The cached state may process empty slots beyond the block at that root. -/
+private theorem registry_of_justified_window {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (early : fork < .glamsterdam)
+    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat}
+    {head : ForkChoiceNode} {state : BeaconState preset fork}
+    {first finish : Slot} {members : Std.TreeSet ValidatorIndex}
+    (same : head.root = ((e.world n).state u).justifiedCheckpoint.root)
+    (cached : ((e.world n).state u).checkpointState
+      ((e.world n).state u).justifiedCheckpoint = .ok state)
+    (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first finish =
+      .ok members) :
+    ∀ v ∈ members, ∃ validator, validatorAt state v = .ok validator := by
+  obtain ⟨base, start, baseFound, _, advanced⟩ :=
+    e.checkpointStates_fixedChecks anchorStore anchored honest
+      (Store.checkpointState_ok_iff.mp cached)
+  have held : ((e.world n).state u).blockState head.root = .ok base :=
+    Store.blockState_ok_iff.mpr (same ▸ baseFound)
+  intro v member
+  obtain ⟨epoch, active⟩ := active_of_committeeWindow early held window v member
+  obtain ⟨validator, found⟩ := registry_of_runKept (runKept_lookahead advanced) active
+  exact ⟨validator, validatorAt_ok_iff.mpr found⟩
+
 /-- Each accepted signer supplies activity in its own actual cached target state.
 
 The receiver still filters at its own epoch; no activity is transported backwards. -/
