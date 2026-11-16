@@ -1377,6 +1377,51 @@ variable {config : Config} {checks : SignatureChecks} {sources : BlockSources pr
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
+/-- An honest cache read supplies the source's fixed-check lookahead and held block origin.
+
+The common checkpoint and both chain reads remain explicit applicability obligations. -/
+private theorem filteredTotal_of_honest_checkpoint {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (positive : 0 < preset.SLOTS_PER_EPOCH)
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat}
+    {checkpoint targetCheckpoint : Checkpoint}
+    {boundary targetState base cached : BeaconState preset fork}
+    {root : Root} {block sourceBlock : BeaconBlock preset fork} {start target : Slot}
+    {epoch : Epoch} {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
+    (targetRead : ((e.world n).state u).checkpointState targetCheckpoint = .ok targetState)
+    (boundaryFound : ((e.world n).state u).checkpointStates[checkpoint]? = some boundary)
+    (startOk : computeStartSlotAtEpoch preset checkpoint.epoch = .ok start)
+    (walk : ((e.world n).state u).getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root)
+    (found : ((e.world n).state u).blocks[root]? = some block)
+    (bound : start ≤ block.slot)
+    (baseFound : ((e.world n).state u).blockStates[root]? = some base)
+    (advanced : lookaheadState config checks base target = .ok cached)
+    (sourceWalk : ((e.world n).state u).getCheckpointBlock targetCheckpoint.root checkpoint.epoch =
+      .ok checkpoint.root)
+    (sourceBlockFound : ((e.world n).state u).blocks[targetCheckpoint.root]? = some sourceBlock)
+    (sourceBound : start ≤ sourceBlock.slot)
+    (finalized : targetState.finalizedCheckpoint.epoch ≤ checkpoint.epoch)
+    (finite : checkpoint.epoch < FAR_FUTURE_EPOCH)
+    (active : ∀ v ∈ participants, isActiveAt targetState epoch v.toNat = true)
+    (read : getTotalActiveBalance cached = .ok total) :
+    ∃ selected result,
+      participants.toList.filterM (fun index => do
+        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
+        .ok selected ∧ getTotalBalance cached selected = .ok result := by
+  have reached := e.forwardReachableWith
+    (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
+    n u honest
+  obtain ⟨source, sourceStart, sourceFound, _, sourceRun⟩ :=
+    e.checkpointStates_fixedChecks anchorStore anchored honest
+      (Store.checkpointState_ok_iff.mp targetRead)
+  exact filteredTotal_of_checkpoint_pendingTail electra early anchorSlot reached
+    anchorInvariant positive walk found startOk bound baseFound boundaryFound advanced sourceRun
+    sourceWalk sourceBlockFound sourceBound sourceFound
+    finalized finite active read
+
 /-- Held-state flags suffice for a cached checkpoint through its fixed-check lookahead origin. -/
 private theorem notSlashed_checkpointState {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
