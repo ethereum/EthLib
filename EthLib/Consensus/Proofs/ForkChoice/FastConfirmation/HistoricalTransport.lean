@@ -884,25 +884,18 @@ private theorem filteredTotal_of_stateTransition {config : Config} {checks : Sig
   exact filteredTotal_of_processBlock electra early block finite
     (pendingTail_processSlots holds slots low advancedFinalized finite tail) contains active read
 
-/-- A successful slot step gives checked historical reads without an epoch-stage premise. -/
-private theorem filteredTotal_of_advanceSlot
-    {config : Config} {checks : SignatureChecks}
-    {source after cached : BeaconState preset fork}
-    {epoch boundEpoch : Epoch} {count : Nat}
-    {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
-    (run : advanceSlot config checks source = .ok after)
+/-- Lookahead preserves the pending tail through either actual slots or the identity branch. -/
+private theorem pendingTail_lookahead {config : Config} {checks : SignatureChecks}
+    {source after : BeaconState preset fork} {slot : Slot} {boundEpoch : Epoch} {count : Nat}
+    (holds : Invariant source) (run : lookaheadState config checks source slot = .ok after)
     (boundary : boundEpoch ≤ getCurrentEpoch source)
     (finalized : after.finalizedCheckpoint.epoch ≤ boundEpoch)
-    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source)
-    (contains : count ≤ cached.validators.data.size)
-    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
-    (read : getTotalActiveBalance cached = .ok total) :
-    ∃ selected result,
-      participants.toList.filterM (fun index => do
-        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
-        .ok selected ∧ getTotalBalance cached selected = .ok result :=
-  filteredTotal_of_pendingTail
-    (pendingTail_advanceSlot run boundary finalized finite tail) contains active read
+    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source) :
+    PendingTail count boundEpoch after := by
+  unfold lookaheadState at run
+  split at run
+  · exact pendingTail_processSlots holds (mapError_ok_iff.mp run) boundary finalized finite tail
+  · cases run; exact tail
 
 /-- Lookahead extends a run without assuming a registry-size bound. -/
 private theorem runKept_lookahead {config : Config} {checks : SignatureChecks}
@@ -930,26 +923,33 @@ private theorem ancestor_registrySize_le_cached {config : Config} {checks : Sign
 
 /-- A held ancestor supplies the prefix size for checked historical participant reads.
 
-The pending-tail provenance is still required separately; no validator identity is inferred. -/
+The source lookahead transports its tail, while the receiver lookahead supplies the prefix size.
+
+Historical applicability is still required separately; no validator identity is inferred. -/
 private theorem filteredTotal_of_ancestor_pendingTail {config : Config} {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {store : Store preset fork} (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reachable : Store.Reachable config anchorState anchorBlock store)
     {node ancestor : ForkChoiceNode} {query target : Slot}
-    {source boundary base cached : BeaconState preset fork} {epoch boundEpoch : Epoch}
+    {source advancedSource boundary base cached : BeaconState preset fork}
+    {sourceTarget : Slot} {epoch boundEpoch : Epoch}
     {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
     (walk : store.getAncestor node query = .ok ancestor)
     (baseFound : store.blockStates[node.root]? = some base)
     (boundaryFound : store.blockStates[ancestor.root]? = some boundary)
     (advanced : lookaheadState config checks base target = .ok cached)
+    (sourceRun : lookaheadState config checks source sourceTarget = .ok advancedSource)
+    (holds : Invariant source) (low : boundEpoch ≤ getCurrentEpoch source)
+    (finalized : advancedSource.finalizedCheckpoint.epoch ≤ boundEpoch)
+    (finite : boundEpoch < FAR_FUTURE_EPOCH)
     (tail : PendingTail boundary.validators.data.size boundEpoch source)
-    (active : ∀ v ∈ participants, isActiveAt source epoch v.toNat = true)
+    (active : ∀ v ∈ participants, isActiveAt advancedSource epoch v.toNat = true)
     (read : getTotalActiveBalance cached = .ok total) :
     ∃ selected result,
       participants.toList.filterM (fun index => do
         return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
         .ok selected ∧ getTotalBalance cached selected = .ok result :=
-  filteredTotal_of_pendingTail tail
+  filteredTotal_of_pendingTail (pendingTail_lookahead holds sourceRun low finalized finite tail)
     (ancestor_registrySize_le_cached anchorSlot reachable walk baseFound boundaryFound advanced)
     active read
 
