@@ -340,6 +340,55 @@ private theorem pendingTail_processWithdrawalRequest {config : Config}
   · exact pendingTail_of_validators
       (congrArg (·.data) (requestPartialWithdrawal_kept withdrawn).1) tail
 
+/-- Switching credentials and queueing excess balance preserve pending activation fields. -/
+private theorem pendingTail_switchToCompoundingValidator
+    {state after : BeaconState preset fork} {electra : .pectra ≤ fork}
+    {index : ValidatorIndex} {count : Nat} {epoch : Epoch}
+    (run : switchToCompoundingValidator state electra index = .ok after)
+    (tail : PendingTail count epoch state) : PendingTail count epoch after := by
+  simp only [switchToCompoundingValidator, bind_ok_iff] at run
+  obtain ⟨old, found, switched, set, queued⟩ := run
+  rw [setValidator_eq_setValidatorAt] at set
+  have read : getValidatorAt state index.toNat = .ok old := by
+    rwa [← getValidator_eq_getValidatorAt]
+  exact pendingTail_of_validators
+    (congrArg (·.data) (queueExcessActiveBalance_validators queued))
+    (pendingTail_setValidatorAt read set rfl rfl tail)
+
+/-- Consolidation queueing changes exit fields, not pending activation fields. -/
+private theorem pendingTail_queueConsolidation {config : Config}
+    {state after : BeaconState preset fork} {electra : .pectra ≤ fork}
+    {index target : ValidatorIndex} {source : Validator} {count : Nat} {epoch : Epoch}
+    (found : state.validators.data[index.toNat]? = some source)
+    (run : queueConsolidation config state electra index source target = .ok after)
+    (tail : PendingTail count epoch state) : PendingTail count epoch after := by
+  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+    pure, Except.pure, Except.ok.injEq] at run
+  obtain ⟨⟨churned, exitEpoch⟩, churn, _, _, written, set, _, _, rfl⟩ := run
+  have same := (computeConsolidationEpochAndUpdateChurn_earliest churn).2.1
+  have read : getValidatorAt churned index.toNat = .ok source := by
+    rw [← getValidator_eq_getValidatorAt, getValidator, same, found]
+  rw [setValidator_eq_setValidatorAt] at set
+  exact pendingTail_of_validators (state := written) rfl
+    (pendingTail_setValidatorAt read set rfl rfl
+      (pendingTail_of_validators (congrArg (·.data) same) tail))
+
+/-- Every successful consolidation request preserves the pending activation suffix. -/
+private theorem pendingTail_processConsolidationRequest {config : Config}
+    {state after : BeaconState preset fork} {electra : .pectra ≤ fork}
+    {request : ConsolidationRequest} {count : Nat} {epoch : Epoch}
+    (run : processConsolidationRequest config state electra request = .ok after)
+    (tail : PendingTail count epoch state) : PendingTail count epoch after := by
+  unfold processConsolidationRequest at run
+  simp only [bind, Except.bind, pure, Except.pure] at run
+  repeat' split at run
+  all_goals first
+    | (cases run; done)
+    | (cases run; exact tail)
+    | exact pendingTail_switchToCompoundingValidator (liftAccessor_ok.mp run) tail
+    | exact pendingTail_queueConsolidation
+        (getElem?_toNat_of_ofNatChecked (by assumption)) run tail
+
 /-- The existing pending-deposit pass transports the suffix through all applied deposits. -/
 private theorem pendingTail_passPendingDeposits {config : Config} {checks : SignatureChecks}
     {stop : PendingDeposit → Bool} {nextEpoch : Epoch} {available : Gwei}
@@ -444,15 +493,15 @@ private theorem filteredTotal_of_pendingTail {source state : BeaconState preset 
   obtain ⟨validator, found⟩ := active_registry_of_pendingTail tail contains (active v member)
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
-/-- Successful deposit, exit, credential and withdrawal folds supply checked historical reads.
+/-- Successful deposit, exit, credential and execution-request folds supply historical reads.
 
 Extraction of these intermediate states from the operation schedule remains separate. -/
 private theorem filteredTotal_of_operation_folds {config : Config} {checks : SignatureChecks}
-    {source deposited exited changed requested after cached : BeaconState preset fork}
+    {source deposited exited changed requested withdrawn after cached : BeaconState preset fork}
     {before : fork < .hegota} {electra : .pectra ≤ fork}
     {deposits : List Deposit} {exits : List SignedVoluntaryExit}
     {changes : List SignedBLSToExecutionChange} {requests : List DepositRequest}
-    {withdrawals : List WithdrawalRequest}
+    {withdrawals : List WithdrawalRequest} {consolidations : List ConsolidationRequest}
     {epoch boundary : Epoch} {count : Nat}
     {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
     (run : deposits.foldlM (processDeposit config checks before) source = .ok deposited)
@@ -460,7 +509,9 @@ private theorem filteredTotal_of_operation_folds {config : Config} {checks : Sig
     (changeRun : changes.foldlM (processBlsToExecutionChange config checks) exited = .ok changed)
     (requestRun : requests.foldlM (processDepositRequest · electra ·) changed = .ok requested)
     (withdrawalRun : withdrawals.foldlM (processWithdrawalRequest config · electra ·) requested =
-      .ok after)
+      .ok withdrawn)
+    (consolidationRun : consolidations.foldlM (processConsolidationRequest config · electra ·)
+      withdrawn = .ok after)
     (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source)
     (contains : count ≤ cached.validators.data.size)
     (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
@@ -481,11 +532,14 @@ private theorem filteredTotal_of_operation_folds {config : Config} {checks : Sig
   have withdrawnTail := foldlM_ok_invariant (PendingTail count boundary)
     (fun _ _ _ holds ok => pendingTail_processWithdrawalRequest ok holds)
     requestedTail withdrawalRun
-  exact filteredTotal_of_pendingTail withdrawnTail contains active read
+  have consolidatedTail := foldlM_ok_invariant (PendingTail count boundary)
+    (fun _ _ _ holds ok => pendingTail_processConsolidationRequest ok holds)
+    withdrawnTail consolidationRun
+  exact filteredTotal_of_pendingTail consolidatedTail contains active read
 
-/-- A successful Electra-to-Fulu operation schedule supplies the actual states before consolidation.
+/-- A successful Electra-to-Fulu operation schedule transports the tail through consolidation.
 
-Tail and activity applicability at those states remain explicit conditional inputs. -/
+Tail applicability before deposits and activity at the output remain conditional inputs. -/
 private theorem filteredTotal_of_operations_cut {config : Config} {checks : SignatureChecks}
     {source after cached : BeaconState preset fork} {body : BeaconBlockBody preset fork}
     {parentSlot : Slot} (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
@@ -504,7 +558,7 @@ private theorem filteredTotal_of_operations_cut {config : Config} {checks : Sign
       (body.executionRequests ⟨electra, early⟩).consolidations.data.toList.foldlM
         (processConsolidationRequest config · electra ·) withdrawn = .ok after ∧
       (PendingTail count boundary attested →
-        (∀ v ∈ participants, isActiveAt withdrawn epoch v.toNat = true) →
+        (∀ v ∈ participants, isActiveAt after epoch v.toNat = true) →
         ∃ selected result,
           participants.toList.filterM (fun index => do
             return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
@@ -526,7 +580,8 @@ private theorem filteredTotal_of_operations_cut {config : Config} {checks : Sign
   obtain ⟨requested, requestedOk, withdrawn, withdrawnOk, consolidatedOk⟩ := requestsOk
   exact ⟨proposers, slashings, attested, withdrawn, proposersOk, slashingsOk, attestedOk,
     consolidatedOk, fun tail active => filteredTotal_of_operation_folds
-      depositedOk exitsOk changesFold requestedOk withdrawnOk finite tail contains active read⟩
+      depositedOk exitsOk changesFold requestedOk withdrawnOk consolidatedOk
+      finite tail contains active read⟩
 
 /-- Every non-registry stage preserves the pending tail, including intervening epoch stages. -/
 private theorem pendingTail_epochStage {config : Config} {checks : SignatureChecks}
