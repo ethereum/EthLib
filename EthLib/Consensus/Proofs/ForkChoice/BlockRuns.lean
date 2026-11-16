@@ -210,6 +210,63 @@ private theorem Store.getAncestor_last {node ancestor : ForkChoiceNode} {slot : 
         subst same
         simp [notLower, throw, throwThe, MonadExceptOf.throw] at walk
 
+/-- Construct the actual checkpoint prefix and compose a relation through its descendants. -/
+theorem Store.ForwardReachableWith.relation_of_checkpointPrefix {checks : SignatureChecks}
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (edge : ∀ {s t : BeaconState preset fork} {checks' : SignatureChecks}
+      {engine : ExecutionEngine preset fork} {signed : SignedBeaconBlock preset fork},
+      stateTransition config checks' engine s signed true = .ok t → R s t)
+    (fromPrefix : ∀ {s mid t : BeaconState preset fork} {middle : Slot}
+      {engine : ExecutionEngine preset fork} {signed : SignedBeaconBlock preset fork},
+      processSlots config checks s middle = .ok mid → middle ≤ signed.message.slot →
+      stateTransition config checks engine s signed true = .ok t → R mid t)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    {checkpoint : Checkpoint} {root : Root} {block : BeaconBlock preset fork} {start : Slot}
+    {base state : BeaconState preset fork}
+    (target : store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root)
+    (found : store.blocks[root]? = some block)
+    (startOk : computeStartSlotAtEpoch preset checkpoint.epoch = .ok start)
+    (atOrAfter : start ≤ block.slot)
+    (baseFound : store.blockStates[checkpoint.root]? = some base)
+    (stateFound : store.blockStates[root]? = some state) :
+    ∃ boundary, lookaheadState config checks base start = .ok boundary ∧ R boundary state := by
+  have reachable := reached.reachable
+  simp only [Store.getCheckpointBlock, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at target
+  obtain ⟨start', startOk', node, walk, rooted⟩ := target
+  rw [startOk, Except.ok.injEq] at startOk'
+  subst startOk'
+  rw [← rooted] at baseFound
+  by_cases below : base.slot < start
+  swap
+  · refine ⟨base, ?_, reachable.relation_of_getAncestor R refl trans edge
+      anchorSlot walk stateFound baseFound⟩
+    simp [lookaheadState, below, pure, Except.pure]
+  rcases Store.getAncestor_last found walk with ⟨le, rfl⟩ | ⟨child, childBlock, childFound,
+      -, above, parentRoot, childWalk⟩
+  · have := reachable.slot_le_of_blockState anchorSlot found baseFound
+    exact absurd (UInt64.le_trans atOrAfter this) (UInt64.not_le.mpr below)
+  obtain ⟨childState, childStateFound, -, notAnchor⟩ :=
+    reached.blockStatesFromParents childFound
+  have notAnchorBlock : childBlock ≠ anchorBlock := by
+    rintro rfl
+    have := UInt64.le_trans anchorSlot (reachable.anchorSlot_le_of_blockState baseFound)
+    exact absurd (UInt64.le_trans this (UInt64.le_of_lt below)) (UInt64.not_le.mpr above)
+  obtain ⟨parentState, checks', engine, signed, rfl, message, parentFound, transition⟩ :=
+    notAnchor notAnchorBlock
+  rw [parentRoot, baseFound, Option.some.injEq] at parentFound
+  subst parentFound
+  obtain ⟨advanced, slotsOk, _, _, _, _⟩ := stateTransition_ok transition
+  obtain ⟨boundary, prefixOk, _⟩ := processSlots_split below (message ▸ above) slotsOk
+  refine ⟨boundary, ?_, trans
+    (fromPrefix prefixOk (message ▸ UInt64.le_of_lt above) transition)
+    (reachable.relation_of_getAncestor R refl trans edge anchorSlot childWalk
+      stateFound childStateFound)⟩
+  simp [lookaheadState, below, prefixOk, Except.mapError]
+
 /-- Compose a relation from a checkpoint's actual slot prefix through its descendant blocks. -/
 theorem Store.ForwardReachableWith.relation_of_checkpointState {checks : SignatureChecks}
     (R : BeaconState preset fork → BeaconState preset fork → Prop)
@@ -233,36 +290,17 @@ theorem Store.ForwardReachableWith.relation_of_checkpointState {checks : Signatu
     (checkpointFound : store.checkpointStates[checkpoint]? = some checkpointState)
     (stateFound : store.blockStates[root]? = some state) :
     R checkpointState state := by
-  have reachable := reached.reachable
-  simp only [Store.getCheckpointBlock, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at target
-  obtain ⟨start', startOk', node, walk, rooted⟩ := target
-  rw [startOk, Except.ok.injEq] at startOk'
-  subst startOk'
   obtain ⟨base, start', baseFound, startOk', fromBlock⟩ :=
     reached.checkpointStatesFromBlocks checkpointFound
   rw [startOk, Except.ok.injEq] at startOk'
   subst startOk'
-  rw [← rooted] at baseFound
-  rcases fromBlock with ⟨-, rfl⟩ | ⟨below, checks', rfl, slotsOk⟩
-  · exact reachable.relation_of_getAncestor R refl trans edge anchorSlot walk stateFound baseFound
-  rcases Store.getAncestor_last found walk with ⟨le, rfl⟩ | ⟨child, childBlock, childFound,
-      -, above, parentRoot, childWalk⟩
-  · have := reachable.slot_le_of_blockState anchorSlot found baseFound
-    exact absurd (UInt64.le_trans atOrAfter this) (UInt64.not_le.mpr below)
-  obtain ⟨childState, childStateFound, -, notAnchor⟩ :=
-    reached.blockStatesFromParents childFound
-  have notAnchorBlock : childBlock ≠ anchorBlock := by
-    rintro rfl
-    have := UInt64.le_trans anchorSlot (reachable.anchorSlot_le_of_blockState baseFound)
-    exact absurd (UInt64.le_trans this (UInt64.le_of_lt below)) (UInt64.not_le.mpr above)
-  obtain ⟨parentState, checks', engine, signed, rfl, message, parentFound, transition⟩ :=
-    notAnchor notAnchorBlock
-  rw [parentRoot, baseFound, Option.some.injEq] at parentFound
-  subst parentFound
-  exact trans (fromPrefix slotsOk (message ▸ UInt64.le_of_lt above) transition)
-    (reachable.relation_of_getAncestor R refl trans edge anchorSlot childWalk
-      stateFound childStateFound)
+  obtain ⟨boundary, prefixOk, related⟩ := reached.relation_of_checkpointPrefix R refl trans edge
+    fromPrefix anchorSlot target found startOk atOrAfter baseFound stateFound
+  have cached : lookaheadState config checks base start = .ok checkpointState := by
+    rcases fromBlock with ⟨le, rfl⟩ | ⟨below, checks', rfl, slotsOk⟩
+    · simp [lookaheadState, UInt64.not_lt.mpr le, pure, Except.pure]
+    · simp [lookaheadState, below, slotsOk, Except.mapError]
+  exact (Except.ok.inj (prefixOk.symm.trans cached)) ▸ related
 
 /-- In a store built with one setting of the checks, a checkpoint state runs on to a block state.
 
