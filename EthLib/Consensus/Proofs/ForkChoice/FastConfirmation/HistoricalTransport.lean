@@ -2079,9 +2079,13 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
           ⟨block.parentRoot, .pending⟩ = .ok true ∧
         Models.stake (fun v => balanceAt state v.toNat)
         (Store.activeMembers state members) + score.toNat <
-      2 * Models.stake (fun v => balanceAt state v.toNat)
+      2 * Models.stake (fun v =>
+        if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
+        then balanceAt state v.toNat else 0)
         {v ∈ ((e.world n).state u).supportersOf state ⟨root, .pending⟩ | v ∈ J} +
-      Models.stake (fun v => balanceAt state v.toNat)
+      Models.stake (fun v =>
+        if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
+        then balanceAt state v.toNat else 0)
         {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J}))
     (scoreOk : computeProposerScore config state = .ok (score : Gwei)) :
     ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true ∨
@@ -2130,6 +2134,20 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
   have boostedBound := Models.ForkChoice.weight_withBoost
     (V := Store.voters state) (w := balanceAt state) (G := Store.view lower nodes)
     store.boostedRoot (store.boostScore config) (some root)
+  have guarded (voters : Finset ValidatorIndex) :
+      Models.stake (fun v =>
+        if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
+        then balanceAt state v.toNat else 0) voters ≤
+      Models.stake (fun v => balanceAt state v.toNat) voters := by
+    apply Finset.sum_le_sum
+    intro v _
+    split
+    · exact Nat.le_refl _
+    · exact Nat.zero_le _
+  have supportGuard := guarded
+    {v ∈ store.supportersOf state ⟨root, .pending⟩ | v ∈ J}
+  have parentGuard := guarded
+    {v ∈ store.parentVotersOf state participants block parent | v ∈ J}
   have modelMargin : Models.stake (fun v => balanceAt state v.toNat)
         (Store.activeMembers state members) + store.boostScore config <
       2 * Models.ForkChoice.weight (Store.voters state).insertNone
@@ -2137,7 +2155,7 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
         ((Store.view lower nodes).withBoost store.boostedRoot) (some root) +
       Models.stake (fun v => balanceAt state v.toNat)
         {v ∈ store.parentVotersOf state participants block parent | v ∈ J} := by
-    dsimp only [store] at boostBound boostedBound ⊢
+    dsimp only [store] at boostBound boostedBound supportGuard parentGuard ⊢
     omega
   have ghostEq := Store.getHead_eq_ghost_withBoost lower before stateRead tree headRead
   have ancestry := (Store.filterNodeTree_ancestor (lower := lower) before tree _ viable).1
