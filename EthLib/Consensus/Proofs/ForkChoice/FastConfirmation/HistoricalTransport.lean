@@ -33,6 +33,15 @@ open Base Uint64 Models
 
 variable {preset : Preset} {fork : Fork}
 
+/-- A successful checked predecessor has the original slot as its checked successor. -/
+private theorem addChecked_one_of_subChecked {a b : Slot}
+    (read : subChecked a 1 = .ok b) : addChecked b 1 = .ok a := by
+  obtain ⟨positive, value⟩ := subChecked_ok_iff.mp read
+  apply addChecked_ok_iff.mpr
+  have bound := a.toNat_lt
+  simp only [UInt64.reduceToNat] at positive value ⊢
+  constructor <;> omega
+
 /-- Activity at any queried epoch requires a finite activation epoch. -/
 private theorem finiteActivation {state : BeaconState preset fork} {epoch : Epoch}
     {position : Nat} (active : isActiveAt state epoch position = true) :
@@ -3086,12 +3095,7 @@ private theorem receiver_maximum_discount_of_head_window {anchor : Store preset 
         .ok result := by
     by_cases empty : last < first
     · exact ⟨0, Store.computeCommitteeWeightBetweenSlots_of_gt empty⟩
-    have afterOk : addChecked last 1 = .ok block.slot := by
-      obtain ⟨positive, value⟩ := subChecked_ok_iff.mp lastOk
-      apply addChecked_ok_iff.mpr
-      have bound := block.slot.toNat_lt
-      simp only [UInt64.reduceToNat] at positive value ⊢
-      constructor <;> omega
+    have afterOk := addChecked_one_of_subChecked lastOk
     obtain ⟨covered, coverage⟩ := coverage_exists_of_maximum
       (UInt64.le_trans (UInt64.not_lt.mp empty) before) read afterOk
     exact maximum_exists_of_total coverage window totalOk inside
@@ -3421,12 +3425,7 @@ public theorem receiver_fullMaximum_of_head_window {anchor : Store preset fork}
     exact .inr ⟨u, caller, w, receiver, n, k, callerTime, inTime, parentRoot,
       (parentRoot, leftBlock, rightBlock), found⟩
   left
-  have afterOk : addChecked finish 1 = .ok current := by
-    obtain ⟨positive, value⟩ := subChecked_ok_iff.mp lastOk
-    apply addChecked_ok_iff.mpr
-    have bound := current.toNat_lt
-    simp only [UInt64.reduceToNat] at positive value ⊢
-    constructor <;> omega
+  have afterOk := addChecked_one_of_subChecked lastOk
   -- Only the range arithmetic is reused; the balance state and committee read are the receiver's.
   obtain ⟨covered, coverage⟩ := coverage_exists_of_maximum nonempty read afterOk
   have stakeBound := ceiling w receiver k _ state inTime cached
