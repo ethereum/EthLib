@@ -1988,6 +1988,26 @@ private theorem sibling_weight_lt_of_window_margin [DecidablePred (· ∈ J)]
         (Finset.mem_filter.mp member).1⟩)
   omega
 
+/-- A held block's checked predecessor is no later than the current slot's predecessor. -/
+private theorem previousBlockSlot_le_previousCurrentSlot
+    {store : Store preset fork}
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    {root : Root} {block : BeaconBlock preset fork} {current first last : Slot}
+    (found : store.blocks[root]? = some block)
+    (slotRead : store.getCurrentSlot config = .ok current)
+    (blockLast : subChecked block.slot 1 = .ok first)
+    (currentLast : subChecked current 1 = .ok last) : first ≤ last := by
+  obtain ⟨state, stateFound, _, _⟩ := reached.reachable.blockStatesFromParents found
+  have blockLe := reached.reachable.slot_le_of_blockState anchorSlot found stateFound
+  have stateLe := reached.forwardReachable.slot_le_of_blockState_of_getCurrentSlot
+    stateFound slotRead
+  have := (subChecked_ok_iff.mp blockLast).2
+  have := (subChecked_ok_iff.mp currentLast).2
+  have := UInt64.le_iff_toNat_le.mp blockLe
+  have := UInt64.le_iff_toNat_le.mp stateLe
+  exact UInt64.le_iff_toNat_le.mpr (by omega)
+
 /-- A finite-window margin at a visited parent keeps the actual head below its child. -/
 private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     {last n : Nat} {u : ValidatorIndex}
@@ -2022,7 +2042,7 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
       .ok members)
     (shortWindow : ((e.world n).state u).getCommitteesBetweenSlots head.root first shortLast =
       .ok participants)
-    (shortBefore : shortLast ≤ finish)
+    (shortLastOk : subChecked block.slot 1 = .ok shortLast)
     (margin : Models.stake (fun v => balanceAt state v.toNat)
         (Store.activeMembers state members) + score.toNat <
       2 * Models.stake (fun v => balanceAt state v.toNat)
@@ -2034,6 +2054,8 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
   classical
   let store := (e.world n).state u
   have within := BeaconState.registryWithinLimit_of_lt before state
+  have shortBefore := previousBlockSlot_le_previousCurrentSlot reached anchorSlot
+    found slotRead shortLastOk lastOk
   -- The visited parent makes the head known; reachability supplies its stored state.
   obtain ⟨headBlock, headKnown, _⟩ := Store.slot_le_of_isAncestor parentFound descends
   obtain ⟨headState, headStored, _, _⟩ := reached.reachable.blockStatesFromParents headKnown
@@ -2874,17 +2896,8 @@ private theorem receiver_maximum_discount_of_head_window {anchor : Store preset 
     positive slots early compatible bounded honest inTime parentFound unknown firstOk
     headRead cached epochRead window
   -- The caller holds the same block, so its checked predecessor bounds the empty-slot range.
-  obtain ⟨blockState, stateFound, -, -⟩ := reached.reachable.blockStatesFromParents callerFound
-  have blockLe := reached.reachable.slot_le_of_blockState (UInt64.le_of_eq anchorSlot)
-    callerFound stateFound
-  have stateLe := reached.forwardReachable.slot_le_of_blockState_of_getCurrentSlot
-    stateFound callerSlot
-  have before : last ≤ oldLast := by
-    have := (subChecked_ok_iff.mp lastOk).2
-    have := (subChecked_ok_iff.mp callerLast).2
-    have := UInt64.le_iff_toNat_le.mp blockLe
-    have := UInt64.le_iff_toNat_le.mp stateLe
-    exact UInt64.le_iff_toNat_le.mpr (by omega)
+  have before := previousBlockSlot_le_previousCurrentSlot reached (UInt64.le_of_eq anchorSlot)
+    callerFound callerSlot lastOk callerLast
   obtain ⟨shortMaximum, shortRead⟩ : ∃ result,
       ((e.world n).state u).computeCommitteeWeightBetweenSlots head.root state first last =
         .ok result := by
