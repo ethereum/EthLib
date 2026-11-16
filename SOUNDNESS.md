@@ -301,10 +301,40 @@ Both checks read the index and the deposit root of the claim.
 It holds at every preset and every fork before Heze.
 Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
 
-These other branch checks also hash with SHA-256, and no theorem composes their proofs with the branch bound:
+`Consensus/Proofs/DataAvailability/DataColumnRandomOracle.lean` composes the branch bound with `verifyKzgCommitmentsInclusionProof`, the inclusion check of a list of commitments.
+Data column sidecars and partial data column headers read that check at Fulu and the BPO forks.
+The preset and the fork are fixed before the run, and an adversary outputs two partial data column headers.
+The extraction roots both lists, reads the subtree index of the list in the body as the check does, and climbs both proofs.
+Every hash is an oracle call, and the climbs take the inclusion proof depth of the preset.
+The adversary wins when the headers have one body root and different lists, and both climbs reach that body root.
+Only the forks from Deneb and before Gloas put the list in the body, where the climbs can run.
+A data column sidecar carries the same commitments, proof and block header, and its check reads the same function on them.
+The bound holds for two sidecars as well, but no theorem states it.
 
-- The light client checks of bootstraps and updates, from Altair, and of headers, from Capella.
-- `verifyKzgCommitmentsInclusionProof`, which data column sidecars and partial data column headers read at Fulu.
+`collision_of_extractColumnHeaders` shows that every win leaves two different cached inputs with one answer.
+By `hashTreeRootM_bytes48List` (`Serialization/Proofs/Ssz/BranchRandomOracle.lean`), the root of a list is the perfect tree over the roots of its commitments, with the count mixed in.
+The replay of that tree caches every message it hashes, by `cached_of_subtreeAtM` (`Serialization/Proofs/Ssz/RandomOracle.lean`).
+So `collision_of_hashTreeRootM_bytes48List` finds two such inputs for two different lists with one root, through `CommitmentTree.binding` and `lengthWord_injective`.
+Two different roots that climb to one body root give the inputs that `collision_of_extractBranches` finds.
+`prEvent_experimentWith_le` then gives `prEvent_columnWins_le`, which bounds a win by `Q^2 / N`, and `prEvent_columnWins_le_two_pow` states it with `N = 2^256`.
+`hashTreeRootM_bytes48List_queryBound` shows that the root of a list makes at most `limit + 2^d` queries, where `2^d` is the width of its tree.
+That is one query per commitment, at most `2^d - 1` for the tree by `subtreeAtM_queryBound`, and one for the count.
+`extractColumnHeaders_queryBound` counts both roots and at most `2 * depth` queries for the climbs.
+`experimentWith_extractColumnHeaders_queryBound` adds the adversary's queries, through `experimentWith_queryBound`.
+`prEvent_columnWins_le_of_adversary` states the bound with `Q = q + 2 * (limit + 2^d) + 2 * depth`, for an adversary of `q` queries.
+There `limit` is the most blob commitments of a block, and `depth` is the inclusion proof depth.
+At the mainnet limit of 4096 and depth of 4, `prEvent_columnWins_le_mainnet` bounds a win by `(q + 16392)^2 / 2^256`.
+Beyond the adversary's own queries, `Q` grows with the limit and the depth, not with the commitments that the headers carry.
+The collision lemma, the bounds and the count of the extraction need a fork before Gloas, where the list has a limit.
+From Gloas the list is progressive, and neither a sidecar nor a partial sidecar carries the proof.
+There the body has no list of commitments, so the extraction reads no subtree index and no adversary wins.
+No theorem states this.
+With SHA-256 in place of the oracle, `columnWins_sha256_iff` shows that a win is two such headers that `verifyKzgCommitmentsInclusionProof` accepts.
+It holds at every preset and every fork.
+Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
+
+The light client checks of bootstraps and updates, from Altair, and of headers, from Capella, also hash with SHA-256.
+No theorem composes their proofs with the branch bound.
 
 ### leanSPHINCS
 
@@ -5871,6 +5901,7 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   The branch bound fixes the depth before the run, and its adversary picks the index, the leaves and the branches.
   The blob sidecar bound fixes the preset and the fork before the run, and its adversary picks both sidecars.
   The deposit bound reads no preset or fork, and its adversary picks the index, the deposit root and both deposits.
+  The data column bound fixes the preset and the fork before the run, and its adversary picks both partial headers.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of SHA-256.
