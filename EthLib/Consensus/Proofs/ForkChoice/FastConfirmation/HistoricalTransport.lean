@@ -2001,7 +2001,6 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {head : ForkChoiceNode} {state : BeaconState preset fork}
-    (within : state.RegistryWithinLimit)
     {root : Root} {block parent : BeaconBlock preset fork}
     {current first finish shortLast : Slot} {epoch : Epoch}
     {members participants : Std.TreeSet ValidatorIndex} {nodes : List ForkChoiceNode}
@@ -2034,6 +2033,7 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true := by
   classical
   let store := (e.world n).state u
+  have within := BeaconState.registryWithinLimit_of_lt before state
   -- The visited parent makes the head known; reachability supplies its stored state.
   obtain ⟨headBlock, headKnown, _⟩ := Store.slot_le_of_isAncestor parentFound descends
   obtain ⟨headState, headStored, _, _⟩ := reached.reachable.blockStatesFromParents headKnown
