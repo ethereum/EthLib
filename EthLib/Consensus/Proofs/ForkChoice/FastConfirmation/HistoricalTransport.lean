@@ -2016,7 +2016,7 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock
       ((e.world n).state u))
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot) (before : fork < .glamsterdam)
-    (lower : ((e.world n).state u).ParentsBelow)
+    (unknown : ((e.world n).state u).blocks[anchorBlock.parentRoot]? = none)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -2059,6 +2059,7 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     exact Store.isAncestor_trans_of_lt before justifiedKnown found
       (Store.isAncestor_getHead_of_lt_gloas before headRead) justifiedAbove
   let store := (e.world n).state u
+  have lower := reached.reachable.parentsBelow anchorSlot unknown
   have within := BeaconState.registryWithinLimit_of_lt before state
   have shortBefore := previousBlockSlot_le_previousCurrentSlot reached anchorSlot
     found slotRead shortLastOk lastOk
