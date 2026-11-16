@@ -831,6 +831,59 @@ private theorem pendingTail_advanceSlot {config : Config} {checks : SignatureChe
     · cases epochOk; exact cachedTail
   exact epochedTail
 
+/-- The shared successful-slot traversal preserves the tail using its output finalized bound. -/
+private theorem pendingTail_processSlots {config : Config} {checks : SignatureChecks}
+    {source after : BeaconState preset fork} {slot : Slot} {boundEpoch : Epoch} {count : Nat}
+    (holds : Invariant source) (run : processSlots config checks source slot = .ok after)
+    (boundary : boundEpoch ≤ getCurrentEpoch source)
+    (finalized : after.finalizedCheckpoint.epoch ≤ boundEpoch)
+    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source) :
+    PendingTail count boundEpoch after := by
+  simp only [processSlots, bind_ok_iff, ensure_ok_iff] at run
+  obtain ⟨_, _, advanced⟩ := run
+  let R := fun (s t : BeaconState preset fork) =>
+    getCurrentEpoch s ≤ getCurrentEpoch t ∧
+      (boundEpoch ≤ getCurrentEpoch s → t.finalizedCheckpoint.epoch ≤ boundEpoch →
+        PendingTail count boundEpoch s → PendingTail count boundEpoch t)
+  have refl : ∀ s, R s s := fun _ => ⟨UInt64.le_refl _, fun _ _ held => held⟩
+  have trans : ∀ {s m t}, m.finalizedCheckpoint.epoch ≤ t.finalizedCheckpoint.epoch →
+      R s m → R m t → R s t := by
+    intro s m t ordered one two
+    exact ⟨UInt64.le_trans one.1 two.1, fun low high held =>
+      two.2 (UInt64.le_trans low one.1) high
+        (one.2 low (UInt64.le_trans ordered high) held)⟩
+  have step : ∀ {s t}, Invariant s → advanceSlot config checks s = .ok t → R s t := by
+    intro s t _ ok
+    exact ⟨(runKept_advanceSlot ok).later, fun low high held =>
+      pendingTail_advanceSlot ok low high finite held⟩
+  exact (advanceSlots_invariant_of R refl trans step holds advanced).2.2.2 boundary finalized tail
+
+/-- A successful state transition supplies historical reads from its pre-slot input tail.
+
+Invariant and finalized applicability remain private inputs, with the same fork limits. -/
+private theorem filteredTotal_of_stateTransition {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {source after cached : BeaconState preset fork}
+    {signed : SignedBeaconBlock preset fork} {validate : Bool}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    {epoch boundary : Epoch} {count : Nat} {participants : Std.TreeSet ValidatorIndex}
+    {total : Gwei} (holds : Invariant source)
+    (run : stateTransition config checks engine source signed validate = .ok after)
+    (low : boundary ≤ getCurrentEpoch source)
+    (finalized : after.finalizedCheckpoint.epoch ≤ boundary)
+    (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source)
+    (contains : count ≤ cached.validators.data.size)
+    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
+    (read : getTotalActiveBalance cached = .ok total) :
+    ∃ selected result,
+      participants.toList.filterM (fun index => do
+        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
+        .ok selected ∧ getTotalBalance cached selected = .ok result := by
+  obtain ⟨advanced, slots, _, _, block, _⟩ := stateTransition_ok run
+  have advancedFinalized : advanced.finalizedCheckpoint.epoch ≤ boundary := by
+    simpa only [(frame_processBlock block).finalized] using finalized
+  exact filteredTotal_of_processBlock electra early block finite
+    (pendingTail_processSlots holds slots low advancedFinalized finite tail) contains active read
+
 /-- A successful slot step gives checked historical reads without an epoch-stage premise. -/
 private theorem filteredTotal_of_advanceSlot
     {config : Config} {checks : SignatureChecks}

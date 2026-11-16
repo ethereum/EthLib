@@ -2760,20 +2760,40 @@ theorem advanceSlot_invariant (holds : Invariant state)
     · rw [cachedFrame.finalized]
       exact UInt64.le_refl _
 
-theorem advanceSlots_invariant :
+/-- Successful slots compose a relation while retaining the invariant and finalized order.
+
+Composition can use the finalized order of the remaining slots. -/
+theorem advanceSlots_invariant_of
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ state, R state state)
+    (trans : ∀ {first middle last},
+      middle.finalizedCheckpoint.epoch ≤ last.finalizedCheckpoint.epoch →
+      R first middle → R middle last → R first last)
+    (step : ∀ {state after}, Invariant state →
+      advanceSlot config checks state = .ok after → R state after) :
     ∀ {count : Nat} {state after : BeaconState preset fork}, Invariant state →
       advanceSlots config checks count state = .ok after →
-      Invariant after ∧ state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch
+      Invariant after ∧ state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch ∧
+        R state after
   | 0, state, after, holds, computed => by
     simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
-    exact ⟨holds, UInt64.le_refl _⟩
+    exact ⟨holds, UInt64.le_refl _, refl _⟩
   | count + 1, state, after, holds, computed => by
     simp only [advanceSlots, bind_ok_iff] at computed
     obtain ⟨next, nextOk, rest⟩ := computed
     obtain ⟨nextHolds, first⟩ := advanceSlot_invariant holds nextOk
-    obtain ⟨afterHolds, second⟩ := advanceSlots_invariant nextHolds rest
-    exact ⟨afterHolds, UInt64.le_trans first second⟩
+    obtain ⟨afterHolds, second, related⟩ :=
+      advanceSlots_invariant_of R refl trans step nextHolds rest
+    exact ⟨afterHolds, UInt64.le_trans first second, trans second (step holds nextOk) related⟩
+
+theorem advanceSlots_invariant
+    {count : Nat} {state after : BeaconState preset fork} (holds : Invariant state)
+    (computed : advanceSlots config checks count state = .ok after) :
+    Invariant after ∧ state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch := by
+  obtain ⟨afterHolds, ordered, _⟩ := advanceSlots_invariant_of (fun _ _ => True)
+    (fun _ => trivial) (fun _ _ _ => trivial) (fun _ _ => trivial) holds computed
+  exact ⟨afterHolds, ordered⟩
 
 /-- Advancing to a later slot keeps the invariant.
 
