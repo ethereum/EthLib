@@ -1404,6 +1404,57 @@ variable {config : Config} {checks : SignatureChecks} {sources : BlockSources pr
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
+/-- Recent vote targets and the actual head have a common committee-preserving history. -/
+private def VoteCommitteeCommonHistory (last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
+    ∀ (head : ForkChoiceNode) headState current v (attestation : Attestation preset fork)
+      targetState,
+    ((e.world k).state w).getHead config = .ok head →
+    ((e.world k).state w).blockState head.root = .ok headState →
+    ((e.world k).state w).getCurrentStoreEpoch config = .ok current →
+    attestation.data.target.epoch.toNat ≤ current.toNat →
+    current.toNat ≤ attestation.data.target.epoch.toNat + 1 →
+    ((e.world k).state w).VoteOrigin config v attestation →
+    ((e.world k).state w).checkpointStates[attestation.data.target]? = some targetState →
+    ∃ common : BeaconState preset fork,
+      RunKept common headState ∧ RunKept common targetState ∧
+      attestation.data.target.epoch.toNat ≤
+        (getCurrentEpoch common).toNat + preset.MIN_SEED_LOOKAHEAD.toNat ∧
+      attestation.data.target.epoch ≤ activityFixedEpoch common ∧
+      (getCurrentEpoch headState).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+        attestation.data.target.epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat ∧
+      (getCurrentEpoch targetState).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+        attestation.data.target.epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
+
+/-- A far target within the parent's two-epoch horizon is the actual receiver epoch. -/
+private theorem common_history_of_far_vote {last n : Nat} {u v : ValidatorIndex}
+    (history : VoteCommitteeCommonHistory (e := e) last) (honest : u ∈ J)
+    (time : (e.world n).time ≤ last)
+    {head : ForkChoiceNode} {headState targetState : BeaconState preset fork}
+    {current : Epoch} {parent : BeaconBlock preset fork} {attestation : Attestation preset fork}
+    (headRead : ((e.world n).state u).getHead config = .ok head)
+    (headFound : ((e.world n).state u).blockState head.root = .ok headState)
+    (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok current)
+    (horizon : current.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2)
+    (far : (computeEpochAtSlot preset parent.slot).toNat + 1 < attestation.data.target.epoch.toNat)
+    (origin : ((e.world n).state u).VoteOrigin config v attestation)
+    (targetRead : ((e.world n).state u).checkpointState attestation.data.target = .ok targetState) :
+    ∃ common, RunKept common targetState ∧ RunKept common headState ∧
+      attestation.data.target.epoch ≤ activityFixedEpoch common := by
+  obtain ⟨slot, slotRead, past⟩ := origin.past
+  have currentEq : computeEpochAtSlot preset slot = current := by
+    simpa [Store.getCurrentStoreEpoch, slotRead, bind, Except.bind, pure, Except.pure]
+      using epochRead
+  have targetLe : attestation.data.target.epoch.toNat ≤ current.toNat := by
+    rw [origin.targetEpoch, ← currentEq]
+    simp only [computeEpochAtSlot, UInt64.toNat_div]
+    exact Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp (UInt64.le_of_lt past))
+  have same : current.toNat = attestation.data.target.epoch.toNat := by omega
+  obtain ⟨common, headRun, targetRun, _, fixed, _, _⟩ := history u honest n time
+    head headState current v attestation targetState headRead headFound epochRead targetLe
+    (by omega) origin (Store.checkpointState_ok_iff.mp targetRead)
+  exact ⟨common, targetRun, headRun, fixed⟩
+
 /-- Held-state finality supplies the source bound at the store's realized checkpoint.
 
 The two ancestry reads remain separate inputs; this does not bound cached-output finality. -/
@@ -1765,9 +1816,16 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
             computeStartSlotAtEpoch preset (attestation v).data.target.epoch = .ok start ∧
             start ≤ block.slot ∧
             ((e.world n).state u).blockStates[root]? = some descendant) ∨
-        ∃ common headState headRoot headBlock,
-          RunKept common (targetState v) ∧ RunKept common headState ∧
-          (attestation v).data.target.epoch ≤ activityFixedEpoch common ∧
+        ∃ headState headRoot headBlock,
+          ((∃ common, RunKept common (targetState v) ∧ RunKept common headState ∧
+            (attestation v).data.target.epoch ≤ activityFixedEpoch common) ∨
+            ∃ last head current, ∃ parent : BeaconBlock preset fork,
+              VoteCommitteeCommonHistory (e := e) last ∧ (e.world n).time ≤ last ∧
+              ((e.world n).state u).getHead config = .ok head ∧ head.root = headRoot ∧
+              ((e.world n).state u).getCurrentStoreEpoch config = .ok current ∧
+              current.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2 ∧
+              (computeEpochAtSlot preset parent.slot).toNat + 1 <
+                (attestation v).data.target.epoch.toNat) ∧
           ((e.world n).state u).blockStates[headRoot]? = some headState ∧
           ((e.world n).state u).blocks[headRoot]? = some headBlock ∧
           ((e.world n).state u).getCheckpointBlock headRoot checkpoint.epoch =
@@ -1798,13 +1856,23 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
         (BeaconState.registryWithinLimit_of_lt early (targetState v))).mp
         (mem_getActiveValidatorIndices_of_getAttestingIndices attestersOk attester))
   have position : ∃ validator, cached.validators.data[v.toNat]? = some validator := by
-    rcases finalized v member with cacheBound | ⟨common, headState, headRoot, headBlock,
-      toTarget, toHead, fixed, headFound, headBlockFound, headWalk, headBound, storeBound⟩
+    rcases finalized v member with cacheBound | ⟨headState, headRoot, headBlock,
+      commonSource, headFound, headBlockFound, headWalk, headBound, storeBound⟩
     · exact registry_of_honest_checkpoint anchorStore anchored anchorInvariant anchorSlot
         positive early honest (targetRead v member) boundaryBaseFound startOk walk found
         bound baseFound advanced (sourceWalk v member) (sourceBlockFound v member)
         (sourceEpoch v member) cacheBound finite _ v.toNat active
     · -- Common-history activity identifies a held source at the same queried epoch.
+      have commonWitness : ∃ common, RunKept common (targetState v) ∧
+          RunKept common headState ∧
+          (attestation v).data.target.epoch ≤ activityFixedEpoch common := by
+        rcases commonSource with ready | ⟨last, head, current, parent, history, time,
+          headRead, rootEq, epochRead, horizon, far⟩
+        · exact ready
+        · exact common_history_of_far_vote history honest time headRead
+            (Store.blockState_ok_iff.mpr (rootEq ▸ headFound)) epochRead horizon far
+            (origins v member) (targetRead v member)
+      obtain ⟨common, toTarget, toHead, fixed⟩ := commonWitness
       rw [← (origins v member).targetEpoch, toTarget.active _ fixed v.toNat,
         ← toHead.active _ fixed v.toNat] at active
       have reached := e.forwardReachableWith
