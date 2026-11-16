@@ -308,6 +308,26 @@ private theorem pendingTail_processDeposit {config : Config} {checks : Signature
   obtain ⟨_, _, _, _, applied⟩ := processDeposit_ok run
   exact pendingTail_applyDeposit applied finite (pendingTail_of_validators rfl tail)
 
+/-- A checked voluntary exit preserves the pending activation fields. -/
+private theorem pendingTail_processVoluntaryExit {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork} {signed : SignedVoluntaryExit}
+    {count : Nat} {epoch : Epoch}
+    (run : processVoluntaryExit config checks state signed = .ok after)
+    (tail : PendingTail count epoch state) : PendingTail count epoch after :=
+  pendingTail_initiateValidatorExit (processVoluntaryExit_initiates run) tail
+
+/-- A credential change leaves both activation fields unchanged. -/
+private theorem pendingTail_processBlsToExecutionChange {config : Config}
+    {checks : SignatureChecks} {state after : BeaconState preset fork}
+    {signed : SignedBLSToExecutionChange} {count : Nat} {epoch : Epoch}
+    (run : processBlsToExecutionChange config checks state signed = .ok after)
+    (tail : PendingTail count epoch state) : PendingTail count epoch after := by
+  obtain ⟨old, found, _, _, _, set⟩ := processBlsToExecutionChange_ok run
+  rw [setValidator_eq_setValidatorAt] at set
+  have read : getValidatorAt state signed.message.validatorIndex.toNat = .ok old := by
+    rwa [← getValidator_eq_getValidatorAt]
+  exact pendingTail_setValidatorAt read set rfl rfl tail
+
 /-- The existing pending-deposit pass transports the suffix through all applied deposits. -/
 private theorem pendingTail_passPendingDeposits {config : Config} {checks : SignatureChecks}
     {stop : PendingDeposit → Bool} {nextEpoch : Epoch} {available : Gwei}
@@ -412,12 +432,15 @@ private theorem filteredTotal_of_pendingTail {source state : BeaconState preset 
   obtain ⟨validator, found⟩ := active_registry_of_pendingTail tail contains (active v member)
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
-/-- A checked block-deposit fold supplies historical participant reads in the cached prefix. -/
-private theorem filteredTotal_of_deposits {config : Config} {checks : SignatureChecks}
-    {source after cached : BeaconState preset fork} {before : fork < .hegota}
-    {deposits : List Deposit} {epoch boundary : Epoch} {count : Nat}
+/-- The adjacent deposit, exit and credential folds supply checked historical participant reads. -/
+private theorem filteredTotal_of_deposits_exits_changes {config : Config} {checks : SignatureChecks}
+    {source deposited exited after cached : BeaconState preset fork} {before : fork < .hegota}
+    {deposits : List Deposit} {exits : List SignedVoluntaryExit}
+    {changes : List SignedBLSToExecutionChange} {epoch boundary : Epoch} {count : Nat}
     {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
-    (run : deposits.foldlM (processDeposit config checks before) source = .ok after)
+    (run : deposits.foldlM (processDeposit config checks before) source = .ok deposited)
+    (exitRun : exits.foldlM (processVoluntaryExit config checks) deposited = .ok exited)
+    (changeRun : changes.foldlM (processBlsToExecutionChange config checks) exited = .ok after)
     (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source)
     (contains : count ≤ cached.validators.data.size)
     (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
@@ -425,11 +448,14 @@ private theorem filteredTotal_of_deposits {config : Config} {checks : SignatureC
     ∃ selected result,
       participants.toList.filterM (fun index => do
         return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
-        .ok selected ∧ getTotalBalance cached selected = .ok result :=
-  filteredTotal_of_pendingTail
-    (foldlM_ok_invariant (PendingTail count boundary)
-      (fun _ _ _ holds ok => pendingTail_processDeposit ok finite holds) tail run)
-    contains active read
+        .ok selected ∧ getTotalBalance cached selected = .ok result := by
+  have depositedTail := foldlM_ok_invariant (PendingTail count boundary)
+    (fun _ _ _ holds ok => pendingTail_processDeposit ok finite holds) tail run
+  have exitedTail := foldlM_ok_invariant (PendingTail count boundary)
+    (fun _ _ _ holds ok => pendingTail_processVoluntaryExit ok holds) depositedTail exitRun
+  have changedTail := foldlM_ok_invariant (PendingTail count boundary)
+    (fun _ _ _ holds ok => pendingTail_processBlsToExecutionChange ok holds) exitedTail changeRun
+  exact filteredTotal_of_pendingTail changedTail contains active read
 
 /-- Every non-registry stage preserves the pending tail, including intervening epoch stages. -/
 private theorem pendingTail_epochStage {config : Config} {checks : SignatureChecks}
