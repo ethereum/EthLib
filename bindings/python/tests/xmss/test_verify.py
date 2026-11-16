@@ -234,12 +234,13 @@ def test_other_key() -> None:
 # ---- Rejected: a digest that is not a codeword --------------------------------
 
 # A codeword has zero digits after those of its chains, and its chain digits sum to TARGET_SUM.
-# Each near miss signs one layer again, under a randomizer whose digest breaks one of the two rules.
+# Each near miss signs one layer again, under a randomizer whose digest is not a codeword.
 # Its chain values are the key's own at that digest, so the leaf, the path and the root still match.
 # So the codeword check of that layer is the only check that rejects the signature.
 #
 # A randomizer is a counter, written as RANDOMIZER_LEN little-endian bytes.
-# A search outside the suite found each counter, and the test checks the digest that it gives.
+# Each counter is the least one from 0 whose digest has the digits that the case names.
+# The test checks the digest that it gives.
 #
 # In a case named `all_sum`, the digits of the whole digest sum to TARGET_SUM.
 # A verifier that sums every digit rejects such a digest only through its zero digits.
