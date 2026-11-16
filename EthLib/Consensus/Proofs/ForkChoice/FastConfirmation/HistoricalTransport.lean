@@ -360,24 +360,48 @@ private theorem filteredTotal_of_postRegistry
     (pendingTail_epochTrace trace (by simp [EpochStage.middleStages, EpochStage.tailStages])
       finite tail) contains active read
 
-/-- The Electra registry stage retains the historical checked-read boundary. -/
-private theorem filteredTotal_of_registryUpdates
-    {config : Config}
-    {source after cached : BeaconState preset fork} (electra : .pectra ≤ fork)
+/-- A successful epoch supplies the registry equation and the complete suffix at its prefix cut. -/
+private theorem processEpoch_registryCut {config : Config} {checks : SignatureChecks}
+    {source ready after : BeaconState preset fork}
+    (run : processEpoch config checks source = .ok after)
+    (beforeRegistry : EpochTrace (EpochStage.action config checks)
+      [.justification, .inactivity, .rewards] source ready) :
+    ∃ registered, processRegistryUpdates config ready = .ok registered ∧
+      EpochTrace (EpochStage.action config checks)
+        ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
+          EpochStage.middleStages ++ EpochStage.tailStages) registered after := by
+  have trace := processEpoch_trace run
+  change EpochTrace _ ([.justification, .inactivity, .rewards] ++
+    (.registry :: ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
+      EpochStage.middleStages ++ EpochStage.tailStages))) source after at trace
+  obtain ⟨middle, before, rest⟩ := EpochTrace.append_iff.mp trace
+  have same : middle = ready := Except.ok.inj
+    ((EpochTrace.run_ok_iff.mpr before).symm.trans (EpochTrace.run_ok_iff.mpr beforeRegistry))
+  subst middle
+  cases rest with
+  | cons registry suffix => exact ⟨_, EpochStage.action_cases.mp registry, suffix⟩
+
+/-- The epoch composes registry and suffix transport from explicit prefix-state inputs. -/
+private theorem filteredTotal_of_epoch_registryCut
+    {config : Config} {checks : SignatureChecks}
+    {source ready after cached : BeaconState preset fork} (electra : .pectra ≤ fork)
     {epoch boundEpoch : Epoch} {count : Nat}
     {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
-    (registry : processRegistryUpdates config source = .ok after)
-    (boundary : boundEpoch ≤ getCurrentEpoch source)
-    (finalized : source.finalizedCheckpoint.epoch ≤ boundEpoch)
-    (tail : PendingTail count boundEpoch source)
+    (run : processEpoch config checks source = .ok after)
+    (beforeRegistry : EpochTrace (EpochStage.action config checks)
+      [.justification, .inactivity, .rewards] source ready)
+    (boundary : boundEpoch ≤ getCurrentEpoch ready)
+    (finalized : ready.finalizedCheckpoint.epoch ≤ boundEpoch)
+    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch ready)
     (contains : count ≤ cached.validators.data.size)
     (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
     (read : getTotalActiveBalance cached = .ok total) :
     ∃ selected result,
       participants.toList.filterM (fun index => do
         return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
-        .ok selected ∧ getTotalBalance cached selected = .ok result :=
-  filteredTotal_of_pendingTail
+        .ok selected ∧ getTotalBalance cached selected = .ok result := by
+  obtain ⟨registered, registry, suffix⟩ := processEpoch_registryCut run beforeRegistry
+  exact filteredTotal_of_postRegistry suffix finite
     (pendingTail_processRegistryUpdatesElectra electra registry boundary finalized tail)
     contains active read
 
