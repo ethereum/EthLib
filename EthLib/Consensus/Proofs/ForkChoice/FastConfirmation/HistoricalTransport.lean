@@ -851,51 +851,85 @@ private theorem pendingTail_stateTransition {config : Config} {checks : Signatur
   exact pendingTail_processBlock electra early block finite
     (pendingTail_processSlots holds slots low advancedFinalized finite tail)
 
-/-- The shared ancestor traversal carries invariant, finality and conditional pending tails.
-
-The transition witnesses retain their own signature checks and execution engines. -/
-private theorem pendingTailRelation_of_getAncestor
-    {config : Config} {anchorState : BeaconState preset fork}
-    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (reachable : Store.Reachable config anchorState anchorBlock store)
-    {node ancestor : ForkChoiceNode} {slot : Slot}
-    {source boundary : BeaconState preset fork} {epoch : Epoch} {count : Nat}
-    (walk : store.getAncestor node slot = .ok ancestor)
-    (sourceFound : store.blockStates[node.root]? = some source)
-    (boundaryFound : store.blockStates[ancestor.root]? = some boundary)
-    (finite : epoch < FAR_FUTURE_EPOCH) (holds : Invariant boundary) :
-    getCurrentEpoch boundary ≤ getCurrentEpoch source ∧
-      Invariant source ∧ boundary.finalizedCheckpoint.epoch ≤ source.finalizedCheckpoint.epoch ∧
-      (epoch ≤ getCurrentEpoch boundary → source.finalizedCheckpoint.epoch ≤ epoch →
-        PendingTail count epoch boundary → PendingTail count epoch source) := by
-  let R := fun (s t : BeaconState preset fork) =>
+private def PendingTailRun (count : Nat) (epoch : Epoch)
+    (s t : BeaconState preset fork) : Prop :=
     getCurrentEpoch s ≤ getCurrentEpoch t ∧
       (Invariant s → Invariant t ∧ s.finalizedCheckpoint.epoch ≤ t.finalizedCheckpoint.epoch ∧
         (epoch ≤ getCurrentEpoch s → t.finalizedCheckpoint.epoch ≤ epoch →
           PendingTail count epoch s → PendingTail count epoch t))
-  have refl : ∀ s, R s s := fun _ =>
-    ⟨UInt64.le_refl _, fun inv => ⟨inv, UInt64.le_refl _, fun _ _ tail => tail⟩⟩
-  have trans : ∀ {s m t}, R s m → R m t → R s t := by
-    intro s m t one two
-    refine ⟨UInt64.le_trans one.1 two.1, fun inv => ?_⟩
-    obtain ⟨middle, firstFinalized, firstTail⟩ := one.2 inv
-    obtain ⟨last, secondFinalized, secondTail⟩ := two.2 middle
-    exact ⟨last, UInt64.le_trans firstFinalized secondFinalized, fun low high tail =>
-      secondTail (UInt64.le_trans low one.1) high
-        (firstTail low (UInt64.le_trans secondFinalized high) tail)⟩
-  have edge : ∀ {s t : BeaconState preset fork} {checks : SignatureChecks}
-      {engine : ExecutionEngine preset fork} {signed : SignedBeaconBlock preset fork},
-      stateTransition config checks engine s signed true = .ok t → R s t := by
-    intro s t checks engine signed ok
-    refine ⟨(runKept_stateTransition ok).later, fun inv => ?_⟩
-    obtain ⟨afterInv, ordered⟩ := stateTransition_invariant inv ok
-    exact ⟨afterInv, ordered, fun low high tail =>
-      pendingTail_stateTransition electra early inv ok low high finite tail⟩
-  have related := reachable.relation_of_getAncestor R refl trans edge anchorSlot walk
-    sourceFound boundaryFound
-  exact ⟨related.1, related.2 holds⟩
+
+private theorem PendingTailRun.refl {count : Nat} {epoch : Epoch}
+    (s : BeaconState preset fork) : PendingTailRun count epoch s s :=
+  ⟨UInt64.le_refl _, fun inv => ⟨inv, UInt64.le_refl _, fun _ _ tail => tail⟩⟩
+
+private theorem PendingTailRun.trans {count : Nat} {epoch : Epoch}
+    {s m t : BeaconState preset fork}
+    (one : PendingTailRun count epoch s m) (two : PendingTailRun count epoch m t) :
+    PendingTailRun count epoch s t := by
+  refine ⟨UInt64.le_trans one.1 two.1, fun inv => ?_⟩
+  obtain ⟨middle, firstFinalized, firstTail⟩ := one.2 inv
+  obtain ⟨last, secondFinalized, secondTail⟩ := two.2 middle
+  exact ⟨last, UInt64.le_trans firstFinalized secondFinalized, fun low high tail =>
+    secondTail (UInt64.le_trans low one.1) high
+      (firstTail low (UInt64.le_trans secondFinalized high) tail)⟩
+
+private theorem pendingTailRun_processSlots {config : Config} {checks : SignatureChecks}
+    {s t : BeaconState preset fork} {slot : Slot} {epoch : Epoch} {count : Nat}
+    (finite : epoch < FAR_FUTURE_EPOCH)
+    (ok : processSlots config checks s slot = .ok t) : PendingTailRun count epoch s t := by
+  refine ⟨(runKept_processSlots ok).later, fun inv => ?_⟩
+  obtain ⟨afterInv, ordered⟩ := processSlots_invariant inv ok
+  exact ⟨afterInv, ordered, fun low high tail =>
+    pendingTail_processSlots inv ok low high finite tail⟩
+
+private theorem pendingTailRun_processBlock {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {s t : BeaconState preset fork}
+    {block : BeaconBlock preset fork} {epoch : Epoch} {count : Nat}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (finite : epoch < FAR_FUTURE_EPOCH)
+    (ok : processBlock config checks engine s block = .ok t) : PendingTailRun count epoch s t := by
+  have frame := frame_processBlock ok
+  refine ⟨(runKept_processBlock ok).later, fun inv =>
+    ⟨frame.invariant inv, ?_,
+      fun _ _ tail => pendingTail_processBlock electra early ok finite tail⟩⟩
+  rw [frame.finalized]
+  exact UInt64.le_refl _
+
+private theorem pendingTailRun_stateTransition {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {s t : BeaconState preset fork}
+    {signed : SignedBeaconBlock preset fork} {epoch : Epoch} {count : Nat}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (finite : epoch < FAR_FUTURE_EPOCH)
+    (ok : stateTransition config checks engine s signed true = .ok t) :
+    PendingTailRun count epoch s t := by
+  refine ⟨(runKept_stateTransition ok).later, fun inv => ?_⟩
+  obtain ⟨afterInv, ordered⟩ := stateTransition_invariant inv ok
+  exact ⟨afterInv, ordered, fun low high tail =>
+    pendingTail_stateTransition electra early inv ok low high finite tail⟩
+
+/-- The checkpoint composition starts at its actual processed slot, not its older block state. -/
+private theorem pendingTailRun_checkpoint {config : Config} {checks : SignatureChecks}
+    {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    {checkpoint : Checkpoint} {root : Root} {block : BeaconBlock preset fork} {start : Slot}
+    {source boundary : BeaconState preset fork} {epoch : Epoch} {count : Nat}
+    (target : store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root)
+    (found : store.blocks[root]? = some block)
+    (startOk : computeStartSlotAtEpoch preset checkpoint.epoch = .ok start)
+    (atOrAfter : start ≤ block.slot)
+    (checkpointFound : store.checkpointStates[checkpoint]? = some boundary)
+    (sourceFound : store.blockStates[root]? = some source)
+    (finite : epoch < FAR_FUTURE_EPOCH) : PendingTailRun count epoch boundary source := by
+  exact reached.relation_of_checkpointState (PendingTailRun count epoch)
+    PendingTailRun.refl (fun one two => one.trans two)
+    (fun ok => pendingTailRun_stateTransition electra early finite ok)
+    (fun slots bound ok => relation_of_processSlots_of_stateTransition (PendingTailRun count epoch)
+      (fun one two => one.trans two) (fun rest => pendingTailRun_processSlots finite rest)
+      (fun step => pendingTailRun_processBlock electra early finite step) slots bound ok)
+    anchorSlot target found startOk atOrAfter checkpointFound sourceFound
 
 /-- Lookahead preserves the pending tail through either actual slots or the identity branch. -/
 private theorem pendingTail_lookahead {config : Config} {checks : SignatureChecks}
@@ -919,69 +953,91 @@ private theorem runKept_lookahead {config : Config} {checks : SignatureChecks}
   · exact runKept_processSlots (mapError_ok_iff.mp run)
   · cases run; exact .refl _
 
-/-- An ancestor's registry prefix remains present in a descendant's cached state. -/
-private theorem ancestor_registrySize_le_cached {config : Config} {checks : SignatureChecks}
+/-- A checkpoint registry prefix remains present in a descendant's cached state. -/
+private theorem checkpoint_registrySize_le_cached {config : Config} {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {store : Store preset fork} (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (reachable : Store.Reachable config anchorState anchorBlock store)
-    {node ancestor : ForkChoiceNode} {query target : Slot}
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    {checkpoint : Checkpoint} {root : Root} {block : BeaconBlock preset fork} {start target : Slot}
     {boundary base cached : BeaconState preset fork}
-    (walk : store.getAncestor node query = .ok ancestor)
-    (baseFound : store.blockStates[node.root]? = some base)
-    (boundaryFound : store.blockStates[ancestor.root]? = some boundary)
+    (walk : store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root)
+    (found : store.blocks[root]? = some block)
+    (startOk : computeStartSlotAtEpoch preset checkpoint.epoch = .ok start)
+    (bound : start ≤ block.slot)
+    (baseFound : store.blockStates[root]? = some base)
+    (boundaryFound : store.checkpointStates[checkpoint]? = some boundary)
     (advanced : lookaheadState config checks base target = .ok cached) :
     boundary.validators.data.size ≤ cached.validators.data.size :=
-  Nat.le_trans (reachable.runKept_of_getAncestor anchorSlot walk baseFound boundaryFound).grows
+  Nat.le_trans (reached.runKept_of_checkpointState anchorSlot walk found startOk bound
+    boundaryFound baseFound).grows
     (runKept_lookahead advanced).grows
 
-/-- A held ancestor supplies the prefix size for checked historical participant reads.
+/-- A held checkpoint supplies the prefix size for checked historical participant reads.
 
 The source lookahead transports its tail, while the receiver lookahead supplies the prefix size.
 
 Historical applicability is still required separately; no validator identity is inferred. -/
-private theorem filteredTotal_of_ancestor_pendingTail {config : Config} {checks : SignatureChecks}
+private theorem filteredTotal_of_checkpoint_pendingTail {config : Config} {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {store : Store preset fork} (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (reachable : Store.Reachable config anchorState anchorBlock store)
-    {node ancestor : ForkChoiceNode} {query target : Slot}
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    (anchorInvariant : Invariant anchorState) (positive : 0 < preset.SLOTS_PER_EPOCH)
+    {checkpoint : Checkpoint} {root sourceRoot : Root}
+    {block sourceBlock : BeaconBlock preset fork} {start target : Slot}
     {source advancedSource boundary base cached : BeaconState preset fork}
-    {sourceTarget : Slot} {epoch boundEpoch : Epoch}
+    {sourceTarget : Slot} {epoch : Epoch}
     {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
-    (walk : store.getAncestor node query = .ok ancestor)
-    (baseFound : store.blockStates[node.root]? = some base)
-    (boundaryFound : store.blockStates[ancestor.root]? = some boundary)
+    (walk : store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root)
+    (found : store.blocks[root]? = some block)
+    (startOk : computeStartSlotAtEpoch preset checkpoint.epoch = .ok start)
+    (bound : start ≤ block.slot)
+    (baseFound : store.blockStates[root]? = some base)
+    (boundaryFound : store.checkpointStates[checkpoint]? = some boundary)
     (advanced : lookaheadState config checks base target = .ok cached)
     (sourceRun : lookaheadState config checks source sourceTarget = .ok advancedSource)
-    {sourceNode : ForkChoiceNode}
-    (sourceWalk : store.getAncestor sourceNode query = .ok ancestor)
-    (sourceFound : store.blockStates[sourceNode.root]? = some source)
-    (holds : Invariant boundary) (low : boundEpoch ≤ getCurrentEpoch boundary)
-    (finalized : advancedSource.finalizedCheckpoint.epoch ≤ boundEpoch)
-    (finite : boundEpoch < FAR_FUTURE_EPOCH)
+    (sourceWalk : store.getCheckpointBlock sourceRoot checkpoint.epoch = .ok checkpoint.root)
+    (sourceBlockFound : store.blocks[sourceRoot]? = some sourceBlock)
+    (sourceBound : start ≤ sourceBlock.slot)
+    (sourceFound : store.blockStates[sourceRoot]? = some source)
+    (finalized : advancedSource.finalizedCheckpoint.epoch ≤ checkpoint.epoch)
+    (finite : checkpoint.epoch < FAR_FUTURE_EPOCH)
     (active : ∀ v ∈ participants, isActiveAt advancedSource epoch v.toNat = true)
     (read : getTotalActiveBalance cached = .ok total) :
     ∃ selected result,
       participants.toList.filterM (fun index => do
         return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
         .ok selected ∧ getTotalBalance cached selected = .ok result := by
-  obtain ⟨epochOrder, sourceInv, _, transport⟩ := pendingTailRelation_of_getAncestor electra early
-    anchorSlot reachable sourceWalk sourceFound boundaryFound finite holds
-  have sourceFinalized : source.finalizedCheckpoint.epoch ≤ boundEpoch := by
+  have holds := reached.reachable.checkpointStatesHold anchorInvariant boundaryFound
+  have related := pendingTailRun_checkpoint (count := boundary.validators.data.size)
+    electra early anchorSlot reached sourceWalk
+    sourceBlockFound startOk sourceBound boundaryFound sourceFound finite
+  obtain ⟨sourceInv, _, transport⟩ := related.2 holds
+  have low : checkpoint.epoch ≤ getCurrentEpoch boundary := by
+    obtain ⟨base, first, _, atOk, origin⟩ := reached.checkpointStatesFromBlocks boundaryFound
+    have slotBound : first ≤ boundary.slot := by
+      rcases origin with ⟨le, rfl⟩ | ⟨_, _, _, run⟩
+      · exact le
+      · exact UInt64.le_of_eq (processSlots_slot run).2.symm
+    rw [← computeEpochAtSlot_computeStartSlotAtEpoch positive atOk]
+    exact UInt64.le_iff_toNat_le.mpr
+      (Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp slotBound))
+  have sourceFinalized : source.finalizedCheckpoint.epoch ≤ checkpoint.epoch := by
     have ordered : source.finalizedCheckpoint.epoch ≤ advancedSource.finalizedCheckpoint.epoch := by
       unfold lookaheadState at sourceRun
       split at sourceRun
       · exact (processSlots_invariant sourceInv (mapError_ok_iff.mp sourceRun)).2
       · cases sourceRun; exact UInt64.le_refl _
     exact UInt64.le_trans ordered finalized
-  have tail : PendingTail boundary.validators.data.size boundEpoch source :=
+  have tail : PendingTail boundary.validators.data.size checkpoint.epoch source :=
     transport low sourceFinalized (fun i v outside found => by
       obtain ⟨inside, _⟩ := Array.getElem?_eq_some_iff.mp found
       omega)
-  have sourceLow := UInt64.le_trans low epochOrder
+  have sourceLow := UInt64.le_trans low related.1
   exact filteredTotal_of_pendingTail
     (pendingTail_lookahead sourceInv sourceRun sourceLow finalized finite tail)
-    (ancestor_registrySize_le_cached anchorSlot reachable walk baseFound boundaryFound advanced)
+    (checkpoint_registrySize_le_cached anchorSlot reached walk found startOk bound
+      baseFound boundaryFound advanced)
     active read
 
 /-- The maximum succeeds when its arithmetic, committee, registry and total reads succeed. -/
