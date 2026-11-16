@@ -4,6 +4,7 @@ import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
 import EthLib.Consensus.Proofs.ForkChoice.HonestVotes
 import EthLib.Consensus.Proofs.ForkChoice.HonestEquivocators
 import EthLib.Consensus.Proofs.ForkChoice.BlockAgreement
+import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
 import EthLib.Consensus.Proofs.Transition.FfgStake
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 
@@ -123,6 +124,55 @@ private theorem filteredTotal_of_pendingTail {source state : BeaconState preset 
   intro v member
   obtain ⟨validator, found⟩ := active_registry_of_pendingTail tail contains (active v member)
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
+
+/-- Lookahead extends a run without assuming a registry-size bound. -/
+private theorem runKept_lookahead {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork} {slot : Slot}
+    (run : lookaheadState config checks state slot = .ok after) : RunKept state after := by
+  unfold lookaheadState at run
+  split at run
+  · exact runKept_processSlots (mapError_ok_iff.mp run)
+  · cases run; exact .refl _
+
+/-- An ancestor's registry prefix remains present in a descendant's cached state. -/
+private theorem ancestor_registrySize_le_cached {config : Config} {checks : SignatureChecks}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork} (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    {node ancestor : ForkChoiceNode} {query target : Slot}
+    {boundary base cached : BeaconState preset fork}
+    (walk : store.getAncestor node query = .ok ancestor)
+    (baseFound : store.blockStates[node.root]? = some base)
+    (boundaryFound : store.blockStates[ancestor.root]? = some boundary)
+    (advanced : lookaheadState config checks base target = .ok cached) :
+    boundary.validators.data.size ≤ cached.validators.data.size :=
+  Nat.le_trans (reachable.runKept_of_getAncestor anchorSlot walk baseFound boundaryFound).grows
+    (runKept_lookahead advanced).grows
+
+/-- A held ancestor supplies the prefix size for checked historical participant reads.
+
+The pending-tail provenance is still required separately; no validator identity is inferred. -/
+private theorem filteredTotal_of_ancestor_pendingTail {config : Config} {checks : SignatureChecks}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork} (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    {node ancestor : ForkChoiceNode} {query target : Slot}
+    {source boundary base cached : BeaconState preset fork} {epoch boundEpoch : Epoch}
+    {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
+    (walk : store.getAncestor node query = .ok ancestor)
+    (baseFound : store.blockStates[node.root]? = some base)
+    (boundaryFound : store.blockStates[ancestor.root]? = some boundary)
+    (advanced : lookaheadState config checks base target = .ok cached)
+    (tail : PendingTail boundary.validators.data.size boundEpoch source)
+    (active : ∀ v ∈ participants, isActiveAt source epoch v.toNat = true)
+    (read : getTotalActiveBalance cached = .ok total) :
+    ∃ selected result,
+      participants.toList.filterM (fun index => do
+        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
+        .ok selected ∧ getTotalBalance cached selected = .ok result :=
+  filteredTotal_of_pendingTail tail
+    (ancestor_registrySize_le_cached anchorSlot reachable walk baseFound boundaryFound advanced)
+    active read
 
 /-- The maximum succeeds when its arithmetic, committee, registry and total reads succeed. -/
 private theorem maximum_exists_of_total {store : Store preset fork} {head : Root}
