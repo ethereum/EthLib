@@ -359,8 +359,39 @@ It needs a committee of at least one member, and holds at every index.
 Both read the index of the committee at the slot, as the checks do.
 Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
 
-The finality branch of an update, from Altair, and the execution branch of a header, from Capella, also hash with SHA-256.
-No theorem composes their proofs with the branch bound.
+`Consensus/Proofs/LightClient/FinalityRandomOracle.lean` composes the branch bound with the finality check of the light client, from Altair.
+`validateFinality` proves the finalized header of an update by a normalized branch against the attested state root.
+Its leaf is the root of the beacon header, or zero bytes when that header is at the genesis slot.
+The generalized index is fixed before the run, and an adversary outputs a state root and two beacon headers with a branch each.
+The extraction reads both leaves as the check does, and climbs the last nodes of each branch, as many as the depth of the index.
+The adversary wins when the headers differ, both branches end in that many nodes after zero nodes, and both climbs reach the state root.
+The zero leaf of the genesis slot is no oracle answer.
+A win with a header at that slot also needs two different leaves.
+
+`collision_of_extractFinality` shows that every win leaves two different cached inputs with one answer.
+By `hashTreeRootM_beaconBlockHeader`, the root of a beacon header is seven hashes over its five fields.
+So one leaf of two different headers past genesis gives two such inputs, which a chase from the root down finds with `collision_or_eq_of_queryHash`.
+Two different leaves that climb to one state root give the inputs that `collision_of_extractBranches` finds.
+`prEvent_experimentWith_le` then gives `prEvent_finalityWins_le`, which bounds a win by `Q^2 / N`.
+`extractFinality_queryBound` shows that the extraction makes at most `14 + 2 * depth` queries, seven per leaf and one per climbed node.
+`experimentWith_extractFinality_queryBound` adds the adversary's queries, through `experimentWith_queryBound`.
+`prEvent_finalityWins_le_of_adversary` states the bound with `N = 2^256`, for an adversary of `q` queries.
+The depth of the index is 6 before Electra, 7 from Electra and 9 from Gloas.
+With SHA-256 in place of the oracle, `finalityWins_sha256_iff` shows that a win is two different headers whose branches `isValidNormalizedMerkleBranch` accepts.
+Its leaves are the ones the check reads, and they must differ when a header is at the genesis slot.
+It holds at every index.
+`finalityWins_of_validateFinality` gives such a win for two updates that prove finality and pass `validateFinality`, by `validateFinality_proves`.
+It needs one attested state root and slot, and different finalized headers.
+It reads the index of the finalized root at that slot, as the check does.
+It also needs the root of neither finalized header to be zero bytes.
+That need serves only when one header is at the genesis slot and the other is not.
+Two finalized headers at the genesis slot have one beacon header, since the check holds both to the empty header there, by `validateFinality_beacon_of_genesis` (`Consensus/Proofs/LightClient/Authenticate.lean`).
+A header past genesis whose root is zero bytes would share the leaf of the genesis slot, and no theorem bounds that case.
+Such a header is a preimage of zero bytes under SHA-256.
+Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
+
+`isValidLightClientHeader` checks the execution branch of a header, from Capella, which also hashes with SHA-256.
+No theorem composes that check with the branch bound.
 
 ### leanSPHINCS
 
@@ -5949,6 +5980,8 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   The deposit bound reads no preset or fork, and its adversary picks the index, the deposit root and both deposits.
   The data column bound fixes the preset and the fork before the run, and its adversary picks both partial headers.
   The sync committee bound fixes the preset and the index before the run, and its adversary picks the state root, both committees and both branches.
+  The finality bound fixes the index before the run, and its adversary picks the state root, both headers and both branches.
+  An adversary that also picks the slot picks one of at most three indices, so its bound at most triples.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of SHA-256.
