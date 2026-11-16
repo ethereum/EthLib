@@ -1754,7 +1754,7 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
       ((e.world n).state u).blocks[(attestation v).data.target.root]? = some (sourceBlock v))
     (sourceEpoch : ∀ v ∈ participants, checkpoint.epoch ≤ (attestation v).data.target.epoch)
     (finalized : ∀ v ∈ participants,
-      (targetState v).finalizedCheckpoint.epoch ≤ checkpoint.epoch ∨
+      ((targetState v).finalizedCheckpoint.epoch ≤ checkpoint.epoch ∨
         (((e.world n).state u).finalizedCheckpoint.epoch ≤ checkpoint.epoch ∧
           (attestation v).data.target.epoch.toNat ≤ checkpoint.epoch.toNat + 1) ∨
         ((e.world n).state u).finalizedCheckpoint.epoch ≤ checkpoint.epoch ∧
@@ -1764,7 +1764,16 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
             ((e.world n).state u).blocks[root]? = some block ∧
             computeStartSlotAtEpoch preset (attestation v).data.target.epoch = .ok start ∧
             start ≤ block.slot ∧
-            ((e.world n).state u).blockStates[root]? = some descendant)
+            ((e.world n).state u).blockStates[root]? = some descendant) ∨
+        ∃ common headState headRoot headBlock,
+          RunKept common (targetState v) ∧ RunKept common headState ∧
+          (attestation v).data.target.epoch ≤ activityFixedEpoch common ∧
+          ((e.world n).state u).blockStates[headRoot]? = some headState ∧
+          ((e.world n).state u).blocks[headRoot]? = some headBlock ∧
+          ((e.world n).state u).getCheckpointBlock headRoot checkpoint.epoch =
+            .ok checkpoint.root ∧
+          start ≤ headBlock.slot ∧
+          ((e.world n).state u).finalizedCheckpoint.epoch ≤ checkpoint.epoch)
     (finite : checkpoint.epoch < FAR_FUTURE_EPOCH)
     (read : getTotalActiveBalance cached = .ok total) :
     ∃ selected result,
@@ -1773,10 +1782,6 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
         .ok selected ∧ getTotalBalance cached selected = .ok result := by
   apply filteredTotal_exists read
   intro v member
-  have inside := registry_of_honest_checkpoint anchorStore anchored anchorInvariant anchorSlot
-    positive early honest (targetRead v member) boundaryBaseFound startOk walk found
-    bound baseFound advanced (sourceWalk v member) (sourceBlockFound v member)
-    (sourceEpoch v member) (finalized v member) finite
   have active : isActiveAt (targetState v) (computeEpochAtSlot preset (attestation v).data.slot)
       v.toNat = true := by
     obtain ⟨state, indexed, stored, _, computed, listed⟩ := (origins v member).committees
@@ -1792,7 +1797,30 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
       ((mem_getActiveValidatorIndices
         (BeaconState.registryWithinLimit_of_lt early (targetState v))).mp
         (mem_getActiveValidatorIndices_of_getAttestingIndices attestersOk attester))
-  obtain ⟨validator, found⟩ := inside _ v.toNat active
+  have position : ∃ validator, cached.validators.data[v.toNat]? = some validator := by
+    rcases finalized v member with cacheBound | ⟨common, headState, headRoot, headBlock,
+      toTarget, toHead, fixed, headFound, headBlockFound, headWalk, headBound, storeBound⟩
+    · exact registry_of_honest_checkpoint anchorStore anchored anchorInvariant anchorSlot
+        positive early honest (targetRead v member) boundaryBaseFound startOk walk found
+        bound baseFound advanced (sourceWalk v member) (sourceBlockFound v member)
+        (sourceEpoch v member) cacheBound finite _ v.toNat active
+    · -- Common-history activity identifies a held source at the same queried epoch.
+      rw [← (origins v member).targetEpoch, toTarget.active _ fixed v.toNat,
+        ← toHead.active _ fixed v.toNat] at active
+      have reached := e.forwardReachableWith
+        (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
+        n u honest
+      have heldBound := UInt64.le_trans
+        ((reached.reachable.ordered_finalized anchorInvariant).2 headFound) storeBound
+      have identity : lookaheadState config checks headState headState.slot = .ok headState := by
+        simp [lookaheadState, pure, Except.pure]
+      have sourceBound : start ≤ max headBlock.slot headState.slot := by
+        rw [UInt64.le_iff_toNat_le, toNat_max]
+        exact Nat.le_trans (UInt64.le_iff_toNat_le.mp headBound) (Nat.le_max_left _ _)
+      exact registry_of_checkpointPrefix early anchorSlot reached anchorInvariant positive
+        walk found startOk bound baseFound boundaryBaseFound advanced identity headWalk
+        headBlockFound sourceBound headFound heldBound finite _ v.toNat active
+  obtain ⟨validator, found⟩ := position
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
 /-- Held-state flags suffice for a cached checkpoint through its fixed-check lookahead origin. -/
