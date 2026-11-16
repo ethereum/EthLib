@@ -339,27 +339,6 @@ private theorem pendingTail_epochTrace {config : Config} {checks : SignatureChec
     (fun stage member _ _ run holds =>
       pendingTail_epochStage run (other stage member) finite holds) tail
 
-/-- The actual post-registry schedule supplies checked reads after its intervening stages. -/
-private theorem filteredTotal_of_postRegistry
-    {config : Config} {checks : SignatureChecks}
-    {source after cached : BeaconState preset fork}
-    {epoch boundEpoch : Epoch} {count : Nat} {participants : Std.TreeSet ValidatorIndex}
-    {total : Gwei}
-    (trace : EpochTrace (EpochStage.action config checks)
-      ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
-        EpochStage.middleStages ++ EpochStage.tailStages) source after)
-    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source)
-    (contains : count ≤ cached.validators.data.size)
-    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
-    (read : getTotalActiveBalance cached = .ok total) :
-    ∃ selected result,
-      participants.toList.filterM (fun index => do
-        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
-        .ok selected ∧ getTotalBalance cached selected = .ok result :=
-  filteredTotal_of_pendingTail
-    (pendingTail_epochTrace trace (by simp [EpochStage.middleStages, EpochStage.tailStages])
-      finite tail) contains active read
-
 /-- A successful epoch supplies its prefix, registry equation and complete suffix. -/
 private theorem processEpoch_registryCut {config : Config} {checks : SignatureChecks}
     {source after : BeaconState preset fork}
@@ -432,23 +411,16 @@ private theorem finalized_epochTrace {config : Config} {checks : SignatureChecks
   exact (mutatorEpochFrameLaws.toEpochStepLaws.epochEdge
     ⟨other stage member, payments, participation, deposits⟩ run).finalized
 
-/-- The output finalized bound suffices for the actual Electra epoch reader. -/
-private theorem filteredTotal_of_epoch
+/-- The output finalized bound suffices to preserve the tail through an Electra epoch. -/
+private theorem pendingTail_processEpoch
     {config : Config} {checks : SignatureChecks}
-    {source after cached : BeaconState preset fork} (electra : .pectra ≤ fork)
-    {epoch boundEpoch : Epoch} {count : Nat}
-    {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
+    {source after : BeaconState preset fork} (electra : .pectra ≤ fork)
+    {boundEpoch : Epoch} {count : Nat}
     (run : processEpoch config checks source = .ok after)
     (boundary : boundEpoch ≤ getCurrentEpoch source)
     (finalized : after.finalizedCheckpoint.epoch ≤ boundEpoch)
-    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source)
-    (contains : count ≤ cached.validators.data.size)
-    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
-    (read : getTotalActiveBalance cached = .ok total) :
-    ∃ selected result,
-      participants.toList.filterM (fun index => do
-        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
-        .ok selected ∧ getTotalBalance cached selected = .ok result := by
+    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source) :
+    PendingTail count boundEpoch after := by
   obtain ⟨ready, registered, beforeRegistry, registry, suffix⟩ := processEpoch_registryCut run
   obtain ⟨validators, slot⟩ := epochPrefix_kept beforeRegistry
   have readyTail := pendingTail_of_validators (congrArg (·.data) validators) tail
@@ -459,9 +431,50 @@ private theorem filteredTotal_of_epoch
     (by simp [EpochStage.middleStages, EpochStage.tailStages])
   have readyFinalized : ready.finalizedCheckpoint.epoch ≤ boundEpoch := by
     simpa only [same] using finalized
-  exact filteredTotal_of_postRegistry suffix finite
+  exact pendingTail_epochTrace suffix
+    (by simp [EpochStage.middleStages, EpochStage.tailStages]) finite
     (pendingTail_processRegistryUpdatesElectra electra registry readyBound readyFinalized readyTail)
-    contains active read
+
+/-- The actual cache, optional epoch and slot increment preserve the pending suffix. -/
+private theorem pendingTail_advanceSlot {config : Config} {checks : SignatureChecks}
+    {source after : BeaconState preset fork} (electra : .pectra ≤ fork)
+    {boundEpoch : Epoch} {count : Nat}
+    (run : advanceSlot config checks source = .ok after)
+    (boundary : boundEpoch ≤ getCurrentEpoch source)
+    (finalized : after.finalizedCheckpoint.epoch ≤ boundEpoch)
+    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source) :
+    PendingTail count boundEpoch after := by
+  obtain ⟨next, cached, epoched, _, cacheOk, epochOk, rfl⟩ := advanceSlot_ok run
+  obtain ⟨_, _, _, _, cacheEq⟩ := processSlot_ok cacheOk
+  have cachedTail : PendingTail count boundEpoch cached :=
+    pendingTail_of_validators (by rw [cacheEq]) tail
+  have epochedTail : PendingTail count boundEpoch epoched := by
+    unfold epochIfLast at epochOk
+    split at epochOk
+    · apply pendingTail_processEpoch electra epochOk ?_ finalized finite cachedTail
+      simpa only [getCurrentEpoch, cacheEq] using boundary
+    · cases epochOk; exact cachedTail
+  exact epochedTail
+
+/-- A successful slot step gives checked historical reads without an epoch-stage premise. -/
+private theorem filteredTotal_of_advanceSlot
+    {config : Config} {checks : SignatureChecks}
+    {source after cached : BeaconState preset fork} (electra : .pectra ≤ fork)
+    {epoch boundEpoch : Epoch} {count : Nat}
+    {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
+    (run : advanceSlot config checks source = .ok after)
+    (boundary : boundEpoch ≤ getCurrentEpoch source)
+    (finalized : after.finalizedCheckpoint.epoch ≤ boundEpoch)
+    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source)
+    (contains : count ≤ cached.validators.data.size)
+    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
+    (read : getTotalActiveBalance cached = .ok total) :
+    ∃ selected result,
+      participants.toList.filterM (fun index => do
+        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
+        .ok selected ∧ getTotalBalance cached selected = .ok result :=
+  filteredTotal_of_pendingTail
+    (pendingTail_advanceSlot electra run boundary finalized finite tail) contains active read
 
 /-- Lookahead extends a run without assuming a registry-size bound. -/
 private theorem runKept_lookahead {config : Config} {checks : SignatureChecks}
