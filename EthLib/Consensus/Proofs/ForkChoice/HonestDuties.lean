@@ -261,6 +261,36 @@ def Votes {J : Set ValidatorIndex} (stable : ℕ)
     stable ≤ time →
     ∃ n attestation indexed, VoteAt e v slot committeeIndex time n attestation indexed
 
+/-- The committee check succeeds whenever the store successfully reads the target state.
+
+This condition does not require the target cache operations themselves to succeed. -/
+def VoteCommittees (store : Store preset fork)
+    (attestation : Attestation preset fork) : Prop :=
+  ∀ withTarget targetState,
+    store.storeTargetCheckpointState config checks attestation.data.target = .ok withTarget →
+    withTarget.checkpointState attestation.data.target = .ok targetState →
+    checkAttestationCommittees targetState attestation = .ok ()
+
+/-- Assigned honest validators vote in the half-open slot interval `[first, last)`.
+
+The selected vote also passes the committee check in its target state.
+
+Both conditions concern the same attestation at the same event, not separate witnesses.
+
+No vote is required outside the interval, or before the execution starts. -/
+def VotesInSlots {J : Set ValidatorIndex}
+    (e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
+      genesisTimeMs) J) (first last : Slot) : Prop :=
+  ∀ v ∈ J, ∀ slot committeeIndex deadline,
+    first ≤ slot → slot < last →
+    assignment.committee v slot = some committeeIndex →
+    IsAttestationDeadline fork config genesisTimeMs slot deadline →
+    e.startTime ≤ deadline →
+    ∃ n attestation indexed,
+      VoteAt e v slot committeeIndex deadline n attestation indexed ∧
+      VoteCommittees (config := config) (checks := checks)
+        ((e.world n).state v) attestation
+
 /-- Under synchrony with delay `Δ`, a vote of a duty reaches every honest validator `Δ` later. -/
 theorem VoteAt.mem_view {J : Set ValidatorIndex}
     {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment

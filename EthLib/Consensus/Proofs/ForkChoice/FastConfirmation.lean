@@ -22,6 +22,10 @@ One module turns an assumed honest vote count into concrete voters when the one-
 
 Another shows that honest votes over a whole epoch keep the block on the head chain.
 
+It requires votes only in that epoch, with the committee check on each selected vote.
+
+For the head result, the epoch and its vote condition are witnesses of the same stake margin.
+
 Its alternative conclusion is a hash collision between blocks of two honest stores.
 
 It assumes the stake margin, the ancestry at earlier slots and a compatible finalized checkpoint.

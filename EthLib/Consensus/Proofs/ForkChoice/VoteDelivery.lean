@@ -255,18 +255,10 @@ theorem Execution.exists_duty_boundaries {Δ : ℕ}
 
 Each vote it assumes also passes the committee check in its target state. -/
 theorem Execution.exists_voteAt_of_duty_interval {Δ : ℕ} {first time : ℕ}
-    (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
-      assignment.committee v slot = some committeeIndex →
-      IsAttestationDeadline fork config genesisTimeMs slot deadline →
-      e.startTime ≤ deadline → deadline ≤ time →
-      ∃ n attestation indexed, VoteAt e v slot committeeIndex deadline n attestation indexed ∧
-        ∀ withTarget targetState,
-          ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
-            .ok withTarget →
-          withTarget.checkpointState attestation.data.target = .ok targetState →
-          checkAttestationCommittees targetState attestation = .ok ())
+    {begin last slot : Slot}
+    (votes : VotesInSlots e begin last)
     (fits : DelayFits fork config genesisTimeMs Δ)
-    {begin last slot : Slot} {beginTime endTime : UInt64}
+    {beginTime endTime : UInt64}
     (beginOk : computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime)
     (endOk : computeTimeAtSlotMs config genesisTimeMs last = .ok endTime)
     (started : e.startTime ≤ first) (fresh : first ≤ beginTime.toNat)
@@ -281,11 +273,8 @@ theorem Execution.exists_voteAt_of_duty_interval {Δ : ℕ} {first time : ℕ}
       IsAttestationDeadline fork config genesisTimeMs slot deadline ∧
       first ≤ deadline ∧ deadline + Δ < following.toNat ∧ following.toNat ≤ time ∧
       VoteAt e v slot committeeIndex deadline n attestation indexed ∧
-      ∀ withTarget targetState,
-        ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
-          .ok withTarget →
-        withTarget.checkpointState attestation.data.target = .ok targetState →
-        checkAttestationCommittees targetState attestation = .ok () := by
+      VoteCommittees (config := config) (checks := checks)
+        ((e.world n).state v) attestation := by
   have slotLt := UInt64.lt_iff_toNat_lt.mp beforeEnd
   have lastBound := last.toNat_lt
   have nextBound : slot.toNat + (1 : UInt64).toNat < 2 ^ 64 := by simp; omega
@@ -307,9 +296,8 @@ theorem Execution.exists_voteAt_of_duty_interval {Δ : ℕ} {first time : ℕ}
   have followingLe := UInt64.le_iff_toNat_le.mp followingLe
   have firstLe : first ≤ startTime.toNat + due.toNat := by omega
   obtain ⟨n, attestation, indexed, vote, committees⟩ :=
-    votes v honest slot committeeIndex _ duty deadline
-    (started.trans firstLe)
-    (by have := fits.before_boundary nextOk startOk followingOk deadline; omega)
+    votes v honest slot committeeIndex _ afterBegin beforeEnd duty deadline
+      (started.trans firstLe)
   exact ⟨slot + 1, startTime, following, _, n, attestation, indexed,
     nextOk, startOk, followingOk, deadline, firstLe,
     fits.before_boundary nextOk startOk followingOk deadline, by omega, vote, committees⟩
