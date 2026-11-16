@@ -291,9 +291,9 @@ theorem valueOf_union {selectors : List Nat} {options : List Desc} {spelling : S
   rw [place] at wrote
   have names : objectNames (Json.mkObj [("selector", decimal selector), ("data", payload)])
       = ["data", "selector"] := by
-    rw [Base.Toolchain.mkObj_eq]
+    rw [Base.Toolchain.Json.mkObj_eq]
     simpa [objectNames] using
-      keys_ofList_pair (decimal selector) payload (by rw [Base.Toolchain.compare_eq]; decide)
+      keys_ofList_pair (decimal selector) payload (by rw [Base.Toolchain.String.compare_eq]; decide)
   have carried : (Json.mkObj [("selector", decimal selector), ("data", payload)]).getObjVal? "data"
       = .ok payload := getObjVal?_mkObj (by simp) (by simp)
   have tagged :
@@ -301,8 +301,8 @@ theorem valueOf_union {selectors : List Nat} {options : List Desc} {spelling : S
       = .ok (decimal selector) := getObjVal?_mkObj (by simp) (by simp)
   have inner : valueOf option (spelling.part (0 + slot)) payload = .ok data :=
     back _ data payload fitted (by simpa using wrote)
-  rw [Base.Toolchain.mkObj_eq, valueOf]
-  simp only [Base.Toolchain.mkObj_eq] at names tagged carried
+  rw [Base.Toolchain.Json.mkObj_eq, valueOf]
+  simp only [Base.Toolchain.Json.mkObj_eq] at names tagged carried
   simp only [names, List.isEmpty_cons, Bool.false_eq_true, ite_false, tagged, carried,
     Except.toOption, Bind.bind, Except.bind, readNat_decimal]
   exact valueOfOption_found spelling payload option data selectors options 0 selector slot
@@ -408,8 +408,8 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
       subst wrote
       obtain ⟨undeclared, read⟩ := valueOf_struct (ih (wellFormed_container sound))
         (nodup_of_firstDuplicate names once) counted paired each parts
-      rw [Base.Toolchain.mkObj_eq, valueOf]
-      simp only [Base.Toolchain.mkObj_eq] at undeclared read
+      rw [Base.Toolchain.Json.mkObj_eq, valueOf]
+      simp only [Base.Toolchain.Json.mkObj_eq] at undeclared read
       simp only [undeclared, read, Bind.bind, Except.bind]
       rfl
   | progressiveContainer active names fields ih =>
@@ -424,8 +424,8 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
       subst wrote
       obtain ⟨undeclared, read⟩ := valueOf_struct (ih (wellFormed_progressiveContainer sound))
         (nodup_of_firstDuplicate names once) counted paired each parts
-      rw [Base.Toolchain.mkObj_eq, valueOf]
-      simp only [Base.Toolchain.mkObj_eq] at undeclared read
+      rw [Base.Toolchain.Json.mkObj_eq, valueOf]
+      simp only [Base.Toolchain.Json.mkObj_eq] at undeclared read
       simp only [undeclared, read, Bind.bind, Except.bind]
       rfl
   | compatibleUnion selectors options ih =>

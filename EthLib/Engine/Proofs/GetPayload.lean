@@ -249,7 +249,7 @@ theorem blobsBundleOfJson_json (version : Nat) (b : BlobsBundle)
       Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList) b.proofs)].Pairwise
       fun a b => a.1 ≠ b.1 := by simp
   obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobsBundle" hd
-    (by simp [Serialization.JsonRpc.listJson, Serialization.JsonRpc.isNull_arr])
+    (by simp [Serialization.JsonRpc.listJson])
   have hex : Serialization.JsonRpc.hasExactly fs blobsBundleFields = true :=
     Serialization.JsonRpc.hasExactly_of_perm hp
   unfold blobsBundleOfJson blobsBundleJson
@@ -359,7 +359,7 @@ private theorem fork_of_accepts {version : Nat} {fork : Fork}
 private theorem payloadJson_isNull {fork : Fork} (r : GetPayloadResult fork) :
     r.payloadJson.isNull = false := by
   unfold GetPayloadResult.payloadJson Json.executionPayloadV4Json Json.executionPayloadJson
-  split <;> exact Base.Toolchain.isNull_mkObj _
+  split <;> exact Base.Toolchain.Json.isNull_mkObj _
 
 /-- The result of a response, written and read back at its version and its fork, is that result.
 
@@ -413,13 +413,11 @@ theorem getPayloadResultOfJson_json {r : GetPayloadResponse}
   have hd : L.Pairwise fun a b => a.1 ≠ b.1 := by
     by_cases h3 : 3 ≤ version <;> by_cases h4 : 4 ≤ version <;> simp [hL, hbb, hso, her, h3, h4]
   have hbn : (blobsBundleJson r.stored.bundle).isNull = false := by
-    unfold blobsBundleJson; exact Base.Toolchain.isNull_mkObj _
-  have hbo : ∀ o : Bool, (Lean.Json.bool o).isNull = false := Base.Toolchain.isNull_bool
+    unfold blobsBundleJson; exact Base.Toolchain.Json.isNull_mkObj _
   have hpres : ∀ p ∈ L, p.2.isNull = false := by
     by_cases h3 : 3 ≤ version <;> by_cases h4 : 4 ≤ version <;>
-      simp [hL, hbb, hso, her, h3, h4, hbn, hbo, payloadJson_isNull,
-        Serialization.JsonRpc.quantityJson, Serialization.JsonRpc.isNull_str,
-        Serialization.JsonRpc.isNull_arr, Serialization.JsonRpc.listJson]
+      simp [hL, hbb, hso, her, h3, h4, hbn, payloadJson_isNull,
+        Serialization.JsonRpc.quantityJson, Serialization.JsonRpc.listJson]
   obtain ⟨fs, hfs, hperm⟩ := Serialization.JsonRpc.fields_mkObj "result" hd hpres
   have hex : Serialization.JsonRpc.hasExactly fs (getPayloadResultFields version) = true := by
     have := Serialization.JsonRpc.hasExactly_of_perm hperm

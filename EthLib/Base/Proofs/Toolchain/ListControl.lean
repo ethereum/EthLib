@@ -17,7 +17,7 @@ Other proofs cite these theorems, so a Lean release that changes a body breaks t
 
 @[expose] public section
 
-namespace EthLib.Base.Toolchain
+namespace EthLib.Base.Toolchain.List
 
 universe v
 
@@ -39,4 +39,4 @@ theorem filterM_eq (p : α → m Bool) (as : List α) :
     as.filterM p = List.filterAuxM p as [] >>= fun kept => pure kept.reverse := by
   rw [List.filterM]
 
-end EthLib.Base.Toolchain
+end EthLib.Base.Toolchain.List

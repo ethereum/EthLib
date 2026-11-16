@@ -374,9 +374,6 @@ theorem bodiesByRangeParams_json (start count : UInt64) :
 
 /-! ## The answer as JSON -/
 
-/-- The JSON `null` is `null`. -/
-private theorem isNull_null : Lean.Json.null.isNull = true := Base.Toolchain.isNull_null
-
 /-- A body of version 1 reads back from its JSON, with `null` withdrawals read as absent. -/
 theorem bodyV1OfJson_json (b : ExecutionPayloadBodyV1) : bodyV1OfJson (bodyV1Json b) = .ok b := by
   have hd : [("transactions", Serialization.JsonRpc.listJson
@@ -393,14 +390,14 @@ theorem bodyV1OfJson_json (b : ExecutionPayloadBodyV1) : bodyV1OfJson (bodyV1Jso
       simp only [List.mem_cons, List.not_mem_nil, or_false] at this
       rcases this with rfl | rfl <;> simp [bodyFieldsV1])
   have wp : ∀ x, (Serialization.JsonRpc.listJson Execution.Rpc.withdrawalJson x).isNull = false :=
-    fun x => Serialization.JsonRpc.isNull_arr _
+    fun x => Base.Toolchain.Json.isNull_arr _
   have hT : fs.lookup "transactions" = some (Serialization.JsonRpc.listJson
       (Serialization.JsonRpc.dataJson ·.data.toList) b.transactions) := by
-    simp [hl, Serialization.JsonRpc.listJson, Serialization.JsonRpc.isNull_arr]
+    simp [hl, Serialization.JsonRpc.listJson]
   have hW : fs.lookup "withdrawals" =
       b.withdrawals.map (Serialization.JsonRpc.listJson Execution.Rpc.withdrawalJson) := by
     rw [hl]
-    cases b.withdrawals <;> simp [List.lookup, wp, Serialization.JsonRpc.optionJson, isNull_null]
+    cases b.withdrawals <;> simp [List.lookup, wp, Serialization.JsonRpc.optionJson]
   unfold bodyV1OfJson bodyV1Json
   simp only [bind, Except.bind, hfs, hon, ite_true, Serialization.JsonRpc.field, hT, pure,
     Except.pure, Serialization.JsonRpc.array_bytes_listJson, hW]
@@ -424,22 +421,21 @@ theorem bodyV2OfJson_json (b : ExecutionPayloadBodyV2) : bodyV2OfJson (bodyV2Jso
       simp only [List.mem_cons, List.not_mem_nil, or_false] at this
       rcases this with rfl | rfl | rfl <;> simp [bodyFieldsV2, bodyFieldsV1])
   have wp : ∀ x, (Serialization.JsonRpc.listJson Execution.Rpc.withdrawalJson x).isNull = false :=
-    fun x => Serialization.JsonRpc.isNull_arr _
+    fun x => Base.Toolchain.Json.isNull_arr _
   have ap : ∀ x : ByteArray,
       (Serialization.JsonRpc.dataJson x.data.toList).isNull = false :=
-    fun x => Serialization.JsonRpc.isNull_str _
+    fun x => Base.Toolchain.Json.isNull_str _
   have hT : fs.lookup "transactions" = some (Serialization.JsonRpc.listJson
       (Serialization.JsonRpc.dataJson ·.data.toList) b.transactions) := by
-    simp [hl, Serialization.JsonRpc.listJson, Serialization.JsonRpc.isNull_arr]
+    simp [hl, Serialization.JsonRpc.listJson]
   have hW : fs.lookup "withdrawals" =
       b.withdrawals.map (Serialization.JsonRpc.listJson Execution.Rpc.withdrawalJson) := by
     rw [hl]
-    cases b.withdrawals <;> simp [List.lookup, wp, Serialization.JsonRpc.optionJson, isNull_null]
+    cases b.withdrawals <;> simp [List.lookup, wp, Serialization.JsonRpc.optionJson]
   have hA : fs.lookup "blockAccessList" =
       b.blockAccessList.map (Serialization.JsonRpc.dataJson ·.data.toList) := by
     rw [hl]
-    cases b.blockAccessList <;> simp [List.lookup, ap, Serialization.JsonRpc.optionJson,
-      isNull_null]
+    cases b.blockAccessList <;> simp [List.lookup, ap, Serialization.JsonRpc.optionJson]
   unfold bodyV2OfJson bodyV2Json
   simp only [bind, Except.bind, hfs, hon, ite_true, Serialization.JsonRpc.field, hT, pure,
     Except.pure, Serialization.JsonRpc.array_bytes_listJson, hW, hA]
@@ -452,7 +448,7 @@ theorem payloadBodiesV1OfJson_json (bodies : List (Option ExecutionPayloadBodyV1
     payloadBodiesV1OfJson (payloadBodiesV1Json bodies) = .ok bodies := by
   unfold payloadBodiesV1OfJson payloadBodiesV1Json
   rw [Serialization.JsonRpc.array_listJson_of _ (Serialization.JsonRpc.nullable_optionJson
-    bodyV1OfJson_json fun _ => Base.Toolchain.isNull_mkObj _)]
+    bodyV1OfJson_json fun _ => Base.Toolchain.Json.isNull_mkObj _)]
   rfl
 
 /-- An answer of version 2 reads back from its JSON, with `null` at the same entries. -/
@@ -460,7 +456,7 @@ theorem payloadBodiesV2OfJson_json (bodies : List (Option ExecutionPayloadBodyV2
     payloadBodiesV2OfJson (payloadBodiesV2Json bodies) = .ok bodies := by
   unfold payloadBodiesV2OfJson payloadBodiesV2Json
   rw [Serialization.JsonRpc.array_listJson_of _ (Serialization.JsonRpc.nullable_optionJson
-    bodyV2OfJson_json fun _ => Base.Toolchain.isNull_mkObj _)]
+    bodyV2OfJson_json fun _ => Base.Toolchain.Json.isNull_mkObj _)]
   rfl
 
 end EthLib.Engine

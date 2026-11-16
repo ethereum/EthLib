@@ -37,9 +37,9 @@ theorem initialSecrets_ok (dcid : ByteArray) :
     ∃ client server, initialSecrets dcid = .ok (client, server) := by
   let initial := Tls13.extract (packBytes INITIAL_SALT) dcid
   obtain ⟨client, hc⟩ := Tls13.expandLabel_ok initial "client in".toUTF8 .empty 32
-    (by rw [Tls13.size_toUTF8]; decide) (by decide) (by decide)
+    (by simp; decide) (by decide) (by decide)
   obtain ⟨server, hs⟩ := Tls13.expandLabel_ok initial "server in".toUTF8 .empty 32
-    (by rw [Tls13.size_toUTF8]; decide) (by decide) (by decide)
+    (by simp; decide) (by decide) (by decide)
   exact ⟨client, server, (initialSecrets_ok_iff dcid client server).mpr ⟨hc, hs⟩⟩
 
 /-- Packet derivation uses exactly the labels and empty contexts of RFC 9001 §5.1. -/
@@ -63,11 +63,11 @@ theorem packetKeys_ok (suite : CipherSuite) (secret : Tls13.Secret) :
     ∃ keys, packetKeys suite secret = .ok keys := by
   have hlength : suite.keyLength ≤ 8160 := by cases suite <;> decide
   obtain ⟨key, hk⟩ := Tls13.expandLabel_ok secret "quic key".toUTF8 .empty suite.keyLength
-    (by rw [Tls13.size_toUTF8]; decide) (by decide) hlength
+    (by simp; decide) (by decide) hlength
   obtain ⟨iv, hi⟩ := Tls13.expandLabel_ok secret "quic iv".toUTF8 .empty 12
-    (by rw [Tls13.size_toUTF8]; decide) (by decide) (by decide)
+    (by simp; decide) (by decide) (by decide)
   obtain ⟨hp, hh⟩ := Tls13.expandLabel_ok secret "quic hp".toUTF8 .empty suite.keyLength
-    (by rw [Tls13.size_toUTF8]; decide) (by decide) hlength
+    (by simp; decide) (by decide) hlength
   exact ⟨⟨key, iv, hp⟩, (packetKeys_ok_iff suite secret _).mpr ⟨hk, hi, hh⟩⟩
 
 end EthLib.Networking.Quic

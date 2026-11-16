@@ -70,14 +70,16 @@ private theorem array_of_items {α : Type} (what : String) (f : Lean.Json → Re
     rfl
 
 /-- The JSON of a quantity is not `null`. -/
-private theorem isNull_quantityJson (n : Nat) : (quantityJson n).isNull = false := isNull_str _
+private theorem isNull_quantityJson (n : Nat) : (quantityJson n).isNull = false :=
+  Base.Toolchain.Json.isNull_str _
 
 /-- The JSON of data is not `null`. -/
-private theorem isNull_dataJson (l : List UInt8) : (dataJson l).isNull = false := isNull_str _
+private theorem isNull_dataJson (l : List UInt8) : (dataJson l).isNull = false :=
+  Base.Toolchain.Json.isNull_str _
 
 /-- The JSON of a list is not `null`. -/
 private theorem isNull_listJson {α : Type} (g : α → Lean.Json) (l : List α) :
-    (listJson g l).isNull = false := isNull_arr _
+    (listJson g l).isNull = false := Base.Toolchain.Json.isNull_arr _
 
 /-- The fields of a transaction have distinct names. -/
 private theorem names_distinct (gp : Nat) (tx : Transaction) :
@@ -171,7 +173,7 @@ private theorem recipient_of {fs : List (String × Lean.Json)} (o : Option Addre
   cases o with
   | none =>
     rw [h]
-    simp [optionJson, Option.filter_some, Base.Toolchain.isNull_null, pure, Except.pure]
+    simp [optionJson, Option.filter_some, pure, Except.pure]
   | some a =>
     rw [h]
     simp only [optionJson, Option.filter_some, isNull_dataJson, Bool.not_false, ite_true]
@@ -218,7 +220,7 @@ theorem authorization_authorizationJson (a : Authorization) :
   obtain ⟨fs, hfs, hp⟩ := fields_mkObj "authorization" hd (by
     intro p hp
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hp
-    rcases hp with rfl | rfl | rfl | rfl | rfl | rfl <;> exact isNull_str _)
+    rcases hp with rfl | rfl | rfl | rfl | rfl | rfl <;> exact Base.Toolchain.Json.isNull_str _)
   have r1 := field_of_perm (what := "authorization") hp hd
     (k := "chainId") (v := quantityJson a.chainId.toNat) (by simp)
   have r2 := field_of_perm (what := "authorization") hp hd

@@ -72,7 +72,7 @@ private theorem fields_withdrawalJson (w : Blocks.Withdrawal) :
     refine List.filter_eq_self.mpr fun p hp => ?_
     have h := (hmem p).mp hp
     simp only [List.mem_cons, List.not_mem_nil, or_false] at h
-    rcases h with rfl | rfl | rfl | rfl <;> simp [quantityJson, dataJson, isNull_str]
+    rcases h with rfl | rfl | rfl | rfl <;> simp [quantityJson, dataJson]
   have hm : ∀ p, p ∈ [("index", quantityJson w.index.toNat),
       ("validatorIndex", quantityJson w.validatorIndex.toNat),
       ("address", dataJson w.address.toList), ("amount", quantityJson w.amount.toNat)] →

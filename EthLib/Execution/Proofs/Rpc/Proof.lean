@@ -132,7 +132,7 @@ private theorem storageProofOfJson_storageProofJson (s : StorageProof) :
   obtain ⟨fs, hfs, hl⟩ := lookup_fields_mkObj "slot" (pairs := [
     ("key", quantityJson (bytesToNat s.key.toList)), ("value", quantityJson s.value.toNat),
     ("proof", proofNodesJson s.proof)]) (by simp)
-    (by simp [Base.Toolchain.isNull_eq, quantityJson, proofNodesJson, listJson])
+    (by simp [Base.Toolchain.Json.isNull_eq, quantityJson, proofNodesJson, listJson])
   have f1 : field "slot" fs "key" = .ok (quantityJson (bytesToNat s.key.toList)) :=
     field_eq_ok_iff.mpr (hl "key" _ (by simp))
   have f2 : field "slot" fs "value" = .ok (quantityJson s.value.toNat) :=
@@ -164,7 +164,7 @@ theorem accountProofOfJson_accountProofJson {p : AccountProof} (hnonce : p.nonce
     ("balance", quantityJson p.balance.toNat), ("codeHash", dataJson p.codeHash.toList),
     ("nonce", quantityJson p.nonce), ("storageHash", dataJson p.storageHash.toList),
     ("storageProof", listJson storageProofJson p.storageProof)]) (by simp)
-    (by simp [Base.Toolchain.isNull_eq, quantityJson, proofNodesJson, listJson, dataJson])
+    (by simp [Base.Toolchain.Json.isNull_eq, quantityJson, proofNodesJson, listJson, dataJson])
   have f1 : field "answer" fs "address" = .ok (dataJson p.address.toList) :=
     field_eq_ok_iff.mpr (hl "address" _ (by simp))
   have f2 : field "answer" fs "accountProof" = .ok (proofNodesJson p.accountProof) :=

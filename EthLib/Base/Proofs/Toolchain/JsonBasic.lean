@@ -18,7 +18,7 @@ Other proofs cite these theorems, so a Lean release that changes a body breaks t
 
 @[expose] public section
 
-namespace EthLib.Base.Toolchain
+namespace EthLib.Base.Toolchain.Json
 
 open Lean
 
@@ -32,28 +32,29 @@ theorem isNull_eq (j : Json) : j.isNull = match j with | .null => true | _ => fa
   cases j <;> rfl
 
 /-- `null` is null. -/
-theorem isNull_null : Json.null.isNull = true := by
+@[simp] theorem isNull_null : Json.null.isNull = true := by
   rw [isNull_eq]
 
 /-- A Boolean is not null. -/
-theorem isNull_bool (b : Bool) : (Json.bool b).isNull = false := by
+@[simp] theorem isNull_bool (b : Bool) : (Json.bool b).isNull = false := by
   rw [isNull_eq]
 
 /-- A string is not null. -/
-theorem isNull_str (s : String) : (Json.str s).isNull = false := by
+@[simp] theorem isNull_str (s : String) : (Json.str s).isNull = false := by
   rw [isNull_eq]
 
 /-- An array is not null. -/
-theorem isNull_arr (a : Array Json) : (Json.arr a).isNull = false := by
+@[simp] theorem isNull_arr (a : Array Json) : (Json.arr a).isNull = false := by
   rw [isNull_eq]
 
 /-- An object is not null. -/
-theorem isNull_obj (kvs : Std.TreeMap.Raw String Json compare) :
+@[simp] theorem isNull_obj (kvs : Std.TreeMap.Raw String Json compare) :
     (Json.obj kvs).isNull = false := by
   rw [isNull_eq]
 
 /-- An object built from a list of pairs is not null. -/
-theorem isNull_mkObj (pairs : List (String × Json)) : (Json.mkObj pairs).isNull = false := by
+@[simp] theorem isNull_mkObj (pairs : List (String × Json)) :
+    (Json.mkObj pairs).isNull = false := by
   rw [mkObj_eq, isNull_obj]
 
 /-- Reading array items succeeds exactly for an array. -/
@@ -89,4 +90,4 @@ theorem getObjVal?_eq (j : Json) (k : String) :
       | _ => .error "object expected" := by
   cases j <;> rfl
 
-end EthLib.Base.Toolchain
+end EthLib.Base.Toolchain.Json
