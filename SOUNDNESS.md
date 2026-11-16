@@ -4819,6 +4819,20 @@ With that bound, `getBlockRootAtSlot_error` (`Consensus/Proofs/Accessors.lean`) 
 It reads the clause of `computeProposerIndex` that refuses a draw with no candidate, and `epochProposers` gives that refusal code 500.
 That epoch gets code 500, not code 400.
 It needs an epoch of at least one slot.
+`dutiesResponse_proposer_internal_iff_of_lt_fulu` shows that before Fulu a proposer answer gets code 500 at the current epoch exactly when the draw of that epoch fails.
+It needs the bound of `dependentRoot_error` on the slot of the state.
+It reads the clause of `epochProposers` that gives a failed draw code 500.
+A draw that succeeds has computed the start of the epoch and the slot of each proposer, as `proposerDuties` computes them.
+`getBeaconProposerIndices_active` (`Consensus/Proofs/Proposers.lean`) shows that each drawn proposer names an active validator, whose fetch then succeeds.
+`dutiesResponse_proposer_error_of_lt_fulu` shows that before Fulu a proposer answer fails only with the error of an invalid epoch.
+It needs the bounds of `getBeaconProposerIndices_ok` at the current epoch, and the bound of `dependentRoot_error` on the slot of the state.
+The current epoch plus `EPOCHS_PER_HISTORICAL_VECTOR` must stay below `2^64`, and the first slot after it must be at most `2^64`.
+`currentEpochRoom_presets` shows both for every state on mainnet and minimal.
+The seed lookahead must be shorter than `EPOCHS_PER_HISTORICAL_VECTOR`, as `seedLookahead_lt_presets` shows on those presets.
+The registry must hold at most `2^40` validators, as `BeaconState.registryWithinLimit_of_lt` and `registryLimit_presets` show on those presets before Gloas.
+The draws of the current epoch must end (`ProposersDrawEnd`), as `ProposersDrawEnd.of_atCap` shows when an active validator is at the cap of the draw.
+It covers every epoch, since `dutiesResponse_proposer_not_current` refuses any other epoch with that error.
+`dutiesResponse_proposer_error_code_of_lt_fulu` follows: such an answer fails only with code 400.
 `dutiesResponse_proposer_internal_iff` shows that from Fulu a proposer answer gets code 500 exactly when a lookahead entry of the epoch names no validator.
 It reads the step of `proposerDuties` that fetches the validator of each proposer, which fails for an index past the registry.
 It needs the first answer at the current epoch, or the second at an epoch of the lookahead.
@@ -4860,13 +4874,11 @@ These cases of code 500 remain without a theorem:
   So no theorem excludes the code 500 of `dutiesResponse_proposer_internal_iff` at a state that such a chain reaches.
   `registryGrows_of_chainSteps` gives one part of that bound, since the registry never shrinks along a chain.
   A state decoded from bytes, as the export of the duty answers takes it, can hold such an entry.
-- Before Fulu, the draw of an epoch with active validators can still fail.
-  It fails past `2^40` candidates, for a product of the draw past 64 bits, or at `2^64` steps of its search.
-  On mainnet and minimal the type of the registry excludes the first, by `BeaconState.registryWithinLimit_of_lt`.
-  On those presets, `drawFits_presets` and `Run.effectiveBalance_capped` exclude the second along a run from genesis.
-  The draw also fails for an epoch within `EPOCHS_PER_HISTORICAL_VECTOR` of `2^64`, which the current epoch of a mainnet or minimal state never is.
-  `getBeaconProposerIndices_ok` shows that the draw succeeds under bounds when the draws of the epoch end (`ProposersDrawEnd`), as they do when an active validator is at the cap of the draw.
-  No theorem carries that to the answers yet.
+- Before Fulu, no theorem excludes a failed draw of the current epoch, which gives code 500 by `dutiesResponse_proposer_internal_iff_of_lt_fulu`.
+  `dutiesResponse_proposer_error_of_lt_fulu` assumes that the draws of that epoch end (`ProposersDrawEnd`), as `getBeaconProposerIndices_ok` does.
+  Under its other bounds, a draw of an epoch with active validators fails only for a product past 64 bits, or at `2^64` steps.
+  On mainnet and minimal, `drawFits_presets` and `Run.effectiveBalance_capped` exclude the first along a run from genesis.
+  `ProposersDrawEnd.of_atCap` gives the end when an active validator is at the cap of the draw, which no theorem shows along a chain.
 - No theorem excludes code 500 from the attester and PTC answers where a bound of their error theorems fails.
   On mainnet and minimal, code 500 from a PTC assignment needs a slot of the state within two epochs of `2^64`.
   Code 500 from an attester assignment needs such a slot, or a registry of more than `2^40` validators.
