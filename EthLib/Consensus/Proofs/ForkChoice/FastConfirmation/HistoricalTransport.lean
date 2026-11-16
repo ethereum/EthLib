@@ -328,6 +328,18 @@ private theorem pendingTail_processBlsToExecutionChange {config : Config}
     rwa [← getValidator_eq_getValidatorAt]
   exact pendingTail_setValidatorAt read set rfl rfl tail
 
+/-- Withdrawal requests preserve pending activation fields in every successful case. -/
+private theorem pendingTail_processWithdrawalRequest {config : Config}
+    {state after : BeaconState preset fork} {electra : .pectra ≤ fork}
+    {request : WithdrawalRequest} {count : Nat} {epoch : Epoch}
+    (run : processWithdrawalRequest config state electra request = .ok after)
+    (tail : PendingTail count epoch state) : PendingTail count epoch after := by
+  rcases withdrawalRequest_cases run with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact tail
+  · exact pendingTail_initiateValidatorExit exited tail
+  · exact pendingTail_of_validators
+      (congrArg (·.data) (requestPartialWithdrawal_kept withdrawn).1) tail
+
 /-- The existing pending-deposit pass transports the suffix through all applied deposits. -/
 private theorem pendingTail_passPendingDeposits {config : Config} {checks : SignatureChecks}
     {stop : PendingDeposit → Bool} {nextEpoch : Epoch} {available : Gwei}
@@ -432,15 +444,21 @@ private theorem filteredTotal_of_pendingTail {source state : BeaconState preset 
   obtain ⟨validator, found⟩ := active_registry_of_pendingTail tail contains (active v member)
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
-/-- The adjacent deposit, exit and credential folds supply checked historical participant reads. -/
-private theorem filteredTotal_of_deposits_exits_changes {config : Config} {checks : SignatureChecks}
-    {source deposited exited after cached : BeaconState preset fork} {before : fork < .hegota}
+/-- Successful deposit, exit, credential and withdrawal folds supply checked historical reads.
+
+Extraction of these intermediate states from the operation schedule remains separate. -/
+private theorem filteredTotal_of_operation_folds {config : Config} {checks : SignatureChecks}
+    {source deposited exited changed after cached : BeaconState preset fork}
+    {before : fork < .hegota} {electra : .pectra ≤ fork}
     {deposits : List Deposit} {exits : List SignedVoluntaryExit}
-    {changes : List SignedBLSToExecutionChange} {epoch boundary : Epoch} {count : Nat}
+    {changes : List SignedBLSToExecutionChange} {withdrawals : List WithdrawalRequest}
+    {epoch boundary : Epoch} {count : Nat}
     {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
     (run : deposits.foldlM (processDeposit config checks before) source = .ok deposited)
     (exitRun : exits.foldlM (processVoluntaryExit config checks) deposited = .ok exited)
-    (changeRun : changes.foldlM (processBlsToExecutionChange config checks) exited = .ok after)
+    (changeRun : changes.foldlM (processBlsToExecutionChange config checks) exited = .ok changed)
+    (withdrawalRun : withdrawals.foldlM (processWithdrawalRequest config · electra ·) changed =
+      .ok after)
     (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source)
     (contains : count ≤ cached.validators.data.size)
     (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
@@ -455,7 +473,9 @@ private theorem filteredTotal_of_deposits_exits_changes {config : Config} {check
     (fun _ _ _ holds ok => pendingTail_processVoluntaryExit ok holds) depositedTail exitRun
   have changedTail := foldlM_ok_invariant (PendingTail count boundary)
     (fun _ _ _ holds ok => pendingTail_processBlsToExecutionChange ok holds) exitedTail changeRun
-  exact filteredTotal_of_pendingTail changedTail contains active read
+  have withdrawnTail := foldlM_ok_invariant (PendingTail count boundary)
+    (fun _ _ _ holds ok => pendingTail_processWithdrawalRequest ok holds) changedTail withdrawalRun
+  exact filteredTotal_of_pendingTail withdrawnTail contains active read
 
 /-- Every non-registry stage preserves the pending tail, including intervening epoch stages. -/
 private theorem pendingTail_epochStage {config : Config} {checks : SignatureChecks}
