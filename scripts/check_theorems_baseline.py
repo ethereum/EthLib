@@ -1,6 +1,7 @@
 """Reject additions to a theorem baseline already present at the base revision."""
 
 import argparse
+import re
 import stat
 import subprocess
 import sys
@@ -17,21 +18,22 @@ class BaselineError(ValueError):
 def git(root: Path, *args: str) -> str:
     """Read the output of Git without invoking a shell."""
     try:
-        result = subprocess.run(
-            ["git", *args], cwd=root, capture_output=True, text=True, encoding="utf-8", check=False
-        )
+        result = subprocess.run(["git", *args], cwd=root, capture_output=True, check=False)
+        output = result.stdout.decode("utf-8")
+        errors = result.stderr.decode("utf-8")
     except (OSError, UnicodeError) as error:
         raise BaselineError(str(error)) from error
     if result.returncode:
-        raise BaselineError(result.stderr.strip() or "Git command failed")
-    return result.stdout
+        raise BaselineError(errors.strip() or "Git command failed")
+    return output
 
 
 def entries(text: str, source: str) -> set[tuple[str, str]]:
     """Parse module and declaration pairs, rejecting malformed and duplicate entries."""
     found: set[tuple[str, str]] = set()
-    for number, line in enumerate(text.splitlines(), 1):
-        words = line.partition("#")[0].split()
+    # Match Char.isWhitespace and IO.FS.lines in the Lean baseline reader.
+    for number, line in enumerate(text.split("\n"), 1):
+        words = [word for word in re.split(r"[ \t\r\n]+", line.partition("#")[0]) if word]
         if not words:
             continue
         if len(words) != 2:
@@ -71,7 +73,8 @@ def comparison(root: Path, base: str) -> tuple[list[str], bool]:
         mode = path.lstat().st_mode
         if not stat.S_ISREG(mode):
             raise BaselineError(f"{path}: expected a regular file")
-        current = path.read_text(encoding="utf-8")
+        with path.open(encoding="utf-8", newline="") as stream:
+            current = stream.read()
     except FileNotFoundError:
         current = None
     except (OSError, UnicodeError) as error:

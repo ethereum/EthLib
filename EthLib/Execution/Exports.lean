@@ -3,7 +3,6 @@ module
 public import EthLib.Execution.Exports.Blocks
 public import EthLib.Execution.Exports.Era1
 public import EthLib.Execution.Exports.Evm
-public import EthLib.Execution.Exports.Proofs.Evm
 public import EthLib.Execution.Exports.Fees
 public import EthLib.Execution.Exports.Network
 public import EthLib.Execution.Exports.Session
@@ -15,7 +14,6 @@ public import EthLib.Execution.Exports.State
 public import EthLib.Execution.Exports.Transactions
 public import EthLib.Execution.Exports.Transition
 public import EthLib.Execution.Exports.Trie
-public import EthLib.Execution.Exports.Proofs.Trie
 
 /-!
 # `EthLib.Execution.Exports`

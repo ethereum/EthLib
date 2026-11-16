@@ -2151,7 +2151,7 @@ The variants `root_binding_foldl_trieSet` and `verifyProof_sound_foldl_trieSet` 
 Later entries replace earlier values of the same key, and an empty value removes its key.
 `nodup_keys_foldl_trieSet` proves that this construction gives distinct keys, as the trie of Yellow Paper Appendix D (Shanghai version) assumes, so callers need no distinctness hypothesis.
 This construction is the path of Python `trie.root`, through `Execution/Exports/Trie.lean`.
-`root_of_rootExport` (`Execution/Exports/Proofs/Trie.lean`) proves that the export returns the root of this trie, built from its decoded pairs.
+`root_of_rootExport` (`Execution/Proofs/Exports/Trie.lean`) proves that the export returns the root of this trie, built from its decoded pairs.
 `rootExport_of_root` proves the converse, so the two variants apply to the output of Python `trie.root`.
 The state and storage roots in `Execution/State/Root.lean` build tries directly, and `stateEntries_nodup` and `storageEntries_nodup` (`Execution/Proofs/State/Root.lean`) supply their distinct keys.
 `root_binding_secured` (`Execution/Proofs/Trie/Binding.lean`) applies `root_binding` to two secured tries with distinct keys and one root.

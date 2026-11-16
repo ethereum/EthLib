@@ -23,9 +23,6 @@ The table that ROMix fills holds BlockMix applied `j` times to the input at entr
 
 namespace EthLib.Cryptography.Hash.Scrypt
 
-/-- Every encoded state has the 64 bytes required by BlockMix. -/
-theorem State.bytes_size (s : State) : s.bytes.size = 64 := rfl
-
 /-- A successful Salsa20/8 call returns one 64-byte block. -/
 theorem salsa208_size {input output : ByteArray} (h : salsa208 input = .ok output) :
     output.size = 64 := by
