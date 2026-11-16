@@ -55,7 +55,7 @@ theorem ethAggregatePubkeys_empty : ethAggregatePubkeys #[] = .error .emptyPubke
 
 /-- Adding one key that fails key validation reports its index. -/
 theorem addPubkeyPoint_invalidPubkey {pk : BLSPubkey} {e : BlsError}
-    (hval : G1.keyValidatePoint (packBytes pk) = .error e) (agg : G1) (i : Nat) :
+    (hval : G1.keyValidatePoint pk = .error e) (agg : G1) (i : Nat) :
     addPubkeyPoint agg (pk, i) = .error (.invalidPubkey (some i)) := by
   simp [addPubkeyPoint, hval, throw, throwThe, MonadExceptOf.throw]
 
@@ -69,16 +69,11 @@ theorem coreAggregateVerify_size_ne {pks msgs : Array ByteArray} (h : pks.size �
   unfold coreAggregateVerify
   rw [ite_eq_left_of_eq_true _ _ (by simp [h])]
 
-/-- Key validation rejects a public key that is not 48 bytes. -/
-theorem keyValidatePoint_size_ne {pk : ByteArray} (h : pk.size ≠ 48) :
-    G1.keyValidatePoint pk = .error .invalidG1Point := by
-  simp [G1.keyValidatePoint, G1.uncompress, h, bind, Except.bind]
-
 /-- The core verification rejects a public key that is not 48 bytes. -/
 theorem coreVerify_badPubkeySize {pk : ByteArray} (h : pk.size ≠ 48) (msg sig dst : ByteArray) :
     coreVerify pk msg sig dst = false := by
   unfold coreVerify
-  rw [keyValidatePoint_size_ne h]
+  rw [show exactBytes? 48 pk = none by simp [exactBytes?, h]]
   split <;> simp
 
 /-- The secret key decoder gives a key exactly when the decoder of scalars gives its scalar. -/

@@ -49,34 +49,30 @@ theorem ofBytes_getElem {g1LagrangeBytes g1MonomialBytes g2MonomialBytes : Array
     {s : TrustedSetup}
     (h : TrustedSetup.ofBytes g1LagrangeBytes g1MonomialBytes g2MonomialBytes = .ok s)
     (i : Fin FIELD_ELEMENTS_PER_BLOB) :
-    G1.uncompress g1MonomialBytes[i.val]! = .ok s.g1Monomial[i] ∧
-      G1.uncompress g1LagrangeBytes[reverseBits i.val FIELD_ELEMENTS_PER_BLOB]! =
+    TrustedSetup.decodeG1 g1MonomialBytes[i.val]! = .ok s.g1Monomial[i] ∧
+      TrustedSetup.decodeG1 g1LagrangeBytes[reverseBits i.val FIELD_ELEMENTS_PER_BLOB]! =
         .ok s.g1LagrangeBrp[i] := by
   unfold TrustedSetup.ofBytes at h
   dsimp only at h
-  cases h₁ : g1LagrangeBytes.mapM fun b =>
-      (Bls.G1.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup with
+  cases h₁ : g1LagrangeBytes.mapM TrustedSetup.decodeG1 with
   | error e => rw [h₁] at h; cases h
   | ok lagrange =>
-  cases h₂ : g1MonomialBytes.mapM fun b =>
-      (Bls.G1.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup with
+  cases h₂ : g1MonomialBytes.mapM TrustedSetup.decodeG1 with
   | error e => rw [h₁, h₂] at h; cases h
   | ok monomial =>
-  cases h₃ : g2MonomialBytes.mapM fun b =>
-      (Bls.G2.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup with
+  cases h₃ : g2MonomialBytes.mapM TrustedSetup.decodeG2 with
   | error e => rw [h₁, h₂, h₃] at h; cases h
   | ok monomial2 =>
   rw [h₁, h₂, h₃] at h
   dsimp only [bind, Except.bind] at h
   -- A successful map gives each output from the input at the same position.
   have hpos {xs : Array ByteArray} {ys : Array G1}
-      (hm : (xs.mapM fun b =>
-        (Bls.G1.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup) = .ok ys)
-      (j : Nat) (hj : j < ys.size) : G1.uncompress xs[j]! = .ok ys[j] := by
+      (hm : xs.mapM TrustedSetup.decodeG1 = .ok ys)
+      (j : Nat) (hj : j < ys.size) : TrustedSetup.decodeG1 xs[j]! = .ok ys[j] := by
     obtain ⟨hsize, hget⟩ := array_mapM_ok hm
     have hj' : j < xs.size := by rw [← hsize]; exact hj
     rw [getElem!_pos xs j hj']
-    exact Base.mapError_ok_iff.mp (hget j hj' hj)
+    exact hget j hj' hj
   split at h
   · rename_i hl
     split at h

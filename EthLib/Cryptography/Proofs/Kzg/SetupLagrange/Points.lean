@@ -97,7 +97,7 @@ private theorem select_eq {y₀ yPos : Fp} (hy : yPos = y₀ ∨ yPos = -y₀) (
 /-- Decompression returns `(x, y, 1)` from the bytes of a string that encodes `(x, y)`. -/
 theorem coords_of_encodes {s : String} {b : ByteArray} {q : G1} {x y : Nat}
     (hd : encodes (codes s) x y = true) (hb : TrustedSetup.hexToBytes? s = some b)
-    (hq : G1.uncompress b = .ok q) : coords q = (x, y, 1) := by
+    (hq : TrustedSetup.decodeG1 b = .ok q) : coords q = (x, y, 1) := by
   unfold encodes codes at hd
   rw [TrustedSetup.hexToBytes?, SetupTorsion.hexToBytesAux_eq] at hb
   cases hl : hexBytes (s.toList.map Char.toNat) with
@@ -118,7 +118,8 @@ theorem coords_of_encodes {s : String} {b : ByteArray} {q : G1} {x y : Nat}
   subst hx
   -- The branches of decompression.
   have hhead : (⟨((h :: t).map UInt8.ofNat).toArray⟩ : ByteArray).get! 0 = UInt8.ofNat h := rfl
-  obtain ⟨-, -, ⟨hc0, -, -⟩ | ⟨-, xf, yPos, hx, hsqrt, rfl⟩⟩ := G1.uncompress_ok_cases hq
+  obtain ⟨v, hv, hq⟩ := TrustedSetup.decodeG1_eq_ok.mp hq
+  obtain ⟨-, ⟨hc0, -, -⟩ | ⟨-, xf, yPos, hx, hsqrt, rfl⟩⟩ := G1.uncompress_ok_cases_bytes hv hq
   · rw [hhead] at hc0
     exact absurd hinf ((flag40 h).mp (by rw [hc0]; decide))
   have hxv : xf.val = xOf (h :: t) := SetupTorsion.fromBytesBE_eq hx

@@ -44,10 +44,10 @@ private theorem verify_scalars (a b : Fr) : 1 * (a * b) + -a * b = 0 := by
 /-- The core verification accepts exactly the signatures that decode to `(a * b) • g2`.
 
 Here the key validates to a representative of `a • g1`, and the message hashes to `b • g2`. -/
-theorem coreVerify_iff {pk msg sig dst : ByteArray} {P : G1} {Q : G2}
+theorem coreVerify_iff {pk : Vector UInt8 48} {msg sig dst : ByteArray} {P : G1} {Q : G2}
     {a b : Fr} (hP : G1.keyValidatePoint pk = .ok P) (hPa : G1.Represents P a)
     (hQ : HashToCurve.hashToG2 msg dst = .ok Q) (hb : G2.Represents Q b) :
-    coreVerify pk msg sig dst = true ↔
+    coreVerify (packBytes pk) msg sig dst = true ↔
       ∃ R, G2.uncompress sig = .ok R ∧ G2.Represents R (a * b) := by
   unfold coreVerify
   cases hu : G2.uncompress sig with
@@ -55,6 +55,8 @@ theorem coreVerify_iff {pk msg sig dst : ByteArray} {P : G1} {Q : G2}
   | ok R =>
     have hRv := G2.valid_of_uncompress hu
     -- Rewrite every discriminant first, or the kernel evaluates the hash on a variable message.
+    rw [exactBytes?_packBytes]
+    dsimp only
     rw [hP, hQ]
     dsimp only
     constructor
@@ -71,22 +73,29 @@ theorem coreVerify_iff {pk msg sig dst : ByteArray} {P : G1} {Q : G2}
 
 /-- A key that passes the core verification passes key validation. -/
 private theorem keyValidatePoint_of_coreVerify {pk msg sig dst : ByteArray}
-    (h : coreVerify pk msg sig dst = true) : ∃ P, G1.keyValidatePoint pk = .ok P := by
-  cases hk : G1.keyValidatePoint pk with
-  | ok P => exact ⟨P, rfl⟩
-  | error e =>
-    exfalso
-    unfold coreVerify at h
-    rw [hk] at h
-    split at h
-    · cases h
-    · simp at h
+    (h : coreVerify pk msg sig dst = true) :
+    ∃ v, packBytes v = pk ∧ ∃ P, G1.keyValidatePoint v = .ok P := by
+  unfold coreVerify at h
+  split at h
+  · cases h
+  -- A key of another length than 48 bytes fails the verification.
+  cases hx : exactBytes? 48 pk with
+  | none => rw [hx] at h; simp at h
+  | some v =>
+    refine ⟨v, packBytes_of_exactBytes? hx, ?_⟩
+    cases hk : G1.keyValidatePoint v with
+    | ok P => exact ⟨P, rfl⟩
+    | error e =>
+      rw [hx] at h
+      dsimp only at h
+      rw [hk] at h
+      simp at h
 
 /-- A key and a message have at most one signature that verifies, byte for byte. -/
 theorem coreVerify_unique {pk msg sig sig' dst : ByteArray}
     (h : coreVerify pk msg sig dst = true) (h' : coreVerify pk msg sig' dst = true) :
     sig = sig' := by
-  obtain ⟨P, hP⟩ := keyValidatePoint_of_coreVerify h
+  obtain ⟨v, rfl, P, hP⟩ := keyValidatePoint_of_coreVerify h
   obtain ⟨-, hPv, -, hPr⟩ := G1.keyValidatePoint_eq_ok_iff.mp hP
   obtain ⟨a, ha⟩ := (G1.inSubgroup_iff_exists_represents hPv).mp
     ((G1.inSubgroup_iff_modulus_smul_eq_zero hPv).mpr hPr)
@@ -120,22 +129,20 @@ The signature `c • H(msg)` then passes for the victim's key together with the 
 The attacker never learns the victim's secret key. -/
 theorem fastAggregateVerify_rogue (sk : SecretKey) {c : Fr} (hc0 : c ≠ 0)
     (hc : c ≠ sk.val) (msg : ByteArray) :
-    ∃ P Q, G1.keyValidatePoint (pkBytes sk) = .ok P ∧ HashToCurve.hashToG2 msg DST = .ok Q ∧
+    ∃ P Q, G1.keyValidatePoint (skToPk sk) = .ok P ∧ HashToCurve.hashToG2 msg DST = .ok Q ∧
       fastAggregateVerify
         #[skToPk sk, pointToPubkey (G1.add (G1.mul G1.generator c) (G1.neg P))] msg
         (pointToSignature (G2.mul Q c)) = true := by
   obtain ⟨P, hP, hPrep⟩ := G1.keyValidatePoint_compress_mul sk.property
   obtain ⟨Q, hQ, hQv, hQs⟩ := HashToCurve.hashToG2_total_inSubgroup msg DST
   obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hQv).mp hQs
-  refine ⟨P, Q, (pkBytes_eq sk).symm ▸ hP, hQ, ?_⟩
+  refine ⟨P, Q, hP, hQ, ?_⟩
   -- The rogue key is the public key of the scalar `c - sk`, which the attacker does not know.
   let rogue : SecretKey := ⟨c + -sk.val, rogue_ne_zero hc⟩
   have hrep : G1.Represents (G1.add (G1.mul G1.generator c) (G1.neg P)) rogue.val :=
     (G1.represents_mul_generator c).add hPrep.neg
-  have hrogue : pointToPubkey (G1.add (G1.mul G1.generator c) (G1.neg P)) = skToPk rogue := by
-    apply packBytes_injective
-    rw [packBytes_pointToPubkey, packBytes_skToPk]
-    exact G1.compress_congr hrep.1 (G1.represents_mul_generator rogue.val).1 hrep.2
+  have hrogue : pointToPubkey (G1.add (G1.mul G1.generator c) (G1.neg P)) = skToPk rogue :=
+    G1.compress_congr hrep.1 (G1.represents_mul_generator rogue.val).1 hrep.2
   have hkeys : #[skToPk sk, skToPk rogue] = ([sk, rogue].map skToPk).toArray := rfl
   have hsum : ([sk, rogue].map (·.val)).sum = c := rogue_sum sk.val c
   rw [hrogue, hkeys]
