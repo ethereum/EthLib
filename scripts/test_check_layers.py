@@ -614,6 +614,18 @@ class KindsRule(unittest.TestCase):
                 self.assertEqual(len(problems), 1, problems)
                 self.assertRegex(problems[0], f"^coverage/kinds\\.toml: {message}$")
 
+    def test_missing_file_still_reports_a_stale_entry_of_another_rule(self):
+        # Only the model rule reads the declarations, so the other rules still check their entries.
+        baseline = "# Why.\nlayer EthLib.Base.A EthLib.Cryptography.A\n"
+        self.assertEqual(
+            Tree(GOOD, kinds=None, baseline=baseline).problems(),
+            [
+                "coverage/kinds.toml: missing",
+                "scripts/check_layers_baseline.txt:2: layer EthLib.Base.A EthLib.Cryptography.A "
+                "no longer breaks the rules of layers and kinds of module; remove the entry",
+            ],
+        )
+
     def test_invalid_file_is_reported(self):
         problems = Tree(GOOD, kinds='models = []\nrefinement = "EthLib.Proofs"\n').problems()
         self.assertEqual(
@@ -1276,11 +1288,20 @@ class Baseline(unittest.TestCase):
             "import-all EthLib.Execution.Exports.B Batteries.Data.Except\n"
         )
         self.assertEqual(Tree(tree, baseline=both).problems(), [])
-        for line in both.splitlines():
+        # Each entry allows only its rule, so the other rule still reports the import.
+        cases = {
+            "layer EthLib.Execution.Exports.B Batteries.Data.Except": (
+                "EthLib/Execution/Exports/B.lean:3: imports all of Batteries.Data.Except, "
+                "but only a module under EthLib/Base/Proofs/Toolchain/ reads its bodies"
+            ),
+            "import-all EthLib.Execution.Exports.B Batteries.Data.Except": (
+                "EthLib/Execution/Exports/B.lean: imports Batteries.Data.Except, "
+                "but a C export imports only EthLib and the toolchain"
+            ),
+        }
+        for line, message in cases.items():
             with self.subTest(line=line):
-                problems = Tree(tree, baseline=line + "\n").problems()
-                self.assertEqual(len(problems), 1, problems)
-                self.assertIn("EthLib/Execution/Exports/B.lean", problems[0])
+                self.assertEqual(Tree(tree, baseline=line + "\n").problems(), [message])
 
     def test_line_of_another_form_fails(self):
         cases = {
