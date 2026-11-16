@@ -87,6 +87,23 @@ private theorem pendingTail_processEffectiveBalanceUpdates {state after : Beacon
   obtain ⟨_, found, _, _, _, _, set⟩ := ok
   exact pendingTail_setValidatorAt found set rfl rfl before
 
+/-- Scheduling an exit preserves both activation fields of the pending suffix. -/
+private theorem pendingTail_initiateValidatorExit {config : Config}
+    {state after : BeaconState preset fork} {index : ValidatorIndex}
+    {count : Nat} {epoch : Epoch}
+    (run : initiateValidatorExit config state index = .ok after)
+    (tail : PendingTail count epoch state) : PendingTail count epoch after := by
+  obtain ⟨validator, found, unchanged | ⟨_, queued, _, _, queue, _, set⟩⟩ :=
+    initiateValidatorExit_ok run
+  · rw [unchanged.2]; exact tail
+  · have same := (exitQueue_validators queue).1
+    rw [setValidator_eq_setValidatorAt] at set
+    have queuedFound : getValidatorAt queued index.toNat = .ok validator := by
+      rw [← getValidator_eq_getValidatorAt, getValidator_of_validators_eq same]
+      exact found
+    exact pendingTail_setValidatorAt queuedFound set rfl rfl
+      (pendingTail_of_validators (congrArg (·.data) same) tail)
+
 /-- A newly deposited validator is pending beyond every finite boundary epoch. -/
 private theorem pendingTail_addValidator {state after : BeaconState preset fork}
     {count : Nat} {epoch : Epoch} {pubkey : Cryptography.Bls.BLSPubkey}
@@ -226,22 +243,6 @@ private theorem filteredTotal_of_pendingTail {source state : BeaconState preset 
   obtain ⟨validator, found⟩ := active_registry_of_pendingTail tail contains (active v member)
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
-/-- Activity after pending deposits still gives checked reads through the earlier boundary. -/
-private theorem filteredTotal_of_pendingDeposits {config : Config} {checks : SignatureChecks}
-    {source after cached : BeaconState preset fork} {electra : .pectra ≤ fork}
-    {epoch boundEpoch : Epoch} {count : Nat} {participants : Std.TreeSet ValidatorIndex}
-    {total : Gwei} (run : processPendingDeposits config checks source electra = .ok after)
-    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source)
-    (contains : count ≤ cached.validators.data.size)
-    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
-    (read : getTotalActiveBalance cached = .ok total) :
-    ∃ selected result,
-      participants.toList.filterM (fun index => do
-        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
-        .ok selected ∧ getTotalBalance cached selected = .ok result :=
-  filteredTotal_of_pendingTail (pendingTail_processPendingDeposits run finite tail)
-    contains active read
-
 /-- A deposit pass followed by balance updates still gives checked historical reads. -/
 private theorem filteredTotal_of_pendingDeposits_balances
     {config : Config} {checks : SignatureChecks}
@@ -260,6 +261,26 @@ private theorem filteredTotal_of_pendingDeposits_balances
   filteredTotal_of_pendingTail
     (pendingTail_processEffectiveBalanceUpdates balances
       (pendingTail_processPendingDeposits deposits finite tail)) contains active read
+
+/-- Exit scheduling before deposits and balances retains the historical checked-read boundary. -/
+private theorem filteredTotal_of_exit_deposits_balances
+    {config : Config} {checks : SignatureChecks}
+    {source exited deposited after cached : BeaconState preset fork} {electra : .pectra ≤ fork}
+    {index : ValidatorIndex} {epoch boundEpoch : Epoch} {count : Nat}
+    {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
+    (exit : initiateValidatorExit config source index = .ok exited)
+    (deposits : processPendingDeposits config checks exited electra = .ok deposited)
+    (balances : processEffectiveBalanceUpdates deposited = .ok after)
+    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source)
+    (contains : count ≤ cached.validators.data.size)
+    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
+    (read : getTotalActiveBalance cached = .ok total) :
+    ∃ selected result,
+      participants.toList.filterM (fun index => do
+        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
+        .ok selected ∧ getTotalBalance cached selected = .ok result :=
+  filteredTotal_of_pendingDeposits_balances deposits balances finite
+    (pendingTail_initiateValidatorExit exit tail) contains active read
 
 /-- Lookahead extends a run without assuming a registry-size bound. -/
 private theorem runKept_lookahead {config : Config} {checks : SignatureChecks}
