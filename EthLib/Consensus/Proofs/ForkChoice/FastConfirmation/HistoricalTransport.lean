@@ -2008,15 +2008,21 @@ private theorem previousBlockSlot_le_previousCurrentSlot
   have := UInt64.le_iff_toNat_le.mp stateLe
   exact UInt64.le_iff_toNat_le.mpr (by omega)
 
+/-- Honest stores do not hold the parent of the anchor before the deadline. -/
+private def AnchorParentAbsent (last : Nat) : Prop :=
+  ∀ a ∈ J, ∀ i, (e.world i).time ≤ last →
+    ((e.world i).state a).blocks[anchorBlock.parentRoot]? = none
+
 /-- A finite-window margin or justified ancestry keeps the actual head below the block. -/
 private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
+    {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
     {last n : Nat} {u : ValidatorIndex}
     (history : VoteCommitteeCommonHistory (e := e) last) (honest : u ∈ J)
     (time : (e.world n).time ≤ last)
-    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock
-      ((e.world n).state u))
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot) (before : fork < .glamsterdam)
-    (unknown : ((e.world n).state u).blocks[anchorBlock.parentRoot]? = none)
+    (absent : AnchorParentAbsent (e := e) last)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -2059,7 +2065,10 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     exact Store.isAncestor_trans_of_lt before justifiedKnown found
       (Store.isAncestor_getHead_of_lt_gloas before headRead) justifiedAbove
   let store := (e.world n).state u
-  have lower := reached.reachable.parentsBelow anchorSlot unknown
+  have reached := e.forwardReachableWith
+    (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
+    n u honest
+  have lower := reached.reachable.parentsBelow anchorSlot (absent u honest n time)
   have within := BeaconState.registryWithinLimit_of_lt before state
   have shortBefore := previousBlockSlot_le_previousCurrentSlot reached anchorSlot
     found slotRead shortLastOk lastOk
@@ -2945,11 +2954,6 @@ private def ActiveStakeAtMost (cap : Nat) (state : BeaconState preset fork) : Pr
 private def CheckpointStakeCeiling (cap last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k checkpoint state, (e.world k).time ≤ last →
     ((e.world k).state w).checkpointState checkpoint = .ok state → ActiveStakeAtMost cap state
-
-/-- Honest stores do not hold the parent of the anchor before the deadline. -/
-private def AnchorParentAbsent (last : Nat) : Prop :=
-  ∀ a ∈ J, ∀ i, (e.world i).time ≤ last →
-    ((e.world i).state a).blocks[anchorBlock.parentRoot]? = none
 
 /-- Endpoint observations supply receiver reads or honest-store collision evidence.
 
