@@ -1849,7 +1849,6 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
             ((e.world n).state u).blocks[headRoot]? = some headBlock ∧
             ((e.world n).state u).getCheckpointBlock headRoot checkpoint.epoch =
               .ok checkpoint.root ∧
-            start ≤ headBlock.slot ∧
             ((e.world n).state u).finalizedCheckpoint.epoch ≤ checkpoint.epoch))
     (finite : checkpoint.epoch < FAR_FUTURE_EPOCH)
     (read : getTotalActiveBalance cached = .ok total) :
@@ -1894,13 +1893,9 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
       obtain ⟨common, toTarget, toHead, fixed⟩ := commonWitness
       rw [← (origins v member).targetEpoch, toTarget.active _ fixed v.toNat,
         ← toHead.active _ fixed v.toNat] at active
-      rcases headPath with same | atBoundary | ⟨headBlockFound, headWalk, headBound, storeBound⟩
-      · -- A fallback head at the cache base needs only the actual lookahead's registry growth.
-        rw [same, baseFound, Option.some.injEq] at headFound
-        subst headState
-        exact registry_of_runKept (runKept_lookahead advanced) active
-      · -- The historical checkpoint's held registry precedes its prefix and receiver run.
-        rw [atBoundary, boundaryBaseFound, Option.some.injEq] at headFound
+      have atBoundaryRange (same : headRoot = checkpoint.root) :
+          ∃ validator, cached.validators.data[v.toNat]? = some validator := by
+        rw [same, boundaryBaseFound, Option.some.injEq] at headFound
         subst headState
         have reached := e.forwardReachableWith
           (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
@@ -1911,6 +1906,21 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
           (fun ok => runKept_processSlots ok) anchorSlot reached walk found startOk bound
           boundaryBaseFound baseFound advanced
         exact registry_of_runKept ((runKept_lookahead prefixOk).trans run) active
+      rcases headPath with same | atBoundary | ⟨headBlockFound, headWalk, storeBound⟩
+      · -- A fallback head at the cache base needs only the actual lookahead's registry growth.
+        rw [same, baseFound, Option.some.injEq] at headFound
+        subst headState
+        exact registry_of_runKept (runKept_lookahead advanced) active
+      · exact atBoundaryRange atBoundary
+      by_cases headBound : start ≤ headBlock.slot
+      swap
+      · -- A checkpoint walk below the boundary stops at the held head itself.
+        have same : headRoot = checkpoint.root := by
+          simpa [Store.getCheckpointBlock, startOk, Except.mapError,
+            Store.getAncestor_of_le (node := ⟨headRoot, .pending⟩) headBlockFound
+              (UInt64.le_of_lt (UInt64.not_le.mp headBound)), bind, Except.bind,
+            pure, Except.pure] using headWalk
+        exact atBoundaryRange same
       have reached := e.forwardReachableWith
         (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
         n u honest
