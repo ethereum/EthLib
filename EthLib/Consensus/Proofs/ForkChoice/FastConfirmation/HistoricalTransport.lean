@@ -307,13 +307,47 @@ private theorem filteredTotal_of_pendingTail {source state : BeaconState preset 
   obtain ⟨validator, found⟩ := active_registry_of_pendingTail tail contains (active v member)
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
-/-- A deposit pass followed by balance updates still gives checked historical reads. -/
-private theorem filteredTotal_of_pendingDeposits_balances
+/-- Every non-registry stage preserves the pending tail, including intervening epoch stages. -/
+private theorem pendingTail_epochStage {config : Config} {checks : SignatureChecks}
+    {stage : EpochStage} {source after : BeaconState preset fork} {count : Nat} {epoch : Epoch}
+    (run : EpochStage.action config checks stage source = .ok after)
+    (other : stage ≠ .registry) (finite : epoch < FAR_FUTURE_EPOCH)
+    (tail : PendingTail count epoch source) : PendingTail count epoch after := by
+  have edge := EpochStage.action_cases.mp run
+  cases stage
+  case registry => exact absurd rfl other
+  case pendingDeposits =>
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · exact pendingTail_processPendingDeposits edge finite tail
+    · exact edge ▸ tail
+  case effectiveBalances => exact pendingTail_processEffectiveBalanceUpdates edge tail
+  all_goals
+    exact pendingTail_of_validators
+      (congrArg (·.data) (edge.validators_eq ⟨nofun, nofun, nofun⟩)) tail
+
+/-- An equation-bearing schedule without registry updates transports the pending tail. -/
+private theorem pendingTail_epochTrace {config : Config} {checks : SignatureChecks}
+    {stages : List EpochStage} {source after : BeaconState preset fork}
+    {count : Nat} {epoch : Epoch}
+    (trace : EpochTrace (EpochStage.action config checks) stages source after)
+    (other : ∀ stage ∈ stages, stage ≠ .registry) (finite : epoch < FAR_FUTURE_EPOCH)
+    (tail : PendingTail count epoch source) : PendingTail count epoch after := by
+  exact trace.transport
+    (fun s t => PendingTail count epoch s → PendingTail count epoch t)
+    (fun _ holds => holds) (fun one two holds => two (one holds))
+    (fun stage member _ _ run holds =>
+      pendingTail_epochStage run (other stage member) finite holds) tail
+
+/-- The actual post-registry schedule supplies checked reads after its intervening stages. -/
+private theorem filteredTotal_of_postRegistry
     {config : Config} {checks : SignatureChecks}
-    {source deposited after cached : BeaconState preset fork} {electra : .pectra ≤ fork}
+    {source after cached : BeaconState preset fork}
     {epoch boundEpoch : Epoch} {count : Nat} {participants : Std.TreeSet ValidatorIndex}
-    {total : Gwei} (deposits : processPendingDeposits config checks source electra = .ok deposited)
-    (balances : processEffectiveBalanceUpdates deposited = .ok after)
+    {total : Gwei}
+    (trace : EpochTrace (EpochStage.action config checks)
+      ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
+        EpochStage.middleStages ++ EpochStage.tailStages) source after)
     (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source)
     (contains : count ≤ cached.validators.data.size)
     (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
@@ -323,8 +357,8 @@ private theorem filteredTotal_of_pendingDeposits_balances
         return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
         .ok selected ∧ getTotalBalance cached selected = .ok result :=
   filteredTotal_of_pendingTail
-    (pendingTail_processEffectiveBalanceUpdates balances
-      (pendingTail_processPendingDeposits deposits finite tail)) contains active read
+    (pendingTail_epochTrace trace (by simp [EpochStage.middleStages, EpochStage.tailStages])
+      finite tail) contains active read
 
 /-- The Electra registry stage retains the historical checked-read boundary. -/
 private theorem filteredTotal_of_registryUpdates
