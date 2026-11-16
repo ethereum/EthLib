@@ -1827,11 +1827,12 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
               (computeEpochAtSlot preset parent.slot).toNat + 1 <
                 (attestation v).data.target.epoch.toNat) ∧
           ((e.world n).state u).blockStates[headRoot]? = some headState ∧
-          ((e.world n).state u).blocks[headRoot]? = some headBlock ∧
-          ((e.world n).state u).getCheckpointBlock headRoot checkpoint.epoch =
-            .ok checkpoint.root ∧
-          start ≤ headBlock.slot ∧
-          ((e.world n).state u).finalizedCheckpoint.epoch ≤ checkpoint.epoch)
+          (headRoot = root ∨
+            ((e.world n).state u).blocks[headRoot]? = some headBlock ∧
+            ((e.world n).state u).getCheckpointBlock headRoot checkpoint.epoch =
+              .ok checkpoint.root ∧
+            start ≤ headBlock.slot ∧
+            ((e.world n).state u).finalizedCheckpoint.epoch ≤ checkpoint.epoch))
     (finite : checkpoint.epoch < FAR_FUTURE_EPOCH)
     (read : getTotalActiveBalance cached = .ok total) :
     ∃ selected result,
@@ -1857,7 +1858,7 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
         (mem_getActiveValidatorIndices_of_getAttestingIndices attestersOk attester))
   have position : ∃ validator, cached.validators.data[v.toNat]? = some validator := by
     rcases finalized v member with cacheBound | ⟨headState, headRoot, headBlock,
-      commonSource, headFound, headBlockFound, headWalk, headBound, storeBound⟩
+      commonSource, headFound, headPath⟩
     · exact registry_of_honest_checkpoint anchorStore anchored anchorInvariant anchorSlot
         positive early honest (targetRead v member) boundaryBaseFound startOk walk found
         bound baseFound advanced (sourceWalk v member) (sourceBlockFound v member)
@@ -1875,6 +1876,19 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
       obtain ⟨common, toTarget, toHead, fixed⟩ := commonWitness
       rw [← (origins v member).targetEpoch, toTarget.active _ fixed v.toNat,
         ← toHead.active _ fixed v.toNat] at active
+      rcases headPath with same | ⟨headBlockFound, headWalk, headBound, storeBound⟩
+      · -- A fallback head at the cache base needs only the actual lookahead's registry growth.
+        rw [same, baseFound, Option.some.injEq] at headFound
+        subst headState
+        have grows : base.validators.data.size ≤ cached.validators.data.size := by
+          unfold lookaheadState at advanced
+          split at advanced
+          · exact (runKept_processSlots (mapError_ok_iff.mp advanced)).grows
+          · cases advanced
+            exact Nat.le_refl _
+        obtain ⟨validator, held, _⟩ := isActiveAt_eq_true_iff.mp active
+        have inside := Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp held).1 grows
+        exact ⟨cached.validators.data[v.toNat], Array.getElem?_eq_getElem inside⟩
       have reached := e.forwardReachableWith
         (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
         n u honest
