@@ -33,15 +33,6 @@ private theorem size_proposerCandidates_le (state : BeaconState preset fork)
   · exact Array.size_filter_le
   · exact Nat.le_refl _
 
-/-- Each candidate to propose is an active validator. -/
-private theorem mem_of_mem_proposerCandidates {state : BeaconState preset fork}
-    {active : Array ValidatorIndex} {index : ValidatorIndex}
-    (member : index ∈ proposerCandidates state active) : index ∈ active := by
-  unfold proposerCandidates at member
-  split at member
-  · exact (Array.mem_filter.mp member).1
-  · exact member
-
 /-- The proposer of a slot is drawn when a candidate is at the cap of the draw.
 
 Each candidate must name a validator whose effective balance is at most that cap.

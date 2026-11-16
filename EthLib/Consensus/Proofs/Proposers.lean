@@ -9,7 +9,9 @@ public import EthLib.Consensus.Proposers
 
 The proposer of a slot is one of the candidates it is drawn from.
 
-From Gloas each candidate is active and unslashed, so each proposer is too.
+Each candidate is active, so each proposer of an epoch names a validator active in it.
+
+From Gloas each candidate is also unslashed, so each proposer is too.
 
 A balance-weighted selection of one proposer draws the same proposer as the proposer search.
 
@@ -50,6 +52,15 @@ theorem mem_of_computeProposerIndices {epoch : Epoch} {seed : Bytes32}
   have entry := vector_mapM_ok_getElem drawn (i := i) (by simpa using inside)
   obtain ⟨slot, -, slotProposer⟩ := bind_ok_iff.mp entry
   simpa using mem_of_computeSlotProposer slotProposer
+
+/-- Each candidate to propose is an active validator. -/
+theorem mem_of_mem_proposerCandidates {state : BeaconState preset fork}
+    {active : Array ValidatorIndex} {index : ValidatorIndex}
+    (member : index ∈ proposerCandidates state active) : index ∈ active := by
+  unfold proposerCandidates at member
+  split at member
+  · exact (Array.mem_filter.mp member).1
+  · exact member
 
 /-- From Gloas, each candidate to propose is among the active validators and unslashed. -/
 theorem proposerCandidates_spec (gloas : .glamsterdam ≤ fork) {active : Array ValidatorIndex}
@@ -183,6 +194,19 @@ theorem getBeaconProposerIndices_spec (gloas : .glamsterdam ≤ fork) {epoch : E
     proposerCandidates_spec gloas (mem_of_computeProposerIndices drawn proposer member)
   rw [← getActiveValidatorIndicesChecked_ok checked]
   exact ⟨List.mem_toArray.mp listed, unslashed⟩
+
+/-- Each proposer of an epoch names a validator of the registry that is active in that epoch. -/
+theorem getBeaconProposerIndices_active {epoch : Epoch}
+    {proposers : Vector ValidatorIndex preset.SLOTS_PER_EPOCH.toNat}
+    (computed : getBeaconProposerIndices state epoch = .ok proposers) :
+    ∀ proposer ∈ proposers.toList, ∃ validator,
+      state.validators.data[proposer.toNat]? = some validator ∧
+        isActiveValidator validator epoch = true := by
+  obtain ⟨active, checked, computed⟩ := bind_ok_iff.mp computed
+  obtain ⟨seed, -, drawn⟩ := bind_ok_iff.mp computed
+  intro proposer member
+  exact (mem_iff_of_getActiveValidatorIndicesChecked_ok checked).mp (List.mem_toArray.mp
+    (mem_of_mem_proposerCandidates (mem_of_computeProposerIndices drawn proposer member)))
 
 /-- Moving the lookahead shifts every proposer back by one epoch.
 
