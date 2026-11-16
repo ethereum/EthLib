@@ -2049,7 +2049,7 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     (route : (((e.world n).state u).isAncestor
         ⟨((e.world n).state u).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true) ∨
       ((⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes ∧
-        ((e.world n).state u).isAncestor ⟨head.root, .pending⟩
+        ((e.world n).state u).isAncestor head
           ⟨block.parentRoot, .pending⟩ = .ok true ∧
         Models.stake (fun v => balanceAt state v.toNat)
         (Store.activeMembers state members) + score.toNat <
@@ -2072,6 +2072,11 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
   have within := BeaconState.registryWithinLimit_of_lt before state
   have shortBefore := previousBlockSlot_le_previousCurrentSlot reached anchorSlot
     found slotRead shortLastOk lastOk
+  have pending := Store.getHead_pending before headRead
+  have pendingHead : (⟨head.root, .pending⟩ : ForkChoiceNode) = head := by
+    cases head
+    simp_all only
+  rw [← pendingHead] at descends
   -- The visited parent makes the head known; reachability supplies its stored state.
   obtain ⟨headBlock, headKnown, _⟩ := Store.slot_le_of_isAncestor parentFound descends
   obtain ⟨headState, headStored, _, _⟩ := reached.reachable.blockStatesFromParents headKnown
@@ -2117,7 +2122,6 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
         lower minLookahead maxLookahead ring within nodes store.boostedRoot
         (store.boostScore config) headRead headFound found parentFound descends slotRead
         epochRead horizon firstOk lastOk window shortWindow shortBefore member distinct modelMargin
-  have pending := Store.getHead_pending before headRead
   have answer := Store.isAncestor_of_blockTree_ancestor (lower := lower) before headKnown
     found result
   obtain ⟨headRoot, status⟩ := head
