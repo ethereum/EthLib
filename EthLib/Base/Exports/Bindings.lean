@@ -1274,7 +1274,7 @@ def bindings : List Binding := [
     [`EthLib.Consensus.BoundsError], some "ConsensusError"⟩,
   ⟨"consensus_reqresp_response_valid", `EthLib.Consensus.Exports.reqRespResponseValidExport,
     "(name: str, fork: str, protocol: str, request: bytes, " ++
-      "items: list[tuple[int | bytes, ...]], " ++
+      "items: list[tuple[int | bytes | str, ...]], " ++
       "committee: list[int]) -> bool",
     [`EthLib.Consensus.BoundsError, `EthLib.Serialization.Ssz.Err], some "ConsensusError"⟩,
   ⟨"consensus_gossip_topic_bound", `EthLib.Consensus.Exports.gossipTopicBoundExport,
