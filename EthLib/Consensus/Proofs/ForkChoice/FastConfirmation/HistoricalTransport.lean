@@ -1556,6 +1556,63 @@ private theorem mem_window_of_mem_supporters {last n : Nat} {u : ValidatorIndex}
   · exact mem_window_of_far_vote history honest time headRead headFound epochRead horizon
       (by omega) origin window low high
 
+open Models.ForkChoice in
+/-- The actual all-range committee window bounds two siblings and a disjoint discount set. -/
+private theorem sibling_weight_le_window {last n : Nat} {u : ValidatorIndex}
+    (history : VoteCommitteeCommonHistory (e := e) last) (honest : u ∈ J)
+    (time : (e.world n).time ≤ last)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock
+      ((e.world n).state u))
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) (before : fork < .glamsterdam)
+    (lower : ((e.world n).state u).ParentsBelow)
+    (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {head : ForkChoiceNode} {headState state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit)
+    (nodes : List ForkChoiceNode) (boosted : Option (Option Root)) (score : Nat)
+    {root : Root} {block parent : BeaconBlock preset fork} {sibling : Option Root}
+    {current first finish : Slot} {epoch : Epoch} {members : Std.TreeSet ValidatorIndex}
+    {N : Finset ValidatorIndex}
+    (headRead : ((e.world n).state u).getHead config = .ok head)
+    (headFound : ((e.world n).state u).blockState head.root = .ok headState)
+    (found : ((e.world n).state u).blocks[root]? = some block)
+    (parentFound : ((e.world n).state u).blocks[block.parentRoot]? = some parent)
+    (descends : ((e.world n).state u).isAncestor ⟨head.root, .pending⟩
+      ⟨block.parentRoot, .pending⟩ = .ok true)
+    (slotRead : ((e.world n).state u).getCurrentSlot config = .ok current)
+    (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok epoch)
+    (horizon : epoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2)
+    (firstOk : addChecked parent.slot 1 = .ok first)
+    (lastOk : subChecked current 1 = .ok finish)
+    (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first finish =
+      .ok members)
+    (siblingChild : sibling ∈ children (Store.view lower nodes) (some block.parentRoot))
+    (distinct : sibling ≠ some root)
+    (inside : N ⊆ members.toList.toFinset)
+    (neither : ∀ v ∈ N,
+      v.toNat ∉ supporters (Store.voters state) (Store.view lower nodes) (some root) ∧
+      v.toNat ∉ supporters (Store.voters state) (Store.view lower nodes) sibling) :
+    weight (Store.voters state).insertNone (boostStake (balanceAt state) score)
+        ((Store.view lower nodes).withBoost boosted) (some root) +
+      weight (Store.voters state).insertNone (boostStake (balanceAt state) score)
+        ((Store.view lower nodes).withBoost boosted) sibling +
+      stake (fun v => balanceAt state v.toNat) N ≤
+    stake (fun v => balanceAt state v.toNat) members.toList.toFinset + score := by
+  apply Store.weight_add_weight_add_stake_le_stake_withBoost lower within nodes boosted score
+    found rfl siblingChild distinct _ inside neither
+  intro i member
+  have child : ∃ c, (Store.blockTree lower).IsChild c (some block.parentRoot) ∧
+      i ∈ supporters (Store.voters state) (Store.view lower nodes) c := by
+    rcases Finset.mem_union.mp member with first | second
+    · exact ⟨_, Store.blockTree_isChild_iff.mpr ⟨block, found, rfl⟩, first⟩
+    · exact ⟨_, (mem_children.mp siblingChild).2, second⟩
+  obtain ⟨c, isChild, supporter⟩ := child
+  have member := mem_window_of_mem_supporters history honest time reached anchorSlot before
+    lower minLookahead maxLookahead ring headRead headFound parentFound descends slotRead
+    epochRead horizon firstOk lastOk window isChild supporter
+  simpa only [List.mem_toFinset, Std.TreeSet.mem_toList] using member
+
 /-- Held-state finality supplies the source bound at the store's realized checkpoint.
 
 The two ancestry reads remain separate inputs; this does not bound cached-output finality. -/
