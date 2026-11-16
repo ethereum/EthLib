@@ -93,6 +93,7 @@ The `key_gen_known_answer` and `sign_known_answer` cases pin one full key and on
 The key grows from the seed `S_0[i] = 37 i + 11 mod 256`, and the signature signs `m[i] = 7 i + 3` at leaf index `0xA5C37E19`.
 The public key and the signature bytes were computed outside EthLib, by an independent implementation of the note.
 The `verify` cases check that this signature verifies, and that it fails with a changed message, leaf index, randomizer, chain value or sibling.
+Twelve more `verify` cases keep its leaf, its path and its root, and sign one layer under a digest that is not a codeword.
 The other cases are EthLib's own, and nothing outside EthLib checks them yet.
 
 ## What is proved

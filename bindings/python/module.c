@@ -30,6 +30,8 @@ size_t XMSS_RANDOMIZER_LEN;
 size_t XMSS_CHAINS;
 size_t XMSS_LAYER_HEIGHT;
 size_t XMSS_LEAF_INDEX_SIZE;
+size_t XMSS_CHAIN_LENGTH;
+size_t XMSS_TARGET_SUM;
 
 size_t SPHINCS_MESSAGE_LEN;
 size_t SPHINCS_SEED_LEN;
@@ -259,6 +261,16 @@ eth_xmss_const_layer_height(
 
 extern uint64_t
 eth_xmss_const_leaf_index_size(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_xmss_const_chain_length(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_xmss_const_target_sum(
   lean_object* unit
 );
 
@@ -1477,6 +1489,8 @@ PyInit__native(void) {
     XMSS_CHAINS = (size_t) eth_xmss_const_chains(lean_box(0));
     XMSS_LAYER_HEIGHT = (size_t) eth_xmss_const_layer_height(lean_box(0));
     XMSS_LEAF_INDEX_SIZE = (size_t) eth_xmss_const_leaf_index_size(lean_box(0));
+    XMSS_CHAIN_LENGTH = (size_t) eth_xmss_const_chain_length(lean_box(0));
+    XMSS_TARGET_SUM = (size_t) eth_xmss_const_target_sum(lean_box(0));
     SPHINCS_N = (size_t) eth_sphincs_const_n(lean_box(0));
     SPHINCS_RANDOMIZER_LEN = (size_t) eth_sphincs_const_randomizer_len(lean_box(0));
     SPHINCS_CHAINS = (size_t) eth_sphincs_const_chains(lean_box(0));
@@ -1543,6 +1557,8 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "XMSS_CHAINS", XMSS_CHAINS);
   PyModule_AddIntConstant(m, "XMSS_LAYER_HEIGHT", XMSS_LAYER_HEIGHT);
   PyModule_AddIntConstant(m, "XMSS_LEAF_INDEX_SIZE", XMSS_LEAF_INDEX_SIZE);
+  PyModule_AddIntConstant(m, "XMSS_CHAIN_LENGTH", XMSS_CHAIN_LENGTH);
+  PyModule_AddIntConstant(m, "XMSS_TARGET_SUM", XMSS_TARGET_SUM);
   PyModule_AddIntConstant(m, "SPHINCS_N", SPHINCS_N);
   PyModule_AddIntConstant(m, "SPHINCS_RANDOMIZER_LEN", SPHINCS_RANDOMIZER_LEN);
   PyModule_AddIntConstant(m, "SPHINCS_CHAINS", SPHINCS_CHAINS);
