@@ -1815,8 +1815,9 @@ private theorem mem_window_of_mem_supporters {last n : Nat} {u : ValidatorIndex}
       (by omega) origin window low high
 
 open Models.ForkChoice in
-/-- The computed all-range committee weight bounds two siblings and a disjoint discount set. -/
-private theorem sibling_weight_le_window {last n : Nat} {u : ValidatorIndex}
+/-- A finite-window margin makes a block heavier than a sibling, including the boost. -/
+private theorem sibling_weight_lt_of_window_margin [DecidablePred (· ∈ J)]
+    {last n : Nat} {u : ValidatorIndex}
     (history : VoteCommitteeCommonHistory (e := e) last) (honest : u ∈ J)
     (time : (e.world n).time ≤ last)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock
@@ -1830,8 +1831,8 @@ private theorem sibling_weight_le_window {last n : Nat} {u : ValidatorIndex}
     (within : state.RegistryWithinLimit)
     (nodes : List ForkChoiceNode) (boosted : Option (Option Root)) (score : Nat)
     {root : Root} {block parent : BeaconBlock preset fork} {sibling : Option Root}
-    {current first finish : Slot} {epoch : Epoch} {members : Std.TreeSet ValidatorIndex}
-    {N : Finset ValidatorIndex} {maximum : Gwei}
+    {current first finish shortLast : Slot} {epoch : Epoch}
+    {members participants : Std.TreeSet ValidatorIndex}
     (headRead : ((e.world n).state u).getHead config = .ok head)
     (headFound : ((e.world n).state u).blockState head.root = .ok headState)
     (found : ((e.world n).state u).blocks[root]? = some block)
@@ -1845,43 +1846,52 @@ private theorem sibling_weight_le_window {last n : Nat} {u : ValidatorIndex}
     (lastOk : subChecked current 1 = .ok finish)
     (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first finish =
       .ok members)
-    (maximumOk : ((e.world n).state u).computeCommitteeWeightBetweenSlots head.root state
-      first finish = .ok maximum)
+    (shortWindow : ((e.world n).state u).getCommitteesBetweenSlots head.root first shortLast =
+      .ok participants)
+    (shortBefore : shortLast ≤ finish)
     (siblingChild : sibling ∈ children (Store.view lower nodes) (some block.parentRoot))
     (distinct : sibling ≠ some root)
-    (inside : N ⊆ Store.activeMembers state members)
-    (neither : ∀ v ∈ N,
-      v.toNat ∉ supporters (Store.voters state) (Store.view lower nodes) (some root) ∧
-      v.toNat ∉ supporters (Store.voters state) (Store.view lower nodes) sibling) :
-    weight (Store.voters state).insertNone (boostStake (balanceAt state) score)
+    (margin : stake (fun v => balanceAt state v.toNat) (Store.activeMembers state members) +
+      score < 2 * weight (Store.voters state).insertNone (boostStake (balanceAt state) score)
         ((Store.view lower nodes).withBoost boosted) (some root) +
+      stake (fun v => balanceAt state v.toNat)
+        {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J}) :
+    weight (Store.voters state).insertNone (boostStake (balanceAt state) score)
+        ((Store.view lower nodes).withBoost boosted) sibling <
       weight (Store.voters state).insertNone (boostStake (balanceAt state) score)
-        ((Store.view lower nodes).withBoost boosted) sibling +
-      stake (fun v => balanceAt state v.toNat) N ≤
-    maximum.toNat + score := by
+        ((Store.view lower nodes).withBoost boosted) (some root) := by
   classical
-  have cap : stake (fun v => balanceAt state v.toNat) (Store.activeMembers state members) ≤
-      maximum.toNat :=
-    Store.stake_le_computeCommitteeWeightBetweenSlots window maximumOk
-      (fun _ member => Store.mem_activeMembers.mp member)
-  apply le_trans _ (Nat.add_le_add_right cap score)
-  apply Store.weight_add_weight_add_stake_le_stake_withBoost lower within nodes boosted score
-    found rfl siblingChild distinct _ inside neither
-  intro i member
-  have child : ∃ c, (Store.blockTree lower).IsChild c (some block.parentRoot) ∧
-      i ∈ supporters (Store.voters state) (Store.view lower nodes) c := by
-    rcases Finset.mem_union.mp member with first | second
-    · exact ⟨_, Store.blockTree_isChild_iff.mpr ⟨block, found, rfl⟩, first⟩
-    · exact ⟨_, (mem_children.mp siblingChild).2, second⟩
-  obtain ⟨c, isChild, supporter⟩ := child
-  have member := mem_window_of_mem_supporters history honest time reached anchorSlot before
-    lower minLookahead maxLookahead ring headRead headFound parentFound descends slotRead
-    epochRead horizon firstOk lastOk window isChild supporter
-  obtain ⟨below, validator, atIndex, active⟩ :=
-    active_of_mem_voters (Finset.mem_of_mem_filter _ supporter)
-  have back := toNat_toUInt64_of_lt within below
-  exact Store.mem_activeMembers.mpr ⟨member, validator, by simpa only [back] using atIndex,
-    active⟩
+  have bound := Store.weight_add_weight_add_stake_le_stake_withBoost lower within nodes boosted
+    score found rfl siblingChild distinct (window := Store.activeMembers state members)
+    (fun i member => by
+      have child : ∃ c, (Store.blockTree lower).IsChild c (some block.parentRoot) ∧
+          i ∈ supporters (Store.voters state) (Store.view lower nodes) c := by
+        rcases Finset.mem_union.mp member with first | second
+        · exact ⟨_, Store.blockTree_isChild_iff.mpr ⟨block, found, rfl⟩, first⟩
+        · exact ⟨_, (mem_children.mp siblingChild).2, second⟩
+      obtain ⟨c, isChild, supporter⟩ := child
+      have member := mem_window_of_mem_supporters history honest time reached anchorSlot before
+        lower minLookahead maxLookahead ring headRead headFound parentFound descends slotRead
+        epochRead horizon firstOk lastOk window isChild supporter
+      obtain ⟨below, validator, atIndex, active⟩ :=
+        active_of_mem_voters (Finset.mem_of_mem_filter _ supporter)
+      have back := toNat_toUInt64_of_lt within below
+      exact Store.mem_activeMembers.mpr ⟨member, validator, by simpa only [back] using atIndex,
+        active⟩)
+    (N := {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J})
+    (fun v member => by
+      obtain ⟨inShort, validator, _⟩ := Store.mem_parentVotersOf.mp
+        (Finset.mem_filter.mp member).1
+      obtain ⟨entry, atIndex, _, active⟩ := validator
+      exact Store.mem_activeMembers.mpr
+        ⟨Store.mem_getCommitteesBetweenSlots_of_le shortWindow window shortBefore inShort,
+          entry, atIndex, active⟩)
+    (fun v member =>
+      ⟨Store.not_mem_supporters_of_mem_parentVotersOf
+        (Store.blockTree_isChild_iff.mpr ⟨block, found, rfl⟩) (Finset.mem_filter.mp member).1,
+      Store.not_mem_supporters_of_mem_parentVotersOf (mem_children.mp siblingChild).2
+        (Finset.mem_filter.mp member).1⟩)
+  omega
 
 /-- Held-state finality supplies the source bound at the store's realized checkpoint.
 
