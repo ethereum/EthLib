@@ -1581,6 +1581,39 @@ private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
   obtain ⟨validator, found⟩ := inside epoch v.toNat active
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
+/-- A near-epoch cache read has bounded finality even when its target precedes an empty slot. -/
+private theorem checkpoint_finalized_le_of_near_epoch {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (anchorInvariant : Invariant anchorState) (positive : 0 < preset.SLOTS_PER_EPOCH)
+    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat}
+    {checkpoint : Checkpoint} {state : BeaconState preset fork} {boundary : Epoch}
+    (read : ((e.world n).state u).checkpointState checkpoint = .ok state)
+    (storeBound : ((e.world n).state u).finalizedCheckpoint.epoch ≤ boundary)
+    (near : checkpoint.epoch.toNat ≤ boundary.toNat + 1) :
+    state.finalizedCheckpoint.epoch ≤ boundary := by
+  have reached := e.forwardReachableWith
+    (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
+    n u honest
+  obtain ⟨base, start, held, startOk, advanced⟩ :=
+    e.checkpointStates_fixedChecks anchorStore anchored honest
+      (Store.checkpointState_ok_iff.mp read)
+  unfold lookaheadState at advanced
+  split at advanced
+  · have slotsOk := mapError_ok_iff.mp advanced
+    have inv := (processSlots_invariant
+      ((reached.reachable.ordered anchorInvariant).2 held) slotsOk).1
+    have epoch : getCurrentEpoch state = checkpoint.epoch := by
+      change computeEpochAtSlot preset state.slot = checkpoint.epoch
+      rw [(processSlots_slot slotsOk).2]
+      exact computeEpochAtSlot_computeStartSlotAtEpoch positive startOk
+    have upper := UInt64.le_trans (Store.finalized_le_currentJustified inv.ordered) inv.settled
+    rw [UInt64.le_iff_toNat_le, getPreviousEpoch_toNat, epoch] at upper
+    exact UInt64.le_iff_toNat_le.mpr (by omega)
+  · cases advanced
+    exact UInt64.le_trans
+      ((reached.reachable.ordered_finalized anchorInvariant).2 held) storeBound
+
 /-- An actual descendant bounds the finalized epoch of its cached checkpoint prefix. -/
 private theorem checkpoint_finalized_le_of_descendant {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -1648,6 +1681,8 @@ private theorem registry_of_honest_checkpoint {anchor : Store preset fork}
     (sourceBlockFound : ((e.world n).state u).blocks[targetCheckpoint.root]? = some sourceBlock)
     (sourceEpoch : checkpoint.epoch ≤ targetCheckpoint.epoch)
     (finalized : targetState.finalizedCheckpoint.epoch ≤ checkpoint.epoch ∨
+      (((e.world n).state u).finalizedCheckpoint.epoch ≤ checkpoint.epoch ∧
+        targetCheckpoint.epoch.toNat ≤ checkpoint.epoch.toNat + 1) ∨
       ((e.world n).state u).finalizedCheckpoint.epoch ≤ checkpoint.epoch ∧
         ∃ root block start descendant,
           ((e.world n).state u).getCheckpointBlock root targetCheckpoint.epoch =
@@ -1673,9 +1708,11 @@ private theorem registry_of_honest_checkpoint {anchor : Store preset fork}
     rw [UInt64.le_iff_toNat_le, toNat_max]
     exact Nat.le_trans ordered (Nat.le_max_right _ _)
   have targetFinalized : targetState.finalizedCheckpoint.epoch ≤ checkpoint.epoch := by
-    rcases finalized with direct | ⟨storeBound, root, block, start, descendant,
-      walk, found, startOk, atOrAfter, held⟩
+    rcases finalized with direct | ⟨storeBound, near⟩ | ⟨storeBound, root, block, start,
+      descendant, walk, found, startOk, atOrAfter, held⟩
     · exact direct
+    · exact checkpoint_finalized_le_of_near_epoch anchorStore anchored anchorInvariant positive
+        honest targetRead storeBound near
     · exact UInt64.le_trans
         (checkpoint_finalized_le_of_descendant anchorStore anchored anchorInvariant anchorSlot
           honest targetRead walk found startOk atOrAfter held) storeBound
@@ -1718,6 +1755,8 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
     (sourceEpoch : ∀ v ∈ participants, checkpoint.epoch ≤ (attestation v).data.target.epoch)
     (finalized : ∀ v ∈ participants,
       (targetState v).finalizedCheckpoint.epoch ≤ checkpoint.epoch ∨
+        (((e.world n).state u).finalizedCheckpoint.epoch ≤ checkpoint.epoch ∧
+          (attestation v).data.target.epoch.toNat ≤ checkpoint.epoch.toNat + 1) ∨
         ((e.world n).state u).finalizedCheckpoint.epoch ≤ checkpoint.epoch ∧
           ∃ root block start descendant,
             ((e.world n).state u).getCheckpointBlock root (attestation v).data.target.epoch =
