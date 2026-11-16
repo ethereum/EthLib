@@ -1771,6 +1771,24 @@ private theorem registry_of_honest_checkpoint {anchor : Store preset fork}
     walk found startOk bound baseFound boundaryBaseFound advanced sourceRun sourceWalk
     sourceBlockFound sourceBound sourceFound targetFinalized finite
 
+/-- An actual lookahead preserves the run relation in both slot branches. -/
+private theorem runKept_lookahead {state after : BeaconState preset fork} {slot : Slot}
+    (run : lookaheadState config checks state slot = .ok after) : RunKept state after := by
+  unfold lookaheadState at run
+  split at run
+  · exact runKept_processSlots (mapError_ok_iff.mp run)
+  · cases run
+    exact RunKept.refl _
+
+/-- A growing registry retains every index read in the earlier state. -/
+private theorem registry_of_runKept {state after : BeaconState preset fork}
+    (run : RunKept state after) {epoch : Epoch} {position : Nat}
+    (active : isActiveAt state epoch position = true) :
+    ∃ validator, after.validators.data[position]? = some validator := by
+  obtain ⟨validator, held, _⟩ := isActiveAt_eq_true_iff.mp active
+  have inside := Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp held).1 run.grows
+  exact ⟨after.validators.data[position], Array.getElem?_eq_getElem inside⟩
+
 /-- Each accepted signer supplies activity in its own actual cached target state.
 
 The receiver still filters at its own epoch; no activity is transported backwards. -/
@@ -1827,7 +1845,7 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
               (computeEpochAtSlot preset parent.slot).toNat + 1 <
                 (attestation v).data.target.epoch.toNat) ∧
           ((e.world n).state u).blockStates[headRoot]? = some headState ∧
-          (headRoot = root ∨
+          (headRoot = root ∨ headRoot = checkpoint.root ∨
             ((e.world n).state u).blocks[headRoot]? = some headBlock ∧
             ((e.world n).state u).getCheckpointBlock headRoot checkpoint.epoch =
               .ok checkpoint.root ∧
@@ -1876,19 +1894,23 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
       obtain ⟨common, toTarget, toHead, fixed⟩ := commonWitness
       rw [← (origins v member).targetEpoch, toTarget.active _ fixed v.toNat,
         ← toHead.active _ fixed v.toNat] at active
-      rcases headPath with same | ⟨headBlockFound, headWalk, headBound, storeBound⟩
+      rcases headPath with same | atBoundary | ⟨headBlockFound, headWalk, headBound, storeBound⟩
       · -- A fallback head at the cache base needs only the actual lookahead's registry growth.
         rw [same, baseFound, Option.some.injEq] at headFound
         subst headState
-        have grows : base.validators.data.size ≤ cached.validators.data.size := by
-          unfold lookaheadState at advanced
-          split at advanced
-          · exact (runKept_processSlots (mapError_ok_iff.mp advanced)).grows
-          · cases advanced
-            exact Nat.le_refl _
-        obtain ⟨validator, held, _⟩ := isActiveAt_eq_true_iff.mp active
-        have inside := Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp held).1 grows
-        exact ⟨cached.validators.data[v.toNat], Array.getElem?_eq_getElem inside⟩
+        exact registry_of_runKept (runKept_lookahead advanced) active
+      · -- The historical checkpoint's held registry precedes its prefix and receiver run.
+        rw [atBoundary, boundaryBaseFound, Option.some.injEq] at headFound
+        subst headState
+        have reached := e.forwardReachableWith
+          (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
+          n u honest
+        obtain ⟨boundary, prefixOk, run⟩ := relation_of_checkpoint_lookahead RunKept RunKept.refl
+          (fun one two => one.trans two) (fun ok => runKept_stateTransition ok)
+          (fun slots bound ok => runKept_of_processSlots_of_stateTransition slots bound ok)
+          (fun ok => runKept_processSlots ok) anchorSlot reached walk found startOk bound
+          boundaryBaseFound baseFound advanced
+        exact registry_of_runKept ((runKept_lookahead prefixOk).trans run) active
       have reached := e.forwardReachableWith
         (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
         n u honest
