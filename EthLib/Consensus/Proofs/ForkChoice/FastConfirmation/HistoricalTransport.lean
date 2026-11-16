@@ -400,38 +400,39 @@ private theorem epochPrefix_kept {config : Config} {checks : SignatureChecks}
     | exact ⟨edge.validators_eq ⟨nofun, nofun, nofun⟩,
         (edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩).2.2.2.2⟩
 
-/-- The prefix finalizes only an old checkpoint, so bounds on all three suffice. -/
-private theorem epochPrefix_finalized_le {config : Config} {checks : SignatureChecks}
-    {source ready : BeaconState preset fork} {epoch : Epoch}
-    (beforeRegistry : EpochTrace (EpochStage.action config checks)
-      [.justification, .inactivity, .rewards] source ready)
-    (finalized : source.finalizedCheckpoint.epoch ≤ epoch)
-    (previous : source.previousJustifiedCheckpoint.epoch ≤ epoch)
-    (current : source.currentJustifiedCheckpoint.epoch ≤ epoch) :
-    ready.finalizedCheckpoint.epoch ≤ epoch := by
-  have stages := EpochTrace.run_ok_iff.mpr beforeRegistry
-  simp only [EpochTrace.run, List.foldlM_cons, List.foldlM_nil, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq] at stages
-  obtain ⟨justified, justifiedOk, inactive, inactiveOk, _, rewardsOk, rfl⟩ := stages
-  have finalBound : justified.finalizedCheckpoint.epoch ≤ epoch := by
-    rcases processJustificationAndFinalization_ok (EpochStage.action_cases.mp justifiedOk)
-      with rfl | ⟨_, _, _, weighed⟩
-    · exact finalized
-    · obtain ⟨_, _, alternatives, _⟩ := weighJustificationAndFinalization_checkpoints weighed
-      rcases alternatives with same | same | same
-      · simpa only [same] using finalized
-      · simpa only [same] using previous
-      · simpa only [same] using current
-  have inactiveEdge := EpochStage.action_cases.mp inactiveOk
-  have kept : inactive.finalizedCheckpoint = justified.finalizedCheckpoint := by
-    simp only [EpochStage.Edge] at inactiveEdge
-    split at inactiveEdge
-    · rw [processInactivityUpdates_frame inactiveEdge]
-    · exact inactiveEdge ▸ rfl
-  rw [processRewardsAndPenalties_frame (EpochStage.action_cases.mp rewardsOk)]
-  exact kept ▸ finalBound
+/-- Every stage after justification preserves the finalized checkpoint exactly. -/
+private theorem finalized_epochTrace {config : Config} {checks : SignatureChecks}
+    {stages : List EpochStage} {source after : BeaconState preset fork}
+    (trace : EpochTrace (EpochStage.action config checks) stages source after)
+    (other : ∀ stage ∈ stages, stage ≠ .justification) :
+    after.finalizedCheckpoint = source.finalizedCheckpoint := by
+  apply trace.transport
+    (fun (s t : BeaconState preset fork) => t.finalizedCheckpoint = s.finalizedCheckpoint)
+    (fun _ => rfl) (fun one two => two.trans one)
+  intro stage member s t run
+  have edge := EpochStage.action_cases.mp run
+  by_cases deposits : stage = .pendingDeposits
+  · subst stage
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · exact (frame_processPendingDeposits edge).finalized
+    · exact edge ▸ rfl
+  by_cases payments : stage = .payments
+  · subst stage
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · exact (frame_processBuilderPendingPayments edge).finalized
+    · exact edge ▸ rfl
+  by_cases participation : stage = .participation
+  · subst stage
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · subst edge; exact (frame_processParticipationFlagUpdates _ _).finalized
+    · exact (frame_processParticipationRecordUpdates edge).finalized
+  exact (mutatorEpochFrameLaws.toEpochStepLaws.epochEdge
+    ⟨other stage member, payments, participation, deposits⟩ run).finalized
 
-/-- Ordered source checkpoints below the boundary suffice for the actual Electra epoch reader. -/
+/-- The output finalized bound suffices for the actual Electra epoch reader. -/
 private theorem filteredTotal_of_epoch
     {config : Config} {checks : SignatureChecks}
     {source after cached : BeaconState preset fork} (electra : .pectra ≤ fork)
@@ -439,8 +440,7 @@ private theorem filteredTotal_of_epoch
     {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
     (run : processEpoch config checks source = .ok after)
     (boundary : boundEpoch ≤ getCurrentEpoch source)
-    (ordered : CheckpointsOrdered source)
-    (current : source.currentJustifiedCheckpoint.epoch ≤ boundEpoch)
+    (finalized : after.finalizedCheckpoint.epoch ≤ boundEpoch)
     (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source)
     (contains : count ≤ cached.validators.data.size)
     (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
@@ -454,9 +454,11 @@ private theorem filteredTotal_of_epoch
   have readyTail := pendingTail_of_validators (congrArg (·.data) validators) tail
   have readyBound : boundEpoch ≤ getCurrentEpoch ready := by
     simpa only [getCurrentEpoch, slot] using boundary
-  have previous := UInt64.le_trans ordered.2 current
-  have finalized := UInt64.le_trans ordered.1 previous
-  have readyFinalized := epochPrefix_finalized_le beforeRegistry finalized previous current
+  have same := finalized_epochTrace
+    (EpochTrace.cons ((EpochStage.action_cases (stage := .registry)).mpr registry) suffix)
+    (by simp [EpochStage.middleStages, EpochStage.tailStages])
+  have readyFinalized : ready.finalizedCheckpoint.epoch ≤ boundEpoch := by
+    simpa only [same] using finalized
   exact filteredTotal_of_postRegistry suffix finite
     (pendingTail_processRegistryUpdatesElectra electra registry readyBound readyFinalized readyTail)
     contains active read
