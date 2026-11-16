@@ -1815,6 +1815,59 @@ private theorem mem_window_of_mem_supporters {last n : Nat} {u : ValidatorIndex}
       (by omega) origin window low high
 
 open Models.ForkChoice in
+/-- The model weight includes every honest supporter counted by the store. -/
+private theorem honest_supporters_le_weight [DecidablePred (· ∈ J)]
+    {store : Store preset fork} {state : BeaconState preset fork} {root : Root}
+    {block : BeaconBlock preset fork} (lower : store.ParentsBelow)
+    (before : fork < .glamsterdam) (within : state.RegistryWithinLimit)
+    (found : store.blocks[root]? = some block) (nodes : List ForkChoiceNode) :
+    stake (fun v => balanceAt state v.toNat)
+        {v ∈ store.supportersOf state ⟨root, .pending⟩ | v ∈ J} ≤
+      weight (Store.voters state) (balanceAt state) (Store.view lower nodes) (some root) := by
+  classical
+  let S := {v ∈ store.supportersOf state ⟨root, .pending⟩ | v ∈ J}
+  have inside : S.image UInt64.toNat ⊆
+      supporters (Store.voters state) (Store.view lower nodes) (some root) := by
+    intro i member
+    obtain ⟨v, inS, rfl⟩ := Finset.mem_image.mp member
+    have supporter := (Finset.mem_filter.mp inS).1
+    have counts := Store.voteCountsFor_of_mem_supportersOf supporter
+    obtain ⟨message, supported, latest, clean, supportedOk, descends⟩ :=
+      store.exists_of_voteCountsFor counts
+    rw [Store.getSupportedNode_of_lt before, Except.ok.injEq] at supportedOk
+    subst supported
+    have ancestry := (Store.isAncestor_iff (lower := lower) before found rfl descends).mp rfl
+    simp only [Store.supportersOf, List.mem_toFinset, List.mem_map, List.mem_filter] at supporter
+    obtain ⟨⟨index, balance⟩, ⟨entry, _⟩, same⟩ := supporter
+    simp only at same
+    subst index
+    simp only [unslashedActiveBalances, List.mem_filterMap, Option.ite_none_right_eq_some,
+      Option.some.injEq, Prod.mk.injEq, Prod.exists] at entry
+    obtain ⟨validator, position, inZip, flags, indexEq, _⟩ := entry
+    have atIndex := List.mem_zipIdx_iff_getElem?.mp inZip
+    have atArray : state.validators.data[position]? = some validator := by
+      simpa using atIndex
+    have below : position < state.validators.data.size := by
+      simpa using (List.getElem?_eq_some_iff.mp atIndex).1
+    have back := toNat_toUInt64_of_lt within below
+    have voter : v.toNat ∈ Store.voters state := by
+      rw [← indexEq, back]
+      simp only [Store.voters, Finset.mem_filter, Finset.mem_range]
+      exact ⟨below, by simpa [Store.counts, atArray] using flags⟩
+    refine Finset.mem_filter.mpr ⟨voter, ?_⟩
+    refine ⟨some message.root, ?_, ancestry⟩
+    change store.latestVote v.toNat.toUInt64 = some (some message.root)
+    have notEquivocating : v ∉ store.equivocatingIndices := by simpa using clean
+    simp [Store.latestVote, latest, notEquivocating]
+  have summed : stake (balanceAt state) (S.image UInt64.toNat) =
+      stake (fun v => balanceAt state v.toNat) S := by
+    unfold stake
+    rw [Finset.sum_image]
+    exact fun _ _ _ _ same => UInt64.toNat_inj.mp same
+  rw [← summed]
+  exact stake_mono inside
+
+open Models.ForkChoice in
 /-- A visited parent selects its strictly heaviest child. -/
 private theorem ancestor_ghost_of_visited_parent {ν β ρ : Type*} [DecidableEq β]
     [LinearOrder ρ] {T : BlockTree β} (V : Finset ν) (w : ν → Nat) (G : View ν β T)
@@ -1973,15 +2026,34 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
       .ok participants)
     (shortBefore : shortLast ≤ finish)
     (margin : Models.stake (fun v => balanceAt state v.toNat)
-        (Store.activeMembers state members) + ((e.world n).state u).boostScore config <
-      2 * Models.ForkChoice.weight (Store.voters state).insertNone
-        (Models.ForkChoice.boostStake (balanceAt state) (((e.world n).state u).boostScore config))
-        ((Store.view lower nodes).withBoost ((e.world n).state u).boostedRoot) (some root) +
+        (Store.activeMembers state members) + score.toNat <
+      2 * Models.stake (fun v => balanceAt state v.toNat)
+        {v ∈ ((e.world n).state u).supportersOf state ⟨root, .pending⟩ | v ∈ J} +
       Models.stake (fun v => balanceAt state v.toNat)
-        {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J}) :
+        {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J})
+    (scoreOk : computeProposerScore config state = .ok (score : Gwei)) :
     ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true := by
   classical
   let store := (e.world n).state u
+  have boostBound : store.boostScore config ≤ score.toNat := by
+    dsimp only [store]
+    simp only [Store.boostScore]
+    split
+    · exact Nat.zero_le _
+    · simp [Store.getProposerScore, stateRead, scoreOk, bind, Except.bind]
+  have supportBound := honest_supporters_le_weight (J := J) lower before within found nodes
+  have boostedBound := Models.ForkChoice.weight_withBoost
+    (V := Store.voters state) (w := balanceAt state) (G := Store.view lower nodes)
+    store.boostedRoot (store.boostScore config) (some root)
+  have modelMargin : Models.stake (fun v => balanceAt state v.toNat)
+        (Store.activeMembers state members) + store.boostScore config <
+      2 * Models.ForkChoice.weight (Store.voters state).insertNone
+        (Models.ForkChoice.boostStake (balanceAt state) (store.boostScore config))
+        ((Store.view lower nodes).withBoost store.boostedRoot) (some root) +
+      Models.stake (fun v => balanceAt state v.toNat)
+        {v ∈ store.parentVotersOf state participants block parent | v ∈ J} := by
+    dsimp only [store] at boostBound boostedBound ⊢
+    omega
   have ghostEq := Store.getHead_eq_ghost_withBoost lower before stateRead tree headRead
   have ancestry := (Store.filterNodeTree_ancestor (lower := lower) before tree _ viable).1
   have child := (Store.blockTree_isChild_iff (lower := lower)).mpr ⟨block, found, rfl⟩
@@ -2003,7 +2075,7 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
       exact sibling_weight_lt_of_window_margin history honest time reached anchorSlot before
         lower minLookahead maxLookahead ring within nodes store.boostedRoot
         (store.boostScore config) headRead headFound found parentFound descends slotRead
-        epochRead horizon firstOk lastOk window shortWindow shortBefore member distinct margin
+        epochRead horizon firstOk lastOk window shortWindow shortBefore member distinct modelMargin
   obtain ⟨headBlock, headKnown⟩ := reached.reachable.known_of_blockState
     (Store.blockState_ok_iff.mp headFound)
   have pending := Store.getHead_pending before headRead
