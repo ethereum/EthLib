@@ -448,16 +448,18 @@ private theorem filteredTotal_of_pendingTail {source state : BeaconState preset 
 
 Extraction of these intermediate states from the operation schedule remains separate. -/
 private theorem filteredTotal_of_operation_folds {config : Config} {checks : SignatureChecks}
-    {source deposited exited changed after cached : BeaconState preset fork}
+    {source deposited exited changed requested after cached : BeaconState preset fork}
     {before : fork < .hegota} {electra : .pectra ≤ fork}
     {deposits : List Deposit} {exits : List SignedVoluntaryExit}
-    {changes : List SignedBLSToExecutionChange} {withdrawals : List WithdrawalRequest}
+    {changes : List SignedBLSToExecutionChange} {requests : List DepositRequest}
+    {withdrawals : List WithdrawalRequest}
     {epoch boundary : Epoch} {count : Nat}
     {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
     (run : deposits.foldlM (processDeposit config checks before) source = .ok deposited)
     (exitRun : exits.foldlM (processVoluntaryExit config checks) deposited = .ok exited)
     (changeRun : changes.foldlM (processBlsToExecutionChange config checks) exited = .ok changed)
-    (withdrawalRun : withdrawals.foldlM (processWithdrawalRequest config · electra ·) changed =
+    (requestRun : requests.foldlM (processDepositRequest · electra ·) changed = .ok requested)
+    (withdrawalRun : withdrawals.foldlM (processWithdrawalRequest config · electra ·) requested =
       .ok after)
     (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source)
     (contains : count ≤ cached.validators.data.size)
@@ -473,9 +475,58 @@ private theorem filteredTotal_of_operation_folds {config : Config} {checks : Sig
     (fun _ _ _ holds ok => pendingTail_processVoluntaryExit ok holds) depositedTail exitRun
   have changedTail := foldlM_ok_invariant (PendingTail count boundary)
     (fun _ _ _ holds ok => pendingTail_processBlsToExecutionChange ok holds) exitedTail changeRun
+  have requestedTail := foldlM_ok_invariant (PendingTail count boundary)
+    (fun _ _ _ holds ok => pendingTail_of_validators
+      (congrArg (·.data) (processDepositRequest_ok ok).2.1) holds) changedTail requestRun
   have withdrawnTail := foldlM_ok_invariant (PendingTail count boundary)
-    (fun _ _ _ holds ok => pendingTail_processWithdrawalRequest ok holds) changedTail withdrawalRun
+    (fun _ _ _ holds ok => pendingTail_processWithdrawalRequest ok holds)
+    requestedTail withdrawalRun
   exact filteredTotal_of_pendingTail withdrawnTail contains active read
+
+/-- A successful Electra-to-Fulu operation schedule supplies the actual states before consolidation.
+
+Tail and activity applicability at those states remain explicit conditional inputs. -/
+private theorem filteredTotal_of_operations_cut {config : Config} {checks : SignatureChecks}
+    {source after cached : BeaconState preset fork} {body : BeaconBlockBody preset fork}
+    {parentSlot : Slot} (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    {epoch boundary : Epoch} {count : Nat} {participants : Std.TreeSet ValidatorIndex}
+    {total : Gwei}
+    (run : processOperations config checks source body parentSlot = .ok after)
+    (finite : boundary < FAR_FUTURE_EPOCH) (contains : count ≤ cached.validators.data.size)
+    (read : getTotalActiveBalance cached = .ok total) :
+    ∃ proposers slashings attested withdrawn,
+      body.proposerSlashings.data.toList.foldlM (processProposerSlashing config checks) source =
+        .ok proposers ∧
+      body.attesterSlashings.data.toList.foldlM (processAttesterSlashing config checks) proposers =
+        .ok slashings ∧
+      body.attestations.data.toList.foldlM (processAttestation config checks · parentSlot ·)
+        slashings = .ok attested ∧
+      (body.executionRequests ⟨electra, early⟩).consolidations.data.toList.foldlM
+        (processConsolidationRequest config · electra ·) withdrawn = .ok after ∧
+      (PendingTail count boundary attested →
+        (∀ v ∈ participants, isActiveAt withdrawn epoch v.toNat = true) →
+        ∃ selected result,
+          participants.toList.filterM (fun index => do
+            return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
+            .ok selected ∧ getTotalBalance cached selected = .ok result) := by
+  have capella : .shapella ≤ fork := Nat.le_trans (by decide) electra
+  unfold processOperations at run
+  split at run
+  · exact absurd ‹.glamsterdam ≤ fork› (Nat.not_le.mpr early)
+  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at run
+  obtain ⟨_, _, _, _, proposers, proposersOk, slashings, slashingsOk, attested, attestedOk,
+    deposited, depositedOk, exited, exitsOk, changed, changesOk, requestsOk⟩ := run
+  have changesFold : (body.blsToExecutionChanges capella).data.toList.foldlM
+      (processBlsToExecutionChange config checks) exited = .ok changed := by
+    unfold processBlsToExecutionChanges at changesOk
+    split at changesOk
+    · simpa only [← Array.foldlM_toList] using changesOk
+    · exact absurd capella ‹¬.shapella ≤ fork›
+  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at requestsOk
+  obtain ⟨requested, requestedOk, withdrawn, withdrawnOk, consolidatedOk⟩ := requestsOk
+  exact ⟨proposers, slashings, attested, withdrawn, proposersOk, slashingsOk, attestedOk,
+    consolidatedOk, fun tail active => filteredTotal_of_operation_folds
+      depositedOk exitsOk changesFold requestedOk withdrawnOk finite tail contains active read⟩
 
 /-- Every non-registry stage preserves the pending tail, including intervening epoch stages. -/
 private theorem pendingTail_epochStage {config : Config} {checks : SignatureChecks}
