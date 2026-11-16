@@ -127,7 +127,8 @@ private theorem contributionEntries_verify
   have keys : (((contributionEntries keyed pubkeys).map fun entry => secret entry.1).map
       Signatures.skToPk) =
       (contributionEntries keyed pubkeys).map Prod.fst := by
-    simp only [List.map_map]
+    -- A lambda, not a composition, so the kernel never unfolds a key to compare it.
+    simp only [List.map_map, Function.comp_def]
     apply List.map_congr_left
     intro entry member
     exact (honest entry (mem_keyed_of_mem_contributionEntries member)).1.symm

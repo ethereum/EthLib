@@ -54,9 +54,9 @@ def syncParticipantPubkeys (committee : SyncCommittee preset)
     let absent := (pairs.filter (!·.2)).map (·.1)
     let absentSum ← (Signatures.ethAggregatePubkeys absent).mapError
       fun _ => .invalidSyncCommitteeKey
-    let total ← (G1.uncompress (packBytes committee.aggregatePubkey)).mapError
+    let total ← (G1.uncompress committee.aggregatePubkey).mapError
       fun _ => .invalidSyncCommitteeKey
-    let absentPoint ← (G1.uncompress (packBytes absentSum)).mapError
+    let absentPoint ← (G1.uncompress absentSum).mapError
       fun _ => .invalidSyncCommitteeKey
     return #[Signatures.pointToPubkey (G1.add total (G1.neg absentPoint))]
   else

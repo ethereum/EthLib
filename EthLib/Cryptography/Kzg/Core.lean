@@ -37,7 +37,7 @@ abbrev KZGCommitment := Bytes48
 abbrev KZGProof := Bytes48
 
 /-- The 48-byte compressed encoding of a point. -/
-def compressG1 (p : G1) : Bytes48 := ⟨(Bls.G1.compress p).data, Bls.G1.size_compress p⟩
+def compressG1 (p : G1) : Bytes48 := Bls.G1.compress p
 
 /-! ## Validation -/
 
@@ -51,14 +51,14 @@ def validateKzgG1Point (b : Bytes48) : Except KzgError G1 :=
   -- The canonical infinity encoding is accepted as the identity.
   if b == G1_POINT_AT_INFINITY then .ok Bls.G1.zero
   -- Any other input must pass full public-key validation.
-  else match Bls.G1.keyValidatePoint ⟨b.toArray⟩ with
+  else match Bls.G1.keyValidatePoint b with
   | .ok p    => .ok p
   | .error _ => .error .invalidG1Point
 
 /-- BLS validation, allowing the point at infinity. -/
 def validateKzgG1 (b : Bytes48) : Bool :=
   if b == G1_POINT_AT_INFINITY then true
-  else (Bls.G1.keyValidate ⟨b.toArray⟩).isOk
+  else (Bls.G1.keyValidate b).isOk
 
 /-- Decompress 48 bytes into a point, or fail with an invalid-point error.
 
@@ -67,7 +67,7 @@ A failed decompression must stop the computation.
 Falling back to a default point would silently replace the input with the point at infinity.
 -/
 def uncompressG1 (b : Bytes48) : Except KzgError G1 :=
-  match Bls.G1.uncompress ⟨b.toArray⟩ with
+  match Bls.G1.uncompress b with
   | .ok g    => pure g
   | .error _ => throw .invalidG1Point
 

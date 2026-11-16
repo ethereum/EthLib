@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Bytes
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Cryptography.Kzg.TrustedSetup
 public import EthLib.Cryptography.Proofs.Bls.Compress
@@ -26,7 +27,8 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (G1 G2)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
-open EthLib.Base (array_mapM_ok array_mapM_ok_mem)
+open EthLib.Base (array_mapM_ok array_mapM_ok_mem packBytes exactBytes? packBytes_injective
+  size_packBytes)
 
 /-- Each point of the setup is a point of its curve. -/
 structure TrustedSetup.Valid (s : TrustedSetup) : Prop where
@@ -34,21 +36,32 @@ structure TrustedSetup.Valid (s : TrustedSetup) : Prop where
   g1Monomial : ∀ i : Fin FIELD_ELEMENTS_PER_BLOB, G1.Valid s.g1Monomial[i]
   g2Monomial : ∀ i : Fin KZG_SETUP_G2_LENGTH, G2.Valid s.g2Monomial[i]
 
+/-- A string decodes to a point of `G1` of the setup when it is a compressed point of 48 bytes. -/
+theorem TrustedSetup.decodeG1_eq_ok {b : ByteArray} {p : G1} :
+    TrustedSetup.decodeG1 b = .ok p ↔ ∃ v, packBytes v = b ∧ G1.uncompress v = .ok p := by
+  unfold TrustedSetup.decodeG1 exactBytes?
+  by_cases hsz : b.size = 48
+  · rw [dite_eq_left hsz]
+    dsimp only
+    rw [Base.mapError_ok_iff]
+    refine ⟨fun h => ⟨_, rfl, h⟩, fun ⟨v, hv, h⟩ => ?_⟩
+    -- The vector with the bytes of `b` is `v`, since their bytes agree.
+    rwa [show (⟨b.data, hsz⟩ : Vector UInt8 48) = v from packBytes_injective hv.symm]
+  · rw [dite_eq_right hsz]
+    dsimp only
+    refine ⟨fun h => (by cases h), fun ⟨v, hv, _⟩ => absurd ?_ hsz⟩
+    rw [← hv, size_packBytes]
+
 /-- A point that decodes to a G1 point of the setup is valid. -/
-private theorem valid_of_toG1 {b : ByteArray} {p : G1}
-    (h : ((Bls.G1.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup) = .ok p) :
+private theorem valid_of_toG1 {b : ByteArray} {p : G1} (h : TrustedSetup.decodeG1 b = .ok p) :
     G1.Valid p := by
-  cases hu : Bls.G1.uncompress b with
-  | error e => rw [hu] at h; cases h
-  | ok q =>
-    rw [hu] at h
-    cases h
-    exact G1.uncompress_valid hu
+  obtain ⟨v, -, hu⟩ := TrustedSetup.decodeG1_eq_ok.mp h
+  exact G1.uncompress_valid hu
 
 /-- A point that decodes to a G2 point of the setup is valid. -/
-private theorem valid_of_toG2 {b : ByteArray} {p : G2}
-    (h : ((Bls.G2.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup) = .ok p) :
+private theorem valid_of_toG2 {b : ByteArray} {p : G2} (h : TrustedSetup.decodeG2 b = .ok p) :
     G2.Valid p := by
+  unfold TrustedSetup.decodeG2 at h
   cases hu : Bls.G2.uncompress b with
   | error e => rw [hu] at h; cases h
   | ok q =>
@@ -65,16 +78,13 @@ theorem TrustedSetup.ofBytes_valid {g1LagrangeBytes g1MonomialBytes g2MonomialBy
   unfold TrustedSetup.ofBytes at h
   dsimp only at h
   -- Each list decodes, or the decoder fails.
-  cases h₁ : g1LagrangeBytes.mapM fun b =>
-      (Bls.G1.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup with
+  cases h₁ : g1LagrangeBytes.mapM TrustedSetup.decodeG1 with
   | error e => rw [h₁] at h; cases h
   | ok lagrange =>
-  cases h₂ : g1MonomialBytes.mapM fun b =>
-      (Bls.G1.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup with
+  cases h₂ : g1MonomialBytes.mapM TrustedSetup.decodeG1 with
   | error e => rw [h₁, h₂] at h; cases h
   | ok monomial =>
-  cases h₃ : g2MonomialBytes.mapM fun b =>
-      (Bls.G2.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup with
+  cases h₃ : g2MonomialBytes.mapM TrustedSetup.decodeG2 with
   | error e => rw [h₁, h₂, h₃] at h; cases h
   | ok monomial2 =>
   rw [h₁, h₂, h₃] at h
@@ -116,19 +126,16 @@ theorem TrustedSetup.ofBytes_g1Monomial_mem
     {g1LagrangeBytes g1MonomialBytes g2MonomialBytes : Array ByteArray} {s : TrustedSetup}
     (h : TrustedSetup.ofBytes g1LagrangeBytes g1MonomialBytes g2MonomialBytes = .ok s)
     (i : Fin FIELD_ELEMENTS_PER_BLOB) :
-    ∃ b ∈ g1MonomialBytes, G1.uncompress b = .ok s.g1Monomial[i] := by
+    ∃ b ∈ g1MonomialBytes, TrustedSetup.decodeG1 b = .ok s.g1Monomial[i] := by
   unfold TrustedSetup.ofBytes at h
   dsimp only at h
-  cases h₁ : g1LagrangeBytes.mapM fun b =>
-      (Bls.G1.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup with
+  cases h₁ : g1LagrangeBytes.mapM TrustedSetup.decodeG1 with
   | error e => rw [h₁] at h; cases h
   | ok lagrange =>
-  cases h₂ : g1MonomialBytes.mapM fun b =>
-      (Bls.G1.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup with
+  cases h₂ : g1MonomialBytes.mapM TrustedSetup.decodeG1 with
   | error e => rw [h₁, h₂] at h; cases h
   | ok monomial =>
-  cases h₃ : g2MonomialBytes.mapM fun b =>
-      (Bls.G2.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup with
+  cases h₃ : g2MonomialBytes.mapM TrustedSetup.decodeG2 with
   | error e => rw [h₁, h₂, h₃] at h; cases h
   | ok monomial2 =>
   rw [h₁, h₂, h₃] at h
@@ -140,10 +147,7 @@ theorem TrustedSetup.ofBytes_g1Monomial_mem
       · cases h
         have hi : i.val < monomial.size := by rw [hm]; exact i.isLt
         obtain ⟨b, hmem, hb⟩ := array_mapM_ok_mem h₂ _ (Array.getElem_mem hi)
-        refine ⟨b, hmem, ?_⟩
-        cases hu : Bls.G1.uncompress b with
-        | error e => rw [hu] at hb; cases hb
-        | ok q => rw [hu] at hb; cases hb; rfl
+        exact ⟨b, hmem, hb⟩
       · cases h
     · cases h
   · cases h
@@ -191,8 +195,8 @@ theorem TrustedSetup.ofBytes_g2Monomial
         -- The decoder wraps each error, so a decoded point is the decompression itself.
         have hd := hc i hb hm
         cases hu : G2.uncompress g2MonomialBytes[i] with
-        | error e => simp [hu, Except.mapError] at hd
-        | ok q => simp [hu, Except.mapError] at hd; simp [hd]
+        | error e => simp [TrustedSetup.decodeG2, hu, Except.mapError] at hd
+        | ok q => simp [TrustedSetup.decodeG2, hu, Except.mapError] at hd; simp [hd]
       · cases h
     · cases h
   · cases h

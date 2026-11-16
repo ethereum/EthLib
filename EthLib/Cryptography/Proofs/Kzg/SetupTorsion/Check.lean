@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Kzg.TrustedSetup
 public import EthLib.Cryptography.Proofs.Bls.G1TorsionCheck
+public import EthLib.Cryptography.Proofs.Kzg.TrustedSetup
 public meta import Lean.Elab.Term
 
 /-!
@@ -133,7 +134,7 @@ theorem fromBytesBE_eq {l : List Nat} {x : Fp}
 /-- If the check of a string passes, each point that it decodes to has order dividing `r`. -/
 theorem modulus_smul_eq_zero {s : String} {b : ByteArray} {q : G1}
     (hc : checkCodes (codes s) = true) (hb : TrustedSetup.hexToBytes? s = some b)
-    (hq : G1.uncompress b = .ok q) : Fr.modulus • G1.toPoint q = 0 := by
+    (hq : TrustedSetup.decodeG1 b = .ok q) : Fr.modulus • G1.toPoint q = 0 := by
   unfold checkCodes codes at hc
   rw [TrustedSetup.hexToBytes?, hexToBytesAux_eq] at hb
   cases hl : hexBytes (s.toList.map Char.toNat) with
@@ -142,7 +143,8 @@ theorem modulus_smul_eq_zero {s : String} {b : ByteArray} {q : G1}
     rw [hl] at hc
     rw [hl, Option.map_some, Option.some.injEq] at hb
     subst hb
-    rcases G1.uncompress_eq_zero_or hq with rfl | ⟨x, y, hx, hy, rfl⟩
+    obtain ⟨v, hv, hq⟩ := TrustedSetup.decodeG1_eq_ok.mp hq
+    rcases G1.uncompress_eq_zero_or_bytes hv hq with rfl | ⟨x, y, hx, hy, rfl⟩
     · rw [G1.toPoint_zero, nsmul_zero]
     · have he : ByteArray.empty.data ++ (l.map UInt8.ofNat).toArray =
           (l.map UInt8.ofNat).toArray := Array.empty_append
