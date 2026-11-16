@@ -1581,6 +1581,49 @@ private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
   obtain ⟨validator, found⟩ := inside epoch v.toNat active
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
+/-- An actual descendant bounds the finalized epoch of its cached checkpoint prefix. -/
+private theorem checkpoint_finalized_le_of_descendant {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat}
+    {checkpoint : Checkpoint} {state descendant : BeaconState preset fork}
+    {root : Root} {block : BeaconBlock preset fork} {start : Slot}
+    (read : ((e.world n).state u).checkpointState checkpoint = .ok state)
+    (walk : ((e.world n).state u).getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root)
+    (found : ((e.world n).state u).blocks[root]? = some block)
+    (startOk : computeStartSlotAtEpoch preset checkpoint.epoch = .ok start)
+    (atOrAfter : start ≤ block.slot)
+    (held : ((e.world n).state u).blockStates[root]? = some descendant) :
+    state.finalizedCheckpoint.epoch ≤ ((e.world n).state u).finalizedCheckpoint.epoch := by
+  have reached := e.forwardReachableWith
+    (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
+    n u honest
+  -- The existing block traversal composes invariant-indexed finality monotonicity.
+  let R := fun (s t : BeaconState preset fork) =>
+    Invariant s → Invariant t ∧ s.finalizedCheckpoint.epoch ≤ t.finalizedCheckpoint.epoch
+  have trans : ∀ {s m t}, R s m → R m t → R s t := by
+    intro s m t first second inv
+    obtain ⟨middleInv, firstLe⟩ := first inv
+    obtain ⟨lastInv, secondLe⟩ := second middleInv
+    exact ⟨lastInv, UInt64.le_trans firstLe secondLe⟩
+  have related := reached.relation_of_checkpointState R
+    (fun _ inv => ⟨inv, UInt64.le_refl _⟩) trans
+    (fun ok inv => stateTransition_invariant inv ok)
+    (fun slotsOk bound ok => relation_of_processSlots_of_stateTransition R trans
+      (fun slots inv => processSlots_invariant inv slots)
+      (fun computed inv => by
+        have frame := frame_processBlock computed
+        refine ⟨frame.invariant inv, ?_⟩
+        rw [frame.finalized]
+        exact UInt64.le_refl _)
+      slotsOk bound ok)
+    anchorSlot walk found startOk atOrAfter (Store.checkpointState_ok_iff.mp read) held
+  have inv := reached.reachable.checkpointStatesHold anchorInvariant
+    (Store.checkpointState_ok_iff.mp read)
+  exact UInt64.le_trans (related inv).2
+    ((reached.reachable.ordered_finalized anchorInvariant).2 held)
+
 /-- Honest checkpoint origins supply the actual source prefix, including an older held block. -/
 private theorem registry_of_honest_checkpoint {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -1604,7 +1647,15 @@ private theorem registry_of_honest_checkpoint {anchor : Store preset fork}
       .ok checkpoint.root)
     (sourceBlockFound : ((e.world n).state u).blocks[targetCheckpoint.root]? = some sourceBlock)
     (sourceEpoch : checkpoint.epoch ≤ targetCheckpoint.epoch)
-    (finalized : targetState.finalizedCheckpoint.epoch ≤ checkpoint.epoch)
+    (finalized : targetState.finalizedCheckpoint.epoch ≤ checkpoint.epoch ∨
+      ((e.world n).state u).finalizedCheckpoint.epoch ≤ checkpoint.epoch ∧
+        ∃ root block start descendant,
+          ((e.world n).state u).getCheckpointBlock root targetCheckpoint.epoch =
+            .ok targetCheckpoint.root ∧
+          ((e.world n).state u).blocks[root]? = some block ∧
+          computeStartSlotAtEpoch preset targetCheckpoint.epoch = .ok start ∧
+          start ≤ block.slot ∧
+          ((e.world n).state u).blockStates[root]? = some descendant)
     (finite : checkpoint.epoch < FAR_FUTURE_EPOCH) :
     ∀ epoch position, isActiveAt targetState epoch position = true →
       ∃ validator, cached.validators.data[position]? = some validator := by
@@ -1621,9 +1672,16 @@ private theorem registry_of_honest_checkpoint {anchor : Store preset fork}
       ← (computeStartSlotAtEpoch_ok_iff.mp sourceStartOk).2] at ordered
     rw [UInt64.le_iff_toNat_le, toNat_max]
     exact Nat.le_trans ordered (Nat.le_max_right _ _)
+  have targetFinalized : targetState.finalizedCheckpoint.epoch ≤ checkpoint.epoch := by
+    rcases finalized with direct | ⟨storeBound, root, block, start, descendant,
+      walk, found, startOk, atOrAfter, held⟩
+    · exact direct
+    · exact UInt64.le_trans
+        (checkpoint_finalized_le_of_descendant anchorStore anchored anchorInvariant anchorSlot
+          honest targetRead walk found startOk atOrAfter held) storeBound
   exact registry_of_checkpointPrefix early anchorSlot reached anchorInvariant positive
     walk found startOk bound baseFound boundaryBaseFound advanced sourceRun sourceWalk
-    sourceBlockFound sourceBound sourceFound finalized finite
+    sourceBlockFound sourceBound sourceFound targetFinalized finite
 
 /-- Each accepted signer supplies activity in its own actual cached target state.
 
@@ -1659,7 +1717,15 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
       ((e.world n).state u).blocks[(attestation v).data.target.root]? = some (sourceBlock v))
     (sourceEpoch : ∀ v ∈ participants, checkpoint.epoch ≤ (attestation v).data.target.epoch)
     (finalized : ∀ v ∈ participants,
-      (targetState v).finalizedCheckpoint.epoch ≤ checkpoint.epoch)
+      (targetState v).finalizedCheckpoint.epoch ≤ checkpoint.epoch ∨
+        ((e.world n).state u).finalizedCheckpoint.epoch ≤ checkpoint.epoch ∧
+          ∃ root block start descendant,
+            ((e.world n).state u).getCheckpointBlock root (attestation v).data.target.epoch =
+              .ok (attestation v).data.target.root ∧
+            ((e.world n).state u).blocks[root]? = some block ∧
+            computeStartSlotAtEpoch preset (attestation v).data.target.epoch = .ok start ∧
+            start ≤ block.slot ∧
+            ((e.world n).state u).blockStates[root]? = some descendant)
     (finite : checkpoint.epoch < FAR_FUTURE_EPOCH)
     (read : getTotalActiveBalance cached = .ok total) :
     ∃ selected result,
