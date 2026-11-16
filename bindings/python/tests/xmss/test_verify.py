@@ -5,10 +5,11 @@ import pytest
 from dumper import hex_str, write_case
 from ethlib.cryptography import xmss
 
-from . import fixtures
+from . import derivation, fixtures
 
 # The keys and signatures come from the committed `key_gen` and `sign` cases.
 # Each rejection changes one input, so it fails at one known step.
+# The zero cases change more than one input, and each says which.
 
 HANDLER = "verify"
 
@@ -186,6 +187,29 @@ def test_wrong_root() -> None:
     )
 
 
+def test_wrong_root_last_byte() -> None:
+    # The last byte of the root, which a comparison of its first bytes does not read.
+    _emit(
+        f"{HANDLER}_wrong_root_last_byte",
+        fixtures.flip(_key(), xmss.DIGEST_LEN - 1),
+        fixtures.MESSAGE_KNOWN_ANSWER,
+        _signature(),
+        expected=False,
+    )
+
+
+def test_wrong_root_high_bit() -> None:
+    # The high bit of the first byte of the root.
+    key = _key()
+    _emit(
+        f"{HANDLER}_wrong_root_high_bit",
+        bytes([key[0] ^ 0x80]) + key[1:],
+        fixtures.MESSAGE_KNOWN_ANSWER,
+        _signature(),
+        expected=False,
+    )
+
+
 def test_wrong_public_param() -> None:
     _emit(
         f"{HANDLER}_wrong_public_param",
@@ -203,6 +227,104 @@ def test_other_key() -> None:
         fixtures.read_output("key_gen", "key_gen_zero_seed"),
         fixtures.MESSAGE_KNOWN_ANSWER,
         _signature(),
+        expected=False,
+    )
+
+
+# ---- Rejected: a digest that is not a codeword --------------------------------
+
+# A codeword has zero digits after those of its chains, and its chain digits sum to TARGET_SUM.
+# Each near miss signs one layer again, under a randomizer whose digest breaks one of the two rules.
+# Its chain values are the key's own at that digest, so the leaf, the path and the root still match.
+# So the codeword check of that layer is the only check that rejects the signature.
+#
+# A randomizer is a counter, written as RANDOMIZER_LEN little-endian bytes.
+# A search outside the suite found each counter, and the test checks the digest that it gives.
+#
+# In a case named `all_sum`, the digits of the whole digest sum to TARGET_SUM.
+# A verifier that sums every digit rejects such a digest only through its zero digits.
+#
+# Each row is a name, the first and the last digit after the chains, and the sum of chain digits.
+# The counter of the bottom layer and the counter of the top layer end the row.
+NEAR_MISSES = [
+    ("digit_sum_105", 0, 0, xmss.TARGET_SUM - 1, 238156, 45339),
+    ("digit_sum_107", 0, 0, xmss.TARGET_SUM + 1, 4909009, 2384780),
+    ("digit_58_nonzero", 1, 0, xmss.TARGET_SUM, 1425269, 502872),
+    ("digit_58_all_sum_106", 1, 0, xmss.TARGET_SUM - 1, 1789135, 712522),
+    ("last_digit_nonzero", 0, 2, xmss.TARGET_SUM, 1794943, 328771),
+    ("last_digit_all_sum_106", 0, 2, xmss.TARGET_SUM - 2, 1349650, 97764),
+]
+
+
+@pytest.mark.parametrize(
+    "layer_name, layer", [("bottom", derivation.BOTTOM_LAYER), ("top", derivation.TOP_LAYER)]
+)
+@pytest.mark.parametrize("name, first, last, chain_sum, bottom_counter, top_counter", NEAR_MISSES)
+def test_near_miss(
+    layer_name: str,
+    layer: int,
+    name: str,
+    first: int,
+    last: int,
+    chain_sum: int,
+    bottom_counter: int,
+    top_counter: int,
+) -> None:
+    counter = top_counter if layer == derivation.TOP_LAYER else bottom_counter
+    near_miss = derivation.near_miss(
+        fixtures.SEED_KNOWN_ANSWER,
+        fixtures.MESSAGE_KNOWN_ANSWER,
+        _signature(),
+        layer,
+        counter.to_bytes(xmss.RANDOMIZER_LEN, "little"),
+    )
+    # The digest has the digits that the case names.
+    digits = derivation.digits(near_miss.digest)
+    after_chains = digits[xmss.CHAINS :]
+    assert (after_chains[0], after_chains[-1]) == (first, last)
+    assert not any(after_chains[1:-1])
+    assert sum(digits[: xmss.CHAINS]) == chain_sum
+    # The chain values lead to the leaf of the valid signature, so every later check passes.
+    assert near_miss.leaf == near_miss.valid_leaf
+    _emit(
+        f"{HANDLER}_{layer_name}_{name}",
+        _key(),
+        fixtures.MESSAGE_KNOWN_ANSWER,
+        near_miss.signature,
+        expected=False,
+    )
+
+
+# ---- Rejected: zero inputs and a zero root -------------------------------------
+
+
+def test_zero_inputs() -> None:
+    # Every byte of the public key, the message and the signature is zero.
+    _emit(
+        f"{HANDLER}_zero_inputs",
+        bytes(xmss.PUB_KEY_SIZE),
+        bytes(xmss.MESSAGE_LEN),
+        bytes(xmss.SIG_SIZE),
+        expected=False,
+    )
+
+
+@pytest.mark.parametrize("layer, start", [("bottom", BOTTOM), ("top", TOP)])
+def test_zero_root_not_codeword(layer: str, start: int) -> None:
+    # The root of the public key is zero, and a flipped bit in one randomizer changes its digest.
+    # A verifier that holds zero for a root it never computed would compare zero with zero.
+    key = _key()
+    signature = fixtures.flip(_signature(), start)
+    # The digest of that layer is not a codeword.
+    bottom_digest, top_digest = derivation.layer_digests(
+        key[xmss.DIGEST_LEN :], fixtures.MESSAGE_KNOWN_ANSWER, signature
+    )
+    assert not derivation.is_codeword(top_digest if layer == "top" else bottom_digest)
+    _emit(
+        f"{HANDLER}_zero_root_{layer}_not_codeword",
+        bytes(xmss.DIGEST_LEN) + key[xmss.DIGEST_LEN :],
+        fixtures.MESSAGE_KNOWN_ANSWER,
+        signature,
         expected=False,
     )
 
