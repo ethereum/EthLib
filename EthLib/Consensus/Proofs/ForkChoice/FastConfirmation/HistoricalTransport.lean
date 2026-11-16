@@ -1815,6 +1815,48 @@ private theorem mem_window_of_mem_supporters {last n : Nat} {u : ValidatorIndex}
       (by omega) origin window low high
 
 open Models.ForkChoice in
+/-- A visited parent selects its strictly heaviest child. -/
+private theorem ancestor_ghost_of_visited_parent {ν β ρ : Type*} [DecidableEq β]
+    [LinearOrder ρ] {T : BlockTree β} (V : Finset ν) (w : ν → Nat) (G : View ν β T)
+    (key : β → ρ) {parent child start : β} (member : child ∈ children G parent)
+    (above : T.Ancestor start parent)
+    (visited : T.Ancestor parent (ghost V w G key start))
+    (heavier : ∀ sibling ∈ children G parent, sibling ≠ child →
+      weight V w G sibling < weight V w G child) :
+    T.Ancestor child (ghost V w G key start) := by
+  classical
+  induction start using ghost.induct V w G key with
+  | case1 start nonempty next =>
+    let chosen := heaviestChild V w G key start nonempty
+    have chosenChild := (mem_children.mp (heaviestChild_spec V w G key start nonempty).1).2
+    have walked := ghost_of_nonempty V w G key nonempty
+    change ghost V w G key start = ghost V w G key chosen at walked
+    by_cases same : start = parent
+    · subst start
+      have direct := (mem_children.mp member).2
+      apply ancestor_ghost_of_heavier V w G key (mem_children.mp member).1 direct.ancestor
+      intro middle fromParent toChild different sibling siblingMember distinct
+      rcases toChild.eq_or_parent with sameChild | belowParent
+      · subst middle
+        simpa only [direct.2] using heavier sibling (direct.2 ▸ siblingMember) distinct
+      · rw [direct.2] at belowParent
+        exact False.elim (different (belowParent.antisymm fromParent))
+    · have through : T.Ancestor chosen parent := by
+        have both := (ancestor_ghost V w G key chosen).total (walked ▸ visited)
+        rcases both with through | past
+        · exact through
+        · rcases past.eq_or_parent with equal | back
+          · exact equal ▸ BlockTree.Ancestor.refl parent
+          · rw [chosenChild.2] at back
+            exact False.elim (same (above.antisymm back))
+      rw [walked]
+      exact next through (walked ▸ visited)
+  | case2 start empty =>
+    rw [ghost_of_not_nonempty V w G key empty] at visited
+    have same := above.antisymm visited
+    exact False.elim (empty ⟨child, same ▸ member⟩)
+
+open Models.ForkChoice in
 /-- A finite-window margin makes a block heavier than a sibling, including the boost. -/
 private theorem sibling_weight_lt_of_window_margin [DecidablePred (· ∈ J)]
     {last n : Nat} {u : ValidatorIndex}
@@ -1892,6 +1934,85 @@ private theorem sibling_weight_lt_of_window_margin [DecidablePred (· ∈ J)]
       Store.not_mem_supporters_of_mem_parentVotersOf (mem_children.mp siblingChild).2
         (Finset.mem_filter.mp member).1⟩)
   omega
+
+/-- A finite-window margin at a visited parent keeps the actual head below its child. -/
+private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
+    {last n : Nat} {u : ValidatorIndex}
+    (history : VoteCommitteeCommonHistory (e := e) last) (honest : u ∈ J)
+    (time : (e.world n).time ≤ last)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock
+      ((e.world n).state u))
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) (before : fork < .glamsterdam)
+    (lower : ((e.world n).state u).ParentsBelow)
+    (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {head : ForkChoiceNode} {headState state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit)
+    {root : Root} {block parent : BeaconBlock preset fork}
+    {current first finish shortLast : Slot} {epoch : Epoch}
+    {members participants : Std.TreeSet ValidatorIndex} {nodes : List ForkChoiceNode}
+    (headRead : ((e.world n).state u).getHead config = .ok head)
+    (headFound : ((e.world n).state u).blockState head.root = .ok headState)
+    (stateRead : ((e.world n).state u).checkpointState
+      ((e.world n).state u).justifiedCheckpoint = .ok state)
+    (tree : ((e.world n).state u).getFilteredNodeTree config = .ok nodes)
+    (viable : (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes)
+    (found : ((e.world n).state u).blocks[root]? = some block)
+    (parentFound : ((e.world n).state u).blocks[block.parentRoot]? = some parent)
+    (descends : ((e.world n).state u).isAncestor ⟨head.root, .pending⟩
+      ⟨block.parentRoot, .pending⟩ = .ok true)
+    (slotRead : ((e.world n).state u).getCurrentSlot config = .ok current)
+    (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok epoch)
+    (horizon : epoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2)
+    (firstOk : addChecked parent.slot 1 = .ok first)
+    (lastOk : subChecked current 1 = .ok finish)
+    (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first finish =
+      .ok members)
+    (shortWindow : ((e.world n).state u).getCommitteesBetweenSlots head.root first shortLast =
+      .ok participants)
+    (shortBefore : shortLast ≤ finish)
+    (margin : Models.stake (fun v => balanceAt state v.toNat)
+        (Store.activeMembers state members) + ((e.world n).state u).boostScore config <
+      2 * Models.ForkChoice.weight (Store.voters state).insertNone
+        (Models.ForkChoice.boostStake (balanceAt state) (((e.world n).state u).boostScore config))
+        ((Store.view lower nodes).withBoost ((e.world n).state u).boostedRoot) (some root) +
+      Models.stake (fun v => balanceAt state v.toNat)
+        {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J}) :
+    ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true := by
+  classical
+  let store := (e.world n).state u
+  have ghostEq := Store.getHead_eq_ghost_withBoost lower before stateRead tree headRead
+  have ancestry := (Store.filterNodeTree_ancestor (lower := lower) before tree _ viable).1
+  have child := (Store.blockTree_isChild_iff (lower := lower)).mpr ⟨block, found, rfl⟩
+  have inView : some root ∈ (Store.view lower nodes).blocks := by
+    simp only [Store.view, Models.ForkChoice.View.mem_ofBlocks, List.mem_toFinset, List.mem_map]
+    exact ⟨_, ⟨_, viable, rfl⟩, .refl _⟩
+  have result : (Store.blockTree lower).Ancestor (some root) (some head.root) := by
+    rcases ancestry.eq_or_parent with same | above
+    · rw [← same, ← ghostEq]
+      exact Models.ForkChoice.ancestor_ghost _ _ _ _ _
+    · rw [Store.blockTree_parent_of found] at above
+      have visited := (Store.isAncestor_iff (lower := lower) before parentFound rfl descends).mp rfl
+      rw [← ghostEq]
+      apply ancestor_ghost_of_visited_parent _ _
+        ((Store.view lower nodes).withBoost store.boostedRoot) _
+        (Models.ForkChoice.mem_children.mpr ⟨inView, child⟩) above
+        (ghostEq ▸ visited)
+      intro sibling member distinct
+      exact sibling_weight_lt_of_window_margin history honest time reached anchorSlot before
+        lower minLookahead maxLookahead ring within nodes store.boostedRoot
+        (store.boostScore config) headRead headFound found parentFound descends slotRead
+        epochRead horizon firstOk lastOk window shortWindow shortBefore member distinct margin
+  obtain ⟨headBlock, headKnown⟩ := reached.reachable.known_of_blockState
+    (Store.blockState_ok_iff.mp headFound)
+  have pending := Store.getHead_pending before headRead
+  have answer := Store.isAncestor_of_blockTree_ancestor (lower := lower) before headKnown
+    found result
+  obtain ⟨headRoot, status⟩ := head
+  simp only at pending
+  subst status
+  exact answer
 
 /-- Held-state finality supplies the source bound at the store's realized checkpoint.
 
