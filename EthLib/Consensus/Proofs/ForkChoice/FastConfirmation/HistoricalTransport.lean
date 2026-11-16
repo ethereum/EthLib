@@ -115,6 +115,61 @@ private theorem pendingTail_initiateValidatorExit {config : Config}
     exact pendingTail_setValidatorAt queuedFound set rfl rfl
       (pendingTail_of_validators (congrArg (·.data) same) tail)
 
+/-- Slashing changes exit, withdrawal and slashed fields, but not pending activation fields. -/
+private theorem pendingTail_slashValidator {config : Config}
+    {state after : BeaconState preset fork} {index : ValidatorIndex}
+    {whistleblower : Option ValidatorIndex} {count : Nat} {epoch : Epoch}
+    (run : slashValidator config state index whistleblower = .ok after)
+    (tail : PendingTail count epoch state) : PendingTail count epoch after := by
+  obtain ⟨exited, old, _, marked, _, _, _, _, _, _, _, last, exitedOk, found, _, set,
+    _, _, _, lowered, _, _, raised, final, done⟩ := slashValidator_ok run
+  have same := (slashValidator_last (last := last) (after := after) (index := index)
+    (by subst done; rfl)).1.trans ((increaseBalance_validators final).trans
+      ((increaseBalance_validators raised).trans (decreaseBalance_validators lowered)))
+  rw [setValidator_eq_setValidatorAt] at set
+  rw [getValidator_eq_getValidatorAt] at found
+  exact pendingTail_of_validators (congrArg (·.data) same)
+    (pendingTail_setValidatorAt found set rfl rfl
+      (pendingTail_initiateValidatorExit exitedOk tail))
+
+/-- A proposer slashing preserves the pending activation suffix. -/
+private theorem pendingTail_processProposerSlashing {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork} {slashing : ProposerSlashing}
+    {count : Nat} {epoch : Epoch}
+    (run : processProposerSlashing config checks state slashing = .ok after)
+    (tail : PendingTail count epoch state) : PendingTail count epoch after := by
+  simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at run
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := run
+  exact pendingTail_slashValidator slashed tail
+
+/-- An attester-slashing step either keeps the state or slashes its selected validator. -/
+private theorem pendingTail_slashIfSlashable {config : Config}
+    {step next : BeaconState preset fork × Bool} {index : ValidatorIndex}
+    {count : Nat} {epoch : Epoch}
+    (run : slashIfSlashable config step index = .ok next)
+    (tail : PendingTail count epoch step.1) : PendingTail count epoch next.1 := by
+  obtain ⟨state, flag⟩ := step
+  simp only [slashIfSlashable, bind_ok_iff, liftAccessor_ok] at run
+  obtain ⟨_, _, run⟩ := run
+  split at run
+  · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at run
+    obtain ⟨_, slashed, rfl⟩ := run
+    exact pendingTail_slashValidator slashed tail
+  · simp only [pure, Except.pure, Except.ok.injEq] at run
+    exact run ▸ tail
+
+/-- The existing attester-slashing fold preserves the pending activation suffix. -/
+private theorem pendingTail_processAttesterSlashing {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork} {slashing : AttesterSlashing preset fork}
+    {count : Nat} {epoch : Epoch}
+    (run : processAttesterSlashing config checks state slashing = .ok after)
+    (tail : PendingTail count epoch state) : PendingTail count epoch after := by
+  simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at run
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, folded, _, _, rfl⟩ := run
+  exact foldlM_ok_invariant (fun step => PendingTail count epoch step.1)
+    (fun _ _ _ before ok => pendingTail_slashIfSlashable ok before) tail folded
+
 /-- Electra registry updates cannot activate entries beyond the finalized boundary. -/
 private theorem pendingTail_updateRegistryEntryElectra {config : Config}
     {state after : BeaconState preset fork} {index count : Nat} {epoch activation : Epoch}
@@ -539,7 +594,7 @@ private theorem filteredTotal_of_operation_folds {config : Config} {checks : Sig
 
 /-- A successful Electra-to-Fulu operation schedule transports the tail through consolidation.
 
-Tail applicability before deposits and activity at the output remain conditional inputs. -/
+Tail applicability at the operation input and activity at the output remain conditional inputs. -/
 private theorem filteredTotal_of_operations_cut {config : Config} {checks : SignatureChecks}
     {source after cached : BeaconState preset fork} {body : BeaconBlockBody preset fork}
     {parentSlot : Slot} (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
@@ -557,7 +612,7 @@ private theorem filteredTotal_of_operations_cut {config : Config} {checks : Sign
         slashings = .ok attested ∧
       (body.executionRequests ⟨electra, early⟩).consolidations.data.toList.foldlM
         (processConsolidationRequest config · electra ·) withdrawn = .ok after ∧
-      (PendingTail count boundary attested →
+      (PendingTail count boundary source →
         (∀ v ∈ participants, isActiveAt after epoch v.toNat = true) →
         ∃ selected result,
           participants.toList.filterM (fun index => do
@@ -578,10 +633,19 @@ private theorem filteredTotal_of_operations_cut {config : Config} {checks : Sign
     · exact absurd capella ‹¬.shapella ≤ fork›
   simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at requestsOk
   obtain ⟨requested, requestedOk, withdrawn, withdrawnOk, consolidatedOk⟩ := requestsOk
+  have tailAtAttested (tail : PendingTail count boundary source) :
+      PendingTail count boundary attested := by
+    have proposerTail := foldlM_ok_invariant (PendingTail count boundary)
+      (fun _ _ _ held ok => pendingTail_processProposerSlashing ok held) tail proposersOk
+    have slashingTail := foldlM_ok_invariant (PendingTail count boundary)
+      (fun _ _ _ held ok => pendingTail_processAttesterSlashing ok held) proposerTail slashingsOk
+    exact foldlM_ok_invariant (PendingTail count boundary)
+      (fun _ _ _ held ok => pendingTail_of_validators
+        (congrArg (·.data) (processAttestation_registry ok).1) held) slashingTail attestedOk
   exact ⟨proposers, slashings, attested, withdrawn, proposersOk, slashingsOk, attestedOk,
     consolidatedOk, fun tail active => filteredTotal_of_operation_folds
       depositedOk exitsOk changesFold requestedOk withdrawnOk consolidatedOk
-      finite tail contains active read⟩
+      finite (tailAtAttested tail) contains active read⟩
 
 /-- Every non-registry stage preserves the pending tail, including intervening epoch stages. -/
 private theorem pendingTail_epochStage {config : Config} {checks : SignatureChecks}
