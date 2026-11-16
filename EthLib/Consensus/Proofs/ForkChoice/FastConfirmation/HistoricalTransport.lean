@@ -2008,7 +2008,7 @@ private theorem previousBlockSlot_le_previousCurrentSlot
   have := UInt64.le_iff_toNat_le.mp stateLe
   exact UInt64.le_iff_toNat_le.mpr (by omega)
 
-/-- A finite-window margin at a visited parent keeps the actual head below its child. -/
+/-- A finite-window margin or justified ancestry keeps the actual head below the block. -/
 private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     {last n : Nat} {u : ValidatorIndex}
     (history : VoteCommitteeCommonHistory (e := e) last) (honest : u ∈ J)
@@ -2043,15 +2043,22 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     (shortWindow : ((e.world n).state u).getCommitteesBetweenSlots head.root first shortLast =
       .ok participants)
     (shortLastOk : subChecked block.slot 1 = .ok shortLast)
-    (margin : Models.stake (fun v => balanceAt state v.toNat)
+    (margin : (Models.stake (fun v => balanceAt state v.toNat)
         (Store.activeMembers state members) + score.toNat <
       2 * Models.stake (fun v => balanceAt state v.toNat)
         {v ∈ ((e.world n).state u).supportersOf state ⟨root, .pending⟩ | v ∈ J} +
       Models.stake (fun v => balanceAt state v.toNat)
-        {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J})
+        {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J}) ∨
+      ((e.world n).state u).isAncestor
+        ⟨((e.world n).state u).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true)
     (scoreOk : computeProposerScore config state = .ok (score : Gwei)) :
     ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true := by
   classical
+  rcases margin with margin | justifiedAbove
+  swap
+  · obtain ⟨justified, justifiedKnown⟩ := Store.filterNodeTree_known tree
+    exact Store.isAncestor_trans_of_lt before justifiedKnown found
+      (Store.isAncestor_getHead_of_lt_gloas before headRead) justifiedAbove
   let store := (e.world n).state u
   have within := BeaconState.registryWithinLimit_of_lt before state
   have shortBefore := previousBlockSlot_le_previousCurrentSlot reached anchorSlot
