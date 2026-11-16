@@ -3375,6 +3375,68 @@ public theorem latest_eq_of_rank_eq (slots : 0 < config.SLOT_DURATION_MS)
     signedFirst signedSecond honest epoch
   simp only [LatestMessage.ofAttestation, same]
 
+/-- A nonempty caller range supplies arithmetic for the receiver's full-window maximum. -/
+public theorem receiver_fullMaximum_of_head_window {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (slots : 0 < config.SLOT_DURATION_MS)
+    (early : fork < .glamsterdam) {horizon : Epoch} {time : Nat}
+    (compatible : FinalizedCheckpointCompatibility (e := e) horizon time)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
+    (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) time)
+    (absent : AnchorParentAbsent (e := e) time)
+    {u w : ValidatorIndex} (caller : u ∈ J) (receiver : w ∈ J) {n k : Nat}
+    (callerTime : (e.world n).time ≤ time) (inTime : (e.world k).time ≤ time)
+    {head : ForkChoiceNode} {state source : BeaconState preset fork} {callerHead : Root}
+    {parent : BeaconBlock preset fork} {parentRoot : Root}
+    {current first last finish : Slot} {epoch : Epoch}
+    {window : Std.TreeSet ValidatorIndex} {maximum : Gwei}
+    (parentOk : ((e.world n).state u).block parentRoot = .ok parent)
+    (parentSafe : ((e.world k).state w).isAncestor head ⟨parentRoot, .pending⟩ = .ok true)
+    (firstOk : addChecked parent.slot 1 = .ok first)
+    (headOk : ((e.world k).state w).getHead config = .ok head)
+    (cached : ((e.world k).state w).checkpointState
+      ((e.world k).state w).justifiedCheckpoint = .ok state)
+    (epochOk : ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch)
+    (lastOk : subChecked current 1 = .ok finish)
+    (windowOk : ((e.world k).state w).getCommitteesBetweenSlots head.root first finish =
+      .ok window)
+    (nonempty : first ≤ last)
+    (read : ((e.world n).state u).computeCommitteeWeightBetweenSlots callerHead source
+      first last = .ok maximum) :
+    (∃ result, ((e.world k).state w).computeCommitteeWeightBetweenSlots head.root state
+      first finish = .ok result) ∨
+    ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
+      ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
+        some evidence := by
+  have forward v (honest : v ∈ J) m := e.forwardReachableWith
+    (fun a ha => (anchored a ha) ▸ Store.ForwardReachableWith.anchor anchorStore) m v honest
+  rcases parent_read_or_collision (forward u caller n).reachable
+      (forward w receiver k).reachable (Store.block_ok_iff.mp parentOk) parentSafe with
+    parentFound | collision
+  swap
+  · obtain ⟨leftBlock, rightBlock, found, _, _, _⟩ := collision
+    exact .inr ⟨u, caller, w, receiver, n, k, callerTime, inTime, parentRoot,
+      (parentRoot, leftBlock, rightBlock), found⟩
+  left
+  have afterOk : addChecked finish 1 = .ok current := by
+    obtain ⟨positive, value⟩ := subChecked_ok_iff.mp lastOk
+    apply addChecked_ok_iff.mpr
+    have bound := current.toNat_lt
+    simp only [UInt64.reduceToNat] at positive value ⊢
+    constructor <;> omega
+  -- Only the range arithmetic is reused; the balance state and committee read are the receiver's.
+  obtain ⟨covered, coverage⟩ := coverage_exists_of_maximum nonempty read afterOk
+  have stakeBound := ceiling w receiver k _ state inTime cached
+  obtain ⟨total, totalOk⟩ := activeTotal_exists
+    (BeaconState.registryWithinLimit_of_lt early state) (by change _ ≤ _ at stakeBound; omega)
+  exact maximum_exists_of_total coverage windowOk totalOk
+    (registry_of_head_window anchorStore anchored sound anchorSlot boundary
+      (UInt64.lt_iff_toNat_lt.mpr positive) slots early compatible bounded receiver inTime
+      parentFound (absent w receiver k inTime) firstOk headOk cached epochOk windowOk)
+
 end Models.Network
 
 end EthLib.Consensus
