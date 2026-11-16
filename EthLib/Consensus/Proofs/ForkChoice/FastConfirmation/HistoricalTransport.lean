@@ -552,6 +552,240 @@ private theorem filteredTotal_exists {state : BeaconState preset fork}
         (isActiveAt_eq_true_iff.mpr ⟨validator, validatorAt_ok_iff.mp found, isActive⟩))
   exact ⟨active, result, filtered, resultOk⟩
 
+/-- Checked weights with a bounded sum supply a successful checked sum. -/
+private theorem sumGwei_exists_of_bound {α : Type} {items : List α}
+    {weight : α → Except ForkChoiceError Gwei} {bound : α → Nat}
+    (each : ∀ item ∈ items, ∃ value, weight item = .ok value ∧ value.toNat ≤ bound item)
+    (small : (items.map bound).sum < 2 ^ 64) :
+    ∃ result, sumGwei items weight = .ok result := by
+  obtain ⟨total, folded⟩ := foldlM_exists_ok_of_invariant (fun _ : Nat => True)
+    (xs := items) (g := fun sum item => return sum + (← weight item).toNat)
+    (fun sum item member _ => by
+      obtain ⟨value, found, -⟩ := each item member
+      exact ⟨sum + value.toNat, by simp [found], trivial⟩) 0 trivial
+  -- The fold adds only the bounded weight supplied by each successful read.
+  have boundFold : ∀ (rest : List α) (start total : Nat),
+      (∀ item ∈ rest, ∃ value, weight item = .ok value ∧ value.toNat ≤ bound item) →
+      rest.foldlM (fun sum item => return sum + (← weight item).toNat) start = .ok total →
+      total ≤ start + (rest.map bound).sum := by
+    intro rest
+    induction rest with
+    | nil => intro start total _ run; simpa using (Except.ok.inj run).symm.le
+    | cons item rest ih =>
+      intro start total each run
+      obtain ⟨value, found, bounded⟩ := each item List.mem_cons_self
+      simp only [List.foldlM_cons, found, bind, Except.bind, pure, Except.pure] at run
+      have tail := ih _ _ (fun v member => each v (List.mem_cons_of_mem _ member)) run
+      simp only [List.map_cons, List.sum_cons]
+      omega
+  have bounded := boundFold items 0 total each folded
+  refine ⟨total.toUInt64, ?_⟩
+  unfold sumGwei
+  rw [folded]
+  simp only [bind, Except.bind]
+  split
+  · rename_i overflow; omega
+  · rfl
+
+/-- A distinct list of active indices weighs less than a bounded active stake. -/
+private theorem active_list_sum_lt {state : BeaconState preset fork}
+    {indices : List ValidatorIndex} (distinct : indices.Nodup)
+    (subset : ∀ v ∈ indices, v ∈ getActiveValidatorIndices state (getCurrentEpoch state))
+    (small : stake (fun v => balanceAt state v.toNat)
+      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset < 2 ^ 64) :
+    (indices.map fun v => balanceAt state v.toNat).sum < 2 ^ 64 := by
+  rw [← List.sum_toFinset _ distinct]
+  exact lt_of_le_of_lt (stake_mono fun v member =>
+    List.mem_toFinset.mpr (subset v (List.mem_toFinset.mp member))) small
+
+/-- Before Gloas, registry reads and bounded active stake supply node support. -/
+private theorem nodeSupport_exists {store : Store preset fork} {state : BeaconState preset fork}
+    {head : Root} {first last : Slot} {participants : Std.TreeSet ValidatorIndex}
+    (early : fork < .glamsterdam) (nodes : List ForkChoiceNode)
+    (window : store.getCommitteesBetweenSlots head first last = .ok participants)
+    (inside : ∀ v ∈ participants, ∃ validator, validatorAt state v = .ok validator)
+    (small : stake (fun v => balanceAt state v.toNat)
+      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset < 2 ^ 64) :
+    ∃ support, store.getNodeSupportBetweenSlots head state nodes first last = .ok support := by
+  classical
+  obtain ⟨counted, filtered⟩ := filterM_exists_ok
+    (test := fun index => do
+      let validator ← validatorAt state index
+      return !validator.slashed && isActiveValidator validator (getCurrentEpoch state))
+    (list := participants.toList) (fun v member => by
+      obtain ⟨validator, found⟩ := inside v (Std.TreeSet.mem_toList.mp member)
+      exact ⟨!validator.slashed && isActiveValidator validator (getCurrentEpoch state), by
+        simp [found]⟩)
+  have distinct : counted.Nodup := (sublist_of_filterM_ok filtered).nodup
+    (Std.TreeSet.distinct_toList.imp Std.ReflCmp.ne_of_cmp_ne_eq)
+  have subset : ∀ v ∈ counted, v ∈ getActiveValidatorIndices state (getCurrentEpoch state) := by
+    intro v member
+    have passed := passes_of_mem_filterM_ok filtered member
+    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Bool.and_eq_true,
+      Bool.not_eq_true'] at passed
+    obtain ⟨validator, found, -, active⟩ := passed
+    exact mem_getActiveValidatorIndices_of_isActiveAt
+      (isActiveAt_eq_true_iff.mpr ⟨validator, validatorAt_ok_iff.mp found, active⟩)
+  have bounded := active_list_sum_lt distinct subset small
+  unfold Store.getNodeSupportBetweenSlots
+  rw [window]
+  simp only [bind, Except.bind] at filtered ⊢
+  rw [filtered]
+  apply sumGwei_exists_of_bound (bound := fun v => balanceAt state v.toNat) ?_ bounded
+  intro v member
+  obtain ⟨validator, found⟩ := inside v
+    (Std.TreeSet.mem_toList.mp (mem_of_filterM_ok filtered member))
+  -- Every latest message has a supported pending node before Gloas.
+  cases latest : store.latestMessages[v]? with
+  | none => exact ⟨0, rfl, Nat.zero_le _⟩
+  | some message =>
+    simp only [Store.getSupportedNode_of_lt early]
+    split
+    · exact ⟨validator.effectiveBalance, by rw [found]; rfl, by
+        exact (toNat_eq_balanceAt_of_effectiveBalance (by rw [found]; rfl)).le⟩
+    · exact ⟨0, rfl, Nat.zero_le _⟩
+
+/-- Registry reads and bounded active stake supply the equivocation score. -/
+private theorem equivocation_exists {store : Store preset fork} {state : BeaconState preset fork}
+    {participants : Std.TreeSet ValidatorIndex}
+    (inside : ∀ v ∈ participants, ∃ validator, validatorAt state v = .ok validator)
+    (small : stake (fun v => balanceAt state v.toNat)
+      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset < 2 ^ 64) :
+    ∃ score, store.getEquivocationScoreOf state participants = .ok score := by
+  classical
+  let known := participants.toList.filter (· ∈ store.equivocatingIndices)
+  obtain ⟨active, filtered⟩ := filterM_exists_ok
+    (test := fun index => do
+      return isActiveValidator (← validatorAt state index) (getCurrentEpoch state))
+    (list := known) (fun v member => by
+      obtain ⟨validator, found⟩ := inside v
+        (Std.TreeSet.mem_toList.mp (List.mem_of_mem_filter member))
+      exact ⟨isActiveValidator validator (getCurrentEpoch state), by simp [found]⟩)
+  have distinct : active.Nodup := (sublist_of_filterM_ok filtered).nodup
+    ((List.filter_sublist).nodup
+      (Std.TreeSet.distinct_toList.imp Std.ReflCmp.ne_of_cmp_ne_eq))
+  have subset : ∀ v ∈ active, v ∈ getActiveValidatorIndices state (getCurrentEpoch state) := by
+    intro v member
+    have passed := passes_of_mem_filterM_ok filtered member
+    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at passed
+    obtain ⟨validator, found, isActive⟩ := passed
+    exact mem_getActiveValidatorIndices_of_isActiveAt
+      (isActiveAt_eq_true_iff.mpr ⟨validator, validatorAt_ok_iff.mp found, isActive⟩)
+  have bounded := active_list_sum_lt distinct subset small
+  unfold Store.getEquivocationScoreOf
+  change ∃ score, (do
+    let active ← known.filterM (fun index => do
+      return isActiveValidator (← validatorAt state index) (getCurrentEpoch state))
+    sumGwei active fun index => return (← validatorAt state index).effectiveBalance) = .ok score
+  rw [filtered]
+  apply sumGwei_exists_of_bound (bound := fun v => balanceAt state v.toNat) ?_ bounded
+  intro v member
+  obtain ⟨validator, found⟩ := inside v (Std.TreeSet.mem_toList.mp
+    (List.mem_of_mem_filter (mem_of_filterM_ok filtered member)))
+  exact ⟨validator.effectiveBalance, by rw [found]; rfl,
+    (toNat_eq_balanceAt_of_effectiveBalance (by rw [found]; rfl)).le⟩
+
+/-- A successful maximum is at most the active total in its own balance state. -/
+private theorem maximum_le_total {store : Store preset fork} {state : BeaconState preset fork}
+    {head : Root} {first last : Slot} {maximum total : Gwei}
+    (read : store.computeCommitteeWeightBetweenSlots head state first last = .ok maximum)
+    (totalOk : getTotalActiveBalance state = .ok total) : maximum.toNat ≤ total.toNat := by
+  by_cases empty : last < first
+  · rw [Store.computeCommitteeWeightBetweenSlots_of_gt empty, Except.ok.injEq] at read
+    subst maximum
+    exact Nat.zero_le _
+  simp only [Store.computeCommitteeWeightBetweenSlots, bind_ok_iff,
+    pure, Except.pure, Except.ok.injEq] at read
+  obtain ⟨⟨weight, members⟩, computed, rfl⟩ := read
+  simp only [Store.computeCommitteeWeightAndMembers, empty, ↓reduceIte,
+    bind_ok_iff] at computed
+  obtain ⟨covered, coverage, computed⟩ := computed
+  cases covered
+  · simp only [Bool.false_eq_true, ↓reduceIte, bind_ok_iff, mapError_ok_iff] at computed
+    obtain ⟨participants, -, active, filtered, result, resultOk, final⟩ := computed
+    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at final
+    obtain ⟨rfl, -⟩ := final
+    obtain ⟨-, -, resultValue⟩ := getTotalBalance_ok_iff_stake.mp resultOk
+    obtain ⟨-, -, totalValue⟩ := getTotalBalance_ok_iff_stake.mp
+      (getTotalActiveBalance_ok totalOk)
+    rw [resultValue, totalValue]
+    apply max_le_max_left
+    apply stake_mono
+    intro v member
+    have passed := passes_of_mem_filterM_ok filtered (List.mem_toFinset.mp member)
+    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at passed
+    obtain ⟨validator, found, active⟩ := passed
+    exact List.mem_toFinset.mpr (mem_getActiveValidatorIndices_of_isActiveAt
+      (isActiveAt_eq_true_iff.mpr ⟨validator, validatorAt_ok_iff.mp found, active⟩))
+  · simp only [↓reduceIte, totalOk, Except.mapError, bind, Except.bind,
+      pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
+    exact (congrArg UInt64.toNat computed.1).symm.le
+
+/-- A checked maximum, registry and share bound supply adversarial weight. -/
+private theorem adversary_exists {config : Config} {store : Store preset fork}
+    {state : BeaconState preset fork} {head : Root} {first last : Slot} {maximum total : Gwei}
+    {participants : Std.TreeSet ValidatorIndex}
+    (read : store.computeCommitteeWeightBetweenSlots head state first last = .ok maximum)
+    (window : store.getCommitteesBetweenSlots head first last = .ok participants)
+    (inside : ∀ v ∈ participants, ∃ validator, validatorAt state v = .ok validator)
+    (totalOk : getTotalActiveBalance state = .ok total)
+    (shareFits : total.toNat / 100 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat < 2 ^ 64) :
+    ∃ adversary, store.computeAdversarialWeight config head state first last = .ok adversary := by
+  have weightLe := maximum_le_total read totalOk
+  have fits : (maximum / 100).toNat * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat <
+      2 ^ 64 := by
+    simp only [UInt64.toNat_div, UInt64.reduceToNat]
+    exact lt_of_le_of_lt (Nat.mul_le_mul_right _ (Nat.div_le_div_right weightLe)) shareFits
+  obtain ⟨-, small, -⟩ := getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok totalOk)
+  obtain ⟨equivocation, equivocationOk⟩ := equivocation_exists (store := store) inside small
+  simp only [Store.computeCommitteeWeightBetweenSlots, bind_ok_iff,
+    pure, Except.pure, Except.ok.injEq] at read
+  obtain ⟨⟨weight, members⟩, pairOk, rfl⟩ := read
+  refine ⟨saturatingSub ((weight / 100) * config.CONFIRMATION_BYZANTINE_THRESHOLD)
+    equivocation, ?_⟩
+  unfold Store.computeAdversarialWeight
+  rw [pairOk]
+  simp only [bind, Except.bind]
+  rw [mulChecked_of_lt fits]
+  cases members with
+  | none => simp [window, equivocationOk, pure, Except.pure, Except.mapError]
+  | some members =>
+    have same : members = participants := by
+      have obtained := Store.getCommitteesBetweenSlots_of_computeCommitteeWeightAndMembers pairOk
+      rw [window, Except.ok.injEq] at obtained
+      exact obtained.symm
+    subst members
+    simp [equivocationOk, pure, Except.pure, Except.mapError]
+
+/-- Before Gloas, checked empty-slot reads supply the discount, including the zero branch. -/
+private theorem discount_exists {config : Config} {store : Store preset fork}
+    {state : BeaconState preset fork} {head root : Root} {block parent : BeaconBlock preset fork}
+    {first last : Slot} {participants : Std.TreeSet ValidatorIndex} {maximum total : Gwei}
+    (early : fork < .glamsterdam)
+    (blockOk : store.block root = .ok block)
+    (parentOk : store.block block.parentRoot = .ok parent)
+    (firstOk : addChecked parent.slot 1 = .ok first)
+    (lastOk : subChecked block.slot 1 = .ok last)
+    (window : store.getCommitteesBetweenSlots head first last = .ok participants)
+    (inside : ∀ v ∈ participants, ∃ validator, validatorAt state v = .ok validator)
+    (read : store.computeCommitteeWeightBetweenSlots head state first last = .ok maximum)
+    (totalOk : getTotalActiveBalance state = .ok total)
+    (shareFits : total.toNat / 100 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat < 2 ^ 64) :
+    ∃ discount, store.computeEmptySlotSupportDiscount config head state root = .ok discount := by
+  by_cases adjacent : first = block.slot
+  · exact ⟨0, by
+      simp [Store.computeEmptySlotSupportDiscount, blockOk, parentOk, firstOk, adjacent,
+        Except.mapError, bind, Except.bind, pure, Except.pure]⟩
+  obtain ⟨-, small, -⟩ := getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok totalOk)
+  obtain ⟨support, supportOk⟩ := nodeSupport_exists early [⟨block.parentRoot, .pending⟩]
+    window inside small
+  obtain ⟨adversary, adversaryOk⟩ := adversary_exists read window inside totalOk shareFits
+  refine ⟨saturatingSub support adversary, ?_⟩
+  have before : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
+  simp [Store.computeEmptySlotSupportDiscount, blockOk, parentOk, firstOk, adjacent,
+    before, lastOk, supportOk, adversaryOk, Except.mapError, bind, Except.bind,
+    pure, Except.pure]
+
 /-- Execution requests preserve the pending suffix through their three actual folds. -/
 private theorem pendingTail_processExecutionRequests {config : Config}
     {source after : BeaconState preset fork} {body : BeaconBlockBody preset fork}
@@ -2354,6 +2588,129 @@ private theorem receiver_oldMaximum_of_head_window {anchor : Store preset fork}
     (registry_of_head_window anchorStore anchored anchorInvariant anchorSlot boundary positive
       slots early compatible bounded receiverHonest inTime parentFound unknown parentNext
       headRead cached epochRead windowOk)
+
+/-- The receiver's maximum and discount succeed, or its comparison parent gives a collision.
+
+The caller's successful maximum supplies range arithmetic, not receiver balances. -/
+private theorem receiver_maximum_discount_of_head_window {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (positive : 0 < preset.SLOTS_PER_EPOCH) (slots : 0 < config.SLOT_DURATION_MS)
+    (early : fork < .glamsterdam) {horizon : Epoch} {time : Nat}
+    (compatible : FinalizedCheckpointCompatibility (e := e) horizon time)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
+    {u caller : ValidatorIndex} (honest : u ∈ J) (callerHonest : caller ∈ J)
+    {n call : Nat} (inTime : (e.world n).time ≤ time)
+    {head : ForkChoiceNode} {state source : BeaconState preset fork} {callerHead : Root}
+    {root : Root} {block parent : BeaconBlock preset fork}
+    {first last slot oldLast current receiverLast : Slot} {epoch : Epoch}
+    {participants windowMembers : Std.TreeSet ValidatorIndex} {maximum : Gwei}
+    (found : ((e.world n).state u).blocks[root]? = some block)
+    (callerFound : ((e.world call).state caller).blocks[root]? = some block)
+    (callerSlot : ((e.world call).state caller).getCurrentSlot config = .ok slot)
+    (callerLast : subChecked slot 1 = .ok oldLast)
+    (later : (e.world call).time ≤ (e.world n).time)
+    (updated : UpToDate config checks sources (e.world n).time
+      ((e.world n).view u) ((e.world n).state u))
+    (receiverSlot : ((e.world n).state u).getCurrentSlot config = .ok current)
+    (receiverLastOk : subChecked current 1 = .ok receiverLast)
+    (receiverWindow : ((e.world n).state u).getCommitteesBetweenSlots head.root
+      first receiverLast = .ok windowMembers)
+    (callerParent : ((e.world call).state caller).blocks[block.parentRoot]? = some parent)
+    (parentSafe : ((e.world n).state u).isAncestor head
+      ⟨block.parentRoot, .pending⟩ = .ok true)
+    (unknown : ((e.world n).state u).blocks[anchorBlock.parentRoot]? = none)
+    (firstOk : addChecked parent.slot 1 = .ok first)
+    (lastOk : subChecked block.slot 1 = .ok last)
+    (headRead : ((e.world n).state u).getHead config = .ok head)
+    (cached : ((e.world n).state u).checkpointState
+      ((e.world n).state u).justifiedCheckpoint = .ok state)
+    (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok epoch)
+    (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first last =
+      .ok participants)
+    (read : ((e.world call).state caller).computeCommitteeWeightBetweenSlots callerHead source
+      first oldLast = .ok maximum)
+    (threshold : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
+    (ceiling : stake (fun v => balanceAt state v.toNat)
+      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ≤ 2 * 10 ^ 17) :
+    (∃ receiverMaximum discount,
+      ((e.world n).state u).computeCommitteeWeightBetweenSlots head.root state
+        first oldLast = .ok receiverMaximum ∧
+      ((e.world n).state u).computeEmptySlotSupportDiscount config head.root state
+        root = .ok discount) ∨ ∃ leftBlock rightBlock,
+      Store.findBlockCollision ((e.world call).state caller) ((e.world n).state u)
+        [block.parentRoot] = some (block.parentRoot, leftBlock, rightBlock) ∧
+      leftBlock ≠ rightBlock ∧
+      Serialization.Ssz.SszType.hashTreeRoot leftBlock = .ok block.parentRoot ∧
+      Serialization.Ssz.SszType.hashTreeRoot rightBlock = .ok block.parentRoot := by
+  have reached := e.forwardReachableWith
+    (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
+    call caller callerHonest
+  have receiverReached := e.forwardReachableWith
+    (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
+    n u honest
+  -- Agreement identifies the exact parent used by the caller's checked first slot.
+  rcases parent_read_or_collision reached.reachable receiverReached.reachable
+      callerParent parentSafe with parentFound | collision
+  swap
+  · exact .inr collision
+  rcases receiver_oldMaximum_of_head_window anchorStore anchored anchorInvariant anchorSlot
+      boundary positive slots early compatible bounded callerHonest honest later inTime updated
+      callerParent parentSafe firstOk unknown headRead cached epochRead callerSlot receiverSlot
+      callerLast receiverLastOk receiverWindow read ceiling with maximumOk | collision
+  swap
+  · exact .inr collision
+  obtain ⟨receiverMaximum, maximumOk⟩ := maximumOk
+  left
+  obtain ⟨total, totalOk⟩ := activeTotal_exists
+    (BeaconState.registryWithinLimit_of_lt early state) (by omega)
+  have inside := registry_of_head_window anchorStore anchored anchorInvariant anchorSlot boundary
+    positive slots early compatible bounded honest inTime parentFound unknown firstOk
+    headRead cached epochRead window
+  -- The caller holds the same block, so its checked predecessor bounds the empty-slot range.
+  obtain ⟨blockState, stateFound, -, -⟩ := reached.reachable.blockStatesFromParents callerFound
+  have blockLe := reached.reachable.slot_le_of_blockState (UInt64.le_of_eq anchorSlot)
+    callerFound stateFound
+  have stateLe := reached.forwardReachable.slot_le_of_blockState_of_getCurrentSlot
+    stateFound callerSlot
+  have before : last ≤ oldLast := by
+    have := (subChecked_ok_iff.mp lastOk).2
+    have := (subChecked_ok_iff.mp callerLast).2
+    have := UInt64.le_iff_toNat_le.mp blockLe
+    have := UInt64.le_iff_toNat_le.mp stateLe
+    exact UInt64.le_iff_toNat_le.mpr (by omega)
+  obtain ⟨shortMaximum, shortRead⟩ : ∃ result,
+      ((e.world n).state u).computeCommitteeWeightBetweenSlots head.root state first last =
+        .ok result := by
+    by_cases empty : last < first
+    · exact ⟨0, Store.computeCommitteeWeightBetweenSlots_of_gt empty⟩
+    have afterOk : addChecked last 1 = .ok block.slot := by
+      obtain ⟨positive, value⟩ := subChecked_ok_iff.mp lastOk
+      apply addChecked_ok_iff.mpr
+      have bound := block.slot.toNat_lt
+      simp only [UInt64.reduceToNat] at positive value ⊢
+      constructor <;> omega
+    obtain ⟨covered, coverage⟩ := coverage_exists_of_maximum
+      (UInt64.le_trans (UInt64.not_lt.mp empty) before) read afterOk
+    exact maximum_exists_of_total coverage window totalOk inside
+  -- The threshold is at most 50, even when one increment exceeds the active stake ceiling.
+  have totalValue := (getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok totalOk)).2.2
+  have fits : total.toNat / 100 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat < 2 ^ 64 := by
+    have small := preset.EFFECTIVE_BALANCE_INCREMENT.toNat_lt
+    rw [totalValue]
+    have quotient : max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+        (stake (fun v => balanceAt state v.toNat)
+          (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset) / 100 ≤
+        (2 ^ 64 - 1) / 100 := Nat.div_le_div_right (by omega)
+    have share : config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 50 := by omega
+    have le := Nat.mul_le_mul quotient share
+    norm_num at le ⊢
+    omega
+  obtain ⟨discount, discountOk⟩ := discount_exists early (Store.block_ok_iff.mpr found)
+    (Store.block_ok_iff.mpr parentFound) firstOk lastOk window inside shortRead totalOk fits
+  exact ⟨receiverMaximum, discount, maximumOk, discountOk⟩
 
 /-- Each accepted signer supplies activity in its own actual cached target state.
 
