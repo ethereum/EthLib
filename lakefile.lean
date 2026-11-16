@@ -148,6 +148,12 @@ lean_lib «CheckAccessorsTest» where
   srcDir := "scripts"
   roots := #[`CheckAccessorsTest]
 
+/-- Source attribute inspection used by the theorem placement check. -/
+lean_lib «CheckTheoremSupport» where
+  srcDir := "scripts"
+  roots := #[`CheckTheoremAttributes]
+  allowNonModules := true
+
 /-- Checks that specification theorems support definitions, instances or simplification.
 
 It compares the remaining theorems with an exact baseline that may only shrink.
@@ -166,3 +172,11 @@ Not a default target: `scripts/test_check_theorems.sh` builds and checks it. -/
 lean_lib «CheckTheoremsTest» where
   srcDir := "scripts"
   roots := #[`CheckTheoremsTest]
+
+/-- Persistent theorem attributes on which the placement check must stop.
+
+Not a default target: `scripts/test_check_theorems.sh` builds and checks it. -/
+lean_lib «CheckTheoremsAttributesTest» where
+  srcDir := "scripts"
+  roots := #[`CheckTheoremsAttributesTest]
+  allowNonModules := true

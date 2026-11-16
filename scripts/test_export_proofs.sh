@@ -138,8 +138,7 @@ for domain in ["Base", "Cryptography", "Networking", "Execution", "Consensus", "
 # Strip the object suffix so an aggregate module named `Proofs` counts too.
 for path in objects:
     parts = path.as_posix().removesuffix(".c.o.export").split("/")
-    if "Proofs" in parts:
-        assert "Exports" in parts and parts.index("Exports") < parts.index("Proofs"), path
+    assert "Proofs" not in parts, path
 native_proofs = [
     path for path in (project / ".lake/build/lib").rglob("*Proofs*")
     if path.is_file() and path.suffix in {".a", ".so", ".dylib", ".dll"}

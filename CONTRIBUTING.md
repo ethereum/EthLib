@@ -413,8 +413,11 @@ lake exe check-theorems
 uv run --no-project --python 3.12 python scripts/check_theorems_baseline.py --base origin/master
 ```
 
-The environment check follows the dependencies of definitions and instances, and permits persistent `@[simp]` theorems.
-An untagged helper used only by a simplification theorem is still a finding.
+The check follows the dependencies of definitions, instances and persistent `@[simp]` theorems.
+It reads private proof terms and resolved references from Lean's `.ilean` files, including named lemmas that simplification erases from a proof term.
+Helpers of retained theorems stay with their consumers.
+An unsupported persistent attribute written on a theorem or in an `attribute` command stops the check.
+Review custom command macros for attributes they generate, since the source guard does not expand them.
 Other theorems belong under `Proofs/`, as [`ARCHITECTURE.md`](ARCHITECTURE.md#where-a-new-module-goes) explains.
 
 To inspect the findings and their source locations, run `lake exe check-theorems --list`.

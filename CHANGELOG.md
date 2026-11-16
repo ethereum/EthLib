@@ -16,6 +16,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `EthLib.Execution.Exports.Proofs.Evm` and `EthLib.Execution.Exports.Proofs.Trie` move to `EthLib.Execution.Proofs.Exports.Evm` and `EthLib.Execution.Proofs.Exports.Trie` ([#2630](https://github.com/ethereum/EthLib/issues/2630)).
+  Declaration names and statements are unchanged; update the imports.
+  Consumers that received these theorems through an `Exports` root must import the relevant proof module or `EthLib.Execution.Proofs`.
+
 - In Lean, `Evm.Call.TransferLog` becomes `Evm.TransferLog`, and the XMSS security modules `XmssSecurity.Scan.*` move to `XmssSecurity.Proof.Scan.*` ([#2629](https://github.com/ethereum/EthLib/pull/2629)).
   The import checker now finds a cycle between directories through imports at any depth, and these moves break the two such cycles that remained.
   Declaration names, namespaces and statements are unchanged; update the imports.

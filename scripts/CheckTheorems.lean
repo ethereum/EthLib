@@ -1,4 +1,6 @@
 import Lean
+import Lean.Server.References
+import CheckTheoremAttributes
 
 /-!
 # Theorems in specification modules
@@ -7,9 +9,13 @@ The check keeps the theorems that specification definitions and instances use.
 
 A persistent simplification attribute also exempts a theorem.
 
+The dependencies of every retained theorem stay with it.
+
+Other explicit persistent theorem attributes stop the check until they have a placement rule.
+
 All other theorems belong in the property library.
 
-The check reads declaration types and private bodies from the compiled environment.
+The check reads declaration types, private bodies and elaborated references from build artifacts.
 
 Generated declarations belong to their source declaration rather than to the migration baseline.
 
@@ -28,11 +34,6 @@ def moduleOf? (env : Environment) (n : Name) : Option Name := do
 /-- Specification modules exclude every property and export tree. -/
 def isSpecModule (scope m : Name) : Bool :=
   scope.isPrefixOf m && !m.components.contains `Proofs && !m.components.contains `Exports
-
-/-- The original declaration's source range, without falling back to a parent's range. -/
-def ranges? (env : Environment) (n : Name) : Option DeclarationRanges :=
-  declRangeExt.find? (level := .exported) env n <|>
-    declRangeExt.find? (level := .server) env n
 
 /-- Source positions in their file order. -/
 def positionLE (a b : Position) : Bool :=
@@ -88,6 +89,34 @@ def dependencies (c : ConstantInfo) : Array Name :=
   | .inductInfo v => v.type.getUsedConstants ++ v.ctors.toArray
   | _ => c.type.getUsedConstants
 
+/-- Elaborated references retain named lemmas even when simplification erases their proof terms. -/
+abbrev SourceDependencies := Std.HashMap Name (Array Name)
+
+/-- Read the same resolved names that Lean's language server uses for references.
+
+The parent declaration identifies the consumer without guessing namespaces from source text. -/
+def sourceDependencies (env : Environment) (root : System.FilePath) (scope : Name)
+    (modules : Array Name) : IO SourceDependencies := do
+  let mut out := {}
+  for m in modules do
+    let path := (← findOLean m).withExtension "ilean"
+    let refs ← try Server.Ilean.load path catch _ =>
+      throw <| IO.userError s!"{path}: cannot read reference metadata"
+    unless refs.module == m && refs.version == 5 do
+      throw <| IO.userError s!"{path}: unexpected reference metadata module or version"
+    let components := m.components.drop scope.components.length
+    let source := (components.foldl (fun p n => p / n.toString) root).addExtension "lean"
+    let diagnostics ← unsupportedAttributes env source refs
+    unless diagnostics.isEmpty do
+      throw <| IO.userError (String.intercalate "\n" diagnostics.toList)
+    for (ident, info) in refs.references do
+      if let .const _ target := ident then
+        for usage in info.usages do
+          if let some parent := usage.parentDecl? then
+            let parent := parent.toName
+            out := out.insert parent ((out[parent]?.getD #[]).push target.toName)
+  return out
+
 /-- Theorems registered in the persistent global or scoped simplification sets.
 
 Local attributes are absent after import and therefore do not retain a theorem by themselves. -/
@@ -118,17 +147,19 @@ def instanceNames (env : Environment) : NameSet := Id.run do
   return names
 
 /-- Reachability from retained declarations through every specification dependency. -/
-partial def reachable (env : Environment) (scope : Name) (pending : List Name)
+partial def reachable (env : Environment) (source : SourceDependencies) (scope : Name)
+    (pending : List Name)
     (seen : NameSet := {}) : NameSet :=
   match pending with
   | [] => seen
   | n :: rest =>
     if seen.contains n || !(moduleOf? env n).any (isSpecModule scope) then
-      reachable env scope rest seen
+      reachable env source scope rest seen
     else
       let seen := seen.insert n
-      let children := (env.find? n).map dependencies |>.getD #[]
-      reachable env scope (children.toList ++ rest) seen
+      let children := ((env.find? n).map dependencies |>.getD #[]) ++
+        source[n]?.getD #[]
+      reachable env source scope (children.toList ++ rest) seen
 
 /-- One movable theorem, identified independently of generated private-name counters. -/
 structure Finding where
@@ -137,10 +168,11 @@ structure Finding where
   original : Name
 
 /-- The baseline's stable identity for a declaration. -/
-def Finding.key (f : Finding) : Name × Name := (f.moduleName, f.decl)
+def Finding.key (f : Finding) : String × String := (f.moduleName.toString, f.decl.toString)
 
-/-- Find theorems that no definition or instance uses and that carry no `simp` attribute. -/
-def findings (env : Environment) (scope : Name) : Array Finding := Id.run do
+/-- Find theorems outside the dependencies of definitions, instances and `simp` rules. -/
+def findings (env : Environment) (source : SourceDependencies) (scope : Name) :
+    Array Finding := Id.run do
   let declarations := env.constants.toList.filter fun (n, _) =>
     (moduleOf? env n).any (isSpecModule scope)
   let mut names : NameIndex := {}
@@ -151,11 +183,11 @@ def findings (env : Environment) (scope : Name) : Array Finding := Id.run do
   let simp := simpNames env
   let instances := instanceNames env
   let roots := declarations.filterMap fun (n, c) =>
-    if instances.contains n ||
+    if simp.contains n || instances.contains n ||
         ((c matches .defnInfo _ | .opaqueInfo _ | .inductInfo _ | .ctorInfo _) &&
           !isProofSupport env names n) then some n
     else none
-  let kept := reachable env scope roots
+  let kept := reachable env source scope roots
   let out := declarations.filterMap fun (n, c) => do
     guard (c matches .thmInfo _)
     guard (!kept.contains n && !simp.contains n && (owner? env names n).isNone)
@@ -185,11 +217,16 @@ structure Options where
   baseline : System.FilePath := "scripts/check_theorems_baseline.txt"
   print : Bool := false
   list : Bool := false
+  parseBaseline : Option System.FilePath := none
 
 /-- Read flags without accepting missing values or unknown arguments. -/
 def parseArgs : List String → Options → Except String Options
   | [], options =>
-    if options.print && options.list then .error "choose either --print or --list"
+    if options.parseBaseline.isSome &&
+        (options.root != "EthLib" || options.baseline != "scripts/check_theorems_baseline.txt" ||
+          options.print || options.list) then
+      .error "choose either --parse-baseline or other options"
+    else if options.print && options.list then .error "choose either --print or --list"
     else .ok options
   | "--root" :: value :: rest, options =>
     if value.startsWith "--" then .error "--root needs a directory"
@@ -199,21 +236,26 @@ def parseArgs : List String → Options → Except String Options
     else parseArgs rest { options with baseline := value }
   | "--print" :: rest, options => parseArgs rest { options with print := true }
   | "--list" :: rest, options => parseArgs rest { options with list := true }
+  | "--parse-baseline" :: value :: rest, options =>
+    if value.startsWith "--" then .error "--parse-baseline needs a file"
+    else parseArgs rest { options with parseBaseline := some value }
   | flag :: _, _ => .error s!"unknown or incomplete option {flag}"
 
 /-- Parse one exact baseline entry, with comments and blank lines ignored. -/
-def baselineEntry (line : String) : Except String (Option (Name × Name)) := do
+def baselineEntry (line : String) : Except String (Option (String × String)) := do
   let line := (line.splitOn "#").headD ""
   let words := (line.splitToList Char.isWhitespace).filter (· != "")
   match words with
   | [] => return none
-  | [m, n] => return some (m.toName, n.toName)
+  | [m, n] => return some (m, n)
   | _ => throw "expected a module and a declaration name"
 
 /-- Malformed and duplicate baseline entries are errors rather than ignored lines. -/
-def readBaseline (path : System.FilePath) : IO (Array (Name × Name)) := do
+def readBaseline (path : System.FilePath) : IO (Array (String × String)) := do
+  let lines ← try IO.FS.lines path catch _ =>
+    throw <| IO.userError s!"{path}: cannot read baseline"
   let mut out := #[]
-  for (line, index) in (← IO.FS.lines path).zipIdx do
+  for (line, index) in lines.zipIdx do
     let entry ← match baselineEntry line with
       | .ok entry => pure entry
       | .error message => throw <| IO.userError s!"{path}:{index + 1}: {message}"
@@ -240,6 +282,13 @@ unsafe def run (args : List String) : IO UInt32 := do
     | .error message =>
       IO.eprintln s!"check-theorems: {message}"
       return 2
+  if let some path := options.parseBaseline then
+    try
+      for (m, n) in ← readBaseline path do IO.println s!"{m} {n}"
+      return 0
+    catch error =>
+      IO.eprintln s!"check-theorems: {error}"
+      return 2
   let some last := options.root.fileName
     | IO.eprintln "check-theorems: the root has no last part to name its modules"
       return 2
@@ -261,7 +310,10 @@ unsafe def run (args : List String) : IO UInt32 := do
   if scanned == 0 then
     IO.eprintln "check-theorems: no definition of the specification was loaded"
     return 3
-  let found := findings env scope
+  let source ← try sourceDependencies env options.root scope modules catch error =>
+    IO.eprintln s!"check-theorems: {error}"
+    return 2
+  let found := findings env source scope
   let keys := found.map Finding.key
   if (keys.toList.eraseDups).length != keys.size then
     IO.eprintln "check-theorems: findings have duplicate module and declaration names"

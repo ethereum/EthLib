@@ -2,6 +2,7 @@ module
 
 public import CheckTheoremsTest.Spec
 public import CheckTheoremsTest.Hidden
+public import CheckTheoremsTest.LocalSyntax
 public import CheckTheoremsTest.Proofs.Lemmas
 public import CheckTheoremsTest.Exports.Api
 
