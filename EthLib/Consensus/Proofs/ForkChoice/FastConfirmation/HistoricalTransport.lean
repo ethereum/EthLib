@@ -168,6 +168,86 @@ private theorem pendingTail_processRegistryUpdatesElectra {config : Config}
     ⟨tail, rfl, rfl⟩ folded
   exact result.1
 
+/-- The legacy first pass queues eligibility after the boundary and keeps activation unassigned. -/
+private theorem pendingTail_updateRegistryEntry {config : Config}
+    {state after : BeaconState preset fork} {index count : Nat} {epoch : Epoch}
+    (run : updateRegistryEntry config state index = .ok after)
+    (boundary : epoch ≤ getCurrentEpoch state) (tail : PendingTail count epoch state) :
+    PendingTail count epoch after := by
+  simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at run
+  obtain ⟨old, found, queued, queue, marked, set, rest⟩ := run
+  have markedTail : PendingTail count epoch marked := by
+    apply pendingTail_setValidatorAt_of found set (fun beyond pending => ?_) tail
+    unfold queueForActivation at queue
+    split at queue
+    · simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+        pure, Except.pure, Except.ok.injEq] at queue
+      obtain ⟨next, nextOk, rfl⟩ := queue
+      have sum := (addChecked_ok_iff.mp nextOk).2
+      have bound := UInt64.le_iff_toNat_le.mp boundary
+      norm_num only [UInt64.toNat_ofNat] at sum
+      change epoch < next ∧ old.activationEpoch = FAR_FUTURE_EPOCH
+      exact ⟨UInt64.lt_iff_toNat_lt.mpr (by omega), pending⟩
+    · cases queue; exact ⟨beyond, pending⟩
+  split at rest
+  · simp only [bind_ok_iff, liftAccessor_ok] at rest
+    obtain ⟨_, _, exited⟩ := rest
+    exact pendingTail_initiateValidatorExit exited markedTail
+  · cases rest; exact markedTail
+
+/-- Both registry schedules keep the pending suffix beyond their finalized boundary. -/
+private theorem pendingTail_processRegistryUpdates {config : Config}
+    {state after : BeaconState preset fork} {count : Nat} {epoch : Epoch}
+    (run : processRegistryUpdates config state = .ok after)
+    (boundary : epoch ≤ getCurrentEpoch state)
+    (finalized : state.finalizedCheckpoint.epoch ≤ epoch) (tail : PendingTail count epoch state) :
+    PendingTail count epoch after := by
+  by_cases electra : .pectra ≤ fork
+  · exact pendingTail_processRegistryUpdatesElectra electra run boundary finalized tail
+  simp only [processRegistryUpdates, electra, ↓reduceIte, bind_ok_iff] at run
+  obtain ⟨updated, first, activated⟩ := run
+  have updatedFacts := foldlM_ok_invariant
+    (fun s => PendingTail count epoch s ∧ s.slot = state.slot ∧
+      s.finalizedCheckpoint = state.finalizedCheckpoint)
+    (fun s i t before ok => by
+      have frame := frame_updateRegistryEntry ok
+      refine ⟨pendingTail_updateRegistryEntry ok ?_ before.1,
+        frame.slot.trans before.2.1, frame.finalized.trans before.2.2⟩
+      simpa only [getCurrentEpoch, before.2.1] using boundary)
+    ⟨tail, rfl, rfl⟩ first
+  have queueBefore : ∀ index ∈ activationQueue updated, index.toNat < count := by
+    intro index member
+    obtain ⟨position, validator, equal, found, eligible⟩ := mem_activationQueue member
+    have inside := (Array.getElem?_eq_some_iff.mp found).1
+    have small := updated.validators.bound
+      (Nat.lt_trans (Nat.lt_of_not_le electra) (by decide : Fork.pectra < .glamsterdam))
+    have exactIndex : index.toNat = position := by
+      rw [← equal, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' (by
+        have := UInt64.toNat_lt preset.VALIDATOR_REGISTRY_LIMIT
+        change position < 18446744073709551616
+        omega)]
+    rw [exactIndex]
+    by_contra outside
+    have beyond := (updatedFacts.1 position validator (Nat.le_of_not_gt outside) found).1
+    have lower : validator.activationEligibilityEpoch ≤ updated.finalizedCheckpoint.epoch := by
+      simp only [isEligibleForActivation, Bool.and_eq_true, decide_eq_true_eq,
+        beq_iff_eq] at eligible
+      exact eligible.1
+    rw [updatedFacts.2.2] at lower
+    exact UInt64.not_lt.mpr (UInt64.le_trans lower finalized) beyond
+  apply foldlM_ok_invariant_of_mem (PendingTail count epoch) (fun s index t member before ok => ?_)
+    updatedFacts.1 activated
+  have lower : index.toNat < count := queueBefore index (List.mem_of_mem_take member)
+  simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨_, _, _, _, set⟩ := ok
+  obtain ⟨inside, rfl⟩ := setValidator_ok set
+  intro position validator beyond found
+  simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
+    Array.getElem?_set] at found
+  split at found
+  · omega
+  · exact before position validator beyond found
+
 /-- A newly deposited validator is pending beyond every finite boundary epoch. -/
 private theorem pendingTail_addValidator {state after : BeaconState preset fork}
     {count : Nat} {epoch : Epoch} {pubkey : Cryptography.Bls.BLSPubkey}
@@ -411,10 +491,10 @@ private theorem finalized_epochTrace {config : Config} {checks : SignatureChecks
   exact (mutatorEpochFrameLaws.toEpochStepLaws.epochEdge
     ⟨other stage member, payments, participation, deposits⟩ run).finalized
 
-/-- The output finalized bound suffices to preserve the tail through an Electra epoch. -/
+/-- The output finalized bound suffices to preserve the tail through an epoch. -/
 private theorem pendingTail_processEpoch
     {config : Config} {checks : SignatureChecks}
-    {source after : BeaconState preset fork} (electra : .pectra ≤ fork)
+    {source after : BeaconState preset fork}
     {boundEpoch : Epoch} {count : Nat}
     (run : processEpoch config checks source = .ok after)
     (boundary : boundEpoch ≤ getCurrentEpoch source)
@@ -433,11 +513,11 @@ private theorem pendingTail_processEpoch
     simpa only [same] using finalized
   exact pendingTail_epochTrace suffix
     (by simp [EpochStage.middleStages, EpochStage.tailStages]) finite
-    (pendingTail_processRegistryUpdatesElectra electra registry readyBound readyFinalized readyTail)
+    (pendingTail_processRegistryUpdates registry readyBound readyFinalized readyTail)
 
 /-- The actual cache, optional epoch and slot increment preserve the pending suffix. -/
 private theorem pendingTail_advanceSlot {config : Config} {checks : SignatureChecks}
-    {source after : BeaconState preset fork} (electra : .pectra ≤ fork)
+    {source after : BeaconState preset fork}
     {boundEpoch : Epoch} {count : Nat}
     (run : advanceSlot config checks source = .ok after)
     (boundary : boundEpoch ≤ getCurrentEpoch source)
@@ -451,7 +531,7 @@ private theorem pendingTail_advanceSlot {config : Config} {checks : SignatureChe
   have epochedTail : PendingTail count boundEpoch epoched := by
     unfold epochIfLast at epochOk
     split at epochOk
-    · apply pendingTail_processEpoch electra epochOk ?_ finalized finite cachedTail
+    · apply pendingTail_processEpoch epochOk ?_ finalized finite cachedTail
       simpa only [getCurrentEpoch, cacheEq] using boundary
     · cases epochOk; exact cachedTail
   exact epochedTail
@@ -459,7 +539,7 @@ private theorem pendingTail_advanceSlot {config : Config} {checks : SignatureChe
 /-- A successful slot step gives checked historical reads without an epoch-stage premise. -/
 private theorem filteredTotal_of_advanceSlot
     {config : Config} {checks : SignatureChecks}
-    {source after cached : BeaconState preset fork} (electra : .pectra ≤ fork)
+    {source after cached : BeaconState preset fork}
     {epoch boundEpoch : Epoch} {count : Nat}
     {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
     (run : advanceSlot config checks source = .ok after)
@@ -474,7 +554,7 @@ private theorem filteredTotal_of_advanceSlot
         return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
         .ok selected ∧ getTotalBalance cached selected = .ok result :=
   filteredTotal_of_pendingTail
-    (pendingTail_advanceSlot electra run boundary finalized finite tail) contains active read
+    (pendingTail_advanceSlot run boundary finalized finite tail) contains active read
 
 /-- Lookahead extends a run without assuming a registry-size bound. -/
 private theorem runKept_lookahead {config : Config} {checks : SignatureChecks}
