@@ -2013,7 +2013,31 @@ private def AnchorParentAbsent (last : Nat) : Prop :=
   ∀ a ∈ J, ∀ i, (e.world i).time ≤ last →
     ((e.world i).state a).blocks[anchorBlock.parentRoot]? = none
 
-/-- A finite-window margin or justified ancestry keeps the actual head below the block. -/
+/-- A receiver's ancestor parent agrees with the caller's parent or supplies a block collision. -/
+private theorem parent_read_or_collision {caller receiver : Store preset fork}
+    (callerReached : Store.Reachable config anchorState anchorBlock caller)
+    (receiverReached : Store.Reachable config anchorState anchorBlock receiver)
+    {parent : BeaconBlock preset fork} {parentRoot : Root} {head : ForkChoiceNode}
+    (callerParentFound : caller.blocks[parentRoot]? = some parent)
+    (parentSafe : receiver.isAncestor head ⟨parentRoot, .pending⟩ = .ok true) :
+    receiver.blocks[parentRoot]? = some parent ∨ ∃ leftBlock rightBlock,
+      Store.findBlockCollision caller receiver [parentRoot] =
+        some (parentRoot, leftBlock, rightBlock) ∧ leftBlock ≠ rightBlock ∧
+      Serialization.Ssz.SszType.hashTreeRoot leftBlock = .ok parentRoot ∧
+      Serialization.Ssz.SszType.hashTreeRoot rightBlock = .ok parentRoot := by
+  have parentRead := parentSafe
+  unfold Store.isAncestor at parentRead
+  obtain ⟨receiverParent, parentOk, _⟩ := bind_ok_iff.mp parentRead
+  have receiverParentFound := Store.block_ok_iff.mp parentOk
+  by_cases same : parent = receiverParent
+  · exact .inl (same ▸ receiverParentFound)
+  have searched : Store.findBlockCollision caller receiver [parentRoot] =
+      some (parentRoot, parent, receiverParent) := by
+    simp [Store.findBlockCollision, callerParentFound, receiverParentFound, same]
+  have valid := Store.findBlockCollision_valid callerReached receiverReached searched
+  exact .inr ⟨parent, receiverParent, searched, valid⟩
+
+/-- A margin or justified ancestry gives head ancestry or a collision at the caller's parent. -/
 private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -2035,7 +2059,9 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
       ((e.world n).state u).justifiedCheckpoint = .ok state)
     (tree : ((e.world n).state u).getFilteredNodeTree config = .ok nodes)
     (found : ((e.world n).state u).blocks[root]? = some block)
-    (parentFound : ((e.world n).state u).blocks[block.parentRoot]? = some parent)
+    {caller : Store preset fork}
+    (callerReached : Store.Reachable config anchorState anchorBlock caller)
+    (callerParentFound : caller.blocks[block.parentRoot]? = some parent)
     (slotRead : ((e.world n).state u).getCurrentSlot config = .ok current)
     (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok epoch)
     (horizon : epoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2)
@@ -2058,16 +2084,26 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
       Models.stake (fun v => balanceAt state v.toNat)
         {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J}))
     (scoreOk : computeProposerScore config state = .ok (score : Gwei)) :
-    ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true := by
+    ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true ∨
+    ∃ leftBlock rightBlock,
+      Store.findBlockCollision caller ((e.world n).state u) [block.parentRoot] =
+        some (block.parentRoot, leftBlock, rightBlock) ∧ leftBlock ≠ rightBlock ∧
+      Serialization.Ssz.SszType.hashTreeRoot leftBlock = .ok block.parentRoot ∧
+      Serialization.Ssz.SszType.hashTreeRoot rightBlock = .ok block.parentRoot := by
   classical
   rcases route with justifiedAbove | ⟨viable, descends, margin⟩
   · obtain ⟨justified, justifiedKnown⟩ := Store.filterNodeTree_known tree
-    exact Store.isAncestor_trans_of_lt before justifiedKnown found
-      (Store.isAncestor_getHead_of_lt_gloas before headRead) justifiedAbove
+    exact .inl (Store.isAncestor_trans_of_lt before justifiedKnown found
+      (Store.isAncestor_getHead_of_lt_gloas before headRead) justifiedAbove)
   let store := (e.world n).state u
   have reached := e.forwardReachableWith
     (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
     n u honest
+  rcases parent_read_or_collision callerReached reached.reachable callerParentFound descends with
+    parentFound | collision
+  swap
+  · exact .inr collision
+  left
   have lower := reached.reachable.parentsBelow anchorSlot (absent u honest n time)
   have within := BeaconState.registryWithinLimit_of_lt before state
   have shortBefore := previousBlockSlot_le_previousCurrentSlot reached anchorSlot
@@ -2228,30 +2264,6 @@ private theorem anchor_finite_of_parentNext {store : Store preset fork}
   have one : (1 : UInt64).toNat = 1 := rfl
   rw [one] at step
   omega
-
-/-- A receiver's ancestor parent agrees with the caller's parent or supplies a block collision. -/
-private theorem parent_read_or_collision {caller receiver : Store preset fork}
-    (callerReached : Store.Reachable config anchorState anchorBlock caller)
-    (receiverReached : Store.Reachable config anchorState anchorBlock receiver)
-    {parent : BeaconBlock preset fork} {parentRoot : Root} {head : ForkChoiceNode}
-    (callerParentFound : caller.blocks[parentRoot]? = some parent)
-    (parentSafe : receiver.isAncestor head ⟨parentRoot, .pending⟩ = .ok true) :
-    receiver.blocks[parentRoot]? = some parent ∨ ∃ leftBlock rightBlock,
-      Store.findBlockCollision caller receiver [parentRoot] =
-        some (parentRoot, leftBlock, rightBlock) ∧ leftBlock ≠ rightBlock ∧
-      Serialization.Ssz.SszType.hashTreeRoot leftBlock = .ok parentRoot ∧
-      Serialization.Ssz.SszType.hashTreeRoot rightBlock = .ok parentRoot := by
-  have parentRead := parentSafe
-  unfold Store.isAncestor at parentRead
-  obtain ⟨receiverParent, parentOk, _⟩ := bind_ok_iff.mp parentRead
-  have receiverParentFound := Store.block_ok_iff.mp parentOk
-  by_cases same : parent = receiverParent
-  · exact .inl (same ▸ receiverParentFound)
-  have searched : Store.findBlockCollision caller receiver [parentRoot] =
-      some (parentRoot, parent, receiverParent) := by
-    simp [Store.findBlockCollision, callerParentFound, receiverParentFound, same]
-  have valid := Store.findBlockCollision_valid callerReached receiverReached searched
-  exact .inr ⟨parent, receiverParent, searched, valid⟩
 
 /-- A held head supplies registry lookups for the receiver's checked older-window maximum.
 
