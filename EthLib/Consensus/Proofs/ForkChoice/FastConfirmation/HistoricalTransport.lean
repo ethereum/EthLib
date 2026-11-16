@@ -2712,6 +2712,85 @@ private theorem receiver_maximum_discount_of_head_window {anchor : Store preset 
     (Store.block_ok_iff.mpr parentFound) firstOk lastOk window inside shortRead totalOk fits
   exact ⟨receiverMaximum, discount, maximumOk, discountOk⟩
 
+/-- The active stake of a balance state is bounded by the supplied cap. -/
+private def ActiveStakeAtMost (cap : Nat) (state : BeaconState preset fork) : Prop :=
+  stake (fun v => balanceAt state v.toNat)
+    (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ≤ cap
+
+/-- Every honest checkpoint cache read before the deadline satisfies the stake ceiling. -/
+private def CheckpointStakeCeiling (cap last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k checkpoint state, (e.world k).time ≤ last →
+    ((e.world k).state w).checkpointState checkpoint = .ok state → ActiveStakeAtMost cap state
+
+/-- Honest stores do not hold the parent of the anchor before the deadline. -/
+private def AnchorParentAbsent (last : Nat) : Prop :=
+  ∀ a ∈ J, ∀ i, (e.world i).time ≤ last →
+    ((e.world i).state a).blocks[anchorBlock.parentRoot]? = none
+
+/-- Endpoint observations supply receiver reads or honest-store collision evidence.
+
+Both committee windows remain observations, not consequences of committee agreement. -/
+private theorem receiver_reads_of_historical_observations {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (slots : 0 < config.SLOT_DURATION_MS)
+    (early : fork < .glamsterdam) {horizon : Epoch} {time : Nat}
+    (compatible : FinalizedCheckpointCompatibility (e := e) horizon time)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
+    (supply : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) time)
+    (absent : AnchorParentAbsent (e := e) time)
+    {u w : ValidatorIndex} (caller : u ∈ J) (receiver : w ∈ J) {n k : Nat}
+    (later : (e.world n).time ≤ time) (atTime : (e.world k).time = time)
+    (updated : UpToDate config checks sources (e.world k).time
+      ((e.world k).view w) ((e.world k).state w))
+    {head : ForkChoiceNode} {state source : BeaconState preset fork} {callerHead root : Root}
+    {block parent : BeaconBlock preset fork} {slot current first last beforeBlock finish : Slot}
+    {epoch : Epoch} {window participants : Std.TreeSet ValidatorIndex} {maximum : Gwei}
+    (blockOk : ((e.world n).state u).block root = .ok block)
+    (known : ((e.world k).state w).blocks[root]? = some block)
+    (parentOk : ((e.world n).state u).block block.parentRoot = .ok parent)
+    (above : ((e.world k).state w).isAncestor head ⟨block.parentRoot, .pending⟩ = .ok true)
+    (firstOk : addChecked parent.slot 1 = .ok first)
+    (beforeOk : subChecked block.slot 1 = .ok beforeBlock)
+    (callerSlot : ((e.world n).state u).getCurrentSlot config = .ok slot)
+    (callerLast : subChecked slot 1 = .ok last)
+    (headOk : ((e.world k).state w).getHead config = .ok head)
+    (stateOk : ((e.world k).state w).checkpointState
+      ((e.world k).state w).justifiedCheckpoint = .ok state)
+    (currentOk : ((e.world k).state w).getCurrentSlot config = .ok current)
+    (epochOk : ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch)
+    (lastOk : subChecked current 1 = .ok finish)
+    (windowOk : ((e.world k).state w).getCommitteesBetweenSlots head.root first finish =
+      .ok window)
+    (participantsOk : ((e.world k).state w).getCommitteesBetweenSlots head.root first
+      beforeBlock = .ok participants)
+    (maximumOk : ((e.world n).state u).computeCommitteeWeightBetweenSlots callerHead source
+      first last = .ok maximum)
+    (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100) :
+    (∃ receiverMaximum discount,
+      ((e.world k).state w).computeCommitteeWeightBetweenSlots head.root state
+        first last = .ok receiverMaximum ∧
+      ((e.world k).state w).computeEmptySlotSupportDiscount config head.root state
+        root = .ok discount) ∨
+    ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
+      ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
+        some evidence := by
+  have inTime : (e.world k).time ≤ time := Nat.le_of_eq atTime
+  have ordered : (e.world n).time ≤ (e.world k).time := atTime ▸ later
+  have positiveSlot : 0 < preset.SLOTS_PER_EPOCH := UInt64.lt_iff_toNat_lt.mpr positive
+  rcases receiver_maximum_discount_of_head_window anchorStore anchored sound anchorSlot boundary
+      positiveSlot slots early compatible bounded receiver caller inTime known
+      (Store.block_ok_iff.mp blockOk) callerSlot callerLast ordered updated currentOk lastOk
+      windowOk (Store.block_ok_iff.mp parentOk) above (absent w receiver k inTime) firstOk
+      beforeOk headOk stateOk epochOk participantsOk maximumOk half
+      (supply w receiver k _ state inTime stateOk) with reads | collision
+  · exact .inl reads
+  · obtain ⟨leftBlock, rightBlock, found, _, _, _⟩ := collision
+    exact .inr ⟨u, caller, w, receiver, n, k, later, inTime, block.parentRoot,
+      (block.parentRoot, leftBlock, rightBlock), found⟩
+
 /-- Each accepted signer supplies activity in its own actual cached target state.
 
 The receiver still filters at its own epoch; no activity is transported backwards. -/
