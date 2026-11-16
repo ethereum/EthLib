@@ -6,7 +6,8 @@ public import EthLib.Serialization.Ssz.Codec.Json
 public import EthLib.Serialization.Exports.Ssz
 import EthLib.Base.Proofs.Toolchain.JsonBasic
 import all EthLib.Serialization.Exports.Ssz
-import all EthLib.Base.Exports.PyValue
+import all EthLib.Base.Exports.PyValueCore
+import all EthLib.Base.Exports.PyValueJson
 import Std.Data.TreeMap.Raw.Lemmas
 import Std.Data.TreeMap.Raw.WF
 

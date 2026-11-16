@@ -125,4 +125,7 @@ attribute [placement_tag] localCommand_rule
 /-- A proof using no constants can lack a declaration entry in the reference file. -/
 @[placement_tag] theorem identity {p : Prop} (h : p) : p := h
 
+-- An allowed documentation attribute must not hide the persistent custom label beside it.
+@[inherit_doc tagged_rule, placement_tag] theorem metadata_mixed_rule : True := True.intro
+
 end CheckTheoremsAttributesTest

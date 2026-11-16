@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Exports
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import Lean.Data.Json
 public import EthLib.Base.Hex
 public import EthLib.Serialization.Ssz.Codec.Json

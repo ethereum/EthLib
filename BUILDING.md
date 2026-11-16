@@ -68,11 +68,20 @@ The module system hides a body only from files that have a `module` header.
 In such a file, `rfl`, `unfold`, `decide` and `decide +kernel` stop at the hidden body, and the proof cites a law instead.
 A downstream file without a `module` header sees hidden bodies, so the module system does not hold it to the laws.
 
-The library, the proofs and the C exports remain three separate Lake libraries.
+The `EthLib` library holds the specification, and `Proofs` holds its properties.
+`PythonConversions` holds the shared Python conversion core and the proofs of its laws.
+`Exports` holds the remaining C exports that the Python bindings call.
+The conversion library imports only the Lean toolchain, so both exports and properties can use it without a cycle between native libraries.
+
 The exports library has one root and a library name that matches its module initializer.
 Lake then treats it as a plugin, and Lean loads the specification plugin before it.
-The export globs still assign each domain's export modules to that library.
+The export globs assign each domain's export modules to that library, except for the separately owned conversion core.
+So each module of `Base/Exports/` is listed by name; a missing entry fails the build with a cycle.
 This load order lets a property module import a C export.
+
+Conversion laws enter the exports through `public meta import` during elaboration.
+The Python extension links only ordinary runtime imports and calls the runtime initializer of `EthLib.Exports`.
+The linker discards EthLib's unused compile-time and legacy initializers while preserving runtime initializers and the C exports.
 
 Import property theorems from the `Proofs` tree.
 The import path follows the file layout even when a theorem uses the namespace of its specification.
@@ -102,7 +111,10 @@ The module regression checks ordinary imports.
 It also checks that changing a private proof leaves the public artifact unchanged, so that a downstream build is skipped.
 Public metadata still changes when source positions move, so a proof edit does not always avoid downstream builds.
 
-The export proof regression checks native load order and keeps ordinary property objects out of the export build.
+The export proof regression checks fresh builds, shared exports and precompiled downstream consumers.
+It links and runs a native fixture with the production settings.
+A separate assertion requires the real Python link inputs to include every export module and exclude every property module.
+An ordinary import of a property must fail that assertion, even when compile-time proof objects are present in the cache.
 
 ## CI cache and timing
 
@@ -220,5 +232,5 @@ EthLib's dependencies then keep the pins of the root manifest, and doc-gen4's de
 The doc-gen4 tag in `docbuild/lakefile.toml` names the toolchain version.
 No check raises it, so a pull request that upgrades the toolchain raises it to the same tag.
 
-Only the library `EthLib` has pages, not `Proofs` or `Exports`.
+Only the library `EthLib` has pages, not `Proofs`, `Exports` or `PythonConversions`.
 Most of the output documents `Init`, `Lean`, `Lake` and `Std`, which doc-gen4 always includes.

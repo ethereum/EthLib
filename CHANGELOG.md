@@ -16,6 +16,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the Python conversion laws and properties move from `EthLib.Base.Exports.Proofs.PyValue` to `EthLib.Base.Proofs.Exports.PyValue` ([#2630](https://github.com/ethereum/EthLib/issues/2630)).
+  Update imports for `pyExport_items` and the hexadecimal conversion theorems; their statements are unchanged.
+  `EthLib.Base.Exports.PyValue` imports the law instances at compile time, and `pyExport` keeps the same law constraints.
+  The Python extension links only runtime dependencies and preserves C exports and runtime initializers as public native symbols.
+  The linker hides EthLib's compile-time and legacy initializers and discards their unused sections.
+  C callers that initialize the extension through an `initialize_EthLib_*` symbol must use the corresponding `runtime_initialize_EthLib_*` symbol or import the Python module.
+
 - In Lean, the honest-duty supporter and head theorems use `VotesInSlots` for one complete epoch, including their accountable companions.
   For `Execution.mem_supportersOf_of_duty_epoch` and its accountable companion, pass the scoped votes after the epoch and slot binders, before `beginOk`.
   For `Execution.isAncestor_getHead_of_duty_epoch` and its accountable companion, include the scoped votes inside the `margin` existential, after the time bounds and before the stake inequality.

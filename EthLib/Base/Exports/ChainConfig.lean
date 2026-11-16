@@ -2,7 +2,7 @@ module
 
 public import EthLib.Base.ChainConfig
 public import EthLib.Base.Hex
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import Lean.Data.Json
 
 /-!

@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Execution.Blocks
 public import EthLib.Execution.Transactions.Envelope
 public import EthLib.Serialization.Exports.Rlp

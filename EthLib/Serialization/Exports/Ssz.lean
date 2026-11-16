@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Serialization.Ssz.Codec.Json
 public import EthLib.Serialization.Ssz.Codec.Proof
 public import EthLib.Serialization.Ssz.Codec.Root

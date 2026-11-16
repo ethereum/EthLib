@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Bytes
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Execution.Evm.Call.ContractAddress
 public import EthLib.Execution.Evm.Gas.Memory
 public import EthLib.Execution.Evm.Op

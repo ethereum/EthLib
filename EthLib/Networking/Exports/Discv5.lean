@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Networking.Exports.Enr
 public import EthLib.Networking.Discv5.Identity
 public import EthLib.Networking.Discv5.Message

@@ -6,7 +6,11 @@ import Lean.Server.References
 
 Moving an attributed theorem can change compilation, elaboration or tactic behaviour.
 
-The source guard accepts `simp` and stops on other explicit persistent theorem attributes.
+The source guard accepts `simp`, `deprecated` and `inherit_doc`.
+
+Deprecation and inherited documentation add metadata rather than compiler or tactic rules.
+
+Other explicit persistent theorem attributes stop the check.
 
 Prefix parsers identify the attributes, and elaborator references identify their declarations.
 
@@ -61,7 +65,7 @@ def attributeDiagnostics (source : System.FilePath) (text : FileMap)
   let mut out := #[]
   for attr in attrs do
     if let some name := persistentAttributeName? attr then
-      if name != `simp then
+      if ![`simp, `deprecated, `inherit_doc].contains name then
         let line := (text.toPosition (attr.getPos?.getD 0)).line
         for n in names do
           out := out.push ((attr.getPos?.getD 0).byteIdx,
