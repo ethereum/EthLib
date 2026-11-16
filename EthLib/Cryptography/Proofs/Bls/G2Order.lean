@@ -113,7 +113,7 @@ macro "decide_g2_at_model" "[" ids:Lean.Parser.Tactic.simpLemma,* "]" : tactic =
                Fp.toModel_ofNat, Fp.toModel_zero, Fp.toModel_one, $ids,*]
              decide +kernel))
 
-/-- `[r]g₂` is the point at infinity.
+/-- `[r]g_2` is the point at infinity.
 
 The kernel runs the ladder in the model, 255 doublings and additions on 381-bit integers. -/
 theorem modulus_smul_generator :

@@ -233,7 +233,7 @@ private theorem z_mul_inverse {p : G1} (hz : ¬ p.z.isZero = true) :
   rw [Fp.toZMod_inverse]
   exact mul_inv_cancel₀ (fun hh => hz (isZero_iff.mpr hh))
 
-/-- The affine `y` squares to `x³ + 4` (matching uncompress's `rhs`). -/
+/-- The affine `y` squares to `x^3 + 4` (matching uncompress's `rhs`). -/
 theorem affine_sqrt_witness {p : G1} (h : Valid p) (hz : ¬ p.z.isZero = true) :
     (p.toAffine).2 * (p.toAffine).2
       = (p.toAffine).1 * (p.toAffine).1 * (p.toAffine).1 + Fp.ofNat 4 := by
@@ -267,7 +267,7 @@ theorem signBit_neg {y : Fp} (hy : y ≠ 0) :
 
 /-! ## The two square roots -/
 
-/-- `yPos = ±ya`: any square root of `ya²` is `ya` or `-ya`.
+/-- `yPos = ±ya`: any square root of `ya^2` is `ya` or `-ya`.
 
 This holds since `ZMod Fp.modulus` is a domain, as `p` is prime. -/
 theorem sqrt_pm {ya yPos : ZMod Fp.modulus}

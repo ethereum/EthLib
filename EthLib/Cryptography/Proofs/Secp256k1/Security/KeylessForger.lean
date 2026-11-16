@@ -41,11 +41,11 @@ The solver below tries each candidate for the key, and keeps the one that gives 
 
 The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
 
-The forger is their `F₀` of Figure 6.
+The forger is their `F_0` of Figure 6.
 
 Their line 30 signs the forgery's message with that key, by the signing of Figure 3, which may fail.
 
-So their claim that `F₀` wins as often as the forger in Game G3 does not hold exactly.
+So their claim that `F_0` wins as often as the forger in Game G3 does not hold exactly.
 
 Here the case of a programmed point is charged to a solver of the discrete logarithm instead.
 
@@ -278,7 +278,7 @@ def forgerImpl (scheme : Scheme F G A M) (X : G) (fuel : ℕ) :
     QueryImpl (Spec F A M) (StateT (JointState F M (ProgrammedCache A)) (PermComp A)) :=
   jointImpl overlayPermOracle fun m pc => liftM ((keylessSign scheme X m fuel).run pc)
 
-/-- The key-only forger built from a chosen-message forger, after `F₀` of Figure 6 of the source.
+/-- The key-only forger built from a chosen-message forger, after `F_0` of Figure 6 of the source.
 
 It runs the chosen-message forger on its key, with the oracles above from empty caches.
 

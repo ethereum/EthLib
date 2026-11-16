@@ -24,7 +24,7 @@ The code is generic in the base field, as for `Fp2`.
 
 namespace EthLib.Cryptography.Bls
 
-/-- An element of `Fp6`, written `c0 + c1·v + c2·v²` with `v³ = 1 + i`.
+/-- An element of `Fp6`, written `c0 + c1·v + c2·v^2` with `v^3 = 1 + i`.
 
 The base field is `Fp` unless stated. -/
 structure Fp6 (F : Type := Fp) where
@@ -47,7 +47,7 @@ variable {F : Type} [BaseField F]
 @[inline] def sub (a b : Fp6 F) : Fp6 F := ⟨a.c0 - b.c0, a.c1 - b.c1, a.c2 - b.c2⟩
 @[inline] def neg (a : Fp6 F)   : Fp6 F := ⟨-a.c0, -a.c1, -a.c2⟩
 
-/-- School-book multiplication with `v³ = 1 + i`. -/
+/-- School-book multiplication with `v^3 = 1 + i`. -/
 def mul (a b : Fp6 F) : Fp6 F :=
   let t0 := a.c0 * b.c0
   let t1 := a.c1 * b.c1
@@ -70,8 +70,7 @@ instance : Neg (Fp6 F) := ⟨neg⟩
 
 /-- Multiplication by `v` (cyclic shift + ξ-twist). -/
 @[inline] def mulByV (a : Fp6 F) : Fp6 F :=
-  -- (c0 + c1·v + c2·v²) · v = c0·v + c1·v² + c2·v³
-  --                          = ξ·c2 + c0·v + c1·v²
+  -- (c0 + c1·v + c2·v^2) · v = c0·v + c1·v^2 + c2·v^3 = ξ·c2 + c0·v + c1·v^2
   ⟨a.c2.mulByOnePlusI, a.c0, a.c1⟩
 
 /-- Multiplicative inverse via the norm formula.

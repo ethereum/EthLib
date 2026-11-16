@@ -641,7 +641,7 @@ So the game counts only messages that were never signed.
 `keyOnlyAdvantage_le_indep` replaces the bijection by independent uniform answers in that game.
 It counts no win once a new answer repeats a cached value in the direction of its query.
 The cost is at most `q (q + 1) / 2` over the size of the bijection's domain, for a forger with at most `q` queries to the bijection or its inverse.
-That is the step from Game G0 to Game G1 of §4.2 of the source, in the proof of its Theorem 2, whose bound `Q² / 2^L` is at least as large.
+That is the step from Game G0 to Game G1 of §4.2 of the source, in the proof of its Theorem 2, whose bound `Q^2 / 2^L` is at least as large.
 The source draws the key from the nonzero scalars; the key-only game here draws it from all scalars, and the key `0` never verifies.
 So its advantage is the source's times `(n - 1) / n`, where `n` is the number of scalars.
 `keyOnlyIndepAdvantage_eq_outside` (`Proofs/Secp256k1/Security/KeyOnlyOutside.lean`) proves that the advantage with independent answers stays the same when each new forward answer is one query to an outside oracle with no input.
@@ -843,7 +843,7 @@ So no run of the ladder can observe the cleared bit 255; only the clamp theorems
 `swap_ladder_decodeScalar` proves that a clamped scalar leaves no swap pending at the end of the ladder.
 
 The ladder computes a scalar multiple on Curve25519, and X25519 is a key agreement (`Proofs/MontgomeryCurve.lean`, `Proofs/X25519/`).
-The curve `v ^ 2 = u ^ 3 + 486662 u ^ 2 + u` is the Weierstrass curve with `a₂ = 486662` and `a₄ = 1`, so the group law that Mathlib proves applies to it.
+The curve `v ^ 2 = u ^ 3 + 486662 u ^ 2 + u` is the Weierstrass curve with `a_2 = 486662` and `a_4 = 1`, so the group law that Mathlib proves applies to it.
 `Represents.double` and `Represents.diffAdd` prove the doubling and the differential addition of RFC 7748 §5 on projective u-coordinates.
 They hold for every point, the point at infinity and the points of order 2 included, over any field in which `2 ≠ 0`.
 The differential addition needs the u-coordinate of the difference of its two points, and that coordinate must not be `0`.

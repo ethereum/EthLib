@@ -48,7 +48,7 @@ def test_eip8_initiator_secrets() -> None:
 
 
 def test_eip8_extra_elements() -> None:
-    # Auth₃ and Ack₃ carry other versions and more list elements, which both sides ignore.
+    # Auth_3 and Ack_3 carry other versions and more list elements, which both sides ignore.
     a = _parts(rlpx.finish(*KEYS_A, AUTH_3, ACK_3, b"probe"))
     b = _parts(rlpx.recipient_secrets(*KEYS_B, AUTH_3, ACK_3, b"probe"))
     assert a[:2] == b[:2]
@@ -56,7 +56,7 @@ def test_eip8_extra_elements() -> None:
 
 
 def test_fields_of_auth() -> None:
-    # The signature of Auth₂ used another nonce, so only the other fields can match.
+    # The signature of Auth_2 used another nonce, so only the other fields can match.
     auth = rlpx.make_auth(
         *KEYS_A, b"\x04" + public_key(STATIC_KEY_B), EPHEMERAL_KEY_B, bytes(16), b""
     )

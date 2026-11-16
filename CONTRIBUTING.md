@@ -96,6 +96,9 @@ The specification and the exports import nothing beyond the Lean toolchain.
 - Name things after the specification.
   If the paper calls it the randomizer, the code does too.
   If `consensus-specs` calls it `process_slots`, so does the code, in Lean's casing.
+- Write the digits of a new name in ASCII, such as `h1`, `x0` and `w2`, not `h₁`, `x₀` and `w₂`.
+  Names that Lean, Mathlib or VCVio define, such as `mul_inv_cancel₀`, keep their own spelling.
+  Prose writes powers and indices in ASCII too, as [WRITING.md](WRITING.md#mathematical-and-technical-conventions) says.
 - Reject malformed input at the boundary with a typed error.
   Do not truncate or pad it, and do not replace it silently with a default.
 - Put invariants in types, such as `Vector` lengths and `Fin` bounds.

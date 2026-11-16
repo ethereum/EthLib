@@ -105,7 +105,7 @@ end Spec
 
 /-! ## The pieces -/
 
-/-- The SHA-256 of the code is the model's on a message shorter than 2⁶¹ bytes. -/
+/-- The SHA-256 of the code is the model's on a message shorter than 2^61 bytes. -/
 private theorem hash_toList {x : ByteArray} (admitted : x.size < 2 ^ 61) :
     (Hash.Sha256.hash x).data.toList = Spec.sha256 x.data.toList := by
   rw [Hash.Sha256.hash_eq_spec x admitted, Spec.sha256, Array.toArray_toList]

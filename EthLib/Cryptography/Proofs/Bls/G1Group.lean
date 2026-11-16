@@ -163,7 +163,7 @@ theorem add_eq_addSpec : (add : G1 → G1 → G1) = addSpec := by
     exact (addSpec_eq_addMixed p qx qy hp hq).symm
   · exact (addSpec_eq_addGeneral p q hp hq).symm
 
-/-- The BLS12-381 curve `y² = x³ + 4`.
+/-- The BLS12-381 curve `y^2 = x^3 + 4`.
 
 It is a Mathlib Weierstrass curve in Jacobian coordinates over `ZMod Fp.modulus`. -/
 def curve : Jacobian (ZMod Fp.modulus) :=
@@ -334,7 +334,7 @@ theorem toPoint_double {P : G1} (h : Valid P) :
 
 The spec's Bernstein–Lange `add-2007-bl` formulas agree with Mathlib's `addXYZ`.
 
-They agree up to the weighted Jacobian scaling `u = -(2·z₁·z₂)`.
+They agree up to the weighted Jacobian scaling `u = -(2·z_1·z_2)`.
 
 They agree *modulo the curve equations* of the two inputs.
 
@@ -344,7 +344,7 @@ The special branches (`z = 0`, doubling, opposite points) go through Mathlib's e
 
 Those lemmas work at the affine level. -/
 
-/-- The curve equation of a valid point, in `linear_combination`-ready form (`y² = x³ + 4z⁶`).
+/-- The curve equation of a valid point, in `linear_combination`-ready form (`y^2 = x^3 + 4z^6`).
 
 It is phrased over `rep` projections, so every operation is syntactically over `ZMod`. -/
 theorem valid_equation {P : G1} (h : Valid P) :
