@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Committees
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedRoot
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.DutySupport
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalTransport
+import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalStatements
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Indicators
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Supporters

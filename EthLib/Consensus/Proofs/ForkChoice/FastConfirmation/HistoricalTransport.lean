@@ -1,10 +1,10 @@
 module
 
-import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
-import EthLib.Consensus.Proofs.ForkChoice.HonestVotes
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
+public import EthLib.Consensus.Proofs.ForkChoice.HonestVotes
 import EthLib.Consensus.Proofs.ForkChoice.HonestEquivocators
 import EthLib.Consensus.Proofs.ForkChoice.BlockAgreement
-import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
+public import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
 import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
 import EthLib.Consensus.Proofs.ForkChoice.CheckpointAncestry
 import EthLib.Consensus.Proofs.ForkChoice.SiblingCap
@@ -1620,7 +1620,7 @@ private theorem active_of_committeeWindow {store : Store preset fork} {head : Ro
   · simp at empty
   · exact ⟨_, active_of_slotCommittee early held read v inside⟩
 
-private def NotSlashed (state : BeaconState preset fork) (v : ValidatorIndex) : Prop :=
+public def NotSlashed (state : BeaconState preset fork) (v : ValidatorIndex) : Prop :=
   (state.validators.data[v.toNat]?.map (·.slashed)).getD false = false
 
 /-- Lookahead preserves unslashedness without a committee, chain or honest-set premise. -/
@@ -1641,7 +1641,7 @@ variable {config : Config} {checks : SignatureChecks} {sources : BlockSources pr
     genesisTimeMs) J}
 
 /-- The checkpoints selected by the approved historical transport endpoint. -/
-private def SelectedCheckpoint (store : Store preset fork) (checkpoint : Checkpoint) : Prop :=
+public def SelectedCheckpoint (store : Store preset fork) (checkpoint : Checkpoint) : Prop :=
   checkpoint = store.justifiedCheckpoint ∨ checkpoint = store.unrealizedJustifiedCheckpoint ∨
     GENESIS_EPOCH < checkpoint.epoch ∧
       ((∃ (r : Root) (st : BeaconState preset fork), store.blockStates[r]? = some st ∧
@@ -1659,12 +1659,12 @@ private def FinalizedCheckpointCompatibility (horizon : Epoch) (last : Nat) : Pr
         .ok ((e.world i).state a).finalizedCheckpoint.root
 
 /-- Honest stores have current epochs within the approved horizon. -/
-private def HonestStoreEpochsBounded (horizon : Epoch) (last : Nat) : Prop :=
+public def HonestStoreEpochsBounded (horizon : Epoch) (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ last →
     ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon
 
 /-- Recent vote targets and the actual head have a common committee-preserving history. -/
-private def VoteCommitteeCommonHistory (last : Nat) : Prop :=
+public def VoteCommitteeCommonHistory (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
     ∀ (head : ForkChoiceNode) headState current v (attestation : Attestation preset fork)
       targetState,
@@ -2009,7 +2009,7 @@ private theorem previousBlockSlot_le_previousCurrentSlot
   exact UInt64.le_iff_toNat_le.mpr (by omega)
 
 /-- Honest stores do not hold the parent of the anchor before the deadline. -/
-private def AnchorParentAbsent (last : Nat) : Prop :=
+public def AnchorParentAbsent (last : Nat) : Prop :=
   ∀ a ∈ J, ∀ i, (e.world i).time ≤ last →
     ((e.world i).state a).blocks[anchorBlock.parentRoot]? = none
 
@@ -2038,7 +2038,7 @@ private theorem parent_read_or_collision {caller receiver : Store preset fork}
   exact .inr ⟨parent, receiverParent, searched, valid⟩
 
 /-- The approved drift bound compares honest finite stakes in source and receiver balances. -/
-private def WindowMarginDrift (call last : Nat) (source : BeaconState preset fork)
+public def WindowMarginDrift (call last : Nat) (source : BeaconState preset fork)
     (shift : Nat) : Prop :=
   ∀ w ∈ J, ∀ k (head : ForkChoiceNode) state score sourceScore first finish maximum sourceMaximum,
     (e.world call).time ≤ (e.world k).time → (e.world k).time ≤ last →
@@ -2058,6 +2058,72 @@ private def WindowMarginDrift (call last : Nat) (source : BeaconState preset for
     2 * stake sourceWeight p + stake sourceWeight q + maximum.toNat + score.toNat ≤
       2 * stake receiverWeight p + stake receiverWeight q + sourceMaximum.toNat +
         sourceScore.toNat + shift
+
+private theorem guarded_stake_le {state : BeaconState preset fork}
+    {left right : Finset ValidatorIndex}
+    (inside : ∀ v ∈ left, v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset →
+      v ∈ right) :
+    stake (fun v => if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
+      then balanceAt state v.toNat else 0) left ≤
+    stake (fun v => if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
+      then balanceAt state v.toNat else 0) right := by
+  classical
+  apply Finset.sum_le_sum_of_ne_zero
+  intro v member nonzero
+  have active : v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset := by
+    by_contra absent
+    simp [absent] at nonzero
+  exact inside v member active
+
+private theorem guarded_supporters_le [DecidablePred (· ∈ J)]
+    {store : Store preset fork} {state source : BeaconState preset fork}
+    {node : ForkChoiceNode} :
+    stake (fun v => if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
+      then balanceAt state v.toNat else 0) {v ∈ store.supportersOf source node | v ∈ J} ≤
+    stake (fun v => if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
+      then balanceAt state v.toNat else 0) {v ∈ store.supportersOf state node | v ∈ J} := by
+  classical
+  apply guarded_stake_le
+  intro v member active
+  obtain ⟨supported, honest⟩ := Finset.mem_filter.mp member
+  have counted := Store.voteCountsFor_of_mem_supportersOf supported
+  obtain ⟨entry, entryOk, indexEq⟩ := List.mem_map.mp (List.mem_toFinset.mp active)
+  apply Finset.mem_filter.mpr
+  refine ⟨?_, honest⟩
+  simp only [Store.supportersOf, List.mem_toFinset, List.mem_map, List.mem_filter]
+  exact ⟨entry, ⟨entryOk, indexEq ▸ counted⟩, indexEq⟩
+
+private theorem guarded_parentVoters_le [DecidablePred (· ∈ J)]
+    {store : Store preset fork} {state source : BeaconState preset fork}
+    {participants : Std.TreeSet ValidatorIndex} {block parent : BeaconBlock preset fork}
+    (within : state.RegistryWithinLimit) :
+    stake (fun v => if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
+      then balanceAt state v.toNat else 0)
+      {v ∈ store.parentVotersOf source participants block parent | v ∈ J} ≤
+    stake (fun v => if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
+      then balanceAt state v.toNat else 0)
+      {v ∈ store.parentVotersOf state participants block parent | v ∈ J} := by
+  classical
+  apply guarded_stake_le
+  intro v member active
+  obtain ⟨member, honest⟩ := Finset.mem_filter.mp member
+  obtain ⟨inCommittee, _, clean, vote⟩ := Store.mem_parentVotersOf.mp member
+  obtain ⟨⟨index, balance⟩, entry, same⟩ := List.mem_map.mp (List.mem_toFinset.mp active)
+  simp only at same
+  subst index
+  simp only [unslashedActiveBalances, List.mem_filterMap, Option.ite_none_right_eq_some,
+    Option.some.injEq, Prod.mk.injEq, Prod.exists] at entry
+  obtain ⟨validator, position, inZip, flags, indexEq, _⟩ := entry
+  have atIndex := List.mem_zipIdx_iff_getElem?.mp inZip
+  have below : position < state.validators.data.size := by
+    simpa using (List.getElem?_eq_some_iff.mp atIndex).1
+  have back := toNat_toUInt64_of_lt within below
+  have found : state.validators.data[v.toNat]? = some validator := by
+    rw [← indexEq, back]
+    simpa using atIndex
+  simp only [Bool.and_eq_true, Bool.not_eq_true'] at flags
+  exact Finset.mem_filter.mpr ⟨Store.mem_parentVotersOf.mpr
+    ⟨inCommittee, ⟨validator, found, flags.2, flags.1⟩, clean, vote⟩, honest⟩
 
 /-- A source margin and approved drift give head ancestry or a collision at the caller's parent. -/
 private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
@@ -2112,11 +2178,11 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
       2 * Models.stake (fun v =>
         if v ∈ ((unslashedActiveBalances source).map (·.1)).toFinset
         then balanceAt source v.toNat else 0)
-        {v ∈ ((e.world n).state u).supportersOf state ⟨root, .pending⟩ | v ∈ J} +
+        {v ∈ ((e.world n).state u).supportersOf source ⟨root, .pending⟩ | v ∈ J} +
       Models.stake (fun v =>
         if v ∈ ((unslashedActiveBalances source).map (·.1)).toFinset
         then balanceAt source v.toNat else 0)
-        {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J}))
+        {v ∈ ((e.world n).state u).parentVotersOf source participants block parent | v ∈ J}))
     (scoreOk : computeProposerScore config state = .ok (score : Gwei)) :
     ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true ∨
     ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ last ∧ (e.world j).time ≤ last ∧
@@ -2145,10 +2211,15 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
   left
   have transported := drift u honest n head state score sourceScore first finish maximum
     sourceMaximum later time headRead stateRead scoreOk sourceScoreOk maximumOk sourceMaximumOk
-    {v ∈ store.supportersOf state ⟨root, .pending⟩ | v ∈ J}
-    {v ∈ store.parentVotersOf state participants block parent | v ∈ J}
+    {v ∈ store.supportersOf source ⟨root, .pending⟩ | v ∈ J}
+    {v ∈ store.parentVotersOf source participants block parent | v ∈ J}
     (fun _ member => (Finset.mem_filter.mp member).2)
     (fun _ member => (Finset.mem_filter.mp member).2)
+  have within := BeaconState.registryWithinLimit_of_lt before state
+  have supportTransport := guarded_supporters_le (J := J) (store := store)
+    (state := state) (source := source) (node := ⟨root, .pending⟩)
+  have parentTransport := guarded_parentVoters_le (J := J) (store := store)
+    (source := source) (participants := participants) (block := block) (parent := parent) within
   have windowBound := Store.stake_le_computeCommitteeWeightBetweenSlots window maximumOk
     (fun _ member => Store.mem_activeMembers.mp member)
   have margin : Models.stake (fun v => balanceAt state v.toNat)
@@ -2162,10 +2233,9 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
         then balanceAt state v.toNat else 0)
         {v ∈ store.parentVotersOf state participants block parent | v ∈ J} := by
     dsimp only at transported
-    dsimp only [store] at transported ⊢
+    dsimp only [store] at transported supportTransport parentTransport ⊢
     omega
   have lower := reached.reachable.parentsBelow anchorSlot (absent u honest n time)
-  have within := BeaconState.registryWithinLimit_of_lt before state
   have shortBefore := previousBlockSlot_le_previousCurrentSlot reached anchorSlot
     found slotRead shortLastOk lastOk
   have pending := Store.getHead_pending before headRead
@@ -3036,12 +3106,12 @@ private theorem receiver_maximum_discount_of_head_window {anchor : Store preset 
   exact ⟨receiverMaximum, discount, maximumOk, discountOk⟩
 
 /-- The active stake of a balance state is bounded by the supplied cap. -/
-private def ActiveStakeAtMost (cap : Nat) (state : BeaconState preset fork) : Prop :=
+public def ActiveStakeAtMost (cap : Nat) (state : BeaconState preset fork) : Prop :=
   stake (fun v => balanceAt state v.toNat)
     (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ≤ cap
 
 /-- Every honest checkpoint cache read before the deadline satisfies the stake ceiling. -/
-private def CheckpointStakeCeiling (cap last : Nat) : Prop :=
+public def CheckpointStakeCeiling (cap last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k checkpoint state, (e.world k).time ≤ last →
     ((e.world k).state w).checkpointState checkpoint = .ok state → ActiveStakeAtMost cap state
 
