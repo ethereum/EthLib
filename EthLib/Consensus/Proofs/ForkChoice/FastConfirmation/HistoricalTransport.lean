@@ -1440,7 +1440,13 @@ private theorem common_history_of_far_vote {last n : Nat} {u v : ValidatorIndex}
     (origin : ((e.world n).state u).VoteOrigin config v attestation)
     (targetRead : ((e.world n).state u).checkpointState attestation.data.target = .ok targetState) :
     ∃ common, RunKept common targetState ∧ RunKept common headState ∧
-      attestation.data.target.epoch ≤ activityFixedEpoch common := by
+      attestation.data.target.epoch ≤ activityFixedEpoch common ∧
+      attestation.data.target.epoch.toNat ≤
+        (getCurrentEpoch common).toNat + preset.MIN_SEED_LOOKAHEAD.toNat ∧
+      (getCurrentEpoch targetState).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+        attestation.data.target.epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat ∧
+      (getCurrentEpoch headState).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+        attestation.data.target.epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
   obtain ⟨slot, slotRead, past⟩ := origin.past
   have currentEq : computeEpochAtSlot preset slot = current := by
     simpa [Store.getCurrentStoreEpoch, slotRead, bind, Except.bind, pure, Except.pure]
@@ -1450,10 +1456,36 @@ private theorem common_history_of_far_vote {last n : Nat} {u v : ValidatorIndex}
     simp only [computeEpochAtSlot, UInt64.toNat_div]
     exact Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp (UInt64.le_of_lt past))
   have same : current.toNat = attestation.data.target.epoch.toNat := by omega
-  obtain ⟨common, headRun, targetRun, _, fixed, _, _⟩ := history u honest n time
+  obtain ⟨common, headRun, targetRun, final, fixed, headRing, targetRing⟩ := history u honest n time
     head headState current v attestation targetState headRead headFound epochRead targetLe
     (by omega) origin (Store.checkpointState_ok_iff.mp targetRead)
-  exact ⟨common, targetRun, headRun, fixed⟩
+  exact ⟨common, targetRun, headRun, fixed, final, targetRing, headRing⟩
+
+/-- A far vote belongs to the receiver's actual window through the approved common history. -/
+private theorem mem_window_of_far_vote {last n : Nat} {u v : ValidatorIndex}
+    (history : VoteCommitteeCommonHistory (e := e) last) (honest : u ∈ J)
+    (time : (e.world n).time ≤ last)
+    {head : ForkChoiceNode} {headState : BeaconState preset fork}
+    {current : Epoch} {parent : BeaconBlock preset fork} {attestation : Attestation preset fork}
+    {first finish : Slot} {members : Std.TreeSet ValidatorIndex}
+    (headRead : ((e.world n).state u).getHead config = .ok head)
+    (headFound : ((e.world n).state u).blockState head.root = .ok headState)
+    (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok current)
+    (horizon : current.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2)
+    (far : (computeEpochAtSlot preset parent.slot).toNat + 1 < attestation.data.target.epoch.toNat)
+    (origin : ((e.world n).state u).VoteOrigin config v attestation)
+    (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first finish = .ok members)
+    (low : first ≤ attestation.data.slot) (high : attestation.data.slot ≤ finish) :
+    v ∈ members := by
+  obtain ⟨targetState, index, committee, stored, below, committeeOk, member⟩ :=
+    origin.exists_mem_committee
+  obtain ⟨common, toTarget, toHead, fixed, final, targetRing, headRing⟩ :=
+    common_history_of_far_vote history honest time headRead headFound epochRead horizon far
+      origin (Store.checkpointState_ok_iff.mpr stored)
+  obtain ⟨kept, count⟩ := toTarget.committees_agree toHead final fixed targetRing headRing
+  rw [origin.targetEpoch] at kept count
+  exact Store.mem_getCommitteesBetweenSlots window low high headFound (count ▸ below)
+    ((kept _ _ rfl).trans committeeOk) member
 
 /-- Held-state finality supplies the source bound at the store's realized checkpoint.
 
@@ -1887,9 +1919,11 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
         rcases commonSource with ready | ⟨last, head, current, parent, history, time,
           headRead, rootEq, epochRead, horizon, far⟩
         · exact ready
-        · exact common_history_of_far_vote history honest time headRead
+        · obtain ⟨common, toTarget, toHead, fixed, _⟩ := common_history_of_far_vote
+            history honest time headRead
             (Store.blockState_ok_iff.mpr (rootEq ▸ headFound)) epochRead horizon far
             (origins v member) (targetRead v member)
+          exact ⟨common, toTarget, toHead, fixed⟩
       obtain ⟨common, toTarget, toHead, fixed⟩ := commonWitness
       rw [← (origins v member).targetEpoch, toTarget.active _ fixed v.toNat,
         ← toHead.active _ fixed v.toNat] at active
