@@ -315,7 +315,7 @@ private theorem not_mem_supporters_of_latest {lower : store.ParentsBelow}
   exact absurd isChild.height_lt (Nat.not_lt.mpr above.height_le)
 
 /-- Each model voter is a registry index that is active in the balance state. -/
-private theorem active_of_mem_voters {state : BeaconState preset fork} {i : ℕ}
+theorem active_of_mem_voters {state : BeaconState preset fork} {i : ℕ}
     (member : i ∈ Store.voters state) :
     i < state.validators.data.size ∧ ∃ validator,
       state.validators.data[i]? = some validator ∧

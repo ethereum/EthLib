@@ -1557,7 +1557,7 @@ private theorem mem_window_of_mem_supporters {last n : Nat} {u : ValidatorIndex}
       (by omega) origin window low high
 
 open Models.ForkChoice in
-/-- The actual all-range committee window bounds two siblings and a disjoint discount set. -/
+/-- The computed all-range committee weight bounds two siblings and a disjoint discount set. -/
 private theorem sibling_weight_le_window {last n : Nat} {u : ValidatorIndex}
     (history : VoteCommitteeCommonHistory (e := e) last) (honest : u ∈ J)
     (time : (e.world n).time ≤ last)
@@ -1573,7 +1573,7 @@ private theorem sibling_weight_le_window {last n : Nat} {u : ValidatorIndex}
     (nodes : List ForkChoiceNode) (boosted : Option (Option Root)) (score : Nat)
     {root : Root} {block parent : BeaconBlock preset fork} {sibling : Option Root}
     {current first finish : Slot} {epoch : Epoch} {members : Std.TreeSet ValidatorIndex}
-    {N : Finset ValidatorIndex}
+    {N : Finset ValidatorIndex} {maximum : Gwei}
     (headRead : ((e.world n).state u).getHead config = .ok head)
     (headFound : ((e.world n).state u).blockState head.root = .ok headState)
     (found : ((e.world n).state u).blocks[root]? = some block)
@@ -1587,9 +1587,11 @@ private theorem sibling_weight_le_window {last n : Nat} {u : ValidatorIndex}
     (lastOk : subChecked current 1 = .ok finish)
     (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first finish =
       .ok members)
+    (maximumOk : ((e.world n).state u).computeCommitteeWeightBetweenSlots head.root state
+      first finish = .ok maximum)
     (siblingChild : sibling ∈ children (Store.view lower nodes) (some block.parentRoot))
     (distinct : sibling ≠ some root)
-    (inside : N ⊆ members.toList.toFinset)
+    (inside : N ⊆ Store.activeMembers state members)
     (neither : ∀ v ∈ N,
       v.toNat ∉ supporters (Store.voters state) (Store.view lower nodes) (some root) ∧
       v.toNat ∉ supporters (Store.voters state) (Store.view lower nodes) sibling) :
@@ -1598,7 +1600,13 @@ private theorem sibling_weight_le_window {last n : Nat} {u : ValidatorIndex}
       weight (Store.voters state).insertNone (boostStake (balanceAt state) score)
         ((Store.view lower nodes).withBoost boosted) sibling +
       stake (fun v => balanceAt state v.toNat) N ≤
-    stake (fun v => balanceAt state v.toNat) members.toList.toFinset + score := by
+    maximum.toNat + score := by
+  classical
+  have cap : stake (fun v => balanceAt state v.toNat) (Store.activeMembers state members) ≤
+      maximum.toNat :=
+    Store.stake_le_computeCommitteeWeightBetweenSlots window maximumOk
+      (fun _ member => Store.mem_activeMembers.mp member)
+  apply le_trans _ (Nat.add_le_add_right cap score)
   apply Store.weight_add_weight_add_stake_le_stake_withBoost lower within nodes boosted score
     found rfl siblingChild distinct _ inside neither
   intro i member
@@ -1611,7 +1619,11 @@ private theorem sibling_weight_le_window {last n : Nat} {u : ValidatorIndex}
   have member := mem_window_of_mem_supporters history honest time reached anchorSlot before
     lower minLookahead maxLookahead ring headRead headFound parentFound descends slotRead
     epochRead horizon firstOk lastOk window isChild supporter
-  simpa only [List.mem_toFinset, Std.TreeSet.mem_toList] using member
+  obtain ⟨below, validator, atIndex, active⟩ :=
+    active_of_mem_voters (Finset.mem_of_mem_filter _ supporter)
+  have back := toNat_toUInt64_of_lt within below
+  exact Store.mem_activeMembers.mpr ⟨member, validator, by simpa only [back] using atIndex,
+    active⟩
 
 /-- Held-state finality supplies the source bound at the store's realized checkpoint.
 
