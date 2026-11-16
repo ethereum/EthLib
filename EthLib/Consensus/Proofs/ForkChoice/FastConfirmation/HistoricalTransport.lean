@@ -381,7 +381,28 @@ private theorem processEpoch_registryCut {config : Config} {checks : SignatureCh
   cases rest with
   | cons registry suffix => exact ⟨_, EpochStage.action_cases.mp registry, suffix⟩
 
-/-- The epoch composes registry and suffix transport from explicit prefix-state inputs. -/
+/-- The actual epoch prefix keeps the registry and slot, including the rewards stage. -/
+private theorem epochPrefix_kept {config : Config} {checks : SignatureChecks}
+    {source ready : BeaconState preset fork}
+    (beforeRegistry : EpochTrace (EpochStage.action config checks)
+      [.justification, .inactivity, .rewards] source ready) :
+    ready.validators = source.validators ∧ ready.slot = source.slot := by
+  apply beforeRegistry.transport
+    (fun (s t : BeaconState preset fork) => t.validators = s.validators ∧ t.slot = s.slot)
+    (fun _ => ⟨rfl, rfl⟩)
+    (fun {a b c} (one : b.validators = a.validators ∧ b.slot = a.slot)
+      (two : c.validators = b.validators ∧ c.slot = b.slot) =>
+      ⟨two.1.trans one.1, two.2.trans one.2⟩)
+  intro stage member s t run
+  have edge := EpochStage.action_cases.mp run
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
+  rcases member with rfl | rfl | rfl
+  all_goals first
+    | rw [processRewardsAndPenalties_frame edge]; exact ⟨rfl, rfl⟩
+    | exact ⟨edge.validators_eq ⟨nofun, nofun, nofun⟩,
+        (edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩).2.2.2.2⟩
+
+/-- The epoch transports the source tail and bound through its actual prefix and registry cut. -/
 private theorem filteredTotal_of_epoch_registryCut
     {config : Config} {checks : SignatureChecks}
     {source ready after cached : BeaconState preset fork} (electra : .pectra ≤ fork)
@@ -390,9 +411,9 @@ private theorem filteredTotal_of_epoch_registryCut
     (run : processEpoch config checks source = .ok after)
     (beforeRegistry : EpochTrace (EpochStage.action config checks)
       [.justification, .inactivity, .rewards] source ready)
-    (boundary : boundEpoch ≤ getCurrentEpoch ready)
+    (boundary : boundEpoch ≤ getCurrentEpoch source)
     (finalized : ready.finalizedCheckpoint.epoch ≤ boundEpoch)
-    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch ready)
+    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source)
     (contains : count ≤ cached.validators.data.size)
     (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
     (read : getTotalActiveBalance cached = .ok total) :
@@ -401,8 +422,12 @@ private theorem filteredTotal_of_epoch_registryCut
         return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
         .ok selected ∧ getTotalBalance cached selected = .ok result := by
   obtain ⟨registered, registry, suffix⟩ := processEpoch_registryCut run beforeRegistry
+  obtain ⟨validators, slot⟩ := epochPrefix_kept beforeRegistry
+  have readyTail := pendingTail_of_validators (congrArg (·.data) validators) tail
+  have readyBound : boundEpoch ≤ getCurrentEpoch ready := by
+    simpa only [getCurrentEpoch, slot] using boundary
   exact filteredTotal_of_postRegistry suffix finite
-    (pendingTail_processRegistryUpdatesElectra electra registry boundary finalized tail)
+    (pendingTail_processRegistryUpdatesElectra electra registry readyBound finalized readyTail)
     contains active read
 
 /-- Lookahead extends a run without assuming a registry-size bound. -/
