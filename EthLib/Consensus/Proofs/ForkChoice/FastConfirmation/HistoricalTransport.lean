@@ -490,6 +490,25 @@ private theorem active_registry_of_pendingTail {state cached : BeaconState prese
   have inside := Nat.lt_of_lt_of_le (active_before_pendingTail tail active) contains
   exact ⟨cached.validators.data[position], Array.getElem?_eq_getElem inside⟩
 
+/-- A finite active stake supplies the checked total, without bounding inactive balances. -/
+private theorem activeTotal_exists {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit)
+    (bounded : stake (fun v => balanceAt state v.toNat)
+      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset < 2 ^ 64) :
+    ∃ total, getTotalActiveBalance state = .ok total := by
+  let value := max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    (stake (fun v => balanceAt state v.toNat)
+      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
+  have fits : value < 2 ^ 64 := max_lt preset.EFFECTIVE_BALANCE_INCREMENT.toNat_lt bounded
+  refine ⟨value.toUInt64, ?_⟩
+  unfold getTotalActiveBalance
+  rw [getActiveValidatorIndicesChecked_of_within within]
+  apply getTotalBalance_ok_iff_stake.mpr
+  refine ⟨?_, bounded, UInt64.toNat_ofNat_of_lt' fits⟩
+  intro v member
+  obtain ⟨validator, found, _⟩ := (mem_getActiveValidatorIndices within).mp member
+  exact (Array.getElem?_eq_some_iff.mp found).1
+
 /-- A successful total also bounds a subset, without bounding inactive balances. -/
 private theorem totalBalance_exists_of_subset {state : BeaconState preset fork}
     {indices all : List ValidatorIndex} {total : Gwei}
@@ -1440,7 +1459,7 @@ private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
     {boundaryBase source base cached : BeaconState preset fork}
     {root head : Root} {block headBlock : BeaconBlock preset fork} {start target : Slot}
     {caller : Store preset fork} {callerHead : Root} {callerState : BeaconState preset fork}
-    {first oldLast last : Slot} {maximum total : Gwei} {window : Std.TreeSet ValidatorIndex}
+    {first oldLast last : Slot} {maximum : Gwei} {window : Std.TreeSet ValidatorIndex}
     (boundaryBaseFound : ((e.world n).state u).blockStates[
       ((e.world n).state u).finalizedCheckpoint.root]? = some boundaryBase)
     (startOk : computeStartSlotAtEpoch preset ((e.world n).state u).finalizedCheckpoint.epoch =
@@ -1462,12 +1481,16 @@ private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
     (read : caller.computeCommitteeWeightBetweenSlots callerHead callerState first oldLast =
       .ok maximum)
     (windowOk : ((e.world n).state u).getCommitteesBetweenSlots head first last = .ok window)
-    (before : oldLast ≤ last) (totalOk : getTotalActiveBalance cached = .ok total) :
+    (before : oldLast ≤ last)
+    (stakeBound : stake (fun v => balanceAt cached v.toNat)
+      (getActiveValidatorIndices cached (getCurrentEpoch cached)).toFinset ≤ 2 * 10 ^ 17) :
     ∃ result, ((e.world n).state u).computeCommitteeWeightBetweenSlots head cached first oldLast =
       .ok result := by
   have inside := registry_of_honest_block anchorStore anchored anchorInvariant anchorSlot
     positive early honest boundaryBaseFound startOk walk found bound baseFound advanced
     headWalk headBlockFound headStateFound headBound finite
+  obtain ⟨total, totalOk⟩ := activeTotal_exists
+    (BeaconState.registryWithinLimit_of_lt early cached) (by omega)
   apply receiver_oldMaximum read windowOk before totalOk
   intro v member
   obtain ⟨epoch, active⟩ := active_of_committeeWindow early
