@@ -1494,6 +1494,8 @@ private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
     {boundaryBase source base cached : BeaconState preset fork}
     {root head : Root} {block headBlock : BeaconBlock preset fork} {start target : Slot}
     {caller : Store preset fork} {callerHead : Root} {callerState : BeaconState preset fork}
+    {callerNode : ValidatorIndex} {callerTime : Nat} (callerHonest : callerNode ∈ J)
+    (callerOrigin : caller = (e.world callerTime).state callerNode)
     {first oldLast last : Slot} {maximum : Gwei} {window : Std.TreeSet ValidatorIndex}
     (boundaryBaseFound : ((e.world n).state u).blockStates[
       ((e.world n).state u).finalizedCheckpoint.root]? = some boundaryBase)
@@ -1525,21 +1527,33 @@ private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
     (stakeBound : stake (fun v => balanceAt cached v.toNat)
       (getActiveValidatorIndices cached (getCurrentEpoch cached)).toFinset ≤ 2 * 10 ^ 17) :
     (∃ result, ((e.world n).state u).computeCommitteeWeightBetweenSlots head cached first oldLast =
-      .ok result) ∨ ∃ collision,
-      Store.findBlockCollision caller ((e.world n).state u) [parentRoot] = some collision := by
+      .ok result) ∨ ∃ leftBlock rightBlock,
+      Store.findBlockCollision caller ((e.world n).state u) [parentRoot] =
+        some (parentRoot, leftBlock, rightBlock) ∧ leftBlock ≠ rightBlock ∧
+      Serialization.Ssz.SszType.hashTreeRoot leftBlock = .ok parentRoot ∧
+      Serialization.Ssz.SszType.hashTreeRoot rightBlock = .ok parentRoot := by
+  have reachableAt : ∀ w ∈ J, ∀ k,
+      Store.Reachable config anchorState anchorBlock ((e.world k).state w) := by
+    intro w member k
+    exact e.reachable
+      (fun v hv => (anchored v hv) ▸ Store.Reachable.anchor anchorStore) k w member
   have parentRead := parentSafe
   unfold Store.isAncestor at parentRead
   obtain ⟨receiverParent, parentOk, _⟩ := bind_ok_iff.mp parentRead
   have receiverParentFound := Store.block_ok_iff.mp parentOk
   by_cases same : parent = receiverParent
   swap
-  · exact .inr ⟨(parentRoot, parent, receiverParent), by
-      simp [Store.findBlockCollision, callerParentFound, receiverParentFound, same]⟩
+  · have searched : Store.findBlockCollision caller ((e.world n).state u) [parentRoot] =
+        some (parentRoot, parent, receiverParent) := by
+      simp [Store.findBlockCollision, callerParentFound, receiverParentFound, same]
+    have valid := Store.findBlockCollision_valid
+      (callerOrigin.symm ▸ reachableAt callerNode callerHonest callerTime)
+      (reachableAt u honest n) searched
+    exact .inr ⟨parent, receiverParent, searched, valid⟩
   subst receiverParent
   left
   have parentFound := receiverParentFound
-  have reached := e.reachable
-    (fun w member => (anchored w member) ▸ Store.Reachable.anchor anchorStore) n u honest
+  have reached := reachableAt u honest n
   obtain ⟨_, _, anchorFound⟩ := reached.anchor_known
   have anchorLe := reached.orphans_le (UInt64.le_of_eq anchorSlot)
     anchorFound anchorParentAbsent parentFound
