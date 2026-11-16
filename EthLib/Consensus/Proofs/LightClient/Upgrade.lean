@@ -38,14 +38,8 @@ variable {preset : Preset} {fork : Fork}
 /-- An Electra header with the SSZ value of the empty one has the beacon header of the empty one. -/
 private theorem beacon_of_same {header : LightClientHeader preset .pectra}
     (same : sameSszValue header (LightClientHeader.empty preset .pectra) = true) :
-    header.beacon = (LightClientHeader.empty preset .pectra).beacon := by
-  have values := beq_iff_eq.mp same
-  simp only [SszType.toValue, SszFields.toValues, Value.seq.injEq, List.cons.injEq] at values
-  obtain ⟨⟨slot, proposer, parent, state, body, -⟩, -⟩ := values
-  simp only [Value.uint.injEq, Value.bytes.injEq, UInt64.toNat_inj, Vector.toArray_inj]
-    at slot proposer parent state body
-  cases beacon : header.beacon
-  simp_all [LightClientHeader.empty]
+    header.beacon = (LightClientHeader.empty preset .pectra).beacon :=
+  LightClientHeader.beacon_eq_of_sameSszValue same
 
 /-- The Gloas header of an Electra header keeps the beacon header. -/
 theorem LightClientHeader.toGloas_beacon {config : Config} {post : Fork}
