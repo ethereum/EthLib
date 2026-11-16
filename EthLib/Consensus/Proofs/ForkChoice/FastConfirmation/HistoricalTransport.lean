@@ -1321,6 +1321,49 @@ private theorem slashFlags_lookahead {config : Config} {checks : SignatureChecks
     exact steps advanced
   · cases run; exact .refl _
 
+/-- Folding a committee into a set preserves a property held by both inputs. -/
+private theorem members_array_insert {committee : Array ValidatorIndex}
+    {members : Std.TreeSet ValidatorIndex} (P : ValidatorIndex → Prop)
+    (old : ∀ v ∈ members, P v) (new : ∀ v ∈ committee, P v) :
+    ∀ v ∈ committee.foldl (·.insert ·) members, P v := by
+  apply Array.foldl_induction (fun _ set => ∀ v ∈ set, P v) old
+  intro i set held v member
+  rcases Std.TreeSet.mem_insert.mp member with same | previous
+  · have same : committee[i] = v := Std.LawfulEqCmp.compare_eq_iff_eq.mp same
+    exact same ▸ new _ (Array.getElem_mem i.isLt)
+  · exact held v previous
+
+/-- Every member of a successful slot committee is active at that slot in the head state. -/
+private theorem active_of_slotCommittee {store : Store preset fork} {head : Root} {slot : Slot}
+    {state : BeaconState preset fork} {members : Std.TreeSet ValidatorIndex}
+    (early : fork < .glamsterdam) (held : store.blockState head = .ok state)
+    (read : store.getSlotCommittee head slot = .ok members) :
+    ∀ v ∈ members, isActiveAt state (computeEpochAtSlot preset slot) v.toNat = true := by
+  simp only [Store.getSlotCommittee, held, bind, Except.bind] at read
+  apply foldlM_ok_invariant
+    (fun set => ∀ v ∈ set, isActiveAt state (computeEpochAtSlot preset slot) v.toNat = true)
+    (fun set index next old step => ?_) (by simp) read
+  obtain ⟨committee, computed, result⟩ := bind_ok_iff.mp step
+  cases result
+  apply members_array_insert _ old
+  intro v member
+  exact isActiveAt_eq_true_iff.mpr
+    ((mem_getActiveValidatorIndices (BeaconState.registryWithinLimit_of_lt early state)).mp
+      (mem_getActiveValidatorIndices_of_getBeaconCommittee (mapError_ok_iff.mp computed) member))
+
+/-- A window member is active at a queried epoch of the held head state. -/
+private theorem active_of_committeeWindow {store : Store preset fork} {head : Root}
+    {first last : Slot} {state : BeaconState preset fork} {members : Std.TreeSet ValidatorIndex}
+    (early : fork < .glamsterdam) (held : store.blockState head = .ok state)
+    (read : store.getCommitteesBetweenSlots head first last = .ok members) :
+    ∀ v ∈ members, ∃ epoch, isActiveAt state epoch v.toNat = true := by
+  simp only [Store.getCommitteesBetweenSlots, bind_ok_iff, mapError_ok_iff] at read
+  obtain ⟨_, _, folded⟩ := read
+  intro v member
+  rcases (mem_foldlM_committees_iff folded).mp member with empty | ⟨offset, _, set, read, inside⟩
+  · simp at empty
+  · exact ⟨_, active_of_slotCommittee early held read v inside⟩
+
 private def NotSlashed (state : BeaconState preset fork) (v : ValidatorIndex) : Prop :=
   (state.validators.data[v.toNat]?.map (·.slashed)).getD false = false
 
@@ -1384,6 +1427,53 @@ private theorem registry_of_honest_block {anchor : Store preset fork}
   exact registry_of_checkpointPrefix early anchorSlot reached anchorInvariant positive
     walk found startOk bound baseFound boundaryBaseFound advanced identity sourceWalk
     sourceBlockFound sourceStart sourceFound finalized finite
+
+/-- A held head supplies registry lookups for the receiver's checked older-window maximum.
+
+No cached target-state finality bound is used in this construction. -/
+private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (positive : 0 < preset.SLOTS_PER_EPOCH) (early : fork < .glamsterdam)
+    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat}
+    {boundaryBase source base cached : BeaconState preset fork}
+    {root head : Root} {block headBlock : BeaconBlock preset fork} {start target : Slot}
+    {caller : Store preset fork} {callerHead : Root} {callerState : BeaconState preset fork}
+    {first oldLast last : Slot} {maximum total : Gwei} {window : Std.TreeSet ValidatorIndex}
+    (boundaryBaseFound : ((e.world n).state u).blockStates[
+      ((e.world n).state u).finalizedCheckpoint.root]? = some boundaryBase)
+    (startOk : computeStartSlotAtEpoch preset ((e.world n).state u).finalizedCheckpoint.epoch =
+      .ok start)
+    (walk : ((e.world n).state u).getCheckpointBlock root
+      ((e.world n).state u).finalizedCheckpoint.epoch =
+        .ok ((e.world n).state u).finalizedCheckpoint.root)
+    (found : ((e.world n).state u).blocks[root]? = some block)
+    (bound : start ≤ max block.slot target)
+    (baseFound : ((e.world n).state u).blockStates[root]? = some base)
+    (advanced : lookaheadState config checks base target = .ok cached)
+    (headWalk : ((e.world n).state u).getCheckpointBlock head
+      ((e.world n).state u).finalizedCheckpoint.epoch =
+        .ok ((e.world n).state u).finalizedCheckpoint.root)
+    (headBlockFound : ((e.world n).state u).blocks[head]? = some headBlock)
+    (headStateFound : ((e.world n).state u).blockStates[head]? = some source)
+    (headBound : start ≤ headBlock.slot)
+    (finite : ((e.world n).state u).finalizedCheckpoint.epoch < FAR_FUTURE_EPOCH)
+    (read : caller.computeCommitteeWeightBetweenSlots callerHead callerState first oldLast =
+      .ok maximum)
+    (windowOk : ((e.world n).state u).getCommitteesBetweenSlots head first last = .ok window)
+    (before : oldLast ≤ last) (totalOk : getTotalActiveBalance cached = .ok total) :
+    ∃ result, ((e.world n).state u).computeCommitteeWeightBetweenSlots head cached first oldLast =
+      .ok result := by
+  have inside := registry_of_honest_block anchorStore anchored anchorInvariant anchorSlot
+    positive early honest boundaryBaseFound startOk walk found bound baseFound advanced
+    headWalk headBlockFound headStateFound headBound finite
+  apply receiver_oldMaximum read windowOk before totalOk
+  intro v member
+  obtain ⟨epoch, active⟩ := active_of_committeeWindow early
+    (Store.blockState_ok_iff.mpr headStateFound) windowOk v member
+  obtain ⟨validator, found⟩ := inside epoch v.toNat active
+  exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
 /-- Honest checkpoint origins supply the actual source prefix, including an older held block. -/
 private theorem registry_of_honest_checkpoint {anchor : Store preset fork}
