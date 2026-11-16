@@ -4,6 +4,7 @@
 # Inputs that the specification rejects raise XmssError, with the code of the Lean error.
 
 from ethlib.cryptography._native import (
+    XMSS_CHAIN_LENGTH as CHAIN_LENGTH,
     XMSS_CHAINS as CHAINS,
     XMSS_DIGEST_LEN as DIGEST_LEN,
     XMSS_LAYER_HEIGHT as LAYER_HEIGHT,
@@ -14,6 +15,7 @@ from ethlib.cryptography._native import (
     XMSS_RANDOMIZER_LEN as RANDOMIZER_LEN,
     XMSS_SEED_LEN as SEED_LEN,
     XMSS_SIG_SIZE as SIG_SIZE,
+    XMSS_TARGET_SUM as TARGET_SUM,
     xmss_key_gen,
     xmss_sign,
     xmss_signature_index,
@@ -51,6 +53,8 @@ __all__ = [
     "PUBLIC_PARAM_LEN",
     "RANDOMIZER_LEN",
     "CHAINS",
+    "CHAIN_LENGTH",
+    "TARGET_SUM",
     "LAYER_HEIGHT",
     "LEAF_INDEX_SIZE",
     "key_gen",
