@@ -647,6 +647,41 @@ private theorem filteredTotal_of_operations_cut {config : Config} {checks : Sign
       depositedOk exitsOk changesFold requestedOk withdrawnOk consolidatedOk
       finite (tailAtAttested tail) contains active read⟩
 
+/-- An Electra-to-Fulu block supplies historical reads from its input tail.
+
+The execution prefix and sync aggregate keep the registry.
+
+Activity is required only at the block output, at the arbitrary queried epoch.
+
+Cache and boundary applicability remain inputs. -/
+private theorem filteredTotal_of_processBlock {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {source after cached : BeaconState preset fork}
+    {block : BeaconBlock preset fork} (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    {epoch boundary : Epoch} {count : Nat} {participants : Std.TreeSet ValidatorIndex}
+    {total : Gwei}
+    (run : processBlock config checks engine source block = .ok after)
+    (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source)
+    (contains : count ≤ cached.validators.data.size)
+    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
+    (read : getTotalActiveBalance cached = .ok total) :
+    ∃ selected result,
+      participants.toList.filterM (fun index => do
+        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
+        .ok selected ∧ getTotalBalance cached selected = .ok result := by
+  obtain ⟨input, operated, started, operations, _, synced⟩ := processBlock_operationsInput run
+  have inputTail := pendingTail_of_validators
+    (congrArg (·.data) (started.validators_eq early)) tail
+  have same : after.validators = operated.validators := by
+    have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
+    simp only [altair, ↓reduceDIte] at synced
+    obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+    rfl
+  obtain ⟨_, _, _, _, _, _, _, _, checked⟩ :=
+    filteredTotal_of_operations_cut electra early operations finite contains read
+  apply checked inputTail
+  intro v member
+  simpa only [isActiveAt, same] using active v member
+
 /-- Every non-registry stage preserves the pending tail, including intervening epoch stages. -/
 private theorem pendingTail_epochStage {config : Config} {checks : SignatureChecks}
     {stage : EpochStage} {source after : BeaconState preset fork} {count : Nat} {epoch : Epoch}
