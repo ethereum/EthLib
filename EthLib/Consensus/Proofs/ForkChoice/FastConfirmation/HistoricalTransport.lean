@@ -548,17 +548,16 @@ private theorem filteredTotal_of_pendingTail {source state : BeaconState preset 
   obtain ⟨validator, found⟩ := active_registry_of_pendingTail tail contains (active v member)
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
-/-- Successful deposit, exit, credential and execution-request folds supply historical reads.
+/-- Successful deposit, exit, credential and execution-request folds preserve the pending tail.
 
 Extraction of these intermediate states from the operation schedule remains separate. -/
-private theorem filteredTotal_of_operation_folds {config : Config} {checks : SignatureChecks}
-    {source deposited exited changed requested withdrawn after cached : BeaconState preset fork}
+private theorem pendingTail_operation_folds {config : Config} {checks : SignatureChecks}
+    {source deposited exited changed requested withdrawn after : BeaconState preset fork}
     {before : fork < .hegota} {electra : .pectra ≤ fork}
     {deposits : List Deposit} {exits : List SignedVoluntaryExit}
     {changes : List SignedBLSToExecutionChange} {requests : List DepositRequest}
     {withdrawals : List WithdrawalRequest} {consolidations : List ConsolidationRequest}
-    {epoch boundary : Epoch} {count : Nat}
-    {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
+    {boundary : Epoch} {count : Nat}
     (run : deposits.foldlM (processDeposit config checks before) source = .ok deposited)
     (exitRun : exits.foldlM (processVoluntaryExit config checks) deposited = .ok exited)
     (changeRun : changes.foldlM (processBlsToExecutionChange config checks) exited = .ok changed)
@@ -567,14 +566,8 @@ private theorem filteredTotal_of_operation_folds {config : Config} {checks : Sig
       .ok withdrawn)
     (consolidationRun : consolidations.foldlM (processConsolidationRequest config · electra ·)
       withdrawn = .ok after)
-    (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source)
-    (contains : count ≤ cached.validators.data.size)
-    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
-    (read : getTotalActiveBalance cached = .ok total) :
-    ∃ selected result,
-      participants.toList.filterM (fun index => do
-        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
-        .ok selected ∧ getTotalBalance cached selected = .ok result := by
+    (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source) :
+    PendingTail count boundary after := by
   have depositedTail := foldlM_ok_invariant (PendingTail count boundary)
     (fun _ _ _ holds ok => pendingTail_processDeposit ok finite holds) tail run
   have exitedTail := foldlM_ok_invariant (PendingTail count boundary)
@@ -587,22 +580,19 @@ private theorem filteredTotal_of_operation_folds {config : Config} {checks : Sig
   have withdrawnTail := foldlM_ok_invariant (PendingTail count boundary)
     (fun _ _ _ holds ok => pendingTail_processWithdrawalRequest ok holds)
     requestedTail withdrawalRun
-  have consolidatedTail := foldlM_ok_invariant (PendingTail count boundary)
+  exact foldlM_ok_invariant (PendingTail count boundary)
     (fun _ _ _ holds ok => pendingTail_processConsolidationRequest ok holds)
     withdrawnTail consolidationRun
-  exact filteredTotal_of_pendingTail consolidatedTail contains active read
 
 /-- A successful Electra-to-Fulu operation schedule transports the tail through consolidation.
 
-Tail applicability at the operation input and activity at the output remain conditional inputs. -/
-private theorem filteredTotal_of_operations_cut {config : Config} {checks : SignatureChecks}
-    {source after cached : BeaconState preset fork} {body : BeaconBlockBody preset fork}
+Tail applicability at the operation input remains conditional. -/
+private theorem pendingTail_operations_cut {config : Config} {checks : SignatureChecks}
+    {source after : BeaconState preset fork} {body : BeaconBlockBody preset fork}
     {parentSlot : Slot} (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {epoch boundary : Epoch} {count : Nat} {participants : Std.TreeSet ValidatorIndex}
-    {total : Gwei}
+    {boundary : Epoch} {count : Nat}
     (run : processOperations config checks source body parentSlot = .ok after)
-    (finite : boundary < FAR_FUTURE_EPOCH) (contains : count ≤ cached.validators.data.size)
-    (read : getTotalActiveBalance cached = .ok total) :
+    (finite : boundary < FAR_FUTURE_EPOCH) :
     ∃ proposers slashings attested withdrawn,
       body.proposerSlashings.data.toList.foldlM (processProposerSlashing config checks) source =
         .ok proposers ∧
@@ -612,12 +602,7 @@ private theorem filteredTotal_of_operations_cut {config : Config} {checks : Sign
         slashings = .ok attested ∧
       (body.executionRequests ⟨electra, early⟩).consolidations.data.toList.foldlM
         (processConsolidationRequest config · electra ·) withdrawn = .ok after ∧
-      (PendingTail count boundary source →
-        (∀ v ∈ participants, isActiveAt after epoch v.toNat = true) →
-        ∃ selected result,
-          participants.toList.filterM (fun index => do
-            return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
-            .ok selected ∧ getTotalBalance cached selected = .ok result) := by
+      (PendingTail count boundary source → PendingTail count boundary after) := by
   have capella : .shapella ≤ fork := Nat.le_trans (by decide) electra
   unfold processOperations at run
   split at run
@@ -643,31 +628,22 @@ private theorem filteredTotal_of_operations_cut {config : Config} {checks : Sign
       (fun _ _ _ held ok => pendingTail_of_validators
         (congrArg (·.data) (processAttestation_registry ok).1) held) slashingTail attestedOk
   exact ⟨proposers, slashings, attested, withdrawn, proposersOk, slashingsOk, attestedOk,
-    consolidatedOk, fun tail active => filteredTotal_of_operation_folds
+    consolidatedOk, fun tail => pendingTail_operation_folds
       depositedOk exitsOk changesFold requestedOk withdrawnOk consolidatedOk
-      finite (tailAtAttested tail) contains active read⟩
+      finite (tailAtAttested tail)⟩
 
-/-- An Electra-to-Fulu block supplies historical reads from its input tail.
+/-- An Electra-to-Fulu block transports its input pending tail.
 
 The execution prefix and sync aggregate keep the registry.
 
-Activity is required only at the block output, at the arbitrary queried epoch.
-
-Cache and boundary applicability remain inputs. -/
-private theorem filteredTotal_of_processBlock {config : Config} {checks : SignatureChecks}
-    {engine : ExecutionEngine preset fork} {source after cached : BeaconState preset fork}
+Boundary applicability remains an input. -/
+private theorem pendingTail_processBlock {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {source after : BeaconState preset fork}
     {block : BeaconBlock preset fork} (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {epoch boundary : Epoch} {count : Nat} {participants : Std.TreeSet ValidatorIndex}
-    {total : Gwei}
+    {boundary : Epoch} {count : Nat}
     (run : processBlock config checks engine source block = .ok after)
-    (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source)
-    (contains : count ≤ cached.validators.data.size)
-    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
-    (read : getTotalActiveBalance cached = .ok total) :
-    ∃ selected result,
-      participants.toList.filterM (fun index => do
-        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
-        .ok selected ∧ getTotalBalance cached selected = .ok result := by
+    (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source) :
+    PendingTail count boundary after := by
   obtain ⟨input, operated, started, operations, _, synced⟩ := processBlock_operationsInput run
   have inputTail := pendingTail_of_validators
     (congrArg (·.data) (started.validators_eq early)) tail
@@ -677,10 +653,8 @@ private theorem filteredTotal_of_processBlock {config : Config} {checks : Signat
     obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
     rfl
   obtain ⟨_, _, _, _, _, _, _, _, checked⟩ :=
-    filteredTotal_of_operations_cut electra early operations finite contains read
-  apply checked inputTail
-  intro v member
-  simpa only [isActiveAt, same] using active v member
+    pendingTail_operations_cut electra early operations finite
+  exact pendingTail_of_validators (congrArg (·.data) same) (checked inputTail)
 
 /-- Every non-registry stage preserves the pending tail, including intervening epoch stages. -/
 private theorem pendingTail_epochStage {config : Config} {checks : SignatureChecks}
@@ -858,31 +832,70 @@ private theorem pendingTail_processSlots {config : Config} {checks : SignatureCh
       pendingTail_advanceSlot ok low high finite held⟩
   exact (advanceSlots_invariant_of R refl trans step holds advanced).2.2.2 boundary finalized tail
 
-/-- A successful state transition supplies historical reads from its pre-slot input tail.
+/-- A successful state transition transports its pre-slot input pending tail.
 
 Invariant and finalized applicability remain private inputs, with the same fork limits. -/
-private theorem filteredTotal_of_stateTransition {config : Config} {checks : SignatureChecks}
-    {engine : ExecutionEngine preset fork} {source after cached : BeaconState preset fork}
+private theorem pendingTail_stateTransition {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {source after : BeaconState preset fork}
     {signed : SignedBeaconBlock preset fork} {validate : Bool}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {epoch boundary : Epoch} {count : Nat} {participants : Std.TreeSet ValidatorIndex}
-    {total : Gwei} (holds : Invariant source)
+    {boundary : Epoch} {count : Nat} (holds : Invariant source)
     (run : stateTransition config checks engine source signed validate = .ok after)
     (low : boundary ≤ getCurrentEpoch source)
     (finalized : after.finalizedCheckpoint.epoch ≤ boundary)
-    (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source)
-    (contains : count ≤ cached.validators.data.size)
-    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
-    (read : getTotalActiveBalance cached = .ok total) :
-    ∃ selected result,
-      participants.toList.filterM (fun index => do
-        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
-        .ok selected ∧ getTotalBalance cached selected = .ok result := by
+    (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source) :
+    PendingTail count boundary after := by
   obtain ⟨advanced, slots, _, _, block, _⟩ := stateTransition_ok run
   have advancedFinalized : advanced.finalizedCheckpoint.epoch ≤ boundary := by
     simpa only [(frame_processBlock block).finalized] using finalized
-  exact filteredTotal_of_processBlock electra early block finite
-    (pendingTail_processSlots holds slots low advancedFinalized finite tail) contains active read
+  exact pendingTail_processBlock electra early block finite
+    (pendingTail_processSlots holds slots low advancedFinalized finite tail)
+
+/-- The shared ancestor traversal carries invariant, finality and conditional pending tails.
+
+The transition witnesses retain their own signature checks and execution engines. -/
+private theorem pendingTailRelation_of_getAncestor
+    {config : Config} {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    {node ancestor : ForkChoiceNode} {slot : Slot}
+    {source boundary : BeaconState preset fork} {epoch : Epoch} {count : Nat}
+    (walk : store.getAncestor node slot = .ok ancestor)
+    (sourceFound : store.blockStates[node.root]? = some source)
+    (boundaryFound : store.blockStates[ancestor.root]? = some boundary)
+    (finite : epoch < FAR_FUTURE_EPOCH) (holds : Invariant boundary) :
+    getCurrentEpoch boundary ≤ getCurrentEpoch source ∧
+      Invariant source ∧ boundary.finalizedCheckpoint.epoch ≤ source.finalizedCheckpoint.epoch ∧
+      (epoch ≤ getCurrentEpoch boundary → source.finalizedCheckpoint.epoch ≤ epoch →
+        PendingTail count epoch boundary → PendingTail count epoch source) := by
+  let R := fun (s t : BeaconState preset fork) =>
+    getCurrentEpoch s ≤ getCurrentEpoch t ∧
+      (Invariant s → Invariant t ∧ s.finalizedCheckpoint.epoch ≤ t.finalizedCheckpoint.epoch ∧
+        (epoch ≤ getCurrentEpoch s → t.finalizedCheckpoint.epoch ≤ epoch →
+          PendingTail count epoch s → PendingTail count epoch t))
+  have refl : ∀ s, R s s := fun _ =>
+    ⟨UInt64.le_refl _, fun inv => ⟨inv, UInt64.le_refl _, fun _ _ tail => tail⟩⟩
+  have trans : ∀ {s m t}, R s m → R m t → R s t := by
+    intro s m t one two
+    refine ⟨UInt64.le_trans one.1 two.1, fun inv => ?_⟩
+    obtain ⟨middle, firstFinalized, firstTail⟩ := one.2 inv
+    obtain ⟨last, secondFinalized, secondTail⟩ := two.2 middle
+    exact ⟨last, UInt64.le_trans firstFinalized secondFinalized, fun low high tail =>
+      secondTail (UInt64.le_trans low one.1) high
+        (firstTail low (UInt64.le_trans secondFinalized high) tail)⟩
+  have edge : ∀ {s t : BeaconState preset fork} {checks : SignatureChecks}
+      {engine : ExecutionEngine preset fork} {signed : SignedBeaconBlock preset fork},
+      stateTransition config checks engine s signed true = .ok t → R s t := by
+    intro s t checks engine signed ok
+    refine ⟨(runKept_stateTransition ok).later, fun inv => ?_⟩
+    obtain ⟨afterInv, ordered⟩ := stateTransition_invariant inv ok
+    exact ⟨afterInv, ordered, fun low high tail =>
+      pendingTail_stateTransition electra early inv ok low high finite tail⟩
+  have related := reachable.relation_of_getAncestor R refl trans edge anchorSlot walk
+    sourceFound boundaryFound
+  exact ⟨related.1, related.2 holds⟩
 
 /-- Lookahead preserves the pending tail through either actual slots or the identity branch. -/
 private theorem pendingTail_lookahead {config : Config} {checks : SignatureChecks}
@@ -928,7 +941,8 @@ The source lookahead transports its tail, while the receiver lookahead supplies 
 Historical applicability is still required separately; no validator identity is inferred. -/
 private theorem filteredTotal_of_ancestor_pendingTail {config : Config} {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
-    {store : Store preset fork} (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    {store : Store preset fork} (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reachable : Store.Reachable config anchorState anchorBlock store)
     {node ancestor : ForkChoiceNode} {query target : Slot}
     {source advancedSource boundary base cached : BeaconState preset fork}
@@ -939,17 +953,34 @@ private theorem filteredTotal_of_ancestor_pendingTail {config : Config} {checks 
     (boundaryFound : store.blockStates[ancestor.root]? = some boundary)
     (advanced : lookaheadState config checks base target = .ok cached)
     (sourceRun : lookaheadState config checks source sourceTarget = .ok advancedSource)
-    (holds : Invariant source) (low : boundEpoch ≤ getCurrentEpoch source)
+    {sourceNode : ForkChoiceNode}
+    (sourceWalk : store.getAncestor sourceNode query = .ok ancestor)
+    (sourceFound : store.blockStates[sourceNode.root]? = some source)
+    (holds : Invariant boundary) (low : boundEpoch ≤ getCurrentEpoch boundary)
     (finalized : advancedSource.finalizedCheckpoint.epoch ≤ boundEpoch)
     (finite : boundEpoch < FAR_FUTURE_EPOCH)
-    (tail : PendingTail boundary.validators.data.size boundEpoch source)
     (active : ∀ v ∈ participants, isActiveAt advancedSource epoch v.toNat = true)
     (read : getTotalActiveBalance cached = .ok total) :
     ∃ selected result,
       participants.toList.filterM (fun index => do
         return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
-        .ok selected ∧ getTotalBalance cached selected = .ok result :=
-  filteredTotal_of_pendingTail (pendingTail_lookahead holds sourceRun low finalized finite tail)
+        .ok selected ∧ getTotalBalance cached selected = .ok result := by
+  obtain ⟨epochOrder, sourceInv, _, transport⟩ := pendingTailRelation_of_getAncestor electra early
+    anchorSlot reachable sourceWalk sourceFound boundaryFound finite holds
+  have sourceFinalized : source.finalizedCheckpoint.epoch ≤ boundEpoch := by
+    have ordered : source.finalizedCheckpoint.epoch ≤ advancedSource.finalizedCheckpoint.epoch := by
+      unfold lookaheadState at sourceRun
+      split at sourceRun
+      · exact (processSlots_invariant sourceInv (mapError_ok_iff.mp sourceRun)).2
+      · cases sourceRun; exact UInt64.le_refl _
+    exact UInt64.le_trans ordered finalized
+  have tail : PendingTail boundary.validators.data.size boundEpoch source :=
+    transport low sourceFinalized (fun i v outside found => by
+      obtain ⟨inside, _⟩ := Array.getElem?_eq_some_iff.mp found
+      omega)
+  have sourceLow := UInt64.le_trans low epochOrder
+  exact filteredTotal_of_pendingTail
+    (pendingTail_lookahead sourceInv sourceRun sourceLow finalized finite tail)
     (ancestor_registrySize_le_cached anchorSlot reachable walk baseFound boundaryFound advanced)
     active read
 

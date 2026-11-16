@@ -76,19 +76,21 @@ theorem Store.Reachable.anchorSlot_le
     exact UInt64.le_trans anchorSlot (UInt64.le_trans
       (reachable.anchorSlot_le_of_blockState parentFound) (UInt64.le_of_lt lower))
 
-/-- In a reachable store, a walk back from a block gives a run to its state.
-
-The run starts at the state of the ancestor that the walk reaches.
-
-The anchor block must not be after the anchor state. -/
-theorem Store.Reachable.runKept_of_getAncestor
+/-- The existing ancestor traversal composes a relation along actual block transitions. -/
+theorem Store.Reachable.relation_of_getAncestor
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (edge : ∀ {s t : BeaconState preset fork} {checks : SignatureChecks}
+      {engine : ExecutionEngine preset fork} {signed : SignedBeaconBlock preset fork},
+      stateTransition config checks engine s signed true = .ok t → R s t)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reachable : Store.Reachable config anchorState anchorBlock store)
     {node ancestor : ForkChoiceNode} {slot : Slot} {state ancestorState : BeaconState preset fork}
     (walk : store.getAncestor node slot = .ok ancestor)
     (stateFound : store.blockStates[node.root]? = some state)
     (ancestorFound : store.blockStates[ancestor.root]? = some ancestorState) :
-    RunKept ancestorState state := by
+    R ancestorState state := by
   induction node using Store.getAncestor.induct (store := store) (slot := slot)
     generalizing state with
   | case1 node notFound =>
@@ -98,7 +100,7 @@ theorem Store.Reachable.runKept_of_getAncestor
     rw [Store.getAncestor_of_le blockFound le, Except.ok.injEq] at walk
     subst walk
     rw [stateFound, Option.some.injEq] at ancestorFound
-    exact ancestorFound ▸ RunKept.refl _
+    exact ancestorFound ▸ refl _
   | case3 node block blockFound above parentNotFound =>
     rw [Store.getAncestor] at walk
     split at walk
@@ -118,7 +120,7 @@ theorem Store.Reachable.runKept_of_getAncestor
       exact absurd (reachable.anchorSlot_le anchorSlot parentFound) (UInt64.not_le.mpr lower)
     obtain ⟨parentState, checks, engine, signed, -, -, parentStateFound, transition⟩ :=
       notAnchor notAnchorBlock
-    exact (ih walk parentStateFound).trans (runKept_stateTransition transition)
+    exact trans (ih walk parentStateFound) (edge transition)
   | case5 node block blockFound above parent parentFound notLower =>
     rw [Store.getAncestor] at walk
     split at walk
@@ -133,6 +135,22 @@ theorem Store.Reachable.runKept_of_getAncestor
         rw [parentFound, Option.some.injEq] at same
         subst same
         simp [notLower, throw, throwThe, MonadExceptOf.throw] at walk
+
+/-- In a reachable store, a walk back from a block gives a run to its state.
+
+The run starts at the state of the ancestor that the walk reaches.
+
+The anchor block must not be after the anchor state. -/
+theorem Store.Reachable.runKept_of_getAncestor
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    {node ancestor : ForkChoiceNode} {slot : Slot} {state ancestorState : BeaconState preset fork}
+    (walk : store.getAncestor node slot = .ok ancestor)
+    (stateFound : store.blockStates[node.root]? = some state)
+    (ancestorFound : store.blockStates[ancestor.root]? = some ancestorState) :
+    RunKept ancestorState state :=
+  reachable.relation_of_getAncestor RunKept RunKept.refl (fun one two => one.trans two)
+    (fun ok => runKept_stateTransition ok) anchorSlot walk stateFound ancestorFound
 
 /-- A walk back stays at a block at or below the slot.
 
