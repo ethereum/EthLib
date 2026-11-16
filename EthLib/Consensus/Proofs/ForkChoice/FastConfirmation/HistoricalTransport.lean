@@ -1749,6 +1749,30 @@ private theorem anchor_finite_of_parentNext {store : Store preset fork}
   rw [one] at step
   omega
 
+/-- A receiver's ancestor parent agrees with the caller's parent or supplies a block collision. -/
+private theorem parent_read_or_collision {caller receiver : Store preset fork}
+    (callerReached : Store.Reachable config anchorState anchorBlock caller)
+    (receiverReached : Store.Reachable config anchorState anchorBlock receiver)
+    {parent : BeaconBlock preset fork} {parentRoot : Root} {head : ForkChoiceNode}
+    (callerParentFound : caller.blocks[parentRoot]? = some parent)
+    (parentSafe : receiver.isAncestor head ⟨parentRoot, .pending⟩ = .ok true) :
+    receiver.blocks[parentRoot]? = some parent ∨ ∃ leftBlock rightBlock,
+      Store.findBlockCollision caller receiver [parentRoot] =
+        some (parentRoot, leftBlock, rightBlock) ∧ leftBlock ≠ rightBlock ∧
+      Serialization.Ssz.SszType.hashTreeRoot leftBlock = .ok parentRoot ∧
+      Serialization.Ssz.SszType.hashTreeRoot rightBlock = .ok parentRoot := by
+  have parentRead := parentSafe
+  unfold Store.isAncestor at parentRead
+  obtain ⟨receiverParent, parentOk, _⟩ := bind_ok_iff.mp parentRead
+  have receiverParentFound := Store.block_ok_iff.mp parentOk
+  by_cases same : parent = receiverParent
+  · exact .inl (same ▸ receiverParentFound)
+  have searched : Store.findBlockCollision caller receiver [parentRoot] =
+      some (parentRoot, parent, receiverParent) := by
+    simp [Store.findBlockCollision, callerParentFound, receiverParentFound, same]
+  have valid := Store.findBlockCollision_valid callerReached receiverReached searched
+  exact .inr ⟨parent, receiverParent, searched, valid⟩
+
 /-- A held head supplies registry lookups for the receiver's checked older-window maximum.
 
 No cached target-state finality bound is used in this construction. -/
@@ -1804,22 +1828,12 @@ private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
     intro w member k
     exact e.reachable
       (fun v hv => (anchored v hv) ▸ Store.Reachable.anchor anchorStore) k w member
-  have parentRead := parentSafe
-  unfold Store.isAncestor at parentRead
-  obtain ⟨receiverParent, parentOk, _⟩ := bind_ok_iff.mp parentRead
-  have receiverParentFound := Store.block_ok_iff.mp parentOk
-  by_cases same : parent = receiverParent
-  swap
-  · have searched : Store.findBlockCollision caller ((e.world n).state u) [parentRoot] =
-        some (parentRoot, parent, receiverParent) := by
-      simp [Store.findBlockCollision, callerParentFound, receiverParentFound, same]
-    have valid := Store.findBlockCollision_valid
+  rcases parent_read_or_collision
       (callerOrigin.symm ▸ reachableAt callerNode callerHonest callerTime)
-      (reachableAt u honest n) searched
-    exact .inr ⟨parent, receiverParent, searched, valid⟩
-  subst receiverParent
+      (reachableAt u honest n) callerParentFound parentSafe with parentFound | collision
+  swap
+  · exact .inr collision
   left
-  have parentFound := receiverParentFound
   have reached := reachableAt u honest n
   have anchorFinite := anchor_finite_of_parentNext reached anchorSlot parentFound
     anchorParentAbsent parentNext
@@ -2020,6 +2034,39 @@ private theorem registry_of_justified_window {anchor : Store preset fork}
   obtain ⟨validator, found⟩ := registry_of_runKept (runKept_lookahead advanced) active
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
+/-- Honest stores at ordered times have ordered predecessor slots. -/
+private theorem previousSlot_le_of_time_le {anchor : Store preset fork}
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    {u w : ValidatorIndex} (callerHonest : u ∈ J) (receiverHonest : w ∈ J) {n k : Nat}
+    (later : (e.world n).time ≤ (e.world k).time)
+    (updated : UpToDate config checks sources (e.world k).time
+      ((e.world k).view w) ((e.world k).state w))
+    {slot current oldLast last : Slot}
+    (callerSlot : ((e.world n).state u).getCurrentSlot config = .ok slot)
+    (receiverSlot : ((e.world k).state w).getCurrentSlot config = .ok current)
+    (callerLast : subChecked slot 1 = .ok oldLast)
+    (receiverLast : subChecked current 1 = .ok last) : oldLast ≤ last := by
+  have callerClock := e.clock_bounds u n
+  have receiverClock := e.clock_bounds w k
+  rw [anchored u callerHonest] at callerClock
+  rw [anchored w receiverHonest] at receiverClock
+  have clockLe : ((e.world n).state u).timeMs ≤ ((e.world k).state w).timeMs := by
+    have initial := UInt64.le_iff_toNat_le.mp receiverClock.2.1
+    have now := updated.1
+    exact UInt64.le_iff_toNat_le.mpr (by omega)
+  have slots : slot ≤ current := by
+    have callerRead := mapError_ok_iff.mp callerSlot
+    have receiverRead := mapError_ok_iff.mp receiverSlot
+    change computeSlotAtTimeMs config _ _ = .ok slot at callerRead
+    change computeSlotAtTimeMs config _ _ = .ok current at receiverRead
+    rw [callerClock.1] at callerRead
+    rw [receiverClock.1] at receiverRead
+    exact computeSlotAtTimeMs_mono clockLe callerRead receiverRead
+  have := (subChecked_ok_iff.mp callerLast).2
+  have := (subChecked_ok_iff.mp receiverLast).2
+  have := UInt64.le_iff_toNat_le.mp slots
+  exact UInt64.le_iff_toNat_le.mpr (by omega)
+
 /-- The actual clocks order the receiver's window at its justified root.
 
 The checkpoint stake ceiling supplies its total.
@@ -2050,27 +2097,8 @@ private theorem receiver_oldMaximum_of_justified_root {anchor : Store preset for
       (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ≤ 2 * 10 ^ 17) :
     ∃ result, ((e.world k).state w).computeCommitteeWeightBetweenSlots head.root state
       first oldLast = .ok result := by
-  have callerClock := e.clock_bounds u n
-  have receiverClock := e.clock_bounds w k
-  rw [anchored u callerHonest] at callerClock
-  rw [anchored w receiverHonest] at receiverClock
-  have clockLe : ((e.world n).state u).timeMs ≤ ((e.world k).state w).timeMs := by
-    have initial := UInt64.le_iff_toNat_le.mp receiverClock.2.1
-    have now := updated.1
-    exact UInt64.le_iff_toNat_le.mpr (by omega)
-  have slots : slot ≤ current := by
-    have callerRead := mapError_ok_iff.mp callerSlot
-    have receiverRead := mapError_ok_iff.mp receiverSlot
-    change computeSlotAtTimeMs config _ _ = .ok slot at callerRead
-    change computeSlotAtTimeMs config _ _ = .ok current at receiverRead
-    rw [callerClock.1] at callerRead
-    rw [receiverClock.1] at receiverRead
-    exact computeSlotAtTimeMs_mono clockLe callerRead receiverRead
-  have before : oldLast ≤ last := by
-    have := (subChecked_ok_iff.mp callerLast).2
-    have := (subChecked_ok_iff.mp receiverLast).2
-    have := UInt64.le_iff_toNat_le.mp slots
-    exact UInt64.le_iff_toNat_le.mpr (by omega)
+  have before := previousSlot_le_of_time_le anchored callerHonest receiverHonest later updated
+    callerSlot receiverSlot callerLast receiverLast
   obtain ⟨total, totalOk⟩ := activeTotal_exists
     (BeaconState.registryWithinLimit_of_lt early state) (by omega)
   exact receiver_oldMaximum read windowOk before totalOk
@@ -2259,6 +2287,73 @@ private theorem registry_of_head_window {anchor : Store preset fork}
   exact registry_of_nongenesis_window anchorStore anchored anchorInvariant anchorSlot positive
     slots early compatible bounded honest inTime headRead same genesis headStateFound
     parentFound unknown parentNext cached epochRead window
+
+/-- The actual receiver maximum succeeds, or the comparison parent gives a block collision.
+
+The receiver supplies its own balance state and window; no successful maximum is assumed there. -/
+private theorem receiver_oldMaximum_of_head_window {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (positive : 0 < preset.SLOTS_PER_EPOCH) (slots : 0 < config.SLOT_DURATION_MS)
+    (early : fork < .glamsterdam) {horizon : Epoch} {time : Nat}
+    (compatible : FinalizedCheckpointCompatibility (e := e) horizon time)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
+    {u w : ValidatorIndex} (callerHonest : u ∈ J) (receiverHonest : w ∈ J) {n k : Nat}
+    (later : (e.world n).time ≤ (e.world k).time) (inTime : (e.world k).time ≤ time)
+    (updated : UpToDate config checks sources (e.world k).time
+      ((e.world k).view w) ((e.world k).state w))
+    {head : ForkChoiceNode} {state source : BeaconState preset fork} {callerHead : Root}
+    {parent : BeaconBlock preset fork} {parentRoot : Root}
+    {slot current first oldLast last : Slot} {epoch : Epoch}
+    {window : Std.TreeSet ValidatorIndex} {maximum : Gwei}
+    (callerParent : ((e.world n).state u).blocks[parentRoot]? = some parent)
+    (parentSafe : ((e.world k).state w).isAncestor head ⟨parentRoot, .pending⟩ = .ok true)
+    (parentNext : addChecked parent.slot 1 = .ok first)
+    (unknown : ((e.world k).state w).blocks[anchorBlock.parentRoot]? = none)
+    (headRead : ((e.world k).state w).getHead config = .ok head)
+    (cached : ((e.world k).state w).checkpointState
+      ((e.world k).state w).justifiedCheckpoint = .ok state)
+    (epochRead : ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch)
+    (callerSlot : ((e.world n).state u).getCurrentSlot config = .ok slot)
+    (receiverSlot : ((e.world k).state w).getCurrentSlot config = .ok current)
+    (callerLast : subChecked slot 1 = .ok oldLast)
+    (receiverLast : subChecked current 1 = .ok last)
+    (windowOk : ((e.world k).state w).getCommitteesBetweenSlots head.root first last =
+      .ok window)
+    (read : ((e.world n).state u).computeCommitteeWeightBetweenSlots callerHead source
+      first oldLast = .ok maximum)
+    (ceiling : stake (fun v => balanceAt state v.toNat)
+      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ≤ 2 * 10 ^ 17) :
+    (∃ result, ((e.world k).state w).computeCommitteeWeightBetweenSlots head.root state
+      first oldLast = .ok result) ∨ ∃ leftBlock rightBlock,
+      Store.findBlockCollision ((e.world n).state u) ((e.world k).state w) [parentRoot] =
+        some (parentRoot, leftBlock, rightBlock) ∧ leftBlock ≠ rightBlock ∧
+      Serialization.Ssz.SszType.hashTreeRoot leftBlock = .ok parentRoot ∧
+      Serialization.Ssz.SszType.hashTreeRoot rightBlock = .ok parentRoot := by
+  have reached : ∀ v ∈ J, ∀ i,
+      Store.Reachable config anchorState anchorBlock ((e.world i).state v) := by
+    intro v honest i
+    exact e.reachable
+      (fun a member => (anchored a member) ▸ Store.Reachable.anchor anchorStore) i v honest
+  rcases parent_read_or_collision (reached u callerHonest n) (reached w receiverHonest k)
+      callerParent parentSafe with parentFound | collision
+  swap
+  · exact .inr collision
+  left
+  by_cases same : head.root = ((e.world k).state w).justifiedCheckpoint.root
+  · exact receiver_oldMaximum_of_justified_root anchorStore anchored early callerHonest
+      receiverHonest later updated same cached callerSlot receiverSlot callerLast receiverLast
+      windowOk read ceiling
+  have before := previousSlot_le_of_time_le anchored callerHonest receiverHonest later updated
+    callerSlot receiverSlot callerLast receiverLast
+  obtain ⟨total, totalOk⟩ := activeTotal_exists
+    (BeaconState.registryWithinLimit_of_lt early state) (by omega)
+  exact receiver_oldMaximum read windowOk before totalOk
+    (registry_of_head_window anchorStore anchored anchorInvariant anchorSlot boundary positive
+      slots early compatible bounded receiverHonest inTime parentFound unknown parentNext
+      headRead cached epochRead windowOk)
 
 /-- Each accepted signer supplies activity in its own actual cached target state.
 
