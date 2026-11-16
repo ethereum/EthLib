@@ -152,7 +152,7 @@ private theorem stake_le_of_active_of_reads {head : Root} {state : BeaconState p
 /-- A vote in the subtree of a child of a known parent is from a slot after the parent, before now.
 
 Those are the slots from the one after the parent to the one before the current slot. -/
-private theorem slot_mem_range_of_voteOrigin (lower : store.ParentsBelow)
+theorem slot_mem_range_of_voteOrigin (lower : store.ParentsBelow)
     {child parentRoot : Root} {childBlock parentBlock : BeaconBlock preset fork}
     {currentSlot firstSlot lastSlot : Slot} {v : ValidatorIndex}
     {attestation : Attestation preset fork}
@@ -264,7 +264,7 @@ private theorem mem_committees_of_voteOrigin {checks : SignatureChecks}
 /-- A supporter of a child of a root voted with an attestation that the store checked.
 
 Its vote is in the subtree of the child, which is a known block with that parent root. -/
-private theorem exists_voteOrigin_of_mem_supporters {checks : SignatureChecks}
+theorem exists_voteOrigin_of_mem_supporters {checks : SignatureChecks}
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     {lower : store.ParentsBelow} {state : BeaconState preset fork} {nodes : List ForkChoiceNode}
     {c : Option Root} {parentRoot : Root} {i : ℕ}

@@ -6,6 +6,7 @@ import EthLib.Consensus.Proofs.ForkChoice.HonestEquivocators
 import EthLib.Consensus.Proofs.ForkChoice.BlockAgreement
 import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
 import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
+import EthLib.Consensus.Proofs.ForkChoice.SiblingCap
 import EthLib.Consensus.Proofs.Transition.FfgStake
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 
@@ -1486,6 +1487,74 @@ private theorem mem_window_of_far_vote {last n : Nat} {u v : ValidatorIndex}
   rw [origin.targetEpoch] at kept count
   exact Store.mem_getCommitteesBetweenSlots window low high headFound (count ▸ below)
     ((kept _ _ rfl).trans committeeOk) member
+
+/-- Every child supporter lies in the actual window, including votes beyond the near epoch. -/
+private theorem mem_window_of_mem_supporters {last n : Nat} {u : ValidatorIndex}
+    (history : VoteCommitteeCommonHistory (e := e) last) (honest : u ∈ J)
+    (time : (e.world n).time ≤ last)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock
+      ((e.world n).state u))
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) (before : fork < .glamsterdam)
+    (lower : ((e.world n).state u).ParentsBelow)
+    (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {head : ForkChoiceNode} {headState state : BeaconState preset fork}
+    {parentRoot : Root} {parent : BeaconBlock preset fork}
+    {current first finish : Slot} {epoch : Epoch} {members : Std.TreeSet ValidatorIndex}
+    {nodes : List ForkChoiceNode} {c : Option Root} {i : Nat}
+    (headRead : ((e.world n).state u).getHead config = .ok head)
+    (headFound : ((e.world n).state u).blockState head.root = .ok headState)
+    (parentFound : ((e.world n).state u).blocks[parentRoot]? = some parent)
+    (descends : ((e.world n).state u).isAncestor ⟨head.root, .pending⟩
+      ⟨parentRoot, .pending⟩ = .ok true)
+    (slotRead : ((e.world n).state u).getCurrentSlot config = .ok current)
+    (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok epoch)
+    (horizon : epoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2)
+    (firstOk : addChecked parent.slot 1 = .ok first)
+    (lastOk : subChecked current 1 = .ok finish)
+    (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first finish =
+      .ok members)
+    (child : (Store.blockTree lower).IsChild c (some parentRoot))
+    (supporter : i ∈ Models.ForkChoice.supporters (Store.voters state)
+      (Store.view lower nodes) c) : i.toUInt64 ∈ members := by
+  obtain ⟨childRoot, childBlock, attestation, -, childFound, childParent, origin, above⟩ :=
+    exists_voteOrigin_of_mem_supporters reached child supporter
+  obtain ⟨low, high⟩ := slot_mem_range_of_voteOrigin lower parentFound childFound childParent
+    slotRead firstOk lastOk origin above
+  by_cases near : attestation.data.target.epoch.toNat ≤
+      (computeEpochAtSlot preset parent.slot).toNat + 1
+  · obtain ⟨voted, votedFound, -⟩ := origin.voted
+    have isChild : (Store.blockTree lower).IsChild (some childRoot) (some parentRoot) :=
+      Store.blockTree_isChild_iff.mpr ⟨childBlock, childFound, childParent⟩
+    have voteDescends := Store.isAncestor_of_blockTree_ancestor (lower := lower) before
+      votedFound parentFound (isChild.ancestor.trans above)
+    have headLe := reached.forwardReachable.slot_le_of_blockState_of_getCurrentSlot
+      (Store.blockState_ok_iff.mp headFound) slotRead
+    have epochEq : computeEpochAtSlot preset current = epoch := by
+      simpa [Store.getCurrentStoreEpoch, slotRead, bind, Except.bind, pure, Except.pure]
+        using epochRead
+    have headEpoch : (getCurrentEpoch headState).toNat ≤ epoch.toNat := by
+      rw [← epochEq, getCurrentEpoch_toNat]
+      simp only [computeEpochAtSlot, UInt64.toNat_div]
+      exact Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp headLe)
+    have parentVote : (computeEpochAtSlot preset parent.slot).toNat ≤
+        (computeEpochAtSlot preset attestation.data.slot).toNat := by
+      have start := (Uint64.addChecked_ok_iff.mp firstOk).2
+      have low := UInt64.le_iff_toNat_le.mp low
+      simp only [UInt64.toNat_one] at start
+      simp only [computeEpochAtSlot, UInt64.toNat_div]
+      exact Nat.div_le_div_right (by omega)
+    obtain ⟨targetState, index, committee, stored, below, committeeOk, member⟩ :=
+      origin.exists_mem_committee
+    obtain ⟨kept, count⟩ := reached.committeesKept_of_voteOrigin anchorSlot minLookahead
+      maxLookahead (by omega) parentFound descends origin
+      (voted := ⟨attestation.data.beaconBlockRoot, .pending⟩) rfl voteDescends
+      (origin.targetEpoch ▸ near) stored (Store.blockState_ok_iff.mp headFound) (by omega)
+    exact Store.mem_getCommitteesBetweenSlots window low high headFound (count ▸ below)
+      ((kept _ _ rfl).trans committeeOk) member
+  · exact mem_window_of_far_vote history honest time headRead headFound epochRead horizon
+      (by omega) origin window low high
 
 /-- Held-state finality supplies the source bound at the store's realized checkpoint.
 
