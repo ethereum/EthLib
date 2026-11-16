@@ -54,6 +54,39 @@ private theorem pendingTail_of_validators {state after : BeaconState preset fork
   intro index validator lower found
   exact tail index validator lower (same ▸ found)
 
+/-- Replacing an entry preserves the suffix when its two activation fields are unchanged. -/
+private theorem pendingTail_setValidatorAt {state after : BeaconState preset fork}
+    {position count : Nat} {epoch : Epoch} {old validator : Validator}
+    (found : getValidatorAt state position = .ok old)
+    (set : state.setValidatorAt position validator = .ok after)
+    (eligibility : validator.activationEligibilityEpoch = old.activationEligibilityEpoch)
+    (activation : validator.activationEpoch = old.activationEpoch)
+    (tail : PendingTail count epoch state) : PendingTail count epoch after := by
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
+  have oldEq : state.validators.data[position] = old := by
+    simpa [getValidatorAt, inside] using found
+  intro index entry lower read
+  simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
+    Array.getElem?_set] at read
+  split at read
+  · rename_i same
+    subst index
+    cases read
+    obtain ⟨eligible, pending⟩ := tail position old lower
+      (by rw [Array.getElem?_eq_getElem inside, oldEq])
+    exact ⟨eligibility ▸ eligible, activation.trans pending⟩
+  · exact tail index entry lower read
+
+/-- Effective-balance updates cannot change pending activation eligibility or activation. -/
+private theorem pendingTail_processEffectiveBalanceUpdates {state after : BeaconState preset fork}
+    {count : Nat} {epoch : Epoch}
+    (run : processEffectiveBalanceUpdates state = .ok after)
+    (tail : PendingTail count epoch state) : PendingTail count epoch after := by
+  apply foldlM_ok_invariant (PendingTail count epoch) (fun s i t before ok => ?_) tail run
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨_, found, _, _, _, _, set⟩ := ok
+  exact pendingTail_setValidatorAt found set rfl rfl before
+
 /-- A newly deposited validator is pending beyond every finite boundary epoch. -/
 private theorem pendingTail_addValidator {state after : BeaconState preset fork}
     {count : Nat} {epoch : Epoch} {pubkey : Cryptography.Bls.BLSPubkey}
@@ -208,6 +241,25 @@ private theorem filteredTotal_of_pendingDeposits {config : Config} {checks : Sig
         .ok selected ∧ getTotalBalance cached selected = .ok result :=
   filteredTotal_of_pendingTail (pendingTail_processPendingDeposits run finite tail)
     contains active read
+
+/-- A deposit pass followed by balance updates still gives checked historical reads. -/
+private theorem filteredTotal_of_pendingDeposits_balances
+    {config : Config} {checks : SignatureChecks}
+    {source deposited after cached : BeaconState preset fork} {electra : .pectra ≤ fork}
+    {epoch boundEpoch : Epoch} {count : Nat} {participants : Std.TreeSet ValidatorIndex}
+    {total : Gwei} (deposits : processPendingDeposits config checks source electra = .ok deposited)
+    (balances : processEffectiveBalanceUpdates deposited = .ok after)
+    (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source)
+    (contains : count ≤ cached.validators.data.size)
+    (active : ∀ v ∈ participants, isActiveAt after epoch v.toNat = true)
+    (read : getTotalActiveBalance cached = .ok total) :
+    ∃ selected result,
+      participants.toList.filterM (fun index => do
+        return isActiveValidator (← validatorAt cached index) (getCurrentEpoch cached)) =
+        .ok selected ∧ getTotalBalance cached selected = .ok result :=
+  filteredTotal_of_pendingTail
+    (pendingTail_processEffectiveBalanceUpdates balances
+      (pendingTail_processPendingDeposits deposits finite tail)) contains active read
 
 /-- Lookahead extends a run without assuming a registry-size bound. -/
 private theorem runKept_lookahead {config : Config} {checks : SignatureChecks}
