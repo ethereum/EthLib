@@ -46,6 +46,10 @@ The period of an update is the period of the slot of its attested header.
 
 That fork is the one that the context bytes of the chunk of the update name.
 
+The check compares forks, not digests.
+
+So from Fulu it does not tell apart the digests of the epochs of blob parameters.
+
 The source asks for updates in consecutive order by period, which may also mean periods with no gap.
 
 The check asks only for increasing periods, so it allows a period with no update.
