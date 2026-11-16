@@ -757,7 +757,7 @@ theorem prep_fail_le (parameterOutput : HashOutput) (fixed : HiddenGraph.Table)
         encoding_not_graph _ _ position _ _ _ _ _
 
 omit [Params] in
-/-- The bound `(1 - 2⁻¹⁴)^(2¹⁴) ≤ 1/2`. -/
+/-- The bound `(1 - 2⁻¹^4)^(2^14) ≤ 1/2`. -/
 theorem one_sub_pow_le_half : (1 - (2 : ℝ)⁻¹ ^ 14) ^ (2 ^ 14) ≤ 1 / 2 := by
   set a : ℝ := (2 : ℝ)⁻¹ ^ 14 with ha
   have ha0 : 0 ≤ a := by positivity

@@ -137,7 +137,7 @@ end Spec
 /--
 Whether a number below 324 is prime.
 
-Trial division stops at 17, since every composite below 18² has a divisor that small.
+Trial division stops at 17, since every composite below 18^2 has a divisor that small.
 -/
 def smallPrime (candidate : Nat) : Bool :=
   2 ≤ candidate && (List.range 18).all fun divisor =>
@@ -157,7 +157,7 @@ def wholeCubeRoot (value : Nat) : Nat :=
 /--
 Whether a word is the first 32 fractional bits of the square root of a prime.
 
-With `root = ⌊√prime⌋ · 2^32 + word`, it is exactly when `root² ≤ prime · 2^64 < (root + 1)²`.
+With `root = ⌊√prime⌋ · 2^32 + word`, it is exactly when `root^2 ≤ prime · 2^64 < (root + 1)^2`.
 -/
 def squareRootFraction (prime word : Nat) : Bool :=
   let root := wholeSquareRoot prime * 2 ^ 32 + word
@@ -166,7 +166,7 @@ def squareRootFraction (prime word : Nat) : Bool :=
 /--
 Whether a word is the first 32 fractional bits of the cube root of a prime.
 
-With `root = ⌊∛prime⌋ · 2^32 + word`, it is exactly when `root³ ≤ prime · 2^96 < (root + 1)³`.
+With `root = ⌊∛prime⌋ · 2^32 + word`, it is exactly when `root^3 ≤ prime · 2^96 < (root + 1)^3`.
 -/
 def cubeRootFraction (prime word : Nat) : Bool :=
   let root := wholeCubeRoot prime * 2 ^ 32 + word
@@ -349,7 +349,7 @@ theorem paddingZeros_minimal (size zeros : Nat) (complete : (size + 1 + zeros + 
 
 private theorem bits_toNat (size : Nat) (admitted : size < 2 ^ 61) :
     (UInt64.ofNat size * 8).toNat = size * 8 := by
-  -- Below 2⁶¹ bytes, the bit count does not wrap.
+  -- Below 2^61 bytes, the bit count does not wrap.
   simp [UInt64.toNat_mul, UInt64.toNat_ofNat]
   omega
 
@@ -365,7 +365,7 @@ private theorem shift_toNat (i : Fin 8) : (56 - 8 * UInt64.ofNat i.val).toNat = 
     change 8 * i.val ≤ 56
     omega
 
-/-- Below 2⁶¹ bytes, the length bytes are the base-256 digits of the bit length. -/
+/-- Below 2^61 bytes, the length bytes are the base-256 digits of the bit length. -/
 theorem lengthBytes_digit (size : Nat) (admitted : size < 2 ^ 61) (i : Fin 8) :
     ((lengthBytes size)[i.val]'(by simp)).toNat = (size * 8 / 2 ^ (56 - 8 * i.val)) % 256 := by
   simp only [lengthBytes, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn,
@@ -373,7 +373,7 @@ theorem lengthBytes_digit (size : Nat) (admitted : size < 2 ^ 61) (i : Fin 8) :
   change ((size * 8) >>> ((56 - 8 * i.val) % 64)) % 256 = _
   rw [Nat.mod_eq_of_lt (show 56 - 8 * i.val < 64 by omega), Nat.shiftRight_eq_div_pow]
 
-/-- The padding is the one of FIPS 180-4 §5.1.1, below 2⁶¹ bytes. -/
+/-- The padding is the one of FIPS 180-4 §5.1.1, below 2^61 bytes. -/
 theorem pad_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
     pad message = Spec.padded message := by
   have zeros : paddingZeros message.size = Spec.zeroCount message.size := by
@@ -431,9 +431,9 @@ theorem digest_eq_spec (s : State) : digest s = Spec.digest (interpret s) := by
   all_goals (apply UInt8.toNat_inj.mp; simp [Nat.shiftRight_eq_div_pow])
 
 /--
-SHA-256 is the hash of FIPS 180-4 §6.2, on every message shorter than 2⁶¹ bytes.
+SHA-256 is the hash of FIPS 180-4 §6.2, on every message shorter than 2^61 bytes.
 
-FIPS 180-4 §5.1.1 bounds a message at 2⁶⁴ bits, which is 2⁶¹ bytes.
+FIPS 180-4 §5.1.1 bounds a message at 2^64 bits, which is 2^61 bytes.
 -/
 theorem hash_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
     hash message = Spec.hash message := by

@@ -34,7 +34,7 @@ The swap is the step from Game G0 to Game G1 of their §4.2, in the proof of the
 
 Their Game G1 is in their Figure 7.
 
-Their bound there is `Q² / 2^L`; the bound here is half of it, or less.
+Their bound there is `Q^2 / 2^L`; the bound here is half of it, or less.
 -/
 
 @[expose] public section

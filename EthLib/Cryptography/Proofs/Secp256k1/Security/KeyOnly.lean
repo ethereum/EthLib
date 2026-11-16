@@ -48,7 +48,7 @@ Their `Q` bounds the forger's queries, and their forger asks the check's query f
 
 Here the check may ask once more, hence `q + 1`.
 
-Their bound `Q² / 2^L` is still at least the one here.
+Their bound `Q^2 / 2^L` is still at least the one here.
 -/
 
 @[expose] public section

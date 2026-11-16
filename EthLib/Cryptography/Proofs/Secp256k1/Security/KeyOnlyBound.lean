@@ -30,11 +30,11 @@ The bound is their Theorem 2, from their games of Figure 7 and the reductions of
 
 Their `Q` is `q + 1` here, and their `|B|` is `|A|`.
 
-Their bound is `√(2 Q² ε_dr + 2 Q ε') + ε'' + Q² / 2^L`, where `ε''` is the inverse solver's.
+Their bound is `√(2 Q^2 ε_dr + 2 Q ε') + ε'' + Q^2 / 2^L`, where `ε''` is the inverse solver's.
 
-Here the terms in `|A|` sum to `Q (Q + 1) / (2 |A|)`, at most `Q² / |A|`.
+Here the terms in `|A|` sum to `Q (Q + 1) / (2 |A|)`, at most `Q^2 / |A|`.
 
-The root here is `√(Q ε' + Q² ε_dr)`, so the bound here is at most theirs.
+The root here is `√(Q ε' + Q^2 ε_dr)`, so the bound here is at most theirs.
 
 The theorems bound chances only; no theorem states the running times of the three adversaries.
 

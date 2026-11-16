@@ -140,7 +140,7 @@ def uncompress (bytes : Vector UInt8 48) : Except BlsError G1 :=
     match Fp.fromBytesBE (packBytes xBytes) with
     | .error _ => .error .invalidG1Point
     | .ok x =>
-      -- Compute y² = x³ + 4 and take a sqrt.
+      -- Compute y^2 = x^3 + 4 and take a sqrt.
       let rhs := x * x * x + Fp.ofNat 4
       match Fp.sqrt rhs with
       | .error _ => .error .invalidG1Point

@@ -104,7 +104,9 @@ def DoubleVote (x y : Vote ν β) : Prop :=
 
 /-- The first vote surrounds the second, which breaks the second slashing condition.
 
-For votes from `s₁` to `t₁` and from `s₂` to `t₂`, the epochs satisfy `s₁ < s₂ < t₂ < t₁`. -/
+Take votes from `s_1` to `t_1` and from `s_2` to `t_2`.
+
+Their epochs satisfy `s_1 < s_2 < t_2 < t_1`. -/
 def SurroundVote (x y : Vote ν β) : Prop :=
   x.source.epoch < y.source.epoch ∧ y.source.epoch < y.target.epoch ∧
     y.target.epoch < x.target.epoch
