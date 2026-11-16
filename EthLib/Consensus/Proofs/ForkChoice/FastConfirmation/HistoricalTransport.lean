@@ -1513,7 +1513,9 @@ private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
     (headStateFound : ((e.world n).state u).blockStates[head]? = some source)
     (headBound : start ≤ headBlock.slot)
     {parent : BeaconBlock preset fork} {parentRoot : Root}
-    (parentFound : ((e.world n).state u).blocks[parentRoot]? = some parent)
+    (callerParentFound : caller.blocks[parentRoot]? = some parent)
+    (parentSafe : ((e.world n).state u).isAncestor ⟨head, .pending⟩
+      ⟨parentRoot, .pending⟩ = .ok true)
     (parentNext : addChecked parent.slot 1 = .ok first)
     (anchorParentAbsent : ((e.world n).state u).blocks[anchorBlock.parentRoot]? = none)
     (read : caller.computeCommitteeWeightBetweenSlots callerHead callerState first oldLast =
@@ -1522,8 +1524,20 @@ private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
     (before : oldLast ≤ last)
     (stakeBound : stake (fun v => balanceAt cached v.toNat)
       (getActiveValidatorIndices cached (getCurrentEpoch cached)).toFinset ≤ 2 * 10 ^ 17) :
-    ∃ result, ((e.world n).state u).computeCommitteeWeightBetweenSlots head cached first oldLast =
-      .ok result := by
+    (∃ result, ((e.world n).state u).computeCommitteeWeightBetweenSlots head cached first oldLast =
+      .ok result) ∨ ∃ collision,
+      Store.findBlockCollision caller ((e.world n).state u) [parentRoot] = some collision := by
+  have parentRead := parentSafe
+  unfold Store.isAncestor at parentRead
+  obtain ⟨receiverParent, parentOk, _⟩ := bind_ok_iff.mp parentRead
+  have receiverParentFound := Store.block_ok_iff.mp parentOk
+  by_cases same : parent = receiverParent
+  swap
+  · exact .inr ⟨(parentRoot, parent, receiverParent), by
+      simp [Store.findBlockCollision, callerParentFound, receiverParentFound, same]⟩
+  subst receiverParent
+  left
+  have parentFound := receiverParentFound
   have reached := e.reachable
     (fun w member => (anchored w member) ▸ Store.Reachable.anchor anchorStore) n u honest
   obtain ⟨_, _, anchorFound⟩ := reached.anchor_known
