@@ -2037,7 +2037,29 @@ private theorem parent_read_or_collision {caller receiver : Store preset fork}
   have valid := Store.findBlockCollision_valid callerReached receiverReached searched
   exact .inr ⟨parent, receiverParent, searched, valid⟩
 
-/-- A margin or justified ancestry gives head ancestry or a collision at the caller's parent. -/
+/-- The approved drift bound compares honest finite stakes in source and receiver balances. -/
+private def WindowMarginDrift (call last : Nat) (source : BeaconState preset fork)
+    (shift : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k (head : ForkChoiceNode) state score sourceScore first finish maximum sourceMaximum,
+    (e.world call).time ≤ (e.world k).time → (e.world k).time ≤ last →
+    ((e.world k).state w).getHead config = .ok head →
+    ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint = .ok state →
+    computeProposerScore config state = .ok score →
+    computeProposerScore config source = .ok sourceScore →
+    ((e.world k).state w).computeCommitteeWeightBetweenSlots head.root state first finish =
+      .ok maximum →
+    ((e.world k).state w).computeCommitteeWeightBetweenSlots head.root source first finish =
+      .ok sourceMaximum →
+    ∀ p q : Finset ValidatorIndex, (∀ v ∈ p, v ∈ J) → (∀ v ∈ q, v ∈ J) →
+    let sourceWeight := fun v => if v ∈ ((unslashedActiveBalances source).map (·.1)).toFinset
+      then balanceAt source v.toNat else 0
+    let receiverWeight := fun v => if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
+      then balanceAt state v.toNat else 0
+    2 * stake sourceWeight p + stake sourceWeight q + maximum.toNat + score.toNat ≤
+      2 * stake receiverWeight p + stake receiverWeight q + sourceMaximum.toNat +
+        sourceScore.toNat + shift
+
+/-- A source margin and approved drift give head ancestry or a collision at the caller's parent. -/
 private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -2061,6 +2083,9 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     (found : ((e.world n).state u).blocks[root]? = some block)
     {caller : ValidatorIndex} {call : Nat}
     (callerHonest : caller ∈ J) (callerTime : (e.world call).time ≤ last)
+    (later : (e.world call).time ≤ (e.world n).time)
+    {source : BeaconState preset fork} {shift : Nat}
+    (drift : WindowMarginDrift (e := e) call last source shift)
     (callerParentFound : ((e.world call).state caller).blocks[block.parentRoot]? = some parent)
     (slotRead : ((e.world n).state u).getCurrentSlot config = .ok current)
     (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok epoch)
@@ -2077,15 +2102,20 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
       ((⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes ∧
         ((e.world n).state u).isAncestor head
           ⟨block.parentRoot, .pending⟩ = .ok true ∧
-        Models.stake (fun v => balanceAt state v.toNat)
-        (Store.activeMembers state members) + score.toNat <
+        ∃ maximum sourceMaximum sourceScore,
+      ((e.world n).state u).computeCommitteeWeightBetweenSlots head.root state first finish =
+        .ok maximum ∧
+      ((e.world n).state u).computeCommitteeWeightBetweenSlots head.root source first finish =
+        .ok sourceMaximum ∧
+      computeProposerScore config source = .ok sourceScore ∧
+      sourceMaximum.toNat + sourceScore.toNat + shift <
       2 * Models.stake (fun v =>
-        if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
-        then balanceAt state v.toNat else 0)
+        if v ∈ ((unslashedActiveBalances source).map (·.1)).toFinset
+        then balanceAt source v.toNat else 0)
         {v ∈ ((e.world n).state u).supportersOf state ⟨root, .pending⟩ | v ∈ J} +
       Models.stake (fun v =>
-        if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
-        then balanceAt state v.toNat else 0)
+        if v ∈ ((unslashedActiveBalances source).map (·.1)).toFinset
+        then balanceAt source v.toNat else 0)
         {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J}))
     (scoreOk : computeProposerScore config state = .ok (score : Gwei)) :
     ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true ∨
@@ -2093,7 +2123,9 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
       ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
         some evidence := by
   classical
-  rcases route with justifiedAbove | ⟨viable, descends, margin⟩
+  rcases route with justifiedAbove |
+    ⟨viable, descends, maximum, sourceMaximum, sourceScore, maximumOk, sourceMaximumOk,
+      sourceScoreOk, sourceMargin⟩
   · obtain ⟨justified, justifiedKnown⟩ := Store.filterNodeTree_known tree
     exact .inl (Store.isAncestor_trans_of_lt before justifiedKnown found
       (Store.isAncestor_getHead_of_lt_gloas before headRead) justifiedAbove)
@@ -2111,6 +2143,27 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     exact .inr ⟨caller, callerHonest, u, honest, call, n, callerTime, time, block.parentRoot,
       (block.parentRoot, leftBlock, rightBlock), searched⟩
   left
+  have transported := drift u honest n head state score sourceScore first finish maximum
+    sourceMaximum later time headRead stateRead scoreOk sourceScoreOk maximumOk sourceMaximumOk
+    {v ∈ store.supportersOf state ⟨root, .pending⟩ | v ∈ J}
+    {v ∈ store.parentVotersOf state participants block parent | v ∈ J}
+    (fun _ member => (Finset.mem_filter.mp member).2)
+    (fun _ member => (Finset.mem_filter.mp member).2)
+  have windowBound := Store.stake_le_computeCommitteeWeightBetweenSlots window maximumOk
+    (fun _ member => Store.mem_activeMembers.mp member)
+  have margin : Models.stake (fun v => balanceAt state v.toNat)
+        (Store.activeMembers state members) + score.toNat <
+      2 * Models.stake (fun v =>
+        if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
+        then balanceAt state v.toNat else 0)
+        {v ∈ store.supportersOf state ⟨root, .pending⟩ | v ∈ J} +
+      Models.stake (fun v =>
+        if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
+        then balanceAt state v.toNat else 0)
+        {v ∈ store.parentVotersOf state participants block parent | v ∈ J} := by
+    dsimp only at transported
+    dsimp only [store] at transported ⊢
+    omega
   have lower := reached.reachable.parentsBelow anchorSlot (absent u honest n time)
   have within := BeaconState.registryWithinLimit_of_lt before state
   have shortBefore := previousBlockSlot_le_previousCurrentSlot reached anchorSlot
@@ -2155,7 +2208,7 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
         ((Store.view lower nodes).withBoost store.boostedRoot) (some root) +
       Models.stake (fun v => balanceAt state v.toNat)
         {v ∈ store.parentVotersOf state participants block parent | v ∈ J} := by
-    dsimp only [store] at boostBound boostedBound supportGuard parentGuard ⊢
+    dsimp only [store] at margin boostBound boostedBound supportGuard parentGuard ⊢
     omega
   have ghostEq := Store.getHead_eq_ghost_withBoost lower before stateRead tree headRead
   have ancestry := (Store.filterNodeTree_ancestor (lower := lower) before tree _ viable).1
