@@ -2429,7 +2429,15 @@ The theorems state these properties.
 - So after a message is forwarded or delivered, no later RPC forwards or delivers its ID.
   This holds within the lifetime of the seen cache, whatever RPCs come between, with any parameters, standing and validation.
   The first and the last RPC use the same parameters and the same message ID function.
-  No theorem covers two messages with the same ID in one RPC: a lifetime of zero lets both through.
+- An RPC forwards each message it delivers to the mesh of its topic and to the explicit peers, and nothing else (`receiveRpc_forward_delivered`).
+  The mesh is the one before the RPC.
+  The sender of the RPC is among them when it is a mesh or explicit peer.
+- With a positive lifetime of the seen cache, an RPC delivers at most one message of each ID (`receiveRpc_delivered_nodup`).
+  So, by the two theorems, at most one of two messages with the same ID in one RPC is delivered or forwarded.
+  The proof reads the check of `receiveMessage` against the seen cache that the fold of the messages updates.
+  Each message of the RPC that passed this check left its ID there, with the time of the RPC.
+  An entry of that time counts in the check of a later message only with a positive lifetime.
+  A lifetime of zero lets both messages through.
 
 The sources leave these points open, and the router takes one reading of each.
 
