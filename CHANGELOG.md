@@ -16,6 +16,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the honest-duty supporter and head theorems use `VotesInSlots` for one complete epoch, including their accountable companions.
+  For `Execution.mem_supportersOf_of_duty_epoch` and its accountable companion, pass the scoped votes after the epoch and slot binders, before `beginOk`.
+  For `Execution.isAncestor_getHead_of_duty_epoch` and its accountable companion, include the scoped votes inside the `margin` existential, after the time bounds and before the stake inequality.
+  For `Execution.exists_voteAt_of_duty_interval`, bind `begin`, `last` and `slot` before the scoped votes, and supply `beginTime` and `endTime` after `fits`.
+  `VotesInSlots` couples `VoteAt` and `VoteCommittees` on the same witness; the latter requires the committee check only after successful target-cache reads.
+  Conclusions and the existing unbounded `Votes` definition are unchanged.
+
 - In Lean, the compressed encoding of a point of `G1` has its 48 bytes in its type ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
   `G1.compress` returns a `Vector UInt8 48`, and `G1.uncompress`, `G1.keyValidatePoint` and `G1.keyValidate` take one.
   A caller that holds bytes of another length reads them with `exactBytes? 48`, now in `EthLib.Base`, and rejects `none` as decompression did.
