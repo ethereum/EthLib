@@ -333,7 +333,33 @@ With SHA-256 in place of the oracle, `columnWins_sha256_iff` shows that a win is
 It holds at every preset and every fork.
 Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
 
-The light client checks of bootstraps and updates, from Altair, and of headers, from Capella, also hash with SHA-256.
+`Consensus/Proofs/LightClient/SyncCommitteeRandomOracle.lean` composes the branch bound with the committee checks of the light client, from Altair.
+`initializeLightClientStore` proves the current sync committee of a bootstrap by a normalized branch against the state root of its header.
+`validateNextSyncCommitteeBranch` proves the next sync committee of an update the same way, against the attested state root.
+The preset and the generalized index are fixed before the run, and an adversary outputs a state root and two committees with a branch each.
+The extraction roots both committees, and climbs the last nodes of each branch, as many as the depth of the index.
+The adversary wins when the committees differ, both branches end in that many nodes after zero nodes, and both climbs reach the state root.
+
+`collision_of_extractSyncCommittees` shows that every win leaves two different cached inputs with one answer.
+By `hashTreeRootM_syncCommittee`, the root of a committee is one hash of the root of its keys and the root of its aggregate key.
+By `hashTreeRootM_bytes48Vector` (`Serialization/Proofs/Ssz/BranchRandomOracle.lean`), the root of the keys is the perfect tree over the roots of the keys.
+So equal roots of two different committees give two such inputs, which a chase from the root down finds with `collision_or_eq_of_queryHash` and `collision_or_eq_of_hashTreeRootM_bytes48Vector`.
+Two different roots that climb to one state root give the inputs that `collision_of_extractBranches` finds.
+`prEvent_experimentWith_le` then gives `prEvent_syncCommitteeWins_le`, which bounds a win by `Q^2 / N`.
+`extractSyncCommittees_queryBound` shows that the extraction makes at most `2 * (size + 2^d + 1) + 2 * depth` queries, where `2^d` is the width of the tree of keys.
+Each root of a committee takes one query per key and at most `2^d - 1` for the tree, by `hashTreeRootM_bytes48Vector_queryBound`, and two more.
+`experimentWith_extractSyncCommittees_queryBound` adds the adversary's queries, through `experimentWith_queryBound`.
+`prEvent_syncCommitteeWins_le_of_adversary` states the bound with `N = 2^256`, for an adversary of `q` queries.
+At the mainnet size of 512, `prEvent_syncCommitteeWins_le_mainnet` bounds a win by `(q + 2050 + 2 * depth)^2 / 2^256`.
+The depth of both indices is 5 before Electra, 6 from Electra and 11 from Gloas.
+With SHA-256 in place of the oracle, `syncCommitteeWins_sha256_iff` shows that a win is two different committees whose branches `isValidNormalizedMerkleBranch` accepts.
+It needs a committee of at least one member, and holds at every index.
+`syncCommitteeWins_of_initializeLightClientStore` gives such a win for two accepted bootstraps with one state root, one slot and different committees, by `initializeLightClientStore_proves`.
+`syncCommitteeWins_of_validateNextSyncCommitteeBranch` gives one for two updates that pass the committee check, with one attested state root and slot and different next committees, by `validateNextSyncCommitteeBranch_proves`.
+Both read the index of the committee at the slot, as the checks do.
+Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
+
+The finality branch of an update, from Altair, and the execution branch of a header, from Capella, also hash with SHA-256.
 No theorem composes their proofs with the branch bound.
 
 ### leanSPHINCS
@@ -5922,6 +5948,7 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   The blob sidecar bound fixes the preset and the fork before the run, and its adversary picks both sidecars.
   The deposit bound reads no preset or fork, and its adversary picks the index, the deposit root and both deposits.
   The data column bound fixes the preset and the fork before the run, and its adversary picks both partial headers.
+  The sync committee bound fixes the preset and the index before the run, and its adversary picks the state root, both committees and both branches.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of SHA-256.

@@ -42,6 +42,8 @@ A mapped computation fails exactly when the computation fails, with the map of i
 A map in `Option` that succeeds has one output per input, each the image of its input.
 
 It succeeds exactly when the function succeeds on every input.
+
+In a lawful monad, two continuations agree after a map when they agree on results of its length.
 -/
 
 @[expose] public section
@@ -796,5 +798,20 @@ theorem isSome_mapM_iff {α β : Type} {g : α → Option β} :
     have ih := isSome_mapM_iff (g := g) (xs := xs)
     simp only [List.mapM_cons, bind, Option.bind, pure, List.mem_cons, forall_eq_or_imp]
     cases hx : g x <;> cases hr : xs.mapM g <;> simp_all
+
+/-! ## Maps in a lawful monad -/
+
+/-- Two continuations of a map agree after it, when they agree on every result of its length. -/
+theorem mapM_bind_congr_length {m : Type → Type} [Monad m] [LawfulMonad m] {α β γ : Type}
+    (g : α → m β) (xs : List α) {k k' : List β → m γ}
+    (same : ∀ ys : List β, ys.length = xs.length → k ys = k' ys) :
+    xs.mapM g >>= k = xs.mapM g >>= k' := by
+  induction xs generalizing k k' with
+  | nil =>
+    simp only [List.mapM_nil, pure_bind]
+    exact same [] rfl
+  | cons x rest ih =>
+    simp only [List.mapM_cons, bind_assoc, pure_bind]
+    exact bind_congr fun y => ih fun ys count => same (y :: ys) (by simp [count])
 
 end EthLib.Base
