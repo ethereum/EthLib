@@ -530,35 +530,17 @@ private theorem filteredTotal_exists {state : BeaconState preset fork}
         (isActiveAt_eq_true_iff.mpr ⟨validator, validatorAt_ok_iff.mp found, isActive⟩))
   exact ⟨active, result, filtered, resultOk⟩
 
-/-- Successful deposit, exit, credential and execution-request folds preserve the pending tail.
-
-Extraction of these intermediate states from the operation schedule remains separate. -/
-private theorem pendingTail_operation_folds {config : Config} {checks : SignatureChecks}
-    {source deposited exited changed requested withdrawn after : BeaconState preset fork}
-    {before : fork < .hegota} {electra : .pectra ≤ fork}
-    {deposits : List Deposit} {exits : List SignedVoluntaryExit}
-    {changes : List SignedBLSToExecutionChange} {requests : List DepositRequest}
-    {withdrawals : List WithdrawalRequest} {consolidations : List ConsolidationRequest}
-    {boundary : Epoch} {count : Nat}
-    (run : deposits.foldlM (processDeposit config checks before) source = .ok deposited)
-    (exitRun : exits.foldlM (processVoluntaryExit config checks) deposited = .ok exited)
-    (changeRun : changes.foldlM (processBlsToExecutionChange config checks) exited = .ok changed)
-    (requestRun : requests.foldlM (processDepositRequest · electra ·) changed = .ok requested)
-    (withdrawalRun : withdrawals.foldlM (processWithdrawalRequest config · electra ·) requested =
-      .ok withdrawn)
-    (consolidationRun : consolidations.foldlM (processConsolidationRequest config · electra ·)
-      withdrawn = .ok after)
-    (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source) :
-    PendingTail count boundary after := by
-  have depositedTail := foldlM_ok_invariant (PendingTail count boundary)
-    (fun _ _ _ holds ok => pendingTail_processDeposit ok finite holds) tail run
-  have exitedTail := foldlM_ok_invariant (PendingTail count boundary)
-    (fun _ _ _ holds ok => pendingTail_processVoluntaryExit ok holds) depositedTail exitRun
-  have changedTail := foldlM_ok_invariant (PendingTail count boundary)
-    (fun _ _ _ holds ok => pendingTail_processBlsToExecutionChange ok holds) exitedTail changeRun
+/-- Execution requests preserve the pending suffix through their three actual folds. -/
+private theorem pendingTail_processExecutionRequests {config : Config}
+    {source after : BeaconState preset fork} {body : BeaconBlockBody preset fork}
+    {electra : .pectra ≤ fork ∧ fork < .glamsterdam} {boundary : Epoch} {count : Nat}
+    (run : processExecutionRequests config source body electra = .ok after)
+    (tail : PendingTail count boundary source) : PendingTail count boundary after := by
+  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at run
+  obtain ⟨requested, requestRun, withdrawn, withdrawalRun, consolidationRun⟩ := run
   have requestedTail := foldlM_ok_invariant (PendingTail count boundary)
     (fun _ _ _ holds ok => pendingTail_of_validators
-      (congrArg (·.data) (processDepositRequest_ok ok).2.1) holds) changedTail requestRun
+      (congrArg (·.data) (processDepositRequest_ok ok).2.1) holds) tail requestRun
   have withdrawnTail := foldlM_ok_invariant (PendingTail count boundary)
     (fun _ _ _ holds ok => pendingTail_processWithdrawalRequest ok holds)
     requestedTail withdrawalRun
@@ -566,62 +548,39 @@ private theorem pendingTail_operation_folds {config : Config} {checks : Signatur
     (fun _ _ _ holds ok => pendingTail_processConsolidationRequest ok holds)
     withdrawnTail consolidationRun
 
-/-- A successful Electra-to-Fulu operation schedule transports the tail through consolidation.
-
-Tail applicability at the operation input remains conditional. -/
-private theorem pendingTail_operations_cut {config : Config} {checks : SignatureChecks}
+/-- The shared operation schedule preserves the pending suffix at every fork before Gloas. -/
+private theorem pendingTail_processOperations {config : Config} {checks : SignatureChecks}
     {source after : BeaconState preset fork} {body : BeaconBlockBody preset fork}
-    {parentSlot : Slot} (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    {parentSlot : Slot} (early : fork < .glamsterdam)
     {boundary : Epoch} {count : Nat}
     (run : processOperations config checks source body parentSlot = .ok after)
-    (finite : boundary < FAR_FUTURE_EPOCH) :
-    ∃ proposers slashings attested withdrawn,
-      body.proposerSlashings.data.toList.foldlM (processProposerSlashing config checks) source =
-        .ok proposers ∧
-      body.attesterSlashings.data.toList.foldlM (processAttesterSlashing config checks) proposers =
-        .ok slashings ∧
-      body.attestations.data.toList.foldlM (processAttestation config checks · parentSlot ·)
-        slashings = .ok attested ∧
-      (body.executionRequests ⟨electra, early⟩).consolidations.data.toList.foldlM
-        (processConsolidationRequest config · electra ·) withdrawn = .ok after ∧
-      (PendingTail count boundary source → PendingTail count boundary after) := by
-  have capella : .shapella ≤ fork := Nat.le_trans (by decide) electra
-  unfold processOperations at run
-  split at run
-  · exact absurd ‹.glamsterdam ≤ fork› (Nat.not_le.mpr early)
-  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at run
-  obtain ⟨_, _, _, _, proposers, proposersOk, slashings, slashingsOk, attested, attestedOk,
-    deposited, depositedOk, exited, exitsOk, changed, changesOk, requestsOk⟩ := run
-  have changesFold : (body.blsToExecutionChanges capella).data.toList.foldlM
-      (processBlsToExecutionChange config checks) exited = .ok changed := by
-    unfold processBlsToExecutionChanges at changesOk
-    split at changesOk
-    · simpa only [← Array.foldlM_toList] using changesOk
-    · exact absurd capella ‹¬.shapella ≤ fork›
-  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at requestsOk
-  obtain ⟨requested, requestedOk, withdrawn, withdrawnOk, consolidatedOk⟩ := requestsOk
-  have tailAtAttested (tail : PendingTail count boundary source) :
-      PendingTail count boundary attested := by
-    have proposerTail := foldlM_ok_invariant (PendingTail count boundary)
-      (fun _ _ _ held ok => pendingTail_processProposerSlashing ok held) tail proposersOk
-    have slashingTail := foldlM_ok_invariant (PendingTail count boundary)
-      (fun _ _ _ held ok => pendingTail_processAttesterSlashing ok held) proposerTail slashingsOk
-    exact foldlM_ok_invariant (PendingTail count boundary)
-      (fun _ _ _ held ok => pendingTail_of_validators
-        (congrArg (·.data) (processAttestation_registry ok).1) held) slashingTail attestedOk
-  exact ⟨proposers, slashings, attested, withdrawn, proposersOk, slashingsOk, attestedOk,
-    consolidatedOk, fun tail => pendingTail_operation_folds
-      depositedOk exitsOk changesFold requestedOk withdrawnOk consolidatedOk
-      finite (tailAtAttested tail)⟩
+    (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source) :
+    PendingTail count boundary after := by
+  let R := fun (s t : BeaconState preset fork) =>
+    PendingTail count boundary s → PendingTail count boundary t
+  obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
+    processOperations_folds_of R (fun _ tail => tail) (fun one two tail => two (one tail))
+      (fun ok tail => pendingTail_processDeposit ok finite tail)
+      (fun ok tail => pendingTail_processVoluntaryExit ok tail)
+      (fun ok tail => pendingTail_processBlsToExecutionChange ok tail)
+      (fun ok tail => pendingTail_processExecutionRequests ok tail)
+      (fun {state after} {gloas} _ => (Nat.not_le.mpr early gloas).elim) run
+  have proposerTail := foldlM_ok_invariant (PendingTail count boundary)
+    (fun _ _ _ held ok => pendingTail_processProposerSlashing ok held) tail proposersOk
+  have slashingTail := foldlM_ok_invariant (PendingTail count boundary)
+    (fun _ _ _ held ok => pendingTail_processAttesterSlashing ok held) proposerTail slashingsOk
+  exact rest (foldlM_ok_invariant (PendingTail count boundary)
+    (fun _ _ _ held ok => pendingTail_of_validators
+      (congrArg (·.data) (processAttestation_registry ok).1) held) slashingTail attestedOk)
 
-/-- An Electra-to-Fulu block transports its input pending tail.
+/-- A block before Gloas transports its input pending tail.
 
 The execution prefix and sync aggregate keep the registry.
 
 Boundary applicability remains an input. -/
 private theorem pendingTail_processBlock {config : Config} {checks : SignatureChecks}
     {engine : ExecutionEngine preset fork} {source after : BeaconState preset fork}
-    {block : BeaconBlock preset fork} (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    {block : BeaconBlock preset fork} (early : fork < .glamsterdam)
     {boundary : Epoch} {count : Nat}
     (run : processBlock config checks engine source block = .ok after)
     (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source) :
@@ -630,13 +589,12 @@ private theorem pendingTail_processBlock {config : Config} {checks : SignatureCh
   have inputTail := pendingTail_of_validators
     (congrArg (·.data) (started.validators_eq early)) tail
   have same : after.validators = operated.validators := by
-    have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
-    simp only [altair, ↓reduceDIte] at synced
-    obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
-    rfl
-  obtain ⟨_, _, _, _, _, _, _, _, checked⟩ :=
-    pendingTail_operations_cut electra early operations finite
-  exact pendingTail_of_validators (congrArg (·.data) same) (checked inputTail)
+    split at synced
+    · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+      rfl
+    · cases synced; rfl
+  exact pendingTail_of_validators (congrArg (·.data) same)
+    (pendingTail_processOperations early operations finite inputTail)
 
 /-- Every non-registry stage preserves the pending tail, including intervening epoch stages. -/
 private theorem pendingTail_epochStage {config : Config} {checks : SignatureChecks}
@@ -816,11 +774,11 @@ private theorem pendingTail_processSlots {config : Config} {checks : SignatureCh
 
 /-- A successful state transition transports its pre-slot input pending tail.
 
-Invariant and finalized applicability remain private inputs, with the same fork limits. -/
+Invariant and finalized applicability remain private inputs at every fork before Gloas. -/
 private theorem pendingTail_stateTransition {config : Config} {checks : SignatureChecks}
     {engine : ExecutionEngine preset fork} {source after : BeaconState preset fork}
     {signed : SignedBeaconBlock preset fork} {validate : Bool}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (early : fork < .glamsterdam)
     {boundary : Epoch} {count : Nat} (holds : Invariant source)
     (run : stateTransition config checks engine source signed validate = .ok after)
     (low : boundary ≤ getCurrentEpoch source)
@@ -830,7 +788,7 @@ private theorem pendingTail_stateTransition {config : Config} {checks : Signatur
   obtain ⟨advanced, slots, _, _, block, _⟩ := stateTransition_ok run
   have advancedFinalized : advanced.finalizedCheckpoint.epoch ≤ boundary := by
     simpa only [(frame_processBlock block).finalized] using finalized
-  exact pendingTail_processBlock electra early block finite
+  exact pendingTail_processBlock early block finite
     (pendingTail_processSlots holds slots low advancedFinalized finite tail)
 
 private def PendingTailRun (count : Nat) (epoch : Epoch)
@@ -867,27 +825,27 @@ private theorem pendingTailRun_processSlots {config : Config} {checks : Signatur
 private theorem pendingTailRun_processBlock {config : Config} {checks : SignatureChecks}
     {engine : ExecutionEngine preset fork} {s t : BeaconState preset fork}
     {block : BeaconBlock preset fork} {epoch : Epoch} {count : Nat}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (early : fork < .glamsterdam)
     (finite : epoch < FAR_FUTURE_EPOCH)
     (ok : processBlock config checks engine s block = .ok t) : PendingTailRun count epoch s t := by
   have frame := frame_processBlock ok
   refine ⟨(runKept_processBlock ok).later, fun inv =>
     ⟨frame.invariant inv, ?_,
-      fun _ _ tail => pendingTail_processBlock electra early ok finite tail⟩⟩
+      fun _ _ tail => pendingTail_processBlock early ok finite tail⟩⟩
   rw [frame.finalized]
   exact UInt64.le_refl _
 
 private theorem pendingTailRun_stateTransition {config : Config} {checks : SignatureChecks}
     {engine : ExecutionEngine preset fork} {s t : BeaconState preset fork}
     {signed : SignedBeaconBlock preset fork} {epoch : Epoch} {count : Nat}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (early : fork < .glamsterdam)
     (finite : epoch < FAR_FUTURE_EPOCH)
     (ok : stateTransition config checks engine s signed true = .ok t) :
     PendingTailRun count epoch s t := by
   refine ⟨(runKept_stateTransition ok).later, fun inv => ?_⟩
   obtain ⟨afterInv, ordered⟩ := stateTransition_invariant inv ok
   exact ⟨afterInv, ordered, fun low high tail =>
-    pendingTail_stateTransition electra early inv ok low high finite tail⟩
+    pendingTail_stateTransition early inv ok low high finite tail⟩
 
 /-- An uncached checkpoint prefix comes from the first actual descendant's slot processing. -/
 private theorem relation_of_checkpoint_lookahead {config : Config} {checks : SignatureChecks}
@@ -955,7 +913,7 @@ private theorem relation_of_checkpoint_lookahead {config : Config} {checks : Sig
 private theorem pendingTailRun_checkpointPrefix {config : Config} {checks : SignatureChecks}
     {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (early : fork < .glamsterdam)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     {checkpoint : Checkpoint} {root : Root} {block : BeaconBlock preset fork}
@@ -972,10 +930,10 @@ private theorem pendingTailRun_checkpointPrefix {config : Config} {checks : Sign
       PendingTailRun count epoch boundary after := by
   exact relation_of_checkpoint_lookahead (PendingTailRun count epoch)
     PendingTailRun.refl (fun one two => one.trans two)
-    (fun ok => pendingTailRun_stateTransition electra early finite ok)
+    (fun ok => pendingTailRun_stateTransition early finite ok)
     (fun slots bound ok => relation_of_processSlots_of_stateTransition (PendingTailRun count epoch)
       (fun one two => one.trans two) (fun rest => pendingTailRun_processSlots finite rest)
-      (fun step => pendingTailRun_processBlock electra early finite step) slots bound ok)
+      (fun step => pendingTailRun_processBlock early finite step) slots bound ok)
     (fun ok => pendingTailRun_processSlots finite ok)
     anchorSlot reached target found startOk atOrAfter baseFound sourceFound advanced
 
@@ -986,7 +944,7 @@ The source lookahead transports its tail, while the receiver lookahead supplies 
 Historical applicability is still required separately; no validator identity is inferred. -/
 private theorem registry_of_checkpointPrefix {config : Config} {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
-    {store : Store preset fork} (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    {store : Store preset fork} (early : fork < .glamsterdam)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     (anchorInvariant : Invariant anchorState) (positive : 0 < preset.SLOTS_PER_EPOCH)
@@ -1017,7 +975,7 @@ private theorem registry_of_checkpointPrefix {config : Config} {checks : Signatu
     (fun ok => runKept_processSlots ok)
     anchorSlot reached walk found startOk bound boundaryBaseFound baseFound advanced
   obtain ⟨sourceBoundary, sourceBoundaryRun, related⟩ := pendingTailRun_checkpointPrefix
-    (count := boundary.validators.data.size) electra early anchorSlot reached sourceWalk
+    (count := boundary.validators.data.size) early anchorSlot reached sourceWalk
     sourceBlockFound startOk sourceBound boundaryBaseFound sourceFound sourceRun finite
   have same : sourceBoundary = boundary :=
     Except.ok.inj (sourceBoundaryRun.symm.trans boundaryRun)
@@ -1389,7 +1347,7 @@ private theorem registry_of_honest_checkpoint {anchor : Store preset fork}
     (anchored : ∀ w ∈ J, e.start w = anchor)
     (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (positive : 0 < preset.SLOTS_PER_EPOCH)
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (early : fork < .glamsterdam)
     {u : ValidatorIndex} (honest : u ∈ J) {n : Nat}
     {checkpoint targetCheckpoint : Checkpoint}
     {boundaryBase targetState base cached : BeaconState preset fork}
@@ -1423,7 +1381,7 @@ private theorem registry_of_honest_checkpoint {anchor : Store preset fork}
       ← (computeStartSlotAtEpoch_ok_iff.mp sourceStartOk).2] at ordered
     rw [UInt64.le_iff_toNat_le, toNat_max]
     exact Nat.le_trans ordered (Nat.le_max_right _ _)
-  exact registry_of_checkpointPrefix electra early anchorSlot reached anchorInvariant positive
+  exact registry_of_checkpointPrefix early anchorSlot reached anchorInvariant positive
     walk found startOk bound baseFound boundaryBaseFound advanced sourceRun sourceWalk
     sourceBlockFound sourceBound sourceFound finalized finite
 
@@ -1435,7 +1393,7 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
     (anchored : ∀ w ∈ J, e.start w = anchor)
     (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (positive : 0 < preset.SLOTS_PER_EPOCH)
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (early : fork < .glamsterdam)
     {u : ValidatorIndex} (honest : u ∈ J) {n : Nat}
     {checkpoint : Checkpoint} {attestation : ValidatorIndex → Attestation preset fork}
     {targetState : ValidatorIndex → BeaconState preset fork}
@@ -1471,7 +1429,7 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
   apply filteredTotal_exists read
   intro v member
   have inside := registry_of_honest_checkpoint anchorStore anchored anchorInvariant anchorSlot
-    positive electra early honest (targetRead v member) boundaryBaseFound startOk walk found
+    positive early honest (targetRead v member) boundaryBaseFound startOk walk found
     bound baseFound advanced (sourceWalk v member) (sourceBlockFound v member)
     (sourceEpoch v member) (finalized v member) finite
   have active : isActiveAt (targetState v) (computeEpochAtSlot preset (attestation v).data.slot)
