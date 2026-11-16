@@ -551,9 +551,10 @@ EthLib is one Lake package, and three libraries hold its code.
 The executables `check-decls`, `check-accessors` and `check-theorems` inspect the compiled declarations.
 They check which constructs the declarations use, which defaulting accessors the specification calls, and which theorems it needs.
 `gen-bindings` writes the binding contract from Lean, and `known-answers` runs pinned test vectors.
-Three more libraries hold test cases in `scripts/`: `CheckDeclsTest`, `CheckAccessorsTest` and `CheckTheoremsTest`.
+Four more libraries hold test cases in `scripts/`: `CheckDeclsTest`, `CheckAccessorsTest`, `CheckTheoremsTest` and `CheckTheoremsAttributesTest`.
 They are not default targets.
 Their test scripts, `scripts/test_check_decls.sh`, `scripts/test_check_accessors.sh` and `scripts/test_check_theorems.sh`, build them.
+`CheckTheoremSupport` holds the source attribute inspection used by `check-theorems`.
 
 The package requires Mathlib and VCVio, a library of probabilistic computations.
 Only the properties and the models may import them, or Batteries.
@@ -588,10 +589,15 @@ A theorem stays in the specification file in two cases, because a specification 
 - The users of a definition rely on it, such as a `@[simp]` lemma.
   A project that imports only the specification can then still use it.
 
-`lake exe check-theorems` decides these cases from the compiled environment, including private bodies.
-Starting from definitions and instances, it follows constants used in their types and bodies, through other theorems too.
-A theorem outside that dependency set stays only when it has a persistent `@[simp]` attribute.
-An untagged helper used only to prove a simplification theorem is still a finding.
+`lake exe check-theorems` starts from definitions, instances and persistent `@[simp]` theorems.
+It follows constants in their types and private bodies, and resolved references recorded in Lean's `.ilean` files.
+These references retain a named lemma even when simplification erases its proof term.
+The search follows the helpers of every retained theorem, including simplification rules.
+The check reads persistent theorem attributes written in declarations or `attribute` commands.
+An attribute other than `@[simp]` stops the check until it has a placement rule.
+This guard parses declaration modifiers and standalone `attribute` commands, since Lean's compiled environment has no general query for applied attributes.
+It does not reparse bodies, whose local notation can disappear after import.
+The guard does not inspect attributes that custom command macros generate without an explicit source application.
 The search covers the specification modules and `EthLib.lean`, and identifies a declaration by its defining module, not its namespace.
 Definitions local to theorem proofs are not independent roots, but executable `where` helpers are.
 Generated theorems are not migration findings.

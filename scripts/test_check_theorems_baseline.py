@@ -3,6 +3,7 @@
 import contextlib
 import importlib.util
 import io
+import json
 import os
 import re
 import shutil
@@ -25,6 +26,20 @@ ONE = "EthLib.Base.Sample EthLib.Base.first\n"
 TWO = "EthLib.Base.Sample EthLib.Base.second\n"
 THREE = "EthLib.Base.Sample EthLib.Base.third\n"
 MALFORMED = "1: expected a module and a declaration name"
+
+
+class ParserTests(unittest.TestCase):
+    def test_shared_parser_cases(self) -> None:
+        cases = json.loads((HERE / "check_theorems_baseline_cases.json").read_text())
+        for case in cases:
+            with self.subTest(case=case["name"]):
+                if "error" in case:
+                    message = f"fixture:{case['error']}"
+                    with self.assertRaisesRegex(guard.BaselineError, f"^{re.escape(message)}$"):
+                        guard.entries(case["text"], "fixture")
+                else:
+                    expected = {tuple(entry) for entry in case["entries"]}
+                    self.assertEqual(guard.entries(case["text"], "fixture"), expected)
 
 
 class BaselineTests(unittest.TestCase):
@@ -254,6 +269,13 @@ class BaselineTests(unittest.TestCase):
     def test_duplicate_current_entries_fail(self) -> None:
         self.write(ONE + ONE)
         self.assert_error(self.base, f"{guard.BASELINE}:2: duplicate baseline entry")
+
+    def test_carriage_returns_do_not_split_lines_in_either_revision(self) -> None:
+        self.write(ONE.replace("\n", "\r") + TWO)
+        self.assert_error(self.base, f"{guard.BASELINE}:{MALFORMED}")
+        bad_base = self.commit()
+        self.write(ONE)
+        self.assert_error(bad_base, f"{guard.BASELINE} at {bad_base}:{MALFORMED}")
 
     def test_malformed_base_baseline_fails(self) -> None:
         self.write("one_column\n")

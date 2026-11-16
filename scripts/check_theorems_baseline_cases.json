@@ -1,0 +1,70 @@
+[
+  {
+    "name": "empty",
+    "text": "",
+    "entries": []
+  },
+  {
+    "name": "comments and blank lines",
+    "text": "# Comment.\n \t\r# Indented comment.\n\n",
+    "entries": []
+  },
+  {
+    "name": "ASCII whitespace and inline comments",
+    "text": " \tEthLib.Base.Sample\tEthLib.Base.first\r # First.\r\nEthLib.Base.Sample EthLib.Base.second# Second.",
+    "entries": [
+      ["EthLib.Base.Sample", "EthLib.Base.first"],
+      ["EthLib.Base.Sample", "EthLib.Base.second"]
+    ]
+  },
+  {
+    "name": "literal quoted and numeric name spellings",
+    "text": "EthLib.Sample a.01\nEthLib.Sample a.1\nEthLib.Sample «a».b\nEthLib.Sample a.b\nEthLib.Sample «a.b».c\nEthLib.Sample α.β\n",
+    "entries": [
+      ["EthLib.Sample", "a.01"],
+      ["EthLib.Sample", "a.1"],
+      ["EthLib.Sample", "«a».b"],
+      ["EthLib.Sample", "a.b"],
+      ["EthLib.Sample", "«a.b».c"],
+      ["EthLib.Sample", "α.β"]
+    ]
+  },
+  {
+    "name": "Unicode whitespace is part of a field",
+    "text": "Module\u00a0Name theorem\u2028name\nModule\u0085Name theorem\u000bname",
+    "entries": [
+      ["Module\u00a0Name", "theorem\u2028name"],
+      ["Module\u0085Name", "theorem\u000bname"]
+    ]
+  },
+  {
+    "name": "one column",
+    "text": "only_one_column\n",
+    "error": "1: expected a module and a declaration name"
+  },
+  {
+    "name": "three columns after comments",
+    "text": "# Comment.\n\nModule theorem extra\n",
+    "error": "3: expected a module and a declaration name"
+  },
+  {
+    "name": "nonbreaking space is not a separator",
+    "text": "Module\u00a0theorem\n",
+    "error": "1: expected a module and a declaration name"
+  },
+  {
+    "name": "vertical tab is not a separator",
+    "text": "Module\u000btheorem\n",
+    "error": "1: expected a module and a declaration name"
+  },
+  {
+    "name": "carriage return does not start a new line",
+    "text": "Module theorem\rOther theorem\n",
+    "error": "1: expected a module and a declaration name"
+  },
+  {
+    "name": "duplicate with different whitespace and comment",
+    "text": "Module theorem # First.\n# Comment.\n\tModule\ttheorem# Second.\n",
+    "error": "3: duplicate baseline entry"
+  }
+]

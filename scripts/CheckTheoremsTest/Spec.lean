@@ -3,7 +3,7 @@ module
 /-!
 # Theorems retained by definitions, instances and simplification
 
-Findings have no definition or instance consumer and no `simp` attribute.
+Findings have no retained consumer and no `simp` attribute.
 -/
 
 @[expose] public section
@@ -34,6 +34,34 @@ theorem transitive_bound (n : Nat) : n < n + 1 := transitive_helper n
 /-- The check follows the complete chain from this definition. -/
 def transitive (n : Nat) : Fin (n + 1) := ⟨n, transitive_bound n⟩
 
+/-- A reducible definition lets simplification erase its equality proof. -/
+def erasedValue (n : Nat) : Nat := n
+
+/-- The elaborated reference retains this lemma even when its proof term disappears. -/
+theorem erased_helper (n : Nat) : erasedValue n = n := rfl
+
+/-- A retained theorem names its helper in a tactic block. -/
+theorem erased_bound (n : Nat) : erasedValue n < n + 1 := by
+  simp only [erased_helper]
+  exact Nat.lt_succ_self n
+
+/-- The computational root retains the complete chain of source references. -/
+def erased (n : Nat) : Fin (n + 1) := ⟨erasedValue n, erased_bound n⟩
+
+/-- A definition's own proof can also lose a named lemma during simplification. -/
+theorem erased_direct_helper (n : Nat) : erasedValue n = n := rfl
+
+/-- This definition retains its own helper independently of the theorem's helper. -/
+def erased_direct (n : Nat) : Fin (n + 1) :=
+  ⟨erasedValue n, by simp only [erased_direct_helper]; exact Nat.lt_succ_self n⟩
+
+/-- A helper used only by an unretained proof remains a finding. -/
+theorem erased_unused_helper (n : Nat) : erasedValue n = n := rfl
+
+/-- Source references do not make an unretained theorem into a root. -/
+theorem erased_unused (n : Nat) : erasedValue n = n := by
+  simp only [erased_unused_helper]
+
 /-- The theorem belongs only to another unneeded theorem's proof. -/
 theorem unused_helper (n : Nat) : n + 0 = n := Nat.add_zero n
 
@@ -46,7 +74,7 @@ theorem used_only_from_proofs (n : Nat) : n < n + 1 := Nat.lt_succ_self n
 /-- Only a definition in an export module uses this theorem. -/
 theorem used_only_from_exports (n : Nat) : n < n + 1 := Nat.lt_succ_self n
 
-/-- Only a simplification theorem uses this private helper. -/
+/-- A retained simplification theorem uses this private helper. -/
 private theorem simp_helper (n : Nat) : n + 0 = n := Nat.add_zero n
 
 /-- A definition whose simplification rule is public. -/
@@ -55,7 +83,7 @@ def simpValue (n : Nat) : Nat := n + 0
 /-- The simplification attribute exempts this theorem from findings. -/
 @[simp] theorem simpValue_eq (n : Nat) : simpValue n = n := simp_helper n
 
-/-- Only the reverse simplification rule uses this private helper. -/
+/-- A retained reverse simplification rule uses this private helper. -/
 private theorem reverse_helper (n : Nat) : n = n + 0 := (Nat.add_zero n).symm
 
 /-- A definition with a reverse simplification rule. -/
