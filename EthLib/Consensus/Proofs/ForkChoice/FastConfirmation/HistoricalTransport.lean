@@ -2000,13 +2000,12 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    {head : ForkChoiceNode} {headState state : BeaconState preset fork}
+    {head : ForkChoiceNode} {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit)
     {root : Root} {block parent : BeaconBlock preset fork}
     {current first finish shortLast : Slot} {epoch : Epoch}
     {members participants : Std.TreeSet ValidatorIndex} {nodes : List ForkChoiceNode}
     (headRead : ((e.world n).state u).getHead config = .ok head)
-    (headFound : ((e.world n).state u).blockState head.root = .ok headState)
     (stateRead : ((e.world n).state u).checkpointState
       ((e.world n).state u).justifiedCheckpoint = .ok state)
     (tree : ((e.world n).state u).getFilteredNodeTree config = .ok nodes)
@@ -2035,6 +2034,10 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true := by
   classical
   let store := (e.world n).state u
+  -- The visited parent makes the head known; reachability supplies its stored state.
+  obtain ⟨headBlock, headKnown, _⟩ := Store.slot_le_of_isAncestor parentFound descends
+  obtain ⟨headState, headStored, _, _⟩ := reached.reachable.blockStatesFromParents headKnown
+  have headFound := Store.blockState_ok_iff.mpr headStored
   have boostBound : store.boostScore config ≤ score.toNat := by
     dsimp only [store]
     simp only [Store.boostScore]
@@ -2076,8 +2079,6 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
         lower minLookahead maxLookahead ring within nodes store.boostedRoot
         (store.boostScore config) headRead headFound found parentFound descends slotRead
         epochRead horizon firstOk lastOk window shortWindow shortBefore member distinct modelMargin
-  obtain ⟨headBlock, headKnown⟩ := reached.reachable.known_of_blockState
-    (Store.blockState_ok_iff.mp headFound)
   have pending := Store.getHead_pending before headRead
   have answer := Store.isAncestor_of_blockTree_ancestor (lower := lower) before headKnown
     found result
