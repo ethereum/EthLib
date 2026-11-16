@@ -32,6 +32,51 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
+/-- Honest signatures for one target epoch carry the same attestation data. -/
+theorem data_eq_of_signed_of_target_epoch (slots : 0 < config.SLOT_DURATION_MS)
+    {n k : ℕ} {first second : Message preset fork} (sentFirst : first ∈ (e.world n).sent)
+    (sentSecond : second ∈ (e.world k).sent) {v : ValidatorIndex} {data other : AttestationData}
+    (signedFirst : (v, data) ∈ statements config checks anchorState anchorBlock first)
+    (signedSecond : (v, other) ∈ statements config checks anchorState anchorBlock second)
+    (honest : v ∈ J) (epoch : data.target.epoch = other.target.epoch) : data = other := by
+  have nonslashable := e.isSlashableAttestationData_honest slots (max n k) honest
+    (e.monotone_sent (Nat.le_max_left n k) sentFirst)
+    (e.monotone_sent (Nat.le_max_right n k) sentSecond) signedFirst signedSecond
+  by_contra different
+  simp [isSlashableAttestationData, different, epoch] at nonslashable
+
+/-- A latest vote at or above a signed vote's rank cannot come from an older slot. -/
+theorem latest_slot_floor_of_signed_rank
+    (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
+    {v : ValidatorIndex} (honest : v ∈ J) {n k : ℕ}
+    {message other : Message preset fork}
+    (sent : message ∈ (e.world n).sent) (sentOther : other ∈ (e.world k).sent)
+    {data : AttestationData} {attestation : Attestation preset fork}
+    (signed : (v, data) ∈ statements config checks anchorState anchorBlock message)
+    (signedOther : (v, attestation.data) ∈
+      statements config checks anchorState anchorBlock other)
+    {store : Store preset fork} (origin : store.VoteOrigin config v attestation)
+    (epoch : data.target.epoch = computeEpochAtSlot preset data.slot)
+    (rank : (LatestMessage.ofAttestation (fork := fork) attestation).rank ≥ data.target.epoch)
+    {slot : Slot} (floor : slot ≤ data.slot) : slot ≤ attestation.data.slot := by
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
+  have targetLe : data.target.epoch ≤ attestation.data.target.epoch := by
+    simpa [LatestMessage.rank, LatestMessage.ofAttestation, notGloas] using rank
+  by_cases same : data.target.epoch = attestation.data.target.epoch
+  · have dataEq := data_eq_of_signed_of_target_epoch slots sent sentOther
+      signed signedOther honest same
+    exact dataEq ▸ floor
+  · have targetLt := UInt64.lt_of_le_of_ne targetLe same
+    have slotLe : data.slot ≤ attestation.data.slot := by
+      by_contra h
+      have reversed := Nat.div_le_div_right (c := preset.SLOTS_PER_EPOCH.toNat)
+        (UInt64.le_iff_toNat_le.mp (UInt64.le_of_lt (UInt64.not_le.mp h)))
+      rw [epoch, origin.targetEpoch] at targetLt
+      have strict := UInt64.lt_iff_toNat_lt.mp targetLt
+      simp only [computeEpochAtSlot, UInt64.toNat_div] at strict
+      omega
+    exact UInt64.le_trans floor slotLe
+
 /-- A latest honest vote supports the safe prefix, or bounded honest stores name a collision.
 
 Each signed origin of the latest message must have a slot that starts at or after `first`.
@@ -293,7 +338,9 @@ private theorem blocks_or_justified_covers {Δ : ℕ} (sync : e.Synchronous Δ)
       Store.isAncestor_of_getCheckpointBlock preGloas checkpoint
     exact Store.isAncestor_trans_of_lt preGloas held known descends covered
 
-/-- An epoch of honest votes gives support, justification coverage, or a store collision.
+/-- An interval of honest votes gives support, justification coverage, or a store collision.
+
+The interval runs over the slots from `begin`, included, to `next`, excluded.
 
 Each honest vote it assumes also passes the committee check in its target state.
 
@@ -304,7 +351,7 @@ The hypothesis on delayed blocks gives the rest of the block handler.
 The root is assumed to fit each finalized checkpoint seen since the safe interval starts.
 
 Finalized-prefix compatibility and nonzero state roots of held blocks are assumed. -/
-private theorem Execution.mem_supportersOf_of_duty_epoch_core {Δ : ℕ} (sync : e.Synchronous Δ)
+private theorem Execution.mem_supportersOf_of_duty_interval_core {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
     (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
@@ -330,9 +377,7 @@ private theorem Execution.mem_supportersOf_of_duty_epoch_core {Δ : ℕ} (sync :
     (nonzero : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
       ∀ (r : Root) (b : BeaconBlock preset fork),
         ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
-    {epoch : Epoch} {begin next : Slot} {beginTime endTime : UInt64}
-    (beginOk : computeStartSlotAtEpoch preset epoch = .ok begin)
-    (nextOk : addChecked begin preset.SLOTS_PER_EPOCH = .ok next)
+    {begin next : Slot} {beginTime endTime : UInt64}
     (beginTimeOk : computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime)
     (endTimeOk : computeTimeAtSlotMs config genesisTimeMs next = .ok endTime)
     (fresh : first ≤ beginTime.toNat) (complete : endTime.toNat ≤ time) {root : Root}
@@ -473,19 +518,127 @@ private theorem Execution.mem_supportersOf_of_duty_epoch_core {Δ : ℕ} (sync :
     ⟨latest, latestOk, rank⟩ | collision
   swap
   · exact .inr collision
-  have dutyEpoch : computeEpochAtSlot preset slot = epoch := by
-    have b := (computeStartSlotAtEpoch_ok_iff.mp beginOk).2
-    have nx := (addChecked_ok_iff.mp nextOk).2
-    have lo := UInt64.le_iff_toNat_le.mp beginLe
-    have hi := UInt64.lt_iff_toNat_lt.mp slotLt
-    apply UInt64.toNat_inj.mp
-    simp only [computeEpochAtSlot, UInt64.toNat_div]
-    exact Nat.div_eq_of_lt_le (by omega) (by rw [Nat.add_mul, Nat.one_mul]; omega)
-  exact (mem_supportersOf_of_latest_rank anchored start preGloas honest receiver
-    latestOk (counted k) upToDate (by omega) dueOk dueLt beginOk beginTimeOk fresh
-    (by simpa [dataEpoch, dutyEpoch] using rank)
+  -- Each signed origin of the latest vote is at or after the duty slot, a lower bound on its start.
+  refine (mem_supportersOf_of_latest_signed anchored start preGloas honest receiver
+    latestOk (counted k) upToDate (by omega) dueOk dueLt ?_
     (fun earlier hfirst htime => safe earlier hfirst (by omega)) known rootAbove active).imp
       Or.inl id
+  intro other signedIn otherTime latestEq seen signedOther otherTimeOk
+  obtain ⟨origin, originIn, originSeen, originEq, originSigned, originVote⟩ :=
+    e.exists_signed_origin_of_latestMessages anchored start receiver latestOk
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
+  -- The two signed origins share the target epoch of the latest vote, so they carry one data.
+  have sameData := data_eq_of_signed_of_target_epoch slots
+    (e.view_subset_sent k w originSeen) (e.view_subset_sent k w seen) originSigned signedOther
+    honest (by
+      have both := originEq.symm.trans latestEq
+      have ranks := congrArg LatestMessage.rank both
+      simpa [LatestMessage.rank, LatestMessage.ofAttestation, notGloas] using ranks)
+  -- The duty vote is a sent message that signs its own data.
+  have dutySent : Message.attestation attestation ∈ (e.world (n + 1)).sent :=
+    e.view_subset_sent (n + 1) v (by simp [Execution.world_succ, vote.sends, World.apply])
+  have dutySigned : (v, attestation.data) ∈
+      statements config checks anchorState anchorBlock (Message.attestation attestation) := by
+    obtain ⟨_, _, _, _, indexedOk, _⟩ := vote.reads
+    obtain ⟨attesters, attestersOk, _⟩ := getAttestingIndices_of_getIndexedAttestation indexedOk
+    obtain ⟨indexed', indexedOk', _, dataEq, _⟩ :=
+      getIndexedAttestation_of_getAttestingIndices attestersOk
+    rw [indexedOk, Except.ok.injEq] at indexedOk'
+    subst indexedOk'
+    refine ⟨(e.world n).state v, indexed, (forward v honest n).reachable, vote.reads, ?_,
+      dataEq.symm⟩
+    have alone := vote.alone
+    simp only [← Array.mem_toList_iff, alone, List.mem_singleton]
+  have floor := latest_slot_floor_of_signed_rank slots preGloas honest dutySent
+    (e.view_subset_sent k w originSeen) dutySigned originSigned originVote
+    (by rw [dataEpoch, dataSlot]) (by rw [← originEq]; exact rank) (UInt64.le_of_eq dataSlot.symm)
+  rw [sameData] at floor
+  obtain ⟨beginTime', beginOk', _, timeLe⟩ :=
+    exists_timeAtSlotMs_of_le (UInt64.le_trans beginLe floor) otherTimeOk
+  have same := Except.ok.inj (beginOk'.symm.trans beginTimeOk)
+  subst beginTime'
+  have timeLe := UInt64.le_iff_toNat_le.mp timeLe
+  omega
+
+/-- An epoch of honest votes gives support, justification coverage, or a store collision.
+
+Each honest vote it assumes also passes the committee check in its target state.
+
+A compatible finalized checkpoint gives the finality check of block validation.
+
+The hypothesis on delayed blocks gives the rest of the block handler.
+
+The root is assumed to fit each finalized checkpoint seen since the safe interval starts.
+
+Finalized-prefix compatibility and nonzero state roots of held blocks are assumed. -/
+private theorem Execution.mem_supportersOf_of_duty_epoch_core {Δ : ℕ} (sync : e.Synchronous Δ)
+    (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
+    {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
+    (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
+      assignment.committee v slot = some committeeIndex →
+      IsAttestationDeadline fork config genesisTimeMs slot deadline →
+      e.startTime ≤ deadline → deadline ≤ time →
+      ∃ n attestation indexed, VoteAt e v slot committeeIndex deadline n attestation indexed ∧
+        ∀ withTarget targetState,
+          ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
+            .ok withTarget →
+          withTarget.checkpointState attestation.data.target = .ok targetState →
+          checkAttestationCommittees targetState attestation = .ok ())
+    (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e time)
+    {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (start : ∀ w ∈ J, e.start w = anchor) (started : e.startTime ≤ first)
+    (chain : ∀ w ∈ J, ∀ i k, i ≤ k → (e.world k).time ≤ time →
+      ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
+        ((e.world i).state w).finalizedCheckpoint.epoch =
+          .ok ((e.world i).state w).finalizedCheckpoint.root)
+    (nonzero : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ (r : Root) (b : BeaconBlock preset fork),
+        ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
+    {epoch : Epoch} {begin next : Slot} {beginTime endTime : UInt64}
+    (_beginOk : computeStartSlotAtEpoch preset epoch = .ok begin)
+    (_nextOk : addChecked begin preset.SLOTS_PER_EPOCH = .ok next)
+    (beginTimeOk : computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime)
+    (endTimeOk : computeTimeAtSlotMs config genesisTimeMs next = .ok endTime)
+    (fresh : first ≤ beginTime.toNat) (complete : endTime.toNat ≤ time) {root : Root}
+    (safe : ∀ earlier, first ≤ earlier → earlier < time → ∀ u ∈ J, ∀ n head,
+      (e.world n).time = earlier →
+      UpToDate config checks sources (e.world n).time ((e.world n).view u)
+        ((e.world n).state u) →
+      ((e.world n).state u).getHead config = .ok head →
+      ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true)
+    {w : ValidatorIndex} (receiver : w ∈ J) {k : ℕ} (atTime : (e.world k).time = time)
+    (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view w)
+      ((e.world k).state w)) {rootBlock : BeaconBlock preset fork}
+    (known : ((e.world k).state w).blocks[root]? = some rootBlock)
+    (rootFinal : ∀ k' ≤ k, first ≤ (e.world k').time →
+      UpToDate config checks sources (e.world k').time ((e.world k').view w)
+        ((e.world k').state w) →
+      (∃ boundary,
+        computeStartSlotAtEpoch preset ((e.world k').state w).finalizedCheckpoint.epoch =
+          .ok boundary ∧ boundary ≤ rootBlock.slot ∧
+        ((e.world k).state w).getCheckpointBlock root
+          ((e.world k').state w).finalizedCheckpoint.epoch =
+            .ok ((e.world k').state w).finalizedCheckpoint.root) ∨
+      ((e.world k).state w).isAncestor
+        ⟨((e.world k').state w).finalizedCheckpoint.root, .pending⟩
+        ⟨root, .pending⟩ = .ok true)
+    {state : BeaconState preset fork} {v : ValidatorIndex} (honest : v ∈ J)
+    (active : v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset)
+    (duty : ∃ slot committeeIndex, begin ≤ slot ∧ slot < next ∧
+      assignment.committee v slot = some committeeIndex) :
+    (v ∈ ((e.world k).state w).supportersOf state ⟨root, .pending⟩ ∨
+      ((e.world k).state w).isAncestor
+        ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩
+        ⟨root, .pending⟩ = .ok true) ∨
+    ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ time ∧ (e.world m).time ≤ time ∧
+      ∃ root collision, Store.findBlockCollision ((e.world n).state u)
+        ((e.world m).state v) [root] = some collision :=
+  e.mem_supportersOf_of_duty_interval_core sync slots preGloas admitted votes fits prompt
+    anchored anchorSlot anchorBoundary start started chain nonzero beginTimeOk endTimeOk fresh
+    complete safe receiver atTime upToDate known rootFinal honest active duty
 
 private theorem justified_epoch_in_horizon {anchor : Store preset fork} {time : ℕ} {horizon : Epoch}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)

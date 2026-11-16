@@ -5,6 +5,10 @@ public import EthLib.Consensus.Proofs.ForkChoice.HonestVotes
 import EthLib.Consensus.Proofs.ForkChoice.HonestEquivocators
 import EthLib.Consensus.Proofs.ForkChoice.BlockAgreement
 public import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
+public import EthLib.Consensus.Proofs.ForkChoice.SharedAncestry
+public import EthLib.Consensus.Proofs.ForkChoice.Supporters
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.DutySupport
 import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
 import EthLib.Consensus.Proofs.ForkChoice.CheckpointAncestry
 import EthLib.Consensus.Proofs.ForkChoice.SiblingCap
@@ -1649,7 +1653,8 @@ public def SelectedCheckpoint (store : Store preset fork) (checkpoint : Checkpoi
       ∃ r : Root, store.unrealizedJustifications[r]? = some checkpoint)
 
 /-- Selected checkpoints agree with finalized roots through the approved horizon. -/
-private def FinalizedCheckpointCompatibility (horizon : Epoch) (last : Nat) : Prop :=
+@[expose]
+public def FinalizedCheckpointCompatibility (horizon : Epoch) (last : Nat) : Prop :=
   ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
     ∀ checkpoint : Checkpoint, SelectedCheckpoint ((e.world j).state b) checkpoint →
     ((e.world i).state a).finalizedCheckpoint.epoch ≤ checkpoint.epoch →
@@ -1659,6 +1664,7 @@ private def FinalizedCheckpointCompatibility (horizon : Epoch) (last : Nat) : Pr
         .ok ((e.world i).state a).finalizedCheckpoint.root
 
 /-- Honest stores have current epochs within the approved horizon. -/
+@[expose]
 public def HonestStoreEpochsBounded (horizon : Epoch) (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ last →
     ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon
@@ -2009,6 +2015,7 @@ private theorem previousBlockSlot_le_previousCurrentSlot
   exact UInt64.le_iff_toNat_le.mpr (by omega)
 
 /-- Honest stores do not hold the parent of the anchor before the deadline. -/
+@[expose]
 public def AnchorParentAbsent (last : Nat) : Prop :=
   ∀ a ∈ J, ∀ i, (e.world i).time ≤ last →
     ((e.world i).state a).blocks[anchorBlock.parentRoot]? = none
@@ -2126,7 +2133,7 @@ private theorem guarded_parentVoters_le [DecidablePred (· ∈ J)]
     ⟨inCommittee, ⟨validator, found, flags.2, flags.1⟩, clean, vote⟩, honest⟩
 
 /-- A source margin and approved drift give head ancestry or a collision at the caller's parent. -/
-private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
+public theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
@@ -3118,7 +3125,7 @@ public def CheckpointStakeCeiling (cap last : Nat) : Prop :=
 /-- Endpoint observations supply receiver reads or honest-store collision evidence.
 
 Both committee windows remain observations, not consequences of committee agreement. -/
-private theorem receiver_reads_of_historical_observations {anchor : Store preset fork}
+public theorem receiver_reads_of_historical_observations {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
@@ -3346,21 +3353,8 @@ private theorem notSlashed_checkpointState {anchor : Store preset fork}
   intro v member
   exact (notSlashed_lookahead advanced v).mpr (flags checkpoint.root base stored v member)
 
-/-- Honest signatures for one target epoch carry the same attestation data. -/
-private theorem data_eq_of_signed_of_target_epoch (slots : 0 < config.SLOT_DURATION_MS)
-    {n k : ℕ} {first second : Message preset fork} (sentFirst : first ∈ (e.world n).sent)
-    (sentSecond : second ∈ (e.world k).sent) {v : ValidatorIndex} {data other : AttestationData}
-    (signedFirst : (v, data) ∈ statements config checks anchorState anchorBlock first)
-    (signedSecond : (v, other) ∈ statements config checks anchorState anchorBlock second)
-    (honest : v ∈ J) (epoch : data.target.epoch = other.target.epoch) : data = other := by
-  have nonslashable := e.isSlashableAttestationData_honest slots (max n k) honest
-    (e.monotone_sent (Nat.le_max_left n k) sentFirst)
-    (e.monotone_sent (Nat.le_max_right n k) sentSecond) signedFirst signedSecond
-  by_contra different
-  simp [isSlashableAttestationData, different, epoch] at nonslashable
-
 /-- Equal-rank honest latest votes agree before Gloas, even across different stores. -/
-private theorem latest_eq_of_rank_eq (slots : 0 < config.SLOT_DURATION_MS)
+public theorem latest_eq_of_rank_eq (slots : 0 < config.SLOT_DURATION_MS)
     (preGloas : fork < .glamsterdam) {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
@@ -3380,38 +3374,6 @@ private theorem latest_eq_of_rank_eq (slots : 0 < config.SLOT_DURATION_MS)
     (e.view_subset_sent n u seenFirst) (e.view_subset_sent k w seenSecond)
     signedFirst signedSecond honest epoch
   simp only [LatestMessage.ofAttestation, same]
-
-/-- A latest vote at or above a signed vote's rank cannot come from an older slot. -/
-private theorem latest_slot_floor_of_signed_rank
-    (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
-    {v : ValidatorIndex} (honest : v ∈ J) {n k : ℕ}
-    {message other : Message preset fork}
-    (sent : message ∈ (e.world n).sent) (sentOther : other ∈ (e.world k).sent)
-    {data : AttestationData} {attestation : Attestation preset fork}
-    (signed : (v, data) ∈ statements config checks anchorState anchorBlock message)
-    (signedOther : (v, attestation.data) ∈
-      statements config checks anchorState anchorBlock other)
-    {store : Store preset fork} (origin : store.VoteOrigin config v attestation)
-    (epoch : data.target.epoch = computeEpochAtSlot preset data.slot)
-    (rank : (LatestMessage.ofAttestation (fork := fork) attestation).rank ≥ data.target.epoch)
-    {slot : Slot} (floor : slot ≤ data.slot) : slot ≤ attestation.data.slot := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
-  have targetLe : data.target.epoch ≤ attestation.data.target.epoch := by
-    simpa [LatestMessage.rank, LatestMessage.ofAttestation, notGloas] using rank
-  by_cases same : data.target.epoch = attestation.data.target.epoch
-  · have dataEq := data_eq_of_signed_of_target_epoch slots sent sentOther
-      signed signedOther honest same
-    exact dataEq ▸ floor
-  · have targetLt := UInt64.lt_of_le_of_ne targetLe same
-    have slotLe : data.slot ≤ attestation.data.slot := by
-      by_contra h
-      have reversed := Nat.div_le_div_right (c := preset.SLOTS_PER_EPOCH.toNat)
-        (UInt64.le_iff_toNat_le.mp (UInt64.le_of_lt (UInt64.not_le.mp h)))
-      rw [epoch, origin.targetEpoch] at targetLt
-      have strict := UInt64.lt_iff_toNat_lt.mp targetLt
-      simp only [computeEpochAtSlot, UInt64.toNat_div] at strict
-      omega
-    exact UInt64.le_trans floor slotLe
 
 end Models.Network
 
