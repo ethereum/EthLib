@@ -5,6 +5,7 @@ import EthLib.Consensus.Proofs.ForkChoice.HonestVotes
 import EthLib.Consensus.Proofs.ForkChoice.HonestEquivocators
 import EthLib.Consensus.Proofs.ForkChoice.BlockAgreement
 import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
+import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
 import EthLib.Consensus.Proofs.Transition.FfgStake
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 
@@ -1447,13 +1448,47 @@ private theorem registry_of_honest_block {anchor : Store preset fork}
     walk found startOk bound baseFound boundaryBaseFound advanced identity sourceWalk
     sourceBlockFound sourceStart sourceFound finalized finite
 
+/-- An invariant state's three old checkpoints are below the far-future epoch. -/
+private theorem oldCheckpoints_finite {state : BeaconState preset fork}
+    (holds : Invariant state) :
+    state.currentJustifiedCheckpoint.epoch < FAR_FUTURE_EPOCH ∧
+      state.previousJustifiedCheckpoint.epoch < FAR_FUTURE_EPOCH ∧
+      state.finalizedCheckpoint.epoch < FAR_FUTURE_EPOCH := by
+  have settled := UInt64.le_iff_toNat_le.mp holds.settled
+  rw [getPreviousEpoch_toNat] at settled
+  have current := (getCurrentEpoch state).toNat_lt
+  have previous := UInt64.le_iff_toNat_le.mp holds.ordered.2
+  have finalized := UInt64.le_iff_toNat_le.mp holds.ordered.1
+  have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  simp only [UInt64.lt_iff_toNat_lt, far]
+  omega
+
+/-- Exact checkpoint origins preserve finite finality from a finite anchor epoch. -/
+private theorem finalized_finite_of_anchor {store : Store preset fork}
+    (reached : Store.Reachable config anchorState anchorBlock store)
+    (sound : Invariant anchorState)
+    (anchorFinite : getCurrentEpoch anchorState < FAR_FUTURE_EPOCH) :
+    store.finalizedCheckpoint.epoch < FAR_FUTURE_EPOCH := by
+  rcases reached.finalized_origins _ (.inl rfl) with
+    ⟨_, _, same⟩ | ⟨_, state, held, same⟩ | ⟨_, state, pulled, held, run, same⟩
+  · simpa only [same] using anchorFinite
+  · simpa only [same] using (oldCheckpoints_finite ((reached.ordered sound).2 held)).2.2
+  · rw [same]
+    have old := oldCheckpoints_finite ((reached.ordered sound).2 held)
+    rcases processJustificationAndFinalization_ok run with rfl | ⟨_, _, _, weighed⟩
+    · exact old.2.2
+    · rcases (weighJustificationAndFinalization_checkpoints weighed).2.2.1 with same | same | same
+      · exact same ▸ old.2.2
+      · exact same ▸ old.2.1
+      · exact same ▸ old.1
+
 /-- A held head supplies registry lookups for the receiver's checked older-window maximum.
 
 No cached target-state finality bound is used in this construction. -/
 private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
-    (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (positive : 0 < preset.SLOTS_PER_EPOCH) (early : fork < .glamsterdam)
     {u : ValidatorIndex} (honest : u ∈ J) {n : Nat}
     {boundaryBase source base cached : BeaconState preset fork}
@@ -1477,7 +1512,10 @@ private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
     (headBlockFound : ((e.world n).state u).blocks[head]? = some headBlock)
     (headStateFound : ((e.world n).state u).blockStates[head]? = some source)
     (headBound : start ≤ headBlock.slot)
-    (finite : ((e.world n).state u).finalizedCheckpoint.epoch < FAR_FUTURE_EPOCH)
+    {parent : BeaconBlock preset fork} {parentRoot : Root}
+    (parentFound : ((e.world n).state u).blocks[parentRoot]? = some parent)
+    (parentNext : addChecked parent.slot 1 = .ok first)
+    (anchorParentAbsent : ((e.world n).state u).blocks[anchorBlock.parentRoot]? = none)
     (read : caller.computeCommitteeWeightBetweenSlots callerHead callerState first oldLast =
       .ok maximum)
     (windowOk : ((e.world n).state u).getCommitteesBetweenSlots head first last = .ok window)
@@ -1486,7 +1524,24 @@ private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
       (getActiveValidatorIndices cached (getCurrentEpoch cached)).toFinset ≤ 2 * 10 ^ 17) :
     ∃ result, ((e.world n).state u).computeCommitteeWeightBetweenSlots head cached first oldLast =
       .ok result := by
-  have inside := registry_of_honest_block anchorStore anchored anchorInvariant anchorSlot
+  have reached := e.reachable
+    (fun w member => (anchored w member) ▸ Store.Reachable.anchor anchorStore) n u honest
+  obtain ⟨_, _, anchorFound⟩ := reached.anchor_known
+  have anchorLe := reached.orphans_le (UInt64.le_of_eq anchorSlot)
+    anchorFound anchorParentAbsent parentFound
+  have anchorFinite : getCurrentEpoch anchorState < FAR_FUTURE_EPOCH := by
+    have step := (addChecked_ok_iff.mp parentNext).1
+    have le := UInt64.le_iff_toNat_le.mp anchorLe
+    have epoch := getCurrentEpoch_toNat_le_slot anchorState
+    rw [anchorSlot] at le
+    have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+    rw [UInt64.lt_iff_toNat_lt, far]
+    have one : (1 : UInt64).toNat = 1 := rfl
+    rw [one] at step
+    omega
+  have finite := finalized_finite_of_anchor reached anchorInvariant anchorFinite
+  have inside := registry_of_honest_block anchorStore anchored anchorInvariant
+    (UInt64.le_of_eq anchorSlot)
     positive early honest boundaryBaseFound startOk walk found bound baseFound advanced
     headWalk headBlockFound headStateFound headBound finite
   obtain ⟨total, totalOk⟩ := activeTotal_exists
