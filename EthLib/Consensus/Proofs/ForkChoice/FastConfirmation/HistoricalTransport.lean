@@ -2059,9 +2059,9 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
       ((e.world n).state u).justifiedCheckpoint = .ok state)
     (tree : ((e.world n).state u).getFilteredNodeTree config = .ok nodes)
     (found : ((e.world n).state u).blocks[root]? = some block)
-    {caller : Store preset fork}
-    (callerReached : Store.Reachable config anchorState anchorBlock caller)
-    (callerParentFound : caller.blocks[block.parentRoot]? = some parent)
+    {caller : ValidatorIndex} {call : Nat}
+    (callerHonest : caller ∈ J) (callerTime : (e.world call).time ≤ last)
+    (callerParentFound : ((e.world call).state caller).blocks[block.parentRoot]? = some parent)
     (slotRead : ((e.world n).state u).getCurrentSlot config = .ok current)
     (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok epoch)
     (horizon : epoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2)
@@ -2085,11 +2085,9 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
         {v ∈ ((e.world n).state u).parentVotersOf state participants block parent | v ∈ J}))
     (scoreOk : computeProposerScore config state = .ok (score : Gwei)) :
     ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true ∨
-    ∃ leftBlock rightBlock,
-      Store.findBlockCollision caller ((e.world n).state u) [block.parentRoot] =
-        some (block.parentRoot, leftBlock, rightBlock) ∧ leftBlock ≠ rightBlock ∧
-      Serialization.Ssz.SszType.hashTreeRoot leftBlock = .ok block.parentRoot ∧
-      Serialization.Ssz.SszType.hashTreeRoot rightBlock = .ok block.parentRoot := by
+    ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ last ∧ (e.world j).time ≤ last ∧
+      ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
+        some evidence := by
   classical
   rcases route with justifiedAbove | ⟨viable, descends, margin⟩
   · obtain ⟨justified, justifiedKnown⟩ := Store.filterNodeTree_known tree
@@ -2099,10 +2097,15 @@ private theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
   have reached := e.forwardReachableWith
     (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
     n u honest
+  have callerReached := e.reachable
+    (fun w member => (anchored w member) ▸ Store.Reachable.anchor anchorStore)
+    call caller callerHonest
   rcases parent_read_or_collision callerReached reached.reachable callerParentFound descends with
     parentFound | collision
   swap
-  · exact .inr collision
+  · obtain ⟨leftBlock, rightBlock, searched, _, _, _⟩ := collision
+    exact .inr ⟨caller, callerHonest, u, honest, call, n, callerTime, time, block.parentRoot,
+      (block.parentRoot, leftBlock, rightBlock), searched⟩
   left
   have lower := reached.reachable.parentsBelow anchorSlot (absent u honest n time)
   have within := BeaconState.registryWithinLimit_of_lt before state
