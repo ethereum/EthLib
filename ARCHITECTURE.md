@@ -334,7 +334,7 @@ Existing ones, such as `ExecutionEngine`, `SignatureChecks` and `BlockSources`, 
 
 The conversions between Lean values and Python values, `ToPy`, `FromPy`, `ToPyItems` and `FromPyItems`, are not operation boundaries.
 No specification takes them as an argument, so the conversion types and the classes `LawfulPy` and `LawfulPyItems` that state their laws belong to `PythonConversions`.
-Their instances live in `Base/Proofs/Exports/PyValue.lean` and enter the exports through `public meta import`.
+The instances for the base types live in `Base/Proofs/Exports/PyValue.lean` and enter the exports through `public meta import`.
 They check the conversions during elaboration and produce no runtime dependency on that property module.
 
 The card is a list in the doc comment, with one item per field, in this order:

@@ -3,7 +3,7 @@ module
 public import EthLib.Base.Exports.PyValueCore
 
 /-!
-# Proofs: `Base.Exports.PyValue`
+# Proofs: `Base.Exports.PyValueCore`
 
 Reading back the Python value of a value gives that value, for each type that crosses the boundary.
 

@@ -2,8 +2,10 @@
 
 import ast
 import json
+import re
 import tempfile
 import unittest
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class SetupRuntimeTests(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.work = tempfile.TemporaryDirectory()
         self.addCleanup(self.work.cleanup)
         self.root = Path(self.work.name)
@@ -32,7 +34,7 @@ class SetupRuntimeTests(unittest.TestCase):
         }
         exec(compile(ast.Module(body=helpers, type_ignores=[]), "setup.py", "exec"), self.namespace)
 
-    def write_module(self, module, imports=()):
+    def write_module(self, module: str, imports: Sequence[list[str | bool]] = ()) -> Path:
         path = Path(*module.split("."))
         source = self.root / path.with_suffix(".lean")
         source.parent.mkdir(parents=True, exist_ok=True)
@@ -45,10 +47,10 @@ class SetupRuntimeTests(unittest.TestCase):
         obj.touch()
         return obj
 
-    def collect(self):
+    def collect(self) -> list[str]:
         return self.namespace["_collect_lean_objects"]()
 
-    def test_runtime_walk_keeps_private_and_all_imports_but_skips_meta_closure(self):
+    def test_runtime_walk_keeps_private_and_all_imports_but_skips_meta_closure(self) -> None:
         root = self.write_module(
             "EthLib.Exports",
             [
@@ -67,14 +69,14 @@ class SetupRuntimeTests(unittest.TestCase):
         self.write_module("EthLib.Base.Proofs.Other")
         self.assertEqual(self.collect(), sorted(map(str, [root, probe, value])))
 
-    def test_ordinary_proof_import_is_selected_so_the_boundary_check_can_reject_it(self):
+    def test_ordinary_proof_import_is_selected_so_the_boundary_check_can_reject_it(self) -> None:
         root = self.write_module(
             "EthLib.Exports", [["EthLib.Base.Proofs.Laws", False, False, False]]
         )
         laws = self.write_module("EthLib.Base.Proofs.Laws")
         self.assertEqual(self.collect(), sorted(map(str, [root, laws])))
 
-    def test_ordinary_import_wins_when_the_same_module_is_also_meta_imported(self):
+    def test_ordinary_import_wins_when_the_same_module_is_also_meta_imported(self) -> None:
         root = self.write_module(
             "EthLib.Exports",
             [
@@ -85,34 +87,39 @@ class SetupRuntimeTests(unittest.TestCase):
         value = self.write_module("EthLib.Base.Value")
         self.assertEqual(self.collect(), sorted(map(str, [root, value])))
 
-    def test_unreachable_and_removed_module_objects_do_not_enter_the_link(self):
+    def test_unreachable_and_removed_module_objects_do_not_enter_the_link(self) -> None:
         root = self.write_module("EthLib.Exports")
         self.write_module("EthLib.Base.Unreachable")
         self.write_module("EthLib.Base.Removed")
         (self.root / "EthLib/Base/Removed.lean").unlink()
         self.assertEqual(self.collect(), [str(root)])
 
-    def test_missing_runtime_object_fails_instead_of_shortening_the_link(self):
+    def test_missing_runtime_object_fails_instead_of_shortening_the_link(self) -> None:
         self.write_module("EthLib.Exports", [["EthLib.Base.Value", False, False, False]])
-        self.write_module("EthLib.Base.Value").unlink()
-        with self.assertRaisesRegex(RuntimeError, "runtime Lean object is missing"):
+        obj = self.write_module("EthLib.Base.Value")
+        obj.unlink()
+        message = f"runtime Lean object is missing: {obj}"
+        with self.assertRaisesRegex(RuntimeError, rf"\A{re.escape(message)}\Z"):
             self.collect()
 
-    def test_missing_runtime_source_fails_instead_of_using_its_stale_object(self):
+    def test_missing_runtime_source_fails_instead_of_using_its_stale_object(self) -> None:
         self.write_module("EthLib.Exports", [["EthLib.Base.Value", False, False, False]])
         self.write_module("EthLib.Base.Value")
-        (self.root / "EthLib/Base/Value.lean").unlink()
-        with self.assertRaisesRegex(RuntimeError, "runtime Lean source is missing"):
+        source = self.root / "EthLib/Base/Value.lean"
+        source.unlink()
+        message = f"runtime Lean source is missing: {source}"
+        with self.assertRaisesRegex(RuntimeError, rf"\A{re.escape(message)}\Z"):
             self.collect()
 
-    def test_metadata_must_match_the_module_and_supported_schema(self):
+    def test_metadata_must_match_the_module_and_supported_schema(self) -> None:
         self.write_module("EthLib.Exports")
         metadata = self.lean / "EthLib/Exports.ilean"
         for changes in [{"version": 4}, {"module": "EthLib.Other"}]:
             with self.subTest(changes=changes):
                 data = {"version": 5, "module": "EthLib.Exports", "directImports": []}
                 metadata.write_text(json.dumps(data | changes))
-                with self.assertRaisesRegex(RuntimeError, "unsupported or mismatched"):
+                message = f"unsupported or mismatched Lean import metadata: {metadata}"
+                with self.assertRaisesRegex(RuntimeError, rf"\A{re.escape(message)}\Z"):
                     self.collect()
 
 

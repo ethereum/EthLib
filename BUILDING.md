@@ -76,6 +76,7 @@ The conversion library imports only the Lean toolchain, so both exports and prop
 The exports library has one root and a library name that matches its module initializer.
 Lake then treats it as a plugin, and Lean loads the specification plugin before it.
 The export globs assign each domain's export modules to that library, except for the separately owned conversion core.
+So each module of `Base/Exports/` is listed by name; a missing entry fails the build with a cycle.
 This load order lets a property module import a C export.
 
 Conversion laws enter the exports through `public meta import` during elaboration.

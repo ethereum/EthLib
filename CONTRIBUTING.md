@@ -75,6 +75,7 @@ Proofs live in their own Lake library, so the library code builds and links with
 
 The C exports live in a third library, `Exports`, so a Lean project that imports the specification gets no `@[export]` symbol.
 A new domain with exports adds its export tree to the `globs` of the `Exports` library in `lakefile.lean`.
+A new module under `Base/Exports/` is listed there by name, since the conversion core of that tree belongs to another library.
 Keep `EthLib.Exports` as its only root so that it remains a native plugin.
 
 The Python conversion core and its law proofs form `PythonConversions`, which both the exports and the remaining proofs can import without a cycle between native libraries.

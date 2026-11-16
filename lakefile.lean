@@ -101,6 +101,8 @@ The core imports only the Lean toolchain, and the law module imports only the co
 
 These modules belong to neither `Exports` nor `Proofs`.
 
+Lake assigns a module to the last library whose globs match it, so this block stays after `Proofs`.
+
 A downstream project can then precompile the exports without a native library cycle.
 
 The bindings link the core's runtime objects, but not the meta-imported law module. -/
