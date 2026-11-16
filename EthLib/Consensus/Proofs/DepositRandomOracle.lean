@@ -228,16 +228,8 @@ theorem collision_of_extractDeposits {cache : HashOracle.QueryCache} {claim : De
     by_cases sameLeaf : firstLeaf = secondLeaf
     · -- One root of two different data, so the chase down both roots finds a collision.
       subst sameLeaf
-      have read : ∀ {root : Except Err Bytes}, root >>= toChunk = .ok firstLeaf →
-          root = .ok firstLeaf.toArray := by
-        intro root hread
-        cases root with
-        | error => simp [bind, Except.bind] at hread
-        | ok bytes =>
-          simp only [bind, Except.bind, toChunk_ok_iff] at hread
-          rw [hread]
-      rw [read hfirstLeaf] at hfirst
-      rw [read hsecondLeaf] at hsecond
+      rw [eq_ok_of_bind_toChunk hfirstLeaf] at hfirst
+      rw [eq_ok_of_bind_toChunk hsecondLeaf] at hsecond
       exact (collision_or_eq_of_hashTreeRootM_depositData hfirst hsecond).elim id
         fun same => absurd same differ
     · -- Two different roots climb to one root, so the search finds a collision of the climbs.

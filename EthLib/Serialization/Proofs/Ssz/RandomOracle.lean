@@ -29,6 +29,8 @@ So the birthday bound of the oracle bounds the probability of a win.
 
 The bound counts every query of the experiment, the adversary's and the extraction's.
 
+A perfect subtree makes at most one oracle call per inner node, and its replay caches its messages.
+
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2.
 
 <https://cseweb.ucsd.edu/~mihir/papers/ro.pdf>
@@ -306,6 +308,100 @@ theorem cached_of_rehash {cache : HashOracle.QueryCache} {tree : CommitmentTree}
     · rcases List.mem_append.mp hx with hx | hx
       · exact ihLeft hleft x hx
       · exact ihRight hright x hx
+
+/-- A fold of two nodes makes one oracle call. -/
+theorem combineM_queryBound (left right : Bytes) :
+    IsQueryBoundP (combineM queryHash left right) (fun _ => True) 1 := by
+  simp [combineM, queryHash]
+
+/-- The root of an all-zero subtree makes one oracle call per level. -/
+theorem zeroSubtreeM_queryBound (depth : Nat) :
+    IsQueryBoundP (zeroSubtreeM queryHash depth) (fun _ => True) depth := by
+  induction depth with
+  | zero => trivial
+  | succ depth ih => exact isQueryBoundP_bind ih fun below _ => combineM_queryBound below below
+
+/-- The root of a perfect subtree makes at most one oracle call per inner node.
+
+A half past the data is an all-zero subtree, whose one call per level is within that count. -/
+theorem subtreeAtM_queryBound (chunks : Array Bytes) (depth start : Nat) :
+    IsQueryBoundP (subtreeAtM oracleHasher chunks depth start) (fun _ => True)
+      (2 ^ depth - 1) := by
+  induction depth generalizing start with
+  | zero =>
+    unfold subtreeAtM
+    split
+    · exact zeroSubtreeM_queryBound 0
+    · trivial
+  | succ depth ih =>
+    have below : depth + 1 < 2 ^ (depth + 1) := Nat.lt_two_pow_self
+    have half : 1 ≤ 2 ^ depth := Nat.one_le_two_pow
+    unfold subtreeAtM
+    split
+    · exact (zeroSubtreeM_queryBound (depth + 1)).mono (by omega)
+    · refine (isQueryBoundP_bind (ih start) fun _ _ =>
+        isQueryBoundP_bind (ih (start + 2 ^ depth)) fun _ _ =>
+          combineM_queryBound _ _).mono ?_
+      rw [Nat.pow_succ]
+      omega
+
+/-- A replayed subtree root caches every message of its perfect tree, with the answer of the table.
+
+It needs the table to agree with the cache. -/
+theorem cached_of_subtreeAtM {cache : HashOracle.QueryCache} {f : QueryImpl HashOracle Id}
+    (hf : cache.AgreesWithFn f) {chunks : Array Bytes} {depth start : Nat} {root : Bytes}
+    (hrun : simulateQ cache.toPartialImpl (subtreeAtM oracleHasher chunks depth start) =
+      some root) :
+    ∀ x ∈ (CommitmentTree.perfect depth fun i => padded zeroChunk chunks (start + i)).messages
+        (tableHash f),
+      cache (ByteArray.mk x) = some (f (ByteArray.mk x)) := by
+  induction depth generalizing start root with
+  | zero => simp [CommitmentTree.perfect, CommitmentTree.messages]
+  | succ depth ih =>
+    -- Both halves are replayed, and the parent hashes their two roots.
+    obtain ⟨left, right, hleft, hright, hparent⟩ : ∃ left right,
+        simulateQ cache.toPartialImpl (subtreeAtM oracleHasher chunks depth start) = some left ∧
+        simulateQ cache.toPartialImpl (subtreeAtM oracleHasher chunks depth (start + 2 ^ depth)) =
+          some right ∧
+        simulateQ cache.toPartialImpl (combineM queryHash left right) = some root := by
+      unfold subtreeAtM at hrun
+      split at hrun
+      · rename_i past
+        -- Past the data, both halves are the all-zero subtree one level below.
+        have zero : ∀ position, position ≥ chunks.size →
+            subtreeAtM oracleHasher chunks depth position = zeroSubtreeM queryHash depth := by
+          intro position beyond
+          unfold subtreeAtM
+          rw [ite_eq_left_of_eq_true _ _ (eq_true beyond)]
+          rfl
+        simp only [oracleHasher, Hasher.ofHash, zeroSubtreeM, simulateQ_bind] at hrun
+        obtain ⟨below, hbelow, hroot⟩ := Option.bind_eq_some_iff.mp hrun
+        exact ⟨below, below, by rw [zero start past]; exact hbelow,
+          by rw [zero _ (Nat.le_add_right_of_le past)]; exact hbelow, hroot⟩
+      · simp only [simulateQ_bind] at hrun
+        obtain ⟨left, hleft, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+        obtain ⟨right, hright, hroot⟩ := Option.bind_eq_some_iff.mp hrun
+        exact ⟨left, right, hleft, hright, hroot⟩
+    -- Each replayed half is the root of its perfect tree under the table.
+    have rooted : ∀ {position : Nat} {node : Bytes},
+        simulateQ cache.toPartialImpl (subtreeAtM oracleHasher chunks depth position) =
+          some node →
+        (CommitmentTree.perfect depth fun i => padded zeroChunk chunks (position + i)).root
+          (tableHash f) = node := by
+      intro position node hnode
+      rw [CommitmentTree.perfect_subtreeAtM, ← evalWithAnswerFn_subtreeAtM]
+      exact cache.evalWithAnswerFn_eq_of_agreesWithFn hf _ hnode
+    intro x hx
+    simp only [CommitmentTree.perfect, CommitmentTree.messages, List.mem_cons, List.mem_append,
+      show ∀ i, start + (i + 2 ^ depth) = start + 2 ^ depth + i from fun i => by omega] at hx
+    rcases hx with rfl | hx | hx
+    · rw [rooted hleft, rooted hright]
+      simp only [combineM, simulateQ_bind] at hparent
+      obtain ⟨_, hquery, -⟩ := Option.bind_eq_some_iff.mp hparent
+      obtain ⟨digest, hdigest⟩ := cached_of_queryHash hquery
+      rw [hdigest, hf hdigest]
+    · exact ih hleft x hx
+    · exact ih hright x hx
 
 /-- Two different inputs with one digest of a table collide in a cache.
 
