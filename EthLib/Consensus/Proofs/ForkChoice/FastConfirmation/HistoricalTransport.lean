@@ -1406,6 +1406,29 @@ variable {config : Config} {checks : SignatureChecks} {sources : BlockSources pr
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
+/-- The checkpoints selected by the approved historical transport endpoint. -/
+private def SelectedCheckpoint (store : Store preset fork) (checkpoint : Checkpoint) : Prop :=
+  checkpoint = store.justifiedCheckpoint ∨ checkpoint = store.unrealizedJustifiedCheckpoint ∨
+    GENESIS_EPOCH < checkpoint.epoch ∧
+      ((∃ (r : Root) (st : BeaconState preset fork), store.blockStates[r]? = some st ∧
+        checkpoint = st.currentJustifiedCheckpoint) ∨
+      ∃ r : Root, store.unrealizedJustifications[r]? = some checkpoint)
+
+/-- Selected checkpoints agree with finalized roots through the approved horizon. -/
+private def FinalizedCheckpointCompatibility (horizon : Epoch) (last : Nat) : Prop :=
+  ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
+    ∀ checkpoint : Checkpoint, SelectedCheckpoint ((e.world j).state b) checkpoint →
+    ((e.world i).state a).finalizedCheckpoint.epoch ≤ checkpoint.epoch →
+    checkpoint.epoch ≤ horizon →
+    ((e.world j).state b).getCheckpointBlock checkpoint.root
+      ((e.world i).state a).finalizedCheckpoint.epoch =
+        .ok ((e.world i).state a).finalizedCheckpoint.root
+
+/-- Honest stores have current epochs within the approved horizon. -/
+private def HonestStoreEpochsBounded (horizon : Epoch) (last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ last →
+    ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon
+
 /-- Recent vote targets and the actual head have a common committee-preserving history. -/
 private def VoteCommitteeCommonHistory (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
@@ -1704,6 +1727,28 @@ private theorem finalized_finite_of_anchor {store : Store preset fork}
       · exact same ▸ old.2.1
       · exact same ▸ old.1
 
+/-- A held block with a checked successor excludes the far-future anchor epoch. -/
+private theorem anchor_finite_of_parentNext {store : Store preset fork}
+    (reached : Store.Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    {parent : BeaconBlock preset fork} {root : Root} {first : Slot}
+    (parentFound : store.blocks[root]? = some parent)
+    (anchorParentAbsent : store.blocks[anchorBlock.parentRoot]? = none)
+    (parentNext : addChecked parent.slot 1 = .ok first) :
+    getCurrentEpoch anchorState < FAR_FUTURE_EPOCH := by
+  obtain ⟨_, _, anchorFound⟩ := reached.anchor_known
+  have anchorLe := reached.orphans_le (UInt64.le_of_eq anchorSlot)
+    anchorFound anchorParentAbsent parentFound
+  have step := (addChecked_ok_iff.mp parentNext).1
+  have le := UInt64.le_iff_toNat_le.mp anchorLe
+  have epoch := getCurrentEpoch_toNat_le_slot anchorState
+  rw [anchorSlot] at le
+  have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  rw [UInt64.lt_iff_toNat_lt, far]
+  have one : (1 : UInt64).toNat = 1 := rfl
+  rw [one] at step
+  omega
+
 /-- A held head supplies registry lookups for the receiver's checked older-window maximum.
 
 No cached target-state finality bound is used in this construction. -/
@@ -1776,19 +1821,8 @@ private theorem receiver_oldMaximum_of_honest_block {anchor : Store preset fork}
   left
   have parentFound := receiverParentFound
   have reached := reachableAt u honest n
-  obtain ⟨_, _, anchorFound⟩ := reached.anchor_known
-  have anchorLe := reached.orphans_le (UInt64.le_of_eq anchorSlot)
-    anchorFound anchorParentAbsent parentFound
-  have anchorFinite : getCurrentEpoch anchorState < FAR_FUTURE_EPOCH := by
-    have step := (addChecked_ok_iff.mp parentNext).1
-    have le := UInt64.le_iff_toNat_le.mp anchorLe
-    have epoch := getCurrentEpoch_toNat_le_slot anchorState
-    rw [anchorSlot] at le
-    have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-    rw [UInt64.lt_iff_toNat_lt, far]
-    have one : (1 : UInt64).toNat = 1 := rfl
-    rw [one] at step
-    omega
+  have anchorFinite := anchor_finite_of_parentNext reached anchorSlot parentFound
+    anchorParentAbsent parentNext
   have finite := finalized_finite_of_anchor reached anchorInvariant anchorFinite
   have inside := registry_of_honest_block anchorStore anchored anchorInvariant
     (UInt64.le_of_eq anchorSlot)
@@ -2093,6 +2127,138 @@ private theorem registry_of_genesis_window {anchor : Store preset fork}
     (Store.blockState_ok_iff.mpr headStateFound) window v member
   obtain ⟨validator, found⟩ := inside epoch v.toNat active
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
+
+/-- A nonidentity head supplies registry containment through its realized finalized boundary.
+
+A head at the finalized root uses prefix growth, even when its block precedes the boundary. -/
+private theorem registry_of_nongenesis_window {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (positive : 0 < preset.SLOTS_PER_EPOCH) (slots : 0 < config.SLOT_DURATION_MS)
+    (early : fork < .glamsterdam) {horizon : Epoch} {time : Nat}
+    (compatible : FinalizedCheckpointCompatibility (e := e) horizon time)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
+    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat} (inTime : (e.world n).time ≤ time)
+    {head : ForkChoiceNode} {headState state : BeaconState preset fork}
+    {first last : Slot} {current : Epoch} {members : Std.TreeSet ValidatorIndex}
+    (headRead : ((e.world n).state u).getHead config = .ok head)
+    (different : head.root ≠ ((e.world n).state u).justifiedCheckpoint.root)
+    (notGenesis : ((e.world n).state u).finalizedCheckpoint.epoch ≠ GENESIS_EPOCH)
+    (headStateFound : ((e.world n).state u).blockStates[head.root]? = some headState)
+    {parent : BeaconBlock preset fork} {parentRoot : Root}
+    (parentFound : ((e.world n).state u).blocks[parentRoot]? = some parent)
+    (unknown : ((e.world n).state u).blocks[anchorBlock.parentRoot]? = none)
+    (parentNext : addChecked parent.slot 1 = .ok first)
+    (cached : ((e.world n).state u).checkpointState
+      ((e.world n).state u).justifiedCheckpoint = .ok state)
+    (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok current)
+    (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first last =
+      .ok members) :
+    ∀ v ∈ members, ∃ validator, validatorAt state v = .ok validator := by
+  have reached := e.forwardReachableWith
+    (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
+    n u honest
+  have viable : ((e.world n).state u).isViableLeaf config head = .ok true := by
+    rcases Store.getHead_viable headRead with viable | ⟨_, same⟩
+    · exact viable
+    · exact False.elim (different (congrArg ForkChoiceNode.root same))
+  have headWalk := (Store.isViableLeaf_finalized viable).resolve_left notGenesis
+  obtain ⟨headBlock, headFound⟩ := reached.reachable.known_of_blockState headStateFound
+  obtain ⟨base, target, baseFound, targetOk, advanced⟩ :=
+    e.checkpointStates_fixedChecks anchorStore anchored honest
+      (Store.checkpointState_ok_iff.mp cached)
+  obtain ⟨block, found⟩ := reached.reachable.known_of_blockState baseFound
+  have ordered := reached.reachable.finalized_le_justified anchorInvariant
+  have upper := UInt64.le_trans
+    (reached.forwardReachable.justified_epoch_le_current anchorInvariant slots
+      (UInt64.le_of_eq anchorSlot) epochRead).1 (bounded u honest n current inTime epochRead)
+  have walk := compatible u honest u honest n n inTime inTime _ (.inl rfl) ordered upper
+  obtain ⟨start, boundaryBlock, startOk, boundaryFound, _, _⟩ :=
+    Store.isAncestor_of_getCheckpointBlock early walk
+  obtain ⟨boundaryBase, boundaryBaseFound, _, _⟩ :=
+    reached.reachable.blockStatesFromParents boundaryFound
+  have bound : start ≤ max block.slot target := by
+    have le := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat
+      (UInt64.le_iff_toNat_le.mp ordered)
+    rw [← (computeStartSlotAtEpoch_ok_iff.mp startOk).2,
+      ← (computeStartSlotAtEpoch_ok_iff.mp targetOk).2] at le
+    rw [UInt64.le_iff_toNat_le, toNat_max]
+    exact Nat.le_trans le (Nat.le_max_right _ _)
+  by_cases same : head.root = ((e.world n).state u).finalizedCheckpoint.root
+  · rw [same, boundaryBaseFound, Option.some.injEq] at headStateFound
+    subst headState
+    obtain ⟨boundaryState, boundaryRun, run⟩ := relation_of_checkpoint_lookahead
+      RunKept RunKept.refl (fun one two => one.trans two)
+      (fun ok => runKept_stateTransition ok)
+      (fun slotsOk le ok => runKept_of_processSlots_of_stateTransition slotsOk le ok)
+      (fun ok => runKept_processSlots ok) (UInt64.le_of_eq anchorSlot) reached walk found
+      startOk bound boundaryBaseFound baseFound advanced
+    intro v member
+    obtain ⟨epoch, active⟩ := active_of_committeeWindow early
+      (Store.blockState_ok_iff.mpr (same ▸ boundaryBaseFound)) window v member
+    obtain ⟨validator, held⟩ := registry_of_runKept
+      ((runKept_lookahead boundaryRun).trans run) active
+    exact ⟨validator, validatorAt_ok_iff.mpr held⟩
+  have headBound : start ≤ headBlock.slot := by
+    by_contra below
+    apply same
+    simpa [Store.getCheckpointBlock, startOk, Except.mapError,
+      Store.getAncestor_of_le (node := ⟨head.root, .pending⟩) headFound
+        (UInt64.le_of_lt (UInt64.not_le.mp below)), bind, Except.bind,
+      pure, Except.pure] using headWalk
+  have finite := finalized_finite_of_anchor reached.reachable anchorInvariant
+    (anchor_finite_of_parentNext reached.reachable anchorSlot parentFound unknown parentNext)
+  have inside := registry_of_honest_block anchorStore anchored anchorInvariant
+    (UInt64.le_of_eq anchorSlot) positive early honest boundaryBaseFound startOk walk found
+    bound baseFound advanced headWalk headFound headStateFound headBound finite
+  intro v member
+  obtain ⟨epoch, active⟩ := active_of_committeeWindow early
+    (Store.blockState_ok_iff.mpr headStateFound) window v member
+  obtain ⟨validator, held⟩ := inside epoch v.toNat active
+  exact ⟨validator, validatorAt_ok_iff.mpr held⟩
+
+/-- The actual head selects identity, genesis or finalized-prefix registry transport. -/
+private theorem registry_of_head_window {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (positive : 0 < preset.SLOTS_PER_EPOCH) (slots : 0 < config.SLOT_DURATION_MS)
+    (early : fork < .glamsterdam) {horizon : Epoch} {time : Nat}
+    (compatible : FinalizedCheckpointCompatibility (e := e) horizon time)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
+    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat} (inTime : (e.world n).time ≤ time)
+    {head : ForkChoiceNode} {state : BeaconState preset fork}
+    {first last : Slot} {current : Epoch} {members : Std.TreeSet ValidatorIndex}
+    {parent : BeaconBlock preset fork} {parentRoot : Root}
+    (parentFound : ((e.world n).state u).blocks[parentRoot]? = some parent)
+    (unknown : ((e.world n).state u).blocks[anchorBlock.parentRoot]? = none)
+    (parentNext : addChecked parent.slot 1 = .ok first)
+    (headRead : ((e.world n).state u).getHead config = .ok head)
+    (cached : ((e.world n).state u).checkpointState
+      ((e.world n).state u).justifiedCheckpoint = .ok state)
+    (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok current)
+    (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first last =
+      .ok members) :
+    ∀ v ∈ members, ∃ validator, validatorAt state v = .ok validator := by
+  by_cases same : head.root = ((e.world n).state u).justifiedCheckpoint.root
+  · exact registry_of_justified_window anchorStore anchored early honest same cached window
+  have reached := e.forwardReachableWith
+    (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
+    n u honest
+  obtain ⟨base, _, baseFound, _, _⟩ := e.checkpointStates_fixedChecks anchorStore anchored honest
+    (Store.checkpointState_ok_iff.mp cached)
+  obtain ⟨justified, justifiedFound⟩ := reached.reachable.known_of_blockState baseFound
+  obtain ⟨headBlock, headFound, _⟩ := Store.slot_le_of_isAncestor justifiedFound
+    (Store.isAncestor_getHead_of_lt_gloas early headRead)
+  obtain ⟨headState, headStateFound, _, _⟩ := reached.reachable.blockStatesFromParents headFound
+  by_cases genesis : ((e.world n).state u).finalizedCheckpoint.epoch = GENESIS_EPOCH
+  · exact registry_of_genesis_window anchorStore anchored anchorInvariant anchorSlot boundary
+      positive early honest genesis unknown headFound headStateFound cached window
+  exact registry_of_nongenesis_window anchorStore anchored anchorInvariant anchorSlot positive
+    slots early compatible bounded honest inTime headRead same genesis headStateFound
+    parentFound unknown parentNext cached epochRead window
 
 /-- Each accepted signer supplies activity in its own actual cached target state.
 
