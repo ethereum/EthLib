@@ -1030,7 +1030,7 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
 /-- A slot no later than a store's current slot starts by the store's clock.
 
 The store must follow the model's time of genesis. -/
-private theorem slotStart_le_clock {store : Store preset fork}
+public theorem slotStart_le_clock {store : Store preset fork}
     (genesisEq : store.genesisTimeMs = genesisTimeMs) {current target : Slot}
     (currentOk : store.getCurrentSlot config = .ok current) (before : target ≤ current) :
     ∃ targetTime, computeTimeAtSlotMs config genesisTimeMs target = .ok targetTime ∧

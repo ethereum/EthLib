@@ -21,6 +21,12 @@ Not yet released.
   They retain the network and duty conditions and require deposited genesis history, preset bounds, a fixed-fork horizon, stake floors and an absent anchor parent.
   The alternative is the reference-stake inequality with derived drift, or `DirectSafety.HashEvidence`, not an a priori drift bound.
 
+- `Execution.honestHeadsCover_of_signed_justification` derives the late half of the root's viability inside the same induction ([#2656](https://github.com/ethereum/EthLib/issues/2656)).
+  A justified checkpoint after the call's epoch descends from the root, because an honest validator signed a vote for it after the call.
+  It takes `EarlyJustifiedConsistent`, `RootKeepsViableLeaf` and `JustifiedHonestlySigned` instead of `RootViable`.
+  `Execution.honestHeadsCover_of_historical_anchor` keeps its statement.
+  `slotStart_le_clock` is now public.
+
 - `HonestVoteData.target_read` reads the target of an honest vote from its voter's head, without the reads of a duty vote.
   It needs the target block held by some store reachable from the same anchor.
   The anchor store does not tie the anchor state's latest header to the anchor block, so a read at the anchor needs that block.

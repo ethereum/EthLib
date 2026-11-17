@@ -274,6 +274,63 @@ def RootViable (root : Root) (first last : Nat) : Prop :=
         ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
       (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes
 
+/-- Each up-to-date honest store with an early justified checkpoint has it comparable with the root.
+
+An early checkpoint has an epoch at most the given one.
+
+The justified block descends from the root, or the root descends from the justified block.
+
+This is the checkpoint-consistency half of `RootViable`, for early checkpoints only.
+
+While no later checkpoint is justified, every honest store's checkpoint is early.
+
+So over such a stretch this still assumes the whole consistency.
+
+Realized justification at the call's head would discharge it more directly, by a rule change. -/
+def EarlyJustifiedConsistent (root : Root) (epoch : Epoch) (first last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k, first ≤ (e.world k).time → (e.world k).time ≤ last →
+    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    ((e.world k).state w).justifiedCheckpoint.epoch ≤ epoch →
+    ((e.world k).state w).isAncestor
+        ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
+      ((e.world k).state w).isAncestor ⟨root, .pending⟩
+        ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ = .ok true
+
+/-- Each up-to-date honest store keeps a root that strictly descends from its justified block.
+
+The root stays in the store's filtered tree.
+
+The filtered tree keeps such a block when a viable leaf descends from it.
+
+So this says that the root keeps a viable leaf, the other half of `RootViable`.
+
+Voting sources refreshed after empty epochs would make it more direct, by a rule change. -/
+def RootKeepsViableLeaf (root : Root) (first last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k (nodes : List ForkChoiceNode), first ≤ (e.world k).time →
+    (e.world k).time ≤ last →
+    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    ((e.world k).state w).getFilteredNodeTree config = .ok nodes →
+    ((e.world k).state w).isAncestor ⟨root, .pending⟩
+        ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ = .ok true →
+    root ≠ ((e.world k).state w).justifiedCheckpoint.root →
+    (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes
+
+/-- Each up-to-date honest store whose justified checkpoint is after an epoch has an honest signer.
+
+An honest validator signed a vote with that checkpoint as its target.
+
+The vote is of a slot before the store's current slot, in a message sent by the store's time.
+
+Less than two thirds of Byzantine stake in each state that counts the votes gives such a signer. -/
+def JustifiedHonestlySigned (epoch : Epoch) (first last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k (slot : Slot), first ≤ (e.world k).time → (e.world k).time ≤ last →
+    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    ((e.world k).state w).getCurrentSlot config = .ok slot →
+    epoch < ((e.world k).state w).justifiedCheckpoint.epoch →
+    ∃ v ∈ J, ∃ i, (e.world i).time ≤ (e.world k).time ∧ ∃ m ∈ (e.world i).sent, ∃ data,
+      (v, data) ∈ statements config checks anchorState anchorBlock m ∧
+      data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < slot
+
 /-- Each honest head of the interval omits at most the exit reserve per full window epoch.
 
 The window starts at the given slot and ends at the slot before the store's current slot. -/

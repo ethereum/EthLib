@@ -3012,6 +3012,14 @@ It assumes that no up-to-date honest justified checkpoint over the interval conf
 `ReceiverWindowExits` assumes the exit bound of each receiver's window, and `LateDutyMajority` assumes the honest duty majority of the duty-epoch theorem.
 The receiver's proposer score is derived from the checkpoint stake ceiling and `Config.ProposerScoreFits`, a bound on the boost that mainnet and minimal satisfy.
 
+`Execution.honestHeadsCover_of_signed_justification` in the same file splits `RootViable` and derives one part of it.
+A justified checkpoint of an epoch after the call's epoch descends from the root.
+An honest validator signed a vote for it after the call, from a head that the induction already covers.
+`JustifiedHonestlySigned` assumes that signer.
+Signatures enter only through the network model: no validator sends a statement of an honest validator unless a sent message had it (`Allowed` in `Consensus/Proofs/Models/Network/Model.lean`).
+`EarlyJustifiedConsistent` assumes the consistency of justified checkpoints of the call's epoch or before, and `RootKeepsViableLeaf` assumes the viable leaf.
+While no later checkpoint is justified, the early premise still carries the whole consistency.
+
 `Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
 `getCurrentTarget_eq_ok_iff` states that target as the checkpoint of the store's epoch in the chain of the head, and `epoch_eq_of_getCurrentTarget` gives its epoch.
 `willCurrentTargetBeJustified_eq_ok_true_iff` states the two-thirds test, with both products checked for overflow.
