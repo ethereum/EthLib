@@ -255,7 +255,7 @@ def sinceValue {fork : Fork} {α : Type} {f : Fork} (x : Since f fork α) : Opti
 
 /-- A request for more items than the node takes at once is too large. -/
 def checkRequestSize (maxRequest count : Nat) : Except EngineError Unit :=
-  if maxRequest < count then throw .tooLargeRequest else pure ()
+  if maxRequest < count then throw (.tooLargeRequest count maxRequest) else pure ()
 
 /-! ## Errors -/
 
@@ -266,11 +266,11 @@ The execution API gives `-32000` another message, so each API keeps its own tabl
 [errors]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/common.md#errors -/
 def EngineError.message : EngineError → String
   | .invalidParams _ => "Invalid params"
-  | .unsupportedFork => "Unsupported fork"
-  | .invalidForkchoiceState => "Invalid forkchoice state"
-  | .tooLargeRequest => "Too large request"
+  | .unsupportedFork _ => "Unsupported fork"
+  | .invalidForkchoiceState .. => "Invalid forkchoice state"
+  | .tooLargeRequest .. => "Too large request"
   | .invalidPayloadAttributes => "Invalid payload attributes"
-  | .unknownPayload => "Unknown payload"
+  | .unknownPayload _ => "Unknown payload"
 
 /-- The error object of an error: the negative of its code, its message, and `null` data.
 

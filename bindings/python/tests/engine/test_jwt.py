@@ -234,7 +234,7 @@ def test_base64_utf8_and_signature() -> None:
 @pytest.mark.parametrize("length", [0, 1, 31, 33, 64])
 def test_secret_length(length: int) -> None:
     secret = bytes(length)
-    with raises(JwtError, "EthLib.Engine.Jwt.JwtError.secretLength") as error:
+    with raises(JwtError, f"EthLib.Engine.Jwt.JwtError.secretLength {length}") as error:
         engine.jwt_build(secret, NOW)
     assert error.value.code == 1
     assert not engine.jwt_check(secret, _token('{"alg":"HS256"}', '{"iat":1700000000}'), NOW)

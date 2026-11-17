@@ -84,7 +84,8 @@ def test_rejects_a_full_body() -> None:
     accounts[1] = (plain, rlp.encode(list(FULL[plain])))
     with raises(
         SnapError,
-        "range answer does not verify: EthLib.Execution.Network.SnapRangeError.slimAccount",
+        "range answer does not verify: EthLib.Execution.Network.SnapRangeError.slimAccount "
+        f"(hash := 0x{plain.hex()})",
     ) as error:
         verify_account_range(STATE.root, ZERO, accounts, [])
     assert error.value.code == 3
@@ -155,7 +156,8 @@ def test_rejects_a_cut_range_before_the_last() -> None:
 def test_rejects_more_ranges_than_accounts() -> None:
     with raises(
         SnapError,
-        "range answer does not verify: EthLib.Execution.Network.SnapRangeError.tooManyRanges",
+        "range answer does not verify: EthLib.Execution.Network.SnapRangeError.tooManyRanges "
+        "(ranges := 2) (accounts := 1)",
     ) as error:
         verify_storage_ranges(ROOTS[:1], b"", [_slots(0), _slots(1)], [])
     assert error.value.code == 4

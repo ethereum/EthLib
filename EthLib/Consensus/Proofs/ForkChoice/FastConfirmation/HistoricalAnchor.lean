@@ -85,7 +85,6 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred 
     {receiverLast : Slot}
     (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) head source
       first receiverLast) {horizon : Epoch}
-    (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon time)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (unslashed : HonestCountedStatesUnslashed (e := e) time)
@@ -145,7 +144,7 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred 
     anchorSlot anchorBoundary start caller callerUpToDate headNode slotOk beginOk timeEq blockOk
     parentOk sourceOk boostOk firstOk lastOk beforeOk maximumOk parentParticipantsOk registry
     aligned increment supportOk discountOk adversaryOk margin callerTime sourceReads reserve
-    residual bounded roots unslashed ceiling parameters genesis pre heldEarly enough terminal
+    bounded roots unslashed ceiling parameters genesis pre heldEarly enough terminal
     rootCovers headDescends historicalBelow callerEpochOk historicalEpochOk near epochStartOk
     epochStartTimeOk historyCovers receiver atTime upToDate known finality receiverHeadOk
     receiverParent stateOk currentOk receiverEpochOk receiverNear receiverLastOk windowOk

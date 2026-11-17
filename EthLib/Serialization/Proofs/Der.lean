@@ -767,7 +767,7 @@ private def oidStep (atStart : Bool) (byte : UInt8) : Except Error Bool := do
 
 /-- The check of a content is the fold of one step from the start of a subidentifier. -/
 private theorem oid_eq (value : Value) : oid value = (do
-    if value.tag != 6 then throw .tag
+    if value.tag != 6 then throw (.tag (some 6) value.tag)
     if value.content.isEmpty then throw .value
     let atStart ← value.content.data.toList.foldlM oidStep true
     if atStart then return value.content else throw .value) := rfl
@@ -1107,7 +1107,7 @@ It also holds the UTF8String, PrintableString, IA5String, UniversalString and BM
 The constructed SEQUENCE and SET have identifier octets 48 and 49. -/
 private theorem validate_go_eq_error_tag {value : Value} (fuel : Nat)
     (tag : value.tag.toNat ∉ [1, 2, 3, 4, 5, 6, 12, 19, 22, 28, 30, 48, 49]) :
-    validate.go (fuel + 1) value = .error .tag := by
+    validate.go (fuel + 1) value = .error (.tag none value.tag) := by
   rw [validate.go]
   split <;> simp_all <;> rfl
 
@@ -1140,10 +1140,12 @@ theorem validate_printableString_ok_iff {value : Value} (tag : value.tag = 19) :
         Char.ofNat b.toNat ∈ [' ', '\'', '(', ')', '+', ',', '-', '.', '/', ':', '=', '?'] :=
   validate_go_printableString_ok_iff _ tag
 
-/-- A value of a tag outside the certificate subset fails validation with a tag error. -/
+/-- A value of a tag outside the certificate subset fails validation with a tag error.
+
+The error names that tag, and no expected one. -/
 theorem validate_eq_error_tag {value : Value}
     (tag : value.tag.toNat ∉ [1, 2, 3, 4, 5, 6, 12, 19, 22, 28, 30, 48, 49]) :
-    validate value = .error .tag :=
+    validate value = .error (.tag none value.tag) :=
   validate_go_eq_error_tag _ tag
 
 /-! ## SEQUENCE and SET OF -/

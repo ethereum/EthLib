@@ -24,8 +24,9 @@ open Lean Base
 /-- The message of a shuffle error, for a Python traceback. -/
 def shuffleErrorText : ShuffleError → String
   | .indexOutOfRange index count => s!"index {index} is not below the index count {count}"
-  | .noCommittee => "the committee count is zero"
-  | .overflow => "a committee bound is 2^64 or more"
+  | .noCommittee index => s!"the committee count is zero, for committee {index}"
+  | .overflow size index =>
+    s!"a bound of committee {index} of {size} indices is 2^64 or more"
   | .countTooLarge count => s!"the index count {count} is above 2^40"
 
 /-- The shuffled position of every index below the count, which must be at most `2^40`. -/

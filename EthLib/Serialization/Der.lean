@@ -18,13 +18,24 @@ The reader keeps each value's complete encoding, so a certificate signature can 
 
 namespace EthLib.Serialization.Der
 
-/-- A malformed DER tag, length, value or trailing input. -/
+/-- A malformed DER tag, length, value or trailing input.
+
+A count of bytes is relative to the input of the read that failed. -/
 inductive Error where
-  | truncated
-  | tag
-  | length
+  /-- The input has `available` bytes, where the value needs at least `needed`. -/
+  | truncated (needed available : Nat)
+  /-- The tag `actual` is not allowed here.
+
+  With `expected`, it is not that tag.
+
+  Without, it is a high-number or zero tag, or outside the subset that validation reads. -/
+  | tag (expected : Option UInt8) (actual : UInt8)
+  /-- The length octets, which start with `first`, are not in the minimal definite form. -/
+  | length (first : UInt8)
+  /-- The content of a value is not a valid encoding of its type. -/
   | value
-  | trailing
+  /-- `count` bytes are left after the value. -/
+  | trailing (count : Nat)
   deriving Repr, DecidableEq
 
 /-- One low-tag-number DER value, including its original tag and length bytes. -/
@@ -37,41 +48,42 @@ structure Value where
 def read (input : ByteArray) : Except Error (Value × ByteArray) := do
   match input.data.toList with
   | tag :: first :: rest =>
-    if tag.toNat % 32 = 31 ∨ tag = 0 then throw .tag
+    if tag.toNat % 32 = 31 ∨ tag = 0 then throw (.tag none tag)
     let (length, header) ←
       if first.toNat < 128 then pure (first.toNat, 2)
       else do
         let count := first.toNat - 128
-        if count = 0 ∨ count = 127 then throw .length
-        if rest.length < count then throw .truncated
+        if count = 0 ∨ count = 127 then throw (.length first)
+        if rest.length < count then throw (.truncated (2 + count) input.size)
         let bytes := rest.take count
         match bytes with
-        | [] => throw .length
+        | [] => throw (.length first)
         | head :: _ =>
-          if head = 0 then throw .length
+          if head = 0 then throw (.length first)
           let length := EthLib.Base.bytesToNat bytes
-          if length < 128 then throw .length
+          if length < 128 then throw (.length first)
           pure (length, 2 + count)
-    if input.size < header + length then throw .truncated
+    if input.size < header + length then throw (.truncated (header + length) input.size)
     return (⟨tag, input.extract header (header + length),
       input.extract 0 (header + length)⟩, input.extract (header + length) input.size)
-  | _ => throw .truncated
+  | _ => throw (.truncated 2 input.size)
 
 /-- Read one value of the expected tag. -/
 def readTag (tag : UInt8) (input : ByteArray) : Except Error (Value × ByteArray) := do
   let (value, rest) ← read input
-  if value.tag = tag then return (value, rest) else throw .tag
+  if value.tag = tag then return (value, rest) else throw (.tag (some tag) value.tag)
 
 /-- Read exactly one value, without trailing bytes. -/
 def exact (tag : UInt8) (input : ByteArray) : Except Error Value := do
   let (value, rest) ← readTag tag input
-  if rest.isEmpty then return value else throw .trailing
+  if rest.isEmpty then return value else throw (.trailing rest.size)
 
 /-- Read siblings, with at most one value per input byte. -/
 def children (input : ByteArray) : Except Error (List Value) := go input.size input
 where
   go : Nat → ByteArray → Except Error (List Value)
-    | 0, input => if input.isEmpty then .ok [] else .error .truncated
+    -- Unreachable: each read takes two bytes or more, so the fuel never runs out first.
+    | 0, input => if input.isEmpty then .ok [] else .error (.truncated 2 input.size)
     | fuel + 1, input => do
       if input.isEmpty then return []
       let (value, rest) ← read input
@@ -79,7 +91,7 @@ where
 
 /-- A DER INTEGER, rejecting redundant sign octets (X.690 §8.3). -/
 def integer (value : Value) : Except Error Int := do
-  if value.tag != 2 then throw .tag
+  if value.tag != 2 then throw (.tag (some 2) value.tag)
   match value.content.data.toList with
   | [] => throw .value
   | first :: rest =>
@@ -99,7 +111,7 @@ def natural (value : Value) : Except Error Nat := do
 
 /-- DER BOOLEAN uses one byte, 00 or FF (X.690 §11.1). -/
 def boolean (value : Value) : Except Error Bool := do
-  if value.tag != 1 then throw .tag
+  if value.tag != 1 then throw (.tag (some 1) value.tag)
   match value.content.data.toList with
   | [0] => return false
   | [255] => return true
@@ -107,14 +119,14 @@ def boolean (value : Value) : Except Error Bool := do
 
 /-- An octet-aligned BIT STRING, used for certificate keys and signatures (RFC 5280 §4.1). -/
 def bitString (value : Value) : Except Error ByteArray := do
-  if value.tag != 3 then throw .tag
+  if value.tag != 3 then throw (.tag (some 3) value.tag)
   match value.content.data.toList with
   | 0 :: bytes => return ⟨bytes.toArray⟩
   | _ => throw .value
 
 /-- Validate minimal base-128 OBJECT IDENTIFIER components (X.690 §8.19). -/
 def oid (value : Value) : Except Error ByteArray := do
-  if value.tag != 6 then throw .tag
+  if value.tag != 6 then throw (.tag (some 6) value.tag)
   if value.content.isEmpty then throw .value
   -- A component starts after a byte with the top bit clear, and may not start with 0x80.
   let atStart ← value.content.data.toList.foldlM
@@ -182,6 +194,6 @@ where
           if (values.map (·.encoded.data.toList)).Pairwise (· ≤ ·) then pure ()
           else throw .value
         values.forM (go fuel)
-      | _ => throw .tag
+      | _ => throw (.tag none value.tag)
 
 end EthLib.Serialization.Der

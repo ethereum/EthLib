@@ -180,13 +180,14 @@ theorem compactToNibbleList_empty : compactToNibbleList ByteArray.empty = .error
 /-- A first nibble above 3 is rejected, whatever follows it. -/
 theorem compactToNibbleList_invalidFirstNibble (first : UInt8) (rest : List UInt8)
     (h : 3 < (highNibble first).val) :
-    compactToNibbleList ⟨⟨first :: rest⟩⟩ = .error .invalidFirstNibble := by
+    compactToNibbleList ⟨⟨first :: rest⟩⟩ =
+      .error (.invalidFirstNibble (highNibble first).val) := by
   simp [compactToNibbleList, bytesToNibbleList_cons, h]
 
 /-- An even path whose padding nibble is not 0 is rejected, whatever follows it. -/
 theorem compactToNibbleList_nonZeroPadding (first : UInt8) (rest : List UInt8)
     (hflag : (highNibble first).val = 0 ∨ (highNibble first).val = 2) (hpad : lowNibble first ≠ 0) :
-    compactToNibbleList ⟨⟨first :: rest⟩⟩ = .error .nonZeroPadding := by
+    compactToNibbleList ⟨⟨first :: rest⟩⟩ = .error (.nonZeroPadding (lowNibble first).val) := by
   rcases hflag with h | h <;> simp [compactToNibbleList, bytesToNibbleList_cons, h, hpad]
 
 end EthLib.Execution.Trie

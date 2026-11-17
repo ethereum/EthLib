@@ -50,7 +50,7 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 theorem jumpStep_eq_error_iff {evm : Evm fork Meter} {destination : U256} {rest : List U256}
     {gas : Meter} (h : evm.stack.val = destination :: rest)
     (paid : GasMeter.charge evm.gas OPCODE_JUMP = .ok gas) :
-    jumpStep evm = .error .invalidJumpDest ↔
+    jumpStep evm = .error (.invalidJumpDest destination.toNat) ↔
       isValidJumpDest evm.validJumpDestinations destination.toNat = false := by
   have hstack : evm.stack = ⟨destination :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
   simp only [jumpStep, popWord, chargeGas, hstack, Stack.pop]
@@ -91,7 +91,7 @@ theorem jumpiStep_zero {evm : Evm fork Meter} {destination : U256} {rest : List 
 theorem jumpiStep_eq_error_iff {evm : Evm fork Meter} {destination condition : U256}
     {rest : List U256} {gas : Meter} (h : evm.stack.val = destination :: condition :: rest)
     (nonzero : condition ≠ 0) (paid : GasMeter.charge evm.gas OPCODE_JUMPI = .ok gas) :
-    jumpiStep evm = .error .invalidJumpDest ↔
+    jumpiStep evm = .error (.invalidJumpDest destination.toNat) ↔
       isValidJumpDest evm.validJumpDestinations destination.toNat = false := by
   have hstack : evm.stack = ⟨destination :: condition :: rest, h ▸ evm.stack.property⟩ :=
     Subtype.ext h
@@ -165,7 +165,7 @@ theorem jumpStep_eq_error_iff_of_code {evm : Evm fork Meter} {destination : U256
     (flags : evm.validJumpDestinations = validJumpDestinations evm.code)
     (h : evm.stack.val = destination :: rest)
     (paid : GasMeter.charge evm.gas OPCODE_JUMP = .ok gas) :
-    jumpStep evm = .error .invalidJumpDest ↔
+    jumpStep evm = .error (.invalidJumpDest destination.toNat) ↔
       ¬(destination.toNat ∈ opcodePositions evm.code ∧
         byteAt evm.code destination.toNat = JUMPDEST) := by
   rw [jumpStep_eq_error_iff h paid, flags, ← isValidJumpDest_iff, Bool.not_eq_true]

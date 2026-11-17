@@ -481,8 +481,10 @@ def processWithdrawals (state : BeaconState preset fork) (capella : .shapella �
     else pure state
   else do
     let expected ← getExpectedWithdrawals state capella
-    ensure (((payload (Nat.lt_of_not_le gloas)).withdrawals capella).data = expected.withdrawals)
-      .wrongWithdrawals
+    let carried := ((payload (Nat.lt_of_not_le gloas)).withdrawals capella).data
+    ensure (carried = expected.withdrawals)
+      (.wrongWithdrawals (firstDifference carried expected.withdrawals) carried.size
+        expected.withdrawals.size)
     liftAccessor (applyExpectedWithdrawals state capella expected)
 
 /-! ## Changes of BLS credentials -/
@@ -518,8 +520,8 @@ def processBlsToExecutionChange (config : Config) (checks : SignatureChecks)
   let domain ← liftSsz (computeDomain config DOMAIN_BLS_TO_EXECUTION_CHANGE
     (genesisValidatorsRoot := state.genesisValidatorsRoot))
   let signingRoot ← liftSsz (computeSigningRoot change domain)
-  ensure (checks.verify change.fromBlsPubkey (packBytes signingRoot)
-    signed.signature = true) .invalidBlsChangeSignature
+  ensure (checks.verify change.fromBlsPubkey (packBytes signingRoot) signed.signature = true)
+    (.invalidBlsChangeSignature index signingRoot)
   liftAccessor (state.setValidator index
     { validator with withdrawalCredentials := executionCredentials change.toExecutionAddress })
 

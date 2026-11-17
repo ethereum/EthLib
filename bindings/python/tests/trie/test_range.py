@@ -113,13 +113,15 @@ def test_rejects_a_partial_range_without_proof() -> None:
 def test_rejects_reordered_keys() -> None:
     entries = _range(37, 120)
     entries[3], entries[4] = entries[4], entries[3]
-    with raises(TrieError, _fault("unsorted")) as error:
+    # The key at index 4 is now below the key before it.
+    with raises(TrieError, _fault("unsorted (index := 4)")) as error:
         _check(KEYS[37], entries)
     assert error.value.code == 201
 
 
 def test_rejects_a_key_below_the_start() -> None:
-    with raises(TrieError, _fault("beforeStart")) as error:
+    # The first entry, key 37, is below the start, key 38.
+    with raises(TrieError, _fault("beforeStart (index := 0)")) as error:
         _check(KEYS[38], _range(37, 120))
     assert error.value.code == 202
 
@@ -127,7 +129,7 @@ def test_rejects_a_key_below_the_start() -> None:
 def test_rejects_an_empty_value() -> None:
     entries = _range(37, 120)
     entries[5] = (entries[5][0], b"")
-    with raises(TrieError, _fault("emptyValue")) as error:
+    with raises(TrieError, _fault("emptyValue (index := 5)")) as error:
         _check(KEYS[37], entries)
     assert error.value.code == 203
 
@@ -138,7 +140,8 @@ def test_rejects_a_missing_proof_node() -> None:
     with raises(
         TrieError,
         "range does not verify: EthLib.Execution.Trie.RangeError.proof "
-        "(EthLib.Execution.Trie.ProofError.missingNode)",
+        "(EthLib.Execution.Trie.ProofError.missingNode "
+        f"(hash := some 0x{keccak.keccak256(TRIE.proof(KEYS[37])[1]).hex()}))",
     ) as error:
         trie.verify_range(TRIE.root, KEYS[37], entries, TRIE.proof(KEYS[37])[:1])
     assert error.value.code == 204

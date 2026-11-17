@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from ethlib.cryptography.keccak import keccak256
 from ethlib.errors import TrieError
 from ethlib.execution import trie
 from ethlib.serialization import rlp
@@ -70,7 +71,12 @@ def test_rejects_tampered_node() -> None:
     # A changed byte in the root node no longer hashes to the state root.
     proof = [_hex(node) for node in _RESPONSE["accountProof"]]
     proof[0] = proof[0][:-1] + bytes([proof[0][-1] ^ 1])
-    with raises(ValueError, "proof does not verify: EthLib.Execution.Trie.ProofError.hashMismatch"):
+    # The root points to the node by the state root, and the node hashes to something else.
+    message = (
+        "proof does not verify: EthLib.Execution.Trie.ProofError.hashMismatch "
+        f"(expected := 0x{STATE_ROOT.hex()}) (actual := 0x{keccak256(proof[0]).hex()})"
+    )
+    with raises(ValueError, message):
         trie.verify_proof(STATE_ROOT, _hex(_RESPONSE["address"]), proof, secured=True)
 
 
@@ -94,7 +100,7 @@ _NODE_ERRORS = [
         "c24001",
         104,
         "EthLib.Execution.Trie.ProofError.hexPrefix "
-        "(EthLib.Execution.Trie.HexPrefixError.invalidFirstNibble)",
+        "(EthLib.Execution.Trie.HexPrefixError.invalidFirstNibble (nibble := 4))",
         id="hex_prefix",
     ),
     pytest.param(
@@ -112,7 +118,7 @@ _NODE_ERRORS = [
         "c8d66ee53b41a50fbf8280e8e0c5972d54fe8543bfa52a630b0b9e38234aecc1",
         "d685070707070780808080808080808080808080808080",
         106,
-        "EthLib.Execution.Trie.ProofError.invalidReference",
+        "EthLib.Execution.Trie.ProofError.invalidReference (size := 5)",
         id="invalid_reference",
     ),
     pytest.param(
@@ -149,7 +155,8 @@ def test_leaf_proof() -> None:
 def test_rejects_unused_node() -> None:
     """A proof that holds a node beyond those of the path is rejected, even if the path holds."""
     with raises(
-        TrieError, "proof does not verify: EthLib.Execution.Trie.ProofError.unusedNodes"
+        TrieError,
+        "proof does not verify: EthLib.Execution.Trie.ProofError.unusedNodes (count := 1)",
     ) as error:
         trie.verify_proof(_LEAF_ROOT, _KEY, [_LEAF, _LEAF], secured=False)
     assert error.value.code == 108

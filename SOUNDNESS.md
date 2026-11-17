@@ -2991,12 +2991,11 @@ The endpoint assumes synchrony, prompt processing, block admission and validated
 It also assumes agreement between assignment duties and head committee windows, common history for vote committees, and successful source-weight window reads.
 Its stake hypotheses include a Byzantine and exit reserve for each nonempty committee window of the caller's head, from the caller's first slot to the receiver's last slot.
 They also include unslashed honest validators in counted states, a checkpoint stake ceiling and an explicit drift bound.
-Earlier honest-head coverage, receiver-finality coverage and residual finalized-checkpoint compatibility remain hypotheses.
+Earlier honest-head coverage and receiver-finality coverage remain hypotheses.
 The coverage of earlier honest heads is assumed from the call up to the receiver's time, and the theorem extends it to the receiver's head at that time.
-Residual finalized-checkpoint compatibility carries cross-store finality safety.
-A checkpoint that an honest store selects, at an epoch from an honest finalized epoch up to the horizon, reads back that finalized checkpoint.
-That safety is assumed, not derived.
-Only the case of one store's later justified checkpoint is left out: that case is proved, or the direct-safety evidence holds.
+Finality across honest stores is not assumed.
+The proof reads finality only within one store: the receiver's finalized checkpoint lies on the chain of its own justified checkpoint.
+That is proved, or the direct-safety evidence holds.
 The direct-safety branch requires deposited genesis, a fixed-fork history before the next upgrade, direct-safety parameters and stake floors for held runs and terminal states.
 The theorem also retains the stated slot, epoch, tree, viable-route and successful-read conditions.
 These conditions are recorded in `HistoricalStatements.lean` and in the endpoint's statement; the theorem is not unconditional safety of every successful confirmation call.
@@ -3005,7 +3004,7 @@ These conditions are recorded in `HistoricalStatements.lean` and in the endpoint
 An induction on time applies the historical-anchor theorem at each time until two epochs after the parent's epoch, and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` after that.
 It concludes that every up-to-date honest head from the call to the horizon descends from the block, or one of the same two alternatives.
 The coverage of the parent over the same interval and the coverage of the historical anchor before the call remain hypotheses.
-Residual finalized-checkpoint compatibility is carried unchanged, so cross-store finality safety stays assumed.
+Like the historical-anchor theorem, it does not assume finality across honest stores.
 Receiver finality coverage and the receiver's block lookup are derived from `RootViable`, the root's viability at each honest store, which is assumed.
 It assumes that no up-to-date honest justified checkpoint over the interval conflicts with the root: the checkpoint-consistency half of the safety of the confirmation, not derived.
 `HonestHeadReads` assumes that each honest head reads its justified state and its committee windows.
@@ -3020,6 +3019,19 @@ Signatures enter only through the network model.
 A sender may carry another honest validator's statement only if an earlier sent message carried it; an honest sender must also follow the protocol (`Allowed` in `Consensus/Proofs/Models/Network/Model.lean`).
 `EarlyJustifiedConsistent` assumes the consistency of justified checkpoints of the call's epoch or before, and `RootKeepsViableLeaf` assumes the viable leaf.
 While no later checkpoint is justified, the early premise still carries the whole consistency.
+
+`Execution.honestHeadsCover_of_byzantine_bound` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalSigners.lean` derives that signer.
+`Execution.justifiedHonestlySigned` shows that one count of votes set each later justified checkpoint.
+The count ran in a held state, or on the way from one to a held child.
+The count passed, so with Byzantine stake below two thirds there (`ByzantineCountedStake`), an honest quorum voter voted for the checkpoint.
+That vote was cast in a held block.
+The store reads it with a valid signature in the state of the vote's target, so it is a statement of a sent message.
+Signatures still enter only through the network model's sender rule.
+The derivation takes the headline's stake floors, a positive inclusion delay (`Preset.InclusionDelayPositive`, true on mainnet and minimal) and two conditions on the anchor.
+The anchor's latest header must be the anchor block's, with a zero state root, as the post-state of a block has.
+The anchor store checks neither, and without them a justified root may be one that no store holds.
+So the late half of the root's viability rests on the Byzantine bound, the stake floors and these conditions.
+The signed-justification theorem keeps its statement for callers that supply the signer.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
 `getCurrentTarget_eq_ok_iff` states that target as the checkpoint of the store's epoch in the chain of the head, and `epoch_eq_of_getCurrentTarget` gives its epoch.

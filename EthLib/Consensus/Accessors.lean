@@ -40,20 +40,26 @@ namespace EthLib.Consensus
 
 open Base Uint64 Serialization.Ssz
 
+open scoped HexRepr
+
 /-- An error of a state accessor. -/
 inductive AccessorError where
   /-- A validator index names no validator of the registry. -/
   | indexOutOfRange (index : ValidatorIndex)
-  /-- A total balance reaches 2^64. -/
-  | balanceOverflow
+  /-- A total balance reaches 2^64.
+
+  It holds that total. -/
+  | balanceOverflow (total : Nat)
   /-- The slot is not one of the recent slots whose block root the state keeps. -/
   | slotOutOfRange (slot stateSlot : Slot)
   /-- A 64-bit operation has no result. -/
   | arith (error : ArithError)
   /-- A shuffle or a committee has no value. -/
   | shuffle (error : ShuffleError)
-  /-- The root of a fork has no value. -/
-  | ssz
+  /-- The root of a fork has no value.
+
+  It holds the error of the root. -/
+  | ssz (error : Err)
   /-- There is no candidate to draw a proposer from. -/
   | noCandidates
   /-- An attestation has no bit at a position of its committees. -/
@@ -74,11 +80,15 @@ inductive AccessorError where
   | listFull (limit : Nat)
   /-- The epoch is neither the previous nor the current epoch. -/
   | epochNotRecent (epoch previous current : Epoch)
-  /-- From Altair: the public keys to aggregate are none, or one of them is not valid. -/
-  | invalidPubkeys
+  /-- From Altair: the public keys to aggregate are none, or one of them is not valid.
+
+  It holds the number of keys, and the position of the first key that is not valid, if any. -/
+  | invalidPubkeys (count : Nat) (position : Option Nat)
   /-- From Altair: the source of an attestation is not the justified checkpoint it should vote for.
-  -/
-  | wrongSource
+
+  It holds the epoch and root of the source, then those of the justified checkpoint. -/
+  | wrongSource (sourceEpoch : Epoch) (sourceRoot : Root) (justifiedEpoch : Epoch)
+      (justifiedRoot : Root)
   /-- From Gloas: an attestation for the block of its own slot has a nonzero index. -/
   | sameSlotIndexNotZero (index : CommitteeIndex)
   deriving DecidableEq, Repr
@@ -138,7 +148,7 @@ def getTotalBalance (state : BeaconState preset fork) (indices : List ValidatorI
   if let some index := indices.find? (validators.size ≤ ·.toNat) then
     throw (.indexOutOfRange index)
   let total := sumMarked validators (markIndices validators.size indices)
-  if 2 ^ 64 ≤ total then throw .balanceOverflow
+  if 2 ^ 64 ≤ total then throw (.balanceOverflow total)
   return max preset.EFFECTIVE_BALANCE_INCREMENT total.toUInt64
 
 /-- The total effective balance of the validators active in the epoch of a state. -/
@@ -270,7 +280,7 @@ def getPendingBalanceToWithdraw (state : BeaconState preset fork) (electra : .pe
     (index : ValidatorIndex) : Except AccessorError Gwei :=
   let total := ((state.pendingPartialWithdrawals electra).data.toList.map fun withdrawal =>
     if withdrawal.validatorIndex = index then withdrawal.amount.toNat else 0).sum
-  if total < 2 ^ 64 then .ok total.toUInt64 else .error .balanceOverflow
+  if total < 2 ^ 64 then .ok total.toUInt64 else .error (.balanceOverflow total)
 
 /-- The seed of an epoch for one kind of duty.
 
@@ -490,7 +500,7 @@ def getDomain (config : Config) (state : BeaconState preset fork) (domainType : 
   let version :=
     if epoch < state.forkVersions.epoch then state.forkVersions.previousVersion
     else state.forkVersions.currentVersion
-  (computeDomain config domainType version state.genesisValidatorsRoot).mapError fun _ => .ssz
+  (computeDomain config domainType version state.genesisValidatorsRoot).mapError .ssz
 
 /-- From Electra: the indices of the committees whose bit is set, in increasing order. -/
 def getCommitteeIndices {n : Nat} (bits : Bitvector n) : List CommitteeIndex :=

@@ -75,7 +75,7 @@ def ofEntryItem (item : Item) : Except RlpError Entry := do
 def ofEntries (entries : List Entry) : Except StateInputError State :=
   entries.foldlM (init := ⟨∅, ∅, ∅⟩) fun state entry => do
     if entry.address ∈ state.accounts then
-      throw .repeatedAddress
+      throw (.repeatedAddress entry.address)
     let codeHash := Cryptography.Hash.Keccak.keccak256 entry.code
     return {
       accounts := state.accounts.insert entry.address ⟨entry.nonce, entry.balance, codeHash⟩
