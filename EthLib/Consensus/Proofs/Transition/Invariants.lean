@@ -1074,14 +1074,10 @@ theorem requestPartialWithdrawal {electra : .pectra ≤ fork} {index : Validator
 theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (computed : Consensus.processWithdrawalRequest config state electra request = .ok after) :
     R state after := by
-  unfold Consensus.processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact laws.refl _)
-    | exact laws.initiateValidatorExit (liftAccessor_ok.mp computed)
-    | exact laws.requestPartialWithdrawal keep computed
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact laws.refl _
+  · exact laws.initiateValidatorExit exited
+  · exact laws.requestPartialWithdrawal keep withdrawn
 
 theorem queueExcessActiveBalance {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (computed : Consensus.queueExcessActiveBalance state electra index = .ok after) :

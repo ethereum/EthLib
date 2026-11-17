@@ -210,14 +210,10 @@ private theorem loadKept_processWithdrawalRequest {electra : .pectra ≤ fork}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     LoadKept state after := by
   refine loadKept_of_sameSizes (sameSizes_processWithdrawalRequest computed) ?_
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; rfl)
-    | exact (loadKeptLaws.initiateValidatorExit (liftAccessor_ok.mp computed)).2
-    | exact (loadKept_requestPartialWithdrawal computed).2
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · rfl
+  · exact (loadKeptLaws.initiateValidatorExit exited).2
+  · exact (loadKept_requestPartialWithdrawal withdrawn).2
 
 /-- A consolidation of two validators keeps the count. -/
 private theorem loadKept_queueConsolidation {electra : .pectra ≤ fork}

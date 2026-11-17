@@ -215,14 +215,10 @@ theorem builderFrame_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     BuilderFrame state after := by
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact BuilderFrame.refl _)
-    | exact builderFrame_initiateValidatorExit (liftAccessor_ok.mp computed)
-    | exact builderFrame_requestPartialWithdrawal computed
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact BuilderFrame.refl _
+  · exact builderFrame_initiateValidatorExit exited
+  · exact builderFrame_requestPartialWithdrawal withdrawn
 
 private theorem builderFrame_switchToCompoundingValidator {electra : .pectra ≤ fork}
     {index : ValidatorIndex}

@@ -206,14 +206,10 @@ private theorem stepKeeps_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     StepKeeps state after := by
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact StepKeeps.refl _)
-    | exact stepKeeps_initiateValidatorExit (liftAccessor_ok.mp computed)
-    | exact stepKeeps_requestPartialWithdrawal computed
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact StepKeeps.refl _
+  · exact stepKeeps_initiateValidatorExit exited
+  · exact stepKeeps_requestPartialWithdrawal withdrawn
 
 private theorem stepKeeps_queueExcessActiveBalance {electra : .pectra ≤ fork}
     {index : ValidatorIndex}

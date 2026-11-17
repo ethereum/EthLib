@@ -177,14 +177,10 @@ private theorem down_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) (index : Nat) :
     BalanceDown index state after := by
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact BalanceDown.refl _ _)
-    | exact down_initiateValidatorExit (liftAccessor_ok.mp computed) index
-    | exact down_requestPartialWithdrawal computed index
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact BalanceDown.refl _ _
+  · exact down_initiateValidatorExit exited index
+  · exact down_requestPartialWithdrawal withdrawn index
 
 /-- A switch to compounding credentials keeps every balance from rising. -/
 private theorem down_switchToCompoundingValidator {electra : .pectra ≤ fork}
@@ -466,14 +462,10 @@ private theorem fixed_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     BlockFixed state after := by
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact BlockFixed.refl _)
-    | exact fixed_initiateValidatorExit (liftAccessor_ok.mp computed)
-    | exact fixed_requestPartialWithdrawal computed
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact BlockFixed.refl _
+  · exact fixed_initiateValidatorExit exited
+  · exact fixed_requestPartialWithdrawal withdrawn
 
 /-- A switch to compounding credentials keeps the fields. -/
 private theorem fixed_switchToCompoundingValidator {electra : .pectra ≤ fork}

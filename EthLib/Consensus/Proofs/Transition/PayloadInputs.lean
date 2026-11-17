@@ -195,14 +195,10 @@ theorem payloadInputs_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     PayloadInputs state after := by
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact PayloadInputs.refl _)
-    | exact payloadInputs_initiateValidatorExit (liftAccessor_ok.mp computed)
-    | exact payloadInputs_requestPartialWithdrawal computed
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact PayloadInputs.refl _
+  · exact payloadInputs_initiateValidatorExit exited
+  · exact payloadInputs_requestPartialWithdrawal withdrawn
 
 theorem payloadInputs_switchToCompoundingValidator {electra : .pectra ≤ fork}
     {index : ValidatorIndex}
