@@ -62,10 +62,10 @@ inductive MessageError where
   | unknownType (type : UInt8)
   /-- The bytes after the type are not one RLP list, or a field has the wrong form. -/
   | rlp (e : RlpError)
-  /-- The message has more or fewer fields than its type. -/
-  | fields (type : UInt8)
-  /-- A request ID, an address or a distance is out of its range. -/
-  | invalid
+  /-- The message of type `type` has `count` fields, more or fewer than its type. -/
+  | fields (type : UInt8) (count : Nat)
+  /-- A request ID, an address or a distance of a message of type `type` is out of its range. -/
+  | invalid (type : UInt8)
   deriving DecidableEq
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -77,8 +77,8 @@ def MessageError.code : MessageError → UInt32
   | .empty => 101
   | .unknownType _ => 102
   | .rlp _ => 103
-  | .fields _ => 104
-  | .invalid => 105
+  | .fields .. => 104
+  | .invalid _ => 105
 
 /-- A port, a scalar below 2^16. -/
 def portItem (port : UInt16) : Item := .scalar port.toNat
@@ -172,13 +172,13 @@ def decodeFields (bytes : ByteArray) : Except MessageError Message := do
   unless 1 ≤ type.toNat ∧ type.toNat ≤ 10 do throw (.unknownType type)
   let item ← (Serialization.Rlp.decode ⟨rest.toArray⟩).mapError .rlp
   let items ← item.toItems.mapError .rlp
-  let some m ← (ofFields type items).mapError .rlp | throw (.fields type)
+  let some m ← (ofFields type items).mapError .rlp | throw (.fields type items.length)
   return m
 
 /-- The message of a plaintext, or why it is not a valid message. -/
 def decode (bytes : ByteArray) : Except MessageError Message := do
   let m ← decodeFields bytes
-  unless m.valid do throw .invalid
+  unless m.valid do throw (.invalid m.type)
   return m
 
 end Message

@@ -66,12 +66,12 @@ def test_changed_signature_fails() -> None:
 
 
 def test_unsorted_keys_rejected() -> None:
-    with raises(ValueError, "the keys are not sorted"):
+    with raises(ValueError, "the keys are not sorted: 0x6964 follows 0x6970"):
         enr.seq(_record([PAIRS[1], PAIRS[0], PAIRS[2], PAIRS[3]]))
 
 
 def test_repeated_key_rejected() -> None:
-    with raises(ValueError, "a key is repeated"):
+    with raises(ValueError, "the key 0x6970 is repeated"):
         enr.seq(_record([PAIRS[0], PAIRS[1], PAIRS[1], PAIRS[2], PAIRS[3]]))
 
 
@@ -164,12 +164,12 @@ def test_make_record_v4_eip_vector() -> None:
 
 def test_make_record_v4_rejects_its_own_keys() -> None:
     # The pair id is the builder's own, so a second one repeats the key.
-    with raises(ValueError, "a key is repeated"):
+    with raises(ValueError, "the key 0x6964 is repeated"):
         enr.make_record_v4(SECRET_KEY, 1, _pairs_list([PAIRS[0], PAIRS[1], PAIRS[3]]))
 
 
 def test_make_record_v4_rejects_unsorted_pairs() -> None:
-    with raises(ValueError, "the keys are not sorted"):
+    with raises(ValueError, "the keys are not sorted: 0x6970 follows 0x756470"):
         enr.make_record_v4(SECRET_KEY, 1, _pairs_list([PAIRS[3], PAIRS[1]]))
 
 
@@ -188,3 +188,15 @@ def test_make_record_v4_rejects_a_large_record() -> None:
     pairs = _pairs_list([PAIRS[1], PAIRS[3], (b"z", bytes(250))])
     with raises(ValueError, "record has 388 bytes, more than 300"):
         enr.make_record_v4(SECRET_KEY, 1, pairs)
+
+
+def test_too_few_items_rejected() -> None:
+    # A list of one empty string holds no sequence number.
+    with raises(ValueError, "record has 1 items, too few for a signature and a sequence number"):
+        enr.seq(bytes.fromhex("c180"))
+
+
+def test_unknown_scheme_rejected() -> None:
+    record = _record([(b"id", b"v5"), PAIRS[1], PAIRS[2], PAIRS[3]])
+    with raises(ValueError, "identity scheme 0x7635 is not v4"):
+        enr.node_id(record)
