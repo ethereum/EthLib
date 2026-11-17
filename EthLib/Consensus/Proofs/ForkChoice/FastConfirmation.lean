@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Committees
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.CheckpointConsistency
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedCalls
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedRoot
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedWalk
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.DutySupport
@@ -62,4 +63,6 @@ When the two-thirds test on the current target passes, honest voters sign that t
 Those voters hold two thirds of the active balance, given an honest count and coverage of the heads.
 
 Another module gives the coverage of a walk of roots from that of its start and a step per member.
+
+A delay after an event of an honest store, honest stores have justified the epoch it finalized.
 -/

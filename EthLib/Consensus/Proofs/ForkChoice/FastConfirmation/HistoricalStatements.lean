@@ -251,6 +251,19 @@ def WindowExitBound (store : Store preset fork) (source : BeaconState preset for
 def HeldBlockStateRootsNonzero (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last → HeldStateRootsNonzero ((e.world k).state w)
 
+omit [DecidablePred (· ∈ J)] in
+/-- An honest held copy of the anchor block has a nonzero state root. -/
+theorem Execution.anchor_stateRoot_nonzero {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor) {last : Nat}
+    (roots : HeldBlockStateRootsNonzero (e := e) last)
+    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat} (inTime : (e.world n).time ≤ last) :
+    anchorBlock.stateRoot ≠ Vector.replicate 32 0 := by
+  obtain ⟨root, _, anchorFound⟩ := (e.forwardReachableWith
+    (fun w hw => (anchored w hw) ▸ Store.ForwardReachableWith.anchor anchorStore) n u
+      honest).reachable.anchor_known
+  exact roots u honest n inTime root anchorBlock anchorFound
+
 /-- Two honest stores collide on one root, by a time. -/
 def HonestCollision (time : ℕ) : Prop :=
   ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧

@@ -23,18 +23,6 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
-/-- An honest held copy of the anchor block has a nonzero state root. -/
-private theorem Execution.anchor_stateRoot_nonzero {anchor : Store preset fork}
-    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (anchored : ∀ w ∈ J, e.start w = anchor) {last : Nat}
-    (roots : HeldBlockStateRootsNonzero (e := e) last)
-    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat} (inTime : (e.world n).time ≤ last) :
-    anchorBlock.stateRoot ≠ Vector.replicate 32 0 := by
-  obtain ⟨root, _, anchorFound⟩ := (e.forwardReachableWith
-    (fun w hw => (anchored w hw) ▸ Store.ForwardReachableWith.anchor anchorStore) n u
-      honest).reachable.anchor_known
-  exact roots u honest n inTime root anchorBlock anchorFound
-
 /-- Honest justified epochs stay within the horizon that bounds the honest store epochs. -/
 private theorem Execution.justified_epoch_le_horizon {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
