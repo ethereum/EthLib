@@ -78,8 +78,8 @@ theorem forsClimb_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsS
     ∀ (n level : Nat), level + n ≤ FORS_HEIGHT →
       ofDigest <$> SphincsSecurity.Concrete.forsFold (m := m) P index κ leaf path (level + n) v
         = SphincsSecurity.Concrete.forsFold (m := m) P index κ leaf path level v >>= fun c =>
-            Merkle.climb (forsNodeHash (queryH (m := m)) (ofParam P) index.val (treeOf κ)) level
-              (leaf.val / 2 ^ level) (ofDigest c)
+            Merkle.climb (forsNodeHash (queryH (m := m)) (ofParam P) index.val (treeOf κ))
+              ⟨level, leaf.val / 2 ^ level⟩ (ofDigest c)
               (((List.ofFn fun i => ofDigest (path i)).drop level).take n)
   | 0, level, _ => by simp [Merkle.climb]
   | n + 1, level, hn => by
@@ -99,12 +99,15 @@ theorem forsClimb_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsS
     have hnode := forsNodeHash_queryH (m := m) P index κ ⟨level, hlevel⟩
       ⟨leaf.val / 2 ^ (level + 1), Nat.lt_of_le_of_lt (Nat.div_le_self _ _) leaf.isLt⟩
       (div_two_pow_lt leaf level hlevel)
-    rw [Merkle.climb, hdiv, Nat.testBit_eq_decide_div_mod_eq]
+    rw [Merkle.climb]
+    dsimp only [Merkle.Position.parent]
+    rw [hdiv, Nat.testBit_eq_decide_div_mod_eq]
     rcases Nat.mod_two_eq_zero_or_one (leaf.val / 2 ^ level) with h | h
-    · simp only [h, Merkle.ordered, ↓reduceIte, Nat.zero_ne_one, decide_false,
-        Bool.false_eq_true]
+    · simp only [h, Merkle.ordered, Merkle.Position.isLeft, ↓reduceIte, Nat.zero_ne_one,
+        decide_false, decide_true, Bool.false_eq_true]
       rw [hnode, bind_map_left]
-    · simp only [h, Merkle.ordered, ↓reduceIte, Nat.one_ne_zero, decide_true]
+    · simp only [h, Merkle.ordered, Merkle.Position.isLeft, ↓reduceIte, Nat.one_ne_zero,
+        decide_false, decide_true, Bool.false_eq_true]
       rw [hnode, bind_map_left]
 
 /-- The root that an opening leads to is the model's. -/
@@ -174,7 +177,7 @@ theorem forsNode_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.P
           (secretsOf S P) index.val (treeOf κ) level j)
         = ofDigest (forsNodeValue f P index κ S level j)
   | 0, j, _, hj => by
-    rw [forsNode, Merkle.node, forsLeaves_queryH S P index κ j hj, evalWithAnswerFn_map]
+    rw [forsNode, Merkle.node_zero, forsLeaves_queryH S P index κ j hj, evalWithAnswerFn_map]
     rfl
   | level + 1, j, hlevel, hj => by
     have hpow : 2 ^ (FORS_HEIGHT - level) = 2 * 2 ^ (FORS_HEIGHT - (level + 1)) := by
@@ -185,7 +188,7 @@ theorem forsNode_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.P
     have hlt : level < SphincsSecurity.forsHeight := by
       change _ < 10; simp only [FORS_HEIGHT] at hlevel; omega
     simp only [forsNode] at hl hr ⊢
-    rw [Merkle.node, evalWithAnswerFn_bind, hl, evalWithAnswerFn_bind, hr,
+    rw [Merkle.node_succ, evalWithAnswerFn_bind, hl, evalWithAnswerFn_bind, hr,
       forsNodeValue_succ f P index κ S level j hlt]
     erw [forsNodeHash_queryH_mod (m := OracleComp HashSig.HashSpec) P index κ ⟨level, hlt⟩ j hj,
       evalWithAnswerFn_map, eval_tweakableHash]
@@ -225,7 +228,7 @@ theorem forsSiblings_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecuri
           (forsNodeHash (queryH (m := OracleComp HashSig.HashSpec)) (ofParam P) index.val
             (treeOf κ))
           (forsLeaves queryH (ofParam P) (secretsOf S P) index.val (treeOf κ))
-          level (e / 2 ^ level) n)
+          ⟨level, e / 2 ^ level⟩ n)
         = Vector.ofFn fun i : Fin n =>
             ofDigest (forsNodeValue f P index κ S (level + i.val)
               (Nat.xor (e / 2 ^ (level + i.val)) 1))
@@ -241,7 +244,9 @@ theorem forsSiblings_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecuri
       rw [Nat.div_div_eq_div_mul, pow_succ]
     have hnode := forsNode_answers f S P index κ level ((e / 2 ^ level) ^^^ 1) (by omega) hsib
     simp only [forsNode] at hnode
-    rw [Merkle.siblings, evalWithAnswerFn_bind, hnode, evalWithAnswerFn_bind, hdiv,
+    rw [Merkle.siblings]
+    dsimp only [Merkle.Position.sibling, Merkle.Position.parent]
+    rw [evalWithAnswerFn_bind, hnode, evalWithAnswerFn_bind, hdiv,
       forsSiblings_answers S P index κ e he n (level + 1) (by omega), evalWithAnswerFn_pure]
     apply Vector.ext
     intro i hi

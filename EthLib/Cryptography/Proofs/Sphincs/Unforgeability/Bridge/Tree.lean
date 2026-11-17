@@ -154,20 +154,20 @@ theorem node_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.Public
     (lay : SphincsSecurity.Layer) (tree : SphincsSecurity.TreeIndex) :
     ∀ (level j : Nat), level ≤ TOP_HEIGHT → j < 2 ^ (TOP_HEIGHT - level) →
       Merkle.node (nodeHash (queryH (m := m)) (ofParam P) (layerOf lay) tree.val)
-          (leaves (queryH (m := m)) (ofParam P) (secretsOf S P) (layerOf lay) tree.val) level j
+          (leaves (queryH (m := m)) (ofParam P) (secretsOf S P) (layerOf lay) tree.val) ⟨level, j⟩
         = ofDigest <$> SphincsSecurity.Seeded.treeNode (m := m) P lay tree S level j
   | 0, j, _, hj => by
     have hleaf : keyOf lay tree (SphincsSecurity.Concrete.leafOfNat j)
         = ⟨layerOf lay, tree.val, j⟩ := by
       simp only [keyOf, SphincsSecurity.Concrete.leafOfNat, OtsKey.mk.injEq, true_and]
       exact Nat.mod_eq_of_lt hj
-    rw [Merkle.node, leaves, ← hleaf, otsPublicLeaf_queryH]
+    rw [Merkle.node_zero, leaves, ← hleaf, otsPublicLeaf_queryH]
     rfl
   | level + 1, j, hlevel, hj => by
     have hpow : 2 ^ (TOP_HEIGHT - level) = 2 * 2 ^ (TOP_HEIGHT - (level + 1)) := by
       rw [show TOP_HEIGHT - level = TOP_HEIGHT - (level + 1) + 1 by omega, pow_succ]
       ring
-    rw [Merkle.node, node_queryH S P lay tree level (2 * j) (by omega) (by omega),
+    rw [Merkle.node_succ, node_queryH S P lay tree level (2 * j) (by omega) (by omega),
       node_queryH S P lay tree level (2 * j + 1) (by omega) (by omega)]
     simp only [SphincsSecurity.Seeded.treeNode, bind_map_left, map_bind]
     refine bind_congr fun left => bind_congr fun right => ?_
@@ -207,8 +207,8 @@ theorem siblings_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.Pu
     (he : e < 2 ^ TOP_HEIGHT) :
     ∀ (n level : Nat), level + n ≤ TOP_HEIGHT →
       Merkle.siblings (nodeHash (queryH (m := m)) (ofParam P) (layerOf lay) tree.val)
-          (leaves (queryH (m := m)) (ofParam P) (secretsOf S P) (layerOf lay) tree.val) level
-          (e / 2 ^ level) n
+          (leaves (queryH (m := m)) (ofParam P) (secretsOf S P) (layerOf lay) tree.val)
+          ⟨level, e / 2 ^ level⟩ n
         = ofPath <$> sequenceFin (m := m) fun i : Fin n =>
             SphincsSecurity.Seeded.treeNode P lay tree S (level + i.val)
               (Nat.xor (e / 2 ^ (level + i.val)) 1)
@@ -224,7 +224,9 @@ theorem siblings_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.Pu
       Nat.xor_lt_two_pow hlt (Nat.one_lt_two_pow (by omega))
     have hdiv : e / 2 ^ level / 2 = e / 2 ^ (level + 1) := by
       rw [Nat.div_div_eq_div_mul, pow_succ]
-    rw [Merkle.siblings, node_queryH S P lay tree level _ (by omega) hsib, hdiv,
+    rw [Merkle.siblings]
+    dsimp only [Merkle.Position.sibling, Merkle.Position.parent]
+    rw [node_queryH S P lay tree level _ (by omega) hsib, hdiv,
       siblings_queryH S P lay tree e he n (level + 1) (by omega)]
     simp only [sequenceFin, map_bind, bind_map_left, map_pure, Fin.val_zero, Nat.add_zero]
     refine bind_congr fun head => ?_
@@ -265,8 +267,8 @@ theorem climb_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurit
     ∀ (n level : Nat),
       ofDigest <$> SphincsSecurity.Concrete.treeFold (m := m) P lay tree leaf path (level + n) v
         = SphincsSecurity.Concrete.treeFold (m := m) P lay tree leaf path level v >>= fun c =>
-            Merkle.climb (nodeHash (queryH (m := m)) (ofParam P) (layerOf lay) tree.val) level
-              (leaf.val / 2 ^ level) (ofDigest c)
+            Merkle.climb (nodeHash (queryH (m := m)) (ofParam P) (layerOf lay) tree.val)
+              ⟨level, leaf.val / 2 ^ level⟩ (ofDigest c)
               (List.ofFn fun i : Fin n => ofDigest (path (level + i.val)))
   | 0, level => by simp [Merkle.climb]
   | n + 1, level => by
@@ -280,12 +282,15 @@ theorem climb_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurit
     have hlist : (List.ofFn fun i : Fin n => ofDigest (path (level + (i.val + 1))))
         = List.ofFn fun i : Fin n => ofDigest (path (level + 1 + i.val)) :=
       congrArg List.ofFn (funext fun i => by rw [Nat.add_right_comm, Nat.add_assoc])
-    rw [Merkle.climb, hdiv, hlist, Nat.testBit_eq_decide_div_mod_eq]
+    rw [Merkle.climb]
+    dsimp only [Merkle.Position.parent]
+    rw [hdiv, hlist, Nat.testBit_eq_decide_div_mod_eq]
     rcases Nat.mod_two_eq_zero_or_one (leaf.val / 2 ^ level) with h | h
-    · simp only [h, Merkle.ordered, ↓reduceIte, Nat.zero_ne_one, decide_false,
-        Bool.false_eq_true]
+    · simp only [h, Merkle.ordered, Merkle.Position.isLeft, ↓reduceIte, Nat.zero_ne_one,
+        decide_false, decide_true, Bool.false_eq_true]
       rw [nodeHash_queryH P lay tree (level + 1), bind_map_left]
-    · simp only [h, Merkle.ordered, ↓reduceIte, Nat.one_ne_zero, decide_true]
+    · simp only [h, Merkle.ordered, Merkle.Position.isLeft, ↓reduceIte, Nat.one_ne_zero,
+        decide_false, decide_true, Bool.false_eq_true]
       rw [nodeHash_queryH P lay tree (level + 1), bind_map_left]
 
 end EthLib.Cryptography.Sphincs.Unforgeability.Bridge

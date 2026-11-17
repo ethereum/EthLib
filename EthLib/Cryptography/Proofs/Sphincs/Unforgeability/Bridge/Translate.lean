@@ -189,7 +189,7 @@ theorem otsLeafHash_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsS
 /-- A tree node at height `z` and index `j`, from its two children. -/
 theorem nodeHash_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurity.Layer)
     (tree : SphincsSecurity.TreeIndex) (z j : Nat) (left right : SphincsSecurity.Digest) :
-    nodeHash (queryH (m := m)) (ofParam P) (layerOf lay) tree.val z j (ofDigest left)
+    nodeHash (queryH (m := m)) (ofParam P) (layerOf lay) tree.val ⟨z, j⟩ (ofDigest left)
         (ofDigest right)
       = ofDigest <$> tweakableHash (m := m) P (.node lay tree z j)
           (SphincsSecurity.Concrete.nodePayload left right) :=
@@ -216,7 +216,7 @@ theorem forsLeafHash_queryH (P : SphincsSecurity.PublicParameter) (index : Sphin
 theorem forsNodeHash_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsSecurity.Index)
     (κ : SphincsSecurity.FTree) (level : SphincsSecurity.FLevel) (node : SphincsSecurity.FLeaf)
     (hnode : node.val < 2 ^ (FORS_HEIGHT - (level.val + 1))) (left right : SphincsSecurity.Digest) :
-    forsNodeHash (queryH (m := m)) (ofParam P) index.val (treeOf κ) (level.val + 1) node.val
+    forsNodeHash (queryH (m := m)) (ofParam P) index.val (treeOf κ) ⟨level.val + 1, node.val⟩
         (ofDigest left) (ofDigest right)
       = ofDigest <$> tweakableHash (m := m) P (.forsNode index κ level node)
           (SphincsSecurity.Concrete.nodePayload left right) :=
@@ -229,7 +229,7 @@ The model stores its index as a FORS leaf, modulo `2^10`. -/
 theorem forsNodeHash_queryH_mod (P : SphincsSecurity.PublicParameter)
     (index : SphincsSecurity.Index) (κ : SphincsSecurity.FTree) (level : SphincsSecurity.FLevel)
     (j : Nat) (hj : j < 2 ^ (FORS_HEIGHT - (level.val + 1))) (left right : SphincsSecurity.Digest) :
-    forsNodeHash (queryH (m := m)) (ofParam P) index.val (treeOf κ) (level.val + 1) j
+    forsNodeHash (queryH (m := m)) (ofParam P) index.val (treeOf κ) ⟨level.val + 1, j⟩
         (ofDigest left) (ofDigest right)
       = ofDigest <$> tweakableHash (m := m) P (.forsNode index κ level
           ⟨j % 2 ^ SphincsSecurity.forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩)

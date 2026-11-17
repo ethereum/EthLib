@@ -124,9 +124,9 @@ theorem th_map_monad (pkSeed : PkSeed) (adrs : Adrs) (payload : ByteArray) :
 omit [LawfulMonad m] [LawfulMonad n] in
 /-- A FORS node hash commutes with the map. -/
 theorem forsNodeHash_map_monad (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
-    (z j : Nat) (left right : Digest) :
-    φ (forsNodeHash H pkSeed idx kappa z j left right)
-      = forsNodeHash (fun x => φ (H x)) pkSeed idx kappa z j left right :=
+    (p : Merkle.Position) (left right : Digest) :
+    φ (forsNodeHash H pkSeed idx kappa p left right)
+      = forsNodeHash (fun x => φ (H x)) pkSeed idx kappa p left right :=
   th_map_monad φ map_pure map_bind H _ _ _
 
 omit [LawfulMonad m] [LawfulMonad n] in
@@ -138,10 +138,10 @@ theorem forsPkFromRoots_map_monad (pkSeed : PkSeed) (idx : Nat)
 
 omit [LawfulMonad m] [LawfulMonad n] in
 /-- A hypertree node hash commutes with the map. -/
-theorem nodeHash_map_monad (pkSeed : PkSeed) (layer : Layer) (tree z j : Nat)
+theorem nodeHash_map_monad (pkSeed : PkSeed) (layer : Layer) (tree : Nat) (p : Merkle.Position)
     (left right : Digest) :
-    φ (nodeHash H pkSeed layer tree z j left right)
-      = nodeHash (fun x => φ (H x)) pkSeed layer tree z j left right :=
+    φ (nodeHash H pkSeed layer tree p left right)
+      = nodeHash (fun x => φ (H x)) pkSeed layer tree p left right :=
   th_map_monad φ map_pure map_bind H _ _ _
 
 omit [LawfulMonad m] [LawfulMonad n] in
@@ -267,15 +267,15 @@ theorem chain_isTotalQueryBound {α : Type} {k : Nat} (step : Fin k → α → O
       fun _ => hstep _ _
 
 /-- A climb makes one call per sibling, when each node hash makes at most one. -/
-theorem climb_isTotalQueryBound {α : Type} (hash : Nat → Nat → α → α → OracleComp spec α)
-    (hhash : ∀ level j left right, IsTotalQueryBound (hash level j left right) 1) :
-    ∀ (siblings : List α) (level j : Nat) (current : α),
-      IsTotalQueryBound (Merkle.climb hash level j current siblings) siblings.length
-  | [], _, _, _ => isQueryBound_pure _ _ _ _
-  | _ :: rest, level, j, current => by
+theorem climb_isTotalQueryBound {α : Type} (hash : Merkle.Position → α → α → OracleComp spec α)
+    (hhash : ∀ p left right, IsTotalQueryBound (hash p left right) 1) :
+    ∀ (siblings : List α) (p : Merkle.Position) (current : α),
+      IsTotalQueryBound (Merkle.climb hash p current siblings) siblings.length
+  | [], _, _ => isQueryBound_pure _ _ _ _
+  | _ :: rest, p, current => by
     rw [Merkle.climb, List.length_cons]
-    exact (isTotalQueryBound_bind (hhash _ _ _ _)
-      fun _ => climb_isTotalQueryBound hash hhash rest _ _ _).mono (by omega)
+    exact (isTotalQueryBound_bind (hhash _ _ _)
+      fun _ => climb_isTotalQueryBound hash hhash rest _ _).mono (by omega)
 
 /-- The chains of a codeword have `3 * 64 - 128 = 64` steps left above the revealed positions. -/
 theorem sum_steps_of_codeword {d : Digest} {x : Codeword} (h : codeword? d = some x) :
@@ -318,7 +318,7 @@ theorem treeRecover_isTotalQueryBound (pkSeed : PkSeed) (idx : Nat) (kappa : Fin
   rw [treeRecover]
   refine isTotalQueryBound_bind (th_isTotalQueryBound H hH _ _ _) fun leaf => ?_
   have := climb_isTotalQueryBound (forsNodeHash H pkSeed idx kappa)
-    (fun _ _ _ _ => th_isTotalQueryBound H hH _ _ _) opening.path.toList 0 s.val leaf
+    (fun _ _ _ => th_isTotalQueryBound H hH _ _ _) opening.path.toList ⟨0, s.val⟩ leaf
   rwa [Vector.length_toList] at this
 
 /-- Recovering the FORS public key makes `24 * 11 + 1 = 265` calls: the trees, then `T_k`. -/
@@ -364,8 +364,8 @@ theorem layerRoot_isTotalQueryBound (pkSeed : PkSeed) (layer : Layer) (idx : Nat
     refine isTotalQueryBound_bind ?_ fun _ => isQueryBound_pure _ _ _ _
     rw [fold]
     have := climb_isTotalQueryBound (nodeHash H pkSeed layer (OtsKey.ofIndex layer idx).tree)
-      (fun _ _ _ _ => th_isTotalQueryBound H hH _ _ _) sig.path.toList 0
-      (OtsKey.ofIndex layer idx).leaf leaf
+      (fun _ _ _ => th_isTotalQueryBound H hH _ _ _) sig.path.toList
+      ⟨0, (OtsKey.ofIndex layer idx).leaf⟩ leaf
     rwa [Vector.length_toList] at this
 
 /-- The most hash calls verification makes: the digest, FORS, three layers and their paths. -/
@@ -447,12 +447,12 @@ theorem length_queriesWith_chain {α : Type} {k : Nat} (step : Fin k → α → 
       length_queriesWith_chain step hstep start s _ value, hstep]
 
 /-- A climb queries one input per sibling, when each node hash queries one. -/
-theorem length_queriesWith_climb {α : Type} (hash : Nat → Nat → α → α → OracleComp spec α)
-    (hhash : ∀ z j left right, (queriesWith F (hash z j left right)).length = 1) :
-    ∀ (siblings : List α) (z j : Nat) (current : α),
-      (queriesWith F (Merkle.climb hash z j current siblings)).length = siblings.length
-  | [], _, _, _ => rfl
-  | _ :: rest, z, j, current => by
+theorem length_queriesWith_climb {α : Type} (hash : Merkle.Position → α → α → OracleComp spec α)
+    (hhash : ∀ p left right, (queriesWith F (hash p left right)).length = 1) :
+    ∀ (siblings : List α) (p : Merkle.Position) (current : α),
+      (queriesWith F (Merkle.climb hash p current siblings)).length = siblings.length
+  | [], _, _ => rfl
+  | _ :: rest, p, current => by
     rw [Merkle.climb, queriesWith_bind, List.length_append, hhash,
       length_queriesWith_climb hash hhash rest, List.length_cons]
     omega
@@ -480,7 +480,7 @@ theorem length_queriesWith_treeRecover (pkSeed : PkSeed) (idx : Nat) (kappa : Fi
     (queriesWith F (treeRecover H pkSeed idx kappa s opening)).length = 1 + FORS_HEIGHT := by
   rw [treeRecover, queriesWith_bind, List.length_append, forsLeafHash,
     length_queriesWith_th F H hH, length_queriesWith_climb F (forsNodeHash H pkSeed idx kappa)
-      (fun _ _ _ _ => length_queriesWith_th F H hH _ _ _), Vector.length_toList]
+      (fun _ _ _ => length_queriesWith_th F H hH _ _ _), Vector.length_toList]
 
 /-- Recovering the FORS public key queries `24 * 11 + 1 = 265` inputs. -/
 theorem length_queriesWith_forsRecover (pkSeed : PkSeed) (idx : Nat)
@@ -534,7 +534,7 @@ theorem length_queriesWith_layerRoot (pkSeed : PkSeed) (layer : Layer) (idx : Na
     dsimp only
     rw [queriesWith_bind, List.length_append, fold,
       length_queriesWith_climb F (nodeHash H pkSeed layer (OtsKey.ofIndex layer idx).tree)
-        (fun _ _ _ _ => length_queriesWith_th F H hH _ _ _), Vector.length_toList]
+        (fun _ _ _ => length_queriesWith_th F H hH _ _ _), Vector.length_toList]
     rfl
 
 /-- **A signature that verifies takes exactly as many calls as the bound.**

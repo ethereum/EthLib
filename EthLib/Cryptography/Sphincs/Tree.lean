@@ -50,11 +50,13 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 /-! ## Nodes -/
 
-/-- The parent at index `j` and height `z` of tree `tree` of a layer, from its two children. -/
-def nodeHash (pkSeed : PkSeed) (layer : Layer) (tree z j : Nat) (left right : Digest) :
-    m Digest :=
+/-- The parent at a position of tree `tree` of a layer, from its two children.
+
+The position's level is the height `z`, and its index is the index `j`. -/
+def nodeHash (pkSeed : PkSeed) (layer : Layer) (tree : Nat) (p : Merkle.Position)
+    (left right : Digest) : m Digest :=
   -- The payload is the left child, then the right child.
-  th H pkSeed (adrsNode layer tree z j) (packBytes left ++ packBytes right)
+  th H pkSeed (adrsNode layer tree p.level p.index) (packBytes left ++ packBytes right)
 
 /-- `X_{0,e}`: the leaf of one-time key `e` of tree `tree` of a layer. -/
 def leaves (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree e : Nat) : m Digest :=
@@ -64,7 +66,7 @@ def leaves (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree e : Nat) : m Di
 
 Computing it evaluates the `2^z` one-time keys below it. -/
 def node (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree z j : Nat) : m Digest :=
-  Merkle.node (nodeHash H pkSeed layer tree) (leaves H pkSeed prf layer tree) z j
+  Merkle.node (nodeHash H pkSeed layer tree) (leaves H pkSeed prf layer tree) ⟨z, j⟩
 
 /-- The root of tree `tree` of a layer: its one node at the top height. -/
 def treeRoot (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree : Nat) : m Digest :=
@@ -87,6 +89,6 @@ def path (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree e : Nat) :
 It is the climb of FIPS 205's `xmss_pkFromSig`. -/
 def fold (pkSeed : PkSeed) (layer : Layer) (tree e : Nat) (leaf : Digest)
     (pi : Vector Digest layer.height) : m Digest :=
-  Merkle.climb (nodeHash H pkSeed layer tree) 0 e leaf pi.toList
+  Merkle.climb (nodeHash H pkSeed layer tree) ⟨0, e⟩ leaf pi.toList
 
 end EthLib.Cryptography.Sphincs
