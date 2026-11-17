@@ -222,6 +222,56 @@ theorem DelayFits.before_boundary {Δ : ℕ}
   rw [timeEq]
   exact fits.2 slot next start due following nextOk startOk dueOk followingOk
 
+/-- A past slot's attestation deadline plus the delay is at most the current clock.
+
+The current slot starts at or before the clock, and the slot after the deadline's no later.
+
+A fitting delay puts the deadline plus the delay before the start of that slot. -/
+theorem DelayFits.deadline_add_le {Δ time : ℕ} {slot current : Slot} {clock : UInt64}
+    (fits : DelayFits fork config genesisTimeMs Δ)
+    (deadline : IsAttestationDeadline fork config genesisTimeMs slot time)
+    (currentOk : computeSlotAtTimeMs config genesisTimeMs clock = .ok current)
+    (past : slot < current) : time + Δ ≤ clock.toNat := by
+  have ⟨start, _, startOk, _, _⟩ := deadline
+  -- The current slot starts at or before the clock.
+  have read := currentOk
+  simp only [computeSlotAtTimeMs, bind_ok_iff] at read
+  obtain ⟨elapsed, elapsedOk, quotient⟩ := read
+  obtain ⟨_, elapsedNat⟩ := subChecked_ok_iff.mp elapsedOk
+  obtain ⟨_, quotientNat⟩ := divChecked_ok_iff.mp quotient
+  have floor := Nat.div_mul_le_self elapsed.toNat config.SLOT_DURATION_MS.toNat
+  rw [← quotientNat] at floor
+  have productFits : current.toNat * config.SLOT_DURATION_MS.toNat < 2 ^ 64 := by
+    have := clock.toNat_lt
+    omega
+  have productOk := mulChecked_of_lt productFits
+  have productNat := (mulChecked_ok_iff.mp productOk).2
+  have sumFits : genesisTimeMs.toNat + (current * config.SLOT_DURATION_MS).toNat < 2 ^ 64 := by
+    have := clock.toNat_lt
+    rw [productNat]
+    omega
+  have sumOk := addChecked_of_lt sumFits
+  have currentTimeOk : computeTimeAtSlotMs config genesisTimeMs current =
+      .ok (genesisTimeMs + current * config.SLOT_DURATION_MS) := by
+    simp only [computeTimeAtSlotMs, productOk, bind, Except.bind]
+    exact sumOk
+  have currentLe : (genesisTimeMs + current * config.SLOT_DURATION_MS).toNat ≤ clock.toNat := by
+    rw [(addChecked_ok_iff.mp sumOk).2, productNat]
+    omega
+  -- The slot after the deadline's is at most the current one.
+  have lt := UInt64.lt_iff_toNat_lt.mp past
+  have bound := current.toNat_lt
+  have nextNat : (slot + 1).toNat = slot.toNat + 1 := by
+    rw [UInt64.toNat_add, UInt64.toNat_one]
+    exact Nat.mod_eq_of_lt (by omega)
+  have nextOk : addChecked slot 1 = .ok (slot + 1) :=
+    addChecked_ok_iff.mpr ⟨by simp only [UInt64.toNat_one]; omega, nextNat⟩
+  obtain ⟨following, followingOk, -, followingLe⟩ := exists_timeAtSlotMs_of_le
+    (UInt64.le_iff_toNat_le.mpr (by rw [nextNat]; omega)) currentTimeOk
+  have before := fits.before_boundary nextOk startOk followingOk deadline
+  have le := UInt64.le_iff_toNat_le.mp followingLe
+  omega
+
 /-- A fitting delay places the attestation deadline inside each representable slot. -/
 theorem DelayFits.due_lt_slot {Δ : ℕ}
     (fits : DelayFits fork config genesisTimeMs Δ)

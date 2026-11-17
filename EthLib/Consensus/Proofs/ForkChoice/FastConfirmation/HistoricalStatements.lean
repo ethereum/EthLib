@@ -211,6 +211,12 @@ def HonestBlocksAgree (time : Nat) : Prop :=
     ((e.world i).state a).blocks[r]? = some left →
     ((e.world j).state b).blocks[r]? = some right → left = right
 
+/-- Two honest stores collide on one root, by a time. -/
+def HonestCollision (time : ℕ) : Prop :=
+  ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
+    ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
+      some evidence
+
 /-- No honest validator has a true slashed flag in a counted state through the horizon. -/
 def HonestCountedStatesUnslashed (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k state, (e.world k).time ≤ last →
