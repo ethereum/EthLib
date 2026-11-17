@@ -3007,6 +3007,7 @@ It concludes that every up-to-date honest head from the call to the horizon desc
 The coverage of the parent over the same interval and the coverage of the historical anchor before the call remain hypotheses.
 Residual finalized-checkpoint compatibility is carried unchanged, so cross-store finality safety stays assumed.
 Receiver finality coverage and the receiver's block lookup are derived from `RootViable`, the root's viability at each honest store, which is assumed.
+It assumes that no up-to-date honest justified checkpoint over the interval conflicts with the root: the checkpoint-consistency half of the safety of the confirmation, not derived.
 `HonestHeadReads` assumes that each honest head reads its justified state and its committee windows.
 `ReceiverWindowExits` assumes the exit bound of each receiver's window, and `LateDutyMajority` assumes the honest duty majority of the duty-epoch theorem.
 The receiver's proposer score is derived from the checkpoint stake ceiling and `Config.ProposerScoreFits`, a bound on the boost that mainnet and minimal satisfy.

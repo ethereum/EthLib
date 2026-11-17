@@ -186,6 +186,10 @@ Every up-to-date honest head from the call to the horizon descends from the bloc
 
 Otherwise two honest stores hold different blocks at one root, or direct-safety evidence exists.
 
+That evidence is relative to the anchor, and its drift counts from the anchor.
+
+With enough churn since the anchor, it holds with no accountable key.
+
 The induction on time replaces the earlier coverage of the root that each step assumes.
 
 The parent's coverage over the same interval is still assumed.
@@ -196,7 +200,15 @@ After that, each step is the duty-epoch step, which needs a late duty majority a
 
 The cross-store finality of the historical-anchor step, `residual`, stays an assumption.
 
-The receiver reads `reads`, viability `viable`, exits `exits` and the majority `late` are assumed.
+The receivers' reads, their exits and the late duty majority are assumed.
+
+The root's viability is assumed too.
+
+It says that no honest justified checkpoint over the interval conflicts with the root.
+
+That is the checkpoint-consistency half of the safety of the confirmation, not derived here.
+
+The stake ceiling is `2 * 10^8` ETH, above mainnet's active stake.
 
 The proposer score at each receiver follows from the stake ceiling and `scoreFits`.
 

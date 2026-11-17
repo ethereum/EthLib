@@ -109,7 +109,7 @@ theorem getTotalBalance_ok_iff_stake {state : BeaconState preset fork}
 
 /-- A finite active stake supplies the checked total, without bounding inactive balances.
 
-`getTotalActiveBalance_exists_ok` asks instead for the whole registry's sum below `2^64`. -/
+The other existence lemma asks instead for the sum over the whole registry below `2^64`. -/
 theorem getTotalActiveBalance_exists {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit)
     (bounded : stake (fun v => balanceAt state v.toNat)

@@ -259,7 +259,13 @@ def HonestHeadReads (firstSlot : Slot) (first last : Nat) : Prop :=
       high < current → ∃ participants,
         ((e.world k).state w).getCommitteesBetweenSlots head.root firstSlot high = .ok participants
 
-/-- Each up-to-date honest store has the root in its filtered tree or below its justified block. -/
+/-- Each up-to-date honest store has the root in its filtered tree or below its justified block.
+
+The filtered tree grows from the justified block, so either way the root does not conflict with it.
+
+So this assumes that no honest justified checkpoint conflicts with the root over the interval.
+
+That is the checkpoint-consistency half of the safety of the confirmation, assumed, not derived. -/
 def RootViable (root : Root) (first last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k (nodes : List ForkChoiceNode), first ≤ (e.world k).time → (e.world k).time ≤ last →
     UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
