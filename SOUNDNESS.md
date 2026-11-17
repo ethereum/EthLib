@@ -3007,7 +3007,8 @@ The coverage of the parent over the same interval and the coverage of the histor
 Like the historical-anchor theorem, it does not assume finality across honest stores.
 Receiver finality coverage and the receiver's block lookup are derived from `RootViable`, the root's viability at each honest store, which is assumed.
 It assumes that no up-to-date honest justified checkpoint over the interval conflicts with the root: the checkpoint-consistency half of the safety of the confirmation, not derived.
-`HonestHeadReads` assumes that each honest head reads its justified state and its committee windows.
+`HonestHeadReads` assumes that each honest head reads its committee windows.
+The receiver's justified state is derived: when the root is above the justified block, the head computation weighed a child of that block and so read its state (`Store.checkpointState_justified_of_getHead`).
 `ReceiverWindowExits` assumes the exit bound of each receiver's window, and `LateDutyMajority` assumes the honest duty majority of the duty-epoch theorem.
 The receiver's proposer score is derived from the checkpoint stake ceiling and `Config.ProposerScoreFits`, a bound on the boost that mainnet and minimal satisfy.
 

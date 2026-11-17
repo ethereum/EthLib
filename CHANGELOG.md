@@ -39,6 +39,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `HonestHeadReads` no longer asks for the receiver's justified state ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  It keeps only the committee windows, so a caller that builds it drops its first conjunct; the historical-anchor theorems keep their statements otherwise.
+  `Store.checkpointState_justified_of_getHead` derives the state: a head that has a viable node besides the justified block read it.
+
 - In Lean, the historical-anchor theorems no longer assume finality across honest stores ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `Execution.source_surplus_or_historical_evidence`, `Execution.isAncestor_getHead_of_historical_anchor`, `Execution.honestHeadsCover_of_historical_anchor` and `Execution.honestHeadsCover_of_signed_justification` drop their `residual` argument; their conclusions are unchanged.
   `receiver_fullMaximum_of_head_window` takes the receiver's own finalized checkpoint on its own justified chain, `finalizedRead`, instead of `compatible`, `bounded`, `slots` and `epochOk`.

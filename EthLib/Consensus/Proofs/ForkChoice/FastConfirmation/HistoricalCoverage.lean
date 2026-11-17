@@ -523,8 +523,18 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
         known | ⟨r, evidence, searched⟩
       swap
       · exact .inr (.inl ⟨u, caller, w, receiver, n, k, callerTime, highK, r, evidence, searched⟩)
-      obtain ⟨⟨state, stateOk⟩, windowsOk⟩ :=
-        reads w receiver k receiverHead lowK highK upToDate receiverHeadOk
+      -- A root below the justified block is below the head, with no read.
+      obtain ⟨justifiedBlock, justifiedFound⟩ := Store.filterNodeTree_known tree
+      by_cases settled : ((e.world k).state w).isAncestor
+          ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true
+      · exact .inl (Store.isAncestor_trans_of_lt preGloas justifiedFound known
+          (Store.isAncestor_getHead_of_lt_gloas preGloas receiverHeadOk) settled)
+      -- Otherwise the root is a viable node besides the justified block, so the head read its state.
+      obtain ⟨state, stateOk⟩ := Store.checkpointState_justified_of_getHead preGloas tree
+        receiverHeadOk (route.resolve_left settled) fun same => settled (by
+          rw [same]
+          exact Store.isAncestor_self (node := ⟨_, .pending⟩) justifiedFound)
+      have windowsOk := reads w receiver k receiverHead lowK highK upToDate receiverHeadOk
       -- The ceiling and the parameter bound give the receiver's proposer score.
       obtain ⟨score, scoreOk⟩ := computeProposerScore_exists scoreFits positive
         (BeaconState.registryWithinLimit_of_lt preGloas state)
@@ -646,7 +656,9 @@ After that, each step is the duty-epoch step, which needs a late duty majority a
 
 Both steps read finality only within one store, so no finality across stores is assumed.
 
-The receivers' reads, their exits and the late duty majority are assumed.
+The receivers' committee windows, their exits and the late duty majority are assumed.
+
+A receiver's justified state needs no assumption: its head read it whenever the root is above it.
 
 The root's viability is assumed too.
 
