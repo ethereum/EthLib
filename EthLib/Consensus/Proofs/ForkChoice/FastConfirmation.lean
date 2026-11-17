@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Committees
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.CheckpointConsistency
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedRoot
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.DutySupport
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalStatements
