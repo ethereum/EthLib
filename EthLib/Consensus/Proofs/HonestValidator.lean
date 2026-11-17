@@ -675,21 +675,8 @@ theorem getCommitteeAssignment_exists {state : BeaconState preset fork} {epoch :
       cases empty
     refine findCommitteeOf_exists fun slot index mem => ?_
     obtain ⟨-, indexLt⟩ := mem_committeePositions positioned mem
-    have remainder : (slot % preset.SLOTS_PER_EPOCH).toNat < preset.SLOTS_PER_EPOCH.toNat := by
-      rw [UInt64.toNat_mod]
-      exact Nat.mod_lt _ positive
-    have indexNat := UInt64.lt_iff_toNat_lt.mp indexLt
-    refine beaconCommitteeOf_ok countFits ?_ (by rw [List.size_toArray]; exact activeFits)
-    calc (slot % preset.SLOTS_PER_EPOCH).toNat * (getCommitteeCountPerSlot state epoch).toNat +
-          index.toNat
-        < ((slot % preset.SLOTS_PER_EPOCH).toNat + 1) *
-          (getCommitteeCountPerSlot state epoch).toNat := by
-          rw [Nat.succ_mul]
-          omega
-      _ ≤ preset.SLOTS_PER_EPOCH.toNat * (getCommitteeCountPerSlot state epoch).toNat :=
-          Nat.mul_le_mul_right _ remainder
-      _ = (getCommitteeCountPerSlot state epoch).toNat * preset.SLOTS_PER_EPOCH.toNat :=
-          Nat.mul_comm _ _
+    exact beaconCommitteeOf_ok_of_lt positive countFits
+      (by rw [List.size_toArray]; exact activeFits) indexLt
 
 /-! ## Proposer and sync committee duties -/
 

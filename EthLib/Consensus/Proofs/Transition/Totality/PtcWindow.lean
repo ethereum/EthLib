@@ -290,20 +290,11 @@ theorem computePtc_ok {state : BeaconState preset fork} {slot : Slot}
       (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).toArray shuffled =
       .ok members := by
     unfold slotCommitteeMembersOf
-    refine foldlM_committees_ok _ fun i lt => beaconCommitteeOf_ok countFits ?_ (by
-      simpa only [List.size_toArray] using activeFits)
-    have iNat : (i.toUInt64).toNat = i := by
-      rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' (Nat.lt_trans lt
-        (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat_lt)]
-    rw [iNat, UInt64.toNat_mod]
-    have below := Nat.mod_lt slot.toNat epochPos
-    generalize (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat = p at *
-    generalize UInt64.toNat slot % UInt64.toNat preset.SLOTS_PER_EPOCH = k at *
-    generalize UInt64.toNat preset.SLOTS_PER_EPOCH = e at *
-    calc k * p + i < k * p + p := Nat.add_lt_add_left lt _
-      _ = (k + 1) * p := (Nat.succ_mul k p).symm
-      _ ≤ e * p := Nat.mul_le_mul_right _ below
-      _ = p * e := Nat.mul_comm _ _
+    refine foldlM_committees_ok _ fun i lt => beaconCommitteeOf_ok_of_lt epochPos countFits (by
+      simpa only [List.size_toArray] using activeFits) ?_
+    rw [UInt64.lt_iff_toNat_lt, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' (Nat.lt_trans lt
+      (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat_lt)]
+    exact lt
   have found : slotCommitteeMembers state slot = .ok members := by
     unfold slotCommitteeMembers
     simp only [shuffleOk, bind, Except.bind]

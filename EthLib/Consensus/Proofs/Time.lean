@@ -209,6 +209,16 @@ theorem computeSlotAtTimeMs_mono {genesisTimeMs timeMs laterMs : UInt64} {slot l
       have := UInt64.le_iff_toNat_le.mp le
       exact Nat.div_le_div_right (by omega)
 
+/-- The slot at a time is at most the largest 64-bit integer divided by the slot duration. -/
+theorem computeSlotAtTimeMs_le {genesisTimeMs timeMs : UInt64} {slot : Slot}
+    (ok : computeSlotAtTimeMs config genesisTimeMs timeMs = .ok slot) :
+    slot.toNat ≤ (2 ^ 64 - 1) / config.SLOT_DURATION_MS.toNat := by
+  unfold computeSlotAtTimeMs at ok
+  obtain ⟨elapsed, -, divided⟩ := bind_ok_iff.mp ok
+  obtain ⟨-, value⟩ := divChecked_ok_iff.mp divided
+  rw [value]
+  exact Nat.div_le_div_right (by have := elapsed.toNat_lt; omega)
+
 /-- A whole number of seconds that fits keeps its value, in milliseconds.
 
 It fits when it is at most the largest 64-bit integer divided by 1000. -/

@@ -824,6 +824,51 @@ theorem getAttestationScore_ok_of_getHead (before : fork < .glamsterdam)
   | error error => simp [scoreOk] at weightOk
   | ok score => exact ⟨score, scoreOk⟩
 
+/-- Before Gloas, a head with a viable node besides the justified block has read its state.
+
+It gives a receiver's justified state without assuming the read. -/
+theorem checkpointState_justified_of_getHead (before : fork < .glamsterdam)
+    {nodes : List ForkChoiceNode} {head node : ForkChoiceNode}
+    (tree : store.getFilteredNodeTree config = .ok nodes)
+    (found : store.getHead config = .ok head) (member : node ∈ nodes)
+    (other : node ≠ ⟨store.justifiedCheckpoint.root, .pending⟩) :
+    ∃ state, store.checkpointState store.justifiedCheckpoint = .ok state := by
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  have walk : store.filterNodeTree config ⟨store.justifiedCheckpoint.root, .pending⟩ =
+      .ok nodes := tree
+  simp only [getHead, notGloas, false_and, ↓reduceIte, tree, bind, Except.bind] at found
+  -- The first step of the walk weighs the children of the justified block among the nodes.
+  rw [getHeadFrom] at found
+  obtain ⟨result, chosen⟩ : ∃ result, store.heaviestChild config store.justifiedTally nodes
+      ⟨store.justifiedCheckpoint.root, .pending⟩ = .ok result := by
+    cases step : store.heaviestChild config store.justifiedTally nodes
+        ⟨store.justifiedCheckpoint.root, .pending⟩ with
+    | error e => simp [step, bind, Except.bind] at found
+    | ok result => exact ⟨result, rfl⟩
+  obtain ⟨children, weighted, childrenOk, weightedOk, -⟩ := heaviestChild_eq chosen
+  -- Without children, the viable nodes would be at most the justified block itself.
+  have nonempty : children ≠ [] := by
+    rintro rfl
+    rw [filterNodeTree, bind_ok_iff] at walk
+    obtain ⟨empty, same, walk⟩ := walk
+    rw [childrenOk, Except.ok.injEq] at same
+    subst same
+    simp only [List.isEmpty_nil, ↓reduceIte, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at walk
+    obtain ⟨isViable, -, rfl⟩ := walk
+    cases isViable <;> simp_all
+  obtain ⟨child, childMem, childIn⟩ := filterNodeTree_child walk _
+    (filterNodeTree_self walk (List.ne_nil_of_mem member)) childrenOk nonempty
+  obtain ⟨weighed, _, weighedOk⟩ := exists_mem_of_mapM_ok weightedOk
+    (List.mem_filter.mpr ⟨childMem, by simpa using childIn⟩)
+  -- Weighing the child forces the tally of the justified state.
+  have weightOk := (weighNode_ok_iff.mp weighedOk).2.1
+  cases stateOk : store.checkpointState store.justifiedCheckpoint with
+  | ok state => exact ⟨state, rfl⟩
+  | error e =>
+    simp [getWeight, notGloas, justifiedTally, stateOk, bind, Except.bind, pure, Except.pure]
+      at weightOk
+
 /-- A node whose viable subtree can be computed is a known block.
 
 An unknown node has no voting source, and no child can rank below it. -/

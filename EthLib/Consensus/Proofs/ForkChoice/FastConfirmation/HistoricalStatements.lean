@@ -242,19 +242,6 @@ def HonestHeadsCover (root : Root) (first last : Nat) : Prop :=
     ((e.world i).state a).getHead config = .ok hd →
     ((e.world i).state a).isAncestor hd ⟨root, .pending⟩ = .ok true
 
-/-- Each up-to-date honest head in the interval reads its justified state and its windows.
-
-A window starts at the given slot and ends before the store's current slot. -/
-def HonestHeadReads (firstSlot : Slot) (first last : Nat) : Prop :=
-  ∀ w ∈ J, ∀ k (head : ForkChoiceNode), first ≤ (e.world k).time → (e.world k).time ≤ last →
-    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
-    ((e.world k).state w).getHead config = .ok head →
-    (∃ state, ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint =
-      .ok state) ∧
-    ∀ current high, ((e.world k).state w).getCurrentSlot config = .ok current →
-      high < current → ∃ participants,
-        ((e.world k).state w).getCommitteesBetweenSlots head.root firstSlot high = .ok participants
-
 /-- Each up-to-date honest store has the root in its filtered tree or below its justified block.
 
 The filtered tree grows from the justified block, so either way the root does not conflict with it.
