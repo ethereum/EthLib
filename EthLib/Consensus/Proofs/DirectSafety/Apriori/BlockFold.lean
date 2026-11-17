@@ -573,7 +573,7 @@ private theorem guardedReplay_consolidationRequest {x : ForkedBeaconState preset
         switch frame retired cover future compounding e before after notTransfer)
   obtain ⟨_, _, _, _, assignmentT, _, erasureT, _, reserveT⟩ := frameT
   refine ⟨queue', calls', owned', replay, reserveT, assignmentT, erasureT, retiredT, coverT,
-    futureT, processConsolidationRequest_slashed_exit_assigned compounding ok delay slashed, ?_,
+    futureT, processConsolidationRequest_slashed_exit_assigned ok slashed, ?_,
     trace electra, ?_⟩
   · intro tag member n isFresh
     by_cases old : tag ∈ queue
@@ -807,11 +807,10 @@ theorem blockReplay_proved :
     (((operationReplay_eth1 (x := x) (high := high) (rounding := rounding) electra
       eth1Ok).guarded G).append
     (replayP.append (replayS.append (replayA.append (replayD.append
-    (((reservedReplay_voluntaryExits x high rounding electra early delay _ exitsList).guarded
-      G).append
-    (((operationReplay_blsChanges x high rounding electra delay _ changedOk).guarded G).append
+    (((reservedReplay_voluntaryExits x high rounding electra early _ exitsList).guarded G).append
+    (((operationReplay_blsChanges x high rounding electra _ changedOk).guarded G).append
     (((operationReplay_depositRequests x high rounding electra _ requestsList).guarded G).append
-    (((reservedReplay_withdrawalRequests x high rounding electra early delay _
+    (((reservedReplay_withdrawalRequests x high rounding electra early _
       withdrawalsList).guarded G).append
     (replayC.append ((operationReplay_sync (x := x) (high := high) (rounding := rounding)
       electra syncOk syncBound).guarded G)

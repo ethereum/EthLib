@@ -600,7 +600,7 @@ theorem ScheduledAllocation.ofReads {x y : ForkedBeaconState preset}
     fun i _ v found => by simp [found],
     fun i _ v initial initialAt found => by simp [initialAt, found],
     reads, ?_⟩⟩
-  -- `scheduledExitStake` counts the scheduled indices with their effective balances.
+  -- `Sch` counts the scheduled indices with their effective balances.
   unfold scheduledExitStake
   rw [list_map_sum_range x.state.validators.data.toList _, Array.length_toList]
   refine (Finset.sum_le_sum fun i member => ?_).trans (Finset.sum_le_sum_of_subset_of_nonneg
@@ -1662,7 +1662,6 @@ def AttesterSlashingReplay : Prop :=
 def VoluntaryExitsReplay : Prop :=
   ∀ (x : ForkedBeaconState preset) (high : Nat) (rounding : Nat → Nat) {fork : Fork}
     (electra : .pectra ≤ fork) (_early : fork < .glamsterdam)
-    (_delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {s t : BeaconState preset fork} (exits : List SignedVoluntaryExit),
     exits.foldlM (processVoluntaryExit config checks) s = .ok t →
     OperationReplay (config := config) (checks := checks) x high rounding electra s t [] []
@@ -1671,7 +1670,6 @@ def VoluntaryExitsReplay : Prop :=
 def WithdrawalRequestsReplay : Prop :=
   ∀ (x : ForkedBeaconState preset) (high : Nat) (rounding : Nat → Nat) {fork : Fork}
     (electra : .pectra ≤ fork) (_early : fork < .glamsterdam)
-    (_delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {s t : BeaconState preset fork} (requests : List WithdrawalRequest),
     requests.foldlM (processWithdrawalRequest config · electra ·) s = .ok t →
     OperationReplay (config := config) (checks := checks) x high rounding electra s t [] []
@@ -1925,10 +1923,9 @@ theorem QuietStep.trans {fork : Fork} {electra : .pectra ≤ fork}
 private theorem QuietStep.initiateValidatorExit {fork : Fork} {electra : .pectra ≤ fork}
     {s t : BeaconState preset fork} {index : ValidatorIndex}
     (ok : initiateValidatorExit config s index = .ok t)
-    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ordered : ExitsOrdered s) (finite : getCurrentEpoch s < FAR_FUTURE_EPOCH) :
     QuietStep electra s t := by
-  have held := initiateValidatorExit_slashed_exit_assigned ok delay
+  have held := initiateValidatorExit_slashed_exit_assigned ok
   obtain ⟨v, found, ⟨_, rfl⟩ | ⟨far, queued, exitEpoch, withdrawableEpoch, queue, summed, set⟩⟩ :=
     initiateValidatorExit_ok ok
   · exact .refl ordered
@@ -1965,24 +1962,22 @@ private theorem QuietStep.initiateValidatorExit {fork : Fork} {electra : .pectra
 private theorem QuietStep.voluntaryExit {fork : Fork} {electra : .pectra ≤ fork}
     {s t : BeaconState preset fork} {signed : SignedVoluntaryExit}
     (ok : processVoluntaryExit config checks s signed = .ok t)
-    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ordered : ExitsOrdered s) (finite : getCurrentEpoch s < FAR_FUTURE_EPOCH) :
     QuietStep electra s t := by
   unfold processVoluntaryExit at ok
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-  exact .initiateValidatorExit exited delay ordered finite
+  exact .initiateValidatorExit exited ordered finite
 
 /-- A withdrawal request is quiet. -/
 private theorem QuietStep.withdrawalRequest {fork : Fork} {electra : .pectra ≤ fork}
     {s t : BeaconState preset fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t)
-    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ordered : ExitsOrdered s) (finite : getCurrentEpoch s < FAR_FUTURE_EPOCH) :
     QuietStep electra s t := by
   rcases withdrawalRequest_cases ok with rfl | ⟨index, exited⟩ | ⟨index, v, owed, paid⟩
   · exact .refl ordered
-  · exact .initiateValidatorExit exited delay ordered finite
+  · exact .initiateValidatorExit exited ordered finite
   · simp only [requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure,
       Except.pure] at paid
     obtain ⟨_, _, _, _, paid⟩ := paid
@@ -2071,19 +2066,19 @@ theorem operationReplay_quiet {x : ForkedBeaconState preset} {high : Nat}
 /-- The voluntary exits of a block record nothing. -/
 theorem reservedReplay_voluntaryExits :
     VoluntaryExitsReplay (preset := preset) (config := config) (checks := checks) :=
-  fun _ _ _ _ electra _ delay _ _ exits ok =>
+  fun _ _ _ _ electra _ _ _ exits ok =>
   operationReplay_quiet (foldlM_framePath _ exits ok fun _ _ _ _ eq => .exit eq)
     (foldlM_step (QuietStep electra) (fun _ => .refl) .trans (·.1.2.2.2.2.2.2) (·.1.2.2.2.1) _
-      (fun _ _ _ step => QuietStep.voluntaryExit step delay) exits ok)
+      (fun _ _ _ step => QuietStep.voluntaryExit step) exits ok)
 
 /-- The withdrawal requests of a block record nothing. -/
 theorem reservedReplay_withdrawalRequests :
     WithdrawalRequestsReplay (preset := preset) (config := config) (checks := checks) :=
-  fun _ _ _ _ electra _ delay _ _ requests ok =>
+  fun _ _ _ _ electra _ _ _ requests ok =>
   operationReplay_quiet
     (foldlM_framePath _ requests ok fun _ _ _ _ eq => .withdrawalRequest electra eq)
     (foldlM_step (QuietStep electra) (fun _ => .refl) .trans (·.1.2.2.2.2.2.2) (·.1.2.2.2.1) _
-      (fun _ _ _ step => QuietStep.withdrawalRequest step delay) requests ok)
+      (fun _ _ _ step => QuietStep.withdrawalRequest step) requests ok)
 
 /-- A slashing step is a registry step that keeps the queue and the consolidation churn.
 
@@ -2123,7 +2118,6 @@ private theorem SlashStep.slashValidator {fork : Fork} {electra : .pectra ≤ fo
     {s t : BeaconState preset fork} {index : ValidatorIndex} {v : Validator}
     (early : fork < .glamsterdam)
     (ok : slashValidator config s index none = .ok t)
-    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (found : getValidator s index = .ok v)
     (slashable : isSlashableValidator v (getCurrentEpoch s) = true)
     (ordered : ExitsOrdered s) (finite : getCurrentEpoch s < FAR_FUTURE_EPOCH) :
@@ -2131,7 +2125,7 @@ private theorem SlashStep.slashValidator {fork : Fork} {electra : .pectra ≤ fo
   obtain ⟨exited, validator, withdrawable, marked, _, _, slashings, lowered, _, _, raised, last,
     exitedOk, foundE, _, markedOk, _, _, _, loweredOk, _, _, raisedOk, lastOk, done⟩ :=
     slashValidator_ok ok
-  have quiet := QuietStep.initiateValidatorExit (electra := electra) exitedOk delay ordered finite
+  have quiet := QuietStep.initiateValidatorExit (electra := electra) exitedOk ordered finite
   have read : s.validators.data[index.toNat]? = some v := getValidator_eq_ok_iff.mp found
   have readE : exited.validators.data[index.toNat]? = some validator :=
     getValidator_eq_ok_iff.mp foundE
@@ -2284,7 +2278,7 @@ theorem reservedReplay_proposerSlashing :
   simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, _, _, _, _, v, found, _, slashable, _, _, _, _, slashed⟩ := ok
   exact operationReplay_slashing
-    (fun ordered finite => .slashValidator early slashed delay found slashable ordered finite)
+    (fun ordered finite => .slashValidator early slashed found slashable ordered finite)
     credits held
 
 /-- Take the slashings of an attester slashing's indices.
@@ -2293,8 +2287,8 @@ Let each of them slash a slashable validator.
 
 Then they are a slashing step. -/
 private theorem SlashStep.foldlM_slashIfSlashable {fork : Fork} {electra : .pectra ≤ fork}
-    (early : fork < .glamsterdam) (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (indices : List ValidatorIndex) {s t : BeaconState preset fork} {flag last : Bool}
+    (early : fork < .glamsterdam) (indices : List ValidatorIndex)
+    {s t : BeaconState preset fork} {flag last : Bool}
     (ok : indices.foldlM (slashIfSlashable config) (s, flag) = .ok (t, last))
     (ordered : ExitsOrdered s) (finite : getCurrentEpoch s < FAR_FUTURE_EPOCH) :
     SlashStep electra s t :=
@@ -2311,7 +2305,7 @@ private theorem SlashStep.foldlM_slashIfSlashable {fork : Fork} {electra : .pect
           simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure,
             Except.ok.injEq, Prod.mk.injEq] at one
           obtain ⟨u', slashed, rfl, rfl⟩ := one
-          exact .slashValidator early slashed delay read slashable ordered bounded
+          exact .slashValidator early slashed read slashable ordered bounded
         · simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at one
           obtain ⟨rfl, rfl⟩ := one
           exact .refl ordered
@@ -2332,8 +2326,7 @@ theorem reservedReplay_attesterSlashing :
     Except.ok.injEq] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, _, ⟨u, flag⟩, folded, _, _, rfl⟩ := ok
   exact operationReplay_slashing
-    (fun ordered finite => .foldlM_slashIfSlashable early delay _ folded ordered finite) credits
-    held
+    (fun ordered finite => .foldlM_slashIfSlashable early _ folded ordered finite) credits held
 
 end
 

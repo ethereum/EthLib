@@ -588,13 +588,12 @@ private theorem NewCohortCuts.boundary_keys {x y : ForkedBeaconState preset}
       decide_eq_true_eq] at first
     simp only [after, Option.any_some, decide_eq_true_eq] at onKey
     exact ⟨v, w, before, after, key, first.1.1, first.1.2, onKey⟩
-  let key : Nat → BLSPubkey := fun i =>
-    ((y.state.validators.data[i]?).map (·.pubkey)).getD default
+  let key : Nat → BLSPubkey := keyAt y.state
   refine ⟨cuts.boundary.image key, ?_, ?_⟩
   · intro k member
     obtain ⟨i, inBoundary, named⟩ := Finset.mem_image.mp member
     obtain ⟨v, w, before, after, same, active, clean, onKey⟩ := reads i inBoundary
-    have keyed : key i = w.pubkey := by simp [key, after]
+    have keyed : key i = w.pubkey := by simp [key, keyAt, after]
     rw [← named, keyed]
     have activeX : w.pubkey ∈ activeKeys x.state := by
       unfold activeKeys
@@ -611,14 +610,14 @@ private theorem NewCohortCuts.boundary_keys {x y : ForkedBeaconState preset}
   · rw [Finset.sum_image]
     · refine Finset.sum_congr rfl fun i member => ?_
       obtain ⟨v, w, before, after, same, _, _, _⟩ := reads i member
-      have keyed : key i = w.pubkey := by simp [key, after]
+      have keyed : key i = w.pubkey := by simp [key, keyAt, after]
       rw [keyed, effectiveWeight_of_member uniqueY (by simpa using Array.mem_of_getElem? after),
         same, effectiveWeight_of_member uniqueX (by simpa using Array.mem_of_getElem? before)]
       simp [effectiveAt, before, after]
     · intro i first j second equal
       obtain ⟨_, u, _, uFound, _, _, _, _⟩ := reads i first
       obtain ⟨_, w, _, wFound, _, _, _, _⟩ := reads j second
-      have keys : u.pubkey = w.pubkey := by simpa [key, uFound, wFound] using equal
+      have keys : u.pubkey = w.pubkey := by simpa [key, keyAt, uFound, wFound] using equal
       exact uniqueY.index_eq uFound wFound keys
 
 /-- Add twice the new nonreference boundary stake and twice the boundary gains of the new cohort.

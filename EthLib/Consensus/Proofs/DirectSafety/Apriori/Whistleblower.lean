@@ -549,7 +549,7 @@ private theorem active_recent_window_keys {g x y : ForkedBeaconState preset}
     (y.state.validators.data[i]?).any (·.activationEpoch != FAR_FUTURE_EPOCH) &&
       (x.state.validators.data[i]?).all fun w => w.activationEpoch == FAR_FUTURE_EPOCH ||
         decide (getCurrentEpoch x.state < w.exitEpoch)
-  let key := fun i : Nat => (y.state.validators.data[i]?.map (·.pubkey)).getD default
+  let key := keyAt y.state
   have xEarly : x.fork < .glamsterdam := Nat.lt_of_le_of_lt
     (fork_le_of_chainSteps tail.chainSteps) (Nat.lt_trans early (by decide))
   have finiteX := getCurrentEpoch_ne_farFuture twoSlots x.state
@@ -590,7 +590,7 @@ private theorem active_recent_window_keys {g x y : ForkedBeaconState preset}
               getCurrentEpoch x.state < v.exitEpoch from by simpa [isActiveValidator] using active)
             |>.2
         exact ⟨assigned, Or.inr live⟩
-      · simp only [key, after, Option.map_some, Option.getD_some]
+      · simp only [key, keyAt, after, Option.map_some, Option.getD_some]
         exact (equal ▸ zKey).trans same
     · obtain ⟨recent, notPrevious⟩ := Finset.mem_sdiff.mp recent
       have support := (Finset.mem_filter.mp recent).1
@@ -612,7 +612,7 @@ private theorem active_recent_window_keys {g x y : ForkedBeaconState preset}
         exact finiteBelow finiteY lower
       apply Finset.mem_image.mpr
       refine ⟨i, Finset.mem_filter.mpr ⟨Finset.mem_range.mpr
-        (Array.getElem?_eq_some_iff.mp after).1, ?_⟩, by simp [key, after, same]⟩
+        (Array.getElem?_eq_some_iff.mp after).1, ?_⟩, by simp [key, keyAt, after, same]⟩
       simp only [after, Option.any_some, Bool.and_eq_true, bne_iff_ne]
       refine ⟨assigned, ?_⟩
       cases before : x.state.validators.data[i]? with

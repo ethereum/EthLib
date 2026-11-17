@@ -2,6 +2,11 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.ValidatorStep
 
+import EthLib.Consensus.Proofs.Churn
+import EthLib.Consensus.Proofs.Mutators
+import EthLib.Consensus.Proofs.Transition.Requests
+import EthLib.Consensus.Proofs.Transition.Withdrawals
+
 /-!
 # Slashed validators keep an assigned exit
 
@@ -59,30 +64,91 @@ theorem processSlashing_slashed_exit_assigned
   · exact (CapStep.proposerSlashing ok).1.slashed_exit_assigned delay held
   · exact (CapStep.attesterSlashing ok).1.slashed_exit_assigned delay held
 
+/-- Setting one validator keeps the slashed exits, when it keeps the slashed flag.
+
+A validator that was slashed must keep an assigned exit. -/
+theorem SlashedExitAssigned.of_setValidator {f : Fork} {s t : BeaconState preset f}
+    {i : ValidatorIndex} {v w : Validator}
+    (set : s.setValidator i w = .ok t) (flag : w.slashed = v.slashed)
+    (kept : v.slashed = true → w.exitEpoch ≠ FAR_FUTURE_EPOCH)
+    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
+  obtain ⟨inside, rfl⟩ := setValidator_ok set
+  intro j z read slashed
+  by_cases eq : j = i.toNat
+  · subst j
+    have same : z = w := by
+      simpa [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set] using read.symm
+    subst z
+    exact kept (flag ▸ slashed)
+  · apply held j z ?_ slashed
+    simpa [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
+      Array.getElem?_set, eq, Ne.symm eq] using read
+
 /-- Initiating an exit keeps the exit of every slashed validator assigned. -/
 theorem initiateValidatorExit_slashed_exit_assigned {f : Fork} {s t : BeaconState preset f}
     {i : ValidatorIndex} (ok : initiateValidatorExit config s i = .ok t)
-    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (held : SlashedExitAssigned s) : SlashedExitAssigned t :=
-  (CapStep.exit ok).1.slashed_exit_assigned delay held
+    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
+  obtain ⟨v, found, ⟨_, rfl⟩ | ⟨far, queued, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok ok
+  · exact held
+  · obtain ⟨_, _, shape⟩ := exitQueue_eq queue
+    have data : queued.validators.data = s.validators.data := by rw [shape]
+    have read : s.validators.data[i.toNat]? = some v := getValidator_eq_ok_iff.mp found
+    -- The exiting validator had no exit, so it was not slashed.
+    exact (held.of_validators_eq data).of_setValidator set rfl
+      (fun flag => absurd far (held _ v read flag))
 
 /-- A change to execution credentials keeps the exit of every slashed validator assigned. -/
 theorem processBlsToExecutionChange_slashed_exit_assigned {f : Fork}
     {s t : BeaconState preset f} {signed : SignedBLSToExecutionChange}
     (ok : processBlsToExecutionChange config checks s signed = .ok t)
-    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (held : SlashedExitAssigned s) : SlashedExitAssigned t :=
-  (CapStep.blsChange ok).1.slashed_exit_assigned delay held
+    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
+  obtain ⟨v, found, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
+  exact held.of_setValidator set rfl (fun flag => held _ v (getValidator_eq_ok_iff.mp found) flag)
+
+private theorem switchToCompoundingValidator_slashed_exit_assigned {f : Fork}
+    {s t : BeaconState preset f} {electra : .pectra ≤ f} {i : ValidatorIndex}
+    (ok : switchToCompoundingValidator s electra i = .ok t)
+    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
+  simp only [switchToCompoundingValidator, bind_ok_iff] at ok
+  obtain ⟨v, found, _, set, queued⟩ := ok
+  exact (held.of_setValidator set rfl
+    (fun flag => held _ v (getValidator_eq_ok_iff.mp found) flag)).of_validators_eq
+      (congrArg (·.data) (queueExcessActiveBalance_validators queued))
+
+private theorem queueConsolidation_slashed_exit_assigned {f : Fork}
+    {s t : BeaconState preset f} {electra : .pectra ≤ f} {i target : ValidatorIndex}
+    {source : Validator}
+    (found : getValidator s i = .ok source) (unset : source.exitEpoch = FAR_FUTURE_EPOCH)
+    (ok : queueConsolidation config s electra i source target = .ok t)
+    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
+  -- The source has no exit, so it is not slashed.
+  have clean : source.slashed = false := by
+    cases flag : source.slashed with
+    | false => rfl
+    | true => exact (held _ source (getValidator_eq_ok_iff.mp found) flag unset).elim
+  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+  obtain ⟨⟨churned, epoch⟩, churn, withdrawal, _, _, set, _, _, rfl⟩ := ok
+  have same := (computeConsolidationEpochAndUpdateChurn_earliest churn).2.1
+  have kept := (held.of_validators_eq (congrArg (·.data) same)).of_setValidator set rfl
+    (fun (flag : source.slashed = true) => by simp [clean] at flag)
+  exact kept
 
 /-- A consolidation request keeps the exit of every slashed validator assigned. -/
 theorem processConsolidationRequest_slashed_exit_assigned {f : Fork}
     {s t : BeaconState preset f} {electra : .pectra ≤ f} {request : ConsolidationRequest}
-    (order : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
     (ok : processConsolidationRequest config s electra request = .ok t)
-    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (held : SlashedExitAssigned s) : SlashedExitAssigned t :=
-  (CapStep.consolidationRequest order ok).1.slashed_exit_assigned delay held
+    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
+  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ |
+      ⟨_, _, _, _, accepted, queued⟩
+  · exact held
+  · exact switchToCompoundingValidator_slashed_exit_assigned switched held
+  · exact queueConsolidation_slashed_exit_assigned (getValidator_eq_ok_iff.mpr accepted.sourceAt)
+      accepted.sourceStays queued held
 
+/-- Along a run from genesis before Gloas, every slashed validator has an assigned exit.
+
+The withdrawal delay must be positive, so a slashing assigns an exit. -/
 theorem run_slashed_exit_assigned {g x : ForkedBeaconState preset}
     (run : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g)

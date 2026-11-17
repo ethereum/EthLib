@@ -989,17 +989,16 @@ theorem initial_active_carrier_card_le
     (active : ∀ i ∈ carrier, ∃ v, x.state.validators.data[i]? = some v ∧
       isActiveValidator v (getCurrentEpoch x.state) = true) :
     carrier.card ≤ referenceCount x := by
-  let key : Nat → BLSPubkey := fun i =>
-    (x.state.validators.data[i]?.map (·.pubkey)).getD default
+  let key : Nat → BLSPubkey := keyAt x.state
   apply Finset.card_le_card_of_injOn key
   · intro i member
     obtain ⟨v, found, enabled⟩ := active i member
     apply (mem_keysAt_epoch early _ _).mpr
-    exact ⟨i, v, found, by simp [key, found], enabled⟩
+    exact ⟨i, v, found, by simp [key, keyAt, found], enabled⟩
   · intro i hi j hj same
     obtain ⟨v, found, _⟩ := active i hi
     obtain ⟨w, read, _⟩ := active j hj
-    exact unique.index_eq found read (by simpa [key, found, read] using same)
+    exact unique.index_eq found read (by simpa [key, keyAt, found, read] using same)
 theorem carrier_resource_count_le (carrier : Finset Nat) (a p : Nat → Nat)
     (band budgetA budgetP : Nat) (positive : 0 < band)
     (gap : ∀ i ∈ carrier, band < a i + p i)

@@ -30,11 +30,8 @@ Nothing else that a registry step reads changes. -/
 private theorem QuietStep.blsChange {fork : Fork} {electra : .pectra ≤ fork}
     {s t : BeaconState preset fork} {signed : SignedBLSToExecutionChange}
     (ok : processBlsToExecutionChange config checks s signed = .ok t)
-    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ordered : ExitsOrdered s) : QuietStep electra s t := by
-  have held := processBlsToExecutionChange_slashed_exit_assigned ok delay
-  -- The index bounds below must not read the delay, or `decide` rejects their goals.
-  clear delay
+  have held := processBlsToExecutionChange_slashed_exit_assigned ok
   obtain ⟨v, found, bls, _, _, set⟩ := processBlsToExecutionChange_ok ok
   have read : s.validators.data[signed.message.validatorIndex.toNat]? = some v :=
     getValidator_eq_ok_iff.mp found
@@ -63,7 +60,6 @@ private theorem QuietStep.blsChange {fork : Fork} {electra : .pectra ≤ fork}
 /-- The BLS credential changes of a block record nothing. -/
 theorem operationReplay_blsChanges (x : ForkedBeaconState preset) (high : Nat)
     (rounding : Nat → Nat) {fork : Fork} (electra : .pectra ≤ fork)
-    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {s t : BeaconState preset fork} (body : BeaconBlockBody preset fork)
     (ok : processBlsToExecutionChanges config checks s body = .ok t) :
     OperationReplay (config := config) (checks := checks) x high rounding electra s t [] [] := by
@@ -76,7 +72,7 @@ theorem operationReplay_blsChanges (x : ForkedBeaconState preset) (high : Nat)
     exact operationReplay_quiet
       (foldlM_framePath _ _ folded fun _ _ _ _ eq => .credentials eq)
       (foldlM_step (QuietStep electra) (fun _ => .refl) .trans (·.1.2.2.2.2.2.2) (·.1.2.2.2.1) _
-        (fun _ _ _ step ordered _ => QuietStep.blsChange step delay ordered) _ folded)
+        (fun _ _ _ step ordered _ => QuietStep.blsChange step ordered) _ folded)
   · rename_i before
     exact absurd (Nat.le_trans (by decide) electra) before
 

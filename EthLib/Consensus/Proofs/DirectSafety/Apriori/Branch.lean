@@ -671,7 +671,7 @@ theorem departures_le_budget {g x y : ForkedBeaconState preset}
   rw [Run.departureCharges_append, List.filter_append, List.map_append, List.sum_append, after,
     Nat.add_zero]
   obtain ⟨-, -, minimum, -, -, -, -, -, -, -, -, -, -, crossing⟩ := guard
-  -- The written-out carry of D-Q is `queueCarry`.
+  -- The written-out carry of D-Q is the carry of the queues.
   change _ ≤ queueCarry x high + _ + _ + _ at bound
   simp only [departureBudget]
   generalize activeCountPath config (referenceCount x + scheduledActivationCount x)
@@ -1042,7 +1042,7 @@ theorem previousStake_le_start (x : ForkedBeaconState preset)
     Finset.sum_le_sum_of_subset fun i member => (Finset.mem_filter.mp member).2
   have funded : ∑ i ∈ current, effectiveAt x i.toNat ≤ fundedStake x :=
     activeEffective_le_funded x xEarly unique
-  -- The others are the keys that `previousOnlyStake` counts.
+  -- The others are the keys active only at the previous epoch.
   have leaving : ∑ i ∈ before.filter (· ∉ current), effectiveAt x i.toNat ≤
       previousOnlyStake x := by
     let weight (v : Validator) : Nat :=

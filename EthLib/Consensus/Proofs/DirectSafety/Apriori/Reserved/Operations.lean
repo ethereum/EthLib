@@ -3919,7 +3919,7 @@ So every clause transports once its guard does.
 
 They may assign an activation, an exit and a withdrawable epoch:
 
-- `retiredActivated` and `startActivated` cover retired and initially active keys.
+- Two premises cover the retired keys and the keys active at the start.
   They say that such a key was already activated.
   So an assigned activation cannot make it supported later.
 - `activity` says that activity up to the current epoch is unchanged.

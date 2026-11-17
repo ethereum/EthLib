@@ -59,6 +59,7 @@ def QueueTag.isFresh : QueueTag → Bool
   | .fresh _ => true
 
 attribute [simp] QueueTag.isFresh.eq_1 QueueTag.isFresh.eq_2
+
 structure TaggedEntry where
   entry : PendingConsolidation
   tag : QueueTag
@@ -240,6 +241,7 @@ def TokenOrigin.isReleased : TokenOrigin → Bool
   | .released _ _ => true
 
 attribute [simp] TokenOrigin.isReleased.eq_1 TokenOrigin.isReleased.eq_2 TokenOrigin.isReleased.eq_3
+
 structure Ownership where
   issued : Finset TokenOrigin
   owner : TokenOrigin → Option Nat

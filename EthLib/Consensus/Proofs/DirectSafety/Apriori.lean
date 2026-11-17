@@ -7,13 +7,15 @@ import EthLib.Consensus.Proofs.DirectSafety.Apriori.BlockFold
 /-!
 # Accountable safety with an a priori drift bound
 
-Two runs extend a common run from genesis to a reference state and finalize conflicting checkpoints.
+Two runs extend a common run from genesis to a shared state and finalize conflicting checkpoints.
 
-Then the unslashed stake there is at most three times the accountable stake plus twice a drift.
+Then the unslashed active effective stake at the shared state is bounded by the accountable stake.
+
+The bound is three times the accountable stake plus twice a drift.
 
 Otherwise the runs contain hash evidence.
 
-The drift reads only the reference state and the later finalized epoch, with no replay of the runs.
+The drift reads only the shared state and the later finalized epoch, with no replay of the runs.
 
 When the guard of the bound fails, the drift is the whole unslashed stake, and the bound is trivial.
 
