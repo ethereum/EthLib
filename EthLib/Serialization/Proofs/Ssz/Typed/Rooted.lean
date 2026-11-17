@@ -40,7 +40,7 @@ def LevelOf (chunks : Array Bytes) (height : Nat) (level : Array Bytes) : Prop :
 theorem levelOf_leaves (chunks : Array Bytes) : LevelOf chunks 0 chunks := by
   intro index
   rw [subtreeAt_leaf, zeroSubtree_eq]
-  simp [zeroRoot]
+  simp [zeroRoot_zero]
 
 /-- Pairing up the level at a height gives the level one higher. -/
 theorem LevelOf.pairUp {chunks level : Array Bytes} {height : Nat}
