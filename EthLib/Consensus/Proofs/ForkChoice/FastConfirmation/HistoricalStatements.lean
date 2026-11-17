@@ -135,6 +135,75 @@ def VoteCommitteeCommonHistory (last : Nat) : Prop :=
       (getCurrentEpoch targetState).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
         attestation.data.target.epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
 
+/-- Each voter below an ancestor of an honest head lies in the head's window after that ancestor.
+
+The ancestor is a known block, `parent`, and the store's current epoch is at most two after it.
+
+The window holds the committees of the head state for the slots after `parent`.
+
+It ends at the slot before the current one.
+
+The vote has an origin and is for a block that descends from `parent`.
+
+Its slot is in the window. -/
+def VotersInHeadWindow (last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
+    ∀ (head : ForkChoiceNode) (parentRoot : Root) (parent : BeaconBlock preset fork)
+      (current first finish : Slot) (epoch : Epoch) (members : Std.TreeSet ValidatorIndex)
+      (v : ValidatorIndex) (attestation : Attestation preset fork),
+    ((e.world k).state w).getHead config = .ok head →
+    ((e.world k).state w).blocks[parentRoot]? = some parent →
+    ((e.world k).state w).isAncestor ⟨head.root, .pending⟩ ⟨parentRoot, .pending⟩ = .ok true →
+    ((e.world k).state w).getCurrentSlot config = .ok current →
+    ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch →
+    epoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2 →
+    addChecked parent.slot 1 = .ok first → subChecked current 1 = .ok finish →
+    ((e.world k).state w).getCommitteesBetweenSlots head.root first finish = .ok members →
+    ((e.world k).state w).VoteOrigin config v attestation →
+    ((e.world k).state w).isAncestor ⟨attestation.data.beaconBlockRoot, .pending⟩
+      ⟨parentRoot, .pending⟩ = .ok true →
+    first ≤ attestation.data.slot → attestation.data.slot ≤ finish →
+    v ∈ members
+
+/-- The newly active voters of `VotersInHeadWindow` lie in the head's window.
+
+It covers only a vote whose target epoch is two after the epoch of `parent`.
+
+Its voter must have that target epoch as its activation epoch, in the target state.
+
+The window covers all of the epoch before the target.
+
+Every other such voter was active then, so it is in the window with no premise.
+
+The head's shuffling may give a newly active voter a slot at or after the current one.
+
+That slot is outside the window.
+
+If the rule's window weight paid one epoch's activation churn, this premise would go. -/
+def NewlyActiveVotersInHeadWindow (last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
+    ∀ (head : ForkChoiceNode) (parentRoot : Root) (parent : BeaconBlock preset fork)
+      (current first finish : Slot) (epoch : Epoch) (members : Std.TreeSet ValidatorIndex)
+      (v : ValidatorIndex) (attestation : Attestation preset fork)
+      (targetState : BeaconState preset fork) (voter : Validator),
+    ((e.world k).state w).getHead config = .ok head →
+    ((e.world k).state w).blocks[parentRoot]? = some parent →
+    ((e.world k).state w).isAncestor ⟨head.root, .pending⟩ ⟨parentRoot, .pending⟩ = .ok true →
+    ((e.world k).state w).getCurrentSlot config = .ok current →
+    ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch →
+    epoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2 →
+    addChecked parent.slot 1 = .ok first → subChecked current 1 = .ok finish →
+    ((e.world k).state w).getCommitteesBetweenSlots head.root first finish = .ok members →
+    ((e.world k).state w).VoteOrigin config v attestation →
+    ((e.world k).state w).isAncestor ⟨attestation.data.beaconBlockRoot, .pending⟩
+      ⟨parentRoot, .pending⟩ = .ok true →
+    first ≤ attestation.data.slot → attestation.data.slot ≤ finish →
+    (computeEpochAtSlot preset parent.slot).toNat + 2 = attestation.data.target.epoch.toNat →
+    ((e.world k).state w).checkpointStates[attestation.data.target]? = some targetState →
+    targetState.validators.data[v.toNat]? = some voter →
+    voter.activationEpoch = attestation.data.target.epoch →
+    v ∈ members
+
 /-- Honest stores do not hold the parent of the anchor before the deadline. -/
 def AnchorParentAbsent (last : Nat) : Prop :=
   ∀ a ∈ J, ∀ i, (e.world i).time ≤ last →

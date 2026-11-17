@@ -40,6 +40,15 @@ Not yet released.
   It asks that the anchor block is not after the anchor state and that its parent root names no known block.
   `Store.isViableLeaf_checkpointBlock` gives the checkpoint block that a viable leaf reads.
 
+- `Execution.honestHeadsCover_of_historical_anchor_of_newlyActive` and `Execution.honestHeadsCover_of_signed_justification_of_newlyActive` drop `VoteCommitteeCommonHistory` ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  That premise fails in reachable runs, such as one epoch with no block followed by a vote with the current target.
+  They assume `NewlyActiveVotersInHeadWindow` instead.
+  It asks only that a voter activated at its target epoch lie in the head's window, for a vote two epochs after the parent.
+  Every other voter is proved to lie there, through `VotersInHeadWindow`, which `Execution.votersInHeadWindow_of_newlyActive` derives.
+  The merged headlines keep their statements and call the new ones through `Execution.votersInHeadWindow_of_commonHistory`.
+  `Store.mem_getCommitteesBetweenSlots_of_active` and `Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin` are the general steps.
+  If the rule's window weight paid one epoch's activation churn, the remaining premise would go.
+
 ### Changes that break callers
 
 - In Lean, the historical-anchor theorems no longer assume finality across honest stores ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
