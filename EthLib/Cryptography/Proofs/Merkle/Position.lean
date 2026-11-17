@@ -230,4 +230,147 @@ instance (a p : Position) : Decidable (a.IsAncestor p) :=
 
 end Position
 
+/-! ## Ancestors on one level -/
+
+/-- Flipping the low bit of an even number adds 1.
+
+So the sibling of a left child is the next node of its level. -/
+theorem xor_one_of_even {x : Nat} (even : x % 2 = 0) : x ^^^ 1 = x + 1 := by
+  -- The flip keeps the half and makes the number odd.
+  have half : (x ^^^ 1) / 2 = x / 2 := by simp [Nat.xor_div_two]
+  have parity := Nat.xor_mod_two_eq_one (a := x) (b := 1)
+  omega
+
+/-- Flipping the low bit of an odd number subtracts 1.
+
+So the sibling of a right child is the previous node of its level. -/
+theorem xor_one_of_odd {x : Nat} (odd : x % 2 = 1) : x ^^^ 1 = x - 1 := by
+  -- The flip keeps the half and makes the number even.
+  have half : (x ^^^ 1) / 2 = x / 2 := by simp [Nat.xor_div_two]
+  have parity := Nat.xor_mod_two_eq_one (a := x) (b := 1)
+  omega
+
+namespace Position
+
+/-- A node is its own ancestor only at its own level.
+
+So two nodes on one level, one an ancestor of the other, are the same node. -/
+theorem IsAncestor.eq_of_level_le {a p : Position} (h : a.IsAncestor p) (le : a.level ≤ p.level) :
+    a = p := by
+  obtain ⟨k, rfl⟩ := h
+  -- Climbing zero levels stays in place.
+  have : k = 0 := by simp only [ancestor_level] at le; omega
+  subst this
+  exact ancestor_zero p
+
+/-- An ancestor of a node strictly above it is an ancestor of its parent.
+
+So an ancestor of a node is found again by climbing one level. -/
+theorem IsAncestor.parent {a p : Position} (h : a.IsAncestor p) (lt : p.level < a.level) :
+    a.IsAncestor p.parent := by
+  obtain ⟨k, rfl⟩ := h
+  -- The ancestor is at least one level up, so it is above the parent.
+  obtain ⟨k, rfl⟩ : ∃ k', k = k' + 1 := ⟨k - 1, by simp only [ancestor_level] at lt; omega⟩
+  exact ⟨k, (ancestor_parent p k).symm⟩
+
+/-- A parent is an ancestor of each of its children. -/
+theorem isAncestor_of_parent {a p : Position} (h : p.parent = a) : a.IsAncestor p :=
+  ⟨1, by simp [h]⟩
+
+/-- Two nodes with one parent are the same node or siblings.
+
+So the two children of a node on a path are the path node and its sibling. -/
+theorem eq_or_eq_sibling_of_parent_eq {a b : Position} (h : a.parent = b.parent) :
+    a = b ∨ a = b.sibling := by
+  obtain ⟨la, ia⟩ := a
+  obtain ⟨lb, ib⟩ := b
+  simp only [parent_mk, mk.injEq] at h
+  obtain ⟨levels, half⟩ := h
+  obtain rfl : la = lb := by omega
+  -- The sibling has the same half and the other parity, which pins down a different index.
+  by_cases same : ia = ib
+  · exact .inl (by rw [same])
+  refine .inr ?_
+  rw [sibling_mk, mk.injEq]
+  refine ⟨rfl, ?_⟩
+  have half' : (ib ^^^ 1) / 2 = ib / 2 := by simp [Nat.xor_div_two]
+  have parity := Nat.xor_mod_two_eq_one (a := ib) (b := 1)
+  have := Nat.mod_two_eq_zero_or_one ib
+  have := Nat.mod_two_eq_zero_or_one ia
+  have := Nat.mod_two_eq_zero_or_one (ib ^^^ 1)
+  omega
+
+/-- Two ancestors of one node on one level are the same node. -/
+theorem IsAncestor.unique {a b p : Position} (ha : a.IsAncestor p) (hb : b.IsAncestor p)
+    (level : a.level = b.level) : a = b := by
+  obtain ⟨m, rfl⟩ := ha
+  obtain ⟨n, rfl⟩ := hb
+  simp only [ancestor_level] at level
+  obtain rfl : m = n := by omega
+  rfl
+
+/-- Of two ancestors of one node, the higher one is an ancestor of the lower one. -/
+theorem IsAncestor.of_both {a b p : Position} (ha : a.IsAncestor p) (hb : b.IsAncestor p)
+    (le : b.level ≤ a.level) : a.IsAncestor b := by
+  obtain ⟨m, rfl⟩ := ha
+  obtain ⟨n, rfl⟩ := hb
+  simp only [ancestor_level] at le
+  exact ⟨m - n, by rw [ancestor_ancestor]; congr 1; omega⟩
+
+/-- A node strictly above another is an ancestor of the other's sibling too. -/
+theorem IsAncestor.sibling {a q : Position} (h : a.IsAncestor q) (lt : q.level < a.level) :
+    a.IsAncestor q.sibling := by
+  -- Both share the parent, which the ancestor sits above.
+  have parent := h.parent lt
+  rw [← sibling_parent] at parent
+  exact parent.trans (isAncestor_of_parent rfl)
+
+/-- A node is an ancestor of its left child. -/
+theorem isAncestor_left (l j : Nat) : (⟨l + 1, j⟩ : Position).IsAncestor ⟨l, 2 * j⟩ :=
+  isAncestor_of_parent (Position.ext rfl (by show 2 * j / 2 = j; omega))
+
+/-- A node is an ancestor of its right child. -/
+theorem isAncestor_right (l j : Nat) : (⟨l + 1, j⟩ : Position).IsAncestor ⟨l, 2 * j + 1⟩ :=
+  isAncestor_of_parent (Position.ext rfl (by show (2 * j + 1) / 2 = j; omega))
+
+/-- The sibling of the left child is the right child. -/
+theorem sibling_left (l j : Nat) : (⟨l, 2 * j⟩ : Position).sibling = ⟨l, 2 * j + 1⟩ := by
+  rw [sibling_mk, xor_one_of_even (by omega)]
+
+/-- The sibling of the right child is the left child. -/
+theorem sibling_right (l j : Nat) : (⟨l, 2 * j + 1⟩ : Position).sibling = ⟨l, 2 * j⟩ := by
+  rw [sibling_mk, xor_one_of_odd (by omega)]
+  rfl
+
+/-- A node below another, at least one level lower, lies below one of its two children. -/
+theorem IsAncestor.child {l j : Nat} {q : Position} (h : (⟨l + 1, j⟩ : Position).IsAncestor q)
+    (low : q.level ≤ l) :
+    (⟨l, 2 * j⟩ : Position).IsAncestor q ∨ (⟨l, 2 * j + 1⟩ : Position).IsAncestor q := by
+  obtain ⟨m, hm⟩ := h
+  have level := congrArg Position.level hm
+  have index := congrArg Position.index hm
+  simp only [ancestor_level, ancestor_index] at level index
+  -- The ancestor of `q` one level below the node is the child on its side.
+  obtain ⟨m, rfl⟩ : ∃ m', m = m' + 1 := ⟨m - 1, by omega⟩
+  have half : q.index / 2 ^ m / 2 = j := by rw [div_pow_div_two]; exact index.symm
+  rcases Nat.mod_two_eq_zero_or_one (q.index / 2 ^ m) with even | odd
+  · exact .inl ⟨m, Position.ext (by simp; omega) (by simp; omega)⟩
+  · exact .inr ⟨m, Position.ext (by simp; omega) (by simp; omega)⟩
+
+/-- No node lies below both children of a node. -/
+theorem IsAncestor.not_both {l j : Nat} {q : Position}
+    (left : (⟨l, 2 * j⟩ : Position).IsAncestor q)
+    (right : (⟨l, 2 * j + 1⟩ : Position).IsAncestor q) : False := by
+  have := congrArg Position.index (left.unique right rfl)
+  simp at this
+
+end Position
+
+/-- A node is never its own sibling. -/
+theorem Position.sibling_ne (q : Position) : q.sibling ≠ q := by
+  intro same
+  have index : q.index ^^^ 1 = q.index := congrArg Position.index same
+  have parity := Nat.xor_mod_two_eq_one (a := q.index) (b := 1)
+  omega
+
 end EthLib.Cryptography.Merkle

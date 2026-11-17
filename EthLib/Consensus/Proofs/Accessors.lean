@@ -643,6 +643,50 @@ theorem getCurrentEpoch_ne_farFuture (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.to
   simp only [UInt64.size] at this
   omega
 
+/-- With at least two slots in an epoch, the epoch after the current one is before the far future.
+
+It is the far future epoch less one at most, since the slot is below `2^64`. -/
+theorem getCurrentEpoch_succ_lt_farFuture (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
+    (state : BeaconState preset fork) :
+    (getCurrentEpoch state).toNat + 1 < FAR_FUTURE_EPOCH.toNat := by
+  simp only [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div]
+  have slotBound := state.slot.toNat_lt
+  have quotient : state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ state.slot.toNat / 2 :=
+    Nat.div_le_div_left twoSlots (by omega)
+  change state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 < 2 ^ 64 - 1
+  omega
+
+/-- With at least two slots in an epoch, the next epoch is before the far future.
+
+The checked addition alone allows the far future, from the epoch just before it. -/
+theorem nextEpoch_lt_farFuture {state : BeaconState preset fork} {next : Epoch}
+    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
+    (nextOk : Uint64.addChecked (getCurrentEpoch state) 1 = .ok next) :
+    next < FAR_FUTURE_EPOCH := by
+  have sum := (Uint64.addChecked_ok_iff.mp nextOk).2
+  have bound := getCurrentEpoch_succ_lt_farFuture twoSlots state
+  have one : (1 : UInt64).toNat = 1 := rfl
+  rw [UInt64.lt_iff_toNat_lt]
+  omega
+
+/-- A validator active at the previous epoch is active at the current one or the one before it.
+
+At epoch zero the previous epoch is the current one. -/
+theorem active_current_or_before_of_active_previous (state : BeaconState preset fork)
+    (v : Validator) (active : isActiveValidator v (getPreviousEpoch state) = true) :
+    isActiveValidator v (getCurrentEpoch state) = true ∨
+      isActiveValidator v (getCurrentEpoch state - 1) = true := by
+  have previous := getPreviousEpoch_toNat state
+  by_cases zero : (getCurrentEpoch state).toNat = 0
+  · have same : getPreviousEpoch state = getCurrentEpoch state := UInt64.toNat_inj.mp (by omega)
+    exact Or.inl (same ▸ active)
+  · have one : (1 : UInt64) ≤ getCurrentEpoch state :=
+      UInt64.le_iff_toNat_le.mpr (by simp; omega)
+    have same : getPreviousEpoch state = getCurrentEpoch state - 1 := UInt64.toNat_inj.mp (by
+      rw [UInt64.toNat_sub_of_le _ _ one, previous]
+      rfl)
+    exact Or.inr (same ▸ active)
+
 /-- The current epoch is at most the slot, at every length of an epoch. -/
 theorem getCurrentEpoch_toNat_le_slot (state : BeaconState preset fork) :
     (getCurrentEpoch state).toNat ≤ state.slot.toNat := by

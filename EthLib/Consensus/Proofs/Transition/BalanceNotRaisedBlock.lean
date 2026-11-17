@@ -232,7 +232,7 @@ private theorem down_processConsolidationRequest {electra : .pectra ≤ fork}
 private theorem down_processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) (index : Nat) :
     BalanceDown index state after :=
-  BalanceDown.of_balances (processDepositRequest_ok computed).2.2
+  BalanceDown.of_balances (processDepositRequest_ok computed).2.2.1
 
 /-- The withdrawals lower balances, and from Gloas those of builders. -/
 private theorem down_processWithdrawals {capella : .shapella ≤ fork}
@@ -431,11 +431,7 @@ private theorem fixed_slashValidator {slashedIndex : ValidatorIndex}
 private theorem fixed_processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
     BlockFixed state after := by
-  obtain ⟨start, recorded⟩ :=
-    recordDepositRequestsStart_eq (state := state) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, rfl⟩ := computed
+  obtain ⟨-, -, -, start, pending, rfl⟩ := processDepositRequest_ok computed
   exact BlockFixed.of_eq
 
 /-- A partial withdrawal request keeps the fields. -/

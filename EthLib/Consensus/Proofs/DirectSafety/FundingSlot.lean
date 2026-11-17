@@ -183,17 +183,31 @@ private theorem funding_slot_upgrades {s t : ForkedBeaconState preset}
       (funding_slot_upgrade nextOk later).trans (held (Nat.lt_trans post.property later)))
     (fun _ => Nat.le_refl _) ok early
 
-/-- One slot before Gloas conserves funding up to epoch churn and recorded source credits. -/
-theorem funding_slot {x y : ForkedBeaconState preset}
+/-- Bounds for caching, epochs and upgrades give the funding bound of a slot. -/
+theorem funding_slot_of {x y : ForkedBeaconState preset}
+    (potential : ForkedBeaconState preset → Nat)
+    (cachedBound : ∀ {cached}, processSlot x.state = .ok cached →
+      potential ⟨x.fork, cached⟩ = potential x)
+    (incrementBound : ∀ (s : BeaconState preset x.fork) next,
+      s.slot.toNat ≤ next.toNat →
+      potential ⟨x.fork, { s with slot := next }⟩ ≤ potential ⟨x.fork, s⟩)
+    (upgradeBound : ∀ {advanced},
+      processUpgrades config checks ⟨x.fork, advanced⟩ = .ok y →
+      potential y ≤ potential ⟨x.fork, advanced⟩)
+    (epochBound : ∀ {cached epoched}, processSlot x.state = .ok cached →
+      (getCurrentEpoch y.state).toNat = (getCurrentEpoch cached).toNat + 1 →
+      processEpoch config checks cached = .ok epoched →
+      ∀ middle added,
+        epochBalanceReplay (config := config) (checks := checks) cached = .ok (middle, added) →
+        potential ⟨x.fork, epoched⟩ + fundingCarry ⟨x.fork, epoched⟩ ≤
+          potential ⟨x.fork, cached⟩ + fundingCarry ⟨x.fork, cached⟩ +
+            config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
+            (added.map fundingCredit).sum)
     (early : y.fork < .glamsterdam)
-    (delay : 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (matched : BalancesMatch x.state) (ordered : ExitsOrdered x.state)
-    (activation : ActivationExitOrder x.state)
-    (pending : PendingConsolidationInvariant config x.state)
     (ok : advanceSlotAcross config checks x = .ok y)
     (events : List (BalanceEvent preset))
     (replayed : (Step.slot ok).balanceEvents = .ok events) :
-    fundedStake y + fundingCarry y ≤ fundedStake x + fundingCarry x +
+    potential y + fundingCarry y ≤ potential x + fundingCarry x +
       ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
         config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
       (events.map fundingCredit).sum := by
@@ -201,7 +215,7 @@ theorem funding_slot {x y : ForkedBeaconState preset}
     Nat.lt_of_le_of_lt (Step.slot ok).chainStep.fork_le early
   obtain ⟨advanced, advanceOk, upgrades⟩ := bind_ok_iff.mp ok
   obtain ⟨crossings, crossingOk, _⟩ := upgradeBalanceReplay_bounded upgrades
-  have fundedUpgrade := funding_slot_upgrades (s := ⟨x.fork, advanced⟩) upgrades early
+  have fundedUpgrade := upgradeBound upgrades
   have carryUpgrade := depositCarry_processUpgrades upgrades early
   change fundingCarry y = fundingCarry ⟨x.fork, advanced⟩ at carryUpgrade
   rw [carryUpgrade]
@@ -214,8 +228,7 @@ theorem funding_slot {x y : ForkedBeaconState preset}
     (mapError_ok_iff.mp (liftAccessor_ok.mp nextOk))).2
   simp only [UInt64.toNat_one] at sum
   obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
-  have cachedFund : fundedStake ⟨x.fork, cached⟩ = fundedStake x := by
-    rw [cachedEq]; rfl
+  have cachedFund := cachedBound cachedOk
   have cachedCarry : fundingCarry ⟨x.fork, cached⟩ = fundingCarry x := by
     rw [cachedEq]; rfl
   have cachedSlot : cached.slot = x.state.slot := by rw [cachedEq]
@@ -231,10 +244,10 @@ theorem funding_slot {x y : ForkedBeaconState preset}
     · simp only [epochIfLast, last, ↓reduceIte, pure, Except.pure,
         Except.ok.injEq] at epochOk
       rw [← epochOk]
-  have increment := funding_slot_increment epoched next (by
+  have increment := incrementBound epoched next (by
     rw [epochedSlot, cachedSlot]; omega)
-  have finalBound : fundedStake ⟨x.fork, advanced⟩ + fundingCarry ⟨x.fork, advanced⟩ ≤
-      fundedStake ⟨x.fork, epoched⟩ + fundingCarry ⟨x.fork, epoched⟩ := by
+  have finalBound : potential ⟨x.fork, advanced⟩ + fundingCarry ⟨x.fork, advanced⟩ ≤
+      potential ⟨x.fork, epoched⟩ + fundingCarry ⟨x.fork, epoched⟩ := by
     subst advanced
     exact Nat.add_le_add_right increment _
   apply finalBound.trans
@@ -243,23 +256,22 @@ theorem funding_slot {x y : ForkedBeaconState preset}
   · simp only [epochIfLast, last, ↓reduceIte] at epochOk
     obtain ⟨middle, updated, added, replay, _⟩ :=
       epochBalanceReplay_result cached epoched before epochOk
-    have bound := funding_epoch before delay
-      ((frame_processSlot cachedOk).balancesMatch matched)
-      ((frame_processSlot cachedOk).exitsOrdered ordered)
-      (by rw [cachedEq]; exact activation) (by rw [cachedEq]; exact pending)
-      epochOk added replay
+    have epochNext : (getCurrentEpoch y.state).toNat = (getCurrentEpoch cached).toNat + 1 := by
+      have epochs := nextSlot_epoch_of_boundary sum last
+      rw [getCurrentEpoch_toNat, slotUpgrade]
+      rw [← advancedEq]
+      simp only [getCurrentEpoch_toNat, cachedSlot]
+      exact epochs
+    have bound := epochBound cachedOk epochNext epochOk middle added replay
     simp only [Step.balanceEvents, cachedOk, nextOk, last, ↓reduceIte,
       replay, advanceOk, crossingOk, bind, Except.bind, pure, Except.pure,
       Except.ok.injEq] at replayed
     subst events
     have epochDiff : (getCurrentEpoch y.state).toNat -
         (getCurrentEpoch x.state).toNat = 1 := by
-      have epochs := nextSlot_epoch_of_boundary sum last
-      rw [getCurrentEpoch_toNat, slotUpgrade]
-      dsimp only
-      rw [← advancedEq]
-      dsimp only
-      rw [getCurrentEpoch_toNat]
+      have cachedEpoch : getCurrentEpoch cached = getCurrentEpoch x.state := by
+        simp only [getCurrentEpoch, cachedSlot]
+      rw [cachedEpoch] at epochNext
       omega
     rw [epochDiff, one_mul, List.map_append, List.sum_append]
     rw [cachedFund, cachedCarry] at bound
@@ -269,5 +281,32 @@ theorem funding_slot {x y : ForkedBeaconState preset}
     subst epoched
     rw [cachedFund, cachedCarry]
     omega
+
+/-- One slot before Gloas conserves funding up to epoch churn and recorded source credits. -/
+theorem funding_slot {x y : ForkedBeaconState preset}
+    (early : y.fork < .glamsterdam)
+    (delay : 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (matched : BalancesMatch x.state) (ordered : ExitsOrdered x.state)
+    (activation : ActivationExitOrder x.state)
+    (pending : PendingConsolidationInvariant config x.state)
+    (ok : advanceSlotAcross config checks x = .ok y)
+    (events : List (BalanceEvent preset))
+    (replayed : (Step.slot ok).balanceEvents = .ok events) :
+    fundedStake y + fundingCarry y ≤ fundedStake x + fundingCarry x +
+      ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
+        config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
+      (events.map fundingCredit).sum := by
+  apply funding_slot_of fundedStake
+    (fun cachedOk => by obtain ⟨_, _, _, _, eq⟩ := processSlot_ok cachedOk; rw [eq]; rfl)
+    funding_slot_increment (fun upgrades => funding_slot_upgrades upgrades early)
+    (fun cachedOk _ epochOk middle added replay => ?_) early ok events replayed
+  have before : x.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (Step.slot ok).chainStep.fork_le early
+  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  exact funding_epoch before delay
+    ((frame_processSlot cachedOk).balancesMatch matched)
+    ((frame_processSlot cachedOk).exitsOrdered ordered)
+    (by rw [cachedEq]; exact activation) (by rw [cachedEq]; exact pending)
+    epochOk added replay
 
 end EthLib.Consensus.DirectSafety

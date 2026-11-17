@@ -70,12 +70,15 @@ private theorem processEpoch_unset (altair : .altair ≤ fork)
   simp only [processEpoch, altair, ↓reduceDIte] at computed
   obtain ⟨justified, rooted, justifiedOk, head, tail⟩ := processEpochAltair_split computed
   have current := (processJustificationAndFinalization_keeps justifiedOk).2.2.2.2.2.2.2.2.2
-  refine ⟨unset_of_keptOrZero (fun i flags found => (tail.flags altair i flags).2 found) ?_,
-    fun unset => unset_of_keptOrZero (fun i flags found => (tail.flags altair i flags).1 found) ?_⟩
+  refine ⟨unset_of_keptOrZero (fun i flags found =>
+      ((tail.flags altair i flags).2 found).imp_right And.left) ?_,
+    fun unset => unset_of_keptOrZero (fun i flags found =>
+      ((tail.flags altair i flags).1 found).imp_right And.left) ?_⟩
   · rw [processParticipationFlagUpdates_current]
     exact fun flags mem => (Array.mem_replicate.mp mem).2
   · rw [processParticipationFlagUpdates_previous]
-    refine unset_of_keptOrZero (fun i flags found => (head.flags altair i flags).2 found) ?_
+    refine unset_of_keptOrZero (fun i flags found =>
+      ((head.flags altair i flags).2 found).imp_right And.left) ?_
     rw [current]
     exact unset
 
@@ -244,8 +247,8 @@ private theorem upgradeNext_quiet {pre : ForkedBeaconState preset}
     have frame := (BlockFrame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued).trans
       (BlockFrame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok) compounded)
     exact quiet_of_flags (fork := .dencun) (fork' := .pectra) (by decide) (by decide)
-      (fun i flags found => (frame.flags (by decide) i flags).1 found)
-      (fun i flags found => (frame.flags (by decide) i flags).2 found)
+      (fun i flags found => ((frame.flags (by decide) i flags).1 found).imp_right And.left)
+      (fun i flags found => ((frame.flags (by decide) i flags).2 found).imp_right And.left)
   | pectra =>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨after, afterOk, rfl⟩ := computed

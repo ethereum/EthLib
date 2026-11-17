@@ -749,7 +749,7 @@ private theorem depositRequests_balanceSum {electra : .pectra ≤ fork}
     (computed : requests.foldlM (processDepositRequest · electra ·) a = .ok b) :
     balanceSum b = balanceSum a := by
   have kept := foldlM_ok_invariant (fun s : BeaconState preset fork => s.balances = a.balances)
-    (fun _ _ _ before ok => (processDepositRequest_ok ok).2.2.trans before) rfl computed
+    (fun _ _ _ before ok => (processDepositRequest_ok ok).2.2.1.trans before) rfl computed
   simp only [balanceSum, kept]
 
 /-- A consolidation churn above the activation balance places its source within its cost. -/

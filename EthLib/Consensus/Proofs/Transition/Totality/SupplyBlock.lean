@@ -387,13 +387,8 @@ private theorem pendingDepositSum_of_push {s t : BeaconState preset fork}
 private theorem rise_depositRequest {s t : BeaconState preset fork} {electra : .pectra ≤ fork}
     {request : DepositRequest} (ok : processDepositRequest s electra request = .ok t) :
     Rise request.amount.toNat s t := by
-  obtain ⟨pushed, -, balances⟩ := processDepositRequest_ok ok
-  have slashings : t.slashings = s.slashings := by
-    obtain ⟨start, recorded⟩ := recordDepositRequestsStart_eq (state := s) (index := request.index)
-    simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-      bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, rfl⟩ := ok
-    rfl
+  obtain ⟨pushed, -, balances, start, pending, shape⟩ := processDepositRequest_ok ok
+  have slashings : t.slashings = s.slashings := by rw [shape]
   have summed : balanceSum t = balanceSum s := by
     unfold balanceSum
     rw [balances]

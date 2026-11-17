@@ -2,7 +2,7 @@ module
 
 public import EthLib.Base.Hash32
 public import EthLib.Serialization.Proofs.Ssz.Codec.Binding
-public import EthLib.Cryptography.Proofs.Merkle.RandomOracle
+public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Collision
 public import EthLib.Cryptography.Proofs.ExceptTAnswers
 public import VCVio.OracleComp.QueryTracking.RandomOracle.CachePartial
 

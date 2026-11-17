@@ -181,7 +181,7 @@ private theorem stay_processExecutionRequests {body : BeaconBlockBody preset for
   simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, depositsOk, _, withdrawalsOk, consolidationsOk⟩ := computed
   have deposited := Stay.foldlM (fun _ _ _ _ _ ok => ⟨BalanceStays.of_balances
-    (processDepositRequest_ok ok).2.2, (frame_processDepositRequest ok).pubkeysPrefix⟩)
+    (processDepositRequest_ok ok).2.2.1, (frame_processDepositRequest ok).pubkeysPrefix⟩)
     held depositsOk
   have withdrawn := Stay.foldlM (fun _ _ _ _ _ ok => ⟨stays_processWithdrawalRequest ok index,
     (frame_processWithdrawalRequest ok).pubkeysPrefix⟩) deposited withdrawalsOk

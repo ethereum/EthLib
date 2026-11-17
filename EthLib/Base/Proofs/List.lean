@@ -26,6 +26,8 @@ Dropping the front where a test holds keeps each member that fails the test.
 Numbering the front of a list gives the front of the numbered list.
 
 An array holds an element that passes a test whenever a search for one finds it.
+
+The largest of a list of numbers bounds each of them.
 -/
 
 @[expose] public section
@@ -188,5 +190,11 @@ theorem zipIdx_take {α : Type} (l : List α) (i : Nat) : (l.take i).zipIdx = l.
 theorem any_eq_true_of_find?_eq_some {α : Type} {p : α → Bool} {xs : Array α} {x : α}
     (found : xs.find? p = some x) : xs.any p = true :=
   Array.any_eq_true'.mpr ⟨x, Array.mem_of_find?_eq_some found, Array.find?_some found⟩
+
+/-- Each element of a list of numbers is at most their largest, folded from zero. -/
+theorem le_foldr_max : ∀ {values : List Nat} {value : Nat}, value ∈ values →
+    value ≤ values.foldr max 0
+  | _ :: _, _, .head _ => Nat.le_max_left _ _
+  | _ :: _, _, .tail _ member => Nat.le_trans (le_foldr_max member) (Nat.le_max_right _ _)
 
 end EthLib.Base
