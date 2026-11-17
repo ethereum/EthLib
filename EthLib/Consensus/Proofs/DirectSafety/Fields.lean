@@ -1286,6 +1286,40 @@ theorem view_field_crossing {g a : ForkedBeaconState preset} (run : Run config c
       · exact old (.inl named)
       · exact old (.inr (.inl named))
 
+/-- A justified field of a view is the genesis checkpoint, or a quorum targets it.
+
+The quorum is a quorum call of the run, or the test of the step of the view.
+
+The run starts at a genesis built from deposits. -/
+theorem view_justified_fields {g a : ForkedBeaconState preset} (run : Run config checks g a)
+    (genesis : Genesis config checks g) (view : TerminalView a) (j : Checkpoint)
+    (field : j = view.state.previousJustifiedCheckpoint ∨
+      j = view.state.currentJustifiedCheckpoint) :
+    j = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ ∨
+      ∃ quorum : ViewQuorum run view, quorum.target = j := by
+  -- A justified field of the last state has a history, whose last call targets it.
+  have old {view : TerminalView a} (field : j = a.state.previousJustifiedCheckpoint ∨
+      j = a.state.currentJustifiedCheckpoint) :
+      j = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ ∨
+        ∃ quorum : ViewQuorum run view, quorum.target = j := by
+    rcases justified_fields run genesis j field with initial | history
+    · exact .inl initial
+    · obtain ⟨history⟩ := history
+      obtain ⟨call, target⟩ := history_last history
+      exact .inr ⟨.inl call, target⟩
+  cases view with
+  | realized => exact old field
+  | pulled after ok =>
+    change j = after.previousJustifiedCheckpoint ∨ j = after.currentJustifiedCheckpoint at field
+    rcases step_reads ok with ⟨_, rfl⟩ | ⟨later, ⟨reads⟩⟩
+    · exact old field
+    rcases field with previous | current
+    · exact old (.inr
+        (previous.trans (weighJustificationAndFinalization_checkpoints reads.weighed).1))
+    · rcases step_current reads with same | ⟨test, target, _⟩
+      · exact old (.inr (current.trans same))
+      · exact .inr ⟨.inr (.ofTest ok later test), target.trans current.symm⟩
+
 /-- The finalized field of a view is genesis, or a quorum leaves it one or two epochs ahead.
 
 A quorum also targets it, and with a gap of two, another quorum targets the epoch between.

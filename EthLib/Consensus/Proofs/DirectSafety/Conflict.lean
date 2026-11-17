@@ -76,8 +76,12 @@ def EitherCall.state {g a b : ForkedBeaconState preset} {left : Run config check
 
 /-- Two quorums with different targets at one epoch make their common voters slashable.
 
-Each common voter has a vote of the runs for each target, so it voted twice in that epoch. -/
-private theorem view_same_epoch {g a b : ForkedBeaconState preset}
+Each common voter has a vote of the runs for each target, so it voted twice in that epoch.
+
+Each quorum is a quorum call of its run, or the test of the step of its view.
+
+The runs start at one genesis built from deposits, and the preset meets the parameters. -/
+theorem view_same_epoch {g a b : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
     {va : TerminalView a} {vb : TerminalView b}
