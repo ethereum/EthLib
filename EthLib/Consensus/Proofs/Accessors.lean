@@ -930,6 +930,29 @@ theorem beaconCommitteeOf_ok {slot : Slot} {index : CommitteeIndex} {perSlot : U
       2 ^ 64), Base.Uint64.addChecked_of_lt sumFits,
     Base.Uint64.mulChecked_of_lt countFits, bind, Except.bind, Except.mapError, cut]
 
+/-- A beacon committee is cut when its index is below the count of committees of a slot.
+
+An epoch must have a slot, and the bounds of `beaconCommitteeOf_ok` must fit in 64 bits. -/
+theorem beaconCommitteeOf_ok_of_lt {slot : Slot} {index : CommitteeIndex} {perSlot : UInt64}
+    {active : Array ValidatorIndex} {shuffled : Array UInt64}
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (count : perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (fits : active.size * (perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64)
+    (below : index < perSlot) :
+    ∃ committee, beaconCommitteeOf preset slot index perSlot active shuffled = .ok committee := by
+  refine beaconCommitteeOf_ok count ?_ fits
+  -- The committees of the earlier slots of the epoch come first, then this slot's.
+  have indexLt := UInt64.lt_iff_toNat_lt.mp below
+  have remainder := Nat.mod_lt slot.toNat positive
+  rw [UInt64.toNat_mod]
+  generalize perSlot.toNat = p at *
+  generalize slot.toNat % preset.SLOTS_PER_EPOCH.toNat = k at *
+  generalize preset.SLOTS_PER_EPOCH.toNat = e at *
+  calc k * p + index.toNat < k * p + p := Nat.add_lt_add_left indexLt _
+    _ = (k + 1) * p := (Nat.succ_mul k p).symm
+    _ ≤ e * p := Nat.mul_le_mul_right _ remainder
+    _ = p * e := Nat.mul_comm _ _
+
 /-- A beacon committee whose index is below the count of its slot is cut.
 
 The epoch of the slot plus the length of the history of mixes must fit in 64 bits.
@@ -952,23 +975,9 @@ theorem getBeaconCommittee_exists {state : BeaconState preset fork} {slot : Slot
     (computeEpochAtSlot preset slot) committeeRoom
   obtain ⟨shuffled, shuffleOk⟩ := attesterShuffle_ok_of_le (state := state)
     (epoch := computeEpochAtSlot preset slot) seedRoom lookahead few
-  -- The position of the committee in its epoch is below the count of committees of the epoch.
-  have inside : (slot % preset.SLOTS_PER_EPOCH).toNat *
-      (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat + index.toNat <
-      (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat *
-        preset.SLOTS_PER_EPOCH.toNat := by
-    have indexLt := UInt64.lt_iff_toNat_lt.mp below
-    have remainder := Nat.mod_lt slot.toNat positive
-    rw [UInt64.toNat_mod]
-    generalize (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat = p at *
-    generalize slot.toNat % preset.SLOTS_PER_EPOCH.toNat = k at *
-    generalize preset.SLOTS_PER_EPOCH.toNat = e at *
-    calc k * p + index.toNat < k * p + p := Nat.add_lt_add_left indexLt _
-      _ = (k + 1) * p := (Nat.succ_mul k p).symm
-      _ ≤ e * p := Nat.mul_le_mul_right _ remainder
-      _ = p * e := Nat.mul_comm _ _
   simp only [getBeaconCommittee, shuffleOk, bind, Except.bind]
-  exact beaconCommitteeOf_ok countFits inside (by simpa only [List.size_toArray] using activeFits)
+  exact beaconCommitteeOf_ok_of_lt positive countFits
+    (by simpa only [List.size_toArray] using activeFits) below
 
 /-- Each member of a committee is active in the epoch of its slot. -/
 theorem mem_getActiveValidatorIndices_of_getBeaconCommittee {state : BeaconState preset fork}
