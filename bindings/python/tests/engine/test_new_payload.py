@@ -9,7 +9,7 @@ import pytest
 from ethlib import engine
 from raising import raises
 
-from .cases import check, config
+from .cases import FORK_OF_NETWORK, check, config
 
 _FILE = Path(__file__).resolve().parents[4] / "tests" / "engine" / "new_payload.json"
 CASES = json.loads(_FILE.read_text())
@@ -38,12 +38,16 @@ def test_counts() -> None:
     assert kinds == {"valid": 93, "error": 75, "invalid": 80, "execution": 2}
 
 
+def _unsupported(network: str) -> str:
+    """The message of a payload of the fork of this network that the version does not take."""
+    fork = FORK_OF_NETWORK[network]
+    return f'engine error: EthLib.Engine.EngineError.unsupportedFork (some "{fork}")'
+
+
 def test_wrong_version() -> None:
     """A version of the method rejects a payload of a fork that it does not take."""
     case = next(c for c in CASES if c["network"] == "Prague" and c["validationError"] is None)
-    with raises(
-        engine.EngineError, "engine error: EthLib.Engine.EngineError.unsupportedFork"
-    ) as error:
+    with raises(engine.EngineError, _unsupported("Prague")) as error:
         engine.new_payload(config("Prague"), "engine_newPayloadV3", case["params"][:3])
     assert error.value.code == 38005
 
@@ -88,18 +92,14 @@ def test_v5_before_amsterdam() -> None:
     """Version 5 rejects a payload of a fork before Amsterdam as an unsupported fork."""
     params = _prague_v4()
     payload = dict(params[0], blockAccessList="0xc0", slotNumber="0x0")
-    with raises(
-        engine.EngineError, "engine error: EthLib.Engine.EngineError.unsupportedFork"
-    ) as error:
+    with raises(engine.EngineError, _unsupported("Prague")) as error:
         engine.new_payload(config("Prague"), "engine_newPayloadV5", [payload, *params[1:]])
     assert error.value.code == 38005
 
 
 def test_v4_at_amsterdam() -> None:
     """Version 4 rejects a payload of Amsterdam as an unsupported fork."""
-    with raises(
-        engine.EngineError, "engine error: EthLib.Engine.EngineError.unsupportedFork"
-    ) as error:
+    with raises(engine.EngineError, _unsupported("Amsterdam")) as error:
         engine.new_payload(config("Amsterdam"), "engine_newPayloadV4", _prague_v4())
     assert error.value.code == 38005
 

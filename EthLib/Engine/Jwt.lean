@@ -35,21 +35,35 @@ namespace EthLib.Engine.Jwt
 
 open EthLib.Base
 
-/-- Why building or authenticating an Engine token failed. -/
+/-- Why building or authenticating an Engine token failed.
+
+A failed signature check carries nothing, so that it reveals nothing about the expected tag. -/
 inductive JwtError where
-  | secretLength
-  | compact
+  /-- The secret has `size` bytes, where the Engine API takes 32.
+
+  The size of a rejected secret says nothing about a key of 32 bytes. -/
+  | secretLength (size : Nat)
+  /-- The token has `count` parts separated by periods, where the compact form has three.
+
+  The count comes from the token, not from the key. -/
+  | compact (count : Nat)
+  /-- The header is not a JSON object. -/
   | header
-  | algorithm
+  /-- The header names the algorithm `name`, other than HS256, or no algorithm as a string. -/
+  | algorithm (name : Option String)
+  /-- The header names a critical extension, which this profile does not support. -/
   | critical
+  /-- The claims are not a JSON object with a numeric issued-at time. -/
   | claims
+  /-- The signature does not decode, or does not match. -/
   | signature
+  /-- A built token does not read back with its time, which never happens. -/
   | serialization
   deriving Repr, DecidableEq
 
 /-- Stable error codes for the bindings, one per failure. -/
 def JwtError.code : JwtError → UInt32
-  | .secretLength => 1 | .compact => 2 | .header => 3 | .algorithm => 4
+  | .secretLength _ => 1 | .compact _ => 2 | .header => 3 | .algorithm _ => 4
   | .critical => 5 | .claims => 6 | .signature => 7 | .serialization => 8
 
 /-- The three encoded parts of the JWS compact form. -/
@@ -86,13 +100,13 @@ def objectFields (segment : String) : Option (List (String × Json.Value)) := do
 def algorithm (header : String) : Except JwtError String := do
   let some fields := objectFields header | throw .header
   if (fields.lookup "crit").isSome then throw .critical else do
-  let some (.str name) := fields.lookup "alg" | throw .algorithm
+  let some (.str name) := fields.lookup "alg" | throw (.algorithm none)
   return name
 
 /-- Read the issued-at claim after enforcing the sole supported algorithm, HS256. -/
 def issuedAt (header claims : String) : Except JwtError Json.Number := do
   let name ← algorithm header
-  if name ≠ "HS256" then throw .algorithm else do
+  if name ≠ "HS256" then throw (.algorithm (some name)) else do
   let some fields := objectFields claims | throw .claims
   let some (.num time) := fields.lookup "iat" | throw .claims
   return time
@@ -101,8 +115,8 @@ def issuedAt (header claims : String) : Except JwtError Json.Number := do
 
 The tag is checked first, so the JSON reader sees only a token whose tag matches its parts. -/
 def authenticate (secret : ByteArray) (token : String) : Except JwtError Json.Number := do
-  if secret.size ≠ 32 then throw .secretLength else do
-  let some p := parts token | throw .compact
+  if secret.size ≠ 32 then throw (.secretLength secret.size) else do
+  let some p := parts token | throw (.compact (token.toList.splitOn '.').length)
   let .ok mac := Base64.decode p.signature | throw .signature
   if mac ≠ Cryptography.Hash.Hmac.hmac secret (signingInput p.header p.claims) then
     throw .signature
@@ -126,7 +140,7 @@ The builder checks that its generated JSON reads back with that time before sign
 
 That check never fails, so a 32-byte secret always gives a token. -/
 def build (secret : ByteArray) (time : Nat) : Except JwtError String := do
-  if secret.size ≠ 32 then throw .secretLength else do
+  if secret.size ≠ 32 then throw (.secretLength secret.size) else do
   match issuedAt headerPart (claimsPart time) with
   | .ok parsed =>
     if parsed = ⟨time, 0⟩ then

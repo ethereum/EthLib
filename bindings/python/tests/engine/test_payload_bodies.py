@@ -122,10 +122,11 @@ def test_range_below_one(start: int, count: int, message: str) -> None:
 @pytest.mark.parametrize("version", [1, 2])
 def test_request_limit(version: int) -> None:
     """A request above the limit is too large, and a request of 32 bodies never is."""
-    with raises(engine.EngineError, "engine error: EthLib.Engine.EngineError.tooLargeRequest") as e:
+    too_large = "engine error: EthLib.Engine.EngineError.tooLargeRequest 33 32"
+    with raises(engine.EngineError, too_large) as e:
         _range(version, 1, 33)
     assert e.value.code == 38004
-    with raises(engine.EngineError, "engine error: EthLib.Engine.EngineError.tooLargeRequest") as e:
+    with raises(engine.EngineError, too_large) as e:
         _by_hash(version, [_hash(1)] * 33)
     assert e.value.code == 38004
     assert len(_range(version, 1, 32)) == LATEST

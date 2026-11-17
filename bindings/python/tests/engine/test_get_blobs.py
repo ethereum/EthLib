@@ -8,6 +8,8 @@ from raising import raises
 BLOB_SIZE = 131072
 CELL_SIZE = 2048
 CELLS = 128
+# The default maximum number of hashes in a request.
+MAX_REQUEST = 128
 
 
 def _hash(n: int) -> bytes:
@@ -73,9 +75,12 @@ def test_v1_not_serving() -> None:
     assert answer == [None, None, None]
 
 
+UNSUPPORTED_FORK_FUSAKA = 'engine error: EthLib.Engine.EngineError.unsupportedFork (some "fusaka")'
+
+
 def test_v1_unsupported_from_fusaka() -> None:
     """From Fusaka, version 1 is an unsupported fork."""
-    with raises(engine.EngineError, "engine error: EthLib.Engine.EngineError.unsupportedFork") as e:
+    with raises(engine.EngineError, UNSUPPORTED_FORK_FUSAKA) as e:
         engine.get_blobs(POOL, "fusaka", "engine_getBlobsV1", [REQUEST])
     assert e.value.code == 38005
 
@@ -184,19 +189,22 @@ def test_request_limit(version: int) -> None:
     """A request above the limit is too large, and a request of 128 hashes never is."""
     # Versions 2 to 4 have no fork in the source, so Dencun suits all four versions.
     method = f"engine_getBlobsV{version}"
-    with raises(engine.EngineError, "engine error: EthLib.Engine.EngineError.tooLargeRequest") as e:
-        engine.get_blobs(POOL, "dencun", method, _params(version, [REQUEST[0]] * 129))
+    too_large = (
+        f"engine error: EthLib.Engine.EngineError.tooLargeRequest {MAX_REQUEST + 1} {MAX_REQUEST}"
+    )
+    with raises(engine.EngineError, too_large) as e:
+        engine.get_blobs(POOL, "dencun", method, _params(version, [REQUEST[0]] * (MAX_REQUEST + 1)))
     assert e.value.code == 38004
-    answer = engine.get_blobs(POOL, "dencun", method, _params(version, [REQUEST[0]] * 128))
-    assert answer == [ANSWER_A[version]] * 128
-    params = _params(version, [REQUEST[0]] * 129)
-    answer = engine.get_blobs(POOL, "dencun", method, params, max_request=129)
-    assert answer == [ANSWER_A[version]] * 129
+    answer = engine.get_blobs(POOL, "dencun", method, _params(version, [REQUEST[0]] * MAX_REQUEST))
+    assert answer == [ANSWER_A[version]] * MAX_REQUEST
+    params = _params(version, [REQUEST[0]] * (MAX_REQUEST + 1))
+    answer = engine.get_blobs(POOL, "dencun", method, params, max_request=MAX_REQUEST + 1)
+    assert answer == [ANSWER_A[version]] * (MAX_REQUEST + 1)
 
 
 def test_fork_before_size() -> None:
     """The fork of version 1 is checked before the size of the request."""
-    with raises(engine.EngineError, "engine error: EthLib.Engine.EngineError.unsupportedFork") as e:
+    with raises(engine.EngineError, UNSUPPORTED_FORK_FUSAKA) as e:
         engine.get_blobs(POOL, "fusaka", "engine_getBlobsV1", [[REQUEST[0]] * 200])
     assert e.value.code == 38005
 

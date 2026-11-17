@@ -412,7 +412,7 @@ theorem check_build_of_size {secret : ByteArray} {time clock : Nat} (hs : secret
 /-- An algorithm other than HS256 cannot produce an issued-at time for this profile. -/
 theorem issuedAt_eq_error_of_algorithm_ne {header claims name : String}
     (ha : algorithm header = .ok name) (hn : name ≠ "HS256") :
-    issuedAt header claims = .error .algorithm := by
+    issuedAt header claims = .error (.algorithm (some name)) := by
   simp only [issuedAt, ha, bind, Except.bind, ite_eq_left hn]
   rfl
 

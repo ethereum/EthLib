@@ -206,7 +206,7 @@ def checkNewPayload (config : ChainConfig) (version : Nat) (params : Json) :
   -- The fork of the payload must be one that the version takes.
   let number := any.common.blockNumber.toNat
   let timestamp := any.common.timestamp.toNat
-  let some fork := config.activeFork number timestamp | throw .unsupportedFork
+  let some fork := config.activeFork number timestamp | throw (.unsupportedFork none)
   if hAccepted : acceptsFork version fork = true then
     let payload ← any.atFork fork
     let beacon ← since (f := .dencun) "parentBeaconBlockRoot" beaconRoot
@@ -224,9 +224,10 @@ def checkNewPayload (config : ChainConfig) (version : Nat) (params : Json) :
     | .ok block =>
       if let some hashes := hashes then
         if ExecutionPayload.blobVersionedHashes block.transactions ≠ hashes then
-          return .error (invalidStatus .wrongVersionedHashes)
+          let actual := ExecutionPayload.blobVersionedHashes block.transactions
+          return .error (invalidStatus (.wrongVersionedHashes hashes actual))
       return .ok ⟨fork, hAccepted, block⟩
-  else throw .unsupportedFork
+  else throw (.unsupportedFork (some fork))
 
 /-- The status of `engine_newPayload` from an execution layer without the parent's state.
 
@@ -289,7 +290,7 @@ def newPayloadOnChain (transition : TransitionConfiguration) (totalDifficulty : 
     unless parent.header.hash.toOption = some header.parentHash do
       return (⟨.syncing, none⟩, none, none)
     unless passesTerminalCheck transition totalDifficulty parent do
-      return (⟨.invalid, some 0⟩, some .invalidTerminalBlock, none)
+      return (⟨.invalid, some 0⟩, some (.invalidTerminalBlock header.parentHash), none)
     match stateTransition chain checked.block (checkSeal := false) with
     | .ok post =>
       return (⟨.valid, header.hash.toOption⟩, none, some (⟨checked.fork, header, []⟩, post))

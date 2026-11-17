@@ -325,11 +325,12 @@ def forkchoiceUpdated (transition : TransitionConfiguration) (tree : PayloadTree
     else if belowFinalized tree finalized state.headBlockHash then
       pure (⟨.valid, some state.headBlockHash⟩, none)
     -- The note of the forkchoice state, read as an invalid state of step 9.
-    else if zeroAfterTransition tree finalized state then throw .invalidForkchoiceState
+    else if zeroAfterTransition tree finalized state then
+      throw (.invalidForkchoiceState state.safeBlockHash state.finalizedBlockHash)
     else if onChain tree state.headBlockHash state.safeBlockHash &&
         onChain tree state.headBlockHash state.finalizedBlockHash then
       pure (⟨.valid, some state.headBlockHash⟩, some state.headBlockHash)
-    else throw .invalidForkchoiceState
+    else throw (.invalidForkchoiceState state.safeBlockHash state.finalizedBlockHash)
 
 /-- The forkchoice state, with exactly its three fields. -/
 def forkchoiceStateOfJson (j : Json) : Decode ForkchoiceState := do
@@ -568,8 +569,8 @@ def checkAttributes (config : ChainConfig) (version : Nat) (head : KnownPayload)
     Except EngineError (Σ fork, PayloadAttributes fork) := do
   let timestamp := attributes.2.timestamp
   let some fork := config.activeFork (head.number.toNat + 1) timestamp.toNat
-    | throw .unsupportedFork
-  unless attributesTakeFork version fork do throw .unsupportedFork
+    | throw (.unsupportedFork none)
+  unless attributesTakeFork version fork do throw (.unsupportedFork (some fork))
   let some atFork := PayloadAttributes.atFork attributes fork | throw .invalidPayloadAttributes
   unless head.timestamp < timestamp do throw .invalidPayloadAttributes
   return ⟨fork, atFork⟩
