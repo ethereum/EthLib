@@ -106,7 +106,7 @@ One way it fails is a member that the source state does not hold, such as a late
 
 The source reads also fail on overflow, in a total or in the score.
 
-With positive `SLOTS_PER_EPOCH`, it holds, barring overflow, when each such member is in it. -/
+With positive `SLOTS_PER_EPOCH`, it holds, barring overflow, if the source holds every member. -/
 def SourceWindowReads (call last : Nat) (source : BeaconState preset fork) : Prop :=
   ∀ w ∈ J, ∀ k (head : ForkChoiceNode) state current first finish maximum,
     (e.world call).time ≤ (e.world k).time → (e.world k).time ≤ last →
