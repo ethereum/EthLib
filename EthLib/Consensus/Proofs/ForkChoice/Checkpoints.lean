@@ -1151,6 +1151,23 @@ theorem Store.ForwardReachable.justified_le_of_pulledUp (anchor : Invariant anch
   cases Except.ok.inj (currentOk.symm.trans nowOk)
   exact (adopted root block state pulled known held run).2 earlier
 
+/-- The pull-up of each held block is at most the unrealized justified checkpoint of the store.
+
+A block raises the unrealized justified checkpoint to its pull-up when it arrives.
+
+Later steps never lower that checkpoint.
+
+The anchor state must keep the invariant of the state transition. -/
+theorem Store.ForwardReachable.pulledUp_le_unrealized (anchor : Invariant anchorState)
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (slots : 0 < config.SLOT_DURATION_MS)
+    {root : Root} {block : BeaconBlock preset fork} {state pulled : BeaconState preset fork}
+    (known : store.blocks[root]? = some block) (held : store.blockStates[root]? = some state)
+    (run : processJustificationAndFinalization state = .ok pulled) :
+    pulled.currentJustifiedCheckpoint.epoch ≤ store.unrealizedJustifiedCheckpoint.epoch := by
+  obtain ⟨_, _, adopted⟩ := forward.adoption anchor positive slots
+  exact (adopted root block state pulled known held run).1
+
 /-- The state of a block of a reachable store, pulled up to the current epoch, keeps the invariant.
 
 The anchor state must keep the invariant of the state transition. -/
