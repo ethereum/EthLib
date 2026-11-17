@@ -26,7 +26,7 @@ It does not need the resource and per-key producers that establish them.
 
 The cached-call ledger remains an explicit input.
 
-`CommonLedger` is stated on run endpoints.
+The ledger of the common slashed stake is stated on run endpoints.
 
 But the two selected calls observe cached states inside epoch processing. -/
 theorem composition_conditional_of_call_ledger
@@ -623,7 +623,7 @@ private theorem NewCohortCuts.boundary_keys {x y : ForkedBeaconState preset}
 
 /-- Add twice the new nonreference boundary stake and twice the boundary gains of the new cohort.
 
-The sum is within twice the new-boundary term of `drift`. -/
+The sum is within twice the new-boundary term of the drift. -/
 theorem nonreference_boundary_le {x y : ForkedBeaconState preset}
     {tail : Run config checks x y} {high : Nat} {ledger : LedgerCuts tail}
     (cuts : NewCohortCuts tail high ledger)
@@ -642,7 +642,7 @@ theorem nonreference_boundary_le {x y : ForkedBeaconState preset}
 
 end
 
-/-- Before Electra, this is `PenaltyProducer`'s bound with every floor proved.
+/-- Before Electra, this is the penalty bound of a branch with every floor proved.
 
 The guard keeps the branch before Electra.
 
@@ -668,7 +668,7 @@ theorem penaltyProducer_pre {g x y : ForkedBeaconState preset}
       within total read
   · exact steps_before_end tail
 
-/-- `PenaltyProducer` in both fork regimes, like `floorProducer_proved`. -/
+/-- The penalty bound of a branch in both fork regimes, like the balance floor of each key. -/
 theorem penaltyProducer_proved {g x y : ForkedBeaconState preset} :
     PenaltyProducer (config := config) (checks := checks) (g := g) (x := x) (y := y) :=
   if before : x.fork < .pectra then penaltyProducer_pre before
@@ -678,9 +678,9 @@ theorem penaltyProducer_proved {g x y : ForkedBeaconState preset} :
 
 /-! ## Scheduled boundary growth within the exit-cohort growth
 
-For each exit epoch through `horizonEnd x high`, sum `cap - 2e` over the keys that exit there.
+For each exit epoch through the end of the window, sum `cap - 2e` over the keys that exit there.
 
-`exitCohortGrowth` takes the largest of these sums.
+The exit-cohort growth takes the largest of these sums.
 
 Each cap and effective balance is read at `x`.
 
@@ -737,7 +737,7 @@ private theorem sum_range_getElem? (F : Validator → Nat) (l : List Validator) 
       Option.getD_some]
     rw [ih, Nat.add_comm]
 
-/-- One exit cohort's residual is at most `exitCohortGrowth`. -/
+/-- One exit cohort's residual is at most the exit-cohort growth. -/
 private theorem cohort_le_Rhat (x : ForkedBeaconState preset) (high j : Nat)
     (within : j ≤ horizonEnd x high) :
     (x.state.validators.data.toList.map fun v =>
@@ -749,7 +749,7 @@ private theorem cohort_le_Rhat (x : ForkedBeaconState preset) (high j : Nat)
   apply Serialization.Ssz.member_le_foldl_max
   exact List.mem_map.mpr ⟨j, List.mem_range.mpr (Nat.lt_succ_of_le within), rfl⟩
 
-/-- `ScheduledBoundaryProducer`: endpoint-epoch exits grow within `exitCohortGrowth`. -/
+/-- Endpoint-epoch exits grow within the exit-cohort growth. -/
 theorem scheduledBoundaryProducer {g x y : ForkedBeaconState preset} :
     ScheduledBoundaryProducer (config := config) (checks := checks) (g := g) (x := x)
       (y := y) := by
@@ -802,7 +802,7 @@ It changes only the source's exit and withdrawable epochs.
 
 The exit is after the current epoch, and the source can withdraw exactly the delay after it.
 
-The call it makes is DepartureQueue's `queueConsolidation_call`. -/
+The call it makes spends the source balance before it changes the exit epoch. -/
 private theorem queueConsolidation_facts {fork : Fork} {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
     (found : s.validators.data[sourceIndex.toNat]? = some source)
@@ -999,14 +999,14 @@ private theorem futureCover_queueConsolidation {x : ForkedBeaconState preset} {f
 
 /-- The reserved replay of one consolidation request of a block.
 
-By `consolidationRequest_cases`, the request does one of three things.
+The request does one of three things.
 
 It returns its state, or it switches one validator to compounding credentials.
 
 Otherwise, it queues an accepted source.
 
 - Returning the state keeps everything.
-- The switch is the producer's `reservedReplay_switchToCompounding`, here `switched`.
+- The switch is the reserved replay of a switch to compounding, here `switched`.
 - Queueing appends a fresh tag for the call it makes.
   An accepted source is active with no exit.
   So by `slashedExit` it is unslashed and supported at the current epoch.
@@ -1208,7 +1208,9 @@ theorem reservedReplay_consolidationRequest {fork : Fork} {s t : BeaconState pre
     simp only [Array.length_toList, List.length_append, List.length_singleton] at grown
     omega
 
-/-- The stake of one exit cohort within the horizon is at most `adjacentExitStake`. -/
+/-- The stake of one exit cohort within the horizon is at most `Bd`.
+
+`Bd` is the largest effective balance that exits in two adjacent epochs of the window. -/
 private theorem cohort_le_Bd (x : ForkedBeaconState preset) {high t : Nat}
     (within : t ≤ driftHorizon x high) :
     (x.state.validators.data.toList.map fun v =>
@@ -1219,7 +1221,7 @@ private theorem cohort_le_Bd (x : ForkedBeaconState preset) {high t : Nat}
   apply le_foldr_max
   exact List.mem_map.mpr ⟨t, List.mem_range.mpr (Nat.lt_succ_of_le within), rfl⟩
 
-/-- `previousOnlyStake <= adjacentExitStake`.
+/-- The stake of the keys active only at the previous epoch is at most `Bd`.
 
 A validator active only at the previous epoch exits at the current one. -/
 private theorem B0_le_Bd (x : ForkedBeaconState preset) (high : Nat) : previousOnlyStake x ≤
@@ -1242,7 +1244,7 @@ private theorem B0_le_Bd (x : ForkedBeaconState preset) (high : Nat) : previousO
 
 /-- Take the previous-only keys still recent at `y` and the initially scheduled boundary of `y`.
 
-Together they fit `previousOnlyStake + 2 adjacentExitStake`.
+Together they fit the stake of the previous-only keys plus twice `Bd`.
 
 Each previous-only key exits at the epoch of `x`.
 
@@ -1252,7 +1254,7 @@ There it counts once as gain and twice as boundary, and its effective balance ha
 
 Above that epoch, take the active keys of `x` that exit at the epoch of `y`.
 
-They are one exit cohort within the horizon, which `adjacentExitStake` bounds. -/
+They are one exit cohort within the horizon, which `Bd` bounds. -/
 theorem oldBoundary_le {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y) (high : Nat)
     (supported : Supported shared tail high) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) :
@@ -1456,7 +1458,9 @@ private theorem range_filter_length (n m : Nat) :
     · simp [low]; omega
     · simp [low]; omega
 
-/-- Take the injected selected charges that complete by `horizonEnd x high - delay`.
+/-- Take the injected selected charges.
+
+Each completes by the end of the window less the withdrawal delay.
 
 They fit the initial carry plus the moved flow. -/
 theorem selected_capacity {x : ForkedBeaconState preset} {high : Nat}
@@ -1746,9 +1750,9 @@ theorem TagReplay.unique {position : Nat} {events : List (BalanceEvent preset)}
       obtain ⟨rfl, rfl, rfl, rfl⟩ := ih rest'
       exact ⟨rfl, rfl, rfl, rfl⟩
 
-/-- `DerivedProducer` follows from the state bound at every prefix of the tail.
+/-- The derived drift bound follows from the state bound at every prefix of the tail.
 
-The bound is the constant `drift x high`, so it grows trivially.
+The bound is the a priori drift at `x`, a constant, so it grows trivially.
 
 Each in-horizon prefix is supported.
 

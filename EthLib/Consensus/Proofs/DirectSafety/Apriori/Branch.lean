@@ -24,7 +24,7 @@ noncomputable section
 
 /-! ## No deposit credit to a withdrawable consolidation source
 
-`withdrawnConsolidationCredit` is what a deposit event credits to pending consolidation sources.
+The withdrawn-source credit of an event is what a deposit event credits to pending sources.
 
 It counts only the sources that can already withdraw at the current epoch.
 
@@ -34,7 +34,7 @@ From Electra, a block deposit only queues a pending deposit, so its event credit
 
 The pass of the pending deposits starts at a state of the epoch replay.
 
-The stages before it keep `PendingConsolidationsOrdered` at the current epoch.
+The stages before it keep the pending consolidations ordered, with the current epoch as bound.
 
 So every pending source there withdraws after the current epoch, slashed or not.
 -/
@@ -271,7 +271,7 @@ Every pending consolidation source of a reachable state withdraws after the curr
 
 The epoch pass of the pending deposits starts at such a state, and block deposits credit nothing.
 
-It covers the deposit events, the only ones whose `fundingCredit` reads this credit. -/
+It covers the deposit events, the only ones whose funding credit reads this credit. -/
 theorem _root_.EthLib.Consensus.Run.withdrawnConsolidationCredit_eq_zero
     {checks : SignatureChecks} {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
@@ -347,7 +347,7 @@ theorem countPath_monotone (config : Config) (start : Nat) :
 
 Each observable is a number read at the reference state `x` of a branch.
 
-It is a parameter of `drift`, not a premise.
+It is a parameter of the drift, not a premise.
 -/
 
 /-! ## The inactivity scores of a branch
@@ -358,7 +358,7 @@ Every other step keeps the scores at the positions that exist before it.
 
 So a key of the registry at `x` has a score of at most `sigma + bias * t` after `t` updates.
 
-`sigma` is the start score `startInactivityScore`, at least each score at `x`.
+`sigma` is the start score, at least each score at `x`.
 -/
 
 /-- From Altair, each score of a state at a position below `n` is at most `bound`. -/
@@ -557,7 +557,7 @@ theorem referenceScores_le {x z : ForkedBeaconState preset} (head : Run config c
 
 The departures that a branch charges in its window fit the budget `Dnew` of the drift.
 
-This is the bound of `departure_charges_le_window_from` with the counts and rates of the drift.
+This is the window bound of the departure charges, with the counts and rates of the drift.
 
 Two facts of the window are hypotheses here, since the ceiling of the active stake gives them.
 
@@ -772,7 +772,7 @@ The funding is the funded stake plus the deposit carry, and `start` bounds it at
 
 Each epoch from `v` to `y` adds its deposit churn, and the replay adds its funding credits.
 
-From an Electra `x`, `v` is `x` and `start` is `fundedStake x + fundingCarry x`. -/
+From an Electra `x`, `v` is `x` and `start` is the funded stake plus the deposit carry at `x`. -/
 theorem funding_le_ceiling {g v y : ForkedBeaconState preset}
     (shared : Run config checks g v) (tail : Run config checks v y)
     (genesis : Genesis (config := config) (checks := checks) g)
@@ -806,7 +806,7 @@ Its current epoch is still `t - 1`, so its funded stake counts every such key.
 
 For `t = 0`, `u` is the start `x` of the branch.
 
-The keys active at the epoch before `x` but not at `x` are then counted by `previousOnlyStake x`.
+The keys active at the epoch before `x` but not at `x` are then counted by their stake at `x`.
 -/
 
 /-- The participants of the previous epoch weigh at most the stake at `u` of its active keys.

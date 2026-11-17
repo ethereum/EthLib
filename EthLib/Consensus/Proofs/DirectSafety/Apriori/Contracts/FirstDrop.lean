@@ -331,7 +331,7 @@ private theorem Stop.selected_local_replay
       (getCurrentEpoch_succ_lt_farFuture twoSlots stop.state.state)
 /-- The per-key accounting trace of a branch, through any slashing of the key.
 
-Each step extends the trace by `FloorTrace.step`.
+Each step extends the trace, keeping the carried account.
 
 The trace is marked slashed only if the key ends the branch slashed. -/
 theorem FloorTrace.run

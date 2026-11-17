@@ -275,7 +275,7 @@ A missing head flag costs nothing, and the rewards only raise the balance.
 
 The sync committee penalties are not part of this pass.
 
-`processSyncAggregate` applies them in each block.
+The processing of the sync aggregate applies them in each block.
 
 The bound reads the replay of the pass, which records each penalty entry as its own event.
 -/
@@ -312,7 +312,7 @@ private theorem replayDeltas_credits {fork : Fork} (source : BalanceSource)
 
 /-- The debit of one event at one position, when the event is a penalty or an inactivity penalty.
 
-This is the term of `referenceDebit` at that position, for the two sources of the rewards pass. -/
+This is the non-slashing debit of that position, for the two sources of the rewards pass. -/
 def penaltyDebit (j : Nat) (event : BalanceEvent preset) : Nat :=
   if event.source = .penalties ∨ event.source = .inactivity then
     actualBalanceAt event.before j - actualBalanceAt event.after j

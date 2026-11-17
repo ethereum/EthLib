@@ -26,11 +26,11 @@ noncomputable section
 
 Here `R' = min(R, P')`, with `P'` read at `u`.
 
-Only `original` changes. -/
+Only the original baselines change. -/
 def lowerOriginal (o : Ownership) (u : ForkedBeaconState preset) : Ownership :=
   { o with original := fun i => min (o.original i) (max (effectiveAt u i) (actualBalanceAt u i)) }
 
-/-- The lowering mints, moves, retires and endpoints nothing, and only decreases `original`. -/
+/-- The lowering mints, moves, retires and endpoints nothing, and only lowers original baselines. -/
 private theorem lowerOriginal_frame (o : Ownership) (u : ForkedBeaconState preset) :
     (lowerOriginal o u).issued = o.issued ∧ (lowerOriginal o u).owner = o.owner ∧
     (lowerOriginal o u).endpoint = o.endpoint ∧ (lowerOriginal o u).retired = o.retired ∧
@@ -42,11 +42,11 @@ private theorem lowerOriginal_frame (o : Ownership) (u : ForkedBeaconState prese
 
 /-- Lowering at the cut's own state keeps the cut.
 
-Only the reference clause has `original` on its larger side.
+Only the reference clause has the original baseline on its larger side.
 
 The lowered value is either the old one or the funding value itself.
 
-That funding value is `max (effectiveAt u i) (actualBalanceAt u i)`. -/
+That funding value is the larger of the effective balance and the balance at `u`. -/
 private theorem reserveCut_lowerOriginal {x : ForkedBeaconState preset} {high : Nat}
     {u : ForkedBeaconState preset} {demandEpoch : Epoch} {suffix : List PendingConsolidation}
     {o : Ownership} (reserve : ReserveCut x high u demandEpoch suffix o) :
@@ -141,13 +141,13 @@ private theorem epochSuffix_effective {fork : Fork} {consolidated z : BeaconStat
   have late := balanceDrift_late rest
   exact ⟨_, updatedOk, late.1, late.2.trans (processEffectiveBalanceUpdates_balances updatedOk)⟩
 
-/-- `reservedReplay_epochNext`, followed by the lowering at its end state `z`.
+/-- The whole-epoch reserved replay, followed by the lowering at its end state `z`.
 
 Its header is unchanged.
 
-This wrapper appends `reservedFrame_lowerOriginal` at `z` to its replay and to its suffix frame.
+This wrapper appends the lowering frame at `z` to its replay and to its suffix frame.
 
-The last conjunct is the effective bound read by the carried `OriginalDown`.
+The last conjunct is the effective bound that the carried bound on original baselines reads.
 
 Without a drop, the lowered value is at most the old one.
 
@@ -290,11 +290,11 @@ theorem reservedReplay_epochNext_lowered {fork : Fork}
         rw [ite_eq_right flagged] at prior
         omega
 
-/-! ## The carried bound and `assigned` -/
+/-! ## The carried bound and the assignment premise -/
 
-/-- The carried bound: `original <= eff + (FirstDown ?
+/-- The carried bound: each original baseline is at most the effective balance at the run's end.
 
-EBI : 0)` at the run's end. -/
+A key with a first drop on the run may exceed it by one increment. -/
 def OriginalDown {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (o : Ownership) : Prop :=
   ∀ i, o.original i ≤ effectiveAt y i +
@@ -383,14 +383,14 @@ private theorem firstDown_snoc_iff {x m n : ForkedBeaconState preset}
   rw [firstDown_iff_pathDrop, firstDown_iff_pathDrop]
   exact pathDrop_append_iff (Run.balancePath_ends pre).2 (Step.balancePath_ends step).1
 
-/-- Base of the carried bound, from the OwnedInitial equation. -/
+/-- Base of the carried bound, from the original baselines of the initial ownership. -/
 theorem originalDown_initial {x : ForkedBeaconState preset} {high : Nat} {o : Ownership}
     (initial : OwnedInitial x high o) : OriginalDown (Run.nil : Run config checks x x) o := by
   intro i
   rw [initial.2.2.2.2.2 i]
   split <;> (split <;> omega)
 
-/-- A block step keeps the bound: effective balances are kept and `original` only drops. -/
+/-- A block step keeps the bound: effective balances are kept and original baselines only drop. -/
 theorem originalDown_block {x : ForkedBeaconState preset} {fork : Fork}
     {m n : BeaconState preset fork}
     (pre : Run config checks x ⟨fork, m⟩) (step : Step config checks ⟨fork, m⟩ ⟨fork, n⟩)
@@ -500,7 +500,7 @@ theorem RoundLedger.sourceFalling_of_firstDown
     reference, ?_, firstDown⟩
   simp [atStop, clean]
 
-/-- This is the `assigned` premise of `reservedReplay_consolidationRequest`.
+/-- This is the assignment premise of the reserved replay of one consolidation request.
 
 It is the form after the approved weakening.
 

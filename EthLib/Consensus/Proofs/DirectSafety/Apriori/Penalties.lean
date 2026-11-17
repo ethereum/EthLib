@@ -1623,13 +1623,13 @@ Take a key whose exit at `r` is after the window.
 
 At `r` it keeps its stake less its slack, debits, any slashing penalty and one increment.
 
-This follows from `FloorProducer` over the branch to `r`.
+This follows from the balance floor of one key over the branch to `r`.
 
 A key whose exit at `r` is within the window was given that exit on the branch.
 
 The step that set it charged the departure queue its effective balance then.
 
-That balance meets the same bound by `FloorProducer` over the branch to that step.
+That balance meets the same bound by the balance floor of one key over the branch to that step.
 
 The keys select stops and prefixes of the replay, and the budgets are read only there.
 
@@ -1857,7 +1857,7 @@ private theorem anchor_floor_core {g x r : ForkedBeaconState preset} {high : Nat
 
 /-- Let `r` be the first state of an epoch.
 
-From Electra, the budgets of `anchor_floor_core` hold for any stops of a branch to `r`.
+From Electra, the key budgets that the floor at `r` reads hold for any stops of a branch to `r`.
 
 The charges and partial withdrawals fit the departure budget and the due partials.
 
@@ -1957,7 +1957,7 @@ Take as given the budgets at `r` and the total there.
 
 Then the total active balance at `u` is at least the floor at its epoch.
 
-The branch splits at `r` once, by `epoch_anchor`. -/
+The branch splits at `r` once. -/
 private theorem endpoint_floor_core {g x u : ForkedBeaconState preset} {high : Nat}
     (shared : Run config checks g x) (tail : Run config checks x u)
     (supported : Supported shared tail high) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
@@ -2096,7 +2096,7 @@ private theorem FloorTrace.balance_floor {low base quotient : Nat} {a b : FloorA
     generalize base / quotient = pay at *
     omega
 
-/-- `FloorProducer`'s bound for one key, at any fork, given three facts that depend on the fork.
+/-- The balance floor of one key, at any fork, given three facts that depend on the fork.
 
 Every step's slashing quotient is at least the window's, and no step is the Electra crossing.
 
@@ -2190,7 +2190,7 @@ private theorem floor_bound_of_guards {g x y : ForkedBeaconState preset}
   unfold base at bound
   omega
 
-/-- From Electra, `FloorProducer`.
+/-- From Electra, the balance floor of each key holds.
 
 Each step's quotient is the Electra quotient.
 
@@ -2206,7 +2206,7 @@ private theorem floorProducer_electra {g x y : ForkedBeaconState preset}
     (fun pre _ _ => .inl (Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps)))
     (by simp only [base, notBefore, ↓reduceIte]; omega)
 
-/-- Before Electra, `FloorProducer`.
+/-- Before Electra, the balance floor of each key holds.
 
 The guard keeps the whole window before the fork.
 
@@ -2246,7 +2246,7 @@ private theorem floorProducer_pre {g x y : ForkedBeaconState preset}
     simp only [base, before, ↓reduceIte]
     omega
 
-/-- `FloorProducer`, at every fork. -/
+/-- The balance floor of each key holds at every fork. -/
 theorem floorProducer_proved {g x y : ForkedBeaconState preset} :
     FloorProducer (config := config) (checks := checks) (g := g) (x := x) (y := y) :=
   if before : x.fork < .pectra then floorProducer_pre before
@@ -2458,7 +2458,7 @@ private theorem floor_all_runs {g x : ForkedBeaconState preset} {high : Nat}
 
 /-- From Electra, the reward and sync credits of a branch fit the issuance envelope.
 
-The floor at every epoch through the end of the branch comes from `floor_all_runs`. -/
+The floor at every epoch through the end of the branch comes from an induction on the epoch. -/
 private theorem issuance_of_floor_all_runs {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y) (high : Nat)
     (supported : Supported shared tail high) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
@@ -2479,7 +2479,7 @@ private theorem issuance_of_floor_all_runs {g x y : ForkedBeaconState preset}
 
 The total active balance at that state is at least the floor at its epoch.
 
-This statement has `FloorProducer` proved. -/
+This statement has the balance floor of each key proved. -/
 theorem floor_all_runs_electra {g x : ForkedBeaconState preset} {high : Nat}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (parameters : Parameters preset) (caps : CapOrder preset)
@@ -2492,7 +2492,7 @@ theorem floor_all_runs_electra {g x : ForkedBeaconState preset} {high : Nat}
   floor_all_runs shared genesis parameters caps aligned guard electra twoSlots
     (floorProducer_electra electra)
 
-/-- From Electra, this is `PenaltyProducer`'s bound with every floor proved.
+/-- From Electra, this is the penalty bound of a branch with every floor proved.
 
 The cohort's penalty and sync debits over a branch fit the penalties of its epochs. -/
 theorem penaltyProducer_electra {g x y : ForkedBeaconState preset}

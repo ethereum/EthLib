@@ -4047,6 +4047,8 @@ A guard that holds does not by itself make the bound useful.
 Write `U` for the unslashed active stake at `x` and `A` for the accountable stake.
 Unless the runs show `HashEvidence`, the theorem gives `A >= (U - 2 * drift x high) / 3`.
 That lower bound is positive only when `2 * drift x high < U`.
+As an estimate on mainnet-like aggregates, not a proved fact, `drift x high` is of the order of `0.3 U` for a window of a few epochs.
+The bound then gives nothing for a window longer than about a week.
 `AccountableDriftBound` and `AccountableWindowBound` take the premises of `source_safety`, and `AccountableWindowBound` also takes the guard.
 Like the envelope, `drift` is an upper bound, and nothing says that a run attains it.
 

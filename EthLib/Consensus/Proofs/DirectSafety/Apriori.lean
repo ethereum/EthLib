@@ -7,11 +7,17 @@ import EthLib.Consensus.Proofs.DirectSafety.Apriori.BlockFold
 /-!
 # Accountable safety with an a priori drift bound
 
-Two runs extend a common run from genesis and finalize conflicting checkpoints.
+Two runs extend a common run from genesis to a reference state and finalize conflicting checkpoints.
 
-Then the unslashed stake at the reference state is at most three times the accountable stake.
+Then the unslashed stake there is at most three times the accountable stake plus twice a drift.
 
-The bound adds twice a drift that reads only the reference state and the later finalized epoch.
+Otherwise the runs contain hash evidence.
+
+The drift reads only the reference state and the later finalized epoch, with no replay of the runs.
+
+When the guard of the bound fails, the drift is the whole unslashed stake, and the bound is trivial.
+
+The definitions are in the bound module, and the proof in the modules beside it.
 -/
 
 @[expose] public section
@@ -26,15 +32,17 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 Two runs extend a common run from genesis to `x` and finalize conflicting checkpoints.
 
-Assume the hypotheses of `AccountableDriftBound`, such as the parameters, genesis and enough stake.
+Assume the parameters of the preset, genesis, enough stake and the other hypotheses of the bound.
 
-Then the unslashed stake at `x` is at most three times the accountable stake plus twice `drift`.
+Then the unslashed stake at `x` is at most three times the accountable stake plus twice the drift.
 
 Or the runs contain hash evidence.
 
-`drift` depends only on observables at `x` and on the later finalized epoch.
+The drift depends only on observables at `x` and on the later finalized epoch.
 
-`AccountableWindowBound` strengthens this for a guarded `x` and two calls drawn from the runs.
+When the guard fails at `x`, the drift is the unslashed stake at `x`, and the bound is trivial.
+
+The guarded form takes the guard at `x` and two calls drawn from the runs.
 
 It adds three times the stake of the keys active at `x` that exit before the earlier target epoch.
 

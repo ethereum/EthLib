@@ -887,7 +887,9 @@ theorem activeStake_le_ceiling {g x y : ForkedBeaconState preset}
   have rElectra : .pectra ≤ r.fork := Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps)
   simpa only [same] using activeStake_same_epoch inner rElectra early same current previous
 
-/-- Before the epoch sentinel, the unassigned resource pot is exactly `unassignedPreStake`. -/
+/-- Before the epoch sentinel, the unassigned resource pot is exactly the stake `PreU`.
+
+`PreU` is the pre-active stake of the validators with no assigned activation epoch. -/
 private theorem unassigned_resources_eq_pre {g x : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (finite : getCurrentEpoch x.state < FAR_FUTURE_EPOCH) :
@@ -934,7 +936,7 @@ private theorem unassigned_resources_eq_pre {g x : ForkedBeaconState preset}
 
 /-- Newly assigned candidates are paid from three sources.
 
-They are `unassignedPreStake`, the carry and the epoch deposit allowance. -/
+They are the unassigned pre-active stake `PreU`, the carry and the epoch deposit allowance. -/
 private theorem unassigned_assignment_budget {g x u : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (head : Run config checks x u) (caps : CapOrder preset)
@@ -1094,7 +1096,9 @@ theorem newly_slashed_count_le {g x y : ForkedBeaconState preset}
 
 Each of them is given an activation epoch, and it had not exited at `x`.
 
-So it is one of the validators that `windowActivations_le_countPath` counts. -/
+So it is one of the validators given an activation epoch in the window.
+
+Their count follows `A_t`. -/
 theorem activeCount_le_countPath {g x z : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (tail : Run config checks x z) (early : z.fork < .pectra) :

@@ -72,6 +72,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `processDepositRequest_ok` also gives the state after the request.
+  It is the state before, with only the pending deposits and the start index of the requests changed.
+  A caller that took the balances as `.2.2` takes `.2.2.1`, and a pattern with three parts gets a fourth.
+  Nothing breaks in Python.
+
 - In Lean, `FlagsKeptOrZero` is stronger.
   A zero byte of flags appears only at a position at or past the size of the registry before the step.
   So a step keeps the flags of each existing validator, or zeroes the byte of a new one.

@@ -119,7 +119,7 @@ private theorem stateProducer_of_ledger {g x y : ForkedBeaconState preset}
     (by rw [empty]; exact Finset.empty_inter _) (Nat.zero_le _)
   simpa [empty, commonSlashed, Models.stake] using read
 
-/-- The headline from the derived envelope and the common ledger, without `ProducerGraph`. -/
+/-- The headline from the derived envelope and the common ledger, without the producer graph. -/
 private theorem composition_of_ledger
     (ledger : ∀ g x y : ForkedBeaconState preset,
       CommonLedger (config := config) (checks := checks) (g := g) (x := x) (y := y)) :
@@ -505,7 +505,7 @@ private theorem ownedCreditBound_le (e : BalanceEvent preset) :
       · simp only [deposit, reward, sync, or_self, ↓reduceIte]
         omega
 
-/-- The four ownership-count conjuncts of `CumulativeFunding`.
+/-- The four ownership-count conjuncts of the cumulative funding.
 
 They are for the fresh allocations of the replay from `x` to `y`. -/
 theorem ownership_counts {x y : ForkedBeaconState preset} {high : Nat}
@@ -565,7 +565,7 @@ The scheduled keys are the unslashed keys active at `x` with an exit assigned wi
 
 Each keeps its key along the tail, and a recent key at `y` is unslashed there.
 
-Their effective balances at `x` are part of the scheduled departures `scheduledExitStake`. -/
+Their effective balances at `x` are part of the scheduled departures `Sch`. -/
 theorem ScheduledAllocation.ofReads {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (high : Nat) : Nonempty (ScheduledAllocation x y high) := by
   have kept := (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1
@@ -746,11 +746,11 @@ The last two are the previous-only keys and the new nonreference keys.
 
 Each part is paid by its own term of the drift.
 
-The terms are the scheduled reserve `scheduledExitStake` and the new cohort's budgets.
+The terms are the scheduled reserve `Sch` and the new cohort's budgets.
 
-They also include the old boundary `previousOnlyStake + 2 adjacentExitStake`.
+They also include the old boundary, the previous-only stake plus twice `Bd`.
 
-They include the scheduled growth `exitCohortGrowth` as well.
+They include the scheduled growth of the exit cohorts as well.
 
 The last two are the gain budget and the nonreference maximum. -/
 private theorem stateDrift_scheduledReserve_le {x y : ForkedBeaconState preset}
@@ -1076,19 +1076,19 @@ private theorem cutoff_le_farFuture {x : ForkedBeaconState preset} {high cutoff 
 
 The scheduled allocation is read off the two ends.
 
-The scheduled boundary at the end of the tail is bounded by `exitCohortGrowth`.
+The scheduled boundary at the end of the tail is bounded by the exit-cohort growth.
 
-The old boundary is bounded by `previousOnlyStake + 2 adjacentExitStake`.
+The old boundary is bounded by the previous-only stake plus twice `Bd`.
 
 The slashed common stake is paid from the common reserve of the scheduled keys.
 
 The cutoff is below the far future.
 
-That matters: past it `exitedBefore` would admit keys with no exit.
+That matters: past it the keys exited before the cutoff would admit keys with no exit.
 
 The scheduled reserve does not hold such keys.
 
-The guard excludes it (`cutoff_le_farFuture`). -/
+The guard excludes it. -/
 private theorem commonLedger_of_cuts {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y) (high : Nat)
     (supported : Supported shared tail high) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
@@ -1144,7 +1144,9 @@ private theorem commonLedger_of_allocation {g x y : ForkedBeaconState preset}
 
 The new cohort and its round ledger exist before the fork.
 
-The gain outside the previous-only keys fits `activationBudget`, which the gain budget contains. -/
+The gain outside the previous-only keys fits the activation budget.
+
+The gain budget contains the activation budget. -/
 private theorem commonLedger_pre {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y) (high : Nat)
     (supported : Supported shared tail high) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
@@ -1195,7 +1197,7 @@ The conclusion is the replay over the operation and the same facts at its output
 
 It is `[]`, except for an accepted consolidation request, which reads it at `⟨fork, s⟩`.
 
-`OperationReplay` closes this over the queue, the ownership and the positions. -/
+The operation replay closes this over the queue, the ownership and the positions. -/
 def OperationReplayAt (x : ForkedBeaconState preset) (high : Nat)
     (rounding : Nat → Nat) {fork : Fork} (electra : .pectra ≤ fork)
     (s t : BeaconState preset fork) (added : List (BalanceEvent preset))
@@ -1479,7 +1481,7 @@ theorem zip_filter_fst_map {α β γ : Type} (p : α → Bool) (f : α → γ) :
     have rest := zip_filter_fst_map p f l r (by simpa using same)
     by_cases chosen : p a <;> simp [chosen, rest]
 
-/-- SelectedRelease's `ActualPaymentCoverage` premise, for the fresh payments of the history. -/
+/-- The selected release's actual payment coverage premise, for the history's fresh payments. -/
 theorem ReservedReplay.actual_payment_coverage {x y : ForkedBeaconState preset}
     {high : Nat} {rounding : Nat → Nat} {events : List (BalanceEvent preset)}
     {final : List TaggedEntry} {allPayments : List (TaggedEntry × Payment preset)}
@@ -1674,9 +1676,9 @@ def WithdrawalRequestsReplay : Prop :=
     requests.foldlM (processWithdrawalRequest config · electra ·) s = .ok t →
     OperationReplay (config := config) (checks := checks) x high rounding electra s t [] []
 
-/-- `OperationReplay` for a whole block from `s` to `t`.
+/-- The operation replay for a whole block from `s` to `t`.
 
-It also takes `BlockAssigned` at the block input, which each consolidation request reads. -/
+It also takes the bound on the exits the block assigns, which each consolidation request reads. -/
 def BlockOperationReplay (x : ForkedBeaconState preset) (high : Nat)
     (rounding : Nat → Nat) {fork : Fork} (electra : .pectra ≤ fork)
     (s t : BeaconState preset fork) (added : List (BalanceEvent preset))

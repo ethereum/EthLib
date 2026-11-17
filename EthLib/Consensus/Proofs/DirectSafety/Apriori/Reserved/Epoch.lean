@@ -650,7 +650,7 @@ private theorem reservedEvent_consolidations {x : ForkedBeaconState preset} {hig
 
 The epoch replay records the pending consolidations.
 
-It sets both limits to `consumedConsolidations`.
+It sets both limits to the balance the pass consumes.
 
 That is the effective balance of the consumed unslashed sources.
 
@@ -658,13 +658,13 @@ The reserved readers state the same event with limits `0` and `0`.
 
 Neither limit is read on the reserved side.
 
-For a consolidation event, consider `OwnedEvent` and the reserve clause of `ReservedEvent`.
+For a consolidation event, consider its ownership step and the reserve clause of the event.
 
 They read only the source, the two states and the actual tagged pass with its payments.
 
 The moved balance is accounted there, payment by payment.
 
-`fundingCredit` of a consolidation is `0` whatever its limits.
+The funding credit of a consolidation is `0` whatever its limits.
 
 So the two payloads give the same proposition. -/
 private theorem reservedEvent_consolidations_payload {x : ForkedBeaconState preset}
@@ -697,7 +697,7 @@ The reserved event is the one the readers construct, with limits `0` and `0`.
 
 The replay records the event with the limits the caller needs.
 
-An example is the epoch replay's `consumedConsolidations`.
+An example is the consumed balance that the epoch replay records.
 
 It does so through the payload bridges above. -/
 private theorem reservedReplay_consolidations_cons_payload {fork : Fork}
@@ -1250,7 +1250,7 @@ theorem epochDepositTrace {fork : Fork}
       -- registry--> registered --slashings--> slashed --eth1 reset--> reset pending deposits--> t
 ```
 
-These are the stages `funding_epoch_site` names, in the order of the epoch schedule.
+These are the stages before the payments, in the order of the epoch schedule.
 
 Each step hands its own output frame to the next.
 
@@ -1262,7 +1262,7 @@ The queue erasure at `t` is the one the pending-deposit event establishes.
 
 The facts the stages need in between come from the epoch start.
 
-`deposit_prefix_facts` carries the slot, the queue order, the exits and the delay to `reset`.
+The epoch prefix carries the slot, the queue order, the exits and the delay to `reset`.
 
 Each stage keeps the registry lifecycle.
 
@@ -1477,11 +1477,11 @@ The frame into `s` supplies the incoming queue erasure and the assignment cut.
 
 So the event reads no separate erasure hypothesis.
 
-The event is the one pass construction of `reservedEvent_consolidations_suffix_retired`.
+The event is the one pass construction of the pending consolidations with the silent suffix.
 
 The replay records it with the limits the caller needs.
 
-An example is the epoch replay's `consumedConsolidations`.
+An example is the consumed balance that the epoch replay records.
 
 It ends in the suffix frame at the event's ownership `after`.
 
@@ -1696,7 +1696,7 @@ It gives the exit order, the slot, the lifecycle and the exit delay there too.
 
 The caps at the consolidation input come from the caps at `s`.
 
-The steps before the payments keep them (`capped_epochBeforePayments`).
+The steps before the payments keep them.
 
 The pending consolidations keep the registry.
 
@@ -1828,9 +1828,9 @@ private theorem reservedReplay_epochReserved {fork : Fork}
 
 /-- The slashed sources' withdrawability from `x` to the consolidation input.
 
-`Run.slashed_withdrawableEpoch_mono_epoch` covers the run, the cache step and these stages.
+A slashed withdrawable epoch cannot decrease along the run, the cache step and these stages.
 
-This is the `slashedSpan` premise of `reservedReplay_epochReserved`. -/
+This is the slashed-span premise of the reserved replay of the epoch. -/
 theorem epochPrefix_slashedSpan {x outer : ForkedBeaconState preset}
     {s justified scored rewarded registered slashed reset deposited :
       BeaconState preset outer.fork}
@@ -1988,7 +1988,7 @@ Let every queued source that becomes due be bounded.
 
 Then the cut at the current epoch moves to the next one.
 
-`reserveCut_next` asks for this bound in two cases.
+The move of the cut to the next epoch asks for this bound in two cases.
 
 - A source of the start's queue has its exit assigned at `x`.
   If it is unslashed at `x`, it withdraws there at most the delay after its exit.
@@ -2076,7 +2076,7 @@ They are the current cut, the future cover, the exit order and the slot.
 
 They also include the registry lifecycle from `x`, the withdrawal delay and the slashed span.
 
-`reserveCut_next_of_provenance` turns these into the cut at the next epoch.
+The lemma above on the cut at the next epoch turns these into that cut.
 
 It also uses the queue provenance and the queue order at `x`.
 

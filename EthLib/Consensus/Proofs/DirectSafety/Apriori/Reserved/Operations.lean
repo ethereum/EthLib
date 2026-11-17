@@ -124,7 +124,11 @@ private theorem initialOwnership_valid (x : ForkedBeaconState preset) (high : Na
 
 /-- The initial ownership issues one token per unit of each of its pots.
 
-Its pots are `initialExcess`, `preActiveStake`, `dueConsolidationCredits` and `pendingSourceExcess`.
+Its first pot is the balance above the effective balance of the keys active at `x`.
+
+The next two are the pre-active stake `Pre` and the due consolidation credits `Pi_c`.
+
+The last is the excess of the pending sources inactive at `x` and withdrawable in the window.
 
 So it issues at most their sum. -/
 private theorem initialOwnership_card {x : ForkedBeaconState preset} (high : Nat)
@@ -325,7 +329,9 @@ private theorem initialOwnership_weight {g x : ForkedBeaconState preset}
 
 /-- The initial ownership of a window: the four initial pots, each unit owned by its key.
 
-It meets `OwnedInitial` and the reserve cut at `x` itself, with the actual pending queue.
+It meets the initial ownership facts and the reserve cut at `x` itself.
+
+The reserve cut reads the actual pending queue.
 
 Each clause reads at most two pot entries of one key.
 
@@ -1300,7 +1306,7 @@ open Cryptography.Bls
 
 /-- A same-registry credit with no due deposit target is a reserved event that keeps the queue.
 
-`eligible` is the condition under which `reserveCut_credit_eligible` keeps the reserve cut. -/
+`eligible` is the condition under which such a credit keeps the reserve cut. -/
 private theorem reservedEvent_credit_eligible {x : ForkedBeaconState preset}
     {e : BalanceEvent preset} {before : Ownership} {eventPosition paymentPosition high : Nat}
     {rounding : Nat → Nat} {queue : List TaggedEntry}
@@ -1486,7 +1492,7 @@ private theorem TaggedPass.suffix_sublist {fork : Fork} {next : Epoch}
 
 /-- One tagged event either keeps a sublist of the tagged queue or appends one fresh tag.
 
-The fresh tag comes only from the recorded `queueConsolidation` case.
+The fresh tag comes only from the recorded case that queues a consolidation.
 
 The other two cases keep the queue unchanged or run a pending-consolidation pass. -/
 private theorem TagEvent.queue_shape {e : BalanceEvent preset} {position : Nat}
@@ -1552,7 +1558,7 @@ private theorem increaseBalance_credit_eligible {fork : Fork} {s t : BeaconState
 
 The pass applies it only under one condition.
 
-`depositTargetStatus` must find its validator not yet withdrawable at the next epoch.
+The status of the deposit target must find its validator not yet withdrawable at the next epoch.
 
 So that validator is not due at the current epoch, and the deposit raises only its balance. -/
 private theorem applyPendingDeposit_churn_eligible {fork : Fork} {s t : BeaconState preset fork}
@@ -2067,7 +2073,7 @@ The endpoint covers its effective balance.
 
 A validator still to activate may hold an effective balance above its balance.
 
-So the capped balance of `EndpointCoverAll` does not bound it.
+So the capped balance that the endpoint covers for every such validator does not bound it.
 
 The guard has no condition on an assigned activation.
 
@@ -2349,7 +2355,7 @@ Every covered validator after it was covered before it, with no more capped bala
 
 No key loses endpoint tokens.
 
-An `OwnedFrame` alone does not give `endpointKept`.
+An ownership frame alone does not give `endpointKept`.
 
 It may erase an owner or drop an endpoint token.
 
@@ -2674,7 +2680,7 @@ theorem OwnershipBefore.transfer {p : Payment preset} {allocation : OwnedRelease
     obtain ⟨unit, _, rfl⟩ := Finset.mem_image.mp new
     exact Nat.lt_succ_self _
 
-/-- The credit bound that `OwnedCredit` puts on the tokens one event mints. -/
+/-- The credit bound that an owned credit puts on the tokens one event mints. -/
 def ownedCreditBound (e : BalanceEvent preset) : Nat :=
   if e.source = .deposits then funding_deposit_credit e
   else if e.source = .rewards ∨ e.source = .sync then e.creditLimit else otherCredit e
@@ -2918,7 +2924,7 @@ private theorem TagEvent.queueProvenance_appended {x : ForkedBeaconState preset}
     exact ⟨fun c member => held c ((pass.suffix_sublist.map _).subset member),
       fun _ member fresh => absurd (pass.suffix_sublist.subset member) fresh⟩
 
-/-- The entry provenance of `TagEvent.queueProvenance_appended`. -/
+/-- The entry provenance of the queue after one tagged event. -/
 private theorem TagEvent.queueProvenance {x : ForkedBeaconState preset}
     {e : BalanceEvent preset} {position : Nat} {before after consumed : List TaggedEntry}
     {payments : List (TaggedEntry × Payment preset)}
@@ -3719,7 +3725,7 @@ Then it keeps the reserve cut at the current epoch.
 
 It may assign an activation, an exit and a withdrawable epoch, or set a slashed flag.
 
-Besides `kept`, it reads the facts of `reserveCut_registry`.
+Besides `kept`, it reads the facts that the registry updates need to keep the reserve cut.
 
 Retired and initially active keys were already activated.
 
@@ -3923,7 +3929,7 @@ They may assign an activation, an exit and a withdrawable epoch:
 
 An assigned exit keeps its withdrawable epoch.
 
-This is `processRegistryUpdates_withdrawableEpoch_of_assigned`. -/
+This holds from Electra, for the registry updates. -/
 private theorem reserveCut_registry {x : ForkedBeaconState preset} {high : Nat} {fork : Fork}
     {u v : BeaconState preset fork} {suffix : List PendingConsolidation} {o : Ownership}
     (electra : .pectra ≤ fork)
@@ -3955,7 +3961,7 @@ private theorem reserveCut_registry {x : ForkedBeaconState preset} {high : Nat} 
     cases found'
     exact .inl exact
 
-/-- Registry updates keep activity up to the current epoch, by the registry's `StepKeeps`. -/
+/-- Registry updates keep activity up to the current epoch, as a step that keeps the registry. -/
 private theorem registry_activity {fork : Fork} {u v : BeaconState preset fork}
     (ok : processRegistryUpdates config u = .ok v) :
     ∀ (i : Nat) (w₀ w : Validator), u.validators.data[i]? = some w₀ →
@@ -4232,7 +4238,7 @@ theorem reservedReplay_registrySlashings_frame {fork : Fork}
 
 /-- A source the pending consolidations pay at `next` is not covered at the current epoch.
 
-The finite next epoch lets the existing `endpoint_sourceGone` exclude an unassigned exit. -/
+The finite next epoch lets the endpoint bound for a due source exclude an unassigned exit. -/
 theorem consolidation_sourceGone {fork : Fork} {s : BeaconState preset fork}
     {next : Epoch} {w : Validator} (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
     (nextOk : Uint64.addChecked (getCurrentEpoch s) 1 = .ok next)

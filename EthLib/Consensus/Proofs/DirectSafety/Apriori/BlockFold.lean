@@ -963,7 +963,9 @@ private theorem depositExits_proved {g x y : ForkedBeaconState preset}
     simp [Finset.sum, Finset.range_val, Multiset.range]
   omega
 
-/-- The headline with its `deposits` premise discharged; it waits only on `BlockReplay`. -/
+/-- The headline with its deposit premise discharged.
+
+It waits only on the operation replay of each block step. -/
 theorem headline_of_block_deposits
     (block : BlockReplay (preset := preset) (config := config) (checks := checks)) :
     AccountableDriftBound (preset := preset) (config := config) (checks := checks) ∧

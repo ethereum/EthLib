@@ -913,23 +913,23 @@ theorem reservedReplay_switchToCompounding {fork : Fork} {s t : BeaconState pres
 
 /-- The reserved replay of a tail from Electra, built step by step.
 
-The replay starts at `x` with the initial ownership and frame of `reservedFrame_initial`.
+The replay starts at `x` with the initial ownership and its initial reserved frame.
 
-A slot step extends it by `SlotStepReplay`, and a block step by `BlockReplay`.
+A slot step extends it by the replay of a slot step, and a block step by the replay of a block.
 
 Each step reads the queue provenance and the zero originals of initial tags from the replay so far.
 
 It reads the run facts at its input from `shared` and the prefix.
 
-This is the one run-level replay walk, and it follows the recursion of `Run.balanceEvents`.
+This is the one run-level replay walk, and it follows the recursion of the run's balance events.
 
-`funding_run_bound_of` cannot carry the step.
+The funding bound of a run cannot carry the step.
 
 Its motive is a fixed number.
 
 Its step bound sees neither the replay so far nor the prefix events.
 
-`floor_by_epoch_induction` recurses on epochs and sees no events. -/
+The floor induction recurses on epochs and sees no events. -/
 private theorem reservedReplay_run {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y) (high : Nat)
     (supported : Supported shared tail high) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
@@ -1473,13 +1473,15 @@ section
 
 open Cryptography.Bls Uint64
 
-/-- `SelectedReleaseProducer` from the run's reserved replay.
+/-- The selected-release statement from the run's reserved replay.
 
 The run replay rounds with the ledger's source-falling keys.
 
 The given fresh coverage replays the same tags.
 
-So `TagReplay.unique` makes its queue, calls and payments the replay's own.
+A tag replay is determined by its events, start position and initial queue.
+
+So its queue, calls and payments are the replay's own.
 
 The deposit funding and the selected capacity are taken as hypotheses. -/
 private theorem selectedReleaseProducer_of_run {g x y : ForkedBeaconState preset}
@@ -1561,7 +1563,7 @@ private theorem selectedReleaseProducer_of_run {g x y : ForkedBeaconState preset
 
 The selected inputs come from the slot and block replays, and the release from its assembly.
 
-The release's selected capacity is `selected_capacity_of_run`. -/
+The release's selected capacity holds, since the run's selected charges fit the carry and flow. -/
 theorem headline_of_block
     (block : BlockReplay (preset := preset) (config := config) (checks := checks))
     (deposits : ∀ g x y : ForkedBeaconState preset,
