@@ -3016,7 +3016,8 @@ The receiver's proposer score is derived from the checkpoint stake ceiling and `
 A justified checkpoint of an epoch after the call's epoch descends from the root.
 An honest validator signed a vote for it after the call, from a head that the induction already covers.
 `JustifiedHonestlySigned` assumes that signer.
-Signatures enter only through the network model: no validator sends a statement of an honest validator unless a sent message had it (`Allowed` in `Consensus/Proofs/Models/Network/Model.lean`).
+Signatures enter only through the network model.
+A sender may carry another honest validator's statement only if an earlier sent message carried it; an honest sender must also follow the protocol (`Allowed` in `Consensus/Proofs/Models/Network/Model.lean`).
 `EarlyJustifiedConsistent` assumes the consistency of justified checkpoints of the call's epoch or before, and `RootKeepsViableLeaf` assumes the viable leaf.
 While no later checkpoint is justified, the early premise still carries the whole consistency.
 
