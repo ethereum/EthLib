@@ -1288,12 +1288,6 @@ private theorem seed_processAttestation_keepsPending {config : Config}
     rw [same]
     exact member
 
-/-- A frame for pending attestations keeps both lists. -/
-private theorem seed_pendingFrame_recentPending {first second : BeaconState preset fork}
-    (frame : PendingFrame first second) (before : fork < .altair) (current : Bool) :
-    recentPending second before current = recentPending first before current := by
-  cases current <;> simp [recentPending, frame.previousPending, frame.currentPending]
-
 /-- Before Altair, a block keeps each pending attestation of both epochs. -/
 private theorem seed_processBlock_keepsPending {config : Config} {checks : SignatureChecks}
     {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
@@ -1303,11 +1297,11 @@ private theorem seed_processBlock_keepsPending {config : Config} {checks : Signa
     (member : pending ∈ recentPending state before current) :
     pending ∈ recentPending after before current := by
   obtain ⟨first, last, head, attested, tail⟩ := processBlock_pendingSplit before computed
-  rw [seed_pendingFrame_recentPending tail before current]
+  rw [recentPending_pendingFrame tail before current]
   refine foldlM_ok_invariant (fun s => pending ∈ recentPending s before current)
     (fun _ _ _ holds ok => seed_processAttestation_keepsPending before ok current holds) ?_
     attested
-  rw [seed_pendingFrame_recentPending head before current]
+  rw [recentPending_pendingFrame head before current]
   exact member
 
 /-- A block keeps the run, the epoch, each root, each target flag and each pending attestation. -/
@@ -1389,7 +1383,7 @@ private theorem seedPending_frame {anchorEpoch : Epoch} {state after : BeaconSta
   have previous : getPreviousEpoch after = getPreviousEpoch state := by
     simp only [getPreviousEpoch, current]
   intro before recent later pending member
-  rw [seed_pendingFrame_recentPending frame] at member
+  rw [recentPending_pendingFrame frame] at member
   rw [current, previous] at later ⊢
   exact holds before recent later pending member
 
@@ -1446,51 +1440,18 @@ private theorem seedPending_advanceSlot {anchorEpoch : Epoch} {config : Config}
     (holds : SeedPending anchorEpoch state)
     (computed : advanceSlot config checks state = .ok after) :
     SeedPending anchorEpoch after := by
-  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
-  have cachedLists : ∀ before current, recentPending cached before current =
-      recentPending state before current := by
-    intro before current
-    cases current <;> simp [recentPending, cachedEq]
-  have stateEpoch := getCurrentEpoch_toNat state
-  have afterEpoch := getCurrentEpoch_toNat { epoched with slot := next }
-  dsimp only at afterEpoch
   intro before current later pending member
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    have epochs := nextSlot_epoch_of_boundary sum boundary
-    have previousEq : getPreviousEpoch { epoched with slot := next } = getCurrentEpoch state := by
-      apply UInt64.toNat_inj.mp
-      rw [getPreviousEpoch_toNat, afterEpoch, stateEpoch, epochs]
-      rfl
-    obtain ⟨rotated, emptied⟩ := processEpoch_pendingRotation before epochedOk
-    cases current
-    · have moved : recentPending { epoched with slot := next } before false =
-          recentPending state before true := by
-        rw [← cachedLists before true]
-        simp [recentPending, rotated]
-      rw [moved] at member
+  rcases recentPending_advanceSlot before computed with
+    ⟨previousEq, -, moved, emptied⟩ | ⟨currentEq, previousEq, -, -, lists⟩
+  · cases current
+    · rw [moved] at member
       have prior : anchorEpoch < getCurrentEpoch state := by
         simpa only [Bool.false_eq_true, ↓reduceIte, previousEq] using later
       obtain ⟨epoch, slot⟩ := holds before true (by simpa using prior) pending member
       refine ⟨?_, slot⟩
       simpa [previousEq] using epoch
-    · simp [recentPending, emptied] at member
-  · rename_i inside
-    simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    have currentEq : getCurrentEpoch { cached with slot := next } = getCurrentEpoch state := by
-      apply UInt64.toNat_inj.mp
-      rw [afterEpoch, stateEpoch]
-      exact nextSlot_epoch_of_inside sum inside
-    have previousEq : getPreviousEpoch { cached with slot := next } =
-        getPreviousEpoch state := by
-      unfold getPreviousEpoch
-      rw [currentEq]
-    have lists : recentPending { cached with slot := next } before current =
-        recentPending state before current := cachedLists before current
-    rw [lists] at member
+    · simp [emptied] at member
+  · rw [lists] at member
     rw [currentEq, previousEq] at later ⊢
     exact holds before current later pending member
 

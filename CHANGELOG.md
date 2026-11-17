@@ -21,6 +21,10 @@ Not yet released.
   `DelayFits.deadline_add_le`, `Store.ForwardReachable.finalized_add_two_le_or_anchor` and `Store.getCheckpointBlock_trans` are general steps.
   The new premises `CallCheckpointInputs`, `AcceptedRealizedRecent`, `AcceptedRealizedHead`, `CallRolloverRead`, `JustifiedPinned`, `TargetIncluded` and `QuorumDriftWithin` are described in `SOUNDNESS.md`.
 
+- `advanceSlot_epochs` splits one slot into the end of an epoch or a step inside it, with the epochs on each side.
+  `recentPending_advanceSlot` adds the two lists of pending attestations, and `recentPending_pendingFrame` keeps them across a frame.
+  `TargetFlagsVoted.of_advanceSlot` and `PendingVoted.of_advanceSlot` read them, as does the proof of `Execution.rootViable_of_checked_call`.
+
 - `Execution.honestTargetVotes_signed_of_checked` shows that an accepted current-target test has honest signers with two thirds of the active balance ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).
   Three times their stake is at least twice the total active balance plus the margin of the count.
   Each of them is active in the pulled-up head state, and sent a vote for the target before the start of the next epoch.
