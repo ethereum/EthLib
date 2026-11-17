@@ -76,19 +76,21 @@ theorem Store.Reachable.anchorSlot_le
     exact UInt64.le_trans anchorSlot (UInt64.le_trans
       (reachable.anchorSlot_le_of_blockState parentFound) (UInt64.le_of_lt lower))
 
-/-- In a reachable store, a walk back from a block gives a run to its state.
-
-The run starts at the state of the ancestor that the walk reaches.
-
-The anchor block must not be after the anchor state. -/
-theorem Store.Reachable.runKept_of_getAncestor
+/-- The existing ancestor traversal composes a relation along actual block transitions. -/
+theorem Store.Reachable.relation_of_getAncestor
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (edge : ∀ {s t : BeaconState preset fork} {checks : SignatureChecks}
+      {engine : ExecutionEngine preset fork} {signed : SignedBeaconBlock preset fork},
+      stateTransition config checks engine s signed true = .ok t → R s t)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reachable : Store.Reachable config anchorState anchorBlock store)
     {node ancestor : ForkChoiceNode} {slot : Slot} {state ancestorState : BeaconState preset fork}
     (walk : store.getAncestor node slot = .ok ancestor)
     (stateFound : store.blockStates[node.root]? = some state)
     (ancestorFound : store.blockStates[ancestor.root]? = some ancestorState) :
-    RunKept ancestorState state := by
+    R ancestorState state := by
   induction node using Store.getAncestor.induct (store := store) (slot := slot)
     generalizing state with
   | case1 node notFound =>
@@ -98,7 +100,7 @@ theorem Store.Reachable.runKept_of_getAncestor
     rw [Store.getAncestor_of_le blockFound le, Except.ok.injEq] at walk
     subst walk
     rw [stateFound, Option.some.injEq] at ancestorFound
-    exact ancestorFound ▸ RunKept.refl _
+    exact ancestorFound ▸ refl _
   | case3 node block blockFound above parentNotFound =>
     rw [Store.getAncestor] at walk
     split at walk
@@ -118,7 +120,7 @@ theorem Store.Reachable.runKept_of_getAncestor
       exact absurd (reachable.anchorSlot_le anchorSlot parentFound) (UInt64.not_le.mpr lower)
     obtain ⟨parentState, checks, engine, signed, -, -, parentStateFound, transition⟩ :=
       notAnchor notAnchorBlock
-    exact (ih walk parentStateFound).trans (runKept_stateTransition transition)
+    exact trans (ih walk parentStateFound) (edge transition)
   | case5 node block blockFound above parent parentFound notLower =>
     rw [Store.getAncestor] at walk
     split at walk
@@ -133,6 +135,22 @@ theorem Store.Reachable.runKept_of_getAncestor
         rw [parentFound, Option.some.injEq] at same
         subst same
         simp [notLower, throw, throwThe, MonadExceptOf.throw] at walk
+
+/-- In a reachable store, a walk back from a block gives a run to its state.
+
+The run starts at the state of the ancestor that the walk reaches.
+
+The anchor block must not be after the anchor state. -/
+theorem Store.Reachable.runKept_of_getAncestor
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    {node ancestor : ForkChoiceNode} {slot : Slot} {state ancestorState : BeaconState preset fork}
+    (walk : store.getAncestor node slot = .ok ancestor)
+    (stateFound : store.blockStates[node.root]? = some state)
+    (ancestorFound : store.blockStates[ancestor.root]? = some ancestorState) :
+    RunKept ancestorState state :=
+  reachable.relation_of_getAncestor RunKept RunKept.refl (fun one two => one.trans two)
+    (fun ok => runKept_stateTransition ok) anchorSlot walk stateFound ancestorFound
 
 /-- A walk back stays at a block at or below the slot.
 
@@ -192,6 +210,98 @@ private theorem Store.getAncestor_last {node ancestor : ForkChoiceNode} {slot : 
         subst same
         simp [notLower, throw, throwThe, MonadExceptOf.throw] at walk
 
+/-- Construct the actual checkpoint prefix and compose a relation through its descendants. -/
+theorem Store.ForwardReachableWith.relation_of_checkpointPrefix {checks : SignatureChecks}
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (edge : ∀ {s t : BeaconState preset fork} {checks' : SignatureChecks}
+      {engine : ExecutionEngine preset fork} {signed : SignedBeaconBlock preset fork},
+      stateTransition config checks' engine s signed true = .ok t → R s t)
+    (fromPrefix : ∀ {s mid t : BeaconState preset fork} {middle : Slot}
+      {engine : ExecutionEngine preset fork} {signed : SignedBeaconBlock preset fork},
+      processSlots config checks s middle = .ok mid → middle ≤ signed.message.slot →
+      stateTransition config checks engine s signed true = .ok t → R mid t)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    {checkpoint : Checkpoint} {root : Root} {block : BeaconBlock preset fork} {start : Slot}
+    {base state : BeaconState preset fork}
+    (target : store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root)
+    (found : store.blocks[root]? = some block)
+    (startOk : computeStartSlotAtEpoch preset checkpoint.epoch = .ok start)
+    (atOrAfter : start ≤ block.slot)
+    (baseFound : store.blockStates[checkpoint.root]? = some base)
+    (stateFound : store.blockStates[root]? = some state) :
+    ∃ boundary, lookaheadState config checks base start = .ok boundary ∧ R boundary state := by
+  have reachable := reached.reachable
+  simp only [Store.getCheckpointBlock, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at target
+  obtain ⟨start', startOk', node, walk, rooted⟩ := target
+  rw [startOk, Except.ok.injEq] at startOk'
+  subst startOk'
+  rw [← rooted] at baseFound
+  by_cases below : base.slot < start
+  swap
+  · refine ⟨base, ?_, reachable.relation_of_getAncestor R refl trans edge
+      anchorSlot walk stateFound baseFound⟩
+    simp [lookaheadState, below, pure, Except.pure]
+  rcases Store.getAncestor_last found walk with ⟨le, rfl⟩ | ⟨child, childBlock, childFound,
+      -, above, parentRoot, childWalk⟩
+  · have := reachable.slot_le_of_blockState anchorSlot found baseFound
+    exact absurd (UInt64.le_trans atOrAfter this) (UInt64.not_le.mpr below)
+  obtain ⟨childState, childStateFound, -, notAnchor⟩ :=
+    reached.blockStatesFromParents childFound
+  have notAnchorBlock : childBlock ≠ anchorBlock := by
+    rintro rfl
+    have := UInt64.le_trans anchorSlot (reachable.anchorSlot_le_of_blockState baseFound)
+    exact absurd (UInt64.le_trans this (UInt64.le_of_lt below)) (UInt64.not_le.mpr above)
+  obtain ⟨parentState, checks', engine, signed, rfl, message, parentFound, transition⟩ :=
+    notAnchor notAnchorBlock
+  rw [parentRoot, baseFound, Option.some.injEq] at parentFound
+  subst parentFound
+  obtain ⟨advanced, slotsOk, _, _, _, _⟩ := stateTransition_ok transition
+  obtain ⟨boundary, prefixOk, _⟩ := processSlots_split below (message ▸ above) slotsOk
+  refine ⟨boundary, ?_, trans
+    (fromPrefix prefixOk (message ▸ UInt64.le_of_lt above) transition)
+    (reachable.relation_of_getAncestor R refl trans edge anchorSlot childWalk
+      stateFound childStateFound)⟩
+  simp [lookaheadState, below, prefixOk, Except.mapError]
+
+/-- Compose a relation from a checkpoint's actual slot prefix through its descendant blocks. -/
+theorem Store.ForwardReachableWith.relation_of_checkpointState {checks : SignatureChecks}
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (edge : ∀ {s t : BeaconState preset fork} {checks' : SignatureChecks}
+      {engine : ExecutionEngine preset fork} {signed : SignedBeaconBlock preset fork},
+      stateTransition config checks' engine s signed true = .ok t → R s t)
+    (fromPrefix : ∀ {s mid t : BeaconState preset fork} {middle : Slot}
+      {engine : ExecutionEngine preset fork} {signed : SignedBeaconBlock preset fork},
+      processSlots config checks s middle = .ok mid → middle ≤ signed.message.slot →
+      stateTransition config checks engine s signed true = .ok t → R mid t)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    {checkpoint : Checkpoint} {root : Root} {block : BeaconBlock preset fork} {start : Slot}
+    {checkpointState state : BeaconState preset fork}
+    (target : store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root)
+    (found : store.blocks[root]? = some block)
+    (startOk : computeStartSlotAtEpoch preset checkpoint.epoch = .ok start)
+    (atOrAfter : start ≤ block.slot)
+    (checkpointFound : store.checkpointStates[checkpoint]? = some checkpointState)
+    (stateFound : store.blockStates[root]? = some state) :
+    R checkpointState state := by
+  obtain ⟨base, start', baseFound, startOk', fromBlock⟩ :=
+    reached.checkpointStatesFromBlocks checkpointFound
+  rw [startOk, Except.ok.injEq] at startOk'
+  subst startOk'
+  obtain ⟨boundary, prefixOk, related⟩ := reached.relation_of_checkpointPrefix R refl trans edge
+    fromPrefix anchorSlot target found startOk atOrAfter baseFound stateFound
+  have cached : lookaheadState config checks base start = .ok checkpointState := by
+    rcases fromBlock with ⟨le, rfl⟩ | ⟨below, checks', rfl, slotsOk⟩
+    · simp [lookaheadState, UInt64.not_lt.mpr le, pure, Except.pure]
+    · simp [lookaheadState, below, slotsOk, Except.mapError]
+  exact (Except.ok.inj (prefixOk.symm.trans cached)) ▸ related
+
 /-- In a store built with one setting of the checks, a checkpoint state runs on to a block state.
 
 The checkpoint block must be the ancestor of that block at the start of the epoch.
@@ -210,36 +320,10 @@ theorem Store.ForwardReachableWith.runKept_of_checkpointState {checks : Signatur
     (atOrAfter : start ≤ block.slot)
     (checkpointFound : store.checkpointStates[checkpoint]? = some checkpointState)
     (stateFound : store.blockStates[root]? = some state) :
-    RunKept checkpointState state := by
-  have reachable := reached.reachable
-  simp only [Store.getCheckpointBlock, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at target
-  obtain ⟨start', startOk', node, walk, rooted⟩ := target
-  rw [startOk, Except.ok.injEq] at startOk'
-  subst startOk'
-  obtain ⟨base, start', baseFound, startOk', fromBlock⟩ :=
-    reached.checkpointStatesFromBlocks checkpointFound
-  rw [startOk, Except.ok.injEq] at startOk'
-  subst startOk'
-  rw [← rooted] at baseFound
-  rcases fromBlock with ⟨-, rfl⟩ | ⟨below, checks', rfl, slotsOk⟩
-  · exact reachable.runKept_of_getAncestor anchorSlot walk stateFound baseFound
-  rcases Store.getAncestor_last found walk with ⟨le, rfl⟩ | ⟨child, childBlock, childFound,
-      -, above, parentRoot, childWalk⟩
-  · have := reachable.slot_le_of_blockState anchorSlot found baseFound
-    exact absurd (UInt64.le_trans atOrAfter this) (UInt64.not_le.mpr below)
-  obtain ⟨childState, childStateFound, -, notAnchor⟩ :=
-    reached.blockStatesFromParents childFound
-  have notAnchorBlock : childBlock ≠ anchorBlock := by
-    rintro rfl
-    have := UInt64.le_trans anchorSlot (reachable.anchorSlot_le_of_blockState baseFound)
-    exact absurd (UInt64.le_trans this (UInt64.le_of_lt below)) (UInt64.not_le.mpr above)
-  obtain ⟨parentState, checks', engine, signed, rfl, message, parentFound, transition⟩ :=
-    notAnchor notAnchorBlock
-  rw [parentRoot, baseFound, Option.some.injEq] at parentFound
-  subst parentFound
-  exact (runKept_of_processSlots_of_stateTransition slotsOk
-      (message ▸ UInt64.le_of_lt above) transition).trans
-    (reachable.runKept_of_getAncestor anchorSlot childWalk stateFound childStateFound)
+    RunKept checkpointState state :=
+  reached.relation_of_checkpointState RunKept RunKept.refl (fun one two => one.trans two)
+    (fun ok => runKept_stateTransition ok)
+    (fun slots bound ok => runKept_of_processSlots_of_stateTransition slots bound ok)
+    anchorSlot target found startOk atOrAfter checkpointFound stateFound
 
 end EthLib.Consensus

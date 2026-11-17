@@ -682,7 +682,7 @@ private theorem Store.Reachable.eq_anchor_of_slot_le {config : Config}
   have strict := UInt64.lt_iff_toNat_lt.mp parentLower
   omega
 
-private theorem Store.Reachable.getCheckpointBlock_anchor {config : Config}
+theorem Store.Reachable.getCheckpointBlock_anchor {config : Config}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {store : Store preset fork}
     (reachable : Store.Reachable config anchorState anchorBlock store)

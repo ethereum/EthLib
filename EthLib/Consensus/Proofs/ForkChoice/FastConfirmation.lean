@@ -4,6 +4,9 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Committees
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedRoot
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.DutySupport
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalStatements
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalTransport
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalAnchor
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Indicators
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Supporters
@@ -32,5 +35,7 @@ It assumes the stake margin, the ancestry at earlier slots and a compatible fina
 
 It also assumes that delayed blocks pass the handler and that stores process messages on time.
 
-No theorem here shows that the confirmed block is safe in an execution or in another store.
+Historical anchor transport derives later head ancestry from a guarded margin, or returns evidence.
+
+It retains committee agreement, historical coverage, drift and finality conditions as hypotheses.
 -/

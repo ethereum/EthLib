@@ -817,6 +817,21 @@ theorem sameSizes_queueExcessActiveBalance {state after : BeaconState preset for
     subst computed
     exact SameSizes.refl _
 
+/-- Moving excess balance to the pending queue leaves the registry unchanged. -/
+theorem queueExcessActiveBalance_validators {state after : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : ValidatorIndex}
+    (computed : queueExcessActiveBalance state electra index = .ok after) :
+    after.validators = state.validators := by
+  simp only [queueExcessActiveBalance, bind_ok_iff] at computed
+  obtain ⟨_, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, _, setOk, rfl⟩ := computed
+    obtain ⟨_, rfl⟩ := setBalance_ok setOk
+    rfl
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    rw [computed]
+
 /-- A validator that switches to compounding credentials has compounding credentials.
 
 The sizes stay the same. -/
@@ -830,18 +845,7 @@ theorem switchToCompoundingValidator_compounding {state after : BeaconState pres
   refine ⟨(sameSizes_setValidator set).trans (sameSizes_queueExcessActiveBalance queued),
     { validator with withdrawalCredentials :=
       validator.withdrawalCredentials.set 0 COMPOUNDING_WITHDRAWAL_PREFIX[0] }, ?_, ?_⟩
-  · -- Moving the balance leaves the registry.
-    have same : after.validators = switched.validators := by
-      simp only [queueExcessActiveBalance, bind_ok_iff] at queued
-      obtain ⟨_, _, queued⟩ := queued
-      split at queued
-      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at queued
-        obtain ⟨_, _, _, _, _, setOk, rfl⟩ := queued
-        obtain ⟨_, rfl⟩ := setBalance_ok setOk
-        rfl
-      · simp only [pure, Except.pure, Except.ok.injEq] at queued
-        rw [queued]
-    rw [getValidator_of_validators_eq same]
+  · rw [getValidator_of_validators_eq (queueExcessActiveBalance_validators queued)]
     exact getValidator_setValidator_self set
   · simp [hasCompoundingWithdrawalCredential, isCompoundingWithdrawalCredential]
 
