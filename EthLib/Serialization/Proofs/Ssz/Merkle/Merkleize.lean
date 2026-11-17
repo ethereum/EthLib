@@ -26,8 +26,8 @@ theorem subtreeRoot_halves (combine : α → α → α) (depth : Nat) (leaves : 
       = combine (subtreeRoot combine depth leaves)
           (subtreeRoot combine depth fun i => leaves (i + 2 ^ depth)) := by
   -- Each child of the root is the root of the tree over its own half of the leaves.
-  show combine (Cryptography.Merkle.node (m := Id) _ leaves depth 0).run
-      (Cryptography.Merkle.node (m := Id) _ leaves depth 1).run = _
+  show combine (Cryptography.Merkle.node (m := Id) _ leaves ⟨depth, 0⟩).run
+      (Cryptography.Merkle.node (m := Id) _ leaves ⟨depth, 1⟩).run = _
   rw [Cryptography.Merkle.node_const_shift combine depth leaves 0,
     Cryptography.Merkle.node_const_shift combine depth leaves 1]
   simp only [Nat.zero_mul, Nat.zero_add, Nat.one_mul, Nat.add_comm (2 ^ depth)]
