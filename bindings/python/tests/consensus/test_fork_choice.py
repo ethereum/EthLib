@@ -320,11 +320,13 @@ def test_anchor_state_mismatch():
     # The anchor block must commit to the anchor state; its state root sits at bytes 48 to 80.
     case = next((FILES / "minimal" / "altair").rglob("steps.yaml")).parent
     block = bytearray(_read(case, "anchor_block"))
+    state_root = bytes(block[48:80])
     block[48] ^= 1
-    with raises(
-        consensus.ForkChoiceError,
-        "fork choice: EthLib.Consensus.ForkChoiceError.anchorStateMismatch",
-    ) as info:
+    message = (
+        f"fork choice: expected the anchor state root 0x{state_root.hex()}, "
+        f"got the block's state root 0x{bytes(block[48:80]).hex()}"
+    )
+    with raises(consensus.ForkChoiceError, message) as info:
         consensus.fork_choice("minimal", "altair", _read(case, "anchor_state"), bytes(block), [])
     assert info.value.code == 1
 
@@ -420,8 +422,7 @@ def _weight(read: dict, root: bytes) -> int:
 def _wrong_state_root(outcome: object) -> bool:
     """Whether an outcome is the rejection of a block whose state root is wrong."""
     return isinstance(outcome, consensus.ForkChoiceError) and str(outcome) == (
-        "EthLib.Consensus.ForkChoiceError.transition "
-        "(EthLib.Consensus.TransitionError.wrongStateRoot)"
+        "the state transition fails: EthLib.Consensus.TransitionError.wrongStateRoot"
     )
 
 
@@ -592,9 +593,9 @@ def test_fast_confirmation_discount_bound():
     error = confirm(6)[-1]
     assert isinstance(error, consensus.ForkChoiceError)
     assert error.code == 53
-    # The message wraps the root over several lines.
-    assert " ".join(str(error).split()) == (
-        f"EthLib.Consensus.ForkChoiceError.supportDiscountAboveMaximum #v{list(child_root)}"
+    assert str(error) == (
+        f"the support discount of the block 0x{child_root.hex()} "
+        "exceeds the committee weight since its parent"
     )
     # A boost of a full committee, 256 ETH, lifts the bound to the discount; the maximum stays.
     boosted = confirm(6, 100)[-1]

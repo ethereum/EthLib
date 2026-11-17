@@ -125,8 +125,9 @@ Otherwise it extends unless the boosted block builds on this block and chose its
 def shouldExtendPayload (gloas : .glamsterdam ≤ fork) (root : Root) :
     Except ForkChoiceError Bool := do
   let block ← store.block root
-  if (← (addChecked block.slot 1).mapError .arith) ≠ (← store.getCurrentSlot config) then
-    throw (.notPreviousSlot root)
+  let nextSlot ← (addChecked block.slot 1).mapError .arith
+  let currentSlot ← store.getCurrentSlot config
+  if nextSlot ≠ currentSlot then throw (.notPreviousSlot root block.slot currentSlot)
   if !store.isPayloadVerified gloas root then return false
   if heze : .hegota ≤ fork then
     if !(← store.isPayloadInclusionListSatisfied heze root) then return false

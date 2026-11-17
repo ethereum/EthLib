@@ -748,7 +748,8 @@ theorem getForkchoiceStore_mismatch {config : Config} {anchorState : BeaconState
     {anchorBlock : BeaconBlock preset fork} {stateRoot : Root}
     (root : SszType.hashTreeRoot anchorState = .ok stateRoot)
     (differ : anchorBlock.stateRoot ≠ stateRoot) :
-    getForkchoiceStore config anchorState anchorBlock = .error .anchorStateMismatch := by
+    getForkchoiceStore config anchorState anchorBlock =
+      .error (.anchorStateMismatch anchorBlock.stateRoot stateRoot) := by
   simp [getForkchoiceStore, root, differ, Except.mapError, bind, Except.bind, throw,
     throwThe, MonadExceptOf.throw]
 
