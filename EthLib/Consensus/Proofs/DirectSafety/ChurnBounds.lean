@@ -77,7 +77,7 @@ theorem _root_.EthLib.Consensus.Run.departureCharges_append {a b c : ForkedBeaco
   | snoc two step ih => simp only [Run.append, Run.departureCharges, ih, List.append_assoc]
 
 /-- An existing validator whose exit becomes assigned has a charge at that exit epoch. -/
-private theorem _root_.EthLib.Consensus.Run.departure_charge_of_assigned
+theorem _root_.EthLib.Consensus.Run.departure_charge_of_assigned
     {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (i : Nat) (old current : Validator)
     (before : x.state.validators.data[i]? = some old)

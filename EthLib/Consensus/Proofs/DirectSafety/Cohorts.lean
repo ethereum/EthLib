@@ -28,7 +28,7 @@ open Base
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
   {fork : Fork} {state after : BeaconState preset fork}
 
-open DirectSafety (cohortCap validatorChurnLimit_le_cohortCap)
+open DirectSafety (activeCount cohortCap validatorChurnLimit_le_cohortCap)
 
 private theorem cohortCap_mono {n m : Nat} (le : n ≤ m) :
     cohortCap config n ≤ cohortCap config m := by
@@ -226,26 +226,29 @@ private theorem cohorts_attestation {parentSlot : Slot} {attestation : Attestati
     CohortsKept state after :=
   .of_data (congrArg (·.data) (processAttestation_registry ok).1)
 
+/-- A registry entry keeps the cohorts, and the slot and activity up to the fixed epoch. -/
 private theorem cohorts_updateEntry {i : Nat}
     (ok : updateRegistryEntry config state i = .ok after) :
-    CohortsKept state after := by
+    CohortsKept state after ∧ ActiveStep state after := by
   simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨v, found, queued, queue, marked, set, rest⟩ := ok
-  have activation : queued.activationEpoch = v.activationEpoch := by
+  have epochs : queued.activationEpoch = v.activationEpoch ∧ queued.exitEpoch = v.exitEpoch := by
     unfold queueForActivation at queue
     split at queue
     · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at queue
       obtain ⟨_, _, rfl⟩ := queue
-      rfl
+      exact ⟨rfl, rfl⟩
     · cases queue
-      rfl
-  have kept := CohortsKept.setValidatorAt found set activation
+      exact ⟨rfl, rfl⟩
+  have kept := CohortsKept.setValidatorAt found set epochs.1
+  have step := activeStep_setValidatorAt found
+    (fun _ _ => by simp only [isActiveValidator, epochs.1, epochs.2]) set
   split at rest
   · simp only [bind_ok_iff, liftAccessor_ok] at rest
     obtain ⟨_, _, exited⟩ := rest
-    exact kept.trans (cohorts_exit exited)
+    exact ⟨kept.trans (cohorts_exit exited), step.trans (activeStep_initiateValidatorExit exited)⟩
   · cases rest
-    exact kept
+    exact ⟨kept, step⟩
 
 private theorem cohorts_credentials {signed : SignedBLSToExecutionChange}
     (ok : processBlsToExecutionChange config checks state signed = .ok after) :
@@ -357,6 +360,40 @@ private theorem cohorts_activate_many :
     have k := cohorts_activate first e
     split at h <;> simp_all only [↓reduceIte, List.length_cons] <;> omega
 
+/-- A registry pass only increases the scheduled activation cohort, by at most count churn.
+
+The churn is read after the first pass of the registry entries, and `cap` bounds it there. -/
+private theorem activationCohort_processRegistryUpdates_le (early : fork < .pectra)
+    (ok : processRegistryUpdates config state = .ok after) (cap : Nat)
+    (churn : ∀ updated, (List.range state.validators.data.size).foldlM (updateRegistryEntry config)
+      state = .ok updated → (getValidatorChurnLimit config updated).toNat ≤ cap)
+    (e : Epoch) (finite : e ≠ FAR_FUTURE_EPOCH) :
+    validatorCohort Validator.activationEpoch after e ≤
+      validatorCohort Validator.activationEpoch state e +
+        if e.toNat = scheduledActivationEpoch state then cap else 0 := by
+  have noElectra : ¬ Fork.pectra ≤ fork := Nat.not_le_of_lt early
+  simp only [processRegistryUpdates, noElectra, ↓reduceIte, bind_ok_iff] at ok
+  obtain ⟨updated, pass, activated⟩ := ok
+  have kept := CohortsKept.foldlM
+    (fun _ _ _ ok => (cohorts_updateEntry ok).1) pass
+  have slot := foldlM_ok_invariant (fun next : BeaconState preset fork => next.slot = state.slot)
+    (fun _ _ _ h step => (updateRegistryEntry_activationEpochs step).1.trans h) rfl pass
+  have same : scheduledActivationEpoch updated = scheduledActivationEpoch state := by
+    simp only [scheduledActivationEpoch, getCurrentEpoch, slot]
+  have bound := cohorts_activate_many activated e
+  rw [kept.activations e finite, same] at bound
+  have limit : (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
+      else getValidatorChurnLimit config updated).toNat ≤ cap := by
+    split
+    · exact Nat.le_trans (getValidatorActivationChurnLimit_le).2 (churn updated pass)
+    · exact churn updated pass
+  have taken := List.length_take_le
+    (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
+      else getValidatorChurnLimit config updated).toNat
+    (activationQueue updated)
+  split at bound <;> simp_all only [↓reduceIte]
+  omega
+
 /-- A registry pass only increases the scheduled activation cohort, by at most count churn. -/
 private theorem activationCohort_processRegistryUpdates (early : fork < .pectra)
     (ok : processRegistryUpdates config state = .ok after) (e : Epoch)
@@ -365,34 +402,11 @@ private theorem activationCohort_processRegistryUpdates (early : fork < .pectra)
       validatorCohort Validator.activationEpoch state e +
         if e.toNat = scheduledActivationEpoch state then
           cohortCap config state.validators.data.size else 0 := by
-  have noElectra : ¬ Fork.pectra ≤ fork := Nat.not_le_of_lt early
-  simp only [processRegistryUpdates, noElectra, ↓reduceIte, bind_ok_iff] at ok
-  obtain ⟨updated, pass, activated⟩ := ok
-  have kept := CohortsKept.foldlM
-    (fun _ _ _ ok => cohorts_updateEntry ok) pass
+  refine activationCohort_processRegistryUpdates_le early ok _ (fun updated pass => ?_) e finite
   have sizes := foldlM_ok_invariant (SameSizes state)
     (fun _ _ _ sizes step => sizes.trans (sameSizes_updateRegistryEntry step))
     (SameSizes.refl state) pass
-  have slot := foldlM_ok_invariant (fun next : BeaconState preset fork => next.slot = state.slot)
-    (fun _ _ _ h step => (updateRegistryEntry_activationEpochs step).1.trans h) rfl pass
-  have same : scheduledActivationEpoch updated = scheduledActivationEpoch state := by
-    simp only [scheduledActivationEpoch, getCurrentEpoch, slot]
-  have bound := cohorts_activate_many activated e
-  rw [kept.activations e finite, same] at bound
-  have limit : (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
-      else getValidatorChurnLimit config updated).toNat ≤
-      cohortCap config state.validators.data.size := by
-    have churn := validatorChurnLimit_le_cohortCap (config := config) updated _
-      (Nat.le_of_eq sizes.1)
-    split
-    · exact Nat.le_trans (getValidatorActivationChurnLimit_le).2 churn
-    · exact churn
-  have taken := List.length_take_le
-    (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
-      else getValidatorChurnLimit config updated).toNat
-    (activationQueue updated)
-  split at bound <;> simp_all only [↓reduceIte]
-  omega
+  exact validatorChurnLimit_le_cohortCap (config := config) updated _ (Nat.le_of_eq sizes.1)
 
 /-- The activation pass fills an empty future cohort; its count cap needs no positivity. -/
 private theorem activationCohortBound_registry_count (early : fork < .pectra)
@@ -451,7 +465,8 @@ private theorem cohorts_epoch (early : fork < .pectra)
       processRegistryUpdates config before = .ok registered ∧
       CohortsKept registered after ∧
       before.slot = state.slot ∧ before.validators.data.size = state.validators.data.size ∧
-      registered.validators.data.size ≤ after.validators.data.size := by
+      registered.validators.data.size ≤ after.validators.data.size ∧
+      before.validators = state.validators := by
   have trace := processEpoch_trace ok
   change EpochTrace _ ([.justification, .inactivity, .rewards] ++ (.registry ::
     ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
@@ -506,7 +521,7 @@ private theorem cohorts_epoch (early : fork < .pectra)
       exact ⟨.of_data (congrArg (·.data) same), Nat.le_of_eq (congrArg (·.data.size) same).symm⟩
   exact ⟨before, registered, .of_data (congrArg (·.data) first.1),
     EpochStage.action_cases.mp registeredOk, last.1, first.2, congrArg (·.data.size) first.1,
-    last.2⟩
+    last.2, first.1⟩
 
 private theorem activationScheduled_of_counts {s t : BeaconState preset fork} {bound : Nat}
     (counts : ∀ e, e ≠ FAR_FUTURE_EPOCH →
@@ -538,7 +553,7 @@ private theorem activationCohortBound_processEpoch (early : fork < .pectra)
         cohortCap config after.validators.data.size) ∧
     (∀ v ∈ after.validators.data, v.activationEpoch ≠ FAR_FUTURE_EPOCH →
       v.activationEpoch.toNat ≤ scheduledActivationEpoch state) := by
-  obtain ⟨before, registered, head, registeredOk, tail, slot, size, grow⟩ :=
+  obtain ⟨before, registered, head, registeredOk, tail, slot, size, grow, -⟩ :=
     cohorts_epoch early ok
   have same : scheduledActivationEpoch before = scheduledActivationEpoch state := by
     simp only [scheduledActivationEpoch, getCurrentEpoch, slot]
@@ -630,21 +645,20 @@ private theorem ActivationCohortBound.of_data {f h : Fork}
   · simpa only [validatorCohort, same] using bounded.count
   · simpa only [scheduledActivationEpoch, getCurrentEpoch, same, slot] using bounded.scheduled
 
-private theorem activationCohortBound_upgrade {s : ForkedBeaconState preset}
+/-- One upgrade before Electra keeps the registry. -/
+private theorem upgradeNext_validators {s : ForkedBeaconState preset}
     {t : {t : ForkedBeaconState preset // s.fork < t.fork}}
-    (ok : upgradeNext config checks s = .ok t) (early : t.val.fork < .pectra)
-    (bounded : ActivationCohortBound config s.state) :
-    ActivationCohortBound config t.val.state := by
+    (ok : upgradeNext config checks s = .ok t) (early : t.val.fork < .pectra) :
+    t.val.state.validators.data = s.state.validators.data := by
   obtain ⟨fork, state⟩ := s
   cases fork <;>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
       throwThe, MonadExceptOf.throw, reduceCtorEq] at ok
   · obtain ⟨_, upgraded, rfl⟩ := ok
-    exact .of_data (s := state) (upgradeToAltair_spec upgraded).1
-      (upgradeFrame_upgradeToAltair upgraded).slot bounded
-  · subst ok; exact .of_data (s := state) rfl rfl bounded
-  · subst ok; exact .of_data (s := state) rfl rfl bounded
-  · subst ok; exact .of_data (s := state) rfl rfl bounded
+    exact (upgradeToAltair_spec upgraded).1
+  · subst ok; rfl
+  · subst ok; rfl
+  · subst ok; rfl
   · obtain ⟨_, _, rfl⟩ := ok
     exact False.elim (Nat.lt_irrefl _ early)
   · obtain ⟨_, _, rfl⟩ := ok
@@ -654,15 +668,20 @@ private theorem activationCohortBound_upgrade {s : ForkedBeaconState preset}
   · obtain ⟨_, _, rfl⟩ := ok
     exact False.elim ((by decide : ¬Fork.hegota < Fork.pectra) early)
 
+/-- The upgrades before Electra keep the registry. -/
+theorem upgrades_validators {s t : ForkedBeaconState preset}
+    (ok : processUpgrades config checks s = .ok t) (early : t.fork < .pectra) :
+    t.state.validators.data = s.state.validators.data :=
+  processUpgrades_induction
+    (property := fun u => u.fork < .pectra → u.state.validators.data = s.state.validators.data)
+    (fun {_ post} holds stepOk postEarly =>
+      (upgradeNext_validators stepOk postEarly).trans (holds (Nat.lt_trans post.2 postEarly)))
+    (fun _ => rfl) ok early
+
 private theorem activationCohortBound_upgrades {s t : ForkedBeaconState preset}
     (ok : processUpgrades config checks s = .ok t) (early : t.fork < .pectra)
-    (bounded : ActivationCohortBound config s.state) : ActivationCohortBound config t.state := by
-  fun_induction processUpgrades config checks s generalizing t with
-  | case1 s due ih =>
-    obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
-    exact ih next rest early (activationCohortBound_upgrade nextOk
-      (Nat.lt_of_le_of_lt (processUpgrades_fork_le rest) early) bounded)
-  | case2 s notDue => cases ok; exact bounded
+    (bounded : ActivationCohortBound config s.state) : ActivationCohortBound config t.state :=
+  .of_data (upgrades_validators ok early) (processUpgrades_slot ok) bounded
 
 /-- A concrete pre-Electra step keeps activation counts and their scheduling bound. -/
 private theorem Step.activationCohortBound {s t : ForkedBeaconState preset}
@@ -690,56 +709,427 @@ private theorem Genesis.activationCohortBound {g : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) :
     ActivationCohortBound config g.state := by
   obtain ⟨hash, time, deposits, ok⟩ := genesis
-  obtain ⟨before, genesisTime, root, deposited, activated, finalRoot, depositedOk, activatedOk,
-    equal⟩ := initializeBeaconStateFromEth1_ok ok
-  have first := CohortsKept.foldlM (fun s entry t computed => by
-    simp only [genesisDeposit, bind_ok_iff] at computed
-    obtain ⟨root, _, deposited⟩ := computed
-    exact (CohortsKept.of_data (s := s)
-      (t := { s with eth1Data := fun _ => { s.eth1Data (Nat.lt_trans before (by decide)) with
-        depositRoot := root } }) rfl).trans
-      (cohorts_deposit (Nat.lt_trans before (by decide)) deposited)) depositedOk
-  have initial : ∀ e, e ≠ FAR_FUTURE_EPOCH → e ≠ GENESIS_EPOCH →
-      validatorCohort Validator.activationEpoch deposited e = 0 := by
-    intro e finite _
-    rw [first.activations e finite]
-    simp [validatorCohort, emptyGenesisState]
-  have last := foldlM_ok_invariant
-    (fun s : BeaconState preset g.fork => ∀ e, e ≠ FAR_FUTURE_EPOCH → e ≠ GENESIS_EPOCH →
-      validatorCohort Validator.activationEpoch s e = 0)
-    (fun s i t bounded computed => by
-      simp only [activateAtGenesis, bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨v, found, _, _, set⟩ := computed
-      intro e finite nonGenesis
-      have absent : (v.activationEpoch == e) = false := by
-        have zero := bounded e finite nonGenesis
-        have mem := mem_of_getValidatorAt found
-        exact Bool.eq_false_iff.mpr (List.countP_eq_zero.mp zero v (by simpa using mem))
-      rw [validatorCohort_setValidatorAt_eq (field := Validator.activationEpoch) found set e
-        (by
-          split
-          · rw [absent]
-            exact beq_eq_false_iff_ne.mpr (Ne.symm nonGenesis)
-          · rfl)]
-      exact bounded e finite nonGenesis) initial activatedOk
-  rw [equal]
+  have classified := initializeBeaconStateFromEth1_activation_epochs ok
   constructor
   · intro e finite nonGenesis
-    exact Nat.le_trans (Nat.le_of_eq (last e finite nonGenesis)) (Nat.zero_le _)
+    have empty : validatorCohort Validator.activationEpoch g.state e = 0 := by
+      apply List.countP_eq_zero.mpr
+      intro v member
+      have cases := classified v (by simpa using member)
+      simp only [beq_iff_eq]
+      rcases cases with future | first
+      · exact fun equal => finite (equal.symm.trans future)
+      · exact fun equal => nonGenesis (equal.symm.trans first)
+    exact Nat.le_trans (Nat.le_of_eq empty) (Nat.zero_le _)
   · intro v member finite
     have genesisEpoch : v.activationEpoch = GENESIS_EPOCH := by
-      apply Classical.byContradiction
-      intro other
-      exact List.countP_eq_zero.mp (last v.activationEpoch finite other) v
-        (by simpa using member) (by simp)
+      exact (classified v member).resolve_left finite
     simp only [genesisEpoch, GENESIS_EPOCH, UInt64.toNat_zero, scheduledActivationEpoch]
     omega
+
+/-! ## Activations over a window before Electra
+
+An activation epoch, once assigned, stays.
+
+So the validators with an assigned activation epoch only grow along a run.
+
+Before Electra they grow only at a registry pass, by at most the count churn of the active ones.
+-/
+
+/-- The number of validators whose activation epoch is assigned. -/
+private def assignedCount (s : BeaconState preset fork) : Nat :=
+  s.validators.data.toList.countP (·.activationEpoch != FAR_FUTURE_EPOCH)
+
+/-- A count over a list is a count over the positions of the list. -/
+private theorem countP_eq_card_range {α : Type} (p : α → Bool) (l : List α) :
+    l.countP p = ((Finset.range l.length).filter fun i => (l[i]?).any p).card := by
+  induction l using List.reverseRecOn with
+  | nil => simp
+  | append_singleton l a ih =>
+    have same : ((Finset.range l.length).filter fun i => ((l ++ [a])[i]?).any p) =
+        (Finset.range l.length).filter fun i => (l[i]?).any p :=
+      Finset.filter_congr fun i member => by
+        rw [List.getElem?_append_left (Finset.mem_range.mp member)]
+    rw [List.countP_append, ih, List.length_append, List.length_singleton, Finset.range_add_one,
+      Finset.filter_insert, same]
+    cases pa : p a <;> simp [pa, Finset.card_insert_of_notMem]
+
+/-- The assigned activation epochs are counted cohort by cohort, over the finite epochs. -/
+private theorem countP_assigned_eq_sum (l : List Validator) (E : Finset Epoch)
+    (far : FAR_FUTURE_EPOCH ∉ E)
+    (covers : ∀ v ∈ l, v.activationEpoch ≠ FAR_FUTURE_EPOCH → v.activationEpoch ∈ E) :
+    l.countP (·.activationEpoch != FAR_FUTURE_EPOCH) =
+      ∑ e ∈ E, l.countP (·.activationEpoch == e) := by
+  induction l with
+  | nil => simp
+  | cons v rest ih =>
+    simp only [List.countP_cons]
+    rw [ih (fun w member => covers w (List.mem_cons_of_mem _ member)), Finset.sum_add_distrib]
+    congr 1
+    by_cases assigned : v.activationEpoch = FAR_FUTURE_EPOCH
+    · simp only [assigned, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, beq_iff_eq]
+      refine (Finset.sum_eq_zero fun e member => ?_).symm
+      have other : FAR_FUTURE_EPOCH ≠ e := fun equal => far (by rw [equal]; exact member)
+      simp [other]
+    · simp only [assigned, bne_iff_ne, ne_eq, not_false_eq_true, ↓reduceIte, beq_iff_eq]
+      rw [Finset.sum_eq_single v.activationEpoch (fun e _ other => by simp [Ne.symm other])
+        (fun absent => absurd (covers v List.mem_cons_self assigned) absent)]
+      simp
+
+/-- Both counts of assigned activation epochs of two registries, over their finite epochs. -/
+private theorem assignedCount_eq_sum (s t : BeaconState preset fork) :
+    let E := ((s.validators.data.toList ++ t.validators.data.toList).map
+      (·.activationEpoch)).toFinset.erase FAR_FUTURE_EPOCH
+    assignedCount s = ∑ e ∈ E, validatorCohort Validator.activationEpoch s e ∧
+      assignedCount t = ∑ e ∈ E, validatorCohort Validator.activationEpoch t e := by
+  intro E
+  have covers (l : List Validator)
+      (inside : ∀ v ∈ l, v ∈ s.validators.data.toList ++ t.validators.data.toList) :
+      ∀ v ∈ l, v.activationEpoch ≠ FAR_FUTURE_EPOCH → v.activationEpoch ∈ E :=
+    fun v member assigned => Finset.mem_erase.mpr
+      ⟨assigned, List.mem_toFinset.mpr (List.mem_map_of_mem (inside v member))⟩
+  exact ⟨countP_assigned_eq_sum _ E (Finset.notMem_erase _ _)
+      (covers _ fun _ member => List.mem_append_left _ member),
+    countP_assigned_eq_sum _ E (Finset.notMem_erase _ _)
+      (covers _ fun _ member => List.mem_append_right _ member)⟩
+
+private theorem CohortsKept.assigned {s t : BeaconState preset fork} (kept : CohortsKept s t) :
+    assignedCount t = assignedCount s := by
+  rw [(assignedCount_eq_sum s t).2, (assignedCount_eq_sum s t).1]
+  exact Finset.sum_congr rfl fun e member => kept.activations e (Finset.ne_of_mem_erase member)
+
+/-- Before Electra, a registry pass assigns at most `cap` activation epochs.
+
+`cap` bounds the count churn after the first pass over the entries. -/
+private theorem assigned_processRegistryUpdates (early : fork < .pectra)
+    (ok : processRegistryUpdates config state = .ok after) (cap : Nat)
+    (churn : ∀ updated, (List.range state.validators.data.size).foldlM (updateRegistryEntry config)
+      state = .ok updated → (getValidatorChurnLimit config updated).toNat ≤ cap) :
+    assignedCount after ≤ assignedCount state + cap := by
+  obtain ⟨first, second⟩ := assignedCount_eq_sum state after
+  rw [first, second]
+  -- Only the epoch that this pass schedules grows, and only one finite epoch is that epoch.
+  have once : ∑ e ∈ ((state.validators.data.toList ++ after.validators.data.toList).map
+      (·.activationEpoch)).toFinset.erase FAR_FUTURE_EPOCH,
+      (if e.toNat = scheduledActivationEpoch state then cap else 0) ≤ cap := by
+    rw [← Finset.sum_filter, Finset.sum_const_nat (m := cap) (fun _ _ => rfl)]
+    exact (Nat.mul_le_mul_right cap (Finset.card_le_one.mpr fun a one b two =>
+      UInt64.toNat_inj.mp ((Finset.mem_filter.mp one).2.trans
+        (Finset.mem_filter.mp two).2.symm))).trans (Nat.one_mul cap).le
+  refine (Finset.sum_le_sum fun e member => activationCohort_processRegistryUpdates_le early ok
+    cap churn e (Finset.ne_of_mem_erase member)).trans ?_
+  rw [Finset.sum_add_distrib]
+  exact Nat.add_le_add_left once _
+
+/-- The first pass over the registry entries keeps the count churn. -/
+private theorem churn_updateEntries {updated : BeaconState preset fork}
+    (pass : (List.range state.validators.data.size).foldlM (updateRegistryEntry config) state =
+      .ok updated) :
+    getValidatorChurnLimit config updated = getValidatorChurnLimit config state := by
+  have step := foldlM_ok_invariant (ActiveStep state)
+    (fun _ _ _ prior ok => prior.trans (cohorts_updateEntry ok).2) (ActiveStep.refl state) pass
+  have epoch : getCurrentEpoch updated = getCurrentEpoch state := by
+    simp only [getCurrentEpoch, step.1]
+  simp only [getValidatorChurnLimit, epoch,
+    step.2.getActiveValidatorIndices_eq (getCurrentEpoch_le_activityFixedEpoch state)]
+
+/-- Before Electra, a slot step either keeps the registry or enters a new epoch.
+
+Then it assigns at most `cap` activation epochs, where `cap` bounds the count churn. -/
+private theorem assigned_advanceSlot (early : fork < .pectra)
+    (ok : advanceSlot config checks state = .ok after) (cap : Nat)
+    (churn : (getValidatorChurnLimit config state).toNat ≤ cap) :
+    after.validators.data = state.validators.data ∨
+      ((getCurrentEpoch state).toNat < (getCurrentEpoch after).toNat ∧
+        assignedCount after ≤ assignedCount state + cap) := by
+  obtain ⟨next, cached, epoched, nextOk, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
+  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  unfold epochIfLast at epochedOk
+  split at epochedOk
+  · rename_i boundary
+    right
+    obtain ⟨before, registered, head, registeredOk, tail, beforeSlot, -, -, beforeValidators⟩ :=
+      cohorts_epoch early epochedOk
+    have registry := assigned_processRegistryUpdates early registeredOk cap fun updated pass => by
+      rw [churn_updateEntries pass]
+      have same : getValidatorChurnLimit config before = getValidatorChurnLimit config state := by
+        unfold getValidatorChurnLimit getActiveValidatorIndices getCurrentEpoch
+        rw [beforeSlot, beforeValidators]
+      rw [same]
+      exact churn
+    have epochs := nextSlot_epoch_of_boundary nextOk boundary
+    refine ⟨?_, ?_⟩
+    · simp only [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div]
+      omega
+    · rw [← tail.assigned] at registry
+      exact registry.trans (Nat.le_of_eq (congrArg (· + cap) head.assigned))
+  · left
+    cases epochedOk
+    rfl
+
+/-- Validators assigned an activation epoch at `s`, without those already exited at `x`. -/
+private def windowCount (x : ForkedBeaconState preset) {f : Fork} (s : BeaconState preset f) :
+    Nat :=
+  ((Finset.range s.validators.data.size).filter fun i =>
+    (s.validators.data[i]?).any (·.activationEpoch != FAR_FUTURE_EPOCH) &&
+      (x.state.validators.data[i]?).all fun w => w.activationEpoch == FAR_FUTURE_EPOCH ||
+        decide (getCurrentEpoch x.state < w.exitEpoch)).card
+
+/-- The validators already exited at `x`. -/
+private def exitedCount (x : ForkedBeaconState preset) : Nat :=
+  ((Finset.range x.state.validators.data.size).filter fun i =>
+    (x.state.validators.data[i]?).any fun w => w.activationEpoch != FAR_FUTURE_EPOCH &&
+      !decide (getCurrentEpoch x.state < w.exitEpoch)).card
+
+/-- A later registry holds every validator exited at `x`, still assigned. -/
+private theorem windowCount_add_exited {x : ForkedBeaconState preset} {s : BeaconState preset fork}
+    (life : RegistryLifecycle x.state s) :
+    windowCount x s + exitedCount x = assignedCount s := by
+  rw [assignedCount, countP_eq_card_range, Array.length_toList,
+    ← Finset.card_filter_add_card_filter_not
+      (s := (Finset.range s.validators.data.size).filter fun i =>
+        (s.validators.data.toList[i]?).any (·.activationEpoch != FAR_FUTURE_EPOCH))
+      (fun i => ((x.state.validators.data[i]?).all fun w =>
+        w.activationEpoch == FAR_FUTURE_EPOCH ||
+          decide (getCurrentEpoch x.state < w.exitEpoch)) = true),
+    Finset.filter_filter, Finset.filter_filter]
+  congr 1
+  · rw [windowCount]
+    congr 1
+    exact Finset.filter_congr fun i _ => by simp only [Array.getElem?_toList, Bool.and_eq_true]
+  · rw [exitedCount]
+    congr 1
+    ext i
+    simp only [Finset.mem_filter, Finset.mem_range, Array.getElem?_toList]
+    cases found : x.state.validators.data[i]? with
+    | none => simp
+    | some w =>
+      obtain ⟨later, read, kept⟩ := life.validators i w found
+      have inside := (Array.getElem?_eq_some_iff.mp found).1
+      have insideLater := (Array.getElem?_eq_some_iff.mp read).1
+      by_cases far : w.activationEpoch = FAR_FUTURE_EPOCH
+      · simp [read, far]
+      · rw [read]
+        simp [far, kept.activationEpoch far, inside, insideLater]
+
+/-- The active validators are counted over the positions of the registry. -/
+private theorem activeCount_eq_card (s : BeaconState preset fork) :
+    activeCount s = ((Finset.range s.validators.data.size).filter fun i =>
+      (s.validators.data[i]?).any (isActiveValidator · (getCurrentEpoch s))).card := by
+  rw [activeCount, getActiveValidatorIndices, List.length_filterMap_eq_countP]
+  have mapped := List.countP_map (l := s.validators.data.toList.zipIdx) (f := Prod.fst)
+    (p := fun v => isActiveValidator v (getCurrentEpoch s))
+  simp only [List.zipIdx_map_fst, Function.comp_def] at mapped
+  have same : (s.validators.data.toList.zipIdx.countP fun (v, i) =>
+      ((if isActiveValidator v (getCurrentEpoch s) then some i.toUInt64 else none).isSome)) =
+      s.validators.data.toList.zipIdx.countP fun entry =>
+        isActiveValidator entry.1 (getCurrentEpoch s) := by
+    congr 1
+    funext entry
+    obtain ⟨v, i⟩ := entry
+    by_cases activeAt : isActiveValidator v (getCurrentEpoch s) = true <;> simp [activeAt]
+  rw [same, ← mapped, countP_eq_card_range, Array.length_toList]
+  simp only [Array.getElem?_toList]
+
+/-- At `x`, the window count is at most the active and the scheduled validators. -/
+private theorem windowCount_start (x : ForkedBeaconState preset) :
+    windowCount x x.state ≤ activeCount x.state + x.state.validators.data.toList.countP fun v =>
+      decide (getCurrentEpoch x.state < v.activationEpoch) &&
+        v.activationEpoch != FAR_FUTURE_EPOCH := by
+  rw [windowCount, activeCount_eq_card, countP_eq_card_range, Array.length_toList]
+  refine (Finset.card_le_card fun i member => ?_).trans (Finset.card_union_le _ _)
+  simp only [Finset.mem_filter, Finset.mem_union, Finset.mem_range, Array.getElem?_toList,
+    Bool.and_eq_true] at member ⊢
+  obtain ⟨inside, assigned, alive⟩ := member
+  obtain ⟨v, found⟩ : ∃ v, x.state.validators.data[i]? = some v :=
+    ⟨_, Array.getElem?_eq_getElem inside⟩
+  simp only [found, Option.any_some, Option.all_some, bne_iff_ne, ne_eq, Bool.or_eq_true,
+    beq_iff_eq, decide_eq_true_eq] at assigned alive ⊢
+  have exitAfter := alive.resolve_left assigned
+  by_cases reached : v.activationEpoch ≤ getCurrentEpoch x.state
+  · exact .inl ⟨inside, by simp [isActiveValidator, reached, exitAfter]⟩
+  · have later : getCurrentEpoch x.state < v.activationEpoch := UInt64.lt_iff_toNat_lt.mpr
+      (Nat.lt_of_not_le fun below => reached (UInt64.le_iff_toNat_le.mpr below))
+    exact .inr ⟨inside, by simp [later, assigned]⟩
+
+/-- Window assignments are initially active or scheduled, or newly assigned in the run. -/
+theorem _root_.EthLib.Consensus.Run.windowAssignments_le_initial_add_new
+    {x u : ForkedBeaconState preset} (run : Run config checks x u) :
+    ((Finset.range u.state.validators.data.size).filter fun i =>
+      (u.state.validators.data[i]?).any (·.activationEpoch != FAR_FUTURE_EPOCH) &&
+        (x.state.validators.data[i]?).all fun w => w.activationEpoch == FAR_FUTURE_EPOCH ||
+          decide (getCurrentEpoch x.state < w.exitEpoch)).card ≤
+      activeCount x.state + x.state.validators.data.toList.countP (fun v =>
+        decide (getCurrentEpoch x.state < v.activationEpoch) &&
+          v.activationEpoch != FAR_FUTURE_EPOCH) +
+      ((Finset.range u.state.validators.data.size).filter fun i =>
+        (x.state.validators.data[i]?.map (·.activationEpoch)).getD FAR_FUTURE_EPOCH =
+            FAR_FUTURE_EPOCH ∧
+          (u.state.validators.data[i]?.map (·.activationEpoch)).getD FAR_FUTURE_EPOCH ≠
+            FAR_FUTURE_EPOCH).card := by
+  classical
+  apply le_trans (b := windowCount x x.state +
+    ((Finset.range u.state.validators.data.size).filter fun i =>
+      (x.state.validators.data[i]?.map (·.activationEpoch)).getD FAR_FUTURE_EPOCH =
+          FAR_FUTURE_EPOCH ∧
+        (u.state.validators.data[i]?.map (·.activationEpoch)).getD FAR_FUTURE_EPOCH ≠
+          FAR_FUTURE_EPOCH).card) ?_ (Nat.add_le_add_right (windowCount_start x) _)
+  apply (Finset.card_le_card (t :=
+    ((Finset.range x.state.validators.data.size).filter fun i =>
+      (x.state.validators.data[i]?).any (·.activationEpoch != FAR_FUTURE_EPOCH) &&
+        (x.state.validators.data[i]?).all fun w => w.activationEpoch == FAR_FUTURE_EPOCH ||
+          decide (getCurrentEpoch x.state < w.exitEpoch)) ∪ _ ) ?_).trans
+    (Finset.card_union_le _ _)
+  intro i member
+  obtain ⟨inside, chosen⟩ := Finset.mem_filter.mp member
+  cases old : x.state.validators.data[i]? with
+  | none =>
+    apply Finset.mem_union_right
+    exact Finset.mem_filter.mpr ⟨inside, by
+      cases found : u.state.validators.data[i]? with
+      | none => simp [old, found] at chosen
+      | some v => simpa [old, found] using chosen⟩
+  | some v =>
+    by_cases pending : v.activationEpoch = FAR_FUTURE_EPOCH
+    · apply Finset.mem_union_right
+      exact Finset.mem_filter.mpr ⟨inside, by
+        cases found : u.state.validators.data[i]? with
+        | none => simp [found] at chosen
+        | some w => simpa [old, found, pending] using chosen⟩
+    · apply Finset.mem_union_left
+      exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr
+        (Array.getElem?_eq_some_iff.mp old).1, by
+          obtain ⟨w, found, kept⟩ := run.registryLifecycle.validators i v old
+          simpa [old, found, pending, kept.activationEpoch pending] using chosen⟩
+
+/-- The count churn is at most the churn of the window count, at a later state of the window. -/
+private theorem churn_le_windowCount {x : ForkedBeaconState preset} {s : BeaconState preset fork}
+    (life : RegistryLifecycle x.state s)
+    (ordered : (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch s).toNat) :
+    (getValidatorChurnLimit config s).toNat ≤ cohortCap config (windowCount x s) := by
+  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  -- Each active position is assigned, and was not exited at `x`.
+  have active : activeCount s ≤ windowCount x s := by
+    rw [activeCount_eq_card]
+    refine Finset.card_le_card fun i member => ?_
+    simp only [Finset.mem_filter, Finset.mem_range, Bool.and_eq_true] at member ⊢
+    obtain ⟨inside, activeAt⟩ := member
+    obtain ⟨v, found⟩ : ∃ v, s.validators.data[i]? = some v :=
+      ⟨_, Array.getElem?_eq_getElem inside⟩
+    simp only [found, Option.any_some, isActiveValidator, Bool.and_eq_true,
+      decide_eq_true_eq] at activeAt
+    have exitBound := UInt64.lt_iff_toNat_lt.mp activeAt.2
+    have assigned : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
+      intro far
+      have reached := UInt64.le_iff_toNat_le.mp activeAt.1
+      have exitBelow := v.exitEpoch.toNat_lt
+      rw [far, farNat] at reached
+      omega
+    refine ⟨inside, by simp [found, assigned], ?_⟩
+    cases old : x.state.validators.data[i]? with
+    | none => rfl
+    | some w =>
+      obtain ⟨later, read, kept⟩ := life.validators i w old
+      rw [found, Option.some.injEq] at read
+      subst later
+      simp only [Option.all_some, Bool.or_eq_true, beq_iff_eq, decide_eq_true_eq]
+      by_cases far : w.activationEpoch = FAR_FUTURE_EPOCH
+      · exact .inl far
+      · right
+        apply UInt64.lt_iff_toNat_lt.mpr
+        by_cases exited : w.exitEpoch = FAR_FUTURE_EPOCH
+        · have farBound := v.exitEpoch.toNat_lt
+          rw [exited, farNat]
+          omega
+        · rw [← kept.exitEpoch exited]
+          omega
+  exact DirectSafety.validatorChurnLimit_le_of_active s _ active
+
+/-- One pre-Electra step of a window grows the window count by at most one count churn.
+
+It grows only when the step enters a new epoch. -/
+private theorem windowCount_step {x u w : ForkedBeaconState preset}
+    (pre : Run config checks x u) (step : Step config checks u w) (early : w.fork < .pectra) :
+    windowCount x w.state = windowCount x u.state ∨
+      ((getCurrentEpoch u.state).toNat < (getCurrentEpoch w.state).toNat ∧
+        windowCount x w.state ≤ windowCount x u.state +
+          cohortCap config (windowCount x u.state)) := by
+  have life := pre.registryLifecycle
+  have counts := windowCount_add_exited life
+  have countsAfter := windowCount_add_exited (pre.snoc step).registryLifecycle
+  have churn := churn_le_windowCount (config := config) life
+    (UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps))
+  have uEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
+  cases step with
+  | block engine signed due ok =>
+    left
+    have kept := (cohorts_block uEarly (applySignedBlock_ok ok).2.1).assigned
+    dsimp only at counts countsAfter kept ⊢
+    omega
+  | slot ok =>
+    obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
+    have data := upgrades_validators upgrades early
+    have slot := processUpgrades_slot upgrades
+    dsimp only at counts countsAfter churn data slot uEarly ⊢
+    rcases assigned_advanceSlot uEarly slotOk _ churn with same | ⟨later, grown⟩
+    · left
+      simp only [windowCount, data, same]
+    · right
+      have epoch : getCurrentEpoch w.state = getCurrentEpoch advanced := by
+        simp only [getCurrentEpoch, slot]
+      have assigned : assignedCount w.state = assignedCount advanced := by
+        simp only [assignedCount, data]
+      rw [epoch]
+      omega
+
+namespace DirectSafety
+
+/-- Before Electra, the validators assigned an activation epoch over a window are few.
+
+They are counted at the end `z` of a run from `x`, without those already exited at `x`.
+
+A validator exited at `x` has an assigned activation epoch and an exit epoch not after `x`.
+
+The count is at most `bound k`, where `k` is the number of epochs from `x` to `z`.
+
+`bound 0` must hold the active and the scheduled validators at `x`.
+
+Each epoch may add the count churn of `bound`.
+
+The count churn is that of the active validators, which are all counted. -/
+theorem windowActivations_le {x z : ForkedBeaconState preset}
+    (tail : Run config checks x z) (early : z.fork < .pectra) (bound : Nat → Nat)
+    (start : activeCount x.state + x.state.validators.data.toList.countP (fun v =>
+      decide (getCurrentEpoch x.state < v.activationEpoch) &&
+        v.activationEpoch != FAR_FUTURE_EPOCH) ≤ bound 0)
+    (grows : ∀ t, bound t + cohortCap config (bound t) ≤ bound (t + 1)) :
+    ((Finset.range z.state.validators.data.size).filter fun i =>
+      (z.state.validators.data[i]?).any (·.activationEpoch != FAR_FUTURE_EPOCH) &&
+        (x.state.validators.data[i]?).all fun w => w.activationEpoch == FAR_FUTURE_EPOCH ||
+          decide (getCurrentEpoch x.state < w.exitEpoch)).card ≤
+      bound ((getCurrentEpoch z.state).toNat - (getCurrentEpoch x.state).toNat) := by
+  have mono : Monotone bound := monotone_nat_of_le_succ fun t =>
+    (Nat.le_add_right _ _).trans (grows t)
+  change windowCount x z.state ≤ _
+  induction tail with
+  | nil => simpa using (windowCount_start x).trans start
+  | @snoc u w pre step ih =>
+    have prior := ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early)
+    have ordered := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
+    have stepped := UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
+    rcases windowCount_step pre step early with same | ⟨later, grown⟩
+    · rw [same]
+      exact prior.trans (mono (by omega))
+    · exact grown.trans ((Nat.add_le_add prior (cohortCap_mono prior)).trans ((grows _).trans
+        (mono (by omega))))
+
+end DirectSafety
 
 /-! ## The joining stake before Electra -/
 
 namespace DirectSafety
 
-private theorem effectiveWeight_le_cap {g x : ForkedBeaconState preset}
+theorem effectiveWeight_le_cap {g x : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (caps : CapOrder preset) (early : x.fork < .pectra) (key : Cryptography.Bls.BLSPubkey) :
     effectiveWeight x.state key ≤ preset.MAX_EFFECTIVE_BALANCE.toNat := by
@@ -845,10 +1235,13 @@ private theorem new_recent_key_activation {x y : ForkedBeaconState preset}
     UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at active now prev
   rcases active with h | h <;> omega
 
-private theorem carry_key_same_epoch {g x y : ForkedBeaconState preset}
+/-- A key recent at both ends of a pre-Gloas run, and inactive at its start, keeps the start epoch.
+
+Its validator exits at the epoch of the start, and that exit persists along the run. -/
+theorem recent_inactive_same_epoch {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)
-    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) (early : y.fork < .pectra)
+    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) (early : y.fork < .glamsterdam)
     {key : Cryptography.Bls.BLSPubkey}
     (member : key ∈ (recentKeys y.state ∩ recentKeys x.state) \ activeKeys x.state) :
     getCurrentEpoch y.state = getCurrentEpoch x.state := by
@@ -857,7 +1250,7 @@ private theorem carry_key_same_epoch {g x y : ForkedBeaconState preset}
   have xEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
   obtain ⟨both, absent⟩ := Finset.mem_sdiff.mp member
   obtain ⟨⟨i, old, found, keyEq, activation, exit⟩, _⟩ :=
-    (mem_boundary_iff x.state (Nat.lt_trans xEarly (by decide))
+    (mem_boundary_iff x.state xEarly
       ((validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
       shared.chainSteps).2) key).mp
       (Finset.mem_sdiff.mpr ⟨(Finset.mem_inter.mp both).2, absent⟩)
@@ -887,10 +1280,10 @@ private theorem carry_key_same_epoch {g x y : ForkedBeaconState preset}
       rfl
     rcases Finset.mem_union.mp recent with h | h
     · obtain ⟨j, z, zFound, zKey, h⟩ :=
-        (mem_keysAt_epoch (Nat.lt_trans early (by decide)) _ key).mp h
+        (mem_keysAt_epoch early _ key).mp h
       exact Or.inl (identify zFound zKey ▸ h)
     · obtain ⟨j, z, zFound, zKey, h⟩ :=
-        (mem_keysAt_epoch (Nat.lt_trans early (by decide)) _ key).mp h
+        (mem_keysAt_epoch early _ key).mp h
       exact Or.inr (identify zFound zKey ▸ h)
   have epochs := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
   have py := getPreviousEpoch_toNat y.state
@@ -899,6 +1292,15 @@ private theorem carry_key_same_epoch {g x y : ForkedBeaconState preset}
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
     UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at active
   rcases active with h | h <;> omega
+
+private theorem carry_key_same_epoch {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) (early : y.fork < .pectra)
+    {key : Cryptography.Bls.BLSPubkey}
+    (member : key ∈ (recentKeys y.state ∩ recentKeys x.state) \ activeKeys x.state) :
+    getCurrentEpoch y.state = getCurrentEpoch x.state :=
+  recent_inactive_same_epoch shared tail genesis twoSlots (Nat.lt_trans early (by decide)) member
 
 /-- New recent keys use only activation cohorts, including when their count cap is zero. -/
 private theorem new_recent_before_electra {g x y : ForkedBeaconState preset}

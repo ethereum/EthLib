@@ -64,6 +64,34 @@ noncomputable def derivedDrift {x : ForkedBeaconState preset} (high : Nat) :
       max (derivedDrift high pre) (stateDrift x y)
     else derivedDrift high pre
 
+/-- The observed drift is at most a bound that grows along the run.
+
+The bound covers every in-horizon prefix. -/
+theorem derivedDrift_le_of_prefixes {x y : ForkedBeaconState preset} (high : Nat)
+    (startEpoch : (getCurrentEpoch x.state).toNat ≤ high + 1)
+    (bound : {u : ForkedBeaconState preset} → Run config checks x u → Nat)
+    (grows : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
+      (step : Step config checks m n), Run config checks n y → bound pre ≤ bound (pre.snoc step))
+    (covers : ∀ {u : ForkedBeaconState preset} (pre : Run config checks x u),
+      Run config checks u y → (getCurrentEpoch u.state).toNat ≤ high + 1 →
+        stateDrift x u ≤ bound pre)
+    (tail : Run config checks x y) :
+    derivedDrift high tail ≤ bound tail := by
+  -- Each prefix keeps the suffix to `y`, which `grows` and `covers` read.
+  suffices general : ∀ {z : ForkedBeaconState preset} (run : Run config checks x z),
+      Run config checks z y → derivedDrift high run ≤ bound run from general tail .nil
+  intro z run
+  induction run with
+  | nil => exact fun post => covers .nil post startEpoch
+  | @snoc middle last pre step ih =>
+    intro post
+    have past := (ih ((Run.nil.snoc step).append post)).trans (grows pre step post)
+    simp only [derivedDrift]
+    split
+    · rename_i within
+      exact max_le past (covers (pre.snoc step) post within)
+    · exact past
+
 /-- A quorum call of a prefix and a tail is in the tail when its target is not before epoch `low`.
 
 The prefix must end no later than the first slot of epoch `low`.
