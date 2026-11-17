@@ -214,6 +214,17 @@ Not yet released.
   The new `ToString` instance of `LightClientError` writes each error with its values, such as "expected trusted block root 0x…, got header root 0x…".
   The Python `LightClientError` carries that message after "light client: ", in place of the Lean name of the constructor.
 
+- The errors of the block header, the RANDAO reveal, the vote on the deposit contract, the slashings, the block signature and the state root carry the values that their check compared.
+  `TransitionError.wrongParent` and `wrongStateRoot` hold the root of the block, then the root that the state gives.
+  `invalidRandaoReveal` holds the proposer and the epoch, and `tooManyEth1Votes` the number of votes and the limit.
+  `headerSlotsDiffer` and `headerProposersDiffer` hold the value of each header, and `sameHeaders` the slot and the proposer.
+  `invalidHeaderSignature` holds the proposer and the signing root, and `invalidBlockSignature` the proposer and the slot.
+  `notSlashableData` holds the source and target epochs of both attestations, `invalidIndexedAttestation` the position of the attestation, 1 or 2, and `noneSlashed` the number of validators in both.
+  The message of a transition error is on one line and writes each root in hex behind `0x`, as in `EthLib.Consensus.TransitionError.wrongParent 0x00… 0x6a…`.
+  A fork choice error that wraps a transition error writes it on one line too.
+  The codes do not change.
+  `processRandao_ne_invalidRandaoReveal` states that the step fails with an invalid reveal for no proposer and no epoch.
+
 - In Lean, every node of a Merkle tree has a `Merkle.Position`, its level and its index, and the tree passes positions instead of a level and an index.
   The node hash has type `Position → α → α → m α`; it had type `Nat → Nat → α → α → m α`, with the level first.
   `Merkle.node hash leaves ⟨level, j⟩`, `Merkle.siblings hash leaves p n`, `Merkle.ordered p` and `Merkle.climb hash p current siblings` take a position; `Merkle.root` and `Merkle.path` keep their arguments.
