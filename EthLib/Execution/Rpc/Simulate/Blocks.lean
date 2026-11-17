@@ -84,9 +84,9 @@ def simulateInclusionError (e : InclusionError) : RpcError :=
   | .insufficientBalance .. => SimulateCode.insufficientFunds.toRpcError data
   | .gasAllowanceExceeded .. | .blobGasLimitExceeded .. =>
     SimulateCode.blockGasLimit.toRpcError data
-  | .senderNotEoa => SimulateCode.senderNotEoa.toRpcError data
+  | .senderNotEoa _ => SimulateCode.senderNotEoa.toRpcError data
   | .transaction (.initCodeTooLarge _) => SimulateCode.initCodeTooLarge.toRpcError data
-  | .transaction .nonceOverflow | .missingCode _ => internalError.toRpcError data
+  | .transaction (.nonceOverflow _) | .missingCode _ => internalError.toRpcError data
   | _ => RpcError.invalidParams (inclusionErrorText e)
 
 /-- The error of a simulated block whose body fails: that of its call, else an internal error. -/

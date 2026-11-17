@@ -335,7 +335,8 @@ def networkMessage : NetworkError → String
   | .wrongVersion v => s!"wrapper version {v} is not {WRAPPER_VERSION}"
   | .countMismatch h b c p =>
     s!"{h} versioned hashes, {b} blobs, {c} commitments and {p} proofs do not match"
-  | .versionedHashMismatch => "a commitment does not hash to its versioned hash"
+  | .versionedHashMismatch index expected actual =>
+    s!"commitment {index} hashes to {hexString expected.toList}, not to {hexString actual.toList}"
   | .kzg e => s!"kzg: {e.message}"
   | .proofRejected => "the proofs do not verify"
 

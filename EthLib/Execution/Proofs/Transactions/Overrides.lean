@@ -59,7 +59,7 @@ theorem checkSender_unsigned {fork : Fork} {state : TransactionState} {sender : 
       let code ← (state.getCode (state.getAccount sender).codeHash).mapError fun _ =>
         InclusionError.missingCode (state.getAccount sender).codeHash
       failIf (decide ((state.getAccount sender).codeHash ≠ State.EMPTY_CODE_HASH ∧
-        !(fork ≥ .pectra ∧ isValidDelegation code))) .senderNotEoa) =
+        !(fork ≥ .pectra ∧ isValidDelegation code))) (.senderNotEoa sender)) =
       (pure () : Except InclusionError Unit) := by
     rw [hc]
     rcases hr with hr | ⟨hp, hd⟩
@@ -135,7 +135,8 @@ theorem paidBaseFee_of_zeroFee {fork : Fork} (env : BlockEnvironment fork) {tx :
 /-- With the nonce check skipped, a sender at the nonce limit of EIP-2681 still fails. -/
 theorem checkSender_of_skipNonce {fork : Fork} {state : TransactionState} {sender : Address}
     {tx : Transaction} {signed : Bool} (h : (state.getAccount sender).nonce = 2 ^ 64 - 1) :
-    checkSender fork state sender tx signed true = .error (.transaction .nonceOverflow) := by
+    checkSender fork state sender tx signed true =
+      .error (.transaction (.nonceOverflow (2 ^ 64 - 1))) := by
   simp [checkSender, h, failIf, bind, Except.bind]
 
 end EthLib.Execution.Transactions

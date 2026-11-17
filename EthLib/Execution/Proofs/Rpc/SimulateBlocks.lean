@@ -482,7 +482,7 @@ private theorem checkSender_signed {fork : Fork} {state : State.TransactionState
       let code ← (state.getCode (state.getAccount sender).codeHash).mapError fun _ =>
         InclusionError.missingCode (state.getAccount sender).codeHash
       failIf ((state.getAccount sender).codeHash ≠ State.EMPTY_CODE_HASH ∧
-        !(fork ≥ .pectra ∧ Evm.isValidDelegation code)) .senderNotEoa) := by
+        !(fork ≥ .pectra ∧ Evm.isValidDelegation code)) (.senderNotEoa sender)) := by
   cases skip <;> simp [checkSender, bind_assoc]
 
 /-- A check that recovers the sender is the check with that sender given, then the code rule. -/
@@ -496,7 +496,7 @@ private theorem checkInclusion_none_eq {fork : Fork} {chainId : UInt64}
       let code ← (state.getCode (state.getAccount sender).codeHash).mapError fun _ =>
         InclusionError.missingCode (state.getAccount sender).codeHash
       failIf ((state.getAccount sender).codeHash ≠ State.EMPTY_CODE_HASH ∧
-        !(fork ≥ .pectra ∧ Evm.isValidDelegation code)) .senderNotEoa
+        !(fork ≥ .pectra ∧ Evm.isValidDelegation code)) (.senderNotEoa sender)
       pure inc) := by
   have hOk : (Except.ok () : Except InclusionError Unit) = pure () := rfl
   have hOkSender : (Except.ok sender : Except InclusionError Address) = pure sender := rfl
@@ -513,7 +513,7 @@ private theorem checkInclusion_none_of_some {fork : Fork} {chainId : UInt64}
     (h : checkInclusion chainId env used state tx (some sender) lifted = .ok inc) :
     checkInclusion chainId env used state tx none lifted = .ok inc ∨
       ∃ e, checkInclusion chainId env used state tx none lifted = .error e ∧
-        (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash) := by
+        (e = .senderNotEoa sender ∨ ∃ codeHash, e = .missingCode codeHash) := by
   rw [checkInclusion_none_eq hChain hSender, h]
   cases hc : state.getCode (state.getAccount sender).codeHash with
   | error _ =>
@@ -541,7 +541,7 @@ private theorem applyTransaction_signed {fork : Fork} {env : Evm.BlockEnvironmen
     (h : applyTransaction env index before tx.unsigned overrides = .ok after) :
     applyTransaction env index before tx = .ok after ∨
       ∃ e, applyTransaction env index before tx = .error (.invalidTransaction index e) ∧
-        (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash) := by
+        (e = .senderNotEoa sender ∨ ∃ codeHash, e = .missingCode codeHash) := by
   unfold applyTransaction at h ⊢
   rw [hs, hl, hp, checkInclusion_unsigned, checkInclusion_totalGasCap hGas] at h
   simp only [processTransaction_totalGasCap, processTransaction_unsigned,
@@ -567,7 +567,8 @@ private theorem foldlM_signed {fork : Fork} {env : Evm.BlockEnvironment fork}
       applyTransaction env index before tx.unsigned overrides = .ok after →
       applyTransaction env index before tx = .ok after ∨
         ∃ e, applyTransaction env index before tx = .error (.invalidTransaction index e) ∧
-          (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash)) →
+          ((∃ s, overrides.senders index = some s ∧ e = .senderNotEoa s)
+            ∨ ∃ codeHash, e = .missingCode codeHash)) →
     ((txs.map Transaction.unsigned).zipIdx n).foldlM
       (fun before (tx, index) => applyTransaction env index before tx overrides) init = .ok out →
     (txs.zipIdx n).foldlM (fun before (tx, index) => applyTransaction env index before tx) init =
@@ -575,7 +576,8 @@ private theorem foldlM_signed {fork : Fork} {env : Evm.BlockEnvironment fork}
       ∃ i e, (txs.zipIdx n).foldlM
           (fun before (tx, index) => applyTransaction env index before tx) init =
           .error (.invalidTransaction i e) ∧
-        (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash)
+        ((∃ s, overrides.senders i = some s ∧ e = .senderNotEoa s)
+          ∨ ∃ codeHash, e = .missingCode codeHash)
   | [], _, _, _, _, h => Or.inl h
   | tx :: txs, n, init, out, hStep, h => by
     simp only [List.map_cons, List.zipIdx_cons, List.foldlM_cons] at h ⊢
@@ -595,12 +597,14 @@ private theorem applyBody_signed {fork : Fork} {config : ChainConfig}
     (hT : ∀ body out, applyTransactions env body (txs.map Transaction.unsigned) overrides =
       .ok out → applyTransactions env body txs = .ok out ∨
         ∃ i e, applyTransactions env body txs = .error (.invalidTransaction i e) ∧
-          (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash))
+          ((∃ s, overrides.senders i = some s ∧ e = .senderNotEoa s)
+            ∨ ∃ codeHash, e = .missingCode codeHash))
     (h : applyBody config env ⟨header, txs.map Transaction.unsigned, [], ws⟩ start overrides =
       .ok output) :
     applyBody config env ⟨header, txs, [], ws⟩ start = .ok output ∨
       ∃ i e, applyBody config env ⟨header, txs, [], ws⟩ start = .error (.invalidTransaction i e) ∧
-        (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash) := by
+        ((∃ s, overrides.senders i = some s ∧ e = .senderNotEoa s)
+          ∨ ∃ codeHash, e = .missingCode codeHash) := by
   unfold applyBody at h ⊢
   obtain ⟨state, hState, h⟩ := bind_ok_iff.mp h
   obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
@@ -984,7 +988,8 @@ private theorem stateTransition_of_simulateBlock_or {chain chain' : BlockChain} 
     stateTransition chain (b.withTransactions txs root) false = .ok b.record.state ∨
       ∃ i e, stateTransition chain (b.withTransactions txs root) false =
           .error (.invalidTransaction i e) ∧
-        (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash) := by
+        ((∃ s, b.senders[i]? = some s ∧ e = .senderNotEoa s)
+          ∨ ∃ codeHash, e = .missingCode codeHash) := by
   obtain ⟨header, filled, result, hash, hRun, rfl⟩ := simulateBlock_valid_spec h
   dsimp only at hFork hHegota hUnsigned hSenders hCheck ⊢
   have hLen : (filled.map (·.2)).length = txs.length := by
@@ -1005,7 +1010,8 @@ private theorem stateTransition_of_simulateBlock_or {chain chain' : BlockChain} 
       applyTransactions (blockEnvironment chain.config hashes header) body txs = .ok out ∨
         ∃ i e, applyTransactions (blockEnvironment chain.config hashes header) body txs =
             .error (.invalidTransaction i e) ∧
-          (e = .senderNotEoa ∨ ∃ codeHash, e = .missingCode codeHash) := by
+          ((∃ s, (filled.map (·.2))[i]? = some s ∧ e = .senderNotEoa s)
+            ∨ ∃ codeHash, e = .missingCode codeHash) := by
     intro body out hT
     refine foldlM_signed txs 0 _ out (fun tx index hm before after hA => ?_) hT
     obtain ⟨hi, hx⟩ := List.mem_zipIdx' hm
@@ -1016,8 +1022,15 @@ private theorem stateTransition_of_simulateBlock_or {chain chain' : BlockChain} 
         (by simp only [List.length_zip, List.length_map] at hi' ⊢; omega)
       simpa only [List.getElem_zip] using this
     obtain ⟨hS, hC⟩ := hSenders _ hp
-    exact applyTransaction_signed (List.getElem?_eq_getElem hi') rfl rfl hC hS
-      (hGas _ (List.getElem_mem hi)) hA
+    have hs : (filled.map (·.2))[index]? = some (filled.map (·.2))[index] :=
+      List.getElem?_eq_getElem hi'
+    rcases applyTransaction_signed hs rfl rfl hC hS (hGas _ (List.getElem_mem hi)) hA with
+      hEq | ⟨e, hEq, hP⟩
+    · exact Or.inl hEq
+    · refine Or.inr ⟨e, hEq, ?_⟩
+      rcases hP with rfl | hP
+      · exact Or.inl ⟨_, hs, rfl⟩
+      · exact Or.inr hP
   rcases applyBody_signed hTxs hOutput with hReal | ⟨i, e, hErr, hP⟩
   · left
     have hBody : runBody chain (⟨header, txs, [], fun _ => []⟩ : Block fork Transaction) =
@@ -1081,6 +1094,10 @@ Then its transition gives the state after the simulated block.
 
 Otherwise it fails at a sender with code, by [EIP-3607][eip-3607], which the simulation skips.
 
+The error names the sender of the failing transaction.
+
+That sender is the one that the simulated block records for the call.
+
 [eip-3607]: https://eips.ethereum.org/EIPS/eip-3607#specification -/
 theorem stateTransition_of_simulateBlock {chain chain' : BlockChain} {base : RecentBlock}
     {fork : Fork} {number time budget budget' : Nat} {calls : List GenericTransaction}
@@ -1105,15 +1122,15 @@ theorem stateTransition_of_simulateBlock {chain chain' : BlockChain} {base : Rec
     (hSize : (do validateBlockSize (← bodyItems (b.withTransactions txs root))) = .ok ())
     (available : chain.state.HasCodes) :
     stateTransition chain (b.withTransactions txs root) false = .ok b.record.state ∨
-      ∃ i, stateTransition chain (b.withTransactions txs root) false =
-        .error (.invalidTransaction i .senderNotEoa) := by
+      ∃ i s, b.senders[i]? = some s ∧ stateTransition chain (b.withTransactions txs root) false =
+        .error (.invalidTransaction i (.senderNotEoa s)) := by
   have hCheck := checkBlock_simulateBlock h hParent hLondon hParentFork hParis hNumber hTime
     hTimeBits hGasLimit hExcess hUnsigned hGas hSize
   rcases stateTransition_of_simulateBlock_or h hFork hHegota hUnsigned hSenders hGas hBlob hRoot
     hCheck with ok | ⟨i, e, he, hE⟩
   · exact .inl ok
-  · rcases hE with rfl | ⟨c, rfl⟩
-    · exact .inr ⟨i, he⟩
+  · rcases hE with ⟨s, hs, rfl⟩ | ⟨c, rfl⟩
+    · exact .inr ⟨i, s, hs, he⟩
     · exact absurd he (stateTransition_ne_invalidTransaction_missingCode _ _ _ available i c)
 
 end EthLib.Execution.Rpc
