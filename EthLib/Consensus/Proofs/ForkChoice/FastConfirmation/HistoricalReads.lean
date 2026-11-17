@@ -71,6 +71,18 @@ public theorem Execution.finalizedFamily_or_historical_evidence {anchor : Store 
   exact e.finalized_prefix_or_accountable anchorStore anchored parameters genesis pre
     anchorSlot boundary nonzero absent justifiedBound early enough terminal
 
+/-- An honest held copy of the anchor block has a nonzero state root. -/
+private theorem Execution.anchor_stateRoot_nonzero {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor) {last : Nat}
+    (roots : HeldBlockStateRootsNonzero (e := e) last)
+    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat} (inTime : (e.world n).time ≤ last) :
+    anchorBlock.stateRoot ≠ Vector.replicate 32 0 := by
+  obtain ⟨root, _, anchorFound⟩ := (e.forwardReachableWith
+    (fun w hw => (anchored w hw) ▸ Store.ForwardReachableWith.anchor anchorStore) n u
+      honest).reachable.anchor_known
+  exact roots u honest n inTime root anchorBlock anchorFound
+
 /-- Honest justified checkpoints agree at each epoch up to the horizon, or evidence holds.
 
 Otherwise two honest stores hold different justified checkpoints of one epoch.
@@ -100,12 +112,7 @@ public theorem Execution.selectedCheckpointsAgree_or_evidence {anchor : Store pr
   simp only [SelectedCheckpointsAgree, not_forall] at agree
   obtain ⟨a, honestA, b, honestB, i, j, timeA, timeB, first, second, selectedFirst,
     selectedSecond, epoch, inHorizon, different⟩ := agree
-  -- An honest held copy of the anchor supplies the nonzero root that the comparison needs.
-  obtain ⟨root, _, anchorFound⟩ := (e.forwardReachableWith
-    (fun w hw => (anchored w hw) ▸ Store.ForwardReachableWith.anchor anchorStore) i a
-      honestA).reachable.anchor_known
-  have nonzero : anchorBlock.stateRoot ≠ Vector.replicate 32 0 :=
-    roots a honestA i timeA root anchorBlock anchorFound
+  have nonzero := e.anchor_stateRoot_nonzero anchorStore anchored roots honestA timeA
   rcases e.justified_eq_or_accountable anchorStore anchored parameters genesis pre
       anchorSlot nonzero absent early enough terminal honestA honestB timeA timeB selectedFirst
       selectedSecond epoch inHorizon with same | evidence
