@@ -919,7 +919,7 @@ private theorem rebuildStep_runPrecompile {block : BlockState} {address : Nat}
   split at h
   · cases h
   · cases h
-    exact rebuildStep_exceptionalHalt evm .precompile
+    exact rebuildStep_exceptionalHalt evm _
   · split at h
     · cases h
       exact rebuildStep_exceptionalHalt evm _

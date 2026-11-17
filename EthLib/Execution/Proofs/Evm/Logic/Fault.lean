@@ -95,7 +95,7 @@ theorem jump_invalid {destination : U256} {rest : List U256} (hlt : pc < code.si
     (hbyte : code[pc] = 0x56) (hgas : 8 ≤ gas)
     (invalid : isValidJumpDest (validJumpDestinations code) destination.toNat = false) :
     Spec fork (At code message pc (destination :: rest) memory gas state substate returnData)
-      (Faulted .invalidJumpDest state substate) := by
+      (Faulted (.invalidJumpDest destination.toNat) state substate) := by
   refine At.fault rfl fun evm ⟨hcode, hj, _, hpc, hst, _, hg, _⟩ => ?_
   subst hcode hpc
   have decoded : Op.ofByte fork evm.code[evm.pc] = some .jump := by
@@ -112,7 +112,7 @@ theorem jumpi_invalid {destination condition : U256} {rest : List U256} (hlt : p
     (invalid : isValidJumpDest (validJumpDestinations code) destination.toNat = false) :
     Spec fork (At code message pc (destination :: condition :: rest) memory gas state substate
         returnData)
-      (Faulted .invalidJumpDest state substate) := by
+      (Faulted (.invalidJumpDest destination.toNat) state substate) := by
   refine At.fault rfl fun evm ⟨hcode, hj, _, hpc, hst, _, hg, _⟩ => ?_
   subst hcode hpc
   have decoded : Op.ofByte fork evm.code[evm.pc] = some .jumpi := by
