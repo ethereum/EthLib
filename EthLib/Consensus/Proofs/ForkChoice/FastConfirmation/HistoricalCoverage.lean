@@ -200,7 +200,9 @@ The receiver reads `reads`, viability `viable`, exits `exits` and the majority `
 
 The proposer score at each receiver follows from the stake ceiling and `scoreFits`.
 
-The reserve is read up to `finish`, the slot before the slot of an honest store at the horizon.
+The reserve is read up to `finish`, the slot before the current slot of an honest reference store.
+
+That store is at the horizon or later.
 
 A safety threshold that subtracts the exit reserve would make `reserve` and `exits` fixed bounds. -/
 public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (· ∈ J)] {Δ : ℕ}
@@ -341,6 +343,17 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
       obtain ⟨current, receiverEpoch, receiverLast, currentOk, receiverEpochOk, receiverLastOk,
         blockLe⟩ := receiver_clock_reads anchored start anchorSlot slots receiver k known
           blockPositive
+      -- Both steps conclude at time `T`; their alternatives also hold at the horizon.
+      suffices atStep : (((e.world k).state w).isAncestor receiverHead ⟨root, .pending⟩ = .ok true ∨
+          ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ T ∧ (e.world j).time ≤ T ∧
+            ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b)
+              [r] = some evidence) ∨
+          HistoricalDirectSafetyEvidence (e := e) pre T by
+        rcases atStep with (ancestor | ⟨a, ha, b, hb, i, j, hi, hj, rest⟩) |
+            ⟨w', hw', i, j, ij, hj, rest⟩
+        · exact .inl ancestor
+        · exact .inr (.inl ⟨a, ha, b, hb, i, j, by omega, by omega, rest⟩)
+        · exact .inr (.inr ⟨w', hw', i, j, ij, by omega, rest⟩)
       by_cases nearParent : receiverEpoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2
       · -- Historical-anchor step at time `T`.
         have lastLt : receiverLast < current := by
@@ -393,11 +406,7 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
           (exits w receiver k receiverHead current receiverLast lowK highK upToDate receiverHeadOk
             currentOk receiverLastOk)
           (fun a ha i hi => absent a ha i (by omega)) tree route
-        rcases step with (ancestor | ⟨a, ha, b, hb, i, j, hi, hj, rest⟩) |
-            ⟨w', hw', i, j, ij, hj, rest⟩
-        · exact .inl ancestor
-        · exact .inr (.inl ⟨a, ha, b, hb, i, j, by omega, by omega, rest⟩)
-        · exact .inr (.inr ⟨w', hw', i, j, ij, by omega, rest⟩)
+        exact step
       · -- Duty-epoch step at time `T`, with the late majority's complete epoch after the call.
         obtain ⟨epoch, epochBegin, epochNext, beginTime, endTime, beginOk', nextOk, beginTimeOk,
           endTimeOk, fresh, complete, majority⟩ :=
@@ -421,11 +430,7 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
             endTimeOk, fresh, atTime ▸ complete,
             votes.votesInSlots fits endTimeOk (by omega), majority⟩
           receiverHeadOk
-        rcases step with (ancestor | ⟨a, ha, b, hb, i, j, hi, hj, rest⟩) |
-            ⟨w', hw', i, j, ij, hj, rest⟩
-        · exact .inl ancestor
-        · exact .inr (.inl ⟨a, ha, b, hb, i, j, by omega, by omega, rest⟩)
-        · exact .inr (.inr ⟨w', hw', i, j, ij, by omega, rest⟩))
+        exact step)
   rcases result with cover | alternative
   · exact .inl cover
   · exact .inr alternative
