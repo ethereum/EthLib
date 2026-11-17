@@ -63,6 +63,16 @@ Not yet released.
   `compactToNibbleList_invalidFirstNibble`, `compactToNibbleList_nonZeroPadding`, `verifySlot_eq_slotMismatch` and `verifyRange_eq` state the values in their errors.
   `ErrorArg` shows a `BitVec`, such as a `U256`, in decimal.
 
+- The state accessor, shuffle and deposit tree errors carry the values that their check compared, and their codes keep their meaning.
+  - `AccessorError.balanceOverflow` holds the total that reached 2^64, and `AccessorError.ssz` the error of the root.
+  - `AccessorError.invalidPubkeys` holds the number of keys and the position of the first key that is not valid, if any.
+  - `AccessorError.wrongSource` holds the epoch and root of the source, then those of the justified checkpoint.
+  - `ShuffleError.noCommittee` holds the index of the committee, and `ShuffleError.overflow` the number of indices and that index.
+  - `DepositTreeError.treeFull` holds the number of deposits, `missingFinalized` the level that finds no root, and `extraFinalized` the number of roots left over.
+  - `DepositTreeError.rootMismatch` holds the deposit root, then the root that the finalized roots compute.
+  The message of a deposit tree error is on one line, with roots in hex, as in `EthLib.Consensus.DepositTreeError.rootMismatch 0x00… 0xd7…`.
+  `getPendingBalanceToWithdraw_eq_error_iff` names the total in the error, and `map_getRoot_pushLeaves` names the cap of the tree.
+
 - The errors of the execution payload, the Gloas bid, envelope, parent requests and payload attestations carry the values that their check compared.
   `TransitionError.wrongPayloadParentHash`, `wrongPayloadRandao`, `wrongPayloadGasLimit`, `wrongPayloadBlockHash` and `wrongPayloadRequestsRoot` hold the value of the payload, then the value it must equal.
   `bidWrongParentHash`, `bidWrongParentRoot` and `bidWrongRandao` hold the value of the bid, then the value of the state; `bidRepeatsParentHash` holds the repeated hash, and `selfBuildBidPaid` the value of the bid.
