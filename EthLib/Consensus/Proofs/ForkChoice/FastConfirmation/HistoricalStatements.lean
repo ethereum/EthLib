@@ -1,6 +1,10 @@
 module
 
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalTransport
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
+public import EthLib.Consensus.Proofs.ForkChoice.HonestVotes
+public import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
+public import EthLib.Consensus.Proofs.ForkChoice.SharedAncestry
+public import EthLib.Consensus.Proofs.ForkChoice.Supporters
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.DutySupport
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets
 
@@ -93,6 +97,88 @@ def SourceWindowReads (call last : Nat) (source : BeaconState preset fork) : Pro
     ∃ sourceMaximum sourceScore,
       ((e.world k).state w).computeCommitteeWeightBetweenSlots head.root source first finish =
         .ok sourceMaximum ∧ computeProposerScore config source = .ok sourceScore
+
+/-- The checkpoints selected by the approved historical transport endpoint. -/
+def SelectedCheckpoint (store : Store preset fork) (checkpoint : Checkpoint) : Prop :=
+  checkpoint = store.justifiedCheckpoint ∨ checkpoint = store.unrealizedJustifiedCheckpoint ∨
+    GENESIS_EPOCH < checkpoint.epoch ∧
+      ((∃ (r : Root) (st : BeaconState preset fork), store.blockStates[r]? = some st ∧
+        checkpoint = st.currentJustifiedCheckpoint) ∨
+      ∃ r : Root, store.unrealizedJustifications[r]? = some checkpoint)
+
+/-- Selected checkpoints agree with finalized roots through the approved horizon. -/
+def FinalizedCheckpointCompatibility (horizon : Epoch) (last : Nat) : Prop :=
+  ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
+    ∀ checkpoint : Checkpoint, SelectedCheckpoint ((e.world j).state b) checkpoint →
+    ((e.world i).state a).finalizedCheckpoint.epoch ≤ checkpoint.epoch →
+    checkpoint.epoch ≤ horizon →
+    ((e.world j).state b).getCheckpointBlock checkpoint.root
+      ((e.world i).state a).finalizedCheckpoint.epoch =
+        .ok ((e.world i).state a).finalizedCheckpoint.root
+
+/-- Honest stores have current epochs within the approved horizon. -/
+def HonestStoreEpochsBounded (horizon : Epoch) (last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ last →
+    ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon
+
+/-- Recent vote targets and the actual head have a common committee-preserving history. -/
+def VoteCommitteeCommonHistory (last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
+    ∀ (head : ForkChoiceNode) headState current v (attestation : Attestation preset fork)
+      targetState,
+    ((e.world k).state w).getHead config = .ok head →
+    ((e.world k).state w).blockState head.root = .ok headState →
+    ((e.world k).state w).getCurrentStoreEpoch config = .ok current →
+    attestation.data.target.epoch.toNat ≤ current.toNat →
+    current.toNat ≤ attestation.data.target.epoch.toNat + 1 →
+    ((e.world k).state w).VoteOrigin config v attestation →
+    ((e.world k).state w).checkpointStates[attestation.data.target]? = some targetState →
+    ∃ common : BeaconState preset fork,
+      RunKept common headState ∧ RunKept common targetState ∧
+      attestation.data.target.epoch.toNat ≤
+        (getCurrentEpoch common).toNat + preset.MIN_SEED_LOOKAHEAD.toNat ∧
+      attestation.data.target.epoch ≤ activityFixedEpoch common ∧
+      (getCurrentEpoch headState).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+        attestation.data.target.epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat ∧
+      (getCurrentEpoch targetState).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+        attestation.data.target.epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
+
+/-- Honest stores do not hold the parent of the anchor before the deadline. -/
+def AnchorParentAbsent (last : Nat) : Prop :=
+  ∀ a ∈ J, ∀ i, (e.world i).time ≤ last →
+    ((e.world i).state a).blocks[anchorBlock.parentRoot]? = none
+
+/-- The approved drift bound compares honest finite stakes in source and receiver balances. -/
+def WindowMarginDrift (call last : Nat) (source : BeaconState preset fork)
+    (shift : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k (head : ForkChoiceNode) state score sourceScore first finish maximum sourceMaximum,
+    (e.world call).time ≤ (e.world k).time → (e.world k).time ≤ last →
+    ((e.world k).state w).getHead config = .ok head →
+    ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint = .ok state →
+    computeProposerScore config state = .ok score →
+    computeProposerScore config source = .ok sourceScore →
+    ((e.world k).state w).computeCommitteeWeightBetweenSlots head.root state first finish =
+      .ok maximum →
+    ((e.world k).state w).computeCommitteeWeightBetweenSlots head.root source first finish =
+      .ok sourceMaximum →
+    ∀ p q : Finset ValidatorIndex, (∀ v ∈ p, v ∈ J) → (∀ v ∈ q, v ∈ J) →
+    let sourceWeight := fun v => if v ∈ ((unslashedActiveBalances source).map (·.1)).toFinset
+      then balanceAt source v.toNat else 0
+    let receiverWeight := fun v => if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
+      then balanceAt state v.toNat else 0
+    2 * stake sourceWeight p + stake sourceWeight q + maximum.toNat + score.toNat ≤
+      2 * stake receiverWeight p + stake receiverWeight q + sourceMaximum.toNat +
+        sourceScore.toNat + shift
+
+/-- The active stake of a balance state is bounded by the supplied cap. -/
+def ActiveStakeAtMost (cap : Nat) (state : BeaconState preset fork) : Prop :=
+  stake (fun v => balanceAt state v.toNat)
+    (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ≤ cap
+
+/-- Every honest checkpoint state read before the deadline has active stake at most the cap. -/
+def CheckpointStakeCeiling (cap last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k checkpoint state, (e.world k).time ≤ last →
+    ((e.world k).state w).checkpointState checkpoint = .ok state → ActiveStakeAtMost cap state
 
 variable [DecidablePred (· ∈ J)]
 

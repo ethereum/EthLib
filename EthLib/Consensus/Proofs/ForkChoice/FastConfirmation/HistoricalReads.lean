@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalStatements
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalTransport
 
 /-!
 # Finalized-prefix family for historical-anchor transport
