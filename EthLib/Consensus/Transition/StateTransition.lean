@@ -286,14 +286,16 @@ def checkBlockSignature (validateResult : Bool) (config : Config) (checks : Sign
     (state : BeaconState preset fork) (signed : SignedBeaconBlock preset fork) :
     Except TransitionError Unit :=
   if validateResult then do
-    ensure ((← verifyBlockSignature config checks state signed) = true) .invalidBlockSignature
+    ensure ((← verifyBlockSignature config checks state signed) = true)
+      (.invalidBlockSignature signed.message.proposerIndex signed.message.slot)
   else pure ()
 
 /-- The check, when the result is validated, that a block commits to the root of a state. -/
 def checkStateRoot (validateResult : Bool) (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) : Except TransitionError Unit :=
   if validateResult then do
-    ensure (block.stateRoot = (← liftSsz (hashTreeRoot state))) .wrongStateRoot
+    let root ← liftSsz (hashTreeRoot state)
+    ensure (block.stateRoot = root) (.wrongStateRoot block.stateRoot root)
   else pure ()
 
 /-- The state after a signed block, on a state already at the slot of the block.

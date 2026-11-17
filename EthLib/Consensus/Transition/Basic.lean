@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Except
+public import EthLib.Base.Hex
 public import EthLib.Consensus.Mutators
 public import EthLib.Cryptography.Bls.Signatures
 
@@ -20,6 +21,10 @@ namespace EthLib.Consensus
 
 open Base Serialization.Ssz
 
+/-- Bytes in an error, such as a root, as hex digits behind `0x`, which keeps its message short. -/
+local instance (priority := high) instReprBytesHex {n : Nat} : Repr (Vector UInt8 n) where
+  reprPrec bytes _ := hexString bytes.toList
+
 /-- An error of the beacon state transition. -/
 inductive TransitionError where
   /-- A state accessor or mutator fails. -/
@@ -32,30 +37,50 @@ inductive TransitionError where
   | notNewer (blockSlot latestSlot : Slot)
   /-- The block names a proposer other than that of its slot. -/
   | wrongProposer (proposer expected : ValidatorIndex)
-  /-- The parent root of the block is not the root of the latest block header. -/
-  | wrongParent
+  /-- The parent root of the block is not the root of the latest block header.
+
+  It holds the parent root of the block, then the root of the latest block header. -/
+  | wrongParent (parentRoot expected : Root)
   /-- The proposer of the block is slashed. -/
   | proposerSlashed (proposer : ValidatorIndex)
-  /-- The RANDAO reveal is not the proposer's signature of the epoch. -/
-  | invalidRandaoReveal
-  /-- The votes on the deposit contract exceed their list limit. -/
-  | tooManyEth1Votes
-  /-- The two headers of a proposer slashing are for different slots. -/
-  | headerSlotsDiffer
-  /-- The two headers of a proposer slashing name different proposers. -/
-  | headerProposersDiffer
-  /-- The two headers of a proposer slashing are equal. -/
-  | sameHeaders
+  /-- The RANDAO reveal is not the proposer's signature of the epoch.
+
+  It holds the index of the proposer and the current epoch, which the reveal signs. -/
+  | invalidRandaoReveal (proposer : ValidatorIndex) (epoch : Epoch)
+  /-- The votes on the deposit contract exceed their list limit.
+
+  It holds the number of votes with the vote of the block, then the limit. -/
+  | tooManyEth1Votes (count limit : Nat)
+  /-- The two headers of a proposer slashing are for different slots.
+
+  It holds the slot of the first header, then that of the second. -/
+  | headerSlotsDiffer (slot1 slot2 : Slot)
+  /-- The two headers of a proposer slashing name different proposers.
+
+  It holds the proposer of the first header, then that of the second. -/
+  | headerProposersDiffer (proposer1 proposer2 : ValidatorIndex)
+  /-- The two headers of a proposer slashing are equal.
+
+  It holds the slot and the proposer of the headers. -/
+  | sameHeaders (slot : Slot) (proposer : ValidatorIndex)
   /-- The validator may not be slashed in the current epoch. -/
   | notSlashable (index : ValidatorIndex)
-  /-- A header of a proposer slashing is not signed by its proposer. -/
-  | invalidHeaderSignature
-  /-- The two attestations of an attester slashing are not a double or a surround vote. -/
-  | notSlashableData
-  /-- An attestation of an attester slashing is not a valid indexed attestation. -/
-  | invalidIndexedAttestation
-  /-- No validator in both attestations of an attester slashing may be slashed. -/
-  | noneSlashed
+  /-- A header of a proposer slashing is not signed by its proposer.
+
+  It holds the proposer of the header and the signing root that the signature fails on. -/
+  | invalidHeaderSignature (proposer : ValidatorIndex) (signingRoot : Root)
+  /-- The two attestations of an attester slashing are not a double or a surround vote.
+
+  It holds the source and target epochs of the first attestation, then those of the second. -/
+  | notSlashableData (source1 target1 source2 target2 : Epoch)
+  /-- An attestation of an attester slashing is not a valid indexed attestation.
+
+  It holds the position of the attestation in the slashing, 1 or 2. -/
+  | invalidIndexedAttestation (position : Nat)
+  /-- No validator in both attestations of an attester slashing may be slashed.
+
+  It holds the number of validators in both attestations. -/
+  | noneSlashed (candidates : Nat)
   /-- From Gloas: a payload attestation is not for the parent of the block. -/
   | payloadAttestationNotForParent
   /-- From Gloas: a payload attestation is not for the slot before that of the state. -/
@@ -138,10 +163,14 @@ inductive TransitionError where
   | historicalRootsFull
   /-- The target slot is not after the slot of the state. -/
   | slotNotAfter (slot stateSlot : Slot)
-  /-- A block does not carry the signature of its proposer. -/
-  | invalidBlockSignature
-  /-- The state root of a block is not the root of the state after it. -/
-  | wrongStateRoot
+  /-- A block does not carry the signature of its proposer.
+
+  It holds the proposer that the block names and the slot of the block. -/
+  | invalidBlockSignature (proposer : ValidatorIndex) (slot : Slot)
+  /-- The state root of a block is not the root of the state after it.
+
+  It holds the state root of the block, then the root of the state after it. -/
+  | wrongStateRoot (stateRoot expected : Root)
   /-- From Bellatrix: the parent hash of a payload is not the block hash of the latest payload. -/
   | wrongPayloadParentHash
   /-- From Bellatrix: a payload does not read the RANDAO mix of the current epoch. -/
@@ -203,18 +232,18 @@ def TransitionError.code : TransitionError → UInt32
   | .slotMismatch .. => 3
   | .notNewer .. => 4
   | .wrongProposer .. => 5
-  | .wrongParent => 6
+  | .wrongParent .. => 6
   | .proposerSlashed _ => 7
-  | .invalidRandaoReveal => 8
-  | .tooManyEth1Votes => 9
-  | .headerSlotsDiffer => 10
-  | .headerProposersDiffer => 11
-  | .sameHeaders => 12
+  | .invalidRandaoReveal .. => 8
+  | .tooManyEth1Votes .. => 9
+  | .headerSlotsDiffer .. => 10
+  | .headerProposersDiffer .. => 11
+  | .sameHeaders .. => 12
   | .notSlashable _ => 13
-  | .invalidHeaderSignature => 14
-  | .notSlashableData => 15
-  | .invalidIndexedAttestation => 16
-  | .noneSlashed => 17
+  | .invalidHeaderSignature .. => 14
+  | .notSlashableData .. => 15
+  | .invalidIndexedAttestation .. => 16
+  | .noneSlashed .. => 17
   | .payloadAttestationNotForParent => 18
   | .payloadAttestationWrongSlot .. => 19
   | .invalidPayloadAttestation => 20
@@ -256,8 +285,8 @@ def TransitionError.code : TransitionError → UInt32
   | .invalidBlsChangeSignature => 65
   | .historicalRootsFull => 52
   | .slotNotAfter .. => 53
-  | .invalidBlockSignature => 54
-  | .wrongStateRoot => 55
+  | .invalidBlockSignature .. => 54
+  | .wrongStateRoot .. => 55
   | .wrongPayloadParentHash => 66
   | .wrongPayloadRandao => 67
   | .wrongPayloadTimestamp .. => 68
@@ -282,6 +311,12 @@ def TransitionError.code : TransitionError → UInt32
   | .wrongPayloadBlockHash => 87
   | .wrongPayloadRequestsRoot => 88
   | .wrongPayloadSlot .. => 89
+
+/-- The message of an error: its constructor and its values, on one line, with roots in hex.
+
+Two roots in hex pass the width at which a rendering would otherwise wrap. -/
+instance : ToString TransitionError where
+  toString error := (repr error).pretty 1000000
 
 /-- An error of a state accessor, as an error of the transition. -/
 def liftAccessor {α : Type} (result : Except AccessorError α) : Except TransitionError α :=

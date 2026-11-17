@@ -337,17 +337,23 @@ _CARRIED_CASE = (
 )
 
 
+def _state_root(signed: dict, state: bytes) -> bytes:
+    """The root of the state after a signed block."""
+    encoded = consensus.api_ssz("minimal", "altair", "BeaconBlock", signed["message"])
+    return consensus.compute_new_state_root("minimal", "altair", state, encoded, verify=False)
+
+
 def _sealed(signed: dict, state: bytes, admitted: bool) -> bytes:
     """A signed block with its true state root, or with the zero root that the store rejects."""
-    message = signed["message"]
-    encoded = consensus.api_ssz("minimal", "altair", "BeaconBlock", message)
-    root = consensus.compute_new_state_root("minimal", "altair", state, encoded, verify=False)
-    message["state_root"] = "0x" + (root if admitted else bytes(32)).hex()
+    root = _state_root(signed, state)
+    signed["message"]["state_root"] = "0x" + (root if admitted else bytes(32)).hex()
     return consensus.api_ssz("minimal", "altair", "SignedBeaconBlock", signed)
 
 
-def _carried_replay(voted_admitted: bool, slashed_admitted: bool) -> tuple[list, bytes]:
-    """The outcomes of a block that votes for block 1, then of one that slashes those voters."""
+def _carried_replay(
+    voted_admitted: bool, slashed_admitted: bool
+) -> tuple[list, bytes, tuple[bytes, bytes]]:
+    """The outcomes of a vote for block 1 and of a slashing of its voters, and their state roots."""
     # The pinned slot-2 block moves onto the anchor, so block 1 stays a leaf with its own weight.
     # Its first attestation is the vote of the four validators of the slot-1 committee.
     # A copy with an unknown root follows: the transition accepts it and the fork choice rejects it.
@@ -376,6 +382,7 @@ def _carried_replay(voted_admitted: bool, slashed_admitted: bool) -> tuple[list,
     state = consensus.state_transitions(
         "minimal", "altair", anchor_state, [voted_block], verify=False
     )
+    voted_state_root = _state_root(voted, anchor_state)
     if not voted_admitted:
         voted_block = _sealed(voted, anchor_state, False)
     slashed = consensus.api_json("minimal", "altair", "SignedBeaconBlock", _read(case, names[2]))
@@ -391,6 +398,7 @@ def _carried_replay(voted_admitted: bool, slashed_admitted: bool) -> tuple[list,
     message["body"]["attester_slashings"] = [
         {"attestation_1": indexed, "attestation_2": {**indexed, "data": bad["data"]}}
     ]
+    slashed_state_root = _state_root(slashed, state)
     slashed_block = _sealed(slashed, state, slashed_admitted)
     outcomes = consensus.fork_choice(
         "minimal",
@@ -410,7 +418,7 @@ def _carried_replay(voted_admitted: bool, slashed_admitted: bool) -> tuple[list,
         verify=False,
         config={"PROPOSER_SCORE_BOOST": 0},
     )
-    return outcomes, first_root
+    return outcomes, first_root, (voted_state_root, slashed_state_root)
 
 
 def _weight(read: dict, root: bytes) -> int:
@@ -419,10 +427,11 @@ def _weight(read: dict, root: bytes) -> int:
     return next(leaf["weight"] for leaf in leaves if leaf["root"] == root)
 
 
-def _wrong_state_root(outcome: object) -> bool:
-    """Whether an outcome is the rejection of a block whose state root is wrong."""
+def _wrong_state_root(outcome: object, expected: bytes) -> bool:
+    """Whether an outcome rejects a block whose state root is zero, not the expected root."""
     return isinstance(outcome, consensus.ForkChoiceError) and str(outcome) == (
-        "the state transition fails: EthLib.Consensus.TransitionError.wrongStateRoot"
+        "the state transition fails: EthLib.Consensus.TransitionError.wrongStateRoot "
+        f"0x{'00' * 32} 0x{expected.hex()}"
     )
 
 
@@ -432,21 +441,23 @@ _FOUR_VOTES = 128_000_000_000
 
 def test_rejected_block_runs_no_carried_handlers():
     # Had the carried votes run, block 1 would weigh 128 ETH.
-    outcomes, first = _carried_replay(voted_admitted=False, slashed_admitted=True)
+    outcomes, first, (voted_root, _) = _carried_replay(voted_admitted=False, slashed_admitted=True)
     assert outcomes[4] == [outcomes[4][0]]
-    assert _wrong_state_root(outcomes[4][0])
+    assert _wrong_state_root(outcomes[4][0], voted_root)
     assert _weight(outcomes[5][0], first) == 0
     # Had the carried slashing run, block 1 would weigh nothing.
-    outcomes, first = _carried_replay(voted_admitted=True, slashed_admitted=False)
+    outcomes, first, (_, slashed_root) = _carried_replay(
+        voted_admitted=True, slashed_admitted=False
+    )
     assert outcomes[4][:2] == [None, None]
     assert _weight(outcomes[5][0], first) == _FOUR_VOTES
     assert outcomes[6] == [outcomes[6][0]]
-    assert _wrong_state_root(outcomes[6][0])
+    assert _wrong_state_root(outcomes[6][0], slashed_root)
     assert _weight(outcomes[7][0], first) == _FOUR_VOTES
 
 
 def test_carried_handlers_commit_independently():
-    outcomes, first = _carried_replay(voted_admitted=True, slashed_admitted=True)
+    outcomes, first, _ = _carried_replay(voted_admitted=True, slashed_admitted=True)
     assert outcomes[3] == [{**outcomes[3][0]}]
     assert _weight(outcomes[3][0], first) == 0
     # The vote for an unknown block fails after the good vote, which keeps its weight.

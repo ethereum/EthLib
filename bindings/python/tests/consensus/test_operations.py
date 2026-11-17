@@ -9,6 +9,7 @@ from ruamel.yaml import YAML
 import archives
 from ethlib import consensus
 from ethlib.networking import snappy
+from ethlib.serialization import ssz
 from raising import raises
 
 from .containers import FORKS
@@ -231,3 +232,130 @@ def test_no_payload_before_bellatrix():
     ) as info:
         consensus.process_operation("minimal", "altair", "execution_payload", b"", b"")
     assert info.value.code == 0
+
+
+# A beacon block header, as SSZ describes it.
+HEADER = {
+    "container": [
+        ["slot", {"uint": 8}],
+        ["proposer_index", {"uint": 8}],
+        ["parent_root", {"byte_vector": 32}],
+        ["state_root", {"byte_vector": 32}],
+        ["body_root", {"byte_vector": 32}],
+    ]
+}
+
+# Each error message starts with the name of its constructor.
+REJECTED = "EthLib.Consensus.TransitionError."
+
+
+def vector(fork: str, handler: str, name: str) -> tuple[bytes, bytes]:
+    """The state and the operation of a vendored minimal case."""
+    case = FILES / "minimal" / fork / "operations" / handler / "pyspec_tests" / name
+    pre = snappy.decompress((case / "pre.ssz_snappy").read_bytes())
+    operation = snappy.decompress((case / f"{HANDLERS[handler][0]}.ssz_snappy").read_bytes())
+    return pre, operation
+
+
+def u64(data: bytes, offset: int) -> int:
+    """The little-endian uint64 at an offset."""
+    return int.from_bytes(data[offset : offset + 8], "little")
+
+
+def header_root(data: bytes) -> bytes:
+    """The hash tree root of the SSZ bytes of a block header."""
+    return ssz.hash_tree_root(HEADER, ssz.deserialize(HEADER, data))
+
+
+def test_wrong_parent_carries_both_roots():
+    pre, block = vector("phase0", "block_header", "basic_block_header")
+    # The latest block header of a state is at bytes 64 to 176.
+    # It follows genesis_time, genesis_validators_root, slot and fork.
+    expected = header_root(pre[64:176])
+    # A block starts with its slot and its proposer index, then its parent root.
+    forged = block[:16] + bytes(32) + block[48:]
+    message = f"{REJECTED}wrongParent 0x{'00' * 32} 0x{expected.hex()}"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation("minimal", "phase0", "block_header", pre, forged, False)
+    assert info.value.code == 6
+
+
+def test_proposer_slashing_headers_disagree():
+    pre, slashing = vector("phase0", "proposer_slashing", "basic")
+    # A slashing holds two signed headers of 208 bytes: a header of 112 bytes, then a signature.
+    slot, proposer = u64(slashing, 0), u64(slashing, 8)
+    other_slot = slashing[:208] + (slot + 1).to_bytes(8, "little") + slashing[216:]
+    message = f"{REJECTED}headerSlotsDiffer {slot} {slot + 1}"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation(
+            "minimal", "phase0", "proposer_slashing", pre, other_slot, False
+        )
+    assert info.value.code == 10
+    other_proposer = slashing[:216] + (proposer + 1).to_bytes(8, "little") + slashing[224:]
+    message = f"{REJECTED}headerProposersDiffer {proposer} {proposer + 1}"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation(
+            "minimal", "phase0", "proposer_slashing", pre, other_proposer, False
+        )
+    assert info.value.code == 11
+    message = f"{REJECTED}sameHeaders {slot} {proposer}"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation(
+            "minimal", "phase0", "proposer_slashing", pre, slashing[:208] * 2, False
+        )
+    assert info.value.code == 12
+
+
+def test_header_signature_carries_the_signing_root():
+    pre, slashing = vector("phase0", "proposer_slashing", "invalid_incorrect_sig_1")
+    # The fork of a state follows genesis_time, genesis_validators_root and slot.
+    previous, current, epoch = pre[48:52], pre[52:56], u64(pre, 56)
+    # A minimal epoch has 8 slots.
+    header_epoch = u64(slashing, 0) // 8
+    version = previous if header_epoch < epoch else current
+    # The domain of a proposer is its type, zero, then 28 bytes of the root of the fork data.
+    fork_data_root = hashlib.sha256(version + bytes(28) + pre[8:40]).digest()
+    domain = bytes(4) + fork_data_root[:28]
+    root = hashlib.sha256(header_root(slashing[:112]) + domain).digest()
+    message = f"{REJECTED}invalidHeaderSignature {u64(slashing, 8)} 0x{root.hex()}"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation("minimal", "phase0", "proposer_slashing", pre, slashing)
+    assert info.value.code == 14
+
+
+def test_attester_slashing_of_one_vote():
+    pre, slashing = vector("phase0", "attester_slashing", "basic_double")
+    # A slashing holds the offsets of its two attestations, then the attestations.
+    start, end = int.from_bytes(slashing[:4], "little"), int.from_bytes(slashing[4:8], "little")
+    first = slashing[start:end]
+    forged = (8).to_bytes(4, "little") + (8 + len(first)).to_bytes(4, "little") + first * 2
+    # The data of an attestation follows the offset of its indices.
+    # Its source epoch is at byte 48 of the data, and its target epoch at byte 88.
+    source, target = u64(first, 52), u64(first, 92)
+    message = f"{REJECTED}notSlashableData {source} {target} {source} {target}"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation("minimal", "phase0", "attester_slashing", pre, forged, False)
+    assert info.value.code == 15
+
+
+@pytest.mark.parametrize(
+    ("fork", "name"),
+    [("gloas", "invalid_too_many_attesting_indices"), ("heze", "invalid_all_empty_indices")],
+)
+def test_invalid_indexed_attestation_names_its_position(fork, name):
+    pre, slashing = vector(fork, "attester_slashing", name)
+    with raises(consensus.TransitionError, f"{REJECTED}invalidIndexedAttestation 1") as info:
+        consensus.process_operation("minimal", FORKS[fork], "attester_slashing", pre, slashing)
+    assert info.value.code == 16
+
+
+def test_invalid_second_attestation_names_position_two():
+    pre, slashing = vector("phase0", "attester_slashing", "basic_double")
+    end = int.from_bytes(slashing[4:8], "little")
+    # An attestation holds the offset of its indices, its data and its signature in 228 bytes.
+    # Without the indices that follow, the second attestation names no validator.
+    forged = slashing[: end + 228]
+    message = f"{REJECTED}invalidIndexedAttestation 2"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation("minimal", "phase0", "attester_slashing", pre, forged, False)
+    assert info.value.code == 16

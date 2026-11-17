@@ -38,7 +38,7 @@ def processBlockHeader (state : BeaconState preset fork) (block : BeaconBlock pr
   let proposer ← liftAccessor (getBeaconProposerIndex state)
   ensure (block.proposerIndex = proposer) (.wrongProposer block.proposerIndex proposer)
   let parentRoot ← liftSsz (hashTreeRoot state.latestBlockHeader)
-  ensure (block.parentRoot = parentRoot) .wrongParent
+  ensure (block.parentRoot = parentRoot) (.wrongParent block.parentRoot parentRoot)
   let bodyRoot ← liftSsz (hashTreeRoot block.body)
   let validator ← liftAccessor (getValidator state block.proposerIndex)
   ensure (validator.slashed = false) (.proposerSlashed block.proposerIndex)
@@ -55,11 +55,12 @@ Its SHA-256 hash is XORed into the mix of the epoch. -/
 def processRandao (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
     (body : BeaconBlockBody preset fork) : Except TransitionError (BeaconState preset fork) := do
   let epoch := getCurrentEpoch state
-  let proposer ← liftAccessor (getValidator state (← liftAccessor (getBeaconProposerIndex state)))
+  let index ← liftAccessor (getBeaconProposerIndex state)
+  let proposer ← liftAccessor (getValidator state index)
   let domain ← liftAccessor (getDomain config state DOMAIN_RANDAO)
   let signingRoot ← liftSsz (computeSigningRoot epoch domain)
   ensure (checks.verify proposer.pubkey (packBytes signingRoot)
-    body.randaoReveal = true) .invalidRandaoReveal
+    body.randaoReveal = true) (.invalidRandaoReveal index epoch)
   let mix ← liftAccessor (getRandaoMix state epoch)
   let mix :=
     Vector.zipWith (· ^^^ ·) mix (Cryptography.Hash.Sha256.hash32 (packBytes body.randaoReveal))
@@ -87,7 +88,8 @@ def processEth1Data (before : fork < .hegota) (state : BeaconState preset fork)
     if slots.toNat < votes.count vote * 2 then
       return { state with eth1Data := fun _ => vote }
     else return state
-  else throw .tooManyEth1Votes
+  else throw (.tooManyEth1Votes votes.size
+    (preset.EPOCHS_PER_ETH1_VOTING_PERIOD.toNat * preset.SLOTS_PER_EPOCH.toNat))
 
 /-- Whether Casper FFG forbids a validator to sign both votes.
 
@@ -128,8 +130,8 @@ def checkHeaderSignature (config : Config) (checks : SignatureChecks)
   let domain ← liftAccessor (getDomain config state DOMAIN_BEACON_PROPOSER
     (some (computeEpochAtSlot preset signed.message.slot)))
   let signingRoot ← liftSsz (computeSigningRoot signed.message domain)
-  ensure (checks.verify pubkey (packBytes signingRoot) signed.signature =
-    true) .invalidHeaderSignature
+  ensure (checks.verify pubkey (packBytes signingRoot) signed.signature = true)
+    (.invalidHeaderSignature signed.message.proposerIndex signingRoot)
 
 /-- The state after a proposer slashing.
 
@@ -143,9 +145,10 @@ def processProposerSlashing (config : Config) (checks : SignatureChecks)
     Except TransitionError (BeaconState preset fork) := do
   let header1 := slashing.signedHeader1.message
   let header2 := slashing.signedHeader2.message
-  ensure (header1.slot = header2.slot) .headerSlotsDiffer
-  ensure (header1.proposerIndex = header2.proposerIndex) .headerProposersDiffer
-  ensure (header1 ≠ header2) .sameHeaders
+  ensure (header1.slot = header2.slot) (.headerSlotsDiffer header1.slot header2.slot)
+  ensure (header1.proposerIndex = header2.proposerIndex)
+    (.headerProposersDiffer header1.proposerIndex header2.proposerIndex)
+  ensure (header1 ≠ header2) (.sameHeaders header1.slot header1.proposerIndex)
   let proposer ← liftAccessor (getValidator state header1.proposerIndex)
   ensure (isSlashableValidator proposer (getCurrentEpoch state) = true)
     (.notSlashable header1.proposerIndex)
@@ -178,15 +181,18 @@ At least one validator must be slashed. -/
 def processAttesterSlashing (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (slashing : AttesterSlashing preset fork) :
     Except TransitionError (BeaconState preset fork) := do
-  ensure (isSlashableAttestationData slashing.attestation1.data slashing.attestation2.data = true)
-    .notSlashableData
+  let data1 := slashing.attestation1.data
+  let data2 := slashing.attestation2.data
+  ensure (isSlashableAttestationData data1 data2 = true)
+    (.notSlashableData data1.source.epoch data1.target.epoch data2.source.epoch
+      data2.target.epoch)
   let valid1 ← isValidIndexedAttestation config checks state slashing.attestation1
-  ensure (valid1 = true) .invalidIndexedAttestation
+  ensure (valid1 = true) (.invalidIndexedAttestation 1)
   let valid2 ← isValidIndexedAttestation config checks state slashing.attestation2
-  ensure (valid2 = true) .invalidIndexedAttestation
-  let (state, slashedAny) ←
-    (slashingIndices slashing).foldlM (slashIfSlashable config) (state, false)
-  ensure (slashedAny = true) .noneSlashed
+  ensure (valid2 = true) (.invalidIndexedAttestation 2)
+  let candidates := slashingIndices slashing
+  let (state, slashedAny) ← candidates.foldlM (slashIfSlashable config) (state, false)
+  ensure (slashedAny = true) (.noneSlashed candidates.length)
   return state
 
 /-- Whether a signed block carries the signature of its proposer, in the current epoch. -/
