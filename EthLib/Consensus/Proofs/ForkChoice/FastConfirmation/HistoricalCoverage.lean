@@ -529,7 +529,7 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
           ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true
       · exact .inl (Store.isAncestor_trans_of_lt preGloas justifiedFound known
           (Store.isAncestor_getHead_of_lt_gloas preGloas receiverHeadOk) settled)
-      -- Otherwise the root is a viable node besides the justified block, so the head read its state.
+      -- Otherwise the root is a viable node above the justified block, so the head read its state.
       obtain ⟨state, stateOk⟩ := Store.checkpointState_justified_of_getHead preGloas tree
         receiverHeadOk (route.resolve_left settled) fun same => settled (by
           rw [same]

@@ -41,7 +41,8 @@ Not yet released.
 
 - In Lean, the historical-anchor theorems no longer assume the receivers' reads ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   `Execution.honestHeadsCover_of_historical_anchor` and `Execution.honestHeadsCover_of_signed_justification` take `fit : config.CommitteeWindowsFit preset` instead of `reads`; their conclusions are unchanged.
-  `Config.CommitteeWindowsFit` bounds the registry limit, the committees of an epoch and the clock; `Config.committeeWindowsFit_mainnet` and `Config.committeeWindowsFit_minimal` prove it for both presets, so a caller on either passes that proof.
+  `Config.CommitteeWindowsFit` bounds the registry limit, the committees of an epoch and the clock.
+  A caller on mainnet or minimal passes `Config.committeeWindowsFit_mainnet` or `Config.committeeWindowsFit_minimal`.
   `HonestHeadReads` is removed.
   The receiver's justified state comes from `Store.checkpointState_justified_of_getHead`, and its committee windows from `Store.getCommitteesBetweenSlots_exists`.
 

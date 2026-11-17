@@ -3009,7 +3009,8 @@ Receiver finality coverage and the receiver's block lookup are derived from `Roo
 It assumes that no up-to-date honest justified checkpoint over the interval conflicts with the root: the checkpoint-consistency half of the safety of the confirmation, not derived.
 The receivers' reads are derived.
 When the root is above the justified block, the head computation weighed a child of that block and so read its state (`Store.checkpointState_justified_of_getHead`).
-Each committee window before the current slot reads from the head's state (`Store.getCommitteesBetweenSlots_exists`), under `Config.CommitteeWindowsFit`, a bound on the registry limit, the committees and the clock that mainnet and minimal satisfy.
+Each committee window before the current slot reads from the head's state (`Store.getCommitteesBetweenSlots_exists`).
+That needs `Config.CommitteeWindowsFit`, a bound on the registry limit, the committees and the clock, which mainnet and minimal satisfy.
 `ReceiverWindowExits` assumes the exit bound of each receiver's window, and `LateDutyMajority` assumes the honest duty majority of the duty-epoch theorem.
 The receiver's proposer score is derived from the checkpoint stake ceiling and `Config.ProposerScoreFits`, a bound on the boost that mainnet and minimal satisfy.
 
