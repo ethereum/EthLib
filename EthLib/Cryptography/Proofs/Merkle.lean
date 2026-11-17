@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Merkle.Completeness
 public import EthLib.Cryptography.Proofs.Merkle.Binding
 public import EthLib.Cryptography.Proofs.Merkle.RandomOracle
 public import EthLib.Cryptography.Proofs.Merkle.VectorBinding
+public import EthLib.Cryptography.Proofs.Merkle.PositionBinding
 
 /-!
 # Proofs: Merkle trees
