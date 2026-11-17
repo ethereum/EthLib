@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.HashSig.Oracle
+public import EthLib.Cryptography.Proofs.Merkle.Completeness
 public import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
 public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 public import VCVio.OracleComp.Constructions.SampleableType.Measure
@@ -81,6 +82,7 @@ Only the verification costs depend on the concrete hash function.
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography
 
 namespace SphincsSecurity
 
@@ -667,18 +669,16 @@ def otsLeaf (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex) (leaf
 
 /-! ### The tree -/
 
-/-- Fold a leaf and a path over `levels` levels of a tree. -/
+/-- Hash `left` and `right` at the address that `domain` gives the level and index of `p`. -/
+def merkleHash (parameter : PublicParameter) (domain : Nat → Nat → HashDomain)
+    (p : Merkle.Position) (left right : Digest) : m Digest :=
+  tweakableHash parameter (domain p.level p.index) (nodePayload left right)
+
+/-- Climb from a leaf with a path over `levels` levels of the tree of a layer. -/
 def treeFold (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
-    (path : Nat → Digest) : Nat → Digest → m Digest
-  | 0, value => pure value
-  | levels + 1, value => do
-      let current ← treeFold parameter lay tree leaf path levels value
-      let sibling := path levels
-      let nodeIdx := leaf.val / 2 ^ (levels + 1)
-      if leaf.val.testBit levels then
-        tweakableHash parameter (.node lay tree (levels + 1) nodeIdx) (nodePayload sibling current)
-      else
-        tweakableHash parameter (.node lay tree (levels + 1) nodeIdx) (nodePayload current sibling)
+    (path : Nat → Digest) (levels : Nat) (value : Digest) : m Digest :=
+  Merkle.climb (merkleHash parameter (.node lay tree)) ⟨0, leaf.val⟩ value
+    (List.ofFn fun level : Fin levels => path level.val)
 
 /-! ### FORS -/
 
@@ -687,24 +687,26 @@ def forsLeafHash (parameter : PublicParameter) (index : Index) (κ : FTree) (lea
     (secret : Digest) : m Digest :=
   tweakableHash parameter (.forsLeaf index κ leaf) (bytesLE 16 secret)
 
-/-- Fold a FORS leaf and a path over `levels` levels. -/
-def forsFold (parameter : PublicParameter) (index : Index) (κ : FTree) (leaf : FLeaf)
-    (path : Fin forsHeight → Digest) : Nat → Digest → m Digest
-  | 0, value => pure value
-  | levels + 1, value => do
-      let current ← forsFold parameter index κ leaf path levels value
-      if hlevel : levels < forsHeight then
-        let sibling := path ⟨levels, hlevel⟩
-        let node : FLeaf := ⟨leaf.val / 2 ^ (levels + 1),
-          Nat.lt_of_le_of_lt (Nat.div_le_self _ _) leaf.isLt⟩
-        if leaf.val.testBit levels then
-          tweakableHash parameter (.forsNode index κ ⟨levels, hlevel⟩ node)
-            (nodePayload sibling current)
-        else
-          tweakableHash parameter (.forsNode index κ ⟨levels, hlevel⟩ node)
-            (nodePayload current sibling)
+/-- The node hash of a FORS tree, with no query above its `a` levels. -/
+def forsHash (parameter : PublicParameter) (index : Index) (κ : FTree) :
+    Merkle.Position → Digest → Digest → m Digest
+  | ⟨level + 1, node⟩, left, right =>
+      if hlevel : level < forsHeight then
+        tweakableHash parameter (.forsNode index κ ⟨level, hlevel⟩
+          ⟨node % 2 ^ forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩) (nodePayload left right)
       else
         pure 0
+  | ⟨0, _⟩, _, _ => pure 0
+
+/-- A FORS path, extended by zero above its last level. -/
+def extendPath (path : Fin forsHeight → Digest) (level : Nat) : Digest :=
+  if hlevel : level < forsHeight then path ⟨level, hlevel⟩ else 0
+
+/-- Climb from a FORS leaf with a path over `levels` levels. -/
+def forsFold (parameter : PublicParameter) (index : Index) (κ : FTree) (leaf : FLeaf)
+    (path : Fin forsHeight → Digest) (levels : Nat) (value : Digest) : m Digest :=
+  Merkle.climb (forsHash parameter index κ) ⟨0, leaf.val⟩ value
+    (List.ofFn fun level : Fin levels => extendPath path level.val)
 
 /-- The root of a FORS tree that an opening reaches: the leaf, folded over `a` levels. -/
 def treeRecover (parameter : PublicParameter) (index : Index) (κ : FTree) (leaf : FLeaf)
@@ -841,6 +843,63 @@ def layerRecover (parameter : PublicParameter) (index : Index) (lay : Layer) (me
   let root ← treeFold parameter lay tree leaf (partPath part) (layerHeight lay) value
   return some root
 
+/-! ### Unfolding the climbs, one level at a time -/
+
+/-- A climb over no level returns the leaf. -/
+theorem treeFold_zero (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (leaf : LeafIndex) (path : Nat → Digest) (value : Digest) :
+    treeFold (m := m) parameter lay tree leaf path 0 value = pure value :=
+  rfl
+
+/-- The climb over `levels + 1` levels hashes the climb over `levels` with the next sibling. -/
+theorem treeFold_succ [LawfulMonad m] (parameter : PublicParameter) (lay : Layer)
+    (tree : TreeIndex) (leaf : LeafIndex) (path : Nat → Digest) (levels : Nat) (value : Digest) :
+    treeFold (m := m) parameter lay tree leaf path (levels + 1) value = (do
+      let current ← treeFold parameter lay tree leaf path levels value
+      let sibling := path levels
+      let nodeIdx := leaf.val / 2 ^ (levels + 1)
+      if leaf.val.testBit levels then
+        tweakableHash parameter (.node lay tree (levels + 1) nodeIdx) (nodePayload sibling current)
+      else
+        tweakableHash parameter (.node lay tree (levels + 1) nodeIdx)
+          (nodePayload current sibling)) :=
+  Merkle.climb_ofFn_succ _ _ _ _ _
+
+/-- A climb over no level returns the leaf. -/
+theorem forsFold_zero (parameter : PublicParameter) (index : Index) (κ : FTree) (leaf : FLeaf)
+    (path : Fin forsHeight → Digest) (value : Digest) :
+    forsFold (m := m) parameter index κ leaf path 0 value = pure value :=
+  rfl
+
+/-- The climb over `levels + 1` levels hashes the climb over `levels` with the next sibling.
+
+Above the `a` levels of the tree it returns zero. -/
+theorem forsFold_succ [LawfulMonad m] (parameter : PublicParameter) (index : Index) (κ : FTree)
+    (leaf : FLeaf) (path : Fin forsHeight → Digest) (levels : Nat) (value : Digest) :
+    forsFold (m := m) parameter index κ leaf path (levels + 1) value = (do
+      let current ← forsFold parameter index κ leaf path levels value
+      if hlevel : levels < forsHeight then
+        let sibling := path ⟨levels, hlevel⟩
+        let node : FLeaf := ⟨leaf.val / 2 ^ (levels + 1),
+          Nat.lt_of_le_of_lt (Nat.div_le_self _ _) leaf.isLt⟩
+        if leaf.val.testBit levels then
+          tweakableHash parameter (.forsNode index κ ⟨levels, hlevel⟩ node)
+            (nodePayload sibling current)
+        else
+          tweakableHash parameter (.forsNode index κ ⟨levels, hlevel⟩ node)
+            (nodePayload current sibling)
+      else
+        pure 0) := by
+  rw [forsFold, Merkle.climb_ofFn_succ]
+  refine bind_congr fun current => ?_
+  -- Below the top, the node index is already reduced and the sibling is in the path.
+  by_cases hlevel : levels < forsHeight
+  · have hnode : leaf.val / 2 ^ (levels + 1) % 2 ^ forsHeight = leaf.val / 2 ^ (levels + 1) :=
+      Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) leaf.isLt)
+    simp only [forsHash, extendPath, dite_eq_left hlevel, hnode]
+  · simp only [forsHash, dite_eq_right hlevel]
+    split <;> rfl
+
 attribute [irreducible] verify
 
 end Concrete
@@ -955,17 +1014,34 @@ def otsSign (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex) (leaf
     m (Option (Counter × (ChainIndex → Digest))) :=
   otsSignFrom parameter lay tree leaf seed message encodingAttemptLimit 0
 
+/-- The one-time leaf at an index of the tree of a layer. -/
+def treeLeaf (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex) (seed : MasterSeed)
+    (nodeIdx : Nat) : m Digest := do
+  let leaf := leafOfNat nodeIdx
+  let endpoints ← oneTimePublicKey parameter lay tree leaf seed
+  leafHash parameter lay tree leaf endpoints
+
 /-- A node of the tree, computed from the one-time keys below it. -/
 def treeNode (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
-    (seed : MasterSeed) : Nat → Nat → m Digest
-  | 0, nodeIdx => do
-      let leaf := leafOfNat nodeIdx
-      let endpoints ← oneTimePublicKey parameter lay tree leaf seed
-      leafHash parameter lay tree leaf endpoints
-  | level + 1, nodeIdx => do
+    (seed : MasterSeed) (level nodeIdx : Nat) : m Digest :=
+  Merkle.node (merkleHash parameter (.node lay tree)) (treeLeaf parameter lay tree seed)
+    ⟨level, nodeIdx⟩
+
+/-- A node at level 0 is the one-time leaf at its index. -/
+theorem treeNode_zero (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (seed : MasterSeed) (nodeIdx : Nat) :
+    treeNode (m := m) parameter lay tree seed 0 nodeIdx =
+      treeLeaf parameter lay tree seed nodeIdx :=
+  rfl
+
+/-- A node of the tree hashes its two children at its own address. -/
+theorem treeNode_succ (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
+    (seed : MasterSeed) (level nodeIdx : Nat) :
+    treeNode (m := m) parameter lay tree seed (level + 1) nodeIdx = (do
       let left ← treeNode parameter lay tree seed level (2 * nodeIdx)
       let right ← treeNode parameter lay tree seed level (2 * nodeIdx + 1)
-      tweakableHash parameter (.node lay tree (level + 1) nodeIdx) (nodePayload left right)
+      tweakableHash parameter (.node lay tree (level + 1) nodeIdx) (nodePayload left right)) :=
+  rfl
 
 /-- The surrogate sibling at a level `level >= b`, derived from the seed with address type 8.
 
@@ -1020,21 +1096,36 @@ def forsSecret (parameter : PublicParameter) (index : Index) (κ : FTree) (leaf 
     (seed : MasterSeed) : m Digest :=
   deriveKey parameter (.fors index κ leaf) seed
 
+/-- The FORS leaf at an index: the hash of its secret. -/
+def forsLeaf (parameter : PublicParameter) (index : Index) (κ : FTree) (seed : MasterSeed)
+    (node : Nat) : m Digest := do
+  let leaf : FLeaf := ⟨node % 2 ^ forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩
+  let secret ← forsSecret parameter index κ leaf seed
+  forsLeafHash parameter index κ leaf secret
+
 /-- A node of a FORS tree at tree level `level`, the root at level `a`. -/
-def forsNode (parameter : PublicParameter) (index : Index) (κ : FTree) (seed : MasterSeed) :
-    Nat → Nat → m Digest
-  | 0, node => do
-      let leaf : FLeaf := ⟨node % 2 ^ forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩
-      let secret ← forsSecret parameter index κ leaf seed
-      forsLeafHash parameter index κ leaf secret
-  | level + 1, node => do
+def forsNode (parameter : PublicParameter) (index : Index) (κ : FTree) (seed : MasterSeed)
+    (level node : Nat) : m Digest :=
+  Merkle.node (forsHash parameter index κ) (forsLeaf parameter index κ seed) ⟨level, node⟩
+
+/-- A FORS node at level 0 is the leaf at its index. -/
+theorem forsNode_zero (parameter : PublicParameter) (index : Index) (κ : FTree)
+    (seed : MasterSeed) (node : Nat) :
+    forsNode (m := m) parameter index κ seed 0 node = forsLeaf parameter index κ seed node :=
+  rfl
+
+/-- A FORS node hashes its two children, with no query above the `a` levels of the tree. -/
+theorem forsNode_succ (parameter : PublicParameter) (index : Index) (κ : FTree)
+    (seed : MasterSeed) (level node : Nat) :
+    forsNode (m := m) parameter index κ seed (level + 1) node = (do
       let left ← forsNode parameter index κ seed level (2 * node)
       let right ← forsNode parameter index κ seed level (2 * node + 1)
       if hlevel : level < forsHeight then
         tweakableHash parameter (.forsNode index κ ⟨level, hlevel⟩
           ⟨node % 2 ^ forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩) (nodePayload left right)
       else
-        pure 0
+        pure 0) :=
+  rfl
 
 /-- The FORS public key of an instance: `T_k` of the roots of its trees. -/
 def forsKey (parameter : PublicParameter) (index : Index) (seed : MasterSeed) : m Digest := do

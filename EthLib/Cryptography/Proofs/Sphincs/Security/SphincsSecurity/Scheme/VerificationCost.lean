@@ -172,9 +172,9 @@ theorem compressions_treeFold (f : QueryImpl HashSpec Id) (parameter : PublicPar
     compressions H f (treeFold parameter lay tree leaf path levels value) =
       levels * nodeCost H := by
   induction levels with
-  | zero => simp [treeFold]
+  | zero => simp [treeFold_zero]
   | succ levels ih =>
-      rw [treeFold, compressions_bind, ih, Nat.succ_mul]
+      rw [treeFold_succ, compressions_bind, ih, Nat.succ_mul]
       dsimp only
       split <;> simp [compressions_tweakableHash, nodePayload, bytesLE_length]
 
@@ -193,9 +193,9 @@ theorem compressions_forsFold (leaf : FLeaf) (path : Fin forsHeight → Digest)
     (levels : Nat) (hlevels : levels ≤ forsHeight) (value : Digest) :
     compressions H f (forsFold parameter index κ leaf path levels value) = levels * nodeCost H := by
   induction levels with
-  | zero => simp [forsFold]
+  | zero => simp [forsFold_zero]
   | succ levels ih =>
-      rw [forsFold, compressions_bind, ih (by omega), dite_eq_left (by omega), Nat.succ_mul]
+      rw [forsFold_succ, compressions_bind, ih (by omega), dite_eq_left (by omega), Nat.succ_mul]
       dsimp only
       split <;> simp [compressions_tweakableHash, nodePayload, bytesLE_length]
 

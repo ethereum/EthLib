@@ -317,7 +317,7 @@ theorem treeHit_hitA (hboundary : BoundaryCorrect f parameter seed labels) (pk :
         value level ∈ SignatureWitness.trace f pk message signature := by
     intro level hlevel
     apply hrun
-    rw [← merkleFold_treeFold]
+    rw [treeFold]
     exact merkleInput_mem f pk.parameter _ leaf.val path value (layerHeight lay) level hlevel
   have hnode : ∀ level results, ¬SecondOrderInput pk.parameter results
       (merkleInput f pk.parameter (fun height index => .node lay tree height index) leaf.val path
