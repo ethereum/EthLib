@@ -1681,19 +1681,6 @@ private theorem caller_supporter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
   · exact .inl (.inl member)
   · exact .inr ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
 
-/-- A validator that the source holds, active and not slashed, is in its unslashed active list. -/
-private theorem mem_unslashedActive {state : BeaconState preset fork} {v : ValidatorIndex}
-    {validator : Validator} (found : state.validators.data[v.toNat]? = some validator)
-    (unslashed : validator.slashed = false)
-    (active : isActiveValidator validator (getCurrentEpoch state) = true) :
-    v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset := by
-  simp only [List.mem_toFinset, List.mem_map, unslashedActiveBalances, List.mem_filterMap,
-    Option.ite_none_right_eq_some, Option.some.injEq, Prod.mk.injEq, Prod.exists]
-  refine ⟨v, validator.effectiveBalance, ⟨validator, v.toNat, ?_, ?_, ?_, rfl⟩, rfl⟩
-  · exact List.mem_zipIdx_iff_getElem?.mpr (by simpa using found)
-  · simp [active, unslashed]
-  · exact UInt64.ofNat_toNat
-
 /-- An honest active committee member is unslashed in the caller's checkpoint state. -/
 private theorem honest_unslashedActive_of_checkpointState {time : ℕ}
     (counted : HonestCountedStatesUnslashed (e := e) time) {anchor : Store preset fork}
@@ -1711,7 +1698,7 @@ private theorem honest_unslashedActive_of_checkpointState {time : ℕ}
   obtain ⟨_, validator, found, active⟩ := Store.mem_activeMembers.mp member
   have flag : validator.slashed = false := by
     simpa [slashedFlagAt, found] using unslashed
-  exact mem_unslashedActive found flag active
+  exact List.mem_toFinset.mpr (mem_unslashedActiveBalances_of_found found active flag)
 
 /-- A head state's epoch is at most the current epoch of a forward-reachable store. -/
 private theorem headState_epoch_le {store : Store preset fork}
@@ -2013,7 +2000,8 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
   rcases Execution.mem_supportersOf_of_latest_signed anchored start preGloas honest receiver
       receivedOk notCounted upToDate receiverTime dueOk dueLt allFresh
       (fun earlier low high => rootCovers earlier low (atTime ▸ high)) known rootAbove
-      (mem_unslashedActive validatorFound unslashed isActive)
+      (List.mem_toFinset.mpr
+        (mem_unslashedActiveBalances_of_found validatorFound isActive unslashed))
     with member | ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
   · exact .inl (.inl member)
   · exact .inr ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
@@ -2877,7 +2865,8 @@ public theorem Execution.source_surplus_or_historical_evidence [DecidablePred (�
     stake_counted_eq fun v member => by
       obtain ⟨-, ⟨validator, validatorFound, unslashedV, activeV⟩, -⟩ :=
         Store.mem_parentVotersOf.mp (Finset.mem_filter.mp member).1
-      exact mem_unslashedActive validatorFound unslashedV activeV]
+      exact List.mem_toFinset.mpr
+        (mem_unslashedActiveBalances_of_found validatorFound activeV unslashedV)]
   exact surplus
 
 end EthLib.Consensus.Models.Network

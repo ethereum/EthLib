@@ -23,6 +23,18 @@ open Base Models
 
 variable {preset : Preset} {fork : Fork}
 
+/-- An index that names a validator active and not slashed is in the unslashed active list. -/
+theorem mem_unslashedActiveBalances_of_found {state : BeaconState preset fork} {v : ValidatorIndex}
+    {validator : Validator} (found : state.validators.data[v.toNat]? = some validator)
+    (active : isActiveValidator validator (getCurrentEpoch state) = true)
+    (slashed : validator.slashed = false) :
+    v ∈ (unslashedActiveBalances state).map (·.1) := by
+  simp only [List.mem_map, unslashedActiveBalances, List.mem_filterMap,
+    Option.ite_none_right_eq_some, Option.some.injEq, Prod.exists]
+  refine ⟨v, validator.effectiveBalance, ⟨validator, v.toNat,
+    List.mem_zipIdx_iff_getElem?.mpr (by simpa using found), by simp [active, slashed], ?_⟩, rfl⟩
+  simp
+
 /-- An index is in the unslashed active list when it names a validator active and not slashed.
 
 The registry must stay within the limit of the preset, so that indices keep their value. -/
@@ -31,22 +43,19 @@ theorem mem_unslashedActiveBalances_iff {state : BeaconState preset fork}
     v ∈ (unslashedActiveBalances state).map (·.1) ↔
       ∃ validator, state.validators.data[v.toNat]? = some validator ∧
         isActiveValidator validator (getCurrentEpoch state) = true ∧ validator.slashed = false := by
+  refine ⟨fun member => ?_, fun ⟨validator, found, active, slashed⟩ =>
+    mem_unslashedActiveBalances_of_found found active slashed⟩
   simp only [List.mem_map, unslashedActiveBalances, List.mem_filterMap,
-    Option.ite_none_right_eq_some, Option.some.injEq, Prod.exists]
-  constructor
-  · rintro ⟨_, _, ⟨validator, position, inZip, flags, same⟩, rfl⟩
-    cases same
-    have found := List.mem_zipIdx_iff_getElem?.mp inZip
-    have lt : position < state.validators.data.size := by
-      simpa using (List.getElem?_eq_some_iff.mp found).1
-    simp only [Bool.and_eq_true, Bool.not_eq_true'] at flags
-    refine ⟨validator, ?_, flags.1, flags.2⟩
-    rw [toNat_toUInt64_of_lt within lt]
-    simpa using found
-  · rintro ⟨validator, found, active, slashed⟩
-    refine ⟨v, validator.effectiveBalance, ⟨validator, v.toNat,
-      List.mem_zipIdx_iff_getElem?.mpr (by simpa using found), by simp [active, slashed], ?_⟩, rfl⟩
-    simp
+    Option.ite_none_right_eq_some, Option.some.injEq, Prod.exists] at member
+  obtain ⟨_, _, ⟨validator, position, inZip, flags, same⟩, rfl⟩ := member
+  cases same
+  have found := List.mem_zipIdx_iff_getElem?.mp inZip
+  have lt : position < state.validators.data.size := by
+    simpa using (List.getElem?_eq_some_iff.mp found).1
+  simp only [Bool.and_eq_true, Bool.not_eq_true'] at flags
+  refine ⟨validator, ?_, flags.1, flags.2⟩
+  rw [toNat_toUInt64_of_lt within lt]
+  simpa using found
 
 namespace Store
 
