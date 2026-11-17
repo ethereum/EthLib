@@ -3051,10 +3051,10 @@ A vote at most one epoch after the parent reads committees that the head state s
 For a far vote, the window holds the whole epoch before the target, where every validator active in the head state has a committee.
 
 The premise fails when the head state's shuffling places a newly active far voter at or after the current slot.
-An adversary can force that.
+An adversary can bring that about.
 Take a validator activated two epochs after the parent's epoch.
 It votes on a branch that left the head's branch after the parent, within the parent's epoch.
-That branch has a different RANDAO mix, so a different seed for the target epoch, and the head's shuffling may place the voter late.
+With `MIN_SEED_LOOKAHEAD` 1, that branch has a different RANDAO mix, so a different seed for the target epoch, and the head's shuffling may place the voter late.
 Each such occurrence leaves out at most that voter's balance.
 Let the maximum seed lookahead be at least two epochs, as on mainnet.
 Then the parent's state already sets that activation epoch, so the head's branch activates the voter too.

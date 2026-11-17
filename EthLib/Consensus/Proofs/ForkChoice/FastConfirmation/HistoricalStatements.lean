@@ -98,7 +98,7 @@ def AssignmentWindowAgreement (last : Nat) : Prop :=
 
 /-- Each later successful window read also succeeds with the source state's weights and boost.
 
-It fails on a window member that the source state does not hold, or on overflow. -/
+With positive `SLOTS_PER_EPOCH`, only a member missing from the source, or overflow, breaks it. -/
 def SourceWindowReads (call last : Nat) (source : BeaconState preset fork) : Prop :=
   ∀ w ∈ J, ∀ k (head : ForkChoiceNode) state current first finish maximum,
     (e.world call).time ≤ (e.world k).time → (e.world k).time ≤ last →
@@ -120,7 +120,9 @@ def HonestStoreEpochsBounded (horizon : Epoch) (last : Nat) : Prop :=
 
 The head descends from the block, and the store's epoch is at most two epochs after the block's.
 
-The window ends at the slot before the store's current slot. -/
+The window ends at the slot before the store's current slot.
+
+The vote has an origin, and the members are the committees of the head state in the window. -/
 def VoteInHeadWindow (config : Config) (store : Store preset fork) (parentRoot : Root)
     (parent : BeaconBlock preset fork) (members : Std.TreeSet ValidatorIndex)
     (v : ValidatorIndex) (attestation : Attestation preset fork) : Prop :=
@@ -138,7 +140,7 @@ def VoteInHeadWindow (config : Config) (store : Store preset fork) (parentRoot :
       .ok true ∧
     first ≤ attestation.data.slot ∧ attestation.data.slot ≤ finish
 
-/-- From the first time to the last, each voter below the parent is in an honest head's window. -/
+/-- From the first time to the last, each voter below the parent is in each honest head's window. -/
 def VotersInHeadWindow (parentRoot : Root) (first last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, first ≤ (e.world k).time → (e.world k).time ≤ last →
     ∀ parent members v attestation,
