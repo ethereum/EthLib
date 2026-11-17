@@ -62,6 +62,25 @@ Not yet released.
   The ENR text decoder starts after the four characters of `enr:`, so its positions count the whole text.
   The lemmas `readSextet_encodeSextet`, `decodeList_encodeList`, `encodeSextet_of_readSextet` and `encodeList_decodeList` hold at every starting position, an implicit argument.
 
+- In Lean, the errors of the light client carry the values that their check compared.
+  Nineteen constructors of `LightClientError` gain fields, and their codes keep their meaning.
+  - `invalidHeader` takes the slot of the header, and `unexpectedFinalizedHeader` the slot of the finalized header.
+  - `untrustedHeader` takes the trusted root and the root of the header.
+  - `invalidCurrentSyncCommitteeBranch`, `invalidFinalityBranch` and `invalidNextSyncCommitteeBranch` take the generalized index and the state root.
+  - `tooFewParticipants` takes the count of signers and the minimum.
+  - `slotsOutOfOrder` takes the current, signature, attested and finalized slots.
+  - `unknownSignaturePeriod` takes the signature period, the store period and whether the store knows the next committee.
+  - `irrelevantUpdate` takes the attested slot and the finalized slot of the store.
+  - `unexpectedNextSyncCommittee` takes the aggregate key of the committee, and `conflictingNextSyncCommittee` the aggregate keys of the store's committee and the update's.
+  - `invalidSignature` takes the signing root.
+  - `finalizedPeriodMismatch` takes the finalized period and the store period.
+  - `slotOverflow` takes the finalized slot and the timeout.
+  - `beforeAltair` takes the epoch of the state and the Altair epoch, and `stateNotAtBlock` the slot of the state and of its latest block header.
+  - `stateNotOfBlock` takes the block root of the state and the root it must equal, and `finalizedNotOfState` the finalized root of the state and the root of the given block.
+
+  The new `ToString` instance of `LightClientError` writes each error with its values, such as "expected trusted block root 0x…, got header root 0x…".
+  The Python `LightClientError` carries that message after "light client: ", in place of the Lean name of the constructor.
+
 - In Lean, every node of a Merkle tree has a `Merkle.Position`, its level and its index, and the tree passes positions instead of a level and an index.
   The node hash has type `Position → α → α → m α`; it had type `Nat → Nat → α → α → m α`, with the level first.
   `Merkle.node hash leaves ⟨level, j⟩`, `Merkle.siblings hash leaves p n`, `Merkle.ordered p` and `Merkle.climb hash p current siblings` take a position; `Merkle.root` and `Merkle.path` keep their arguments.

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Hex
 public import EthLib.Consensus.ForkSchedule
 public import EthLib.Consensus.LightClient.Containers
 public import EthLib.Consensus.Signing
@@ -47,46 +48,86 @@ open Base Cryptography.Bls Serialization.Ssz
 inductive LightClientError where
   /-- A root could not be computed. -/
   | ssz (error : Err)
-  /-- A header fails the checks of its fork. -/
-  | invalidHeader
-  /-- The header of a bootstrap is not the block that the client trusts. -/
-  | untrustedHeader
-  /-- The branch of the current sync committee does not reach the state root. -/
-  | invalidCurrentSyncCommitteeBranch
-  /-- Fewer members than the minimum signed the update. -/
-  | tooFewParticipants
-  /-- The slots of the update are not ordered: now, signature, attested header, finalized header. -/
-  | slotsOutOfOrder
-  /-- The update is signed in a period whose committee the store does not know. -/
-  | unknownSignaturePeriod
-  /-- The update brings neither a newer header nor the next sync committee. -/
-  | irrelevantUpdate
-  /-- An update without a finality branch carries a finalized header. -/
-  | unexpectedFinalizedHeader
-  /-- The finality branch does not reach the state root of the attested header. -/
-  | invalidFinalityBranch
-  /-- An update without a committee branch carries a next sync committee. -/
-  | unexpectedNextSyncCommittee
-  /-- The next sync committee of the update differs from the one that the store knows. -/
-  | conflictingNextSyncCommittee
-  /-- The branch of the next sync committee does not reach the state root of the attested header. -/
-  | invalidNextSyncCommitteeBranch
-  /-- The sync committee signature does not verify. -/
-  | invalidSignature
-  /-- The finalized header of an update lies outside the period of the store. -/
-  | finalizedPeriodMismatch
-  /-- The slot after which an update is forced leaves the 64-bit range. -/
-  | slotOverflow
+  /-- A header fails the checks of the fork of its slot, which the error gives. -/
+  | invalidHeader (slot : Slot)
+  /-- The header of a bootstrap is not the block that the client trusts.
+
+  The error gives the root of the trusted block, then the root of the header. -/
+  | untrustedHeader (trusted header : Root)
+  /-- The branch of the current sync committee does not reach the state root.
+
+  The error gives the generalized index of the committee and the state root. -/
+  | invalidCurrentSyncCommitteeBranch (gindex : Nat) (stateRoot : Root)
+  /-- Fewer members than the minimum signed the update.
+
+  The error gives the number of signers and the minimum. -/
+  | tooFewParticipants (count minimum : Nat)
+  /-- The slots of the update are not ordered: now, signature, attested header, finalized header.
+
+  The error gives the four slots in that order. -/
+  | slotsOutOfOrder (currentSlot signatureSlot attestedSlot finalizedSlot : Slot)
+  /-- The update is signed in a period whose committee the store does not know.
+
+  The error gives the period of the signature and the period of the store.
+
+  It also says whether the store knows the next committee. -/
+  | unknownSignaturePeriod (signaturePeriod storePeriod : UInt64) (nextKnown : Bool)
+  /-- The update brings neither a newer header nor the next sync committee.
+
+  The error gives the slot of the attested header and the finalized slot of the store. -/
+  | irrelevantUpdate (attestedSlot storeFinalizedSlot : Slot)
+  /-- An update that must carry the zero finalized header carries another one.
+
+  The error gives the slot of that header. -/
+  | unexpectedFinalizedHeader (slot : Slot)
+  /-- The finality branch does not reach the state root of the attested header.
+
+  The error gives the generalized index of the finalized root and the state root. -/
+  | invalidFinalityBranch (gindex : Nat) (stateRoot : Root)
+  /-- An update without a committee branch carries a next sync committee.
+
+  The error gives the aggregate key of that committee. -/
+  | unexpectedNextSyncCommittee (aggregatePubkey : BLSPubkey)
+  /-- The next sync committee of the update differs from the one that the store knows.
+
+  The error gives the aggregate key of the store's committee, then that of the update's. -/
+  | conflictingNextSyncCommittee (storeAggregatePubkey updateAggregatePubkey : BLSPubkey)
+  /-- The branch of the next sync committee does not reach the state root of the attested header.
+
+  The error gives the generalized index of the committee and the state root. -/
+  | invalidNextSyncCommitteeBranch (gindex : Nat) (stateRoot : Root)
+  /-- The sync committee signature does not verify against the root that the error gives. -/
+  | invalidSignature (signingRoot : Root)
+  /-- The finalized header of an update lies outside the period of the store.
+
+  The error gives the period of that header and the period of the store. -/
+  | finalizedPeriodMismatch (finalizedPeriod storePeriod : UInt64)
+  /-- The slot after which an update is forced leaves the 64-bit range.
+
+  The error gives the finalized slot of the store and the timeout added to it. -/
+  | slotOverflow (finalizedSlot timeout : Slot)
   /-- The fork has no light client: it comes before Altair. -/
   | forkNotSpecified (fork : Fork)
-  /-- A full node derives data from a state before Altair. -/
-  | beforeAltair
-  /-- A full node derives data from a state that is not at the slot of its latest block. -/
-  | stateNotAtBlock
-  /-- A full node derives data from a state that is not the post state of the block. -/
-  | stateNotOfBlock
-  /-- The finalized block that a full node gives is not the finalized block of the state. -/
-  | finalizedNotOfState
+  /-- A full node derives data from a state before Altair.
+
+  The error gives the epoch of the state and the epoch of Altair. -/
+  | beforeAltair (epoch altairEpoch : Epoch)
+  /-- A full node derives data from a state that is not at the slot of its latest block.
+
+  The error gives the slot of the state and the slot of its latest block header. -/
+  | stateNotAtBlock (stateSlot blockSlot : Slot)
+  /-- A full node derives data from a state that is not the post state of the block.
+
+  The error gives the root of the block that the state holds, then the root it must equal.
+
+  That root is the root of the block, or the parent root of the block that signs an update. -/
+  | stateNotOfBlock (stateBlockRoot blockRoot : Root)
+  /-- The finalized block that a full node gives is not the finalized block of the state.
+
+  The error gives the finalized root of the state, then the root of the given block.
+
+  For a block at the genesis slot the second root is zero. -/
+  | finalizedNotOfState (stateFinalizedRoot blockRoot : Root)
   deriving DecidableEq, Repr
 
 namespace LightClientError
@@ -94,26 +135,80 @@ namespace LightClientError
 /-- The code of an error: one per constructor, from 1. -/
 def code : LightClientError → UInt32
   | .ssz _ => 1
-  | .invalidHeader => 2
-  | .untrustedHeader => 3
-  | .invalidCurrentSyncCommitteeBranch => 4
-  | .tooFewParticipants => 5
-  | .slotsOutOfOrder => 6
-  | .unknownSignaturePeriod => 7
-  | .irrelevantUpdate => 8
-  | .unexpectedFinalizedHeader => 9
-  | .invalidFinalityBranch => 10
-  | .unexpectedNextSyncCommittee => 11
-  | .conflictingNextSyncCommittee => 12
-  | .invalidNextSyncCommitteeBranch => 13
-  | .invalidSignature => 14
-  | .finalizedPeriodMismatch => 15
-  | .slotOverflow => 16
+  | .invalidHeader _ => 2
+  | .untrustedHeader .. => 3
+  | .invalidCurrentSyncCommitteeBranch .. => 4
+  | .tooFewParticipants .. => 5
+  | .slotsOutOfOrder .. => 6
+  | .unknownSignaturePeriod .. => 7
+  | .irrelevantUpdate .. => 8
+  | .unexpectedFinalizedHeader _ => 9
+  | .invalidFinalityBranch .. => 10
+  | .unexpectedNextSyncCommittee _ => 11
+  | .conflictingNextSyncCommittee .. => 12
+  | .invalidNextSyncCommitteeBranch .. => 13
+  | .invalidSignature _ => 14
+  | .finalizedPeriodMismatch .. => 15
+  | .slotOverflow .. => 16
   | .forkNotSpecified _ => 17
-  | .beforeAltair => 18
-  | .stateNotAtBlock => 19
-  | .stateNotOfBlock => 20
-  | .finalizedNotOfState => 21
+  | .beforeAltair .. => 18
+  | .stateNotAtBlock .. => 19
+  | .stateNotOfBlock .. => 20
+  | .finalizedNotOfState .. => 21
+
+/-- The message of an error, with the values that its check compared. -/
+instance : ToString LightClientError where
+  toString
+    | .ssz error => s!"a root cannot be computed: {reprStr error}"
+    | .invalidHeader slot => s!"the header at slot {slot} is not valid for the fork of its slot"
+    | .untrustedHeader trusted header =>
+      s!"expected trusted block root {hexString trusted.toList}, " ++
+        s!"got header root {hexString header.toList}"
+    | .invalidCurrentSyncCommitteeBranch gindex stateRoot =>
+      s!"the current sync committee branch at generalized index {gindex} " ++
+        s!"does not reach state root {hexString stateRoot.toList}"
+    | .tooFewParticipants count minimum =>
+      s!"{count} sync committee participants, expected at least {minimum}"
+    | .slotsOutOfOrder current signature attested finalized =>
+      s!"expected current slot {current} >= signature slot {signature} > " ++
+        s!"attested slot {attested} >= finalized slot {finalized}"
+    | .unknownSignaturePeriod signature store nextKnown =>
+      s!"signature period {signature} has no known committee: store period {store}, " ++
+        s!"next committee known: {nextKnown}"
+    | .irrelevantUpdate attested storeFinalized =>
+      s!"attested slot {attested} is not after the store's finalized slot {storeFinalized}, " ++
+        "and the update brings no next sync committee that the store lacks"
+    | .unexpectedFinalizedHeader slot =>
+      s!"expected the zero finalized header, got a header at slot {slot}"
+    | .invalidFinalityBranch gindex stateRoot =>
+      s!"the finality branch at generalized index {gindex} " ++
+        s!"does not reach state root {hexString stateRoot.toList}"
+    | .unexpectedNextSyncCommittee key =>
+      s!"expected the zero next sync committee, got another with aggregate key " ++
+        hexString key.toList
+    | .conflictingNextSyncCommittee store update =>
+      s!"the next sync committee differs from the store's: aggregate keys " ++
+        s!"{hexString store.toList} in the store and {hexString update.toList} in the update"
+    | .invalidNextSyncCommitteeBranch gindex stateRoot =>
+      s!"the next sync committee branch at generalized index {gindex} " ++
+        s!"does not reach state root {hexString stateRoot.toList}"
+    | .invalidSignature signingRoot =>
+      s!"the sync committee signature does not verify for signing root " ++
+        hexString signingRoot.toList
+    | .finalizedPeriodMismatch finalized store =>
+      s!"finalized period {finalized}, expected the store period {store}"
+    | .slotOverflow finalized timeout =>
+      s!"finalized slot {finalized} plus timeout {timeout} leaves the 64-bit range"
+    | .forkNotSpecified fork => s!"fork {fork.name} has no light client"
+    | .beforeAltair epoch altair => s!"state epoch {epoch} is before the Altair epoch {altair}"
+    | .stateNotAtBlock stateSlot blockSlot =>
+      s!"state slot {stateSlot}, expected the slot of its latest block {blockSlot}"
+    | .stateNotOfBlock stateBlock block =>
+      s!"the block root of the state {hexString stateBlock.toList} " ++
+        s!"differs from the root it must equal {hexString block.toList}"
+    | .finalizedNotOfState stateFinalized block =>
+      s!"the finalized root of the state {hexString stateFinalized.toList} differs from " ++
+        s!"{hexString block.toList}, the root of the given block, or zero at the genesis slot"
 
 end LightClientError
 
@@ -352,15 +447,16 @@ def initializeLightClientStore (config : Config) (trustedBlockRoot : Root)
     (bootstrap : LightClientBootstrap preset fork) :
     Except LightClientError (LightClientStore preset fork) := do
   requireFork fork
-  require (← isValidLightClientHeader config bootstrap.header) .invalidHeader
-  require ((← liftRoot (SszType.hashTreeRoot bootstrap.header.beacon)) = trustedBlockRoot)
-    .untrustedHeader
+  require (← isValidLightClientHeader config bootstrap.header)
+    (.invalidHeader bootstrap.header.beacon.slot)
+  let headerRoot ← liftRoot (SszType.hashTreeRoot bootstrap.header.beacon)
+  require (headerRoot = trustedBlockRoot) (.untrustedHeader trustedBlockRoot headerRoot)
   let leaf ← liftRoot (SszType.hashTreeRoot bootstrap.currentSyncCommittee)
   let gindex ← currentSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
     bootstrap.header.beacon.slot
   require (← liftRoot (isValidNormalizedMerkleBranch leaf
       bootstrap.currentSyncCommitteeBranch.toList gindex bootstrap.header.beacon.stateRoot))
-    .invalidCurrentSyncCommitteeBranch
+    (.invalidCurrentSyncCommitteeBranch gindex bootstrap.header.beacon.stateRoot)
   return {
     finalizedHeader := bootstrap.header
     currentSyncCommittee := bootstrap.currentSyncCommittee
@@ -389,31 +485,31 @@ def validateFinality (config : Config) (update : LightClientUpdate preset fork) 
     Except LightClientError Unit := do
   if !update.isFinalityUpdate then
     require (sameSszValue update.finalizedHeader (LightClientHeader.empty preset fork))
-      .unexpectedFinalizedHeader
+      (.unexpectedFinalizedHeader update.finalizedHeader.beacon.slot)
   else
     let finalizedRoot ← if update.finalizedHeader.beacon.slot = GENESIS_SLOT then do
         require (sameSszValue update.finalizedHeader (LightClientHeader.empty preset fork))
-          .unexpectedFinalizedHeader
+          (.unexpectedFinalizedHeader update.finalizedHeader.beacon.slot)
         pure zeroBytes32
       else do
         require (← isValidLightClientHeader config update.finalizedHeader)
-          .invalidHeader
+          (.invalidHeader update.finalizedHeader.beacon.slot)
         liftRoot (SszType.hashTreeRoot update.finalizedHeader.beacon)
+    let gindex ← finalizedRootGindexAtSlot (preset := preset) (fork := fork) config
+      update.attestedHeader.beacon.slot
     require (← liftRoot (isValidNormalizedMerkleBranch finalizedRoot update.finalityBranch.toList
-        (← finalizedRootGindexAtSlot (preset := preset) (fork := fork) config
-          update.attestedHeader.beacon.slot)
-        update.attestedHeader.beacon.stateRoot))
-      .invalidFinalityBranch
+        gindex update.attestedHeader.beacon.stateRoot))
+      (.invalidFinalityBranch gindex update.attestedHeader.beacon.stateRoot)
 
 /-- The branch check of the next sync committee of an update, against the attested state root. -/
 def validateNextSyncCommitteeBranch (config : Config) (update : LightClientUpdate preset fork) :
     Except LightClientError Unit := do
   let leaf ← liftRoot (SszType.hashTreeRoot update.nextSyncCommittee)
+  let gindex ← nextSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
+    update.attestedHeader.beacon.slot
   require (← liftRoot (isValidNormalizedMerkleBranch leaf update.nextSyncCommitteeBranch.toList
-      (← nextSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
-        update.attestedHeader.beacon.slot)
-      update.attestedHeader.beacon.stateRoot))
-    .invalidNextSyncCommitteeBranch
+      gindex update.attestedHeader.beacon.stateRoot))
+    (.invalidNextSyncCommitteeBranch gindex update.attestedHeader.beacon.stateRoot)
 
 /-- The committee that signs an update: the current one in the period of the store.
 
@@ -457,36 +553,42 @@ def validateLightClientUpdate (config : Config) (checks : SignatureChecks)
   requireFork fork
   let aggregate := update.syncAggregate
   require (aggregate.participants ≥ preset.MIN_SYNC_COMMITTEE_PARTICIPANTS.toNat)
-    .tooFewParticipants
-  require (← isValidLightClientHeader config update.attestedHeader) .invalidHeader
+    (.tooFewParticipants aggregate.participants preset.MIN_SYNC_COMMITTEE_PARTICIPANTS.toNat)
+  require (← isValidLightClientHeader config update.attestedHeader)
+    (.invalidHeader update.attestedHeader.beacon.slot)
   let attestedSlot := update.attestedHeader.beacon.slot
   let finalizedSlot := update.finalizedHeader.beacon.slot
   require (currentSlot ≥ update.signatureSlot ∧ update.signatureSlot > attestedSlot ∧
-    attestedSlot ≥ finalizedSlot) .slotsOutOfOrder
+    attestedSlot ≥ finalizedSlot)
+    (.slotsOutOfOrder currentSlot update.signatureSlot attestedSlot finalizedSlot)
   let period := computeSyncCommitteePeriodAtSlot preset
   let storePeriod := period store.finalizedHeader.beacon.slot
   let signaturePeriod := period update.signatureSlot
   if store.isNextSyncCommitteeKnown then
     require (signaturePeriod = storePeriod ∨ signaturePeriod = storePeriod + 1)
-      .unknownSignaturePeriod
+      (.unknownSignaturePeriod signaturePeriod storePeriod true)
   else
-    require (signaturePeriod = storePeriod) .unknownSignaturePeriod
+    require (signaturePeriod = storePeriod)
+      (.unknownSignaturePeriod signaturePeriod storePeriod false)
   let attestedPeriod := period attestedSlot
   let hasNextSyncCommittee := !store.isNextSyncCommitteeKnown &&
     (update.isSyncCommitteeUpdate && attestedPeriod == storePeriod)
   require (attestedSlot > store.finalizedHeader.beacon.slot ∨ hasNextSyncCommittee)
-    .irrelevantUpdate
+    (.irrelevantUpdate attestedSlot store.finalizedHeader.beacon.slot)
   validateFinality config update
   if !update.isSyncCommitteeUpdate then
-    require (update.nextSyncCommittee = SyncCommittee.empty preset) .unexpectedNextSyncCommittee
+    require (update.nextSyncCommittee = SyncCommittee.empty preset)
+      (.unexpectedNextSyncCommittee update.nextSyncCommittee.aggregatePubkey)
   else
     if attestedPeriod = storePeriod ∧ store.isNextSyncCommitteeKnown then
-      require (update.nextSyncCommittee = store.nextSyncCommittee) .conflictingNextSyncCommittee
+      require (update.nextSyncCommittee = store.nextSyncCommittee)
+        (.conflictingNextSyncCommittee store.nextSyncCommittee.aggregatePubkey
+          update.nextSyncCommittee.aggregatePubkey)
     validateNextSyncCommitteeBranch config update
   let keys := (store.signatureCommittee update).participantKeys aggregate
   let signingRoot ← syncCommitteeSigningRoot config update genesisValidatorsRoot
   require (checks.fastAggregateVerify keys (packBytes signingRoot)
-    aggregate.syncCommitteeSignature = true) .invalidSignature
+    aggregate.syncCommitteeSignature = true) (.invalidSignature signingRoot)
 
 /-- The store after it applies an update that it has checked.
 
@@ -503,7 +605,8 @@ def applyLightClientUpdate (store : LightClientStore preset fork)
   let storePeriod := period store.finalizedHeader.beacon.slot
   let finalizedPeriod := period update.finalizedHeader.beacon.slot
   let store ← if !store.isNextSyncCommitteeKnown then do
-      require (finalizedPeriod = storePeriod) .finalizedPeriodMismatch
+      require (finalizedPeriod = storePeriod)
+        (.finalizedPeriodMismatch finalizedPeriod storePeriod)
       pure { store with nextSyncCommittee := update.nextSyncCommittee }
     else if finalizedPeriod = storePeriod + 1 then
       pure { store with
@@ -530,7 +633,8 @@ def processLightClientStoreForceUpdate (store : LightClientStore preset fork)
     (currentSlot : Slot) : Except LightClientError (LightClientStore preset fork) := do
   requireFork fork
   let timeout := store.finalizedHeader.beacon.slot.toNat + preset.UPDATE_TIMEOUT.toNat
-  require (timeout < 2 ^ 64) .slotOverflow
+  require (timeout < 2 ^ 64)
+    (.slotOverflow store.finalizedHeader.beacon.slot preset.UPDATE_TIMEOUT)
   match store.bestValidUpdate with
   | some best =>
     if currentSlot.toNat > timeout then

@@ -39,7 +39,7 @@ open Serialization.Ssz.Exports (runSsz)
 
 /-- A result of the light client, with the code of its error. -/
 def runLightClient {α : Type} (act : Except LightClientError α) : Result α :=
-  act.mapError fun e => (e.code, s!"light client: {reprStr e}")
+  act.mapError fun e => (e.code, s!"light client: {e}")
 
 /-- The preset and a fork of the light client, from Altair. -/
 def lightClientPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
@@ -190,12 +190,12 @@ def lightClientUpdateProofsOf
     | other => throw (0, s!"no update of type {other}")
   runLightClient do
     LightClientError.require (← isValidLightClientHeader config update.attestedHeader)
-      .invalidHeader
+      (.invalidHeader update.attestedHeader.beacon.slot)
     validateFinality config update
     if update.isSyncCommitteeUpdate then validateNextSyncCommitteeBranch config update
     else
       LightClientError.require (update.nextSyncCommittee = SyncCommittee.empty preset)
-        .unexpectedNextSyncCommittee
+        (.unexpectedNextSyncCommittee update.nextSyncCommittee.aggregatePubkey)
   return true
 
 /-- Whether the proofs of an update or a finality update, given as bytes, verify.

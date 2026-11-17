@@ -109,7 +109,7 @@ theorem createLightClientUpdate_signature {config : Config} {signatureFork final
   unfold createLightClientUpdate at created
   simp only [bind_ok_iff] at created
   obtain ⟨_, -, ⟨signatureAltair⟩, -, _, -, _, few, _, -, _, -, _, -, _, -, _, -, _, -, _, -, _, -,
-    _, -, _, -, tail⟩ := created
+    _, -, _, -, _, -, tail⟩ := created
   have enough := LightClientError.require_ok.mp few
   -- Every path to a result ends in an update with the slot of the block and the aggregate of it.
   suffices h : update.signatureSlot = block.message.slot ∧
