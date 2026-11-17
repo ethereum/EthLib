@@ -32,14 +32,6 @@ private theorem window_reserve_core {β a n q j r Wa X : ℕ} (half : 2 * β ≤
     nlinarith
   · nlinarith
 
-private theorem stake_disjoint_union {ν : Type*} [DecidableEq ν] {w : ν → ℕ} {S T : Finset ν}
-    (apart : Disjoint S T) : stake w (S ∪ T) = stake w S + stake w T :=
-  Finset.sum_union apart
-
-private theorem stake_filter_split {ν : Type*} {w : ν → ℕ} (S : Finset ν) (p : ν → Prop)
-    [DecidablePred p] : stake w {v ∈ S | p v} + stake w {v ∈ S | ¬ p v} = stake w S :=
-  Finset.sum_filter_add_sum_filter_not S p w
-
 private theorem source_surplus_of_sets {ν : Type*} [DecidableEq ν] {J : Set ν}
     [DecidablePred (· ∈ J)] {w : ν → ℕ}
     {Wadv Wc Xm Sup I Hd P Q : Finset ν} {β maximum boost shift A D sM X : ℕ}
@@ -92,20 +84,23 @@ private theorem source_surplus_of_sets {ν : Type*} [DecidableEq ν] {J : Set ν
       · exact q
     have pBound := stake_mono (w := w) inP
     have qBound := stake_mono (w := w) inQ
-    rw [stake_disjoint_union hsRest, stake_disjoint_union newRest] at pBound
     have unionY := stake_mono (w := w) (Finset.subset_union_left (s₁ := Y ∩ Wc) (s₂ := Hd ∩ P))
     have unionD := stake_mono (w := w) (Finset.subset_union_right (s₁ := Y ∩ Wc) (s₂ := Hd ∩ P))
     have parentSplit : stake w (Hd ∩ P) + stake w (Hd \ P) = stake w Hd :=
       Finset.sum_inter_add_sum_sdiff Hd P w
+    -- The three disjoint parts of the reached set weigh as much as their sum.
+    unfold stake at pBound qBound unionY unionD parentSplit ⊢
+    rw [Finset.sum_union hsRest, Finset.sum_union newRest] at pBound
     omega
   -- The caller's Byzantine supporters and equivocators fit in the adversary range.
   have byzantine := ForkChoice.byzantine_support_add_le (w := w) (J := J) supIn equivocatorsIn
     apart equivocatorsDishonest
-  have supSplit := stake_filter_split (w := w) Sup (· ∈ J)
+  have supSplit : stake w {v ∈ Sup | v ∈ J} + stake w {v ∈ Sup | v ∉ J} = stake w Sup :=
+    Finset.sum_filter_add_sum_filter_not Sup (· ∈ J) w
   -- The receiver window splits into the caller window and its new members.
   have windowSplit : stake w (Wc ∪ Xm) = stake w Wc + stake w (Xm \ Wc) := by
     rw [← Finset.union_sdiff_self_eq_union]
-    exact stake_disjoint_union Finset.disjoint_sdiff
+    exact Finset.sum_union Finset.disjoint_sdiff
   -- The reserve window splits into the adversary range, the new members and the repeats.
   have vEq : Wadv ∪ Xm = Wadv ∪ ((Xm \ Wc) ∪ ((Xm \ Wadv) ∩ Wc)) := by
     ext v
@@ -131,13 +126,15 @@ private theorem source_surplus_of_sets {ν : Type*} [DecidableEq ν] {J : Set ν
     Finset.disjoint_left.mpr fun v x y => (Finset.mem_sdiff.mp x).2 (Finset.mem_inter.mp y).2
   have vStake : stake w (Wadv ∪ Xm) =
       stake w Wadv + stake w (Xm \ Wc) + stake w ((Xm \ Wadv) ∩ Wc) := by
-    rw [vEq, stake_disjoint_union vApart, stake_disjoint_union xApart, Nat.add_assoc]
+    unfold stake
+    rw [vEq, Finset.sum_union vApart, Finset.sum_union xApart, Nat.add_assoc]
   have vFilter : {v ∈ Wadv ∪ Xm | v ∉ J} =
       {v ∈ Wadv | v ∉ J} ∪ ({v ∈ Xm \ Wc | v ∉ J} ∪ {v ∈ (Xm \ Wadv) ∩ Wc | v ∉ J}) := by
     rw [vEq, Finset.filter_union, Finset.filter_union]
   have vDishonest : stake w {v ∈ Wadv ∪ Xm | v ∉ J} = stake w {v ∈ Wadv | v ∉ J} +
       stake w {v ∈ Xm \ Wc | v ∉ J} + stake w {v ∈ (Xm \ Wadv) ∩ Wc | v ∉ J} := by
-    rw [vFilter, stake_disjoint_union, stake_disjoint_union, Nat.add_assoc]
+    unfold stake
+    rw [vFilter, Finset.sum_union, Finset.sum_union, Nat.add_assoc]
     · exact Finset.disjoint_filter_filter xApart
     · rw [← Finset.filter_union]; exact Finset.disjoint_filter_filter vApart
   -- The honest new and repeated members are exactly the parts of `Y`.
@@ -153,8 +150,11 @@ private theorem source_surplus_of_sets {ν : Type*} [DecidableEq ν] {J : Set ν
     ext v
     simp only [Y, Finset.mem_filter, Finset.mem_inter]
     tauto
-  have newSplit := stake_filter_split (w := w) (Xm \ Wc) (· ∈ J)
-  have repeatSplit := stake_filter_split (w := w) ((Xm \ Wadv) ∩ Wc) (· ∈ J)
+  have newSplit : stake w {v ∈ Xm \ Wc | v ∈ J} + stake w {v ∈ Xm \ Wc | v ∉ J} =
+      stake w (Xm \ Wc) := Finset.sum_filter_add_sum_filter_not (Xm \ Wc) (· ∈ J) w
+  have repeatSplit : stake w {v ∈ (Xm \ Wadv) ∩ Wc | v ∈ J} +
+      stake w {v ∈ (Xm \ Wadv) ∩ Wc | v ∉ J} = stake w ((Xm \ Wadv) ∩ Wc) :=
+    Finset.sum_filter_add_sum_filter_not ((Xm \ Wadv) ∩ Wc) (· ∈ J) w
   rw [newHonest] at newSplit
   rw [repeatHonest] at repeatSplit
   have aLe : stake w {v ∈ Wadv | v ∉ J} ≤ stake w Wadv := stake_mono (Finset.filter_subset _ _)
@@ -190,7 +190,8 @@ private theorem honest_vote_of_margin {ν : Type*} [DecidableEq ν] {J : Set ν}
   have empty : Hd = ∅ := Finset.not_nonempty_iff_eq_empty.mp noVoter
   have noHonest : {v ∈ Sup | v ∈ J} = ∅ :=
     Finset.filter_eq_empty_iff.mpr fun v member honest => noSupporter ⟨v, member, honest⟩
-  have supSplit := stake_filter_split (w := w) Sup (· ∈ J)
+  have supSplit : stake w {v ∈ Sup | v ∈ J} + stake w {v ∈ Sup | v ∉ J} = stake w Sup :=
+    Finset.sum_filter_add_sum_filter_not Sup (· ∈ J) w
   rw [noHonest] at supSplit
   have zeroHonest : stake w (∅ : Finset ν) = 0 := Finset.sum_empty
   have zeroVoters : stake w Hd = 0 := by rw [empty]; exact Finset.sum_empty
