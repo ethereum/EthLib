@@ -549,16 +549,23 @@ private theorem Store.Reachable.anchor_processSlots_root
     rw [header, reachable.root found, Except.ok.injEq] at cached
     exact cached.symm
 
-/-- A known history root in lookahead agrees with the ancestor walk after the anchor slot. -/
-theorem Store.Reachable.lookahead_history_ancestor
+/-- A history root in lookahead agrees with the ancestor walk after the anchor slot.
+
+Some store reachable from the same anchor must hold the block of that root.
+
+The anchor store does not tie the anchor state's latest header to the anchor block.
+
+So in lookahead from the anchor, only a held root shows that the header is the anchor block's. -/
+theorem Store.Reachable.lookahead_history_ancestor_of_held
     (reachable : Store.Reachable config anchorState anchorBlock store)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (nonzero : ∀ (root : Root) (block : BeaconBlock preset fork), store.blocks[root]? = some block →
       block.stateRoot ≠ Vector.replicate 32 0)
+    {other : Store preset fork} (holder : Store.Reachable config anchorState anchorBlock other)
     {root readRoot : Root} {state advanced : BeaconState preset fork}
     {readBlock : BeaconBlock preset fork} {checks : SignatureChecks} {slot query : Slot}
     (stored : store.blockStates[root]? = some state)
-    (known : store.blocks[readRoot]? = some readBlock)
+    (known : other.blocks[readRoot]? = some readBlock)
     (computed : lookaheadState config checks state slot = .ok advanced)
     (read : getBlockRootAtSlot advanced query = .ok readRoot)
     (later : anchorState.slot ≤ query) (status : PayloadStatus) :
@@ -577,8 +584,15 @@ theorem Store.Reachable.lookahead_history_ancestor
       rw [stored, Option.some.injEq] at postOk
       subst post
       by_cases same : block = anchorBlock
-      · have eq := reachable.anchor_processSlots_root (by simpa [same] using nonzero _ _ found)
-          (same ▸ found) known ((anchored same) ▸ slotsOk) read later
+      · -- The holder knows the anchor block at the same root as this store.
+        obtain ⟨anchorRoot, hashed, held⟩ := holder.anchor_known
+        have rootEq : root = anchorRoot := by
+          have rooted := reachable.root found
+          rw [same, hashed, Except.ok.injEq] at rooted
+          exact rooted.symm
+        have eq := holder.anchor_processSlots_root (by simpa [same] using nonzero _ _ found)
+          held known ((anchored same) ▸ slotsOk) read later
+        rw [← rootEq] at eq
         rw [Store.getAncestor_of_le found (same ▸ UInt64.le_trans anchorSlot later)]
         simp only [Functor.map, Except.map, eq]
       · have eq := getBlockRootAtSlot_processSlots_header (reachable.blockState_root found stored)
@@ -596,6 +610,23 @@ theorem Store.Reachable.lookahead_history_ancestor
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     subst advanced
     exact reachable.blockState_history_ancestor anchorSlot nonzero stored read later status
+
+/-- A known history root in lookahead agrees with the ancestor walk after the anchor slot. -/
+theorem Store.Reachable.lookahead_history_ancestor
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (nonzero : ∀ (root : Root) (block : BeaconBlock preset fork), store.blocks[root]? = some block →
+      block.stateRoot ≠ Vector.replicate 32 0)
+    {root readRoot : Root} {state advanced : BeaconState preset fork}
+    {readBlock : BeaconBlock preset fork} {checks : SignatureChecks} {slot query : Slot}
+    (stored : store.blockStates[root]? = some state)
+    (known : store.blocks[readRoot]? = some readBlock)
+    (computed : lookaheadState config checks state slot = .ok advanced)
+    (read : getBlockRootAtSlot advanced query = .ok readRoot)
+    (later : anchorState.slot ≤ query) (status : PayloadStatus) :
+    (·.root) <$> store.getAncestor ⟨root, status⟩ query = .ok readRoot :=
+  reachable.lookahead_history_ancestor_of_held anchorSlot nonzero reachable stored known computed
+    read later status
 
 /-- A reachable receiver holding the tip agrees on ancestor walks above the anchor slot. -/
 theorem Store.getAncestor_of_same_blocks {store receiver : Store preset fork}

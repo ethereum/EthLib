@@ -21,6 +21,17 @@ Not yet released.
   They retain the network and duty conditions and require deposited genesis history, preset bounds, a fixed-fork horizon, stake floors and an absent anchor parent.
   The alternative is the reference-stake inequality with derived drift, or `DirectSafety.HashEvidence`, not an a priori drift bound.
 
+- `Execution.honestHeadsCover_of_signed_justification` derives the late half of the root's viability inside the same induction ([#2656](https://github.com/ethereum/EthLib/issues/2656)).
+  A justified checkpoint after the call's epoch descends from the root, because an honest validator signed a vote for it after the call.
+  It takes `EarlyJustifiedConsistent`, `RootKeepsViableLeaf` and `JustifiedHonestlySigned` instead of `RootViable`.
+  `Execution.honestHeadsCover_of_historical_anchor` keeps its statement.
+  `slotStart_le_clock` is now public.
+
+- `HonestVoteData.target_read` reads the target of an honest vote from its voter's head, without the reads of a duty vote.
+  It needs the target block held by some store reachable from the same anchor.
+  The anchor store does not tie the anchor state's latest header to the anchor block, so a read at the anchor needs that block.
+  `VoteAt.data_target` follows from it, and `Store.Reachable.lookahead_history_ancestor_of_held` is the walk it reads.
+
 - `Store.Reachable.isViableLeaf_finalized` shows that each viable leaf of a reachable store descends from the finalized block, also at a genesis finalized epoch ([#1423](https://github.com/ethereum/EthLib/issues/1423)).
   Its checkpoint block at the finalized epoch is the finalized block.
   It asks that the anchor block is not after the anchor state and that its parent root names no known block.
