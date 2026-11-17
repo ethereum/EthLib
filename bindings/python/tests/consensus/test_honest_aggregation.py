@@ -34,6 +34,11 @@ DATA += struct.pack("<Q", 2) + bytes(32)
 # The data of another vote, for another block root.
 OTHER_DATA = DATA[:16] + bytes([1]) * 32 + DATA[48:]
 
+# The messages of errors that several tests share.
+NO_MATCH = f"no message matches the one to aggregate, at slot {SLOT} for block 0x{bytes(32).hex()}"
+NO_SIGNATURE = "BLS: empty signature list"
+NOT_A_POINT = "BLS: invalid G2 point"
+
 
 def bitlist(bits: list) -> bytes:
     """The SSZ bytes of a bitlist: the bits from the lowest, then a closing bit."""
@@ -77,11 +82,13 @@ def test_aggregate_signature():
 
 
 @pytest.mark.parametrize(
-    "attestations", [[], [phase0_attestation([True], DATA, bytes(96))]], ids=["none", "bad"]
+    ("attestations", "message"),
+    [([], NO_SIGNATURE), ([phase0_attestation([True], DATA, bytes(96))], NOT_A_POINT)],
+    ids=["none", "bad"],
 )
-def test_aggregate_signature_rejected(attestations: list):
+def test_aggregate_signature_rejected(attestations: list, message: str):
     # The aggregate of no signature, or of bytes that are no point, fails in BLS.
-    with raises(DUTY_ERROR, "validator duty failed with code 3") as info:
+    with raises(DUTY_ERROR, message) as info:
         consensus.get_aggregate_signature("mainnet", "phase0", attestations)
     assert info.value.code == 3
 
@@ -111,7 +118,8 @@ def test_attestation_of_a_validator():
 
 def test_attestation_of_a_validator_outside_its_committee():
     outside = next(v for v in range(COUNT) if v not in _expected_committee(COUNT, 2, SLOT))
-    with raises(DUTY_ERROR, "validator duty failed with code 8") as info:
+    message = f"validator {outside} has no seat in the committee of its message"
+    with raises(DUTY_ERROR, message) as info:
         _attest(outside)
     assert info.value.code == 8
 
@@ -162,17 +170,21 @@ def test_aggregate_of_attestations_with_the_attestation_of_a_validator():
 
 
 @pytest.mark.parametrize(
-    ("attestations", "code"),
+    ("attestations", "message", "code"),
     [
-        ([], 9),
-        ([phase0_attestation([True, False], OTHER_DATA, vote(1))], 9),
-        ([phase0_attestation([True, False, False], DATA, vote(1))], 11),
-        ([phase0_attestation([True, False], DATA, bytes(96))], 3),
+        ([], NO_MATCH, 9),
+        ([phase0_attestation([True, False], OTHER_DATA, vote(1))], NO_MATCH, 9),
+        (
+            [phase0_attestation([True, False, False], DATA, vote(1))],
+            "3 aggregation bits, expected one for each of 2 members",
+            11,
+        ),
+        ([phase0_attestation([True, False], DATA, bytes(96))], NOT_A_POINT, 3),
     ],
     ids=["none", "other data", "three bits", "bad signature"],
 )
-def test_aggregate_of_attestations_rejected(attestations: list, code: int):
-    with raises(DUTY_ERROR, f"validator duty failed with code {code}") as info:
+def test_aggregate_of_attestations_rejected(attestations: list, message: str, code: int):
+    with raises(DUTY_ERROR, message) as info:
         _aggregate(attestations)
     assert info.value.code == code
 
@@ -288,15 +300,17 @@ def test_aggregate_of_the_single_attestations_of_a_committee(pectra: bytes):
 def test_aggregate_of_single_attestations_rejected(pectra: bytes):
     first, _ = _committee(pectra)
     outside = next(v for v in range(COUNT) if v not in _committee(pectra))
+    no_seat = f"validator {outside} has no seat in the committee of its message"
+    # A slot has 64 committees on mainnet, so index 64 is out of range.
     cases = [
-        ([single(64, first, DATA, vote(1))], 64, 12),
-        ([], 0, 9),
-        ([single(0, first, OTHER_DATA, vote(1))], 0, 9),
-        ([single(0, outside, DATA, vote(1))], 0, 8),
-        ([single(0, first, DATA, bytes(96))], 0, 3),
+        ([single(64, first, DATA, vote(1))], 64, "index 64 is not below 64", 12),
+        ([], 0, NO_MATCH, 9),
+        ([single(0, first, OTHER_DATA, vote(1))], 0, NO_MATCH, 9),
+        ([single(0, outside, DATA, vote(1))], 0, no_seat, 8),
+        ([single(0, first, DATA, bytes(96))], 0, NOT_A_POINT, 3),
     ]
-    for singles, committee, code in cases:
-        with raises(DUTY_ERROR, f"validator duty failed with code {code}") as info:
+    for singles, committee, message, code in cases:
+        with raises(DUTY_ERROR, message) as info:
             _aggregate_singles(pectra, singles, committee)
         assert info.value.code == code
 
@@ -367,22 +381,38 @@ def test_sync_committee_contribution_takes_the_first_message_of_a_key():
     assert _contribute(messages) == contribution(1, list(range(0, SUBCOMMITTEE_SIZE, 2)), joined)
 
 
+# The message when no sync committee message is at the slot of the state for the root.
+SYNC_NO_MATCH = f"no message matches the one to aggregate, at slot {SLOT} for block 0x{ROOT.hex()}"
+
+
 @pytest.mark.parametrize(
-    ("messages", "subcommittee", "committee", "code"),
+    ("messages", "subcommittee", "committee", "error", "code"),
     [
-        ([message(SLOT, ROOT, 5, vote(1))], 4, MIXED, 12),
-        ([], 1, MIXED, 9),
-        ([message(SLOT, bytes(32), 5, vote(1))], 1, MIXED, 9),
-        ([message(SLOT, ROOT, COUNT, vote(1))], 1, MIXED, 1),
-        ([message(SLOT, ROOT, 5, vote(1))], 1, sync_committee([OTHER_PUBKEY] * 512), 8),
-        ([message(SLOT, ROOT, 5, bytes(96))], 1, MIXED, 3),
+        ([message(SLOT, ROOT, 5, vote(1))], 4, MIXED, "index 4 is not below 4", 12),
+        ([], 1, MIXED, SYNC_NO_MATCH, 9),
+        ([message(SLOT, bytes(32), 5, vote(1))], 1, MIXED, SYNC_NO_MATCH, 9),
+        (
+            [message(SLOT, ROOT, COUNT, vote(1))],
+            1,
+            MIXED,
+            f"a state accessor fails: EthLib.Consensus.AccessorError.indexOutOfRange {COUNT}",
+            1,
+        ),
+        (
+            [message(SLOT, ROOT, 5, vote(1))],
+            1,
+            sync_committee([OTHER_PUBKEY] * 512),
+            "validator 5 has no seat in the committee of its message",
+            8,
+        ),
+        ([message(SLOT, ROOT, 5, bytes(96))], 1, MIXED, NOT_A_POINT, 3),
     ],
     ids=["subcommittee", "none", "other root", "unknown validator", "no seat", "bad signature"],
 )
 def test_sync_committee_contribution_rejected(
-    messages: list, subcommittee: int, committee: bytes, code: int
+    messages: list, subcommittee: int, committee: bytes, error: str, code: int
 ):
-    with raises(DUTY_ERROR, f"validator duty failed with code {code}") as info:
+    with raises(DUTY_ERROR, error) as info:
         _contribute(messages, subcommittee, committee)
     assert info.value.code == code
 

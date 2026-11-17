@@ -71,6 +71,18 @@ Not yet released.
   - `Discv5.MessageError.fields` also carries the field count, and `invalid` the message type.
   - `Discv4.decode_hashMismatch` states both hashes of the error it returns.
 
+- In Lean, the errors of era files, protocol bounds, light client update chunks, validator duties and proposer steps carry the values that their check compared, and their codes keep their meaning.
+  - `EraError.noState` and `noStateIndex` take the type of the record that the check read, or `none` when the group ends; `stateIndex` takes the number of entries, the position the first one points at and the position of the state.
+  - `EraError.genesisBlocks` takes the number of block records and whether an index of blocks is present, `noBlockIndex` the era, and `blockIndexRange` the first slot and the entries of the index, then those the era expects.
+  - `BoundsError.notAtFork` and `topicNotAtFork` take the protocol or topic name and the fork, and `noRequest` the protocol; their messages do not change.
+  - `ChunkError.truncated` takes the offset of the chunk, the length it needs and the length left, and `digestMismatch` also takes the expected digest.
+  - `ValidatorDutyError.noMessages` takes the slot and the block root of the message to aggregate, and `pendingPayloadStatus` the slot of the vote and of the head block.
+  - `ProposerError.noCommittee` takes the data of the aggregate.
+
+  `attestationDataIndex_of_glamsterdam_of_ne` states the fields of `pendingPayloadStatus`.
+  New `ToString` instances of `ValidatorDutyError`, `ProposerError` and `BoundsError` write each error with its values.
+  The Python `ValidatorDutyError` and `ProposerError` carry that text in place of "validator duty failed with code N" and "proposer step failed with code N", such as "epoch 2 is after 1, the last epoch whose committees are known".
+
 - The block, ommer and proof-of-work errors carry the values that their failed check compared.
   Each code keeps its meaning, and each error fires on the same inputs as before.
   The message of each error names each value, as `(name := value)`, and writes each hash, address and byte string in hex.

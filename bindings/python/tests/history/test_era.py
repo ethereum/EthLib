@@ -311,13 +311,14 @@ def test_truncated_file_is_rejected() -> None:
 
 def test_group_without_state_is_rejected() -> None:
     data = _record(VERSION, b"") + _record(SLOT_INDEX, _index(0, [0]))
-    with raises(EraError, _error("noState")):
+    with raises(EraError, _error(f"noState (some {SLOT_INDEX})")):
         _decode(data)
 
 
 def test_group_without_state_index_is_rejected() -> None:
+    # The last 32 bytes are the whole state index, so the state ends the group.
     data, _ = _file(Group(0))
-    with raises(EraError, _error("noStateIndex")):
+    with raises(EraError, _error("noStateIndex none")):
         _decode(data[: len(data) - 32])
 
 
@@ -328,7 +329,8 @@ def test_record_of_the_era_document_among_the_others_is_rejected() -> None:
 
 @pytest.mark.parametrize("shift", [-1, 8])
 def test_state_index_off_the_state_is_rejected(shift: int) -> None:
-    with raises(EraError, _error("stateIndex")):
+    # The state record follows the Version record, at position 8.
+    with raises(EraError, _error(f"stateIndex 1 (some {8 + shift}) 8")):
         _decode(_file(Group(0, state_offset_shift=shift))[0])
 
 
@@ -360,7 +362,7 @@ def test_state_of_the_wrong_fork_version_is_rejected() -> None:
 
 
 def test_genesis_group_with_a_block_is_rejected() -> None:
-    with raises(EraError, _error("genesisBlocks")):
+    with raises(EraError, _error("genesisBlocks 1 false")):
         _decode(_file(Group(0, [_block(0)]))[0])
 
 
@@ -369,17 +371,17 @@ def test_genesis_group_with_a_block_index_is_rejected() -> None:
     data += _record(STATE, snappy.encode_frames(_state(0, [])[1]))
     data += _record(SLOT_INDEX, _index(0, [0]))
     data += _record(SLOT_INDEX, _index(0, [-(len(data) - 8)]))
-    with raises(EraError, _error("genesisBlocks")):
+    with raises(EraError, _error("genesisBlocks 0 true")):
         _decode(data)
 
 
 def test_group_without_block_index_is_rejected() -> None:
-    with raises(EraError, _error("noBlockIndex")):
+    with raises(EraError, _error("noBlockIndex 1")):
         _decode(_file(Group(1, drop_block_index=True))[0])
 
 
 def test_block_index_of_another_era_is_rejected() -> None:
-    with raises(EraError, _error("blockIndexRange")):
+    with raises(EraError, _error(f"blockIndexRange 1 {SLOTS_PER_ERA} 0 {SLOTS_PER_ERA}")):
         _decode(_file(Group(1, block_start_shift=1))[0])
 
 
@@ -432,7 +434,7 @@ def test_empty_file_is_rejected() -> None:
 
 
 def test_empty_group_is_rejected() -> None:
-    with raises(EraError, _error("noState")):
+    with raises(EraError, _error("noState none")):
         _decode(_record(VERSION, b""))
 
 
@@ -445,7 +447,7 @@ def test_state_with_its_index_off_the_end_of_an_era_is_rejected() -> None:
 def test_state_index_of_two_entries_is_rejected() -> None:
     data = _record(VERSION, b"") + _record(STATE, snappy.encode_frames(_state(0, [])[1]))
     data += _record(SLOT_INDEX, _index(0, [-(len(data) - 8), 0]))
-    with raises(EraError, _error("stateIndex")):
+    with raises(EraError, _error("stateIndex 2 (some 8) 8")):
         _decode(data)
 
 
@@ -464,7 +466,7 @@ def test_index_of_the_wrong_size_is_rejected() -> None:
 
 
 def test_block_index_of_more_entries_than_slots_is_rejected() -> None:
-    with raises(EraError, _error("blockIndexRange")):
+    with raises(EraError, _error(f"blockIndexRange 0 {SLOTS_PER_ERA + 1} 0 {SLOTS_PER_ERA}")):
         _decode(_file(Group(1, extra_entries=1))[0])
 
 

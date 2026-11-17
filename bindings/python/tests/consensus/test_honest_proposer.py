@@ -201,7 +201,7 @@ def test_eth1_vote_once_the_deposits_are_in():
 
 def test_eth1_vote_overflow():
     state = state_at("phase0", ONE_COMMITTEE, genesis_time=GENESIS_TIME, slot=SLOT)
-    with raises(ProposerError, "proposer step failed with code 1"):
+    with raises(ProposerError, "arithmetic: EthLib.Base.ArithError.overflow"):
         consensus.get_eth1_vote("mainnet", "phase0", state, [(2**64 - 1, eth1_data(1, 1))])
 
 
@@ -304,7 +304,8 @@ def test_custody_index_out_of_range():
 
 def test_custody_of_an_unknown_validator():
     state = state_at("fusaka", [32 * GWEI])
-    with raises(ProposerError, "proposer step failed with code 2"):
+    message = "a state accessor fails: EthLib.Consensus.AccessorError.indexOutOfRange 1"
+    with raises(ProposerError, message):
         consensus.get_validators_custody_requirement("mainnet", "fusaka", state, [1])
 
 
@@ -344,12 +345,25 @@ def test_execution_requests(entries: list, lists: list):
 @pytest.mark.parametrize(
     ("entries", "message"),
     [
-        ([b""], "proposer step failed with code 9"),
-        ([b"\x03" + DEPOSIT], "proposer step failed with code 9"),
-        ([b"\x00"], "proposer step failed with code 10"),
-        ([b"\x01" + WITHDRAWAL, b"\x00" + DEPOSIT], "proposer step failed with code 11"),
-        ([b"\x00" + DEPOSIT, b"\x00" + DEPOSIT], "proposer step failed with code 11"),
-        ([b"\x00" + DEPOSIT[:-1]], "proposer step failed with code 3"),
+        ([b""], "a request of 0 bytes has no type byte that names a request"),
+        (
+            [b"\x03" + DEPOSIT],
+            f"a request of {1 + len(DEPOSIT)} bytes has no type byte that names a request",
+        ),
+        ([b"\x00"], "the request of type 0 has nothing after its type byte"),
+        (
+            [b"\x01" + WITHDRAWAL, b"\x00" + DEPOSIT],
+            "request type 0 does not come after the type before it, 1",
+        ),
+        (
+            [b"\x00" + DEPOSIT, b"\x00" + DEPOSIT],
+            "request type 0 does not come after the type before it, 0",
+        ),
+        (
+            [b"\x00" + DEPOSIT[:-1]],
+            "a value cannot be encoded, decoded or hashed: "
+            f"EthLib.Serialization.Ssz.Err.scopeUndivided {len(DEPOSIT) - 1} {len(DEPOSIT)}",
+        ),
     ],
 )
 def test_execution_requests_rejected(entries: list, message: str):
@@ -420,9 +434,12 @@ def test_on_chain_aggregate_reads_the_first_committee():
 @pytest.mark.parametrize(
     ("aggregates", "message"),
     [
-        ([], "proposer step failed with code 6"),
-        ([attestation([True], signature(1), [])], "proposer step failed with code 7"),
-        ([attestation([True], bytes(96), [1])], "proposer step failed with code 4"),
+        ([], "there is no network aggregate to join"),
+        (
+            [attestation([True], signature(1), [])],
+            f"the network aggregate at slot 9 for block 0x{'07' * 32} has no committee bit set",
+        ),
+        ([attestation([True], bytes(96), [1])], "BLS: invalid G2 point"),
     ],
 )
 def test_on_chain_aggregate_rejected(aggregates: list, message: str):
@@ -459,17 +476,25 @@ def test_sync_aggregate():
 
 
 @pytest.mark.parametrize(
-    ("contributions", "code"),
+    ("contributions", "message", "code"),
     [
-        ([contribution(4, [0], signature(1))], 12),
-        ([contribution(1, [0], signature(1)), contribution(1, [1], signature(2))], 13),
-        ([], 4),
-        ([contribution(0, [0], bytes(96))], 4),
+        (
+            [contribution(4, [0], signature(1))],
+            "subcommittee 4 is not below the number of subnets",
+            12,
+        ),
+        (
+            [contribution(1, [0], signature(1)), contribution(1, [1], signature(2))],
+            "two contributions name subcommittee 1",
+            13,
+        ),
+        ([], "BLS: empty signature list", 4),
+        ([contribution(0, [0], bytes(96))], "BLS: invalid G2 point", 4),
     ],
     ids=["subcommittee", "repeated", "none", "bad signature"],
 )
-def test_sync_aggregate_rejected(contributions: list, code: int):
-    with raises(ProposerError, f"proposer step failed with code {code}") as info:
+def test_sync_aggregate_rejected(contributions: list, message: str, code: int):
+    with raises(ProposerError, message) as info:
         consensus.process_sync_committee_contributions("mainnet", "altair", contributions)
     assert info.value.code == code
 
@@ -540,5 +565,7 @@ def test_execution_requests_of_builders():
 
 
 def test_no_builder_requests_before_gloas():
-    with raises(ProposerError, "proposer step failed with code 9"):
+    # Before Gloas, type 3 names no request.
+    message = f"a request of {1 + len(BUILDER_DEPOSIT)} bytes has no type byte that names a request"
+    with raises(ProposerError, message):
         consensus.get_execution_requests("mainnet", "fusaka", [b"\x03" + BUILDER_DEPOSIT])
