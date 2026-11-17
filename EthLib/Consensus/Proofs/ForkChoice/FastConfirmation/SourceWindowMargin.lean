@@ -1058,6 +1058,60 @@ public theorem slotStart_le_clock {store : Store preset fork}
   rw [(addChecked_ok_iff.mp sumOk).2, productNat]
   omega
 
+/-- An honest duty lies between the call and a store's time.
+
+Its slot is at or after the call's slot and before the store's current slot.
+
+So the duty starts at or after the call's time.
+
+The signer signs at its deadline, before the next slot starts, so before the store's clock. -/
+public theorem duty_window_of_slot_le {anchor : Store preset fork} {Δ : ℕ}
+    {callSlot current : Slot} {callStart : UInt64} {w v : ValidatorIndex} {k k' : ℕ}
+    {data : AttestationData}
+    (start : ∀ w ∈ J, e.start w = anchor) (fits : DelayFits fork config genesisTimeMs Δ)
+    (callStartOk : computeTimeAtSlotMs config genesisTimeMs callSlot = .ok callStart)
+    (receiver : w ∈ J)
+    (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view w)
+      ((e.world k).state w))
+    (currentOk : ((e.world k).state w).getCurrentSlot config = .ok current) (honest : v ∈ J)
+    (duty : MaySign config checks sources anchorState anchorBlock assignment genesisTimeMs v
+      (e.world k').time ((e.world k').view v) ((e.world k').state v) data)
+    (after : callSlot ≤ data.slot) (before : data.slot < current) :
+    callStart.toNat ≤ (e.world k').time ∧ (e.world k').time < (e.world k).time := by
+  obtain ⟨_, -, deadline, genesis, -, -, -⟩ := duty
+  have deadlineCopy := deadline
+  obtain ⟨dutyStart, due, dutyStartOk, -, timeEq⟩ := deadlineCopy
+  obtain ⟨callStart', callStartOk', -, callLe⟩ := exists_timeAtSlotMs_of_le after dutyStartOk
+  rw [callStartOk, Except.ok.injEq] at callStartOk'
+  subst callStart'
+  -- The store follows the signer's time of genesis, so its current slot starts by its clock.
+  have senderGenesis := (e.clock_bounds v k').1
+  have receiverGenesis := (e.clock_bounds w k).1
+  rw [start v honest] at senderGenesis
+  rw [start w receiver] at receiverGenesis
+  obtain ⟨endTime, endOk, endLe⟩ := slotStart_le_clock
+    (receiverGenesis.trans (senderGenesis.symm.trans genesis)) currentOk (UInt64.le_refl _)
+  -- The deadline and the delay fall before the slot after the duty starts.
+  have nextFits : data.slot.toNat + (1 : UInt64).toNat < 2 ^ 64 := by
+    have := UInt64.lt_iff_toNat_lt.mp before
+    have := current.toNat_lt
+    simp only [UInt64.toNat_one]
+    omega
+  have nextOk := addChecked_of_lt nextFits
+  have nextLe : data.slot + 1 ≤ current := UInt64.le_iff_toNat_le.mpr (by
+    have := UInt64.lt_iff_toNat_lt.mp before
+    rw [(addChecked_ok_iff.mp nextOk).2]
+    simp only [UInt64.toNat_one]
+    omega)
+  obtain ⟨following, followingOk, -, followingLe⟩ := exists_timeAtSlotMs_of_le nextLe endOk
+  have bound := fits.before_boundary nextOk dutyStartOk followingOk deadline
+  have followingNat := UInt64.le_iff_toNat_le.mp followingLe
+  refine ⟨?_, ?_⟩
+  · have := UInt64.le_iff_toNat_le.mp callLe
+    omega
+  · rw [← upToDate.1]
+    omega
+
 /-- An honest signature delivered by a time comes from the signer's validated duty vote.
 
 The signer signed at the deadline of its duty, which is before the next slot starts. -/

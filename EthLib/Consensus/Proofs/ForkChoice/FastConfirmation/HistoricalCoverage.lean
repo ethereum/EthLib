@@ -205,7 +205,7 @@ private theorem signer_duty_window {anchor : Store preset fork} {Δ : ℕ}
         (e.world k').time ((e.world k').view v) ((e.world k').state v) data := by
   obtain ⟨k', -, duty⟩ := e.exists_maySign_of_signed sent member honest
   have dutyCopy := duty
-  obtain ⟨_, -, deadline, genesis, -, made, -⟩ := dutyCopy
+  obtain ⟨_, -, -, -, -, made, -⟩ := dutyCopy
   obtain ⟨_, _, _, _, -, -, -, -, dataOk⟩ := made
   -- The duty slot is after the call's slot, as its epoch is later.
   have slotLt : callSlot < data.slot := by
@@ -213,39 +213,9 @@ private theorem signer_duty_window {anchor : Store preset fork} {Δ : ℕ}
     rw [← callEpochEq, target_epoch_eq_of_getAttestationData dataOk] at epochLt
     simp only [computeEpochAtSlot, UInt64.toNat_div] at epochLt
     exact UInt64.lt_iff_toNat_lt.mpr (Nat.lt_of_div_lt_div epochLt)
-  have deadlineCopy := deadline
-  obtain ⟨dutyStart, due, dutyStartOk, -, timeEq⟩ := deadlineCopy
-  obtain ⟨callStart', callStartOk', -, callLe⟩ :=
-    exists_timeAtSlotMs_of_le (UInt64.le_of_lt slotLt) dutyStartOk
-  rw [callStartOk, Except.ok.injEq] at callStartOk'
-  subst callStart'
-  -- The store follows the signer's time of genesis, so its current slot starts by its clock.
-  have senderGenesis := (e.clock_bounds v k').1
-  have receiverGenesis := (e.clock_bounds w k).1
-  rw [start v honest] at senderGenesis
-  rw [start w receiver] at receiverGenesis
-  obtain ⟨endTime, endOk, endLe⟩ := slotStart_le_clock
-    (receiverGenesis.trans (senderGenesis.symm.trans genesis)) currentOk (UInt64.le_refl _)
-  -- The deadline and the delay fall before the slot after the duty starts.
-  have nextFits : data.slot.toNat + (1 : UInt64).toNat < 2 ^ 64 := by
-    have := UInt64.lt_iff_toNat_lt.mp before
-    have := current.toNat_lt
-    simp only [UInt64.toNat_one]
-    omega
-  have nextOk := addChecked_of_lt nextFits
-  have nextLe : data.slot + 1 ≤ current := UInt64.le_iff_toNat_le.mpr (by
-    have := UInt64.lt_iff_toNat_lt.mp before
-    rw [(addChecked_ok_iff.mp nextOk).2]
-    simp only [UInt64.toNat_one]
-    omega)
-  obtain ⟨following, followingOk, -, followingLe⟩ := exists_timeAtSlotMs_of_le nextLe endOk
-  have bound := fits.before_boundary nextOk dutyStartOk followingOk deadline
-  have followingNat := UInt64.le_iff_toNat_le.mp followingLe
-  refine ⟨k', ?_, ?_, duty⟩
-  · have := UInt64.le_iff_toNat_le.mp callLe
-    omega
-  · rw [← upToDate.1]
-    omega
+  obtain ⟨low, high⟩ := duty_window_of_slot_le start fits callStartOk receiver upToDate currentOk
+    honest duty (UInt64.le_of_lt slotLt) before
+  exact ⟨k', low, high, duty⟩
 
 /-- A justified checkpoint after the call's epoch descends from the root, given an honest signer.
 
