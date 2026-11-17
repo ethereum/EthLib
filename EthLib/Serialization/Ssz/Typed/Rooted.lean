@@ -206,21 +206,6 @@ The height is that of the subtrees in the top level given.
 def raiseLevels (height : Nat) (levels : List (Array Bytes)) (count : Nat) : List (Array Bytes) :=
   levels ++ (buildLevels height (levels.getLast?.getD #[]) count).tail
 
-/-- One more level on top of a tree pairs up its top level. -/
-theorem buildLevels_succ :
-    ∀ (above height : Nat) (level : Array Bytes),
-      buildLevels height level (above + 1) = buildLevels height level above
-        ++ [pairUp (height + above) ((buildLevels height level above).getLast?.getD #[])]
-  | 0, height, level => by simp [buildLevels]
-  | above + 1, height, level => by
-    rw [buildLevels, buildLevels_succ above (height + 1), buildLevels]
-    -- The levels above the first are never empty, so the top is theirs.
-    obtain ⟨first, rest, nonempty⟩ :
-        ∃ first rest, buildLevels (height + 1) (pairUp height level) above = first :: rest := by
-      cases above <;> exact ⟨_, _, rfl⟩
-    rw [nonempty, show height + 1 + above = height + (above + 1) by omega]
-    simp
-
 /-- Raising the levels of a tree gives the levels of the same leaves up to a greater height. -/
 theorem raiseLevels_buildLevels (height : Nat) (level : Array Bytes) (count above : Nat) :
     raiseLevels (height + above) (buildLevels height level above) count
