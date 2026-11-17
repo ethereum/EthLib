@@ -84,21 +84,9 @@ private theorem le_activityFixedEpoch {state : BeaconState preset fork} {epoch :
   have := epoch.toNat_lt
   omega
 
-/-- The runs behind a vote and a head that descend from a known block.
+/-- A known block's state runs to the head state and to the state of a vote's target block.
 
-The target state of the vote comes from the state of its target block, `base`.
-
-Take the block at or before the start of the target epoch.
-
-Then the state of the block runs to `base` and to the head state.
-
-The target block is then at or before that start.
-
-When it is the anchor block, `base` itself runs to the head state.
-
-Otherwise the target block is an ancestor of the head, so the target state runs to the head state.
-
-The store is built with one setting of the checks, and the anchor block is not after its state. -/
+When the block is after the start of the target epoch, the target state runs to the head state. -/
 private theorem Store.ForwardReachableWith.runs_of_voteOrigin {checks : SignatureChecks}
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
@@ -173,32 +161,6 @@ private theorem Store.ForwardReachableWith.runs_of_voteOrigin {checks : Signatur
         reachRooted.trans rooted⟩
     exact .inr ⟨above, reached.runKept_of_checkpointState anchorSlot checkpoint headBlockFound
       startOk (UInt64.le_trans (UInt64.le_of_lt above) headAbove) targetFound headFound⟩
-
-/-- A checkpoint state is in the epoch of its checkpoint or a later one.
-
-The epoch of the checkpoint must be that of a slot, so that a zero epoch length is covered.
-
-The state comes from the state of the checkpoint block, perhaps processed to the start of the epoch.
-
-The store is built with one setting of the checks. -/
-theorem Store.ForwardReachableWith.epoch_le_of_checkpointState {checks : SignatureChecks}
-    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
-    {slot : Slot} {checkpoint : Checkpoint} {state : BeaconState preset fork}
-    (found : store.checkpointStates[checkpoint]? = some state)
-    (epochOf : checkpoint.epoch = computeEpochAtSlot preset slot) :
-    (computeEpochAtSlot preset slot).toNat ≤ (getCurrentEpoch state).toNat := by
-  obtain ⟨base, start, baseFound, startOk, fromBlock⟩ := reached.checkpointStatesFromBlocks found
-  have startLe : start ≤ state.slot := by
-    rcases fromBlock with ⟨baseLe, rfl⟩ | ⟨-, _, -, slotsOk⟩
-    · exact baseLe
-    · exact (processSlots_slot slotsOk).2 ▸ UInt64.le_refl _
-  rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | positive
-  · rw [computeEpochAtSlot, UInt64.toNat_div, zero, Nat.div_zero]
-    exact Nat.zero_le _
-  · rw [epochOf] at startOk
-    rw [← computeEpochAtSlot_computeStartSlotAtEpoch (UInt64.lt_iff_toNat_lt.mpr positive)
-      startOk, getCurrentEpoch_toNat]
-    exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp startLe)
 
 /-- The target state of a vote and the state of the head agree on the committees of its epoch.
 
@@ -280,19 +242,9 @@ theorem Store.ForwardReachableWith.committeesKept_of_voteOrigin {checks : Signat
   · exact run.committees_count (by omega) (le_activityFixedEpoch maxLookahead (by omega))
       headInRing
 
-/-- The voter of a vote was active in the head state in the epoch before the target of the vote.
+/-- A voter was active in the head state in the epoch before its target, or activated at it.
 
-Otherwise it became active at the target epoch itself.
-
-The voted block and the head descend from a known block.
-
-The target is at most two epochs after that block.
-
-The two states agree on activity up to one epoch after that block.
-
-That covers the epoch before the target.
-
-The store is built with one setting of the checks, and the anchor block is not after its state. -/
+The target is at most two epochs after a known block that the vote and the head descend from. -/
 theorem Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin {checks : SignatureChecks}
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
@@ -305,7 +257,8 @@ theorem Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin {checks :
     (origin : store.VoteOrigin config validator attestation)
     (voteDescends : store.isAncestor ⟨attestation.data.beaconBlockRoot, .pending⟩
       ⟨root, .pending⟩ = .ok true)
-    (near : attestation.data.target.epoch.toNat ≤ (computeEpochAtSlot preset block.slot).toNat + 2)
+    (horizon : attestation.data.target.epoch.toNat ≤
+      (computeEpochAtSlot preset block.slot).toNat + 2)
     (before : previous.toNat + 1 = attestation.data.target.epoch.toNat)
     (targetFound : store.checkpointStates[attestation.data.target]? = some targetState)
     (headFound : store.blockStates[head]? = some headState) :

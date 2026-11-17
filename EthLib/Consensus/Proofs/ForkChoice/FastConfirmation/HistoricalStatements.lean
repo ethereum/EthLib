@@ -98,15 +98,7 @@ def AssignmentWindowAgreement (last : Nat) : Prop :=
 
 /-- Each later successful window read also succeeds with the source state's weights and boost.
 
-A window that holds no whole epoch reads the record of each of its members in the source state.
-
-It sums the balances of the members active there.
-
-One way it fails is a member that the source state does not hold, such as a later deposit.
-
-The source reads also fail on overflow, in a total or in the score.
-
-With positive `SLOTS_PER_EPOCH`, it holds, barring overflow, if the source holds every member. -/
+It fails on a window member that the source state does not hold, or on overflow. -/
 def SourceWindowReads (call last : Nat) (source : BeaconState preset fork) : Prop :=
   ∀ w ∈ J, ∀ k (head : ForkChoiceNode) state current first finish maximum,
     (e.world call).time ≤ (e.world k).time → (e.world k).time ≤ last →
@@ -124,69 +116,42 @@ def HonestStoreEpochsBounded (horizon : Epoch) (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ last →
     ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon
 
-/-- Each voter below an ancestor of an honest head lies in the head's window after that ancestor.
+/-- A vote below a known block, with a slot in the window of the store's head after that block.
 
-The ancestor is a known block, `parent`, and the store's current epoch is at most two after it.
+The head descends from the block, and the store's epoch is at most two epochs after the block's.
 
-The window holds the committees of the head state for the slots after `parent`.
+The window ends at the slot before the store's current slot. -/
+def VoteInHeadWindow (config : Config) (store : Store preset fork) (parentRoot : Root)
+    (parent : BeaconBlock preset fork) (members : Std.TreeSet ValidatorIndex)
+    (v : ValidatorIndex) (attestation : Attestation preset fork) : Prop :=
+  ∃ (head : ForkChoiceNode) (current first finish : Slot) (epoch : Epoch),
+    store.getHead config = .ok head ∧
+    store.blocks[parentRoot]? = some parent ∧
+    store.isAncestor ⟨head.root, .pending⟩ ⟨parentRoot, .pending⟩ = .ok true ∧
+    store.getCurrentSlot config = .ok current ∧
+    store.getCurrentStoreEpoch config = .ok epoch ∧
+    epoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2 ∧
+    addChecked parent.slot 1 = .ok first ∧ subChecked current 1 = .ok finish ∧
+    store.getCommitteesBetweenSlots head.root first finish = .ok members ∧
+    store.VoteOrigin config v attestation ∧
+    store.isAncestor ⟨attestation.data.beaconBlockRoot, .pending⟩ ⟨parentRoot, .pending⟩ =
+      .ok true ∧
+    first ≤ attestation.data.slot ∧ attestation.data.slot ≤ finish
 
-It ends at the slot before the current one.
-
-The vote has an origin and is for a block that descends from `parent`.
-
-Its slot is in the window. -/
-def VotersInHeadWindow (last : Nat) : Prop :=
-  ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
-    ∀ (head : ForkChoiceNode) (parentRoot : Root) (parent : BeaconBlock preset fork)
-      (current first finish : Slot) (epoch : Epoch) (members : Std.TreeSet ValidatorIndex)
-      (v : ValidatorIndex) (attestation : Attestation preset fork),
-    ((e.world k).state w).getHead config = .ok head →
-    ((e.world k).state w).blocks[parentRoot]? = some parent →
-    ((e.world k).state w).isAncestor ⟨head.root, .pending⟩ ⟨parentRoot, .pending⟩ = .ok true →
-    ((e.world k).state w).getCurrentSlot config = .ok current →
-    ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch →
-    epoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2 →
-    addChecked parent.slot 1 = .ok first → subChecked current 1 = .ok finish →
-    ((e.world k).state w).getCommitteesBetweenSlots head.root first finish = .ok members →
-    ((e.world k).state w).VoteOrigin config v attestation →
-    ((e.world k).state w).isAncestor ⟨attestation.data.beaconBlockRoot, .pending⟩
-      ⟨parentRoot, .pending⟩ = .ok true →
-    first ≤ attestation.data.slot → attestation.data.slot ≤ finish →
+/-- From the first time to the last, each voter below the parent is in an honest head's window. -/
+def VotersInHeadWindow (parentRoot : Root) (first last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k, first ≤ (e.world k).time → (e.world k).time ≤ last →
+    ∀ parent members v attestation,
+    VoteInHeadWindow config ((e.world k).state w) parentRoot parent members v attestation →
     v ∈ members
 
-/-- The newly active voters of `VotersInHeadWindow` lie in the head's window.
+/-- The voters activated at the target of a vote two epochs after the parent are in the window.
 
-It covers only a vote whose target epoch is two after the epoch of `parent`.
-
-Its voter must have that target epoch as its activation epoch, in the target state.
-
-The window covers all of the epoch before the target.
-
-Every other such voter was active then, so it is in the window with no premise.
-
-It can fail when the head state's shuffling places such a voter at or after the current slot.
-
-It can also fail when the head's branch has not activated the voter at that epoch.
-
-A proposed follow-up, a window weight that pays one epoch's activation churn, would remove it. -/
-def NewlyActiveVotersInHeadWindow (last : Nat) : Prop :=
-  ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
-    ∀ (head : ForkChoiceNode) (parentRoot : Root) (parent : BeaconBlock preset fork)
-      (current first finish : Slot) (epoch : Epoch) (members : Std.TreeSet ValidatorIndex)
-      (v : ValidatorIndex) (attestation : Attestation preset fork)
-      (targetState : BeaconState preset fork) (voter : Validator),
-    ((e.world k).state w).getHead config = .ok head →
-    ((e.world k).state w).blocks[parentRoot]? = some parent →
-    ((e.world k).state w).isAncestor ⟨head.root, .pending⟩ ⟨parentRoot, .pending⟩ = .ok true →
-    ((e.world k).state w).getCurrentSlot config = .ok current →
-    ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch →
-    epoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2 →
-    addChecked parent.slot 1 = .ok first → subChecked current 1 = .ok finish →
-    ((e.world k).state w).getCommitteesBetweenSlots head.root first finish = .ok members →
-    ((e.world k).state w).VoteOrigin config v attestation →
-    ((e.world k).state w).isAncestor ⟨attestation.data.beaconBlockRoot, .pending⟩
-      ⟨parentRoot, .pending⟩ = .ok true →
-    first ≤ attestation.data.slot → attestation.data.slot ≤ finish →
+Every other voter below the parent lies in the window by a proof. -/
+def NewlyActiveVotersInHeadWindow (parentRoot : Root) (first last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k, first ≤ (e.world k).time → (e.world k).time ≤ last →
+    ∀ parent members v attestation (targetState : BeaconState preset fork) (voter : Validator),
+    VoteInHeadWindow config ((e.world k).state w) parentRoot parent members v attestation →
     (computeEpochAtSlot preset parent.slot).toNat + 2 = attestation.data.target.epoch.toNat →
     ((e.world k).state w).checkpointStates[attestation.data.target]? = some targetState →
     targetState.validators.data[v.toNat]? = some voter →
@@ -390,9 +355,7 @@ A receiver is near when its store epoch is at most two epochs after `parentEpoch
 
 The window starts at the given slot and ends at the slot before the store's current slot.
 
-It is asked only of these receivers, where every step of the historical-anchor proof reads it.
-
-The duty-epoch step, which covers later receivers, does not read it. -/
+Later receivers are covered by the duty-epoch step, which does not read it. -/
 def ReceiverWindowExitsNear (parentEpoch : Epoch) (source : BeaconState preset fork)
     (firstSlot : Slot) (first last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k (head : ForkChoiceNode) (current finish : Slot) (receiverEpoch : Epoch),

@@ -240,16 +240,6 @@ theorem exists_offset_eq_iff {first last after slot : Slot}
     rw [← UInt64.toNat_sub_of_le _ _ low, Nat.toUInt64_eq, UInt64.ofNat_toNat,
       UInt64.add_comm, UInt64.sub_add_cancel]
 
-/-- A committee that is cut checked that the indices times one more than its position fit. -/
-private theorem fits_of_shuffledCommittee {indices : Array ValidatorIndex}
-    {shuffled : Array UInt64} {index count : UInt64} {committee : Array ValidatorIndex}
-    (cut : shuffledCommittee indices shuffled index count = .ok committee) :
-    indices.size * (index.toNat + 1) < 2 ^ 64 := by
-  unfold shuffledCommittee at cut
-  split at cut
-  · exact (by assumption : _ ∧ _).2
-  · split at cut <;> cases cut
-
 namespace Store
 
 variable {config : Config} {store : Store preset fork}

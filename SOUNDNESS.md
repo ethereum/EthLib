@@ -3008,7 +3008,8 @@ Like the historical-anchor theorem, it does not assume finality across honest st
 Receiver finality coverage and the receiver's block lookup are derived from `RootViable`, the root's viability at each honest store, which is assumed.
 It assumes that no up-to-date honest justified checkpoint over the interval conflicts with the root: the checkpoint-consistency half of the safety of the confirmation, not derived.
 `HonestHeadReads` assumes that each honest head reads its justified state and its committee windows.
-`ReceiverWindowExitsNear` assumes the exit bound of each near receiver's window, and `LateDutyMajority` assumes the honest duty majority of the duty-epoch theorem.
+`ReceiverWindowExitsNear` assumes the exit bound of the window of each receiver within two epochs of the parent.
+`LateDutyMajority` assumes the honest duty majority of the duty-epoch theorem.
 The receiver's proposer score is derived from the checkpoint stake ceiling and `Config.ProposerScoreFits`, a bound on the boost that mainnet and minimal satisfy.
 
 `Execution.honestHeadsCover_of_signed_justification` in the same file splits `RootViable` and derives one part of it.
@@ -3033,18 +3034,30 @@ The anchor store checks neither, and without them a justified root may be one th
 So the late half of the root's viability rests on the Byzantine bound, the stake floors and these conditions.
 The signed-justification theorem keeps its statement for callers that supply the signer.
 
-Three premises of these headlines are worth stating with when they hold.
+Three premises of these headlines need a word on when they hold.
 
-The headlines do not assume a common vote history: a common committee-preserving state behind every recent vote and the head.
-That former premise fails on ordinary runs.
-Take an epoch with no block, and then a vote with the current target.
+The headlines do not assume a common committee-preserving state behind every recent vote and the head.
+That assumption fails on ordinary runs.
+Let `MIN_SEED_LOOKAHEAD` be 1, as on mainnet, and take an epoch with no block.
+Then take a vote with the current target while the head block is still from before that epoch.
 A common state must be no later than the head state and within one seed lookahead of the target, and no state is both.
-The headlines assume `NewlyActiveVotersInHeadWindow` instead, which that premise implies.
-It asks only about a vote two epochs after the parent of the tested block, whose voter became active at the vote's target epoch.
+The headlines assume `NewlyActiveVotersInHeadWindow` instead, which that assumption implies.
+It reads only the parent of the tested block, and only honest stores from the call's time to the horizon.
+It asks only about a far vote, one whose target is two epochs after the parent.
+Its voter must also have become active at that target epoch.
 Such a voter must lie in the head's window, from the slot after the parent to the slot before the current one.
-It can fail when the head state's shuffling places such a voter at or after the current slot, or when the head's branch has not activated it at that epoch.
-Every other voter lies in the window by a proof (`Execution.votersInHeadWindow_of_newlyActive`), since the window holds the whole epoch before the target.
-A proposed follow-up, not part of these theorems, would remove it: a rule change whose window weight also counts one epoch's activation churn.
+Every other voter below the parent lies in the window by a proof (`Execution.votersInHeadWindow_of_newlyActive`).
+A vote at most one epoch after the parent reads committees that the head state shares.
+For a far vote, the window holds the whole epoch before the target, where every validator active in the head state has a committee.
+
+The premise fails when the head state's shuffling places a newly active far voter at or after the current slot.
+An adversary can force that.
+Take a validator activated two epochs after the parent's epoch.
+It votes on a branch that left the head's branch after the parent, within the parent's epoch.
+That branch has a different RANDAO mix, so a different seed for the target epoch, and the head's shuffling may place the voter late.
+Each such occurrence leaves out at most that voter's balance.
+Let the maximum seed lookahead be at least two epochs, as on mainnet.
+Then the parent's state already sets that activation epoch, so the head's branch activates the voter too.
 
 `SourceWindowReads` assumes two reads in the caller's source state.
 Each later window weight that a receiver computes with its own balances must also compute with the source state's.
