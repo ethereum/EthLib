@@ -61,8 +61,12 @@ def test_wrong_slot_value() -> None:
     """A word other than that of the proven slot does not hold, with the index of the slot."""
     slot = dict(_WITH_STORAGE["storageProof"][0], value="0x34")
     answer = dict(_WITH_STORAGE, storageProof=[slot])
+    # The proof shows the word of the fixture, and the answer gives 0x34.
+    proven = int(_WITH_STORAGE["storageProof"][0]["value"], 16)
     with raises(
-        TrieError, "answer does not hold: EthLib.Execution.State.AccountProofError.slotMismatch 0"
+        TrieError,
+        "answer does not hold: EthLib.Execution.State.AccountProofError.slotMismatch "
+        f"(index := 0) (expected := {proven}) (actual := 52)",
     ):
         trie.verify_account_proof(STATE_ROOT, answer)
 
@@ -82,7 +86,9 @@ def test_absent_slot() -> None:
 def test_absent_slot_nonzero() -> None:
     """A slot that is not set holds 0, so another value does not hold."""
     with raises(
-        TrieError, "answer does not hold: EthLib.Execution.State.AccountProofError.slotMismatch 1"
+        TrieError,
+        "answer does not hold: EthLib.Execution.State.AccountProofError.slotMismatch "
+        "(index := 1) (expected := 0) (actual := 5)",
     ) as error:
         trie.verify_account_proof(STATE_ROOT, _with_unset_slot("0x5"))
     assert error.value.code == 506
@@ -95,8 +101,9 @@ def test_slot_proof_fails() -> None:
     slot = dict(_WITH_STORAGE["storageProof"][0], proof=[root_node])
     with raises(
         TrieError,
-        "answer does not hold: EthLib.Execution.State.AccountProofError.slot 0 "
-        "(EthLib.Execution.Trie.ProofError.missingNode)",
+        "answer does not hold: EthLib.Execution.State.AccountProofError.slot (index := 0) "
+        "(EthLib.Execution.Trie.ProofError.missingNode (hash := some "
+        f"0x{keccak256(bytes.fromhex(_WITH_STORAGE['storageProof'][0]['proof'][1][2:])).hex()}))",
     ):
         trie.verify_account_proof(STATE_ROOT, dict(_WITH_STORAGE, storageProof=[slot]))
 
@@ -148,7 +155,9 @@ def test_absent_account_slot_nonzero() -> None:
         {"key": "0x2", "value": "0x5", "proof": []},
     ]
     with raises(
-        TrieError, "answer does not hold: EthLib.Execution.State.AccountProofError.slotMismatch 1"
+        TrieError,
+        "answer does not hold: EthLib.Execution.State.AccountProofError.slotMismatch "
+        "(index := 1) (expected := 0) (actual := 5)",
     ) as error:
         trie.verify_account_proof(_EMPTY_ROOT, dict(_ABSENT, storageProof=slots))
     assert error.value.code == 506
@@ -191,7 +200,9 @@ def test_wrong_root() -> None:
     with raises(
         TrieError,
         "answer does not hold: EthLib.Execution.State.AccountProofError.account "
-        "(EthLib.Execution.Trie.ProofError.hashMismatch)",
+        "(EthLib.Execution.Trie.ProofError.hashMismatch "
+        f"(expected := 0x{bytes(32).hex()}) "
+        f"(actual := 0x{keccak256(bytes.fromhex(_WITH_STORAGE['accountProof'][0][2:])).hex()}))",
     ) as error:
         trie.verify_account_proof(bytes(32), _WITH_STORAGE)
     assert error.value.code == 501
@@ -307,7 +318,8 @@ def test_slot_not_rlp_word() -> None:
         "storageProof": [{"key": "0x1", "value": "0x0", "proof": ["0x" + slot_node]}],
     }
     with raises(
-        TrieError, "answer does not hold: EthLib.Execution.State.AccountProofError.slotEncoding 0"
+        TrieError,
+        "answer does not hold: EthLib.Execution.State.AccountProofError.slotEncoding (index := 0)",
     ) as error:
         trie.verify_account_proof(root, answer)
     assert error.value.code == 505

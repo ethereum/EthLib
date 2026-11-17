@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Execution.ErrorFormat
+
 /-!
 # `Trie.HexPrefix`
 
@@ -74,11 +76,24 @@ def nibbleListToCompact (x : List Nibble) (isLeaf : Bool) : ByteArray :=
 inductive HexPrefixError where
   /-- The input is empty, so it has no first nibble. -/
   | empty
-  /-- The first nibble is above 3, which no flag and parity give. -/
-  | invalidFirstNibble
-  /-- The path is even, and the padding nibble after the first is not 0. -/
-  | nonZeroPadding
-  deriving Repr, DecidableEq
+  /-- The first nibble `nibble` is above 3, which no flag and parity give. -/
+  | invalidFirstNibble (nibble : Nat)
+  /-- The path is even, and the padding nibble `nibble` after the first is not 0. -/
+  | nonZeroPadding (nibble : Nat)
+  deriving DecidableEq
+
+/-- A constructor of the error, named in full, applied to its arguments. -/
+def hexPrefixErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.Trie.HexPrefixError." ++ name) args prec
+
+/-- The form of the error in Lean syntax, with each value named. -/
+def HexPrefixError.reprPrec : HexPrefixError → Nat → Std.Format
+  | .empty, p => hexPrefixErrorFormat "empty" [] p
+  | .invalidFirstNibble nibble, p =>
+    hexPrefixErrorFormat "invalidFirstNibble" [namedArg "nibble" nibble] p
+  | .nonZeroPadding nibble, p => hexPrefixErrorFormat "nonZeroPadding" [namedArg "nibble" nibble] p
+
+instance : Repr HexPrefixError := ⟨HexPrefixError.reprPrec⟩
 
 /-- The path and the leaf flag that `compact` encodes: the inverse of the encoding.
 
@@ -88,7 +103,7 @@ def compactToNibbleList (compact : ByteArray) : Except HexPrefixError (List Nibb
   match bytesToNibbleList compact with
   | firstNibble :: secondNibble :: rest =>
     if 3 < firstNibble.val then
-      .error .invalidFirstNibble
+      .error (.invalidFirstNibble firstNibble.val)
     -- An odd path starts at the second nibble, and the leaf flag is a first nibble of 2 or 3.
     else if firstNibble.val % 2 = 1 then
       .ok (secondNibble :: rest, 2 ≤ firstNibble.val)
@@ -96,7 +111,7 @@ def compactToNibbleList (compact : ByteArray) : Except HexPrefixError (List Nibb
     else if secondNibble = 0 then
       .ok (rest, 2 ≤ firstNibble.val)
     else
-      .error .nonZeroPadding
+      .error (.nonZeroPadding secondNibble.val)
   -- Every byte has two nibbles, so fewer than two nibbles means no byte.
   | _ => .error .empty
 

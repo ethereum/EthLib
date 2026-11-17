@@ -221,7 +221,7 @@ theorem verifyRange_eq (hash : ByteArray → Hash32) (root start : Hash32)
         match Trie.root hash ⟨false, entries.map fun (key, value) => (⟨key.toArray⟩, value)⟩ with
         | .ok built => if built = root then .ok false else .error .mismatch
         | .error (.rlp error) => .error (.rlp error)
-        | .error .emptyValue => .error .emptyValue
+        | .error .emptyValue => .error (.emptyValue entries.length)
       else
         checkSubtree hash (proof.map fun encoded => (hash encoded, encoded))
           (bytesToNibbleList ⟨start.toArray⟩)
@@ -237,11 +237,18 @@ theorem verifyRange_eq (hash : ByteArray → Hash32) (root start : Hash32)
       fun x => decide (x.snd.size = 0)) = false := by
     simp only [List.any_map, List.any_eq_false, Function.comp_apply, decide_eq_true_eq]
     exact hfull
+  -- No value is empty, so the search for one runs to the end.
+  have hidx : ((entries.map fun entry => (bytesToNibbleList ⟨entry.1.toArray⟩, entry.2)).findIdx
+      fun x => decide (x.snd.size = 0)) = entries.length := by
+    rw [List.findIdx_eq_length.mpr, List.length_map]
+    simp only [List.mem_map, decide_eq_false_iff_not, forall_exists_index, and_imp]
+    rintro _ entry hmem rfl
+    exact hfull entry hmem
   unfold verifyRange
   have hsorted' : strictlyIncreasing ((entries.map fun entry =>
       (bytesToNibbleList ⟨entry.1.toArray⟩, entry.2)).map Prod.fst) = true := by
     rwa [List.map_map]
-  simp only [hsorted', hbefore, hzero, Bool.false_eq_true, ↓reduceIte]
+  simp only [hsorted', hbefore, hzero, hidx, Bool.false_eq_true, ↓reduceIte]
   rfl
 
 end EthLib.Execution.Trie

@@ -78,7 +78,7 @@ def test_state_error_code() -> None:
     # The RLP list of one account, given twice.
     # The account has a 20-byte address, nonce 0, balance 0, no code and no storage.
     account = bytes([0xD9, 0x94]) + bytes(20) + bytes([0x80, 0x80, 0x80, 0xC0])
-    with raises(StateError, "an address is given twice") as info:
+    with raises(StateError, f"address 0x{bytes(20).hex()} is given twice") as info:
         state_root(bytes([0xF4]) + account + account)
     # The code of an address given twice.
     assert info.value.code == 4
