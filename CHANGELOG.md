@@ -53,7 +53,7 @@ Not yet released.
 
 - In Lean, the historical-anchor theorems no longer assume finality across honest stores ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `Execution.source_surplus_or_historical_evidence`, `Execution.isAncestor_getHead_of_historical_anchor`, `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` drop their `residual` argument; their conclusions are unchanged.
-  `receiver_fullMaximum_of_head_window` takes the receiver's own finalized checkpoint on its own justified chain, `finalizedRead`, instead of `compatible`, `bounded`, `slots` and `epochOk`.
+  `receiver_fullMaximum_of_head_window` takes the receiver's own finalized checkpoint on its own justified chain, `finalizedRead`, instead of `compatible`, `bounded`, `slots` and `epochOk`, and loses its implicit `horizon` and `epoch`.
   `SelectedCheckpoint`, `FinalizedCheckpointCompatibility`, `ResidualFinalizedCheckpointCompatibility` and `compatibility_of_residual` are removed: no proof read them any more.
 
 - The eth body, session, snap range and era1 errors, and the argument errors of the EVM exports, carry the values that their failed check compared.
