@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.ErrorFormat
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Execution.Evm.Words
 
@@ -35,7 +36,18 @@ def gasCost (size : Nat) : Nat := GAS_BASE + GAS_PER_WORD * wordCount size
 inductive Sha256Error where
   /-- The gas given was below the price, so the call consumes all its gas. -/
   | outOfGas (cost gas : Nat)
-  deriving Repr, DecidableEq
+  deriving DecidableEq
+
+/-- A constructor of the error, named in full, applied to its arguments. -/
+def sha256ErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.Evm.Precompiles.Sha256.Sha256Error." ++ name) args prec
+
+/-- The form of the error in Lean syntax, with each value named. -/
+def Sha256Error.reprPrec : Sha256Error → Nat → Std.Format
+  | .outOfGas cost gas, p =>
+    sha256ErrorFormat "outOfGas" [namedArg "cost" cost, namedArg "gas" gas] p
+
+instance : Repr Sha256Error := ⟨Sha256Error.reprPrec⟩
 
 /-- The stable code of an error, one per constructor.
 

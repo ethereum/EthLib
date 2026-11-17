@@ -13,6 +13,7 @@ from ruamel.yaml import YAML
 from ethlib.precompiles import price, run
 from raising import raises
 
+from .bls_faults import first_fault
 from .forks import ends, since
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -141,12 +142,20 @@ def test_bls(fork: str, address: int, case: dict) -> None:
 @pytest.mark.parametrize("fork", ends("pectra"))
 @pytest.mark.parametrize("address, case", _new(BLS_FAILURE, BLS_FAIL_EIP))
 def test_bls_error(fork: str, address: int, case: dict) -> None:
+    data = _hex(case["Input"])
+    variant = BLS_ERROR[case["ExpectedError"]]
+    # The length error names the length of the input, and the others the faulty element.
+    if variant == "invalidInputLength":
+        variant = f"{variant} (size := {len(data)})"
+    else:
+        variant = first_fault(address, data)
+        assert variant.startswith(BLS_ERROR[case["ExpectedError"]] + " "), variant
     with raises(
         ValueError,
-        "EthLib.Execution.Evm.Precompiles.PrecompileError.bls12381\n  "
-        f"(EthLib.Execution.Evm.Precompiles.Bls12381.Bls12381Error.{BLS_ERROR[case['ExpectedError']]})",
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.bls12381 "
+        f"(EthLib.Execution.Evm.Precompiles.Bls12381.Bls12381Error.{variant})",
     ):
-        run(fork, address, _hex(case["Input"]), AMPLE_GAS)
+        run(fork, address, data, AMPLE_GAS)
 
 
 # ---- P256VERIFY (EIP-7951) -------------------------------------------------------------------

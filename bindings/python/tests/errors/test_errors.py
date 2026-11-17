@@ -57,8 +57,9 @@ def test_precompile_error_names_the_precompile() -> None:
     with raises(
         errors.PrecompileError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp\n  "
-            "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.outOfGas 500 0)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp "
+            "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.outOfGas "
+            "(cost := 500) (gas := 0))"
         ),
     ) as info:
         run("fusaka", 0x05, data, 0)
@@ -108,23 +109,31 @@ def test_concat_kdf_error_code() -> None:
             0x01,
             1,
             (
-                "ecrecover\n  "
-                "(EthLib.Execution.Evm.Precompiles.Ecrecover.EcrecoverError.outOfGas 3000 0)"
+                "ecrecover "
+                "(EthLib.Execution.Evm.Precompiles.Ecrecover.EcrecoverError.outOfGas "
+                "(cost := 3000) (gas := 0))"
             ),
         ),
-        (0x02, 2, "sha256\n  (EthLib.Execution.Evm.Precompiles.Sha256.Sha256Error.outOfGas 60 0)"),
+        (
+            0x02,
+            2,
+            "sha256 (EthLib.Execution.Evm.Precompiles.Sha256.Sha256Error.outOfGas "
+            "(cost := 60) (gas := 0))",
+        ),
         (
             0x03,
             3,
             (
-                "ripemd160\n  "
-                "(EthLib.Execution.Evm.Precompiles.Ripemd160.Ripemd160Error.outOfGas 600 0)"
+                "ripemd160 "
+                "(EthLib.Execution.Evm.Precompiles.Ripemd160.Ripemd160Error.outOfGas "
+                "(cost := 600) (gas := 0))"
             ),
         ),
         (
             0x04,
             4,
-            "identity\n  (EthLib.Execution.Evm.Precompiles.Identity.IdentityError.outOfGas 15 0)",
+            "identity (EthLib.Execution.Evm.Precompiles.Identity.IdentityError.outOfGas "
+            "(cost := 15) (gas := 0))",
         ),
     ],
 )
@@ -143,9 +152,9 @@ def test_modexp_length_too_large() -> None:
     with raises(
         errors.PrecompileError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp\n  "
-            "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.lengthTooLarge\n    "
-            "(EthLib.Execution.Evm.Precompiles.Modexp.LengthField.base)\n    1025)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp "
+            "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.lengthTooLarge "
+            "(field := EthLib.Execution.Evm.Precompiles.Modexp.LengthField.base) (length := 1025))"
         ),
     ) as info:
         run("fusaka", 0x05, data, 10**6)

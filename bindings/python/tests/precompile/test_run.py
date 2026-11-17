@@ -81,8 +81,9 @@ def test_ecrecover(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.ecrecover\n  "
-            "(EthLib.Execution.Evm.Precompiles.Ecrecover.EcrecoverError.outOfGas 3000 2999)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.ecrecover "
+            "(EthLib.Execution.Evm.Precompiles.Ecrecover.EcrecoverError.outOfGas "
+            "(cost := 3000) (gas := 2999))"
         ),
     ):
         run(fork, 0x01, data, 2999)
@@ -94,8 +95,9 @@ def test_sha256(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.sha256\n  "
-            "(EthLib.Execution.Evm.Precompiles.Sha256.Sha256Error.outOfGas 72 71)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.sha256 "
+            "(EthLib.Execution.Evm.Precompiles.Sha256.Sha256Error.outOfGas "
+            "(cost := 72) (gas := 71))"
         ),
     ):
         run(fork, 0x02, b"abc", 71)
@@ -119,8 +121,9 @@ def test_ripemd160(fork: str, data: bytes, digest: str | None, cost: int) -> Non
         assert out[12:].hex() == digest
     with raises(
         ValueError,
-        f"EthLib.Execution.Evm.Precompiles.PrecompileError.ripemd160\n  "
-        f"(EthLib.Execution.Evm.Precompiles.Ripemd160.Ripemd160Error.outOfGas {cost} {cost - 1})",
+        f"EthLib.Execution.Evm.Precompiles.PrecompileError.ripemd160 "
+        "(EthLib.Execution.Evm.Precompiles.Ripemd160.Ripemd160Error.outOfGas "
+        f"(cost := {cost}) (gas := {cost - 1}))",
     ):
         run(fork, 0x03, data, cost - 1)
 
@@ -133,8 +136,9 @@ def test_identity(fork: str, size: int, cost: int) -> None:
     assert run(fork, 0x04, data, cost) == data
     with raises(
         ValueError,
-        f"EthLib.Execution.Evm.Precompiles.PrecompileError.identity\n  "
-        f"(EthLib.Execution.Evm.Precompiles.Identity.IdentityError.outOfGas {cost} {cost - 1})",
+        f"EthLib.Execution.Evm.Precompiles.PrecompileError.identity "
+        "(EthLib.Execution.Evm.Precompiles.Identity.IdentityError.outOfGas "
+        f"(cost := {cost}) (gas := {cost - 1}))",
     ):
         run(fork, 0x04, data, cost - 1)
 
@@ -148,8 +152,9 @@ def test_modexp(fork: str) -> None:
     assert run(fork, 0x05, data, cost) == word(pow(3, p - 2, p))
     with raises(
         ValueError,
-        f"EthLib.Execution.Evm.Precompiles.PrecompileError.modexp\n  "
-        f"(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.outOfGas {cost} {cost - 1})",
+        f"EthLib.Execution.Evm.Precompiles.PrecompileError.modexp "
+        "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.outOfGas "
+        f"(cost := {cost}) (gas := {cost - 1}))",
     ):
         run(fork, 0x05, data, cost - 1)
 
@@ -186,8 +191,9 @@ def test_blake2f(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f\n  "
-            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.outOfGas 12 11)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f "
+            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.outOfGas "
+            "(cost := 12) (gas := 11))"
         ),
     ):
         run(fork, 0x09, data, 11)
@@ -199,24 +205,26 @@ def test_blake2f_order_of_checks(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f\n  "
-            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.invalidInputLength 212)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f "
+            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.invalidInputLength "
+            "(size := 212))"
         ),
     ):
         run(fork, 0x09, blake2f_input(12, b"abc", 1)[:-1], 0)
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f\n  "
-            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.outOfGas 12 11)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f "
+            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.outOfGas "
+            "(cost := 12) (gas := 11))"
         ),
     ):
         run(fork, 0x09, blake2f_input(12, b"abc", 2), 11)
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f\n  "
-            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.invalidFlag 2)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f "
+            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.invalidFlag (flag := 2))"
         ),
     ):
         run(fork, 0x09, blake2f_input(12, b"abc", 2), 12)
@@ -235,8 +243,9 @@ def test_bls12_add_infinity(fork: str, address: int, size: int, cost: int, out_s
     assert run(fork, address, bytes(size), cost) == bytes(out_size)
     with raises(
         ValueError,
-        f"EthLib.Execution.Evm.Precompiles.PrecompileError.bls12381\n  "
-        f"(EthLib.Execution.Evm.Precompiles.Bls12381.Bls12381Error.outOfGas {cost} {cost - 1})",
+        f"EthLib.Execution.Evm.Precompiles.PrecompileError.bls12381 "
+        "(EthLib.Execution.Evm.Precompiles.Bls12381.Bls12381Error.outOfGas "
+        f"(cost := {cost}) (gas := {cost - 1}))",
     ):
         run(fork, address, bytes(size), cost - 1)
 
@@ -254,7 +263,8 @@ def test_bls12_map_zero(fork: str, address: int, size: int, cost: int, out_size:
     assert len(run(fork, address, bytes(size), cost)) == out_size
     with raises(
         ValueError,
-        f"EthLib.Execution.Evm.Precompiles.PrecompileError.bls12381\n  "
-        f"(EthLib.Execution.Evm.Precompiles.Bls12381.Bls12381Error.outOfGas {cost} {cost - 1})",
+        f"EthLib.Execution.Evm.Precompiles.PrecompileError.bls12381 "
+        "(EthLib.Execution.Evm.Precompiles.Bls12381.Bls12381Error.outOfGas "
+        f"(cost := {cost}) (gas := {cost - 1}))",
     ):
         run(fork, address, bytes(size), cost - 1)

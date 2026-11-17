@@ -25,6 +25,8 @@ open EthLib.Execution.Evm.Precompiles
 
 The code of a failed call names the precompile, and the message is its error, as Lean prints it.
 
+The message stays on one line.
+
 An unknown fork, or an address with no precompile at the fork, has code 0.
 
 No error of a precompile has that code. -/
@@ -33,7 +35,7 @@ def runExport (fork : ByteArray) (address : UInt64) (data : ByteArray) (gas : UI
     Result ByteArray := do
   let fork ← forkUpTo .glamsterdam fork
   match run fork address.toNat data gas.toNat with
-  | some result => result.mapError fun e => (e.code, reprStr e)
+  | some result => result.mapError fun e => (e.code, (repr e).pretty 1000000)
   | none => throw (0, s!"no precompile at address {address} at fork {fork.name}")
 
 /-- The price of the precompile at the address on the call data, at the fork named.

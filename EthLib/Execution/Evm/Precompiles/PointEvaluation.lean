@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.ErrorFormat
 public import EthLib.Base.BigEndian
 public import EthLib.Cryptography.Kzg.Core
 public import EthLib.Cryptography.Kzg.VersionedHash
@@ -49,21 +50,44 @@ inductive PointEvaluationError where
   | invalidInputLength (size : Nat)
   /-- The gas given was below the price. -/
   | outOfGas (cost gas : Nat)
-  /-- The versioned hash is not the one of the commitment. -/
-  | versionedHashMismatch
-  /-- The commitment is not a valid compressed G1 point in the subgroup. -/
-  | invalidCommitment
-  /-- `z` or `y` is not below the BLS12-381 group order. -/
-  | invalidFieldElement
-  /-- The proof is not a valid compressed G1 point in the subgroup. -/
-  | invalidProof
+  /-- The versioned hash `actual` of the call is not `expected`, the one of the commitment. -/
+  | versionedHashMismatch (expected actual : Bytes32)
+  /-- The commitment `commitment` is not a valid compressed G1 point in the subgroup. -/
+  | invalidCommitment (commitment : Bytes48)
+  /-- `z` or `y`, of value `value`, is not below the BLS12-381 group order. -/
+  | invalidFieldElement (value : Nat)
+  /-- The proof `proof` is not a valid compressed G1 point in the subgroup. -/
+  | invalidProof (proof : Bytes48)
   /-- `[tau]_2` does not decompress.
 
   The source decompresses the same constant, and fails the same way if it is invalid. -/
   | invalidTrustedSetup
   /-- The pairing check fails: the proof does not show `p(z) = y`. -/
   | proofRejected
-  deriving Repr, DecidableEq
+  deriving DecidableEq
+
+/-- A constructor of the error, named in full, applied to its arguments. -/
+def pointEvaluationErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat
+    ("EthLib.Execution.Evm.Precompiles.PointEvaluation.PointEvaluationError." ++ name) args prec
+
+/-- The form of the error in Lean syntax, with each value named and each byte string in hex. -/
+def PointEvaluationError.reprPrec : PointEvaluationError → Nat → Std.Format
+  | .invalidInputLength size, p =>
+    pointEvaluationErrorFormat "invalidInputLength" [namedArg "size" size] p
+  | .outOfGas cost gas, p =>
+    pointEvaluationErrorFormat "outOfGas" [namedArg "cost" cost, namedArg "gas" gas] p
+  | .versionedHashMismatch expected actual, p => pointEvaluationErrorFormat "versionedHashMismatch"
+      [namedArg "expected" expected, namedArg "actual" actual] p
+  | .invalidCommitment commitment, p =>
+    pointEvaluationErrorFormat "invalidCommitment" [namedArg "commitment" commitment] p
+  | .invalidFieldElement value, p =>
+    pointEvaluationErrorFormat "invalidFieldElement" [namedArg "value" value] p
+  | .invalidProof proof, p => pointEvaluationErrorFormat "invalidProof" [namedArg "proof" proof] p
+  | .invalidTrustedSetup, p => pointEvaluationErrorFormat "invalidTrustedSetup" [] p
+  | .proofRejected, p => pointEvaluationErrorFormat "proofRejected" [] p
+
+instance : Repr PointEvaluationError := ⟨PointEvaluationError.reprPrec⟩
 
 /-- The stable code of an error, one per constructor.
 
@@ -73,10 +97,10 @@ A new constructor takes a new code, so that each code keeps its meaning. -/
 def PointEvaluationError.code : PointEvaluationError → UInt32
   | .invalidInputLength .. => 1
   | .outOfGas .. => 2
-  | .versionedHashMismatch => 3
-  | .invalidCommitment => 4
-  | .invalidFieldElement => 5
-  | .invalidProof => 6
+  | .versionedHashMismatch .. => 3
+  | .invalidCommitment _ => 4
+  | .invalidFieldElement _ => 5
+  | .invalidProof _ => 6
   | .invalidTrustedSetup => 7
   | .proofRejected => 8
 
@@ -88,10 +112,13 @@ The check holds when the quotient `(p(X) - y) / (X - z)` is a polynomial. -/
 def verifyKzgProof (commitment : Bytes48) (z y : Bytes32) (proof : Bytes48) :
     Except PointEvaluationError Bool := do
   -- The inputs are decoded in the order of EIP-4844.
-  let commitmentPoint ← (validateKzgG1Point commitment).mapError fun _ => .invalidCommitment
-  let zField ← (Fr.fromBytesBE (packBytes z)).mapError fun _ => .invalidFieldElement
-  let yField ← (Fr.fromBytesBE (packBytes y)).mapError fun _ => .invalidFieldElement
-  let proofPoint ← (validateKzgG1Point proof).mapError fun _ => .invalidProof
+  let commitmentPoint ←
+    (validateKzgG1Point commitment).mapError fun _ => .invalidCommitment commitment
+  let zField ← (Fr.fromBytesBE (packBytes z)).mapError fun _ =>
+    .invalidFieldElement (EthLib.Base.bytesToNat z.toList)
+  let yField ← (Fr.fromBytesBE (packBytes y)).mapError fun _ =>
+    .invalidFieldElement (EthLib.Base.bytesToNat y.toList)
+  let proofPoint ← (validateKzgG1Point proof).mapError fun _ => .invalidProof proof
   let tau ← (G2.uncompress KZG_SETUP_G2_MONOMIAL_1).mapError fun _ => .invalidTrustedSetup
   return verifyKzgProofWith tau commitmentPoint zField yField proofPoint
 
@@ -114,7 +141,7 @@ def pointEvaluation (data : ByteArray) (gas : Nat) : Except PointEvaluationError
     let commitment := readBytes data 96 48 (by simp [fits, INPUT_BYTES])
     let proof := readBytes data 144 48 (by simp [fits, INPUT_BYTES])
     if kzgCommitmentToVersionedHash commitment ≠ versionedHash then
-      throw .versionedHashMismatch
+      throw (.versionedHashMismatch (kzgCommitmentToVersionedHash commitment) versionedHash)
     if !(← verifyKzgProof commitment z y proof) then
       throw .proofRejected
     return output
