@@ -10,6 +10,12 @@ Completeness: climbing from a leaf with its path reaches the root.
 The statements hold for every node hash, run in the identity monad.
 
 The unfolding equations of a node hold in every monad.
+
+The file also proves the facts other proofs use to move a tree between hashes and monads.
+
+- Which levels a node, a path or a climb hashes at, so a hash can be changed elsewhere.
+- How a map of monads, such as answering oracle calls from a table, acts on the tree.
+- How a tree whose hash ignores the position splits into subtrees.
 -/
 
 @[expose] public section
@@ -34,12 +40,17 @@ theorem node_succ (leaves : Nat → m α) (level j : Nat) :
       hash ⟨level + 1, j⟩ left right) :=
   rfl
 
-/-- At any position above level 0, a node hashes its left child, then its right child. -/
+/-- At any position above level 0, a node hashes its left child, then its right child.
+
+The previous equation needs the level written as `level + 1`.
+
+This one takes any position, with a hypothesis that it is above the leaves. -/
 theorem node_children (leaves : Nat → m α) {p : Position} (hlevel : p.level ≠ 0) :
     node hash leaves p = (do
       let left ← node hash leaves p.left
       let right ← node hash leaves p.right
       hash p left right) := by
+  -- A position above level 0 has a level of the form `level + 1`.
   obtain ⟨level, j⟩ := p
   cases level with
   | zero => exact absurd rfl hlevel
@@ -59,7 +70,9 @@ theorem climb_append [LawfulMonad m] :
 
 /-- Climbing the first `n + 1` siblings climbs the first `n`, then hashes in sibling `n`.
 
-The held node is then the ancestor `n` levels up, which says which child it is. -/
+After `n` steps the climb holds a node at the position `n` levels up.
+
+The parity of that position says whether the node is the left or the right child. -/
 theorem climb_take_succ [LawfulMonad m] (p : Position) (current : α) (s : List α) (n : Nat)
     (hn : n < s.length) :
     climb hash p current (s.take (n + 1)) = (do
@@ -74,26 +87,32 @@ theorem climb_take_succ [LawfulMonad m] (p : Position) (current : α) (s : List 
   unfold ordered
   split <;> rfl
 
-/-- A climb step puts the held node on the left when its index is even. -/
+/-- A climb step puts the node it holds on the left when its index is even. -/
 theorem ordered_eq_ite (p : Position) (current sibling : α) :
     ordered p current sibling
       = if p.index % 2 = 0 then (current, sibling) else (sibling, current) := by
   unfold ordered
   simp only [Position.isLeft_iff]
 
-/-- Ordering two mapped children maps the ordered pair. -/
+/-- Ordering two mapped children maps the ordered pair.
+
+The order depends only on the position, not on the values. -/
 theorem ordered_map {β : Type} (f : α → β) (p : Position) (current sibling : α) :
     ordered p (f current) (f sibling) = Prod.map f f (ordered p current sibling) := by
+  -- In both cases of the parity, the map is applied to each component.
   unfold ordered
   split <;> rfl
 
-/-- A map that commutes with the node hash commutes with the climb. -/
+/-- A map that commutes with the node hash commutes with the climb.
+
+For example, the map can encode nodes as bytes, for a hash defined on bytes. -/
 theorem climb_map [LawfulMonad m] {β : Type} (hash' : Position → β → β → m β) (f : α → β)
     (commute : ∀ p left right, hash' p (f left) (f right) = f <$> hash p left right) :
     ∀ (siblings : List α) (p : Position) (current : α),
       climb hash' p (f current) (siblings.map f) = f <$> climb hash p current siblings
   | [], _, _ => by simp [climb]
   | sibling :: rest, p, current => by
+    -- Push the map through the order, then through the hash, then into the rest of the climb.
     simp only [List.map_cons, climb, ordered_map, Prod.map_fst, Prod.map_snd, commute,
       bind_map_left, map_bind, climb_map hash' f commute rest]
 
@@ -101,7 +120,9 @@ theorem climb_map [LawfulMonad m] {β : Type} (hash' : Position → β → β �
 
 /-- A node hashes only at levels 1 to its own.
 
-So two node hashes that agree there give the same node. -/
+So two node hashes that agree there give the same node.
+
+A proof can then replace the hash at the levels a node never reaches. -/
 theorem node_congr (hash' : Position → α → α → m α) (leaves : Nat → m α) (p : Position)
     (agree : ∀ q : Position, 1 ≤ q.level → q.level ≤ p.level → hash q = hash' q) :
     node hash leaves p = node hash' leaves p := by
@@ -115,7 +136,9 @@ theorem node_congr (hash' : Position → α → α → m α) (leaves : Nat → m
     rw [node_succ, node_succ, ih (2 * j) below, ih (2 * j + 1) below,
       agree ⟨level + 1, j⟩ (by simp) (Nat.le_refl _)]
 
-/-- The `n` siblings from a node at level `l` up hash only at levels 1 to `l + n - 1`. -/
+/-- The `n` siblings from a node at level `l` up hash only at levels 1 to `l + n - 1`.
+
+So two node hashes that agree there give the same siblings. -/
 theorem siblings_congr (hash' : Position → α → α → m α) (leaves : Nat → m α) :
     ∀ (n : Nat) (p : Position),
       (∀ q : Position, 1 ≤ q.level → q.level < p.level + n → hash q = hash' q) →
@@ -128,13 +151,17 @@ theorem siblings_congr (hash' : Position → α → α → m α) (leaves : Nat �
       siblings_congr hash' leaves n p.parent
         (fun q h1 h2 => agree q h1 (by simp at h2; omega))]
 
-/-- The path in a tree of height `h` hashes only at levels 1 to `h - 1`. -/
+/-- The path in a tree of height `h` hashes only at levels 1 to `h - 1`.
+
+It never computes the root, so the hash at level `h` does not matter. -/
 theorem path_congr (hash' : Position → α → α → m α) (leaves : Nat → m α) (h j : Nat)
     (agree : ∀ q : Position, 1 ≤ q.level → q.level < h → hash q = hash' q) :
     path hash leaves h j = path hash' leaves h j :=
   siblings_congr hash hash' leaves h ⟨0, j⟩ (by simpa using agree)
 
-/-- A climb from a node over `n` siblings hashes only at the `n` levels above the node. -/
+/-- A climb from a node over `n` siblings hashes only at the `n` levels above the node.
+
+So two node hashes that agree there give the same climb. -/
 theorem climb_congr (hash' : Position → α → α → m α) :
     ∀ (siblings : List α) (p : Position) (current : α),
       (∀ q : Position, p.level < q.level → q.level ≤ p.level + siblings.length →
@@ -147,7 +174,9 @@ theorem climb_congr (hash' : Position → α → α → m α) :
     exact congrArg _ (funext fun parent => climb_congr hash' rest p.parent parent
       (fun q h1 h2 => agree q (by simp at h1; omega) (by simp at h2 ⊢; omega)))
 
-/-- A node depends on its index only modulo `N`, when the leaves and the node hash do. -/
+/-- A node depends on its index only modulo `N`, when the leaves and the node hash do.
+
+For example, leaves indexed by a type with `N` values read a natural index modulo `N`. -/
 theorem node_mod (leaves : Nat → m α) (N : Nat) (hleaves : ∀ j, leaves j = leaves (j % N))
     (hhash : ∀ level j, hash ⟨level, j⟩ = hash ⟨level, j % N⟩) :
     ∀ level j, node hash leaves ⟨level, j⟩ = node hash leaves ⟨level, j % N⟩ := by
@@ -160,12 +189,15 @@ theorem node_mod (leaves : Nat → m α) (N : Nat) (hleaves : ∀ j, leaves j = 
   | zero => intro j j' hj; rw [node_zero, node_zero, hleaves, hj, ← hleaves]
   | succ level ih =>
     intro j j' hj
+    -- The children `2j` and `2j + 1` are equal modulo `N` to `2j'` and `2j' + 1`.
     rw [node_succ, node_succ, ih (2 * j) (2 * j') (by rw [Nat.mul_mod, hj, ← Nat.mul_mod]),
       ih (2 * j + 1) (2 * j' + 1) (by rw [Nat.add_mod, Nat.mul_mod, hj, ← Nat.mul_mod,
         ← Nat.add_mod]), hhash (level + 1) j, hhash (level + 1) j']
     simp only [hj]
 
-/-- A property kept by `bind` that holds of the leaves and of the node hash holds of every node. -/
+/-- A property kept by `bind` that holds of the leaves and of the node hash holds of every node.
+
+For example, the property can say that a computation never queries some input. -/
 theorem node_rec (P : ∀ {β : Type}, m β → Prop)
     (bind : ∀ {β γ : Type} {x : m β} {f : β → m γ}, P x → (∀ b, P (f b)) → P (x >>= f))
     (leaves : Nat → m α) (hleaves : ∀ j, P (leaves j))
@@ -175,10 +207,13 @@ theorem node_rec (P : ∀ {β : Type}, m β → Prop)
   induction level generalizing j with
   | zero => exact hleaves j
   | succ level ih =>
+    -- A node binds its two children, then hashes them.
     rw [node_succ]
     exact bind (ih _) fun _ => bind (ih _) fun _ => hhash _ _ _
 
-/-- A property kept by `pure` and `bind`, and true of the leaves and the hash, holds of siblings. -/
+/-- A property kept by `pure` and `bind`, and true of the leaves and the hash, holds of siblings.
+
+The siblings also need `pure`, to return the vector they collect. -/
 theorem siblings_rec (P : ∀ {β : Type}, m β → Prop) (hpure : ∀ {β : Type} (b : β), P (pure b))
     (hbind : ∀ {β γ : Type} {x : m β} {f : β → m γ}, P x → (∀ b, P (f b)) → P (x >>= f))
     (leaves : Nat → m α) (hleaves : ∀ j, P (leaves j))
@@ -186,11 +221,21 @@ theorem siblings_rec (P : ∀ {β : Type}, m β → Prop) (hpure : ∀ {β : Typ
     ∀ (p : Position) (n : Nat), P (siblings hash leaves p n)
   | _, 0 => hpure _
   | p, n + 1 =>
+    -- Compute one sibling, then the siblings one level up, then return them together.
     hbind (node_rec hash P hbind leaves hleaves hhash _) fun _ =>
       hbind (siblings_rec P hpure hbind leaves hleaves hhash p.parent n) fun _ =>
         hpure _
 
 section Map
+
+/-! ### Changing the monad
+
+A map of monads that keeps `pure` and `bind` moves a computation to another monad.
+
+For example, it can answer oracle calls from a table, or lift them into a larger oracle.
+
+The tree commutes with such a map: mapping a node is computing the node with the mapped hash.
+-/
 
 variable {n : Type → Type} [Monad n] (φ : ∀ {β : Type}, m β → n β)
   (map_pure : ∀ {β : Type} (b : β), φ (pure b) = pure b)
@@ -205,6 +250,7 @@ theorem node_map (leaves : Nat → m α) :
   rintro ⟨level, j⟩
   induction level generalizing j with
   | zero => rfl
+  -- The map passes through each bind, down to the children and the hash.
   | succ level ih => simp only [node_succ, map_bind, ih]
 
 include map_pure in
@@ -240,14 +286,16 @@ end Monad
 
 variable {α : Type} (hash : Position → α → α → Id α)
 
-/-- A node above level 0 is the hash of its two children, at its own position. -/
+/-- A node at level `level + 1` is the hash of its two children, at its own position.
+
+It holds by definition. -/
 theorem node_succ_run (leaves : Nat → Id α) (level j : Nat) :
     (node hash leaves ⟨level + 1, j⟩).run
       = (hash ⟨level + 1, j⟩ (node hash leaves ⟨level, 2 * j⟩).run
           (node hash leaves ⟨level, 2 * j + 1⟩).run).run :=
   rfl
 
-/-- A node above level 0 is the hash of its two children, at its own position. -/
+/-- A node at any position above the leaves is the hash of its two children, at that position. -/
 theorem node_children_run (leaves : Nat → Id α) {p : Position} (hlevel : p.level ≠ 0) :
     (node hash leaves p).run
       = (hash p (node hash leaves p.left).run (node hash leaves p.right).run).run := by
@@ -265,7 +313,9 @@ theorem siblings_succ_toList (leaves : Nat → Id α) (p : Position) (n : Nat) :
     (climb hash p current []).run = current :=
   rfl
 
-/-- The pair of children determines the held node and its sibling. -/
+/-- The ordered pair determines the node a climb holds and its sibling.
+
+So two climb steps at one position that hash the same pair held the same node and sibling. -/
 theorem ordered_inj {p : Position} {c s c' s' : α} :
     ordered p c s = ordered p c' s' ↔ c = c' ∧ s = s' := by
   unfold ordered
@@ -283,7 +333,9 @@ theorem climb_cons (p : Position) (current sibling : α) (rest : List α) :
 
 /-- A node and its sibling, in order, are the two children of their parent.
 
-Here `f` reads the nodes of a tree. -/
+Here `f` gives the node at each position, for example in the honest tree.
+
+So a climb step from an honest node with its honest sibling hashes the parent's children. -/
 theorem ordered_sibling (f : Position → α) (p : Position) :
     ordered p (f p) (f p.sibling) = (f p.parent.left, f p.parent.right) := by
   unfold ordered
@@ -311,13 +363,16 @@ theorem siblings_succ_toList_concat (leaves : Nat → Id α) :
     conv => lhs; rw [siblings_succ_toList, siblings_succ_toList_concat leaves n p.parent]
     rw [siblings_succ_toList, List.cons_append, Position.ancestor_parent]
 
-/-- The siblings of the ancestors of a node, read one per level, start with its first siblings. -/
+/-- Siblings listed one per level for `h` levels, cut to the first `n`, are the first `n` siblings.
+
+The list on the left gives sibling `k` as a function of `k`, as a signature scheme may state it. -/
 theorem ofFn_take_siblings (leaves : Nat → Id α) (p : Position) (h : Nat) :
     ∀ n, n ≤ h → (List.ofFn fun k : Fin h =>
         (node hash leaves (p.ancestor k.val).sibling).run).take n =
       (siblings hash leaves p n).run.toList
   | 0, _ => by simp [siblings]
   | n + 1, hn => by
+    -- Both sides grow by the sibling of the ancestor `n` levels up.
     rw [siblings_succ_toList_concat, ← ofFn_take_siblings leaves p h n (by omega),
       List.take_add_one]
     simp [show n < h by omega]
@@ -337,20 +392,23 @@ theorem climb_siblings (leaves : Nat → Id α) :
     dsimp only
     rw [← node_children_run hash leaves (p := p.parent) (by simp), ih, Position.ancestor_parent]
 
-/-- Climbing from leaf `j` with its path reaches its ancestor on level `h`. -/
+/-- Climbing from leaf `j` with its path reaches its ancestor on level `h`.
+
+That ancestor is the root only when `j < 2^h`. -/
 theorem climb_path (leaves : Nat → Id α) (h j : Nat) :
     (climb hash ⟨0, j⟩ (leaves j).run (path hash leaves h j).run.toList).run
       = (node hash leaves ⟨h, j / 2 ^ h⟩).run := by
+  -- A path is the siblings of the leaf, so this is the climb along the siblings.
   have := climb_siblings hash leaves h ⟨0, j⟩
   rwa [Position.ancestor_mk_zero] at this
 
-/-- The top two nodes below the root, in order, from a path of a tree of height `n + 1`.
+/-- The last step of a climb along a path of height `n + 1` hashes the children of the top node.
 
-The climb over the first `n` siblings reaches the leaf's ancestor on level `n`.
+The top node is the leaf's ancestor on level `n + 1`, the root when the leaf is in the tree.
 
-The last sibling is the other node on level `n`.
-
-The ancestor's position puts the two in order. -/
+- After `n` steps the climb holds the leaf's ancestor on level `n`.
+- The last sibling is the other child of the top node.
+- The ancestor's position puts the two in order. -/
 theorem ordered_climb_path_last (leaves : Nat → Id α) {h n : Nat} (hn : h = n + 1) (j : Nat) :
     ordered ((⟨0, j⟩ : Position).ancestor n)
         (climb hash ⟨0, j⟩ (leaves j).run ((path hash leaves h j).run.toList.take n)).run
@@ -371,10 +429,13 @@ theorem ordered_climb_path_last (leaves : Nat → Id α) {h n : Nat} (hn : h = n
   rw [show (leaves j).run = (node hash leaves ⟨0, j⟩).run from rfl, hclimb,
     ordered_sibling (fun q => (node hash leaves q).run), Position.parent_ancestor]
 
-/-- Completeness: climbing from a leaf `j < 2^h` with its path reaches the root. -/
+/-- Completeness: climbing from a leaf `j < 2^h` with its path reaches the root.
+
+So an honest path always verifies. -/
 theorem climb_path_root (leaves : Nat → Id α) {h j : Nat} (hj : j < 2 ^ h) :
     (climb hash ⟨0, j⟩ (leaves j).run (path hash leaves h j).run.toList).run
       = (root hash leaves h).run := by
+  -- The ancestor on level `h` has index `j / 2^h = 0`, which is the root.
   rw [climb_path, Nat.div_eq_of_lt hj]
   rfl
 
@@ -382,7 +443,11 @@ theorem climb_path_root (leaves : Nat → Id α) {h j : Nat} (hj : j < 2 ^ h) :
 
 /-- In a tree that hashes every node alike, a node is the root of the subtree below it.
 
-The subtree's leaves are the `2^level` leaves under node `j`, starting at leaf `j * 2^level`. -/
+The subtree's leaves are the `2^level` leaves under node `j`, starting at leaf `j * 2^level`.
+
+This fails when the hash reads the position, since the subtree's positions start again at 0.
+
+So a tree such as SSZ's can be computed one subtree at a time. -/
 theorem node_const_shift (combine : α → α → Id α) :
     ∀ (level : Nat) (leaves : Nat → Id α) (j : Nat),
       (node (fun _ => combine) leaves ⟨level, j⟩).run
