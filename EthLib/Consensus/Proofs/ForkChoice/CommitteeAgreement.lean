@@ -174,6 +174,32 @@ private theorem Store.ForwardReachableWith.runs_of_voteOrigin {checks : Signatur
     exact .inr ⟨above, reached.runKept_of_checkpointState anchorSlot checkpoint headBlockFound
       startOk (UInt64.le_trans (UInt64.le_of_lt above) headAbove) targetFound headFound⟩
 
+/-- A checkpoint state is in the epoch of its checkpoint or a later one.
+
+The epoch of the checkpoint must be that of a slot, so that a zero epoch length is covered.
+
+The state comes from the state of the checkpoint block, perhaps processed to the start of the epoch.
+
+The store is built with one setting of the checks. -/
+theorem Store.ForwardReachableWith.epoch_le_of_checkpointState {checks : SignatureChecks}
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    {slot : Slot} {checkpoint : Checkpoint} {state : BeaconState preset fork}
+    (found : store.checkpointStates[checkpoint]? = some state)
+    (epochOf : checkpoint.epoch = computeEpochAtSlot preset slot) :
+    (computeEpochAtSlot preset slot).toNat ≤ (getCurrentEpoch state).toNat := by
+  obtain ⟨base, start, baseFound, startOk, fromBlock⟩ := reached.checkpointStatesFromBlocks found
+  have startLe : start ≤ state.slot := by
+    rcases fromBlock with ⟨baseLe, rfl⟩ | ⟨-, _, -, slotsOk⟩
+    · exact baseLe
+    · exact (processSlots_slot slotsOk).2 ▸ UInt64.le_refl _
+  rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | positive
+  · rw [computeEpochAtSlot, UInt64.toNat_div, zero, Nat.div_zero]
+    exact Nat.zero_le _
+  · rw [epochOf] at startOk
+    rw [← computeEpochAtSlot_computeStartSlotAtEpoch (UInt64.lt_iff_toNat_lt.mpr positive)
+      startOk, getCurrentEpoch_toNat]
+    exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp startLe)
+
 /-- The target state of a vote and the state of the head agree on the committees of its epoch.
 
 They also agree on the count of committees per slot of that epoch.
@@ -219,19 +245,8 @@ theorem Store.ForwardReachableWith.committeesKept_of_voteOrigin {checks : Signat
     reached.checkpointStatesFromBlocks targetFound
   have startEpoch := startOk
   rw [origin.targetEpoch] at startEpoch
-  have targetLe : start ≤ targetState.slot := by
-    rcases fromBlock with ⟨baseLe, rfl⟩ | ⟨-, _, -, slotsOk⟩
-    · exact baseLe
-    · exact (processSlots_slot slotsOk).2 ▸ UInt64.le_refl _
   -- The epoch of the vote is that of its first slot, which is no later than the target state.
-  have targetEpochLe : (computeEpochAtSlot preset attestation.data.slot).toNat ≤
-      (getCurrentEpoch targetState).toNat := by
-    rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | positive
-    · rw [computeEpochAtSlot, UInt64.toNat_div, zero, Nat.div_zero]
-      exact Nat.zero_le _
-    · rw [← computeEpochAtSlot_computeStartSlotAtEpoch (UInt64.lt_iff_toNat_lt.mpr positive)
-        startEpoch, getCurrentEpoch_toNat]
-      exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp targetLe)
+  have targetEpochLe := reached.epoch_le_of_checkpointState targetFound origin.targetEpoch
   rcases reached.runs_of_voteOrigin anchorSlot found headDescends origin votedRoot voteDescends
       targetFound headFound baseFound startOk with
     ⟨-, common, targetBlock, commonFound, targetBlockFound, targetBlockLe, toTarget, toHead,
@@ -301,10 +316,6 @@ theorem Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin {checks :
   -- The target state is the state of the target block, perhaps processed to the start.
   obtain ⟨base, start, baseFound, startOk, fromBlock⟩ :=
     reached.checkpointStatesFromBlocks targetFound
-  have targetLe : start ≤ targetState.slot := by
-    rcases fromBlock with ⟨baseLe, rfl⟩ | ⟨-, _, -, slotsOk⟩
-    · exact baseLe
-    · exact (processSlots_slot slotsOk).2 ▸ UInt64.le_refl _
   -- The two states have the same active validators in the epoch before the target.
   have same : getActiveValidatorIndices headState previous =
       getActiveValidatorIndices targetState previous := by
@@ -326,14 +337,8 @@ theorem Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin {checks :
       rw [toHead.active.getActiveValidatorIndices_eq fixed,
         (toTarget.trans baseToTarget).active.getActiveValidatorIndices_eq fixed]
     · -- The target state is at or after the start of the target epoch, and runs to the head.
-      have targetEpochLe : attestation.data.target.epoch.toNat ≤
-          (getCurrentEpoch targetState).toNat := by
-        rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | positive
-        · rw [origin.targetEpoch, computeEpochAtSlot, UInt64.toNat_div, zero, Nat.div_zero]
-          exact Nat.zero_le _
-        · rw [← computeEpochAtSlot_computeStartSlotAtEpoch
-            (UInt64.lt_iff_toNat_lt.mpr positive) startOk, getCurrentEpoch_toNat]
-          exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp targetLe)
+      have targetEpochLe := reached.epoch_le_of_checkpointState targetFound origin.targetEpoch
+      rw [← origin.targetEpoch] at targetEpochLe
       exact run.active.getActiveValidatorIndices_eq
         (le_activityFixedEpoch maxLookahead (by omega))
   rw [same]
