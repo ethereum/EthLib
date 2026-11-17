@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 public import EthLib.Consensus.Proofs.Transition.EpochDecomposition
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
+import EthLib.Base.Proofs.Nat
 import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.Totality.EffectiveBalances
 public import EthLib.Consensus.Proofs.Transition.Totality.PendingDeposits
@@ -173,20 +174,6 @@ theorem mul_div_sqrt_le {total : Nat} (positive : 0 < total) (factor : Nat) :
         exact Nat.mul_le_mul_right _ below
     _ = factor * (Nat.sqrt total + 2) := by
         rw [Nat.mul_div_cancel_left _ rootPositive, Nat.mul_comm]
-
-/-- Whole increments of a total, times one increment's share of a factor, are at most the total's.
-
-The share of an increment is the increment times the factor over the root.
-
-The share of the total is the total times the factor over the root. -/
-theorem div_mul_div_le_mul_div (total increment factor root : Nat) :
-    total / increment * (increment * factor / root) ≤ total * factor / root :=
-  calc total / increment * (increment * factor / root)
-      ≤ total / increment * (increment * factor) / root := Nat.mul_div_le_mul_div_assoc _ _ _
-    _ ≤ total * factor / root := by
-        refine Nat.div_le_div_right ?_
-        rw [← Nat.mul_assoc]
-        exact Nat.mul_le_mul_right _ (Nat.div_mul_le_self _ _)
 
 /-- Whole increments of a positive total, times one increment's share of a factor, are bounded.
 

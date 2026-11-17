@@ -588,11 +588,7 @@ private theorem still_processConsolidationRequest {electra : .pectra ≤ fork}
 private theorem still_processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) (index : Nat) :
     Still index state after := by
-  obtain ⟨start, recorded⟩ :=
-    recordDepositRequestsStart_eq (state := state) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, rfl⟩ := computed
+  obtain ⟨-, -, -, start, pending, rfl⟩ := processDepositRequest_ok computed
   exact Still.of_eq rfl rfl rfl index
 
 /-! ## The balance alone -/

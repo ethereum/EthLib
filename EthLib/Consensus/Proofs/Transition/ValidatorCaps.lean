@@ -3132,13 +3132,21 @@ private theorem preKeyCharge_sync {f : Fork} {s t : BeaconState preset f}
     · simpa only [signed, Bool.false_eq_true, ↓reduceIte, apart member inside] using previous
   exact same ▸ located
 
+/-- Every slashed validator of the state has an assigned exit epoch. -/
+def SlashedExitAssigned {f : Fork} (s : BeaconState preset f) : Prop :=
+  ∀ (i : Nat) (v : Validator), s.validators.data[i]? = some v → v.slashed = true →
+    v.exitEpoch ≠ FAR_FUTURE_EPOCH
+
+/-- A state with the same registry has the same slashed exits. -/
+theorem SlashedExitAssigned.of_validators_eq {f h : Fork} {s : BeaconState preset f}
+    {t : BeaconState preset h} (same : t.validators.data = s.validators.data)
+    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
+  simpa only [SlashedExitAssigned, same] using held
+
 private theorem CapStep.slashed_exit_assigned {f h : Fork} {s : BeaconState preset f}
     {t : BeaconState preset h} (step : CapStep config s t)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (held : ∀ (i : Nat) (v : Validator), s.validators.data[i]? = some v → v.slashed = true →
-      v.exitEpoch ≠ FAR_FUTURE_EPOCH) :
-    ∀ (i : Nat) (w : Validator), t.validators.data[i]? = some w → w.slashed = true →
-      w.exitEpoch ≠ FAR_FUTURE_EPOCH := by
+    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
   intro i w after flag
   by_cases inside : i < s.validators.data.size
   · have before := Array.getElem?_eq_getElem inside
@@ -3148,7 +3156,7 @@ private theorem CapStep.slashed_exit_assigned {f h : Fork} {s : BeaconState pres
         (held i _ before oldFlag)).2.1
   · exact step.appended delay i w (by omega) after flag
 
-/-- Proposer and attester slashings preserve assigned exits for every slashed validator. -/
+/-- Proposer and attester slashings keep the exit of every slashed validator assigned. -/
 theorem processSlashing_slashed_exit_assigned
     {f : Fork} {s t : BeaconState preset f}
     (step : (∃ sl : ProposerSlashing,
@@ -3156,13 +3164,34 @@ theorem processSlashing_slashed_exit_assigned
       (∃ sl : AttesterSlashing preset f,
         processAttesterSlashing config checks s sl = .ok t))
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (held : ∀ (i : Nat) (v : Validator), s.validators.data[i]? = some v → v.slashed = true →
-      v.exitEpoch ≠ FAR_FUTURE_EPOCH) :
-    ∀ (i : Nat) (w : Validator), t.validators.data[i]? = some w → w.slashed = true →
-      w.exitEpoch ≠ FAR_FUTURE_EPOCH := by
+    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
   rcases step with ⟨sl, ok⟩ | ⟨sl, ok⟩
   · exact (CapStep.proposerSlashing ok).1.slashed_exit_assigned delay held
   · exact (CapStep.attesterSlashing ok).1.slashed_exit_assigned delay held
+
+/-- Initiating an exit keeps the exit of every slashed validator assigned. -/
+theorem initiateValidatorExit_slashed_exit_assigned {f : Fork} {s t : BeaconState preset f}
+    {i : ValidatorIndex} (ok : initiateValidatorExit config s i = .ok t)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (held : SlashedExitAssigned s) : SlashedExitAssigned t :=
+  (CapStep.exit ok).1.slashed_exit_assigned delay held
+
+/-- A change to execution credentials keeps the exit of every slashed validator assigned. -/
+theorem processBlsToExecutionChange_slashed_exit_assigned {f : Fork}
+    {s t : BeaconState preset f} {signed : SignedBLSToExecutionChange}
+    (ok : processBlsToExecutionChange config checks s signed = .ok t)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (held : SlashedExitAssigned s) : SlashedExitAssigned t :=
+  (CapStep.blsChange ok).1.slashed_exit_assigned delay held
+
+/-- A consolidation request keeps the exit of every slashed validator assigned. -/
+theorem processConsolidationRequest_slashed_exit_assigned {f : Fork}
+    {s t : BeaconState preset f} {electra : .pectra ≤ f} {request : ConsolidationRequest}
+    (order : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (ok : processConsolidationRequest config s electra request = .ok t)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (held : SlashedExitAssigned s) : SlashedExitAssigned t :=
+  (CapStep.consolidationRequest order ok).1.slashed_exit_assigned delay held
 
 private theorem CapStep.withdrawals {f : Fork} {s t : BeaconState preset f}
     {capella : .shapella ≤ f} {payload : Until .glamsterdam f (ExecutionPayload preset f)}

@@ -179,11 +179,7 @@ private theorem stepKeeps_processDepositRequest {electra : .pectra ≤ fork}
     {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
     StepKeeps state after := by
-  obtain ⟨start, recorded⟩ :=
-    recordDepositRequestsStart_eq (state := state) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, rfl⟩ := computed
+  obtain ⟨-, -, -, start, pending, rfl⟩ := processDepositRequest_ok computed
   exact StepKeeps.of_validators
 
 private theorem stepKeeps_requestPartialWithdrawal {electra : .pectra ≤ fork}

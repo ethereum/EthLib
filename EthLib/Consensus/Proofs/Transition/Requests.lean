@@ -635,7 +635,7 @@ theorem sameSizes_processExecutionRequests {body : BeaconBlockBody preset fork}
       (SameSizes.refl _) folded
   have requested := keep (fun _ _ _ ok =>
     ⟨congrArg (·.data.size) (processDepositRequest_ok ok).2.1,
-      congrArg (·.data.size) (processDepositRequest_ok ok).2.2⟩) depositedOk
+      congrArg (·.data.size) (processDepositRequest_ok ok).2.2.1⟩) depositedOk
   exact requested.trans <|
     (keep (fun _ _ _ ok => sameSizes_processWithdrawalRequest ok) withdrawnOk).trans
       (keep (fun _ _ _ ok => sameSizes_processConsolidationRequest ok) consolidated)

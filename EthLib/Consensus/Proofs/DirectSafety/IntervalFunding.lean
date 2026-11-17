@@ -2366,21 +2366,6 @@ private theorem coverage_path_append (debit : Bool) (i : Nat)
       | nil => simp [pathCredits, pathDebits]
       | cons second rest => simpa [pathCredits, pathDebits, Nat.add_assoc] using ih
 
-/-- The balance path of a run ends at its endpoint. -/
-theorem coverage_path_last {x y : ForkedBeaconState preset}
-    (run : Run config checks x y) : ∃ pre, run.balancePath = pre ++ [y] := by
-  cases run with
-  | nil => exact ⟨[], rfl⟩
-  | @snoc middle last pre step =>
-    cases step with
-    | @block fork before after engine signed due ok =>
-      exact ⟨pre.balancePath ++ [⟨fork, before⟩], by
-        simp [Run.balancePath, Step.balancePath, List.append_assoc]⟩
-    | slot ok =>
-      obtain ⟨advanced, advanceOk, _⟩ := bind_ok_iff.mp ok
-      exact ⟨pre.balancePath ++ [middle, ⟨middle.fork, advanced⟩], by
-        simp [Run.balancePath, Step.balancePath, advanceOk, Except.toOption, List.append_assoc]⟩
-
 theorem coverage_run {x y : ForkedBeaconState preset} (run : Run config checks x y)
     (early : y.fork < .glamsterdam) (high : Nat)
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
@@ -2400,14 +2385,9 @@ theorem coverage_run {x y : ForkedBeaconState preset} (run : Run config checks x
     obtain ⟨added, addedOk, rfl⟩ := rest
     have priorCover := ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) selected priorOk
     have addedCover := coverage_step step early addedOk
-    obtain ⟨initialPath, prefixEq⟩ := coverage_path_last pre
-    have stepStarts : ∃ rest, step.balancePath = middle :: rest := by
-      cases step with
-      | block => exact ⟨_, rfl⟩
-      | slot ok =>
-        obtain ⟨advanced, advanceOk, _⟩ := bind_ok_iff.mp ok
-        exact ⟨[⟨middle.fork, advanced⟩, last], by
-          simp [Step.balancePath, advanceOk, Except.toOption]⟩
+    obtain ⟨initialPath, prefixEq⟩ := Run.balancePath_last pre
+    have stepStarts : ∃ rest, step.balancePath = middle :: rest :=
+      List.head?_eq_some_iff.mp (Step.balancePath_ends step).1
     obtain ⟨suffix, suffixEq⟩ := stepStarts
     intro debit i
     have splitPath : coveragePath debit i (pre.snoc step).balancePath =

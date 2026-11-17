@@ -66,6 +66,93 @@ def _root_.EthLib.Consensus.Run.balancePath {x : ForkedBeaconState preset} :
   | _, .nil => [x]
   | _, .snoc pre step => pre.balancePath ++ step.balancePath
 
+/-- A step's balance path starts at its start and ends at its end. -/
+theorem Step.balancePath_ends {m n : ForkedBeaconState preset}
+    (step : Step config checks m n) :
+    step.balancePath.head? = some m ∧ step.balancePath.getLast? = some n := by
+  cases step with
+  | block => simp [Step.balancePath]
+  | slot ok =>
+    simp only [Step.balancePath]
+    split <;> simp
+
+/-- A run's balance path starts at its start and ends at its end. -/
+theorem Run.balancePath_ends {x y : ForkedBeaconState preset}
+    (run : Run config checks x y) :
+    run.balancePath.head? = some x ∧ run.balancePath.getLast? = some y := by
+  induction run with
+  | nil => simp [Run.balancePath]
+  | snoc pre step ih =>
+    have ends := Step.balancePath_ends step
+    simp only [Run.balancePath, List.head?_append, List.getLast?_append, ih.1, ends.2]
+    simp
+
+/-- The balance path of an appended run.
+
+The second path loses its first state, which is the first path's last. -/
+theorem Run.balancePath_append {x m y : ForkedBeaconState preset}
+    (pre : Run config checks x m) (rest : Run config checks m y) :
+    (pre.append rest).balancePath = pre.balancePath ++ rest.balancePath.tail := by
+  induction rest with
+  | nil => simp [Run.append, Run.balancePath]
+  | snoc rest step ih =>
+    simp only [Run.append, Run.balancePath, ih, List.append_assoc]
+    obtain ⟨head, _⟩ := Run.balancePath_ends rest
+    cases h : rest.balancePath with
+    | nil => simp [h] at head
+    | cons a l => simp
+
+/-- A run that extends to a run ending in a step is that whole run, or extends to its prefix. -/
+theorem Run.prefix_snoc {x m k n : ForkedBeaconState preset}
+    (p : Run config checks x m) (r : Run config checks m n)
+    (q : Run config checks x k) (step : Step config checks k n)
+    (split : p.append r = q.snoc step) :
+    (m = n ∧ HEq p (q.snoc step)) ∨ ∃ r' : Run config checks m k, p.append r' = q := by
+  cases r with
+  | nil => exact .inl ⟨rfl, heq_of_eq split⟩
+  | snoc r' last =>
+    simp only [Run.append] at split
+    injection split with middle _ prefixEq _
+    subst middle
+    exact .inr ⟨r', eq_of_heq prefixEq⟩
+
+/-- Two runs with a common extension are ordered: one extends the other. -/
+theorem Run.prefix_total_of {x m1 m2 : ForkedBeaconState preset}
+    (p1 : Run config checks x m1) (p2 : Run config checks x m2) :
+    ∀ {y : ForkedBeaconState preset} (r2 : Run config checks m2 y)
+      (r1 : Run config checks m1 y), p1.append r1 = p2.append r2 →
+    (∃ r : Run config checks m1 m2, p1.append r = p2) ∨
+      ∃ r : Run config checks m2 m1, p2.append r = p1 := by
+  intro y r2
+  induction r2 with
+  | nil => exact fun r1 same => .inl ⟨r1, same⟩
+  | snoc r2 last ih =>
+    intro r1 same
+    simp only [Run.append] at same
+    rcases Run.prefix_snoc p1 r1 (p2.append r2) last same with ⟨rfl, joined⟩ | ⟨r', earlier⟩
+    · exact .inr ⟨r2.snoc last, (eq_of_heq joined).symm⟩
+    · exact ih r' earlier
+
+/-- Two splits of one run are ordered. -/
+theorem Run.prefix_total {x m1 m2 y : ForkedBeaconState preset}
+    {tail : Run config checks x y}
+    (p1 : Run config checks x m1) (r1 : Run config checks m1 y)
+    (p2 : Run config checks x m2) (r2 : Run config checks m2 y)
+    (one : p1.append r1 = tail) (two : p2.append r2 = tail) :
+    (∃ r : Run config checks m1 m2, p1.append r = p2) ∨
+      ∃ r : Run config checks m2 m1, p2.append r = p1 :=
+  Run.prefix_total_of p1 p2 r2 r1 (one.trans two.symm)
+
+/-- A run's balance path is a list that ends at the end of the run. -/
+theorem Run.balancePath_last {x y : ForkedBeaconState preset}
+    (run : Run config checks x y) : ∃ pre, run.balancePath = pre ++ [y] :=
+  List.getLast?_eq_some_iff.mp (Run.balancePath_ends run).2
+
+/-- A run's balance path is a list that starts at the start of the run. -/
+theorem Run.balancePath_head {x y : ForkedBeaconState preset}
+    (run : Run config checks x y) : ∃ rest, run.balancePath = x :: rest :=
+  List.head?_eq_some_iff.mp (Run.balancePath_ends run).1
+
 /-- The balance increases at one position between consecutive states of a path. -/
 def pathCredits (i : Nat) : List (ForkedBeaconState preset) → Nat
   | x :: y :: rest => (actualBalanceAt y i - actualBalanceAt x i) + pathCredits i (y :: rest)
@@ -821,29 +908,6 @@ private theorem balanceDrift_credits_append (i : Nat) (a b : List (ForkedBeaconS
     | nil => simp [pathCredits]
     | cons second rest => simpa [pathCredits, Nat.add_assoc] using ih
 
-private theorem balanceDrift_path_last {x y : ForkedBeaconState preset}
-    (run : Run config checks x y) : ∃ pre, run.balancePath = pre ++ [y] := by
-  induction run with
-  | nil => exact ⟨[], rfl⟩
-  | @snoc middle last pre step ih =>
-    cases step with
-    | @block fork before after engine signed due ok =>
-      exact ⟨pre.balancePath ++ [⟨fork, before⟩], by
-        simp [Run.balancePath, Step.balancePath, List.append_assoc]⟩
-    | slot ok =>
-      obtain ⟨next, advance, upgrade⟩ := bind_ok_iff.mp ok
-      exact ⟨pre.balancePath ++ [middle, ⟨middle.fork, next⟩], by
-        simp [Run.balancePath, Step.balancePath, advance, Except.toOption, List.append_assoc]⟩
-
-/-- A run's balance path starts at the start of the run. -/
-private theorem balanceDrift_path_head {x y : ForkedBeaconState preset}
-    (run : Run config checks x y) : ∃ rest, run.balancePath = x :: rest := by
-  induction run with
-  | nil => exact ⟨[], rfl⟩
-  | snoc pre step ih =>
-    obtain ⟨rest, path⟩ := ih
-    exact ⟨rest ++ step.balancePath, by simp [Run.balancePath, path]⟩
-
 private theorem balanceDrift_gain {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam)
     (i : Nat) (present : i < x.state.validators.data.size) :
@@ -856,7 +920,7 @@ private theorem balanceDrift_gain {x y : ForkedBeaconState preset}
     have middleEarly := Nat.lt_of_le_of_lt forkLe early
     have bound := ih middleEarly
     have inside := Nat.lt_of_lt_of_le present pre.registryLifecycle.size_le
-    obtain ⟨initial, path⟩ := balanceDrift_path_last pre
+    obtain ⟨initial, path⟩ := Run.balancePath_last pre
     cases step with
     | @block fork before after engine signed due ok =>
       have kept := effectiveKept_processBlock (applySignedBlock_ok ok).2.1 i inside
@@ -1214,7 +1278,7 @@ theorem effective_loss_from_balance {g x y : ForkedBeaconState preset}
   · have capped := shared.effectiveBalance_capped genesis caps.activation caps.compounding
       (Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early) v
       (Array.mem_of_getElem? found)
-    obtain ⟨rest, path⟩ := balanceDrift_path_head tail
+    obtain ⟨rest, path⟩ := Run.balancePath_head tail
     have bound := tail.effectiveAt_ge_of_balanceFloor caps early i v found activated reference
       (by rw [value]; dsimp [rounded]
           have division := Nat.mod_add_div amount preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -1562,7 +1626,7 @@ private theorem admissionFunded_requests {f : Fork} {s t : BeaconState preset f}
   simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at ok
   obtain ⟨deposited, deposits, withdrawn, withdrawals, consolidations⟩ := ok
   have one : property deposited := foldlM_ok_invariant property (fun a request b prior ok => by
-    obtain ⟨_, validators, balances⟩ := processDepositRequest_ok ok
+    obtain ⟨_, validators, balances, -⟩ := processDepositRequest_ok ok
     constructor
     · simpa only [AdmissionFunded, effectiveAt, actualBalanceAt, validators, balances] using prior.1
     · simpa only [validators] using prior.2) ⟨holds, pending⟩ deposits
@@ -1893,7 +1957,7 @@ private theorem balanceDrift_join_of_admission {g x y : ForkedBeaconState preset
     have prior := ih middleEarly
     have credits : pathCredits i (pre.snoc step).balancePath =
         pathCredits i pre.balancePath + pathCredits i step.balancePath := by
-      obtain ⟨initial, path⟩ := balanceDrift_path_last pre
+      obtain ⟨initial, path⟩ := Run.balancePath_last pre
       cases step with
       | block engine signed due ok =>
         simp only [Run.balancePath, Step.balancePath, path, List.append_assoc,

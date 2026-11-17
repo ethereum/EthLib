@@ -212,4 +212,8 @@ theorem validatorKeys_prefix_and_distinct_of_genesis_chainSteps
   obtain ⟨kept, carried⟩ := validatorKeys_prefix_and_distinct_of_chainSteps steps
   exact ⟨kept, carried distinct⟩
 
+/-- The key at a registry position, or the default key past the end. -/
+def keyAt (state : BeaconState preset fork) (i : Nat) : Cryptography.Bls.BLSPubkey :=
+  ((state.validators.data[i]?).map (·.pubkey)).getD default
+
 end EthLib.Consensus

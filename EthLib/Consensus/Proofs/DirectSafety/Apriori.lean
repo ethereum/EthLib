@@ -11,6 +11,7 @@ import EthLib.Consensus.Proofs.DirectSafety.Provenance
 public import Mathlib.Data.Nat.Sqrt
 public import Mathlib.Order.Monotone.Defs
 import EthLib.Base.Proofs.MapM
+import EthLib.Base.Proofs.Nat
 import EthLib.Base.Proofs.Uint64
 import EthLib.Consensus.Proofs.Participation
 import EthLib.Consensus.Proofs.Transition.ActiveKept
@@ -1300,13 +1301,10 @@ private theorem replayRewards_credits_le (altair : .altair ≤ fork)
   simp only [Nat.add_mul] at one two three ⊢
   omega
 
-/-- A sum of quotients is at most the quotient of the sum. -/
+/-- A sum of quotients over a finite set is at most the quotient of the sum. -/
 private theorem sum_div_le {ι : Type} (s : Finset ι) (f : ι → Nat) (d : Nat) :
     ∑ i ∈ s, f i / d ≤ (∑ i ∈ s, f i) / d := by
-  rcases Nat.eq_zero_or_pos d with rfl | positive
-  · simp
-  · rw [Nat.le_div_iff_mul_le positive, Finset.sum_mul]
-    exact Finset.sum_le_sum fun i _ => Nat.div_mul_le_self _ _
+  simpa only [Finset.sum_map_toList] using sum_map_div_le f d s.toList
 
 /-- A rewards pass has zero genesis debits, otherwise its debits are bounded by four entries. -/
 private theorem replayRewards_penalty_entries (altair : .altair ≤ fork)
@@ -1948,12 +1946,6 @@ private theorem ScoresBelow.step {m l : ForkedBeaconState preset} (step : Step c
       rw [nextSlot_epoch_of_inside sum within, Nat.sub_self, Nat.mul_zero, Nat.add_zero]
       obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
       exact ScoresBelow.of_kept (fun i _ => ScoreKept.of_scores rfl i) below
-
-/-- Each score of a list is at most the largest one. -/
-private theorem le_foldr_max : ∀ {values : List Nat} {value : Nat}, value ∈ values →
-    value ≤ values.foldr max 0
-  | _ :: _, _, .head _ => Nat.le_max_left _ _
-  | _ :: _, _, .tail _ member => (le_foldr_max member).trans (Nat.le_max_right _ _)
 
 /-- On a branch from `x` from Altair, the scores of the registry at `x` follow `sigma + bias * t`.
 
@@ -8092,15 +8084,6 @@ private theorem retained_local_replay
   · intro m rest v found
     have cutoff := prefix_exit_gt_of_endpoint rest v w found final active
     omega
-private theorem actual_epoch_succ_lt_far
-    (state : ForkedBeaconState preset) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) :
-    (getCurrentEpoch state.state).toNat + 1 < FAR_FUTURE_EPOCH.toNat := by
-  simp only [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div]
-  have slotBound := state.state.slot.toNat_lt
-  have quotient : state.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤
-      state.state.slot.toNat / 2 := Nat.div_le_div_left twoSlots (by omega)
-  change state.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 < 2 ^ 64 - 1
-  omega
 private theorem Stop.selected_local_replay
     {tail : Run config checks x y} (stop : Stop tail i)
     (chosen : stop.charge = some c)
@@ -8116,7 +8099,7 @@ private theorem Stop.selected_local_replay
     exact replayed
   · intro m rest v found
     exact stop.selected_prefix_exit_gt chosen rest v found
-      (actual_epoch_succ_lt_far stop.state twoSlots)
+      (getCurrentEpoch_succ_lt_farFuture twoSlots stop.state.state)
 /-- The per-key accounting trace of a branch, through any slashing of the key.
 
 Each step extends the trace by `FloorTrace.step`.
@@ -8326,7 +8309,7 @@ private theorem effectiveAt_le_of_not_firstDown
       obtain ⟨rest, path⟩ := ih
       exact ⟨rest ++ step.balancePath, by simp [Run.balancePath, path]⟩
   obtain ⟨rest, starts⟩ := starts
-  obtain ⟨pre, ends⟩ := coverage_path_last tail
+  obtain ⟨pre, ends⟩ := Run.balancePath_last tail
   have first : tail.balancePath[0]? = some x := by simp [starts]
   have last : tail.balancePath[pre.length]? = some y := by simp [ends]
   have bound (n : Nat) : ∀ state, tail.balancePath[n]? = some state →
@@ -8393,7 +8376,7 @@ private theorem adjacent_decrease_step
     have impossible := two
     simp [Run.balancePath] at impossible
   | @snoc m n pre step ih =>
-    obtain ⟨rest, path⟩ := coverage_path_last pre
+    obtain ⟨rest, path⟩ := Run.balancePath_last pre
     have last : pre.balancePath[pre.balancePath.length - 1]? = some m := by
       simp [path]
     have start : step.balancePath[0]? = some m := by
@@ -8723,14 +8706,6 @@ private theorem reachable_update_decrease_gap
     cachedOk epochOk replayed inside found
   exact ⟨v, amount, effective, found, balance, after, scalar, lower, before,
     scalar_decrease_gap whole capped scalar lower⟩
-private theorem balancePath_prefix_append
-    (pre : Run config checks x m) (post : Run config checks m y) :
-    ∃ rest, (pre.append post).balancePath = pre.balancePath ++ rest := by
-  induction post with
-  | nil => exact ⟨[], by simp [Run.append]⟩
-  | snoc post step ih =>
-    obtain ⟨rest, path⟩ := ih
-    exact ⟨rest ++ step.balancePath, by simp [Run.append, Run.balancePath, path, List.append_assoc]⟩
 private theorem noEarlier_of_localized_decrease
     (tail : Run config checks x y) (pre : Run config checks x m)
     (step : Step config checks m n) (post : Run config checks n y)
@@ -8740,7 +8715,7 @@ private theorem noEarlier_of_localized_decrease
       tail.balancePath[q + 1]? = some v → effectiveAt u i ≤ effectiveAt v i) :
     ∀ q u v, pre.balancePath[q]? = some u → pre.balancePath[q + 1]? = some v →
       effectiveAt u i ≤ effectiveAt v i := by
-  obtain ⟨rest, path⟩ := balancePath_prefix_append (pre.snoc step) post
+  have path := Run.balancePath_append (pre.snoc step) post
   rw [split, Run.balancePath, List.append_assoc] at path
   intro q u v one two
   have within : q + 1 < pre.balancePath.length := (List.getElem?_eq_some_iff.mp two).1
@@ -10503,7 +10478,7 @@ private theorem Stop.firstUpdate_of_firstDown_regime
     initial final unslashed clean activated
     (localHigh := (getCurrentEpoch stop.state.state).toNat) (by omega)
     (stop.selected_prefix_exit_gt chosen Run.nil u final
-      (actual_epoch_succ_lt_far stop.state twoSlots)) replayed drop
+      (getCurrentEpoch_succ_lt_farFuture twoSlots stop.state.state)) replayed drop
 private theorem effectiveAt_eq_of_epoch_zero
     (tail : Run config checks x y)
     (early : y.fork < .glamsterdam) (zero : (getCurrentEpoch y.state).toNat = 0)
@@ -10732,7 +10707,7 @@ private theorem Stop.source_firstUpdate_regime
       (regime_prefix regime stop.post) i v u
       initial final unslashed clean activated _ replayed drop
     rw [exit]
-    exact Nat.lt_trans (Nat.lt_succ_self _) (actual_epoch_succ_lt_far stop.state twoSlots)
+    exact Nat.lt_trans (Nat.lt_succ_self _) (getCurrentEpoch_succ_lt_farFuture twoSlots stop.state.state)
 private theorem Stop.source_firstUpdate_of_reference_regime
     {tail : Run config checks x y} (stop : Stop tail i)
     (shared : Run config checks g x) (supported : Supported shared tail high)
@@ -19569,26 +19544,13 @@ private theorem le_far (e : Epoch) : e ≤ FAR_FUTURE_EPOCH := by
   have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
   omega
 
-/-- Each validator after a step is the one before it at its index.
-
-It has the same key, effective balance and largest effective balance.
-
-Any assigned epoch is unchanged, and it is unslashed only if it was unslashed. -/
-private def RegistryKept {fork : Fork} (u v : BeaconState preset fork) : Prop :=
-  ∀ (i : Nat) (w : Validator), v.validators.data[i]? = some w → ∃ w₀,
-    u.validators.data[i]? = some w₀ ∧ w.pubkey = w₀.pubkey ∧
-      w.effectiveBalance = w₀.effectiveBalance ∧
-      withdrawalMaxEffectiveBalance preset fork w =
-        withdrawalMaxEffectiveBalance preset fork w₀ ∧
-      (w.slashed = false → w₀.slashed = false) ∧ ValidatorLifecycle w₀ w
-
 /-- Let a step keep every validator's key, effective balance, credentials and slashed flag.
 
-Then it keeps the registry in the sense of `RegistryKept`. -/
+Then it keeps each entry of the registry. -/
 private theorem registryKept_of_lookup {fork : Fork} {u v : BeaconState preset fork}
     (lookup : ∀ (i : Nat) (w : Validator), v.validators.data[i]? = some w → ∃ w₀,
       u.validators.data[i]? = some w₀ ∧ ValidatorSame w₀ w ∧ ValidatorLifecycle w₀ w) :
-    RegistryKept u v := by
+    RegistryEntriesKept u v := by
   intro i w found
   obtain ⟨w₀, foundU, ⟨key, effective, credentials, slashed⟩, life⟩ := lookup i w found
   refine ⟨w₀, foundU, key, effective, ?_, fun clean => slashed.symm.trans clean, life⟩
@@ -19602,7 +19564,7 @@ It only assigns an exit that was at the far future.
 So a validator covered after it was covered before it. -/
 private theorem endpointCover_of_kept {x : ForkedBeaconState preset} {fork : Fork}
     {u v : BeaconState preset fork} {o : Ownership}
-    (kept : RegistryKept u v) (balances : v.balances = u.balances)
+    (kept : RegistryEntriesKept u v) (balances : v.balances = u.balances)
     (epoch : getCurrentEpoch v = getCurrentEpoch u)
     (cover : EndpointCoverAll x ⟨fork, u⟩ o) :
     EndpointCoverAll x ⟨fork, v⟩ o := by
@@ -19629,7 +19591,7 @@ It only assigns an activation or an exit that was at the far future.
 So a guarded validator after it was guarded before it. -/
 private theorem futureCover_of_kept {x : ForkedBeaconState preset} {fork : Fork}
     {u v : BeaconState preset fork} {o : Ownership}
-    (kept : RegistryKept u v) (epoch : getCurrentEpoch v = getCurrentEpoch u)
+    (kept : RegistryEntriesKept u v) (epoch : getCurrentEpoch v = getCurrentEpoch u)
     (cover : FutureEffectiveCover x ⟨fork, u⟩ o) :
     FutureEffectiveCover x ⟨fork, v⟩ o := by
   apply futureCover_mono (u := ⟨fork, u⟩) ?_ (fun _ => Nat.le_refl _) cover
@@ -19711,7 +19673,7 @@ private theorem reserveCut_of_kept {x : ForkedBeaconState preset} {high : Nat} {
     (activity : ∀ (i : Nat) (w₀ w : Validator), u.validators.data[i]? = some w₀ →
       v.validators.data[i]? = some w → ∀ e ≤ getCurrentEpoch u,
         isActiveValidator w e = isActiveValidator w₀ e)
-    (kept : RegistryKept u v)
+    (kept : RegistryEntriesKept u v)
     (withdrawable : ∀ (i : Nat) (w₀ w : Validator), u.validators.data[i]? = some w₀ →
       v.validators.data[i]? = some w →
       w.withdrawableEpoch = w₀.withdrawableEpoch ∨
@@ -20306,20 +20268,6 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
 namespace Apriori.Internal
 
-/-- With at least two slots in an epoch, the epoch after the current one is before the far future.
-
-The checked addition alone allows the far future, from the epoch just before it. -/
-private theorem consolidationNext_finite {fork : Fork} {s : BeaconState preset fork}
-    {next : Epoch} (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
-    (nextOk : Uint64.addChecked (getCurrentEpoch s) 1 = .ok next) :
-    next < FAR_FUTURE_EPOCH := by
-  have sum := (Uint64.addChecked_ok_iff.mp nextOk).2
-  have bound := actual_epoch_succ_lt_far ⟨fork, s⟩ twoSlots
-  have one : (1 : UInt64).toNat = 1 := rfl
-  rw [UInt64.lt_iff_toNat_lt]
-  change (getCurrentEpoch s).toNat + 1 < FAR_FUTURE_EPOCH.toNat at bound
-  omega
-
 /-- A source the pending consolidations pay at `next` is not covered at the current epoch.
 
 The finite next epoch lets the existing `endpoint_sourceGone` exclude an unassigned exit. -/
@@ -20330,7 +20278,7 @@ private theorem consolidation_sourceGone {fork : Fork} {s : BeaconState preset f
     (delay : w.exitEpoch ≠ FAR_FUTURE_EPOCH →
       w.exitEpoch.toNat + 2 ≤ w.withdrawableEpoch.toNat)
     (due : w.withdrawableEpoch ≤ next) (covered : getCurrentEpoch s ≤ w.exitEpoch) : False :=
-  endpoint_sourceGone (consolidationNext_finite twoSlots nextOk) ordered delay due nextOk covered
+  endpoint_sourceGone (nextEpoch_lt_farFuture twoSlots nextOk) ordered delay due nextOk covered
 
 end Apriori.Internal
 end
@@ -21575,7 +21523,7 @@ private theorem reservedEvent_consolidations {x : ForkedBeaconState preset} {hig
       outgoing, history, cut, assigned, counted, covered, activated, owned, baselines, slot,
       finalFuture⟩ :=
     processPendingConsolidations_reserved (eventPosition := eventPosition) ok incoming reserve
-      assignment counters nextOk (consolidationNext_finite twoSlots nextOk) twoSlots exits
+      assignment counters nextOk (nextEpoch_lt_farFuture twoSlots nextOk) twoSlots exits
       activationOrder delay caps unique apart initialZero cover future retired sources
   have slotEq : t.slot = u.slot := (frame_processPendingConsolidations ok).slot.trans slot.symm
   have retiredT : RetiredActivated t after.retired := by
@@ -25467,23 +25415,6 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
 namespace Apriori.Internal
 
-/-- A validator active at the previous epoch is active at the current one or the one before it.
-
-At epoch zero the previous epoch is the current one. -/
-private theorem previous_active_cases {fork : Fork} (s : BeaconState preset fork) (v : Validator)
-    (active : isActiveValidator v (getPreviousEpoch s) = true) :
-    isActiveValidator v (getCurrentEpoch s) = true ∨
-      isActiveValidator v (getCurrentEpoch s - 1) = true := by
-  have previous := getPreviousEpoch_toNat s
-  by_cases zero : (getCurrentEpoch s).toNat = 0
-  · have same : getPreviousEpoch s = getCurrentEpoch s := UInt64.toNat_inj.mp (by omega)
-    exact Or.inl (same ▸ active)
-  · have one : (1 : UInt64) ≤ getCurrentEpoch s := UInt64.le_iff_toNat_le.mpr (by simp; omega)
-    have same : getPreviousEpoch s = getCurrentEpoch s - 1 := UInt64.toNat_inj.mp (by
-      rw [UInt64.toNat_sub_of_le _ _ one, previous]
-      rfl)
-    exact Or.inr (same ▸ active)
-
 /-- The endpoint reserve cut, with the epoch of `y` as demand epoch, gives the endpoint demand.
 
 Each recent key that is not previous-only names one supported validator at `y`.
@@ -25508,7 +25439,7 @@ private theorem endpointDemand_of_reserveCut {g x y : ForkedBeaconState preset} 
     · obtain ⟨i, v, found, key, active⟩ := (mem_keysAt_epoch early _ k).mp now
       exact ⟨i, v, found, key, Or.inl active⟩
     · obtain ⟨i, v, found, key, active⟩ := (mem_keysAt_epoch early _ k).mp before
-      exact ⟨i, v, found, key, previous_active_cases _ v active⟩
+      exact ⟨i, v, found, key, active_current_or_before_of_active_previous _ v active⟩
   have listed : v ∈ y.state.validators.data.toList := by
     simpa using Array.mem_of_getElem? found
   have clean : v.slashed = false := by
@@ -25877,10 +25808,6 @@ open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
 namespace Apriori.Internal
-
-/-- The key at a registry position, or the default key past the end. -/
-private def keyAt {fork : Fork} (s : BeaconState preset fork) (i : Nat) : BLSPubkey :=
-  ((s.validators.data[i]?).map (·.pubkey)).getD default
 
 /-- The positions of the unslashed validators active at the current epoch. -/
 private def unslashedIndices {fork : Fork} (s : BeaconState preset fork) : Finset Nat :=
@@ -26465,79 +26392,6 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
 namespace Apriori.Internal
 
-/-- Every slashed validator of a state has an exit epoch. -/
-private def SlashedExitAssigned {fork : Fork} (s : BeaconState preset fork) : Prop :=
-  ∀ (i : Nat) (v : Validator), s.validators.data[i]? = some v → v.slashed = true →
-    v.exitEpoch ≠ FAR_FUTURE_EPOCH
-
-private theorem SlashedExitAssigned.data {fork : Fork} {s t : BeaconState preset fork}
-    (same : t.validators.data = s.validators.data) (held : SlashedExitAssigned s) :
-    SlashedExitAssigned t := by
-  simpa only [SlashedExitAssigned, same] using held
-
-private theorem SlashedExitAssigned.set {fork : Fork} {s t : BeaconState preset fork}
-    {i : ValidatorIndex} {v w : Validator} (_found : getValidator s i = .ok v)
-    (set : s.setValidator i w = .ok t) (flag : w.slashed = v.slashed)
-    (kept : v.slashed = true → w.exitEpoch ≠ FAR_FUTURE_EPOCH)
-    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
-  obtain ⟨inside, rfl⟩ := setValidator_ok set
-  intro j z read slashed
-  by_cases eq : j = i.toNat
-  · subst j
-    have same : z = w := by
-      simpa [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set] using read.symm
-    subst z
-    exact kept (flag ▸ slashed)
-  · apply held j z ?_ slashed
-    simpa [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
-      Array.getElem?_set, eq, Ne.symm eq] using read
-
-private theorem SlashedExitAssigned.bls {fork : Fork} {s t : BeaconState preset fork}
-    {signed : SignedBLSToExecutionChange}
-    (ok : processBlsToExecutionChange config checks s signed = .ok t)
-    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
-  obtain ⟨v, found, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
-  exact held.set found set rfl (fun flag => held _ v (getValidator_eq_ok_iff.mp found) flag)
-
-private theorem SlashedExitAssigned.compounding {fork : Fork} {s t : BeaconState preset fork}
-    {electra : .pectra ≤ fork} {i : ValidatorIndex}
-    (ok : switchToCompoundingValidator s electra i = .ok t)
-    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
-  simp only [switchToCompoundingValidator, bind_ok_iff] at ok
-  obtain ⟨v, found, _, set, queued⟩ := ok
-  exact (held.set found set rfl
-    (fun flag => held _ v (getValidator_eq_ok_iff.mp found) flag)).data
-      (congrArg (·.data) (queueExcessActiveBalance_validators queued))
-
-private theorem SlashedExitAssigned.queue {fork : Fork} {s t : BeaconState preset fork}
-    {electra : .pectra ≤ fork} {i target : ValidatorIndex} {source : Validator}
-    (found : getValidator s i = .ok source) (unset : source.exitEpoch = FAR_FUTURE_EPOCH)
-    (ok : queueConsolidation config s electra i source target = .ok t)
-    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
-  have clean : source.slashed = false := by
-    cases flag : source.slashed with
-    | false => rfl
-    | true => exact (held _ source (getValidator_eq_ok_iff.mp found) flag unset).elim
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨⟨churned, epoch⟩, churn, withdrawal, _, _, set, _, _, rfl⟩ := ok
-  have same := (computeConsolidationEpochAndUpdateChurn_earliest churn).2.1
-  have prior := held.data (congrArg (·.data) same)
-  have nextHeld := prior.set ((getValidator_of_validators_eq same i).trans found) set rfl
-    (fun flag => by simp [clean] at flag)
-  exact nextHeld
-
-private theorem SlashedExitAssigned.consolidation {fork : Fork}
-    {s t : BeaconState preset fork} {electra : .pectra ≤ fork}
-    {request : ConsolidationRequest}
-    (ok : processConsolidationRequest config s electra request = .ok t)
-    (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
-  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ |
-      ⟨_, _, _, _, accepted, queued⟩
-  · exact held
-  · exact held.compounding switched
-  · exact held.queue (getValidator_eq_ok_iff.mpr accepted.sourceAt) accepted.sourceStays queued
-
 /-- Each fresh tag of a queue names a source whose exit is its tag epoch. -/
 private def FreshExits {fork : Fork} (s : BeaconState preset fork)
     (queue : List TaggedEntry) : Prop :=
@@ -26765,9 +26619,7 @@ private theorem depositRequests_kept {fork : Fork} {electra : .pectra ≤ fork}
         v.earliestConsolidationEpoch = u.earliestConsolidationEpoch ∧
         v.consolidationBalanceToConsume = u.consolidationBalanceToConsume := by
     intro u request v first
-    obtain ⟨_, recorded⟩ := recordDepositRequestsStart_eq (state := u) (index := request.index)
-    simp only [processDepositRequest, recorded, liftAccessor_ok] at first
-    obtain ⟨_, rfl⟩ := addPendingDeposit_eq first
+    obtain ⟨-, -, -, start, pending, rfl⟩ := processDepositRequest_ok first
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
   obtain ⟨registry, balances, slot, pending, earliest, consume⟩ := foldlM_ok_invariant
     (fun u : BeaconState preset fork => u.validators = s.validators ∧ u.balances = s.balances ∧
@@ -27069,6 +26921,7 @@ private def AttesterSlashingReplay : Prop :=
 private def VoluntaryExitsReplay : Prop :=
   ∀ (x : ForkedBeaconState preset) (high : Nat) (rounding : Nat → Nat) {fork : Fork}
     (electra : .pectra ≤ fork) (_early : fork < .glamsterdam)
+    (_delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {s t : BeaconState preset fork} (exits : List SignedVoluntaryExit),
     exits.foldlM (processVoluntaryExit config checks) s = .ok t →
     OperationReplay (config := config) (checks := checks) x high rounding electra s t [] []
@@ -27077,6 +26930,7 @@ private def VoluntaryExitsReplay : Prop :=
 private def WithdrawalRequestsReplay : Prop :=
   ∀ (x : ForkedBeaconState preset) (high : Nat) (rounding : Nat → Nat) {fork : Fork}
     (electra : .pectra ≤ fork) (_early : fork < .glamsterdam)
+    (_delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {s t : BeaconState preset fork} (requests : List WithdrawalRequest),
     requests.foldlM (processWithdrawalRequest config · electra ·) s = .ok t →
     OperationReplay (config := config) (checks := checks) x high rounding electra s t [] []
@@ -27195,7 +27049,7 @@ It keeps each withdrawable epoch, or moves one after the current epoch to anothe
 
 It keeps the order of exits and withdrawals. -/
 private def RegistryStep {fork : Fork} (s t : BeaconState preset fork) : Prop :=
-  RegistryKept s t ∧
+  RegistryEntriesKept s t ∧
     (∀ (i : Nat) (w₀ w : Validator), s.validators.data[i]? = some w₀ →
       t.validators.data[i]? = some w →
       w.withdrawableEpoch = w₀.withdrawableEpoch ∨
@@ -27343,8 +27197,10 @@ private theorem QuietStep.trans {fork : Fork} {electra : .pectra ≤ fork}
 private theorem QuietStep.initiateValidatorExit {fork : Fork} {electra : .pectra ≤ fork}
     {s t : BeaconState preset fork} {index : ValidatorIndex}
     (ok : initiateValidatorExit config s index = .ok t)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ordered : ExitsOrdered s) (finite : getCurrentEpoch s < FAR_FUTURE_EPOCH) :
     QuietStep electra s t := by
+  have held := initiateValidatorExit_slashed_exit_assigned ok delay
   obtain ⟨v, found, ⟨_, rfl⟩ | ⟨far, queued, exitEpoch, withdrawableEpoch, queue, summed, set⟩⟩ :=
     initiateValidatorExit_ok ok
   · exact .refl ordered
@@ -27373,8 +27229,6 @@ private theorem QuietStep.initiateValidatorExit {fork : Fork} {electra : .pectra
         have two : e < FAR_FUTURE_EPOCH := UInt64.lt_of_le_of_lt (epochQ ▸ early) finite
         simp only [isActiveValidator, far, one, two])
       delayed first.2.2.2.2.2.2
-    have held := fun prior : SlashedExitAssigned s => SlashedExitAssigned.set foundQ set rfl
-      (fun flag => absurd far (prior _ v read flag)) (prior.data data)
     obtain ⟨_, rfl⟩ := setValidator_ok set
     subst shape
     exact ⟨first.trans second, rfl, rfl, rfl, rfl, held⟩
@@ -27383,22 +27237,24 @@ private theorem QuietStep.initiateValidatorExit {fork : Fork} {electra : .pectra
 private theorem QuietStep.voluntaryExit {fork : Fork} {electra : .pectra ≤ fork}
     {s t : BeaconState preset fork} {signed : SignedVoluntaryExit}
     (ok : processVoluntaryExit config checks s signed = .ok t)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ordered : ExitsOrdered s) (finite : getCurrentEpoch s < FAR_FUTURE_EPOCH) :
     QuietStep electra s t := by
   unfold processVoluntaryExit at ok
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-  exact .initiateValidatorExit exited ordered finite
+  exact .initiateValidatorExit exited delay ordered finite
 
 /-- A withdrawal request is quiet. -/
 private theorem QuietStep.withdrawalRequest {fork : Fork} {electra : .pectra ≤ fork}
     {s t : BeaconState preset fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ordered : ExitsOrdered s) (finite : getCurrentEpoch s < FAR_FUTURE_EPOCH) :
     QuietStep electra s t := by
   rcases withdrawalRequest_cases ok with rfl | ⟨index, exited⟩ | ⟨index, v, owed, paid⟩
   · exact .refl ordered
-  · exact .initiateValidatorExit exited ordered finite
+  · exact .initiateValidatorExit exited delay ordered finite
   · simp only [requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure,
       Except.pure] at paid
     obtain ⟨_, _, _, _, paid⟩ := paid
@@ -27487,19 +27343,19 @@ private theorem operationReplay_quiet {x : ForkedBeaconState preset} {high : Nat
 /-- The voluntary exits of a block record nothing. -/
 private theorem reservedReplay_voluntaryExits :
     VoluntaryExitsReplay (preset := preset) (config := config) (checks := checks) :=
-  fun _ _ _ _ electra _ _ _ exits ok =>
+  fun _ _ _ _ electra _ delay _ _ exits ok =>
   operationReplay_quiet (foldlM_framePath _ exits ok fun _ _ _ _ eq => .exit eq)
     (foldlM_step (QuietStep electra) (fun _ => .refl) .trans (·.1.2.2.2.2.2.2) (·.1.2.2.2.1) _
-      (fun _ _ _ step => QuietStep.voluntaryExit step) exits ok)
+      (fun _ _ _ step => QuietStep.voluntaryExit step delay) exits ok)
 
 /-- The withdrawal requests of a block record nothing. -/
 private theorem reservedReplay_withdrawalRequests :
     WithdrawalRequestsReplay (preset := preset) (config := config) (checks := checks) :=
-  fun _ _ _ _ electra _ _ _ requests ok =>
+  fun _ _ _ _ electra _ delay _ _ requests ok =>
   operationReplay_quiet
     (foldlM_framePath _ requests ok fun _ _ _ _ eq => .withdrawalRequest electra eq)
     (foldlM_step (QuietStep electra) (fun _ => .refl) .trans (·.1.2.2.2.2.2.2) (·.1.2.2.2.1) _
-      (fun _ _ _ step => QuietStep.withdrawalRequest step) requests ok)
+      (fun _ _ _ step => QuietStep.withdrawalRequest step delay) requests ok)
 
 /-- A slashing step is a registry step that keeps the queue and the consolidation churn.
 
@@ -27539,6 +27395,7 @@ private theorem SlashStep.slashValidator {fork : Fork} {electra : .pectra ≤ fo
     {s t : BeaconState preset fork} {index : ValidatorIndex} {v : Validator}
     (early : fork < .glamsterdam)
     (ok : slashValidator config s index none = .ok t)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (found : getValidator s index = .ok v)
     (slashable : isSlashableValidator v (getCurrentEpoch s) = true)
     (ordered : ExitsOrdered s) (finite : getCurrentEpoch s < FAR_FUTURE_EPOCH) :
@@ -27546,7 +27403,7 @@ private theorem SlashStep.slashValidator {fork : Fork} {electra : .pectra ≤ fo
   obtain ⟨exited, validator, withdrawable, marked, _, _, slashings, lowered, _, _, raised, last,
     exitedOk, foundE, _, markedOk, _, _, _, loweredOk, _, _, raisedOk, lastOk, done⟩ :=
     slashValidator_ok ok
-  have quiet := QuietStep.initiateValidatorExit (electra := electra) exitedOk ordered finite
+  have quiet := QuietStep.initiateValidatorExit (electra := electra) exitedOk delay ordered finite
   have read : s.validators.data[index.toNat]? = some v := getValidator_eq_ok_iff.mp found
   have readE : exited.validators.data[index.toNat]? = some validator :=
     getValidator_eq_ok_iff.mp foundE
@@ -27699,7 +27556,7 @@ private theorem reservedReplay_proposerSlashing :
   simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, _, _, _, _, v, found, _, slashable, _, _, _, _, slashed⟩ := ok
   exact operationReplay_slashing
-    (fun ordered finite => .slashValidator early slashed found slashable ordered finite)
+    (fun ordered finite => .slashValidator early slashed delay found slashable ordered finite)
     credits held
 
 /-- Take the slashings of an attester slashing's indices.
@@ -27708,8 +27565,8 @@ Let each of them slash a slashable validator.
 
 Then they are a slashing step. -/
 private theorem SlashStep.foldlM_slashIfSlashable {fork : Fork} {electra : .pectra ≤ fork}
-    (early : fork < .glamsterdam) (indices : List ValidatorIndex)
-    {s t : BeaconState preset fork} {flag last : Bool}
+    (early : fork < .glamsterdam) (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (indices : List ValidatorIndex) {s t : BeaconState preset fork} {flag last : Bool}
     (ok : indices.foldlM (slashIfSlashable config) (s, flag) = .ok (t, last))
     (ordered : ExitsOrdered s) (finite : getCurrentEpoch s < FAR_FUTURE_EPOCH) :
     SlashStep electra s t :=
@@ -27726,7 +27583,7 @@ private theorem SlashStep.foldlM_slashIfSlashable {fork : Fork} {electra : .pect
           simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure,
             Except.ok.injEq, Prod.mk.injEq] at one
           obtain ⟨u', slashed, rfl, rfl⟩ := one
-          exact .slashValidator early slashed read slashable ordered bounded
+          exact .slashValidator early slashed delay read slashable ordered bounded
         · simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at one
           obtain ⟨rfl, rfl⟩ := one
           exact .refl ordered
@@ -27747,7 +27604,7 @@ private theorem reservedReplay_attesterSlashing :
     Except.ok.injEq] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, _, ⟨u, flag⟩, folded, _, _, rfl⟩ := ok
   exact operationReplay_slashing
-    (fun ordered finite => .foldlM_slashIfSlashable early _ folded ordered finite) credits held
+    (fun ordered finite => .foldlM_slashIfSlashable early delay _ folded ordered finite) credits held
 
 end Apriori.Internal
 end
@@ -28111,40 +27968,6 @@ private theorem pathDrop_append_iff {path more : List (ForkedBeaconState preset)
           show path.length + j + 1 - path.length = j + 1 by omega]
         exact two
 
-private theorem Step.balancePath_ends {m n : ForkedBeaconState preset}
-    (step : Step config checks m n) :
-    step.balancePath.head? = some m ∧ step.balancePath.getLast? = some n := by
-  cases step with
-  | block => simp [Step.balancePath]
-  | slot ok =>
-    simp only [Step.balancePath]
-    split <;> simp
-
-private theorem Run.balancePath_ends {x y : ForkedBeaconState preset}
-    (run : Run config checks x y) :
-    run.balancePath.head? = some x ∧ run.balancePath.getLast? = some y := by
-  induction run with
-  | nil => simp [Run.balancePath]
-  | snoc pre step ih =>
-    have ends := Step.balancePath_ends step
-    simp only [Run.balancePath, List.head?_append, List.getLast?_append, ih.1, ends.2]
-    simp
-
-/-- The balance path of an appended run.
-
-The second path loses its first state, which is the first path's last. -/
-private theorem Run.balancePath_append {x m y : ForkedBeaconState preset}
-    (pre : Run config checks x m) (rest : Run config checks m y) :
-    (pre.append rest).balancePath = pre.balancePath ++ rest.balancePath.tail := by
-  induction rest with
-  | nil => simp [Run.append, Run.balancePath]
-  | snoc rest step ih =>
-    simp only [Run.append, Run.balancePath, ih, List.append_assoc]
-    obtain ⟨head, _⟩ := Run.balancePath_ends rest
-    cases h : rest.balancePath with
-    | nil => simp [h] at head
-    | cons a l => simp
-
 /-- A first drop of a prefix is a first drop of every extension. -/
 private theorem firstDown_append {x m y : ForkedBeaconState preset}
     (pre : Run config checks x m) (rest : Run config checks m y) (i : Nat)
@@ -28207,46 +28030,6 @@ private theorem originalDown_slot {x m n : ForkedBeaconState preset}
     exact h
   · rw [ite_eq_right f] at h
     omega
-
-/-- Two runs whose extensions agree are ordered, by induction on the second extension. -/
-private theorem Run.prefix_snoc {x m k n : ForkedBeaconState preset}
-    (p : Run config checks x m) (r : Run config checks m n)
-    (q : Run config checks x k) (step : Step config checks k n)
-    (split : p.append r = q.snoc step) :
-    (m = n ∧ HEq p (q.snoc step)) ∨ ∃ r' : Run config checks m k, p.append r' = q := by
-  cases r with
-  | nil => exact .inl ⟨rfl, heq_of_eq split⟩
-  | snoc r' last =>
-    simp only [Run.append] at split
-    injection split with middle _ prefixEq _
-    subst middle
-    exact .inr ⟨r', eq_of_heq prefixEq⟩
-
-private theorem Run.prefix_total_of {x m₁ m₂ : ForkedBeaconState preset}
-    (p₁ : Run config checks x m₁) (p₂ : Run config checks x m₂) :
-    ∀ {y : ForkedBeaconState preset} (r₂ : Run config checks m₂ y)
-      (r₁ : Run config checks m₁ y), p₁.append r₁ = p₂.append r₂ →
-    (∃ r : Run config checks m₁ m₂, p₁.append r = p₂) ∨
-      ∃ r : Run config checks m₂ m₁, p₂.append r = p₁ := by
-  intro y r₂
-  induction r₂ with
-  | nil => exact fun r₁ same => .inl ⟨r₁, same⟩
-  | snoc r₂ last ih =>
-    intro r₁ same
-    simp only [Run.append] at same
-    rcases Run.prefix_snoc p₁ r₁ (p₂.append r₂) last same with ⟨rfl, joined⟩ | ⟨r', earlier⟩
-    · exact .inr ⟨r₂.snoc last, (eq_of_heq joined).symm⟩
-    · exact ih r' earlier
-
-/-- Two splits of one run are ordered. -/
-private theorem Run.prefix_total {x m₁ m₂ y : ForkedBeaconState preset}
-    {tail : Run config checks x y}
-    (p₁ : Run config checks x m₁) (r₁ : Run config checks m₁ y)
-    (p₂ : Run config checks x m₂) (r₂ : Run config checks m₂ y)
-    (one : p₁.append r₁ = tail) (two : p₂.append r₂ = tail) :
-    (∃ r : Run config checks m₁ m₂, p₁.append r = p₂) ∨
-      ∃ r : Run config checks m₂ m₁, p₂.append r = p₁ :=
-  Run.prefix_total_of p₁ p₂ r₂ r₁ (one.trans two.symm)
 
 /-- A key whose exit a step assigns, after a first drop, is a source-falling key.
 
@@ -28415,8 +28198,11 @@ Nothing else that a registry step reads changes. -/
 private theorem QuietStep.blsChange {fork : Fork} {electra : .pectra ≤ fork}
     {s t : BeaconState preset fork} {signed : SignedBLSToExecutionChange}
     (ok : processBlsToExecutionChange config checks s signed = .ok t)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ordered : ExitsOrdered s) : QuietStep electra s t := by
-  have held := fun prior : SlashedExitAssigned s => SlashedExitAssigned.bls ok prior
+  have held := processBlsToExecutionChange_slashed_exit_assigned ok delay
+  -- The index bounds below must not read the delay, or `decide` rejects their goals.
+  clear delay
   obtain ⟨v, found, bls, _, _, set⟩ := processBlsToExecutionChange_ok ok
   have read : s.validators.data[signed.message.validatorIndex.toNat]? = some v :=
     getValidator_eq_ok_iff.mp found
@@ -28445,6 +28231,7 @@ private theorem QuietStep.blsChange {fork : Fork} {electra : .pectra ≤ fork}
 /-- The BLS credential changes of a block record nothing. -/
 private theorem operationReplay_blsChanges (x : ForkedBeaconState preset) (high : Nat)
     (rounding : Nat → Nat) {fork : Fork} (electra : .pectra ≤ fork)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {s t : BeaconState preset fork} (body : BeaconBlockBody preset fork)
     (ok : processBlsToExecutionChanges config checks s body = .ok t) :
     OperationReplay (config := config) (checks := checks) x high rounding electra s t [] [] := by
@@ -28457,7 +28244,7 @@ private theorem operationReplay_blsChanges (x : ForkedBeaconState preset) (high 
     exact operationReplay_quiet
       (foldlM_framePath _ _ folded fun _ _ _ _ eq => .credentials eq)
       (foldlM_step (QuietStep electra) (fun _ => .refl) .trans (·.1.2.2.2.2.2.2) (·.1.2.2.2.1) _
-        (fun _ _ _ step ordered _ => QuietStep.blsChange step ordered) _ folded)
+        (fun _ _ _ step ordered _ => QuietStep.blsChange step delay ordered) _ folded)
   · rename_i before
     exact absurd (Nat.le_trans (by decide) electra) before
 
@@ -28686,7 +28473,7 @@ private theorem epochInput_facts {g x u : ForkedBeaconState preset}
   have run := shared.append pre
   have invariant := (run_justified_separated run genesis).1
   have start := currentEpoch_le_of_chainSteps pre.chainSteps
-  have bounded := actual_epoch_succ_lt_far u twoSlots
+  have bounded := getCurrentEpoch_succ_lt_farFuture twoSlots u.state
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cached
   exact ⟨invariant.balancesMatch, invariant.exitsOrdered,
     run.pendingConsolidationsOrdered genesis early delay,
@@ -30107,10 +29894,10 @@ private theorem operationReplay_carry {x : ForkedBeaconState preset} {high : Nat
   operationReplay_quiet path fun ordered _ =>
     ⟨RegistryStep.of_validators (congrArg (·.data) registry) slot ordered, balances, pending,
       congrFun earliest electra, congrFun consume electra,
-      fun held => by simpa only [SlashedExitAssigned, registry] using held⟩
+      SlashedExitAssigned.of_validators_eq (congrArg (·.data) registry)⟩
 
 /-- The deposit requests of a block record nothing and are one frame. -/
-private theorem r2d_depositRequests (x : ForkedBeaconState preset) (high : Nat)
+private theorem operationReplay_depositRequests (x : ForkedBeaconState preset) (high : Nat)
     (rounding : Nat → Nat) {fork : Fork} (electra : .pectra ≤ fork)
     {s t : BeaconState preset fork} (requests : List DepositRequest)
     (ok : requests.foldlM (processDepositRequest · electra ·) s = .ok t) :
@@ -30640,7 +30427,7 @@ private theorem guardedReplay_consolidationRequest {x : ForkedBeaconState preset
         switch frame retired cover future compounding e before after notTransfer)
   obtain ⟨_, _, _, _, assignmentT, _, erasureT, _, reserveT⟩ := frameT
   refine ⟨queue', calls', owned', replay, reserveT, assignmentT, erasureT, retiredT, coverT,
-    futureT, SlashedExitAssigned.consolidation ok slashed, ?_, trace electra, ?_⟩
+    futureT, processConsolidationRequest_slashed_exit_assigned compounding ok delay slashed, ?_, trace electra, ?_⟩
   · intro tag member n isFresh
     by_cases old : tag ∈ queue
     · obtain ⟨v, found, epoch, assignedExit⟩ := fresh tag old n isFresh
@@ -30874,10 +30661,11 @@ private theorem blockReplay_proved :
     (((operationReplay_eth1 (x := x) (high := high) (rounding := rounding) electra
       eth1Ok).guarded G).append
     (replayP.append (replayS.append (replayA.append (replayD.append
-    (((reservedReplay_voluntaryExits x high rounding electra early _ exitsList).guarded G).append
-    (((operationReplay_blsChanges x high rounding electra _ changedOk).guarded G).append
-    (((r2d_depositRequests x high rounding electra _ requestsList).guarded G).append
-    (((reservedReplay_withdrawalRequests x high rounding electra early _
+    (((reservedReplay_voluntaryExits x high rounding electra early delay _ exitsList).guarded
+      G).append
+    (((operationReplay_blsChanges x high rounding electra delay _ changedOk).guarded G).append
+    (((operationReplay_depositRequests x high rounding electra _ requestsList).guarded G).append
+    (((reservedReplay_withdrawalRequests x high rounding electra early delay _
       withdrawalsList).guarded G).append
     (replayC.append ((operationReplay_sync (x := x) (high := high) (rounding := rounding)
       electra syncOk syncBound).guarded G)

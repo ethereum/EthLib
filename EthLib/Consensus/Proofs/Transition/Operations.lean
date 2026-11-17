@@ -1363,19 +1363,23 @@ theorem recordDepositRequestsStart_eq {index : UInt64} :
 
 /-- From Electra, a deposit request joins the end of the pending deposits, at the current slot.
 
-The registry and the balances stay. -/
+The registry and the balances stay.
+
+Every other field stays too, except the start index of the deposit requests. -/
 theorem processDepositRequest_ok {electra : .pectra ≤ fork} {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
     (after.pendingDeposits electra).data = (state.pendingDeposits electra).data.push
         ⟨request.pubkey, request.withdrawalCredentials, request.amount, request.signature,
           state.slot⟩ ∧
-      after.validators = state.validators ∧ after.balances = state.balances := by
+      after.validators = state.validators ∧ after.balances = state.balances ∧
+      ∃ start pending,
+        after = { state with depositRequestsStartIndex := start, pendingDeposits := pending } := by
   obtain ⟨start, recorded⟩ :=
     recordDepositRequestsStart_eq (state := state) (index := request.index)
   simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
     pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨pending, appended, rfl⟩ := computed
-  exact ⟨appendWithinLimit_data appended, rfl, rfl⟩
+  exact ⟨appendWithinLimit_data appended, rfl, rfl, start, fun _ => pending, rfl⟩
 
 /-- A valid deposit lies in the deposit tree, at the next deposit index.
 

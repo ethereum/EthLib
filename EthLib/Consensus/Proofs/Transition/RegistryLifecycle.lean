@@ -59,6 +59,19 @@ theorem ValidatorLifecycle.trans {first second third : Validator}
     have same := one.exitEpoch set
     exact (two.exitEpoch (same ▸ set)).trans same
 
+/-- Each validator after a step is the one before it at its index.
+
+It has the same key, effective balance and largest effective balance.
+
+Any assigned epoch is unchanged, and it is unslashed only if it was unslashed. -/
+def RegistryEntriesKept (u v : BeaconState preset fork) : Prop :=
+  ∀ (i : Nat) (w : Validator), v.validators.data[i]? = some w → ∃ old,
+    u.validators.data[i]? = some old ∧ w.pubkey = old.pubkey ∧
+      w.effectiveBalance = old.effectiveBalance ∧
+      withdrawalMaxEffectiveBalance preset fork w =
+        withdrawalMaxEffectiveBalance preset fork old ∧
+      (w.slashed = false → old.slashed = false) ∧ ValidatorLifecycle old w
+
 /-- The registry of a later state, which may be of a later fork.
 
 It is at least as long.

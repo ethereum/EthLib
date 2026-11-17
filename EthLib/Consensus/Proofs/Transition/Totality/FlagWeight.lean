@@ -60,15 +60,6 @@ def FlagsWithinActive (state : BeaconState preset fork) : Prop :=
       activeBalanceAt state (getCurrentEpoch state) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
       blockPerIncrement preset state * 54
 
-/-- Dividing each element of a list, rounding down, gives at most the sum divided. -/
-private theorem sum_div_le (d : Nat) : ∀ l : List Nat, (l.map (· / d)).sum ≤ l.sum / d
-  | [] => by simp
-  | x :: l => by
-    simp only [List.map_cons, List.sum_cons]
-    have := sum_div_le d l
-    have := Nat.div_add_div_le_add_div (x := x) (y := l.sum) (z := d)
-    omega
-
 /-- The weight of the flags of one epoch of participation, at a base reward per increment. -/
 private def weigh (perIncrement : Nat) (state : BeaconState preset fork)
     (participation : EpochParticipation preset fork) : Nat :=
@@ -159,7 +150,7 @@ private theorem weigh_le (perIncrement : Nat) (state : BeaconState preset fork)
       simp only [mark, Function.comp]
       split <;> simp
     rw [eq]
-    exact sum_div_le inc _
+    simpa only [List.map_id'] using sum_map_div_le (fun n : Nat => n) inc _
   calc _ ≤ _ := step1
     _ = _ := step2
     _ ≤ _ := Nat.mul_le_mul_right 54 (Nat.mul_le_mul_right perIncrement step3)
