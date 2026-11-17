@@ -427,7 +427,7 @@ private theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
 /-- The induction of the historical-anchor headline, with the root's viability given per time.
 
 The viability at a time may read the coverage at every earlier time. -/
-private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
+public theorem Execution.honestHeadsCover_of_viableAt [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
@@ -823,7 +823,7 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
       HonestCollision (e := e) time ∨
       HistoricalDirectSafetyEvidence (e := e) pre time :=
-  honestHeadsCover_core sync slots minLookahead maxLookahead ring preGloas
+  Execution.honestHeadsCover_of_viableAt sync slots minLookahead maxLookahead ring preGloas
     admitted half votes fits prompt windows
     (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
       fit.positive minLookahead maxLookahead ring newVoters)
@@ -973,7 +973,7 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     simp only [Store.getCurrentStoreEpoch, slotOk, bind, Except.bind, pure, Except.pure,
       Except.ok.injEq] at read
     exact read
-  exact honestHeadsCover_core sync slots minLookahead maxLookahead ring preGloas
+  exact Execution.honestHeadsCover_of_viableAt sync slots minLookahead maxLookahead ring preGloas
     admitted half votes fits prompt windows
     (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
       positive minLookahead maxLookahead ring newVoters)
@@ -1447,7 +1447,7 @@ public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈
     viable | alternatives
   swap
   · exact .inr alternatives
-  rcases honestHeadsCover_core sync slots minLookahead maxLookahead ring preGloas
+  rcases Execution.honestHeadsCover_of_viableAt sync slots minLookahead maxLookahead ring preGloas
       admitted half votes fits prompt windows
       (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
         fit.positive minLookahead maxLookahead ring newVoters)
