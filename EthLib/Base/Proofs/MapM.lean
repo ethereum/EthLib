@@ -347,9 +347,11 @@ theorem vector_mapM_eq_ok_iff {n : Nat} {xs : Vector α n} {ys : Vector β n} :
     rw [mapped] at onArray
     exact congrArg Except.ok (Vector.toArray_inj.mp (Except.ok.inj onArray))
 
-/-- Two functions that agree on every element of a list map it to one result, errors included. -/
-theorem mapM_congr {xs : List α} {g : α → Except ε β} (agree : ∀ x ∈ xs, f x = g x) :
-    xs.mapM f = xs.mapM g := by
+/-- Two monadic functions that agree on every element of a list map it to one result.
+
+For `Except`, errors included. -/
+theorem mapM_congr {m : Type → Type} [Monad m] [LawfulMonad m] {xs : List α} {φ g : α → m β}
+    (agree : ∀ x ∈ xs, φ x = g x) : xs.mapM φ = xs.mapM g := by
   induction xs with
   | nil => rfl
   | cons y ys ih =>

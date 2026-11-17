@@ -45,7 +45,7 @@ A chain from a later state keeps its keys distinct when they are distinct in tha
 
 namespace EthLib.Consensus
 
-open Base Serialization.Ssz Cryptography.Bls
+open Base Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
@@ -76,7 +76,8 @@ So it is enough that both registries are prefixes of the keys of a common state.
 The signers must be in the other registry.
 
 The two states must agree on the fork versions and the genesis validators root. -/
-theorem isValidIndexedAttestation_of_keys {one other common : BeaconState preset fork}
+theorem isValidIndexedAttestation_of_keys {post : Fork} {one other : BeaconState preset fork}
+    {common : BeaconState preset post}
     {indexed : IndexedAttestation preset fork}
     (valid : isValidIndexedAttestation config checks one indexed = .ok true)
     (oneKeys : validatorKeys one <+: validatorKeys common)
