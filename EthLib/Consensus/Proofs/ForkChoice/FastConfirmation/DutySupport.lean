@@ -190,63 +190,6 @@ theorem mem_supportersOf_of_latest_signed {anchor : Store preset fork}
   simp only [Store.supportersOf, List.mem_toFinset, List.mem_map, List.mem_filter]
   exact ⟨entry, ⟨member, eq ▸ check⟩, eq⟩
 
-/-- A latest honest vote supports the safe prefix, or bounded honest stores name a collision.
-
-Here the latest message targets an epoch whose first slot starts no earlier than `first`. -/
-private theorem mem_supportersOf_of_latest_rank {anchor : Store preset fork}
-    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (start : ∀ u ∈ J, e.start u = anchor) {last : ℕ}
-    (preGloas : fork < .glamsterdam)
-    {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J) {k : ℕ}
-    {message : LatestMessage fork}
-    (latest : ((e.world k).state w).latestMessages[v]? = some message)
-    (counted : v ∉ ((e.world k).state w).equivocatingIndices)
-    (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view w)
-      ((e.world k).state w)) (bounded : (e.world k).time ≤ last)
-    {due : UInt64} (dueOk : getAttestationDueMs config fork = .ok due)
-    (inSlot : due < config.SLOT_DURATION_MS)
-    {epoch : Epoch} {begin : Slot} {beginTime : UInt64} {first : ℕ}
-    (beginOk : computeStartSlotAtEpoch preset epoch = .ok begin)
-    (beginTimeOk : computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime)
-    (fresh : first ≤ beginTime.toNat) (rank : epoch ≤ message.rank) {root : Root}
-    (safe : ∀ earlier, first ≤ earlier → earlier < (e.world k).time →
-      ∀ u ∈ J, ∀ n head, (e.world n).time = earlier →
-      UpToDate config checks sources (e.world n).time ((e.world n).view u)
-        ((e.world n).state u) →
-      ((e.world n).state u).getHead config = .ok head →
-      ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true)
-    {rootBlock : BeaconBlock preset fork}
-    (known : ((e.world k).state w).blocks[root]? = some rootBlock)
-    (aboveAnchor : anchorBlock.slot ≤ rootBlock.slot) {state : BeaconState preset fork}
-    (active : v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset) :
-    v ∈ ((e.world k).state w).supportersOf state ⟨root, .pending⟩ ∨
-    ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ last ∧ (e.world m).time ≤ last ∧
-      ∃ root collision, Store.findBlockCollision ((e.world n).state u)
-        ((e.world m).state v) [root] = some collision := by
-  refine mem_supportersOf_of_latest_signed anchored start preGloas honest receiver latest
-    counted upToDate bounded dueOk inSlot ?_ safe known aboveAnchor active
-  intro attestation signedIn startTime messageEq seen signed startOk
-  -- The honest signer's data has the epoch of its slot as target, so the vote is after `begin`.
-  obtain ⟨n, _, duty⟩ := e.exists_maySign_of_signed (e.view_subset_sent k w seen) signed honest
-  obtain ⟨_, _, _, _, _, honestData, _⟩ := duty
-  obtain ⟨_, _, _, _, _, _, _, _, made⟩ := honestData
-  have epochEq := target_epoch_eq_of_getAttestationData made
-  have epochRank : epoch ≤ attestation.data.target.epoch := by
-    have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
-    subst messageEq
-    simpa [LatestMessage.rank, LatestMessage.ofAttestation, notGloas] using rank
-  have beginLe : begin ≤ attestation.data.slot := by
-    have floor := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat
-      (UInt64.le_iff_toNat_le.mp epochRank)
-    rw [epochEq, computeEpochAtSlot, UInt64.toNat_div] at floor
-    rw [UInt64.le_iff_toNat_le, (computeStartSlotAtEpoch_ok_iff.mp beginOk).2]
-    exact floor.trans (Nat.div_mul_le_self _ _)
-  obtain ⟨beginTime', beginOk', _, timeLe⟩ := exists_timeAtSlotMs_of_le beginLe startOk
-  have same := Except.ok.inj (beginOk'.symm.trans beginTimeOk)
-  subst beginTime'
-  have timeLe := UInt64.le_iff_toNat_le.mp timeLe
-  omega
-
 /-- Finality compatibility admits the head, covers the prefix, or names a store collision. -/
 private theorem blocks_or_justified_covers {Δ : ℕ} (sync : e.Synchronous Δ)
     (preGloas : fork < .glamsterdam) {last : ℕ}

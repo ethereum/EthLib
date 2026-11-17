@@ -127,15 +127,15 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred 
         ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
           some evidence) ∨ HistoricalFinalityEvidence (e := e) pre time := by
   have sourceResult := e.source_surplus_or_accountable sync slots positive minLookahead
-    maxLookahead ring preGloas admitted half votes fits prompt windows history anchored sound
+    maxLookahead ring preGloas admitted half votes fits prompt windows anchored sound
     anchorSlot anchorBoundary start caller callerUpToDate headNode slotOk beginOk timeEq blockOk
     parentOk sourceOk boostOk firstOk lastOk beforeOk maximumOk parentParticipantsOk registry
-    aligned increment supportOk discountOk adversaryOk margin callerTime sourceReads drift reserve
+    aligned increment supportOk discountOk adversaryOk margin callerTime sourceReads reserve
     residual bounded roots unslashed ceiling parameters genesis pre heldEarly enough terminal
     rootCovers headDescends historicalBelow callerEpochOk historicalEpochOk near epochStartOk
     epochStartTimeOk historyCovers receiver atTime upToDate known finality receiverHeadOk
-    receiverParent stateOk currentOk receiverEpochOk receiverNear receiverLastOk windowOk scoreOk
-    participantsOk exit absent tree route
+    receiverParent stateOk currentOk receiverEpochOk receiverNear receiverLastOk windowOk
+    participantsOk exit absent route
   have applyHead (headRoute) := ancestor_head_of_window_margin anchored start history receiver
     (by rw [atTime]) (UInt64.le_of_eq anchorSlot) preGloas absent minLookahead maxLookahead ring
     receiverHeadOk stateOk tree known caller callerTime (by rw [atTime]; exact callerTime) drift
