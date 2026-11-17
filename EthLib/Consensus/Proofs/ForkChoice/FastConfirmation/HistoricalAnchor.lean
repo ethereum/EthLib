@@ -21,7 +21,19 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
-/-- A guarded historical margin gives head ancestry or explicit collision or finality evidence. -/
+/-- A guarded historical margin gives head ancestry, a block collision or direct-safety evidence.
+
+The receiver's head descends from the block at the receiver's time.
+
+This extends the coverage of earlier honest heads, assumed from the call up to that time.
+
+The direct-safety evidence is relative to the anchor, and its drift counts from the anchor.
+
+With enough churn since the anchor, it holds with no accountable key.
+
+The stake ceiling of `2 * 10^17` Gwei is `2 * 10^8` ETH, above mainnet's active stake.
+
+The proof needs only a ceiling below `2^64` Gwei, so that the checked total cannot overflow. -/
 public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
@@ -127,8 +139,8 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred 
     (((e.world k).state w).isAncestor receiverHead ⟨root, .pending⟩ = .ok true ∨
       ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
         ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-          some evidence) ∨ HistoricalFinalityEvidence (e := e) pre time := by
-  have sourceResult := e.source_surplus_or_accountable sync slots positive minLookahead
+          some evidence) ∨ HistoricalDirectSafetyEvidence (e := e) pre time := by
+  have sourceResult := e.source_surplus_or_historical_evidence sync slots positive minLookahead
     maxLookahead ring preGloas admitted half votes fits prompt windows anchored sound
     anchorSlot anchorBoundary start caller callerUpToDate headNode slotOk beginOk timeEq blockOk
     parentOk sourceOk boostOk firstOk lastOk beforeOk maximumOk parentParticipantsOk registry

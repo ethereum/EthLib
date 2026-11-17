@@ -35,7 +35,13 @@ public theorem compatibility_of_residual {horizon : Epoch} {last : Nat}
     exact family a honestA i j later timeJ
   · exact residual a honestA b honestB i j timeI timeJ checkpoint selected sameStore ordered bounded
 
-/-- The finality companion supplies the finalized-prefix family or explicit evidence. -/
+/-- Each honest store's justified checkpoint reads back its earlier finalized checkpoints.
+
+Otherwise two runs from the anchor give direct-safety evidence.
+
+That evidence is relative to the anchor, and its drift counts from the anchor.
+
+With enough churn since the anchor, it holds with no accountable key. -/
 public theorem Execution.finalizedFamily_or_historical_evidence {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
@@ -56,7 +62,7 @@ public theorem Execution.finalizedFamily_or_historical_evidence {anchor : Store 
       ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
         ((e.world i).state w).finalizedCheckpoint.epoch =
           .ok ((e.world i).state w).finalizedCheckpoint.root) ∨
-    HistoricalFinalityEvidence (e := e) pre last := by
+    HistoricalDirectSafetyEvidence (e := e) pre last := by
   have forward w (member : w ∈ J) k := e.forwardReachableWith
     (fun a ha => (anchored a ha) ▸ Store.ForwardReachableWith.anchor anchorStore) k w member
   -- An honest held copy of the anchor supplies the nonzero root required by the companion.

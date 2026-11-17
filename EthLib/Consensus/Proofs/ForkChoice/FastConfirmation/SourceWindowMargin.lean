@@ -14,7 +14,9 @@ This module shows that a later receiver then has its own surplus over the same s
 
 Otherwise the receiver's justified block descends from the block, or two honest stores collide.
 
-The history since the anchor may also hold accountable evidence instead.
+The runs since the anchor may also give direct-safety evidence instead.
+
+That evidence is relative to the anchor, and with enough churn it holds with no accountable key.
 -/
 
 namespace EthLib.Consensus.Models.Network
@@ -203,9 +205,11 @@ end EthLib.Consensus.Models.Network
 
 namespace EthLib.Consensus
 
-open Base Uint64
+open Base Uint64 Models
 
-variable {preset : Preset} {fork : Fork}
+variable {preset : Preset} {fork : Fork} {config : Config}
+  {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+  {store : Store preset fork}
 
 /-- A later slot is in the same epoch or a later one. -/
 private theorem epoch_le_of_slot_le (a b : Slot) (le : a.toNat ≤ b.toNat) :
@@ -275,15 +279,6 @@ private theorem Store.getCommitteesBetweenSlots_congr {store other : Store prese
     obtain ⟨kept, count⟩ := agree _ low high
     rw [getSlotCommittee_congr stateOk otherOk kept count]
 
-end EthLib.Consensus
-
-namespace EthLib.Consensus
-
-open Base Uint64
-
-variable {preset : Preset} {fork : Fork} {config : Config}
-  {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
-
 /-- Two heads that descend from one parent state agree on the committees near that parent.
 
 The heads may be held by two stores that hold the same parent state. -/
@@ -331,14 +326,6 @@ private theorem committeesKept_of_parentState {caller receiver : Store preset fo
     have := epoch.toNat_lt
     omega
   exact toCaller.committees_agree toReceiver (by omega) fixed callerRing receiverRing
-
-end EthLib.Consensus
-
-namespace EthLib.Consensus
-
-open Base Uint64 Models
-
-variable {preset : Preset} {fork : Fork}
 
 /-- A partial range weighs its active members, raised to one increment. -/
 private theorem weight_le_activeMembers {store : Store preset fork} {head : Root}
@@ -390,16 +377,6 @@ private theorem weight_le_activeVoters {store : Store preset fork} {head : Root}
   obtain ⟨-, -, totalEq⟩ := getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok weightOk)
   rw [totalEq]
   rfl
-
-end EthLib.Consensus
-
-namespace EthLib.Consensus
-
-open Base Uint64 Models
-
-variable {preset : Preset} {fork : Fork} {config : Config}
-  {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
-  {store : Store preset fork}
 
 /-- Each supporter of a block is a member of the committees of a range that the head reads.
 
@@ -747,14 +724,6 @@ private theorem window_ok_of_slots {store : Store preset fork} {head : Root}
       by simp only [committeeOk, pure, Except.pure], trivial⟩
   · trivial
 
-end EthLib.Consensus
-
-namespace EthLib.Consensus
-
-open Base Uint64 Models
-
-variable {preset : Preset} {fork : Fork}
-
 /-- A successful window reads every window inside it. -/
 private theorem window_ok_of_inside {store : Store preset fork} {head : Root}
     {first last low high : Slot} {members : Std.TreeSet ValidatorIndex}
@@ -1021,13 +990,7 @@ private theorem activeMembers_mono_of_window {store : Store preset fork} {head :
   exact Store.mem_activeMembers.mpr ⟨(mem_window_iff readB v).mpr
     ⟨s, UInt64.le_trans low sLow, UInt64.le_trans sHigh high, rest⟩, active⟩
 
-end EthLib.Consensus
-
-namespace EthLib.Consensus
-
-open Base Uint64 Serialization.Ssz SszType
-
-variable {preset : Preset} {fork : Fork}
+open Serialization.Ssz SszType
 
 /-- The finalized epoch of a forward-reachable store is the anchor's or before the current one.
 
@@ -2663,8 +2626,16 @@ The receiver's justified block may instead descend from the block.
 
 Bounded honest stores may instead collide.
 
-The history since the anchor may instead hold accountable evidence. -/
-public theorem Execution.source_surplus_or_accountable [DecidablePred (· ∈ J)] {Δ : ℕ}
+Two runs from the anchor may instead give direct-safety evidence.
+
+That evidence is relative to the anchor, and its drift counts from the anchor.
+
+With enough churn since the anchor, it holds with no accountable key.
+
+The stake ceiling of `2 * 10^17` Gwei is `2 * 10^8` ETH, above mainnet's active stake.
+
+The proof needs only a ceiling below `2^64` Gwei, so that the checked total cannot overflow. -/
+public theorem Execution.source_surplus_or_historical_evidence [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
@@ -2780,11 +2751,11 @@ public theorem Execution.source_surplus_or_accountable [DecidablePred (· ∈ J)
               v ∈ J}) ∨
       (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
         ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-          some evidence) ∨ HistoricalFinalityEvidence (e := e) pre time := by
+          some evidence) ∨ HistoricalDirectSafetyEvidence (e := e) pre time := by
   classical
   set callerStore := (e.world n).state u
   set receiverStore := (e.world k).state w
-  -- The finalized prefixes form one family, or the history holds accountable evidence.
+  -- The finalized prefixes form one family, or the runs from the anchor give evidence.
   rcases e.finalizedFamily_or_historical_evidence anchored start sound anchorSlot anchorBoundary
       slots bounded roots absent parameters genesis pre heldEarly enough terminal caller
       callerTime with family | evidence

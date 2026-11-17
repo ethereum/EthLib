@@ -38,7 +38,17 @@ def CountedState (store : Store preset fork) (config : Config)
 def activeVoters (state : BeaconState preset fork) : Finset ValidatorIndex :=
   (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset
 
-/-- Stake reserved for scheduled exits and the fork's exit and consolidation churn. -/
+/-- Stake of the source state that may leave the active set soon.
+
+It counts the active validators whose exit epoch is at most two epochs after the current one.
+
+From Electra, it adds the exit and consolidation churn limits and the balances left to consume.
+
+A churn limit that fails to read counts as 0.
+
+From Electra, it also adds a slack of `2 * MAX_EFFECTIVE_BALANCE_ELECTRA`.
+
+Before Electra, it adds the validator churn limit, at least 1, times `MAX_EFFECTIVE_BALANCE`. -/
 def exitReserve (config : Config) (source : BeaconState preset fork) : Nat :=
   stake (fun v => balanceAt source v.toNat)
     {v ∈ activeVoters source | (source.validators.data[v.toNat]?).any fun validator =>
@@ -275,8 +285,18 @@ def HeldTerminalStakeFloor (horizon : Epoch) (last : Nat) : Prop :=
     3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
       2 * stake (DirectSafety.effectiveWeight state) (DirectSafety.activeKeys state)
 
-/-- Two historical terminal views expose accountable stake loss or direct-safety hash evidence. -/
-def HistoricalFinalityEvidence {g : ForkedBeaconState preset}
+/-- An honest store has two runs from the anchor to held states that give direct-safety evidence.
+
+A terminal view of the first state has the store's earlier finalized checkpoint.
+
+A terminal view of the second state has the store's later justified checkpoint.
+
+The evidence is the direct-safety stake inequality, or hash evidence on the two runs.
+
+It is relative to the anchor, and its drift counts from the anchor.
+
+With enough churn since the anchor, the stake inequality holds with no accountable key. -/
+def HistoricalDirectSafetyEvidence {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (time : Nat) : Prop :=
   ∃ w ∈ J, ∃ i k, i ≤ k ∧ (e.world k).time ≤ time ∧
     ∃ (stateA stateB : BeaconState preset fork)

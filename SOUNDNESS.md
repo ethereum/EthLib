@@ -2979,15 +2979,25 @@ In an execution of the network model, `Execution.equivocatingIndices_honest` giv
 These are store-local facts: no theorem here shows that a recorded honest vote is its voter's latest actual vote, or that it remains the recorded vote at a later store.
 
 `Execution.isAncestor_getHead_of_historical_anchor` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalAnchor.lean` derives later head ancestry from a guarded historical margin.
-It applies `Execution.source_surplus_or_accountable`, which derives the receiver's source-weight surplus from the caller's checked reads, rather than assuming that surplus.
-The conclusion retains alternatives: a collision between blocks held by honest stores, or historical finality evidence consisting of the direct-safety stake inequality or hash evidence.
-It does not assume hash injectivity.
+It applies `Execution.source_surplus_or_historical_evidence`, which derives the receiver's source-weight surplus from the caller's checked reads, rather than assuming that surplus.
+The conclusion retains alternatives: a collision between blocks held by honest stores, or `HistoricalDirectSafetyEvidence`.
+That evidence is the alternative of `Execution.finalized_prefix_or_accountable`: for two runs from the anchor to held states, the direct-safety stake inequality or hash evidence.
+It is relative to the anchor, and its drift counts from the anchor.
+So with enough churn since the anchor, the stake inequality holds with no accountable key.
+In that case the evidence names no accountable stake.
+The theorem does not assume hash injectivity.
 
 The endpoint assumes synchrony, prompt processing, block admission and validated honest duty votes through its time horizon.
 It also assumes agreement between assignment duties and head committee windows, common history for vote committees, and successful source-weight window reads.
-Its stake hypotheses include source-window Byzantine and exit reserves, unslashed honest validators in counted states, a checkpoint stake ceiling and an explicit drift bound.
+Its stake hypotheses include a Byzantine and exit reserve for each nonempty committee window of the caller's head, from the caller's first slot to the receiver's last slot.
+They also include unslashed honest validators in counted states, a checkpoint stake ceiling and an explicit drift bound.
 Earlier honest-head coverage, receiver-finality coverage and residual finalized-checkpoint compatibility remain hypotheses.
-The accountable finality branch requires deposited genesis, a fixed-fork history before the next upgrade, direct-safety parameters and stake floors for held runs and terminal states.
+The coverage of earlier honest heads is assumed from the call up to the receiver's time, and the theorem extends it to the receiver's head at that time.
+Residual finalized-checkpoint compatibility carries cross-store finality safety.
+A checkpoint that an honest store selects, at an epoch from an honest finalized epoch up to the horizon, reads back that finalized checkpoint.
+That safety is assumed, not derived.
+Only the case of one store's later justified checkpoint is left out: that case is proved, or the direct-safety evidence holds.
+The direct-safety branch requires deposited genesis, a fixed-fork history before the next upgrade, direct-safety parameters and stake floors for held runs and terminal states.
 The theorem also retains the stated slot, epoch, tree, viable-route and successful-read conditions.
 These conditions are recorded in `HistoricalStatements.lean` and in the endpoint's statement; the theorem is not unconditional safety of every successful confirmation call.
 
