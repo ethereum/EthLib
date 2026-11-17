@@ -244,8 +244,8 @@ private theorem duty_of_active {anchor : Store preset fork} {time : ℕ}
     ∃ slot index, first ≤ slot ∧ slot ≤ last ∧ assignment.committee v slot = some index := by
   have forwardN := e.forwardReachable
     (fun a ha => (start a ha) ▸ Store.ForwardReachable.anchor anchored) n u caller
-  have forwardK := e.forwardReachable
-    (fun a ha => (start a ha) ▸ Store.ForwardReachable.anchor anchored) k u caller
+  have forwardK := e.forwardReachableWith
+    (fun a ha => (start a ha) ▸ Store.ForwardReachableWith.anchor anchored) k u caller
   have pending := Store.getHead_pending preGloas headOk
   have nodeEq : hd = ⟨hd.root, .pending⟩ := by
     cases hd
@@ -254,9 +254,8 @@ private theorem duty_of_active {anchor : Store preset fork} {time : ℕ}
   unfold Store.isAncestor at originRead
   obtain ⟨otherOrigin, otherKnown, _⟩ := bind_ok_iff.mp originRead
   have otherKnown := Store.block_ok_iff.mp otherKnown
-  obtain ⟨headBlock, headKnown, _⟩ := Store.slot_le_of_isAncestor otherKnown descends
-  obtain ⟨headState, headStateHeld, _⟩ := forwardK.reachable.blockStatesFromParents headKnown
-  have headStateOk := Store.blockState_ok_iff.mpr headStateHeld
+  obtain ⟨headState, headStateOk⟩ := headState_of_descends forwardK otherKnown
+    (by rw [← nodeEq]; exact descends)
   have activeEq := active_eq_of_common_origin anchored start anchorSlot preGloas caller caller
     same originKnown otherKnown countRead headStateOk countDescends
     (by rw [← nodeEq]; exact descends)
@@ -280,7 +279,7 @@ private theorem duty_of_active {anchor : Store preset fork} {time : ℕ}
     (UInt64.lt_iff_toNat_lt.mpr positive) firstOk
   obtain ⟨slot, index, low, high, duty⟩ := (windows u caller k kBound hd boundary first last
     participants headOk slotOk past (fun found foundOk => by
-      have le := headState_epoch_le forwardK slotOk foundOk
+      have le := headState_epoch_le forwardK.forwardReachable slotOk foundOk
       rw [epochBoundary] at le
       rw [epochFirst]
       omega) read v honest).mp member

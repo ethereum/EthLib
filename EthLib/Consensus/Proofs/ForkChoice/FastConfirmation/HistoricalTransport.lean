@@ -396,7 +396,7 @@ private theorem mem_window_of_near_vote {store : Store preset fork} {v : Validat
     ((kept _ _ rfl).trans committeeOk) member
 
 /-- The head of a store with an ancestor that it descends from has a stored state. -/
-private theorem headState_of_descends {store : Store preset fork}
+public theorem headState_of_descends {store : Store preset fork}
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     {head : ForkChoiceNode} {parentRoot : Root} {parent : BeaconBlock preset fork}
     (parentFound : store.blocks[parentRoot]? = some parent)

@@ -15,6 +15,7 @@ Not yet released.
   It assumes the honest count `HonestTargetVotes`, and that every honest head descends from a block of the target's epoch until then.
   It also assumes `HonestBlocksAgree`, that honest stores agree on the blocks that they both hold.
   `RolloverWindowRead` assumes that the caller has a head at the start of the next epoch and reads its committee window over the target's epoch.
+  `headState_of_descends` is now public, and the proof reads it.
 
 - `quorum_of_current_target` names the honest voters of `HonestTargetVotes` when the two-thirds test on the current target passes.
   Three times their stake is at least twice the total active balance plus the margin of the count.
