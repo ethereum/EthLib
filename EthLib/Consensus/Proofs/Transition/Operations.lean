@@ -66,6 +66,16 @@ def validatorKeys (state : BeaconState preset fork) : List BLSPubkey :=
 def PubkeysDistinct (state : BeaconState preset fork) : Prop :=
   (validatorKeys state).Nodup
 
+/-- With distinct keys, two positions holding the same key are the same position. -/
+theorem PubkeysDistinct.index_eq {state : BeaconState preset fork}
+    (unique : PubkeysDistinct state) {i j : Nat} {v w : Validator}
+    (one : state.validators.data[i]? = some v) (two : state.validators.data[j]? = some w)
+    (key : v.pubkey = w.pubkey) : i = j := by
+  obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp one
+  obtain ⟨hj, rfl⟩ := Array.getElem?_eq_some_iff.mp two
+  exact unique.eq_of_getElem_eq (by simpa [validatorKeys] using hi)
+    (by simpa [validatorKeys] using hj) (by simpa [validatorKeys] using key)
+
 theorem balancesMatch_of_sameSizes (sizes : SameSizes state after)
     (holds : BalancesMatch state) : BalancesMatch after := by
   unfold BalancesMatch at holds ⊢

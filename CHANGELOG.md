@@ -66,6 +66,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `FlagsKeptOrZero` is stronger.
+  A zero byte of flags appears only at a position at or past the size of the registry before the step.
+  So a step keeps the flags of each existing validator, or zeroes the byte of a new one.
+  `FlagsKeptOrZero.trans` takes a new premise: the registry of the first state is no larger than that of the second.
+  A caller passes that fact, for example from `Frame.registryGrows`.
+  A match on the zero case, `old | rfl`, becomes `old | ⟨rfl, -⟩`.
+  Nothing breaks in Python.
+
 - In Lean, the historical-anchor theorems no longer assume the receivers' reads ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` take `fit : config.CommitteeWindowsFit preset` instead of `reads`; their conclusions are unchanged.
   `Config.CommitteeWindowsFit` bounds the registry limit, the committees of an epoch, the clock and the seed lookahead, and requires an epoch to have a slot.

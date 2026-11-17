@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Proofs.Transition.SyncAggregate
+import EthLib.Consensus.Proofs.Participation
 
 /-!
 # Proofs: the rewards paid inside a block
@@ -224,7 +225,7 @@ def newFlagsNumerator (earned : List UInt64) (flags : ParticipationFlags) (base 
 
 /-- Setting the flags of one attester in turn, with no flag twice in the list.
 
-A flag outside the list keeps whether it is set.
+A flag is set after the steps when it was set before, or when it is in the list and earned.
 
 The numerator gains the weighted base reward of each flag newly set, without overflow.
 
@@ -235,8 +236,8 @@ private theorem foldlM_addFlagReward {total : Gwei} {earned : List UInt64}
       {numerator numerator' : Gwei}, flagList.Nodup →
       flagList.foldlM (addFlagReward state total earned index) (flags, numerator) =
         .ok (flags', numerator') →
-      (∀ flag, flag ∉ flagList →
-        hasFlag flags' flag.val.toUInt64 = hasFlag flags flag.val.toUInt64) ∧
+      (∀ flag, hasFlag flags' flag.val.toUInt64 = (hasFlag flags flag.val.toUInt64 ||
+        decide (flag ∈ flagList ∧ flag.val.toUInt64 ∈ earned))) ∧
       ∃ base, (∀ flag ∈ flagList, flag.val.toUInt64 ∈ earned →
           hasFlag flags flag.val.toUInt64 = false → getBaseReward state total index = .ok base) ∧
         numerator'.toNat = numerator.toNat + (flagList.map fun flag =>
@@ -245,26 +246,47 @@ private theorem foldlM_addFlagReward {total : Gwei} {earned : List UInt64}
   | [], flags, flags', numerator, numerator', _, computed => by
     simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
     obtain ⟨rfl, rfl⟩ := computed
-    exact ⟨fun _ _ => rfl, 0, fun _ absent => absurd absent List.not_mem_nil, by simp⟩
+    exact ⟨fun _ => by simp, 0, fun _ absent => absurd absent List.not_mem_nil, by simp⟩
   | flag :: flagList, flags, flags', numerator, numerator', distinct, computed => by
     rw [List.nodup_cons] at distinct
     rw [List.foldlM_cons, bind_ok_iff] at computed
     obtain ⟨⟨middleFlags, middle⟩, stepped, folded⟩ := computed
     obtain ⟨kept, base, based, sum⟩ := foldlM_addFlagReward distinct.2 folded
-    -- The step sets at most its own flag, so the later flags read as before it.
+    -- The step sets at most its own flag, and only when the attestation earns it.
+    have step : ∀ other, hasFlag middleFlags other.val.toUInt64 =
+        (hasFlag flags other.val.toUInt64 ||
+          decide (other = flag ∧ flag.val.toUInt64 ∈ earned)) := by
+      intro other
+      simp only [addFlagReward] at stepped
+      split at stepped
+      · rename_i newly
+        simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq,
+          Prod.mk.injEq] at stepped
+        obtain ⟨_, _, _, _, _, _, rfl, _⟩ := stepped
+        by_cases equal : other = flag
+        · subst equal
+          simp [hasFlag_addFlag, newly.1]
+        · rw [hasFlag_addFlag_of_ne flags equal]
+          simp [equal]
+      · rename_i old
+        simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at stepped
+        obtain ⟨rfl, _⟩ := stepped
+        by_cases equal : other = flag
+        · subst equal
+          by_cases earnedFlag : other.val.toUInt64 ∈ earned
+          · -- An earned flag that the step did not set was set already.
+            cases set : hasFlag flags other.val.toUInt64
+            · exact absurd ⟨earnedFlag, set⟩ old
+            · simp
+          · simp [earnedFlag]
+        · simp [equal]
+    -- So the later flags read as before it.
     have same : ∀ other ∈ flagList,
         hasFlag middleFlags other.val.toUInt64 = hasFlag flags other.val.toUInt64 := by
       intro other member
       have different : other ≠ flag := fun equal => distinct.1 (equal ▸ member)
-      simp only [addFlagReward] at stepped
-      split at stepped
-      · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq,
-          Prod.mk.injEq] at stepped
-        obtain ⟨_, _, _, _, _, _, rfl, _⟩ := stepped
-        exact hasFlag_addFlag_of_ne flags different
-      · simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at stepped
-        obtain ⟨rfl, _⟩ := stepped
-        rfl
+      rw [step other]
+      simp [different]
     have rest : (flagList.map fun other =>
         if other.val.toUInt64 ∈ earned ∧ hasFlag middleFlags other.val.toUInt64 = false then
           base.toNat * PARTICIPATION_FLAG_WEIGHTS[other].toNat else 0) =
@@ -272,20 +294,15 @@ private theorem foldlM_addFlagReward {total : Gwei} {earned : List UInt64}
           if other.val.toUInt64 ∈ earned ∧ hasFlag flags other.val.toUInt64 = false then
             base.toNat * PARTICIPATION_FLAG_WEIGHTS[other].toNat else 0 :=
       List.map_congr_left fun other member => by rw [same other member]
-    have keptOutside : ∀ other, other ∉ flag :: flagList →
-        hasFlag flags' other.val.toUInt64 = hasFlag flags other.val.toUInt64 := by
-      intro other absent
-      rw [kept other (fun member => absent (List.mem_cons_of_mem _ member))]
-      have different : other ≠ flag := fun equal => absent (equal ▸ List.mem_cons_self)
-      simp only [addFlagReward] at stepped
-      split at stepped
-      · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq,
-          Prod.mk.injEq] at stepped
-        obtain ⟨_, _, _, _, _, _, rfl, _⟩ := stepped
-        exact hasFlag_addFlag_of_ne flags different
-      · simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at stepped
-        obtain ⟨rfl, _⟩ := stepped
-        rfl
+    have full : ∀ other, hasFlag flags' other.val.toUInt64 =
+        (hasFlag flags other.val.toUInt64 ||
+          decide (other ∈ flag :: flagList ∧ other.val.toUInt64 ∈ earned)) := by
+      intro other
+      rw [kept other, step other]
+      by_cases equal : other = flag
+      · subst equal
+        cases hasFlag flags other.val.toUInt64 <;> simp
+      · simp [equal]
     simp only [addFlagReward] at stepped
     split at stepped
     · rename_i newly
@@ -301,7 +318,7 @@ private theorem foldlM_addFlagReward {total : Gwei} {earned : List UInt64}
         have := based other member earnedOther (by rw [same other member]; exact unset)
         rw [rewardOk] at this
         exact (Except.ok.inj this).symm
-      refine ⟨keptOutside, reward, fun other member earnedOther unset => ?_, ?_⟩
+      refine ⟨full, reward, fun other member earnedOther unset => ?_, ?_⟩
       · rcases List.mem_cons.mp member with rfl | member
         · exact rewardOk
         · rw [← agree other member earnedOther unset]
@@ -324,13 +341,90 @@ private theorem foldlM_addFlagReward {total : Gwei} {earned : List UInt64}
     · rename_i old
       simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at stepped
       obtain ⟨rfl, rfl⟩ := stepped
-      refine ⟨keptOutside, base, fun other member earnedOther unset => ?_, ?_⟩
+      refine ⟨full, base, fun other member earnedOther unset => ?_, ?_⟩
       · rcases List.mem_cons.mp member with rfl | member
         · exact absurd ⟨earnedOther, unset⟩ old
         · exact based other member earnedOther (by rw [same other member]; exact unset)
       · rw [sum, rest, List.map_cons, List.sum_cons]
         simp only [old, ↓reduceIte]
         omega
+
+/-- The flags of some attesters, each named once, set in turn.
+
+The flags of the other validators stay.
+
+Each attester holds its flags before the attestation, and every earned flag.
+
+The numerator gains, for each attester, the weighted base reward of each flag newly set.
+
+Whether a flag is newly set is read from the attester's flags before the attestation. -/
+private theorem foldlM_addAttesterFlags_full {total : Gwei} {earned : List UInt64} :
+    ∀ {attesters : List ValidatorIndex} {participation : EpochParticipation preset fork}
+      {numerator : Gwei} {result : EpochParticipation preset fork × Gwei},
+      (attesters.map UInt64.toNat).Nodup →
+      attesters.foldlM (addAttesterFlags state total earned) (participation, numerator) =
+        .ok result →
+      (∀ i, (∀ attester ∈ attesters, attester.toNat ≠ i) →
+        result.1.data[i]? = participation.data[i]?) ∧
+      ∃ shares : List (ValidatorIndex × ParticipationFlags × Gwei),
+        shares.map (·.1) = attesters ∧
+        (∀ share ∈ shares, participation.data[share.1.toNat]? = some share.2.1 ∧
+          ∀ flag : Fin PARTICIPATION_FLAG_WEIGHTS.length, flag.val.toUInt64 ∈ earned →
+            hasFlag share.2.1 flag.val.toUInt64 = false →
+              getBaseReward state total share.1 = .ok share.2.2) ∧
+        (∀ share ∈ shares, ∃ flags', result.1.data[share.1.toNat]? = some flags' ∧
+          ∀ flag : Fin PARTICIPATION_FLAG_WEIGHTS.length, hasFlag flags' flag.val.toUInt64 =
+            (hasFlag share.2.1 flag.val.toUInt64 || decide (flag.val.toUInt64 ∈ earned))) ∧
+        result.2.toNat = numerator.toNat +
+          (shares.map fun share => newFlagsNumerator earned share.2.1 share.2.2).sum
+  | [], participation, numerator, result, _, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨fun _ _ => rfl, [], rfl, fun _ absent => absurd absent List.not_mem_nil,
+      fun _ absent => absurd absent List.not_mem_nil, by simp⟩
+  | attester :: attesters, participation, numerator, result, distinct, computed => by
+    rw [List.map_cons, List.nodup_cons] at distinct
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨⟨middle, middleNumerator⟩, stepped, folded⟩ := computed
+    obtain ⟨kept, shares, named, facts, written', sum⟩ :=
+      foldlM_addAttesterFlags_full distinct.2 folded
+    unfold addAttesterFlags at stepped
+    dsimp only at stepped
+    split at stepped
+    · rename_i inside
+      simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at stepped
+      obtain ⟨⟨flags, raised⟩, loop, written, rfl⟩ := stepped
+      obtain ⟨set, base, based, raisedValue⟩ := foldlM_addFlagReward (List.nodup_finRange _) loop
+      -- The step writes only the attester's own flags.
+      have other : ∀ i, attester.toNat ≠ i → middle.data[i]? = participation.data[i]? := by
+        intro i different
+        rw [← written]
+        simp [different]
+      refine ⟨fun i absent => ?_, (attester, participation.data[attester.toNat], base) :: shares,
+        by simp [named], fun share member => ?_, fun share member => ?_, ?_⟩
+      · rw [kept i fun later member => absent later (List.mem_cons_of_mem _ member)]
+        exact other i (absent attester List.mem_cons_self)
+      · rcases List.mem_cons.mp member with rfl | member
+        · exact ⟨Array.getElem?_eq_getElem inside, fun flag earnedFlag unset =>
+            based flag (List.mem_finRange _) earnedFlag unset⟩
+        · obtain ⟨found, reads⟩ := facts share member
+          refine ⟨?_, reads⟩
+          rw [← other share.1.toNat fun same => distinct.1 ?_]
+          · exact found
+          · rw [same, ← named]
+            exact List.mem_map_of_mem (List.mem_map_of_mem member)
+      · rcases List.mem_cons.mp member with rfl | member
+        · -- The later steps keep the attester's flags, which this step wrote.
+          refine ⟨flags, ?_, fun flag => by simp [set flag, List.mem_finRange]⟩
+          rw [kept _ fun later member same => distinct.1 (by
+              rw [← same]
+              exact List.mem_map_of_mem member), ← written]
+          simp
+        · exact written' share member
+      · rw [sum, raisedValue, List.map_cons, List.sum_cons]
+        simp only [newFlagsNumerator]
+        omega
+    · cases stepped
 
 /-- The flags of some attesters, each named once, set in turn.
 
@@ -354,45 +448,32 @@ theorem foldlM_addAttesterFlags {total : Gwei} {earned : List UInt64} :
             hasFlag share.2.1 flag.val.toUInt64 = false →
               getBaseReward state total share.1 = .ok share.2.2) ∧
         result.2.toNat = numerator.toNat +
-          (shares.map fun share => newFlagsNumerator earned share.2.1 share.2.2).sum
-  | [], participation, numerator, result, _, computed => by
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact ⟨fun _ _ => rfl, [], rfl, fun _ absent => absurd absent List.not_mem_nil, by simp⟩
-  | attester :: attesters, participation, numerator, result, distinct, computed => by
-    rw [List.map_cons, List.nodup_cons] at distinct
-    rw [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨⟨middle, middleNumerator⟩, stepped, folded⟩ := computed
-    obtain ⟨kept, shares, named, facts, sum⟩ := foldlM_addAttesterFlags distinct.2 folded
-    unfold addAttesterFlags at stepped
-    dsimp only at stepped
-    split at stepped
-    · rename_i inside
-      simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at stepped
-      obtain ⟨⟨flags, raised⟩, loop, written, rfl⟩ := stepped
-      obtain ⟨-, base, based, raisedValue⟩ := foldlM_addFlagReward (List.nodup_finRange _) loop
-      -- The step writes only the attester's own flags.
-      have other : ∀ i, attester.toNat ≠ i → middle.data[i]? = participation.data[i]? := by
-        intro i different
-        rw [← written]
-        simp [different]
-      refine ⟨fun i absent => ?_, (attester, participation.data[attester.toNat], base) :: shares,
-        by simp [named], fun share member => ?_, ?_⟩
-      · rw [kept i fun later member => absent later (List.mem_cons_of_mem _ member)]
-        exact other i (absent attester List.mem_cons_self)
-      · rcases List.mem_cons.mp member with rfl | member
-        · exact ⟨Array.getElem?_eq_getElem inside, fun flag earnedFlag unset =>
-            based flag (List.mem_finRange _) earnedFlag unset⟩
-        · obtain ⟨found, reads⟩ := facts share member
-          refine ⟨?_, reads⟩
-          rw [← other share.1.toNat fun same => distinct.1 ?_]
-          · exact found
-          · rw [same, ← named]
-            exact List.mem_map_of_mem (List.mem_map_of_mem member)
-      · rw [sum, raisedValue, List.map_cons, List.sum_cons]
-        simp only [newFlagsNumerator]
-        omega
-    · cases stepped
+          (shares.map fun share => newFlagsNumerator earned share.2.1 share.2.2).sum := by
+  intro attesters participation numerator result distinct computed
+  obtain ⟨kept, shares, named, facts, -, sum⟩ := foldlM_addAttesterFlags_full distinct computed
+  exact ⟨kept, shares, named, facts, sum⟩
+
+/-- After the flags of some attesters are set in turn, each attester holds its old flags.
+
+It also holds every flag that the attestation earns.
+
+Each attester must be named once. -/
+theorem foldlM_addAttesterFlags_hasFlag {total : Gwei} {earned : List UInt64}
+    {attesters : List ValidatorIndex} {participation : EpochParticipation preset fork}
+    {numerator : Gwei} {result : EpochParticipation preset fork × Gwei}
+    (distinct : (attesters.map UInt64.toNat).Nodup)
+    (computed : attesters.foldlM (addAttesterFlags state total earned) (participation, numerator) =
+      .ok result) :
+    ∀ attester ∈ attesters, ∃ old new, participation.data[attester.toNat]? = some old ∧
+      result.1.data[attester.toNat]? = some new ∧
+      ∀ flag : Fin PARTICIPATION_FLAG_WEIGHTS.length, hasFlag new flag.val.toUInt64 =
+        (hasFlag old flag.val.toUInt64 || decide (flag.val.toUInt64 ∈ earned)) := by
+  intro attester member
+  obtain ⟨-, shares, named, facts, written, -⟩ := foldlM_addAttesterFlags_full distinct computed
+  rw [← named] at member
+  obtain ⟨share, chosen, rfl⟩ := List.mem_map.mp member
+  obtain ⟨new, found, set⟩ := written share chosen
+  exact ⟨share.2.1, new, (facts share chosen).1, found, set⟩
 
 /-- The attesters of an attestation name each validator once. -/
 theorem getAttestingIndices_nodup {attestation : Attestation preset fork}

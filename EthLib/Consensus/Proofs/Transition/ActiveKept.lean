@@ -48,7 +48,7 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 /-- A step that never shrinks the registry.
 
 It keeps the slot and activity. -/
-private def StepKeeps (state after : BeaconState preset fork) : Prop :=
+def StepKeeps (state after : BeaconState preset fork) : Prop :=
   state.validators.data.size ≤ after.validators.data.size ∧
     ActiveStep state after
 
@@ -633,7 +633,10 @@ private theorem stepKeeps_updateRegistryEntryElectra {activationEpoch : Epoch} {
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ StepKeeps.refl _
 
-private theorem stepKeeps_processRegistryUpdates
+/-- Registry updates keep the slot and activity through the fixed epoch.
+
+They do not shrink the registry. -/
+theorem stepKeeps_processRegistryUpdates
     (computed : processRegistryUpdates config state = .ok after) : StepKeeps state after := by
   have grows := (frame_processRegistryUpdates computed).registryGrows
   by_cases electra : Fork.pectra ≤ fork

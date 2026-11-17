@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 public import EthLib.Consensus.Proofs.Transition.EpochDecomposition
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
+import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.Totality.EffectiveBalances
 public import EthLib.Consensus.Proofs.Transition.Totality.PendingDeposits
 public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
@@ -173,6 +174,30 @@ theorem mul_div_sqrt_le {total : Nat} (positive : 0 < total) (factor : Nat) :
     _ = factor * (Nat.sqrt total + 2) := by
         rw [Nat.mul_div_cancel_left _ rootPositive, Nat.mul_comm]
 
+/-- Whole increments of a total, times one increment's share of a factor, are at most the total's.
+
+The share of an increment is the increment times the factor over the root.
+
+The share of the total is the total times the factor over the root. -/
+theorem div_mul_div_le_mul_div (total increment factor root : Nat) :
+    total / increment * (increment * factor / root) ≤ total * factor / root :=
+  calc total / increment * (increment * factor / root)
+      ≤ total / increment * (increment * factor) / root := Nat.mul_div_le_mul_div_assoc _ _ _
+    _ ≤ total * factor / root := by
+        refine Nat.div_le_div_right ?_
+        rw [← Nat.mul_assoc]
+        exact Nat.mul_le_mul_right _ (Nat.div_mul_le_self _ _)
+
+/-- Whole increments of a positive total, times one increment's share of a factor, are bounded.
+
+The share is the increment times the factor over the root of the total.
+
+The bound is the factor times the root plus 2. -/
+theorem div_mul_div_sqrt_le {total increment : Nat} (positive : 0 < total) (factor : Nat) :
+    total / increment * (increment * factor / Nat.sqrt total) ≤
+      factor * (Nat.sqrt total + 2) :=
+  Nat.le_trans (div_mul_div_le_mul_div _ _ _ _) (mul_div_sqrt_le positive _)
+
 /-- The rise of the rewards over one epoch is at most the issuance bound.
 
 The rise is one base reward per increment for each active increment, times 54/64. -/
@@ -180,15 +205,7 @@ private theorem rise_le_epochIssuance {total increment : Nat} (positive : 0 < to
     total / increment * (increment * preset.BASE_REWARD_FACTOR.toNat / Nat.sqrt total) * 54 / 64 ≤
       preset.epochIssuance total := by
   unfold Preset.epochIssuance
-  refine Nat.div_le_div_right (Nat.mul_le_mul_right _ ?_)
-  calc total / increment * (increment * preset.BASE_REWARD_FACTOR.toNat / Nat.sqrt total)
-      ≤ total / increment * (increment * preset.BASE_REWARD_FACTOR.toNat) / Nat.sqrt total :=
-        Nat.mul_div_le_mul_div_assoc _ _ _
-    _ ≤ total * preset.BASE_REWARD_FACTOR.toNat / Nat.sqrt total := by
-        refine Nat.div_le_div_right ?_
-        rw [← Nat.mul_assoc]
-        exact Nat.mul_le_mul_right _ (Nat.div_mul_le_self _ _)
-    _ ≤ preset.BASE_REWARD_FACTOR.toNat * (Nat.sqrt total + 2) := mul_div_sqrt_le positive _
+  exact Nat.div_le_div_right (Nat.mul_le_mul_right _ (div_mul_div_sqrt_le positive _))
 
 /-- The base reward per increment is the increment times the factor over the root of the total.
 
@@ -206,11 +223,12 @@ private theorem getBaseRewardPerIncrement_eq
   have nonzero : integerSquareroot total ≠ 0 := fun zero => by
     rw [zero, UInt64.toNat_zero] at root
     omega
-  refine ⟨preset.EFFECTIVE_BALANCE_INCREMENT * preset.BASE_REWARD_FACTOR /
-    integerSquareroot total, ?_, ?_⟩
-  · simp only [getBaseRewardPerIncrement, liftArith, mulChecked_of_lt fits, bind, Except.bind,
+  have computed : getBaseRewardPerIncrement preset total =
+      .ok (preset.EFFECTIVE_BALANCE_INCREMENT * preset.BASE_REWARD_FACTOR /
+        integerSquareroot total) := by
+    simp only [getBaseRewardPerIncrement, liftArith, mulChecked_of_lt fits, bind, Except.bind,
       divChecked, nonzero, ite_false, Except.mapError]
-  · rw [UInt64.toNat_div, UInt64.toNat_mul, Nat.mod_eq_of_lt fits, root]
+  exact ⟨_, computed, toNat_getBaseRewardPerIncrement computed⟩
 
 /-- Two states with the same registry, slot and flags have the same reads of the rewards.
 

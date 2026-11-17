@@ -218,22 +218,30 @@ theorem EpochFrame.of_validators (sizes : SameSizes state after)
 
 /-- From Altair, each byte of flags after a step is the byte at its position before, or zero.
 
+A zero appears only at a position at or past the size of the registry before the step.
+
 This holds for the flags of the previous epoch and for those of the current epoch. -/
 def FlagsKeptOrZero (state after : BeaconState preset fork) : Prop :=
   ∀ (altair : .altair ≤ fork) (position : Nat) (flags : ParticipationFlags),
     ((after.previousEpochParticipation altair).data[position]? = some flags →
-      (state.previousEpochParticipation altair).data[position]? = some flags ∨ flags = 0) ∧
+      (state.previousEpochParticipation altair).data[position]? = some flags ∨
+        flags = 0 ∧ state.validators.data.size ≤ position) ∧
     ((after.currentEpochParticipation altair).data[position]? = some flags →
-      (state.currentEpochParticipation altair).data[position]? = some flags ∨ flags = 0)
+      (state.currentEpochParticipation altair).data[position]? = some flags ∨
+        flags = 0 ∧ state.validators.data.size ≤ position)
 
 theorem FlagsKeptOrZero.refl (state : BeaconState preset fork) : FlagsKeptOrZero state state :=
   fun _ _ _ => ⟨.inl, .inl⟩
 
+/-- Two steps keep or zero each byte of flags, when the registry does not shrink between them. -/
 theorem FlagsKeptOrZero.trans {first second third : BeaconState preset fork}
-    (one : FlagsKeptOrZero first second) (two : FlagsKeptOrZero second third) :
+    (one : FlagsKeptOrZero first second) (two : FlagsKeptOrZero second third)
+    (grows : first.validators.data.size ≤ second.validators.data.size) :
     FlagsKeptOrZero first third := fun altair position flags =>
-  ⟨fun found => ((two altair position flags).1 found).elim (one altair position flags).1 .inr,
-    fun found => ((two altair position flags).2 found).elim (one altair position flags).2 .inr⟩
+  ⟨fun found => ((two altair position flags).1 found).elim (one altair position flags).1
+      fun ⟨zero, late⟩ => .inr ⟨zero, Nat.le_trans grows late⟩,
+    fun found => ((two altair position flags).2 found).elim (one altair position flags).2
+      fun ⟨zero, late⟩ => .inr ⟨zero, Nat.le_trans grows late⟩⟩
 
 /-- Two states with the same lists of flags keep each byte of flags. -/
 theorem FlagsKeptOrZero.of_eq
@@ -257,7 +265,8 @@ theorem BlockFrame.refl (state : BeaconState preset fork) : BlockFrame state sta
 
 theorem BlockFrame.trans {first second third : BeaconState preset fork}
     (one : BlockFrame first second) (two : BlockFrame second third) : BlockFrame first third :=
-  ⟨one.toFrame.trans two.toFrame, two.blockRoots.trans one.blockRoots, one.flags.trans two.flags⟩
+  ⟨one.toFrame.trans two.toFrame, two.blockRoots.trans one.blockRoots,
+    one.flags.trans two.flags one.registryGrows⟩
 
 /-- A step that keeps the registry, the number of balances and the fields of a block frame. -/
 theorem BlockFrame.of_validators (sizes : SameSizes state after)
@@ -310,7 +319,7 @@ theorem MutatorFrame.refl (state : BeaconState preset fork) : MutatorFrame state
 theorem MutatorFrame.trans {first second third : BeaconState preset fork}
     (one : MutatorFrame first second) (two : MutatorFrame second third) :
     MutatorFrame first third :=
-  ⟨one.toEpochFrame.trans two.toEpochFrame, one.flags.trans two.flags⟩
+  ⟨one.toEpochFrame.trans two.toEpochFrame, one.flags.trans two.flags one.registryGrows⟩
 
 theorem MutatorFrame.toBlockFrame (frame : MutatorFrame state after) : BlockFrame state after :=
   ⟨frame.toFrame, frame.blockRoots, frame.flags⟩
@@ -686,18 +695,22 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, _, _, previous, previousOk, current, currentOk, _, _, rfl⟩ := computed
-    -- The new validator gets a zero byte of flags, and each other byte stays.
+    obtain ⟨index, indexOk, _, _, _, _, previous, previousOk, current, currentOk, _, _, rfl⟩ :=
+      computed
+    have fresh := (getIndexForNewValidator_ok_iff.mp indexOk).2
+    -- The new validator gets a zero byte of flags at the registry size, and each other byte stays.
     refine ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, kept, distinct, slashed, balances,
       exits, aligned⟩, rfl, rfl, rfl, rfl⟩,
       fun _ position flags => ⟨fun found => ?_, fun found => ?_⟩⟩
     · rw [setOrAppendList_getElem? previousOk] at found
       split at found
-      · exact .inr (Option.some.inj found).symm
+      · rename_i hit
+        exact .inr ⟨(Option.some.inj found).symm, by omega⟩
       · exact .inl found
     · rw [setOrAppendList_getElem? currentOk] at found
       split at found
-      · exact .inr (Option.some.inj found).symm
+      · rename_i hit
+        exact .inr ⟨(Option.some.inj found).symm, by omega⟩
       · exact .inl found
   split at computed
   · cases computed
@@ -1229,10 +1242,12 @@ end EpochFrameLaws
 
 It must hold across each single withdrawal.
 
-It must also hold across each write of a withdrawal index or a withdrawal queue.
+It must also hold across each write of a withdrawal index or a builder withdrawal queue.
+
+For partial withdrawals, it need only hold when the processed prefix leaves the queue.
 
 It must also hold across each write of the expected withdrawals of the payload. -/
-theorem applyExpectedWithdrawals_of_setters
+theorem applyExpectedWithdrawals_of_updates
     (R : BeaconState preset fork → BeaconState preset fork → Prop)
     (refl : ∀ s, R s s)
     (trans : ∀ {s m t}, R s m → R m t → R s t)
@@ -1247,8 +1262,8 @@ theorem applyExpectedWithdrawals_of_setters
       R s { s with payloadExpectedWithdrawals := value })
     (setBuilders : ∀ (s : BeaconState preset fork) value,
       R s { s with builderPendingWithdrawals := value })
-    (setPartials : ∀ (s : BeaconState preset fork) value,
-      R s { s with pendingPartialWithdrawals := value })
+    (dropPartials : ∀ (s : BeaconState preset fork) (electra : .pectra ≤ fork) count,
+      R s (updatePendingPartialWithdrawals s electra count))
     {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (computed : Consensus.applyExpectedWithdrawals state capella expected = .ok after) :
@@ -1277,7 +1292,7 @@ theorem applyExpectedWithdrawals_of_setters
       else kept) := by
     intro kept
     split
-    · exact setPartials _ _
+    · exact dropPartials _ _ _
     · exact refl _
   have swept : ∀ kept : BeaconState preset fork,
       (if gloas : .glamsterdam ≤ fork then
@@ -1291,6 +1306,31 @@ theorem applyExpectedWithdrawals_of_setters
   exact trans one <| trans (EpochFrameLaws.updateNextWithdrawalIndex_of refl setIndex indexedOk) <|
     trans (queued _) <| trans (partials _) <| trans (swept _ sweptOk)
       (EpochFrameLaws.updateNextWithdrawalValidatorIndex_of setValidatorIndex last)
+
+/-- A relation preserved by individual withdrawals and bookkeeping setters holds across the step. -/
+theorem applyExpectedWithdrawals_of_setters
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (withdraw : ∀ {s t} {w : Withdrawal}, applyWithdrawal s w = .ok t → R s t)
+    (setIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalIndex := value })
+    (setValidatorIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalValidatorIndex := value })
+    (setBuilderIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalBuilderIndex := value })
+    (setPayload : ∀ (s : BeaconState preset fork) value,
+      R s { s with payloadExpectedWithdrawals := value })
+    (setBuilders : ∀ (s : BeaconState preset fork) value,
+      R s { s with builderPendingWithdrawals := value })
+    (setPartials : ∀ (s : BeaconState preset fork) value,
+      R s { s with pendingPartialWithdrawals := value })
+    {capella : .shapella ≤ fork}
+    {expected : ExpectedWithdrawals}
+    (computed : Consensus.applyExpectedWithdrawals state capella expected = .ok after) :
+    R state after :=
+  applyExpectedWithdrawals_of_updates R refl trans withdraw setIndex setValidatorIndex
+    setBuilderIndex setPayload setBuilders (fun s _ _ => setPartials s _) computed
 
 /-- A reflexive, transitive relation holds across the expected withdrawals.
 
@@ -1520,13 +1560,43 @@ theorem frame_processExecutionPayloadBid {gloas : .glamsterdam ≤ fork}
   obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq computed
   exact BlockFrame.of_validators ⟨rfl, rfl⟩
 
-/-- A relation holds across the execution part of a block when it holds across the withdrawals.
+/-- A relation holds across the execution part of a block when it holds across its operations.
 
 The relation must hold of each state to itself, and chain.
 
-It must hold across each step that keeps the registry and forms a block frame.
+It must hold across withdrawals, the bid from Gloas and the payload before it. -/
+theorem processBlockExecution_of
+    (step : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ state, step state state)
+    (trans : ∀ {first second third}, step first second → step second third → step first third)
+    (payload : ∀ {state after} {body : BeaconBlockBody preset fork}
+      {execution : .bellatrix ≤ fork ∧ fork < .glamsterdam},
+      processExecutionPayload config engine state body execution = .ok after → step state after)
+    (bid : ∀ {state after} {gloas : .glamsterdam ≤ fork}
+      {signed : SignedExecutionPayloadBid preset fork},
+      processExecutionPayloadBid config checks state gloas signed = .ok after → step state after)
+    (withdrawals : ∀ {state after} {capella : .shapella ≤ fork}
+      {payload : Until .glamsterdam fork (ExecutionPayload preset fork)},
+      processWithdrawals state capella payload = .ok after → step state after)
+    {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
+    (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
+    step state after := by
+  unfold processBlockExecution at computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, withdrawnOk, offered⟩ := computed
+    exact trans (withdrawals withdrawnOk) (bid offered)
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, withdrawnOk, paid⟩ := computed
+    exact trans (withdrawals withdrawnOk) (payload paid)
+  · dsimp only at computed
+    split at computed
+    · exact payload computed
+    · cases computed
+      exact refl _
 
-The bid from Gloas and the payload before it are such steps. -/
+/-- The execution part preserves a relation when withdrawals and registry-preserving frames do. -/
 theorem processBlockExecution_step_of
     (step : BeaconState preset fork → BeaconState preset fork → Prop)
     (refl : ∀ state, step state state)
@@ -1538,27 +1608,12 @@ theorem processBlockExecution_step_of
       processWithdrawals state capella payload = .ok after → step state after)
     {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
     (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
-    step state after := by
-  have payload {s t : BeaconState preset fork}
-      {execution : .bellatrix ≤ fork ∧ fork < .glamsterdam}
-      (ok : processExecutionPayload config engine s body execution = .ok t) : step s t :=
-    keep (frame_processExecutionPayload ok)
-      (by obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok; rfl)
-  unfold processBlockExecution at computed
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, withdrawnOk, bid⟩ := computed
-    exact trans (withdrawals withdrawnOk) (keep (frame_processExecutionPayloadBid bid)
-      (by obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq bid; rfl))
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, withdrawnOk, paid⟩ := computed
-    exact trans (withdrawals withdrawnOk) (payload paid)
-  · dsimp only at computed
-    split at computed
-    · exact payload computed
-    · cases computed
-      exact refl _
+    step state after :=
+  processBlockExecution_of step refl trans
+    (fun ok => keep (frame_processExecutionPayload ok)
+      (by obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok; rfl))
+    (fun ok => keep (frame_processExecutionPayloadBid ok)
+      (by obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq ok; rfl)) withdrawals computed
 
 theorem frame_processBlockExecution {body : BeaconBlockBody preset fork}
     {bellatrix : .bellatrix ≤ fork}

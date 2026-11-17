@@ -425,23 +425,32 @@ theorem balanceNotRaised_processSlashings (computed : processSlashings state = .
     (index : Nat) : BalanceNotRaised index state after :=
   (lowered_processSlashings computed).2.1
 
-/-- A step that keeps each validator and the consolidations, and raises no balance at a position.
+/-- A step that keeps each validator, the consolidations and the score at a position.
 
-It also keeps the score at that position. -/
-private def Credited (index : Nat) (state after : BeaconState preset fork) : Prop :=
-  ValidatorsKept state after ∧ BalanceNotRaised index state after ∧
+When `quiet` holds, it also raises no balance at that position. -/
+private def Credited (quiet : Prop) (index : Nat) (state after : BeaconState preset fork) : Prop :=
+  ValidatorsKept state after ∧ (quiet → BalanceNotRaised index state after) ∧
     after.pendingConsolidations = state.pendingConsolidations ∧ ScoreKept index state after
 
 /-- Each state raises no balance over itself. -/
-private theorem Credited.refl (index : Nat) (state : BeaconState preset fork) :
-    Credited index state state :=
-  ⟨ValidatorsKept.refl state, BalanceNotRaised.refl index state, rfl, ScoreKept.refl index state⟩
+private theorem Credited.refl {quiet : Prop} (index : Nat) (state : BeaconState preset fork) :
+    Credited quiet index state state :=
+  ⟨ValidatorsKept.refl state, fun _ => BalanceNotRaised.refl index state, rfl,
+    ScoreKept.refl index state⟩
 
-/-- Two steps that raise no balance at a position raise none there. -/
-private theorem Credited.trans {index : Nat} {first second third : BeaconState preset fork}
-    (one : Credited index first second) (two : Credited index second third) :
-    Credited index first third :=
-  ⟨one.1.trans two.1, one.2.1.trans two.2.1, two.2.2.1.trans one.2.2.1, one.2.2.2.trans two.2.2.2⟩
+/-- Two steps that raise no balance at a position under their conditions raise none under both. -/
+private theorem Credited.trans {one two : Prop} {index : Nat}
+    {first second third : BeaconState preset fork}
+    (before : Credited one index first second) (after : Credited two index second third) :
+    Credited (one ∧ two) index first third :=
+  ⟨before.1.trans after.1, fun both => (before.2.1 both.1).trans (after.2.1 both.2),
+    after.2.2.1.trans before.2.2.1, before.2.2.2.trans after.2.2.2⟩
+
+/-- A step that raises no balance under a condition raises none under a stronger one. -/
+private theorem Credited.mono {weak strong : Prop} {index : Nat}
+    {state after : BeaconState preset fork} (stronger : strong → weak)
+    (holds : Credited weak index state after) : Credited strong index state after :=
+  ⟨holds.1, fun held => holds.2.1 (stronger held), holds.2.2⟩
 
 /-- From Altair, a new validator at the end keeps each validator and the consolidations.
 
@@ -472,23 +481,24 @@ theorem addValidatorToRegistry_kept {index : Nat} {pubkey : Cryptography.Bls.BLS
 /-- From Altair, a new validator at the end keeps each validator and the balance at a position.
 
 The position holds a validator. -/
-private theorem credited_addValidatorToRegistry {index : Nat} {pubkey : Cryptography.Bls.BLSPubkey}
+private theorem credited_addValidatorToRegistry {quiet : Prop} {index : Nat}
+    {pubkey : Cryptography.Bls.BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei} (altair : .altair ≤ fork)
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
-    (inside : index < state.validators.data.size) : Credited index state after := by
+    (inside : index < state.validators.data.size) : Credited quiet index state after := by
   obtain ⟨kept, balance, consolidations, score⟩ :=
     addValidatorToRegistry_kept altair computed inside
-  exact ⟨kept, fun later found => ⟨later, by rw [← balance]; exact found, UInt64.le_refl _⟩,
+  exact ⟨kept, fun _ later found => ⟨later, by rw [← balance]; exact found, UInt64.le_refl _⟩,
     consolidations, score⟩
 
-/-- From Altair, a deposit to another key keeps each validator.
+/-- From Altair, a deposit keeps each validator and the score at the position of a validator.
 
-It raises no balance at the position of the validator. -/
+A deposit to another key raises no balance there. -/
 private theorem credited_applyPendingDeposit {config : Config} {checks : SignatureChecks}
     {index : Nat} {validator : Validator} {deposit : PendingDeposit} (altair : .altair ≤ fork)
     (computed : applyPendingDeposit config checks state deposit = .ok after)
-    (found : state.validators.data[index]? = some validator)
-    (other : deposit.pubkey ≠ validator.pubkey) : Credited index state after := by
+    (found : state.validators.data[index]? = some validator) :
+    Credited (deposit.pubkey ≠ validator.pubkey) index state after := by
   have inside := (Array.getElem?_eq_some_iff.mp found).1
   unfold applyPendingDeposit at computed
   split at computed
@@ -505,20 +515,20 @@ private theorem credited_applyPendingDeposit {config : Config} {checks : Signatu
     simp only [liftAccessor_ok, bind_ok_iff, liftArith, mapError_ok_iff] at computed
     obtain ⟨target, converted, raised⟩ := computed
     obtain ⟨there, keyed⟩ := Array.findIdx?_eq_some_iff_getElem.mp located
-    have apart : target.toNat ≠ index := by
+    have apart (other : deposit.pubkey ≠ validator.pubkey) : target.toNat ≠ index := by
       rw [(Uint64.ofNatChecked_ok_iff.mp converted).2]
       rintro rfl
       rw [Array.getElem?_eq_getElem there, Option.some.injEq] at found
       subst found
       exact other (beq_iff_eq.mp keyed.1).symm
     refine ⟨ValidatorsKept.of_eq (increaseBalance_validators raised),
-      balanceNotRaised_increaseBalance raised apart, ?_⟩
+      fun other => balanceNotRaised_increaseBalance raised (apart other), ?_⟩
     obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp raised
     exact ⟨rfl, ScoreKept.refl index _⟩
 
-/-- From Altair, a pass over deposits to other keys keeps each validator.
+/-- From Altair, a pass over deposits keeps each validator and the score at its position.
 
-It raises no balance at the position of the validator. -/
+A pass over deposits to other keys raises no balance at that position. -/
 private theorem credited_passPendingDeposits {config : Config} {checks : SignatureChecks}
     {stop : PendingDeposit → Bool} {nextEpoch : Epoch} {available : Gwei} {index : Nat}
     (altair : .altair ≤ fork) :
@@ -527,25 +537,26 @@ private theorem credited_passPendingDeposits {config : Config} {checks : Signatu
       passPendingDeposits config checks stop nextEpoch available state processed count postponed
         deposits = .ok pass →
       state.validators.data[index]? = some validator →
-      (∀ deposit ∈ deposits, deposit.pubkey ≠ validator.pubkey) →
-      Credited index state pass.1.state
-  | [], _, _, _, _, _, _, computed, _, _ => by
+      Credited (∀ deposit ∈ deposits, deposit.pubkey ≠ validator.pubkey) index state pass.1.state
+  | [], _, _, _, _, _, _, computed, _ => by
     simp only [passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
     exact Credited.refl index _
-  | deposit :: rest, state, processed, count, postponed, pass, validator, computed, found,
-      unnamed => by
-    have first : deposit.pubkey ≠ validator.pubkey := unnamed deposit List.mem_cons_self
-    have others : ∀ deposit ∈ rest, deposit.pubkey ≠ validator.pubkey :=
-      fun d member => unnamed d (List.mem_cons_of_mem _ member)
+  | deposit :: rest, state, processed, count, postponed, pass, validator, computed, found => by
     -- A credited deposit keeps the validator at the position, for the rest of the pass.
     have next {middle : BeaconState preset fork}
-        (credited : applyPendingDeposit config checks state deposit = .ok middle) :
-        ∃ now, Credited index state middle ∧ middle.validators.data[index]? = some now ∧
-          ∀ deposit ∈ rest, deposit.pubkey ≠ now.pubkey := by
-      have step := credited_applyPendingDeposit altair credited found first
+        (credited : applyPendingDeposit config checks state deposit = .ok middle)
+        {final : BeaconState preset fork} :
+        (∀ {now : Validator}, middle.validators.data[index]? = some now →
+          Credited (∀ deposit ∈ rest, deposit.pubkey ≠ now.pubkey) index middle final) →
+        Credited (∀ d ∈ deposit :: rest, d.pubkey ≠ validator.pubkey) index state final := by
+      intro later
+      have step := credited_applyPendingDeposit altair credited found
       obtain ⟨now, atNow, same, -, -, -⟩ := step.1 index validator found
-      exact ⟨now, step, atNow, by rw [same]; exact others⟩
+      refine (step.trans (later atNow)).mono fun unnamed => ⟨unnamed deposit List.mem_cons_self,
+        fun d member => ?_⟩
+      rw [same]
+      exact unnamed d (List.mem_cons_of_mem _ member)
     unfold passPendingDeposits at computed
     simp only [bind, Except.bind, pure, Except.pure] at computed
     split at computed
@@ -560,13 +571,14 @@ private theorem credited_passPendingDeposits {config : Config} {checks : Signatu
       split at computed
       · cases computed
       cases computed
-      obtain ⟨_, step, kept, apart⟩ := next credited
-      exact step.trans (credited_passPendingDeposits altair (deposits := rest) ‹_› kept apart)
+      exact next credited fun kept =>
+        credited_passPendingDeposits altair (deposits := rest) ‹_› kept
     split at computed
     · split at computed
       · cases computed
       cases computed
-      exact credited_passPendingDeposits altair (deposits := rest) ‹_› found others
+      exact (credited_passPendingDeposits altair (deposits := rest) ‹_› found).mono
+        fun unnamed d member => unnamed d (List.mem_cons_of_mem _ member)
     split at computed
     · cases computed
     split at computed
@@ -578,25 +590,23 @@ private theorem credited_passPendingDeposits {config : Config} {checks : Signatu
     split at computed
     · cases computed
     cases computed
-    obtain ⟨_, step, kept, apart⟩ := next credited
-    exact step.trans (credited_passPendingDeposits altair (deposits := rest) ‹_› kept apart)
+    exact next credited fun kept => credited_passPendingDeposits altair (deposits := rest) ‹_› kept
 
-/-- From Electra, deposits to other keys keep each validator and the consolidations.
+/-- From Electra, deposits keep each validator, the consolidations and the score at a position.
 
-They raise no balance at the position of the validator. -/
+Deposits to other keys than that of the validator there raise no balance at that position. -/
 private theorem credited_processPendingDeposits {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after) {index : Nat}
-    {validator : Validator} (found : state.validators.data[index]? = some validator)
-    (unnamed : ∀ deposit ∈ (state.pendingDeposits electra).data,
-      deposit.pubkey ≠ validator.pubkey) :
-    Credited index state after := by
+    {validator : Validator} (found : state.validators.data[index]? = some validator) :
+    Credited (∀ deposit ∈ (state.pendingDeposits electra).data,
+      deposit.pubkey ≠ validator.pubkey) index state after := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
   unfold processPendingDeposits at computed
   simp only [bind, Except.bind, pure, Except.pure] at computed
   repeat' (split at computed <;> try cases computed)
   all_goals
-    exact credited_passPendingDeposits altair ‹_› found
-      (fun deposit member => unnamed deposit (by simpa using member))
+    exact (credited_passPendingDeposits altair ‹_› found).mono
+      fun unnamed deposit member => unnamed deposit (by simpa using member)
 
 /-- From Electra, the pending deposits raise no balance of a validator whose key none carries.
 
@@ -607,58 +617,61 @@ theorem balanceNotRaised_processPendingDeposits {electra : .pectra ≤ fork}
     (unnamed : ∀ deposit ∈ (state.pendingDeposits electra).data,
       deposit.pubkey ≠ validator.pubkey) :
     BalanceNotRaised index state after :=
-  (credited_processPendingDeposits computed found unnamed).2.1
+  (credited_processPendingDeposits computed found).2.1 unnamed
 
-/-- A pass over consolidations that target other positions keeps the registry and the scores.
+/-- A pass over consolidations keeps the registry and the scores.
 
-It raises no balance at the given position. -/
+When they all target other positions, it raises no balance at the given position. -/
 private theorem kept_passPendingConsolidations {nextEpoch : Epoch} {index : Nat} :
     ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
       {result : BeaconState preset fork × Nat},
       passPendingConsolidations nextEpoch state consolidations = .ok result →
-      (∀ consolidation ∈ consolidations, consolidation.targetIndex.toNat ≠ index) →
-      result.1.validators = state.validators ∧ BalanceNotRaised index state result.1 ∧
+      result.1.validators = state.validators ∧
+        ((∀ consolidation ∈ consolidations, consolidation.targetIndex.toNat ≠ index) →
+          BalanceNotRaised index state result.1) ∧
         result.1.inactivityScores = state.inactivityScores
-  | [], _, _, computed, _ => by
+  | [], _, _, computed => by
     simp only [passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
-    exact ⟨rfl, BalanceNotRaised.refl index _, rfl⟩
-  | consolidation :: rest, state, result, computed, untargeted => by
-    have others : ∀ c ∈ rest, c.targetIndex.toNat ≠ index :=
-      fun c member => untargeted c (List.mem_cons_of_mem _ member)
+    exact ⟨rfl, fun _ => BalanceNotRaised.refl index _, rfl⟩
+  | consolidation :: rest, state, result, computed => by
     simp only [passPendingConsolidations, bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨source, _, computed⟩ := computed
     split at computed
     · simp only [bind_ok_iff] at computed
       obtain ⟨⟨passed, read⟩, passedOk, computed⟩ := computed
       cases computed
-      exact kept_passPendingConsolidations (result := (passed, read)) passedOk others
+      obtain ⟨same, lower, scores⟩ :=
+        kept_passPendingConsolidations (result := (passed, read)) passedOk
+      exact ⟨same, fun untargeted => lower fun c member =>
+        untargeted c (List.mem_cons_of_mem _ member), scores⟩
     split at computed
     · cases computed
-      exact ⟨rfl, BalanceNotRaised.refl index _, rfl⟩
+      exact ⟨rfl, fun _ => BalanceNotRaised.refl index _, rfl⟩
     simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, lowered, loweredOk, raised, raisedOk, ⟨passed, read⟩, passedOk, computed⟩ :=
       computed
     cases computed
-    obtain ⟨same, rest, scores⟩ :=
-      kept_passPendingConsolidations (result := (passed, read)) passedOk others
+    obtain ⟨same, lower, scores⟩ :=
+      kept_passPendingConsolidations (result := (passed, read)) passedOk
     refine ⟨same.trans ((increaseBalance_validators raisedOk).trans
-      (decreaseBalance_validators loweredOk)), ?_, ?_⟩
+      (decreaseBalance_validators loweredOk)), fun untargeted => ?_, ?_⟩
     · exact (balanceNotRaised_decreaseBalance loweredOk index).trans
         ((balanceNotRaised_increaseBalance raisedOk
-          (untargeted consolidation List.mem_cons_self)).trans rest)
+          (untargeted consolidation List.mem_cons_self)).trans
+          (lower fun c member => untargeted c (List.mem_cons_of_mem _ member)))
     · obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp raisedOk
       obtain ⟨_, rfl⟩ := decreaseBalance_eq_ok_iff.mp loweredOk
       exact scores
 
-/-- From Electra, consolidations that target other positions keep the registry and the scores.
+/-- From Electra, the consolidations keep the registry and the scores.
 
-They raise no balance at the given position. -/
+When they all target other positions, they raise no balance at the given position. -/
 private theorem kept_processPendingConsolidations {electra : .pectra ≤ fork}
-    (computed : processPendingConsolidations state electra = .ok after) {index : Nat}
-    (untargeted : ∀ consolidation ∈ (state.pendingConsolidations electra).data,
-      consolidation.targetIndex.toNat ≠ index) :
-    after.validators = state.validators ∧ BalanceNotRaised index state after ∧
+    (computed : processPendingConsolidations state electra = .ok after) {index : Nat} :
+    after.validators = state.validators ∧
+      ((∀ consolidation ∈ (state.pendingConsolidations electra).data,
+          consolidation.targetIndex.toNat ≠ index) → BalanceNotRaised index state after) ∧
       after.inactivityScores = state.inactivityScores := by
   simp only [processPendingConsolidations, bind, Except.bind, pure, Except.pure] at computed
   split at computed
@@ -667,8 +680,9 @@ private theorem kept_processPendingConsolidations {electra : .pectra ≤ fork}
   · cases computed
   rename_i passed
   cases computed
-  exact kept_passPendingConsolidations passed
-    (fun c member => untargeted c (by simpa using member))
+  obtain ⟨same, lower, scores⟩ := kept_passPendingConsolidations (index := index) passed
+  exact ⟨same, fun untargeted => lower fun c member => untargeted c (by simpa using member),
+    scores⟩
 
 /-- From Electra, the pending consolidations raise no balance of a validator none targets.
 
@@ -678,7 +692,7 @@ theorem balanceNotRaised_processPendingConsolidations {electra : .pectra ≤ for
     (untargeted : ∀ consolidation ∈ (state.pendingConsolidations electra).data,
       consolidation.targetIndex.toNat ≠ index) :
     BalanceNotRaised index state after :=
-  (kept_processPendingConsolidations computed untargeted).2.1
+  (kept_processPendingConsolidations computed).2.1 untargeted
 
 /-- Two states with the same balances, the same registry and the same scores. -/
 def SameBalancesRegistryScores (state after : BeaconState preset fork) : Prop :=
@@ -753,39 +767,38 @@ private theorem processEffectiveBalanceUpdates_scores
   obtain ⟨_, rfl⟩ := setValidatorAt_ok set
   exact kept
 
-/-- From Altair, an epoch raises no balance of an uncredited validator after its rewards.
-
-This holds when the epoch succeeds.
-
-Uncredited means that no pending deposit carries its key, and no pending consolidation targets it.
-
-The queues are those of the state before the epoch; there are none before Electra.
+/-- From Altair, the steps of a successful epoch, at the position of a validator before it.
 
 Justification comes first, then the update of the inactivity scores, then the rewards.
 
 Justification keeps the balances and the registry.
 
-From the rewards up to the update of the effective balances, the balance does not rise.
+Up to the update of the effective balances, the validator keeps its effective balance.
 
-At that point the validator keeps its effective balance and its withdrawal credentials.
+It also keeps its withdrawal credentials up to that update.
 
 That update then runs, and the later steps keep the balances and the registry.
 
-Every step after the rewards keeps the inactivity score of the validator. -/
-theorem balanceNotRaised_processEpochAltair {altair : .altair ≤ fork}
+Every step after the rewards keeps the inactivity score at the position.
+
+The balance there does not rise from the rewards up to that update if the validator is uncredited.
+
+Uncredited means that no pending deposit carries its key, and no pending consolidation targets it.
+-/
+private theorem processEpochAltair_walk {altair : .altair ≤ fork}
     (computed : processEpochAltair config checks state altair = .ok after) {index : Nat}
-    {validator : Validator} (found : state.validators.data[index]? = some validator)
-    (unnamed : ∀ electra : .pectra ≤ fork, ∀ deposit ∈ (state.pendingDeposits electra).data,
-      deposit.pubkey ≠ validator.pubkey)
-    (untargeted : ∀ electra : .pectra ≤ fork,
-      ∀ consolidation ∈ (state.pendingConsolidations electra).data,
-        consolidation.targetIndex.toNat ≠ index) :
+    {validator : Validator} (found : state.validators.data[index]? = some validator) :
     ∃ justified scored rewarded settled updated kept,
       processJustificationAndFinalization state = .ok justified ∧
       justified.balances = state.balances ∧ justified.validators = state.validators ∧
       processInactivityUpdates config justified altair = .ok scored ∧
       processRewardsAndPenalties config scored = .ok rewarded ∧
-      BalanceNotRaised index rewarded settled ∧
+      ((∀ electra : .pectra ≤ fork, ∀ deposit ∈ (state.pendingDeposits electra).data,
+          deposit.pubkey ≠ validator.pubkey) →
+        (∀ electra : .pectra ≤ fork,
+          ∀ consolidation ∈ (state.pendingConsolidations electra).data,
+            consolidation.targetIndex.toNat ≠ index) →
+        BalanceNotRaised index rewarded settled) ∧
       settled.validators.data[index]? = some kept ∧
       kept.effectiveBalance = validator.effectiveBalance ∧
       kept.withdrawalCredentials = validator.withdrawalCredentials ∧
@@ -869,28 +882,34 @@ theorem balanceNotRaised_processEpochAltair {altair : .altair ≤ fork}
         (Lowered.of_kept resetKept))
   obtain ⟨atReset, atResetEq, sameReset⟩ := toReset.1 index validator foundRewarded
   -- The deposits carry other keys, and the consolidations name other targets.
-  have depositedStep : Credited index reset deposited := by
+  have depositedStep : Credited (∀ electra : .pectra ≤ fork,
+      ∀ deposit ∈ (state.pendingDeposits electra).data, deposit.pubkey ≠ validator.pubkey)
+      index reset deposited := by
     have edge := EpochStage.action_cases.mp depositedOk
     simp only [EpochStage.Edge] at edge
     split at edge
     · rename_i electra
-      refine credited_processPendingDeposits edge atResetEq ?_
+      refine (credited_processPendingDeposits edge atResetEq).mono fun unnamed => ?_
       rw [toReset.2.2.1, rewardedDeposits, sameReset.1]
       exact unnamed electra
     · subst edge
       exact Credited.refl index _
   have consolidatedStep : consolidated.validators = deposited.validators ∧
-      BalanceNotRaised index deposited consolidated ∧
+      ((∀ electra : .pectra ≤ fork,
+          ∀ consolidation ∈ (state.pendingConsolidations electra).data,
+            consolidation.targetIndex.toNat ≠ index) →
+        BalanceNotRaised index deposited consolidated) ∧
       consolidated.inactivityScores = deposited.inactivityScores := by
     have edge := EpochStage.action_cases.mp consolidatedOk
     simp only [EpochStage.Edge] at edge
     split at edge
     · rename_i electra
-      refine kept_processPendingConsolidations edge ?_
+      obtain ⟨same, lower, scores⟩ := kept_processPendingConsolidations edge (index := index)
+      refine ⟨same, fun untargeted => lower ?_, scores⟩
       rw [depositedStep.2.2.1, toReset.2.2.2.1, rewardedConsolidations]
       exact untargeted electra
     · subst edge
-      exact ⟨rfl, BalanceNotRaised.refl index _, rfl⟩
+      exact ⟨rfl, fun _ => BalanceNotRaised.refl index _, rfl⟩
   -- The builder payments keep the balances, the registry and the scores.
   have settledSame : settled.validators = consolidated.validators ∧
       settled.balances = consolidated.balances ∧
@@ -902,9 +921,15 @@ theorem balanceNotRaised_processEpochAltair {altair : .altair ≤ fork}
       exact ⟨by rw [frame], by rw [frame], by rw [frame]⟩
     · subst edge
       exact ⟨rfl, rfl, rfl⟩
-  have raised : BalanceNotRaised index rewarded settled :=
-    toReset.2.1.trans (depositedStep.2.1.trans
-      (consolidatedStep.2.1.trans (BalanceNotRaised.of_balances settledSame.2.1 index)))
+  have raised (unnamed : ∀ electra : .pectra ≤ fork,
+      ∀ deposit ∈ (state.pendingDeposits electra).data, deposit.pubkey ≠ validator.pubkey)
+      (untargeted : ∀ electra : .pectra ≤ fork,
+        ∀ consolidation ∈ (state.pendingConsolidations electra).data,
+          consolidation.targetIndex.toNat ≠ index) :
+      BalanceNotRaised index rewarded settled :=
+    toReset.2.1.trans ((depositedStep.2.1 unnamed).trans
+      ((consolidatedStep.2.1 untargeted).trans
+        (BalanceNotRaised.of_balances settledSame.2.1 index)))
   have keptAll : ValidatorsKept rewarded settled :=
     toReset.1.trans (depositedStep.1.trans
       (ValidatorsKept.of_eq (settledSame.1.trans consolidatedStep.1)))
@@ -919,5 +944,69 @@ theorem balanceNotRaised_processEpochAltair {altair : .altair ≤ fork}
   exact ⟨justified, scored, rewarded, settled, updated, kept, justifiedEq, justifiedSame.1,
     justifiedSame.2.1, scoredEq, rewardedEq, raised, atKept, sameKept.2.1, sameKept.2.2.1,
     updatedEq, tail.1, tail.2.1, scoreKept⟩
+
+/-- From Altair, an epoch raises no balance of an uncredited validator after its rewards.
+
+This holds when the epoch succeeds.
+
+Uncredited means that no pending deposit carries its key, and no pending consolidation targets it.
+
+The queues are those of the state before the epoch; there are none before Electra.
+
+Justification comes first, then the update of the inactivity scores, then the rewards.
+
+Justification keeps the balances and the registry.
+
+From the rewards up to the update of the effective balances, the balance does not rise.
+
+At that point the validator keeps its effective balance and its withdrawal credentials.
+
+That update then runs, and the later steps keep the balances and the registry.
+
+Every step after the rewards keeps the inactivity score of the validator. -/
+theorem balanceNotRaised_processEpochAltair {altair : .altair ≤ fork}
+    (computed : processEpochAltair config checks state altair = .ok after) {index : Nat}
+    {validator : Validator} (found : state.validators.data[index]? = some validator)
+    (unnamed : ∀ electra : .pectra ≤ fork, ∀ deposit ∈ (state.pendingDeposits electra).data,
+      deposit.pubkey ≠ validator.pubkey)
+    (untargeted : ∀ electra : .pectra ≤ fork,
+      ∀ consolidation ∈ (state.pendingConsolidations electra).data,
+        consolidation.targetIndex.toNat ≠ index) :
+    ∃ justified scored rewarded settled updated kept,
+      processJustificationAndFinalization state = .ok justified ∧
+      justified.balances = state.balances ∧ justified.validators = state.validators ∧
+      processInactivityUpdates config justified altair = .ok scored ∧
+      processRewardsAndPenalties config scored = .ok rewarded ∧
+      BalanceNotRaised index rewarded settled ∧
+      settled.validators.data[index]? = some kept ∧
+      kept.effectiveBalance = validator.effectiveBalance ∧
+      kept.withdrawalCredentials = validator.withdrawalCredentials ∧
+      processEffectiveBalanceUpdates settled = .ok updated ∧
+      after.balances = updated.balances ∧ after.validators = updated.validators ∧
+      ScoreKept index rewarded after := by
+  obtain ⟨justified, scored, rewarded, settled, updated, kept, justifiedOk, balances, validators,
+    scoredOk, rewardedOk, raised, rest⟩ := processEpochAltair_walk computed found
+  exact ⟨justified, scored, rewarded, settled, updated, kept, justifiedOk, balances, validators,
+    scoredOk, rewardedOk, raised unnamed untargeted, rest⟩
+
+/-- From Altair, the steps of an epoch after the update of the inactivity scores keep a score.
+
+This holds when the epoch succeeds, at each position of the registry before the epoch.
+
+It needs no premise on the deposits or the consolidations.
+
+The update of the scores follows justification, as in the epoch itself. -/
+theorem scoreKept_processEpochAltair {altair : .altair ≤ fork}
+    (computed : processEpochAltair config checks state altair = .ok after) {index : Nat}
+    (inside : index < state.validators.data.size) :
+    ∃ justified scored, processJustificationAndFinalization state = .ok justified ∧
+      processInactivityUpdates config justified altair = .ok scored ∧
+      ScoreKept index scored after := by
+  obtain ⟨justified, scored, rewarded, -, -, -, justifiedOk, -, -, scoredOk, rewardedOk, -, -, -,
+    -, -, -, -, kept⟩ := processEpochAltair_walk computed (Array.getElem?_eq_getElem inside)
+  refine ⟨justified, scored, justifiedOk, scoredOk, ?_⟩
+  have scores : rewarded.inactivityScores = scored.inactivityScores := by
+    rw [processRewardsAndPenalties_frame rewardedOk]
+  exact (ScoreKept.of_scores scores index).trans kept
 
 end EthLib.Consensus

@@ -97,8 +97,8 @@ private theorem FlagsFrame.trans {first second third : BeaconState preset fork}
 private theorem FlagsFrame.of_kept (flags : FlagsKeptOrZero state after)
     (le : after.validators.data.size ≤ state.validators.data.size) : FlagsFrame state after :=
   fun altair j value nonzero inside =>
-    ⟨fun found => ⟨((flags altair j value).1 found).resolve_right nonzero, by omega⟩,
-      fun found => ⟨((flags altair j value).2 found).resolve_right nonzero, by omega⟩⟩
+    ⟨fun found => ⟨((flags altair j value).1 found).resolve_right (nonzero ∘ And.left), by omega⟩,
+      fun found => ⟨((flags altair j value).2 found).resolve_right (nonzero ∘ And.left), by omega⟩⟩
 
 /-- A step that keeps each flag or zeroes it, and keeps the sizes, is a frame of the flags. -/
 private theorem FlagsFrame.of_sizes (flags : FlagsKeptOrZero state after)
@@ -685,8 +685,8 @@ theorem FlagsActive.of_upgradeNext {pre : ForkedBeaconState preset}
       (BlockFrame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok) compounded)
     exact holds.of_upgrade (show Fork.altair ≤ .dencun by decide) kept slot
       (Nat.le_of_eq sizes)
-      (fun _ i flags found => (frame.flags (by decide) i flags).1 found)
-      (fun _ i flags found => (frame.flags (by decide) i flags).2 found)
+      (fun _ i flags found => ((frame.flags (by decide) i flags).1 found).imp_right And.left)
+      (fun _ i flags found => ((frame.flags (by decide) i flags).2 found).imp_right And.left)
   | pectra =>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨after, afterOk, rfl⟩ := computed

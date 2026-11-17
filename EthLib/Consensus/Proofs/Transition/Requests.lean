@@ -40,16 +40,32 @@ open Base Uint64
 variable {preset : Preset} {fork : Base.Fork} {config : Config}
   {state after : BeaconState preset fork}
 
-/-- A pass over the pending consolidations keeps the registry and the sum of the balances. -/
-theorem passPendingConsolidations_kept {nextEpoch : Epoch} :
+/-- A pending-consolidation pass composes its actual balance transfers.
+
+The callback reads the queue entry before its debit and credit. -/
+theorem passPendingConsolidations_of {nextEpoch : Epoch}
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {a b c}, R a b → R b c → R a c)
+    (allowed : PendingConsolidation → Prop)
+    (transfer : ∀ {s lowered raised : BeaconState preset fork} {entry : PendingConsolidation}
+      {source : Validator} {balance : Gwei}, allowed entry →
+      getValidator s entry.sourceIndex = .ok source →
+      getBalance s entry.sourceIndex = .ok balance →
+      decreaseBalance s entry.sourceIndex (min balance source.effectiveBalance) = .ok lowered →
+      increaseBalance lowered entry.targetIndex (min balance source.effectiveBalance) = .ok raised →
+      R s raised) :
     ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork} {result},
+      (∀ entry ∈ consolidations, allowed entry) →
       passPendingConsolidations nextEpoch state consolidations = .ok result →
-      result.1.validators = state.validators ∧ balanceSum result.1 = balanceSum state
-  | [], _, _, computed => by
+      ((result.1.validators = state.validators ∧ balanceSum result.1 = balanceSum state) ∧
+        result.1.proposerLookahead = state.proposerLookahead ∧
+        result.1.pendingPartialWithdrawals = state.pendingPartialWithdrawals) ∧ R state result.1
+  | [], _, _, _, computed => by
     simp only [passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
-    exact ⟨rfl, rfl⟩
-  | consolidation :: rest, state, result, computed => by
+    exact ⟨⟨⟨rfl, rfl⟩, rfl, rfl⟩, refl _⟩
+  | consolidation :: rest, state, result, permitted, computed => by
     unfold passPendingConsolidations at computed
     simp only [bind, Except.bind, pure, Except.pure] at computed
     split at computed
@@ -59,10 +75,12 @@ theorem passPendingConsolidations_kept {nextEpoch : Epoch} :
       · cases computed
       rename_i recur
       cases computed
-      exact (passPendingConsolidations_kept (consolidations := rest) recur :)
+      have kept := passPendingConsolidations_of R refl trans allowed transfer
+        (fun entry member => permitted entry (List.mem_cons_of_mem _ member)) recur
+      exact kept
     split at computed
     · cases computed
-      exact ⟨rfl, rfl⟩
+      exact ⟨⟨⟨rfl, rfl⟩, rfl, rfl⟩, refl _⟩
     split at computed
     · cases computed
     rename_i balance found
@@ -78,13 +96,38 @@ theorem passPendingConsolidations_kept {nextEpoch : Epoch} :
     cases computed
     have lowered := liftAccessor_ok.mp loweredOk
     have raised := liftAccessor_ok.mp raisedOk
-    obtain ⟨validators, summed⟩ := passPendingConsolidations_kept (consolidations := rest) recur
-    refine ⟨validators.trans ((increaseBalance_validators raised).trans
-      (decreaseBalance_validators lowered)), ?_⟩
-    have taken := balanceSum_decreaseBalance (liftAccessor_ok.mp found) Std.min_le_left lowered
-    have given := balanceSum_increaseBalance raised
-    simp only at summed ⊢
-    omega
+    obtain ⟨⟨⟨validators, summed⟩, cache, partials⟩, related⟩ :=
+      passPendingConsolidations_of R refl trans allowed transfer
+        (fun entry member => permitted entry (List.mem_cons_of_mem _ member)) recur
+    refine ⟨⟨⟨validators.trans ((increaseBalance_validators raised).trans
+      (decreaseBalance_validators lowered)), ?_⟩, ?_⟩, ?_⟩
+    · have taken := balanceSum_decreaseBalance (liftAccessor_ok.mp found) Std.min_le_left lowered
+      have given := balanceSum_increaseBalance raised
+      simp only at summed ⊢
+      omega
+    · obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp raised
+      obtain ⟨_, rfl⟩ := decreaseBalance_eq_ok_iff.mp lowered
+      exact ⟨cache, partials⟩
+    · exact trans (transfer (permitted consolidation (by simp))
+        (liftAccessor_ok.mp (by assumption)) (liftAccessor_ok.mp found) lowered raised) related
+
+private theorem passPendingConsolidations_kept_cache {nextEpoch : Epoch}
+    {consolidations : List PendingConsolidation} {state : BeaconState preset fork} {result}
+    (computed : passPendingConsolidations nextEpoch state consolidations = .ok result) :
+    (result.1.validators = state.validators ∧ balanceSum result.1 = balanceSum state) ∧
+      result.1.proposerLookahead = state.proposerLookahead ∧
+      result.1.pendingPartialWithdrawals = state.pendingPartialWithdrawals :=
+  (passPendingConsolidations_of (fun _ _ => True) (fun _ => trivial)
+    (fun _ _ => trivial) (fun _ => True) (fun _ _ _ _ _ => trivial)
+    (fun _ _ => trivial) computed).1
+
+/-- A pass over the pending consolidations keeps the registry and the sum of the balances. -/
+theorem passPendingConsolidations_kept {nextEpoch : Epoch} :
+    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork} {result},
+      passPendingConsolidations nextEpoch state consolidations = .ok result →
+      result.1.validators = state.validators ∧ balanceSum result.1 = balanceSum state := by
+  intro _ _ _ computed
+  exact (passPendingConsolidations_kept_cache computed).1
 
 /-- The pending consolidations of an epoch keep the registry and the sum of the balances. -/
 theorem processPendingConsolidations_kept {electra : .pectra ≤ fork}
@@ -98,6 +141,32 @@ theorem processPendingConsolidations_kept {electra : .pectra ≤ fork}
   rename_i passed
   cases computed
   exact passPendingConsolidations_kept passed
+
+/-- Processing pending consolidations leaves the cached proposers unchanged. -/
+theorem processPendingConsolidations_proposerLookahead {electra : .pectra ≤ fork}
+    (computed : processPendingConsolidations state electra = .ok after) :
+    after.proposerLookahead = state.proposerLookahead := by
+  simp only [processPendingConsolidations, bind, Except.bind, pure, Except.pure] at computed
+  split at computed
+  · cases computed
+  split at computed
+  · cases computed
+  rename_i passed
+  cases computed
+  exact (passPendingConsolidations_kept_cache passed).2.1
+
+/-- Processing pending consolidations leaves the pending partial withdrawals unchanged. -/
+theorem processPendingConsolidations_pendingPartialWithdrawals {electra : .pectra ≤ fork}
+    (computed : processPendingConsolidations state electra = .ok after) :
+    after.pendingPartialWithdrawals = state.pendingPartialWithdrawals := by
+  simp only [processPendingConsolidations, bind, Except.bind, pure, Except.pure] at computed
+  split at computed
+  · cases computed
+  split at computed
+  · cases computed
+  rename_i passed
+  cases computed
+  exact (passPendingConsolidations_kept_cache passed).2.2
 
 /-- A pass over the pending consolidations keeps the end of the exit queue and its balance. -/
 theorem passPendingConsolidations_exitQueue {nextEpoch : Epoch} :
@@ -370,19 +439,37 @@ theorem getElem?_toNat_of_ofNatChecked {position : Fin state.validators.data.siz
   rw [getElem?_toNat_eq_of_ofNatChecked checked]
   simp
 
+/-- Queueing a consolidation keeps the size of the registry and every balance. -/
+private theorem queueConsolidation_kept {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
+    {source : Validator} {targetIndex : ValidatorIndex}
+    (computed :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
+    after.validators.data.size = state.validators.data.size ∧
+      after.balances = state.balances := by
+  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨⟨_, _⟩, churned, _, _, _, set, _, _, rfl⟩ := computed
+  obtain ⟨_, validators, balances⟩ := computeConsolidationEpochAndUpdateChurn_earliest churned
+  have sizes := (sameSizes_setValidator set).1
+  obtain ⟨_, rfl⟩ := setValidator_ok set
+  exact ⟨sizes.trans (congrArg (·.data.size) validators), balances⟩
+
 /-- Queueing a consolidation keeps the sizes of the registry and the balances. -/
 theorem sameSizes_queueConsolidation {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
     {source : Validator} {targetIndex : ValidatorIndex}
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
-    SameSizes state after := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at computed
-  obtain ⟨⟨_, _⟩, churned, computed⟩ := computed
-  simp only [Except.ok.injEq] at computed
-  obtain ⟨_, _, _, set, _, _, rfl⟩ := computed
-  obtain ⟨_, validators, balances⟩ := computeConsolidationEpochAndUpdateChurn_earliest churned
-  exact (SameSizes.trans ⟨congrArg (·.data.size) validators, congrArg (·.data.size) balances⟩
-    (sameSizes_setValidator set)).trans ⟨rfl, rfl⟩
+    SameSizes state after :=
+  have kept := queueConsolidation_kept computed
+  ⟨kept.1, congrArg (·.data.size) kept.2⟩
+
+/-- Queueing a consolidation keeps every balance. -/
+theorem queueConsolidation_balances {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
+    {source : Validator} {targetIndex : ValidatorIndex}
+    (computed :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
+    after.balances = state.balances :=
+  (queueConsolidation_kept computed).2
 
 /-- A consolidation request keeps the sizes of the registry and the balances. -/
 theorem sameSizes_processConsolidationRequest {electra : .pectra ≤ fork}
