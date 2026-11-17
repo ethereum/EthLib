@@ -7,6 +7,7 @@ public import EthLib.Cryptography.Proofs.Merkle.RandomOracle
 public import EthLib.Cryptography.Proofs.Merkle.VectorBinding
 public import EthLib.Cryptography.Proofs.Merkle.PositionBinding
 public import EthLib.Cryptography.Proofs.Merkle.SecondPreimage
+public import EthLib.Cryptography.Proofs.Merkle.Extraction
 
 /-!
 # Proofs: Merkle trees
