@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Cryptography.Vrf.Types
+public import EthLib.Cryptography.Merkle.Tree
 
 /-!
 # VRF hashes
@@ -75,7 +76,7 @@ def nodeHash (left right : Digest) : Digest :=
 /-- The node hash at a position of the tree, in the identity monad.
 
 The VRF tree hashes every node alike, so the position is ignored. -/
-def treeHash (_level _j : Nat) (left right : Digest) : Id Digest :=
+def treeHash (_p : Merkle.Position) (left right : Digest) : Id Digest :=
   pure (nodeHash left right)
 
 /-- The output at index `i` of a secret. -/
