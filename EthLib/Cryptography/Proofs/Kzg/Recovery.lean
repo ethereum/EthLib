@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.List
 public import EthLib.Cryptography.Kzg.Recovery
 public import EthLib.Cryptography.Proofs.Kzg.Fft
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
@@ -652,7 +653,8 @@ theorem recoverCellsAndKzgProofs_notEnoughCells (setup : TrustedSetup)
     {cellIndices : Array CellIndex} {cells : Array Cell}
     (hlen : cells.size = cellIndices.size)
     (h : cellIndices.size < CELLS_PER_EXT_BLOB / 2) :
-    recoverCellsAndKzgProofs setup cellIndices cells = throw .notEnoughCells := by
+    recoverCellsAndKzgProofs setup cellIndices cells =
+      throw (.notEnoughCells cellIndices.size) := by
   simp [recoverCellsAndKzgProofs, hlen, h, throw_bind]
 
 /-- `recoverCellsAndKzgProofs` rejects more cells than exist. -/
@@ -661,19 +663,22 @@ theorem recoverCellsAndKzgProofs_tooManyCells (setup : TrustedSetup)
     (hlen : cells.size = cellIndices.size)
     (hmin : ¬cellIndices.size < CELLS_PER_EXT_BLOB / 2)
     (h : cellIndices.size > CELLS_PER_EXT_BLOB) :
-    recoverCellsAndKzgProofs setup cellIndices cells = throw .tooManyCells := by
+    recoverCellsAndKzgProofs setup cellIndices cells =
+      throw (.tooManyCells cellIndices.size) := by
   simp [recoverCellsAndKzgProofs, hlen, hmin, h, throw_bind]
 
-/-- `recoverCellsAndKzgProofs` rejects an out-of-bounds cell index. -/
+/-- `recoverCellsAndKzgProofs` rejects an out-of-bounds cell index, and names the first one. -/
 theorem recoverCellsAndKzgProofs_cellIndexOutOfBounds (setup : TrustedSetup)
-    {cellIndices : Array CellIndex} {cells : Array Cell}
+    {cellIndices : Array CellIndex} {cells : Array Cell} {index : CellIndex}
     (hlen : cells.size = cellIndices.size)
     (hmin : ¬cellIndices.size < CELLS_PER_EXT_BLOB / 2)
     (hmax : ¬cellIndices.size > CELLS_PER_EXT_BLOB)
-    (h : cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) = true) :
+    (found : cellIndices.find? (· ≥ CELLS_PER_EXT_BLOB) = some index) :
     recoverCellsAndKzgProofs setup cellIndices cells
-      = throw .cellIndexOutOfBounds := by
-  simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, h, throw_bind]
+      = throw (.cellIndexOutOfBounds index) := by
+  have h : cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) = true :=
+    Base.any_eq_true_of_find?_eq_some found
+  simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, h, found, throw_bind]
 
 /-- The ascending check on pairs of neighbours is the check on their indices. -/
 @[simp] theorem any_zip_extract_one_eq (a : Array CellIndex) :
@@ -693,21 +698,25 @@ theorem recoverCellsAndKzgProofs_cellIndexOutOfBounds (setup : TrustedSetup)
     rw [getElem!_pos a (i + 1) (by omega), getElem!_pos a i (by omega)] at h
     simpa [Nat.add_comm] using h
 
-/-- `recoverCellsAndKzgProofs` rejects cell indices that are not strictly ascending. -/
+/-- `recoverCellsAndKzgProofs` rejects cell indices that are not strictly ascending.
+
+It names the first pair of neighbours whose second index is not larger than the first. -/
 theorem recoverCellsAndKzgProofs_indicesNotAscending (setup : TrustedSetup)
-    {cellIndices : Array CellIndex} {cells : Array Cell}
+    {cellIndices : Array CellIndex} {cells : Array Cell} {previous next : CellIndex}
     (hlen : cells.size = cellIndices.size)
     (hmin : ¬cellIndices.size < CELLS_PER_EXT_BLOB / 2)
     (hmax : ¬cellIndices.size > CELLS_PER_EXT_BLOB)
     (hbound : cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) = false)
-    (h : (Array.range (cellIndices.size - 1)).any
-      (fun i => cellIndices[i + 1]! ≤ cellIndices[i]!) = true) :
+    (found : (cellIndices.zip (cellIndices.extract 1)).find? (fun p => p.2 ≤ p.1)
+      = some (previous, next)) :
     recoverCellsAndKzgProofs setup cellIndices cells
-      = throw .indicesNotAscending := by
-  rw [← any_zip_extract_one_eq] at h
-  simp only [Array.size_zip, Array.size_extract, Nat.min_self, Nat.min_eq_right (Nat.sub_le _ _)]
-    at h
-  simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, hbound, h, throw_bind]
+      = throw (.indicesNotAscending previous next) := by
+  have h : (cellIndices.zip (cellIndices.extract 1)).any (fun p => p.2 ≤ p.1) = true :=
+    Base.any_eq_true_of_find?_eq_some found
+  have stop : (cellIndices.zip (cellIndices.extract 1)).size = cellIndices.size - 1 := by
+    simp only [Array.size_zip, Array.size_extract, Nat.min_self, Nat.min_eq_right (Nat.sub_le _ _)]
+  rw [stop] at h
+  simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, hbound, h, found, throw_bind]
 
 /-- The recovery vanishing polynomial has no coefficient above its mathematical degree bound. -/
 theorem constructVanishingPolynomial_high_zero

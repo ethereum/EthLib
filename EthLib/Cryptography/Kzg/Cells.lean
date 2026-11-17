@@ -76,7 +76,7 @@ The coset is `h * G = {h, hg, hg^2, ...}` for a shift `h`.
 It is block `i` of 64 points of the bit-reversed domain, for the cell index `i`. -/
 def cosetForCell (cellIndex : CellIndex) : Except KzgError Coset := do
   if hci : cellIndex ≥ CELLS_PER_EXT_BLOB then
-    throw .cellIndexOutOfBounds
+    throw (.cellIndexOutOfBounds cellIndex)
   else
     let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB
     return Array.ofFn (n := FIELD_ELEMENTS_PER_CELL) fun i =>
@@ -250,10 +250,12 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
   if proofs.size ≠ commitmentIndices.size then
     throw (.inputLengthMismatch "proofs" commitmentIndices.size proofs.size)
   if commitmentIndices.any (· ≥ commitments.size) then
-    throw .commitmentIndexOutOfBounds
+    let index := (commitmentIndices.find? (· ≥ commitments.size)).getD 0
+    throw (.commitmentIndexOutOfBounds index commitments.size)
   -- The commitments list must contain no duplicates
   if commitments.zipIdx.any (fun (c, i) => commitments.idxOf? c ≠ some i) then
-    throw .duplicateCommitments
+    let repeated := commitments.zipIdx.find? (fun (c, i) => commitments.idxOf? c ≠ some i)
+    throw (.duplicateCommitments ((repeated.map (·.2)).getD 0))
 
   -- The verification equation that we will check is pairing (LL, LR) = pairing (RL, [1]), where:
   --
@@ -308,7 +310,7 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
   -- The shift of cell `i` is entry `64 i` of the domain, which exists exactly when `i < 128`.
   let shifts : Array Fr ← cellIndices.mapM fun cellIndex =>
     if h : n * cellIndex < domain.size then pure domain[n * cellIndex]
-    else throw .cellIndexOutOfBounds
+    else throw (.cellIndexOutOfBounds cellIndex)
 
   -- Step 4.2: RLI = [Σ_k r^k I_k(s)], each I_k from one inverse FFT over its coset.
   --
@@ -361,7 +363,7 @@ def verifyCellKzgProofBatch (setup : TrustedSetup)
     throw (.inputLengthMismatch "cellIndices" commitmentsBytes.size cellIndices.size)
 
   if cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) then
-    throw .cellIndexOutOfBounds
+    throw (.cellIndexOutOfBounds ((cellIndices.find? (· ≥ CELLS_PER_EXT_BLOB)).getD 0))
 
   -- Remove repeated commitments, keeping the first index, by a scan over the short list.
   let (deduped, commitmentIndices) ←

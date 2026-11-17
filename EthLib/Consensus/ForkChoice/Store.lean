@@ -353,7 +353,7 @@ instance : ToString ForkChoiceError where
     | .arith error => s!"arithmetic: {reprStr error}"
     | .ssz error => s!"a root cannot be computed: {reprStr error}"
     | .accessor error => s!"a state accessor fails: {reprStr error}"
-    | .transition error => s!"the state transition fails: {reprStr error}"
+    | .transition error => s!"the state transition fails: {error}"
     | .unknownBlockTimeliness root => s!"no timeliness for the block {hex root}"
     | .futureBlock slot currentSlot => s!"block slot {slot} is after the current slot {currentSlot}"
     | .blockNotAfterFinalized slot finalizedSlot =>

@@ -16,6 +16,12 @@ When the vote is at most one epoch after that block, the two states agree on tho
 
 They also agree on the count of committees per slot of the epoch of the vote.
 
+When the vote is at most two epochs after that block, the states agree on activity before it.
+
+That covers the epoch before the vote.
+
+So its voter was active in the head state then, unless it became active in the epoch of the vote.
+
 The store must run every handler with one setting of the signature checks.
 -/
 
@@ -32,7 +38,7 @@ variable {preset : Preset} {fork : Fork} {config : Config}
 /-- A node that descends from a known pending node walks back to its root.
 
 The walk stops at the slot of the block of that root. -/
-private theorem Store.getAncestor_of_isAncestor {node : ForkChoiceNode} {root : Root}
+theorem Store.getAncestor_of_isAncestor {node : ForkChoiceNode} {root : Root}
     {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
     (descends : store.isAncestor node ⟨root, .pending⟩ = .ok true) :
     ∃ reached, store.getAncestor node block.slot = .ok reached ∧ reached.root = root := by
@@ -78,6 +84,96 @@ private theorem le_activityFixedEpoch {state : BeaconState preset fork} {epoch :
   have := epoch.toNat_lt
   omega
 
+/-- The runs behind a vote and a head that descend from a known block.
+
+The target state of the vote comes from the state of its target block, `base`.
+
+Take the block at or before the start of the target epoch.
+
+Then the state of the block runs to `base` and to the head state.
+
+The target block is then at or before that start.
+
+When it is the anchor block, `base` itself runs to the head state.
+
+Otherwise the target block is an ancestor of the head, so the target state runs to the head state.
+
+The store is built with one setting of the checks, and the anchor block is not after its state. -/
+private theorem Store.ForwardReachableWith.runs_of_voteOrigin {checks : SignatureChecks}
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    {root head : Root} {block : BeaconBlock preset fork} {voted : ForkChoiceNode}
+    {validator : ValidatorIndex} {attestation : Attestation preset fork}
+    {targetState headState base : BeaconState preset fork} {start : Slot}
+    (found : store.blocks[root]? = some block)
+    (headDescends : store.isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
+    (origin : store.VoteOrigin config validator attestation)
+    (votedRoot : voted.root = attestation.data.beaconBlockRoot)
+    (voteDescends : store.isAncestor voted ⟨root, .pending⟩ = .ok true)
+    (targetFound : store.checkpointStates[attestation.data.target]? = some targetState)
+    (headFound : store.blockStates[head]? = some headState)
+    (baseFound : store.blockStates[attestation.data.target.root]? = some base)
+    (startOk : computeStartSlotAtEpoch preset attestation.data.target.epoch = .ok start) :
+    (block.slot ≤ start ∧ ∃ common targetBlock,
+        store.blockStates[root]? = some common ∧
+        store.blocks[attestation.data.target.root]? = some targetBlock ∧
+        targetBlock.slot ≤ start ∧ RunKept common base ∧ RunKept common headState ∧
+        (targetBlock = anchorBlock → RunKept base headState)) ∨
+      (start < block.slot ∧ RunKept targetState headState) := by
+  have reachable := reached.reachable
+  -- The target is the ancestor of the voted block at the start of the epoch of the vote.
+  have targetWalk := origin.targetRoot
+  simp only [Store.getCheckpointBlock, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at targetWalk
+  obtain ⟨start', startOk', node, walk, rooted⟩ := targetWalk
+  rw [startOk, Except.ok.injEq] at startOk'
+  subst startOk'
+  -- The voted block and the head walk back to the block at its slot.
+  obtain ⟨votedReach, votedWalk, votedRooted⟩ := Store.getAncestor_of_isAncestor found voteDescends
+  obtain ⟨voteReach, voteWalk, voteRooted⟩ :=
+    Store.getAncestor_ok_of_status .pending votedWalk
+  rw [votedRoot] at voteWalk
+  obtain ⟨headReach, headWalk, headRooted⟩ := Store.getAncestor_of_isAncestor found headDescends
+  obtain ⟨headBlock, headBlockFound, headAbove⟩ := Store.slot_le_of_isAncestor found headDescends
+  rw [← rooted] at baseFound
+  by_cases low : block.slot ≤ start
+  · -- The block is the ancestor of the target block at its slot: both states run from its state.
+    rw [Store.getAncestor_trans low walk] at voteWalk
+    obtain ⟨targetBlock, targetBlockFound, targetBlockLe⟩ := Store.getAncestor_le walk
+    obtain ⟨common, commonFound, -, -⟩ := reachable.blockStatesFromParents found
+    have commonAt := commonFound
+    rw [← votedRooted, ← voteRooted] at commonFound
+    have toTarget := reachable.runKept_of_getAncestor anchorSlot voteWalk baseFound commonFound
+    rw [voteRooted, votedRooted, ← headRooted] at commonFound
+    have toHead := reachable.runKept_of_getAncestor anchorSlot headWalk headFound commonFound
+    refine .inl ⟨low, common, targetBlock, commonAt, rooted ▸ targetBlockFound, targetBlockLe,
+      toTarget, toHead, fun anchor => ?_⟩
+    -- The target block is the anchor, so it is the block, and its state runs to the head.
+    have anchorLe := reachable.anchorSlot_le anchorSlot found
+    rw [Store.getAncestor_of_le targetBlockFound (anchor ▸ anchorLe), Except.ok.injEq]
+      at voteWalk
+    subst voteWalk
+    rw [voteRooted, votedRooted, ← headRooted] at baseFound
+    exact reachable.runKept_of_getAncestor anchorSlot headWalk headFound baseFound
+  · -- The target block is the ancestor of the head at the start, so the target state runs on.
+    have above := UInt64.not_le.mp low
+    have voteTrans := Store.getAncestor_trans (UInt64.le_of_lt above) voteWalk
+    rw [walk] at voteTrans
+    obtain ⟨reach, reachWalk, reachRooted⟩ :=
+      Store.getAncestor_ok_of_status headReach.payloadStatus voteTrans.symm
+    have sameNode : (⟨voteReach.root, headReach.payloadStatus⟩ : ForkChoiceNode) = headReach := by
+      rw [voteRooted, votedRooted, ← headRooted]
+    rw [sameNode] at reachWalk
+    have checkpoint : store.getCheckpointBlock head attestation.data.target.epoch =
+        .ok attestation.data.target.root := by
+      simp only [Store.getCheckpointBlock, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
+        Except.ok.injEq]
+      exact ⟨start, startOk, reach,
+        (Store.getAncestor_trans (UInt64.le_of_lt above) headWalk).trans reachWalk,
+        reachRooted.trans rooted⟩
+    exact .inr ⟨above, reached.runKept_of_checkpointState anchorSlot checkpoint headBlockFound
+      startOk (UInt64.le_trans (UInt64.le_of_lt above) headAbove) targetFound headFound⟩
+
 /-- The target state of a vote and the state of the head agree on the committees of its epoch.
 
 They also agree on the count of committees per slot of that epoch.
@@ -118,25 +214,11 @@ theorem Store.ForwardReachableWith.committeesKept_of_voteOrigin {checks : Signat
       getCommitteeCountPerSlot headState (computeEpochAtSlot preset attestation.data.slot) =
         getCommitteeCountPerSlot targetState (computeEpochAtSlot preset attestation.data.slot) := by
   have reachable := reached.reachable
-  -- The target is the ancestor of the voted block at the start of the epoch of the vote.
-  have targetWalk := origin.targetRoot
-  simp only [Store.getCheckpointBlock, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at targetWalk
-  obtain ⟨start, startOk, node, walk, rooted⟩ := targetWalk
+  -- The target state is the state of the target block, perhaps processed to the start.
+  obtain ⟨base, start, baseFound, startOk, fromBlock⟩ :=
+    reached.checkpointStatesFromBlocks targetFound
   have startEpoch := startOk
   rw [origin.targetEpoch] at startEpoch
-  -- The voted block and the head walk back to the block at its slot.
-  obtain ⟨votedReach, votedWalk, votedRooted⟩ := Store.getAncestor_of_isAncestor found voteDescends
-  obtain ⟨voteReach, voteWalk, voteRooted⟩ :=
-    Store.getAncestor_ok_of_status .pending votedWalk
-  rw [votedRoot] at voteWalk
-  obtain ⟨headReach, headWalk, headRooted⟩ := Store.getAncestor_of_isAncestor found headDescends
-  obtain ⟨headBlock, headBlockFound, headAbove⟩ := Store.slot_le_of_isAncestor found headDescends
-  -- The target state is the state of the target block, perhaps processed to the start.
-  obtain ⟨base, start', baseFound, startOk', fromBlock⟩ :=
-    reached.checkpointStatesFromBlocks targetFound
-  rw [startOk, Except.ok.injEq] at startOk'
-  subst startOk'
   have targetLe : start ≤ targetState.slot := by
     rcases fromBlock with ⟨baseLe, rfl⟩ | ⟨-, _, -, slotsOk⟩
     · exact baseLe
@@ -150,13 +232,11 @@ theorem Store.ForwardReachableWith.committeesKept_of_voteOrigin {checks : Signat
     · rw [← computeEpochAtSlot_computeStartSlotAtEpoch (UInt64.lt_iff_toNat_lt.mpr positive)
         startEpoch, getCurrentEpoch_toNat]
       exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp targetLe)
-  by_cases low : block.slot ≤ start
-  · -- The block is the ancestor of the target block at its slot: both states run from its state.
-    rw [Store.getAncestor_trans low walk] at voteWalk
-    rw [← rooted] at baseFound
-    obtain ⟨targetBlock, targetBlockFound, targetBlockLe⟩ := Store.getAncestor_le walk
-    obtain ⟨common, commonFound, -, -⟩ := reachable.blockStatesFromParents found
-    have commonLe := reachable.slot_le_of_blockState anchorSlot found commonFound
+  rcases reached.runs_of_voteOrigin anchorSlot found headDescends origin votedRoot voteDescends
+      targetFound headFound baseFound startOk with
+    ⟨-, common, targetBlock, commonFound, targetBlockFound, targetBlockLe, toTarget, toHead,
+      anchorRun⟩ | ⟨-, run⟩
+  · have commonLe := reachable.slot_le_of_blockState anchorSlot found commonFound
     have blockEpochLe : (computeEpochAtSlot preset block.slot).toNat ≤
         (getCurrentEpoch common).toNat := by
       rw [getCurrentEpoch_toNat]
@@ -165,21 +245,11 @@ theorem Store.ForwardReachableWith.committeesKept_of_voteOrigin {checks : Signat
         (getCurrentEpoch common).toNat + preset.MIN_SEED_LOOKAHEAD.toNat := by omega
     have fixed := le_activityFixedEpoch (state := common)
       (epoch := computeEpochAtSlot preset attestation.data.slot) maxLookahead (by omega)
-    rw [← votedRooted, ← voteRooted] at commonFound
-    have toTarget := reachable.runKept_of_getAncestor anchorSlot voteWalk baseFound commonFound
-    rw [voteRooted, votedRooted, ← headRooted] at commonFound
-    have toHead := reachable.runKept_of_getAncestor anchorSlot headWalk headFound commonFound
     rcases fromBlock with ⟨baseLe, rfl⟩ | ⟨-, _, -, slotsOk⟩
     · by_cases anchor : targetBlock = anchorBlock
-      · -- The target block is the anchor, so it is the block, and the target state runs on.
-        have anchorLe := reachable.anchorSlot_le anchorSlot found
-        rw [Store.getAncestor_of_le targetBlockFound (anchor ▸ anchorLe), Except.ok.injEq]
-          at voteWalk
-        subst voteWalk
-        rw [voteRooted, votedRooted, ← headRooted] at baseFound
-        have run := reachable.runKept_of_getAncestor anchorSlot headWalk headFound baseFound
-        exact run.committees_count (by omega) (le_activityFixedEpoch maxLookahead (by omega))
-          headInRing
+      · -- The target block is the anchor, and its state runs on to the head.
+        exact (anchorRun anchor).committees_count (by omega)
+          (le_activityFixedEpoch maxLookahead (by omega)) headInRing
       · -- Otherwise the target state is at the slot of the target block, the start.
         obtain ⟨kept, keptFound, -, notAnchor⟩ := reachable.blockStatesFromParents targetBlockFound
         rw [baseFound, Option.some.injEq] at keptFound
@@ -192,25 +262,100 @@ theorem Store.ForwardReachableWith.committeesKept_of_voteOrigin {checks : Signat
     · have := getCurrentEpoch_eq_of_start startEpoch (processSlots_slot slotsOk).2
       exact (toTarget.trans (runKept_processSlots slotsOk)).committees_agree toHead final fixed
         (by omega) headInRing
-  · -- The target block is the ancestor of the head at the start, so the target state runs on.
-    have above := UInt64.not_le.mp low
-    have voteTrans := Store.getAncestor_trans (UInt64.le_of_lt above) voteWalk
-    rw [walk] at voteTrans
-    obtain ⟨reach, reachWalk, reachRooted⟩ :=
-      Store.getAncestor_ok_of_status headReach.payloadStatus voteTrans.symm
-    have sameNode : (⟨voteReach.root, headReach.payloadStatus⟩ : ForkChoiceNode) = headReach := by
-      rw [voteRooted, votedRooted, ← headRooted]
-    rw [sameNode] at reachWalk
-    have checkpoint : store.getCheckpointBlock head attestation.data.target.epoch =
-        .ok attestation.data.target.root := by
-      simp only [Store.getCheckpointBlock, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
-        Except.ok.injEq]
-      exact ⟨start, startOk, reach,
-        (Store.getAncestor_trans (UInt64.le_of_lt above) headWalk).trans reachWalk,
-        reachRooted.trans rooted⟩
-    have run := reached.runKept_of_checkpointState anchorSlot checkpoint headBlockFound startOk
-      (UInt64.le_trans (UInt64.le_of_lt above) headAbove) targetFound headFound
-    exact run.committees_count (by omega) (le_activityFixedEpoch maxLookahead (by omega))
+  · exact run.committees_count (by omega) (le_activityFixedEpoch maxLookahead (by omega))
       headInRing
+
+/-- The voter of a vote was active in the head state in the epoch before the target of the vote.
+
+Otherwise it became active at the target epoch itself.
+
+The voted block and the head descend from a known block.
+
+The target is at most two epochs after that block.
+
+The two states agree on activity up to one epoch after that block.
+
+That covers the epoch before the target.
+
+The store is built with one setting of the checks, and the anchor block is not after its state. -/
+theorem Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin {checks : SignatureChecks}
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    {root head : Root} {block : BeaconBlock preset fork} {validator : ValidatorIndex}
+    {attestation : Attestation preset fork} {targetState headState : BeaconState preset fork}
+    {previous : Epoch}
+    (found : store.blocks[root]? = some block)
+    (headDescends : store.isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
+    (origin : store.VoteOrigin config validator attestation)
+    (voteDescends : store.isAncestor ⟨attestation.data.beaconBlockRoot, .pending⟩
+      ⟨root, .pending⟩ = .ok true)
+    (near : attestation.data.target.epoch.toNat ≤ (computeEpochAtSlot preset block.slot).toNat + 2)
+    (before : previous.toNat + 1 = attestation.data.target.epoch.toNat)
+    (targetFound : store.checkpointStates[attestation.data.target]? = some targetState)
+    (headFound : store.blockStates[head]? = some headState) :
+    validator ∈ getActiveValidatorIndices headState previous ∨
+      ∃ voter : Validator, targetState.validators.data[validator.toNat]? = some voter ∧
+        voter.activationEpoch = attestation.data.target.epoch := by
+  have reachable := reached.reachable
+  -- The target state is the state of the target block, perhaps processed to the start.
+  obtain ⟨base, start, baseFound, startOk, fromBlock⟩ :=
+    reached.checkpointStatesFromBlocks targetFound
+  have targetLe : start ≤ targetState.slot := by
+    rcases fromBlock with ⟨baseLe, rfl⟩ | ⟨-, _, -, slotsOk⟩
+    · exact baseLe
+    · exact (processSlots_slot slotsOk).2 ▸ UInt64.le_refl _
+  -- The two states have the same active validators in the epoch before the target.
+  have same : getActiveValidatorIndices headState previous =
+      getActiveValidatorIndices targetState previous := by
+    rcases reached.runs_of_voteOrigin anchorSlot found headDescends origin rfl voteDescends
+        targetFound headFound baseFound startOk with
+      ⟨-, common, -, commonFound, -, -, toTarget, toHead, -⟩ | ⟨-, run⟩
+    · -- Both states run from the state of the block, which keeps activity a little past it.
+      have commonLe := reachable.slot_le_of_blockState anchorSlot found commonFound
+      have blockEpochLe : (computeEpochAtSlot preset block.slot).toNat ≤
+          (getCurrentEpoch common).toNat := by
+        rw [getCurrentEpoch_toNat]
+        exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp commonLe)
+      have fixed := le_activityFixedEpoch (state := common) (epoch := previous) maxLookahead
+        (by omega)
+      have baseToTarget : RunKept base targetState := by
+        rcases fromBlock with ⟨-, rfl⟩ | ⟨-, _, -, slotsOk⟩
+        · exact RunKept.refl _
+        · exact runKept_processSlots slotsOk
+      rw [toHead.active.getActiveValidatorIndices_eq fixed,
+        (toTarget.trans baseToTarget).active.getActiveValidatorIndices_eq fixed]
+    · -- The target state is at or after the start of the target epoch, and runs to the head.
+      have targetEpochLe : attestation.data.target.epoch.toNat ≤
+          (getCurrentEpoch targetState).toNat := by
+        rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | positive
+        · rw [origin.targetEpoch, computeEpochAtSlot, UInt64.toNat_div, zero, Nat.div_zero]
+          exact Nat.zero_le _
+        · rw [← computeEpochAtSlot_computeStartSlotAtEpoch
+            (UInt64.lt_iff_toNat_lt.mpr positive) startOk, getCurrentEpoch_toNat]
+          exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp targetLe)
+      exact run.active.getActiveValidatorIndices_eq
+        (le_activityFixedEpoch maxLookahead (by omega))
+  rw [same]
+  -- The voter is in a committee of the target epoch, so active then in the target state.
+  obtain ⟨stored, index, committee, storedFound, -, committeeOk, member⟩ :=
+    origin.exists_mem_committee
+  rw [targetFound, Option.some.injEq] at storedFound
+  subst storedFound
+  have activeAtTarget := mem_getActiveValidatorIndices_of_getBeaconCommittee committeeOk member
+  obtain ⟨_, _, shuffleOk⟩ := attesterShuffle_ok_of_getBeaconCommittee committeeOk
+  obtain ⟨voter, voterFound, isActive⟩ := (mem_iff_of_getActiveValidatorIndicesChecked_ok
+    (getActiveValidatorIndicesChecked_of_attesterShuffle shuffleOk)).mp activeAtTarget
+  rw [← origin.targetEpoch] at isActive
+  by_cases fresh : voter.activationEpoch = attestation.data.target.epoch
+  · exact .inr ⟨voter, voterFound, fresh⟩
+  · -- Active at the target epoch and activated before it, so active in the epoch before.
+    refine .inl (mem_getActiveValidatorIndices_of_isActiveAt
+      (isActiveAt_eq_true_iff.mpr ⟨voter, voterFound, ?_⟩))
+    have notSame : voter.activationEpoch.toNat ≠ attestation.data.target.epoch.toNat :=
+      fun eq => fresh (UInt64.toNat_inj.mp eq)
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, UInt64.le_iff_toNat_le,
+      UInt64.lt_iff_toNat_lt] at isActive ⊢
+    omega
 
 end EthLib.Consensus

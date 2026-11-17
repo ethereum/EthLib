@@ -65,17 +65,25 @@ ERROR = {
 def error(variant: str) -> str:
     """The message of a failed call, from the variant of its error."""
     return (
-        "EthLib.Execution.Evm.Precompiles.PrecompileError.pointEvaluation\n  "
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.pointEvaluation "
         f"(EthLib.Execution.Evm.Precompiles.PointEvaluation.PointEvaluationError.{variant})"
     )
 
 
 def expected_error(name: str, data: bytes) -> str:
-    """The error of the Lean specification for a vector whose call fails."""
+    """The error of the Lean specification for a vector whose call fails, with its values."""
     if len(data) != 192:
-        return f"invalidInputLength {len(data)}"
-    (variant,) = [variant for kind, variant in ERROR.items() if f"_case_{kind}_" in name]
-    return variant
+        return f"invalidInputLength (size := {len(data)})"
+    (kind,) = [kind for kind in ERROR if f"_case_{kind}_" in name]
+    # The call data is the versioned hash, z, y, the commitment and the proof, in that order.
+    value = {
+        "invalid_commitment": f"(commitment := 0x{data[96:144].hex()})",
+        "invalid_z": f"(value := {int.from_bytes(data[32:64], 'big')})",
+        "invalid_y": f"(value := {int.from_bytes(data[64:96], 'big')})",
+        "invalid_proof": f"(proof := 0x{data[144:192].hex()})",
+        "incorrect_proof": None,
+    }[kind]
+    return ERROR[kind] if value is None else f"{ERROR[kind]} {value}"
 
 
 @pytest.mark.parametrize("name", CASES)
@@ -96,8 +104,10 @@ def test_versioned_hash_mismatch(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.pointEvaluation\n  "
-            "(EthLib.Execution.Evm.Precompiles.PointEvaluation.PointEvaluationError.versionedHashMismatch)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.pointEvaluation "
+            "(EthLib.Execution.Evm.Precompiles.PointEvaluation.PointEvaluationError."
+            f"versionedHashMismatch (expected := 0x{versioned_hash(data[96:144]).hex()}) "
+            f"(actual := 0x02{data[1:32].hex()}))"
         ),
     ):
         run(fork, 0x0A, b"\x02" + data[1:], 50000)
@@ -109,9 +119,9 @@ def test_out_of_gas(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.pointEvaluation\n  "
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.pointEvaluation "
             "(EthLib.Execution.Evm.Precompiles.PointEvaluation.PointEvaluationError.outOfGas "
-            "50000 49999)"
+            "(cost := 50000) (gas := 49999))"
         ),
     ):
         run(fork, 0x0A, data, 49999)
@@ -119,9 +129,9 @@ def test_out_of_gas(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.pointEvaluation\n  "
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.pointEvaluation "
             "(EthLib.Execution.Evm.Precompiles.PointEvaluation.PointEvaluationError.outOfGas "
-            "50000 49999)"
+            "(cost := 50000) (gas := 49999))"
         ),
     ):
         run(fork, 0x0A, bytes(192), 49999)
@@ -130,5 +140,5 @@ def test_out_of_gas(fork: str) -> None:
 @pytest.mark.parametrize("size", [0, 191, 193])
 @pytest.mark.parametrize("fork", FORKS)
 def test_invalid_length(fork: str, size: int) -> None:
-    with raises(ValueError, error(f"invalidInputLength {size}")):
+    with raises(ValueError, error(f"invalidInputLength (size := {size})")):
         run(fork, 0x0A, bytes(size), 50000)

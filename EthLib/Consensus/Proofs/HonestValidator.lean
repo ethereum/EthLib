@@ -154,7 +154,9 @@ theorem processRandao_ne_invalidRandaoReveal {config : Config}
     (owned : proposer.pubkey = Signatures.skToPk key)
     (current : computeEpochAtSlot preset block.slot = getCurrentEpoch state)
     (signedBy : getEpochSignature config state block key = .ok block.body.randaoReveal) :
-    processRandao config .bls state block.body ≠ .error .invalidRandaoReveal := by
+    ∀ index epoch,
+      processRandao config .bls state block.body ≠ .error (.invalidRandaoReveal index epoch) := by
+  intro index epoch
   unfold getEpochSignature at signedBy
   simp only [current] at signedBy
   obtain ⟨domain, root, domained, rooted, verifies⟩ := signAtEpoch_verifies signedBy

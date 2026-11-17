@@ -215,12 +215,12 @@ def processPayloadAttestation (config : Config) (checks : SignatureChecks)
     Except TransitionError (BeaconState preset fork) := do
   let data := attestation.data
   ensure (data.beaconBlockRoot = state.latestBlockHeader.parentRoot)
-    .payloadAttestationNotForParent
+    (.payloadAttestationNotForParent data.beaconBlockRoot state.latestBlockHeader.parentRoot)
   ensure (data.slot.toNat + 1 = state.slot.toNat)
     (.payloadAttestationWrongSlot data.slot state.slot)
   let indexed ← liftAccessor (getIndexedPayloadAttestation config state gloas attestation)
   let valid ← isValidIndexedPayloadAttestation config checks state indexed
-  ensure (valid = true) .invalidPayloadAttestation
+  ensure (valid = true) (.invalidPayloadAttestation data.slot indexed.attestingIndices.data.size)
   return state
 
 /-- The slot at a position of the window, counted from the first slot of an epoch.

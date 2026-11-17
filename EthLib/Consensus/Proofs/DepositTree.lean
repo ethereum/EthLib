@@ -679,6 +679,8 @@ theorem getRoot_eq {tree : DepositTree} {held : List Root}
 Pushing deposits into a tree gives the deposit root of all its leaves.
 
 It refuses them when they are more than the deposit contract accepts.
+
+Its error then holds that limit, `2^32 - 1`.
 -/
 theorem map_getRoot_pushLeaves {tree : DepositTree} {held : List Root}
     (holds : Holds DEPOSIT_CONTRACT_TREE_DEPTH.toNat tree.tree held)
@@ -688,7 +690,7 @@ theorem map_getRoot_pushLeaves {tree : DepositTree} {held : List Root}
       = if (held ++ leaves).length ≤ 2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat - 1 then
           .ok (mixInCount (create (held ++ leaves) DEPOSIT_CONTRACT_TREE_DEPTH.toNat).root
             (held ++ leaves).length)
-        else .error .treeFull := by
+        else .error (.treeFull (2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat - 1)) := by
   induction leaves generalizing tree held with
   | nil =>
     simp only [List.append_nil, room, ite_true, ← getRoot_eq holds counted]
@@ -701,7 +703,9 @@ theorem map_getRoot_pushLeaves {tree : DepositTree} {held : List Root}
         simp
         omega
       rw [ite_eq_right over]
-      simp [pushLeaf, full]
+      -- The tree holds no more than the cap, so a full tree holds exactly the cap.
+      have atCap : tree.mixInLength = 2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat - 1 := by omega
+      simp [pushLeaf, atCap]
       rfl
     · obtain ⟨pushed, pushes, pushedHolds⟩ := holds.pushLeaf leaf (by omega)
       have step : tree.pushLeaf leaf

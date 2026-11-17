@@ -64,9 +64,9 @@ open EthLib.Exports (Result PyValue pyExport)
 def decodeInput (α : Type) [SszType α] (data : ByteArray) : Result α :=
   (SszType.deserialize α data).mapError fun e => (0, s!"input rejected: {reprStr e}")
 
-/-- The result of a step of the transition, with the code and the text of its error. -/
+/-- The result of a step of the transition, with the code and the message of its error. -/
 def runTransition {α : Type} (result : Except TransitionError α) : Result α :=
-  result.mapError fun e => (e.code, reprStr e)
+  result.mapError fun e => (e.code, toString e)
 
 /-- The state after a block operation of a handler of the vectors, the operation given as bytes.
 

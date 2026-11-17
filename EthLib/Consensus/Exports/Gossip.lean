@@ -90,9 +90,9 @@ def gossipTopicBoundExport (name fork topic : ByteArray) : Result UInt64 := do
   let topicName ← nameOf topic
   let some topic := GossipTopic.ofName? topicName | throw (0, s!"{topicName} names no topic")
   unless (config.gossipTopics fork).contains topic do
-    throw (BoundsError.topicNotAtFork.code, s!"{topicName} is not a topic of {fork.name}")
+    throw (BoundsError.topicNotAtFork topicName fork).fault
   let some bound := topicBound preset config fork topic
-    | throw (BoundsError.topicNotAtFork.code, s!"{topicName} is not a topic of {fork.name}")
+    | throw (BoundsError.topicNotAtFork topicName fork).fault
   return bound
 
 end EthLib.Consensus.Exports

@@ -39,7 +39,7 @@ def verifyAccountProofOf (args : ByteArray × PyValue) : Result (Option (List Bo
     | .ok (.present slots) => return some (slots.map fun
         | .set => true
         | .absent => false)
-    | .error e => throw (e.code, s!"answer does not hold: {repr e}")
+    | .error e => throw (e.code, s!"answer does not hold: {(repr e).pretty 1000000}")
   else
     throw (0, s!"bad root size: {root.size}, expected 32")
 

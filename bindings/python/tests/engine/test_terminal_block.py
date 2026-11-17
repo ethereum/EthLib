@@ -52,9 +52,6 @@ BASE_FEE = PARENT_BASE_FEE - PARENT_BASE_FEE // 8
 
 ZERO_HASH = "0x" + bytes(32).hex()
 
-# The message of the reason, after its code.
-NOT_TERMINAL = "407: the parent is a block of proof of work that is not terminal"
-
 
 def _number(n: int) -> bytes:
     """The bytes of a number for RLP: big-endian, without leading zeros."""
@@ -131,6 +128,10 @@ def _valid(payload: dict) -> dict:
     return {"status": "VALID", "latestValidHash": payload["blockHash"], "validationError": None}
 
 
+# The reason names the genesis block, the parent of every payload that this file refuses.
+NOT_TERMINAL = (
+    f"407: the parent 0x{keccak256(GENESIS).hex()} is a block of proof of work that is not terminal"
+)
 INVALID = {"status": "INVALID", "latestValidHash": ZERO_HASH, "validationError": NOT_TERMINAL}
 
 # With a difficulty of 15, the genesis block is terminal exactly for totals from T to T + 14.

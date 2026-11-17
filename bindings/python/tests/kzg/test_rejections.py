@@ -37,7 +37,7 @@ def test_verify_extra_cell_index() -> None:
 
 def test_verify_cell_index_out_of_bounds() -> None:
     """The index 128 is one past the last cell of an extended blob."""
-    with raises(kzg.KzgError, "cell index out of bounds") as info:
+    with raises(kzg.KzgError, "cell index out of bounds: 128") as info:
         kzg.verify_cell_kzg_proof_batch([COMMITMENT], [kzg.CELLS_PER_EXT_BLOB], [CELL], [PROOF])
     assert info.value.code == 12
 
@@ -52,7 +52,7 @@ def test_recover_cells_missing() -> None:
 def test_recover_not_enough_cells() -> None:
     """Fewer than half of the 128 cells do not recover the blob."""
     half = kzg.CELLS_PER_EXT_BLOB // 2
-    with raises(kzg.KzgError, "not enough cells provided") as info:
+    with raises(kzg.KzgError, "not enough cells provided: 63") as info:
         kzg.recover_cells_and_kzg_proofs(list(range(half - 1)), [CELL] * (half - 1))
     assert info.value.code == 14
 
@@ -60,7 +60,7 @@ def test_recover_not_enough_cells() -> None:
 def test_recover_too_many_cells() -> None:
     """More cells than an extended blob holds are rejected, before their indices are read."""
     count = kzg.CELLS_PER_EXT_BLOB + 1
-    with raises(kzg.KzgError, "too many cells provided") as info:
+    with raises(kzg.KzgError, "too many cells provided: 129") as info:
         kzg.recover_cells_and_kzg_proofs(list(range(count)), [CELL] * count)
     assert info.value.code == 15
 
@@ -68,7 +68,7 @@ def test_recover_too_many_cells() -> None:
 def test_recover_cell_index_out_of_bounds() -> None:
     """Half of the cells are given, the last at the index 128."""
     indices = [*range(65, kzg.CELLS_PER_EXT_BLOB), kzg.CELLS_PER_EXT_BLOB]
-    with raises(kzg.KzgError, "cell index out of bounds") as info:
+    with raises(kzg.KzgError, "cell index out of bounds: 128") as info:
         kzg.recover_cells_and_kzg_proofs(indices, [CELL] * len(indices))
     assert info.value.code == 12
 
@@ -76,9 +76,25 @@ def test_recover_cell_index_out_of_bounds() -> None:
 def test_recover_repeated_index() -> None:
     """Half of the cells are given, the last at the index of the one before."""
     indices = [*range(63), 62]
-    with raises(kzg.KzgError, "indices not strictly ascending") as info:
+    with raises(kzg.KzgError, "indices not strictly ascending: 62 after 62") as info:
         kzg.recover_cells_and_kzg_proofs(indices, [CELL] * len(indices))
     assert info.value.code == 13
+
+
+def test_recover_descending_pair() -> None:
+    """The error names the first pair out of order, the earlier index first."""
+    indices = [*range(62), 70, 65]
+    with raises(kzg.KzgError, "indices not strictly ascending: 65 after 70") as info:
+        kzg.recover_cells_and_kzg_proofs(indices, [CELL] * len(indices))
+    assert info.value.code == 13
+
+
+def test_recover_first_out_of_bounds_index() -> None:
+    """Of two indices past the extended blob, the error names the first in the list."""
+    indices = [*range(62), 200, 130]
+    with raises(kzg.KzgError, "cell index out of bounds: 200") as info:
+        kzg.recover_cells_and_kzg_proofs(indices, [CELL] * len(indices))
+    assert info.value.code == 12
 
 
 # These two errors come from the C layer.
@@ -88,6 +104,17 @@ def test_blob_batch_counts_differ() -> None:
     blob = bytes(kzg.BYTES_PER_BLOB)
     with raises(ValueError, "blobs/commitments/proofs must have equal length"):
         kzg.verify_blob_kzg_proof_batch([blob, blob], [COMMITMENT], [PROOF])
+
+
+def test_challenge_commitment_index_out_of_bounds() -> None:
+    """The commitment index 1 names no commitment when only one is given."""
+    # 0xc0 then zeros is the compressed point at infinity, a valid commitment.
+    infinity = bytes([0xC0]) + bytes(kzg.BYTES_PER_COMMITMENT - 1)
+    coset = [bytes(kzg.BYTES_PER_FIELD_ELEMENT)] * kzg.FIELD_ELEMENTS_PER_CELL
+    message = "out-of-bounds commitment index: 1, expected below 1"
+    with raises(kzg.KzgError, message) as info:
+        kzg.compute_verify_cell_kzg_proof_batch_challenge([infinity], [1], [0], [coset], [PROOF])
+    assert info.value.code == 11
 
 
 def test_challenge_short_coset() -> None:

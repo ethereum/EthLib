@@ -118,7 +118,7 @@ def test_preserves_the_exact_signed_and_public_key_bytes() -> None:
 
 @pytest.mark.parametrize("chain", [[], [CERTIFICATE, CERTIFICATE]])
 def test_chain_must_have_exactly_one_certificate(chain: list[bytes]) -> None:
-    with raises(tls.TlsCertificateError, ERROR + "chain") as info:
+    with raises(tls.TlsCertificateError, ERROR + f"chain {len(chain)}") as info:
         tls.authenticate(POLICY, NOW, chain)
     assert info.value.code == 4
 
@@ -131,7 +131,10 @@ def test_checks_the_dialled_peer() -> None:
 
 @pytest.mark.parametrize("now", [NOT_BEFORE - 1, NOT_AFTER + 1])
 def test_rejects_times_outside_the_validity_interval(now: int) -> None:
-    with raises(tls.TlsCertificateError, ERROR + "validity") as info:
+    # The error holds the time, then the bounds of the validity interval.
+    with raises(
+        tls.TlsCertificateError, ERROR + f"validity {now} {NOT_BEFORE} {NOT_AFTER}"
+    ) as info:
         tls.authenticate(POLICY, now, [CERTIFICATE])
     assert info.value.code == 3
 
@@ -165,11 +168,12 @@ def test_requires_each_host_algorithm_explicitly(
     ("data", "error"),
     [
         # X.690 §10.1: indefinite and non-minimal long lengths are forbidden.
-        (b"\x30\x80", "length"),
-        (b"\x30\x81\x01\x00", "length"),
-        (b"\x30\x82\x00\x80" + bytes(128), "length"),
-        (CERTIFICATE[:-1], "truncated"),
-        (CERTIFICATE + b"\x00", "trailing"),
+        # The message names the first length octet: 0x80, 0x81 and 0x82.
+        (b"\x30\x80", "length 128"),
+        (b"\x30\x81\x01\x00", "length 129"),
+        (b"\x30\x82\x00\x80" + bytes(128), "length 130"),
+        (CERTIFICATE[:-1], f"truncated {len(CERTIFICATE)} {len(CERTIFICATE) - 1}"),
+        (CERTIFICATE + b"\x00", "trailing 1"),
     ],
 )
 def test_strict_der_lengths(data: bytes, error: str) -> None:
@@ -227,7 +231,7 @@ def test_rejects_a_name_string_outside_the_reader_subset() -> None:
     index = CERTIFICATE.index(b"\x13\x09libp2p.io")
     data = CERTIFICATE[:index] + b"\x14" + CERTIFICATE[index + 1 :]
     with raises(
-        tls.TlsCertificateError, ERROR + "der (EthLib.Serialization.Der.Error.tag)"
+        tls.TlsCertificateError, ERROR + "der (EthLib.Serialization.Der.Error.tag none 20)"
     ) as info:
         tls.read_certificate(data)
     assert info.value.code == 1

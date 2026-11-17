@@ -168,7 +168,7 @@ def test_gcm_rejects_truncated_tag() -> None:
     out = aes.gcm_encrypt(k, iv, p, aad, 16)
     c, tag = out[:-16], out[-16:]
     assert aes.gcm_decrypt(k, iv, c, aad, tag, 16) == p
-    with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.tagLength") as info:
+    with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.tagLength 16 12") as info:
         aes.gcm_decrypt(k, iv, c, aad, tag[:12], 16)
     assert info.value.code == 1
 
@@ -184,7 +184,7 @@ def test_gcm_rejects_tag_length_out_of_range(tag_length: int) -> None:
 
 @pytest.mark.parametrize("tag_length", [4, 8])
 def test_gcm_rejects_short_tags(tag_length: int) -> None:
-    with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.shortTag") as info:
+    with raises(AesError, f"EthLib.Cryptography.Aes.Gcm.Error.shortTag {tag_length}") as info:
         aes.gcm_encrypt(bytes(16), bytes(12), b"", b"", tag_length)
     assert info.value.code == 2
 

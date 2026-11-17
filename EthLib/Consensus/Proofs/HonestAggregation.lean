@@ -164,7 +164,7 @@ theorem attestationDataIndex_of_glamsterdam_of_ne {slot headSlot : Slot}
       match payloadStatus with
       | .empty => .ok 0
       | .full => .ok 1
-      | .pending => .error .pendingPayloadStatus := by
+      | .pending => .error (.pendingPayloadStatus slot headSlot) := by
   cases payloadStatus <;> simp [attestationDataIndex, gloas, earlier]
 
 /-- From Electra, the index in attestation data passes the check of the index of a vote. -/

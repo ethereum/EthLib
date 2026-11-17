@@ -36,16 +36,24 @@ inductive KzgError where
   | inputLengthMismatch (input : String) (expected actual : Nat)
   /-- A G1 linear combination got different point and scalar counts. -/
   | lincombLengthMismatch (points scalars : Nat)
-  /-- A commitment index referenced a commitment that does not exist. -/
-  | commitmentIndexOutOfBounds
-  /-- A cell index was 128 or more. -/
-  | cellIndexOutOfBounds
-  /-- Cell indices were not strictly ascending. -/
-  | indicesNotAscending
-  /-- Fewer than 50% of a blob's cells were provided. -/
-  | notEnoughCells
-  /-- More cells than exist in an extended blob were provided. -/
-  | tooManyCells
+  /-- A commitment index, `index`, named no commitment among the `count` given.
+
+  It is the first such index of the list. -/
+  | commitmentIndexOutOfBounds (index count : Nat)
+  /-- A cell index, `index`, was 128 or more.
+
+  When a list of indices is checked, it is the first such index of the list. -/
+  | cellIndexOutOfBounds (index : Nat)
+  /-- Cell indices were not strictly ascending.
+
+  The index `next` came right after `previous`, and is not larger.
+
+  It is the first such pair of the list. -/
+  | indicesNotAscending (previous next : Nat)
+  /-- Fewer than 50% of a blob's cells were provided: `count` of them. -/
+  | notEnoughCells (count : Nat)
+  /-- More cells than exist in an extended blob were provided: `count` of them. -/
+  | tooManyCells (count : Nat)
   /-- Polynomial division by an empty polynomial, or by one with a zero leading coefficient.
 
   Division in `Fr` alone would give a wrong polynomial, with no error. -/
@@ -54,8 +62,10 @@ inductive KzgError where
   | polynomialProductTooLong (lenA lenB : Nat)
   /-- An evaluation-form polynomial did not have 4096 elements. -/
   | badPolynomialSize (actual : Nat)
-  /-- The list of commitments of the core cell check contained a repeated commitment. -/
-  | duplicateCommitments
+  /-- The list of commitments of the core cell check contained a repeated commitment.
+
+  The commitment at position `index`, counted from 0, is the first to repeat an earlier one. -/
+  | duplicateCommitments (index : Nat)
   /-- 48-byte input failed to decompress to a G1 point. -/
   | invalidG1Point
   /-- Every cell of the extended blob was missing.
@@ -85,16 +95,19 @@ def KzgError.message : KzgError → String
       s!"input length mismatch: {input} has length {actual}, expected {expected}"
   | .lincombLengthMismatch points scalars =>
       s!"linear combination length mismatch: {points} points, {scalars} scalars"
-  | .commitmentIndexOutOfBounds => "out-of-bounds commitment index"
-  | .cellIndexOutOfBounds       => "cell index out of bounds"
-  | .indicesNotAscending        => "indices not strictly ascending"
-  | .notEnoughCells             => "not enough cells provided"
-  | .tooManyCells               => "too many cells provided"
+  | .commitmentIndexOutOfBounds index count =>
+      s!"out-of-bounds commitment index: {index}, expected below {count}"
+  | .cellIndexOutOfBounds index => s!"cell index out of bounds: {index}"
+  | .indicesNotAscending previous next =>
+      s!"indices not strictly ascending: {next} after {previous}"
+  | .notEnoughCells count       => s!"not enough cells provided: {count}"
+  | .tooManyCells count         => s!"too many cells provided: {count}"
   | .zeroDivisorPolynomial      => "division by zero polynomial"
   | .polynomialProductTooLong lenA lenB =>
       s!"polynomial product too long: {lenA} + {lenB} coefficients"
   | .badPolynomialSize actual   => s!"bad polynomial size: {actual}"
-  | .duplicateCommitments       => "duplicate commitments"
+  | .duplicateCommitments index =>
+      s!"duplicate commitments: commitment {index} repeats an earlier one"
   | .invalidG1Point             => "invalid G1 point"
   | .tooManyMissingCells        => "too many missing cells"
   | .badIndicesBytesSize actual =>
@@ -117,15 +130,15 @@ def KzgError.code : KzgError → UInt32
   | .invalidFieldElement _     => 8
   | .inputLengthMismatch ..    => 9
   | .lincombLengthMismatch ..  => 10
-  | .commitmentIndexOutOfBounds => 11
-  | .cellIndexOutOfBounds      => 12
-  | .indicesNotAscending       => 13
-  | .notEnoughCells            => 14
-  | .tooManyCells              => 15
+  | .commitmentIndexOutOfBounds .. => 11
+  | .cellIndexOutOfBounds _    => 12
+  | .indicesNotAscending ..    => 13
+  | .notEnoughCells _          => 14
+  | .tooManyCells _            => 15
   | .zeroDivisorPolynomial     => 16
   | .polynomialProductTooLong .. => 17
   | .badPolynomialSize _       => 18
-  | .duplicateCommitments      => 19
+  | .duplicateCommitments _    => 19
   | .invalidG1Point            => 20
   | .tooManyMissingCells       => 21
   | .badIndicesBytesSize _     => 22

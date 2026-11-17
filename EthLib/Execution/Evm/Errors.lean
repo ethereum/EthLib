@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.ErrorFormat
 public import EthLib.Execution.State.Tracker
 public import EthLib.Serialization.Rlp.Item
 
@@ -41,20 +42,22 @@ inductive EvmError where
   | outOfGas
   /-- The byte at the program counter is no opcode at the fork. -/
   | invalidOpcode (code : UInt8)
-  /-- A jump goes to a position that is not a valid jump destination. -/
-  | invalidJumpDest
+  /-- A jump goes to `destination`, which is not a valid jump destination. -/
+  | invalidJumpDest (destination : Nat)
   /-- An instruction changes the state in a static frame. -/
   | writeInStaticContext
-  /-- RETURNDATACOPY reads past the end of the return data. -/
-  | outOfBoundsRead
-  /-- A parameter of an instruction is out of its range. -/
-  | invalidParameter
+  /-- RETURNDATACOPY reads `size` bytes from `offset`, past the end of `available` bytes.
+
+  The bytes are those of the return data. -/
+  | outOfBoundsRead (offset size available : Nat)
+  /-- The immediate byte `immediate` of an instruction is out of its range. -/
+  | invalidParameter (immediate : UInt8)
   /-- The code that a creation deploys starts with the byte `0xef`. -/
   | invalidContractPrefix
-  /-- A creation targets an address that already has code or a nonce. -/
-  | addressCollision
-  /-- A precompiled contract rejects its input, or lacks gas. -/
-  | precompile
+  /-- A creation targets the address `address`, which already has code or a nonce. -/
+  | addressCollision (address : Base.Address)
+  /-- The precompile `address`, which the message runs, rejects its input, or lacks gas. -/
+  | precompile (address : Nat)
   /-- REVERT stops the frame, which keeps its gas left. -/
   | revert
   /-- The state lacks data that it must hold, such as the code of a code hash. -/
@@ -65,7 +68,38 @@ inductive EvmError where
   | encoding (e : Serialization.Rlp.RlpError)
   /-- The rules of a transaction at the fork are not yet specified here. -/
   | forkNotYetSpecified (fork : Base.Fork)
-  deriving DecidableEq, Repr
+  deriving DecidableEq
+
+/-- A constructor of the error, named in full, applied to its arguments. -/
+def evmErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.Evm.EvmError." ++ name) args prec
+
+/-- The form of the error in Lean syntax, with each value named and each address in hex. -/
+def EvmError.reprPrec : EvmError → Nat → Std.Format
+  | .stackUnderflow, p => evmErrorFormat "stackUnderflow" [] p
+  | .stackOverflow, p => evmErrorFormat "stackOverflow" [] p
+  | .outOfGas, p => evmErrorFormat "outOfGas" [] p
+  | .invalidOpcode code, p => evmErrorFormat "invalidOpcode" [namedArg "code" code] p
+  | .invalidJumpDest destination, p =>
+    evmErrorFormat "invalidJumpDest" [namedArg "destination" destination] p
+  | .writeInStaticContext, p => evmErrorFormat "writeInStaticContext" [] p
+  | .outOfBoundsRead offset size available, p =>
+    evmErrorFormat "outOfBoundsRead"
+      [namedArg "offset" offset, namedArg "size" size, namedArg "available" available] p
+  | .invalidParameter immediate, p =>
+    evmErrorFormat "invalidParameter" [namedArg "immediate" immediate] p
+  | .invalidContractPrefix, p => evmErrorFormat "invalidContractPrefix" [] p
+  | .addressCollision address, p =>
+    evmErrorFormat "addressCollision" [namedArg "address" address] p
+  | .precompile address, p => evmErrorFormat "precompile" [namedArg "address" address] p
+  | .revert, p => evmErrorFormat "revert" [] p
+  | .state e, p => evmErrorFormat "state" [reprArg e] p
+  | .unspecifiedOpcode code, p => evmErrorFormat "unspecifiedOpcode" [namedArg "code" code] p
+  | .encoding e, p => evmErrorFormat "encoding" [reprArg e] p
+  | .forkNotYetSpecified fork, p =>
+    evmErrorFormat "forkNotYetSpecified" [namedArg "fork" fork] p
+
+instance : Repr EvmError := ⟨EvmError.reprPrec⟩
 
 /-- Whether an error aborts the whole execution, instead of halting one frame.
 

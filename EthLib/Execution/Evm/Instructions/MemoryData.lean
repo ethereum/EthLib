@@ -101,7 +101,7 @@ def returndatacopyStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter)
   let cost := OPCODE_RETURNDATACOPY_BASE + OPCODE_RETURNDATACOPY_PER_WORD * wordCount size.toNat
   let evm ← chargeGas evm (cost + growth.cost)
   if evm.returnData.size < offset.toNat + size.toNat then
-    throw .outOfBoundsRead
+    throw (.outOfBoundsRead offset.toNat size.toNat evm.returnData.size)
   let memory := memoryExtend evm.memory growth.expandBy
   let value := memoryReadBytes evm.returnData offset.toNat size.toNat
   return advance { evm with memory := memoryWrite memory start.toNat value }

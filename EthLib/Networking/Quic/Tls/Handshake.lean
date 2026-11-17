@@ -43,8 +43,10 @@ open Wire
 inductive Error where
   | unexpectedMessage
   | illegalParameter
-  | missingExtension
-  | unsupportedExtension
+  /-- The extension `type`, which the message needs, is absent (RFC 8446 §6.2). -/
+  | missingExtension (type : CodePoint)
+  /-- The extension `type` was not offered, or is not allowed here (RFC 8446 §6.2). -/
+  | unsupportedExtension (type : CodePoint)
   | handshakeFailure
   | protocolVersion
   | noApplicationProtocol
@@ -65,8 +67,8 @@ Every other cryptographic failure is local, so it is internal_error. -/
 def Error.code : Error → UInt32
   | .unexpectedMessage => 0x10a
   | .illegalParameter => 0x12f
-  | .missingExtension => 0x16d
-  | .unsupportedExtension => 0x16e
+  | .missingExtension _ => 0x16d
+  | .unsupportedExtension _ => 0x16e
   | .handshakeFailure => 0x128
   | .protocolVersion => 0x146
   | .noApplicationProtocol => 0x178
@@ -199,8 +201,8 @@ def supportedSuite (suite : CodePoint) : Bool :=
 /-- Separate an unexpected message type from malformed data, RFC 8446 §§4 and 6.2. -/
 def wire {α : Type} (value : Except Wire.Error α) : Except Error α :=
   value.mapError fun
-    | .messageType | .retry => .unexpectedMessage
-    | .constant | .duplicateExtension => .illegalParameter
+    | .messageType _ | .retry => .unexpectedMessage
+    | .constant | .duplicateExtension _ => .illegalParameter
     | _ => .decodeError
 
 /-- A value whose absence means that a caller supplied an inconsistent state. -/
@@ -219,7 +221,7 @@ def required {α : Type} (error : Error) : Option α → Except Error α
 
 /-- Read a required extension in its message-specific form, RFC 8446 §4.2. -/
 def payload (form : PayloadForm) (extensions : List Extension) : Except Error Payload := do
-  let value ← required .missingExtension (extension form.type extensions)
+  let value ← required (.missingExtension form.type) (extension form.type extensions)
   wire (decodePayload form value)
 
 /-- Read an ALPN list without selecting a protocol, RFC 7301 §3.1. -/
@@ -383,7 +385,8 @@ def checkExtensions (context : Context) (offered : Option (List Extension))
     | none => pure ()
     | some offered =>
       ensure ((context = .retry ∧ value.kind = 44) ∨
-        (offered.any (fun request => request.kind == value.kind)) = true) .unsupportedExtension
+        (offered.any (fun request => request.kind == value.kind)) = true)
+        (.unsupportedExtension value.kind)
 
 /-- Read PSK identities while checking offer framing and binder count, RFC 8446 §4.2.11. -/
 def pskIdentities (extensions : List Extension) : Except Error (List ByteArray) := do
@@ -412,7 +415,7 @@ def checkPskOffer (extensions : List Extension) : Except Error Unit := do
   | none => ensure (extension 42 extensions = none) .illegalParameter
   | some psk =>
     ensure (extensions.getLast? = some psk) .illegalParameter
-    let _ ← required .missingExtension (extension 45 extensions)
+    let _ ← required (.missingExtension 45) (extension 45 extensions)
     let _ ← pskIdentities extensions
     match extension 42 extensions with
     | none => pure ()
@@ -676,7 +679,7 @@ def clientServerHello (config : Config) (state : State) (server : ServerHello)
   else
     checkExtensions .serverHello (some hello.extensions) server.extensions
     -- The client never offers a PSK, so a selected PSK identity is unsupported.
-    ensure (extension 41 server.extensions = none) .unsupportedExtension
+    ensure (extension 41 server.extensions = none) (.unsupportedExtension 41)
     let share ← match ← payload .serverKeyShare server.extensions with
       | .serverKeyShare share => pure share
       | _ => throw .decodeError

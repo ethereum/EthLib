@@ -42,7 +42,7 @@ def runSecp256r1 {α : Type} (act : Except Secp256r1Error α) : Result α :=
 /-- A coordinate below `p`, or an error. -/
 def readCoordinate (bytes : List UInt8) : Except Secp256r1Error Fp :=
   let v := Base.bytesToNat bytes
-  if h : v < Fp.modulus then .ok ⟨v, h⟩ else .error .coordinateTooLarge
+  if h : v < Fp.modulus then .ok ⟨v, h⟩ else .error (.coordinateTooLarge v)
 
 /-- The affine point of a 64-byte public key, or an error for any other length. -/
 def readPublicKey (bytes : ByteArray) : Except Secp256r1Error Point := do

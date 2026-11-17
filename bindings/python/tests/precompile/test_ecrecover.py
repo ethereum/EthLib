@@ -42,8 +42,9 @@ def test_out_of_gas(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.ecrecover\n  "
-            "(EthLib.Execution.Evm.Precompiles.Ecrecover.EcrecoverError.outOfGas 3000 2999)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.ecrecover "
+            "(EthLib.Execution.Evm.Precompiles.Ecrecover.EcrecoverError.outOfGas "
+            "(cost := 3000) (gas := 2999))"
         ),
     ):
         run(fork, ADDRESS, bytes.fromhex(CASES[0]["input"]), GAS - 1)

@@ -128,14 +128,20 @@ def test_gloas_earlier_head_has_the_payload_status(gloas: bytes, status: int, in
 
 
 def test_gloas_earlier_head_with_a_pending_status(gloas: bytes):
-    with raises(DUTY_ERROR, "validator duty failed with code 13") as info:
+    message = (
+        f"the head block at slot {SLOT - 1}, not the slot {SLOT} of the vote, "
+        "has a pending payload status"
+    )
+    with raises(DUTY_ERROR, message) as info:
         data("glamsterdam", gloas, SLOT - 1, 3, 2)
     assert info.value.code == 13
 
 
 def test_root_of_the_first_slot_out_of_range():
     # At slot 2^64 - 2 the first slot of the epoch plus the buffer length overflows 64 bits.
-    with raises(DUTY_ERROR, "validator duty failed with code 1") as info:
+    message = "a state accessor fails: EthLib.Consensus.AccessorError.arith"
+    message += " (EthLib.Base.ArithError.overflow)"
+    with raises(DUTY_ERROR, message) as info:
         data("phase0", phase0_state(2**64 - 2), 0, 0, 0)
     assert info.value.code == 1
 

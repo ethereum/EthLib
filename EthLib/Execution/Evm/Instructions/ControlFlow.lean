@@ -40,7 +40,7 @@ def jumpStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   if isValidJumpDest evm.validJumpDestinations destination.toNat then
     return { evm with pc := destination.toNat }
   else
-    throw .invalidJumpDest
+    throw (.invalidJumpDest destination.toNat)
 
 /-- JUMPI: jump to `destination` when the condition is not zero, else go to the next opcode. -/
 def jumpiStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
@@ -52,7 +52,7 @@ def jumpiStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   else if isValidJumpDest evm.validJumpDestinations destination.toNat then
     return { evm with pc := destination.toNat }
   else
-    throw .invalidJumpDest
+    throw (.invalidJumpDest destination.toNat)
 
 /-- JUMPDEST: mark a jump destination, and do nothing else. -/
 def jumpdestStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do

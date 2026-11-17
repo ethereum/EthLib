@@ -35,17 +35,24 @@ abbrev Tag := Vector UInt8 16
 /-- The sixteen 32-bit words of the ChaCha20 state, RFC 8439 §2.3. -/
 abbrev State := Vector UInt32 16
 
-/-- Counter exhaustion, an unencodable length, or failed authentication, RFC 8439 §2.8. -/
+/-- Counter exhaustion, an unencodable length, or failed authentication, RFC 8439 §2.8.
+
+A failed authentication carries nothing, so that it reveals nothing about the expected tag. -/
 inductive ChaCha20Poly1305Error where
-  | counterExhausted
-  | aadTooLong
+  /-- A text of `length` bytes, from the block counter `counter`, needs the counter `2^32` or more.
+
+  The AEAD construction starts its text at the counter 1. -/
+  | counterExhausted (counter length : Nat)
+  /-- The additional data, of `length` bytes, has `2^64` bytes or more. -/
+  | aadTooLong (length : Nat)
+  /-- The tag does not match. -/
   | authenticationFailed
 deriving DecidableEq, Repr
 
 /-- Stable error codes for the bindings. -/
 def ChaCha20Poly1305Error.code : ChaCha20Poly1305Error → UInt32
-  | .counterExhausted => 1
-  | .aadTooLong => 2
+  | .counterExhausted .. => 1
+  | .aadTooLong _ => 2
   | .authenticationFailed => 3
 
 /-- Add, XOR and rotate four 32-bit words, RFC 8439 §2.1. -/
@@ -112,7 +119,7 @@ def keyStream (key : Key) (counter : UInt32) (nonce : Nonce) (blocks : Nat) : By
 def crypt (key : Key) (counter : UInt32) (nonce : Nonce) (input : ByteArray) :
     Except ChaCha20Poly1305Error ByteArray :=
   if counter.toNat + (input.size + 63) / 64 > 2 ^ 32 then
-    .error .counterExhausted
+    .error (.counterExhausted counter.toNat input.size)
   else
     .ok (xorByteArray input (keyStream key counter nonce ((input.size + 63) / 64)))
 
@@ -149,8 +156,8 @@ def macData (aad ciphertext : ByteArray) : ByteArray :=
 
 /-- AEAD admits at most `2^32 - 1` blocks and `2^64 - 1` AAD bytes, RFC 8439 §2.8. -/
 def checkLengths (aadLength textLength : Nat) : Except ChaCha20Poly1305Error Unit :=
-  if aadLength ≥ 2 ^ 64 then .error .aadTooLong
-  else if textLength > (2 ^ 32 - 1) * 64 then .error .counterExhausted
+  if aadLength ≥ 2 ^ 64 then .error (.aadTooLong aadLength)
+  else if textLength > (2 ^ 32 - 1) * 64 then .error (.counterExhausted 1 textLength)
   else .ok ()
 
 /-- Encrypt and authenticate, returning the ciphertext and its tag, RFC 8439 §2.8. -/

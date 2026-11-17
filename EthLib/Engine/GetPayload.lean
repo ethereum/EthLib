@@ -103,12 +103,14 @@ structure GetPayloadResponse where
 inductive GetPayloadError where
   /-- A request with no build, or for a fork that its version does not support. -/
   | engine (error : EngineError)
-  /-- The stored fork is not the fork of the configuration at the block. -/
-  | wrongFork
+  /-- The stored fork, `stored`, is not the fork of the configuration at the block, `active`.
+
+  `active` is none when no fork is active at the block. -/
+  | wrongFork (stored : Fork) (active : Option Fork)
   /-- The stored execution requests are out of order, have no data, or precede Pectra. -/
   | requests
-  /-- The stored block value does not fit in 256 bits. -/
-  | blockValue
+  /-- The stored block value, `value`, does not fit in 256 bits. -/
+  | blockValue (value : Nat)
   /-- The block has no payload form: a field does not fit, has no encoding, or is too long.
 
   The extra data, at most 32 bytes in the Engine API, is the field that can be too long. -/
@@ -165,13 +167,14 @@ The payload must give back a block with the stored block hash, as `engine_newPay
 So that hash commits to the transactions, the requests and the access list it returns. -/
 def getPayload (config : ChainConfig) (setup : TrustedSetup) (store : PayloadStore)
     (version : Nat) (id : PayloadId) : Except GetPayloadError GetPayloadResponse := do
-  let some stored := store id | throw (.engine .unknownPayload)
+  let some stored := store id | throw (.engine (.unknownPayload id))
   let block := stored.built.block
-  unless config.activeFork block.header.number block.header.timestamp.toNat = some stored.fork do
-    throw .wrongFork
-  unless acceptsGetPayloadFork version stored.fork do throw (.engine .unsupportedFork)
+  let active := config.activeFork block.header.number block.header.timestamp.toNat
+  unless active = some stored.fork do throw (.wrongFork stored.fork active)
+  unless acceptsGetPayloadFork version stored.fork do
+    throw (.engine (.unsupportedFork (some stored.fork)))
   unless requestsOfFork stored.fork stored.built.requests do throw .requests
-  unless stored.built.blockValue < 2 ^ 256 do throw .blockValue
+  unless stored.built.blockValue < 2 ^ 256 do throw (.blockValue stored.built.blockValue)
   let some payload := payloadOfBlock block | throw .noPayload
   if let .error e := stored.blockOfPayload payload then throw (.header e)
   if 3 ≤ version then

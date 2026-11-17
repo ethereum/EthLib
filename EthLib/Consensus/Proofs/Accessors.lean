@@ -292,6 +292,21 @@ theorem mem_getActiveValidatorIndices {state : BeaconState preset fork}
   mem_iff_of_getActiveValidatorIndicesChecked_ok
     (getActiveValidatorIndicesChecked_of_within within epoch)
 
+/-- Each active index names a position of the registry.
+
+It needs no bound on the registry: a position that wraps to 64 bits only gets smaller. -/
+theorem lt_size_of_mem_getActiveValidatorIndices {state : BeaconState preset fork}
+    {epoch : Epoch} {index : ValidatorIndex}
+    (member : index ∈ getActiveValidatorIndices state epoch) :
+    index.toNat < state.validators.data.size := by
+  simp only [getActiveValidatorIndices, List.mem_filterMap, Option.ite_none_right_eq_some,
+    Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists] at member
+  obtain ⟨_, position, found, -, rfl⟩ := member
+  have inside := (List.getElem?_eq_some_iff.mp found).1
+  simp only [Array.length_toList] at inside
+  simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat']
+  exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) inside
+
 /-- The positions of the validators that pass a test increase strictly, as 64-bit indices.
 
 That needs each position that passes to be below `2^64`. -/
@@ -549,13 +564,14 @@ theorem getPendingBalanceToWithdraw_ok_iff {state : BeaconState preset fork}
 
 /-- From Electra, the pending balance of a validator fails exactly when its sum reaches `2^64`.
 
-It then fails with a balance overflow. -/
+It then fails with a balance overflow that holds that sum. -/
 theorem getPendingBalanceToWithdraw_eq_error_iff {state : BeaconState preset fork}
     {electra : .pectra ≤ fork} {index : ValidatorIndex} {error : AccessorError} :
     getPendingBalanceToWithdraw state electra index = .error error ↔
       2 ^ 64 ≤ (((state.pendingPartialWithdrawals electra).data.toList.filter
           (·.validatorIndex = index)).map (·.amount.toNat)).sum ∧
-        error = .balanceOverflow := by
+        error = .balanceOverflow (((state.pendingPartialWithdrawals electra).data.toList.filter
+          (·.validatorIndex = index)).map (·.amount.toNat)).sum := by
   unfold getPendingBalanceToWithdraw
   simp only [EthLib.Base.sum_map_ite_eq_sum_filter
     fun withdrawal : PendingPartialWithdrawal => withdrawal.validatorIndex = index]

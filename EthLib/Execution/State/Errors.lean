@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.Address
+public import EthLib.Base.Hex
 public import EthLib.Execution.Trie.Root
 public import EthLib.Serialization.Rlp.Item
 
@@ -25,8 +27,8 @@ inductive StateInputError where
   | notAList (e : RlpError)
   /-- An account is not a list of address, nonce, balance, code and storage. -/
   | badAccount (e : RlpError)
-  /-- An address is given twice. -/
-  | repeatedAddress
+  /-- The address `address` is given twice. -/
+  | repeatedAddress (address : Base.Address)
   /-- The trie of the state has no root. -/
   | noRoot (e : Trie.TrieError)
 
@@ -35,7 +37,7 @@ def StateInputError.message : StateInputError → String
   | .notAnItem _ => "state is not one RLP item"
   | .notAList _ => "state is not an RLP list"
   | .badAccount _ => "an account is not a list of address, nonce, balance, code and storage"
-  | .repeatedAddress => "an address is given twice"
+  | .repeatedAddress address => s!"address {Base.hexString address.toList} is given twice"
   | .noRoot _ => "state has no root"
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -47,7 +49,7 @@ def StateInputError.code : StateInputError → UInt32
   | .notAnItem _ => 1
   | .notAList _ => 2
   | .badAccount _ => 3
-  | .repeatedAddress => 4
+  | .repeatedAddress _ => 4
   | .noRoot _ => 5
 
 end EthLib.Execution.State

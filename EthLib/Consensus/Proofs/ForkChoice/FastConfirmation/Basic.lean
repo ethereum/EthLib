@@ -27,6 +27,8 @@ Two head states with the same committees on the epochs of a range read the same 
 
 A range that covers a whole epoch weighs the whole active balance.
 
+Such a range also holds every validator active in that epoch.
+
 At each slot the tracked heads move on by one: the current head becomes the previous one.
 
 The update keeps the confirmed block, and sets the checkpoints by the epoch boundaries.
@@ -261,6 +263,16 @@ theorem Config.committeeWindowsFit_mainnet : Config.mainnet.CommitteeWindowsFit 
 /-- The committee windows of minimal fit. -/
 theorem Config.committeeWindowsFit_minimal : Config.minimal.CommitteeWindowsFit Preset.minimal := by
   constructor <;> decide
+
+/-- A committee that is cut checked that the indices times one more than its position fit. -/
+private theorem fits_of_shuffledCommittee {indices : Array ValidatorIndex}
+    {shuffled : Array UInt64} {index count : UInt64} {committee : Array ValidatorIndex}
+    (cut : shuffledCommittee indices shuffled index count = .ok committee) :
+    indices.size * (index.toNat + 1) < 2 ^ 64 := by
+  unfold shuffledCommittee at cut
+  split at cut
+  · exact (by assumption : _ ∧ _).2
+  · split at cut <;> cases cut
 
 namespace Store
 
@@ -543,6 +555,119 @@ theorem mem_getCommitteesBetweenSlots {head : Root} {startSlot endSlot slot : Sl
   exact (mem_getCommitteesBetweenSlots_iff computed validator).mpr
     ⟨slot, low, high, members, membersOk,
       mem_getSlotCommittee membersOk stateOk below committeeOk member⟩
+
+/-- A range that holds every slot of an epoch holds each validator active in that epoch.
+
+The committees are read in the state of the head.
+
+Every committee of the last slot of the epoch has a value.
+
+So the checked products of the epoch fit, and its committees hold all its active validators. -/
+theorem mem_getCommitteesBetweenSlots_of_active {head : Root} {startSlot endSlot : Slot}
+    {participants : Std.TreeSet ValidatorIndex} {headState : BeaconState preset fork}
+    {epoch : Epoch} {validator : ValidatorIndex}
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (computed : store.getCommitteesBetweenSlots head startSlot endSlot = .ok participants)
+    (stateOk : store.blockState head = .ok headState)
+    (low : startSlot.toNat ≤ epoch.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (high : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ endSlot.toNat + 1)
+    (active : validator ∈ getActiveValidatorIndices headState epoch) :
+    validator ∈ participants := by
+  have endLt := endSlot.toNat_lt
+  -- A slot of the range is in the epoch exactly when its number divided by the length is it.
+  have epochOf : ∀ slot : Slot, (computeEpochAtSlot preset slot).toNat =
+      slot.toNat / preset.SLOTS_PER_EPOCH.toNat := fun slot => by
+    simp only [computeEpochAtSlot, UInt64.toNat_div]
+  -- The last slot of the epoch is in the range.
+  let lastSlot : Slot := UInt64.ofNat (epoch.toNat * preset.SLOTS_PER_EPOCH.toNat +
+    (preset.SLOTS_PER_EPOCH.toNat - 1))
+  have lastNat : lastSlot.toNat = epoch.toNat * preset.SLOTS_PER_EPOCH.toNat +
+      (preset.SLOTS_PER_EPOCH.toNat - 1) := by
+    simp only [lastSlot, UInt64.toNat_ofNat']
+    apply Nat.mod_eq_of_lt
+    rw [Nat.succ_mul] at high
+    omega
+  have lastEpoch : computeEpochAtSlot preset lastSlot = epoch := by
+    apply UInt64.toNat_inj.mp
+    rw [epochOf, lastNat, Nat.mul_comm, Nat.mul_add_div positive,
+      Nat.div_eq_of_lt (by omega), Nat.add_zero]
+  have lastPlace : (lastSlot % preset.SLOTS_PER_EPOCH).toNat =
+      preset.SLOTS_PER_EPOCH.toNat - 1 := by
+    rw [UInt64.toNat_mod, lastNat, Nat.mul_comm, Nat.mul_add_mod, Nat.mod_eq_of_lt (by omega)]
+  have lastLow : startSlot ≤ lastSlot := UInt64.le_iff_toNat_le.mpr (by rw [lastNat]; omega)
+  have lastHigh : lastSlot ≤ endSlot := by
+    rw [UInt64.le_iff_toNat_le, lastNat]
+    rw [Nat.succ_mul] at high
+    omega
+  -- The rule read every committee of that slot, the last one included.
+  obtain ⟨members, membersOk⟩ :=
+    getSlotCommittee_ok_of_getCommitteesBetweenSlots computed lastLow lastHigh
+  simp only [getSlotCommittee, stateOk, bind, Except.bind] at membersOk
+  have perPos := UInt64.le_iff_toNat_le.mp
+    (one_le_getCommitteeCountPerSlot headState (computeEpochAtSlot preset lastSlot))
+  obtain ⟨committee, committeeOk⟩ := foldlM_forall_of_ok
+    (P := fun index : Nat => ∃ committee, getBeaconCommittee headState lastSlot
+      index.toUInt64 = .ok committee)
+    (fun _ _ _ stepOk => by
+      obtain ⟨committee, committeeOk, -⟩ := bind_ok_iff.mp stepOk
+      exact ⟨committee, mapError_ok_iff.mp committeeOk⟩)
+    _ _ _ membersOk
+    ((getCommitteeCountPerSlot headState (computeEpochAtSlot preset lastSlot)).toNat - 1)
+    (List.mem_range.mpr (by simp only [UInt64.toNat_one] at perPos; omega))
+  -- Its checked cut gives the bound on the active validators times the committees.
+  obtain ⟨active', shuffled, shuffleOk⟩ := attesterShuffle_ok_of_getBeaconCommittee committeeOk
+  have indicesFit := getActiveValidatorIndicesChecked_of_attesterShuffle shuffleOk
+  obtain ⟨seed, position, count, seedOk, positionEq, countEq, cut⟩ :=
+    getBeaconCommittee_ok committeeOk
+  rw [lastEpoch] at indicesFit seedOk positionEq countEq cut perPos
+  simp only [computeCommittee, bind_ok_iff] at cut
+  obtain ⟨permuted, permutedOk, sliced⟩ := cut
+  have bound := fits_of_shuffledCommittee sliced
+  simp only [List.size_toArray] at bound
+  have countLt := (getCommitteeCountPerSlot headState epoch).toNat_lt
+  rw [positionEq, lastPlace, Nat.toUInt64_eq, UInt64.toNat_ofNat',
+    Nat.mod_eq_of_lt (by omega)] at bound
+  -- The last position plus one is the count of committees of the epoch.
+  have fits : (getActiveValidatorIndices headState epoch).length *
+      ((getCommitteeCountPerSlot headState epoch).toNat * preset.SLOTS_PER_EPOCH.toNat) <
+        2 ^ 64 := by
+    simp only [UInt64.toNat_one] at perPos
+    obtain ⟨s, hs⟩ : ∃ s, preset.SLOTS_PER_EPOCH.toNat = s + 1 :=
+      ⟨_, (Nat.succ_pred_eq_of_pos positive).symm⟩
+    obtain ⟨c, hc⟩ : ∃ c, (getCommitteeCountPerSlot headState epoch).toNat = c + 1 :=
+      ⟨_, (Nat.succ_pred_eq_of_pos perPos).symm⟩
+    rw [hs, hc, Nat.add_sub_cancel, Nat.add_sub_cancel] at bound
+    rw [hs, hc]
+    have same : s * (c + 1) + c + 1 = (c + 1) * (s + 1) := by
+      rw [Nat.mul_comm s, Nat.mul_succ]
+      omega
+    rw [← same]
+    exact bound
+  -- So the active validators number below `2^64`, and the shuffle bounds them by `2^40`.
+  have lengthLt : (getActiveValidatorIndices headState epoch).length < 2 ^ 64 := by
+    simp only [UInt64.toNat_one] at perPos
+    have countPos : 1 ≤ (getCommitteeCountPerSlot headState epoch).toNat *
+        preset.SLOTS_PER_EPOCH.toNat := Nat.mul_pos perPos positive
+    exact Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_right _ countPos) fits
+  have small := (computeShuffledPermutation_ok permutedOk).1
+  simp only [List.size_toArray, UInt64.toNat_ofNat', Nat.mod_eq_of_lt lengthLt] at small
+  have slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64 := by omega
+  -- The committees of the epoch hold the validator, at a slot of the epoch.
+  obtain ⟨slot, index, found, slotEpoch, below, foundOk, member⟩ :=
+    exists_mem_getBeaconCommittee indicesFit seedOk (by
+      intro zero
+      rw [zero] at positive
+      simp at positive) slotsFit small fits active
+  have slotNat := congrArg UInt64.toNat slotEpoch
+  rw [epochOf] at slotNat
+  have slotLow : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat ≤ slot.toNat := by
+    rw [← slotNat]
+    exact Nat.div_mul_le_self _ _
+  have slotHigh : slot.toNat < (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat := by
+    rw [← slotNat]
+    exact Nat.lt_mul_of_div_lt (Nat.lt_succ_self _) positive
+  exact mem_getCommitteesBetweenSlots computed (UInt64.le_iff_toNat_le.mpr (by omega))
+    (UInt64.le_iff_toNat_le.mpr (by omega)) stateOk (slotEpoch ▸ below) foundOk member
 
 /-- Two head states with the same committees of a slot's epoch read the same members for it. -/
 theorem getSlotCommittee_congr {store other : Store preset fork} {head otherHead : Root}

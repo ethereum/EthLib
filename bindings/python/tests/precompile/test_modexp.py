@@ -87,8 +87,9 @@ def test_example_1_price(fork: str, cost: int) -> None:
     assert run(fork, 0x05, EXAMPLE_1, cost) == word(1)
     with raises(
         ValueError,
-        "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp\n  "
-        f"(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.outOfGas {cost} {cost - 1})",
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp "
+        "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.outOfGas "
+        f"(cost := {cost}) (gas := {cost - 1}))",
     ):
         run(fork, 0x05, EXAMPLE_1, cost - 1)
 
@@ -100,10 +101,11 @@ def test_example_3_length_too_large(fork: str, gas: int) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp\n  "
-            "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.lengthTooLarge\n    "
-            "(EthLib.Execution.Evm.Precompiles.Modexp.LengthField.modulus)\n    "
-            "115792089237316195423570985008687907853269984665640564039457584007913129639935)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp "
+            "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.lengthTooLarge "
+            "(field := EthLib.Execution.Evm.Precompiles.Modexp.LengthField.modulus) "
+            "(length := "
+            "115792089237316195423570985008687907853269984665640564039457584007913129639935))"
         ),
     ):
         run(fork, 0x05, EXAMPLE_3, gas)
@@ -126,9 +128,9 @@ def test_example_3_before_fusaka(fork: str) -> None:
     cost = EXAMPLE_3_EIP_198_PRICE if fork in EIP_198_FORKS else EXAMPLE_3_EIP_2565_PRICE
     with raises(
         ValueError,
-        "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp\n  "
-        "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.outOfGas\n    "
-        f"{cost}\n    {2**64 - 1})",
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp "
+        "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.outOfGas "
+        f"(cost := {cost}) (gas := {2**64 - 1}))",
     ):
         run(fork, 0x05, EXAMPLE_3, 2**64 - 1)
 

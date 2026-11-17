@@ -37,10 +37,10 @@ def vector(rounds: str, flag: str) -> bytes:
 
 # Test vectors 0 to 3: the inputs the precompile rejects, with the error it names.
 REJECTED = [
-    (b"", "invalidInputLength 0"),
-    (vector("00000c", "01"), "invalidInputLength 212"),
-    (vector("000000000c", "01"), "invalidInputLength 214"),
-    (vector("0000000c", "02"), "invalidFlag 2"),
+    (b"", "invalidInputLength (size := 0)"),
+    (vector("00000c", "01"), "invalidInputLength (size := 212)"),
+    (vector("000000000c", "01"), "invalidInputLength (size := 214)"),
+    (vector("0000000c", "02"), "invalidFlag (flag := 2)"),
 ]
 
 # Test vectors 4 to 7: the rounds field, the flag and the output.
@@ -77,7 +77,7 @@ ACCEPTED = [
 def test_eip152_rejected(fork: str, data: bytes, error: str) -> None:
     with raises(
         ValueError,
-        "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f\n  "
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f "
         f"(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.{error})",
     ):
         run(fork, ADDRESS, data, 12)
@@ -97,9 +97,9 @@ def test_eip152_vector8_rounds(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f\n  "
-            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.outOfGas 4294967295 "
-            "4294967294)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f "
+            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.outOfGas "
+            "(cost := 4294967295) (gas := 4294967294))"
         ),
     ):
         run(fork, ADDRESS, vector("ffffffff", "01"), 2**32 - 2)
