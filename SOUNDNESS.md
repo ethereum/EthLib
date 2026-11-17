@@ -3149,6 +3149,59 @@ The head's state is held, and the window ends before the current slot.
 The theorem also assumes `AssignmentWindowAgreement`, `ValidatedDutyVotes`, `Prompt` and `DelayFits`.
 It also requires an anchor block at an epoch start, and a historical vector longer than the seed lookahead by more than two epochs.
 
+`Execution.rootViable_of_checked_call` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalCoverage.lean` addresses Theorem 3 of [#2058](https://github.com/ethereum/EthLib/issues/2058) for the confirmed root.
+At each up-to-date honest store up to the horizon whose fork choice returns a head, the root is in the filtered tree or below the justified block.
+The alternatives are a collision between blocks held by honest stores, or accountable-safety evidence.
+That evidence is `HistoricalDirectSafetyEvidence`, `CrossStoreJustifiedEvidence` or `HeldStateFinalityEvidence`.
+Stores whose `getHead` returns an error are not covered, because master does not yet prove that `getHead` always succeeds ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+Such a store has no head for the confirmation to be unsafe about.
+Each evidence alternative is relative to the anchor, and its drift counts from the anchor.
+So with enough churn since the anchor it holds with no accountable key.
+`HeldStateFinalityEvidence` is the conflict between a held state's justified checkpoint and an honest store's finalized checkpoint, from `Execution.heldFinality_or_evidence`.
+
+`Execution.honestHeadsCover_of_checked_call` in the same file gives the coverage that the viability reads.
+Every up-to-date honest head descends from the confirmed root from the call to the horizon, with the same alternatives.
+It is `Execution.honestHeadsCover_of_signed_justification` with `consistent`, `leaf` and the call-epoch `signed` replaced by the checks that the call passed and their inputs.
+Its other premises are those of that headline, with the root fixed to the root that the call stores.
+The root is held by every up-to-date honest store from the call on.
+An honest supporter behind the caller's margin sent a vote above the root before the call's slot (`Execution.honest_vote_of_caller_margin`).
+`Execution.rootHeld_of_honest_vote` then delivers the root.
+The root's viability at each time comes from `Execution.rootViableAt_of_checked`.
+A justified checkpoint of the call's epoch or before is comparable with the root (`Execution.justified_comparable_of_checked`).
+If the root strictly descends from it, `Execution.rootInFilteredTree_of_checked` keeps the root in the filtered tree.
+A later justified checkpoint has an honest signer, which puts it above the root.
+
+These theorems take the following premises beyond the headline's.
+`CallCheckpointInputs` records the checks that the call passed, with the root on the head's chain.
+Off the epoch's first slot the call's count is reserved, and the call's epoch is at least two and after the anchor's.
+`AcceptedRealizedRecent` and `AcceptedRealizedHead` are assumptions on the run, entries 1 and 3 of the rule's spec changes.
+Each accepted root has a realized justification at most one epoch before its own.
+An accepted root of an earlier epoch is realized as justified by the head's state.
+`CallRolloverRead` assumes the caller's head read at each rollover for the current target of its head, through `RolloverWindowRead` above.
+`JustifiedHonestlySigned` assumes the signer of each justified checkpoint after the anchor's epoch, which `Execution.justifiedHonestlySigned` derives from a Byzantine bound.
+`QuorumDriftWithin` assumes that an honest voter set of a call keeps its stake in each counting state, up to the call's quorum reserve.
+No theorem here derives it, and whether the reserve bounds the drift on mainnet is not established.
+The model's genesis time must be the anchor state's (`secondsToMilliseconds anchorState.genesisTime = genesisTimeMs`), a fact of the configuration that holds for every real anchor.
+The theorems derive the agreement of justified checkpoints across honest stores (`Execution.selectedCheckpointsAgree_or_evidence`), or return `CrossStoreJustifiedEvidence`.
+
+`JustifiedPinned` assumes an honest set of a call's voters that pins the justified checkpoints of the call's epoch.
+Its stake exceeds a third of the total of the call's pulled-up head state, plus `margin` and the call's pin reserve `pinReserve`.
+The pinned-checkpoint step pays for cross-state drift with that per-call reserve, carried by the count.
+At the typical non-finality depth of 4 epochs it costs about 1.05–1.41 points of the Byzantine threshold at the last slot of an epoch, and about 0.07 points at mid-epoch, on three mainnet snapshots.
+It stays below 1.5 points through depth 5 and below 5 points through depth 42.
+From depth 6 on, the exit and consolidation queues switch on, at about 0.08 points per extra epoch.
+The bound grows with non-finality depth.
+
+`TargetIncluded` is a network-model premise.
+It adapts Assumption 3 of [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4) (§4.2) and is not equivalent to it.
+Its quorum is a set of honest voters with two thirds of the active balance of the confirming call's pulled-up head state, each having sent a vote for the target.
+The paper's quorum is two thirds of FFG weight, less slashed validators.
+The voters may sign with any source; the paper counts votes from the voting source of the block.
+Canonicity is required from the confirming call to the receiver, not throughout the following epoch.
+The conclusion is a held seed above the block whose state reads the target, and either justifies the target's epoch or holds the voters' target votes.
+The paper's conclusion is a seed whose unrealized justification is the target or later.
+Votes for the target of epoch E count until start(E+1) − 1, and the conclusion applies once a receiver's epoch is E + 2 or later.
+
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
 It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.

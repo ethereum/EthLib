@@ -9,6 +9,18 @@ Not yet released.
 
 ### Proof additions
 
+- `Execution.rootViable_of_checked_call` shows that the confirmed root of a call of the fast confirmation rule stays viable from the call to a horizon ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 3, for the confirmed root).
+  At each up-to-date honest store whose fork choice returns a head, the root is in the filtered tree or below the justified block.
+  The alternatives are a collision of two honest stores and accountable-safety evidence.
+  Stores whose `getHead` returns an error are not covered, pending [#2060](https://github.com/ethereum/EthLib/issues/2060).
+  `Execution.honestHeadsCover_of_checked_call` keeps the root on every up-to-date honest head chain over the same interval.
+  It replaces the consistency, the leaf and the call-epoch signer of `Execution.honestHeadsCover_of_signed_justification` with the rule's checks.
+  `Execution.rootViableAt_of_checked`, `Execution.rootInFilteredTree_of_checked` and `Execution.justified_comparable_of_checked` are the root's step at one time.
+  `Execution.rootHeld_of_honest_vote` holds the root from the call on, from the honest vote that `Execution.honest_vote_of_caller_margin` finds behind the caller's margin.
+  `Execution.heldFinality_or_evidence` reads a store's finalized checkpoint on a held state's justified chain, or gives `HeldStateFinalityEvidence`.
+  `DelayFits.deadline_add_le`, `Store.ForwardReachable.finalized_add_two_le_or_anchor` and `Store.getCheckpointBlock_trans` are general steps.
+  The new premises `CallCheckpointInputs`, `AcceptedRealizedRecent`, `AcceptedRealizedHead`, `CallRolloverRead`, `JustifiedPinned`, `TargetIncluded` and `QuorumDriftWithin` are described in `SOUNDNESS.md`.
+
 - `Execution.honestTargetVotes_signed_of_checked` shows that an accepted current-target test has honest signers with two thirds of the active balance ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).
   Three times their stake is at least twice the total active balance plus the margin of the count.
   Each of them is active in the pulled-up head state, and sent a vote for the target before the start of the next epoch.
