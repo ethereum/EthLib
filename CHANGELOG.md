@@ -62,6 +62,7 @@ Not yet released.
   A caller on mainnet or minimal passes `Config.committeeWindowsFit_mainnet` or `Config.committeeWindowsFit_minimal`.
   `HonestHeadReads` is removed.
   The receiver's justified state comes from `Store.checkpointState_justified_of_getHead`, and its committee windows from `Store.getCommitteesBetweenSlots_exists`.
+  `Store.getCommitteesBetweenSlots_ok_of_slots` reads a window from its slots, `getBeaconCommittee_exists` cuts one committee, and `beaconCommitteeOf_ok_of_lt` bounds its position; all three are new.
 
 - In Lean, the historical-anchor theorems assume less about recent votes and receiver exits ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   Each new statement implies the old one.
