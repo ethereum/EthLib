@@ -5,29 +5,35 @@ public import EthLib.Cryptography.Proofs.Merkle.Completeness
 /-!
 # Proofs: a path binds its leaf
 
-A real node hash compresses two nodes into one, so collisions exist.
+A path climbs from a leaf to the root, hashing one pair of nodes per level.
 
-A statement "the climbs are equal, or a collision exists" would then say nothing.
+The theorems here show that a forged path forces a weakness of the node hash.
 
-So each theorem here names an algorithm that computes the collision from the two climbs.
+## Two forged climbs: a collision
 
-That algorithm is the reduction: whoever forges a path also finds a collision.
+Take two climbs from one position, with different leaves, that reach one root.
 
-Each search takes one step per level, and no theorem here counts its hash calls.
+- At the bottom their nodes differ, and at the top they are equal.
+- At the first level where they become equal, the two pairs hashed below differ.
+- So two different pairs hash to one node: a collision.
 
-- `findCollision` walks two climbs from one position up, level by level.
-- It returns the first level where they hash two different pairs to one parent.
-- Each pair it returns is one its own climb hashes.
-- `findSecondPreimage` does the same for one climb against an honest tree.
-- It returns the first level where the climb hashes another pair to the honest node.
+## One climb against the built tree: a second preimage
 
-The position found is an ancestor of the starting node.
+Take one climb from a position of the built tree, with a wrong leaf, that reaches its root.
 
-So a hash tweaked by its position collides under one tweak.
+- At the bottom it differs from the tree, and at the top it agrees with it.
+- At the first level where it agrees, it hashes another pair to a node of the tree.
+- So it finds a new input for a node the tree already holds: a second preimage.
 
-The searches run in any monad, so an oracle can answer their hash calls.
+## The difference
 
-The statements here hold for every node hash, run in the identity monad.
+A collision lets the forger choose both pairs.
+
+A second preimage must match a node fixed before the forger acts, so it is the harder attack.
+
+The theorems return each pair from an explicit search, since any compressing hash has some.
+
+The searches run in any monad, so a random oracle can answer their hash calls.
 -/
 
 @[expose] public section
