@@ -802,7 +802,7 @@ theorem Store.Reachable.finalized_prefix_or_accountable {config : Config}
   · exact .inl read
   · exact .inr evidence
 
-/-- A viable leaf of a reachable store descends from the finalized block, at every epoch.
+/-- A viable leaf of a reachable store descends from the finalized block, genesis epoch included.
 
 Its checkpoint block at the finalized epoch is the finalized block.
 
