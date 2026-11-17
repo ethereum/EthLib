@@ -28,6 +28,17 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, every node of a Merkle tree has a `Merkle.Position`, its level and its index, and the tree passes positions instead of a level and an index.
+  The node hash has type `Position → α → α → m α`; it had type `Nat → Nat → α → α → m α`, with the level first.
+  `Merkle.node hash leaves ⟨level, j⟩`, `Merkle.siblings hash leaves p n`, `Merkle.ordered p` and `Merkle.climb hash p current siblings` take a position; `Merkle.root` and `Merkle.path` keep their arguments.
+  A position names its `parent`, `sibling`, `left` and `right` children and its `ancestor` `k` levels up, and `EthLib.Cryptography.Proofs.Merkle.Position` proves how they relate.
+  `Merkle.Collision` and `Merkle.SecondPreimage` hold one `position` field, the position of the node they attack, instead of a level and an index.
+  `Merkle.findSecondPreimage_valid` states that this node is a strict ancestor of the starting position, with `Position.IsAncestor`.
+  The agreement hypotheses of `Merkle.node_congr`, `path_congr` and `climb_congr`, and of the XMSS and SPHINCS+ lemmas built on them, quantify over positions.
+  The node hashes of XMSS, SPHINCS+, FORS and the VRF take a position and compute the same bytes.
+  The XMSS, SPHINCS+ and FORS nodes and the SSZ climb still take a level or height and an index, and build the position.
+  To migrate a node hash, read `p.level` and `p.index` where it read the level and the index.
+
 - In Lean, ten general lemmas that [#2647](https://github.com/ethereum/EthLib/pull/2647) made public move into the namespaces of the objects they describe ([#2648](https://github.com/ethereum/EthLib/issues/2648)).
   Statements are unchanged; use the new names.
   - `active_of_mem_voters` becomes `Store.active_of_mem_voters`.
