@@ -312,8 +312,7 @@ private theorem blocks_or_justified_covers {Δ : ℕ} (sync : e.Synchronous Δ)
   have finalRead := chain w receiver arrival arrival (le_refl _) arrivalBound
   obtain ⟨_, finalized, _, finalizedKnown, _, _⟩ :=
     Store.isAncestor_of_getCheckpointBlock preGloas finalRead
-  -- The head fits the finalized checkpoint in the voting store, or the checkpoint descends from
-  -- the root.
+  -- The voter's head fits the finalized checkpoint, or the checkpoint descends from the root.
   by_cases fits : (∃ boundary,
         computeStartSlotAtEpoch preset ((e.world arrival).state w).finalizedCheckpoint.epoch =
           .ok boundary ∧ boundary ≤ rootBlock.slot ∧
