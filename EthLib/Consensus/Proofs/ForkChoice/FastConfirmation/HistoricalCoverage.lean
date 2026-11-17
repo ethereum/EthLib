@@ -433,7 +433,6 @@ public theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
 The viability at a time may read the coverage at every earlier time. -/
 private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -534,6 +533,7 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
           some evidence) ∨
       HistoricalDirectSafetyEvidence (e := e) pre time := by
   classical
+  have positive := fit.positive
   -- The same-store finalized family, or the evidence alternative, once for the horizon.
   rcases e.finalizedFamily_or_historical_evidence anchored start sound anchorSlot anchorBoundary
       slots bounded roots absent parameters genesis pre heldEarly enough terminal caller callerTime
@@ -742,7 +742,6 @@ A safety threshold that subtracts the exit reserve would make `reserve` and `exi
 A voter activated at its vote's target, two epochs after the parent, is assumed in the window. -/
 public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -834,10 +833,10 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
         ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
           some evidence) ∨
       HistoricalDirectSafetyEvidence (e := e) pre time :=
-  honestHeadsCover_core sync slots positive minLookahead maxLookahead ring preGloas
+  honestHeadsCover_core sync slots minLookahead maxLookahead ring preGloas
     admitted half votes fits prompt windows
     (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
-      positive minLookahead maxLookahead ring newVoters)
+      fit.positive minLookahead maxLookahead ring newVoters)
     anchored sound anchorSlot anchorBoundary
     start caller callerUpToDate headNode slotOk beginOk timeEq blockOk parentOk sourceOk boostOk
     firstOk lastOk beforeOk maximumOk parentParticipantsOk registry aligned increment supportOk
@@ -872,7 +871,6 @@ With enough churn since the anchor, it holds with no accountable key.
 A voter activated at its vote's target, two epochs after the parent, is assumed in the window. -/
 public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -966,6 +964,7 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
         ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
           some evidence) ∨
       HistoricalDirectSafetyEvidence (e := e) pre time := by
+  have positive := fit.positive
   classical
   -- Honest stores up to the horizon agree on blocks, or two of them collide.
   rcases Store.blocks_agree_or_collision
@@ -990,7 +989,7 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     simp only [Store.getCurrentStoreEpoch, slotOk, bind, Except.bind, pure, Except.pure,
       Except.ok.injEq] at read
     exact read
-  exact honestHeadsCover_core sync slots positive minLookahead maxLookahead ring preGloas
+  exact honestHeadsCover_core sync slots minLookahead maxLookahead ring preGloas
     admitted half votes fits prompt windows
     (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
       positive minLookahead maxLookahead ring newVoters)

@@ -284,7 +284,6 @@ It rests on that bound, the stake floors, the inclusion delay and conditions on 
 The anchor's latest header must be the anchor block's, with a zero state root. -/
 theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -394,7 +393,7 @@ theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· ∈ J)]
   have afterAnchor := reached.forwardReachable.blockState_epoch_le_current slots
     (UInt64.le_of_eq anchorSlot) callerEpochOk anchorRoot anchorState stateHeld
   exact Execution.honestHeadsCover_of_signed_justification
-    sync slots positive minLookahead maxLookahead ring preGloas admitted half votes fits prompt
+    sync slots minLookahead maxLookahead ring preGloas admitted half votes fits prompt
     windows newVoters anchored sound anchorSlot anchorBoundary start caller callerUpToDate headNode
     slotOk beginOk timeEq blockOk parentOk sourceOk boostOk firstOk lastOk beforeOk maximumOk
     parentParticipantsOk registry aligned increment supportOk discountOk adversaryOk margin
