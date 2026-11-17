@@ -33,6 +33,20 @@ The request names blocks by the roots of their messages.
 - The response has at most as many blocks as the request has roots.
 - The root of each block is one of the requested roots.
 
+## Blocks by head
+
+From Fulu, a request names the blocks along the ancestry of a block root, that block first.
+
+- The response has at most as many blocks as the count, and at most the request limit of Deneb.
+- The root of its first block is the requested root.
+- Each block is the parent of the block before it, and has a lower slot.
+
+So the slots of the blocks decrease along the whole list.
+
+The walk also stops at the first block before the epochs that clients must serve.
+
+That rule needs the current epoch, so it stays out with the rule that asks for at least one block.
+
 ## Light client updates by range
 
 From Altair, a request names the light client updates of a range of sync committee periods.
@@ -194,6 +208,20 @@ def isValidBlocksByRangeResponse (config : Config) (fork : Fork)
 def isValidBlocksByRootResponse {config : Config} {fork : Fork}
     (request : BeaconBlocksByRootRequest config fork) (blocks : List ResponseBlock) : Bool :=
   blocks.length ≤ request.data.size && blocks.all (fun block => request.data.contains block.root)
+
+/-- Whether each block of a list is the parent of the block before it, at a lower slot. -/
+def ResponseBlock.ancestryLinked (blocks : List ResponseBlock) : Bool :=
+  allAdjacent (fun a b => b.slot < a.slot && a.parentRoot == b.root) blocks
+
+/-- Whether the blocks of a response are valid for a request for blocks by head.
+
+The request limit is the one of Deneb, whatever the fork that serves the request. -/
+def isValidBlocksByHeadResponse (config : Config) (request : BeaconBlocksByHeadRequest)
+    (blocks : List ResponseBlock) : Bool :=
+  blocks.length ≤ request.count.toNat &&
+    blocks.length ≤ config.MAX_REQUEST_BLOCKS_DENEB.toNat &&
+    blocks.head?.all (fun first => first.root == request.beaconRoot) &&
+    ResponseBlock.ancestryLinked blocks
 
 /-- What a response check reads from a light client update: its attested slot and its fork.
 

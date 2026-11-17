@@ -13,6 +13,9 @@ What the validity of a response says about its blocks or sidecars.
 - When the step is 1, each block names the one before it as its parent, so the blocks form a chain.
 - A valid response to a request for blocks by root has at most as many blocks as requested roots.
 - The root of each of its blocks is a requested root.
+- A valid response to a request for blocks by head has at most the count of blocks.
+- Its first block has the requested root, and each block is the parent of the one before it.
+- Its slots decrease along the whole list.
 - A valid response to a request for light client updates by range has at most 128 updates.
 - Their periods lie in the requested periods, and increase along the whole list.
 - The fork of each update is the fork of the epoch of its attested header, from Altair.
@@ -142,6 +145,33 @@ theorem isValidBlocksByRootResponse_iff {config : Config} {fork : Base.Fork}
     isValidBlocksByRootResponse request blocks = true ↔
       blocks.length ≤ request.data.size ∧ ∀ block ∈ blocks, block.root ∈ request.data := by
   simp [isValidBlocksByRootResponse, List.all_eq_true]
+
+/-- The rules that a valid response to a request for blocks by head meets, and no others. -/
+theorem isValidBlocksByHeadResponse_iff (config : Config) (request : BeaconBlocksByHeadRequest)
+    (blocks : List ResponseBlock) :
+    isValidBlocksByHeadResponse config request blocks = true ↔
+      blocks.length ≤ request.count.toNat ∧
+      blocks.length ≤ config.MAX_REQUEST_BLOCKS_DENEB.toNat ∧
+      (∀ h : 0 < blocks.length, blocks[0].root = request.beaconRoot) ∧
+      (∀ i (h : i + 1 < blocks.length),
+        blocks[i + 1].slot < blocks[i].slot ∧ blocks[i].parentRoot = blocks[i + 1].root) := by
+  simp only [isValidBlocksByHeadResponse, ResponseBlock.ancestryLinked, Bool.and_eq_true,
+    decide_eq_true_eq, allAdjacent_iff, beq_iff_eq, and_assoc]
+  cases blocks with
+  | nil => simp
+  | cons first rest => simp
+
+/-- In a valid response to a request for blocks by head, slots decrease along the whole list.
+
+So no two of its blocks have the same slot. -/
+theorem pairwise_of_isValidBlocksByHeadResponse {config : Config}
+    {request : BeaconBlocksByHeadRequest} {blocks : List ResponseBlock}
+    (valid : isValidBlocksByHeadResponse config request blocks = true) :
+    blocks.Pairwise (fun a b => b.slot < a.slot) := by
+  simp only [isValidBlocksByHeadResponse, ResponseBlock.ancestryLinked, Bool.and_eq_true] at valid
+  exact pairwise_of_allAdjacent (s := fun (a b : ResponseBlock) => b.slot < a.slot)
+    (fun _ _ h => of_decide_eq_true (Bool.and_eq_true _ _ ▸ h).1)
+    (fun _ _ _ ab bc => UInt64.lt_trans bc ab) valid.2
 
 /-- The rules that a valid response for light client updates by range meets, and no others. -/
 theorem isValidLightClientUpdatesByRangeResponse_iff (preset : Preset) (config : Config)
