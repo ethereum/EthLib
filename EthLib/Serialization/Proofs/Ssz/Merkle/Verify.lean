@@ -32,10 +32,10 @@ theorem climbBranch_cons (index level : Nat) (node sibling : Bytes) (rest : List
   have step : combine (Cryptography.Merkle.ordered ⟨level, index >>> level⟩ node sibling).1
       (Cryptography.Merkle.ordered ⟨level, index >>> level⟩ node sibling).2
       = if gindexBit index level then combine sibling node else combine node sibling := by
-    simp only [Cryptography.Merkle.ordered, Cryptography.Merkle.Position.isLeft, gindexBit_parity]
+    simp only [Cryptography.Merkle.ordered_eq_ite, gindexBit_parity]
     rcases Nat.mod_two_eq_zero_or_one (index >>> level) with h | h <;> simp [h]
   rw [climbBranch_eq_climb, climbBranch_eq_climb, Cryptography.Merkle.climb_cons, step]
-  simp only [Cryptography.Merkle.Position.parent, ← Nat.shiftRight_succ]
+  simp only [Cryptography.Merkle.Position.parent_mk, ← Nat.shiftRight_succ]
   rfl
 
 /-- Climbing a joined branch climbs the front, then the back from where the front ends. -/
@@ -44,8 +44,8 @@ theorem climbBranch_append (index level : Nat) (node : Bytes) (front back : List
       = climbBranch index (level + front.length) (climbBranch index level node front) back := by
   simp only [climbBranch_eq_climb]
   rw [Cryptography.Merkle.climb_append]
-  simp [Cryptography.Merkle.Position.ancestor, Nat.shiftRight_eq_div_pow, Nat.div_div_eq_div_mul,
-    Nat.pow_add]
+  simp [Cryptography.Merkle.Position.ancestor_mk, Nat.shiftRight_eq_div_pow,
+    Nat.div_div_eq_div_mul, Nat.pow_add]
 
 /-- A node and its sibling combine to the node above them, in whichever order they sit. -/
 theorem combine_sibling {node : Nat → Bytes} (tree : MerkleTree node) (index : Nat)

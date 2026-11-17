@@ -1,8 +1,8 @@
 module
 
 public import EthLib.Cryptography.Hash.Keccak
-public import EthLib.Cryptography.Vrf.Types
 public import EthLib.Cryptography.Merkle.Tree
+public import EthLib.Cryptography.Vrf.Types
 
 /-!
 # VRF hashes

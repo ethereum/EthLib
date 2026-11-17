@@ -44,11 +44,10 @@ theorem branchMessages_cons (index level : Nat) (node sibling : Bytes) (rest : L
             rest := by
   -- An even shifted index is a clear bit, which keeps the node on the left.
   unfold branchMessages
-  simp only [Cryptography.Merkle.climbPairs, Cryptography.Merkle.Position.parent, List.map_cons,
-    ← Nat.shiftRight_succ]
+  simp only [Cryptography.Merkle.climbPairs, Cryptography.Merkle.Position.parent_mk,
+    List.map_cons, ← Nat.shiftRight_succ]
   rcases Nat.mod_two_eq_zero_or_one (index >>> level) with h | h <;>
-    simp [Cryptography.Merkle.ordered, Cryptography.Merkle.Position.isLeft, gindexBit_parity, h] <;>
-    rfl
+    simp [Cryptography.Merkle.ordered_eq_ite, gindexBit_parity, h] <;> rfl
 
 /-- The collision two branches from one index run into, if any.
 
