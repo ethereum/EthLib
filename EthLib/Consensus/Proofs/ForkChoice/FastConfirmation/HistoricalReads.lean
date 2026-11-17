@@ -7,8 +7,9 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalTran
 
 The finality companion supplies the finalized-prefix family or explicit evidence.
 
-Source surplus reads the family only within one store: each receiver's own finalized checkpoint
-lies on the chain of its own justified checkpoint.
+Source surplus reads the family only within one store.
+
+It needs each receiver's own finalized checkpoint on the chain of its own justified checkpoint.
 -/
 
 namespace EthLib.Consensus.Models.Network
