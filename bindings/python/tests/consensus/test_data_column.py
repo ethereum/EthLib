@@ -389,7 +389,7 @@ def test_compute_and_recover_matrix():
     kept = [entry for entry in matrix if _entry(entry)[2] % 2 == 1]
     assert consensus.recover_matrix(kept, 2) == matrix
     # One column fewer than half is not enough.
-    with raises(KzgError, "not enough cells provided"):
+    with raises(KzgError, "not enough cells provided: 63"):
         consensus.recover_matrix([e for e in kept if _entry(e)[2] != 1], 2)
 
 

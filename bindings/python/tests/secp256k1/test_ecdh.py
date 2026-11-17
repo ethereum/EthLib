@@ -27,6 +27,7 @@ SET_SHA256 = "049fa2be70e9db836a043aba6132b53cd97de4c0de5277bca6d65a2770075cae"
 HEADER = bytes.fromhex("3056301006072a8648ce3d020106052b8104000a034200")
 
 N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+P = 2**256 - 2**32 - 977
 
 
 def _cases():
@@ -85,12 +86,23 @@ INVALID_POINT = {
 }
 
 
+def _invalid_point_message(tc_id: int, public_key: bytes) -> str:
+    """The message of the error that an invalid uncompressed public key meets."""
+    message = INVALID_POINT[tc_id]
+    if message != _NOT_BELOW_P:
+        return message
+    x, y = public_key[1:33], public_key[33:]
+    # The decoder reads x first, so the message names x when both coordinates are p or more.
+    coordinate = x if int.from_bytes(x, "big") >= P else y
+    return f"{message}: 0x{coordinate.hex()}"
+
+
 @pytest.mark.parametrize(
     "tc_id, private_key, public_key, shared", CASES, ids=[f"tc{c[0]}" for c in CASES]
 )
 def test_ecdh(tc_id: int, private_key: bytes, public_key: bytes, shared: bytes | None) -> None:
     if shared is None:
-        with raises(ValueError, INVALID_POINT[tc_id]):
+        with raises(ValueError, _invalid_point_message(tc_id, public_key)):
             secp256k1.ecdh(private_key, public_key)
     else:
         assert secp256k1.ecdh(private_key, public_key) == shared

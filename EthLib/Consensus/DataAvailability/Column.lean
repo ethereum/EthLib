@@ -471,7 +471,7 @@ def verifyPartialDataColumnSidecarKzgProofs {preset : Preset} {fork : Fork}
   let indices := sidecar.blobIndices
   let commitments ← indices.mapM fun index =>
     if inside : index < allCommitments.data.size then pure allCommitments.data[index]
-    else throw .commitmentIndexOutOfBounds
+    else throw (.commitmentIndexOutOfBounds index allCommitments.data.size)
   verifyCellKzgProofBatch setup commitments (Array.replicate indices.size columnIndex.toNat)
     sidecar.partialColumn.data sidecar.kzgProofs.data
 
