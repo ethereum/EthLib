@@ -95,7 +95,7 @@ theorem hashTreeRootM_progressiveContainer_mixin (hash : ByteArray → ByteArray
     · simp only [Option.map]
       refine ⟨_, ?_, rfl, (Except.ok.inj rooted).symm⟩
       -- A progressive root is a zero node or a digest, so it is one node wide.
-      rw [merkleizeProgressiveUncheckedM]
+      rw [merkleizeProgressiveUncheckedM_unfold]
       split
       · exact zeroChunk_size
       · exact width _
