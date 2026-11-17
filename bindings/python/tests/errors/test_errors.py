@@ -311,7 +311,8 @@ def _subclasses(cls: type[errors.EthLibError]) -> set[type[errors.EthLibError]]:
 
 def test_every_error_class_is_exported() -> None:
     # The copy and pickle tests take their classes from the exports, so each class must be there.
-    assert _subclasses(errors.EthLibError) == {getattr(errors, name) for name in errors.__all__}
+    defined = {cls for cls in _subclasses(errors.EthLibError) if cls.__module__ == errors.__name__}
+    assert defined == {getattr(errors, name) for name in errors.__all__}
 
 
 class _MessageOnly(errors.RlpError):
