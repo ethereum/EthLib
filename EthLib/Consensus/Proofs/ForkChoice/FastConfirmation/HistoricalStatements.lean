@@ -280,7 +280,7 @@ An early checkpoint has an epoch at most the given one.
 
 The justified block descends from the root, or the root descends from the justified block.
 
-This is the checkpoint-consistency half of `RootViable`, for early checkpoints only.
+This is the checkpoint-consistency half of the root's viability, for early checkpoints only.
 
 While no later checkpoint is justified, every honest store's checkpoint is early.
 
@@ -302,7 +302,7 @@ The root stays in the store's filtered tree.
 
 The filtered tree keeps such a block when a viable leaf descends from it.
 
-So this says that the root keeps a viable leaf, the other half of `RootViable`.
+So this says that the root keeps a viable leaf, the other half of the root's viability.
 
 Voting sources refreshed after empty epochs would make it more direct, by a rule change. -/
 def RootKeepsViableLeaf (root : Root) (first last : Nat) : Prop :=
@@ -321,7 +321,9 @@ An honest validator signed a vote with that checkpoint as its target.
 
 The vote is of a slot before the store's current slot, in a message sent by the store's time.
 
-Less than two thirds of Byzantine stake in each state that counts the votes gives such a signer. -/
+Byzantine stake below two thirds in each state that counts the votes would give such a signer.
+
+That is not derived here. -/
 def JustifiedHonestlySigned (epoch : Epoch) (first last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k (slot : Slot), first ≤ (e.world k).time → (e.world k).time ≤ last →
     UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →

@@ -654,7 +654,7 @@ It says that no honest justified checkpoint over the interval conflicts with the
 
 That is the checkpoint-consistency half of the safety of the confirmation, not derived here.
 
-`Execution.honestHeadsCover_of_signed_justification` derives its late half from an honest signer.
+A companion theorem derives its late half from an honest signer.
 
 The stake ceiling is `2 * 10^8` ETH, above mainnet's active stake.
 
@@ -771,19 +771,23 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
 
 /-- A guarded historical margin keeps the block on every honest head chain until the horizon.
 
-It is `Execution.honestHeadsCover_of_historical_anchor` with the root's viability split in two.
+It is the historical-anchor headline with the root's viability replaced by narrower premises.
 
 A justified checkpoint after the call's epoch is derived to descend from the root.
 
 An honest validator signed a vote for it, after the call, from a head that the induction covers.
 
-So `RootViable` is replaced by three premises:
+So three premises replace the root's viability:
 
 - `consistent`: justified checkpoints of the call's epoch or before are comparable with the root;
-- `leaf`: the root keeps a viable leaf when it descends from the justified block;
+- `leaf`: the root keeps a viable leaf when it strictly descends from the justified block;
 - `signed`: each later justified checkpoint has an honest signer.
 
-The other premises and the conclusion are those of the historical-anchor headline. -/
+The other premises and the conclusion are those of the historical-anchor headline.
+
+That evidence is relative to the anchor, and its drift counts from the anchor.
+
+With enough churn since the anchor, it holds with no accountable key. -/
 public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
