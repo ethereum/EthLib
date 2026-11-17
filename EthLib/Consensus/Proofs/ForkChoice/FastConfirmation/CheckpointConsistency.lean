@@ -12,7 +12,7 @@ import EthLib.Consensus.Proofs.HonestAggregation
 
 A call of the fast confirmation rule counts honest voters for its current target.
 
-An honest set with more than a third of the stake, plus a reserve, pins each justified checkpoint.
+An honest set pins each justified checkpoint if 3 times its stake exceeds the total plus a reserve.
 
 One of its members signed that checkpoint.
 
@@ -38,11 +38,11 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
 
 /-- An honest set of a call's voters pins the justified checkpoints of the call's epoch.
 
-The set holds more than a third of the call's stake, plus a reserve.
-
 The call reads its fork-choice head, and the set is active in its pulled-up head state.
 
-There its stake exceeds a third of the total, with `margin` and the call's pin reserve on top.
+There `total + (margin + pinReserve) < 3 * stake` holds for the set.
+
+So its stake exceeds a third of the sum of the total, `margin` and the call's pin reserve.
 
 The pin reserve reads that state and the state of the call's target block.
 
@@ -805,7 +805,7 @@ Honest heads descend from the start up to the limit, and from the root up to `T`
 
 An honest validator signed the receiver's justified checkpoint.
 
-An honest set of more than a third of the call's stake, plus the reserve, pins it.
+An honest set whose stake, times three, exceeds the call's total stake plus the reserve pins it.
 
 At or before the call's epoch's first slot, the signer's duty is from the call on.
 

@@ -3185,7 +3185,8 @@ The model's genesis time must be the anchor state's (`secondsToMilliseconds anch
 The theorems derive the agreement of justified checkpoints across honest stores (`Execution.selectedCheckpointsAgree_or_evidence`), or return `CrossStoreJustifiedEvidence`.
 
 `JustifiedPinned` assumes an honest set of a call's voters that pins the justified checkpoints of the call's epoch.
-Its stake exceeds a third of the total of the call's pulled-up head state, plus `margin` and the call's pin reserve `pinReserve`.
+Three times its stake exceeds the total of the call's pulled-up head state plus `margin` plus the call's pin reserve `pinReserve`.
+So its stake exceeds a third of that sum.
 The pinned-checkpoint step pays for cross-state drift with that per-call reserve, carried by the count.
 At the typical non-finality depth of 4 epochs it costs about 1.06–1.42 points of the Byzantine threshold at the last slot of an epoch, and about 0.07–0.09 points at mid-epoch, on three mainnet states.
 Over 60 days of mainnet epochs it costs at most about 1.42 points, and at depth 5 at most about 1.45 points.
