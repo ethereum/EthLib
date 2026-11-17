@@ -212,7 +212,7 @@ theorem mem_foldlM_committees_iff {α : Type}
 
 /-- A fold over the slots of a range gives all of them, and only them.
 
-The fold runs over the offsets below the successor of the last slot.
+The offsets range below the successor of the last slot minus the first slot.
 
 Each offset is added to the first slot. -/
 theorem exists_offset_eq_iff {first last after slot : Slot}
@@ -237,19 +237,6 @@ theorem exists_offset_eq_iff {first last after slot : Slot}
     refine ⟨slot.toNat - first.toNat, List.mem_range.mpr (by omega), ?_⟩
     rw [← UInt64.toNat_sub_of_le _ _ low, Nat.toUInt64_eq, UInt64.ofNat_toNat,
       UInt64.add_comm, UInt64.sub_add_cancel]
-
-/-- A fold reads the same result when its two steps agree on every element of the list. -/
-theorem foldlM_congr_mem {α β ε : Type} {f g : β → α → Except ε β} :
-    ∀ (items : List α) (init : β), (∀ x ∈ items, ∀ acc, f acc x = g acc x) →
-      items.foldlM f init = items.foldlM g init
-  | [], _, _ => rfl
-  | x :: rest, init, agree => by
-    simp only [List.foldlM_cons, agree x List.mem_cons_self init]
-    cases g init x with
-    | error _ => rfl
-    | ok next =>
-      exact foldlM_congr_mem rest next fun y member acc =>
-        agree y (List.mem_cons_of_mem _ member) acc
 
 namespace Store
 

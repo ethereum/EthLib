@@ -27,6 +27,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - Two functions that agree on every entry of a vector map it to one result.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
+- Two folds whose steps agree on every item of the list read the same result.
 - A fold whose steps fail only with errors of a property fails only with them.
 - A fold succeeds when each step succeeds and keeps an invariant that holds at the start.
 - A successful fold reads only inputs that its steps accept.
@@ -486,6 +487,19 @@ theorem foldlM_ok_invariant_of_mem {g : β → α → Except ε β} (P : β → 
     obtain ⟨middle, first, rest⟩ := computed
     exact foldlM_ok_invariant_of_mem P (fun b y b' mem => step b y b' (List.mem_cons_of_mem x mem))
       (step b x middle List.mem_cons_self holds first) rest
+
+/-- A fold reads the same result when its two steps agree on every element of the list. -/
+theorem foldlM_congr_mem {α β ε : Type} {f g : β → α → Except ε β} :
+    ∀ (items : List α) (init : β), (∀ x ∈ items, ∀ acc, f acc x = g acc x) →
+      items.foldlM f init = items.foldlM g init
+  | [], _, _ => rfl
+  | x :: rest, init, agree => by
+    simp only [List.foldlM_cons, agree x List.mem_cons_self init]
+    cases g init x with
+    | error _ => rfl
+    | ok next =>
+      exact foldlM_congr_mem rest next fun y member acc =>
+        agree y (List.mem_cons_of_mem _ member) acc
 
 /-- A fold whose steps fail only with errors of a property fails only with them.
 
