@@ -787,7 +787,7 @@ theorem Store.Reachable.finalized_prefix_or_accountable {config : Config}
     have notZero : SszType.hashTreeRoot anchorState ≠ .ok (Vector.replicate 32 0) := by
       rw [reachable.anchorState_root]
       exact fun eq => nonzero (Except.ok.inj eq)
-    obtain ⟨epoch, hashed⟩ := reachableEarlier.finalized_anchor atAnchor
+    obtain ⟨epoch, hashed⟩ := reachableEarlier.finalized_eq_anchor_of_epoch_le atAnchor
     have known : store.blocks.contains store.justifiedCheckpoint.root := by
       rcases reachable.checkpoints_known sound (UInt64.le_of_eq anchorSlot) positive window
           (checkpoint := store.justifiedCheckpoint) (by simp) with ⟨-, -, held⟩ |
@@ -824,7 +824,7 @@ theorem Store.Reachable.isViableLeaf_finalized {config : Config}
       .ok store.finalizedCheckpoint.root := by
   obtain ⟨checkpointBlock, checkpointOk, genesis | same⟩ :=
     Store.isViableLeaf_checkpointBlock viable
-  · obtain ⟨-, hashed⟩ := reachable.finalized_anchor
+  · obtain ⟨-, hashed⟩ := reachable.finalized_eq_anchor_of_epoch_le
       (UInt64.le_iff_toNat_le.mpr (by simp [genesis, GENESIS_EPOCH]))
     obtain ⟨start, startOk, reachedNode, walk, rfl⟩ :=
       Store.getCheckpointBlock_ok_iff.mp checkpointOk

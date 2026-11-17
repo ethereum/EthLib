@@ -698,6 +698,16 @@ private theorem Store.Reachable.tracked
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted
     exact ih.of_eq rfl rfl rfl rfl rfl rfl
 
+/-- Finality at or before the anchor epoch is the anchor checkpoint itself. -/
+theorem Store.Reachable.finalized_eq_anchor_of_epoch_le
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (atAnchor : store.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState) :
+    store.finalizedCheckpoint.epoch = getCurrentEpoch anchorState ∧
+      Serialization.Ssz.SszType.hashTreeRoot anchorBlock = .ok store.finalizedCheckpoint.root := by
+  rcases reachable.tracked.finalized with anchored | ⟨later, _⟩
+  · exact anchored
+  · exact False.elim (UInt64.not_lt.mpr atAnchor later)
+
 /-- In a reachable store, the unrealized justification of a block names an ancestor of it.
 
 Its epoch must be after the anchor epoch.
@@ -783,18 +793,6 @@ theorem Store.Reachable.checkpoints_known (anchor : Invariant anchorState)
       member later with ⟨-, known⟩ | zero
   · exact .inr (.inl ⟨later, known⟩)
   · exact .inr (.inr zero)
-
-/-- A finalized checkpoint of a reachable store at or before the anchor epoch is the anchor one.
-
-It has the epoch of the anchor state and the root of the anchor block. -/
-theorem Store.Reachable.finalized_anchor
-    (reachable : Store.Reachable config anchorState anchorBlock store)
-    (early : store.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState) :
-    store.finalizedCheckpoint.epoch = getCurrentEpoch anchorState ∧
-      hashTreeRoot anchorBlock = .ok store.finalizedCheckpoint.root := by
-  rcases reachable.tracked.finalized with anchored | ⟨later, -⟩
-  · exact anchored
-  · exact absurd (UInt64.lt_of_lt_of_le later early) (UInt64.lt_irrefl _)
 
 /-! ## The field that gives each checkpoint of a store -/
 
