@@ -51,6 +51,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the historical-anchor theorems no longer assume finality across honest stores ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  `Execution.source_surplus_or_historical_evidence`, `Execution.isAncestor_getHead_of_historical_anchor`, `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` drop their `residual` argument; their conclusions are unchanged.
+  `receiver_fullMaximum_of_head_window` takes the receiver's own finalized checkpoint on its own justified chain, `finalizedRead`, instead of `compatible`, `bounded`, `slots` and `epochOk`, and loses its implicit `horizon` and `epoch`.
+  `SelectedCheckpoint`, `FinalizedCheckpointCompatibility`, `ResidualFinalizedCheckpointCompatibility` and `compatibility_of_residual` are removed: no proof read them any more.
+
 - The EVM errors `invalidJumpDest`, `outOfBoundsRead`, `invalidParameter`, `addressCollision` and `precompile` carry the values that their failed check compared.
   Each halt keeps its behaviour, and each error fires on the same inputs as before.
   The message of an EVM error names each value, as `(name := value)`, with the address of a collision in hex and a precompile by its number.

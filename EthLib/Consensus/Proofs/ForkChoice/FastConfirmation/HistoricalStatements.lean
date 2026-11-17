@@ -109,24 +109,6 @@ def SourceWindowReads (call last : Nat) (source : BeaconState preset fork) : Pro
       ((e.world k).state w).computeCommitteeWeightBetweenSlots head.root source first finish =
         .ok sourceMaximum ∧ computeProposerScore config source = .ok sourceScore
 
-/-- The checkpoints selected by the approved historical transport endpoint. -/
-def SelectedCheckpoint (store : Store preset fork) (checkpoint : Checkpoint) : Prop :=
-  checkpoint = store.justifiedCheckpoint ∨ checkpoint = store.unrealizedJustifiedCheckpoint ∨
-    GENESIS_EPOCH < checkpoint.epoch ∧
-      ((∃ (r : Root) (st : BeaconState preset fork), store.blockStates[r]? = some st ∧
-        checkpoint = st.currentJustifiedCheckpoint) ∨
-      ∃ r : Root, store.unrealizedJustifications[r]? = some checkpoint)
-
-/-- Selected checkpoints agree with finalized roots through the approved horizon. -/
-def FinalizedCheckpointCompatibility (horizon : Epoch) (last : Nat) : Prop :=
-  ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
-    ∀ checkpoint : Checkpoint, SelectedCheckpoint ((e.world j).state b) checkpoint →
-    ((e.world i).state a).finalizedCheckpoint.epoch ≤ checkpoint.epoch →
-    checkpoint.epoch ≤ horizon →
-    ((e.world j).state b).getCheckpointBlock checkpoint.root
-      ((e.world i).state a).finalizedCheckpoint.epoch =
-        .ok ((e.world i).state a).finalizedCheckpoint.root
-
 /-- Honest stores have current epochs within the approved horizon. -/
 def HonestStoreEpochsBounded (horizon : Epoch) (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ last →
@@ -217,17 +199,6 @@ def WindowExitBound (store : Store preset fork) (source : BeaconState preset for
     store.getCommitteesBetweenSlots head epochStart epochEnd = .ok epochMembers →
     stake (fun v => balanceAt source v.toNat)
       {v ∈ activeVoters source | v ∉ epochMembers} ≤ exitReserve config source
-
-/-- Selected checkpoints cover earlier finality outside the same-validator justified case. -/
-def ResidualFinalizedCheckpointCompatibility (horizon : Epoch) (last : Nat) : Prop :=
-  ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
-    ∀ checkpoint : Checkpoint, SelectedCheckpoint ((e.world j).state b) checkpoint →
-    ¬ (a = b ∧ i ≤ j ∧ checkpoint = ((e.world j).state b).justifiedCheckpoint) →
-    ((e.world i).state a).finalizedCheckpoint.epoch ≤ checkpoint.epoch →
-    checkpoint.epoch ≤ horizon →
-    ((e.world j).state b).getCheckpointBlock checkpoint.root
-      ((e.world i).state a).finalizedCheckpoint.epoch =
-        .ok ((e.world i).state a).finalizedCheckpoint.root
 
 /-- All honest stores hold only blocks with nonzero state roots through the horizon. -/
 def HeldBlockStateRootsNonzero (last : Nat) : Prop :=

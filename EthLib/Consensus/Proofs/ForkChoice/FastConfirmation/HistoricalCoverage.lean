@@ -15,7 +15,9 @@ An induction on time removes that assumption, so the block stays on every honest
 
 Within two epochs after the parent, each step is the historical-anchor step.
 
-Later, each step is the step of an honest duty epoch, which needs only the same-store finality.
+Later, each step is the step of an honest duty epoch.
+
+Both steps need only the finality within one store.
 
 Each step may instead name two honest stores that collide, or historical direct-safety evidence.
 -/
@@ -445,7 +447,6 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
     (referenceSlotOk : ((e.world m).state x).getCurrentSlot config = .ok referenceSlot)
     (finishOk : subChecked referenceSlot 1 = .ok finish)
     {horizon : Epoch}
-    (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon time)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (unslashed : HonestCountedStatesUnslashed (e := e) time)
@@ -581,7 +582,6 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
             (by omega))
           (receiverLast := receiverLast)
           (fun lo hi ps a b c => reserve lo hi ps a b (UInt64.le_trans c lastLe))
-          (fun a ha b hb i j hi hj => residual a ha b hb i j (by omega) (by omega))
           (fun w hw j ep hj => bounded w hw j ep (by omega))
           (fun w hw j hj => roots w hw j (by omega))
           (fun w hw j st hj => unslashed w hw j st (by omega))
@@ -644,7 +644,7 @@ Until two epochs after the parent's epoch, each step is the historical-anchor st
 
 After that, each step is the duty-epoch step, which needs a late duty majority at the receiver.
 
-The cross-store finality of the historical-anchor step, `residual`, stays an assumption.
+Both steps read finality only within one store, so no finality across stores is assumed.
 
 The receivers' reads, their exits and the late duty majority are assumed.
 
@@ -723,7 +723,6 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     (referenceSlotOk : ((e.world m).state x).getCurrentSlot config = .ok referenceSlot)
     (finishOk : subChecked referenceSlot 1 = .ok finish)
     {horizon : Epoch}
-    (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon time)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (unslashed : HonestCountedStatesUnslashed (e := e) time)
@@ -762,7 +761,7 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     start caller callerUpToDate headNode slotOk beginOk timeEq blockOk parentOk sourceOk boostOk
     firstOk lastOk beforeOk maximumOk parentParticipantsOk registry aligned increment supportOk
     discountOk adversaryOk margin callerTime sourceReads drift reserve reference referenceTime
-    referenceUpToDate referenceSlotOk finishOk residual bounded roots unslashed ceiling scoreFits
+    referenceUpToDate referenceSlotOk finishOk bounded roots unslashed ceiling scoreFits
     parameters genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
     historicalEpochOk near epochStartOk epochStartTimeOk historyCovers absent parentCovers reads
     (fun _ low high _ w receiver k nodes _ atTime upToDate _ tree =>
@@ -846,7 +845,6 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     (referenceSlotOk : ((e.world m).state x).getCurrentSlot config = .ok referenceSlot)
     (finishOk : subChecked referenceSlot 1 = .ok finish)
     {horizon : Epoch}
-    (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon time)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (unslashed : HonestCountedStatesUnslashed (e := e) time)
@@ -911,7 +909,7 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     start caller callerUpToDate headNode slotOk beginOk timeEq blockOk parentOk sourceOk boostOk
     firstOk lastOk beforeOk maximumOk parentParticipantsOk registry aligned increment supportOk
     discountOk adversaryOk margin callerTime sourceReads drift reserve reference referenceTime
-    referenceUpToDate referenceSlotOk finishOk residual bounded roots unslashed ceiling scoreFits
+    referenceUpToDate referenceSlotOk finishOk bounded roots unslashed ceiling scoreFits
     parameters genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
     historicalEpochOk near epochStartOk epochStartTimeOk historyCovers absent parentCovers reads
     (fun T low high covers w receiver k nodes hd atTime upToDate headOk tree => by

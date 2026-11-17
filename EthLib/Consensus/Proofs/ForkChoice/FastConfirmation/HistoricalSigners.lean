@@ -340,7 +340,6 @@ theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· ∈ J)]
     (referenceSlotOk : ((e.world m).state x).getCurrentSlot config = .ok referenceSlot)
     (finishOk : subChecked referenceSlot 1 = .ok finish)
     {horizon : Epoch}
-    (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon time)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (unslashed : HonestCountedStatesUnslashed (e := e) time)
@@ -397,7 +396,7 @@ theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· ∈ J)]
     slotOk beginOk timeEq blockOk parentOk sourceOk boostOk firstOk lastOk beforeOk maximumOk
     parentParticipantsOk registry aligned increment supportOk discountOk adversaryOk margin
     callerTime sourceReads drift reserve reference referenceTime referenceUpToDate
-    referenceSlotOk finishOk residual bounded roots unslashed ceiling scoreFits parameters
+    referenceSlotOk finishOk bounded roots unslashed ceiling scoreFits parameters
     genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
     historicalEpochOk near epochStartOk epochStartTimeOk historyCovers absent parentCovers reads
     consistent leaf
