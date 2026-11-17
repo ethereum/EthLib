@@ -1112,6 +1112,88 @@ public theorem duty_window_of_slot_le {anchor : Store preset fork} {Δ : ℕ}
   · rw [← upToDate.1]
     omega
 
+/-- A store's justified checkpoint descends from a root, given an honest duty vote for it.
+
+The duty falls between the call and the store's time.
+
+The root's block is at or before the first slot of the checkpoint's epoch.
+
+The coverage at the duty puts the signer's head above the root.
+
+The checkpoint is that head's block at the first slot of its epoch, so it sits above the root.
+
+The store agrees with the signer on that walk, as honest stores agree on blocks. -/
+public theorem justified_descends_of_duty {anchor : Store preset fork} {time T : ℕ}
+    {root : Root} {u : ValidatorIndex} {n : ℕ} {block : BeaconBlock preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (preGloas : fork < .glamsterdam) (roots : HeldBlockStateRootsNonzero (e := e) time)
+    (agree : HonestBlocksAgree (e := e) time)
+    (caller : u ∈ J) (callerHeld : ((e.world n).state u).blocks[root]? = some block)
+    (callerTime : (e.world n).time ≤ time)
+    (covers : HonestHeadsCover (e := e) root (e.world n).time T) (high : T ≤ time)
+    {w : ValidatorIndex} (receiver : w ∈ J) {k : ℕ} (atTime : (e.world k).time = T)
+    (justifiedKnown : ∃ b, ((e.world k).state w).blocks[
+      ((e.world k).state w).justifiedCheckpoint.root]? = some b)
+    (blockLe : block.slot.toNat ≤
+      ((e.world k).state w).justifiedCheckpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    {v : ValidatorIndex} (honest : v ∈ J) {k' : ℕ} {data : AttestationData}
+    (duty : MaySign config checks sources anchorState anchorBlock assignment genesisTimeMs v
+      (e.world k').time ((e.world k').view v) ((e.world k').state v) data)
+    (target : data.target = ((e.world k).state w).justifiedCheckpoint)
+    (afterCall : (e.world n).time ≤ (e.world k').time)
+    (beforeStore : (e.world k').time < (e.world k).time) :
+    ((e.world k).state w).isAncestor
+      ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true := by
+  obtain ⟨_, -, -, -, current', honestData, -⟩ := duty
+  have k'Bound : (e.world k').time ≤ time := by omega
+  have reachedV := e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored) k' v
+    honest
+  have reachedW := e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored) k w
+    receiver
+  -- The store holds its justified block, which is the signer's target.
+  obtain ⟨justifiedBlock, justifiedKnown⟩ := justifiedKnown
+  rw [← target] at justifiedKnown blockLe ⊢
+  obtain ⟨signerHead, signerHeadOk, targetRead⟩ := honestData.target_read reachedV anchorSlot
+    anchorBoundary (roots v honest k' k'Bound) reachedW justifiedKnown
+  have supports := covers (e.world k').time afterCall (by omega) v honest k' signerHead rfl
+    current' signerHeadOk
+  have pending : signerHead = ⟨signerHead.root, .pending⟩ := by
+    have p := Store.getHead_pending preGloas signerHeadOk
+    cases signerHead
+    simp_all
+  rw [pending] at supports
+  -- The signer holds the root, as the same block as the caller.
+  have rootRead := supports
+  unfold Store.isAncestor at rootRead
+  obtain ⟨b', b'Ok, -⟩ := bind_ok_iff.mp rootRead
+  have b'Found := Store.block_ok_iff.mp b'Ok
+  rw [agree v honest u caller k' n k'Bound callerTime root b' block b'Found callerHeld] at b'Found
+  have rootWalk := Store.getAncestor_of_isAncestor_of_lt preGloas b'Found supports
+  -- The target is the head's ancestor at the first slot of its epoch, which is above the block.
+  have split := targetRead
+  unfold Store.getCheckpointBlock at split
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at split
+  obtain ⟨boundary, boundaryOk, reached, boundaryWalk, reachedRoot⟩ := split
+  have blockBelow : block.slot ≤ boundary := by
+    apply UInt64.le_iff_toNat_le.mpr
+    rw [(computeStartSlotAtEpoch_ok_iff.mp (mapError_ok_iff.mp boundaryOk)).2]
+    exact blockLe
+  have reachedPending := Store.getAncestor_pending_of_lt preGloas rfl boundaryWalk
+  have reachedEq : reached = ⟨data.target.root, .pending⟩ := by
+    obtain ⟨r, s⟩ := reached
+    simp only at reachedRoot reachedPending
+    rw [reachedRoot, reachedPending]
+  rw [reachedEq] at boundaryWalk
+  have through := Store.getAncestor_trans blockBelow boundaryWalk
+  rw [rootWalk] at through
+  -- The store agrees with the signer on the walk.
+  exact Store.isAncestor_of_same_blocks reachedW preGloas
+    (agree v honest w receiver k' k k'Bound (by omega)) b'Found
+    (reachedV.anchorSlot_le (UInt64.le_of_eq anchorSlot) b'Found) ⟨_, justifiedKnown⟩
+    (Store.isAncestor_of_getAncestor through.symm)
+
 /-- An honest signature delivered by a time comes from the signer's validated duty vote.
 
 The signer signed at the deadline of its duty, which is before the next slot starts. -/
