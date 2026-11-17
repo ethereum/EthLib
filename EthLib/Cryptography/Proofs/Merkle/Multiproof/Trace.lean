@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Merkle.MultiproofBinding
+public import EthLib.Cryptography.Proofs.Merkle.Multiproof.Binding
 
 /-!
 # Proofs: the inputs a multiproof verifier hashes

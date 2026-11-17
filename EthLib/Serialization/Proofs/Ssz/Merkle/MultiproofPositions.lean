@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Gindex
-public import EthLib.Cryptography.Proofs.Merkle.Multiproof
+public import EthLib.Cryptography.Proofs.Merkle.Multiproof.Basic
 
 /-!
 Generalized indices and positions in a Merkle tree of a fixed height.

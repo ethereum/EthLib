@@ -135,32 +135,32 @@ The game does not count that as a win.
 ### Merkle trees
 
 leanXMSS, leanSPHINCS, the VRF tree and SSZ build their trees on one definition.
-Two theorems in `Proofs/Merkle/Binding.lean` describe what a path binds, for every node hash.
+Two theorems in `Proofs/Merkle/Binding/` describe what a path binds, for every node hash.
 The first is `climb_binding`, about two climbs from one position that reach one node.
 They are equal, or `findCollision` returns a collision of the node hash at an ancestor of that position.
 The second is `climb_binding_node`, about a climb that reaches an honest node but is not the honest climb.
 Then `findSecondPreimage` returns a second preimage of an honest ancestor.
-`root_binding_leaves` (`Proofs/Merkle/VectorBinding.lean`) applies the first theorem at every leaf: the root binds the vector.
+`root_binding_leaves` (`Proofs/Merkle/Binding/Collision.lean`) applies the first theorem at every leaf: the root binds the vector.
 
 Both searches are explicit algorithms, proved to return valid answers.
 Each can return nothing: on one climb compared with itself (`findCollision_self`), and on the honest climb (`findSecondPreimage_honest`).
 So the statements say something, even though every compressing hash has collisions.
 
-`Proofs/Merkle/PositionBinding.lean` covers a path whose index or length is wrong.
+`Proofs/Merkle/Binding/Index.lean` covers a path whose index or length is wrong.
 `climb_root_honest`: a climb from leaf `j` that reaches the root is the honest opening, or `findSecondPreimage` or `findPositionCollision` succeeds.
 The second search finds two inputs at different positions with one output, which is free for a hash that ignores the position.
 With such a hash, the verifier must check `j < 2^h` and the path length itself (`climb_const_shift_root`, `climb_const_interior`).
 An empty path and a tree of height 0 are not covered.
 
 A multiproof opens several nodes at once, with the helper nodes their paths need (`Merkle/Multiproof.lean`).
-`verify_complete` (`Proofs/Merkle/Multiproof.lean`) shows that an honest multiproof rebuilds the root.
-`verify_binding` (`Proofs/Merkle/MultiproofBinding.lean`) is about two accepted multiproofs for the same positions and root.
+`verify_complete` (`Proofs/Merkle/Multiproof/Basic.lean`) shows that an honest multiproof rebuilds the root.
+`verify_binding` (`Proofs/Merkle/Multiproof/Binding.lean`) is about two accepted multiproofs for the same positions and root.
 The opened positions are distinct and lie in the tree, and none is an ancestor of another.
 Each list of values has one value per position.
 They open the same values, or `findMultiproofCollision` returns a collision of the node hash.
 That search walks both rebuilds down from the root, and returns nothing on one rebuild compared with itself (`findMultiproofCollision_self`).
 
-`Proofs/Merkle/RandomOracle.lean` bounds classical searches against an ideal random oracle with `N` outputs and an empty initial cache.
+`Proofs/Merkle/RandomOracle/Collision.lean` bounds classical searches against an ideal random oracle with `N` outputs and an empty initial cache.
 `prEvent_collision_le` bounds a collision among queried inputs by `q^2 / N` for at most `q` hash calls, and private uniform sampling is not counted.
 This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`: at most 4 for `q >= 2`, and close to 2 for large `q`.
 `prEvent_experimentWith_le` applies it to an experiment where the adversary outputs a claim and an extraction then runs on it with the oracle alone.
@@ -203,8 +203,8 @@ It rests on `climb_binding`, above.
 Multiproof binding is `verifyMerkleMultiproof_binding` and `verifyMerkleMultiproof_overlap_binding` (`Proofs/Ssz/Merkle/MultiproofBinding.lean`).
 Two accepted requests for one root agree on every position they both claim, or `findMultiproofMessageCollision` returns a collision.
 That search is the Merkle multiproof search over the two rebuilds, and returns the two inputs hashed at one node.
-Each input is one its own verifier hashes, in the record of `verifiedMultiproofMessages` (`findMultiproofCollision_recorded`, `Proofs/Merkle/MultiproofTrace.lean`).
-It rests on `rebuild_go_binding` (`Proofs/Merkle/MultiproofBinding.lean`).
+Each input is one its own verifier hashes, in the record of `verifiedMultiproofMessages` (`findMultiproofCollision_recorded`, `Proofs/Merkle/Multiproof/Trace.lean`).
+It rests on `rebuild_go_binding` (`Proofs/Merkle/Multiproof/Binding.lean`).
 
 Whole-value binding is `hashTreeRoot_binding` (`Proofs/Ssz/Codec/Binding.lean`).
 Two values of one type with one root are equal, or `findMessageCollision` returns a collision between the hash inputs of the two root computations.

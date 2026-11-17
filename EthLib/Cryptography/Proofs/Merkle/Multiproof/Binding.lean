@@ -1,7 +1,7 @@
 module
 
-public import EthLib.Cryptography.Proofs.Merkle.Multiproof
-public import EthLib.Cryptography.Proofs.Merkle.Binding
+public import EthLib.Cryptography.Proofs.Merkle.Multiproof.Basic
+public import EthLib.Cryptography.Proofs.Merkle.Binding.Collision
 
 /-!
 # Proofs: a multiproof binds its opened nodes

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofAcceptance
-public import EthLib.Cryptography.Proofs.Merkle.MultiproofTrace
+public import EthLib.Cryptography.Proofs.Merkle.Multiproof.Trace
 
 /-! Conflicting multiproof claims expose a SHA-256 collision, found by the Merkle search. -/
 
