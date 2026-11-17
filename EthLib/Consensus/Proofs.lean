@@ -39,6 +39,7 @@ public import EthLib.Consensus.Proofs.BuilderApi.Registration
 public import EthLib.Consensus.Proofs.Builders
 public import EthLib.Consensus.Proofs.Churn
 public import EthLib.Consensus.Proofs.ChurnReservations
+public import EthLib.Consensus.Proofs.DirectSafety.Apriori
 public import EthLib.Consensus.Proofs.DirectSafety.BalanceSources
 public import EthLib.Consensus.Proofs.DirectSafety.ChurnBounds
 public import EthLib.Consensus.Proofs.DirectSafety.Cohorts

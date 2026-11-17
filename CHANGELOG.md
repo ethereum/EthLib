@@ -9,6 +9,12 @@ Not yet released.
 
 ### Proof additions
 
+- `DirectSafety.accountable_safety_apriori` bounds the drift of accountable safety from the reference state alone.
+  For two runs that finalize conflicting checkpoints, the unslashed stake at the shared state `x` is at most three times the accountable stake plus `2 * drift x high`, or the runs show `HashEvidence`.
+  `drift x high` reads only numbers at `x` and the window to the later finalized epoch, so it needs no replay of the tails.
+  It takes the premises of `source_safety`.
+  When its guard fails, `drift` is the unslashed active stake at `x`, and the bound says nothing.
+
 - `Execution.honestHeadsCover_of_historical_anchor` keeps a confirmed block on every honest head chain from the call to a horizon, by induction on time ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   It no longer assumes the root's own earlier coverage.
   It assumes the parent's coverage, the root's viability, the receivers' exits, and a late duty majority.
