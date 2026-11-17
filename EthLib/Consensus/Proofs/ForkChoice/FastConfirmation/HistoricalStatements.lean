@@ -451,4 +451,56 @@ def HistoricalDirectSafetyEvidence {g : ForkedBeaconState preset}
           (DirectSafety.derivedDrift ((e.world k).state w).justifiedCheckpoint.epoch.toNat right) ∨
         DirectSafety.HashEvidence ((pre.append left).hashObjects ++ (pre.append right).hashObjects))
 
+/-- The justified and unrealized justified checkpoints of honest stores agree at each epoch.
+
+The stores are at events by the time, and the epoch is at most the horizon. -/
+def SelectedCheckpointsAgree (horizon : Epoch) (last : Nat) : Prop :=
+  ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
+    ∀ first second : Checkpoint,
+    (first = ((e.world i).state a).justifiedCheckpoint ∨
+      first = ((e.world i).state a).unrealizedJustifiedCheckpoint) →
+    (second = ((e.world j).state b).justifiedCheckpoint ∨
+      second = ((e.world j).state b).unrealizedJustifiedCheckpoint) →
+    first.epoch = second.epoch → first.epoch ≤ horizon → first = second
+
+/-- Two honest stores hold different justified checkpoints of one epoch, with evidence.
+
+Each checkpoint is the justified or unrealized justified checkpoint of its store.
+
+The stores are at events by the time.
+
+A terminal view of a held state of each store has that checkpoint as its current justified field.
+
+The runs go from the anchor to the two held states.
+
+The evidence is the direct-safety stake inequality on those runs, or hash evidence on them.
+
+Its drift counts from the anchor, up to one epoch past the common epoch.
+
+With enough churn since the anchor, the stake inequality holds with no accountable key. -/
+def CrossStoreJustifiedEvidence {g : ForkedBeaconState preset}
+    (pre : Run config checks g ⟨fork, anchorState⟩) (time : Nat) : Prop :=
+  ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
+    ∃ first second : Checkpoint,
+      (first = ((e.world i).state a).justifiedCheckpoint ∨
+        first = ((e.world i).state a).unrealizedJustifiedCheckpoint) ∧
+      (second = ((e.world j).state b).justifiedCheckpoint ∨
+        second = ((e.world j).state b).unrealizedJustifiedCheckpoint) ∧
+      first.epoch = second.epoch ∧ first ≠ second ∧
+    ∃ (stateA stateB : BeaconState preset fork)
+      (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
+      (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
+      (va : DirectSafety.TerminalView ⟨fork, stateA⟩)
+      (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
+      (∃ r : Root, ((e.world i).state a).blockStates[r]? = some stateA) ∧
+      (∃ r : Root, ((e.world j).state b).blockStates[r]? = some stateB) ∧
+      va.state.currentJustifiedCheckpoint = first ∧
+      vb.state.currentJustifiedCheckpoint = second ∧
+      (stake (DirectSafety.effectiveWeight anchorState) (DirectSafety.unslashedKeys anchorState) ≤
+        3 * stake (DirectSafety.effectiveWeight anchorState)
+          (DirectSafety.accountableKeys pre left right) +
+        2 * max (DirectSafety.derivedDrift first.epoch.toNat left)
+          (DirectSafety.derivedDrift first.epoch.toNat right) ∨
+        DirectSafety.HashEvidence ((pre.append left).hashObjects ++ (pre.append right).hashObjects))
+
 end EthLib.Consensus.Models.Network

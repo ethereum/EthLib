@@ -71,4 +71,68 @@ public theorem Execution.finalizedFamily_or_historical_evidence {anchor : Store 
   exact e.finalized_prefix_or_accountable anchorStore anchored parameters genesis pre
     anchorSlot boundary nonzero absent justifiedBound early enough terminal
 
+/-- Honest justified checkpoints agree at each epoch up to the horizon, or evidence holds.
+
+Otherwise two honest stores hold different justified checkpoints of one epoch.
+
+Runs from the anchor to held states of both have views that hold the two checkpoints.
+
+That evidence is relative to the anchor, and its drift counts from the anchor.
+
+With enough churn since the anchor, it holds with no accountable key. -/
+public theorem Execution.selectedCheckpointsAgree_or_evidence {anchor : Store preset fork}
+    {g : ForkedBeaconState preset}
+    (unique : ∀ {x a b : ForkedBeaconState preset}
+      (shared : Run config checks g x) (left : Run config checks x a)
+      (right : Run config checks x b) (va : DirectSafety.TerminalView a)
+      (vb : DirectSafety.TerminalView b), DirectSafety.Parameters preset →
+      Genesis config checks g → ∀ j k : Checkpoint,
+      DirectSafety.EnoughStake (shared.append left) j.epoch.toNat →
+      DirectSafety.EnoughStake (shared.append right) j.epoch.toNat →
+      va.enough j.epoch.toNat → vb.enough j.epoch.toNat →
+      (j = va.state.previousJustifiedCheckpoint ∨ j = va.state.currentJustifiedCheckpoint) →
+      (k = vb.state.previousJustifiedCheckpoint ∨ k = vb.state.currentJustifiedCheckpoint) →
+      j.epoch = k.epoch →
+      x.state.slot.toNat ≤ j.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat →
+      j = k ∨
+        Models.stake (DirectSafety.effectiveWeight x.state)
+            (DirectSafety.unslashedKeys x.state) ≤
+          3 * Models.stake (DirectSafety.effectiveWeight x.state)
+            (DirectSafety.accountableKeys shared left right) +
+          2 * max (DirectSafety.derivedDrift j.epoch.toNat left)
+            (DirectSafety.derivedDrift j.epoch.toNat right) ∨
+        DirectSafety.HashEvidence ((shared.append left).hashObjects ++
+          (shared.append right).hashObjects))
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    {horizon : Epoch} {last : Nat}
+    (roots : HeldBlockStateRootsNonzero (e := e) last)
+    (absent : AnchorParentAbsent (e := e) last)
+    (parameters : DirectSafety.Parameters preset)
+    (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
+    (early : HeldStatesBeforeUpgrade (e := e) last)
+    (enough : HeldRunStakeFloor (e := e) pre horizon last)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon last) :
+    SelectedCheckpointsAgree (e := e) horizon last ∨
+      CrossStoreJustifiedEvidence (e := e) pre last := by
+  classical
+  by_cases agree : SelectedCheckpointsAgree (e := e) horizon last
+  · exact .inl agree
+  simp only [SelectedCheckpointsAgree, not_forall] at agree
+  obtain ⟨a, honestA, b, honestB, i, j, timeA, timeB, first, second, selectedFirst,
+    selectedSecond, epoch, inHorizon, different⟩ := agree
+  -- An honest held copy of the anchor supplies the nonzero root that the comparison needs.
+  obtain ⟨root, _, anchorFound⟩ := (e.forwardReachableWith
+    (fun w hw => (anchored w hw) ▸ Store.ForwardReachableWith.anchor anchorStore) i a
+      honestA).reachable.anchor_known
+  have nonzero : anchorBlock.stateRoot ≠ Vector.replicate 32 0 :=
+    roots a honestA i timeA root anchorBlock anchorFound
+  rcases e.justified_eq_or_accountable unique anchorStore anchored parameters genesis pre
+      anchorSlot nonzero absent early enough terminal honestA honestB timeA timeB selectedFirst
+      selectedSecond epoch inHorizon with same | evidence
+  · exact absurd same different
+  · exact .inr ⟨a, honestA, b, honestB, i, j, timeA, timeB, first, second, selectedFirst,
+      selectedSecond, epoch, different, evidence⟩
+
 end EthLib.Consensus.Models.Network
