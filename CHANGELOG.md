@@ -31,7 +31,7 @@ Not yet released.
 - In Lean, every node of a Merkle tree has a `Merkle.Position`, its level and its index, and the tree passes positions instead of a level and an index.
   The node hash has type `Position → α → α → m α`; it had type `Nat → Nat → α → α → m α`, with the level first.
   `Merkle.node hash leaves ⟨level, j⟩`, `Merkle.siblings hash leaves p n`, `Merkle.ordered p` and `Merkle.climb hash p current siblings` take a position; `Merkle.root` and `Merkle.path` keep their arguments.
-  The recursion behind a node is `Merkle.node.go`, which was `Merkle.nodeAt`.
+  `Merkle.node hash leaves level j` becomes `Merkle.node hash leaves ⟨level, j⟩`, and the recursion on the level is `Merkle.node.go`.
   A position names its `parent`, `sibling`, `left` and `right` children and its `ancestor` `k` levels up, and `EthLib.Cryptography.Proofs.Merkle.Position` proves how they relate.
   `Merkle.div_two_div_pow` moves to that module, under the same name.
   The searches `Merkle.findCollision`, `Merkle.findSecondPreimage` and `Merkle.climbPairs` take the starting position instead of a level and an index.
@@ -45,6 +45,9 @@ Not yet released.
   The query lemmas of `EthLib.Cryptography.Proofs.QueryAvoidance` take a position and a node hash of a position.
   The node hashes of XMSS, SPHINCS+, FORS and the VRF take a position and compute the same bytes.
   The XMSS, SPHINCS+ and FORS nodes and the SSZ climb still take a level or height and an index, and build the position.
+  Lemmas about climbs from a leaf state its positions as `(⟨0, j⟩ : Position).ancestor n` and its `sibling`, `left` and `right`, in place of `⟨n, j / 2 ^ n⟩`.
+  `Position.ancestor_mk_zero` and the `_mk` lemmas of the position module convert between the two forms.
+  `XmssSecurity.Concrete.CacheReplay.div_pow_succ` is removed; `Merkle.div_pow_div_two` states the same fact.
   To migrate a node hash, read `p.level` and `p.index` where it read the level and the index.
 
 - In Lean, ten general lemmas that [#2647](https://github.com/ethereum/EthLib/pull/2647) made public move into the namespaces of the objects they describe ([#2648](https://github.com/ethereum/EthLib/issues/2648)).

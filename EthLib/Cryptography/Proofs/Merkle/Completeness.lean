@@ -115,7 +115,7 @@ theorem node_congr (hash' : Position → α → α → m α) (leaves : Nat → m
     rw [node_succ, node_succ, ih (2 * j) below, ih (2 * j + 1) below,
       agree ⟨level + 1, j⟩ (by simp) (Nat.le_refl _)]
 
-/-- The `n` siblings from a node up hash only at the levels from 1 to `n - 1` above it. -/
+/-- The `n` siblings from a node at level `l` up hash only at levels 1 to `l + n - 1`. -/
 theorem siblings_congr (hash' : Position → α → α → m α) (leaves : Nat → m α) :
     ∀ (n : Nat) (p : Position),
       (∀ q : Position, 1 ≤ q.level → q.level < p.level + n → hash q = hash' q) →

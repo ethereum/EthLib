@@ -64,13 +64,13 @@ def sibling (p : Position) : Position :=
 
 /-- The left child of a node above the leaves.
 
-At level 0 it is the node at level 0 and index `2j`, which is not a child. -/
+At level 0 it is the node at level 0 and at twice the index, which is not a child. -/
 def left (p : Position) : Position :=
   ⟨p.level - 1, 2 * p.index⟩
 
 /-- The right child of a node above the leaves.
 
-At level 0 it is the node at level 0 and index `2j + 1`, which is not a child. -/
+At level 0 it is the node at level 0 and at twice the index plus 1, which is not a child. -/
 def right (p : Position) : Position :=
   ⟨p.level - 1, 2 * p.index + 1⟩
 

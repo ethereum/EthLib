@@ -198,7 +198,9 @@ theorem IsAncestor.level_le {a p : Position} (h : a.IsAncestor p) : p.level ≤ 
   obtain ⟨k, rfl⟩ := h
   simp
 
-/-- An ancestor is the node at or above the level that holds the node's index, shifted. -/
+/-- A node is an ancestor of another when it is at or above its level.
+
+Its index is then the other's index divided by 2 to the power of the level difference. -/
 theorem isAncestor_iff {a p : Position} :
     a.IsAncestor p ↔ p.level ≤ a.level ∧ a.index = p.index / 2 ^ (a.level - p.level) := by
   constructor
@@ -211,6 +213,7 @@ theorem isAncestor_iff {a p : Position} :
       omega
     · simpa using hindex
 
+/-- Whether a node is an ancestor of another is decided by its level and its index. -/
 instance (a p : Position) : Decidable (a.IsAncestor p) :=
   decidable_of_iff _ isAncestor_iff.symm
 
