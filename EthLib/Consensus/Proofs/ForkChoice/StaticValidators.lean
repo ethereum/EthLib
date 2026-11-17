@@ -135,26 +135,16 @@ private theorem mem_supportersOf_iff {state : BeaconState preset fork} {node : F
     have counts := voteCountsFor_of_mem_supportersOf member
     simp only [supportersOf, List.mem_toFinset, List.mem_map, List.mem_filter] at member
     obtain ⟨⟨index, gwei⟩, ⟨inside, -⟩, rfl⟩ := member
-    simp only [unslashedActiveBalances, List.mem_filterMap, Option.ite_none_right_eq_some,
-      Option.some.injEq, Prod.mk.injEq, Prod.exists] at inside
-    obtain ⟨validator, i, inZip, isActive, rfl, -⟩ := inside
-    have found := List.mem_zipIdx_iff_getElem?.mp inZip
-    have lt : i < state.validators.data.size := by
-      simpa using (List.getElem?_eq_some_iff.mp found).1
-    simp only [Bool.and_eq_true, Bool.not_eq_true'] at isActive
-    refine ⟨validator, ?_, isActive.1, isActive.2, counts⟩
-    rw [toNat_toUInt64_of_lt within lt]
-    simpa using found
+    obtain ⟨validator, found, active, slashed⟩ :=
+      (mem_unslashedActiveBalances_iff within).mp (List.mem_map.mpr ⟨_, inside, rfl⟩)
+    exact ⟨validator, found, active, slashed, counts⟩
   · rintro ⟨validator, found, active, slashed, counts⟩
-    have lt : v.toNat < state.validators.data.size := by
-      exact (Array.getElem?_eq_some_iff.mp found).1
+    obtain ⟨⟨index, gwei⟩, inside, same⟩ := List.mem_map.mp
+      ((mem_unslashedActiveBalances_iff within).mpr ⟨validator, found, active, slashed⟩)
+    simp only at same
+    subst same
     simp only [supportersOf, List.mem_toFinset, List.mem_map, List.mem_filter]
-    refine ⟨(v, validator.effectiveBalance), ⟨?_, counts⟩, rfl⟩
-    simp only [unslashedActiveBalances, List.mem_filterMap, Option.ite_none_right_eq_some,
-      Option.some.injEq, Prod.mk.injEq, Prod.exists]
-    refine ⟨validator, v.toNat, List.mem_zipIdx_iff_getElem?.mpr (by simpa using found),
-      by simp [active, slashed], ?_, rfl⟩
-    simp
+    exact ⟨(index, gwei), ⟨inside, counts⟩, rfl⟩
 
 /-- The honest supporters of a node weigh the same in two states that agree with one reference.
 

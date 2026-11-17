@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
 public import EthLib.Consensus.Proofs.ForkChoice.Head
 public import EthLib.Consensus.Proofs.Models.ForkChoice.LmdGhost
 public import EthLib.Consensus.Proofs.Transition.FfgStake
+import EthLib.Consensus.Proofs.ForkChoice.Supporters
 
 /-!
 # Proofs: the head of the fork choice is LMD-GHOST
@@ -44,6 +45,8 @@ Those votes leave out the boost.
 The head then descends from it.
 
 That holds before Gloas, when each known block sits after its known parent.
+
+The proposer score succeeds when the boost times the largest possible total fits in 64 bits.
 -/
 
 @[expose] public section
@@ -96,21 +99,8 @@ theorem computeProposerScore_exists {config : Config} {cap : ℕ}
   have subset : ∀ v ∈ (unslashedActiveBalances state).map (·.1),
       v ∈ getActiveValidatorIndices state (getCurrentEpoch state) := by
     intro v member
-    simp only [unslashedActiveBalances, List.mem_map, List.mem_filterMap,
-      Option.ite_none_right_eq_some, Option.some.injEq, Prod.exists] at member
-    obtain ⟨_, _, ⟨validator, position, listed, chosen, same⟩, rfl⟩ := member
-    cases same
-    obtain ⟨isActive, -⟩ := Bool.and_eq_true_iff.mp chosen
-    have found := List.mem_zipIdx_iff_getElem?.mp listed
-    simp only [Array.getElem?_toList] at found
-    have inside := (Array.getElem?_eq_some_iff.mp found).1
-    have small : position < 2 ^ 64 :=
-      Nat.lt_of_lt_of_le inside (Nat.le_trans within
-        (Nat.le_of_lt preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt))
-    apply (mem_getActiveValidatorIndices within).mpr
-    refine ⟨validator, ?_, isActive⟩
-    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
-    exact found
+    obtain ⟨validator, found, isActive, -⟩ := (mem_unslashedActiveBalances_iff within).mp member
+    exact (mem_getActiveValidatorIndices within).mpr ⟨validator, found, isActive⟩
   obtain ⟨total, totalOk⟩ :=
     getTotalBalance_exists_of_subset (getTotalActiveBalance_ok activeOk) subset
   obtain ⟨-, -, totalEq⟩ := getTotalBalance_ok_iff_stake.mp totalOk

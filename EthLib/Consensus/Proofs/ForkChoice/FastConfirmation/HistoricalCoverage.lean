@@ -59,15 +59,6 @@ private theorem cover_of_steps {root : Root} {first last : ℕ} {P : Prop}
         headOk).resolve_right alternative
   exact all (last + 1) le_rfl
 
-/-- A successful head read has a successful read of the filtered tree. -/
-private theorem getFilteredNodeTree_of_getHead {store : Store preset fork}
-    {head : ForkChoiceNode} (headOk : store.getHead config = .ok head) :
-    ∃ nodes, store.getFilteredNodeTree config = .ok nodes := by
-  unfold Store.getHead at headOk
-  cases tree : store.getFilteredNodeTree config with
-  | error error => simp [tree, bind, Except.bind] at headOk
-  | ok nodes => exact ⟨nodes, rfl⟩
-
 /-- A root that a receiver keeps viable is held with the caller's block, or the stores collide.
 
 A viable root is in the filtered tree, or below the justified block of the tree. -/
@@ -330,7 +321,7 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
           some evidence) ∨
       HistoricalDirectSafetyEvidence (e := e) pre time)
     (fun T low high covers w receiver k receiverHead atTime upToDate receiverHeadOk => by
-      obtain ⟨nodes, tree⟩ := getFilteredNodeTree_of_getHead receiverHeadOk
+      obtain ⟨nodes, _, tree, _⟩ := Store.getHead_leaf receiverHeadOk
       have lowK : (e.world n).time ≤ (e.world k).time := atTime ▸ low
       have highK : (e.world k).time ≤ time := atTime ▸ high
       have route := viable w receiver k nodes lowK highK upToDate tree
