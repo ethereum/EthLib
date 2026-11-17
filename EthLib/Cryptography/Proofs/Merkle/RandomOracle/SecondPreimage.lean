@@ -1,7 +1,8 @@
 module
 
-public import EthLib.Cryptography.Proofs.Merkle.RandomOracle
+public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Basic
 public import EthLib.Cryptography.Proofs.RandomOracleFromCache
+public import VCVio.OracleComp.Constructions.SampleableType.Measure
 
 /-!
 # Proofs: a tight second-preimage bound for one Merkle tree

@@ -16,6 +16,10 @@ A queued partial withdrawal can take more, so none may name the validator.
 From Gloas the withdrawals of builders lower no balance of a validator.
 
 So the withdrawals of a block keep the capped balance of such a validator.
+
+Before Gloas, the sweep leaves it at least its cap or its balance less the queued payments.
+
+The queue pays a validator at most the amounts of the entries that it reads.
 -/
 
 @[expose] public section
@@ -39,6 +43,58 @@ theorem appendWithdrawal_withdrawnFrom_eq {withdrawals after : Array Withdrawal}
   obtain ⟨_, _, rfl, rfl⟩ := computed
   rw [Array.append_push, withdrawnFrom_push]
 
+/-- The loop of the queued partial withdrawals pays only from the entries that it reads.
+
+Each entry read is withdrawable by the epoch, and pays its validator at most its amount. -/
+private theorem getPendingPartialWithdrawals_loop_taken {state : BeaconState preset fork}
+    {prior : Array Withdrawal} {epoch : Epoch} {limit : Nat} :
+    ∀ (queue : List PendingPartialWithdrawal) (withdrawals : Array Withdrawal)
+      (next : WithdrawalIndex) (processed : Nat)
+      {result : Array Withdrawal × WithdrawalIndex × Nat},
+    getPendingPartialWithdrawals.loop state prior epoch limit queue withdrawals next processed =
+      .ok result →
+    ∃ k, result.2.2 = processed + k ∧ (∀ entry ∈ queue.take k, entry.withdrawableEpoch ≤ epoch) ∧
+      ∀ index, withdrawnFrom withdrawals index ≤ withdrawnFrom result.1 index ∧
+        withdrawnFrom result.1 index ≤ withdrawnFrom withdrawals index +
+          (((queue.take k).filter (·.validatorIndex = index)).map (·.amount.toNat)).sum
+  | [], _, _, _, _, computed => by
+    simp only [getPendingPartialWithdrawals.loop, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨0, rfl, by simp, by simp⟩
+  | pending :: rest, withdrawals, _, processed, result, computed => by
+    simp only [getPendingPartialWithdrawals.loop] at computed
+    split at computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      exact ⟨0, rfl, by simp, by simp⟩
+    rename_i reading
+    simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, _, _, computed⟩ := computed
+    -- The entry read pays at most its amount, and the loop then reads the rest.
+    obtain ⟨after, paid, next', ok⟩ : ∃ after : Array Withdrawal,
+        (∀ index, withdrawnFrom withdrawals index ≤ withdrawnFrom after index ∧
+          withdrawnFrom after index ≤ withdrawnFrom withdrawals index +
+            if pending.validatorIndex = index then pending.amount.toNat else 0) ∧
+        ∃ next', getPendingPartialWithdrawals.loop state prior epoch limit rest after next'
+          (processed + 1) = .ok result := by
+      split at computed
+      · simp only [bind_ok_iff, liftAccessor_ok] at computed
+        obtain ⟨⟨appended, following⟩, appendedOk, rest'⟩ := computed
+        refine ⟨appended, fun index => ?_, _, rest'⟩
+        have sum := appendWithdrawal_withdrawnFrom_eq appendedOk #[] index
+        simp only [Array.empty_append] at sum
+        rw [sum]
+        exact ⟨Nat.le_add_right _ _, by split <;> simp [Uint64.toNat_min] <;> omega⟩
+      · exact ⟨_, fun _ => ⟨Nat.le_refl _, Nat.le_add_right _ _⟩, _, computed⟩
+    obtain ⟨k, counted, taken, sums⟩ := getPendingPartialWithdrawals_loop_taken rest _ _ _ ok
+    refine ⟨k + 1, by omega, ?_, fun index => ?_⟩
+    · exact List.forall_mem_cons.mpr ⟨UInt64.not_lt.mp fun h => reading (.inl h), taken⟩
+    · obtain ⟨low, high⟩ := sums index
+      obtain ⟨low', high'⟩ := paid index
+      refine ⟨Nat.le_trans low' low, ?_⟩
+      rw [List.take_succ_cons, List.filter_cons]
+      by_cases same : pending.validatorIndex = index <;> simp [same] at high' ⊢ <;> omega
+
 /-- The loop of the queued partial withdrawals takes nothing from an index that no entry names. -/
 theorem getPendingPartialWithdrawals_loop_unnamed {state : BeaconState preset fork}
     {prior : Array Withdrawal} {epoch : Epoch} {limit : Nat} {index : ValidatorIndex} :
@@ -48,49 +104,52 @@ theorem getPendingPartialWithdrawals_loop_unnamed {state : BeaconState preset fo
     (∀ pending ∈ queue, pending.validatorIndex ≠ index) →
     getPendingPartialWithdrawals.loop state prior epoch limit queue withdrawals next processed =
       .ok result →
-    withdrawnFrom (prior ++ result.1) index = withdrawnFrom (prior ++ withdrawals) index
-  | [], _, _, _, _, _, computed => by
-    simp only [getPendingPartialWithdrawals.loop, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    rfl
-  | pending :: rest, _, _, _, _, apart, computed => by
-    have others : ∀ other ∈ rest, other.validatorIndex ≠ index :=
-      fun other member => apart other (List.mem_cons_of_mem _ member)
-    simp only [getPendingPartialWithdrawals.loop] at computed
-    split at computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      subst computed
-      rfl
-    · simp only [bind_ok_iff] at computed
-      obtain ⟨_, _, _, _, computed⟩ := computed
-      split at computed
-      · simp only [bind_ok_iff, liftAccessor_ok] at computed
-        obtain ⟨⟨appended, following⟩, appendedOk, rest'⟩ := computed
-        rw [getPendingPartialWithdrawals_loop_unnamed rest _ _ _ others rest',
-          appendWithdrawal_withdrawnFrom_eq appendedOk]
-        simp [apart pending List.mem_cons_self]
-      · exact getPendingPartialWithdrawals_loop_unnamed rest _ _ _ others computed
+    withdrawnFrom (prior ++ result.1) index = withdrawnFrom (prior ++ withdrawals) index := by
+  intro queue withdrawals next processed result apart computed
+  obtain ⟨k, -, -, sums⟩ := getPendingPartialWithdrawals_loop_taken queue withdrawals next
+    processed computed
+  obtain ⟨low, high⟩ := sums index
+  rw [List.filter_eq_nil_iff.mpr fun pending member => by
+    simpa using apart pending (List.mem_of_mem_take member)] at high
+  simp only [withdrawnFrom_append, List.map_nil, List.sum_nil] at high ⊢
+  omega
 
-/-- The loop of the sweep leaves a validator that may not yet withdraw its capped balance.
+/-- From Electra: the queued partial withdrawals read only entries withdrawable by the epoch.
 
-What the withdrawals take from it, plus its capped balance, stays within its balance. -/
-theorem getValidatorsSweepWithdrawals_loop_capped {state : BeaconState preset fork}
-    {prior : Array Withdrawal} {count limit : Nat} {index : ValidatorIndex}
-    {validator : Validator} {balance : Gwei}
+What they pay a validator is at most the amounts of its entries read. -/
+theorem getPendingPartialWithdrawals_taken {state : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {start next : WithdrawalIndex}
+    {prior partials : Array Withdrawal} {count : Nat}
+    (computed : getPendingPartialWithdrawals state electra start prior =
+      .ok (partials, next, count)) :
+    (∀ entry ∈ (state.pendingPartialWithdrawals electra).data.toList.take count,
+        entry.withdrawableEpoch ≤ getCurrentEpoch state) ∧
+      ∀ index, withdrawnFrom partials index ≤
+        ((((state.pendingPartialWithdrawals electra).data.toList.take count).filter
+          (·.validatorIndex = index)).map (·.amount.toNat)).sum := by
+  simp only [getPendingPartialWithdrawals, bind_ok_iff, ensure_ok_iff] at computed
+  obtain ⟨_, _, _, _, loopOk⟩ := computed
+  obtain ⟨k, counted, taken, sums⟩ := getPendingPartialWithdrawals_loop_taken _ _ _ _ loopOk
+  obtain rfl : count = k := by simpa using counted
+  exact ⟨taken, fun index => by simpa [withdrawnFrom] using (sums index).2⟩
+
+/-- The loop of the sweep keeps a validator that may not yet withdraw above a floor.
+
+What the withdrawals take from it, plus a floor at most its cap, stays within its balance. -/
+private theorem getValidatorsSweepWithdrawals_loop_floor {state : BeaconState preset fork}
+    {prior : Array Withdrawal} {epoch : Epoch} {count limit : Nat} {index : ValidatorIndex}
+    {validator : Validator} {balance : Gwei} {floor : Nat}
     (found : state.validators.data[index.toNat]? = some validator)
     (held : state.balances.data[index.toNat]? = some balance)
-    (unwithdrawable : getCurrentEpoch state < validator.withdrawableEpoch) :
+    (unwithdrawable : epoch < validator.withdrawableEpoch)
+    (capped : floor ≤ (withdrawalMaxEffectiveBalance preset fork validator).toNat) :
     ∀ (visits : Nat) (withdrawals : Array Withdrawal) (next : WithdrawalIndex)
       (target : ValidatorIndex) (processed : Nat)
       {result : Array Withdrawal × WithdrawalIndex × Nat},
-    withdrawnFrom (prior ++ withdrawals) index +
-        min balance.toNat (withdrawalMaxEffectiveBalance preset fork validator).toNat ≤
-      balance.toNat →
-    getValidatorsSweepWithdrawals.loop state prior (getCurrentEpoch state) count limit visits
-      withdrawals next target processed = .ok result →
-    withdrawnFrom (prior ++ result.1) index +
-        min balance.toNat (withdrawalMaxEffectiveBalance preset fork validator).toNat ≤
-      balance.toNat
+    withdrawnFrom (prior ++ withdrawals) index + floor ≤ balance.toNat →
+    getValidatorsSweepWithdrawals.loop state prior epoch count limit visits withdrawals next target
+      processed = .ok result →
+    withdrawnFrom (prior ++ result.1) index + floor ≤ balance.toNat
   | 0, _, _, _, _, _, bounded, computed => by
     simp only [getValidatorsSweepWithdrawals.loop, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
@@ -113,8 +172,8 @@ theorem getValidatorsSweepWithdrawals_loop_capped {state : BeaconState preset fo
     · rename_i full
       simp only [bind_ok_iff, liftAccessor_ok] at computed
       obtain ⟨⟨appended, following⟩, appendedOk, _, _, rest⟩ := computed
-      refine getValidatorsSweepWithdrawals_loop_capped found held unwithdrawable visits _ _ _ _
-        ?_ rest
+      refine getValidatorsSweepWithdrawals_loop_floor found held unwithdrawable capped visits
+        _ _ _ _ ?_ rest
       rw [appendWithdrawal_withdrawnFrom_eq appendedOk]
       split
       · rename_i named
@@ -128,8 +187,8 @@ theorem getValidatorsSweepWithdrawals_loop_capped {state : BeaconState preset fo
         at excess
       simp only [bind_ok_iff, liftAccessor_ok] at computed
       obtain ⟨⟨appended, following⟩, appendedOk, _, _, rest⟩ := computed
-      refine getValidatorsSweepWithdrawals_loop_capped found held unwithdrawable visits _ _ _ _
-        ?_ rest
+      refine getValidatorsSweepWithdrawals_loop_floor found held unwithdrawable capped visits
+        _ _ _ _ ?_ rest
       rw [appendWithdrawal_withdrawnFrom_eq appendedOk]
       split
       · rename_i named
@@ -145,8 +204,65 @@ theorem getValidatorsSweepWithdrawals_loop_capped {state : BeaconState preset fo
       · simpa using bounded
     · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, exists_eq_left'] at computed
       obtain ⟨_, _, rest⟩ := computed
-      exact getValidatorsSweepWithdrawals_loop_capped found held unwithdrawable visits _ _ _ _
+      exact getValidatorsSweepWithdrawals_loop_floor found held unwithdrawable capped visits _ _ _ _
         bounded rest
+
+/-- The loop of the sweep leaves a validator that may not yet withdraw its capped balance.
+
+What the withdrawals take from it, plus its capped balance, stays within its balance. -/
+theorem getValidatorsSweepWithdrawals_loop_capped {state : BeaconState preset fork}
+    {prior : Array Withdrawal} {count limit : Nat} {index : ValidatorIndex}
+    {validator : Validator} {balance : Gwei}
+    (found : state.validators.data[index.toNat]? = some validator)
+    (held : state.balances.data[index.toNat]? = some balance)
+    (unwithdrawable : getCurrentEpoch state < validator.withdrawableEpoch) :
+    ∀ (visits : Nat) (withdrawals : Array Withdrawal) (next : WithdrawalIndex)
+      (target : ValidatorIndex) (processed : Nat)
+      {result : Array Withdrawal × WithdrawalIndex × Nat},
+    withdrawnFrom (prior ++ withdrawals) index +
+        min balance.toNat (withdrawalMaxEffectiveBalance preset fork validator).toNat ≤
+      balance.toNat →
+    getValidatorsSweepWithdrawals.loop state prior (getCurrentEpoch state) count limit visits
+      withdrawals next target processed = .ok result →
+    withdrawnFrom (prior ++ result.1) index +
+        min balance.toNat (withdrawalMaxEffectiveBalance preset fork validator).toNat ≤
+      balance.toNat :=
+  getValidatorsSweepWithdrawals_loop_floor found held unwithdrawable (Nat.min_le_right _ _)
+
+/-- Before Gloas, the sweep leaves a validator that is not yet withdrawable at least a floor.
+
+The floor is the smaller of its cap and its balance less what the queued partial withdrawals pay. -/
+theorem getExpectedWithdrawals_sweep_floor {state : BeaconState preset fork}
+    {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals} (before : fork < .glamsterdam)
+    (computed : getExpectedWithdrawals state capella = .ok expected) {index : ValidatorIndex}
+    {validator : Validator} (found : state.validators.data[index.toNat]? = some validator)
+    (alive : getCurrentEpoch state < validator.withdrawableEpoch) {balance : Gwei}
+    (held : state.balances.data[index.toNat]? = some balance) :
+    ∃ partials next,
+      (if electra : .pectra ≤ fork then
+        getPendingPartialWithdrawals state electra (state.nextWithdrawalIndex capella) #[]
+      else .ok (#[], state.nextWithdrawalIndex capella, 0)) =
+        .ok (partials, next, expected.processedPartialWithdrawalsCount) ∧
+      min (balance.toNat - withdrawnFrom partials index)
+          (withdrawalMaxEffectiveBalance preset fork validator).toNat ≤
+        balance.toNat - withdrawnFrom expected.withdrawals index := by
+  have total := getExpectedWithdrawals_withdrawnFrom (.inl before) computed held
+  simp only [getExpectedWithdrawals, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨⟨builders, index1, _⟩, buildersOk, ⟨partials, index2, _⟩, partialsOk,
+    ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk, rfl⟩ := computed
+  have noGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp only [noGloas, ↓reduceDIte, Except.ok.injEq, Prod.mk.injEq] at buildersOk buildersSweepOk
+  obtain ⟨rfl, rfl, _⟩ := buildersOk
+  obtain ⟨rfl, rfl, _⟩ := buildersSweepOk
+  refine ⟨partials, index2, partialsOk, ?_⟩
+  simp only [getValidatorsSweepWithdrawals, bind_ok_iff, ensure_ok_iff] at sweepOk
+  obtain ⟨_, _, loopOk⟩ := sweepOk
+  simp only [Array.empty_append, Array.append_empty, withdrawnFrom_append] at total ⊢
+  have floor := getValidatorsSweepWithdrawals_loop_floor found held alive
+    (floor := min (balance.toNat - withdrawnFrom partials index) _) (Nat.min_le_right _ _)
+    _ _ _ _ _ (by simp only [Array.empty_append, Array.append_empty]; omega) loopOk
+  simp only [Array.empty_append, Array.append_empty, withdrawnFrom_append] at floor
+  omega
 
 /-- The expected withdrawals leave a validator that may not yet withdraw its capped balance.
 

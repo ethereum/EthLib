@@ -135,32 +135,32 @@ The game does not count that as a win.
 ### Merkle trees
 
 leanXMSS, leanSPHINCS, the VRF tree and SSZ build their trees on one definition.
-Two theorems in `Proofs/Merkle/Binding.lean` describe what a path binds, for every node hash.
+Two theorems in `Proofs/Merkle/Binding/` describe what a path binds, for every node hash.
 The first is `climb_binding`, about two climbs from one position that reach one node.
 They are equal, or `findCollision` returns a collision of the node hash at an ancestor of that position.
 The second is `climb_binding_node`, about a climb that reaches an honest node but is not the honest climb.
 Then `findSecondPreimage` returns a second preimage of an honest ancestor.
-`root_binding_leaves` (`Proofs/Merkle/VectorBinding.lean`) applies the first theorem at every leaf: the root binds the vector.
+`root_binding_leaves` (`Proofs/Merkle/Binding/Collision.lean`) applies the first theorem at every leaf: the root binds the vector.
 
 Both searches are explicit algorithms, proved to return valid answers.
 Each can return nothing: on one climb compared with itself (`findCollision_self`), and on the honest climb (`findSecondPreimage_honest`).
 So the statements say something, even though every compressing hash has collisions.
 
-`Proofs/Merkle/PositionBinding.lean` covers a path whose index or length is wrong.
+`Proofs/Merkle/Binding/Index.lean` covers a path whose index or length is wrong.
 `climb_root_honest`: a climb from leaf `j` that reaches the root is the honest opening, or `findSecondPreimage` or `findPositionCollision` succeeds.
 The second search finds two inputs at different positions with one output, which is free for a hash that ignores the position.
 With such a hash, the verifier must check `j < 2^h` and the path length itself (`climb_const_shift_root`, `climb_const_interior`).
 An empty path and a tree of height 0 are not covered.
 
 A multiproof opens several nodes at once, with the helper nodes their paths need (`Merkle/Multiproof.lean`).
-`verify_complete` (`Proofs/Merkle/Multiproof.lean`) shows that an honest multiproof rebuilds the root.
-`verify_binding` (`Proofs/Merkle/MultiproofBinding.lean`) is about two accepted multiproofs for the same positions and root.
+`verify_complete` (`Proofs/Merkle/Multiproof/Basic.lean`) shows that an honest multiproof rebuilds the root.
+`verify_binding` (`Proofs/Merkle/Multiproof/Binding.lean`) is about two accepted multiproofs for the same positions and root.
 The opened positions are distinct and lie in the tree, and none is an ancestor of another.
 Each list of values has one value per position.
 They open the same values, or `findMultiproofCollision` returns a collision of the node hash.
 That search walks both rebuilds down from the root, and returns nothing on one rebuild compared with itself (`findMultiproofCollision_self`).
 
-`Proofs/Merkle/RandomOracle.lean` bounds classical searches against an ideal random oracle with `N` outputs and an empty initial cache.
+`Proofs/Merkle/RandomOracle/Collision.lean` bounds classical searches against an ideal random oracle with `N` outputs and an empty initial cache.
 `prEvent_collision_le` bounds a collision among queried inputs by `q^2 / N` for at most `q` hash calls, and private uniform sampling is not counted.
 This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`: at most 4 for `q >= 2`, and close to 2 for large `q`.
 `prEvent_experimentWith_le` applies it to an experiment where the adversary outputs a claim and an extraction then runs on it with the oracle alone.
@@ -203,8 +203,8 @@ It rests on `climb_binding`, above.
 Multiproof binding is `verifyMerkleMultiproof_binding` and `verifyMerkleMultiproof_overlap_binding` (`Proofs/Ssz/Merkle/MultiproofBinding.lean`).
 Two accepted requests for one root agree on every position they both claim, or `findMultiproofMessageCollision` returns a collision.
 That search is the Merkle multiproof search over the two rebuilds, and returns the two inputs hashed at one node.
-Each input is one its own verifier hashes, in the record of `verifiedMultiproofMessages` (`findMultiproofCollision_recorded`, `Proofs/Merkle/MultiproofTrace.lean`).
-It rests on `rebuild_go_binding` (`Proofs/Merkle/MultiproofBinding.lean`).
+Each input is one its own verifier hashes, in the record of `verifiedMultiproofMessages` (`findMultiproofCollision_recorded`, `Proofs/Merkle/Multiproof/Trace.lean`).
+It rests on `rebuild_go_binding` (`Proofs/Merkle/Multiproof/Binding.lean`).
 
 Whole-value binding is `hashTreeRoot_binding` (`Proofs/Ssz/Codec/Binding.lean`).
 Two values of one type with one root are equal, or `findMessageCollision` returns a collision between the hash inputs of the two root computations.
@@ -4052,6 +4052,72 @@ A payload withdraws from at most 16 keys, so over 225 epochs, about a day, at mo
 Then this rounding alone adds up to about 1.3% of a stake of 36 million ether to the bound, and a tighter deficit is open.
 The premise on the withdrawal delay comes from the proof, which reads the invariant of pending consolidations, not from the bound.
 The envelope is not yet put into the weak subjectivity margin of `accountable_safety_of_weakSubjectivityPeriod`.
+
+`accountable_safety_apriori` (`DirectSafety/Apriori.lean`) replaces the observed drift by `drift x high`.
+Its definitions are in the namespace `DirectSafety.Apriori`.
+`drift x high` is a function of numbers read at `x` and of the window to the finalized epoch of `b`.
+It combines quantities read at `x` with the ceilings that the specification puts on each epoch.
+The ceilings cover the exit, consolidation and deposit churn, slashing and whistleblower amounts, the leak penalty and the issuance.
+When the guard `aprioriGuardAt` fails, `drift` is the unslashed active stake at `x`, so the bound is empty.
+The guard fails for every window that crosses Electra, and for every window from a state before Altair.
+It also fails for a state before Electra whose epoch has reached the Electra fork epoch, since that state never upgrades.
+It fails for a long window: `H + 2 >= EPOCHS_PER_SLASHINGS_VECTOR / 2`, where `H` counts the epochs from `x` to `high + 1`.
+On mainnet that is 4096 epochs, about 18 days without finality.
+It fails as well when the floor on the stake reaches zero, or twice the ceiling exceeds three times the floor.
+A guard that holds does not by itself make the bound useful.
+Write `U` for the unslashed active stake at `x` and `A` for the accountable stake.
+Unless the runs show `HashEvidence`, the theorem gives `A >= (U - 2 * drift x high) / 3`.
+That lower bound is positive only when `2 * drift x high < U`.
+`AccountableDriftBound` and `AccountableWindowBound` take the premises of `source_safety`, and `AccountableWindowBound` also takes the guard.
+Like the envelope, `drift` is an upper bound, and nothing says that a run attains it.
+
+To check what `accountable_safety_apriori` says, read four layers in `DirectSafety/Apriori/Bound.lean`, each in terms of the next.
+
+First, the theorem is `AccountableDriftBound` and `AccountableWindowBound` together.
+`AccountableDriftBound` has the conclusion of `source_safety`, with `2 * drift x high` in place of the source envelope.
+Here `high` is the finalized epoch of `b`.
+`AccountableWindowBound` also takes `aprioriGuardAt config x high`.
+Unless the runs show `HashEvidence`, it finds two quorum calls, possibly of the same run, with target epochs in the finalized window.
+Let `cutoff` be the earlier of the two target epochs.
+It then adds three times the stake of `exitedBefore x cutoff` to the left side.
+
+Second, `exitedBefore x cutoff` is the set of unslashed keys active at `x` whose exit epoch is before `cutoff`.
+It is empty when `cutoff` is at most the epoch of `x`.
+These keys have exited by both target epochs, so they are absent from both calls.
+
+Third, `aprioriGuardAt config x high` is `aprioriGuard` applied to the observables of `x`.
+It asks for positive constants of the preset and the configuration, and a withdrawal delay of at least two epochs.
+It asks for `H + 2 < EPOCHS_PER_SLASHINGS_VECTOR / 2`.
+It asks that the floor `T_minus`, `stakeFloorAt`, stay positive in every epoch.
+From Electra on, it asks for `2 * T_plus <= 3 * T_minus`, where `T_plus` is the ceiling `stakeCeilingAt`.
+It asks that the window not cross Electra.
+
+Fourth, when the guard holds, `drift x high` is:
+
+```text
+  2 * (departureBudgetAt + duePartialWithdrawals + scheduledExitStake + startSlack
+       + windowPenalties (driftHorizon + 1) + roundingBudget)
++ gainBudget + 2 * adjacentExitStake + previousOnlyStake + 2 * exitCohortGrowth
++ 2 * max windowEdgeLoad gainBudget
+```
+
+When the guard fails, `drift` is `referenceStake x - slashedActiveStake x`, the unslashed active stake at `x`.
+
+The terms doubled in the first line are stake that can leave the support of `x`.
+They are departures, partial withdrawals, scheduled exits, slack below the effective balance, penalties and rounding.
+`gainBudget` is stake that can join or grow: `activationBudget`, `creditBudget` and `pendingSourceExcess`.
+From Electra it also includes `roundingBudget` and `dueConsolidationCarry`.
+`creditBudget` is the excess at `x`, due consolidation credits, the whistleblower allowance, issuance and consolidation transfers.
+The remaining terms cover the edges of the window.
+They are two adjacent exit epochs, the stake active only at the previous epoch, and the growth room of an exit cohort.
+
+The bound combines three kinds of terms.
+Some are read once at `x`, such as `startSlack`, `previousOnlyStake` and the carries of the queues.
+Some are sums over the window of a per-epoch ceiling, such as `windowPenalties`, `windowIssuance` and the flows.
+Others are maxima, such as `adjacentExitStake`, `exitCohortGrowth` and `windowEdgeLoad`.
+The per-epoch ceilings come from `stakeCeiling`, which gives `T_plus`, and `stakeFloor`, which gives `T_minus`.
+They follow the churn limits, the issuance bound `Preset.epochIssuanceBeforeAltair` and the penalty `epochPenalty` epoch by epoch.
+Each of these is a function of plain numbers, and its `At` form reads those numbers at `x`.
 
 ### Engine API
 

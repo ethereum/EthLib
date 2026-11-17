@@ -12,6 +12,8 @@ Applying a step once more before its repetitions is one more repetition.
 Lean writes a digit `0` to `9` or `a` to `f` for a number below sixteen, and `*` from sixteen on.
 
 Lean states each case as a public lemma, and this module gathers them into one equation.
+
+Whole increments of a total, each paid a share of a factor, get at most the total's share.
 -/
 
 @[expose] public section
@@ -51,5 +53,19 @@ theorem digitChar_eq (n : Nat) :
   match n with
   | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 => simp
   | n + 16 => simp
+
+/-- Whole increments of a total, times one increment's share of a factor, are at most the total's.
+
+The share of an increment is the increment times the factor over the root.
+
+The share of the total is the total times the factor over the root. -/
+theorem div_mul_div_le_mul_div (total increment factor root : Nat) :
+    total / increment * (increment * factor / root) ≤ total * factor / root :=
+  calc total / increment * (increment * factor / root)
+      ≤ total / increment * (increment * factor) / root := Nat.mul_div_le_mul_div_assoc _ _ _
+    _ ≤ total * factor / root := by
+        refine Nat.div_le_div_right ?_
+        rw [← Nat.mul_assoc]
+        exact Nat.mul_le_mul_right _ (Nat.div_mul_le_self _ _)
 
 end EthLib.Base

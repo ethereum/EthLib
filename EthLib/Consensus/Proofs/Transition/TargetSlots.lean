@@ -358,8 +358,8 @@ theorem TargetFlagsVoted.of_advanceSlot {votes : Set (ValidatorIndex × Attestat
       processJustificationAndFinalization_keeps justifiedOk
     have previousJustified := (cachedEarly'.previousJustified_of_justification justifiedOk)
     cases current
-    · rcases (tail.flags altair position flags).1 found with rotated | rfl
-      · rcases (head.flags altair position flags).2 rotated with old | rfl
+    · rcases (tail.flags altair position flags).1 found with rotated | ⟨rfl, -⟩
+      · rcases (head.flags altair position flags).2 rotated with old | ⟨rfl, -⟩
         · rw [justifiedCurrent, cachedCurrent] at old
           obtain ⟨vote, voted, index, epoch, source, rootOk⟩ :=
             holds altair true position ⟨flags, old, set⟩
@@ -370,7 +370,7 @@ theorem TargetFlagsVoted.of_advanceSlot {votes : Set (ValidatorIndex × Attestat
                 (head.previousJustified.symm.trans tail.previousJustified.symm)
         · exact absurd set (by decide)
       · exact absurd set (by decide)
-    · rcases (tail.flags altair position flags).2 found with rotated | rfl
+    · rcases (tail.flags altair position flags).2 found with rotated | ⟨rfl, -⟩
       · simp only [processParticipationFlagUpdates, Array.getElem?_replicate] at rotated
         split at rotated
         · cases rotated

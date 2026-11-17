@@ -1,6 +1,7 @@
 module
 
-public import EthLib.Cryptography.Proofs.Merkle.Binding
+public import EthLib.Cryptography.Proofs.Merkle.Binding.Collision
+public import EthLib.Cryptography.Proofs.Merkle.Binding.SecondPreimage
 
 /-!
 # Proofs: a path binds its leaf index and its length
@@ -13,6 +14,10 @@ Two attacks change the index or the length of a path instead of its leaf:
 If the hash reads the position, a climb that reaches the root of height `h` has the honest shape.
 
 It starts below `2^h` with `h` siblings, or the search finds a collision across two positions.
+
+With the second-preimage search, a climb that reaches the root is the honest opening.
+
+Otherwise one of the two searches succeeds.
 
 If the hash ignores the position, that collision is free and both attacks succeed.
 

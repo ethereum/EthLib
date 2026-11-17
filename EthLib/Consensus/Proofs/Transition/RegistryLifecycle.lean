@@ -59,6 +59,19 @@ theorem ValidatorLifecycle.trans {first second third : Validator}
     have same := one.exitEpoch set
     exact (two.exitEpoch (same ▸ set)).trans same
 
+/-- Each validator after a step is the one before it at its index.
+
+It has the same key, effective balance and largest effective balance.
+
+Any assigned epoch is unchanged, and it is unslashed only if it was unslashed. -/
+def RegistryEntriesKept (u v : BeaconState preset fork) : Prop :=
+  ∀ (i : Nat) (w : Validator), v.validators.data[i]? = some w → ∃ old,
+    u.validators.data[i]? = some old ∧ w.pubkey = old.pubkey ∧
+      w.effectiveBalance = old.effectiveBalance ∧
+      withdrawalMaxEffectiveBalance preset fork w =
+        withdrawalMaxEffectiveBalance preset fork old ∧
+      (w.slashed = false → old.slashed = false) ∧ ValidatorLifecycle old w
+
 /-- The registry of a later state, which may be of a later fork.
 
 It is at least as long.
@@ -162,6 +175,32 @@ theorem decreaseBalance {index : ValidatorIndex} {delta : Gwei}
   of_data (by rw [decreaseBalance_validators computed])
 
 end RegistryLifecycle
+
+/-- Every epoch stage keeps the slot. -/
+theorem EpochStage.Edge.slot_eq {stage : EpochStage} {s t : BeaconState preset fork}
+    (edge : EpochStage.Edge config checks stage s t) : t.slot = s.slot := by
+  have computed := EpochStage.action_cases.mpr edge
+  by_cases ordinary : stage ≠ .justification ∧ stage ≠ .payments ∧
+      stage ≠ .participation ∧ stage ≠ .pendingDeposits
+  · exact (mutatorEpochFrameLaws.toEpochStepLaws.epochEdge ordinary computed).toFrame.slot
+  cases stage
+  case justification => exact processJustificationAndFinalization_slot edge
+  case payments =>
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · rw [processBuilderPendingPayments_eq edge]
+    · cases edge; rfl
+  case participation =>
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · cases edge; rfl
+    · exact (frame_processParticipationRecordUpdates edge).slot
+  case pendingDeposits =>
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · exact (frame_processPendingDeposits edge).slot
+    · cases edge; rfl
+  all_goals simp at ordinary
 
 /-- An epoch stage keeps five fields, unless it is one of six stages.
 
@@ -755,7 +794,7 @@ theorem registryLifecycle_processBlsToExecutionChange {signed : SignedBLSToExecu
 
 /-! ## Blocks -/
 
-private theorem registryLifecycle_processBlock {block : BeaconBlock preset fork}
+theorem registryLifecycle_processBlock {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     RegistryLifecycle state after := by
   obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput computed
@@ -882,30 +921,86 @@ theorem activationQueue_nodup (small : state.validators.data.size < 2 ^ 64) :
   have unique : (entries.map (·.2)).Nodup := List.pairwise_map.mpr distinct
   exact ((List.mergeSort_perm entries _).map (·.2)).nodup_iff.mpr unique
 
-/-- Activating distinct validators, each eligible for activation at the start. -/
-private theorem registryLifecycle_foldActivateValidator :
+private theorem foldActivateValidator_of_predicate
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {a b c}, R a b → R b c → R a c)
+    (P : ValidatorIndex → Validator → Prop)
+    (activate : ∀ {s t : BeaconState preset fork} {i : ValidatorIndex} {v : Validator},
+      P i v → getValidator s i = .ok v → v.activationEpoch = FAR_FUTURE_EPOCH →
+      activateValidator s i = .ok t → R s t) :
+    ∀ {indices : List ValidatorIndex} {state after : BeaconState preset fork},
+      indices.Nodup →
+      (∀ index ∈ indices, ∃ validator, getValidator state index = .ok validator ∧
+        validator.activationEpoch = FAR_FUTURE_EPOCH ∧ P index validator) →
+      indices.foldlM activateValidator state = .ok after → R state after
+  | [], state, after, _, _, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ refl state
+  | index :: rest, state, after, unique, eligible, computed => by
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, first, tail⟩ := computed
+    obtain ⟨validator, found, far, property⟩ := eligible index List.mem_cons_self
+    obtain ⟨absent, restUnique⟩ := List.nodup_cons.mp unique
+    refine trans (activate property found far first)
+      (foldActivateValidator_of_predicate R refl trans P activate restUnique
+        (fun other member => ?_) tail)
+    -- The other validators of the queue are not touched by this activation.
+    have distinct : other ≠ index := fun same => absent (same ▸ member)
+    obtain ⟨otherValidator, otherFound, otherFar, otherProperty⟩ :=
+      eligible other (List.mem_cons_of_mem _ member)
+    simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at first
+    obtain ⟨_, _, _, _, set⟩ := first
+    exact ⟨otherValidator, (getValidator_setValidator_of_ne set distinct).trans otherFound,
+      otherFar, otherProperty⟩
+
+/-- Fold distinct activations through a relation using their initially unassigned validators.
+
+The relation supplies its own activation invariant; the fold retains the untouched tail. -/
+private theorem foldActivateValidator_of_unassigned
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {a b c}, R a b → R b c → R a c)
+    (activate : ∀ {s t : BeaconState preset fork} {i : ValidatorIndex} {v : Validator},
+      getValidator s i = .ok v → v.activationEpoch = FAR_FUTURE_EPOCH →
+      activateValidator s i = .ok t → R s t) :
     ∀ {indices : List ValidatorIndex} {state after : BeaconState preset fork},
       indices.Nodup →
       (∀ index ∈ indices, ∃ validator, getValidator state index = .ok validator ∧
         validator.activationEpoch = FAR_FUTURE_EPOCH) →
-      indices.foldlM activateValidator state = .ok after → RegistryLifecycle state after
-  | [], state, after, _, _, computed => by
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ .refl _
-  | index :: rest, state, after, unique, eligible, computed => by
-    rw [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨middle, first, tail⟩ := computed
-    obtain ⟨validator, found, far⟩ := eligible index List.mem_cons_self
-    obtain ⟨absent, restUnique⟩ := List.nodup_cons.mp unique
-    refine (registryLifecycle_activateValidator found far first).trans
-      (registryLifecycle_foldActivateValidator restUnique (fun other member => ?_) tail)
-    -- The other validators of the queue are not touched by this activation.
-    have distinct : other ≠ index := fun same => absent (same ▸ member)
-    obtain ⟨otherValidator, otherFound, otherFar⟩ := eligible other (List.mem_cons_of_mem _ member)
-    simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at first
-    obtain ⟨_, _, _, _, set⟩ := first
-    exact ⟨otherValidator, (getValidator_setValidator_of_ne set distinct).trans otherFound,
-      otherFar⟩
+      indices.foldlM activateValidator state = .ok after → R state after := by
+  intro indices state after unique eligible computed
+  apply foldActivateValidator_of_predicate R refl trans (fun _ _ => True)
+    (fun _ found far ok => activate found far ok) unique ?_ computed
+  intro index member
+  obtain ⟨v, found, far⟩ := eligible index member
+  exact ⟨v, found, far, trivial⟩
+
+/-- The activation callback can read the original queue record's eligibility epoch. -/
+theorem foldActivateValidator_of_queue
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {a b c}, R a b → R b c → R a c)
+    {indices : List ValidatorIndex} {state after : BeaconState preset fork}
+    (activate : ∀ {s t : BeaconState preset fork} {i : ValidatorIndex} {v original : Validator},
+      i ∈ indices → getValidator state i = .ok original →
+      v.activationEligibilityEpoch = original.activationEligibilityEpoch →
+      getValidator s i = .ok v → v.activationEpoch = FAR_FUTURE_EPOCH →
+      activateValidator s i = .ok t → R s t)
+    (unique : indices.Nodup)
+    (eligible : ∀ index ∈ indices, ∃ validator, getValidator state index = .ok validator ∧
+      validator.activationEpoch = FAR_FUTURE_EPOCH)
+    (computed : indices.foldlM activateValidator state = .ok after) : R state after := by
+  let P := fun i (v : Validator) => i ∈ indices ∧ ∃ original,
+    getValidator state i = .ok original ∧
+      v.activationEligibilityEpoch = original.activationEligibilityEpoch
+  apply foldActivateValidator_of_predicate R refl trans P ?_ unique ?_ computed
+  · intro s t i v property found far ok
+    obtain ⟨member, original, located, epoch⟩ := property
+    exact activate member located epoch found far ok
+  · intro index member
+    obtain ⟨v, found, far⟩ := eligible index member
+    exact ⟨v, found, far, member, v, found, rfl⟩
 
 theorem registryLifecycle_processRegistryUpdates
     (computed : processRegistryUpdates config state = .ok after) :
@@ -940,7 +1035,9 @@ theorem registryLifecycle_processRegistryUpdates
   have small : updated.validators.data.size < 2 ^ 64 :=
     Nat.lt_of_le_of_lt (updated.validators.bound before) (UInt64.toNat_lt _)
   refine (RegistryLifecycle.foldlM (fun _ _ _ ok => registryLifecycle_updateRegistryEntry ok)
-    updatedOk).trans (registryLifecycle_foldActivateValidator
+    updatedOk).trans (foldActivateValidator_of_unassigned RegistryLifecycle RegistryLifecycle.refl
+      (fun one two => one.trans two)
+      (fun found far ok => registryLifecycle_activateValidator found far ok)
       (List.Nodup.sublist (List.take_sublist _ _) (activationQueue_nodup small))
       (fun index member => ?_) activated)
   obtain ⟨position, validator, equal, found, eligible⟩ :=
@@ -979,12 +1076,9 @@ theorem registryLifecycle_processPendingDeposits {electra : .pectra ≤ fork}
   repeat' (split at computed <;> try cases computed)
   all_goals exact (registryLifecycle_passPendingDeposits ‹_›).trans (.of_data rfl)
 
-/-- The epoch step keeps the lifecycle, stage by stage of the epoch schedule. -/
-private theorem registryLifecycle_processEpoch
-    (computed : processEpoch config checks state = .ok after) : RegistryLifecycle state after := by
-  apply (processEpoch_trace computed).transport RegistryLifecycle .refl (fun a b => a.trans b)
-  intro k _ a b ok
-  have edge := EpochStage.action_cases.mp ok
+/-- Every epoch stage preserves assigned activation and exit epochs. -/
+theorem EpochStage.Edge.registryLifecycle {k : EpochStage}
+    (edge : EpochStage.Edge config checks k state after) : RegistryLifecycle state after := by
   cases k
   case registry => exact registryLifecycle_processRegistryUpdates edge
   case pendingDeposits =>
@@ -994,6 +1088,13 @@ private theorem registryLifecycle_processEpoch
     · exact edge ▸ .refl _
   case effectiveBalances => exact registryLifecycle_processEffectiveBalanceUpdates edge
   all_goals exact .of_data (congrArg (·.data) (edge.validators_eq ⟨nofun, nofun, nofun⟩))
+
+/-- The epoch step keeps the lifecycle, stage by stage of the epoch schedule. -/
+private theorem registryLifecycle_processEpoch
+    (computed : processEpoch config checks state = .ok after) : RegistryLifecycle state after := by
+  apply (processEpoch_trace computed).transport RegistryLifecycle .refl (fun a b => a.trans b)
+  intro k _ a b ok
+  exact (EpochStage.action_cases.mp ok).registryLifecycle
 
 /-! ## Slots, upgrades and chains -/
 

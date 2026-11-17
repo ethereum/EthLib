@@ -398,7 +398,7 @@ private theorem processDepositRequest_registryLoad_le {electra : .pectra ≤ for
     {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
     registryLoad after ≤ registryLoad state + 1 := by
-  obtain ⟨pushed, validators, -⟩ := processDepositRequest_ok computed
+  obtain ⟨pushed, validators, -, -⟩ := processDepositRequest_ok computed
   simp only [registryLoad, electra, ↓reduceDIte, pushed, validators, Array.size_push]
   omega
 
@@ -704,7 +704,7 @@ private theorem processDepositRequest_size {electra : .pectra ≤ fork}
     {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
     after.validators.data.size = state.validators.data.size := by
-  obtain ⟨-, validators, -⟩ := processDepositRequest_ok computed
+  obtain ⟨-, validators, -, -⟩ := processDepositRequest_ok computed
   rw [validators]
 
 /-- A fold whose every step keeps the registry size keeps it. -/

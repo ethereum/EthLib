@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Merkle.RandomOracle
+public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Collision
 public import EthLib.Cryptography.Proofs.RandomOracleFromCache
 
 /-!

@@ -82,7 +82,18 @@ noncomputable def accountableKeys {g x a b : ForkedBeaconState preset}
   classical
   exact (unslashedKeys x.state).filter (Accountable shared left right)
 
-/-- Two quorums with slashable common voters bound the unslashed active stake at `x`.
+open Classical in
+/-- Loss, gain and boundary drift measured against an unslashed reference subset. -/
+noncomputable def stateDriftOn (reference : Finset BLSPubkey)
+    (x y : ForkedBeaconState preset) : Nat :=
+  2 * (∑ k ∈ reference.filter (¬ SlashedAt y.state ·),
+    (effectiveWeight x.state k -
+      Models.supported (recentKeys y.state) (effectiveWeight y.state) k)) +
+    (∑ k ∈ recentKeys y.state, (effectiveWeight y.state k -
+      Models.supported reference (effectiveWeight x.state) k)) + 2 * boundaryStake y
+
+open Classical in
+/-- Two quorums with slashable common voters bound a subset of the unslashed stake at `x`.
 
 The bound is three times the accountable stake.
 
@@ -93,7 +104,7 @@ Each quorum is a quorum call of its run, or the test of the step of its view.
 Both are in the tails: they target epoch `low` or later, and `x` is no later than its first slot.
 
 A key slashed at a quorum and unslashed at `x` has slashing evidence in the tail of the quorum. -/
-private theorem view_pair_bound {g x a b : ForkedBeaconState preset}
+private theorem view_pair_reference_bound {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
     {low high : Nat} (starts : x.state.slot.toNat ≤ low * preset.SLOTS_PER_EPOCH.toNat)
@@ -105,12 +116,14 @@ private theorem view_pair_bound {g x a b : ForkedBeaconState preset}
     (lowerOne : low ≤ one.target.epoch.toNat) (lowerTwo : low ≤ two.target.epoch.toNat)
     (withinOne : one.target.epoch.toNat ≤ high) (withinTwo : two.target.epoch.toNat ≤ high)
     (overlap : ∀ key ∈ one.voters ∩ two.voters,
-      Slashable (shared.append left) (shared.append right) key) :
-    Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
-      3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) +
-      stateDrift x one.state + stateDrift x two.state := by
+      Slashable (shared.append left) (shared.append right) key)
+    (reference : Finset BLSPubkey) (referenceSubset : reference ⊆ unslashedKeys x.state) :
+    Models.stake (effectiveWeight x.state) reference ≤
+      3 * Models.stake (effectiveWeight x.state)
+          (reference.filter (Accountable shared left right)) +
+      stateDriftOn reference x one.state + stateDriftOn reference x two.state := by
   classical
-  let bad := (unslashedKeys x.state).filter (Accountable shared left right)
+  let bad := reference.filter (Accountable shared left right)
   have facts {z : ForkedBeaconState preset} {tail : Run config checks x z}
       {view : TerminalView z}
       (enough : EnoughStake (shared.append tail) high) (terminal : view.enough high)
@@ -120,9 +133,12 @@ private theorem view_pair_bound {g x a b : ForkedBeaconState preset}
       call.voters ⊆ recentKeys call.state.state ∧
       2 * Models.stake (effectiveWeight call.state.state) (unslashedKeys call.state.state) ≤
         3 * Models.stake (effectiveWeight call.state.state) call.voters ∧
-      (∑ k ∈ unslashedKeys x.state \ bad,
+      (∑ k ∈ reference \ bad,
         (effectiveWeight x.state k - Models.supported (recentKeys call.state.state)
-          (effectiveWeight call.state.state) k)) ≤ referenceLoss x call.state := by
+          (effectiveWeight call.state.state) k)) ≤
+      ∑ k ∈ reference.filter (¬ SlashedAt call.state.state ·),
+        (effectiveWeight x.state k - Models.supported (recentKeys call.state.state)
+          (effectiveWeight call.state.state) k) := by
     -- Removing slashed keys from the denominator keeps a quorum.
     refine ⟨view_voters_recent _ parameters genesis call,
       (Nat.mul_le_mul_left 2 (Models.stake_mono (Finset.filter_subset _ _))).trans
@@ -144,14 +160,13 @@ private theorem view_pair_bound {g x a b : ForkedBeaconState preset}
         refine ⟨u, w, step, ?_, evidence⟩
         rw [split]
         exact (Run.contains_append _ post step).mpr (.inl (.earlier inside _))
-    unfold referenceLoss
     apply Finset.sum_le_sum_of_subset_of_nonneg
     · intro k hk
       obtain ⟨fresh, absent⟩ := Finset.mem_sdiff.mp hk
       refine Finset.mem_filter.mpr ⟨fresh, ?_⟩
       rintro ⟨v, found, key, flag⟩
       rcases slashed v found flag with early | evidence
-      · exact (Finset.mem_filter.mp fresh).2 (key ▸ early)
+      · exact (Finset.mem_filter.mp (referenceSubset fresh)).2 (key ▸ early)
       · exact absent (Finset.mem_filter.mpr ⟨fresh, key ▸ included _ evidence⟩)
     · intros; exact Nat.zero_le _
   obtain ⟨recentOne, quorumOne, lossOne⟩ :=
@@ -161,15 +176,21 @@ private theorem view_pair_bound {g x a b : ForkedBeaconState preset}
   -- Include overlap outside the reference set; it contributes no reference weight.
   let accountable := bad ∪ (one.voters ∩ two.voters)
   have outsideLoss (s : ForkedBeaconState preset)
-      (bound : (∑ k ∈ unslashedKeys x.state \ bad,
+      (bound : (∑ k ∈ reference \ bad,
         (effectiveWeight x.state k - Models.supported (recentKeys s.state)
-          (effectiveWeight s.state) k)) ≤ referenceLoss x s) :
-      (∑ k ∈ unslashedKeys x.state \ accountable,
+          (effectiveWeight s.state) k)) ≤
+        ∑ k ∈ reference.filter (¬ SlashedAt s.state ·),
+          (effectiveWeight x.state k - Models.supported (recentKeys s.state)
+            (effectiveWeight s.state) k)) :
+      (∑ k ∈ reference \ accountable,
         (effectiveWeight x.state k - Models.supported (recentKeys s.state)
-          (effectiveWeight s.state) k)) ≤ referenceLoss x s := by
+          (effectiveWeight s.state) k)) ≤
+        ∑ k ∈ reference.filter (¬ SlashedAt s.state ·),
+          (effectiveWeight x.state k - Models.supported (recentKeys s.state)
+            (effectiveWeight s.state) k) := by
     apply le_trans (Finset.sum_le_sum_of_subset_of_nonneg ?_ (by intros; omega)) bound
     exact Finset.sdiff_subset_sdiff (Finset.Subset.refl _) Finset.subset_union_left
-  have same : unslashedKeys x.state ∩ accountable = bad := by
+  have same : reference ∩ accountable = bad := by
     ext k
     simp only [accountable, bad, Finset.mem_inter, Finset.mem_union, Finset.mem_filter]
     constructor
@@ -191,32 +212,96 @@ private theorem view_pair_bound {g x a b : ForkedBeaconState preset}
     obtain ⟨recent, notUnslashed⟩ := Finset.mem_sdiff.mp member
     exact Finset.mem_sdiff.mpr ⟨recent, fun active =>
       notUnslashed (Finset.mem_filter.mpr ⟨active, (Finset.mem_filter.mp recent).2⟩)⟩
-  have bound := Models.stake_le_accountable_add_change (unslashedKeys x.state)
+  have bound := Models.stake_le_accountable_add_change reference
     (unslashedKeys one.state.state) (unslashedKeys two.state.state)
     (recentKeys one.state.state) (recentKeys two.state.state) one.voters two.voters
     accountable (effectiveWeight x.state) (effectiveWeight one.state.state)
-    (effectiveWeight two.state.state) (referenceLoss x one.state) (referenceLoss x two.state)
-    (referenceGain x one.state) (referenceGain x two.state)
+    (effectiveWeight two.state.state)
+    (∑ k ∈ reference.filter (¬ SlashedAt one.state.state ·),
+      (effectiveWeight x.state k - Models.supported (recentKeys one.state.state)
+        (effectiveWeight one.state.state) k))
+    (∑ k ∈ reference.filter (¬ SlashedAt two.state.state ·),
+      (effectiveWeight x.state k - Models.supported (recentKeys two.state.state)
+        (effectiveWeight two.state.state) k))
+    (∑ k ∈ recentKeys one.state.state, (effectiveWeight one.state.state k -
+      Models.supported reference (effectiveWeight x.state) k))
+    (∑ k ∈ recentKeys two.state.state, (effectiveWeight two.state.state k -
+      Models.supported reference (effectiveWeight x.state) k))
     (boundaryStake one.state) (boundaryStake two.state)
     (inside one.state) (inside two.state) recentOne recentTwo quorumOne quorumTwo
     Finset.subset_union_right (outsideLoss one.state lossOne) (outsideLoss two.state lossTwo)
     (Nat.le_refl _) (Nat.le_refl _) (outside one.state) (outside two.state)
   rw [same] at bound
-  change _ ≤ 3 * Models.stake (effectiveWeight x.state) bad +
-    stateDrift x one.state + stateDrift x two.state
-  dsimp only [stateDrift]
+  dsimp only [bad] at bound
+  unfold stateDriftOn
   omega
+
+/-- The original reference set is one instance of the shared quorum transfer. -/
+private theorem view_pair_bound {g x a b : ForkedBeaconState preset}
+    (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
+    {low high : Nat} (starts : x.state.slot.toNat ≤ low * preset.SLOTS_PER_EPOCH.toNat)
+    (enoughA : EnoughStake (shared.append left) high)
+    (enoughB : EnoughStake (shared.append right) high)
+    {va : TerminalView a} {vb : TerminalView b} (terminalA : va.enough high)
+    (terminalB : vb.enough high)
+    (one : ViewQuorum (shared.append left) va) (two : ViewQuorum (shared.append right) vb)
+    (lowerOne : low ≤ one.target.epoch.toNat) (lowerTwo : low ≤ two.target.epoch.toNat)
+    (withinOne : one.target.epoch.toNat ≤ high) (withinTwo : two.target.epoch.toNat ≤ high)
+    (overlap : ∀ key ∈ one.voters ∩ two.voters,
+      Slashable (shared.append left) (shared.append right) key) :
+    Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
+      3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) +
+      stateDrift x one.state + stateDrift x two.state := by
+  exact view_pair_reference_bound shared left right parameters genesis starts enoughA enoughB
+    terminalA terminalB one two lowerOne lowerTwo withinOne withinTwo overlap
+    (unslashedKeys x.state) (Finset.Subset.refl _)
 
 /-- A conflict between two checkpoints puts `x` no later than the first slot of the earlier epoch.
 
 The first checkpoint has the earlier epoch. -/
-private theorem conflict_starts {g x a b : ForkedBeaconState preset}
+theorem conflict_starts {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (f j : Checkpoint) (ordered : f.epoch ≤ j.epoch)
     (conflict : Conflict (shared.append left) (shared.append right) f j) :
     x.state.slot.toNat ≤ f.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat := by
   apply shared.slot_le_of_checkpointPath_ne left right
   simpa only [Conflict, UInt64.min_def, ite_eq_left ordered] using conflict
+
+open Classical in
+/-- The conflict's selected calls transfer a reference chosen from their target epochs. -/
+theorem accountable_safety_at_calls_reference {g x a b : ForkedBeaconState preset}
+    (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
+    (j : Checkpoint)
+    (enoughA : EnoughStake (shared.append left) j.epoch.toNat)
+    (enoughB : EnoughStake (shared.append right) j.epoch.toNat)
+    (field : j = b.state.previousJustifiedCheckpoint ∨ j = b.state.currentJustifiedCheckpoint ∨
+      j = b.state.finalizedCheckpoint)
+    (ordered : a.state.finalizedCheckpoint.epoch ≤ j.epoch)
+    (conflict : Conflict (shared.append left) (shared.append right) a.state.finalizedCheckpoint j)
+    (reference : Nat → Nat → Finset BLSPubkey)
+    (inside : ∀ e f, reference e f ⊆ unslashedKeys x.state) :
+    (∃ one two : EitherCall (shared.append left) (shared.append right),
+      a.state.finalizedCheckpoint.epoch.toNat ≤ one.targetEpoch ∧ one.targetEpoch ≤ j.epoch.toNat ∧
+      a.state.finalizedCheckpoint.epoch.toNat ≤ two.targetEpoch ∧ two.targetEpoch ≤ j.epoch.toNat ∧
+      let r := reference one.targetEpoch two.targetEpoch
+      Models.stake (effectiveWeight x.state) r ≤
+        3 * Models.stake (effectiveWeight x.state) (r.filter (Accountable shared left right)) +
+          stateDriftOn r x one.state + stateDriftOn r x two.state) ∨
+      HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects) := by
+  rcases view_conflicting_fields_quorums (shared.append left) (shared.append right)
+      parameters genesis .realized .realized j field ordered conflict with
+    ⟨one, two, lowerOne, upperOne, lowerTwo, upperTwo, overlap⟩ | hashes
+  · have bound := view_pair_reference_bound shared left right parameters genesis
+      (conflict_starts shared left right _ j ordered conflict) enoughA enoughB
+      (va := .realized) (vb := .realized) trivial trivial one two lowerOne lowerTwo
+      upperOne upperTwo overlap (reference one.target.epoch.toNat two.target.epoch.toNat)
+          (inside _ _)
+    obtain ⟨one, rfl⟩ := one.eq_inl_of_realized
+    obtain ⟨two, rfl⟩ := two.eq_inl_of_realized
+    exact .inl ⟨.inl one, .inr two, lowerOne, upperOne, lowerTwo, upperTwo, bound⟩
+  · exact .inr hashes
 
 /-- A finalized field of the left run conflicts with a field of the right run at its epoch or later.
 
@@ -251,17 +336,8 @@ theorem accountable_safety_at_calls {g x a b : ForkedBeaconState preset}
         3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) +
         stateDrift x one.state + stateDrift x two.state) ∨
       HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects) := by
-  rcases view_conflicting_fields_quorums (shared.append left) (shared.append right)
-      parameters genesis .realized .realized j field ordered conflict with
-    ⟨one, two, lowerOne, upperOne, lowerTwo, upperTwo, overlap⟩ | hashes
-  · have bound := view_pair_bound shared left right parameters genesis
-      (conflict_starts shared left right _ j ordered conflict) enoughA enoughB
-      (va := .realized) (vb := .realized) trivial trivial one two lowerOne lowerTwo
-      upperOne upperTwo overlap
-    obtain ⟨one, rfl⟩ := one.eq_inl_of_realized
-    obtain ⟨two, rfl⟩ := two.eq_inl_of_realized
-    exact .inl ⟨.inl one, .inr two, lowerOne, upperOne, lowerTwo, upperTwo, bound⟩
-  · exact .inr hashes
+  exact accountable_safety_at_calls_reference shared left right parameters genesis j enoughA enoughB
+    field ordered conflict (fun _ _ => unslashedKeys x.state) (fun _ _ => Finset.Subset.refl _)
 
 /-- The drift of a tail observes its last state when that state is within the horizon. -/
 private theorem stateDrift_le_derivedDrift {x z : ForkedBeaconState preset} {high : Nat}
@@ -271,6 +347,43 @@ private theorem stateDrift_le_derivedDrift {x z : ForkedBeaconState preset} {hig
   | nil => exact Nat.le_refl _
   | snoc pre step =>
     simp only [derivedDrift, ite_eq_left bounded]; exact Nat.le_max_right _ _
+
+/-- Caching the slot keeps the slot and validators.
+
+So a quorum call's cached state keeps the epoch, slashed flags, recent keys and drift. -/
+theorem QuorumCall.cached_frame {g y : ForkedBeaconState preset}
+    {run : Run config checks g y} (call : QuorumCall run) (x : ForkedBeaconState preset) :
+    getCurrentEpoch call.cached = getCurrentEpoch call.before.state ∧
+    SlashedAt call.cached = SlashedAt call.before.state ∧
+    recentKeys call.cached = recentKeys call.before.state ∧
+    stateDrift x ⟨call.before.fork, call.cached⟩ = stateDrift x call.before := by
+  obtain ⟨_, _, _, frame, validators, _⟩ := call.toEpochCall.selected_prefix
+  have sameEpoch : getCurrentEpoch call.cached = getCurrentEpoch call.before.state := by
+    simp only [getCurrentEpoch, frame.slot]
+  have weight : effectiveWeight call.cached = effectiveWeight call.before.state := by
+    funext k
+    simp only [effectiveWeight, validators]
+  have slashed : SlashedAt call.cached = SlashedAt call.before.state := by
+    funext k
+    simp only [SlashedAt, validators]
+  have keys : keysAt call.cached = keysAt call.before.state := by
+    funext indices
+    unfold keysAt
+    rw [validators]
+  have indices : getActiveValidatorIndices call.cached =
+      getActiveValidatorIndices call.before.state := by
+    funext epoch
+    unfold getActiveValidatorIndices
+    rw [validators]
+  have active : activeKeys call.cached = activeKeys call.before.state := by
+    unfold activeKeys
+    rw [keys, indices, sameEpoch]
+  have recent : recentKeys call.cached = recentKeys call.before.state := by
+    unfold recentKeys getPreviousEpoch
+    rw [slashed, active, keys, indices, sameEpoch]
+  refine ⟨sameEpoch, slashed, recent, ?_⟩
+  simp only [stateDrift, referenceLoss, referenceGain, boundaryStake]
+  rw [weight, slashed, recent, active]
 
 private theorem selected_call_drift_le {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
@@ -282,13 +395,11 @@ private theorem selected_call_drift_le {g x y : ForkedBeaconState preset}
   have member := call_after_reference shared tail parameters low starts call lower
   obtain ⟨pre, post, split⟩ := tail.contains_split (.slot call.advanced) member
   let before := call.before
-  -- The budget observes the state before caching, whose slot and registry caching preserves.
-  obtain ⟨_, _, _, frame, validators, _⟩ := call.toEpochCall.selected_prefix
-  have sameEpoch : getCurrentEpoch call.cached = getCurrentEpoch before.state := by
-    simp only [getCurrentEpoch, frame.slot, before]
+  have cached := call.cached_frame x
   have epoch : (getCurrentEpoch before.state).toNat ≤ high + 1 := by
     have target := call.currentEpoch_le
-    rw [sameEpoch] at target
+    rw [cached.1] at target
+    dsimp only [before]
     omega
   have mono {u v : ForkedBeaconState preset} (pre : Run config checks x u)
       (post : Run config checks u v) :
@@ -305,31 +416,7 @@ private theorem selected_call_drift_le {g x y : ForkedBeaconState preset}
     split
     · exact Nat.le_max_left _ _
     · exact Nat.le_refl _
-  have same : stateDrift x ⟨call.before.fork, call.cached⟩ = stateDrift x before := by
-    have weight : effectiveWeight call.cached = effectiveWeight before.state := by
-      funext k
-      simp only [effectiveWeight, validators, before]
-    have slashed : SlashedAt call.cached = SlashedAt before.state := by
-      funext k
-      simp only [SlashedAt, validators, before]
-    have keys : keysAt call.cached = keysAt before.state := by
-      funext indices
-      unfold keysAt
-      rw [validators]
-    have indices : getActiveValidatorIndices call.cached =
-        getActiveValidatorIndices before.state := by
-      funext epoch
-      unfold getActiveValidatorIndices
-      rw [validators]
-    have active : activeKeys call.cached = activeKeys before.state := by
-      unfold activeKeys
-      rw [keys, indices, sameEpoch]
-    have recent : recentKeys call.cached = recentKeys before.state := by
-      unfold recentKeys getPreviousEpoch
-      rw [slashed, active, keys, indices, sameEpoch]
-    simp only [stateDrift, referenceLoss, referenceGain, boundaryStake]
-    rw [weight, slashed, recent, active]
-  rw [same]
+  rw [cached.2.2.2]
   have result := (stateDrift_le_derivedDrift pre epoch).trans (next.trans (mono _ post))
   simpa only [← split] using result
 

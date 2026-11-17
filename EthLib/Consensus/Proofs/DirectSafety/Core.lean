@@ -29,8 +29,8 @@ noncomputable def unslashedKeys {fork : Fork} (s : BeaconState preset fork) :
   classical
   exact (activeKeys s).filter (¬ SlashedAt s ·)
 
--- With distinct keys, the key of an unslashed validator names no slashed validator.
-private theorem not_slashedAt {fork : Fork} {state : BeaconState preset fork}
+/-- With distinct keys, the key of an unslashed validator names no slashed validator. -/
+theorem not_slashedAt {fork : Fork} {state : BeaconState preset fork}
     (unique : PubkeysDistinct state) {v : Validator} (member : v ∈ state.validators.data.toList)
     (unslashed : v.slashed = false) : ¬ SlashedAt state v.pubkey := by
   rintro ⟨u, inside, key, slashed⟩

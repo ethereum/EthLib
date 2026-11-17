@@ -2,7 +2,7 @@ module
 
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Verify
 public import EthLib.Cryptography.Proofs.Hash.Sha256
-public import EthLib.Cryptography.Proofs.Merkle.Binding
+public import EthLib.Cryptography.Proofs.Merkle.Binding.Collision
 
 /-! Conflicting branch openings expose a SHA-256 collision between two 64-byte messages.
 
