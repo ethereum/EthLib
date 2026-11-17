@@ -139,7 +139,10 @@ def verifyExecutionPayloadEnvelope (config : Config) (checks : SignatureChecks)
   have capella : .shapella ≤ fork := Nat.le_trans (by decide) gloas
   let withdrawalsRoot ← liftSsz (hashTreeRoot (payload.withdrawals capella))
   let expectedRoot ← liftSsz (hashTreeRoot (state.payloadExpectedWithdrawals gloas))
-  ensure (withdrawalsRoot = expectedRoot) .wrongWithdrawals
+  let carried := (payload.withdrawals capella).data
+  let expected := (state.payloadExpectedWithdrawals gloas).data
+  ensure (withdrawalsRoot = expectedRoot)
+    (.wrongWithdrawals (firstDifference carried expected) carried.size expected.size)
   let commitments := bid.blobKzgCommitments.data
   if bound : commitments.size ≤ preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat then
     let request := envelope.newPayloadRequest commitments bound

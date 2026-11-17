@@ -303,7 +303,7 @@ def appendHistoricalRoot (roots : SszList Root preset.HISTORICAL_ROOTS_LIMIT.toN
     (root : Root) : Except TransitionError (SszList Root preset.HISTORICAL_ROOTS_LIMIT.toNat) :=
   if fits : roots.data.size < preset.HISTORICAL_ROOTS_LIMIT.toNat then
     .ok ⟨roots.data.push root, by simp only [Array.size_push]; omega⟩
-  else .error .historicalRootsFull
+  else .error (.historicalRootsFull preset.HISTORICAL_ROOTS_LIMIT.toNat)
 
 /-- The state after the historical roots update.
 
@@ -339,7 +339,7 @@ def processHistoricalSummariesUpdate (state : BeaconState preset fork)
       let summaries : SszList HistoricalSummary preset.HISTORICAL_ROOTS_LIMIT.toNat :=
         ⟨summaries.data.push summary, by simp only [Array.size_push]; omega⟩
       return { state with historicalSummaries := fun _ => summaries }
-    else throw .historicalSummariesFull
+    else throw (.historicalSummariesFull preset.HISTORICAL_ROOTS_LIMIT.toNat)
   else return state
 
 /-- The state after the rotation of the pending attestations.
