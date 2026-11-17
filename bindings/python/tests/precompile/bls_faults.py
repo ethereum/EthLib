@@ -47,11 +47,10 @@ def _on_curve(kind: str, values: list[int]) -> bool:
 
 def _in_subgroup(kind: str, values: list[int]) -> bool:
     """Whether a point on its curve has the order of the subgroup."""
+    # Each branch multiplies over one field, so the point has one coordinate type.
     if kind == "g1":
-        point = (FQ(values[0]), FQ(values[1]), FQ(1))
-    else:
-        point = (FQ2(values[0:2]), FQ2(values[2:4]), FQ2([1, 0]))
-    return is_inf(multiply(point, curve_order))
+        return is_inf(multiply((FQ(values[0]), FQ(values[1]), FQ(1)), curve_order))
+    return is_inf(multiply((FQ2(values[0:2]), FQ2(values[2:4]), FQ2([1, 0])), curve_order))
 
 
 def first_fault(address: int, data: bytes) -> str:
