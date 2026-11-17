@@ -73,11 +73,11 @@ def test_retry_integrity() -> None:
 def test_sample_and_header_boundaries(suite: quic.CipherSuite) -> None:
     # RFC 9001 §5.4.2 requires three plaintext bytes for a one-byte encoded number.
     secret = bytes(32)
-    with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.sample"):
+    with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.sample 1 20"):
         quic.protect(suite, secret, 0, 1, b"\x40\x00", bytes(2))
     packet = quic.protect(suite, secret, 0, 1, b"\x40\x00", bytes(3))
     assert quic.unprotect(suite, secret, 0, 1, packet) == (b"\x40\x00", bytes(3))
-    with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.sample"):
+    with raises(quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.sample 1 20"):
         quic.unprotect(suite, secret, 0, 1, packet[:-1])
     # RFC 9000 §17.3.1 requires the fixed bit and zero reserved bits.
     for header in (b"\x00\x00", b"\x48\x00"):
@@ -157,7 +157,7 @@ def test_retry_connection_id_bound() -> None:
     retry = bytes.fromhex("ff000000010008f067a5502a4262b5746f6b656e")
     assert len(quic.retry_tag(bytes(20), retry)) == 16
     with raises(
-        quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.connectionId"
+        quic.QuicProtectionError, "EthLib.Networking.Quic.Protection.Error.connectionId 21"
     ) as info:
         quic.retry_tag(bytes(21), retry)
     assert info.value.code == 7

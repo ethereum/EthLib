@@ -131,12 +131,13 @@ theorem length_encodeList_le (v : Varint) (w : Width) (h : v.val < capacity w) :
   exact Nat.pow_le_pow_right (by decide) (minWidth_le v w h)
 
 /-- The empty input is rejected. -/
-theorem decodeList_nil : decodeList [] = .error .truncated := rfl
+theorem decodeList_nil : decodeList [] = .error (.truncated 1 0) := rfl
 
 /-- An input shorter than the selected width is rejected. -/
 theorem decodeList_truncated (head : UInt8) (rest : List UInt8)
     (h : rest.length < tailLength (selector head)) :
-    decodeList (head :: rest) = .error .truncated := by
+    decodeList (head :: rest) =
+      .error (.truncated (tailLength (selector head) + 1) (rest.length + 1)) := by
   have : (rest.take (tailLength (selector head))).length ≠ tailLength (selector head) := by
     simp only [List.length_take]
     omega
@@ -154,12 +155,19 @@ theorem decodeList_ok_of_length (head : UInt8) (rest : List UInt8)
     exact Nat.min_eq_left h
   exact ⟨valueOf_lt _ _ hlen, by simp only [decodeList, hlen, ↓reduceDIte]⟩
 
-/-- A nonempty input is rejected exactly when it ends before its selected length. -/
+/-- A nonempty input is rejected exactly when it ends before its selected length.
+
+The error then holds the length of the integer and the length of the input. -/
 theorem decodeList_error_iff (head : UInt8) (rest : List UInt8) (error : VarintError) :
-    decodeList (head :: rest) = .error error ↔ rest.length < tailLength (selector head) := by
-  cases error
+    decodeList (head :: rest) = .error error ↔ rest.length < tailLength (selector head) ∧
+      error = .truncated (tailLength (selector head) + 1) (rest.length + 1) := by
   by_cases h : rest.length < tailLength (selector head)
-  · simp [decodeList_truncated head rest h, h]
+  · rw [decodeList_truncated head rest h]
+    constructor
+    · intro he
+      exact ⟨h, (Except.error.inj he).symm⟩
+    · rintro ⟨_, rfl⟩
+      rfl
   · obtain ⟨_, hv⟩ := decodeList_ok_of_length head rest (by omega)
     simp [hv, h]
 
@@ -234,12 +242,13 @@ theorem size_encode_le (v : Varint) (w : Width) (h : v.val < capacity w) :
   simpa [encode, encodeWith] using length_encodeList_le v w h
 
 /-- The empty input is rejected. -/
-theorem decode_empty : decode ByteArray.empty = .error .truncated := rfl
+theorem decode_empty : decode ByteArray.empty = .error (.truncated 1 0) := rfl
 
 /-- An input shorter than the selected width is rejected. -/
 theorem decode_truncated (head : UInt8) (rest : ByteArray)
     (short : rest.size < tailLength (selector head)) :
-    decode ([head].toByteArray ++ rest) = .error .truncated := by
+    decode ([head].toByteArray ++ rest) =
+      .error (.truncated (tailLength (selector head) + 1) (rest.size + 1)) := by
   have rejected := decodeList_truncated head rest.data.toList (by simpa using short)
   simp [decode, ByteArray.data_append, rejected, bind, Except.bind]
 
@@ -253,13 +262,20 @@ theorem decode_ok_of_length (head : UInt8) (rest : ByteArray)
   refine ⟨bound, ?_⟩
   simp [decode, ByteArray.data_append, accepted, bind, Except.bind, pure, Except.pure]
 
-/-- A nonempty input is rejected exactly when it ends before its selected length. -/
+/-- A nonempty input is rejected exactly when it ends before its selected length.
+
+The error then holds the length of the integer and the length of the input. -/
 theorem decode_error_iff (head : UInt8) (rest : ByteArray) (error : VarintError) :
     decode ([head].toByteArray ++ rest) = .error error ↔
-      rest.size < tailLength (selector head) := by
-  cases error
+      rest.size < tailLength (selector head) ∧
+        error = .truncated (tailLength (selector head) + 1) (rest.size + 1) := by
   by_cases short : rest.size < tailLength (selector head)
-  · simp [decode_truncated head rest short, short]
+  · rw [decode_truncated head rest short]
+    constructor
+    · intro he
+      exact ⟨short, (Except.error.inj he).symm⟩
+    · rintro ⟨_, rfl⟩
+      rfl
   · obtain ⟨_, accepted⟩ := decode_ok_of_length head rest (by omega)
     simp [accepted, short]
 

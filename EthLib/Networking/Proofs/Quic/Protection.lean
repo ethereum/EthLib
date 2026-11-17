@@ -346,7 +346,8 @@ theorem unprotect_ok_iff (suite : CipherSuite) (keys : PacketKeys suite)
 
 /-- A sample needs 20 bytes from the packet-number offset, RFC 9001 §5.4.2. -/
 theorem sample_eq_error_of_short (packet : ByteArray) (offset : Nat)
-    (h : packet.size < offset + 20) : sample packet offset = .error .sample := by
+    (h : packet.size < offset + 20) :
+    sample packet offset = .error (.sample offset packet.size) := by
   simp [sample, show ¬offset + 4 + 16 ≤ packet.size by omega]
 
 private theorem ensure_eq_error {ε : Type} {c : Prop} [Decidable c] {e e' : ε}
