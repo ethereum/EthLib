@@ -3053,7 +3053,7 @@ A window that holds no whole epoch reads the validator record of each member in 
 It sums the balances of the members active there.
 One way the premise fails is such a member that the source state does not hold, such as a validator deposited after it.
 The reads also fail on Gwei overflow, in the window's total or in the proposer score.
-So it holds, barring overflow, when every member of each such window is in the source state.
+With positive `SLOTS_PER_EPOCH`, it holds, barring overflow, when every member of each such window is in the source state.
 
 `ReceiverWindowExitsNear` asks the exit bound only of receivers within two epochs of the parent, where every step reads it.
 The former premise asked the same bound of every receiver up to the horizon.
