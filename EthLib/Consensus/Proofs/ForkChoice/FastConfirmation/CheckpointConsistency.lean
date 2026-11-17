@@ -464,7 +464,7 @@ private theorem checkpoint_slot_le_of_duty {anchor : Store preset fork}
   exact ⟨boundary, boundaryOk, le⟩
 
 /-- The first slot of a vote's target epoch is at or before the vote's slot. -/
-private theorem boundary_le_of_duty {v : ValidatorIndex} {time : ℕ}
+theorem boundary_le_of_duty {v : ValidatorIndex} {time : ℕ}
     {view : Set (Message preset fork)} {store : Store preset fork} {data : AttestationData}
     (duty : MaySign config checks sources anchorState anchorBlock assignment genesisTimeMs v
       time view store data)

@@ -896,7 +896,7 @@ Without children the start counts alone, if it is a viable leaf.
 With children each child ranks lower, and its viable nodes join those of the start.
 
 The start comes last, after some viable node of a child. -/
-private theorem filterNodeTree_cases {node : ForkChoiceNode} {nodes : List ForkChoiceNode}
+theorem filterNodeTree_cases {node : ForkChoiceNode} {nodes : List ForkChoiceNode}
     (walk : store.filterNodeTree config node = .ok nodes) :
     ∃ children, store.getNodeChildren node = .ok children ∧
       ((children = [] ∧ ∃ isViable, store.isViableLeaf config node = .ok isViable ∧
@@ -938,7 +938,7 @@ private theorem filterNodeTree_cases {node : ForkChoiceNode} {nodes : List ForkC
 /-- The viable nodes below a child of a node are viable nodes of that node.
 
 The child ranks below the node. -/
-private theorem filterNodeTree_sub {node child : ForkChoiceNode}
+theorem filterNodeTree_sub {node child : ForkChoiceNode}
     {nodes children : List ForkChoiceNode}
     (walk : store.filterNodeTree config node = .ok nodes)
     (childrenOk : store.getNodeChildren node = .ok children) (childMem : child ∈ children) :

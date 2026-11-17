@@ -95,7 +95,7 @@ private theorem votedAttesters_of {other : BeaconState preset fork}
   exact voted attesters computed
 
 /-- Before Altair, recording a pending attestation appends it to the list of its epoch. -/
-private theorem recordPendingAttestation_lists {before : fork < .altair} {current : Bool}
+theorem recordPendingAttestation_lists {before : fork < .altair} {current : Bool}
     {pending : PendingAttestation preset}
     (computed : recordPendingAttestation state before current pending = .ok after) :
     recentPending after before current = (recentPending state before current).push pending ∧

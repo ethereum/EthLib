@@ -230,7 +230,7 @@ section Fixed
 /-- A step that keeps the balances, the pending deposits and the slashed balances.
 
 It also keeps the participation flags of both recent epochs. -/
-private def Fixed (a b : BeaconState preset fork) : Prop :=
+def Fixed (a b : BeaconState preset fork) : Prop :=
   b.balances = a.balances ∧ b.pendingDeposits = a.pendingDeposits ∧ b.slashings = a.slashings ∧
     b.previousEpochParticipation = a.previousEpochParticipation ∧
     b.currentEpochParticipation = a.currentEpochParticipation
@@ -296,7 +296,7 @@ private theorem fixed_partialWithdrawal {s t : BeaconState preset fork}
   · cases ok
     exact Fixed.refl _
 
-private theorem fixed_withdrawalRequest {s t : BeaconState preset fork}
+theorem fixed_withdrawalRequest {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) : Fixed s t := by
   rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
@@ -316,12 +316,12 @@ private theorem fixed_queueConsolidation {s t : BeaconState preset fork}
   exact ((fixed_consolidationChurn churn).trans (fixed_setValidator set)).trans
     ⟨rfl, rfl, rfl, rfl, rfl⟩
 
-private theorem fixed_voluntaryExit {s t : BeaconState preset fork}
+theorem fixed_voluntaryExit {s t : BeaconState preset fork}
     {signed : SignedVoluntaryExit}
     (ok : processVoluntaryExit config checks s signed = .ok t) : Fixed s t :=
   fixed_exit (processVoluntaryExit_initiates ok)
 
-private theorem fixed_blsChange {s t : BeaconState preset fork}
+theorem fixed_blsChange {s t : BeaconState preset fork}
     {signed : SignedBLSToExecutionChange}
     (ok : processBlsToExecutionChange config checks s signed = .ok t) : Fixed s t := by
   obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
@@ -753,20 +753,20 @@ end Moves
 section Kept
 
 /-- A step that keeps the participation flags of both recent epochs. -/
-private def Flags (a b : BeaconState preset fork) : Prop :=
+def Flags (a b : BeaconState preset fork) : Prop :=
   b.previousEpochParticipation = a.previousEpochParticipation ∧
     b.currentEpochParticipation = a.currentEpochParticipation
 
 private theorem Flags.refl (a : BeaconState preset fork) : Flags a a := ⟨rfl, rfl⟩
 
-private theorem Flags.trans {a b c : BeaconState preset fork} (one : Flags a b)
+theorem Flags.trans {a b c : BeaconState preset fork} (one : Flags a b)
     (two : Flags b c) : Flags a c :=
   ⟨two.1.trans one.1, two.2.trans one.2⟩
 
-private theorem Fixed.flags {a b : BeaconState preset fork} (fixed : Fixed a b) : Flags a b :=
+theorem Fixed.flags {a b : BeaconState preset fork} (fixed : Fixed a b) : Flags a b :=
   fixed.2.2.2
 
-private theorem Flags.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
+theorem Flags.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
     (each : ∀ a x b, step a x = .ok b → Flags a b) {items : List α}
     {a b : BeaconState preset fork} (computed : items.foldlM step a = .ok b) : Flags a b :=
   (foldlM_ok_steps Flags Flags.refl Flags.trans each computed).1
@@ -784,7 +784,7 @@ private theorem flags_decrease {s t : BeaconState preset fork} {i : ValidatorInd
     (ok : decreaseBalance s i d = .ok t) : Flags s t :=
   flags_setBalance (decreaseBalance_ok ok).choose_spec
 
-private theorem flags_depositRequest {s t : BeaconState preset fork} {electra : .pectra ≤ fork}
+theorem flags_depositRequest {s t : BeaconState preset fork} {electra : .pectra ≤ fork}
     {request : DepositRequest} (ok : processDepositRequest s electra request = .ok t) :
     Flags s t := by
   obtain ⟨start, recorded⟩ := recordDepositRequestsStart_eq (state := s) (index := request.index)
@@ -807,7 +807,7 @@ private theorem flags_queueExcess {s t : BeaconState preset fork} {electra : .pe
     subst ok
     exact Flags.refl _
 
-private theorem flags_consolidationRequest {s t : BeaconState preset fork}
+theorem flags_consolidationRequest {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : ConsolidationRequest}
     (ok : processConsolidationRequest config s electra request = .ok t) : Flags s t := by
   have compounding {a b : BeaconState preset fork} {index : ValidatorIndex}
@@ -903,14 +903,14 @@ private theorem flags_slashValidator {a b : BeaconState preset fork} {i : Valida
   · exact ⟨rfl, rfl⟩
   · exact Flags.refl _
 
-private theorem flags_proposerSlashing {a b : BeaconState preset fork}
+theorem flags_proposerSlashing {a b : BeaconState preset fork}
     {slashing : ProposerSlashing}
     (ok : processProposerSlashing config checks a slashing = .ok b) : Flags a b := by
   simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := ok
   exact flags_slashValidator slashed
 
-private theorem flags_attesterSlashing {a b : BeaconState preset fork}
+theorem flags_attesterSlashing {a b : BeaconState preset fork}
     {slashing : AttesterSlashing preset fork}
     (ok : processAttesterSlashing config checks a slashing = .ok b) : Flags a b := by
   simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff, pure, Except.pure,
@@ -929,7 +929,7 @@ private theorem flags_attesterSlashing {a b : BeaconState preset fork}
     exact before
 
 /-- The steps before the operations keep the participation flags. -/
-private theorem flags_operationsInput {engine : ExecutionEngine preset fork}
+theorem flags_operationsInput {engine : ExecutionEngine preset fork}
     {state input : BeaconState preset fork} {block : BeaconBlock preset fork}
     (started : OperationsInput config checks engine state block input) : Flags state input :=
   started.step_of Flags Flags.refl Flags.trans (fun _ ok => flags_parentPayload ok)
@@ -937,7 +937,7 @@ private theorem flags_operationsInput {engine : ExecutionEngine preset fork}
     (fun ok => (fixed_randao ok).flags) (fun _ ok => (fixed_eth1 ok).flags)
 
 /-- The participation flags at each position below the size of the earlier registry stay. -/
-private def FlagsBelow (a b : BeaconState preset fork) : Prop :=
+def FlagsBelow (a b : BeaconState preset fork) : Prop :=
   ∀ (altair : .altair ≤ fork) j, j < a.validators.data.size →
     (b.previousEpochParticipation altair).data[j]? =
         (a.previousEpochParticipation altair).data[j]? ∧
@@ -987,7 +987,7 @@ private theorem flagsBelow_add {s t : BeaconState preset fork} {key : Cryptograp
   · exact absurd altair ‹_›
 
 /-- A deposit of a block keeps the flags below the size of the registry. -/
-private theorem flagsBelow_deposit {s t : BeaconState preset fork} {before : fork < .hegota}
+theorem flagsBelow_deposit {s t : BeaconState preset fork} {before : fork < .hegota}
     {deposit : Deposit} (ok : processDeposit config checks before s deposit = .ok t) :
     FlagsBelow s t := by
   obtain ⟨-, -, next, -, applied⟩ := processDeposit_ok ok
