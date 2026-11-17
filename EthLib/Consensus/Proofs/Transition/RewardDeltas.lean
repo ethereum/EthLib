@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
+import EthLib.Consensus.Proofs.Participation
+import Mathlib.Data.Nat.Sqrt
 import EthLib.Base.Proofs.FilterM
 
 /-!
@@ -1140,5 +1142,146 @@ theorem getAttestationDeltas_getD {config : Config} (before : fork < .altair)
     simp only [show j < sourceRewards.size from sizes.1 ▸ inside, ↓reduceIte]
   · rw [sumDeltas_getD penaltiesOk j]
     simp only [show j < sourcePenalties.size from sizes.2 ▸ inside, ↓reduceIte]
+
+section
+
+variable {config : Config}
+
+/-- A successful base reward per increment is the scaled factor over the integer square root. -/
+theorem toNat_getBaseRewardPerIncrement {total perIncrement : Gwei}
+    (computed : getBaseRewardPerIncrement preset total = .ok perIncrement) :
+    perIncrement.toNat = preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+      preset.BASE_REWARD_FACTOR.toNat / total.toNat.sqrt := by
+  simp only [getBaseRewardPerIncrement, liftArith, mapError_ok_iff, bind_ok_iff] at computed
+  obtain ⟨scaled, scaledOk, rootOk⟩ := computed
+  rw [mulChecked_ok_iff] at scaledOk
+  rw [divChecked_ok_iff] at rootOk
+  rw [rootOk.2, scaledOk.2, toNat_integerSquareroot]
+
+/-- The base reward of a validator, from Altair, is its whole increments times the scaled factor.
+
+The factor times the increment is divided by the integer square root of the total. -/
+theorem toNat_getBaseReward_le (altair : .altair ≤ fork) {base : Gwei}
+    {index : ValidatorIndex} (computed : getBaseReward state total index = .ok base)
+    {validator : Validator} (found : state.validators.data[index.toNat]? = some validator) :
+    base.toNat ≤ validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+      (preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat /
+        total.toNat.sqrt) := by
+  have copy := computed
+  simp only [getBaseReward, altair, ↓reduceIte, bind_ok_iff] at copy
+  obtain ⟨_, _, perIncrement, perOk, _⟩ := copy
+  obtain ⟨validator', found', value⟩ := getBaseReward_eq_mul_of_altair altair perOk computed
+  obtain rfl : validator' = validator := Option.some.inj (found'.symm.trans found)
+  rw [value, toNat_getBaseRewardPerIncrement perOk]
+
+/-- The penalty entries of one key in the rewards pass, from Altair, inside or outside a leak.
+
+They are its entries in the deltas of the source, target and head flags and of inactivity.
+
+Either they are all zero, or the key is eligible and has a base reward at the total `T`.
+
+Their sum is then at most the weights of the source and target flags in that base reward.
+
+The inactivity penalty of its score, or of a zero score when it has none, adds to that sum.
+
+The two weights are applied together, which rounds down once and so can only raise the bound. -/
+theorem penaltyEntries_le (altair : .altair ≤ fork) (within : state.RegistryWithinLimit)
+    (active : getTotalActiveBalance state = .ok total)
+    {source target head inactivity : Array Gwei × Array Gwei}
+    (sourceOk : getFlagIndexDeltas state altair ⟨0, by decide⟩ = .ok source)
+    (targetOk : getFlagIndexDeltas state altair ⟨1, by decide⟩ = .ok target)
+    (headOk : getFlagIndexDeltas state altair ⟨2, by decide⟩ = .ok head)
+    (inactivityOk : getInactivityPenaltyDeltas config state = .ok inactivity)
+    {j : Nat} (inside : j < state.validators.data.size) :
+    (source.2.getD j 0).toNat + (target.2.getD j 0).toNat + (head.2.getD j 0).toNat +
+        (inactivity.2.getD j 0).toNat = 0 ∨
+      ∃ base, isEligibleValidator (getPreviousEpoch state) state.validators.data[j] = .ok true ∧
+        getBaseReward state total j.toUInt64 = .ok base ∧
+        (source.2.getD j 0).toNat + (target.2.getD j 0).toNat + (head.2.getD j 0).toNat +
+            (inactivity.2.getD j 0).toNat ≤
+          base.toNat * (TIMELY_SOURCE_WEIGHT.toNat + TIMELY_TARGET_WEIGHT.toNat) /
+              WEIGHT_DENOMINATOR.toNat +
+            state.validators.data[j].effectiveBalance.toNat *
+              (((state.inactivityScores altair).data[j]?.map UInt64.toNat).getD 0) /
+              (config.INACTIVITY_SCORE_BIAS.toNat *
+                (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) := by
+  obtain ⟨sourceRewards, sourcePenalties⟩ := source
+  obtain ⟨targetRewards, targetPenalties⟩ := target
+  obtain ⟨headRewards, headPenalties⟩ := head
+  obtain ⟨inactivityRewards, inactivityPenalties⟩ := inactivity
+  dsimp only
+  obtain ⟨sourced, _, total', -, -, totalOk, sourceFacts⟩ :=
+    getFlagIndexDeltas_getD (by exact within) sourceOk
+  obtain ⟨targeted, _, total'', -, -, totalOk', targetFacts⟩ :=
+    getFlagIndexDeltas_getD (by exact within) targetOk
+  obtain ⟨headed, _, total''', -, -, totalOk'', headFacts⟩ :=
+    getFlagIndexDeltas_getD (by exact within) headOk
+  obtain rfl : total' = total := Except.ok.inj (totalOk.symm.trans active)
+  obtain rfl : total'' = total' := Except.ok.inj (totalOk'.symm.trans active)
+  obtain rfl : total''' = total'' := Except.ok.inj (totalOk''.symm.trans active)
+  obtain ⟨matching, matchingOk, inactivityFacts⟩ :=
+    getInactivityPenaltyDeltas_getD_of_altair altair (by exact within) inactivityOk
+  obtain ⟨eligible, eligibleOk, sourceNo, sourceYes⟩ := sourceFacts j inside
+  obtain ⟨eligible₂, eligibleOk₂, targetNo, targetYes⟩ := targetFacts j inside
+  obtain ⟨eligible₃, eligibleOk₃, headNo, headYes⟩ := headFacts j inside
+  obtain ⟨eligible₄, eligibleOk₄, -, inactivityExempt, inactivityPaid⟩ :=
+    inactivityFacts j inside
+  obtain rfl : eligible = eligible₂ := Except.ok.inj (eligibleOk.symm.trans eligibleOk₂)
+  obtain rfl : eligible = eligible₃ := Except.ok.inj (eligibleOk.symm.trans eligibleOk₃)
+  obtain rfl : eligible = eligible₄ := Except.ok.inj (eligibleOk.symm.trans eligibleOk₄)
+  cases eligible with
+  | false =>
+    -- A validator that is not eligible pays nothing.
+    left
+    rw [(sourceNo rfl).2, (targetNo rfl).2, (headNo rfl).2, inactivityExempt (.inl rfl)]
+    rfl
+  | true =>
+    right
+    obtain ⟨base, baseOk, sourceIn, sourceOut⟩ := sourceYes rfl
+    obtain ⟨base₂, baseOk₂, targetIn, targetOut⟩ := targetYes rfl
+    obtain ⟨base₃, baseOk₃, headIn, headOut⟩ := headYes rfl
+    obtain rfl : base = base₂ := Except.ok.inj (baseOk.symm.trans baseOk₂)
+    obtain rfl : base = base₃ := Except.ok.inj (baseOk.symm.trans baseOk₃)
+    -- A missed source or target costs its weight, and a missed head costs nothing.
+    have sourceLe : (sourcePenalties.getD j 0).toNat ≤
+        base.toNat * TIMELY_SOURCE_WEIGHT.toNat / WEIGHT_DENOMINATOR.toNat := by
+      by_cases mem : j.toUInt64 ∈ sourced
+      · obtain ⟨_, _, _, penalty⟩ := sourceIn mem
+        rw [penalty]
+        exact Nat.zero_le _
+      · exact Nat.le_of_eq (by rw [(sourceOut mem).2]; rfl)
+    have targetLe : (targetPenalties.getD j 0).toNat ≤
+        base.toNat * TIMELY_TARGET_WEIGHT.toNat / WEIGHT_DENOMINATOR.toNat := by
+      by_cases mem : j.toUInt64 ∈ targeted
+      · obtain ⟨_, _, _, penalty⟩ := targetIn mem
+        rw [penalty]
+        exact Nat.zero_le _
+      · exact Nat.le_of_eq (by rw [(targetOut mem).2]; rfl)
+    have headZero : (headPenalties.getD j 0).toNat = 0 := by
+      by_cases mem : j.toUInt64 ∈ headed
+      · obtain ⟨_, _, _, penalty⟩ := headIn mem
+        rw [penalty]
+        rfl
+      · rw [(headOut mem).2]
+        rfl
+    -- A missed target also costs the inactivity penalty of the score.
+    have inactivityLe : (inactivityPenalties.getD j 0).toNat ≤
+        state.validators.data[j].effectiveBalance.toNat *
+          (((state.inactivityScores altair).data[j]?.map UInt64.toNat).getD 0) /
+          (config.INACTIVITY_SCORE_BIAS.toNat *
+            (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) := by
+      by_cases mem : j.toUInt64 ∈ matching
+      · rw [inactivityExempt (.inr mem)]
+        exact Nat.zero_le _
+      · obtain ⟨score, found, penalty⟩ := inactivityPaid rfl mem
+        rw [penalty, found]
+        exact Nat.le_refl _
+    refine ⟨base, by exact eligibleOk, by exact baseOk, ?_⟩
+    have split := Nat.div_add_div_le_add_div (x := base.toNat * TIMELY_SOURCE_WEIGHT.toNat)
+      (y := base.toNat * TIMELY_TARGET_WEIGHT.toNat) (z := WEIGHT_DENOMINATOR.toNat)
+    rw [← Nat.mul_add] at split
+    omega
+
+end
 
 end EthLib.Consensus

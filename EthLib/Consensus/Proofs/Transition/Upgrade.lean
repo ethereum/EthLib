@@ -58,10 +58,10 @@ theorem TargetFlagAt.of_flagsKeptOrZero {fork : Fork} {state after : BeaconState
   obtain ⟨flags, found, set⟩ := flagged
   have kept := kept altair position flags
   cases current
-  · rcases kept.1 found with old | rfl
+  · rcases kept.1 found with old | ⟨rfl, -⟩
     · exact ⟨flags, old, set⟩
     · exact absurd set (by decide)
-  · rcases kept.2 found with old | rfl
+  · rcases kept.2 found with old | ⟨rfl, -⟩
     · exact ⟨flags, old, set⟩
     · exact absurd set (by decide)
 

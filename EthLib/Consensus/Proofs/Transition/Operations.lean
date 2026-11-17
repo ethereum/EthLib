@@ -66,6 +66,16 @@ def validatorKeys (state : BeaconState preset fork) : List BLSPubkey :=
 def PubkeysDistinct (state : BeaconState preset fork) : Prop :=
   (validatorKeys state).Nodup
 
+/-- With distinct keys, two positions holding the same key are the same position. -/
+theorem PubkeysDistinct.index_eq {state : BeaconState preset fork}
+    (unique : PubkeysDistinct state) {i j : Nat} {v w : Validator}
+    (one : state.validators.data[i]? = some v) (two : state.validators.data[j]? = some w)
+    (key : v.pubkey = w.pubkey) : i = j := by
+  obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp one
+  obtain ⟨hj, rfl⟩ := Array.getElem?_eq_some_iff.mp two
+  exact unique.eq_of_getElem_eq (by simpa [validatorKeys] using hi)
+    (by simpa [validatorKeys] using hj) (by simpa [validatorKeys] using key)
+
 theorem balancesMatch_of_sameSizes (sizes : SameSizes state after)
     (holds : BalancesMatch state) : BalancesMatch after := by
   unfold BalancesMatch at holds ⊢
@@ -1353,19 +1363,23 @@ theorem recordDepositRequestsStart_eq {index : UInt64} :
 
 /-- From Electra, a deposit request joins the end of the pending deposits, at the current slot.
 
-The registry and the balances stay. -/
+The registry and the balances stay.
+
+Every other field stays too, except the start index of the deposit requests. -/
 theorem processDepositRequest_ok {electra : .pectra ≤ fork} {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
     (after.pendingDeposits electra).data = (state.pendingDeposits electra).data.push
         ⟨request.pubkey, request.withdrawalCredentials, request.amount, request.signature,
           state.slot⟩ ∧
-      after.validators = state.validators ∧ after.balances = state.balances := by
+      after.validators = state.validators ∧ after.balances = state.balances ∧
+      ∃ start pending,
+        after = { state with depositRequestsStartIndex := start, pendingDeposits := pending } := by
   obtain ⟨start, recorded⟩ :=
     recordDepositRequestsStart_eq (state := state) (index := request.index)
   simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
     pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨pending, appended, rfl⟩ := computed
-  exact ⟨appendWithinLimit_data appended, rfl, rfl⟩
+  exact ⟨appendWithinLimit_data appended, rfl, rfl, start, fun _ => pending, rfl⟩
 
 /-- A valid deposit lies in the deposit tree, at the next deposit index.
 

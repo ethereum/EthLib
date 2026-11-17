@@ -6,6 +6,7 @@ public import EthLib.Consensus.Proofs.Transition.Genesis
 public import EthLib.Consensus.Proofs.Transition.Trace
 public import EthLib.Consensus.Proofs.SyncCommittee
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
+import EthLib.Consensus.Proofs.Transition.RunKept
 
 /-!
 # Registry provenance of sync committees
@@ -28,37 +29,62 @@ open Base Uint64 Cryptography.Bls
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
   {state after : BeaconState preset fork}
 
-/-- Every key in a successful committee draw belongs to the registry used for the draw. -/
+/-- Every drawn key has a validator with an assigned activation epoch. -/
 private theorem getNextSyncCommittee_keys {committee : SyncCommittee preset}
     (ok : getNextSyncCommittee state = .ok committee) :
-    ∀ key ∈ committee.pubkeys.toList, key ∈ validatorKeys state := by
-  obtain ⟨indices, _, reads, _⟩ := getNextSyncCommittee_eq_ok_iff.mp ok
+    ∀ key ∈ committee.pubkeys.toList, ∃ (i : Nat) (v : Validator),
+      state.validators.data[i]? = some v ∧ v.pubkey = key ∧
+        v.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
+        v.activationEpoch.toNat ≤ (getCurrentEpoch state).toNat + 1 := by
+  obtain ⟨indices, drawn, reads, _⟩ := getNextSyncCommittee_eq_ok_iff.mp ok
   intro key member
   obtain ⟨i, inside, equal⟩ := List.getElem_of_mem member
   obtain ⟨validator, found, keyEq⟩ := reads ⟨i, by simpa using inside⟩
-  have inRegistry := mem_of_getValidator found
-  apply List.mem_map.mpr
-  refine ⟨validator, by simpa using inRegistry, ?_⟩
-  exact keyEq.symm.trans (by simpa using equal)
+  obtain ⟨_, candidatesOk, selected⟩ := getNextSyncCommitteeIndices_checked drawn
+  have member := selected _
+    (by simpa using indices.getElem_mem (i := i) (by simpa using inside))
+  obtain ⟨v, read, isActive⟩ :=
+    (mem_iff_of_getActiveValidatorIndicesChecked_ok candidatesOk).mp member
+  have same : v = validator := Option.some.inj (read.symm.trans (getValidator_eq_ok_iff.mp found))
+  subst v
+  refine ⟨_, validator, getValidator_eq_ok_iff.mp found,
+    keyEq.symm.trans (by simpa using equal), ?_⟩
+  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at isActive
+  constructor
+  · intro far
+    have less := UInt64.lt_iff_toNat_lt.mp (UInt64.lt_of_le_of_lt isActive.1 isActive.2)
+    rw [far] at less
+    have bound := validator.exitEpoch.toNat_lt
+    change (2 ^ 64 - 1 : Nat) < validator.exitEpoch.toNat at less
+    omega
+  · have active := UInt64.le_iff_toNat_le.mp isActive.1
+    exact Nat.le_trans active (by
+      rw [UInt64.toNat_add]
+      exact Nat.mod_le _ _)
 
-/-- Both committees contain only keys in the state's registry. -/
+/-- Both committees contain only keys whose activation epoch has been assigned. -/
 private def SyncCommitteeKeys (state : BeaconState preset fork) : Prop :=
   ∀ altair : .altair ≤ fork,
     (∀ key ∈ (state.currentSyncCommittee altair).value.pubkeys.toList,
-      key ∈ validatorKeys state) ∧
+      ∃ (i : Nat) (v : Validator), state.validators.data[i]? = some v ∧ v.pubkey = key ∧
+        v.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
+        v.activationEpoch.toNat ≤ (getCurrentEpoch state).toNat + 1) ∧
     (∀ key ∈ (state.nextSyncCommittee altair).value.pubkeys.toList,
-      key ∈ validatorKeys state)
+      ∃ (i : Nat) (v : Validator), state.validators.data[i]? = some v ∧ v.pubkey = key ∧
+        v.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
+        v.activationEpoch.toNat ≤ (getCurrentEpoch state).toNat + 1)
 
 private def SameSyncCommittees (state after : BeaconState preset fork) : Prop :=
   after.currentSyncCommittee = state.currentSyncCommittee ∧
-    after.nextSyncCommittee = state.nextSyncCommittee
+    after.nextSyncCommittee = state.nextSyncCommittee ∧
+    after.proposerLookahead = state.proposerLookahead
 
 private theorem SameSyncCommittees.refl (state : BeaconState preset fork) :
-    SameSyncCommittees state state := ⟨rfl, rfl⟩
+    SameSyncCommittees state state := ⟨rfl, rfl, rfl⟩
 
 private theorem SameSyncCommittees.trans {a b c : BeaconState preset fork}
     (ab : SameSyncCommittees a b) (bc : SameSyncCommittees b c) : SameSyncCommittees a c :=
-  ⟨bc.1.trans ab.1, bc.2.trans ab.2⟩
+  ⟨bc.1.trans ab.1, bc.2.1.trans ab.2.1, bc.2.2.trans ab.2.2⟩
 
 private theorem SameSyncCommittees.foldlM {α ε : Type}
     {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
@@ -74,7 +100,7 @@ private theorem setValidatorAt {position : Nat} {validator : Validator}
     (ok : state.setValidatorAt position validator = .ok after) :
     SameSyncCommittees state after := by
   obtain ⟨_, rfl⟩ := setValidatorAt_ok ok
-  exact ⟨rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl⟩
 
 private theorem setValidator {index : ValidatorIndex} {validator : Validator}
     (ok : state.setValidator index validator = .ok after) : SameSyncCommittees state after :=
@@ -83,7 +109,7 @@ private theorem setValidator {index : ValidatorIndex} {validator : Validator}
 private theorem setBalance {index : ValidatorIndex} {balance : Gwei}
     (ok : state.setBalance index balance = .ok after) : SameSyncCommittees state after := by
   obtain ⟨_, rfl⟩ := setBalance_ok ok
-  exact ⟨rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl⟩
 
 private theorem increaseBalance {index : ValidatorIndex} {delta : Gwei}
     (ok : Consensus.increaseBalance state index delta = .ok after) :
@@ -114,9 +140,9 @@ private theorem addValidatorToRegistry {key : BLSPubkey} {credentials : Bytes32}
   · simp only [addValidatorToRegistryAltair, bind_ok_iff, liftAccessor_ok,
       pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := ok
-    exact ⟨rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl⟩
   · split at ok <;> cases ok
-    exact ⟨rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl⟩
 
 private theorem applyPendingDeposit {deposit : PendingDeposit}
     (ok : Consensus.applyPendingDeposit config checks state deposit = .ok after) :
@@ -132,8 +158,8 @@ private theorem applyDeposit {key : BLSPubkey} {credentials : Bytes32} {amount :
       .ok after) : SameSyncCommittees state after := by
   rcases applyDeposit_cases ok with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, ok⟩
   · exact .refl _
-  · exact ⟨rfl, rfl⟩
-  · exact (addValidatorToRegistry added).trans ⟨rfl, rfl⟩
+  · exact ⟨rfl, rfl, rfl⟩
+  · exact (addValidatorToRegistry added).trans ⟨rfl, rfl, rfl⟩
   · exact applyPendingDeposit ok
 
 private theorem processDeposit {before : fork < .hegota} {deposit : Deposit}
@@ -163,7 +189,7 @@ private theorem processDepositRequest {electra : .pectra ≤ fork} {request : De
   simp only [Consensus.processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
     bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
   obtain ⟨_, _, rfl⟩ := ok
-  exact ⟨rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl⟩
 
 private theorem requestPartialWithdrawal {electra : .pectra ≤ fork} {index : ValidatorIndex}
     {validator : Validator} {amount owed : Gwei}
@@ -179,7 +205,7 @@ private theorem requestPartialWithdrawal {electra : .pectra ≤ fork} {index : V
       Except.ok.injEq] at churned
     obtain ⟨_, _, _, _, _, _, churned⟩ := churned
     cases churned
-    exact ⟨rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl⟩
   · cases ok; exact .refl _
 
 private theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
@@ -258,7 +284,7 @@ private theorem processBuilderDepositRequest {gloas : .glamsterdam ≤ fork}
   unfold Consensus.processBuilderDepositRequest addBuilderToRegistry at ok
   simp only [bind, Except.bind, pure, Except.pure] at ok
   repeat' split at ok
-  all_goals first | (cases ok; done) | (cases ok; exact ⟨rfl, rfl⟩)
+  all_goals first | (cases ok; done) | (cases ok; exact ⟨rfl, rfl, rfl⟩)
 
 private theorem processBuilderExitRequest {gloas : .glamsterdam ≤ fork}
     {request : BuilderExitRequest}
@@ -269,7 +295,7 @@ private theorem processBuilderExitRequest {gloas : .glamsterdam ≤ fork}
   · simp only [initiateBuilderExit, bind_ok_iff] at exited
     obtain ⟨_, _, _, _, set⟩ := exited
     obtain ⟨_, rfl⟩ := setBuilder_ok set
-    exact ⟨rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl⟩
 
 private theorem processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
     {body : BeaconBlockBody preset fork}
@@ -281,7 +307,7 @@ private theorem processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
   · exact .refl _
   · have first : SameSyncCommittees state settled := by
       rw [settleParentPayment_eq settledOk]
-      exact ⟨rfl, rfl⟩
+      exact ⟨rfl, rfl, rfl⟩
     have kept := first.trans <|
       (foldlM (fun _ _ _ ok => processDepositRequest ok) depositsOk).trans <|
       (foldlM (fun _ _ _ ok => processWithdrawalRequest ok) withdrawalsOk).trans <|
@@ -297,8 +323,8 @@ private theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
   apply applyExpectedWithdrawals_of_setters SameSyncCommittees .refl
     (fun one two => one.trans two) (fun step => by
       rw [applyWithdrawal_eq step]
-      exact ⟨rfl, rfl⟩) (computed := ok)
-  all_goals exact fun _ _ => ⟨rfl, rfl⟩
+      exact ⟨rfl, rfl, rfl⟩) (computed := ok)
+  all_goals exact fun _ _ => ⟨rfl, rfl, rfl⟩
 
 private theorem processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
@@ -354,13 +380,13 @@ private theorem processAttestation {attestation : Attestation preset fork} {pare
       _, _, raised, raisedOk, final⟩ := ok
     have last : SameSyncCommittees raised after := by
       split at final
-      · rw [recordPaymentWeight_eq final]; exact ⟨rfl, rfl⟩
+      · rw [recordPaymentWeight_eq final]; exact ⟨rfl, rfl, rfl⟩
       · cases final; exact .refl _
     have flags : ∀ (current : Bool) (participation : EpochParticipation preset fork),
         SameSyncCommittees state (setEpochParticipation state current participation) := by
       intro current participation
       unfold setEpochParticipation
-      split <;> exact ⟨rfl, rfl⟩
+      split <;> exact ⟨rfl, rfl, rfl⟩
     exact (flags _ _).trans ((increaseBalance raisedOk).trans last)
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at ok
@@ -370,7 +396,7 @@ private theorem processAttestation {attestation : Attestation preset fork} {pare
   split at kept <;>
   · obtain ⟨_, rest⟩ := kept
     rw [← rest]
-    exact ⟨rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl⟩
 
 private theorem processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
     (ok : Consensus.processBlsToExecutionChange config checks state signed = .ok after) :
@@ -381,15 +407,30 @@ private theorem processBlsToExecutionChange {signed : SignedBLSToExecutionChange
 /-- Block operations keep both committees, one fold of the operations at a time. -/
 private theorem processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (ok : Consensus.processOperations config checks state body parentSlot = .ok after) :
-    SameSyncCommittees state after := by
+    SameSyncCommittees state after ∧ RegistryLifecycle state after := by
+  let R := fun a b : BeaconState preset fork =>
+    SameSyncCommittees a b ∧ RegistryLifecycle a b
+  have refl (a) : R a a := ⟨.refl a, .refl a⟩
+  have trans {a b c} (one : R a b) (two : R b c) : R a c :=
+    ⟨one.1.trans two.1, one.2.trans two.2⟩
+  have fold {α : Type} {step : BeaconState preset fork → α → Except TransitionError _}
+      (each : ∀ a x b, step a x = .ok b → R a b)
+      {a b : BeaconState preset fork} {items : List α} (ok : items.foldlM step a = .ok b) :
+      R a b := (foldlM_ok_steps R refl (fun one two => trans one two) each ok).1
   obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
-    processOperations_folds_of SameSyncCommittees .refl (fun one two => one.trans two)
-      processDeposit (fun exited => initiateValidatorExit (processVoluntaryExit_initiates exited))
-      processBlsToExecutionChange processExecutionRequests
-      (fun paid => by rw [processPayloadAttestation_eq paid]; exact .refl _) ok
-  exact (foldlM (fun _ _ _ ok => processProposerSlashing ok) proposersOk).trans <|
-    (foldlM (fun _ _ _ ok => processAttesterSlashing ok) slashingsOk).trans <|
-    (foldlM (fun _ _ _ ok => processAttestation ok) attestedOk).trans rest
+    processOperations_folds_of R refl (fun one two => trans one two)
+      (fun ok => ⟨processDeposit ok, registryLifecycle_processDeposit ok⟩)
+      (fun exited => ⟨initiateValidatorExit (processVoluntaryExit_initiates exited),
+        registryLifecycle_processVoluntaryExit exited⟩)
+      (fun ok => ⟨processBlsToExecutionChange ok, registryLifecycle_processBlsToExecutionChange ok⟩)
+      (fun ok => ⟨processExecutionRequests ok, registryLifecycle_processExecutionRequests ok⟩)
+      (fun paid => by rw [processPayloadAttestation_eq paid]; exact refl _) ok
+  exact trans (fold (fun _ _ _ ok =>
+    ⟨processProposerSlashing ok, registryLifecycle_processProposerSlashing ok⟩) proposersOk) <|
+    trans (fold (fun _ _ _ ok =>
+      ⟨processAttesterSlashing ok, registryLifecycle_processAttesterSlashing ok⟩) slashingsOk) <|
+    trans (fold (fun _ _ _ ok =>
+      ⟨processAttestation ok, registryLifecycle_processAttestation ok⟩) attestedOk) rest
 
 private theorem processExecutionPayload {body : BeaconBlockBody preset fork}
     {engine : ExecutionEngine preset fork}
@@ -397,7 +438,7 @@ private theorem processExecutionPayload {body : BeaconBlockBody preset fork}
     (ok : Consensus.processExecutionPayload config engine state body bellatrix = .ok after) :
     SameSyncCommittees state after := by
   obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok
-  exact ⟨rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl⟩
 
 private theorem processExecutionPayloadBid {gloas : .glamsterdam ≤ fork}
     {signed : SignedExecutionPayloadBid preset fork}
@@ -406,10 +447,10 @@ private theorem processExecutionPayloadBid {gloas : .glamsterdam ≤ fork}
   obtain ⟨_, recorded, recordedOk, rfl⟩ := processExecutionPayloadBid_ok ok
   by_cases paid : 0 < signed.message.value
   · obtain ⟨_, _, _, _, rfl⟩ := recordBidPayment_of_pos paid recordedOk
-    exact ⟨rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl⟩
   · simp only [recordBidPayment, paid, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at recordedOk
     subst recordedOk
-    exact ⟨rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl⟩
 
 private theorem processBlockExecution {body : BeaconBlockBody preset fork}
     {engine : ExecutionEngine preset fork} {bellatrix : .bellatrix ≤ fork}
@@ -433,20 +474,20 @@ private theorem processBlockHeader {block : BeaconBlock preset fork}
     (ok : Consensus.processBlockHeader state block = .ok after) :
     SameSyncCommittees state after := by
   obtain ⟨_, _, rfl⟩ := processBlockHeader_eq ok
-  exact ⟨rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl⟩
 
 private theorem processRandao {body : BeaconBlockBody preset fork}
     (ok : Consensus.processRandao config checks state body = .ok after) :
     SameSyncCommittees state after := by
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq ok
-  exact ⟨rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl⟩
 
 private theorem processEth1Data {before : fork < .hegota} {body : BeaconBlockBody preset fork}
     (ok : Consensus.processEth1Data before state body = .ok after) :
     SameSyncCommittees state after := by
   obtain ⟨_, _, rest⟩ := processEth1Data_eq ok
   rw [← rest]
-  exact ⟨rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl⟩
 
 /-- A block keeps both committees, through each step of the block.
 
@@ -469,7 +510,7 @@ private theorem processBlock {block : BeaconBlock preset fork}
       exact .refl _
     · cases synced
       exact .refl _
-  exact head.trans ((processOperations operated).trans tail)
+  exact head.trans ((processOperations operated).1.trans tail)
 
 private theorem applyDeltas {rewards penalties : Array Gwei} {index : Nat}
     (ok : Consensus.applyDeltas rewards penalties state index = .ok after) :
@@ -644,24 +685,24 @@ private theorem processInactivityUpdates {altair : .altair ≤ fork}
   · cases ok; exact .refl _
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, _, _, _, rfl⟩ := ok
-    exact ⟨rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl⟩
 
 private theorem processEth1DataReset {before : fork < .hegota}
     (ok : Consensus.processEth1DataReset before state = .ok after) :
     SameSyncCommittees state after := by
   simp only [Consensus.processEth1DataReset, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, ok⟩ := ok
-  split at ok <;> cases ok <;> exact ⟨rfl, rfl⟩
+  split at ok <;> cases ok <;> exact ⟨rfl, rfl, rfl⟩
 
 private theorem processSlashingsReset (ok : Consensus.processSlashingsReset state = .ok after) :
     SameSyncCommittees state after := by
   obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq ok
-  exact ⟨rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl⟩
 
 private theorem processRandaoMixesReset (ok : Consensus.processRandaoMixesReset state = .ok after) :
     SameSyncCommittees state after := by
   obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq ok
-  exact ⟨rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl⟩
 
 private theorem processHistoricalRootsUpdate
     (ok : Consensus.processHistoricalRootsUpdate state = .ok after) :
@@ -674,7 +715,7 @@ private theorem processHistoricalRootsUpdate
   split at ok
   · simp only [bind_ok_iff, liftSsz_ok, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, _, _, _, rfl⟩ := ok
-    exact ⟨rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl⟩
   · cases ok; exact .refl _
 
 private theorem processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
@@ -683,7 +724,7 @@ private theorem processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
   unfold Consensus.processHistoricalSummariesUpdate at ok
   simp only [bind, Except.bind, pure, Except.pure] at ok
   repeat' (split at ok <;> try cases ok)
-  all_goals exact ⟨rfl, rfl⟩
+  all_goals exact ⟨rfl, rfl, rfl⟩
 
 private theorem processJustificationAndFinalization
     (ok : Consensus.processJustificationAndFinalization state = .ok after) :
@@ -693,7 +734,7 @@ private theorem processJustificationAndFinalization
   · simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok,
       pure, Except.pure, Except.ok.injEq] at weighed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := weighed
-    exact ⟨rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl⟩
 
 private theorem queuePreActivation {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (ok : Consensus.queuePreActivation state electra index = .ok after) :
@@ -716,18 +757,50 @@ private theorem queueCompoundingExcess {electra : .pectra ≤ fork} {index : Nat
 
 end SameSyncCommittees
 
+private theorem assigned_key_transfer
+    (P : Epoch → Prop)
+    (keys : validatorKeys state <+: validatorKeys after)
+    (life : RegistryLifecycle state after) (key : BLSPubkey)
+    (prior : ∃ (i : Nat) (v : Validator),
+      state.validators.data[i]? = some v ∧ v.pubkey = key ∧
+      v.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ P v.activationEpoch) :
+    ∃ (i : Nat) (v : Validator), after.validators.data[i]? = some v ∧ v.pubkey = key ∧
+      v.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ P v.activationEpoch := by
+  obtain ⟨i, v, found, keyEq, assigned, property⟩ := prior
+  obtain ⟨w, read, kept⟩ := life.validators i v found
+  have pubkey : w.pubkey = v.pubkey := by
+    obtain ⟨suffix, eq⟩ := keys
+    have entry : (validatorKeys after)[i]? = (validatorKeys state)[i]? := by
+      rw [← eq, List.getElem?_append_left]
+      simpa [validatorKeys] using (Array.getElem?_eq_some_iff.mp found).1
+    simpa [validatorKeys, List.getElem?_map, found, read] using entry
+  exact ⟨i, w, read, pubkey.trans keyEq,
+    (fun far => assigned ((kept.activationEpoch assigned).symm.trans far)),
+    (kept.activationEpoch assigned) ▸ property⟩
+
 private theorem SyncCommitteeKeys.transfer (holds : SyncCommitteeKeys state)
-    (same : SameSyncCommittees state after) (keys : validatorKeys state <+: validatorKeys after) :
+    (same : after.currentSyncCommittee = state.currentSyncCommittee ∧
+      after.nextSyncCommittee = state.nextSyncCommittee)
+    (keys : validatorKeys state <+: validatorKeys after)
+    (life : RegistryLifecycle state after)
+    (forward : (getCurrentEpoch state).toNat ≤ (getCurrentEpoch after).toNat := by
+      first | assumption | exact Nat.le_refl _) :
     SyncCommitteeKeys after := by
   intro altair
   obtain ⟨current, next⟩ := holds altair
   constructor
   · intro key member
     rw [same.1] at member
-    exact keys.subset (current key member)
+    obtain ⟨i, v, found, keyed, assigned, bounded⟩ :=
+      assigned_key_transfer (fun e => e.toNat ≤ (getCurrentEpoch state).toNat + 1)
+        keys life key (current key member)
+    exact ⟨i, v, found, keyed, assigned, by omega⟩
   · intro key member
     rw [same.2] at member
-    exact keys.subset (next key member)
+    obtain ⟨i, v, found, keyed, assigned, bounded⟩ :=
+      assigned_key_transfer (fun e => e.toNat ≤ (getCurrentEpoch state).toNat + 1)
+        keys life key (next key member)
+    exact ⟨i, v, found, keyed, assigned, by omega⟩
 
 namespace SyncCommitteeKeys
 
@@ -776,80 +849,91 @@ private theorem processEpoch (holds : SyncCommitteeKeys state)
     (fun _ => id) (fun one two => two ∘ one) ?_ holds
   intro k _ a b computed held
   have edge := EpochStage.action_cases.mp computed
+  have life := edge.registryLifecycle
+  have slot := edge.slot_eq
+  have forward : (getCurrentEpoch a).toNat ≤ (getCurrentEpoch b).toNat := by
+    simp only [getCurrentEpoch, slot, Nat.le_refl]
   cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
   case justification =>
-    exact held.transfer (SameSyncCommittees.processJustificationAndFinalization edge)
+    exact held.transfer (And.imp_right And.left
+      (SameSyncCommittees.processJustificationAndFinalization edge))
       (by
         simp only [validatorKeys, (processJustificationAndFinalization_keeps edge).2.2.2.2.2.1]
-        exact List.prefix_refl _)
+        exact List.prefix_refl _) life
   case inactivity =>
-    exact held.transfer (SameSyncCommittees.processInactivityUpdates edge)
-      (frame_processInactivityUpdates edge).pubkeysPrefix
+    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processInactivityUpdates edge))
+      (frame_processInactivityUpdates edge).pubkeysPrefix life
   case rewards =>
-    exact held.transfer (SameSyncCommittees.processRewardsAndPenalties edge)
-      (frame_processRewardsAndPenalties edge).pubkeysPrefix
+    exact held.transfer (And.imp_right And.left
+      (SameSyncCommittees.processRewardsAndPenalties edge))
+      (frame_processRewardsAndPenalties edge).pubkeysPrefix life
   case registry =>
-    exact held.transfer (SameSyncCommittees.processRegistryUpdates edge)
-      (frame_processRegistryUpdates edge).pubkeysPrefix
+    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processRegistryUpdates edge))
+      (frame_processRegistryUpdates edge).pubkeysPrefix life
   case slashings =>
-    exact held.transfer (SameSyncCommittees.processSlashings edge)
-      (frame_processSlashings edge).pubkeysPrefix
+    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processSlashings edge))
+      (frame_processSlashings edge).pubkeysPrefix life
   case eth1Reset =>
     split at edge
-    · exact held.transfer (SameSyncCommittees.processEth1DataReset edge)
-        (frame_processEth1DataReset edge).pubkeysPrefix
+    · exact held.transfer (And.imp_right And.left (SameSyncCommittees.processEth1DataReset edge))
+        (frame_processEth1DataReset edge).pubkeysPrefix life
     · exact edge ▸ held
   case pendingDeposits =>
     split at edge
-    · exact held.transfer (SameSyncCommittees.processPendingDeposits edge)
-        (frame_processPendingDeposits edge).pubkeysPrefix
+    · exact held.transfer (And.imp_right And.left (SameSyncCommittees.processPendingDeposits edge))
+        (frame_processPendingDeposits edge).pubkeysPrefix life
     · exact edge ▸ held
   case pendingConsolidations =>
     split at edge
-    · exact held.transfer (SameSyncCommittees.processPendingConsolidations edge)
-        (frame_processPendingConsolidations edge).pubkeysPrefix
+    · exact held.transfer (And.imp_right And.left
+        (SameSyncCommittees.processPendingConsolidations edge))
+        (frame_processPendingConsolidations edge).pubkeysPrefix life
     · exact edge ▸ held
   case payments =>
     split at edge
     · rw [processBuilderPendingPayments_eq edge]
-      exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _)
+      exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) (.of_data rfl)
     · exact edge ▸ held
   case effectiveBalances =>
-    exact held.transfer (SameSyncCommittees.processEffectiveBalanceUpdates edge)
-      (frame_processEffectiveBalanceUpdates edge).pubkeysPrefix
+    exact held.transfer (And.imp_right And.left
+      (SameSyncCommittees.processEffectiveBalanceUpdates edge))
+      (frame_processEffectiveBalanceUpdates edge).pubkeysPrefix life
   case slashingsReset =>
-    exact held.transfer (SameSyncCommittees.processSlashingsReset edge)
-      (frame_processSlashingsReset edge).pubkeysPrefix
+    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processSlashingsReset edge))
+      (frame_processSlashingsReset edge).pubkeysPrefix life
   case randaoReset =>
-    exact held.transfer (SameSyncCommittees.processRandaoMixesReset edge)
-      (frame_processRandaoMixesReset edge).pubkeysPrefix
+    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processRandaoMixesReset edge))
+      (frame_processRandaoMixesReset edge).pubkeysPrefix life
   case history =>
     split at edge
-    · exact held.transfer (SameSyncCommittees.processHistoricalSummariesUpdate edge)
-        (frame_processHistoricalSummariesUpdate edge).pubkeysPrefix
-    · exact held.transfer (SameSyncCommittees.processHistoricalRootsUpdate edge)
-        (frame_processHistoricalRootsUpdate edge).pubkeysPrefix
+    · exact held.transfer (And.imp_right And.left
+        (SameSyncCommittees.processHistoricalSummariesUpdate edge))
+        (frame_processHistoricalSummariesUpdate edge).pubkeysPrefix life
+    · exact held.transfer (And.imp_right And.left
+        (SameSyncCommittees.processHistoricalRootsUpdate edge))
+        (frame_processHistoricalRootsUpdate edge).pubkeysPrefix life
   case participation =>
     subst edge
-    exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _)
+    exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life
   case syncCommittees => exact processSyncCommitteeUpdates held edge
   case proposerLookahead =>
     split at edge
     · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
         Except.ok.injEq] at edge
       obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _)
+      exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life
     · exact edge ▸ held
   case ptcWindow =>
     split at edge
     · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
       obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _)
+      exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life
     · exact edge ▸ held
 
 /-- A slot updates committees only through the epoch transition. -/
 private theorem advanceSlot (holds : SyncCommitteeKeys state)
     (ok : Consensus.advanceSlot config checks state = .ok after) : SyncCommitteeKeys after := by
+  have later := (runKept_advanceSlot ok).later
   obtain ⟨next, cached, epoched, _, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
   obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
   have cachedKeys : SyncCommitteeKeys cached := by rw [cachedEq]; exact holds
@@ -858,26 +942,41 @@ private theorem advanceSlot (holds : SyncCommitteeKeys state)
     split at epochedOk
     · exact processEpoch cachedKeys epochedOk
     · cases epochedOk; exact cachedKeys
-  exact epochKeys
+  apply epochKeys.transfer (after := { epoched with slot := next })
+    ⟨rfl, rfl⟩ (List.prefix_refl _) (.of_data rfl) ?_
+  have epochedSlot : epoched.slot = state.slot := by
+    unfold epochIfLast at epochedOk
+    split at epochedOk
+    · obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
+      rw [frame.slot, processJustificationAndFinalization_slot justifiedOk, cachedEq]
+    · cases epochedOk; rw [cachedEq]
+  simpa only [getCurrentEpoch, epochedSlot, UInt64.le_iff_toNat_le] using later
 
 /-- Blocks preserve the committees and retain all existing validator keys. -/
 private theorem processBlock {block : BeaconBlock preset fork}
     {engine : ExecutionEngine preset fork} (holds : SyncCommitteeKeys state)
     (ok : Consensus.processBlock config checks engine state block = .ok after) :
     SyncCommitteeKeys after :=
-  holds.transfer (SameSyncCommittees.processBlock ok) (frame_processBlock ok).pubkeysPrefix
+  holds.transfer ((SameSyncCommittees.processBlock ok).imp_right And.left)
+    (frame_processBlock ok).pubkeysPrefix
+    (registryLifecycle_processBlock ok)
+    (by simp only [getCurrentEpoch, (frame_processBlock ok).slot, Nat.le_refl])
 
 private theorem carryFields {post : Fork} (upgrade : fork < post)
     (before : post < .glamsterdam) (altair : .altair ≤ fork)
     (holds : SyncCommitteeKeys state) :
     SyncCommitteeKeys (Consensus.carryFields config post state upgrade before) := by
   intro _
-  simpa [Consensus.carryFields, altair, validatorKeys, carryRooted]
+  simpa [Consensus.carryFields, altair, validatorKeys, carryRooted, getCurrentEpoch]
     using holds altair
 
-private theorem upgradeToElectra {pre : BeaconState preset .dencun}
+private theorem upgradeToElectra {checks : SignatureChecks} {pre : BeaconState preset .dencun}
     {post : BeaconState preset .pectra} (holds : SyncCommitteeKeys pre)
     (ok : Consensus.upgradeToElectra config pre = .ok post) : SyncCommitteeKeys post := by
+  have life := registryLifecycle_upgradeNext (pre := ⟨.dencun, pre⟩)
+    (config := config) (checks := checks)
+    (post := ⟨⟨.pectra, post⟩, by change Fork.dencun < Fork.pectra; decide⟩)
+    (by simp [Consensus.upgradeNext, ok, Functor.map, Except.map])
   simp only [Consensus.upgradeToElectra, bind_ok_iff] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, queued, compounded⟩ := ok
   have same := (SameSyncCommittees.foldlM
@@ -887,10 +986,13 @@ private theorem upgradeToElectra {pre : BeaconState preset .dencun}
   have keys := ((BlockFrame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued).trans
     (BlockFrame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok)
       compounded)).pubkeysPrefix
-  apply transfer ?_ same keys
-  have carried := carryFields (config := config) (post := .pectra)
-    (by decide) (by decide) (by decide) holds
-  exact carried
+  apply transfer ?_ (same.imp_right And.left) keys ?_ ?_
+  · exact carryFields (config := config) (post := .pectra)
+      (by decide) (by decide) (by decide) holds
+  · exact ⟨life.size_le, life.validators⟩
+  · have frame := (BlockFrame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued).trans
+      (BlockFrame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok) compounded)
+    simp only [getCurrentEpoch, frame.slot, Nat.le_refl]
 
 /-- Each upgrade either samples the first committees or carries their keys into the new registry. -/
 private theorem upgradeNext {pre : ForkedBeaconState preset}
@@ -911,7 +1013,7 @@ private theorem upgradeNext {pre : ForkedBeaconState preset}
   case dencun =>
     simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, upgraded, rfl⟩ := ok
-    exact upgradeToElectra holds upgraded
+    exact upgradeToElectra (checks := checks) holds upgraded
   case pectra =>
     simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, upgraded, rfl⟩ := ok
@@ -943,7 +1045,26 @@ theorem processOperations_currentSyncCommittee {body : BeaconBlockBody preset fo
     {parentSlot : Slot} (altair : .altair ≤ fork)
     (ok : processOperations config checks state body parentSlot = .ok after) :
     after.currentSyncCommittee altair = state.currentSyncCommittee altair :=
-  congrFun (SameSyncCommittees.processOperations ok).1 altair
+  congrFun (SameSyncCommittees.processOperations ok).1.1 altair
+
+/-- Block operations retain assigned activation epochs for every current sync committee key. -/
+theorem processOperations_syncCommittee_activation_assigned
+    {body : BeaconBlockBody preset fork} {parentSlot : Slot} (altair : .altair ≤ fork)
+    (holds : ∀ key ∈ (state.currentSyncCommittee altair).value.pubkeys.toList,
+      ∃ (i : Nat) (v : Validator), state.validators.data[i]? = some v ∧ v.pubkey = key ∧
+        v.activationEpoch ≠ FAR_FUTURE_EPOCH)
+    (ok : processOperations config checks state body parentSlot = .ok after) :
+    ∀ key ∈ (after.currentSyncCommittee altair).value.pubkeys.toList,
+      ∃ (i : Nat) (v : Validator), after.validators.data[i]? = some v ∧ v.pubkey = key ∧
+        v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
+  intro key member
+  rw [processOperations_currentSyncCommittee altair ok] at member
+  obtain ⟨i, v, found, keyed, assigned, _⟩ := assigned_key_transfer (fun _ => True)
+    (frame_processOperations ok).pubkeysPrefix
+    (SameSyncCommittees.processOperations ok).2 key (by
+      obtain ⟨i, v, found, keyed, assigned⟩ := holds key member
+      exact ⟨i, v, found, keyed, assigned, trivial⟩)
+  exact ⟨i, v, found, keyed, assigned⟩
 
 /-- Block execution retains the current sync committee. -/
 theorem processBlockExecution_currentSyncCommittee {body : BeaconBlockBody preset fork}
@@ -953,13 +1074,32 @@ theorem processBlockExecution_currentSyncCommittee {body : BeaconBlockBody prese
     after.currentSyncCommittee altair = state.currentSyncCommittee altair :=
   congrFun (SameSyncCommittees.processBlockExecution ok).1 altair
 
-/-- Every current and next sync committee key in a run from genesis belongs to its registry. -/
-theorem Run.syncCommittee_keys {g x : ForkedBeaconState preset} (run : Run config checks g x)
+/-- Block execution leaves the proposer lookahead unchanged. -/
+theorem processBlockExecution_proposerLookahead {body : BeaconBlockBody preset fork}
+    {engine : ExecutionEngine preset fork} {bellatrix : .bellatrix ≤ fork}
+    (ok : processBlockExecution config checks engine state body bellatrix = .ok after) :
+    after.proposerLookahead = state.proposerLookahead :=
+  (SameSyncCommittees.processBlockExecution ok).2.2
+
+/-- Attestations leave the proposer lookahead unchanged. -/
+theorem processAttestation_proposerLookahead {attestation : Attestation preset fork}
+    {parentSlot : Slot}
+    (ok : processAttestation config checks state parentSlot attestation = .ok after) :
+    after.proposerLookahead = state.proposerLookahead :=
+  (SameSyncCommittees.processAttestation ok).2.2
+
+/-- Every sync committee key activates by the next epoch of the state that holds it. -/
+theorem Run.syncCommittee_activation_bounded {g x : ForkedBeaconState preset}
+    (run : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g) (altair : .altair ≤ x.fork) :
     (∀ key ∈ (x.state.currentSyncCommittee altair).value.pubkeys.toList,
-      key ∈ validatorKeys x.state) ∧
+      ∃ (i : Nat) (v : Validator), x.state.validators.data[i]? = some v ∧ v.pubkey = key ∧
+        v.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
+        v.activationEpoch.toNat ≤ (getCurrentEpoch x.state).toNat + 1) ∧
     (∀ key ∈ (x.state.nextSyncCommittee altair).value.pubkeys.toList,
-      key ∈ validatorKeys x.state) := by
+      ∃ (i : Nat) (v : Validator), x.state.validators.data[i]? = some v ∧ v.pubkey = key ∧
+        v.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
+        v.activationEpoch.toNat ≤ (getCurrentEpoch x.state).toNat + 1) := by
   have holds : SyncCommitteeKeys x.state := by
     clear altair
     induction run with
@@ -975,5 +1115,40 @@ theorem Run.syncCommittee_keys {g x : ForkedBeaconState preset} (run : Run confi
       | block engine signed _ ok =>
         exact SyncCommitteeKeys.processBlock ih (applySignedBlock_ok ok).2.1
   exact holds altair
+
+/-- Every sync committee key in a run from genesis has an assigned activation epoch. -/
+theorem Run.syncCommittee_activation_assigned {g x : ForkedBeaconState preset}
+    (run : Run config checks g x)
+    (genesis : Genesis (config := config) (checks := checks) g) (altair : .altair ≤ x.fork) :
+    (∀ key ∈ (x.state.currentSyncCommittee altair).value.pubkeys.toList,
+      ∃ (i : Nat) (v : Validator), x.state.validators.data[i]? = some v ∧ v.pubkey = key ∧
+        v.activationEpoch ≠ FAR_FUTURE_EPOCH) ∧
+    (∀ key ∈ (x.state.nextSyncCommittee altair).value.pubkeys.toList,
+      ∃ (i : Nat) (v : Validator), x.state.validators.data[i]? = some v ∧ v.pubkey = key ∧
+        v.activationEpoch ≠ FAR_FUTURE_EPOCH) := by
+  obtain ⟨current, next⟩ := run.syncCommittee_activation_bounded genesis altair
+  constructor
+  · intro key member
+    obtain ⟨i, v, found, keyed, assigned, _⟩ := current key member
+    exact ⟨i, v, found, keyed, assigned⟩
+  · intro key member
+    obtain ⟨i, v, found, keyed, assigned, _⟩ := next key member
+    exact ⟨i, v, found, keyed, assigned⟩
+
+/-- Every current and next sync committee key in a run from genesis belongs to its registry. -/
+theorem Run.syncCommittee_keys {g x : ForkedBeaconState preset} (run : Run config checks g x)
+    (genesis : Genesis (config := config) (checks := checks) g) (altair : .altair ≤ x.fork) :
+    (∀ key ∈ (x.state.currentSyncCommittee altair).value.pubkeys.toList,
+      key ∈ validatorKeys x.state) ∧
+    (∀ key ∈ (x.state.nextSyncCommittee altair).value.pubkeys.toList,
+      key ∈ validatorKeys x.state) := by
+  have project (key) (found : ∃ (i : Nat) (v : Validator),
+      x.state.validators.data[i]? = some v ∧ v.pubkey = key ∧
+      v.activationEpoch ≠ FAR_FUTURE_EPOCH) : key ∈ validatorKeys x.state := by
+    obtain ⟨i, v, read, rfl, _⟩ := found
+    exact List.mem_map.mpr ⟨v, by simpa using Array.mem_of_getElem? read, rfl⟩
+  obtain ⟨current, next⟩ := run.syncCommittee_activation_assigned genesis altair
+  exact ⟨fun key member => project key (current key member),
+    fun key member => project key (next key member)⟩
 
 end EthLib.Consensus

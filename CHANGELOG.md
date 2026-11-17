@@ -9,6 +9,12 @@ Not yet released.
 
 ### Proof additions
 
+- `DirectSafety.accountable_safety_apriori` bounds the drift of accountable safety from the reference state alone.
+  For two runs that finalize conflicting checkpoints, the unslashed stake at the shared state `x` is at most three times the accountable stake plus `2 * drift x high`, or the runs show `HashEvidence`.
+  `drift x high` reads only numbers at `x` and the window to the later finalized epoch, so it needs no replay of the tails.
+  It takes the premises of `source_safety`.
+  When its guard fails, `drift` is the unslashed active stake at `x`, and the bound says nothing.
+
 - `Execution.honestHeadsCover_of_historical_anchor` keeps a confirmed block on every honest head chain from the call to a horizon, by induction on time ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   It no longer assumes the root's own earlier coverage.
   It assumes the parent's coverage, the root's viability, the receivers' exits, and a late duty majority.
@@ -65,6 +71,19 @@ Not yet released.
   `ReceiverWindowExitsNear` asks the receivers' exit bound only of receivers within two epochs of the parent.
 
 ### Changes that break callers
+
+- In Lean, `processDepositRequest_ok` also gives the state after the request.
+  It is the state before, with only the pending deposits and the start index of the requests changed.
+  A caller that took the balances as `.2.2` takes `.2.2.1`, and a pattern with three parts gets a fourth.
+  Nothing breaks in Python.
+
+- In Lean, `FlagsKeptOrZero` is stronger.
+  A zero byte of flags appears only at a position at or past the size of the registry before the step.
+  So a step keeps the flags of each existing validator, or zeroes the byte of a new one.
+  `FlagsKeptOrZero.trans` takes a new premise: the registry of the first state is no larger than that of the second.
+  A caller passes that fact, for example from `Frame.registryGrows`.
+  A match on the zero case, `old | rfl`, becomes `old | ⟨rfl, -⟩`.
+  Nothing breaks in Python.
 
 - In Lean, the historical-anchor theorems no longer assume the receivers' reads ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` take `fit : config.CommitteeWindowsFit preset` instead of `reads`; their conclusions are unchanged.
@@ -651,6 +670,17 @@ Not yet released.
   The two bodies are not definitionally equal.
   A proof that unfolds `HashEvidence` to take it apart first rewrites with `hashEvidence_iff`, or applies `hashEvidence_iff.mp`.
   A proof that builds the evidence as an `Or` of the old form applies `hashEvidence_iff.mpr`.
+
+- In Lean, `DirectSafety.slashingLimits` counts only the indices that are slashable at the operation.
+  It still reads every index with `getValidator`, so its errors are unchanged.
+  It then keeps the validators for which `isSlashableValidator` holds at the current epoch, the test of `slashIfSlashable`.
+  An attester slashing pays nothing for an index that is already slashed, so its limits no longer count one.
+  So every value derived from it can only decrease.
+  These are the `creditLimit` and `debitLimit` of the `.slashings` events, and through `fundingCredit (.slashings)` the values `activeStakeWindow`, `consolidationRate` and the right side of `departure_charges_le_funded_window`.
+  `residualCredit` and `sourceDrift` read the same limits, so they can only decrease too.
+  A call on one proposer that is not slashable now gives zero limits.
+  The replay of a successful proposer slashing is unchanged, since `processProposerSlashing` requires the proposer to be slashable.
+  Every theorem statement is unchanged.
 
 - In Lean, the four rules by which one justification step finalizes a checkpoint have one definition, `FinalizationStepRule state after checkpoint` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   The bits come from the state after the step, the epoch and the justified checkpoints from the state before it.

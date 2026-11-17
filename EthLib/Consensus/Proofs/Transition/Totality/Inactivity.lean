@@ -224,6 +224,35 @@ theorem processInactivityUpdates_total (config : Config) (altair : .altair ≤ f
   rw [folded]
   rfl
 
+/-- From Altair, the update of the scores raises each score by at most the score bias.
+
+Each score after the update has a score at the same position before it.
+
+The new score is at most that old score plus the bias.
+
+This holds when the update succeeds. -/
+theorem processInactivityUpdates_score_le {config : Config} {altair : .altair ≤ fork}
+    {after : BeaconState preset fork}
+    (computed : processInactivityUpdates config state altair = .ok after) {i : Nat}
+    {score : UInt64} (found : (after.inactivityScores altair).data[i]? = some score) :
+    ∃ old, (state.inactivityScores altair).data[i]? = some old ∧
+      score.toNat ≤ old.toNat + config.INACTIVITY_SCORE_BIAS.toNat := by
+  by_cases genesis : getCurrentEpoch state = GENESIS_EPOCH
+  · rw [processInactivityUpdates_genesis altair genesis, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨score, found, Nat.le_add_right _ _⟩
+  · obtain ⟨eligible, _, kept, changed⟩ := processInactivityUpdates_scores genesis computed
+    by_cases hit : ∀ index ∈ eligible, index.toNat ≠ i
+    · rw [kept i hit] at found
+      exact ⟨score, found, Nat.le_add_right _ _⟩
+    · push Not at hit
+      obtain ⟨index, mem, rfl⟩ := hit
+      obtain ⟨hitters, leak, old, new, _, _, olds, news, value⟩ := changed index mem
+      obtain rfl : new = score := Option.some.inj (news.symm.trans found)
+      refine ⟨old, olds, ?_⟩
+      rw [value]
+      split <;> omega
+
 /-- From Altair, the update of the scores keeps every score within a bound plus the score bias.
 
 Take a bound on every score before the update.
@@ -240,29 +269,10 @@ theorem processInactivityUpdates_scoreBound {config : Config} {altair : .altair 
     ∀ score ∈ (after.inactivityScores altair).data,
       score.toNat ≤ bound + config.INACTIVITY_SCORE_BIAS.toNat := by
   intro score member
-  by_cases genesis : getCurrentEpoch state = GENESIS_EPOCH
-  · rw [processInactivityUpdates_genesis altair genesis, Except.ok.injEq] at computed
-    subst computed
-    exact (scored score member).trans (Nat.le_add_right _ _)
-  · obtain ⟨eligible, _, kept, changed⟩ := processInactivityUpdates_scores genesis computed
-    obtain ⟨i, hi, rfl⟩ := Array.mem_iff_getElem.mp member
-    have found : (after.inactivityScores altair).data[i]? = some (after.inactivityScores
-        altair).data[i] := Array.getElem?_eq_some_iff.mpr ⟨hi, rfl⟩
-    have memOf : ∀ {j : Nat} {x}, (state.inactivityScores altair).data[j]? = some x →
-        x.toNat ≤ bound := fun {j x} h =>
-      scored x (Array.mem_iff_getElem?.mpr ⟨j, h⟩)
-    by_cases hit : ∀ index ∈ eligible, index.toNat ≠ i
-    · have same := kept i hit
-      rw [found] at same
-      have := memOf same.symm
-      omega
-    · push Not at hit
-      obtain ⟨index, mem, rfl⟩ := hit
-      obtain ⟨hitters, leak, old, new, _, _, olds, news, value⟩ := changed index mem
-      rw [found] at news
-      rw [Option.some.inj news]
-      have oldBound := memOf olds
-      rw [value]
-      split <;> omega
+  obtain ⟨i, hi, rfl⟩ := Array.mem_iff_getElem.mp member
+  obtain ⟨old, olds, raised⟩ :=
+    processInactivityUpdates_score_le computed (Array.getElem?_eq_some_iff.mpr ⟨hi, rfl⟩)
+  have := scored old (Array.mem_iff_getElem?.mpr ⟨i, olds⟩)
+  omega
 
 end EthLib.Consensus
