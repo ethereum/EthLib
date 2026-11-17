@@ -30,6 +30,7 @@ namespace SphincsSecurity.Security
 
 variable [Params]
 open Concrete
+open EthLib.Cryptography
 
 namespace Fors
 
@@ -44,31 +45,25 @@ def forsDomain (index : Index) (κ : FTree) (height position : Nat) : HashDomain
       ⟨position % 2 ^ forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩
   else .forsRoots index
 
-/-- A FORS path, extended by zero above its last level. -/
-def extendPath (path : Fin forsHeight → Digest) (level : Nat) : Digest :=
-  if hlevel : level < forsHeight then path ⟨level, hlevel⟩ else 0
+/-- Over at most `a` levels, the climb with the FORS node addresses is the FORS fold.
 
-theorem merkleFold_forsFold (parameter : PublicParameter) (index : Index) (κ : FTree) (leaf : FLeaf)
+So the classification of Merkle climbs applies to FORS openings. -/
+theorem climb_forsFold (parameter : PublicParameter) (index : Index) (κ : FTree) (leaf : FLeaf)
     (path : Fin forsHeight → Digest) (levels : Nat) (hlevels : levels ≤ forsHeight)
     (value : Digest) :
-    merkleFold parameter (forsDomain index κ) leaf.val (extendPath path) levels value =
+    Merkle.climb (merkleHash parameter (forsDomain index κ)) ⟨0, leaf.val⟩ value
+        (List.ofFn fun level : Fin levels => extendPath path level.val) =
       (forsFold parameter index κ leaf path levels value : OracleComp HashSpec Digest) := by
-  induction levels with
-  | zero => rfl
-  | succ levels ih =>
-      have hl : levels < forsHeight := by omega
-      rw [merkleFold, forsFold, ih (by omega)]
-      apply bind_congr
-      intro current
-      rw [dite_eq_left hl]
-      have hdom : forsDomain index κ (levels + 1) (leaf.val / 2 ^ (levels + 1)) =
-          .forsNode index κ ⟨levels, hl⟩ ⟨leaf.val / 2 ^ (levels + 1),
-            Nat.lt_of_le_of_lt (Nat.div_le_self _ _) leaf.isLt⟩ := by
-        rw [forsDomain, dite_eq_left ⟨by omega, by omega⟩]
-        congr 1
-        exact Fin.ext (Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) leaf.isLt))
-      rw [hdom, extendPath, dite_eq_left hl]
-      cases leaf.val.testBit levels <;> rfl
+  refine Merkle.climb_congr _ _ _ _ _ fun q hlow hhigh => ?_
+  -- The climb hashes at levels `1` to `levels`, where both hashes address the same FORS node.
+  obtain ⟨level, node⟩ := q
+  obtain _ | level := level
+  · exact absurd hlow (by simp)
+  simp only [List.length_ofFn, Nat.zero_add] at hhigh
+  have hl : level < forsHeight := by omega
+  funext left right
+  rw [merkleHash, forsHash, dite_eq_left hl, forsDomain, dite_eq_left ⟨Nat.succ_pos _, hl⟩]
+  rfl
 
 section Tree
 
@@ -141,9 +136,9 @@ theorem tree_classification (leaf : FLeaf) (secret : Digest) (path : Fin forsHei
       (leafValue f parameter index κ leaf
         (Completeness.forsSecretValue f parameter index κ seed leaf))
       forsHeight := by
-    simp only [merkleValue, merkleFold_forsFold _ _ _ _ _ _ le_rfl]
+    simp only [merkleValue, climb_forsFold _ _ _ _ _ _ le_rfl]
     exact hroot.trans (canonical_root f parameter index κ seed leaf).symm
-  rcases merkleFold_same_index f parameter _ leaf.val _ _ _ _ forsHeight hfold with
+  rcases merkleValue_same_index f parameter _ leaf.val _ _ _ _ forsHeight hfold with
     ⟨hleaf, hpath⟩ | hmatch
   · by_cases hsecret : secret = Completeness.forsSecretValue f parameter index κ seed leaf
     · refine Or.inl ⟨hsecret, ?_⟩
@@ -238,7 +233,7 @@ theorem nodeInput_mem (leaves : FTree → FLeaf) (opening : FTree → TreeOpenin
   apply queriedInputs_sequenceFin_component f _ κ
   rw [treeRecover]
   apply queriedInputs_mono_bind_right
-  rw [← merkleFold_forsFold _ _ _ _ _ _ le_rfl]
+  rw [← climb_forsFold _ _ _ _ _ _ le_rfl]
   exact merkleInput_mem f parameter _ _ _ _ _ _ hlevel
 
 /-- The `T_k` input over the recovered roots is hashed after recovery. -/

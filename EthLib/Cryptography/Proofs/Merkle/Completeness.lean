@@ -94,6 +94,21 @@ theorem ordered_eq_ite (p : Position) (current sibling : α) :
   unfold ordered
   simp only [Position.isLeft_iff]
 
+/-- A climb from a leaf over `n + 1` path entries climbs `n`, then hashes in entry `n`.
+
+The bit `n` of the leaf index says whether the held node is the right child. -/
+theorem climb_ofFn_succ [LawfulMonad m] (j : Nat) (path : Nat → α) (n : Nat) (value : α) :
+    climb hash ⟨0, j⟩ value (List.ofFn fun level : Fin (n + 1) => path level.val) = (do
+      let current ← climb hash ⟨0, j⟩ value (List.ofFn fun level : Fin n => path level.val)
+      if j.testBit n then hash ⟨n + 1, j / 2 ^ (n + 1)⟩ (path n) current
+      else hash ⟨n + 1, j / 2 ^ (n + 1)⟩ current (path n)) := by
+  rw [List.ofFn_succ_last, climb_append, List.length_ofFn]
+  refine bind_congr fun current => ?_
+  -- The last step hashes at the ancestor's parent, in the order its parity gives.
+  simp only [climb, bind_pure, Position.ancestor_mk_zero, Position.parent_mk, div_pow_div_two,
+    ordered_eq_ite, Fin.val_last, Nat.testBit_eq_decide_div_mod_eq]
+  rcases Nat.mod_two_eq_zero_or_one (j / 2 ^ n) with h | h <;> simp [h]
+
 /-- Ordering two mapped children maps the ordered pair.
 
 The order depends only on the position, not on the values. -/
@@ -103,18 +118,36 @@ theorem ordered_map {β : Type} (f : α → β) (p : Position) (current sibling 
   unfold ordered
   split <;> rfl
 
+/-- A map that commutes with the node hash at the ancestors a climb hashes at commutes with it.
+
+For example, a node hash may agree with another only on the positions inside a tree. -/
+theorem climb_map_ancestors [LawfulMonad m] {β : Type} (hash' : Position → β → β → m β)
+    (f : α → β) :
+    ∀ (siblings : List α) (p : Position) (current : α),
+      (∀ k, 1 ≤ k → k ≤ siblings.length → ∀ left right,
+        hash' (p.ancestor k) (f left) (f right) = f <$> hash (p.ancestor k) left right) →
+      climb hash' p (f current) (siblings.map f) = f <$> climb hash p current siblings
+  | [], _, _, _ => by simp [climb]
+  | sibling :: rest, p, current, commute => by
+    -- The first step hashes at the parent, the ancestor one level up.
+    have hstep := commute 1 (Nat.le_refl 1) (by simp)
+    simp only [Position.ancestor_one] at hstep
+    simp only [List.map_cons, climb, ordered_map, Prod.map_fst, Prod.map_snd, hstep,
+      bind_map_left, map_bind]
+    -- The rest of the climb hashes at the parent's ancestors, one level higher each.
+    refine congrArg _ (funext fun parent => climb_map_ancestors hash' f rest p.parent parent
+      fun k hk1 hk2 => ?_)
+    rw [Position.ancestor_parent]
+    exact commute (k + 1) (by omega) (by simp; omega)
+
 /-- A map that commutes with the node hash commutes with the climb.
 
 For example, the map can encode nodes as bytes, for a hash defined on bytes. -/
 theorem climb_map [LawfulMonad m] {β : Type} (hash' : Position → β → β → m β) (f : α → β)
-    (commute : ∀ p left right, hash' p (f left) (f right) = f <$> hash p left right) :
-    ∀ (siblings : List α) (p : Position) (current : α),
-      climb hash' p (f current) (siblings.map f) = f <$> climb hash p current siblings
-  | [], _, _ => by simp [climb]
-  | sibling :: rest, p, current => by
-    -- Push the map through the order, then through the hash, then into the rest of the climb.
-    simp only [List.map_cons, climb, ordered_map, Prod.map_fst, Prod.map_snd, commute,
-      bind_map_left, map_bind, climb_map hash' f commute rest]
+    (commute : ∀ p left right, hash' p (f left) (f right) = f <$> hash p left right)
+    (siblings : List α) (p : Position) (current : α) :
+    climb hash' p (f current) (siblings.map f) = f <$> climb hash p current siblings :=
+  climb_map_ancestors hash hash' f siblings p current fun k _ _ => commute (p.ancestor k)
 
 /-! ## The levels a tree hashes at -/
 

@@ -107,7 +107,7 @@ theorem publicData_correct (f : QueryImpl HashSpec Id) (parameter : PublicParame
     funext level
     have h := fors_path_sibling f parameter seed labels hconsistent index κ leaf level.val
       level.isLt
-    simpa only [publicData, Fors.extendPath, dite_eq_left level.isLt] using h
+    simpa only [publicData, extendPath, dite_eq_left level.isLt] using h
 
 /-- The public message of a retained key is the message the signer computes. -/
 theorem DataCorrect.keyMessage {f : QueryImpl HashSpec Id} {parameter : PublicParameter}

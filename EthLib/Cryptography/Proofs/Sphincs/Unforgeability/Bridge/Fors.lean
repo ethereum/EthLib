@@ -60,7 +60,7 @@ theorem forsLeaves_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.
   have hl : (⟨j % 2 ^ SphincsSecurity.forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩ :
       SphincsSecurity.FLeaf) = leaf :=
     Fin.ext (Nat.mod_eq_of_lt hj)
-  rw [forsLeaves, SphincsSecurity.Seeded.forsNode, hl,
+  rw [forsLeaves, SphincsSecurity.Seeded.forsNode_zero, SphincsSecurity.Seeded.forsLeaf, hl,
     show j = leaf.val from rfl, forsSecret_queryH S P index κ leaf, bind_map_left, map_bind]
   exact bind_congr fun secret => forsLeafHash_queryH P index κ leaf secret
 
@@ -71,57 +71,46 @@ theorem div_two_pow_lt (leaf : SphincsSecurity.FLeaf) (level : Nat) (h : level <
     show FORS_HEIGHT - (level + 1) + (level + 1) = FORS_HEIGHT by omega]
   exact leaf.isLt
 
-/-- The climb of a FORS tree from a height is the model's fold, continued from that height. -/
-theorem forsClimb_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsSecurity.Index)
+/-- The climb of a FORS tree over its `a` levels is the model's fold, value for value. -/
+theorem forsFold_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsSecurity.Index)
     (κ : SphincsSecurity.FTree) (leaf : SphincsSecurity.FLeaf)
     (path : Fin SphincsSecurity.forsHeight → SphincsSecurity.Digest) (v : SphincsSecurity.Digest) :
-    ∀ (n level : Nat), level + n ≤ FORS_HEIGHT →
-      ofDigest <$> SphincsSecurity.Concrete.forsFold (m := m) P index κ leaf path (level + n) v
-        = SphincsSecurity.Concrete.forsFold (m := m) P index κ leaf path level v >>= fun c =>
-            Merkle.climb (forsNodeHash (queryH (m := m)) (ofParam P) index.val (treeOf κ))
-              ((⟨0, leaf.val⟩ : Merkle.Position).ancestor level) (ofDigest c)
-              (((List.ofFn fun i => ofDigest (path i)).drop level).take n)
-  | 0, level, _ => by simp [Merkle.climb]
-  | n + 1, level, hn => by
-    rw [show level + (n + 1) = level + 1 + n by omega,
-      forsClimb_queryH P index κ leaf path v n (level + 1) (by omega)]
-    have hlevel : level < SphincsSecurity.forsHeight := by
-      change _ < 10
-      simp only [FORS_HEIGHT] at hn
-      omega
-    rw [List.drop_eq_getElem_cons (i := level) (by simp only [List.length_ofFn]; exact hlevel),
-      List.take_succ_cons]
-    simp only [SphincsSecurity.Concrete.forsFold, dite_eq_left hlevel, bind_assoc,
-      List.getElem_ofFn]
-    refine bind_congr fun c => ?_
-    have hnode := forsNodeHash_queryH (m := m) P index κ ⟨level, hlevel⟩
-      ⟨leaf.val / 2 ^ (level + 1), Nat.lt_of_le_of_lt (Nat.div_le_self _ _) leaf.isLt⟩
-      (div_two_pow_lt leaf level hlevel)
-    rw [Merkle.climb, Merkle.Position.parent_ancestor]
-    simp only [Merkle.Position.ancestor_mk_zero]
-    rw [Nat.testBit_eq_decide_div_mod_eq]
-    rcases Nat.mod_two_eq_zero_or_one (leaf.val / 2 ^ level) with h | h
-    · simp only [h, Merkle.ordered_eq_ite, ↓reduceIte, Nat.zero_ne_one, decide_false,
-        Bool.false_eq_true]
-      rw [hnode, bind_map_left]
-    · simp only [h, Merkle.ordered_eq_ite, ↓reduceIte, Nat.one_ne_zero, decide_true]
-      rw [hnode, bind_map_left]
+    ofDigest <$> SphincsSecurity.Concrete.forsFold (m := m) P index κ leaf path
+        SphincsSecurity.forsHeight v
+      = Merkle.climb (forsNodeHash (queryH (m := m)) (ofParam P) index.val (treeOf κ))
+          ⟨0, leaf.val⟩ (ofDigest v) (List.ofFn fun i => ofDigest (path i)) := by
+  -- Inside the tree, the path extension reads the path.
+  have hpath : (List.ofFn fun i : Fin SphincsSecurity.forsHeight =>
+      SphincsSecurity.Concrete.extendPath path i.val).map ofDigest =
+        List.ofFn fun i => ofDigest (path i) := by
+    rw [List.map_ofFn]
+    exact congrArg List.ofFn (funext fun i => by
+      simp only [Function.comp_apply, SphincsSecurity.Concrete.extendPath, dite_eq_left i.isLt])
+  rw [SphincsSecurity.Concrete.forsFold, ← hpath]
+  refine (Merkle.climb_map_ancestors (SphincsSecurity.Concrete.forsHash (m := m) P index κ) _
+    ofDigest _ _ _ ?_).symm
+  -- The climb hashes at the leaf's ancestors on levels `1` to `a`, inside the tree.
+  intro k hk1 hk2 left right
+  obtain ⟨level, rfl⟩ : ∃ level, k = level + 1 := ⟨k - 1, by omega⟩
+  simp only [List.length_ofFn] at hk2
+  have hlevel : level < SphincsSecurity.forsHeight := by omega
+  rw [Merkle.Position.ancestor_mk_zero, SphincsSecurity.Concrete.forsHash,
+    dite_eq_left hlevel]
+  exact forsNodeHash_queryH_mod P index κ ⟨level, hlevel⟩ _ (div_two_pow_lt leaf level hlevel)
+    left right
 
 /-- The root that an opening leads to is the model's. -/
 theorem treeRecover_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsSecurity.Index)
     (κ : SphincsSecurity.FTree) (leaf : SphincsSecurity.FLeaf) (o : SphincsSecurity.TreeOpening) :
     treeRecover (queryH (m := m)) (ofParam P) index.val (treeOf κ) leaf (ofOpening o)
       = ofDigest <$> SphincsSecurity.Concrete.treeRecover (m := m) P index κ leaf o := by
-  have hclimb := forsClimb_queryH (m := m) P index κ leaf o.path
+  have hclimb := forsFold_queryH (m := m) P index κ leaf o.path
   simp only [treeRecover, SphincsSecurity.Concrete.treeRecover, ofOpening]
   rw [forsLeafHash_queryH, bind_map_left, map_bind]
   refine bind_congr fun value => ?_
   -- The climb takes all 10 heights, from the leaf to the root.
-  have h := hclimb value SphincsSecurity.forsHeight 0 (by decide)
-  simp only [Nat.zero_add, SphincsSecurity.Concrete.forsFold, pure_bind,
-    Merkle.Position.ancestor_zero, List.drop_zero] at h
   simp only [ofPath, Vector.toList_ofFn]
-  rw [h, List.take_of_length_le (le_of_eq List.length_ofFn)]
+  rw [hclimb value]
   rfl
 
 /-- The model's FORS roots as EthLib's vector of roots. -/
