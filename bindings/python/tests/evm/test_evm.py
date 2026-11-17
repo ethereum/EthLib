@@ -334,6 +334,40 @@ def test_integers_out_of_range() -> None:
         memory_gas_cost(-1)
 
 
+@pytest.mark.parametrize("argument", ["opcode", "immediate"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        -1,
+        256,
+        2**32,
+        2**32 + 0xE6,
+        -(2**32),
+        0xE6 - 2**32,
+        2**64,
+        2**64 + 0xE6,
+        -(2**64),
+        0xE6 - 2**64,
+        2**128,
+        -(2**128),
+    ],
+)
+def test_immediate_depths_integer_out_of_range(argument: str, value: int) -> None:
+    # Each argument is a byte; values must not wrap at a 32-bit or 64-bit C boundary.
+    opcode, immediate = (value, 0) if argument == "opcode" else (0xE6, value)
+    with raises(OverflowError, "the opcode and the immediate must be below 256"):
+        immediate_depths(opcode, immediate)
+
+
+@pytest.mark.parametrize(
+    "opcode, immediate, message",
+    [(0.0, 0, "opcode must be int"), (0xE6, 0.0, "immediate must be int")],
+)
+def test_immediate_depths_wrong_type(opcode, immediate, message: str) -> None:
+    with raises(TypeError, message):
+        immediate_depths(opcode, immediate)
+
+
 @pytest.mark.parametrize(
     "size, cost",
     [
