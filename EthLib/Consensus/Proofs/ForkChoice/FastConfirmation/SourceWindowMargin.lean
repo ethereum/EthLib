@@ -1198,8 +1198,8 @@ private theorem latest_rank_of_signed {Δ : ℕ} (sync : e.Synchronous Δ)
     vote.data_head anchored (UInt64.le_of_eq anchorSlot) start honest deadlineOk dueOk dueLt
   -- The duty vote and the signature share the target epoch, so they carry one data.
   obtain ⟨dutySent, dutySigned⟩ := vote.signed_sent anchored start honest
-  have sameData := data_eq_of_signed_of_target_epoch slots dutySent sent dutySigned signed honest
-    (by rw [dataEpoch, signedEpoch])
+  have sameData := Execution.data_eq_of_signed_of_target_epoch slots dutySent sent dutySigned
+    signed honest (by rw [dataEpoch, signedEpoch])
   -- The signer's head at the duty is the voted block, which descends from the root.
   have pending := Store.getHead_pending preGloas headOk
   have headEq : head = ⟨attestation.data.beaconBlockRoot, .pending⟩ := by
@@ -1615,8 +1615,8 @@ private theorem caller_supporter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
   rcases UInt64.lt_or_eq_of_le rankLe with greater | same
   swap
   · -- The same rank gives the same vote, which supports the root at the receiver too.
-    have sameVote := latest_eq_of_rank_eq slots preGloas anchored start caller receiver honest
-      latest receivedOk same
+    have sameVote := Execution.latest_eq_of_rank_eq slots preGloas anchored start caller receiver
+      honest latest receivedOk same
     subst sameVote
     obtain ⟨other, otherIn, otherSeen, otherEq, -, otherOrigin⟩ :=
       e.exists_signed_origin_of_latestMessages anchored start receiver receivedOk
@@ -1674,8 +1674,8 @@ private theorem caller_supporter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
       (w := w) (k := k) with allFresh | collision
   swap
   · exact .inr collision
-  rcases mem_supportersOf_of_latest_signed anchored start preGloas honest receiver receivedOk
-      notCounted upToDate (le_of_eq atTime) dueOk dueLt allFresh
+  rcases Execution.mem_supportersOf_of_latest_signed anchored start preGloas honest receiver
+      receivedOk notCounted upToDate (le_of_eq atTime) dueOk dueLt allFresh
       (fun earlier low high => rootCovers earlier low (atTime ▸ high)) known rootAbove active
     with member | ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
   · exact .inl (.inl member)
@@ -1705,7 +1705,7 @@ private theorem honest_unslashedActive_of_checkpointState {time : ℕ}
     {participants : Std.TreeSet ValidatorIndex} {v : ValidatorIndex} (honest : v ∈ J)
     (member : v ∈ Store.activeMembers source participants) :
     v ∈ ((unslashedActiveBalances source).map (·.1)).toFinset := by
-  have unslashed := notSlashed_checkpointState anchored start caller
+  have unslashed := Execution.notSlashed_checkpointState anchored start caller
     (fun root base found => counted u caller n base callerTime ⟨root, base, found, .inl rfl⟩)
     sourceOk v honest
   obtain ⟨_, validator, found, active⟩ := Store.mem_activeMembers.mp member
@@ -1938,8 +1938,8 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
   rcases UInt64.lt_or_eq_of_le rankLe with greater | same
   swap
   · -- The same rank gives the same vote, for the parent at the receiver too.
-    have sameVote := latest_eq_of_rank_eq slots preGloas anchored start caller receiver honest
-      latest receivedOk same
+    have sameVote := Execution.latest_eq_of_rank_eq slots preGloas anchored start caller receiver
+      honest latest receivedOk same
     subst sameVote
     obtain ⟨historicalParent, historicalParentFound, historicalLe⟩ :=
       Store.slot_le_of_isAncestor historicalFound historicalBelow
@@ -1953,9 +1953,9 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
         using receiverEpochOk
     have historicalParent := epoch_le_of_slot_le (preset := preset) historicalBlock.slot parent.slot
       (UInt64.le_iff_toNat_le.mp historicalLe)
-    have callerBefore := previousBlockSlot_le_previousCurrentSlot (forward u caller n)
+    have callerBefore := (forward u caller n).previousBlockSlot_le_previousCurrentSlot
       (UInt64.le_of_eq anchorSlot) found slotOk beforeOk lastOk
-    have receiverBefore := previousBlockSlot_le_previousCurrentSlot (forward w receiver k)
+    have receiverBefore := (forward w receiver k).previousBlockSlot_le_previousCurrentSlot
       (UInt64.le_of_eq anchorSlot) known currentOk beforeOk receiverLastOk
     have lastNat := (subChecked_ok_iff.mp lastOk).2
     have receiverLastNat := (subChecked_ok_iff.mp receiverLastOk).2
@@ -2010,8 +2010,8 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
       (w := w) (k := k) with allFresh | collision
   swap
   · exact .inr collision
-  rcases mem_supportersOf_of_latest_signed anchored start preGloas honest receiver receivedOk
-      notCounted upToDate receiverTime dueOk dueLt allFresh
+  rcases Execution.mem_supportersOf_of_latest_signed anchored start preGloas honest receiver
+      receivedOk notCounted upToDate receiverTime dueOk dueLt allFresh
       (fun earlier low high => rootCovers earlier low (atTime ▸ high)) known rootAbove
       (mem_unslashedActive validatorFound unslashed isActive)
     with member | ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
@@ -2663,10 +2663,10 @@ public theorem Execution.source_surplus_or_historical_evidence [DecidablePred (�
   have historicalNear : callerEpoch.toNat ≤
       (computeEpochAtSlot preset historicalBlock.slot).toNat + 1 := historicalEq ▸ near
   -- Slot order: the caller's last slot is no later than the receiver's.
-  have lastBefore := previousSlot_le_of_time_le start caller receiver
+  have lastBefore := Execution.previousSlot_le_of_time_le start caller receiver
     (by rw [atTime]; exact callerTime) upToDate slotOk currentOk lastOk receiverLastOk
   have lastBeforeNat := UInt64.le_iff_toNat_le.mp lastBefore
-  have beforeLast := previousBlockSlot_le_previousCurrentSlot (forward u caller n)
+  have beforeLast := (forward u caller n).previousBlockSlot_le_previousCurrentSlot
     (UInt64.le_of_eq anchorSlot) found slotOk beforeOk lastOk
   have parentBelowNat := UInt64.lt_iff_toNat_lt.mp parentBelow
   -- The receiver holds the parent, below both heads.
