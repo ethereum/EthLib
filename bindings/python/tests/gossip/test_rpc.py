@@ -448,8 +448,8 @@ def test_backoff_of_two_to_the_64_overflows() -> None:
     # The ten bytes 80 .. 80 02 hold 2^64.
     data = _control(_len(4, _varint(3 << 3) + b"\x80" * 9 + b"\x02"))
     message = (
-        PREFIX + "protobuf\n  (EthLib.Networking.Encoding.Protobuf.ProtobufError.varint "
-        "(EthLib.Networking.Encoding.Varint.VarintError.overflow))"
+        PREFIX + "protobuf\n  (EthLib.Networking.Encoding.Protobuf.ProtobufError.varint\n"
+        "    (EthLib.Networking.Encoding.Varint.VarintError.overflow 18446744073709551616))"
     )
     with raises(rpc.GossipError, message):
         rpc.decode(data)
@@ -482,7 +482,7 @@ def test_control_split_across_two_records_is_rejected() -> None:
     # Each control record is decoded alone, so the first ends inside the GRAFT.
     graft = _len(3, _str(1, "a"))
     data = _control(graft[:2]) + _control(graft[2:])
-    with raises(rpc.GossipError, PROTOBUF + "truncated)") as info:
+    with raises(rpc.GossipError, PROTOBUF + "truncated 3 0)") as info:
         rpc.decode(data)
     assert info.value.code == 101
 
@@ -491,13 +491,13 @@ def test_control_split_across_two_records_is_rejected() -> None:
     ("data", "fault"),
     [
         # A length of 4 with three bytes after it.
-        (_varint(2 << 3 | 2) + b"\x04abc", "truncated)"),
+        (_varint(2 << 3 | 2) + b"\x04abc", "truncated 4 3)"),
         # A truncated record inside a published message.
-        (_len(2, _varint(4 << 3 | 2) + b"\x02a"), "truncated)"),
+        (_len(2, _varint(4 << 3 | 2) + b"\x02a"), "truncated 2 1)"),
         # A fixed-width record cut short.
-        (_varint(9 << 3 | 1) + bytes(7), "truncated)"),
+        (_varint(9 << 3 | 1) + bytes(7), "truncated 8 7)"),
         # A group that never ends.
-        (_varint(9 << 3 | 3), "truncated)"),
+        (_varint(9 << 3 | 3), "truncated 1 0)"),
         # Field number 0, at the top and inside a message.
         (_uint(0, 0), "fieldNumber 0)"),
         (_message(_uint(0, 0)), "fieldNumber 0)"),

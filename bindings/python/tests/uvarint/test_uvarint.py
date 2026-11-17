@@ -49,7 +49,7 @@ VARINT = "Uvarint.UvarintError.varint (EthLib.Networking.Encoding.Varint.VarintE
     ("data", "fault", "code"),
     [
         # 81 00 is the non-minimal encoding of 1, "Incompatibilities with Go varints".
-        ("8100", VARINT.format("nonMinimal"), 1),
+        ("8100", VARINT.format("nonMinimal 2"), 1),
         # A continuation bit with nothing after it.
         ("80", VARINT.format("unterminated"), 1),
         # Nine bytes that all continue: the value would need a tenth.
@@ -57,11 +57,16 @@ VARINT = "Uvarint.UvarintError.varint (EthLib.Networking.Encoding.Varint.VarintE
         # Eleven bytes, over the ten of a 64-bit varint.
         ("80" * 10 + "01", VARINT.format("tooLong"), 1),
         # 2^64 does not fit 64 bits.
-        ("80" * 9 + "02", VARINT.format("overflow"), 1),
+        (
+            "80" * 9 + "02",
+            "Uvarint.UvarintError.varint\n"
+            "  (EthLib.Networking.Encoding.Varint.VarintError.overflow 18446744073709551616)",
+            1,
+        ),
         # 2^63 is minimal in ten bytes, over the nine of "Practical maximum of 9 bytes".
-        ("80808080808080808001", "Uvarint.UvarintError.tooLarge", 2),
+        ("80808080808080808001", "Uvarint.UvarintError.tooLarge 9223372036854775808", 2),
         # 2^64 - 1 is the largest value of ten bytes.
-        ("ff" * 9 + "01", "Uvarint.UvarintError.tooLarge", 2),
+        ("ff" * 9 + "01", "Uvarint.UvarintError.tooLarge 18446744073709551615", 2),
     ],
 )
 def test_decode_rejected(data: str, fault: str, code: int) -> None:

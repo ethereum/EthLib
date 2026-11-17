@@ -337,7 +337,7 @@ def test_state_that_is_not_framed_is_rejected() -> None:
     data += _record(SLOT_INDEX, _index(0, [-(len(data) - 8)]))
     with raises(
         EraError,
-        _error("frame 0 (EthLib.Networking.Snappy.FrameError.missingStreamIdentifier)"),
+        _error("frame 0 (EthLib.Networking.Snappy.FrameError.missingStreamIdentifier (some 0))"),
     ):
         _decode(data)
 

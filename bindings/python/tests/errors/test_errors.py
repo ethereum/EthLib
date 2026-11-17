@@ -201,7 +201,7 @@ def test_snappy_error_ranges() -> None:
     assert 1 <= info.value.code <= 8
     with raises(
         snappy.SnappyError,
-        "stream rejected: EthLib.Networking.Snappy.FrameError.missingStreamIdentifier",
+        "stream rejected: EthLib.Networking.Snappy.FrameError.missingStreamIdentifier (some 0)",
     ) as info:
         snappy.decode_frames(b"\x00")
     assert 101 <= info.value.code <= 109
