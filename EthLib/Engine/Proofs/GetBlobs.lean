@@ -146,7 +146,7 @@ end PooledBlob
 
 /-- From Fusaka, version 1 is an unsupported fork. -/
 theorem getBlobsV1_of_fusaka (pool : BlobPool) {fork : Fork} (hashes : List Bytes32)
-    (h : .fusaka ≤ fork) : getBlobsV1 pool fork hashes = .error .unsupportedFork := by
+    (h : .fusaka ≤ fork) : getBlobsV1 pool fork hashes = .error (.unsupportedFork (some fork)) := by
   simp [getBlobsV1, h, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 /-- Before Fusaka, version 1 answers each hash in turn, or fails on a too large request. -/

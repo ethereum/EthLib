@@ -503,7 +503,8 @@ theorem forkchoiceUpdated_zero_after_transition {p : KnownPayload}
     (hAbove : belowFinalized tree finalized state.headBlockHash = false)
     (hTransition : transitionFinalized tree finalized = true)
     (hZero : state.safeBlockHash = ZERO_HASH ∨ state.finalizedBlockHash = ZERO_HASH) :
-    forkchoiceUpdated transition tree finalized state = .error .invalidForkchoiceState := by
+    forkchoiceUpdated transition tree finalized state =
+      .error (.invalidForkchoiceState state.safeBlockHash state.finalizedBlockHash) := by
   have hz : zeroAfterTransition tree finalized state = true := by
     rcases hZero with hZero | hZero <;> simp [zeroAfterTransition, hTransition, hZero]
   simp [forkchoiceUpdated, hp, hValid, hTerminal, hAbove, hz, throw, throwThe,
@@ -520,7 +521,7 @@ Then its safe or its finalized block is zero after the transition, or neither ze
 The error is then that of an invalid forkchoice state. -/
 theorem forkchoiceUpdated_eq_error_iff {e : EngineError} :
     forkchoiceUpdated transition tree finalized state = .error e ↔
-      e = .invalidForkchoiceState ∧
+      e = .invalidForkchoiceState state.safeBlockHash state.finalizedBlockHash ∧
         ∃ p, tree.lookup state.headBlockHash = some p ∧ p.valid = true ∧
           chainPassesTerminalCheck transition tree state.headBlockHash = true ∧
           belowFinalized tree finalized state.headBlockHash = false ∧
@@ -879,7 +880,9 @@ theorem checkAttributes_eq_error_of_unsupportedFork {version : Nat} {head : Know
     {a : Σ f, PayloadAttributes f}
     (h : ∀ fork, config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat = some fork →
       attributesTakeFork version fork = false) :
-    checkAttributes config version head a = .error .unsupportedFork := by
+    checkAttributes config version head a =
+      .error (.unsupportedFork
+        (config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat)) := by
   cases hF : config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat with
   | none => simp [checkAttributes, hF, throw, throwThe, MonadExceptOf.throw]
   | some fork =>

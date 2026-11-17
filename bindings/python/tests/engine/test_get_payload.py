@@ -245,7 +245,8 @@ def test_block_hash_of_the_fixture(version: int, network: str) -> None:
 @pytest.mark.parametrize(("version", "network"), VERSIONS)
 def test_unknown_payload(version: int, network: str) -> None:
     """An ID with no build is -38001, before any other check."""
-    with raises(engine.EngineError, "engine error: EthLib.Engine.EngineError.unknownPayload") as e:
+    unknown = f"engine error: EthLib.Engine.EngineError.unknownPayload 0x{UNKNOWN.hex()}"
+    with raises(engine.EngineError, unknown) as e:
         _call(network, version, [_entry(network)], UNKNOWN)
     assert e.value.code == 38001
 
@@ -266,7 +267,8 @@ def test_unknown_payload(version: int, network: str) -> None:
 )
 def test_unsupported_fork(version: int, network: str) -> None:
     """A build outside the forks of the version is -38005, at both ends of its range."""
-    with raises(engine.EngineError, "engine error: EthLib.Engine.EngineError.unsupportedFork") as e:
+    unsupported = "engine error: EthLib.Engine.EngineError.unsupportedFork"
+    with raises(engine.EngineError, f'{unsupported} (some "{FORK_OF_NETWORK[network]}")') as e:
         _call(network, version, [_entry(network)])
     assert e.value.code == 38005
 
@@ -433,7 +435,7 @@ def test_transactions_not_in_the_header() -> None:
         pytest.param(
             "Cancun",
             lambda: _entry("Cancun", value=2**256),
-            "store: block value above 2^256",
+            f"store: block value {2**256} is 2^256 or more",
             id="value",
         ),
         pytest.param(
@@ -457,7 +459,8 @@ def test_transactions_not_in_the_header() -> None:
         pytest.param(
             "Prague",
             lambda: _entry("Cancun"),
-            "store: the fork is not the configured fork at the block",
+            # The stored fork is dencun, and the configuration of Prague is at pectra.
+            "store: the fork dencun is not the configured fork at the block, pectra",
             id="wrong-fork",
         ),
         pytest.param(

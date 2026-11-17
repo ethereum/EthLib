@@ -35,6 +35,10 @@ instance instErrorArgVector {n : Nat} : ErrorArg (Vector UInt8 n) :=
 instance instErrorArgByteArray : ErrorArg ByteArray :=
   ⟨fun bytes => hexString bytes.toList⟩
 
+/-- A word shows as its number in decimal. -/
+instance instErrorArgBitVec {n : Nat} : ErrorArg (BitVec n) :=
+  ⟨fun word => repr word.toNat⟩
+
 /-- An optional value shows as `none`, or as `some` before the value. -/
 instance instErrorArgOption {α : Type} [ErrorArg α] : ErrorArg (Option α) :=
   ⟨fun | none => "none" | some a => "some " ++ ErrorArg.format a⟩

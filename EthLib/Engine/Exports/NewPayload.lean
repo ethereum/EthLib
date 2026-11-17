@@ -42,16 +42,23 @@ open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Base
 open EthLib.Base.ChainConfig.Exports (configOfJson)
 
+/-- Hashes in hex, between brackets and separated by commas. -/
+def hashList (hashes : List Hash32) : String :=
+  "[" ++ ", ".intercalate (hashes.map fun hash => hexString hash.toList) ++ "]"
+
 /-- A message for the reason of an invalid payload, on one line. -/
 def reasonMessage : PayloadError → String
   | .invalidTransaction index e => s!"transaction {index} does not decode: {reprStr e}"
   | .noEncoding => "a field of the block has no RLP encoding"
   | .wrongBlockHash expected computed =>
     s!"block hash {hexString expected.toList}, header hash {hexString computed.toList}"
-  | .wrongVersionedHashes => "the expected versioned hashes are not those of the block"
+  | .wrongVersionedHashes expected actual =>
+    s!"the expected versioned hashes are not those of the block: " ++
+      s!"expected {hashList expected}, got {hashList actual}"
   | .invalidBlock e => s!"{e.code}: {Execution.Blocks.Exports.blockErrorMessage e}"
   | .invalidBlockAccessList => "the block access list is not the RLP form of one"
-  | .invalidTerminalBlock => "the parent is a block of proof of work that is not terminal"
+  | .invalidTerminalBlock parent =>
+    s!"the parent {hexString parent.toList} is a block of proof of work that is not terminal"
 
 /-- The JSON of a payload status, with the code of its reason first in the error. -/
 def statusJson (status : PayloadStatus) (reason : Option PayloadError) : Json :=

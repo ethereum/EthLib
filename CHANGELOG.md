@@ -56,6 +56,18 @@ Not yet released.
   `receiver_fullMaximum_of_head_window` takes the receiver's own finalized checkpoint on its own justified chain, `finalizedRead`, instead of `compatible`, `bounded`, `slots` and `epochOk`.
   `SelectedCheckpoint`, `FinalizedCheckpointCompatibility`, `ResidualFinalizedCheckpointCompatibility` and `compatibility_of_residual` are removed: no proof read them any more.
 
+- The trie, range, Merkle proof, account proof and state input errors carry the values that their failed check compared.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  Their messages name each value, as `(name := value)`, with hashes and byte strings in hex and words in decimal, on one line.
+  In Lean, these constructors take arguments:
+  - `Trie.HexPrefixError.invalidFirstNibble nibble` and `nonZeroPadding nibble`;
+  - `Trie.ProofError.missingNode hash`, the hash of the node the path needs, an `Option` that is `none` only when a walk runs out of its budget, which no walk does, `hashMismatch expected actual`, the reference and the hash of the node, `invalidReference size` and `unusedNodes count`;
+  - `Trie.RangeError.unsorted index`, `beforeStart index` and `emptyValue index`, each the first entry, counted from 0, that breaks the rule;
+  - `State.StateInputError.repeatedAddress address`, and `State.AccountProofError.slotMismatch index expected actual`, the word that the proof shows and the word of the answer.
+  `Trie.TrieError.emptyValue` stays bare: the root does not depend on the order of the entries, and naming a key would make the error depend on it.
+  `compactToNibbleList_invalidFirstNibble`, `compactToNibbleList_nonZeroPadding`, `verifySlot_eq_slotMismatch` and `verifyRange_eq` state the values in their errors.
+  `ErrorArg` shows a `BitVec`, such as a `U256`, in decimal.
+
 - The errors of the execution payload, the Gloas bid, envelope, parent requests and payload attestations carry the values that their check compared.
   `TransitionError.wrongPayloadParentHash`, `wrongPayloadRandao`, `wrongPayloadGasLimit`, `wrongPayloadBlockHash` and `wrongPayloadRequestsRoot` hold the value of the payload, then the value it must equal.
   `bidWrongParentHash`, `bidWrongParentRoot` and `bidWrongRandao` hold the value of the bid, then the value of the state; `bidRepeatsParentHash` holds the repeated hash, and `selfBuildBidPaid` the value of the bid.
@@ -66,6 +78,19 @@ Not yet released.
   `parentRequestsNotEmpty` holds the number of requests, which the new `ExecutionRequests.count` gives, and `wrongParentRequestsRoot` the two roots.
   The codes do not change.
   `processParentExecutionPayload_of_empty_requests`, `processExecutionPayload_eq_error_of_prepareExecutionPayload` and `processBlockExecution_eq_error_of_prepareExecutionPayload` state these values.
+
+- The Engine API errors carry the values that their failed check compared.
+  Codes are unchanged, and the JSON-RPC error objects keep the messages and the `null` data that the Engine API fixes.
+  The bindings messages, which print the error in Lean form, now end with these values; hashes and payload IDs print in hex.
+  - `EngineError.unsupportedFork fork` carries the fork the method was asked to serve: that of the payload, of the attributes' block or of the stored build, or the node's fork for blobs; `none` when no fork is active.
+  - `EngineError.invalidForkchoiceState safe finalized` carries the safe and finalized hashes of the forkchoice state.
+  - `EngineError.tooLargeRequest count limit` carries the number of items asked for and the node's maximum.
+  - `EngineError.unknownPayload id` carries the payload ID.
+  - `PayloadError.wrongVersionedHashes expected actual` carries the expected hashes and those of the blob transactions.
+  - `PayloadError.invalidTerminalBlock parent` carries the hash of the parent.
+  - `GetPayloadError.wrongFork stored active` carries the stored fork and the configured one, and `blockValue value` the block value.
+  - `Jwt.JwtError.secretLength size` carries the size of the secret, `compact count` the number of parts of the token, and `algorithm name` the algorithm the header names, or `none`.
+  - The theorems on these errors state them with their fields: `forkchoiceUpdated_zero_after_transition`, `forkchoiceUpdated_eq_error_iff`, `checkAttributes_eq_error_of_unsupportedFork`, `checkRequestSize_eq_error_iff`, `bodiesByHash_eq_error_iff`, `bodiesByRange_eq_error_iff`, `getBlobsV1_of_fusaka`, `getPayload_eq_error_of_store_eq_none`, `getPayload_eq_error_of_activeFork_ne`, `getPayload_eq_error_of_acceptsGetPayloadFork_eq_false`, `getPayload_eq_error_of_blockValue_ge`, `newPayloadOnChain_of_not_terminal` and `issuedAt_eq_error_of_algorithm_ne`.
 
 - The precompile errors carry the values that their failed check compared, and their message names each value on one line.
   Each code keeps its meaning, and each error fires on the same inputs as before.
