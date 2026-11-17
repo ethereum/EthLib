@@ -564,13 +564,14 @@ theorem getPendingBalanceToWithdraw_ok_iff {state : BeaconState preset fork}
 
 /-- From Electra, the pending balance of a validator fails exactly when its sum reaches `2^64`.
 
-It then fails with a balance overflow. -/
+It then fails with a balance overflow that holds that sum. -/
 theorem getPendingBalanceToWithdraw_eq_error_iff {state : BeaconState preset fork}
     {electra : .pectra ≤ fork} {index : ValidatorIndex} {error : AccessorError} :
     getPendingBalanceToWithdraw state electra index = .error error ↔
       2 ^ 64 ≤ (((state.pendingPartialWithdrawals electra).data.toList.filter
           (·.validatorIndex = index)).map (·.amount.toNat)).sum ∧
-        error = .balanceOverflow := by
+        error = .balanceOverflow (((state.pendingPartialWithdrawals electra).data.toList.filter
+          (·.validatorIndex = index)).map (·.amount.toNat)).sum := by
   unfold getPendingBalanceToWithdraw
   simp only [EthLib.Base.sum_map_ite_eq_sum_filter
     fun withdrawal : PendingPartialWithdrawal => withdrawal.validatorIndex = index]

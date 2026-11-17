@@ -31,10 +31,16 @@ namespace EthLib.Consensus
 
 open Base Serialization.Ssz
 
+open scoped HexRepr
+
 /-- The reasons why an operation on the deposit tree or its snapshot fails. -/
 inductive DepositTreeError where
-  /-- The tree already holds the most deposits that the deposit contract accepts. -/
-  | treeFull
+  /-- The tree takes no more deposits.
+
+  It holds the most deposits that the deposit contract accepts, or its sparse tree has no room.
+
+  It holds the number of deposits that the tree counts. -/
+  | treeFull (count : Nat)
   /-- Finalization names more deposits than the tree holds. -/
   | finalizeBeyondCount (finalized count : Nat)
   /-- Finalization names fewer deposits than an earlier finalization. -/
@@ -47,26 +53,38 @@ inductive DepositTreeError where
   | proofBeyondCount (index count : Nat)
   /-- A count of deposits reaches the number of leaves of the tree. -/
   | countBeyondCapacity (count : Nat)
-  /-- A snapshot holds fewer finalized roots than its count has bits set. -/
-  | missingFinalized
-  /-- A snapshot holds more finalized roots than its count has bits set. -/
-  | extraFinalized
-  /-- A deposit root is not the root that the finalized roots and their count compute. -/
-  | rootMismatch
+  /-- A snapshot holds fewer finalized roots than its count has bits set.
+
+  It holds the level of the tree whose set bit of the count finds no root left. -/
+  | missingFinalized (level : Nat)
+  /-- A snapshot holds more finalized roots than its count has bits set.
+
+  It holds the number of roots past those that the count uses. -/
+  | extraFinalized (count : Nat)
+  /-- A deposit root is not the root that the finalized roots and their count compute.
+
+  It holds the deposit root, then the root that they compute. -/
+  | rootMismatch (root computed : Root)
   deriving DecidableEq, Repr
 
 /-- The code of an error at the C boundary, one for each constructor. -/
 def DepositTreeError.code : DepositTreeError → UInt32
-  | .treeFull => 1
+  | .treeFull _ => 1
   | .finalizeBeyondCount .. => 2
   | .notFinalized => 3
   | .proofOfFinalized .. => 4
   | .proofBeyondCount .. => 5
   | .countBeyondCapacity _ => 6
-  | .missingFinalized => 7
-  | .extraFinalized => 8
-  | .rootMismatch => 9
+  | .missingFinalized _ => 7
+  | .extraFinalized _ => 8
+  | .rootMismatch .. => 9
   | .finalizeBelowFinalized .. => 10
+
+/-- The message of an error: its constructor and its values, on one line, with roots in hex.
+
+Two roots in hex pass the width at which a rendering would otherwise wrap. -/
+instance : ToString DepositTreeError where
+  toString error := (repr error).pretty 1000000
 
 
 /-! ## Hashes -/
@@ -276,11 +294,11 @@ A clear bit takes the zero subtree of that level as the right child.
 -/
 def climbFinalized (pending : List Root) (size : Nat) (root : Root) :
     (level : Nat) → (levels : Nat) → Except DepositTreeError Root
-  | _, 0 => if pending.isEmpty then .ok root else .error .extraFinalized
+  | _, 0 => if pending.isEmpty then .ok root else .error (.extraFinalized pending.length)
   | level, levels + 1 =>
     if size.testBit level then
       match pending with
-      | [] => .error .missingFinalized
+      | [] => .error (.missingFinalized level)
       | last :: earlier => climbFinalized earlier size (hashPair last root) (level + 1) levels
     else climbFinalized pending size (hashPair root (zeroNode level)) (level + 1) levels
 
@@ -319,7 +337,8 @@ def fromTreeParts (finalized : List Root) (count : Nat) (block : Hash32 × UInt6
       depositCount := count.toUInt64
       executionBlockHash := block.1
       executionBlockHeight := block.2 }
-  else throw .extraFinalized
+  -- No root is left over here, so the error counts the roots past the depth of the tree.
+  else throw (.extraFinalized (finalized.length - DEPOSIT_CONTRACT_TREE_DEPTH.toNat))
 
 end DepositTreeSnapshot
 
@@ -355,11 +374,12 @@ The deposit contract accepts at most `2^32 - 1` deposits, one fewer than the lea
 The reference implementation of the EIP has no such limit.
 -/
 def pushLeaf (tree : DepositTree) (leaf : Root) : Except DepositTreeError DepositTree :=
-  if 2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat - 1 ≤ tree.mixInLength then .error .treeFull
+  if 2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat - 1 ≤ tree.mixInLength then
+    .error (.treeFull tree.mixInLength)
   else
     match tree.tree.pushLeaf leaf with
     | some sparse => .ok { tree with tree := sparse, mixInLength := tree.mixInLength + 1 }
-    | none => .error .treeFull
+    | none => .error (.treeFull tree.mixInLength)
 
 /-- The tree after pushing deposits in order. -/
 def pushLeaves (tree : DepositTree) (leaves : List Root) : Except DepositTreeError DepositTree :=
@@ -388,7 +408,7 @@ def finalize (tree : DepositTree) (eth1Data : Eth1Data) (executionBlockHeight : 
     if count = 0 then tree.tree else tree.tree.finalize count DEPOSIT_CONTRACT_TREE_DEPTH.toNat
   let (roots, finalizedCount) := sparse.getFinalized
   let computed ← DepositTreeSnapshot.calculateRootOf roots finalizedCount
-  if computed ≠ eth1Data.depositRoot then throw .rootMismatch
+  if computed ≠ eth1Data.depositRoot then throw (.rootMismatch eth1Data.depositRoot computed)
   return { tree with
     tree := sparse
     finalizedExecutionBlock := some (eth1Data.blockHash, executionBlockHeight) }
@@ -408,7 +428,7 @@ The snapshot's root must be the root that its finalized roots and its count comp
 -/
 def fromSnapshot (snapshot : DepositTreeSnapshot) : Except DepositTreeError DepositTree := do
   let computed ← snapshot.calculateRoot
-  if snapshot.depositRoot ≠ computed then throw .rootMismatch
+  if snapshot.depositRoot ≠ computed then throw (.rootMismatch snapshot.depositRoot computed)
   let count := snapshot.depositCount.toNat
   let finalized := snapshot.finalized.data.toList
   match fromSnapshotParts finalized count DEPOSIT_CONTRACT_TREE_DEPTH.toNat with

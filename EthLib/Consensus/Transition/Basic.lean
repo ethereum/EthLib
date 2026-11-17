@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Base.Except
-public import EthLib.Base.Hex
 public import EthLib.Consensus.Mutators
 public import EthLib.Cryptography.Bls.Signatures
 
@@ -21,9 +20,7 @@ namespace EthLib.Consensus
 
 open Base Serialization.Ssz
 
-/-- Bytes in an error, such as a root, as hex digits behind `0x`, which keeps its message short. -/
-local instance (priority := high) instReprBytesHex {n : Nat} : Repr (Vector UInt8 n) where
-  reprPrec bytes _ := hexString bytes.toList
+open scoped HexRepr
 
 /-- An error of the beacon state transition. -/
 inductive TransitionError where

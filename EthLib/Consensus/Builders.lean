@@ -101,7 +101,7 @@ A sum of 2^64 or more is an error, as in 64-bit arithmetic. -/
 def getPendingBalanceToWithdrawForBuilder (state : BeaconState preset fork)
     (gloas : .glamsterdam ≤ fork) (index : BuilderIndex) : Except AccessorError Gwei := do
   let total := pendingBuilderTotal state gloas index
-  if 2 ^ 64 ≤ total then throw .balanceOverflow
+  if 2 ^ 64 ≤ total then throw (.balanceOverflow total)
   return total.toUInt64
 
 /-- Whether a builder can pay a bid of an amount.
