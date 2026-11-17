@@ -163,9 +163,41 @@ jobs:
         if: ${{ !cancelled() }}
         run: scripts/test_check_accessors.sh
 
+      - name: specification theorems
+        if: ${{ !cancelled() }}
+        run: lake exe check-theorems
+
+      - name: theorem baseline
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          PUSH_BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
+        run: |
+          # PR merge commits and newly created branches use their first parent.
+          baseline_base=HEAD^1
+          if [[ -n "$PUSH_BEFORE" && ! "$PUSH_BEFORE" =~ ^0+$ ]]; then
+            baseline_base="$PUSH_BEFORE"
+            if ! git cat-file -e "$baseline_base^{commit}" 2>/dev/null; then
+              git fetch --no-tags --depth=1 origin "$baseline_base"
+            fi
+          fi
+          uv run --no-project --python 3.12 python scripts/check_theorems_baseline.py --base "$baseline_base"
+
+      - name: theorem check fixtures
+        if: ${{ !cancelled() }}
+        run: scripts/test_check_theorems.sh
+
+      - name: theorem baseline fixtures
+        if: ${{ !cancelled() }}
+        run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_theorems_baseline.py
+
       - name: module system regression
         if: ${{ !cancelled() }}
         run: bash scripts/test_module_system.sh
+
+      - name: export proof regression
+        if: ${{ !cancelled() }}
+        run: bash scripts/test_export_proofs.sh
 
       # A separate package that requires EthLib, as a downstream project does, must still build.
       # EthLib is built above, so this elaborates one small file, in a few seconds.
@@ -186,6 +218,10 @@ jobs:
       - name: build pipeline regressions
         if: ${{ !cancelled() && steps.bindings.outcome == 'success' }}
         run: uv run --no-sync python -m unittest discover -s scripts -p 'test_build_pipeline.py'
+
+      - name: runtime object selection regressions
+        if: ${{ !cancelled() }}
+        run: uv run --no-project --python 3.12 python -m unittest scripts/test_setup_runtime.py
 
       # A failed run still publishes its logs and the status of each measured command.
       - name: build timing report

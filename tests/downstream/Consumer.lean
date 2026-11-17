@@ -8,6 +8,7 @@ public import EthLib.Networking.Proofs.Quic.Frame
 public import EthLib.Networking.Proofs.Quic.Packet
 public import EthLib.Networking.Proofs.Quic.Tls.Messages
 public import EthLib.Networking.Proofs.Quic.Varint
+public import EthLib.Serialization.Proofs.Exports.Ssz
 public import EthLib.Serialization.Proofs.Rlp
 public import EthLib.Serialization.Proofs.Ssz.Typed.Root
 
@@ -49,6 +50,12 @@ example {α : Type} [Serialization.Ssz.SszType α] [Serialization.Ssz.LawfulSszT
       Serialization.Ssz.hashTreeRoot (Serialization.Ssz.SszType.desc α)
         (Serialization.Ssz.SszType.toValue a) = .ok root.toArray :=
   Serialization.Ssz.SszType.hashTreeRoot_ok_iff
+
+-- An SSZ export consumer relates the writer's result to its JSON reference.
+example (value : Serialization.Ssz.Value) :
+    Serialization.Ssz.Exports.pyOfValue value =
+      Exports.PyValue.ofJson (Serialization.Ssz.Exports.Proofs.jsonOfValue value) :=
+  Serialization.Ssz.Exports.Proofs.pyOfValue_eq_json value
 
 -- A transaction decoder is checked against the specification through this equivalence.
 example (fork : Base.Fork) (bytes : ByteArray) (t : Execution.Transactions.Transaction) :

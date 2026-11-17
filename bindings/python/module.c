@@ -30,6 +30,8 @@ size_t XMSS_RANDOMIZER_LEN;
 size_t XMSS_CHAINS;
 size_t XMSS_LAYER_HEIGHT;
 size_t XMSS_LEAF_INDEX_SIZE;
+size_t XMSS_CHAIN_LENGTH;
+size_t XMSS_TARGET_SUM;
 
 size_t SPHINCS_MESSAGE_LEN;
 size_t SPHINCS_SEED_LEN;
@@ -263,6 +265,16 @@ eth_xmss_const_leaf_index_size(
 );
 
 extern uint64_t
+eth_xmss_const_chain_length(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_xmss_const_target_sum(
+  lean_object* unit
+);
+
+extern uint64_t
 eth_sphincs_const_n(
   lean_object* unit
 );
@@ -352,65 +364,15 @@ eth_reqresp_const_max_error_message_size(
 extern void
 lean_initialize_runtime_module(void);
 
-/* We boot the export root of each domain, not the library root `EthLib.Exports`.
+/* Lean 4.35 splits module initialization into runtime and compile-time phases.
  *
- * Lake writes a `.c` file for the library root but never compiles it.
+ * The export root initializes every runtime dependency, including the specification.
  *
- * So the init symbol of the library root is never linked in.
- *
- * The init of a module runs the init of everything it imports.
- *
- * So booting the export roots boots the specification too. */
+ * Conversion-law proofs enter only at compile time and need no native object here. */
 extern lean_object*
-initialize_EthLib_EthLib_Cryptography_Exports(
+runtime_initialize_EthLib_EthLib_Exports(
   uint8_t builtin
 );
-
-extern lean_object*
-initialize_EthLib_EthLib_Networking_Exports(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Execution_Exports(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Consensus_Exports(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Serialization_Exports(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Base_Exports_ChainConfig(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Engine_Exports(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Base_Exports_Echo(
-  uint8_t builtin
-);
-
-/*
- * Note on linker hygiene:
- *   `lean_initialize()` and `initialize_Lean` live in libleancpp.a's
- *   `init.cpp.o`, which references most of the Lean *compiler* and
- *   would drag in the 224MB `libLean.a`. We avoid them by calling only
- *   `lean_initialize_runtime_module()` (from libleanrt.a, which is the
- *   minimal runtime: GC, allocator, IO primitives) plus our package's
- *   per-module init `initialize_EthLib_*`. Together that's
- *   enough to run any code we'd actually call from Python.
- */
 
 /* ---- Lean ↔ C marshalling helpers ------------------------------------ */
 
@@ -1486,35 +1448,7 @@ PyInit__native(void) {
     if (PyErr_Occurred()) return NULL;
 
     lean_initialize_runtime_module();
-    lean_object* res = initialize_EthLib_EthLib_Cryptography_Exports(1);
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Networking_Exports(1);
-    }
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Execution_Exports(1);
-    }
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Consensus_Exports(1);
-    }
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Serialization_Exports(1);
-    }
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Base_Exports_ChainConfig(1);
-    }
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Engine_Exports(1);
-    }
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Base_Exports_Echo(1);
-    }
+    lean_object* res = runtime_initialize_EthLib_EthLib_Exports(1);
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
     } else {
@@ -1555,6 +1489,8 @@ PyInit__native(void) {
     XMSS_CHAINS = (size_t) eth_xmss_const_chains(lean_box(0));
     XMSS_LAYER_HEIGHT = (size_t) eth_xmss_const_layer_height(lean_box(0));
     XMSS_LEAF_INDEX_SIZE = (size_t) eth_xmss_const_leaf_index_size(lean_box(0));
+    XMSS_CHAIN_LENGTH = (size_t) eth_xmss_const_chain_length(lean_box(0));
+    XMSS_TARGET_SUM = (size_t) eth_xmss_const_target_sum(lean_box(0));
     SPHINCS_N = (size_t) eth_sphincs_const_n(lean_box(0));
     SPHINCS_RANDOMIZER_LEN = (size_t) eth_sphincs_const_randomizer_len(lean_box(0));
     SPHINCS_CHAINS = (size_t) eth_sphincs_const_chains(lean_box(0));
@@ -1621,6 +1557,8 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "XMSS_CHAINS", XMSS_CHAINS);
   PyModule_AddIntConstant(m, "XMSS_LAYER_HEIGHT", XMSS_LAYER_HEIGHT);
   PyModule_AddIntConstant(m, "XMSS_LEAF_INDEX_SIZE", XMSS_LEAF_INDEX_SIZE);
+  PyModule_AddIntConstant(m, "XMSS_CHAIN_LENGTH", XMSS_CHAIN_LENGTH);
+  PyModule_AddIntConstant(m, "XMSS_TARGET_SUM", XMSS_TARGET_SUM);
   PyModule_AddIntConstant(m, "SPHINCS_N", SPHINCS_N);
   PyModule_AddIntConstant(m, "SPHINCS_RANDOMIZER_LEN", SPHINCS_RANDOMIZER_LEN);
   PyModule_AddIntConstant(m, "SPHINCS_CHAINS", SPHINCS_CHAINS);

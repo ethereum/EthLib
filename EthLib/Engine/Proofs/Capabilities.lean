@@ -2,6 +2,7 @@ module
 
 public import EthLib.Engine.Capabilities
 public import EthLib.Engine.Proofs.Json
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: `engine_exchangeCapabilities` and `engine_getClientVersionV1`
@@ -315,7 +316,7 @@ theorem clientVersionOfJson_json (v : ClientVersion) (h : IsClientCode v.code) :
   have hd : [("code", Lean.Json.str v.code), ("name", .str v.name),
       ("version", .str v.version), ("commit", dataJson v.commit.toList)].Pairwise
       fun a b => a.1 ≠ b.1 := by simp
-  obtain ⟨fs, hfs, hp⟩ := fields_mkObj "clientVersion" hd (by simp [dataJson, isNull_str])
+  obtain ⟨fs, hfs, hp⟩ := fields_mkObj "clientVersion" hd (by simp [dataJson])
   have hex : hasExactly fs clientVersionFields = true := hasExactly_of_perm hp
   have r1 := field_of_perm (what := "clientVersion") hp hd (List.mem_cons_self ..)
   have r2 := field_of_perm (what := "clientVersion") hp hd

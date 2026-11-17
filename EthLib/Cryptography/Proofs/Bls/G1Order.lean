@@ -36,7 +36,7 @@ set_option maxRecDepth 8000
 theorem valid_generator : Valid generator :=
   valid_of_affine_eq (by decide_eq_at_model [])
 
-/-! ## `[r]g₁ = 0` -/
+/-! ## `[r]g_1 = 0` -/
 
 /-- Fuel-based double-and-add, structurally recursive so the kernel can evaluate it.
 
@@ -109,7 +109,7 @@ macro "decide_at_model" "[" ids:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
                Fp.toModel_zero, Fp.toModel_one, $ids,*]
              decide +kernel))
 
-/-- `[r]g₁` is the point at infinity.
+/-- `[r]g_1` is the point at infinity.
 
 The kernel runs the ladder in the model, 255 doublings and additions on 381-bit integers. -/
 theorem modulus_smul_generator :
@@ -140,16 +140,17 @@ theorem addOrderOf_toPoint_generator :
     addOrderOf (toPoint generator) = Fr.modulus :=
   addOrderOf_eq_prime modulus_smul_generator toPoint_generator_ne_zero
 
-/-! ## The `Fr` action on `⟨g₁⟩` -/
+/-! ## The `Fr` action on `⟨g_1⟩` -/
 
-/-- Scalar multiples of `g₁` only depend on the scalar mod `r`. -/
+/-- Scalar multiples of `g_1` only depend on the scalar mod `r`. -/
 theorem nsmul_generator_mod (k : Nat) :
     k • toPoint generator = (k % Fr.modulus) • toPoint generator := by
   conv_lhs => rw [← Nat.div_add_mod k Fr.modulus]
   rw [add_nsmul, Nat.mul_comm Fr.modulus (k / Fr.modulus), mul_nsmul',
       modulus_smul_generator, nsmul_zero, zero_add]
 
-/-- The image of a scalar in the curve group: `ofFr s = [s]g₁`.
+/-- The image of a scalar in the curve group: `ofFr s = [s]g_1`.
+
 `WellFormed` trusted-setup statements are phrased with this map. -/
 noncomputable def ofFr (s : Fr) : curve.toAffine.Point :=
   s.val • toPoint generator

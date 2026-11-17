@@ -55,7 +55,9 @@ theorem popProve_eq (sk : SecretKey) :
 
 /-- Add the point of one key in bytes to a running sum, if the key passes key validation. -/
 def byteAddKey (agg : G1) (pk : ByteArray) : Except BlsError G1 :=
-  G1.add agg <$> G1.keyValidatePoint pk
+  match exactBytes? 48 pk with
+  | none => .error .invalidG1Point
+  | some pk => G1.add agg <$> G1.keyValidatePoint pk
 
 /-- Fast aggregate verification on keys in bytes, with the hash `h` in place of the message hash.
 
@@ -68,7 +70,7 @@ noncomputable def byteFastAggregateVerify
   else
     match pubkeys.foldlM byteAddKey G1.zero with
     | .error _ => false
-    | .ok agg => byteVerify (G1.compress agg) sigBytes h
+    | .ok agg => byteVerify (packBytes (G1.compress agg)) sigBytes h
 
 /-- The sum on bytes succeeds exactly when the key sum succeeds, and with the same point. -/
 private theorem foldlM_byteAddKey (l : List BLSPubkey) (idx : Nat) (acc R : G1) :
@@ -77,8 +79,9 @@ private theorem foldlM_byteAddKey (l : List BLSPubkey) (idx : Nat) (acc R : G1) 
   induction l generalizing idx acc with
   | nil => rfl
   | cons pk l ih =>
-    simp only [List.map_cons, List.zipIdx_cons, List.foldlM_cons, byteAddKey, addPubkeyPoint]
-    cases G1.keyValidatePoint (packBytes pk) with
+    simp only [List.map_cons, List.zipIdx_cons, List.foldlM_cons, byteAddKey, addPubkeyPoint,
+      exactBytes?_packBytes]
+    cases G1.keyValidatePoint pk with
     | error _ => simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind, Functor.map,
         Except.map]
     | ok P => exact ih (idx + 1) (G1.add acc P)
@@ -105,7 +108,6 @@ theorem byteFastAggregateVerify_hashPoint (pubkeys : Array BLSPubkey) (msg : Byt
     | ok R =>
       rw [(foldlM_byteAddKey l 0 G1.zero R).mp hb]
       dsimp only
-      rw [← packBytes_pointToPubkey]
       exact byteVerify_hashPoint _ _ _
 
 /-- A fold of the key sum that succeeds decodes every key.
@@ -125,7 +127,13 @@ private theorem foldlM_decode (ks : List ByteArray) :
   | cons pk rest ih =>
     intro acc R a hv ha h
     simp only [List.foldlM_cons, byteAddKey] at h
-    cases hp : G1.keyValidatePoint pk with
+    -- A key of another length than 48 bytes stops the sum.
+    cases hx : exactBytes? 48 pk with
+    | none => simp [hx, bind, Except.bind] at h
+    | some v =>
+    rw [hx] at h
+    obtain rfl := packBytes_of_exactBytes? hx
+    cases hp : G1.keyValidatePoint v with
     | error _ => simp [hp, bind, Except.bind, Functor.map, Except.map] at h
     | ok P =>
       simp only [hp, Functor.map, Except.map, bind, Except.bind] at h
@@ -161,13 +169,13 @@ theorem isDh_of_byteFastAggregateVerify {pubkeys : Array ByteArray} {sig : ByteA
   cases ha : pubkeys.foldlM byteAddKey G1.zero with
   | error _ => simp [byteFastAggregateVerify, he, ha] at hv
   | ok R =>
-    have hv' : byteVerify (G1.compress R) sig h = true := by
+    have hv' : byteVerify (packBytes (G1.compress R)) sig h = true := by
       simpa [byteFastAggregateVerify, he, ha] using hv
     obtain ⟨xs, hxs, hRv, hRe⟩ := exists_mapM_decodeKey ha
     refine ⟨xs, hxs, ?_⟩
     obtain ⟨x, hdk, hdh⟩ := exists_decodeKey_isDh_of_byteVerify hv'
     have h1 := encode_eq_of_decodeKey hdk
-    have h2 : G1Sub.encode xs.sum = G1.compress R := G1Sub.encode_eq_compress hRv hRe
+    have h2 : G1Sub.encode xs.sum = packBytes (G1.compress R) := G1Sub.encode_eq_compress hRv hRe
     have h3 := decodeKey_encode x
     rw [h1, ← h2, decodeKey_encode] at h3
     rw [Option.some.inj h3]

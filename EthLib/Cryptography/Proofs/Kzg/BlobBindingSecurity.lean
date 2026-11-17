@@ -36,9 +36,7 @@ theorem blobToKzgCommitment_eq_of_represents {s : TrustedSetup} {τ : Fr}
   obtain ⟨hcommit, hsum⟩ := blobToKzgCommitment_represents hs hblob
   have heq := G1.compress_congr hsum.1 hrep.1 (hsum.2.trans hrep.2.symm)
   have hround := G1.compress_uncompress (validateKzgG1Point_eq_ok_iff.mp hpoint).1
-  have hbytes : compressG1 (G1.msm s.g1LagrangeBrp.toArray values) = bytes := by
-    apply Vector.toArray_inj.mp
-    exact congrArg ByteArray.data (heq.trans hround)
+  have hbytes : compressG1 (G1.msm s.g1LagrangeBrp.toArray values) = bytes := heq.trans hround
   exact hbytes ▸ hcommit
 
 /-- The output encodings pass the same point validation as the blob verifier. -/

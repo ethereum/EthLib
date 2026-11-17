@@ -360,4 +360,13 @@ theorem toChunk_ok_iff {node : Bytes} {chunk : Vector UInt8 bytesPerChunk} :
   · rintro rfl
     simp
 
+/-- A node that reads as a 32-byte vector holds the bytes of that vector. -/
+theorem eq_ok_of_bind_toChunk {root : Except Err Bytes} {chunk : Vector UInt8 bytesPerChunk}
+    (read : root >>= toChunk = .ok chunk) : root = .ok chunk.toArray := by
+  cases root with
+  | error => simp [bind, Except.bind] at read
+  | ok node =>
+    simp only [bind, Except.bind, toChunk_ok_iff] at read
+    rw [read]
+
 end EthLib.Serialization.Ssz

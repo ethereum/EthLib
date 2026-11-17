@@ -2,6 +2,8 @@ module
 
 public import EthLib.Execution.Proofs.Blocks
 public import EthLib.Execution.Proofs.Evm
+public import EthLib.Execution.Proofs.Exports.Evm
+public import EthLib.Execution.Proofs.Exports.Trie
 public import EthLib.Execution.Proofs.Fees
 public import EthLib.Execution.Proofs.History
 public import EthLib.Execution.Proofs.Network

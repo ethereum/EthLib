@@ -76,6 +76,7 @@ public import EthLib.Consensus.Proofs.DataAvailability.Blob
 public import EthLib.Consensus.Proofs.DataAvailability.BlobRandomOracle
 public import EthLib.Consensus.Proofs.DataAvailability.Column
 public import EthLib.Consensus.Proofs.DataAvailability.Custody
+public import EthLib.Consensus.Proofs.DataAvailability.DataColumnRandomOracle
 public import EthLib.Consensus.Proofs.DepositRandomOracle
 public import EthLib.Consensus.Proofs.DepositRandomOracleAccepted
 public import EthLib.Consensus.Proofs.DepositTree
@@ -142,8 +143,10 @@ public import EthLib.Consensus.Proofs.InclusionListCommittee
 public import EthLib.Consensus.Proofs.LightClient.Authenticate
 public import EthLib.Consensus.Proofs.LightClient.Containers
 public import EthLib.Consensus.Proofs.LightClient.Execution
+public import EthLib.Consensus.Proofs.LightClient.FinalityRandomOracle
 public import EthLib.Consensus.Proofs.LightClient.FullNode
 public import EthLib.Consensus.Proofs.LightClient.Sync
+public import EthLib.Consensus.Proofs.LightClient.SyncCommitteeRandomOracle
 public import EthLib.Consensus.Proofs.LightClient.Unforgeable
 public import EthLib.Consensus.Proofs.LightClient.Upgrade
 public import EthLib.Consensus.Proofs.Models.Ffg.AccountableSafety

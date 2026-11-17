@@ -21,6 +21,7 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {anchorBlock : BeaconBlock preset fork} {assignment : Assignment preset}
   {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
 
+/-- The state is held by the store or obtained by processing slots toward a held child. -/
 def Counts (store : Store preset fork) (config : Config)
     (state : BeaconState preset fork) : Prop :=
   ∃ (root : Root) (base : BeaconState preset fork), store.blockStates[root]? = some base ∧
@@ -29,9 +30,11 @@ def Counts (store : Store preset fork) (config : Config)
       child.parentRoot = root ∧ slot ≤ child.slot ∧
       processSlots config checks base slot = .ok state)
 
+/-- The validators active at the state's current epoch. -/
 def activeVoters (state : BeaconState preset fork) : Finset ValidatorIndex :=
   (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset
 
+/-- Stake reserved for scheduled exits and the fork's exit and consolidation churn. -/
 def exitReserve (config : Config) (source : BeaconState preset fork) : Nat :=
   stake (fun v => balanceAt source v.toNat)
     {v ∈ activeVoters source | (source.validators.data[v.toNat]?).any fun validator =>
@@ -44,6 +47,7 @@ def exitReserve (config : Config) (source : BeaconState preset fork) : Nat :=
         2 * preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
     else max 1 (getValidatorChurnLimit config source).toNat * preset.MAX_EFFECTIVE_BALANCE.toNat
 
+/-- Every block held by the store has a nonzero state root. -/
 def HeldStateRootsNonzero (store : Store preset fork) : Prop :=
   ∀ (r : Root) (b : BeaconBlock preset fork), store.blocks[r]? = some b →
     b.stateRoot ≠ Vector.replicate 32 0
@@ -51,6 +55,7 @@ def HeldStateRootsNonzero (store : Store preset fork) : Prop :=
 variable {e : Execution (honestForkChoice config checks sources anchorState anchorBlock
   assignment genesisTimeMs) J}
 
+/-- Honest duties due by the horizon produce votes that pass their target-state committee check. -/
 def ValidatedDutyVotes (last : Nat) : Prop :=
   ∀ v ∈ J, ∀ slot committeeIndex deadline,
     assignment.committee v slot = some committeeIndex →
@@ -63,6 +68,7 @@ def ValidatedDutyVotes (last : Nat) : Prop :=
         withTarget.checkpointState attestation.data.target = .ok targetState →
         checkAttestationCommittees targetState attestation = .ok ()
 
+/-- Honest assignment duties agree with the committee windows read from each eligible head. -/
 def AssignmentWindowAgreement (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
     ∀ (head : ForkChoiceNode) current first finish participants,
@@ -75,6 +81,7 @@ def AssignmentWindowAgreement (last : Nat) : Prop :=
     ∀ v ∈ J, v ∈ participants ↔ ∃ slot committeeIndex, first ≤ slot ∧ slot ≤ finish ∧
       assignment.committee v slot = some committeeIndex
 
+/-- Each later successful window read also succeeds with the source state's weights and boost. -/
 def SourceWindowReads (call last : Nat) (source : BeaconState preset fork) : Prop :=
   ∀ w ∈ J, ∀ k (head : ForkChoiceNode) state current first finish maximum,
     (e.world call).time ≤ (e.world k).time → (e.world k).time ≤ last →
@@ -89,6 +96,7 @@ def SourceWindowReads (call last : Nat) (source : BeaconState preset fork) : Pro
 
 variable [DecidablePred (· ∈ J)]
 
+/-- At the call time, each nonempty window covers Byzantine stake plus the weighted exit reserve. -/
 def SourceWindowReserve (call : Nat) (source : BeaconState preset fork) : Prop :=
   ∀ w ∈ J, ∀ k head first finish participants,
     (e.world k).time = (e.world call).time → first ≤ finish →
@@ -98,6 +106,7 @@ def SourceWindowReserve (call : Nat) (source : BeaconState preset fork) : Prop :
       50 * exitReserve config source ≤ config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat *
         stake (fun v => balanceAt source v.toNat) (Store.activeMembers source participants)
 
+/-- Each full epoch in the window omits at most the exit reserve of active source stake. -/
 def WindowExitBound (store : Store preset fork) (source : BeaconState preset fork)
     (head : Root) (first last : Slot) : Prop :=
   ∀ epoch epochStart next epochEnd epochMembers,
@@ -108,6 +117,7 @@ def WindowExitBound (store : Store preset fork) (source : BeaconState preset for
     stake (fun v => balanceAt source v.toNat)
       {v ∈ activeVoters source | v ∉ epochMembers} ≤ exitReserve config source
 
+/-- Selected checkpoints cover earlier finality outside the same-validator justified case. -/
 def ResidualFinalizedCheckpointCompatibility (horizon : Epoch) (last : Nat) : Prop :=
   ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
     ∀ checkpoint : Checkpoint, SelectedCheckpoint ((e.world j).state b) checkpoint →
@@ -118,13 +128,17 @@ def ResidualFinalizedCheckpointCompatibility (horizon : Epoch) (last : Nat) : Pr
       ((e.world i).state a).finalizedCheckpoint.epoch =
         .ok ((e.world i).state a).finalizedCheckpoint.root
 
+/-- All honest stores hold only blocks with nonzero state roots through the horizon. -/
 def HeldBlockStateRootsNonzero (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last → HeldStateRootsNonzero ((e.world k).state w)
 
+/-- No honest validator has a true slashed flag in a counted state through the horizon. -/
 def HonestCountedStatesUnslashed (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k state, (e.world k).time ≤ last →
-    Counts ((e.world k).state w) config state → ∀ v ∈ J, NotSlashed state v
+    Counts ((e.world k).state w) config state →
+    ∀ v ∈ J, (slashedFlagAt state v.toNat).getD false = false
 
+/-- Every up-to-date honest head descends from the root throughout the half-open time interval. -/
 def HonestHeadsCover (root : Root) (first last : Nat) : Prop :=
   ∀ earlier, first ≤ earlier → earlier < last → ∀ a ∈ J, ∀ i hd,
     (e.world i).time = earlier →
@@ -132,6 +146,7 @@ def HonestHeadsCover (root : Root) (first last : Nat) : Prop :=
     ((e.world i).state a).getHead config = .ok hd →
     ((e.world i).state a).isAncestor hd ⟨root, .pending⟩ = .ok true
 
+/-- The receiver can relate the root to each earlier finalized checkpoint in its current store. -/
 def ReceiverFinalityCovers (w : ValidatorIndex) (k : Nat) (root : Root)
     (block : BeaconBlock preset fork) : Prop :=
   ∀ k' ≤ k,
@@ -146,12 +161,14 @@ def ReceiverFinalityCovers (w : ValidatorIndex) (k : Nat) (root : Root)
     ((e.world k).state w).isAncestor
       ⟨((e.world k').state w).finalizedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true
 
+/-- Every held honest state remains before the next configured fork through the horizon. -/
 def HeldStatesBeforeUpgrade (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last → ∀ next ∈ config.nextFork fork,
     ∀ (root : Root) (state : BeaconState preset fork),
     ((e.world k).state w).blockStates[root]? = some state →
     state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat
 
+/-- Every run to a held state meets direct safety's stake floor at the selected epoch horizon. -/
 def HeldRunStakeFloor {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (horizon : Epoch) (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last → ∀ (root : Root) (state : BeaconState preset fork),
@@ -159,6 +176,7 @@ def HeldRunStakeFloor {g : ForkedBeaconState preset}
     ∀ tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩,
     DirectSafety.EnoughStake (pre.append tail) horizon.toNat
 
+/-- Eligible held terminal states have more than three halves of one balance increment in stake. -/
 def HeldTerminalStakeFloor (horizon : Epoch) (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last → ∀ (root : Root) (state : BeaconState preset fork),
     ((e.world k).state w).blockStates[root]? = some state →
@@ -167,6 +185,7 @@ def HeldTerminalStakeFloor (horizon : Epoch) (last : Nat) : Prop :=
     3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
       2 * stake (DirectSafety.effectiveWeight state) (DirectSafety.activeKeys state)
 
+/-- Two historical terminal views expose accountable stake loss or direct-safety hash evidence. -/
 def HistoricalFinalityEvidence {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (time : Nat) : Prop :=
   ∃ w ∈ J, ∃ i k, i ≤ k ∧ (e.world k).time ≤ time ∧

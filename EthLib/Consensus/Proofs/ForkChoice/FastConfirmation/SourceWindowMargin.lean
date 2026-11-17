@@ -17,7 +17,6 @@ Otherwise the receiver's justified block descends from the block, or two honest 
 The history since the anchor may also hold accountable evidence instead.
 -/
 
-
 namespace EthLib.Consensus.Models.Network
 open Models
 
@@ -202,7 +201,6 @@ private theorem honest_vote_of_margin {ν : Type*} [DecidableEq ν] {J : Set ν}
 
 end EthLib.Consensus.Models.Network
 
-
 namespace EthLib.Consensus
 
 open Base Uint64
@@ -336,7 +334,6 @@ private theorem committeesKept_of_parentState {caller receiver : Store preset fo
 
 end EthLib.Consensus
 
-
 namespace EthLib.Consensus
 
 open Base Uint64 Models
@@ -395,7 +392,6 @@ private theorem weight_le_activeVoters {store : Store preset fork} {head : Root}
   rfl
 
 end EthLib.Consensus
-
 
 namespace EthLib.Consensus
 
@@ -1027,7 +1023,6 @@ private theorem activeMembers_mono_of_window {store : Store preset fork} {head :
 
 end EthLib.Consensus
 
-
 namespace EthLib.Consensus
 
 open Base Uint64 Serialization.Ssz SszType
@@ -1235,7 +1230,6 @@ end Models.Network
 
 end EthLib.Consensus
 
-
 namespace EthLib.Consensus.Models.Network
 
 open Base Uint64 Models
@@ -1277,20 +1271,6 @@ private theorem slotStart_le_clock {store : Store preset fork}
   refine ⟨_, by simp only [computeTimeAtSlotMs, productOk, bind, Except.bind]; exact sumOk, ?_⟩
   rw [(addChecked_ok_iff.mp sumOk).2, productNat]
   omega
-
-end EthLib.Consensus.Models.Network
-
-
-namespace EthLib.Consensus.Models.Network
-
-open Base Uint64 Models
-
-variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
-  {sources : BlockSources preset fork} {anchorState : BeaconState preset fork}
-  {anchorBlock : BeaconBlock preset fork} {assignment : Assignment preset}
-  {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
-  {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
-    genesisTimeMs) J}
 
 /-- An ancestry read in one store holds in another that agrees on blocks and holds the node.
 
@@ -1495,20 +1475,6 @@ private theorem latest_rank_of_signed {Δ : ℕ} (sync : e.Synchronous Δ)
   · exact .inl (.inr ⟨covered, k', le, current,
       fun fits => by rw [sameData] at fits; exact unfit (fits.imp_right headFits)⟩)
   · exact .inr collision
-
-end EthLib.Consensus.Models.Network
-
-
-namespace EthLib.Consensus.Models.Network
-
-open Base Uint64 Models
-
-variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
-  {sources : BlockSources preset fork} {anchorState : BeaconState preset fork}
-  {anchorBlock : BeaconBlock preset fork} {assignment : Assignment preset}
-  {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
-  {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
-    genesisTimeMs) J}
 
 /-- A supporter of a store is active and not slashed in its source of balances. -/
 private theorem active_of_mem_supportersOf {store : Store preset fork}
@@ -1907,20 +1873,6 @@ private theorem caller_supporter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
   · exact .inl (.inl member)
   · exact .inr ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
 
-end EthLib.Consensus.Models.Network
-
-
-namespace EthLib.Consensus.Models.Network
-
-open Base Uint64 Models
-
-variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
-  {sources : BlockSources preset fork} {anchorState : BeaconState preset fork}
-  {anchorBlock : BeaconBlock preset fork} {assignment : Assignment preset}
-  {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
-  {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
-    genesisTimeMs) J}
-
 /-- A validator that the source holds, active and not slashed, is in its unslashed active list. -/
 private theorem mem_unslashedActive {state : BeaconState preset fork} {v : ValidatorIndex}
     {validator : Validator} (found : state.validators.data[v.toNat]? = some validator)
@@ -1950,7 +1902,7 @@ private theorem honest_unslashedActive_of_checkpointState {time : ℕ}
     sourceOk v honest
   obtain ⟨_, validator, found, active⟩ := Store.mem_activeMembers.mp member
   have flag : validator.slashed = false := by
-    simpa [NotSlashed, found] using unslashed
+    simpa [slashedFlagAt, found] using unslashed
   exact mem_unslashedActive found flag active
 
 /-- A head state's epoch is at most the current epoch of a forward-reachable store. -/
@@ -2350,26 +2302,36 @@ private theorem receiver_window_member_reaches {Δ : ℕ} (sync : e.Synchronous 
   have started : e.startTime ≤ (e.world n).time := by
     have := e.monotone_time (Nat.zero_le n)
     simpa [Execution.world_zero, World.initial] using this
-  exact e.mem_supportersOf_of_duty_interval_core sync slots preGloas admitted votes fits prompt
-    anchored anchorSlot anchorBoundary start started chain nonzero beginOk endTimeOk
+  have windowVotes : VotesInSlots e slot (finish + 1) := by
+    intro a honestA dutySlot committee deadline _ before assigned deadlineOk begun
+    have nextFits : dutySlot.toNat + (1 : UInt64).toNat < 2 ^ 64 := by
+      have lt := UInt64.lt_iff_toNat_lt.mp before
+      have bound := (finish + 1).toNat_lt
+      simp only [UInt64.toNat_one]
+      omega
+    have nextOk := addChecked_of_lt nextFits
+    have nextLe : dutySlot + 1 ≤ finish + 1 := by
+      have lt := UInt64.lt_iff_toNat_lt.mp before
+      have value := (addChecked_ok_iff.mp nextOk).2
+      rw [UInt64.le_iff_toNat_le, value]
+      simp only [UInt64.toNat_one]
+      omega
+    obtain ⟨following, followingOk, _, followingLe⟩ :=
+      exists_timeAtSlotMs_of_le nextLe endTimeOk
+    obtain ⟨startTime, startOk, _, _⟩ :=
+      exists_timeAtSlotMs_of_le (UInt64.le_of_lt before) endTimeOk
+    have dueBound := fits.before_boundary nextOk startOk followingOk deadlineOk
+    apply votes a honestA dutySlot committee deadline assigned deadlineOk begun
+    have followingLe := UInt64.le_iff_toNat_le.mp followingLe
+    rw [upToDate.1, atTime] at endLe
+    omega
+  exact e.mem_supportersOf_of_duty_interval_core sync slots preGloas admitted fits prompt
+    anchored anchorSlot anchorBoundary start started chain nonzero windowVotes beginOk endTimeOk
     (le_of_eq timeEq) (by rw [← atTime, ← upToDate.1]; exact endLe) rootCovers receiver atTime
     upToDate known (fun k' le _ current => finality k' le current) honest active
     ⟨dutySlot, committee, low, UInt64.lt_iff_toNat_lt.mpr (by
       have := UInt64.le_iff_toNat_le.mp high
       omega), assigned⟩
-
-end EthLib.Consensus.Models.Network
-
-namespace EthLib.Consensus.Models.Network
-
-open Base Uint64 Models
-
-variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
-  {sources : BlockSources preset fork} {anchorState : BeaconState preset fork}
-  {anchorBlock : BeaconBlock preset fork} {assignment : Assignment preset}
-  {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
-  {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
-    genesisTimeMs) J}
 
 /-- The caller's head and the receiver's head read the same committees near the parent.
 
@@ -2486,19 +2448,6 @@ private theorem genesis_of_honest_latest {Δ time : ℕ}
   rw [start v honest] at left
   rw [start w receiver] at right
   exact right.trans (left.symm.trans vote.genesis)
-
-end EthLib.Consensus.Models.Network
-
-namespace EthLib.Consensus.Models.Network
-
-open Base Uint64 Models
-
-variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
-  {sources : BlockSources preset fork} {anchorState : BeaconState preset fork}
-  {anchorBlock : BeaconBlock preset fork} {assignment : Assignment preset}
-  {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
-  {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
-    genesisTimeMs) J}
 
 /-- On validators the source counts as unslashed and active, its counted weight is its balance. -/
 private theorem stake_counted_eq {source : BeaconState preset fork}
@@ -2701,19 +2650,6 @@ private theorem window_reserves_and_weight [DecidablePred (· ∈ J)] {n : ℕ}
       have same : sourceMaximum = maximum := Except.ok.inj (sourceMaximumOk.symm.trans maximumOk)
       subst same
       omega
-
-end EthLib.Consensus.Models.Network
-
-namespace EthLib.Consensus.Models.Network
-
-open Base Uint64 Models
-
-variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
-  {sources : BlockSources preset fork} {anchorState : BeaconState preset fork}
-  {anchorBlock : BeaconBlock preset fork} {assignment : Assignment preset}
-  {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
-  {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
-    genesisTimeMs) J}
 
 /-- A caller's guarded margin for a block gives a receiver its own source surplus.
 

@@ -20,7 +20,7 @@ EPHEMERAL_KEY_B = _hex("e238eb8e04fee6511ab04c6dd3c89ce097b11f25d584863ac2b6d5b3
 NONCE_A = _hex("7e968bba13b6c50e2c4cd7f241cc0d64d1ac25c7f5952df231ac6a2bda8ee5d6")
 NONCE_B = _hex("559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd")
 
-# Auth₁: the RLPx v4 format, without a size prefix, from A to B.
+# Auth_1: the RLPx v4 format, without a size prefix, from A to B.
 AUTH_1 = _hex("""
 048ca79ad18e4b0659fab4853fe5bc58eb83992980f4c9cc147d2aa31532efd29a3d3dc6a3d89eaf
 913150cfc777ce0ce4af2758bf4810235f6e6ceccfee1acc6b22c005e9e3a49d6448610a58e98744
@@ -32,7 +32,7 @@ c444f14be226458940d6061c296350937ffd5e3acaceeaaefd3c6f74be8e23e0f45163cc7ebd7622
 a4592ee77e2bd94d0be3691f3b406f9bba9b591fc63facc016bfa8
 """)
 
-# Auth₂: the EIP-8 format with version 4 and no additional list elements, from A to B.
+# Auth_2: the EIP-8 format with version 4 and no additional list elements, from A to B.
 AUTH_2 = _hex("""
 01b304ab7578555167be8154d5cc456f567d5ba302662433674222360f08d5f1534499d3678b513b
 0fca474f3a514b18e75683032eb63fccb16c156dc6eb2c0b1593f0d84ac74f6e475f1b8d56116b84
@@ -47,7 +47,7 @@ c001edaeb5f8a06d2b26fb6cb93c52a9fca51853b68193916982358fe1e5369e249875bb8d0d0ec3
 3bf7678318e2d5b5340c9e488eefea198576344afbdf66db5f51204a6961a63ce072c8926c
 """)
 
-# Auth₃: the EIP-8 format with version 56 and 3 additional list elements, from A to B.
+# Auth_3: the EIP-8 format with version 56 and 3 additional list elements, from A to B.
 AUTH_3 = _hex("""
 01b8044c6c312173685d1edd268aa95e1d495474c6959bcdd10067ba4c9013df9e40ff45f5bfd6f7
 2471f93a91b493f8e00abc4b80f682973de715d77ba3a005a242eb859f9a211d93a347fa64b597bf
@@ -63,7 +63,7 @@ f0fce91676fd64c7773bac6a003f481fddd0bae0a1f31aa27504e2a533af4cef3b623f4791b2cca6
 d490
 """)
 
-# Ack₁: the RLPx v4 format, without a size prefix, from B to A.
+# Ack_1: the RLPx v4 format, without a size prefix, from B to A.
 ACK_1 = _hex("""
 049f8abcfa9c0dc65b982e98af921bc0ba6e4243169348a236abe9df5f93aa69d99cadddaa387662
 b0ff2c08e9006d5a11a278b1b3331e5aaabf0a32f01281b6f4ede0e09a2d5f585b26513cb794d963
@@ -73,7 +73,7 @@ dca6505b7196532e5f85b259a20c45e1979491683fee108e9660edbf38f3add489ae73e3dda2c71b
 d1497113d5c755e942d1
 """)
 
-# Ack₂: the EIP-8 format with version 4 and no additional list elements, from B to A.
+# Ack_2: the EIP-8 format with version 4 and no additional list elements, from B to A.
 ACK_2 = _hex("""
 01ea0451958701280a56482929d3b0757da8f7fbe5286784beead59d95089c217c9b917788989470
 b0e330cc6e4fb383c0340ed85fab836ec9fb8a49672712aeabbdfd1e837c1ff4cace34311cd7f4de
@@ -90,7 +90,7 @@ e754d021bfca14dc989753d61c413d261934e1a9c67ee060a25eefb54e81a4d14baff922180c395d
 5833c2464c805246155289f4
 """)
 
-# Ack₃: the EIP-8 format with version 57 and 3 additional list elements, from B to A.
+# Ack_3: the EIP-8 format with version 57 and 3 additional list elements, from B to A.
 ACK_3 = _hex("""
 01f004076e58aae772bb101ab1a8e64e01ee96e64857ce82b1113817c6cdd52c09d26f7b90981cd7
 ae835aeac72e1573b8a0225dd56d157a010846d888dac7464baf53f2ad4e3d584531fa203658fab0
@@ -107,7 +107,7 @@ c8c2c5098dbdd28fca547b3f58c01a424ac05f869f49c6a34672ea2cbbc558428aa1fe48bbfd6115
 35b9593b48b9d3ca4c13d245d5f04169b0b1
 """)
 
-# The secrets that node B derives for (Auth₂, Ack₂).
+# The secrets that node B derives for (Auth_2, Ack_2).
 AES_SECRET = _hex("80e8632c05fed6fc2a13b0f8d31a3cf645366239170ea067065aba8e28bac487")
 MAC_SECRET = _hex("2ea74ec5dae199227dff1af715362700e989d889d7a493cb0639691efb8e5f98")
 

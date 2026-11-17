@@ -17,6 +17,13 @@ Reading and writing big-endian bytes undo each other.
 
 namespace EthLib.Base
 
+/-- Zero bytes write nothing. -/
+theorem natToBytes_zero (n : Nat) : natToBytes 0 n = [] := rfl
+
+/-- The counter is always four bytes. -/
+theorem natToBytes4_size (n : Nat) : (natToBytes4 n).size = 4 := by
+  simp [natToBytes4, ByteArray.size, natToBytes_length]
+
 /-- Appending bytes on the right shifts the earlier value left by their count. -/
 theorem bytesToNat_append (a b : List UInt8) :
     bytesToNat (a ++ b) = bytesToNat a * 256 ^ b.length + bytesToNat b := by

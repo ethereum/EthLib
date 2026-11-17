@@ -62,6 +62,38 @@ theorem packBytes_injective {n : Nat} :
   intro v w h
   exact Vector.toArray_inj.mp (congrArg ByteArray.data h)
 
+/-- A buffer read as an object of its own size has the same bytes. -/
+@[simp] theorem packBytes_mk_data {n : Nat} (b : ByteArray) (h : b.data.size = n) :
+    packBytes (⟨b.data, h⟩ : Vector UInt8 n) = b := rfl
+
+/-- The bytes of an object, read back at its size, give the object. -/
+@[simp] theorem exactBytes?_packBytes {n : Nat} (v : Vector UInt8 n) :
+    exactBytes? n (packBytes v) = some v := by
+  rw [exactBytes?, dite_eq_left (size_packBytes v)]
+  rfl
+
+/-- An object read from a buffer has the bytes of that buffer. -/
+theorem packBytes_of_exactBytes? {n : Nat} {b : ByteArray} {v : Vector UInt8 n}
+    (h : exactBytes? n b = some v) : packBytes v = b := by
+  unfold exactBytes? at h
+  split at h
+  · cases h
+    rfl
+  · cases h
+
+/-- A byte of an object is the byte at the same index of its bytes. -/
+theorem getElem_eq_get!_packBytes {n : Nat} (v : Vector UInt8 n) (i : Nat) (h : i < n) :
+    v[i] = (packBytes v).get! i := by
+  change v.toArray[i]'(by simpa using h) = v.toArray[i]!
+  exact (getElem!_pos v.toArray i (by simpa using h)).symm
+
+/-- Writing a byte of an object writes the same byte of its bytes. -/
+theorem packBytes_set {n : Nat} (v : Vector UInt8 n) (i : Nat) (x : UInt8) (h : i < n) :
+    packBytes (v.set i x h) = (packBytes v).set! i x := by
+  change ByteArray.mk (v.toArray.set i x (by simpa using h)) =
+    ByteArray.mk (v.toArray.setIfInBounds i x)
+  rw [Array.setIfInBounds_def, dite_eq_left (by simpa using h)]
+
 /-- The exclusive or of two byte strings does not depend on their order. -/
 theorem xorBytes_comm {n : Nat} (a b : Vector UInt8 n) : xorBytes a b = xorBytes b a := by
   apply Vector.ext

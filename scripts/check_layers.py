@@ -6,6 +6,7 @@ import sys
 import tomllib
 from collections import Counter, deque
 from collections.abc import Iterable, Mapping, Sequence, Set as AbstractSet
+from functools import cache
 from pathlib import Path
 from typing import NamedTuple
 
@@ -34,6 +35,8 @@ LAYERS = {
 AGGREGATORS = {"EthLib", "EthLib.Proofs", "EthLib.Exports"}
 # The packages of the Lean toolchain, which a specification and a C export may import.
 TOOLCHAIN = {"Init", "Std", "Lean"}
+# The only modules that may `import all` a module outside EthLib, as BUILDING.md states.
+TOOLCHAIN_HOME = ("EthLib", "Base", "Proofs", "Toolchain")
 # The first tier of Cryptography: hashes and Merkle trees, which import no other part of it.
 FIRST_TIER = ("Hash", "Merkle")
 # The two hash-based signatures, whose modules never reach each other through their imports.
@@ -41,9 +44,18 @@ SCHEMES = ("Xmss", "Sphincs")
 KIND_NAMES = {"specification": "a specification", "property": "a property", "export": "a C export"}
 # The models and the refinement modules of ARCHITECTURE.md "Three kinds of content".
 KINDS = "coverage/kinds.toml"
+# The imports that break a rule on purpose, each listed with the rule it breaks.
+BASELINE = "scripts/check_layers_baseline.txt"
+# The rules that an entry of the baseline file can allow, each by its label.
+BASELINE_RULES = {
+    "layer": "the rules of layers and kinds of module",
+    "import-all": "the rule of `import all`",
+    "cycle": "the rule of directory cycles",
+    "model": "the rule of models",
+}
 
 HEADER_WORD = re.compile(r"\s*(module|prelude)\b")
-IMPORT = re.compile(r"\s*(?:public\s+)?(meta\s+)?import\s+(?:all\s+)?((?:«[^»]*»|[^\s«])+)")
+IMPORT = re.compile(r"\s*(?:public\s+)?(meta\s+)?import\s+(all\s+)?((?:«[^»]*»|[^\s«])+)")
 MODULE_COMPONENT = re.compile(r"«[^»]*»|[^.]+")
 LIBRARY = re.compile(r"^lean_lib\s+«?([A-Za-z0-9_]+)»?\s+where(.*?)(?=^\S|\Z)", re.M | re.S)
 ROOTS = re.compile(r"roots\s*:=\s*#\[(.*?)\]", re.S)
@@ -56,6 +68,7 @@ class Import(NamedTuple):
     module: str
     meta: bool
     line: int
+    all: bool = False
 
 
 def read_header(text: str) -> tuple[list[Import], str]:
@@ -66,10 +79,10 @@ def read_header(text: str) -> tuple[list[Import], str]:
         if word := HEADER_WORD.match(code, index):
             index = word.end()
         elif match := IMPORT.match(code, index):
-            module = join_module(module_parts(match.group(2)))
+            module = join_module(module_parts(match.group(3)))
             # `strip_lean` keeps every newline, so the line number is the one in the file.
-            line = code.count("\n", 0, match.start(2)) + 1
-            found.append(Import(module, bool(match.group(1)), line))
+            line = code.count("\n", 0, match.start(3)) + 1
+            found.append(Import(module, bool(match.group(1)), line, bool(match.group(2))))
             index = match.end()
         else:
             return found, code[index:]
@@ -212,12 +225,13 @@ def scheme_problems(graph: dict[str, list[str]]) -> list[tuple[str, str, str]]:
 
 def directory_cycles(
     graph: Mapping[str, Sequence[str]],
-    directory_roots: AbstractSet[str] = frozenset(),
+    directory_roots: AbstractSet[str],
 ) -> list[tuple[str, str, tuple[str, ...]]]:
     """
     Each import in a directory cycle, with one closed path of directories.
 
     `directory_roots` names root modules whose directories exist, even without Lean files.
+    Directory edges include every module reached through an import, at any depth.
     """
     directories = set(directory_roots) | {
         join_module(parts[:size])
@@ -227,6 +241,7 @@ def directory_cycles(
         for size in range(2, len(parts))
     }
 
+    @cache
     def containers(name: str) -> list[str]:
         # A root such as `BuilderApi.lean` belongs to `BuilderApi/`, when that directory exists.
         parts = module_parts(name)
@@ -234,17 +249,51 @@ def directory_cycles(
             parts = parts[:-1]
         return [join_module(parts[:size]) for size in range(3, len(parts) + 1)]
 
+    reached: dict[str, set[str]] = {}
+    module_layers = {name: layer(name) for name in graph}
+
+    def reachable(name: str) -> set[str]:
+        # Visit descendants before their importer without using Python's recursion stack.
+        stack = [(name, False)]
+        while stack:
+            current, expanded = stack.pop()
+            if expanded:
+                for imported in graph[current]:
+                    if imported in graph:
+                        reached[current].update(reached[imported])
+            elif current not in reached:
+                # Lean rejects module cycles; the mark keeps a broken tree from looping.
+                reached[current] = {imported for imported in graph[current] if imported in graph}
+                stack.append((current, True))
+                stack.extend(
+                    (imported, False) for imported in sorted(reached[current], reverse=True)
+                )
+        return reached[name]
+
+    @cache
+    def targets(name: str, source_layer: str) -> set[str]:
+        return {
+            target
+            for module in {name} | reachable(name)
+            if module_layers[module] == source_layer
+            for target in containers(module)
+        }
+
     edges: dict[tuple[str, str], list[tuple[str, str]]] = {}
     directory_graph: dict[str, set[str]] = {}
     for name in sorted(graph):
-        if layer(name) is None:
+        source_layer = module_layers[name]
+        if source_layer is None:
             continue
         for imported in sorted(set(graph[name])):
-            if imported not in graph or layer(name) != layer(imported):
+            if imported not in graph:
                 continue
             pairs = []
             for source in containers(name):
-                for target in containers(imported):
+                # An import inside `source` adds no pair; the line that leaves `source` reports it.
+                if source in containers(imported):
+                    continue
+                for target in sorted(targets(imported, source_layer)):
                     if (
                         source == target
                         or source.startswith(target + ".")
@@ -339,6 +388,42 @@ def reach_problems(graph: dict[str, list[str]]) -> list[tuple[str, str, str]]:
         for imported in graph[name]:
             if imported in reached and kind(imported) == "property":
                 problems.append((name, imported, reached[imported]))
+    return problems
+
+
+def toolchain_home(module: str) -> bool:
+    """Whether a module sits in the directory of the modules that read toolchain bodies."""
+    parts = module_parts(module)
+    return (
+        len(parts) > len(TOOLCHAIN_HOME) and tuple(parts[: len(TOOLCHAIN_HOME)]) == TOOLCHAIN_HOME
+    )
+
+
+def import_all_problems(headers: dict[str, list[Import]]) -> list[tuple[str, Import, str]]:
+    """
+    Each `import all` of a module outside EthLib that the rule of BUILDING.md does not allow.
+
+    Each problem is the module that writes the import, the import, and the rule it breaks.
+
+    Such an import reads private declarations and bodies, which a new version can change.
+    So only a module under `EthLib/Base/Proofs/Toolchain/` writes it, and states public theorems.
+    Each outside module has one such module, so a change to it breaks one file.
+    """
+    homes: dict[str, list[str]] = {}
+    problems = []
+    for name in sorted(headers):
+        for found in headers[name]:
+            if not found.all or module_parts(found.module)[0] == "EthLib":
+                continue
+            if toolchain_home(name):
+                homes.setdefault(found.module, []).append(name)
+            else:
+                home = "/".join(TOOLCHAIN_HOME)
+                problems.append((name, found, f"only a module under {home}/ reads its bodies"))
+    for imported, names in sorted(homes.items()):
+        for name in names[1:]:
+            found = next(item for item in headers[name] if item.all and item.module == imported)
+            problems.append((name, found, f"{names[0]} already reads its bodies"))
     return problems
 
 
@@ -494,15 +579,44 @@ def model_imports(
     ]
 
 
-def read_baseline(path: Path) -> set[tuple[str, str]]:
-    """The (module, import) pairs that the baseline file allows."""
-    entries = set()
-    if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            fields = line.split("#", 1)[0].split()
-            if len(fields) == 2:
-                entries.add((fields[0], fields[1]))
-    return entries
+class Entry(NamedTuple):
+    """One entry of the baseline file: the rule it allows, the importing and imported modules."""
+
+    rule: str
+    module: str
+    imported: str
+
+    def __str__(self) -> str:
+        """The entry as a line of the baseline file."""
+        return f"{self.rule} {self.module} {self.imported}"
+
+
+def read_baseline(text: str) -> tuple[dict[Entry, int], list[str]]:
+    """
+    The entries of a baseline file, each with its line number, and a problem for each bad line.
+
+    Each entry allows one import to break only the rule that its label names.
+    """
+    entries: dict[Entry, int] = {}
+    problems = []
+    labels = ", ".join(BASELINE_RULES)
+    for number, line in enumerate(text.splitlines(), start=1):
+        fields = line.split("#", 1)[0].split()
+        if not fields:
+            continue
+        where = f"{BASELINE}:{number}"
+        if len(fields) != 3 or fields[0] not in BASELINE_RULES:
+            problems.append(
+                f"{where}: write <rule> <module> <imported module>, "
+                f"with the rule one of {labels}, not: {' '.join(fields)}"
+            )
+            continue
+        entry = Entry(*fields)
+        if entry in entries:
+            problems.append(f"{where}: {entry} repeats line {entries[entry]}; remove it")
+            continue
+        entries[entry] = number
+    return entries, problems
 
 
 def check(root: Path) -> list[str]:
@@ -519,24 +633,51 @@ def check(root: Path) -> list[str]:
         if name not in AGGREGATORS and layer(name) is None:
             problems.append(f"{path.relative_to(root)}: not in a layer of ARCHITECTURE.md")
 
-    baseline = read_baseline(root / "scripts" / "check_layers_baseline.txt")
-    used = set()
+    baseline_path = root / BASELINE
+    baseline: dict[Entry, int] = {}
+    if baseline_path.exists():
+        baseline, bad_lines = read_baseline(baseline_path.read_text(encoding="utf-8"))
+        problems += bad_lines
+    used: set[Entry] = set()
+
+    def allowed(rule: str, name: str, imported: str) -> bool:
+        """Whether the baseline allows the import to break the rule; mark the entry used if so."""
+        entry = Entry(rule, name, imported)
+        if entry in baseline:
+            used.add(entry)
+            return True
+        return False
+
     for name, imported_list in graph.items():
         for imported in imported_list:
             found = import_problems(name, imported)
-            if found and (name, imported) in baseline:
-                used.add((name, imported))
-            elif found:
+            if found and not allowed("layer", name, imported):
                 for problem in found:
                     problems.append(
                         f"{modules[name].relative_to(root)}: imports {imported}, but {problem}"
                     )
 
+    for name, found, rule in import_all_problems(headers):
+        if not allowed("import-all", name, found.module):
+            problems.append(
+                f"{modules[name].relative_to(root)}:{found.line}: "
+                f"imports all of {found.module}, but {rule}"
+            )
+
     directory_roots = {name for name, path in modules.items() if path.with_suffix("").is_dir()}
-    for name, imported, cycle in directory_cycles(graph, directory_roots):
-        if (name, imported) in baseline:
-            used.add((name, imported))
-        else:
+    # A meta-imported property supplies erased proofs, not runtime dependencies of an export.
+    # Lean's phase check rejects a runtime definition that uses its executable declarations.
+    # The separate meta-import check still forbids reaching specification code this way.
+    directory_graph = {
+        name: [
+            found.module
+            for found in headers[name]
+            if not (found.meta and kind(name) == "export" and kind(found.module) == "property")
+        ]
+        for name in graph
+    }
+    for name, imported, cycle in directory_cycles(directory_graph, directory_roots):
+        if not allowed("cycle", name, imported):
             line = next(found.line for found in headers[name] if found.module == imported)
             path = " -> ".join("/".join(module_parts(directory)) + "/" for directory in cycle)
             problems.append(
@@ -556,20 +697,18 @@ def check(root: Path) -> list[str]:
     if kinds is not None:
         problems += stale_kinds(graph, gatherers, kinds)
         for name, model in model_imports(graph, gatherers, kinds):
-            if (name, model) in baseline:
-                used.add((name, model))
-            else:
+            if not allowed("model", name, model):
                 problems.append(
                     f"{modules[name].relative_to(root)}: imports the model {model}, "
                     f"but {KINDS} does not declare it a refinement module"
                 )
-    for name, imported in sorted(baseline - used):
-        # Without the kinds file, an entry between two properties may still be needed.
-        if kinds is None and kind(name) == kind(imported) == "property":
+    for entry, number in sorted(baseline.items(), key=lambda item: item[1]):
+        # Without the kinds file, the check cannot tell whether a model entry is still needed.
+        if entry in used or (kinds is None and entry.rule == "model"):
             continue
         problems.append(
-            f"scripts/check_layers_baseline.txt: {name} {imported} "
-            "breaks no rule any more; remove the entry"
+            f"{BASELINE}:{number}: {entry} no longer breaks "
+            f"{BASELINE_RULES[entry.rule]}; remove the entry"
         )
 
     for name, found, rule in meta_problems(headers, graph):

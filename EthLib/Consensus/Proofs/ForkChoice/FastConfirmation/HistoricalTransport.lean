@@ -341,18 +341,10 @@ private theorem pendingTail_applyPendingDeposit {config : Config} {checks : Sign
     (run : applyPendingDeposit config checks state deposit = .ok after)
     (finite : epoch < FAR_FUTURE_EPOCH) (tail : PendingTail count epoch state) :
     PendingTail count epoch after := by
-  unfold applyPendingDeposit at run
-  split at run
-  · split at run
-    · cases run; exact tail
-    simp only [bind_ok_iff] at run
-    obtain ⟨_, _, run⟩ := run
-    split at run
-    · exact pendingTail_addValidator run finite tail
-    · cases run; exact tail
-  · simp only [liftAccessor_ok, bind_ok_iff] at run
-    obtain ⟨_, _, run⟩ := run
-    exact pendingTail_of_validators (congrArg (·.data) (increaseBalance_validators run)) tail
+  rcases applyPendingDeposit_cases run with rfl | ⟨_, run⟩ | ⟨_, run⟩
+  · exact tail
+  · exact pendingTail_of_validators (congrArg (·.data) (increaseBalance_validators run)) tail
+  · exact pendingTail_addValidator run finite tail
 
 /-- Both deposit rules preserve pending activation fields, including a newly appended entry. -/
 private theorem pendingTail_applyDeposit {config : Config} {checks : SignatureChecks}
@@ -993,6 +985,21 @@ private theorem pendingTail_processEpoch
     (by simp [EpochStage.middleStages, EpochStage.tailStages]) finite
     (pendingTail_processRegistryUpdates registry readyBound readyFinalized readyTail)
 
+/-- Reduce a slot step to its cache, optional epoch and final slot write. -/
+private theorem advanceSlot_transport {config : Config} {checks : SignatureChecks}
+    {source after : BeaconState preset fork} (P : BeaconState preset fork → Prop)
+    (run : advanceSlot config checks source = .ok after)
+    (finish : ∀ next cached epoched, processSlot source = .ok cached →
+      after = { epoched with slot := next } →
+      (processEpoch config checks cached = .ok epoched ∨ epoched = cached) → P after) :
+    P after := by
+  obtain ⟨next, cached, epoched, _, cacheOk, epochOk, result⟩ := advanceSlot_ok run
+  apply finish next cached epoched cacheOk result
+  unfold epochIfLast at epochOk
+  split at epochOk
+  · exact .inl epochOk
+  · exact .inr (Except.ok.inj epochOk).symm
+
 /-- The actual cache, optional epoch and slot increment preserve the pending suffix. -/
 private theorem pendingTail_advanceSlot {config : Config} {checks : SignatureChecks}
     {source after : BeaconState preset fork}
@@ -1002,16 +1009,17 @@ private theorem pendingTail_advanceSlot {config : Config} {checks : SignatureChe
     (finalized : after.finalizedCheckpoint.epoch ≤ boundEpoch)
     (finite : boundEpoch < FAR_FUTURE_EPOCH) (tail : PendingTail count boundEpoch source) :
     PendingTail count boundEpoch after := by
-  obtain ⟨next, cached, epoched, _, cacheOk, epochOk, rfl⟩ := advanceSlot_ok run
+  apply advanceSlot_transport (PendingTail count boundEpoch) run
+  intro next cached epoched cacheOk result epochStep
+  subst after
   obtain ⟨_, _, _, _, cacheEq⟩ := processSlot_ok cacheOk
   have cachedTail : PendingTail count boundEpoch cached :=
     pendingTail_of_validators (by rw [cacheEq]) tail
   have epochedTail : PendingTail count boundEpoch epoched := by
-    unfold epochIfLast at epochOk
-    split at epochOk
+    rcases epochStep with epochOk | rfl
     · apply pendingTail_processEpoch epochOk ?_ finalized finite cachedTail
       simpa only [getCurrentEpoch, cacheEq] using boundary
-    · cases epochOk; exact cachedTail
+    · exact cachedTail
   exact epochedTail
 
 /-- The shared successful-slot traversal preserves the tail using its output finalized bound. -/
@@ -1372,129 +1380,38 @@ private theorem receiver_oldMaximum {caller receiver : Store preset fork}
   exact maximum_exists_of_total coverage membersOk totalOk
     (fun v member => inside v (subset v member))
 
-/-- Slot processing keeps slashing flags, including the default at an absent position. -/
-private def SlashFlagsKept (state after : BeaconState preset fork) : Prop :=
-  ∀ i : Nat, (after.validators.data[i]?.map (·.slashed)).getD false =
-    (state.validators.data[i]?.map (·.slashed)).getD false
-
-private theorem SlashFlagsKept.refl (state : BeaconState preset fork) :
-    SlashFlagsKept state state := fun _ => rfl
-
-private theorem SlashFlagsKept.trans {first second third : BeaconState preset fork}
-    (one : SlashFlagsKept first second) (two : SlashFlagsKept second third) :
-    SlashFlagsKept first third := fun i => (two i).trans (one i)
-
 private theorem slashFlags_of_validators {state after : BeaconState preset fork}
     (same : after.validators.data = state.validators.data := by rfl) :
-    SlashFlagsKept state after := by intro i; simp only [same]
-
-private theorem slashFlags_of_map {state after : BeaconState preset fork}
-    (same : after.validators.data.toList.map (·.slashed) =
-      state.validators.data.toList.map (·.slashed)) : SlashFlagsKept state after := by
+    ∀ i, (slashedFlagAt after i).getD false = (slashedFlagAt state i).getD false := by
   intro i
-  have atIndex := congrArg (fun xs => (xs[i]?).getD false) same
-  simpa only [List.getElem?_map, Array.getElem?_toList] using atIndex
-
-private theorem slashFlags_fold {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
-    {xs : List α} {state after : BeaconState preset fork}
-    (keeps : ∀ s x t, step s x = .ok t → SlashFlagsKept s t)
-    (ok : xs.foldlM step state = .ok after) : SlashFlagsKept state after :=
-  foldlM_ok_invariant (SlashFlagsKept state)
-    (fun _ _ _ before ok => before.trans (keeps _ _ _ ok)) (.refl state) ok
+  simp only [slashedFlagAt, same]
 
 /-- Replacing one validator with the same flag keeps the flag map. -/
 private theorem slashFlags_setValidatorAt {state after : BeaconState preset fork}
     {position : Nat} {validator old : Validator}
     (found : getValidatorAt state position = .ok old)
     (set : state.setValidatorAt position validator = .ok after) (same : validator.slashed =
-      old.slashed) : SlashFlagsKept state after := by
-  apply slashFlags_of_map
-  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
-  have oldEq : state.validators.data[position] = old := by
-    simpa [getValidatorAt, inside] using found
-  simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
-    Array.toList_set, List.map_set]
-  rw [same, ← oldEq]
-  have atValue : (state.validators.data.toList.map (·.slashed))[position]'(by
-      simpa using inside) = state.validators.data[position].slashed := by simp
-  rw [← atValue]
-  exact List.set_getElem_self _
+      old.slashed) :
+    ∀ i, (slashedFlagAt after i).getD false = (slashedFlagAt state i).getD false := by
+  intro i
+  rw [slashedFlagAt_setValidatorAt found set same]
 
 /-- Exit scheduling changes neither existing slashing flags nor registry length. -/
 private theorem slashFlags_initiateValidatorExit {config : Config}
     {state after : BeaconState preset fork} {index : ValidatorIndex}
     (run : initiateValidatorExit config state index = .ok after) :
-    SlashFlagsKept state after := by
-  obtain ⟨validator, found, unchanged | ⟨_, queued, _, _, queue, _, set⟩⟩ :=
-    initiateValidatorExit_ok run
-  · rw [unchanged.2]; exact .refl _
-  · have same := (exitQueue_validators queue).1
-    have kept := slashFlags_setValidatorAt
-      (by rw [← getValidator_eq_getValidatorAt, getValidator_of_validators_eq same]; exact found)
-      (by rwa [← setValidator_eq_setValidatorAt]) (by rfl)
-    exact (slashFlags_of_validators (congrArg (·.data) same)).trans kept
-
-/-- Registry updates schedule activity without changing slashing flags. -/
-private theorem slashFlags_processRegistryUpdates {config : Config}
-    {state after : BeaconState preset fork}
-    (run : processRegistryUpdates config state = .ok after) : SlashFlagsKept state after := by
-  have update {s t : BeaconState preset fork} {i : Nat}
-      (ok : updateRegistryEntry config s i = .ok t) : SlashFlagsKept s t := by
-    simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨validator, found, queued, queue, marked, set, ok⟩ := ok
-    have flag : queued.slashed = validator.slashed := by
-      unfold queueForActivation at queue
-      split at queue
-      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at queue
-        obtain ⟨_, _, rfl⟩ := queue
-        rfl
-      · cases queue; rfl
-    have first := slashFlags_setValidatorAt found set flag
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact first.trans (slashFlags_initiateValidatorExit exited)
-    · cases ok; exact first
-  have activate {s t : BeaconState preset fork} {i : ValidatorIndex}
-      (ok : activateValidator s i = .ok t) : SlashFlagsKept s t := by
-    simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, found, _, _, set⟩ := ok
-    rw [setValidator_eq_setValidatorAt] at set
-    rw [getValidator_eq_getValidatorAt] at found
-    exact slashFlags_setValidatorAt found set rfl
-  have updateElectra {s t : BeaconState preset fork} {epoch : Epoch} {i : Nat}
-      (ok : updateRegistryEntryElectra config epoch s i = .ok t) : SlashFlagsKept s t := by
-    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, found, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, set⟩ := ok
-      exact slashFlags_setValidatorAt found set rfl
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact slashFlags_initiateValidatorExit exited
-    split at ok
-    · exact slashFlags_setValidatorAt found (liftAccessor_ok.mp ok) rfl
-    · cases ok; exact .refl _
-  unfold processRegistryUpdates at run
-  split at run
-  · simp only [bind_ok_iff, liftAccessor_ok] at run
-    obtain ⟨_, _, run⟩ := run
-    exact slashFlags_fold (fun _ _ _ ok => updateElectra ok) run
-  · simp only [bind_ok_iff] at run
-    obtain ⟨_, updated, activated⟩ := run
-    exact (slashFlags_fold (fun _ _ _ ok => update ok) updated).trans
-      (slashFlags_fold (fun _ _ _ ok => activate ok) activated)
+    ∀ i, (slashedFlagAt after i).getD false = (slashedFlagAt state i).getD false := by
+  intro i
+  rw [slashedFlagAt_initiateValidatorExit run]
 
 /-- A new validator has the same false flag as an absent registry position. -/
 private theorem slashFlags_addValidator {state after : BeaconState preset fork}
     {pubkey : Cryptography.Bls.BLSPubkey} {credentials : Bytes32} {amount : Gwei}
     (run : addValidatorToRegistry state pubkey credentials amount = .ok after) :
-    SlashFlagsKept state after := by
+    ∀ i, (slashedFlagAt after i).getD false = (slashedFlagAt state i).getD false := by
   have added := addValidatorToRegistry_validators_eq_push run
   intro i
-  rw [added]
+  simp only [slashedFlagAt, added]
   by_cases before : i < state.validators.data.size
   · simp [Array.getElem?_push, before, Nat.ne_of_lt before]
   · by_cases atEnd : i = state.validators.data.size
@@ -1502,60 +1419,50 @@ private theorem slashFlags_addValidator {state after : BeaconState preset fork}
       simp [getValidatorFromDeposit]
     · simp [Array.getElem?_push, before, atEnd]
 
-/-- A pending deposit credits a balance or appends an unslashed validator. -/
-private theorem slashFlags_applyPendingDeposit {config : Config} {checks : SignatureChecks}
-    {state after : BeaconState preset fork} {deposit : PendingDeposit}
-    (run : applyPendingDeposit config checks state deposit = .ok after) :
-    SlashFlagsKept state after := by
-  unfold applyPendingDeposit at run
-  split at run
-  · split at run
-    · cases run; exact .refl _
-    simp only [bind_ok_iff] at run
-    obtain ⟨_, _, run⟩ := run
-    split at run
-    · exact slashFlags_addValidator run
-    · cases run; exact .refl _
-  · simp only [liftAccessor_ok, bind_ok_iff] at run
-    obtain ⟨_, _, run⟩ := run
-    exact slashFlags_of_validators (congrArg (·.data) (increaseBalance_validators run))
-
-/-- Passing pending deposits preserves flags even when the registry grows. -/
-private theorem slashFlags_passPendingDeposits {config : Config} {checks : SignatureChecks}
-    {stop : PendingDeposit → Bool} {nextEpoch : Epoch} {available : Gwei}
-    {deposits : List PendingDeposit} {state : BeaconState preset fork}
-    {processed : Gwei} {count : Nat} {postponed : Array PendingDeposit} {pass}
-    (run : passPendingDeposits config checks stop nextEpoch available state processed count
-      postponed deposits = .ok pass) : SlashFlagsKept state pass.1.state :=
-  passPendingDeposits_of SlashFlagsKept .refl (fun one two => one.trans two)
-    (fun ok => slashFlags_applyPendingDeposit ok) run
-
-/-- Effective-balance updates preserve each slashing flag. -/
-private theorem slashFlags_processEffectiveBalanceUpdates {state after : BeaconState preset fork}
-    (run : processEffectiveBalanceUpdates state = .ok after) : SlashFlagsKept state after := by
-  apply slashFlags_fold (fun _ _ _ ok => ?_) run
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, found, _, _, _, _, set⟩ := ok
-  exact slashFlags_setValidatorAt found set rfl
+/-- The existing epoch traversal preserves default-false positional slashing flags. -/
+private theorem slashFlags_epochLaws :
+    EpochFrameLaws (fun (state after : BeaconState preset fork) =>
+      ∀ i, (slashedFlagAt after i).getD false = (slashedFlagAt state i).getD false) where
+  refl := fun _ _ => rfl
+  trans := fun one two i => (two i).trans (one i)
+  setValidatorAt := fun set found _ flag _ _ => slashFlags_setValidatorAt found set flag
+  increaseBalance := fun ok =>
+    slashFlags_of_validators (congrArg (·.data) (increaseBalance_validators ok))
+  decreaseBalance := fun ok =>
+    slashFlags_of_validators (congrArg (·.data) (decreaseBalance_validators ok))
+  initiateValidatorExit := slashFlags_initiateValidatorExit
+  addValidatorToRegistry := fun ok _ => slashFlags_addValidator ok
+  eth1DataVotes _ _ := slashFlags_of_validators
+  inactivityScores _ _ := slashFlags_of_validators
+  slashings _ _ := slashFlags_of_validators
+  randaoMixes _ _ := slashFlags_of_validators
+  historicalRoots _ _ := slashFlags_of_validators
+  historicalSummaries _ _ := slashFlags_of_validators
+  participationRecords _ := slashFlags_of_validators
+  pendingDeposits _ _ _ := slashFlags_of_validators
+  pendingConsolidations _ _ := slashFlags_of_validators
+  syncCommittees _ _ _ := slashFlags_of_validators
+  proposerLookahead _ _ := slashFlags_of_validators
+  ptcWindow _ _ := slashFlags_of_validators
 
 /-- Every stage in the shared epoch schedule preserves the default-false slashing flag. -/
 private theorem slashFlags_processEpoch {config : Config} {checks : SignatureChecks}
     {state after : BeaconState preset fork}
-    (run : processEpoch config checks state = .ok after) : SlashFlagsKept state after := by
-  apply (processEpoch_trace run).transport SlashFlagsKept .refl (fun a b => a.trans b)
+    (run : processEpoch config checks state = .ok after) :
+    ∀ i, (slashedFlagAt after i).getD false = (slashedFlagAt state i).getD false := by
+  apply (processEpoch_trace run).transport
+    (fun s t => ∀ i, (slashedFlagAt t i).getD false = (slashedFlagAt s i).getD false)
+    (fun _ _ => rfl) (fun a b i => (b i).trans (a i))
   intro stage _ s t ok
   have edge := EpochStage.action_cases.mp ok
   cases stage
-  case registry => exact slashFlags_processRegistryUpdates edge
+  case registry => exact slashFlags_epochLaws.processRegistryUpdates edge
   case pendingDeposits =>
     simp only [EpochStage.Edge] at edge
     split at edge
-    · unfold processPendingDeposits at edge
-      simp only [bind, Except.bind, pure, Except.pure] at edge
-      repeat' (split at edge <;> try cases edge)
-      all_goals exact (slashFlags_passPendingDeposits ‹_›).trans slashFlags_of_validators
-    · exact edge ▸ .refl _
-  case effectiveBalances => exact slashFlags_processEffectiveBalanceUpdates edge
+    · exact slashFlags_epochLaws.processPendingDeposits edge
+    · exact edge ▸ fun _ => rfl
+  case effectiveBalances => exact slashFlags_epochLaws.processEffectiveBalanceUpdates edge
   all_goals
     exact slashFlags_of_validators
       (congrArg (·.data) (edge.validators_eq ⟨nofun, nofun, nofun⟩))
@@ -1563,32 +1470,38 @@ private theorem slashFlags_processEpoch {config : Config} {checks : SignatureChe
 /-- Successful lookahead preserves flags across any number of epochs, at every position. -/
 private theorem slashFlags_lookahead {config : Config} {checks : SignatureChecks}
     {state after : BeaconState preset fork} {slot : Slot}
-    (run : lookaheadState config checks state slot = .ok after) : SlashFlagsKept state after := by
+    (run : lookaheadState config checks state slot = .ok after) :
+    ∀ i, (slashedFlagAt after i).getD false = (slashedFlagAt state i).getD false := by
   have step {s t : BeaconState preset fork}
-      (ok : advanceSlot config checks s = .ok t) : SlashFlagsKept s t := by
-    obtain ⟨_, cached, epoched, _, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
+      (ok : advanceSlot config checks s = .ok t) :
+      ∀ i, (slashedFlagAt t i).getD false = (slashedFlagAt s i).getD false := by
+    apply advanceSlot_transport
+      (fun t => ∀ i, (slashedFlagAt t i).getD false = (slashedFlagAt s i).getD false) ok
+    intro next cached epoched cachedOk result epochStep
+    subst t
     obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
-    have first : SlashFlagsKept s cached := slashFlags_of_validators (by rw [cachedEq])
-    have middle : SlashFlagsKept cached epoched := by
-      unfold epochIfLast at epochedOk
-      split at epochedOk
+    have first := slashFlags_of_validators (state := s) (after := cached) (by rw [cachedEq])
+    have middle : ∀ i, (slashedFlagAt epoched i).getD false =
+        (slashedFlagAt cached i).getD false := by
+      rcases epochStep with epochedOk | rfl
       · exact slashFlags_processEpoch epochedOk
-      · cases epochedOk; exact .refl _
-    exact (first.trans middle).trans slashFlags_of_validators
+      · exact fun _ => rfl
+    exact fun i => (middle i).trans (first i)
   have steps {count : Nat} {s t : BeaconState preset fork}
-      (ok : advanceSlots config checks count s = .ok t) : SlashFlagsKept s t := by
+      (ok : advanceSlots config checks count s = .ok t) :
+      ∀ i, (slashedFlagAt t i).getD false = (slashedFlagAt s i).getD false := by
     induction count generalizing s with
-    | zero => cases ok; exact .refl _
+    | zero => cases ok; exact fun _ => rfl
     | succ count ih =>
       obtain ⟨_, first, rest⟩ := bind_ok_iff.mp ok
-      exact (step first).trans (ih rest)
+      exact fun i => (ih rest i).trans (step first i)
   unfold lookaheadState at run
   split at run
   · have slotsOk := mapError_ok_iff.mp run
     simp only [processSlots, bind_ok_iff, ensure_ok_iff] at slotsOk
     obtain ⟨_, _, advanced⟩ := slotsOk
     exact steps advanced
-  · cases run; exact .refl _
+  · cases run; exact fun _ => rfl
 
 /-- Folding a committee into a set preserves a property held by both inputs. -/
 private theorem members_array_insert {committee : Array ValidatorIndex}
@@ -1633,17 +1546,13 @@ private theorem active_of_committeeWindow {store : Store preset fork} {head : Ro
   · simp at empty
   · exact ⟨_, active_of_slotCommittee early held read v inside⟩
 
-@[expose]
-public def NotSlashed (state : BeaconState preset fork) (v : ValidatorIndex) : Prop :=
-  (state.validators.data[v.toNat]?.map (·.slashed)).getD false = false
-
 /-- Lookahead preserves unslashedness without a committee, chain or honest-set premise. -/
 private theorem notSlashed_lookahead {config : Config} {checks : SignatureChecks}
     {state after : BeaconState preset fork} {slot : Slot}
     (run : lookaheadState config checks state slot = .ok after) :
-    ∀ v, NotSlashed after v ↔ NotSlashed state v := by
+    ∀ v : ValidatorIndex, (slashedFlagAt after v.toNat).getD false = false ↔
+      (slashedFlagAt state v.toNat).getD false = false := by
   intro v
-  unfold NotSlashed
   rw [slashFlags_lookahead run v.toNat]
 
 namespace Models.Network
@@ -3348,10 +3257,10 @@ public theorem notSlashed_checkpointState {anchor : Store preset fork}
     {u : ValidatorIndex} (honest : u ∈ J) {n : ℕ}
     (flags : ∀ (root : Root) (base : BeaconState preset fork),
       ((e.world n).state u).blockStates[root]? = some base →
-      ∀ v ∈ J, NotSlashed base v)
+      ∀ v ∈ J, (slashedFlagAt base v.toNat).getD false = false)
     {checkpoint : Checkpoint} {state : BeaconState preset fork}
     (read : ((e.world n).state u).checkpointState checkpoint = .ok state) :
-    ∀ v ∈ J, NotSlashed state v := by
+    ∀ v ∈ J, (slashedFlagAt state v.toNat).getD false = false := by
   obtain ⟨base, slot, stored, _, advanced⟩ :=
     e.checkpointStates_fixedChecks anchorStore anchored honest
       (Store.checkpointState_ok_iff.mp read)

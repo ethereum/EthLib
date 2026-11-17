@@ -255,7 +255,7 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
     (keys : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
       ∀ ready, run (action config checks) readyStages state = .ok ready →
         ∀ validator ∈ ready.validators.data,
-          ∃ point, Cryptography.Bls.G1.keyValidatePoint (packBytes validator.pubkey) = .ok point)
+          ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point)
     (syncEnds : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
       ∀ ready, run (action config checks) readyStages state = .ok ready →
         (∀ validator ∈ ready.validators.data,

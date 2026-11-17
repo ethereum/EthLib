@@ -5,8 +5,7 @@ public import EthLib.Serialization.Proofs.JsonRpc
 public import EthLib.Execution.Proofs.Rpc.Json
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.Fork
--- Showing that a payload field is not `null` unfolds the null test of Lean's JSON.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: the JSON decoders of the Engine API
@@ -195,7 +194,7 @@ private theorem fields_present {fork : Fork} (p : ExecutionPayload fork) :
     ∀ x ∈ executionPayloadFields p, x.2.isNull = false := by
   unfold executionPayloadFields
   by_cases h1 : Fork.shapella ≤ fork <;> by_cases h2 : Fork.dencun ≤ fork <;>
-    simp [h1, h2, dataJson, quantityJson, listJson, isNull_str, isNull_arr]
+    simp [h1, h2, dataJson, quantityJson, listJson]
 
 /-- A computation that has succeeded passes its value on. -/
 private theorem ok_bind {α β : Type} (a : α) (f : α → Decode β) :
@@ -390,7 +389,7 @@ private theorem fields_executionPayloadV4Json {fork : Fork} (p : ExecutionPayloa
     rcases List.mem_append.mp hx with hx | hx
     · exact fields_present p x hx
     · simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
-      rcases hx with rfl | rfl <;> exact isNull_str _
+      rcases hx with rfl | rfl <;> exact Base.Toolchain.Json.isNull_str _
   obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payload" hdist hpres
   have hfsd := (hp.pairwise_iff fun hab => Ne.symm hab).mpr hdist
   -- The pairs of version 3 are those that keep their name when the two new names are dropped.
@@ -517,11 +516,11 @@ theorem payloadStatusOfJson_json (s : PayloadStatus) (e : Option String) :
       [("status", a), ("latestValidHash", b), ("validationError", c)].lookup "validationError" =
         some c := fun _ _ _ => rfl
   have l1 : fs.lookup "status" = some (.str s.status.name) := by
-    rw [look, k1]; rfl
+    rw [look, k1]; simp [Option.filter_some]
   have l2 : fs.lookup "latestValidHash" = s.latestValidHash.map (dataJson ·.toList) := by
-    rw [look, k2]; cases s.latestValidHash <;> rfl
+    rw [look, k2]; cases s.latestValidHash <;> simp [optionJson, dataJson, Option.filter_some]
   have l3 : fs.lookup "validationError" = e.map .str := by
-    rw [look, k3]; cases e <;> rfl
+    rw [look, k3]; cases e <;> simp [optionJson, Option.filter_some]
   have hall : (fs.all (payloadStatusFields.contains ·.1)) = true := by
     rw [List.all_eq_true]
     intro p hm

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Xmss.Constants
 public import EthLib.Cryptography.Proofs.Xmss.Types
 public import EthLib.Cryptography.Proofs.Xmss.Address
 public import EthLib.Cryptography.Proofs.Xmss.TweakableHash

@@ -245,6 +245,11 @@ Some words change their meaning between cryptography, Ethereum, mathematics and 
 Qualify them when two meanings can occur in the same passage.
 A cryptographic usage that is standard, such as "the signature verifies", stays as it is.
 
+Write a power with `^` and an index with `_`, in ASCII: `2^64`, `p^12 - 1`, `K_63` and `g_{P_1,P_2}`.
+Do not use Unicode superscript or subscript characters, such as `2⁶⁴` or `K₆₃`.
+They are hard to read, and the rest of the repository writes the ASCII forms.
+A code span quotes Lean as the code writes it, so the inverse `⁻¹` and a name such as `div_le_iff₀` keep their characters.
+
 ## Vocabulary
 
 Use this vocabulary to clarify technical meanings and wording.

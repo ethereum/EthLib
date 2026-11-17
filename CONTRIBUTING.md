@@ -74,9 +74,14 @@ The library code never imports the proofs.
 Proofs live in their own Lake library, so the library code builds and links without them.
 
 The C exports live in a third library, `Exports`, so a Lean project that imports the specification gets no `@[export]` symbol.
-A new domain with exports adds its export root to the `Exports` library.
+A new domain with exports adds its export tree to the `globs` of the `Exports` library in `lakefile.lean`.
+A new module under `Base/Exports/` is listed there by name, since the conversion core of that tree belongs to another library.
+Keep `EthLib.Exports` as its only root so that it remains a native plugin.
 
-These three libraries form one package, `EthLib`.
+The Python conversion core and its law proofs form `PythonConversions`, which both the exports and the remaining proofs can import without a cycle between native libraries.
+Its law module lives under `Base/Proofs/Exports/` and enters the exports through `meta import`, so its object does not link into the Python extension.
+
+These four libraries form one package, `EthLib`.
 A property or a model may import Mathlib, Batteries or VCVio, and it goes in `EthLib/<Domain>/Proofs/<Module>/` like any other property.
 Among the properties, only a refinement module imports a model directly, as [`ARCHITECTURE.md`](ARCHITECTURE.md#three-kinds-of-content) explains.
 The specification and the exports import nothing beyond the Lean toolchain.
@@ -91,6 +96,9 @@ The specification and the exports import nothing beyond the Lean toolchain.
 - Name things after the specification.
   If the paper calls it the randomizer, the code does too.
   If `consensus-specs` calls it `process_slots`, so does the code, in Lean's casing.
+- Write the digits of a new name in ASCII, such as `h1`, `x0` and `w2`, not `h₁`, `x₀` and `w₂`.
+  Names that Lean, Mathlib or VCVio define, such as `mul_inv_cancel₀`, keep their own spelling.
+  Prose writes powers and indices in ASCII too, as [WRITING.md](WRITING.md#mathematical-and-technical-conventions) says.
 - Reject malformed input at the boundary with a typed error.
   Do not truncate or pad it, and do not replace it silently with a default.
 - Put invariants in types, such as `Vector` lengths and `Fin` bounds.
@@ -117,7 +125,8 @@ The specification and the exports import nothing beyond the Lean toolchain.
   For a loop that can stop early, prefer `foldlM` in `Option` or `Except`.
   This is advice, not a rule: a loop whose speed matters can keep `do`.
 - Prefer an `Except` `do` block for a chain of steps that can fail, so that it reads like the source.
-  In proofs, prefer `bind_ok_iff` and the other lemmas of `EthLib/Base/Except.lean` to unfolding the chain into nested `match` expressions.
+  In proofs, prefer the success and failure lemmas to unfolding the chain into nested `match` expressions.
+  `bind_ok_iff` is in `EthLib.Base.Except`, and the other lemmas are in `EthLib.Base.Proofs.Except`.
 - A small decidable fact that [Known answers](#known-answers) allows, such as a constant checked against its algorithm, evaluates a definition in the kernel.
   That definition needs a recursion that the kernel can reduce.
   `decide` and `rfl` need structural recursion or fuel, because Lean makes a well-founded definition irreducible.
@@ -404,6 +413,44 @@ A new site is fixed, never added to the list.
 
 When you change the check, also run `scripts/test_check_accessors.sh`.
 
+Then check which theorems the specification keeps:
+
+```bash
+lake exe check-theorems
+uv run --no-project --python 3.12 python scripts/check_theorems_baseline.py --base origin/master
+```
+
+The check follows the dependencies of definitions, instances and persistent `@[simp]` theorems.
+It reads private proof terms and resolved references from Lean's `.ilean` files, including named lemmas that simplification erases from a proof term.
+Helpers of retained theorems stay with their consumers.
+The `.ilean` references can miss a lemma named only in a tactic macro; review those dependencies before moving a reported theorem.
+The attribute guard permits `simp`, `deprecated` and `inherit_doc`.
+Deprecation and documentation metadata do not retain an otherwise unused theorem.
+An unsupported persistent attribute written on a theorem or in an `attribute` command stops the check.
+Review custom command macros for attributes they generate, since the source guard does not expand them.
+Other theorems belong under `Proofs/`, as [`ARCHITECTURE.md`](ARCHITECTURE.md#where-a-new-module-goes) explains.
+
+To inspect the findings and their source locations, run `lake exe check-theorems --list`.
+It prints tab-separated columns for the defining module, theorem name, source path and first and last lines.
+
+`scripts/check_theorems_baseline.txt` lists the findings awaiting migration, and may only shrink.
+A new finding or a stale baseline entry fails the check.
+The baseline check rejects entries added since the base revision, after the initial creation of the file.
+It also rejects removing a baseline that the base revision has.
+For a stacked branch, compare with its actual parent instead of `origin/master`.
+Moving a public theorem can change the imports a downstream project needs, so review that public surface too.
+
+On pull requests, CI compares with the first parent of the merge commit.
+On pushes to an existing branch, it compares with the revision before the whole push and fetches that commit if the checkout lacks it.
+Other runs use `HEAD^1`.
+
+When you change either check, also run its tests:
+
+```bash
+scripts/test_check_theorems.sh
+uv run --no-project --python 3.12 python -m unittest scripts/test_check_theorems_baseline.py
+```
+
 Then check that `SOUNDNESS.md` still holds:
 
 ```bash
@@ -438,7 +485,9 @@ uv run --no-project --python 3.12 python scripts/check_layers.py
 
 It fails on an import that breaks a rule of [`ARCHITECTURE.md`](ARCHITECTURE.md#rules), and on a module that no library root imports.
 An import that must break a rule goes in `scripts/check_layers_baseline.txt`, with the reason in a comment and in the pull request.
-An entry that no longer breaks a rule fails the check, so remove it with the import.
+Each entry starts with the label of the rule that the import breaks, and it allows the import to break only that rule.
+The file lists the labels.
+An entry whose import no longer breaks its rule fails the check, so remove it with the import.
 A new model directory or a new refinement module goes in `coverage/kinds.toml`, which the same check reads, and an entry leaves with its module.
 
 When you add or change a C export that reads a fork name, check that it rejects the forks whose rules EthLib lacks:

@@ -124,7 +124,7 @@ private theorem msmMaxBits_bound {n : Nat} (vals : Vector Nat n) :
   rw [msmMaxBits_eq_foldl]
   exact maxBitsF_bound vals (List.finRange n) 0 ⟨j, hj⟩ (List.mem_finRange _)
 
-/-- The base-`2⁸` digit decomposition that drives the window recomposition.
+/-- The base-`2^8` digit decomposition that drives the window recomposition.
 
 Shifting eight fewer bits is `256·(shift) + window`. -/
 private theorem shift_window (s a : Nat) :

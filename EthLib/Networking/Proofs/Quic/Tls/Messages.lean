@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Except
 public import EthLib.Networking.Quic.Tls.Messages
 public import EthLib.Networking.Proofs.Quic.Tls.Wire
 

@@ -18,9 +18,9 @@ On column parities it is the map `c ↦ c + y c + z y⁻¹ c` over GF(2).
 
 Here `y` moves each column parity to the next column, and `z` rotates a lane by one bit.
 
-Squaring is additive over GF(2), so 64 applications give `1 + y⁶⁴ + z⁶⁴ y⁻⁶⁴`.
+Squaring is additive over GF(2), so 64 applications give `1 + y^64 + z^64 y^(-64)`.
 
-As `z⁶⁴ = 1` and `y⁵ = 1`, that is `1 + y + y⁴`, which mixes columns without rotating.
+As `z^64 = 1` and `y^5 = 1`, that is `1 + y + y^4`, which mixes columns without rotating.
 
 It is injective, so theta is too.
 -/
@@ -223,7 +223,7 @@ theorem columnStep_injective_of_sq {α β : Fin 5} {s : UInt64} (hs : s.toNat �
     Function.Injective (columnStep α β s) := fun c d hcd =>
   h (by rw [← columnStep_columnStep _ _ _ hs, ← columnStep_columnStep _ _ _ hs, hcd])
 
-/-- The map `1 + y + y⁴` on one bit of each column parity is injective. -/
+/-- The map `1 + y + y^4` on one bit of each column parity is injective. -/
 theorem mix_bits_injective (p q : Fin 5 → Bool)
     (h : ∀ x, (p x ^^ p (x + 1) ^^ p (x + 4)) = (q x ^^ q (x + 1) ^^ q (x + 4))) : p = q := by
   revert p q

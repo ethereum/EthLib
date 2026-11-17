@@ -2,11 +2,14 @@ module
 
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.LightClient.Sync
+import EthLib.Serialization.Proofs.Ssz.Type.ValueEquality
 
 /-!
 # Proofs: the light client sync protocol
 
 Each error of the light client has its own code.
+
+Two light client headers with one SSZ value have one beacon header.
 
 An update passes its checks against a store exactly when each check of the protocol holds.
 
@@ -66,6 +69,20 @@ theorem LightClientError.require_ok {condition : Prop} [Decidable condition]
 theorem LightClientError.liftRoot_ok {α : Type} {result : Except Err α} {value : α} :
     liftRoot result = .ok value ↔ result = .ok value := by
   cases result <;> simp [liftRoot, Except.mapError]
+
+/-- Two light client headers with one SSZ value have one beacon header, at every fork. -/
+theorem LightClientHeader.beacon_eq_of_sameSszValue {preset : Preset} {fork : Fork}
+    {first second : LightClientHeader preset fork}
+    (same : sameSszValue first second = true) : first.beacon = second.beacon := by
+  obtain ⟨⟨slot₁, proposer₁, parent₁, state₁, body₁⟩, _, _, _⟩ := first
+  obtain ⟨⟨slot₂, proposer₂, parent₂, state₂, body₂⟩, _, _, _⟩ := second
+  have values := beq_iff_eq.mp same
+  -- The beacon header is the first field, so its five values come first in both sequences.
+  simp only [SszType.toValue, SszFields.toValues, Value.seq.injEq, List.cons.injEq] at values
+  obtain ⟨⟨slot, proposer, parent, state, body, -⟩, -⟩ := values
+  simp only [Value.uint.injEq, Value.bytes.injEq, UInt64.toNat_inj, Vector.toArray_inj]
+    at slot proposer parent state body
+  simp only [slot, proposer, parent, state, body]
 
 /-- No update ranks above itself. -/
 theorem isBetterUpdate_self {preset : Preset} {fork : Fork}

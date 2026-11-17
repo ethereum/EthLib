@@ -48,10 +48,6 @@ open EthLib.Cryptography.Sphincs.Constants
 
 variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
-/-- No layer is taller than the top one. -/
-theorem Layer.height_le (layer : Layer) : layer.height ≤ TOP_HEIGHT := by
-  cases layer <;> decide
-
 /-! ## Nodes -/
 
 /-- The parent at index `j` and height `z` of tree `tree` of a layer, from its two children. -/

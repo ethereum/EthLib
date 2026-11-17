@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Execution.Exports.Network
 public import EthLib.Execution.Network.Session
 public import EthLib.Execution.Network.Snap

@@ -25,6 +25,8 @@ SETTING = re.compile(
     r"^[ \t]+(requiresModuleSystem|precompileModules|platformIndependent) := (true|false)$",
     re.MULTILINE,
 )
+FACETS = re.compile(r"defaultFacets\s*:=\s*#\[(.*?)\]")
+FACET_NAMES = {"leanArts": "leanArts", "staticExport": "static.export"}
 FIXTURE_ROOTS = {
     "EthLib": ["EthLib"],
     "Proofs": ["EthLib.Base.Proofs"],
@@ -33,13 +35,18 @@ FIXTURE_ROOTS = {
 
 
 def default_libraries():
-    """Map each default library of `lakefile.lean` to its boolean settings."""
+    """Map each default library of `lakefile.lean` to its build settings."""
     text = (ROOT / "lakefile.lean").read_text()
-    return {
-        match.group(2): dict(SETTING.findall(match.group(3)))
-        for match in LIBRARY.finditer(text)
-        if match.group(1)
-    }
+    libraries = {}
+    for match in LIBRARY.finditer(text):
+        if not match.group(1):
+            continue
+        settings = dict(SETTING.findall(match.group(3)))
+        if facets := FACETS.search(match.group(3)):
+            names = re.findall(r"LeanLib\.(\w+)Facet", facets.group(1))
+            settings["defaultFacets"] = json.dumps([FACET_NAMES[name] for name in names])
+        libraries[match.group(2)] = settings
+    return libraries
 
 
 class BuildPipelineTests(unittest.TestCase):

@@ -9,7 +9,7 @@
 # It also fails on a model that names no module, or that sits outside a Proofs directory.
 # It fails on a refinement entry that does not exist, is of the wrong kind, or reaches no model.
 # A module that only gathers imports, an aggregator and a model are exempt from the rule.
-# An import listed in scripts/check_layers_baseline.txt passes, each one with its reason.
+# An import listed in scripts/check_layers_baseline.txt under the label `model` passes, each one with its reason.
 
 models = [
   # Casper FFG, LMD-GHOST, the payload tree of Gloas, the network and the stake.

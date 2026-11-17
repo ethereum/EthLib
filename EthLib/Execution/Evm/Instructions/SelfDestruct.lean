@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Measure
-public import EthLib.Execution.Evm.Call.TransferLog
+public import EthLib.Execution.Evm.TransferLog
 
 /-!
 # `Evm.Instructions.SelfDestruct`

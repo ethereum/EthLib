@@ -5,6 +5,7 @@ public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.PayloadTimeliness
 public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Time
+public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 
 /-!
 # Proofs: the balance-weighted selection and the payload timeliness committee
@@ -554,7 +555,6 @@ theorem getPtc_initializePtcWindow {config : Config} {state : BeaconState preset
   have moved : ptcWindowPosition config
       { state with ptcWindow := fun _ => .ofVector committees } other =
       .ok position := positionOk
-  have read : (RootedVector.ofVector committees).elements = committees := rfl
-  simp [getPtc, moved, read, bind, Except.bind, pure, Except.pure, inRange]
+  simp [getPtc, moved, bind, Except.bind, pure, Except.pure, inRange]
 
 end EthLib.Consensus

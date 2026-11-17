@@ -391,7 +391,7 @@ private theorem getNextSyncCommitteeIndices_ok {state : BeaconState preset fork}
 private theorem aggregatePubkeys_ok {pubkeys : Array Cryptography.Bls.BLSPubkey}
     (nonempty : pubkeys.size ≠ 0)
     (valid : ∀ pubkey ∈ pubkeys,
-      ∃ point, Cryptography.Bls.G1.keyValidatePoint (packBytes pubkey) = .ok point) :
+      ∃ point, Cryptography.Bls.G1.keyValidatePoint pubkey = .ok point) :
     ∃ aggregate, aggregatePubkeys pubkeys = .ok aggregate := by
   obtain ⟨sum, folded⟩ : ∃ sum, pubkeys.zipIdx.foldlM Cryptography.Bls.Signatures.addPubkeyPoint
       Cryptography.Bls.G1.zero = .ok sum := by
@@ -417,7 +417,7 @@ theorem getNextSyncCommittee_ok {state : BeaconState preset fork}
       2 ^ 64)
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     (keys : ∀ validator ∈ state.validators.data,
-      ∃ point, Cryptography.Bls.G1.keyValidatePoint (packBytes validator.pubkey) = .ok point)
+      ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point)
     (few : state.validators.data.size ≤ 2 ^ 40)
     (ends : SyncDrawEnds state (getCurrentEpoch state + 1))
     (members : preset.SYNC_COMMITTEE_SIZE ≠ 0) :
@@ -463,7 +463,7 @@ The draw for the next epoch ends: an assumption, not a bound. -/
 structure SyncDrawable (state : BeaconState preset fork) : Prop where
   /-- Every key of the registry passes key validation. -/
   keys : ∀ validator ∈ state.validators.data,
-    ∃ point, Cryptography.Bls.G1.keyValidatePoint (packBytes validator.pubkey) = .ok point
+    ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point
   /-- The registry holds at most `2^40` validators. -/
   few : state.validators.data.size ≤ 2 ^ 40
   /-- The draw for the next epoch ends. -/

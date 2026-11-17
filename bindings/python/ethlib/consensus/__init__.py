@@ -386,11 +386,14 @@ ResponseSidecar: TypeAlias = tuple[int, bytes, int]
 ResponseEnvelope: TypeAlias = tuple[int, bytes, bytes, bytes]
 # An inclusion list: its slot, its validator index and its dependent root.
 ResponseInclusionList: TypeAlias = tuple[int, int, bytes]
+# A light client update: the slot of its attested header and the fork of its chunk.
+ResponseLightClientUpdate: TypeAlias = tuple[int, str]
 ResponseItems: TypeAlias = (
     Sequence[ResponseBlock]
     | Sequence[ResponseSidecar]
     | Sequence[ResponseEnvelope]
     | Sequence[ResponseInclusionList]
+    | Sequence[ResponseLightClientUpdate]
 )
 
 
@@ -404,7 +407,7 @@ def reqresp_is_valid_response(
 ) -> bool:
     """Whether the items of a response are valid for the SSZ request of a protocol ID at a fork."""
     # The committee counts only for inclusion lists, as the validator of each seat.
-    native_items: list[tuple[int | bytes, ...]] = list(items)
+    native_items: list[tuple[int | bytes | str, ...]] = list(items)
     return _native.consensus_reqresp_response_valid(
         name, fork, protocol, request, native_items, list(committee)
     )
@@ -2331,6 +2334,7 @@ __all__ = [
     "ResponseSidecar",
     "ResponseEnvelope",
     "ResponseInclusionList",
+    "ResponseLightClientUpdate",
     "ResponseItems",
     "reqresp_is_valid_response",
     "compute_subnet_for_attestation",

@@ -27,7 +27,7 @@ theorem validateKzgG1_eq_validateKzgG1Point (b : Bytes48) :
   split
   · rfl
   · rw [Bls.G1.keyValidate]
-    cases Bls.G1.keyValidatePoint ⟨b.toArray⟩ <;> rfl
+    cases Bls.G1.keyValidatePoint b <;> rfl
 
 /-- A successful `validateKzgG1Point` implies that `validateKzgG1` holds on the input bytes.
 

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Hex
 public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Ssz.Codec.Json
 

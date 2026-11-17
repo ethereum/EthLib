@@ -594,16 +594,6 @@ Finalized-prefix compatibility and nonzero state roots of held blocks are assume
 theorem Execution.mem_supportersOf_of_duty_interval_core {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
-    (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
-      assignment.committee v slot = some committeeIndex →
-      IsAttestationDeadline fork config genesisTimeMs slot deadline →
-      e.startTime ≤ deadline → deadline ≤ time →
-      ∃ n attestation indexed, VoteAt e v slot committeeIndex deadline n attestation indexed ∧
-        ∀ withTarget targetState,
-          ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
-            .ok withTarget →
-          withTarget.checkpointState attestation.data.target = .ok targetState →
-          checkAttestationCommittees targetState attestation = .ok ())
     (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e time)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -618,6 +608,7 @@ theorem Execution.mem_supportersOf_of_duty_interval_core {Δ : ℕ} (sync : e.Sy
       ∀ (r : Root) (b : BeaconBlock preset fork),
         ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
     {begin next : Slot} {beginTime endTime : UInt64}
+    (votes : VotesInSlots e begin next)
     (beginTimeOk : computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime)
     (endTimeOk : computeTimeAtSlotMs config genesisTimeMs next = .ok endTime)
     (fresh : first ≤ beginTime.toNat) (complete : endTime.toNat ≤ time) {root : Root}
@@ -725,16 +716,6 @@ Finalized-prefix compatibility and nonzero state roots of held blocks are assume
 private theorem Execution.mem_supportersOf_of_duty_epoch_core {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
-    (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
-      assignment.committee v slot = some committeeIndex →
-      IsAttestationDeadline fork config genesisTimeMs slot deadline →
-      e.startTime ≤ deadline → deadline ≤ time →
-      ∃ n attestation indexed, VoteAt e v slot committeeIndex deadline n attestation indexed ∧
-        ∀ withTarget targetState,
-          ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
-            .ok withTarget →
-          withTarget.checkpointState attestation.data.target = .ok targetState →
-          checkAttestationCommittees targetState attestation = .ok ())
     (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e time)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -749,6 +730,7 @@ private theorem Execution.mem_supportersOf_of_duty_epoch_core {Δ : ℕ} (sync :
       ∀ (r : Root) (b : BeaconBlock preset fork),
         ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
     {epoch : Epoch} {begin next : Slot} {beginTime endTime : UInt64}
+    (votes : VotesInSlots e begin next)
     (_beginOk : computeStartSlotAtEpoch preset epoch = .ok begin)
     (_nextOk : addChecked begin preset.SLOTS_PER_EPOCH = .ok next)
     (beginTimeOk : computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime)
@@ -787,8 +769,8 @@ private theorem Execution.mem_supportersOf_of_duty_epoch_core {Δ : ℕ} (sync :
     ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ time ∧ (e.world m).time ≤ time ∧
       ∃ root collision, Store.findBlockCollision ((e.world n).state u)
         ((e.world m).state v) [root] = some collision :=
-  e.mem_supportersOf_of_duty_interval_core sync slots preGloas admitted votes fits prompt
-    anchored anchorSlot anchorBoundary start started chain nonzero beginTimeOk endTimeOk fresh
+  e.mem_supportersOf_of_duty_interval_core sync slots preGloas admitted fits prompt
+    anchored anchorSlot anchorBoundary start started chain nonzero votes beginTimeOk endTimeOk fresh
     complete safe receiver atTime upToDate known rootFinal honest active duty
 
 private theorem justified_epoch_in_horizon {anchor : Store preset fork} {time : ℕ} {horizon : Epoch}
@@ -851,16 +833,6 @@ Finalized-prefix compatibility and nonzero state roots of held blocks are assume
 theorem Execution.mem_supportersOf_of_duty_epoch {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
-    (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
-      assignment.committee v slot = some committeeIndex →
-      IsAttestationDeadline fork config genesisTimeMs slot deadline →
-      e.startTime ≤ deadline → deadline ≤ time →
-      ∃ n attestation indexed, VoteAt e v slot committeeIndex deadline n attestation indexed ∧
-        ∀ withTarget targetState,
-          ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
-            .ok withTarget →
-          withTarget.checkpointState attestation.data.target = .ok targetState →
-          checkAttestationCommittees targetState attestation = .ok ())
     (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e time)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -883,6 +855,7 @@ theorem Execution.mem_supportersOf_of_duty_epoch {Δ : ℕ} (sync : e.Synchronou
       ∀ (r : Root) (b : BeaconBlock preset fork),
         ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
     {epoch : Epoch} {begin next : Slot} {beginTime endTime : UInt64}
+    (votes : VotesInSlots e begin next)
     (beginOk : computeStartSlotAtEpoch preset epoch = .ok begin)
     (nextOk : addChecked begin preset.SLOTS_PER_EPOCH = .ok next)
     (beginTimeOk : computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime)
@@ -921,10 +894,10 @@ theorem Execution.mem_supportersOf_of_duty_epoch {Δ : ℕ} (sync : e.Synchronou
     ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ time ∧ (e.world m).time ≤ time ∧
       ∃ root collision, Store.findBlockCollision ((e.world n).state u)
         ((e.world m).state v) [root] = some collision := by
-  exact e.mem_supportersOf_of_duty_epoch_core sync slots preGloas admitted votes fits prompt
+  exact e.mem_supportersOf_of_duty_epoch_core sync slots preGloas admitted fits prompt
     anchored anchorSlot anchorBoundary start started
     (finalized_prefix_of_chain anchored sound start slots anchorSlot chain inHorizon)
-    nonzero beginOk nextOk beginTimeOk endTimeOk fresh complete safe receiver atTime
+    nonzero votes beginOk nextOk beginTimeOk endTimeOk fresh complete safe receiver atTime
     upToDate known rootFinal honest active duty
 
 end EthLib.Consensus.Models.Network
@@ -1135,16 +1108,6 @@ Finalized-prefix compatibility, nonzero state roots and the absent anchor parent
 private theorem Execution.isAncestor_getHead_of_duty_epoch_core {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
-    (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
-      assignment.committee v slot = some committeeIndex →
-      IsAttestationDeadline fork config genesisTimeMs slot deadline →
-      e.startTime ≤ deadline → deadline ≤ time →
-      ∃ n attestation indexed, VoteAt e v slot committeeIndex deadline n attestation indexed ∧
-        ∀ withTarget targetState,
-          ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
-            .ok withTarget →
-          withTarget.checkpointState attestation.data.target = .ok targetState →
-          checkAttestationCommittees targetState attestation = .ok ())
     (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e time)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -1191,6 +1154,7 @@ private theorem Execution.isAncestor_getHead_of_duty_epoch_core {Δ : ℕ} (sync
       computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime ∧
       computeTimeAtSlotMs config genesisTimeMs next = .ok endTime ∧
       first ≤ beginTime.toNat ∧ endTime.toNat ≤ time ∧
+      VotesInSlots e begin next ∧
       Models.stake (fun v => balanceAt state v.toNat)
           ((unslashedActiveBalances state).map (·.1)).toFinset +
           ((e.world k).state w).boostScore config <
@@ -1227,7 +1191,7 @@ private theorem Execution.isAncestor_getHead_of_duty_epoch_core {Δ : ℕ} (sync
   simp only [bind_ok_iff] at parentRead
   obtain ⟨parent, parentOk, _⟩ := parentRead
   obtain ⟨epoch, begin, next, beginTime, endTime, beginOk, nextOk, beginTimeOk, endTimeOk,
-    fresh, complete, majority⟩ := margin
+    fresh, complete, votes, majority⟩ := margin
   apply Store.isAncestor_getHead_of_duty_support
     (fun v => ∃ slot committeeIndex, begin ≤ slot ∧ slot < next ∧
       assignment.committee v slot = some committeeIndex)
@@ -1235,8 +1199,8 @@ private theorem Execution.isAncestor_getHead_of_duty_epoch_core {Δ : ℕ} (sync
     (coverage.resolve_left covered) known (Store.block_ok_iff.mp parentOk) parentAbove ?_
     majority headOk
   intro v active honest duty
-  rcases e.mem_supportersOf_of_duty_epoch_core sync slots preGloas admitted votes fits prompt
-    anchored anchorSlot anchorBoundary start started chain nonzero beginOk nextOk
+  rcases e.mem_supportersOf_of_duty_epoch_core sync slots preGloas admitted fits prompt
+    anchored anchorSlot anchorBoundary start started chain nonzero votes beginOk nextOk
     beginTimeOk endTimeOk fresh complete safe receiver atTime upToDate known
     (fun j le _ _ => Or.inl (rootFinal j le)) honest active duty with support | found
   · exact support.resolve_right covered
@@ -1255,16 +1219,6 @@ Finalized-prefix compatibility, nonzero state roots and the absent anchor parent
 theorem Execution.isAncestor_getHead_of_duty_epoch {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
-    (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
-      assignment.committee v slot = some committeeIndex →
-      IsAttestationDeadline fork config genesisTimeMs slot deadline →
-      e.startTime ≤ deadline → deadline ≤ time →
-      ∃ n attestation indexed, VoteAt e v slot committeeIndex deadline n attestation indexed ∧
-        ∀ withTarget targetState,
-          ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
-            .ok withTarget →
-          withTarget.checkpointState attestation.data.target = .ok targetState →
-          checkAttestationCommittees targetState attestation = .ok ())
     (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e time)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -1319,6 +1273,7 @@ theorem Execution.isAncestor_getHead_of_duty_epoch {Δ : ℕ} (sync : e.Synchron
       computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime ∧
       computeTimeAtSlotMs config genesisTimeMs next = .ok endTime ∧
       first ≤ beginTime.toNat ∧ endTime.toNat ≤ time ∧
+      VotesInSlots e begin next ∧
       Models.stake (fun v => balanceAt state v.toNat)
           ((unslashedActiveBalances state).map (·.1)).toFinset +
           ((e.world k).state w).boostScore config <
@@ -1332,7 +1287,7 @@ theorem Execution.isAncestor_getHead_of_duty_epoch {Δ : ℕ} (sync : e.Synchron
       ∃ root collision, Store.findBlockCollision ((e.world n).state u)
         ((e.world m).state v) [root] = some collision := by
   classical
-  exact e.isAncestor_getHead_of_duty_epoch_core sync slots preGloas admitted votes fits prompt
+  exact e.isAncestor_getHead_of_duty_epoch_core sync slots preGloas admitted fits prompt
     anchored anchorSlot anchorBoundary start started
     (finalized_prefix_of_chain anchored sound start slots anchorSlot chain inHorizon)
     nonzero anchorParent safe parentSafe receiver atTime upToDate known stateOk tree
@@ -1370,16 +1325,6 @@ With enough churn since the anchor, the evidence holds with no accountable key. 
 theorem Execution.mem_supportersOf_of_duty_epoch_or_accountable {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
-    (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
-      assignment.committee v slot = some committeeIndex →
-      IsAttestationDeadline fork config genesisTimeMs slot deadline →
-      e.startTime ≤ deadline → deadline ≤ time →
-      ∃ n attestation indexed, VoteAt e v slot committeeIndex deadline n attestation indexed ∧
-        ∀ withTarget targetState,
-          ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
-            .ok withTarget →
-          withTarget.checkpointState attestation.data.target = .ok targetState →
-          checkAttestationCommittees targetState attestation = .ok ())
     (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e time)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -1414,6 +1359,7 @@ theorem Execution.mem_supportersOf_of_duty_epoch_or_accountable {Δ : ℕ} (sync
       ∀ (r : Root) (b : BeaconBlock preset fork),
         ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
     {epoch : Epoch} {begin next : Slot} {beginTime endTime : UInt64}
+    (votes : VotesInSlots e begin next)
     (beginOk : computeStartSlotAtEpoch preset epoch = .ok begin)
     (nextOk : addChecked begin preset.SLOTS_PER_EPOCH = .ok next)
     (beginTimeOk : computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime)
@@ -1477,9 +1423,10 @@ theorem Execution.mem_supportersOf_of_duty_epoch_or_accountable {Δ : ℕ} (sync
   rcases e.finalized_prefix_or_accountable anchored start parameters genesis pre anchorSlot
       anchorBoundary anchorNonzero anchorParent bounded early enough heldEnough with
     chain | evidence
-  · exact .inl (e.mem_supportersOf_of_duty_epoch_core sync slots preGloas admitted votes fits prompt
-      anchored anchorSlot anchorBoundary start started chain nonzero beginOk nextOk beginTimeOk
-      endTimeOk fresh complete safe receiver atTime upToDate known rootFinal honest active duty)
+  · exact .inl (e.mem_supportersOf_of_duty_epoch_core sync slots preGloas admitted fits prompt
+      anchored anchorSlot anchorBoundary start started chain nonzero votes beginOk nextOk
+      beginTimeOk endTimeOk fresh complete safe receiver atTime upToDate known rootFinal
+      honest active duty)
   · exact .inr evidence
 
 open scoped Classical in
@@ -1495,16 +1442,6 @@ With enough churn since the anchor, the evidence holds with no accountable key. 
 theorem Execution.isAncestor_getHead_of_duty_epoch_or_accountable {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
-    (votes : ∀ v ∈ J, ∀ slot committeeIndex deadline,
-      assignment.committee v slot = some committeeIndex →
-      IsAttestationDeadline fork config genesisTimeMs slot deadline →
-      e.startTime ≤ deadline → deadline ≤ time →
-      ∃ n attestation indexed, VoteAt e v slot committeeIndex deadline n attestation indexed ∧
-        ∀ withTarget targetState,
-          ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
-            .ok withTarget →
-          withTarget.checkpointState attestation.data.target = .ok targetState →
-          checkAttestationCommittees targetState attestation = .ok ())
     (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e time)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -1569,6 +1506,7 @@ theorem Execution.isAncestor_getHead_of_duty_epoch_or_accountable {Δ : ℕ} (sy
       computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime ∧
       computeTimeAtSlotMs config genesisTimeMs next = .ok endTime ∧
       first ≤ beginTime.toNat ∧ endTime.toNat ≤ time ∧
+      VotesInSlots e begin next ∧
       Models.stake (fun v => balanceAt state v.toNat)
           ((unslashedActiveBalances state).map (·.1)).toFinset +
           ((e.world k).state w).boostScore config <
@@ -1607,7 +1545,7 @@ theorem Execution.isAncestor_getHead_of_duty_epoch_or_accountable {Δ : ℕ} (sy
   rcases e.finalized_prefix_or_accountable anchored start parameters genesis pre anchorSlot
       anchorBoundary anchorNonzero anchorParent bounded early enough heldEnough with
     chain | evidence
-  · exact .inl (e.isAncestor_getHead_of_duty_epoch_core sync slots preGloas admitted votes fits
+  · exact .inl (e.isAncestor_getHead_of_duty_epoch_core sync slots preGloas admitted fits
       prompt
       anchored anchorSlot anchorBoundary start started chain nonzero anchorParent safe parentSafe
       receiver atTime upToDate known stateOk tree coverage margin headOk)

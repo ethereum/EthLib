@@ -16,6 +16,58 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the theorems of the `Toolchain` proof modules move to sub-namespaces, and the theorems that repeat them are removed ([#2627](https://github.com/ethereum/EthLib/issues/2627)).
+  `Base.Toolchain.mkObj_eq`, `isNull_eq`, the `isNull` theorem of each constructor, and `getArr?_eq`, `getStr?_eq`, `getNat?_eq`, `getBool?_eq` and `getObjVal?_eq` move to `Base.Toolchain.Json`.
+  `Base.Toolchain.compare_eq` becomes `Base.Toolchain.String.compare_eq`, and `filterM_eq`, `filterAuxM_nil` and `filterAuxM_cons` move to `Base.Toolchain.List`.
+  `EthLib.Base.Proofs.Toolchain.Repr` is removed; import `EthLib.Base.Proofs.Nat` and use `Base.digitChar_eq` in place of `Base.Toolchain.digitChar_eq`.
+  `Serialization.JsonRpc.isNull_str` and `isNull_arr` are removed; use `Base.Toolchain.Json.isNull_str` and `isNull_arr`.
+  `Tls13.size_toUTF8` is removed; use `String.toUTF8_eq_toByteArray` and `String.size_toByteArray`.
+  Statements are unchanged.
+  The `isNull` theorems on `Json.null`, `bool`, `str`, `arr`, `obj` and `mkObj` are now `@[simp]` rules, so `simp` can close goals that it left open before.
+  Each entry of `scripts/check_layers_baseline.txt` now starts with the label of the rule that it allows.
+
+- In Lean, the Python conversion laws and properties move from `EthLib.Base.Exports.Proofs.PyValue` to `EthLib.Base.Proofs.Exports.PyValue` ([#2630](https://github.com/ethereum/EthLib/issues/2630)).
+  Update imports for `pyExport_items` and the hexadecimal conversion theorems; their statements are unchanged.
+  `EthLib.Base.Exports.PyValue` imports the law instances at compile time, and `pyExport` keeps the same law constraints.
+  The Python extension links only runtime dependencies and preserves C exports and runtime initializers as public native symbols.
+  The linker hides EthLib's compile-time and legacy initializers and discards their unused sections.
+  C callers that initialize the extension through an `initialize_EthLib_*` symbol must use the corresponding `runtime_initialize_EthLib_*` symbol or import the Python module.
+
+- In Lean, the honest-duty supporter and head theorems use `VotesInSlots` for one complete epoch, including their accountable companions.
+  For `Execution.mem_supportersOf_of_duty_epoch` and its accountable companion, pass the scoped votes after the epoch and slot binders, before `beginOk`.
+  For `Execution.isAncestor_getHead_of_duty_epoch` and its accountable companion, include the scoped votes inside the `margin` existential, after the time bounds and before the stake inequality.
+  For `Execution.exists_voteAt_of_duty_interval`, bind `begin`, `last` and `slot` before the scoped votes, and supply `beginTime` and `endTime` after `fits`.
+  `VotesInSlots` couples `VoteAt` and `VoteCommittees` on the same witness; the latter requires the committee check only after successful target-cache reads.
+  Conclusions and the existing unbounded `Votes` definition are unchanged.
+
+- In Lean, the compressed encoding of a point of `G1` has its 48 bytes in its type ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  `G1.compress` returns a `Vector UInt8 48`, and `G1.uncompress`, `G1.keyValidatePoint` and `G1.keyValidate` take one.
+  A caller that holds bytes of another length reads them with `exactBytes? 48`, now in `EthLib.Base`, and rejects `none` as decompression did.
+  `G1.size_compress` and `keyValidatePoint_size_ne` are removed, since the type states the length.
+  `G1.uncompress_ok_cases` no longer states the size, and `uncompress_ok_cases_bytes` and `uncompress_eq_zero_or_bytes` state its facts on the bytes of the input.
+  `TrustedSetup.decodeG1` and `TrustedSetup.decodeG2` decode one point of a setup, and the theorems on decoded setups state their facts through them.
+  `Signatures.keyMessagePair` is the pair of one key and one message in the core aggregate verification.
+  `coreVerify_iff` takes the key as a vector, and `packBytes_pointToPubkey` and `packBytes_skToPk` become `pointToPubkey_eq` and `skToPk_eq`.
+  `SyncDrawable.keys` states key validation of each key as a vector.
+  No C export or Python function changes.
+
+- In Lean, `EthLib.Execution.Exports.Proofs.Evm` and `EthLib.Execution.Exports.Proofs.Trie` move to `EthLib.Execution.Proofs.Exports.Evm` and `EthLib.Execution.Proofs.Exports.Trie` ([#2630](https://github.com/ethereum/EthLib/issues/2630)).
+  Declaration names and statements are unchanged; update the imports.
+  Consumers that received these theorems through an `Exports` root must import the relevant proof module or `EthLib.Execution.Proofs`.
+
+- In Lean, `Evm.Call.TransferLog` becomes `Evm.TransferLog`, and the XMSS security modules `XmssSecurity.Scan.*` move to `XmssSecurity.Proof.Scan.*` ([#2629](https://github.com/ethereum/EthLib/pull/2629)).
+  The import checker now finds a cycle between directories through imports at any depth, and these moves break the two such cycles that remained.
+  Declaration names, namespaces and statements are unchanged; update the imports.
+
+- In Lean, specification modules keep only the theorems that their definitions and instances need, plus persistent `@[simp]` rules ([#2628](https://github.com/ethereum/EthLib/pull/2628)).
+  55 theorems move to the matching `Proofs` modules.
+  In Base, two move from `Base.BigEndian` to `Base.Proofs.BigEndian`, five from `Base.Except` to `Base.Proofs.Except`, and one from `Base.Hex` to `Base.Proofs.Hex`.
+  In Cryptography, twelve move from `Cryptography.Montgomery` to `Cryptography.Proofs.Montgomery.Core`, and one each from `Hash.Scrypt` and `Sphincs.Tree` to `Proofs.Hash.Scrypt` and `Proofs.Sphincs.Tree`.
+  The XMSS and SPHINCS+ constants follow: ten move from `Xmss.Constants` to `Proofs.Xmss.Constants`, and twenty-one from `Sphincs.Constants` to `Proofs.Sphincs.Constants`.
+  In Execution, one moves from `Evm.Step` to `Proofs.Evm.Step`, and in Serialization, one from `Ssz.Typed.Rooted` to `Proofs.Ssz.Typed.Rooted`.
+  The SSZ export proofs `EthLib.Serialization.Exports.Proofs.Ssz` become `EthLib.Serialization.Proofs.Exports.Ssz`, and `EthLib.Serialization.Exports` no longer imports them.
+  Declaration names and statements are unchanged; add the `Proofs` imports.
+
 - Fork-choice replay returns a nonempty list of handler outcomes for each input step ([#2622](https://github.com/ethereum/EthLib/pull/2622)).
   An admitted block's first outcome reports admission; the rest report its attestations and attester slashings, in order.
   Carried operations run only for an admitted block, so a rejected block gives one outcome, its error.

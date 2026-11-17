@@ -3,8 +3,7 @@ module
 public import EthLib.Engine.NewPayload
 public import EthLib.Engine.Proofs.Block
 public import EthLib.Engine.Proofs.Json
--- Showing that a written payload is not `null` unfolds the null test of Lean's JSON.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: the checks of `engine_newPayload`
@@ -535,7 +534,7 @@ theorem newPayloadOnChain_of_stateTransition_error {transition : TransitionConfi
 /-! ## The writer of the parameters -/
 
 open EthLib.Serialization.JsonRpc (listJson dataJson array fixed bytes array_listJson
-  fixed_dataJson bytes_hexString isNull_arr isNull_str) in
+  fixed_dataJson bytes_hexString) in
 /-- The decoder reads back an array of a decodable payload, then the values of the version. -/
 private theorem newPayloadParams_arr {version : Nat} {pj : Lean.Json} {any : Json.AnyPayload}
     {amsterdam : Option (ByteArray × UInt64)} (hv : 1 ≤ version ∧ version ≤ 5)
@@ -561,9 +560,10 @@ private theorem newPayloadParams_arr {version : Nat} {pj : Lean.Json} {any : Jso
     exact congrArg Except.ok (ByteArray.ext (Array.toList_inj.mp (by simp)))
   have hb : fixed "parentBeaconBlockRoot" 32 (dataJson beaconRoot.toList) = .ok beaconRoot :=
     fixed_dataJson _ beaconRoot false
-  have nh : (listJson (dataJson ·.toList) hashes).isNull = false := isNull_arr _
-  have nr : (listJson (dataJson ·.data.toList) requests).isNull = false := isNull_arr _
-  have nb : (dataJson beaconRoot.toList).isNull = false := isNull_str _
+  have nh : (listJson (dataJson ·.toList) hashes).isNull = false := Base.Toolchain.Json.isNull_arr _
+  have nr : (listJson (dataJson ·.data.toList) requests).isNull = false :=
+    Base.Toolchain.Json.isNull_arr _
+  have nb : (dataJson beaconRoot.toList).isNull = false := Base.Toolchain.Json.isNull_str _
   obtain rfl | rfl | rfl | rfl | rfl :
       version = 1 ∨ version = 2 ∨ version = 3 ∨ version = 4 ∨ version = 5 := by omega
   -- What is left binds values that already read back.
@@ -630,7 +630,9 @@ theorem newPayloadParams_json_of_structure {fork : Fork} {version : Nat}
       exact layout hlt
     have hp : payloadParam version (Json.executionPayloadJson payload) = .ok (any, none) :=
       (payloadParam_eq_ok_iff_of_lt hlt).mpr ⟨hj, hs, rfl⟩
-    exact ⟨any, newPayloadParams_arr hv rfl hp hashes beaconRoot requests, hat⟩
+    exact ⟨any,
+      newPayloadParams_arr hv (Base.Toolchain.Json.isNull_mkObj _) hp hashes beaconRoot requests,
+      hat⟩
   | some x =>
     -- Version 5 reads the structure of version 4, from Dencun on.
     obtain ⟨accessList, slot⟩ := x
@@ -640,7 +642,9 @@ theorem newPayloadParams_json_of_structure {fork : Fork} {version : Nat}
     have hp : payloadParam version (Json.executionPayloadV4Json payload accessList slot) =
         .ok (any, some (accessList, slot)) :=
       (payloadParam_eq_ok_iff_of_le h5).mpr ⟨accessList, slot, hj, rfl⟩
-    exact ⟨any, newPayloadParams_arr hv rfl hp hashes beaconRoot requests, hat⟩
+    exact ⟨any,
+      newPayloadParams_arr hv (Base.Toolchain.Json.isNull_mkObj _) hp hashes beaconRoot requests,
+      hat⟩
 
 /-- The decoder of the parameters reads back the JSON of the parameters of a version.
 

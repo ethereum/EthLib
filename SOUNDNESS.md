@@ -301,10 +301,97 @@ Both checks read the index and the deposit root of the claim.
 It holds at every preset and every fork before Heze.
 Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
 
-These other branch checks also hash with SHA-256, and no theorem composes their proofs with the branch bound:
+`Consensus/Proofs/DataAvailability/DataColumnRandomOracle.lean` composes the branch bound with `verifyKzgCommitmentsInclusionProof`, the inclusion check of a list of commitments.
+Data column sidecars and partial data column headers read that check at Fulu and the BPO forks.
+The preset and the fork are fixed before the run, and an adversary outputs two partial data column headers.
+The extraction roots both lists, reads the subtree index of the list in the body as the check does, and climbs both proofs.
+Every hash is an oracle call, and the climbs take the inclusion proof depth of the preset.
+The adversary wins when the headers have one body root and different lists, and both climbs reach that body root.
+Only the forks from Deneb and before Gloas put the list in the body, where the climbs can run.
+A data column sidecar carries the same commitments, proof and block header, and its check reads the same function on them.
+The bound holds for two sidecars as well, but no theorem states it.
 
-- The light client checks of bootstraps and updates, from Altair, and of headers, from Capella.
-- `verifyKzgCommitmentsInclusionProof`, which data column sidecars and partial data column headers read at Fulu.
+`collision_of_extractColumnHeaders` shows that every win leaves two different cached inputs with one answer.
+By `hashTreeRootM_bytes48List` (`Serialization/Proofs/Ssz/BranchRandomOracle.lean`), the root of a list is the perfect tree over the roots of its commitments, with the count mixed in.
+The replay of that tree caches every message it hashes, by `cached_of_subtreeAtM` (`Serialization/Proofs/Ssz/RandomOracle.lean`).
+So `collision_of_hashTreeRootM_bytes48List` finds two such inputs for two different lists with one root, through `CommitmentTree.binding` and `lengthWord_injective`.
+Two different roots that climb to one body root give the inputs that `collision_of_extractBranches` finds.
+`prEvent_experimentWith_le` then gives `prEvent_columnWins_le`, which bounds a win by `Q^2 / N`, and `prEvent_columnWins_le_two_pow` states it with `N = 2^256`.
+`hashTreeRootM_bytes48List_queryBound` shows that the root of a list makes at most `limit + 2^d` queries, where `2^d` is the width of its tree.
+That is one query per commitment, at most `2^d - 1` for the tree by `subtreeAtM_queryBound`, and one for the count.
+`extractColumnHeaders_queryBound` counts both roots and at most `2 * depth` queries for the climbs.
+`experimentWith_extractColumnHeaders_queryBound` adds the adversary's queries, through `experimentWith_queryBound`.
+`prEvent_columnWins_le_of_adversary` states the bound with `Q = q + 2 * (limit + 2^d) + 2 * depth`, for an adversary of `q` queries.
+There `limit` is the most blob commitments of a block, and `depth` is the inclusion proof depth.
+At the mainnet limit of 4096 and depth of 4, `prEvent_columnWins_le_mainnet` bounds a win by `(q + 16392)^2 / 2^256`.
+Beyond the adversary's own queries, `Q` grows with the limit and the depth, not with the commitments that the headers carry.
+The collision lemma, the bounds and the count of the extraction need a fork before Gloas, where the list has a limit.
+From Gloas the list is progressive, and neither a sidecar nor a partial sidecar carries the proof.
+There the body has no list of commitments, so the extraction reads no subtree index and no adversary wins.
+No theorem states this.
+With SHA-256 in place of the oracle, `columnWins_sha256_iff` shows that a win is two such headers that `verifyKzgCommitmentsInclusionProof` accepts.
+It holds at every preset and every fork.
+Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
+
+`Consensus/Proofs/LightClient/SyncCommitteeRandomOracle.lean` composes the branch bound with the committee checks of the light client, from Altair.
+`initializeLightClientStore` proves the current sync committee of a bootstrap by a normalized branch against the state root of its header.
+`validateNextSyncCommitteeBranch` proves the next sync committee of an update the same way, against the attested state root.
+The preset and the generalized index are fixed before the run, and an adversary outputs a state root and two committees with a branch each.
+The extraction roots both committees, and climbs the last nodes of each branch, as many as the depth of the index.
+The adversary wins when the committees differ, both branches end in that many nodes after zero nodes, and both climbs reach the state root.
+
+`collision_of_extractSyncCommittees` shows that every win leaves two different cached inputs with one answer.
+By `hashTreeRootM_syncCommittee`, the root of a committee is one hash of the root of its keys and the root of its aggregate key.
+By `hashTreeRootM_bytes48Vector` (`Serialization/Proofs/Ssz/BranchRandomOracle.lean`), the root of the keys is the perfect tree over the roots of the keys.
+So equal roots of two different committees give two such inputs, which a chase from the root down finds with `collision_or_eq_of_queryHash` and `collision_or_eq_of_hashTreeRootM_bytes48Vector`.
+Two different roots that climb to one state root give the inputs that `collision_of_extractBranches` finds.
+`prEvent_experimentWith_le` then gives `prEvent_syncCommitteeWins_le`, which bounds a win by `Q^2 / N`.
+`extractSyncCommittees_queryBound` shows that the extraction makes at most `2 * (size + 2^d + 1) + 2 * depth` queries, where `2^d` is the width of the tree of keys.
+Each root of a committee takes one query per key and at most `2^d - 1` for the tree, by `hashTreeRootM_bytes48Vector_queryBound`, and two more.
+`experimentWith_extractSyncCommittees_queryBound` adds the adversary's queries, through `experimentWith_queryBound`.
+`prEvent_syncCommitteeWins_le_of_adversary` states the bound with `N = 2^256`, for an adversary of `q` queries.
+At the mainnet size of 512, `prEvent_syncCommitteeWins_le_mainnet` bounds a win by `(q + 2050 + 2 * depth)^2 / 2^256`.
+The depth of both indices is 5 before Electra, 6 from Electra and 11 from Gloas.
+With SHA-256 in place of the oracle, `syncCommitteeWins_sha256_iff` shows that a win is two different committees whose branches `isValidNormalizedMerkleBranch` accepts.
+It needs a committee of at least one member, and holds at every index.
+`syncCommitteeWins_of_initializeLightClientStore` gives such a win for two accepted bootstraps with one state root, one slot and different committees, by `initializeLightClientStore_proves`.
+`syncCommitteeWins_of_validateNextSyncCommitteeBranch` gives one for two updates that pass the committee check, with one attested state root and slot and different next committees, by `validateNextSyncCommitteeBranch_proves`.
+Both read the index of the committee at the slot, as the checks do.
+Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
+
+`Consensus/Proofs/LightClient/FinalityRandomOracle.lean` composes the branch bound with the finality check of the light client, from Altair.
+`validateFinality` proves the finalized header of an update by a normalized branch against the attested state root.
+Its leaf is the root of the beacon header, or zero bytes when that header is at the genesis slot.
+The generalized index is fixed before the run, and an adversary outputs a state root and two beacon headers with a branch each.
+The extraction reads both leaves as the check does, and climbs the last nodes of each branch, as many as the depth of the index.
+The adversary wins when the headers differ, both branches end in that many nodes after zero nodes, and both climbs reach the state root.
+The zero leaf of the genesis slot is no oracle answer.
+A win with a header at that slot also needs two different leaves.
+
+`collision_of_extractFinality` shows that every win leaves two different cached inputs with one answer.
+By `hashTreeRootM_beaconBlockHeader`, the root of a beacon header is seven hashes over its five fields.
+So one leaf of two different headers past genesis gives two such inputs, which a chase from the root down finds with `collision_or_eq_of_queryHash`.
+Two different leaves that climb to one state root give the inputs that `collision_of_extractBranches` finds.
+`prEvent_experimentWith_le` then gives `prEvent_finalityWins_le`, which bounds a win by `Q^2 / N`.
+`extractFinality_queryBound` shows that the extraction makes at most `14 + 2 * depth` queries, seven per leaf and one per climbed node.
+`experimentWith_extractFinality_queryBound` adds the adversary's queries, through `experimentWith_queryBound`.
+`prEvent_finalityWins_le_of_adversary` states the bound with `N = 2^256`, for an adversary of `q` queries.
+The depth of the index is 6 before Electra, 7 from Electra and 9 from Gloas.
+With SHA-256 in place of the oracle, `finalityWins_sha256_iff` shows that a win is two different headers whose branches `isValidNormalizedMerkleBranch` accepts.
+Its leaves are the ones the check reads, and they must differ when a header is at the genesis slot.
+It holds at every index.
+`finalityWins_of_validateFinality` gives such a win for two updates that prove finality and pass `validateFinality`, by `validateFinality_proves`.
+It needs one attested state root and slot, and different finalized headers.
+It reads the index of the finalized root at that slot, as the check does.
+It also needs the root of neither finalized header to be zero bytes.
+That need serves only when one header is at the genesis slot and the other is not.
+Two finalized headers at the genesis slot have one beacon header, since the check holds both to the empty header there, by `validateFinality_beacon_of_genesis` (`Consensus/Proofs/LightClient/Authenticate.lean`).
+A header past genesis whose root is zero bytes would share the leaf of the genesis slot, and no theorem bounds that case.
+Such a header is a preimage of zero bytes under SHA-256.
+Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
+
+`isValidLightClientHeader` checks the execution branch of a header, from Capella, which also hashes with SHA-256.
+No theorem composes that check with the branch bound.
 
 ### leanSPHINCS
 
@@ -554,7 +641,7 @@ So the game counts only messages that were never signed.
 `keyOnlyAdvantage_le_indep` replaces the bijection by independent uniform answers in that game.
 It counts no win once a new answer repeats a cached value in the direction of its query.
 The cost is at most `q (q + 1) / 2` over the size of the bijection's domain, for a forger with at most `q` queries to the bijection or its inverse.
-That is the step from Game G0 to Game G1 of §4.2 of the source, in the proof of its Theorem 2, whose bound `Q² / 2^L` is at least as large.
+That is the step from Game G0 to Game G1 of §4.2 of the source, in the proof of its Theorem 2, whose bound `Q^2 / 2^L` is at least as large.
 The source draws the key from the nonzero scalars; the key-only game here draws it from all scalars, and the key `0` never verifies.
 So its advantage is the source's times `(n - 1) / n`, where `n` is the number of scalars.
 `keyOnlyIndepAdvantage_eq_outside` (`Proofs/Secp256k1/Security/KeyOnlyOutside.lean`) proves that the advantage with independent answers stays the same when each new forward answer is one query to an outside oracle with no input.
@@ -756,7 +843,7 @@ So no run of the ladder can observe the cleared bit 255; only the clamp theorems
 `swap_ladder_decodeScalar` proves that a clamped scalar leaves no swap pending at the end of the ladder.
 
 The ladder computes a scalar multiple on Curve25519, and X25519 is a key agreement (`Proofs/MontgomeryCurve.lean`, `Proofs/X25519/`).
-The curve `v ^ 2 = u ^ 3 + 486662 u ^ 2 + u` is the Weierstrass curve with `a₂ = 486662` and `a₄ = 1`, so the group law that Mathlib proves applies to it.
+The curve `v ^ 2 = u ^ 3 + 486662 u ^ 2 + u` is the Weierstrass curve with `a_2 = 486662` and `a_4 = 1`, so the group law that Mathlib proves applies to it.
 `Represents.double` and `Represents.diffAdd` prove the doubling and the differential addition of RFC 7748 §5 on projective u-coordinates.
 They hold for every point, the point at infinity and the points of order 2 included, over any field in which `2 ≠ 0`.
 The differential addition needs the u-coordinate of the difference of its two points, and that coordinate must not be `0`.
@@ -2151,7 +2238,7 @@ The variants `root_binding_foldl_trieSet` and `verifyProof_sound_foldl_trieSet` 
 Later entries replace earlier values of the same key, and an empty value removes its key.
 `nodup_keys_foldl_trieSet` proves that this construction gives distinct keys, as the trie of Yellow Paper Appendix D (Shanghai version) assumes, so callers need no distinctness hypothesis.
 This construction is the path of Python `trie.root`, through `Execution/Exports/Trie.lean`.
-`root_of_rootExport` (`Execution/Exports/Proofs/Trie.lean`) proves that the export returns the root of this trie, built from its decoded pairs.
+`root_of_rootExport` (`Execution/Proofs/Exports/Trie.lean`) proves that the export returns the root of this trie, built from its decoded pairs.
 `rootExport_of_root` proves the converse, so the two variants apply to the output of Python `trie.root`.
 The state and storage roots in `Execution/State/Root.lean` build tries directly, and `stateEntries_nodup` and `storageEntries_nodup` (`Execution/Proofs/State/Root.lean`) supply their distinct keys.
 `root_binding_secured` (`Execution/Proofs/Trie/Binding.lean`) applies `root_binding` to two secured tries with distinct keys and one root.
@@ -2399,7 +2486,15 @@ The theorems state these properties.
 - So after a message is forwarded or delivered, no later RPC forwards or delivers its ID.
   This holds within the lifetime of the seen cache, whatever RPCs come between, with any parameters, standing and validation.
   The first and the last RPC use the same parameters and the same message ID function.
-  No theorem covers two messages with the same ID in one RPC: a lifetime of zero lets both through.
+- An RPC forwards each message it delivers to the mesh of its topic and to the explicit peers, and nothing else (`receiveRpc_forward_delivered`).
+  The mesh is the one before the RPC.
+  The sender of the RPC is among them when it is a mesh or explicit peer.
+- With a positive lifetime of the seen cache, an RPC delivers at most one message of each ID (`receiveRpc_delivered_nodup`).
+  So, by the two theorems, at most one of two messages with the same ID in one RPC is delivered or forwarded.
+  The proof reads the check of `receiveMessage` against the seen cache that the fold of the messages updates.
+  Each message of the RPC that passed this check left its ID there, with the time of the RPC.
+  An entry of that time counts in the check of a later message only with a positive lifetime.
+  A lifetime of zero lets both messages through.
 
 The sources leave these points open, and the router takes one reading of each.
 
@@ -2882,6 +2977,19 @@ The ancestry needs only the two block reads and that local slot order, not `Reac
 It assumes Assumption 2 on the active members of the empty-slot committees, no honest known equivocator, aligned effective balances, and an increment divisible by 100 Gwei.
 In an execution of the network model, `Execution.equivocatingIndices_honest` gives the assumption on known equivocators for the store of an honest validator.
 These are store-local facts: no theorem here shows that a recorded honest vote is its voter's latest actual vote, or that it remains the recorded vote at a later store.
+
+`Execution.isAncestor_getHead_of_historical_anchor` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalAnchor.lean` derives later head ancestry from a guarded historical margin.
+It applies `Execution.source_surplus_or_accountable`, which derives the receiver's source-weight surplus from the caller's checked reads, rather than assuming that surplus.
+The conclusion retains alternatives: a collision between blocks held by honest stores, or historical finality evidence consisting of the direct-safety stake inequality or hash evidence.
+It does not assume hash injectivity.
+
+The endpoint assumes synchrony, prompt processing, block admission and validated honest duty votes through its time horizon.
+It also assumes agreement between assignment duties and head committee windows, common history for vote committees, and successful source-weight window reads.
+Its stake hypotheses include source-window Byzantine and exit reserves, unslashed honest validators in counted states, a checkpoint stake ceiling and an explicit drift bound.
+Earlier honest-head coverage, receiver-finality coverage and residual finalized-checkpoint compatibility remain hypotheses.
+The accountable finality branch requires deposited genesis, a fixed-fork history before the next upgrade, direct-safety parameters and stake floors for held runs and terminal states.
+The theorem also retains the stated slot, epoch, tree, viable-route and successful-read conditions.
+These conditions are recorded in `HistoricalStatements.lean` and in the endpoint's statement; the theorem is not unconditional safety of every successful confirmation call.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
 `getCurrentTarget_eq_ok_iff` states that target as the checkpoint of the store's epoch in the chain of the head, and `epoch_eq_of_getCurrentTarget` gives its epoch.
@@ -4430,7 +4538,7 @@ The body records them without changing anything else that it computes.
 From Byzantium, the status of a call result agrees with its receipt: the receipt succeeds exactly when the result has no error (`applyTransaction_status`, `Proofs/Blocks/Transition.lean`).
 A body has as many results as receipts (`applyTransactions_results_length`), and a refund never raises the gas used (`runTransaction_gasUsed_le`, `Proofs/Transactions/Process.lean`).
 
-Each frame also records the logs that a simulation reports with `traceTransfers` (`Execution/Evm/Call/TransferLog.lean`).
+Each frame also records the logs that a simulation reports with `traceTransfers` (`Execution/Evm/TransferLog.lean`).
 They are its logs, with a log from `0xeeee…eeee` before Glamsterdam for each move of ether that EIP-7708 would log, in the order of execution.
 A frame that fails drops them with its logs.
 The flag is not an input of the blocks of a simulation, so they and their headers do not depend on it (`simulateBlocks_traceTransfers`, `Proofs/Rpc/SimulateCalls.lean`).
@@ -4789,6 +4897,20 @@ With that bound, `getBlockRootAtSlot_error` (`Consensus/Proofs/Accessors.lean`) 
 It reads the clause of `computeProposerIndex` that refuses a draw with no candidate, and `epochProposers` gives that refusal code 500.
 That epoch gets code 500, not code 400.
 It needs an epoch of at least one slot.
+`dutiesResponse_proposer_internal_iff_of_lt_fulu` shows that before Fulu a proposer answer gets code 500 at the current epoch exactly when the draw of that epoch fails.
+It needs the bound of `dependentRoot_error` on the slot of the state.
+It reads the clause of `epochProposers` that gives a failed draw code 500.
+A draw that succeeds has computed the start of the epoch and the slot of each proposer, as `proposerDuties` computes them.
+`getBeaconProposerIndices_active` (`Consensus/Proofs/Proposers.lean`) shows that each drawn proposer names an active validator, whose fetch then succeeds.
+`dutiesResponse_proposer_error_of_lt_fulu` shows that before Fulu a proposer answer fails only with the error of an invalid epoch.
+It needs the bounds of `getBeaconProposerIndices_ok` at the current epoch, and the bound of `dependentRoot_error` on the slot of the state.
+The current epoch plus `EPOCHS_PER_HISTORICAL_VECTOR` must stay below `2^64`, and the first slot after it must be at most `2^64`.
+`currentEpochRoom_presets` shows both for every state on mainnet and minimal.
+The seed lookahead must be shorter than `EPOCHS_PER_HISTORICAL_VECTOR`, as `seedLookahead_lt_presets` shows on those presets.
+The registry must hold at most `2^40` validators, as `BeaconState.registryWithinLimit_of_lt` and `registryLimit_presets` show on those presets before Gloas.
+The draws of the current epoch must end (`ProposersDrawEnd`), as `ProposersDrawEnd.of_atCap` shows when an active validator is at the cap of the draw.
+It covers every epoch, since `dutiesResponse_proposer_not_current` refuses any other epoch with that error.
+`dutiesResponse_proposer_error_code_of_lt_fulu` follows: such an answer fails only with code 400.
 `dutiesResponse_proposer_internal_iff` shows that from Fulu a proposer answer gets code 500 exactly when a lookahead entry of the epoch names no validator.
 It reads the step of `proposerDuties` that fetches the validator of each proposer, which fails for an index past the registry.
 It needs the first answer at the current epoch, or the second at an epoch of the lookahead.
@@ -4830,13 +4952,11 @@ These cases of code 500 remain without a theorem:
   So no theorem excludes the code 500 of `dutiesResponse_proposer_internal_iff` at a state that such a chain reaches.
   `registryGrows_of_chainSteps` gives one part of that bound, since the registry never shrinks along a chain.
   A state decoded from bytes, as the export of the duty answers takes it, can hold such an entry.
-- Before Fulu, the draw of an epoch with active validators can still fail.
-  It fails past `2^40` candidates, for a product of the draw past 64 bits, or at `2^64` steps of its search.
-  On mainnet and minimal the type of the registry excludes the first, by `BeaconState.registryWithinLimit_of_lt`.
-  On those presets, `drawFits_presets` and `Run.effectiveBalance_capped` exclude the second along a run from genesis.
-  The draw also fails for an epoch within `EPOCHS_PER_HISTORICAL_VECTOR` of `2^64`, which the current epoch of a mainnet or minimal state never is.
-  `getBeaconProposerIndices_ok` shows that the draw succeeds under bounds when the draws of the epoch end (`ProposersDrawEnd`), as they do when an active validator is at the cap of the draw.
-  No theorem carries that to the answers yet.
+- Before Fulu, no theorem excludes a failed draw of the current epoch, which gives code 500 by `dutiesResponse_proposer_internal_iff_of_lt_fulu`.
+  `dutiesResponse_proposer_error_of_lt_fulu` assumes that the draws of that epoch end (`ProposersDrawEnd`), as `getBeaconProposerIndices_ok` does.
+  Under its other bounds, a draw of an epoch with active validators fails only for a product past 64 bits, or at `2^64` steps.
+  On mainnet and minimal, `drawFits_presets` and `Run.effectiveBalance_capped` exclude the first along a run from genesis.
+  `ProposersDrawEnd.of_atCap` gives the end when an active validator is at the cap of the draw, which no theorem shows along a chain.
 - No theorem excludes code 500 from the attester and PTC answers where a bound of their error theorems fails.
   On mainnet and minimal, code 500 from a PTC assignment needs a slot of the state within two epochs of `2^64`.
   Code 500 from an attester assignment needs such a slot, or a registry of more than `2^40` validators.
@@ -5871,6 +5991,10 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   The branch bound fixes the depth before the run, and its adversary picks the index, the leaves and the branches.
   The blob sidecar bound fixes the preset and the fork before the run, and its adversary picks both sidecars.
   The deposit bound reads no preset or fork, and its adversary picks the index, the deposit root and both deposits.
+  The data column bound fixes the preset and the fork before the run, and its adversary picks both partial headers.
+  The sync committee bound fixes the preset and the index before the run, and its adversary picks the state root, both committees and both branches.
+  The finality bound fixes the index before the run, and its adversary picks the state root, both headers and both branches.
+  An adversary that also picks the slot picks one of at most three indices, so its bound at most triples.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of SHA-256.
@@ -5964,7 +6088,7 @@ Any loop or fold over an array reaches them, so Lean core is a declared trusted 
 
 ### B3. Native code during elaboration
 
-The `EthLib` and `Exports` libraries set `precompileModules := true`.
+The `EthLib`, `Exports` and `PythonConversions` libraries set `precompileModules := true`.
 So `#eval`, or a tactic that evaluates, in any module that imports them runs natively compiled code.
 A proof is unaffected unless it uses one of the tactics of C2.
 
@@ -5973,12 +6097,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 525 operations and 49 size constants.
-The Python extension calls 525 of the operations and 49 of the constants.
+Lean exports 525 operations and 51 size constants.
+The Python extension calls 525 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11896 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1650), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (261), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (823), `x25519.c` (21), `xmss.c` (134).
+11834 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (109), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1588), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (261), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (823), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

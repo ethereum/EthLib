@@ -27,6 +27,10 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
+/-- No layer is taller than the top one. -/
+theorem Layer.height_le (layer : Layer) : layer.height ≤ TOP_HEIGHT := by
+  cases layer <;> decide
+
 /-! ## Unfolding, in any monad -/
 
 section Monad

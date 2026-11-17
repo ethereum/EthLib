@@ -235,16 +235,15 @@ theorem onBlock_statesHold {checks : SignatureChecks}
     exact (stateTransition_invariant (holds found) transition).1
   · exact holds keptFound
 
-/-- Each held block state's finalized epoch is bounded by the store's realized finality. -/
-def BlockStatesFinalized (store : Store preset fork) : Prop :=
-  ∀ {root : Root} {state : BeaconState preset fork}, store.blockStates[root]? = some state →
-    state.finalizedCheckpoint.epoch ≤ store.finalizedCheckpoint.epoch
-
 /-- Keeping held states and advancing realized finality preserves their finality bound. -/
-private theorem BlockStatesFinalized.of_frame (holds : store.BlockStatesFinalized)
+private theorem held_finalized_of_frame
+    (holds : ∀ {root : Root} {state : BeaconState preset fork},
+      store.blockStates[root]? = some state →
+      state.finalizedCheckpoint.epoch ≤ store.finalizedCheckpoint.epoch)
     (states : after.blockStates = store.blockStates)
     (later : CheckpointAdvances store.finalizedCheckpoint after.finalizedCheckpoint) :
-    after.BlockStatesFinalized :=
+    ∀ {root : Root} {state : BeaconState preset fork}, after.blockStates[root]? = some state →
+      state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch :=
   fun found => UInt64.le_trans (holds (states ▸ found)) later.epoch_le
 
 /-- A block keeps checkpoint order and any bound on the finality of its held states. -/
@@ -252,7 +251,11 @@ theorem onBlock_ordered_finalized {checks : SignatureChecks}
     {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
     (ordered : store.EpochsOrdered) (holds : store.StatesHold)
     (added : store.onBlock config checks sources signed = .ok after) :
-    after.EpochsOrdered ∧ (store.BlockStatesFinalized → after.BlockStatesFinalized) := by
+    after.EpochsOrdered ∧
+      ((∀ {root : Root} {state : BeaconState preset fork}, store.blockStates[root]? = some state →
+        state.finalizedCheckpoint.epoch ≤ store.finalizedCheckpoint.epoch) →
+      ∀ {root : Root} {state : BeaconState preset fork}, after.blockStates[root]? = some state →
+        state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch) := by
   cases root : SszType.hashTreeRoot signed.message with
   | error e =>
     simp [onBlock, root, bind, Except.bind, Except.mapError] at added
@@ -530,7 +533,9 @@ variable {config : Config} {anchorState : BeaconState preset fork}
 The anchor state must keep the invariant. -/
 theorem Store.Reachable.ordered_finalized (anchor : Invariant anchorState)
     (reachable : Store.Reachable config anchorState anchorBlock store) :
-    (store.EpochsOrdered ∧ store.StatesHold) ∧ store.BlockStatesFinalized := by
+    (store.EpochsOrdered ∧ store.StatesHold) ∧
+      ∀ {root : Root} {state : BeaconState preset fork}, store.blockStates[root]? = some state →
+        state.finalizedCheckpoint.epoch ≤ store.finalizedCheckpoint.epoch := by
   induction reachable with
   | anchor made =>
     obtain ⟨anchorRoot, -, -, -, justified, finalized, unrealizedJustified,
@@ -557,7 +562,7 @@ theorem Store.Reachable.ordered_finalized (anchor : Invariant anchorState)
   | tick _ ticked ih =>
     exact ⟨⟨Store.onTick_ordered ih.1.1 ticked,
       Store.StatesHold.of_eq ih.1.2 (Store.onTick_frame ticked).2.2.2⟩,
-      Store.BlockStatesFinalized.of_frame ih.2
+      Store.held_finalized_of_frame ih.2
         (Store.onTick_frame ticked).2.2.2 (Store.onTick_frame ticked).2.1.2⟩
   | block _ added ih =>
     have result := Store.onBlock_ordered_finalized ih.1.1 ih.1.2 added
@@ -565,28 +570,28 @@ theorem Store.Reachable.ordered_finalized (anchor : Invariant anchorState)
   | attestation _ attested ih =>
     exact ⟨⟨Store.onAttestation_ordered ih.1.1 attested,
       Store.StatesHold.of_eq ih.1.2 (Store.onAttestation_frame attested).2.2.1⟩,
-      Store.BlockStatesFinalized.of_frame ih.2 (Store.onAttestation_frame attested).2.2.1
+      Store.held_finalized_of_frame ih.2 (Store.onAttestation_frame attested).2.2.1
         (Store.onAttestation_frame attested).1.2⟩
   | attesterSlashing _ slashed ih =>
     exact ⟨⟨Store.onAttesterSlashing_ordered ih.1.1 slashed,
       Store.StatesHold.of_eq ih.1.2 (Store.onAttesterSlashing_frame slashed).2.2.1⟩,
-      Store.BlockStatesFinalized.of_frame ih.2 (Store.onAttesterSlashing_frame slashed).2.2.1
+      Store.held_finalized_of_frame ih.2 (Store.onAttesterSlashing_frame slashed).2.2.1
         (Store.onAttesterSlashing_frame slashed).1.2⟩
   | payloadAttestation _ voted ih =>
     exact ⟨⟨Store.onPayloadAttestationMessage_ordered ih.1.1 voted,
       Store.StatesHold.of_eq ih.1.2 (onPayloadAttestationMessage_onlyPtcVotes voted).frame.2.2⟩,
-      Store.BlockStatesFinalized.of_frame ih.2
+      Store.held_finalized_of_frame ih.2
         (onPayloadAttestationMessage_onlyPtcVotes voted).frame.2.2
         (onPayloadAttestationMessage_onlyPtcVotes voted).frame.1.2⟩
   | envelope _ accepted ih =>
     exact ⟨⟨Store.onExecutionPayloadEnvelope_ordered ih.1.1 accepted,
       Store.StatesHold.of_eq ih.1.2 (Store.onExecutionPayloadEnvelope_frame accepted).2.2⟩,
-      Store.BlockStatesFinalized.of_frame ih.2 (Store.onExecutionPayloadEnvelope_frame accepted).2.2
+      Store.held_finalized_of_frame ih.2 (Store.onExecutionPayloadEnvelope_frame accepted).2.2
         (Store.onExecutionPayloadEnvelope_frame accepted).1.2⟩
   | inclusionList _ accepted ih =>
     exact ⟨⟨Store.onInclusionList_ordered ih.1.1 accepted,
       Store.StatesHold.of_eq ih.1.2 (Store.onInclusionList_frame accepted).2.2⟩,
-      Store.BlockStatesFinalized.of_frame ih.2 (Store.onInclusionList_frame accepted).2.2
+      Store.held_finalized_of_frame ih.2 (Store.onInclusionList_frame accepted).2.2
         (Store.onInclusionList_frame accepted).1.2⟩
 
 /-- A reachable store keeps its checkpoints ordered and its states in the invariant.

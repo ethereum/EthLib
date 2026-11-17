@@ -13,15 +13,15 @@ Lake produces:
 
 `setup.py` builds the Python C extension under `bindings/python/`, not Lake.
 
-It enumerates the `.c.o.export` files and the Lean toolchain's static archives.
+It selects `.c.o.export` files through the ordinary imports of `EthLib.Exports`.
 
-It links them all statically into a single self-contained Python extension.
+It links these objects into one Python extension beside the shared Lean runtime.
 -/
 
 package «EthLib» where
   -- The release version, the same as in `pyproject.toml` (`scripts/release_manifest.py`).
   version := v!"0.3.0"
-  moreLeancArgs := #["-fPIC"]
+  moreLeancArgs := #["-fPIC", "-ffunction-sections", "-fdata-sections"]
 
 require "leanprover-community" / "mathlib" @ git "v4.35.0"
 
@@ -48,9 +48,9 @@ lean_lib «EthLib» where
 
 The executable specification never depends on this library.
 
-Theorems produce no code, so `precompileModules` is off.
+`precompileModules` is off, since default targets need no native proof objects.
 
-Proof object files then stay out of the Python extension link.
+The Python extension links only the runtime imports of `EthLib.Exports`.
 
 `platformIndependent` keeps the specification's shared library out of each proof's trace.
 
@@ -69,15 +69,48 @@ lean_lib «Proofs» where
 
 It is a separate library, so that the specification never imports an `@[export]` symbol.
 
-`precompileModules` is on, because `setup.py` links these objects.
+`precompileModules` builds the objects that `setup.py` links.
 
-Each domain's export tree is also a root, so that its modules belong to this library. -/
+One root and its initializer name make this a plugin, so the specification's plugin loads first.
+
+The extension initializes only runtime imports.
+
+The linker discards EthLib's unused compile-time and legacy initializers.
+
+The globs assign each domain's export tree to this library. -/
 @[default_target]
 lean_lib «Exports» where
   requiresModuleSystem := true
-  roots := #[`EthLib.Exports, `EthLib.Base.Exports, `EthLib.Cryptography.Exports,
-    `EthLib.Networking.Exports, `EthLib.Execution.Exports, `EthLib.Consensus.Exports,
-    `EthLib.Serialization.Exports, `EthLib.Engine.Exports]
+  roots := #[`EthLib.Exports]
+  libName := "EthLib_EthLib_Exports"
+  -- The conversion core and its laws belong to `PythonConversions` below.
+  globs := #[.one `EthLib.Exports, .one `EthLib.Base.Exports,
+    .one `EthLib.Base.Exports.Bindings, .one `EthLib.Base.Exports.ChainConfig,
+    .one `EthLib.Base.Exports.Echo, .one `EthLib.Base.Exports.Fin,
+    .one `EthLib.Base.Exports.PyDerive, .one `EthLib.Base.Exports.PyValue,
+    .one `EthLib.Base.Exports.PyValueJson,
+    .andSubmodules `EthLib.Cryptography.Exports, .andSubmodules `EthLib.Networking.Exports,
+    .andSubmodules `EthLib.Execution.Exports, .andSubmodules `EthLib.Consensus.Exports,
+    .andSubmodules `EthLib.Serialization.Exports, .andSubmodules `EthLib.Engine.Exports]
+  precompileModules := true
+  defaultFacets := #[LeanLib.leanArtsFacet, LeanLib.staticExportFacet]
+
+/-- Python conversion types and the proofs of their laws.
+
+The core imports only the Lean toolchain, and the law module imports only the core.
+
+These modules belong to neither `Exports` nor `Proofs`.
+
+Lake assigns a module to the last library whose globs match it, so this block stays after `Proofs`.
+
+A downstream project can then precompile the exports without a native library cycle.
+
+The bindings link the core's runtime objects, but not the meta-imported law module. -/
+lean_lib «PythonConversions» where
+  requiresModuleSystem := true
+  roots := #[`EthLib.Base.Exports.Result, `EthLib.Base.Exports.PyValueCore,
+    `EthLib.Base.Proofs.Exports.PyValue]
+  libName := "EthLib_PythonConversions"
   precompileModules := true
 
 /-- Checks the compiled declarations of every library.
@@ -138,3 +171,36 @@ Not a default target: `scripts/test_check_accessors.sh` builds and checks it. -/
 lean_lib «CheckAccessorsTest» where
   srcDir := "scripts"
   roots := #[`CheckAccessorsTest]
+
+/-- Source attribute inspection used by the theorem placement check. -/
+lean_lib «CheckTheoremSupport» where
+  srcDir := "scripts"
+  roots := #[`CheckTheoremAttributes]
+  allowNonModules := true
+
+/-- Checks that specification theorems support definitions, instances or simplification.
+
+It compares the remaining theorems with an exact baseline that may only shrink.
+
+Run it after `lake build` with `lake exe check-theorems`. -/
+lean_exe «check-theorems» where
+  srcDir := "scripts"
+  root := `CheckTheorems
+  supportInterpreter := true
+  -- The dependency search loads private definition and proof bodies.
+  allowNonModules := true
+
+/-- Theorems the placement check must keep, report or skip.
+
+Not a default target: `scripts/test_check_theorems.sh` builds and checks it. -/
+lean_lib «CheckTheoremsTest» where
+  srcDir := "scripts"
+  roots := #[`CheckTheoremsTest]
+
+/-- Persistent theorem attributes on which the placement check must stop.
+
+Not a default target: `scripts/test_check_theorems.sh` builds and checks it. -/
+lean_lib «CheckTheoremsAttributesTest» where
+  srcDir := "scripts"
+  roots := #[`CheckTheoremsAttributesTest]
+  allowNonModules := true

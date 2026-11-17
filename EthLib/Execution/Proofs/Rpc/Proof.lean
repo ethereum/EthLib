@@ -7,10 +7,7 @@ public import EthLib.Execution.Proofs.Rpc.View
 public import EthLib.Execution.Proofs.State.AccountProofOfState
 import EthLib.Base.Proofs.BigEndian
 import ToMathlib.Data.ByteArray
--- The hex digits of a number must unfold for the decision procedure to read them.
-import all Init.Data.Repr
--- The fields of an encoded object unfold Lean's `Json.mkObj` and `Json.isNull`.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: the answer of `eth_getProof`
@@ -135,7 +132,7 @@ private theorem storageProofOfJson_storageProofJson (s : StorageProof) :
   obtain ⟨fs, hfs, hl⟩ := lookup_fields_mkObj "slot" (pairs := [
     ("key", quantityJson (bytesToNat s.key.toList)), ("value", quantityJson s.value.toNat),
     ("proof", proofNodesJson s.proof)]) (by simp)
-    (by simp [Lean.Json.isNull, quantityJson, proofNodesJson, listJson])
+    (by simp [Base.Toolchain.Json.isNull_eq, quantityJson, proofNodesJson, listJson])
   have f1 : field "slot" fs "key" = .ok (quantityJson (bytesToNat s.key.toList)) :=
     field_eq_ok_iff.mpr (hl "key" _ (by simp))
   have f2 : field "slot" fs "value" = .ok (quantityJson s.value.toNat) :=
@@ -167,7 +164,7 @@ theorem accountProofOfJson_accountProofJson {p : AccountProof} (hnonce : p.nonce
     ("balance", quantityJson p.balance.toNat), ("codeHash", dataJson p.codeHash.toList),
     ("nonce", quantityJson p.nonce), ("storageHash", dataJson p.storageHash.toList),
     ("storageProof", listJson storageProofJson p.storageProof)]) (by simp)
-    (by simp [Lean.Json.isNull, quantityJson, proofNodesJson, listJson, dataJson])
+    (by simp [Base.Toolchain.Json.isNull_eq, quantityJson, proofNodesJson, listJson, dataJson])
   have f1 : field "answer" fs "address" = .ok (dataJson p.address.toList) :=
     field_eq_ok_iff.mpr (hl "address" _ (by simp))
   have f2 : field "answer" fs "accountProof" = .ok (proofNodesJson p.accountProof) :=

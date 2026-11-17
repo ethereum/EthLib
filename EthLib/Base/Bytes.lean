@@ -55,6 +55,15 @@ def packBytes {n : Nat} (v : Vector UInt8 n) : ByteArray :=
   -- The length invariant is discarded, not checked: every object has one.
   ⟨v.toArray⟩
 
+/-- The bytes of a buffer as an object of `n` bytes, if the buffer has exactly `n` bytes.
+
+Examples:
+* `exactBytes? 2 (ByteArray.mk #[10, 20]) = some #v[10, 20]`
+* `exactBytes? 3 (ByteArray.mk #[10, 20]) = none`
+-/
+def exactBytes? (n : Nat) (bytes : ByteArray) : Option (Vector UInt8 n) :=
+  if h : bytes.size = n then some ⟨bytes.data, h⟩ else none
+
 /-- Read the `n` bytes of a buffer that start at an offset.
 
 The caller proves the buffer has room, so the read needs no fallback byte.

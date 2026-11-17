@@ -3,8 +3,7 @@ module
 public import EthLib.Execution.Rpc.Header
 public import EthLib.Serialization.Proofs.JsonRpc
 public import EthLib.Execution.Proofs.Rpc.Base
--- The fields of an encoded object unfold Lean's `Json.mkObj` and `Json.isNull`.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: the JSON form of a header
@@ -68,9 +67,9 @@ private theorem present {fork : Fork} (hash : Hash32) (h : Header fork) :
   rcases hp with (((((((((hp | hp) | hp) | hp) | hp) | hp) | hp) | hp) | hp)) <;>
     first
     | (rcases hp with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl |
-        rfl | rfl | rfl | rfl <;> exact isNull_str _)
+        rfl | rfl | rfl | rfl <;> exact Base.Toolchain.Json.isNull_str _)
     | (split at hp <;> simp only [List.mem_cons, List.not_mem_nil, or_false] at hp <;>
-        first | (subst hp; exact isNull_str _) | cases hp)
+        first | (subst hp; exact Base.Toolchain.Json.isNull_str _) | cases hp)
 
 /-- The writer succeeds only on a header with a hash, and then writes the object of the fields. -/
 private theorem headerJson_ok {fork : Fork} {h : Header fork} {j : Lean.Json}

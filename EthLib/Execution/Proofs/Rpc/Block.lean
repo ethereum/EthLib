@@ -4,8 +4,7 @@ public import EthLib.Execution.Rpc.Methods
 public import EthLib.Execution.Proofs.Rpc.Header
 public import EthLib.Execution.Proofs.Rpc.TransactionInfo
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
--- The fields of an encoded object unfold Lean's `Json.mkObj` and `Json.isNull`.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: the JSON form of a block
