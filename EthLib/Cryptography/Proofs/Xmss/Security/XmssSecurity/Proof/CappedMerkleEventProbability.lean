@@ -161,10 +161,10 @@ theorem merkleCollision_afterKeygen_orientation
       (Concrete.CacheView.nodeInput secretKey.parameter .bottom level
         (leafIndex.val / 2 ^ (level.val + 1)) forged.1 forged.2) = some forgedOutput)
     (hne : forged ≠ honest)
-    (heq : (Concrete.CacheView.nodeAt execution.2 secretKey.parameter .bottom (level.val + 1)
-        (leafIndex.val / 2 ^ (level.val + 1)) forged.1 forged.2).run =
-      (Concrete.CacheView.nodeAt execution.2 secretKey.parameter .bottom (level.val + 1)
-        (leafIndex.val / 2 ^ (level.val + 1)) honest.1 honest.2).run)
+    (heq : (Concrete.CacheView.nodeAt execution.2 secretKey.parameter .bottom ⟨level.val + 1,
+        leafIndex.val / 2 ^ (level.val + 1)⟩ forged.1 forged.2).run =
+      (Concrete.CacheView.nodeAt execution.2 secretKey.parameter .bottom ⟨level.val + 1,
+        leafIndex.val / 2 ^ (level.val + 1)⟩ honest.1 honest.2).run)
     (hhonest : honest =
       (Concrete.CacheReplay.treeNode execution.2 secretKey.parameter secretKey.chainStart
           level.val
@@ -248,6 +248,7 @@ theorem merkle_path_collision_afterKeygen_orientation
       (keygenMerkleTargetInput keyResult.1.2 keyResult.2) := by
   subst leafIndex
   obtain ⟨hne, heq⟩ := Merkle.CollidesAt.pairs _ hevent
+  rw [EthLib.Cryptography.Merkle.Position.ancestor_mk_zero] at heq
   have hgame := CappedLeaf.afterKeygen_execution_mem_detailedGame adversary
     keyResult hkeygen execution hafter
   obtain ⟨forgedOutput, hforgedCached⟩ :=

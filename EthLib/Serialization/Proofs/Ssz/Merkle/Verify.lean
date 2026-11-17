@@ -14,7 +14,7 @@ namespace EthLib.Serialization.Ssz
 /-- The climb of a branch with SHA-256 is the Merkle climb that joins nodes with SHA-256. -/
 theorem climbBranch_eq_climb (index level : Nat) (node : Bytes) (branch : List Bytes) :
     climbBranch index level node branch =
-      (Cryptography.Merkle.climb (m := Id) (fun _ _ => combine) level (index >>> level) node
+      (Cryptography.Merkle.climb (m := Id) (fun _ => combine) ⟨level, index >>> level⟩ node
         branch).run :=
   rfl
 
@@ -29,13 +29,13 @@ theorem climbBranch_cons (index level : Nat) (node sibling : Bytes) (rest : List
       = climbBranch index (level + 1)
           (if gindexBit index level then combine sibling node else combine node sibling) rest := by
   -- An even shifted index is a clear bit, which keeps the node on the left.
-  have step : combine (Cryptography.Merkle.ordered (index >>> level) node sibling).1
-      (Cryptography.Merkle.ordered (index >>> level) node sibling).2
+  have step : combine (Cryptography.Merkle.ordered ⟨level, index >>> level⟩ node sibling).1
+      (Cryptography.Merkle.ordered ⟨level, index >>> level⟩ node sibling).2
       = if gindexBit index level then combine sibling node else combine node sibling := by
-    simp only [Cryptography.Merkle.ordered, gindexBit_parity]
+    simp only [Cryptography.Merkle.ordered_eq_ite, gindexBit_parity]
     rcases Nat.mod_two_eq_zero_or_one (index >>> level) with h | h <;> simp [h]
-  rw [climbBranch_eq_climb, climbBranch_eq_climb, Cryptography.Merkle.climb_cons,
-    ← Nat.shiftRight_succ, step]
+  rw [climbBranch_eq_climb, climbBranch_eq_climb, Cryptography.Merkle.climb_cons, step]
+  simp only [Cryptography.Merkle.Position.parent_mk, ← Nat.shiftRight_succ]
   rfl
 
 /-- Climbing a joined branch climbs the front, then the back from where the front ends. -/
@@ -44,7 +44,8 @@ theorem climbBranch_append (index level : Nat) (node : Bytes) (front back : List
       = climbBranch index (level + front.length) (climbBranch index level node front) back := by
   simp only [climbBranch_eq_climb]
   rw [Cryptography.Merkle.climb_append]
-  simp [Nat.shiftRight_eq_div_pow, Nat.div_div_eq_div_mul, Nat.pow_add]
+  simp [Cryptography.Merkle.Position.ancestor_mk, Nat.shiftRight_eq_div_pow,
+    Nat.div_div_eq_div_mul, Nat.pow_add]
 
 /-- A node and its sibling combine to the node above them, in whichever order they sit. -/
 theorem combine_sibling {node : Nat → Bytes} (tree : MerkleTree node) (index : Nat)

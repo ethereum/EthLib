@@ -46,14 +46,16 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 /-! ## Nodes -/
 
-/-- The parent at index `j` on `level`, from its two children.
+/-- The parent at a position, from its two children.
 
-The address holds the level modulo 17.
+The address holds the level modulo 17, and the index within the level.
 
 The tree hashes only at levels 1 to 16, so the address names the true level. -/
-def nodeHash (pp : PublicParam) (layer : Layer) (level j : Nat) (left right : Digest) : m Digest :=
+def nodeHash (pp : PublicParam) (layer : Layer) (p : Merkle.Position) (left right : Digest) :
+    m Digest :=
   -- The payload is the left child, then the right child.
-  th H pp (addrNode layer (Fin.ofNat _ level) (UInt32.ofNat j)) (packBytes left ++ packBytes right)
+  th H pp (addrNode layer (Fin.ofNat _ p.level) (UInt32.ofNat p.index))
+    (packBytes left ++ packBytes right)
 
 /-- `X_{0,j}`: the leaf of one-time key `j`. -/
 def leaves (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (j : Nat) : m Digest :=
@@ -63,7 +65,7 @@ def leaves (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (j : Nat) : m Di
 
 Computing it evaluates the `2^level` leaves below it. -/
 def node (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (level j : Nat) : m Digest :=
-  Merkle.node (nodeHash H pp layer) (leaves H pp prf layer) level j
+  Merkle.node (nodeHash H pp layer) (leaves H pp prf layer) ⟨level, j⟩
 
 /-! ## The path -/
 
@@ -80,6 +82,6 @@ def path (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : Nat) :
 /-- `Tree.fold(l, e, X, pi)`: the root a path leads to from the leaf of key `e`. -/
 def fold (pp : PublicParam) (layer : Layer) (e : Nat) (leaf : Digest)
     (pi : Vector Digest LAYER_HEIGHT) : m Digest :=
-  Merkle.climb (nodeHash H pp layer) 0 e leaf pi.toList
+  Merkle.climb (nodeHash H pp layer) ⟨0, e⟩ leaf pi.toList
 
 end EthLib.Cryptography.Xmss

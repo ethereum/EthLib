@@ -82,7 +82,7 @@ noncomputable def OutcomeTopBadEventOccurs (cache : QueryCache HashSpec)
       (Concrete.CacheView.encodingHash cache outcome.secretKey.parameter outcome.forgery.leafIndex
         (outcome.forgery.message, outcome.forgery.signature.randomness)) = some encoding ∧
     let root := (Merkle.climb (Concrete.CacheView.nodeAt cache outcome.secretKey.parameter .bottom)
-      0 outcome.forgery.leafIndex.val
+      ⟨0, outcome.forgery.leafIndex.val⟩
       (Concrete.CacheView.leafHash cache outcome.secretKey.parameter outcome.forgery.leafIndex
         (recoveredEndpoints
           (fun chain => Concrete.CacheView.chainStep cache outcome.secretKey.parameter
@@ -131,7 +131,7 @@ theorem top_badEvent_or_honest (cache : QueryCache HashSpec) (secretKey : Secret
       have hpart := Concrete.CacheReplay.topPartFromCache_eq cache secretKey key
         randomness encoding hsigned
       have hhonestRoot :
-          (Merkle.climb (Concrete.CacheView.nodeAt cache secretKey.parameter .top) 0 key.val
+          (Merkle.climb (Concrete.CacheView.nodeAt cache secretKey.parameter .top) ⟨0, key.val⟩
               (Concrete.CacheView.topLeafHash cache secretKey.parameter key
                 (recoveredEndpoints
                   (fun chain => Concrete.CacheView.topChainStep cache secretKey.parameter key chain)

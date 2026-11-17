@@ -96,9 +96,10 @@ theorem topLeafHash_tweakable (parameter : PublicParameter) (key : TopIndex)
   exact tweakableHash_tweakable _ _ _
 
 theorem nodeAt_tweakable (parameter : PublicParameter) (layer : EthLib.Cryptography.Xmss.Layer)
-    (level j : Nat) (left right : Digest) :
-    OnlyQueries Tweakable (Concrete.nodeAt parameter layer level j left right :
+    (q : EthLib.Cryptography.Merkle.Position) (left right : Digest) :
+    OnlyQueries Tweakable (Concrete.nodeAt parameter layer q left right :
       OracleComp HashSpec Digest) := by
+  obtain ⟨level, j⟩ := q
   rcases level with _ | level
   · exact .pure _
   · by_cases hlevel : level < treeHeight
@@ -146,7 +147,8 @@ theorem treeNode_tweakable (parameter : PublicParameter) (secret : LeafIndex →
   rw [Concrete.treeNode]
   exact EthLib.Cryptography.Merkle.node_rec _ (OnlyQueries Tweakable) (fun hx hf => hx.bind hf) _
     (fun _ => (OnlyQueries.sequenceFin fun _ => chainWalk_tweakable _ _ _ _ _ _).bind
-      fun _ => leafHash_tweakable _ _ _) (nodeAt_tweakable parameter .bottom) levels node.val
+      fun _ => leafHash_tweakable _ _ _) (nodeAt_tweakable parameter .bottom)
+      ⟨levels, node.val⟩
 
 theorem topTreeNode_tweakable (parameter : PublicParameter) (topSecret : TopIndex → ChainIndex → Digest)
     (levels : Nat) (node : TopNode) :
@@ -155,7 +157,8 @@ theorem topTreeNode_tweakable (parameter : PublicParameter) (topSecret : TopInde
   rw [Concrete.topTreeNode]
   exact EthLib.Cryptography.Merkle.node_rec _ (OnlyQueries Tweakable) (fun hx hf => hx.bind hf) _
     (fun _ => (OnlyQueries.sequenceFin fun _ => topChainWalk_tweakable _ _ _ _ _ _).bind
-      fun _ => topLeafHash_tweakable _ _ _) (nodeAt_tweakable parameter .top) levels node.val
+      fun _ => topLeafHash_tweakable _ _ _) (nodeAt_tweakable parameter .top)
+      ⟨levels, node.val⟩
 
 theorem topSignFrom_tweakable (parameter : PublicParameter) (key : TopIndex) (root : Digest)
     (base : Randomness) (attempts trial : Nat) :

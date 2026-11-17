@@ -68,13 +68,13 @@ theorem sameLeafIndex_forgery_has_badEvent
     (hforgedEncoding : TargetSum.decodeDigest
       (CacheView.encodingHash cache parameter leafIndex
         (forgedMessage, forgedSignature.randomness)) = some forgedEncoding)
-    (hroot : (Merkle.climb (CacheView.nodeAt cache parameter .bottom) 0 leafIndex.val
+    (hroot : (Merkle.climb (CacheView.nodeAt cache parameter .bottom) ⟨0, leafIndex.val⟩
         (CacheView.leafHash cache parameter leafIndex
           (recoveredEndpoints
             (fun chain => CacheView.chainStep cache parameter leafIndex chain)
             forgedEncoding forgedSignature.chainValue))
         (List.ofFn forgedSignature.authPath)).run =
-      (Merkle.climb (CacheView.nodeAt cache parameter .bottom) 0 leafIndex.val
+      (Merkle.climb (CacheView.nodeAt cache parameter .bottom) ⟨0, leafIndex.val⟩
         (CacheView.leafHash cache parameter leafIndex
           (recoveredEndpoints
             (fun chain => CacheView.chainStep cache parameter leafIndex chain)
@@ -116,13 +116,13 @@ theorem freshLeafIndex_forgery_has_badEvent
     (forgedEncoding : Encoding) (forgedSignature : Signature)
     (secret : ChainIndex → Digest) (honestPath : Fin treeHeight → Digest)
     (hforgedValid : TargetSum.Valid forgedEncoding)
-    (hroot : (Merkle.climb (CacheView.nodeAt cache parameter .bottom) 0 leafIndex.val
+    (hroot : (Merkle.climb (CacheView.nodeAt cache parameter .bottom) ⟨0, leafIndex.val⟩
         (CacheView.leafHash cache parameter leafIndex
           (recoveredEndpoints
             (fun chain => CacheView.chainStep cache parameter leafIndex chain)
             forgedEncoding forgedSignature.chainValue))
         (List.ofFn forgedSignature.authPath)).run =
-      (Merkle.climb (CacheView.nodeAt cache parameter .bottom) 0 leafIndex.val
+      (Merkle.climb (CacheView.nodeAt cache parameter .bottom) ⟨0, leafIndex.val⟩
         (CacheView.leafHash cache parameter leafIndex
           (fun chain => Wots.publicChain
             (CacheView.chainStep cache parameter leafIndex chain) (secret chain)))

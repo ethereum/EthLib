@@ -96,11 +96,11 @@ theorem evalWithAnswerFn_climbBranchM (f : QueryImpl HashOracle Id) (index level
     evalWithAnswerFn f (climbBranchM queryHash index level node branch) =
       (climbBranchM (m := Id) (tableHash f) index level node branch).run := by
   unfold climbBranchM
-  rw [Cryptography.Merkle.climb_map_monad (fun _ _ => combineM queryHash)
+  rw [Cryptography.Merkle.climb_map_monad (fun _ => combineM queryHash)
     (fun {β} (x : OracleComp HashOracle β) => (evalWithAnswerFn f x : Id β))
     (fun _ => rfl) (fun _ _ => evalWithAnswerFn_bind _ _ _)]
-  exact congrArg (fun hash => Cryptography.Merkle.climb hash level (index >>> level) node branch)
-    (by funext _ _ left right; exact evalWithAnswerFn_combineM f left right)
+  exact congrArg (fun hash => Cryptography.Merkle.climb hash ⟨level, index >>> level⟩ node branch)
+    (by funext _ left right; exact evalWithAnswerFn_combineM f left right)
 
 /-- A replayed climb caches every message it hashes, with the answer of the table.
 
@@ -112,20 +112,21 @@ theorem cached_of_climbBranchM {cache : HashOracle.QueryCache} {f : QueryImpl Ha
     ∀ x ∈ branchMessages index level node branch (tableHash f),
       cache (ByteArray.mk x) = some (f (ByteArray.mk x)) := by
   -- Each level queries its pair, and the levels above climb from the parent of the table.
-  have climbed : ∀ (branch : List Bytes) (level j : Nat) (node : Bytes) {root : Bytes},
+  have climbed : ∀ (branch : List Bytes) (p : Cryptography.Merkle.Position) (node : Bytes)
+      {root : Bytes},
       simulateQ cache.toPartialImpl
-          (Cryptography.Merkle.climb (fun _ _ => combineM queryHash) level j node branch) =
+          (Cryptography.Merkle.climb (fun _ => combineM queryHash) p node branch) =
         some root →
-      ∀ x ∈ Cryptography.Merkle.climbPairs (fun _ _ => combineM (m := Id) (tableHash f)) level j
+      ∀ x ∈ Cryptography.Merkle.climbPairs (fun _ => combineM (m := Id) (tableHash f)) p
           node branch,
         cache (ByteArray.mk (x.1 ++ x.2)) = some (f (ByteArray.mk (x.1 ++ x.2))) := by
     intro branch
     induction branch with
     | nil =>
-      intro _ _ _ _ _ x hx
+      intro _ _ _ _ x hx
       simp [Cryptography.Merkle.climbPairs] at hx
     | cons sibling rest ih =>
-      intro level j node root hrun x hx
+      intro p node root hrun x hx
       simp only [Cryptography.Merkle.climb, simulateQ_bind] at hrun
       obtain ⟨parent, hparent, hrun⟩ := Option.bind_eq_some_iff.mp hrun
       -- The replayed parent is the parent with the table, which agrees with the cache.
@@ -139,11 +140,11 @@ theorem cached_of_climbBranchM {cache : HashOracle.QueryCache} {f : QueryImpl Ha
         obtain ⟨digest, hdigest⟩ := cached_of_queryHash hquery
         rw [hdigest, hf hdigest]
       · rw [← heval] at hrun
-        exact ih (level + 1) (j / 2) _ hrun x hx
+        exact ih p.parent _ hrun x hx
   intro x hx
   simp only [branchMessages, List.mem_map] at hx
   obtain ⟨pair, hpair, rfl⟩ := hx
-  exact climbed branch level (index >>> level) node hrun pair hpair
+  exact climbed branch ⟨level, index >>> level⟩ node hrun pair hpair
 
 /-- A replayed winning branch extraction exposes a collision of the cache.
 
@@ -187,12 +188,12 @@ private theorem climbBranchM_queryBound (index level : Nat) (node : Bytes) (bran
     IsQueryBoundP (climbBranchM queryHash index level node branch) (fun _ => True)
       branch.length := by
   unfold climbBranchM
-  generalize index >>> level = j
-  induction branch generalizing level j node with
+  generalize (⟨level, index >>> level⟩ : Cryptography.Merkle.Position) = p
+  induction branch generalizing p node with
   | nil => trivial
   | cons sibling rest ih =>
     simp only [Cryptography.Merkle.climb]
-    refine (isQueryBoundP_bind (n := 1) ?_ fun parent _ => ih (level + 1) parent (j / 2)).mono
+    refine (isQueryBoundP_bind (n := 1) ?_ fun parent _ => ih parent p.parent).mono
       (by simp [Nat.add_comm])
     exact combineM_queryBound _ _
 

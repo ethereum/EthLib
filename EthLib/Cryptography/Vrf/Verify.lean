@@ -28,7 +28,7 @@ def verify (root : Digest) (i : UInt32) (opening : Opening) : Option Digest :=
   -- The leaf commits to the secret.
   let leaf := leafHash opening.secret
   -- The opening is valid when its path leads from that leaf to the root.
-  if (Merkle.climb treeHash 0 i.toNat leaf opening.path.toList).run = root then
+  if (Merkle.climb treeHash ⟨0, i.toNat⟩ leaf opening.path.toList).run = root then
     some (outputHash i opening.secret)
   else none
 

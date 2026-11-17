@@ -78,8 +78,8 @@ theorem forsClimb_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsS
     ∀ (n level : Nat), level + n ≤ FORS_HEIGHT →
       ofDigest <$> SphincsSecurity.Concrete.forsFold (m := m) P index κ leaf path (level + n) v
         = SphincsSecurity.Concrete.forsFold (m := m) P index κ leaf path level v >>= fun c =>
-            Merkle.climb (forsNodeHash (queryH (m := m)) (ofParam P) index.val (treeOf κ)) level
-              (leaf.val / 2 ^ level) (ofDigest c)
+            Merkle.climb (forsNodeHash (queryH (m := m)) (ofParam P) index.val (treeOf κ))
+              ((⟨0, leaf.val⟩ : Merkle.Position).ancestor level) (ofDigest c)
               (((List.ofFn fun i => ofDigest (path i)).drop level).take n)
   | 0, level, _ => by simp [Merkle.climb]
   | n + 1, level, hn => by
@@ -94,17 +94,17 @@ theorem forsClimb_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsS
     simp only [SphincsSecurity.Concrete.forsFold, dite_eq_left hlevel, bind_assoc,
       List.getElem_ofFn]
     refine bind_congr fun c => ?_
-    have hdiv : leaf.val / 2 ^ level / 2 = leaf.val / 2 ^ (level + 1) := by
-      rw [Nat.div_div_eq_div_mul, pow_succ]
     have hnode := forsNodeHash_queryH (m := m) P index κ ⟨level, hlevel⟩
       ⟨leaf.val / 2 ^ (level + 1), Nat.lt_of_le_of_lt (Nat.div_le_self _ _) leaf.isLt⟩
       (div_two_pow_lt leaf level hlevel)
-    rw [Merkle.climb, hdiv, Nat.testBit_eq_decide_div_mod_eq]
+    rw [Merkle.climb, Merkle.Position.parent_ancestor]
+    simp only [Merkle.Position.ancestor_mk_zero]
+    rw [Nat.testBit_eq_decide_div_mod_eq]
     rcases Nat.mod_two_eq_zero_or_one (leaf.val / 2 ^ level) with h | h
-    · simp only [h, Merkle.ordered, ↓reduceIte, Nat.zero_ne_one, decide_false,
+    · simp only [h, Merkle.ordered_eq_ite, ↓reduceIte, Nat.zero_ne_one, decide_false,
         Bool.false_eq_true]
       rw [hnode, bind_map_left]
-    · simp only [h, Merkle.ordered, ↓reduceIte, Nat.one_ne_zero, decide_true]
+    · simp only [h, Merkle.ordered_eq_ite, ↓reduceIte, Nat.one_ne_zero, decide_true]
       rw [hnode, bind_map_left]
 
 /-- The root that an opening leads to is the model's. -/
@@ -118,8 +118,8 @@ theorem treeRecover_queryH (P : SphincsSecurity.PublicParameter) (index : Sphinc
   refine bind_congr fun value => ?_
   -- The climb takes all 10 heights, from the leaf to the root.
   have h := hclimb value SphincsSecurity.forsHeight 0 (by decide)
-  simp only [Nat.zero_add, SphincsSecurity.Concrete.forsFold, pure_bind, pow_zero, Nat.div_one,
-    List.drop_zero] at h
+  simp only [Nat.zero_add, SphincsSecurity.Concrete.forsFold, pure_bind,
+    Merkle.Position.ancestor_zero, List.drop_zero] at h
   simp only [ofPath, Vector.toList_ofFn]
   rw [h, List.take_of_length_le (le_of_eq List.length_ofFn)]
   rfl
@@ -174,7 +174,7 @@ theorem forsNode_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.P
           (secretsOf S P) index.val (treeOf κ) level j)
         = ofDigest (forsNodeValue f P index κ S level j)
   | 0, j, _, hj => by
-    rw [forsNode, Merkle.node, forsLeaves_queryH S P index κ j hj, evalWithAnswerFn_map]
+    rw [forsNode, Merkle.node_zero, forsLeaves_queryH S P index κ j hj, evalWithAnswerFn_map]
     rfl
   | level + 1, j, hlevel, hj => by
     have hpow : 2 ^ (FORS_HEIGHT - level) = 2 * 2 ^ (FORS_HEIGHT - (level + 1)) := by
@@ -185,7 +185,7 @@ theorem forsNode_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.P
     have hlt : level < SphincsSecurity.forsHeight := by
       change _ < 10; simp only [FORS_HEIGHT] at hlevel; omega
     simp only [forsNode] at hl hr ⊢
-    rw [Merkle.node, evalWithAnswerFn_bind, hl, evalWithAnswerFn_bind, hr,
+    rw [Merkle.node_succ, evalWithAnswerFn_bind, hl, evalWithAnswerFn_bind, hr,
       forsNodeValue_succ f P index κ S level j hlt]
     erw [forsNodeHash_queryH_mod (m := OracleComp HashSig.HashSpec) P index κ ⟨level, hlt⟩ j hj,
       evalWithAnswerFn_map, eval_tweakableHash]
@@ -225,7 +225,7 @@ theorem forsSiblings_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecuri
           (forsNodeHash (queryH (m := OracleComp HashSig.HashSpec)) (ofParam P) index.val
             (treeOf κ))
           (forsLeaves queryH (ofParam P) (secretsOf S P) index.val (treeOf κ))
-          level (e / 2 ^ level) n)
+          ((⟨0, e⟩ : Merkle.Position).ancestor level) n)
         = Vector.ofFn fun i : Fin n =>
             ofDigest (forsNodeValue f P index κ S (level + i.val)
               (Nat.xor (e / 2 ^ (level + i.val)) 1))
@@ -237,11 +237,11 @@ theorem forsSiblings_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecuri
       exact he.trans_le (Nat.pow_le_pow_right (by decide) (by omega))
     have hsib : (e / 2 ^ level) ^^^ 1 < 2 ^ (FORS_HEIGHT - level) :=
       Nat.xor_lt_two_pow hlt (Nat.one_lt_two_pow (by omega))
-    have hdiv : e / 2 ^ level / 2 = e / 2 ^ (level + 1) := by
-      rw [Nat.div_div_eq_div_mul, pow_succ]
     have hnode := forsNode_answers f S P index κ level ((e / 2 ^ level) ^^^ 1) (by omega) hsib
     simp only [forsNode] at hnode
-    rw [Merkle.siblings, evalWithAnswerFn_bind, hnode, evalWithAnswerFn_bind, hdiv,
+    rw [Merkle.siblings, Merkle.Position.parent_ancestor, Merkle.Position.ancestor_mk_zero e level,
+      Merkle.Position.sibling_mk]
+    rw [evalWithAnswerFn_bind, hnode, evalWithAnswerFn_bind,
       forsSiblings_answers S P index κ e he n (level + 1) (by omega), evalWithAnswerFn_pure]
     apply Vector.ext
     intro i hi
@@ -258,7 +258,7 @@ theorem treeOpen_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.P
           (SphincsSecurity.Seeded.treeOpen P index κ leaf S : OracleComp HashSig.HashSpec _)) := by
   have h := forsSiblings_answers f S P index κ (Fin.val (n := 2 ^ FORS_HEIGHT) leaf) leaf.isLt
     FORS_HEIGHT 0 (by simp)
-  simp only [pow_zero, Nat.div_one, Nat.zero_add] at h
+  simp only [Merkle.Position.ancestor_zero, Nat.zero_add] at h
   -- EthLib reads the leaf as one of `2^FORS_HEIGHT`, the model as one of `2^forsHeight`.
   have hs : forsSecret (secretsOf (m := OracleComp HashSig.HashSpec) S P) index.val (treeOf κ)
       (Fin.val (n := 2 ^ FORS_HEIGHT) leaf)

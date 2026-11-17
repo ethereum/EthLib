@@ -13,20 +13,15 @@ namespace XmssSecurity.Concrete.CacheReplay
 def pathNode (leafIndex : LeafIndex) (level : Nat) : MerkleNode :=
   Concrete.merkleNodeOfNat (leafIndex.val / 2 ^ level)
 
-theorem div_pow_succ (value level : Nat) :
-    value / 2 ^ (level + 1) = (value / 2 ^ level) / 2 := by
-  rw [pow_succ, Nat.div_div_eq_div_mul]
-
 /-- The node on the path of a leaf and its sibling, in order, are the children of the next node. -/
 theorem ordered_pathNode (leafIndex : LeafIndex) (level : MerkleLevel) :
-    Merkle.ordered (leafIndex.val / 2 ^ level.val) (pathNode leafIndex level.val)
-        (Concrete.authenticationPathNode leafIndex level) =
+    Merkle.ordered ((⟨0, leafIndex.val⟩ : Merkle.Position).ancestor level.val)
+        (pathNode leafIndex level.val) (Concrete.authenticationPathNode leafIndex level) =
       (Concrete.childNode (pathNode leafIndex (level.val + 1)) false,
         Concrete.childNode (pathNode leafIndex (level.val + 1)) true) := by
-  have hparent : (pathNode leafIndex (level.val + 1)).val = leafIndex.val / 2 ^ level.val / 2 := by
-    simp only [pathNode, Concrete.merkleNodeOfNat]
-    rw [Nat.mod_eq_of_lt ((Nat.div_le_self _ _).trans_lt leafIndex.isLt), div_pow_succ]
-  refine (Merkle.ordered_sibling Concrete.merkleNodeOfNat _).trans ?_
+  have hparent : (pathNode leafIndex (level.val + 1)).val = leafIndex.val / 2 ^ (level.val + 1) :=
+    Nat.mod_eq_of_lt ((Nat.div_le_self _ _).trans_lt leafIndex.isLt)
+  refine (Merkle.ordered_sibling (fun q => Concrete.merkleNodeOfNat q.index) _).trans ?_
   simp [Concrete.childNode, hparent]
 
 theorem recover_signedChainValues (cache : QueryCache HashSpec)
@@ -65,8 +60,8 @@ theorem treeNode_merkleNodeOfNat (cache : QueryCache HashSpec) (parameter : Publ
     (secret : LeafIndex → ChainIndex → Digest) (level j : Nat) :
     treeNode cache parameter secret level (Concrete.merkleNodeOfNat j) =
       (Merkle.node (CacheView.nodeAt cache parameter .bottom)
-        (fun j => pure (leafAt cache parameter secret (Concrete.merkleNodeOfNat j))) level
-        j).run := by
+        (fun j => pure (leafAt cache parameter secret (Concrete.merkleNodeOfNat j)))
+        ⟨level, j⟩).run := by
   rw [treeNode]
   exact congrArg Id.run (EthLib.Cryptography.Merkle.node_mod _ _ lifetime
     (fun j => by rw [Concrete.merkleNodeOfNat_mod]) (CacheView.nodeAt_mod cache parameter .bottom)
@@ -79,8 +74,10 @@ theorem authPath_signWithEncoding (cache : QueryCache HashSpec) (secretKey : Sec
       fun level : Fin treeHeight =>
       (Merkle.node (CacheView.nodeAt cache secretKey.parameter .bottom)
         (fun j => pure (leafAt cache secretKey.parameter secretKey.chainStart
-          (Concrete.merkleNodeOfNat j))) level ((leafIndex.val / 2 ^ level.val) ^^^ 1)).run := by
+          (Concrete.merkleNodeOfNat j)))
+        ((⟨0, leafIndex.val⟩ : Merkle.Position).ancestor level).sibling).run := by
   funext level
+  rw [Merkle.Position.ancestor_mk_zero]
   exact treeNode_merkleNodeOfNat cache secretKey.parameter secretKey.chainStart level _
 
 /-- The pair the honest path of a leaf hashes above `level` is the children of its next node. -/
@@ -103,14 +100,15 @@ theorem pairAt_authenticationPath (cache : QueryCache HashSpec) (secretKey : Sec
   rw [Concrete.merkleNodeOfNat_val] at hhonest
   rw [authPath_signWithEncoding]
   refine hhonest.trans ?_
-  simp only [Concrete.childNode, treeNode_merkleNodeOfNat, hparent, Bool.false_eq_true,
+  simp only [Merkle.Position.ancestor_mk_zero, Merkle.Position.left_mk, Merkle.Position.right_mk,
+    Concrete.childNode, treeNode_merkleNodeOfNat, hparent, Bool.false_eq_true,
     ↓reduceIte, Nat.add_zero]
 
 /-- The honest path of a leaf climbs from its leaf to the root of its bottom tree. -/
 theorem authenticationPath_climbs_to_root (cache : QueryCache HashSpec)
     (secretKey : SecretKey) (leafIndex : LeafIndex) (randomness : Randomness)
     (encoding : Encoding) :
-    (Merkle.climb (CacheView.nodeAt cache secretKey.parameter .bottom) 0 leafIndex.val
+    (Merkle.climb (CacheView.nodeAt cache secretKey.parameter .bottom) ⟨0, leafIndex.val⟩
         (leafAt cache secretKey.parameter secretKey.chainStart leafIndex)
         (List.ofFn (signWithEncoding cache secretKey leafIndex randomness encoding).authPath)).run =
       Concrete.bottomRoot cache secretKey (topKeyOf leafIndex) := by
@@ -118,7 +116,8 @@ theorem authenticationPath_climbs_to_root (cache : QueryCache HashSpec)
     (CacheView.nodeAt cache secretKey.parameter .bottom)
     (fun j => pure (leafAt cache secretKey.parameter secretKey.chainStart
       (Concrete.merkleNodeOfNat j))) leafIndex.val treeHeight le_rfl
-  rw [List.take_of_length_le (by simp), Concrete.merkleNodeOfNat_val] at hclimb
+  rw [List.take_of_length_le (by simp), Concrete.merkleNodeOfNat_val,
+    Merkle.Position.ancestor_mk_zero] at hclimb
   rw [authPath_signWithEncoding]
   refine hclimb.trans ?_
   rw [Concrete.bottomRoot,
@@ -136,8 +135,8 @@ theorem topTreeNode_topNodeOfNat (cache : QueryCache HashSpec) (parameter : Publ
     (topSecret : TopIndex → ChainIndex → Digest) (level j : Nat) :
     topTreeNode cache parameter topSecret level (Concrete.topNodeOfNat j) =
       (Merkle.node (CacheView.nodeAt cache parameter .top)
-        (fun j => pure (topLeafAt cache parameter topSecret (Concrete.topNodeOfNat j))) level
-        j).run := by
+        (fun j => pure (topLeafAt cache parameter topSecret (Concrete.topNodeOfNat j)))
+        ⟨level, j⟩).run := by
   rw [topTreeNode]
   exact congrArg Id.run (EthLib.Cryptography.Merkle.node_mod _ _ topLifetime
     (fun j => by rw [Concrete.topNodeOfNat_mod]) (CacheView.nodeAt_mod cache parameter .top)
@@ -148,8 +147,10 @@ theorem honestTopPath_eq (cache : QueryCache HashSpec) (secretKey : SecretKey) (
     Concrete.honestTopPath cache secretKey key = fun level : Fin treeHeight =>
       (Merkle.node (CacheView.nodeAt cache secretKey.parameter .top)
         (fun j => pure (topLeafAt cache secretKey.parameter secretKey.topChainStart
-          (Concrete.topNodeOfNat j))) level ((key.val / 2 ^ level.val) ^^^ 1)).run := by
+          (Concrete.topNodeOfNat j)))
+        ((⟨0, key.val⟩ : Merkle.Position).ancestor level).sibling).run := by
   funext level
+  rw [Merkle.Position.ancestor_mk_zero]
   exact topTreeNode_topNodeOfNat cache secretKey.parameter secretKey.topChainStart level _
 
 /-- The pair the honest top path of a key hashes above `level` is the children of its next node. -/
@@ -171,13 +172,14 @@ theorem pairAt_honestTopPath (cache : QueryCache HashSpec) (secretKey : SecretKe
   rw [Concrete.topNodeOfNat_val] at hhonest
   rw [honestTopPath_eq]
   refine hhonest.trans ?_
-  simp only [Concrete.topChildNode, topTreeNode_topNodeOfNat, hparent, Bool.false_eq_true,
+  simp only [Merkle.Position.ancestor_mk_zero, Merkle.Position.left_mk, Merkle.Position.right_mk,
+    Concrete.topChildNode, topTreeNode_topNodeOfNat, hparent, Bool.false_eq_true,
     ↓reduceIte, Nat.add_zero]
 
 /-- The honest top path of a key climbs from its leaf to the public root. -/
 theorem honestTopPath_climbs_to_root (cache : QueryCache HashSpec)
     (secretKey : SecretKey) (key : TopIndex) :
-    (Merkle.climb (CacheView.nodeAt cache secretKey.parameter .top) 0 key.val
+    (Merkle.climb (CacheView.nodeAt cache secretKey.parameter .top) ⟨0, key.val⟩
         (topLeafAt cache secretKey.parameter secretKey.topChainStart key)
         (List.ofFn (Concrete.honestTopPath cache secretKey key))).run =
       topTreeNode cache secretKey.parameter secretKey.topChainStart treeHeight
@@ -185,7 +187,7 @@ theorem honestTopPath_climbs_to_root (cache : QueryCache HashSpec)
   have hclimb := XmssSecurity.Merkle.climb_honest (CacheView.nodeAt cache secretKey.parameter .top)
     (fun j => pure (topLeafAt cache secretKey.parameter secretKey.topChainStart
       (Concrete.topNodeOfNat j))) key.val treeHeight le_rfl
-  rw [List.take_of_length_le (by simp), Concrete.topNodeOfNat_val,
+  rw [List.take_of_length_le (by simp), Concrete.topNodeOfNat_val, Merkle.Position.ancestor_mk_zero,
     Nat.div_eq_of_lt (show key.val < 2 ^ treeHeight from key.isLt)] at hclimb
   rw [honestTopPath_eq]
   refine hclimb.trans ?_

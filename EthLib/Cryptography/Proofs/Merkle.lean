@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Merkle.Position
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
 public import EthLib.Cryptography.Proofs.Merkle.Binding
 public import EthLib.Cryptography.Proofs.Merkle.RandomOracle

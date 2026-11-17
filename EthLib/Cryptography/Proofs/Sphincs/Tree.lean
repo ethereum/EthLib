@@ -48,31 +48,35 @@ theorem node_succ (z j : Nat) :
     node H pkSeed prf layer tree (z + 1) j = (do
       let left ← node H pkSeed prf layer tree z (2 * j)
       let right ← node H pkSeed prf layer tree z (2 * j + 1)
-      nodeHash H pkSeed layer tree (z + 1) j left right) :=
+      nodeHash H pkSeed layer tree ⟨z + 1, j⟩ left right) :=
   rfl
 
 /-! ## Only the heights of the tree matter -/
 
 /-- A path is the same with any node hash that agrees on the heights of the tree. -/
-theorem path_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
-    (agree : ∀ k, 1 ≤ k → k ≤ layer.height → nodeHash H pkSeed layer tree k = hash' k) (e : Nat) :
+theorem path_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Digest)
+    (agree : ∀ q : Merkle.Position, 1 ≤ q.level → q.level ≤ layer.height →
+      nodeHash H pkSeed layer tree q = hash' q) (e : Nat) :
     path H pkSeed prf layer tree e
       = Merkle.path hash' (leaves H pkSeed prf layer tree) layer.height e :=
-  Merkle.path_congr _ hash' _ _ e fun k h1 h2 => agree k h1 (by omega)
+  Merkle.path_congr _ hash' _ _ e fun q h1 h2 => agree q h1 (by omega)
 
 /-- A fold is the same with any node hash that agrees on the heights of the tree. -/
-theorem fold_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
-    (agree : ∀ k, 1 ≤ k → k ≤ layer.height → nodeHash H pkSeed layer tree k = hash' k) (e : Nat)
+theorem fold_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Digest)
+    (agree : ∀ q : Merkle.Position, 1 ≤ q.level → q.level ≤ layer.height →
+      nodeHash H pkSeed layer tree q = hash' q) (e : Nat)
     (leaf : Digest) (pi : Vector Digest layer.height) :
-    fold H pkSeed layer tree e leaf pi = Merkle.climb hash' 0 e leaf pi.toList :=
-  Merkle.climb_congr _ hash' _ 0 e leaf fun k h1 h2 => agree k (by omega) (by simpa using h2)
+    fold H pkSeed layer tree e leaf pi = Merkle.climb hash' ⟨0, e⟩ leaf pi.toList :=
+  Merkle.climb_congr _ hash' _ ⟨0, e⟩ leaf fun q h1 h2 =>
+    agree q (by omega) (by simpa using h2)
 
 /-- The root is the same with any node hash that agrees on the heights of the tree. -/
-theorem treeRoot_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
-    (agree : ∀ k, 1 ≤ k → k ≤ layer.height → nodeHash H pkSeed layer tree k = hash' k) :
+theorem treeRoot_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Digest)
+    (agree : ∀ q : Merkle.Position, 1 ≤ q.level → q.level ≤ layer.height →
+      nodeHash H pkSeed layer tree q = hash' q) :
     treeRoot H pkSeed prf layer tree
       = Merkle.root hash' (leaves H pkSeed prf layer tree) layer.height :=
-  Merkle.node_congr _ hash' _ _ 0 agree
+  Merkle.node_congr _ hash' _ _ agree
 
 end Monad
 

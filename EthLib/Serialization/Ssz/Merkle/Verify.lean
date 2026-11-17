@@ -20,7 +20,7 @@ It is the Merkle climb from the node at that level, hashing every node alike.
 -/
 def climbBranchM {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray)
     (index level : Nat) (node : Bytes) (branch : List Bytes) : m Bytes :=
-  Cryptography.Merkle.climb (fun _ _ => combineM hash) level (index >>> level) node branch
+  Cryptography.Merkle.climb (fun _ => combineM hash) ⟨level, index >>> level⟩ node branch
 
 /-- Joining a node with each branch node in turn, from the leaf upward, with SHA-256. -/
 def climbBranch (index level : Nat) (node : Bytes) (branch : List Bytes) : Bytes :=

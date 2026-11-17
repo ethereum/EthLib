@@ -133,12 +133,13 @@ end HonestKeygen
 /-- A subtree of a tree runs inside the tree's run.
 
 Node `i` on `levels` lies below node `i / 2^(height - levels)` on `height`. -/
-theorem RunsBelow.node_subtree (hash : Nat → Nat → Digest → Digest → OracleComp HashSpec Digest)
+theorem RunsBelow.node_subtree
+    (hash : EthLib.Cryptography.Merkle.Position → Digest → Digest → OracleComp HashSpec Digest)
     (leaves : Nat → OracleComp HashSpec Digest) (levels i : Nat) (cache : QueryCache HashSpec) :
     ∀ (height : Nat), levels ≤ height →
-      RunsBelow (EthLib.Cryptography.Merkle.node hash leaves height (i / 2 ^ (height - levels)))
+      RunsBelow (EthLib.Cryptography.Merkle.node hash leaves ⟨height, i / 2 ^ (height - levels)⟩)
         cache →
-      RunsBelow (EthLib.Cryptography.Merkle.node hash leaves levels i) cache
+      RunsBelow (EthLib.Cryptography.Merkle.node hash leaves ⟨levels, i⟩) cache
   | 0, hle, hrun => by
     obtain rfl : levels = 0 := by omega
     simpa using hrun

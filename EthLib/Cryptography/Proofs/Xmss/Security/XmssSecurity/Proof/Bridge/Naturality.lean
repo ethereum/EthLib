@@ -73,9 +73,10 @@ theorem nat_topChainWalk (parameter : PublicParameter) (key : TopIndex) (chain :
       · simp
 
 theorem nat_nodeAt (parameter : PublicParameter) (layer : EthLib.Cryptography.Xmss.Layer)
-    (level j : Nat) (left right : Digest) :
-    simulateQ impl (Concrete.nodeAt (m := OracleComp s₁) parameter layer level j left right) =
-      Concrete.nodeAt (m := m₂) parameter layer level j left right := by
+    (q : EthLib.Cryptography.Merkle.Position) (left right : Digest) :
+    simulateQ impl (Concrete.nodeAt (m := OracleComp s₁) parameter layer q left right) =
+      Concrete.nodeAt (m := m₂) parameter layer q left right := by
+  obtain ⟨level, j⟩ := q
   rcases level with _ | level
   · simp [Concrete.nodeAt]
   · by_cases hlevel : level < treeHeight
@@ -90,8 +91,9 @@ theorem nat_treeNode (parameter : PublicParameter) (secret : LeafIndex → Chain
       Concrete.treeNode (m := m₂) parameter secret levels node := by
   rw [Concrete.treeNode, Concrete.treeNode, EthLib.Cryptography.Merkle.node_map _
     (fun {β} (x : OracleComp s₁ β) => simulateQ impl x) (fun _ _ => simulateQ_bind _ _ _)]
-  refine congrArg₂ (fun hash leaves => EthLib.Cryptography.Merkle.node hash leaves levels node.val)
-    (by funext level j left right; exact nat_nodeAt impl hq _ _ _ _ _ _) (funext fun j => ?_)
+  refine congrArg₂
+    (fun hash leaves => EthLib.Cryptography.Merkle.node hash leaves ⟨levels, node.val⟩)
+    (by funext q left right; exact nat_nodeAt impl hq _ _ _ _ _) (funext fun j => ?_)
   simp only [Concrete.leafAt, Concrete.oneTimePublicKey, Concrete.leafHash_eq, simulateQ_bind,
     nat_sequenceFin impl, nat_chainWalk impl hq, nat_tweakableHash impl hq]
 
@@ -101,8 +103,9 @@ theorem nat_topTreeNode (parameter : PublicParameter) (topSecret : TopIndex → 
       Concrete.topTreeNode (m := m₂) parameter topSecret levels node := by
   rw [Concrete.topTreeNode, Concrete.topTreeNode, EthLib.Cryptography.Merkle.node_map _
     (fun {β} (x : OracleComp s₁ β) => simulateQ impl x) (fun _ _ => simulateQ_bind _ _ _)]
-  refine congrArg₂ (fun hash leaves => EthLib.Cryptography.Merkle.node hash leaves levels node.val)
-    (by funext level j left right; exact nat_nodeAt impl hq _ _ _ _ _ _) (funext fun j => ?_)
+  refine congrArg₂
+    (fun hash leaves => EthLib.Cryptography.Merkle.node hash leaves ⟨levels, node.val⟩)
+    (by funext q left right; exact nat_nodeAt impl hq _ _ _ _ _) (funext fun j => ?_)
   simp only [Concrete.topLeafAt, Concrete.topOneTimePublicKey, Concrete.topLeafHash_eq,
     simulateQ_bind, nat_sequenceFin impl, nat_topChainWalk impl hq, nat_tweakableHash impl hq]
 

@@ -47,7 +47,7 @@ theorem node_succ (l j : Nat) :
     node H pp prf layer (l + 1) j = (do
       let left ← node H pp prf layer l (2 * j)
       let right ← node H pp prf layer l (2 * j + 1)
-      nodeHash H pp layer (l + 1) j left right) :=
+      nodeHash H pp layer ⟨l + 1, j⟩ left right) :=
   rfl
 
 /-- The path of key `e` computes its siblings one level at a time, level 0 first.
@@ -59,14 +59,14 @@ theorem path_eq_ofFnInOrder [LawfulMonad m] (e : Nat) :
           node H pp prf layer level ((e / 2 ^ level.val) ^^^ 1) := by
   -- From any level, the siblings are the nodes above it in order.
   have siblings_eq : ∀ (n level j : Nat),
-      Merkle.siblings (nodeHash H pp layer) (leaves H pp prf layer) level j n
+      Merkle.siblings (nodeHash H pp layer) (leaves H pp prf layer) ⟨level, j⟩ n
         = ofFnInOrder n fun i => node H pp prf layer (level + i.val) ((j / 2 ^ i.val) ^^^ 1) := by
     intro n
     induction n with
     | zero => intro level j; rfl
     | succ n ih =>
       intro level j
-      simp only [Merkle.siblings, ofFnInOrder, ih]
+      simp only [Merkle.siblings, ofFnInOrder, Merkle.Position.parent_mk, ih]
       -- Entry `i + 1` is entry `i` one level up, with the index halved once more.
       have shift :
           (fun i : Fin n => node H pp prf layer (level + 1 + i.val) ((j / 2 / 2 ^ i.val) ^^^ 1))
@@ -87,30 +87,36 @@ The tree hashes only at levels 1 to 16, where that read is exact.
 So the address of every node of the tree names its true level. -/
 
 /-- On levels up to 16, the node hash reads its level exactly into the address. -/
-theorem nodeHash_of_le {level : Nat} (hlevel : level ≤ LAYER_HEIGHT) (j : Nat) (left right : Digest) :
-    nodeHash H pp layer level j left right
-      = th H pp (addrNode layer ⟨level, by omega⟩ (UInt32.ofNat j)) (packBytes left ++ packBytes right) := by
+theorem nodeHash_of_le {p : Merkle.Position} (hlevel : p.level ≤ LAYER_HEIGHT)
+    (left right : Digest) :
+    nodeHash H pp layer p left right
+      = th H pp (addrNode layer ⟨p.level, by omega⟩ (UInt32.ofNat p.index))
+          (packBytes left ++ packBytes right) := by
   simp only [nodeHash, Fin.ofNat, Nat.mod_eq_of_lt (Nat.lt_succ_of_le hlevel)]
 
 /-- A node up to level 16 is the same with any node hash that agrees on levels 1 to 16. -/
-theorem node_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
-    (agree : ∀ k, 1 ≤ k → k ≤ LAYER_HEIGHT → nodeHash H pp layer k = hash' k)
+theorem node_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Digest)
+    (agree : ∀ q : Merkle.Position, 1 ≤ q.level → q.level ≤ LAYER_HEIGHT →
+      nodeHash H pp layer q = hash' q)
     {level : Nat} (hlevel : level ≤ LAYER_HEIGHT) (j : Nat) :
-    node H pp prf layer level j = Merkle.node hash' (leaves H pp prf layer) level j :=
-  Merkle.node_congr _ hash' _ level j fun k h1 h2 => agree k h1 (by omega)
+    node H pp prf layer level j = Merkle.node hash' (leaves H pp prf layer) ⟨level, j⟩ :=
+  Merkle.node_congr _ hash' _ ⟨level, j⟩ fun q h1 h2 => agree q h1 (by simp at h2; omega)
 
 /-- A path is the same with any node hash that agrees on levels 1 to 16. -/
-theorem path_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
-    (agree : ∀ k, 1 ≤ k → k ≤ LAYER_HEIGHT → nodeHash H pp layer k = hash' k) (e : Nat) :
+theorem path_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Digest)
+    (agree : ∀ q : Merkle.Position, 1 ≤ q.level → q.level ≤ LAYER_HEIGHT →
+      nodeHash H pp layer q = hash' q) (e : Nat) :
     path H pp prf layer e = Merkle.path hash' (leaves H pp prf layer) LAYER_HEIGHT e :=
-  Merkle.path_congr _ hash' _ _ e fun k h1 h2 => agree k h1 (by omega)
+  Merkle.path_congr _ hash' _ _ e fun q h1 h2 => agree q h1 (by omega)
 
 /-- A fold is the same with any node hash that agrees on levels 1 to 16. -/
-theorem fold_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
-    (agree : ∀ k, 1 ≤ k → k ≤ LAYER_HEIGHT → nodeHash H pp layer k = hash' k) (e : Nat) (leaf : Digest)
+theorem fold_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Digest)
+    (agree : ∀ q : Merkle.Position, 1 ≤ q.level → q.level ≤ LAYER_HEIGHT →
+      nodeHash H pp layer q = hash' q) (e : Nat) (leaf : Digest)
     (pi : Vector Digest LAYER_HEIGHT) :
-    fold H pp layer e leaf pi = Merkle.climb hash' 0 e leaf pi.toList :=
-  Merkle.climb_congr _ hash' _ 0 e leaf fun k h1 h2 => agree k (by omega) (by simpa using h2)
+    fold H pp layer e leaf pi = Merkle.climb hash' ⟨0, e⟩ leaf pi.toList :=
+  Merkle.climb_congr _ hash' _ ⟨0, e⟩ leaf fun q h1 h2 =>
+    agree q (by omega) (by simpa using h2)
 
 end Monad
 
@@ -152,18 +158,22 @@ theorem fold_binding {e : Nat} {leaf : Digest} {pi : Vector Digest LAYER_HEIGHT}
     (leaf = (node (pureHash f) pp prf layer 0 e).run ∧
         pi = (path (pureHash f) pp prf layer e).run) ∨
       ∃ w, Merkle.findSecondPreimage (nodeHash (pureHash f) pp layer)
-          (leaves (pureHash f) pp prf layer) 0 e leaf pi.toList = some w ∧
+          (leaves (pureHash f) pp prf layer) ⟨0, e⟩ leaf pi.toList = some w ∧
         w.Valid (nodeHash (pureHash f) pp layer) (leaves (pureHash f) pp prf layer) ∧
-        w.level < LAYER_HEIGHT := by
+        w.position.IsAncestor ⟨0, e⟩ ∧ 1 ≤ w.position.level ∧
+          w.position.level ≤ LAYER_HEIGHT := by
   rw [Nat.shiftRight_eq_div_pow] at heq
   rcases Merkle.climb_binding_node (nodeHash (pureHash f) pp layer)
       (leaves (pureHash f) pp prf layer)
-      LAYER_HEIGHT 0 e leaf pi.toList (by simp) heq with ⟨hleaf, hpi⟩ | hfound
+      LAYER_HEIGHT ⟨0, e⟩ leaf pi.toList (by simp) heq with ⟨hleaf, hpi⟩ | hfound
   · -- The siblings are the honest path, as lists and so as vectors.
     exact .inl ⟨hleaf, Vector.toList_inj.mp hpi⟩
-  · -- The search returns a valid second preimage, on one of the 16 levels.
+  · -- The search returns a valid second preimage, on one of the 16 levels above the leaf.
     obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hfound
-    obtain ⟨hvalid, k, hk, hlevel, -⟩ := Merkle.findSecondPreimage_valid _ _ _ _ _ _ w hw
-    exact .inr ⟨w, hw, hvalid, by simpa [hlevel] using hk⟩
+    obtain ⟨hvalid, hancestor, hlevel⟩ := Merkle.findSecondPreimage_valid _ _ _ _ _ w hw
+    have hbelow := hancestor.level_le
+    simp only [Merkle.Position.parent_level] at hbelow hlevel
+    exact .inr ⟨w, hw, hvalid, hancestor.trans ⟨1, (Merkle.Position.ancestor_one _).symm⟩,
+      by omega, by simpa using hlevel⟩
 
 end EthLib.Cryptography.Xmss

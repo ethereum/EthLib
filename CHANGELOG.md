@@ -28,6 +28,28 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, every node of a Merkle tree has a `Merkle.Position`, its level and its index, and the tree passes positions instead of a level and an index.
+  The node hash has type `Position → α → α → m α`; it had type `Nat → Nat → α → α → m α`, with the level first.
+  `Merkle.node hash leaves ⟨level, j⟩`, `Merkle.siblings hash leaves p n`, `Merkle.ordered p` and `Merkle.climb hash p current siblings` take a position; `Merkle.root` and `Merkle.path` keep their arguments.
+  `Merkle.node hash leaves level j` becomes `Merkle.node hash leaves ⟨level, j⟩`, and the recursion on the level is `Merkle.node.go`.
+  A position names its `parent`, `sibling`, `left` and `right` children and its `ancestor` `k` levels up, and `EthLib.Cryptography.Proofs.Merkle.Position` proves how they relate.
+  `Merkle.div_two_div_pow` moves to that module, under the same name.
+  The searches `Merkle.findCollision`, `Merkle.findSecondPreimage` and `Merkle.climbPairs` take the starting position instead of a level and an index.
+  `Merkle.Collision` and `Merkle.SecondPreimage` hold one `position` field, the position of the node they attack, instead of a level and an index.
+  `Merkle.findCollision_valid` concludes `c.position = p.ancestor (k + 1)` in place of the level and index equations.
+  `Merkle.SecondPreimage.Valid` also requires the position to be above the leaves, where the node has children.
+  `Merkle.findSecondPreimage_valid` states that this node is a strict ancestor of the starting position, with `Position.IsAncestor`.
+  In the random oracle model, `Merkle.RandomOracle.NodeInput R` is `Position × R × R`, so the domain of the node oracle changes.
+  `Merkle.RandomOracle.nodeHash` and `Merkle.RandomOracle.queryNode` take a position.
+  The agreement hypotheses of `Merkle.node_congr`, `path_congr` and `climb_congr`, and of the XMSS and SPHINCS+ lemmas built on them, quantify over positions.
+  The query lemmas of `EthLib.Cryptography.Proofs.QueryAvoidance` take a position and a node hash of a position.
+  The node hashes of XMSS, SPHINCS+, FORS and the VRF take a position and compute the same bytes.
+  The XMSS, SPHINCS+ and FORS nodes and the SSZ climb still take a level or height and an index, and build the position.
+  Lemmas about climbs from a leaf state its positions as `(⟨0, j⟩ : Position).ancestor n` and its `sibling`, `left` and `right`, in place of `⟨n, j / 2 ^ n⟩`.
+  `Position.ancestor_mk_zero` and the `_mk` lemmas of the position module convert between the two forms.
+  `XmssSecurity.Concrete.CacheReplay.div_pow_succ` is removed; `Merkle.div_pow_div_two` states the same fact.
+  To migrate a node hash, read `p.level` and `p.index` where it read the level and the index.
+
 - In Lean, ten general lemmas that [#2647](https://github.com/ethereum/EthLib/pull/2647) made public move into the namespaces of the objects they describe ([#2648](https://github.com/ethereum/EthLib/issues/2648)).
   Statements are unchanged; use the new names.
   - `active_of_mem_voters` becomes `Store.active_of_mem_voters`.

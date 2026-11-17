@@ -185,21 +185,21 @@ A concrete hash matches it through an injective encoding of this tuple.
 
 Such an encoding exists for levels and positions inside the encodable range.
 -/
-abbrev NodeInput (R : Type) := Nat × Nat × R × R
+abbrev NodeInput (R : Type) := Position × R × R
 
 /-- Read a complete oracle table as a node hash in the identity monad. -/
-def nodeHash (g : NodeInput R → R) (level j : Nat) (a b : R) : Id R :=
-  pure (g (level, j, a, b))
+def nodeHash (g : NodeInput R → R) (p : Position) (a b : R) : Id R :=
+  pure (g (p, a, b))
 
 /-- The same node hash, with calls exposed rather than answered by a fixed table. -/
-def queryNode (level j : Nat) (a b : R) : OracleComp (NodeInput R →ₒ R) R :=
-  liftM ((NodeInput R →ₒ R).query (level, j, a, b))
+def queryNode (p : Position) (a b : R) : OracleComp (NodeInput R →ₒ R) R :=
+  liftM ((NodeInput R →ₒ R).query (p, a, b))
 
 /-- One node-hash call costs one query. -/
-theorem queryNode_queryBound (level j : Nat) (a b : R) :
-    IsTotalQueryBound (queryNode level j a b) 1 := by
+theorem queryNode_queryBound (p : Position) (a b : R) :
+    IsTotalQueryBound (queryNode p a b) 1 := by
   change IsTotalQueryBound
-    (liftM ((NodeInput R →ₒ R).query (level, j, a, b)) >>= pure) 1
+    (liftM ((NodeInput R →ₒ R).query (p, a, b)) >>= pure) 1
   exact isTotalQueryBound_query_bind_iff.mpr ⟨Nat.one_pos, fun _ => trivial⟩
 
 /-- A completed search whose two witness inputs were queried gives a cache collision.
@@ -207,18 +207,18 @@ theorem queryNode_queryBound (level j : Nat) (a b : R) :
 The coverage hypothesis must include the search's queries, not only the adversary's queries.
 -/
 theorem collision_of_findCollision [DecidableEq R] (g : NodeInput R → R)
-    (c : (NodeInput R →ₒ R).QueryCache) (p q : List R) (level j : Nat) (a b : R)
-    (hcovered : ∀ w, findCollision (nodeHash g) level j a b p q = some w →
-      c (w.level, w.j, w.x.1, w.x.2) = some (g (w.level, w.j, w.x.1, w.x.2)) ∧
-      c (w.level, w.j, w.y.1, w.y.2) = some (g (w.level, w.j, w.y.1, w.y.2)))
-    (h : (findCollision (nodeHash g) level j a b p q).isSome) : Collision c := by
+    (c : (NodeInput R →ₒ R).QueryCache) (s t : List R) (p : Position) (a b : R)
+    (hcovered : ∀ w, findCollision (nodeHash g) p a b s t = some w →
+      c (w.position, w.x.1, w.x.2) = some (g (w.position, w.x.1, w.x.2)) ∧
+      c (w.position, w.y.1, w.y.2) = some (g (w.position, w.y.1, w.y.2)))
+    (h : (findCollision (nodeHash g) p a b s t).isSome) : Collision c := by
   obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp h
-  obtain ⟨hne, heq⟩ := (findCollision_valid (nodeHash g) p q level j a b w hw).1
+  obtain ⟨hne, heq⟩ := (findCollision_valid (nodeHash g) s t p a b w hw).1
   obtain ⟨hx, hy⟩ := hcovered w hw
-  refine ⟨(w.level, w.j, w.x.1, w.x.2), (w.level, w.j, w.y.1, w.y.2),
-    g (w.level, w.j, w.x.1, w.x.2), ?_, hx, ?_⟩
+  refine ⟨(w.position, w.x.1, w.x.2), (w.position, w.y.1, w.y.2),
+    g (w.position, w.x.1, w.x.2), ?_, hx, ?_⟩
   · intro hxy
-    exact hne (by simpa using congrArg (fun x : NodeInput R => x.2.2) hxy)
+    exact hne (by simpa using congrArg (fun x : NodeInput R => x.2) hxy)
   · simpa [nodeHash] using hy.trans (congrArg some heq.symm)
 
 /-- A second preimage search also gives a collision when both witness inputs were queried.
@@ -227,76 +227,76 @@ The honest children and their parent must be computed with the same oracle.
 -/
 theorem collision_of_findSecondPreimage [DecidableEq R] (g : NodeInput R → R)
     (c : (NodeInput R →ₒ R).QueryCache) (leaves : Nat → Id R)
-    (q : List R) (level j : Nat) (b : R)
-    (hcovered : ∀ w, findSecondPreimage (nodeHash g) leaves level j b q = some w →
-      let x := ((node (nodeHash g) leaves w.level (2 * w.j)).run,
-        (node (nodeHash g) leaves w.level (2 * w.j + 1)).run)
-      c (w.level + 1, w.j, x.1, x.2) = some (g (w.level + 1, w.j, x.1, x.2)) ∧
-      c (w.level + 1, w.j, w.y.1, w.y.2) =
-        some (g (w.level + 1, w.j, w.y.1, w.y.2)))
-    (h : (findSecondPreimage (nodeHash g) leaves level j b q).isSome) : Collision c := by
+    (t : List R) (p : Position) (b : R)
+    (hcovered : ∀ w, findSecondPreimage (nodeHash g) leaves p b t = some w →
+      let x := ((node (nodeHash g) leaves w.position.left).run,
+        (node (nodeHash g) leaves w.position.right).run)
+      c (w.position, x.1, x.2) = some (g (w.position, x.1, x.2)) ∧
+      c (w.position, w.y.1, w.y.2) = some (g (w.position, w.y.1, w.y.2)))
+    (h : (findSecondPreimage (nodeHash g) leaves p b t).isSome) : Collision c := by
   obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp h
-  obtain ⟨hne, heq⟩ := (findSecondPreimage_valid (nodeHash g) leaves q level j b w hw).1
+  obtain ⟨⟨hlevel, hne, heq⟩, -, -⟩ := findSecondPreimage_valid (nodeHash g) leaves t p b w hw
   obtain ⟨hx, hy⟩ := hcovered w hw
-  let x := ((node (nodeHash g) leaves w.level (2 * w.j)).run,
-    (node (nodeHash g) leaves w.level (2 * w.j + 1)).run)
-  refine ⟨(w.level + 1, w.j, w.y.1, w.y.2), (w.level + 1, w.j, x.1, x.2),
-    g (w.level + 1, w.j, w.y.1, w.y.2), ?_, hy, ?_⟩
+  let x := ((node (nodeHash g) leaves w.position.left).run,
+    (node (nodeHash g) leaves w.position.right).run)
+  refine ⟨(w.position, w.y.1, w.y.2), (w.position, x.1, x.2),
+    g (w.position, w.y.1, w.y.2), ?_, hy, ?_⟩
   · intro hxy
-    exact hne (by simpa [x] using congrArg (fun z : NodeInput R => z.2.2) hxy)
-  · change g (w.level + 1, w.j, w.y.1, w.y.2) =
-        g (w.level + 1, w.j, x.1, x.2) at heq
+    exact hne (by simpa [x] using congrArg (fun z : NodeInput R => z.2) hxy)
+  · -- The honest node lies above the leaves, so it is the hash of its honest children.
+    rw [node_children_run _ leaves hlevel] at heq
+    change g (w.position, w.y.1, w.y.2) = g (w.position, x.1, x.2) at heq
     exact hx.trans (congrArg some heq.symm)
 
 /-- The collision search against the oracle makes two calls per common level.
 
 The bound holds even if the lists have different lengths. -/
 theorem findCollision_queryBound [DecidableEq R] :
-    ∀ (p q : List R) (level j : Nat) (a b : R),
-      IsTotalQueryBound (findCollision queryNode level j a b p q)
-        (2 * min p.length q.length) := by
-  intro p
-  induction p with
+    ∀ (s t : List R) (p : Position) (a b : R),
+      IsTotalQueryBound (findCollision queryNode p a b s t)
+        (2 * min s.length t.length) := by
+  intro s
+  induction s with
   | nil => intros; trivial
-  | cons s p ih =>
-    intro q level j a b
-    cases q with
+  | cons u s ih =>
+    intro t p a b
+    cases t with
     | nil => trivial
-    | cons t q =>
+    | cons v t =>
       simp only [List.length_cons, min_add_add_right,
         findCollision, queryNode, isTotalQueryBound_query_bind_iff]
       refine ⟨by omega, fun x => ⟨by omega, fun y => ?_⟩⟩
       split
       · trivial
-      · convert ih q (level + 1) (j / 2) x y using 1
+      · convert ih t p.parent x y using 1
         omega
 
 /-- Replaying a successful search from a cache exposes a collision in that cache. -/
 theorem collision_of_partial_findCollision [DecidableEq R]
     (c : (NodeInput R →ₒ R).QueryCache) :
-    ∀ (p q : List R) (level j : Nat) (a b : R) (w : Merkle.Collision R),
-      simulateQ c.toPartialImpl (findCollision queryNode level j a b p q) = some (some w) →
+    ∀ (s t : List R) (p : Position) (a b : R) (w : Merkle.Collision R),
+      simulateQ c.toPartialImpl (findCollision queryNode p a b s t) = some (some w) →
         Collision c := by
-  intro p
-  induction p with
-  | nil => intro q level j a b w hw; simp [findCollision] at hw
-  | cons s p ih =>
-    intro q level j a b w hw
-    cases q with
+  intro s
+  induction s with
+  | nil => intro t p a b w hw; simp [findCollision] at hw
+  | cons u s ih =>
+    intro t p a b w hw
+    cases t with
     | nil => simp [findCollision] at hw
-    | cons t q =>
+    | cons v t =>
       simp only [findCollision, queryNode, simulateQ_bind, simulateQ_spec_query,
         QueryCache.toPartialImpl_apply] at hw
       obtain ⟨x, hx, hw⟩ := Option.bind_eq_some_iff.mp hw
       obtain ⟨y, hy, hw⟩ := Option.bind_eq_some_iff.mp hw
       split at hw
       · rename_i h
-        refine ⟨(level + 1, j / 2, (ordered j a s).1, (ordered j a s).2),
-          (level + 1, j / 2, (ordered j b t).1, (ordered j b t).2), x, ?_, hx, ?_⟩
+        refine ⟨(p.parent, (ordered p a u).1, (ordered p a u).2),
+          (p.parent, (ordered p b v).1, (ordered p b v).2), x, ?_, hx, ?_⟩
         · intro heq
-          exact h.1 (by simpa using congrArg (fun z : NodeInput R => z.2.2) heq)
+          exact h.1 (by simpa using congrArg (fun z : NodeInput R => z.2) heq)
         · simpa [h.2] using hy
-      · exact ih q _ _ x y w hw
+      · exact ih t _ x y w hw
 
 /-- The birthday bound for a client without private sampling. -/
 theorem prEvent_collision_le_total [SampleableType R]
@@ -325,20 +325,20 @@ The paths and leaves are fixed before the oracle is sampled.
 Paths chosen after seeing oracle answers need the bound for covered events.
 -/
 theorem prEvent_findCollision_queryNode_le [SampleableType R] [DecidableEq R]
-    (p q : List R) (level j : Nat) (a b : R) :
+    (s t : List R) (p : Position) (a b : R) :
     Pr{let z ← (simulateQ (NodeInput R →ₒ R).randomOracle
-      (findCollision queryNode level j a b p q)).run ∅}[z.1.isSome] ≤
-        (2 * min p.length q.length : Nat) *
-          ((2 * min p.length q.length : Nat) / (Nat.card R : ℝ≥0∞)) := by
+      (findCollision queryNode p a b s t)).run ∅}[z.1.isSome] ≤
+        (2 * min s.length t.length : Nat) *
+          ((2 * min s.length t.length : Nat) / (Nat.card R : ℝ≥0∞)) := by
   refine (prEvent_mono_of_support _ _ _ ?_).trans
-    (prEvent_collision_le_total _ (findCollision_queryBound p q level j a b))
+    (prEvent_collision_le_total _ (findCollision_queryBound s t p a b))
   intro z hz hs
   obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hs
   -- The final cache replays every query of this run without sampling again.
   have hp := QueryImpl.simulateQ_toPartialImpl_snd_of_mem_support_run_simulateQ_withCaching
-    uniformSampleImpl (findCollision queryNode level j a b p q) hz
+    uniformSampleImpl (findCollision queryNode p a b s t) hz
   rw [hw] at hp
-  exact collision_of_partial_findCollision z.2 p q level j a b w hp
+  exact collision_of_partial_findCollision z.2 s t p a b w hp
 
 /-- The probability bound transfers to any event that returns a covered Merkle collision.
 
@@ -348,17 +348,17 @@ theorem prEvent_findCollision_le [SampleableType R] [DecidableEq R]
     (oa : OracleComp (unifSpec + (NodeInput R →ₒ R)) α) (event : α → Prop) {Q : Nat}
     (hQ : IsQueryBoundP oa (fun t => t.isRight = true) Q)
     (hsearch : ∀ z ∈ support ((simulateQ (NodeInput R →ₒ R).romImpl oa).run ∅),
-      event z.1 → ∃ (g : NodeInput R → R) (p q : List R) (level j : Nat) (a b : R),
-        (findCollision (nodeHash g) level j a b p q).isSome ∧
-        ∀ w, findCollision (nodeHash g) level j a b p q = some w →
-          z.2 (w.level, w.j, w.x.1, w.x.2) = some (g (w.level, w.j, w.x.1, w.x.2)) ∧
-          z.2 (w.level, w.j, w.y.1, w.y.2) = some (g (w.level, w.j, w.y.1, w.y.2))) :
+      event z.1 → ∃ (g : NodeInput R → R) (s t : List R) (p : Position) (a b : R),
+        (findCollision (nodeHash g) p a b s t).isSome ∧
+        ∀ w, findCollision (nodeHash g) p a b s t = some w →
+          z.2 (w.position, w.x.1, w.x.2) = some (g (w.position, w.x.1, w.x.2)) ∧
+          z.2 (w.position, w.y.1, w.y.2) = some (g (w.position, w.y.1, w.y.2))) :
     Pr{let z ← (simulateQ (NodeInput R →ₒ R).romImpl oa).run ∅}[event z.1] ≤
       Q * ((Q : ℝ≥0∞) / Nat.card R) := by
   refine (prEvent_mono_of_support _ _ _ ?_).trans (prEvent_collision_le oa hQ)
   intro z hz he
-  obtain ⟨g, p, q, level, j, a, b, hs, hc⟩ := hsearch z hz he
-  exact collision_of_findCollision g z.2 p q level j a b hc hs
+  obtain ⟨g, s, t, p, a, b, hs, hc⟩ := hsearch z hz he
+  exact collision_of_findCollision g z.2 s t p a b hc hs
 
 /-- A covered second preimage search has the same birthday bound.
 
@@ -369,37 +369,35 @@ theorem prEvent_findSecondPreimage_le [SampleableType R] [DecidableEq R]
     (hQ : IsQueryBoundP oa (fun t => t.isRight = true) Q)
     (hsearch : ∀ z ∈ support ((simulateQ (NodeInput R →ₒ R).romImpl oa).run ∅),
       event z.1 → ∃ (g : NodeInput R → R) (leaves : Nat → Id R)
-        (q : List R) (level j : Nat) (b : R),
-        (findSecondPreimage (nodeHash g) leaves level j b q).isSome ∧
-        ∀ w, findSecondPreimage (nodeHash g) leaves level j b q = some w →
-          let x := ((node (nodeHash g) leaves w.level (2 * w.j)).run,
-            (node (nodeHash g) leaves w.level (2 * w.j + 1)).run)
-          z.2 (w.level + 1, w.j, x.1, x.2) = some (g (w.level + 1, w.j, x.1, x.2)) ∧
-          z.2 (w.level + 1, w.j, w.y.1, w.y.2) =
-            some (g (w.level + 1, w.j, w.y.1, w.y.2))) :
+        (t : List R) (p : Position) (b : R),
+        (findSecondPreimage (nodeHash g) leaves p b t).isSome ∧
+        ∀ w, findSecondPreimage (nodeHash g) leaves p b t = some w →
+          let x := ((node (nodeHash g) leaves w.position.left).run,
+            (node (nodeHash g) leaves w.position.right).run)
+          z.2 (w.position, x.1, x.2) = some (g (w.position, x.1, x.2)) ∧
+          z.2 (w.position, w.y.1, w.y.2) = some (g (w.position, w.y.1, w.y.2))) :
     Pr{let z ← (simulateQ (NodeInput R →ₒ R).romImpl oa).run ∅}[event z.1] ≤
       Q * ((Q : ℝ≥0∞) / Nat.card R) := by
   refine (prEvent_mono_of_support _ _ _ ?_).trans (prEvent_collision_le oa hQ)
   intro z hz he
-  obtain ⟨g, leaves, q, level, j, b, hs, hc⟩ := hsearch z hz he
-  exact collision_of_findSecondPreimage g z.2 leaves q level j b hc hs
+  obtain ⟨g, leaves, t, p, b, hs, hc⟩ := hsearch z hz he
+  exact collision_of_findSecondPreimage g z.2 leaves t p b hc hs
 
 /-- Computing an honest node from fixed leaves makes `2^level - 1` hash calls. -/
-theorem node_queryBound (leaves : Nat → R) : ∀ level j,
-    IsTotalQueryBound (node queryNode (fun j => pure (leaves j)) level j)
-      (2 ^ level - 1) := by
-  intro level
-  induction level with
-  | zero => intro j; trivial
+theorem node_queryBound (leaves : Nat → R) : ∀ p : Position,
+    IsTotalQueryBound (node queryNode (fun j => pure (leaves j)) p)
+      (2 ^ p.level - 1) := by
+  rintro ⟨level, j⟩
+  induction level generalizing j with
+  | zero => trivial
   | succ level ih =>
-    intro j
     rw [node_succ]
     have h := isTotalQueryBound_bind (ih (2 * j)) fun a =>
       isTotalQueryBound_bind (ih (2 * j + 1)) fun b =>
-        queryNode_queryBound (level + 1) j a b
+        queryNode_queryBound ⟨level + 1, j⟩ a b
     convert h using 1
     have := Nat.one_le_two_pow (n := level)
-    rw [Nat.pow_succ]
+    simp only [Nat.pow_succ]
     omega
 
 /-- Worst-case calls of the second-preimage search, including honest recomputation.
@@ -425,43 +423,43 @@ def secondPreimageQueries : Nat → Nat → Nat
 
 The honest leaves are fixed values, so reading a leaf makes no oracle call. -/
 theorem findSecondPreimage_queryBound [DecidableEq R] (leaves : Nat → R) :
-    ∀ (q : List R) (level j : Nat) (b : R),
-      IsTotalQueryBound (findSecondPreimage queryNode (fun j => pure (leaves j)) level j b q)
-        (secondPreimageQueries level q.length) := by
-  intro q
-  induction q with
+    ∀ (t : List R) (p : Position) (b : R),
+      IsTotalQueryBound (findSecondPreimage queryNode (fun j => pure (leaves j)) p b t)
+        (secondPreimageQueries p.level t.length) := by
+  intro t
+  induction t with
   | nil => intros; trivial
-  | cons t q ih =>
-    intro level j b
+  | cons v t ih =>
+    intro p b
     simp only [findSecondPreimage]
     have h := isTotalQueryBound_bind
-      (queryNode_queryBound (level + 1) (j / 2) (ordered j b t).1 (ordered j b t).2)
-      fun parent => isTotalQueryBound_bind (node_queryBound leaves level (2 * (j / 2)))
-      fun left => isTotalQueryBound_bind (node_queryBound leaves level (2 * (j / 2) + 1))
-      fun right => isTotalQueryBound_bind (node_queryBound leaves (level + 1) (j / 2))
+      (queryNode_queryBound p.parent (ordered p b v).1 (ordered p b v).2)
+      fun parent => isTotalQueryBound_bind (node_queryBound leaves p.parent.left)
+      fun left => isTotalQueryBound_bind (node_queryBound leaves p.parent.right)
+      fun right => isTotalQueryBound_bind (node_queryBound leaves p.parent)
       fun honest => show IsTotalQueryBound
-        (if ordered j b t ≠ (left, right) ∧ parent = honest then
-          pure (some ⟨level, j / 2, ordered j b t⟩)
-        else findSecondPreimage queryNode (fun j => pure (leaves j)) (level + 1) (j / 2) parent q)
-        (secondPreimageQueries (level + 1) q.length) from by
+        (if ordered p b v ≠ (left, right) ∧ parent = honest then
+          pure (some ⟨p.parent, ordered p b v⟩)
+        else findSecondPreimage queryNode (fun j => pure (leaves j)) p.parent parent t)
+        (secondPreimageQueries p.parent.level t.length) from by
           split
           · trivial
-          · exact ih _ _ _
+          · exact ih _ _
     convert h using 1
-    simp only [List.length_cons, secondPreimageQueries]
+    simp only [List.length_cons, secondPreimageQueries, Position.left_level,
+      Position.right_level, Position.parent_level, Nat.add_sub_cancel]
     omega
 
 /-- Computing a node against a complete table gives the deterministic honest node. -/
-theorem evalWithAnswerFn_node (g : NodeInput R → R) (leaves : Nat → R) : ∀ level j,
+theorem evalWithAnswerFn_node (g : NodeInput R → R) (leaves : Nat → R) : ∀ p : Position,
     evalWithAnswerFn (QueryImpl.ofFn g)
-      (node queryNode (fun j => pure (leaves j)) level j) =
-        (node (nodeHash g) (fun j => pure (leaves j)) level j).run := by
-  intro level
-  induction level with
-  | zero => intro j; rfl
+      (node queryNode (fun j => pure (leaves j)) p) =
+        (node (nodeHash g) (fun j => pure (leaves j)) p).run := by
+  rintro ⟨level, j⟩
+  induction level generalizing j with
+  | zero => rfl
   | succ level ih =>
-    intro j
-    simp only [node, evalWithAnswerFn_bind, ih, queryNode,
+    simp only [node_succ, evalWithAnswerFn_bind, ih, queryNode,
       evalWithAnswerFn_liftM_query, QueryImpl.ofFn_apply]
     rfl
 
@@ -482,16 +480,17 @@ theorem prEvent_secondPreimage_le [SampleableType R] (honest : D) (r : R)
       z.2 x = some r] ≤ (q : ℝ≥0∞) / Nat.card R :=
   prEvent_hits_le r oa hq
 
-/-- A successful partial node computation caches its final parent call. -/
+/-- A successful partial computation of a parent caches its final call. -/
 theorem cached_parent_of_partial_node (g : NodeInput R → R)
     (c : (NodeInput R →ₒ R).QueryCache) (hf : c.AgreesWithFn (QueryImpl.ofFn g))
-    (leaves : Nat → R) (level j : Nat) (a : R)
+    (leaves : Nat → R) (p : Position) (a : R)
     (ha : simulateQ c.toPartialImpl
-      (node queryNode (fun j => pure (leaves j)) (level + 1) j) = some a) :
-    c (level + 1, j,
-      (node (nodeHash g) (fun j => pure (leaves j)) level (2 * j)).run,
-      (node (nodeHash g) (fun j => pure (leaves j)) level (2 * j + 1)).run) = some a := by
-  simp only [node_succ, simulateQ_bind] at ha
+      (node queryNode (fun j => pure (leaves j)) p.parent) = some a) :
+    c (p.parent,
+      (node (nodeHash g) (fun j => pure (leaves j)) p.parent.left).run,
+      (node (nodeHash g) (fun j => pure (leaves j)) p.parent.right).run) = some a := by
+  rw [node_children _ _ (p := p.parent) (by simp)] at ha
+  simp only [simulateQ_bind] at ha
   obtain ⟨left, hl, ha⟩ := Option.bind_eq_some_iff.mp ha
   obtain ⟨right, hr, ha⟩ := Option.bind_eq_some_iff.mp ha
   have hleft := c.evalWithAnswerFn_eq_of_agreesWithFn hf _ hl
@@ -503,17 +502,17 @@ theorem cached_parent_of_partial_node (g : NodeInput R → R)
 /-- A successful partial second-preimage search exposes two distinct cached inputs. -/
 theorem collision_of_partial_findSecondPreimage [SampleableType R] [DecidableEq R]
     (c : (NodeInput R →ₒ R).QueryCache) (leaves : Nat → R) :
-    ∀ (q : List R) (level j : Nat) (b : R) (w : SecondPreimage R),
+    ∀ (t : List R) (p : Position) (b : R) (w : SecondPreimage R),
       simulateQ c.toPartialImpl
-        (findSecondPreimage queryNode (fun j => pure (leaves j)) level j b q) = some (some w) →
+        (findSecondPreimage queryNode (fun j => pure (leaves j)) p b t) = some (some w) →
         Collision c := by
   -- Complete the cache only to identify the repeated honest-child computations.
   obtain ⟨g, hg⟩ := c.exists_agreesWithFn
-  intro q
-  induction q with
-  | nil => intro level j b w hw; simp [findSecondPreimage] at hw
-  | cons t q ih =>
-    intro level j b w hw
+  intro t
+  induction t with
+  | nil => intro p b w hw; simp [findSecondPreimage] at hw
+  | cons v t ih =>
+    intro p b w hw
     simp only [findSecondPreimage, simulateQ_bind] at hw
     obtain ⟨parent, hp, hw⟩ := Option.bind_eq_some_iff.mp hw
     obtain ⟨left, hl, hw⟩ := Option.bind_eq_some_iff.mp hw
@@ -525,16 +524,15 @@ theorem collision_of_partial_findSecondPreimage [SampleableType R] [DecidableEq 
       have hleft := c.evalWithAnswerFn_eq_of_agreesWithFn hg' _ hl
       have hright := c.evalWithAnswerFn_eq_of_agreesWithFn hg' _ hr
       rw [evalWithAnswerFn_node] at hleft hright
-      have hc := cached_parent_of_partial_node (fun t => g t) c hg leaves
-        level (j / 2) honest hh
+      have hc := cached_parent_of_partial_node (fun t => g t) c hg leaves p honest hh
       rw [hleft, hright] at hc
-      refine ⟨(level + 1, j / 2, (ordered j b t).1, (ordered j b t).2),
-        (level + 1, j / 2, left, right), parent, ?_, ?_, ?_⟩
+      refine ⟨(p.parent, (ordered p b v).1, (ordered p b v).2),
+        (p.parent, left, right), parent, ?_, ?_, ?_⟩
       · intro heq
-        exact h.1 (by simpa using congrArg (fun z : NodeInput R => z.2.2) heq)
+        exact h.1 (by simpa using congrArg (fun z : NodeInput R => z.2) heq)
       · simpa [queryNode, simulateQ_spec_query, QueryCache.toPartialImpl_apply] using hp
       · simpa [h.2] using hc
-    · exact ih _ _ parent w hw
+    · exact ih _ parent w hw
 
 /-- The second-preimage search against the oracle has the birthday bound at its full budget.
 
@@ -545,19 +543,19 @@ The path and leaves are fixed before the oracle is sampled.
 A path chosen after seeing oracle answers needs the bound for covered events.
 -/
 theorem prEvent_findSecondPreimage_queryNode_le [SampleableType R] [DecidableEq R]
-    (leaves : Nat → R) (q : List R) (level j : Nat) (b : R) :
+    (leaves : Nat → R) (t : List R) (p : Position) (b : R) :
     Pr{let z ← (simulateQ (NodeInput R →ₒ R).randomOracle
-      (findSecondPreimage queryNode (fun j => pure (leaves j)) level j b q)).run ∅}[z.1.isSome] ≤
-        (secondPreimageQueries level q.length : ℝ≥0∞) *
-          ((secondPreimageQueries level q.length : ℝ≥0∞) / Nat.card R) := by
+      (findSecondPreimage queryNode (fun j => pure (leaves j)) p b t)).run ∅}[z.1.isSome] ≤
+        (secondPreimageQueries p.level t.length : ℝ≥0∞) *
+          ((secondPreimageQueries p.level t.length : ℝ≥0∞) / Nat.card R) := by
   refine (prEvent_mono_of_support _ _ _ ?_).trans
-    (prEvent_collision_le_total _ (findSecondPreimage_queryBound leaves q level j b))
+    (prEvent_collision_le_total _ (findSecondPreimage_queryBound leaves t p b))
   intro z hz hs
   obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hs
   have hp := QueryImpl.simulateQ_toPartialImpl_snd_of_mem_support_run_simulateQ_withCaching
-    uniformSampleImpl (findSecondPreimage queryNode (fun j => pure (leaves j)) level j b q) hz
+    uniformSampleImpl (findSecondPreimage queryNode (fun j => pure (leaves j)) p b t) hz
   rw [hw] at hp
-  exact collision_of_partial_findSecondPreimage z.2 leaves q level j b w hp
+  exact collision_of_partial_findSecondPreimage z.2 leaves t p b w hp
 
 /-- There are `2^256` digests of 32 bytes. -/
 theorem card_bytes32 : Nat.card (Vector UInt8 32) = 2 ^ 256 := by

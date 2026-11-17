@@ -253,7 +253,7 @@ theorem Concrete.topTreeNode_queryBound_zero_topEncoding
     (Concrete.nodeAt_queryBound_zero parameter _ .top fun _ _ _ =>
       Concrete.tweakableHash_queryBound_atOtherAddress parameter _ _ _
         (by simp [Concrete.nodeDomain]))
-    levels node.val
+    ⟨levels, node.val⟩
   rw [Concrete.topLeafAt]
   tweakable_hashes
   refine OracleComp.isQueryBoundP_bind (m := 0) ?_ fun endpoints _ =>

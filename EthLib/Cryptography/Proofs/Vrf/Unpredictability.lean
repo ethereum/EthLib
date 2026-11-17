@@ -60,7 +60,7 @@ section Oracle
 variable {m : Type → Type} [Monad m] (H : ByteArray → m Digest)
 
 /-- The node hash of the tree, with `H` in place of Keccak-256. -/
-def nodeWith (_level _j : Nat) (left right : Digest) : m Digest :=
+def nodeWith (_p : Merkle.Position) (left right : Digest) : m Digest :=
   H (nodeInput left right)
 
 /-- Leaf `j` of the tree over the secrets, with `H` in place of Keccak-256. -/
@@ -198,9 +198,9 @@ theorem simulateQ_deriveImpl_gameD (others : UInt32 → Digest) (c : UInt32) (s 
         simulateQ ((encoding c).deriveImpl s) x >>= fun b =>
           simulateQ ((encoding c).deriveImpl s) (f b) :=
     fun x f => simulateQ_bind _ _ _
-  have hnode : ∀ (l j : Nat) (a b : Digest),
-      simulateQ ((encoding c).deriveImpl s) (nodeWith hashD l j a b) = nodeWith queryHash l j a b :=
-    fun _ _ _ _ => hhash _
+  have hnode : ∀ (q : Merkle.Position) (a b : Digest),
+      simulateQ ((encoding c).deriveImpl s) (nodeWith hashD q a b) = nodeWith queryHash q a b :=
+    fun _ _ _ => hhash _
   have hpath : ∀ i : UInt32, simulateQ ((encoding c).deriveImpl s)
       (Merkle.path (nodeWith hashD) (leafD others c) VRF_TREE_HEIGHT i.toNat) =
       Merkle.path (nodeWith queryHash) (leafWith queryHash (Function.update others c s))
@@ -234,39 +234,43 @@ A node of level `l` hashes its `2^l` leaves and its `2^l - 1` inner nodes. -/
 section Count
 
 variable {ι : Type} {spec : OracleSpec ι} {p : ι → Prop} [DecidablePred p] {α : Type}
-  {hash : Nat → Nat → α → α → OracleComp spec α} {leaves : Nat → OracleComp spec α}
+  {hash : Merkle.Position → α → α → OracleComp spec α} {leaves : Nat → OracleComp spec α}
 
 /-- A node of level `l` makes at most `2^(l + 1) - 1` queries, one per leaf and per hash. -/
 theorem isQueryBoundP_node (hleaves : ∀ j, IsQueryBoundP (leaves j) p 1)
-    (hhash : ∀ l j a b, IsQueryBoundP (hash l j a b) p 1) :
-    ∀ level j, IsQueryBoundP (Merkle.node hash leaves level j) p (2 ^ (level + 1) - 1)
-  | 0, j => hleaves j
-  | level + 1, j => by
+    (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 1) :
+    ∀ q : Merkle.Position,
+      IsQueryBoundP (Merkle.node hash leaves q) p (2 ^ (q.level + 1) - 1) := by
+  rintro ⟨level, j⟩
+  induction level generalizing j with
+  | zero => exact hleaves j
+  | succ level ih =>
     rw [Merkle.node_succ]
     have h1 : 1 ≤ 2 ^ (level + 1) := Nat.one_le_two_pow
     have h2 : 2 ^ (level + 1 + 1) = 2 * 2 ^ (level + 1) := by rw [pow_succ]; ring
-    refine (isQueryBoundP_bind (isQueryBoundP_node hleaves hhash level _) fun _ _ =>
-      isQueryBoundP_bind (isQueryBoundP_node hleaves hhash level _) fun _ _ =>
-        hhash _ _ _ _).mono ?_
+    refine (isQueryBoundP_bind (ih _) fun _ _ =>
+      isQueryBoundP_bind (ih _) fun _ _ => hhash _ _ _).mono ?_
+    simp only at h1 h2 ⊢
     omega
 
 /-- The `n` siblings above a node of level `l` make at most `2^(l + n + 1) - 2^(l + 1)` queries. -/
 theorem isQueryBoundP_siblings (hleaves : ∀ j, IsQueryBoundP (leaves j) p 1)
-    (hhash : ∀ l j a b, IsQueryBoundP (hash l j a b) p 1) :
-    ∀ level j n, IsQueryBoundP (Merkle.siblings hash leaves level j n) p
-      (2 ^ (level + n + 1) - 2 ^ (level + 1))
-  | level, j, 0 => by simp [Merkle.siblings]
-  | level, j, n + 1 => by
+    (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 1) :
+    ∀ (q : Merkle.Position) (n : Nat), IsQueryBoundP (Merkle.siblings hash leaves q n) p
+      (2 ^ (q.level + n + 1) - 2 ^ (q.level + 1))
+  | q, 0 => by simp [Merkle.siblings]
+  | q, n + 1 => by
     simp only [Merkle.siblings]
-    have h1 : 1 ≤ 2 ^ (level + 1) := Nat.one_le_two_pow
-    have h2 : 2 ^ (level + 1 + 1) = 2 * 2 ^ (level + 1) := by rw [pow_succ]; ring
-    have h3 : 2 ^ (level + 1 + 1) ≤ 2 ^ (level + 1 + n + 1) :=
+    have h1 : 1 ≤ 2 ^ (q.level + 1) := Nat.one_le_two_pow
+    have h2 : 2 ^ (q.level + 1 + 1) = 2 * 2 ^ (q.level + 1) := by rw [pow_succ]; ring
+    have h3 : 2 ^ (q.level + 1 + 1) ≤ 2 ^ (q.level + 1 + n + 1) :=
       Nat.pow_le_pow_right (by norm_num) (by omega)
-    have h4 : level + (n + 1) + 1 = level + 1 + n + 1 := by omega
+    have h4 : q.level + (n + 1) + 1 = q.level + 1 + n + 1 := by omega
     rw [h4]
-    refine (isQueryBoundP_bind (isQueryBoundP_node hleaves hhash level _) fun _ _ =>
-      isQueryBoundP_bind (isQueryBoundP_siblings hleaves hhash (level + 1) (j / 2) n) fun _ _ =>
+    refine (isQueryBoundP_bind (isQueryBoundP_node hleaves hhash q.sibling) fun _ _ =>
+      isQueryBoundP_bind (isQueryBoundP_siblings hleaves hhash q.parent n) fun _ _ =>
         isQueryBoundP_pure _ _ 0).mono ?_
+    simp only [Merkle.Position.sibling_level, Merkle.Position.parent_level]
     omega
 
 end Count
@@ -319,14 +323,14 @@ theorem isQueryBoundP_leafD (others : UInt32 → Digest) (c : UInt32) (j : Nat) 
 theorem isQueryBoundP_pathD (others : UInt32 → Digest) (c : UInt32) (n i : Nat) :
     IsQueryBoundP (Merkle.path (nodeWith hashD) (leafD others c) n i) IsHashD (2 ^ (n + 1)) := by
   have h := isQueryBoundP_siblings (hash := nodeWith hashD) (leaves := leafD others c)
-    (isQueryBoundP_leafD others c) (fun _ _ a b => isQueryBoundP_hashD (nodeInput a b)) 0 i n
+    (isQueryBoundP_leafD others c) (fun _ a b => isQueryBoundP_hashD (nodeInput a b)) ⟨0, i⟩ n
   exact h.mono (by simp)
 
 /-- The root of a tree of height `n` makes fewer than `2^(n + 1)` hash queries. -/
 theorem isQueryBoundP_rootD (others : UInt32 → Digest) (c : UInt32) (n : Nat) :
     IsQueryBoundP (Merkle.root (nodeWith hashD) (leafD others c) n) IsHashD (2 ^ (n + 1)) := by
   have h := isQueryBoundP_node (hash := nodeWith hashD) (leaves := leafD others c)
-    (isQueryBoundP_leafD others c) (fun _ _ a b => isQueryBoundP_hashD (nodeInput a b)) n 0
+    (isQueryBoundP_leafD others c) (fun _ a b => isQueryBoundP_hashD (nodeInput a b)) ⟨n, 0⟩
   exact h.mono (Nat.sub_le _ _)
 
 /-- Answering an adversary of `qh` hash queries and `qo` requests costs `qh + qo 2^33` queries. -/
@@ -425,13 +429,13 @@ theorem allQueriesSatisfy_beforeOutput (others : UInt32 → Digest) (c : UInt32)
   have hleaf : ∀ j, AllQueriesSatisfy (leafD others c j) NotOutput := fun j => by
     unfold leafD hashD deriveD
     split <;> simp [NotOutput]
-  have hnode : ∀ l j a b, AllQueriesSatisfy (nodeWith hashD l j a b) NotOutput :=
-    fun _ _ _ _ => by simp [nodeWith, hashD, NotOutput]
+  have hnode : ∀ q a b, AllQueriesSatisfy (nodeWith hashD q a b) NotOutput :=
+    fun _ _ _ => by simp [nodeWith, hashD, NotOutput]
   refine allQueriesSatisfy_bind ?_ fun r => (allQueriesSatisfy_true (adversary r)).simulateQ ?_
   · rw [Merkle.root]
     exact Merkle.node_rec (nodeWith hashD)
       (fun {β} (x : OracleComp DerivedSpec β) => AllQueriesSatisfy x NotOutput)
-      allQueriesSatisfy_bind _ hleaf hnode _ _
+      allQueriesSatisfy_bind _ hleaf hnode _
   · rintro (t | i) -
     · simp [openImplD, NotOutput]
     · simp only [openImplD]
@@ -441,7 +445,7 @@ theorem allQueriesSatisfy_beforeOutput (others : UInt32 → Digest) (c : UInt32)
         refine allQueriesSatisfy_bind ?_ fun _ => allQueriesSatisfy_pure _ _
         exact allQueriesSatisfy_bind (Merkle.siblings_rec (nodeWith hashD)
           (fun {β} (x : OracleComp DerivedSpec β) => AllQueriesSatisfy x NotOutput)
-          (fun _ => allQueriesSatisfy_pure _ _) allQueriesSatisfy_bind _ hleaf hnode _ _ _)
+          (fun _ => allQueriesSatisfy_pure _ _) allQueriesSatisfy_bind _ hleaf hnode _ _)
           fun _ => allQueriesSatisfy_pure _ _
 
 /-- In the ideal game, the fresh uniform output is guessed with chance at most `2^-256`. -/

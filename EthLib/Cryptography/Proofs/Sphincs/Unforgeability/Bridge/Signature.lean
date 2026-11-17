@@ -119,8 +119,8 @@ theorem layerRoot_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsS
   rcases r with _ | value
   · simp
   · have h := hclimb value (SphincsSecurity.layerHeight lay) 0
-    simp only [Nat.zero_add, SphincsSecurity.Concrete.treeFold, pure_bind, pow_zero,
-      Nat.div_one] at h
+    simp only [Nat.zero_add, SphincsSecurity.Concrete.treeFold, pure_bind,
+      Merkle.Position.ancestor_zero] at h
     simp only [Option.map_some, fold, keyOf]
     rw [toList_path_ofLayerSignature, ← h]
     simp

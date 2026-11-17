@@ -25,7 +25,7 @@ Nothing here reads a node, so this holds for any node type at all.
 It is the Merkle tree of that depth, hashing every node alike.
 -/
 def subtreeRoot (combine : α → α → α) (depth : Nat) (leaves : Nat → α) : α :=
-  (Cryptography.Merkle.root (m := Id) (fun _ _ => combine) leaves depth).run
+  (Cryptography.Merkle.root (m := Id) (fun _ => combine) leaves depth).run
 
 /--
 Root of the perfect binary tree of a given depth whose every leaf is zero.
