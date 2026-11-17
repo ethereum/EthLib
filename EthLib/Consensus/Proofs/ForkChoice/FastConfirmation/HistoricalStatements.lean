@@ -503,4 +503,39 @@ def CrossStoreJustifiedEvidence {g : ForkedBeaconState preset}
           (DirectSafety.derivedDrift first.epoch.toNat right) ∨
         DirectSafety.HashEvidence ((pre.append left).hashObjects ++ (pre.append right).hashObjects))
 
+/-- An honest store's finalized checkpoint conflicts with the justified checkpoint of a held state.
+
+The held state is held by an honest store, the same one or another, at an event by the time.
+
+Its realized justified checkpoint is at the finalized epoch or later.
+
+Runs from the anchor go to a held state of each store.
+
+A terminal view of the first state has the finalized checkpoint, and the second state is the view.
+
+The evidence is the direct-safety stake inequality on those runs, or hash evidence on them.
+
+Its drift counts from the anchor, up to one epoch past the held justified epoch.
+
+With enough churn since the anchor, the stake inequality holds with no accountable key. -/
+def HeldStateFinalityEvidence {g : ForkedBeaconState preset}
+    (pre : Run config checks g ⟨fork, anchorState⟩) (time : Nat) : Prop :=
+  ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
+    ∃ (stateA stateB : BeaconState preset fork)
+      (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
+      (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
+      (va : DirectSafety.TerminalView ⟨fork, stateA⟩)
+      (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
+      (∃ r : Root, ((e.world i).state a).blockStates[r]? = some stateA) ∧
+      (∃ r : Root, ((e.world j).state b).blockStates[r]? = some stateB) ∧
+      va.state.finalizedCheckpoint = ((e.world i).state a).finalizedCheckpoint ∧
+      vb.state.currentJustifiedCheckpoint = stateB.currentJustifiedCheckpoint ∧
+      ((e.world i).state a).finalizedCheckpoint.epoch ≤ stateB.currentJustifiedCheckpoint.epoch ∧
+      (stake (DirectSafety.effectiveWeight anchorState) (DirectSafety.unslashedKeys anchorState) ≤
+        3 * stake (DirectSafety.effectiveWeight anchorState)
+          (DirectSafety.accountableKeys pre left right) +
+        2 * max (DirectSafety.derivedDrift stateB.currentJustifiedCheckpoint.epoch.toNat left)
+          (DirectSafety.derivedDrift stateB.currentJustifiedCheckpoint.epoch.toNat right) ∨
+        DirectSafety.HashEvidence ((pre.append left).hashObjects ++ (pre.append right).hashObjects))
+
 end EthLib.Consensus.Models.Network

@@ -120,4 +120,75 @@ public theorem Execution.selectedCheckpointsAgree_or_evidence {anchor : Store pr
   · exact .inr ⟨a, honestA, b, honestB, i, j, timeA, timeB, first, second, selectedFirst,
       selectedSecond, epoch, different, evidence⟩
 
+/-- A held state's justified checkpoint reads every honest finalized checkpoint up to its epoch.
+
+The held state is held by an honest store at an event by the time.
+
+Its realized justified checkpoint is after the anchor epoch.
+
+The finalized checkpoint is that of an honest store at an event by the time, the same or another.
+
+Otherwise runs from the anchor to held states of the two stores give direct-safety evidence.
+
+That evidence is relative to the anchor, and its drift counts from the anchor.
+
+With enough churn since the anchor, it holds with no accountable key. -/
+public theorem Execution.heldFinality_or_evidence {anchor : Store preset fork}
+    {horizon : Epoch} {last : Nat} {g : ForkedBeaconState preset}
+    (pre : Run config checks g ⟨fork, anchorState⟩)
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (slots : 0 < config.SLOT_DURATION_MS)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon last)
+    (roots : HeldBlockStateRootsNonzero (e := e) last)
+    (absent : AnchorParentAbsent (e := e) last)
+    (parameters : DirectSafety.Parameters preset) (genesis : Genesis config checks g)
+    (early : HeldStatesBeforeUpgrade (e := e) last)
+    (enough : HeldRunStakeFloor (e := e) pre horizon last)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon last) :
+    (∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
+      ∀ (r : Root) (st : BeaconState preset fork),
+      ((e.world j).state b).blockStates[r]? = some st →
+      getCurrentEpoch anchorState < st.currentJustifiedCheckpoint.epoch →
+      ((e.world i).state a).finalizedCheckpoint.epoch ≤ st.currentJustifiedCheckpoint.epoch →
+      ((e.world j).state b).getCheckpointBlock st.currentJustifiedCheckpoint.root
+        ((e.world i).state a).finalizedCheckpoint.epoch =
+          .ok ((e.world i).state a).finalizedCheckpoint.root) ∨
+    HeldStateFinalityEvidence (e := e) pre last := by
+  classical
+  by_cases family : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last →
+      (e.world j).time ≤ last →
+      ∀ (r : Root) (st : BeaconState preset fork),
+      ((e.world j).state b).blockStates[r]? = some st →
+      getCurrentEpoch anchorState < st.currentJustifiedCheckpoint.epoch →
+      ((e.world i).state a).finalizedCheckpoint.epoch ≤ st.currentJustifiedCheckpoint.epoch →
+      ((e.world j).state b).getCheckpointBlock st.currentJustifiedCheckpoint.root
+        ((e.world i).state a).finalizedCheckpoint.epoch =
+          .ok ((e.world i).state a).finalizedCheckpoint.root
+  · exact .inl family
+  push Not at family
+  obtain ⟨a, honestA, b, honestB, i, j, timeA, timeB, r, st, held, after, ordered, failed⟩ :=
+    family
+  -- The held state's justified epoch is at most its previous epoch, so within the horizon.
+  have inHorizon : st.currentJustifiedCheckpoint.epoch ≤ horizon := by
+    have forward := e.forwardReachableWith
+      (fun w hw => (anchored w hw) ▸ Store.ForwardReachableWith.anchor anchorStore) j b honestB
+    obtain ⟨current, currentOk, _, _⟩ := forward.forwardReachable.slots_le_current
+      slots (UInt64.le_of_eq anchorSlot)
+    have epochOk : ((e.world j).state b).getCurrentStoreEpoch config =
+        .ok (computeEpochAtSlot preset current) := by
+      simp [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
+    exact UInt64.le_trans
+      (UInt64.le_trans ((forward.reachable.ordered sound).2 held).settled
+        (getPreviousEpoch_le _))
+      (UInt64.le_trans (forward.forwardReachable.blockState_epoch_le_current slots
+        (UInt64.le_of_eq anchorSlot) epochOk r st held)
+        (bounded b honestB j _ timeB epochOk))
+  have result := e.held_finalized_read_or_accountable anchorStore anchored parameters genesis pre
+    anchorSlot boundary (e.anchor_stateRoot_nonzero anchorStore anchored roots honestA timeA)
+    absent early enough terminal honestA honestB timeA timeB held after ordered inHorizon
+  exact .inr ⟨a, honestA, b, honestB, i, j, timeA, timeB, result.resolve_left failed⟩
+
 end EthLib.Consensus.Models.Network
