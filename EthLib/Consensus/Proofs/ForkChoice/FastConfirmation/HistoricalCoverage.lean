@@ -480,7 +480,8 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
       ((e.world k).state w).isAncestor
           ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
         (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes)
-    (exits : ReceiverWindowExits (e := e) source first (e.world n).time time)
+    (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
+      (e.world n).time time)
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
@@ -594,8 +595,8 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
           epochStartTimeOk historyCovers receiver atTime upToDate known finality receiverHeadOk
           receiverParent stateOk currentOk receiverEpochOk nearParent receiverLastOk windowOk
           scoreOk participantsOk
-          (exits w receiver k receiverHead current receiverLast lowK highK upToDate receiverHeadOk
-            currentOk receiverLastOk)
+          (exits w receiver k receiverHead current receiverLast receiverEpoch lowK highK upToDate
+            receiverHeadOk currentOk receiverLastOk receiverEpochOk nearParent)
           (fun a ha i hi => absent a ha i (by omega)) tree route
         exact step
       · -- Duty-epoch step at time `T`, with the late majority's complete epoch after the call.
@@ -766,7 +767,7 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     historicalEpochOk near epochStartOk epochStartTimeOk historyCovers absent parentCovers reads
     (fun _ low high _ w receiver k nodes _ atTime upToDate _ tree =>
       viable w receiver k nodes (atTime ▸ low) (atTime ▸ high) upToDate tree)
-    exits late
+    (receiverWindowExitsNear_of_exits exits) late
 
 /-- A guarded historical margin keeps the block on every honest head chain until the horizon.
 
@@ -930,6 +931,6 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
         exact route_of_split
           (consistent w receiver k lowK highK upToDate (UInt64.not_lt.mp later))
           (leaf w receiver k nodes lowK highK upToDate tree))
-    exits late
+    (receiverWindowExitsNear_of_exits exits) late
 
 end EthLib.Consensus.Models.Network
