@@ -180,6 +180,248 @@ private theorem receiver_clock_reads {anchor : Store preset fork}
       (by simp only [UInt64.toNat_one]; omega))]
   exact ⟨current, _, _, currentOk, epochOk, lastOk, above⟩
 
+/-- The induction of the historical-anchor headline, with the root's viability given per time.
+
+The viability at a time may read the coverage at every earlier time. -/
+private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
+    (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (preGloas : fork < .glamsterdam) {time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
+    (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
+    (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
+    (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
+    (history : VoteCommitteeCommonHistory (e := e) time) {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
+      ((e.world n).state u))
+    {head root : Root} {source : BeaconState preset fork}
+    {slot first last beforeBlock : Slot} {block parent : BeaconBlock preset fork}
+    {parentParticipants : Std.TreeSet ValidatorIndex} {boost maximum : Gwei}
+    (headNode : ∃ node, ((e.world n).state u).getHead config = .ok node ∧ node.root = head)
+    (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot) {begin : UInt64}
+    (beginOk : computeTimeAtSlotMs config genesisTimeMs slot = .ok begin)
+    (timeEq : (e.world n).time = begin.toNat)
+    (blockOk : ((e.world n).state u).block root = .ok block)
+    (parentOk : ((e.world n).state u).block block.parentRoot = .ok parent)
+    {checkpoint : Checkpoint}
+    (sourceOk : ((e.world n).state u).checkpointState checkpoint = .ok source)
+    (boostOk : computeProposerScore config source = .ok boost)
+    (firstOk : addChecked parent.slot 1 = .ok first) (lastOk : subChecked slot 1 = .ok last)
+    (beforeOk : subChecked block.slot 1 = .ok beforeBlock)
+    (maximumOk : ((e.world n).state u).computeCommitteeWeightBetweenSlots head source first last =
+      .ok maximum)
+    (parentParticipantsOk : ((e.world n).state u).getCommitteesBetweenSlots head first
+      beforeBlock = .ok parentParticipants)
+    {shift : ℕ} {support discount adversary : Gwei} (registry : source.RegistryWithinLimit)
+    (aligned : EffectiveBalancesAligned source)
+    (increment : preset.EFFECTIVE_BALANCE_INCREMENT.toNat % 100 = 0)
+    (supportOk : ((e.world n).state u).scoreFromTally (((e.world n).state u).tallyVotes source)
+      ⟨root, .pending⟩ = .ok support)
+    (discountOk : ((e.world n).state u).computeEmptySlotSupportDiscount config head source root =
+      .ok discount)
+    (adversaryOk : ((e.world n).state u).getAdversarialWeight config head source root =
+      .ok adversary)
+    (margin : maximum.toNat + boost.toNat + 2 * adversary.toNat + shift <
+      discount.toNat + 2 * support.toNat)
+    (callerTime : (e.world n).time ≤ time) (sourceReads : SourceWindowReads (e := e) n time source)
+    (drift : WindowMarginDrift (e := e) n time source shift)
+    {finish : Slot}
+    (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) head source
+      first finish)
+    {x : ValidatorIndex} (reference : x ∈ J) {m : ℕ} (referenceTime : time ≤ (e.world m).time)
+    (referenceUpToDate : UpToDate config checks sources (e.world m).time ((e.world m).view x)
+      ((e.world m).state x))
+    {referenceSlot : Slot}
+    (referenceSlotOk : ((e.world m).state x).getCurrentSlot config = .ok referenceSlot)
+    (finishOk : subChecked referenceSlot 1 = .ok finish)
+    {horizon : Epoch}
+    (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon time)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time)
+    (unslashed : HonestCountedStatesUnslashed (e := e) time)
+    (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) time)
+    (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
+    (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) time)
+    (enough : HeldRunStakeFloor (e := e) pre horizon time)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon time)
+    (headDescends : ((e.world n).state u).isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
+    {historical : Root} {callerEpoch historicalEpoch : Epoch} {epochStart : Slot}
+    {epochStartTime : UInt64}
+    (historicalBelow : ((e.world n).state u).isAncestor ⟨block.parentRoot, .pending⟩
+      ⟨historical, .pending⟩ = .ok true)
+    (callerEpochOk : ((e.world n).state u).getCurrentStoreEpoch config = .ok callerEpoch)
+    (historicalEpochOk : ((e.world n).state u).getBlockEpoch historical = .ok historicalEpoch)
+    (near : callerEpoch.toNat ≤ historicalEpoch.toNat + 1)
+    (epochStartOk : computeStartSlotAtEpoch preset callerEpoch = .ok epochStart)
+    (epochStartTimeOk : computeTimeAtSlotMs config genesisTimeMs epochStart = .ok epochStartTime)
+    (historyCovers : HonestHeadsCover (e := e) historical epochStartTime.toNat (e.world n).time)
+    (absent : AnchorParentAbsent (e := e) time)
+    (parentCovers : HonestHeadsCover (e := e) block.parentRoot (e.world n).time (time + 1))
+    (reads : HonestHeadReads (e := e) first (e.world n).time time)
+    (viableAt : ∀ T, (e.world n).time ≤ T → T ≤ time →
+      HonestHeadsCover (e := e) root (e.world n).time T →
+      ∀ w ∈ J, ∀ k (nodes : List ForkChoiceNode) (hd : ForkChoiceNode), (e.world k).time = T →
+      UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+      ((e.world k).state w).getHead config = .ok hd →
+      ((e.world k).state w).getFilteredNodeTree config = .ok nodes →
+      ((e.world k).state w).isAncestor
+          ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
+        (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes)
+    (exits : ReceiverWindowExits (e := e) source first (e.world n).time time)
+    (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
+      (e.world n).time time) :
+    HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
+      (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
+        ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
+          some evidence) ∨
+      HistoricalDirectSafetyEvidence (e := e) pre time := by
+  classical
+  -- The same-store finalized family, or the evidence alternative, once for the horizon.
+  rcases e.finalizedFamily_or_historical_evidence anchored start sound anchorSlot anchorBoundary
+      slots bounded roots absent parameters genesis pre heldEarly enough terminal caller callerTime
+    with family | evidence
+  swap
+  · exact .inr (.inr evidence)
+  have callerHeld : ((e.world n).state u).blocks[root]? = some block :=
+    Store.block_ok_iff.mp blockOk
+  -- The parent sits below the block, so the block's slot is positive.
+  have callerLower := (e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored)
+    n u caller).parentsBelow (UInt64.le_of_eq anchorSlot) (absent u caller n callerTime)
+  have parentBelow := callerLower root block parent callerHeld (Store.block_ok_iff.mp parentOk)
+  have blockPositive : 0 < block.slot.toNat := by
+    have := UInt64.lt_iff_toNat_lt.mp parentBelow
+    omega
+  have started : e.startTime ≤ (e.world n).time := by
+    have le := e.monotone_time (Nat.zero_le n)
+    simpa [Execution.world_zero, World.initial] using le
+  -- The time induction; each step is the historical-anchor step or the duty-epoch step.
+  have result := cover_of_steps (e := e) (root := root) (first := (e.world n).time) (last := time)
+    (P := (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
+        ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
+          some evidence) ∨
+      HistoricalDirectSafetyEvidence (e := e) pre time)
+    (fun T low high covers w receiver k receiverHead atTime upToDate receiverHeadOk => by
+      obtain ⟨nodes, _, tree, _⟩ := Store.getHead_leaf receiverHeadOk
+      have lowK : (e.world n).time ≤ (e.world k).time := atTime ▸ low
+      have highK : (e.world k).time ≤ time := atTime ▸ high
+      have route := viableAt T low high covers w receiver k nodes receiverHead atTime upToDate
+        receiverHeadOk tree
+      rcases known_or_collision_of_viable anchored start caller receiver callerHeld tree route with
+        known | ⟨r, evidence, searched⟩
+      swap
+      · exact .inr (.inl ⟨u, caller, w, receiver, n, k, callerTime, highK, r, evidence, searched⟩)
+      obtain ⟨⟨state, stateOk⟩, windowsOk⟩ :=
+        reads w receiver k receiverHead lowK highK upToDate receiverHeadOk
+      -- The ceiling and the parameter bound give the receiver's proposer score.
+      obtain ⟨score, scoreOk⟩ := computeProposerScore_exists scoreFits positive
+        (BeaconState.registryWithinLimit_of_lt preGloas state)
+        (ceiling w receiver k _ state highK stateOk)
+      have receiverParent : ((e.world k).state w).isAncestor receiverHead
+          ⟨block.parentRoot, .pending⟩ = .ok true :=
+        parentCovers T low (by omega) w receiver k receiverHead atTime upToDate receiverHeadOk
+      obtain ⟨current, receiverEpoch, receiverLast, currentOk, receiverEpochOk, receiverLastOk,
+        blockLe⟩ := receiver_clock_reads anchored start anchorSlot slots receiver k known
+          blockPositive
+      -- Both steps conclude at time `T`; their alternatives also hold at the horizon.
+      suffices atStep : (((e.world k).state w).isAncestor receiverHead ⟨root, .pending⟩ = .ok true ∨
+          ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ T ∧ (e.world j).time ≤ T ∧
+            ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b)
+              [r] = some evidence) ∨
+          HistoricalDirectSafetyEvidence (e := e) pre T by
+        rcases atStep with (ancestor | ⟨a, ha, b, hb, i, j, hi, hj, rest⟩) |
+            ⟨w', hw', i, j, ij, hj, rest⟩
+        · exact .inl ancestor
+        · exact .inr (.inl ⟨a, ha, b, hb, i, j, by omega, by omega, rest⟩)
+        · exact .inr (.inr ⟨w', hw', i, j, ij, by omega, rest⟩)
+      by_cases nearParent : receiverEpoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2
+      · -- Historical-anchor step at time `T`.
+        have lastLt : receiverLast < current := by
+          have h1 := (subChecked_ok_iff.mp receiverLastOk).2
+          have := UInt64.le_iff_toNat_le.mp blockLe
+          simp only [UInt64.toNat_one] at h1
+          exact UInt64.lt_iff_toNat_lt.mpr (by omega)
+        have beforeLt : beforeBlock < current := by
+          have h1 := (subChecked_ok_iff.mp beforeOk).2
+          have := UInt64.le_iff_toNat_le.mp blockLe
+          simp only [UInt64.toNat_one] at h1
+          exact UInt64.lt_iff_toNat_lt.mpr (by omega)
+        obtain ⟨window, windowOk⟩ := windowsOk current receiverLast currentOk lastLt
+        obtain ⟨participants, participantsOk⟩ :=
+          windowsOk current beforeBlock currentOk beforeLt
+        have lastLe : receiverLast ≤ finish :=
+          e.previousSlot_le_of_time_le start receiver reference (highK.trans referenceTime)
+            referenceUpToDate currentOk referenceSlotOk receiverLastOk finishOk
+        have finality := receiverFinality_of_viable anchored start anchorSlot preGloas absent
+          family receiver highK known tree route
+        have step := e.isAncestor_getHead_of_historical_anchor sync slots positive minLookahead
+          maxLookahead ring preGloas (time := T)
+          (fun v hv w hw i j hj => admitted v hv w hw i j (by omega))
+          half (fun v hv s c d a dt b dl => votes v hv s c d a dt b (by omega)) fits
+          (prompt.of_le high)
+          (fun w hw j hj => windows w hw j (by omega))
+          (fun w hw j hj => history w hw j (by omega))
+          anchored sound anchorSlot anchorBoundary start caller callerUpToDate headNode slotOk
+          beginOk timeEq blockOk parentOk sourceOk boostOk firstOk lastOk beforeOk maximumOk
+          parentParticipantsOk registry aligned increment supportOk discountOk adversaryOk margin
+          low
+          (fun w hw j hd st cur fs fn mx a b => sourceReads w hw j hd st cur fs fn mx a (by omega))
+          (fun w hw j hd st sc ssc fs fn mx smx a b => drift w hw j hd st sc ssc fs fn mx smx a
+            (by omega))
+          (receiverLast := receiverLast)
+          (fun lo hi ps a b c => reserve lo hi ps a b (UInt64.le_trans c lastLe))
+          (fun a ha b hb i j hi hj => residual a ha b hb i j (by omega) (by omega))
+          (fun w hw j ep hj => bounded w hw j ep (by omega))
+          (fun w hw j hj => roots w hw j (by omega))
+          (fun w hw j st hj => unslashed w hw j st (by omega))
+          (fun w hw j c st hj => ceiling w hw j c st (by omega))
+          parameters genesis pre
+          (fun w hw j hj => heldEarly w hw j (by omega))
+          (fun w hw j hj => enough w hw j (by omega))
+          (fun w hw j hj => terminal w hw j (by omega))
+          covers headDescends historicalBelow callerEpochOk historicalEpochOk near epochStartOk
+          epochStartTimeOk historyCovers receiver atTime upToDate known finality receiverHeadOk
+          receiverParent stateOk currentOk receiverEpochOk nearParent receiverLastOk windowOk
+          scoreOk participantsOk
+          (exits w receiver k receiverHead current receiverLast lowK highK upToDate receiverHeadOk
+            currentOk receiverLastOk)
+          (fun a ha i hi => absent a ha i (by omega)) tree route
+        exact step
+      · -- Duty-epoch step at time `T`, with the late majority's complete epoch after the call.
+        obtain ⟨epoch, epochBegin, epochNext, beginTime, endTime, beginOk', nextOk, beginTimeOk,
+          endTimeOk, fresh, complete, majority⟩ :=
+          late w receiver k receiverEpoch state lowK highK upToDate receiverEpochOk (by omega)
+            stateOk
+        have step := e.isAncestor_getHead_of_duty_epoch_or_accountable sync slots preGloas
+          (first := (e.world n).time) (time := T)
+          (fun v hv w hw i j hj => admitted v hv w hw i j (by omega))
+          fits (prompt.of_le high) anchored sound anchorSlot anchorBoundary start started
+          parameters genesis pre
+          (fun w hw j hj => heldEarly w hw j (by omega))
+          (fun w hw j hj => enough w hw j (by omega))
+          (fun w hw j hj => terminal w hw j (by omega))
+          (fun w hw j ep hj => bounded w hw j ep (by omega))
+          (fun w hw j hj => roots w hw j (by omega))
+          (fun a ha i hi => absent a ha i (by omega))
+          covers
+          (fun v hv j hd hj => parentCovers T low (by omega) v hv j hd hj)
+          receiver atTime upToDate known stateOk tree route
+          ⟨epoch, epochBegin, epochNext, beginTime, endTime, beginOk', nextOk, beginTimeOk,
+            endTimeOk, fresh, atTime ▸ complete,
+            votes.votesInSlots fits endTimeOk (by omega), majority⟩
+          receiverHeadOk
+        exact step)
+  rcases result with cover | alternative
+  · exact .inl cover
+  · exact .inr alternative
+
 /-- A guarded historical margin keeps the block on every honest head chain until the horizon.
 
 Every up-to-date honest head from the call to the horizon descends from the block.
@@ -308,143 +550,17 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
       (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
         ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
           some evidence) ∨
-      HistoricalDirectSafetyEvidence (e := e) pre time := by
-  classical
-  -- The same-store finalized family, or the evidence alternative, once for the horizon.
-  rcases e.finalizedFamily_or_historical_evidence anchored start sound anchorSlot anchorBoundary
-      slots bounded roots absent parameters genesis pre heldEarly enough terminal caller callerTime
-    with family | evidence
-  swap
-  · exact .inr (.inr evidence)
-  have callerHeld : ((e.world n).state u).blocks[root]? = some block :=
-    Store.block_ok_iff.mp blockOk
-  -- The parent sits below the block, so the block's slot is positive.
-  have callerLower := (e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored)
-    n u caller).parentsBelow (UInt64.le_of_eq anchorSlot) (absent u caller n callerTime)
-  have parentBelow := callerLower root block parent callerHeld (Store.block_ok_iff.mp parentOk)
-  have blockPositive : 0 < block.slot.toNat := by
-    have := UInt64.lt_iff_toNat_lt.mp parentBelow
-    omega
-  have started : e.startTime ≤ (e.world n).time := by
-    have le := e.monotone_time (Nat.zero_le n)
-    simpa [Execution.world_zero, World.initial] using le
-  -- The time induction; each step is the historical-anchor step or the duty-epoch step.
-  have result := cover_of_steps (e := e) (root := root) (first := (e.world n).time) (last := time)
-    (P := (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
-        ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-          some evidence) ∨
-      HistoricalDirectSafetyEvidence (e := e) pre time)
-    (fun T low high covers w receiver k receiverHead atTime upToDate receiverHeadOk => by
-      obtain ⟨nodes, _, tree, _⟩ := Store.getHead_leaf receiverHeadOk
-      have lowK : (e.world n).time ≤ (e.world k).time := atTime ▸ low
-      have highK : (e.world k).time ≤ time := atTime ▸ high
-      have route := viable w receiver k nodes lowK highK upToDate tree
-      rcases known_or_collision_of_viable anchored start caller receiver callerHeld tree route with
-        known | ⟨r, evidence, searched⟩
-      swap
-      · exact .inr (.inl ⟨u, caller, w, receiver, n, k, callerTime, highK, r, evidence, searched⟩)
-      obtain ⟨⟨state, stateOk⟩, windowsOk⟩ :=
-        reads w receiver k receiverHead lowK highK upToDate receiverHeadOk
-      -- The ceiling and the parameter bound give the receiver's proposer score.
-      obtain ⟨score, scoreOk⟩ := computeProposerScore_exists scoreFits positive
-        (BeaconState.registryWithinLimit_of_lt preGloas state)
-        (ceiling w receiver k _ state highK stateOk)
-      have receiverParent : ((e.world k).state w).isAncestor receiverHead
-          ⟨block.parentRoot, .pending⟩ = .ok true :=
-        parentCovers T low (by omega) w receiver k receiverHead atTime upToDate receiverHeadOk
-      obtain ⟨current, receiverEpoch, receiverLast, currentOk, receiverEpochOk, receiverLastOk,
-        blockLe⟩ := receiver_clock_reads anchored start anchorSlot slots receiver k known
-          blockPositive
-      -- Both steps conclude at time `T`; their alternatives also hold at the horizon.
-      suffices atStep : (((e.world k).state w).isAncestor receiverHead ⟨root, .pending⟩ = .ok true ∨
-          ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ T ∧ (e.world j).time ≤ T ∧
-            ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b)
-              [r] = some evidence) ∨
-          HistoricalDirectSafetyEvidence (e := e) pre T by
-        rcases atStep with (ancestor | ⟨a, ha, b, hb, i, j, hi, hj, rest⟩) |
-            ⟨w', hw', i, j, ij, hj, rest⟩
-        · exact .inl ancestor
-        · exact .inr (.inl ⟨a, ha, b, hb, i, j, by omega, by omega, rest⟩)
-        · exact .inr (.inr ⟨w', hw', i, j, ij, by omega, rest⟩)
-      by_cases nearParent : receiverEpoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2
-      · -- Historical-anchor step at time `T`.
-        have lastLt : receiverLast < current := by
-          have h1 := (subChecked_ok_iff.mp receiverLastOk).2
-          have := UInt64.le_iff_toNat_le.mp blockLe
-          simp only [UInt64.toNat_one] at h1
-          exact UInt64.lt_iff_toNat_lt.mpr (by omega)
-        have beforeLt : beforeBlock < current := by
-          have h1 := (subChecked_ok_iff.mp beforeOk).2
-          have := UInt64.le_iff_toNat_le.mp blockLe
-          simp only [UInt64.toNat_one] at h1
-          exact UInt64.lt_iff_toNat_lt.mpr (by omega)
-        obtain ⟨window, windowOk⟩ := windowsOk current receiverLast currentOk lastLt
-        obtain ⟨participants, participantsOk⟩ :=
-          windowsOk current beforeBlock currentOk beforeLt
-        have lastLe : receiverLast ≤ finish :=
-          e.previousSlot_le_of_time_le start receiver reference (highK.trans referenceTime)
-            referenceUpToDate currentOk referenceSlotOk receiverLastOk finishOk
-        have finality := receiverFinality_of_viable anchored start anchorSlot preGloas absent
-          family receiver highK known tree route
-        have step := e.isAncestor_getHead_of_historical_anchor sync slots positive minLookahead
-          maxLookahead ring preGloas (time := T)
-          (fun v hv w hw i j hj => admitted v hv w hw i j (by omega))
-          half (fun v hv s c d a dt b dl => votes v hv s c d a dt b (by omega)) fits
-          (prompt.of_le high)
-          (fun w hw j hj => windows w hw j (by omega))
-          (fun w hw j hj => history w hw j (by omega))
-          anchored sound anchorSlot anchorBoundary start caller callerUpToDate headNode slotOk
-          beginOk timeEq blockOk parentOk sourceOk boostOk firstOk lastOk beforeOk maximumOk
-          parentParticipantsOk registry aligned increment supportOk discountOk adversaryOk margin
-          low
-          (fun w hw j hd st cur fs fn mx a b => sourceReads w hw j hd st cur fs fn mx a (by omega))
-          (fun w hw j hd st sc ssc fs fn mx smx a b => drift w hw j hd st sc ssc fs fn mx smx a
-            (by omega))
-          (receiverLast := receiverLast)
-          (fun lo hi ps a b c => reserve lo hi ps a b (UInt64.le_trans c lastLe))
-          (fun a ha b hb i j hi hj => residual a ha b hb i j (by omega) (by omega))
-          (fun w hw j ep hj => bounded w hw j ep (by omega))
-          (fun w hw j hj => roots w hw j (by omega))
-          (fun w hw j st hj => unslashed w hw j st (by omega))
-          (fun w hw j c st hj => ceiling w hw j c st (by omega))
-          parameters genesis pre
-          (fun w hw j hj => heldEarly w hw j (by omega))
-          (fun w hw j hj => enough w hw j (by omega))
-          (fun w hw j hj => terminal w hw j (by omega))
-          covers headDescends historicalBelow callerEpochOk historicalEpochOk near epochStartOk
-          epochStartTimeOk historyCovers receiver atTime upToDate known finality receiverHeadOk
-          receiverParent stateOk currentOk receiverEpochOk nearParent receiverLastOk windowOk
-          scoreOk participantsOk
-          (exits w receiver k receiverHead current receiverLast lowK highK upToDate receiverHeadOk
-            currentOk receiverLastOk)
-          (fun a ha i hi => absent a ha i (by omega)) tree route
-        exact step
-      · -- Duty-epoch step at time `T`, with the late majority's complete epoch after the call.
-        obtain ⟨epoch, epochBegin, epochNext, beginTime, endTime, beginOk', nextOk, beginTimeOk,
-          endTimeOk, fresh, complete, majority⟩ :=
-          late w receiver k receiverEpoch state lowK highK upToDate receiverEpochOk (by omega)
-            stateOk
-        have step := e.isAncestor_getHead_of_duty_epoch_or_accountable sync slots preGloas
-          (first := (e.world n).time) (time := T)
-          (fun v hv w hw i j hj => admitted v hv w hw i j (by omega))
-          fits (prompt.of_le high) anchored sound anchorSlot anchorBoundary start started
-          parameters genesis pre
-          (fun w hw j hj => heldEarly w hw j (by omega))
-          (fun w hw j hj => enough w hw j (by omega))
-          (fun w hw j hj => terminal w hw j (by omega))
-          (fun w hw j ep hj => bounded w hw j ep (by omega))
-          (fun w hw j hj => roots w hw j (by omega))
-          (fun a ha i hi => absent a ha i (by omega))
-          covers
-          (fun v hv j hd hj => parentCovers T low (by omega) v hv j hd hj)
-          receiver atTime upToDate known stateOk tree route
-          ⟨epoch, epochBegin, epochNext, beginTime, endTime, beginOk', nextOk, beginTimeOk,
-            endTimeOk, fresh, atTime ▸ complete,
-            votes.votesInSlots fits endTimeOk (by omega), majority⟩
-          receiverHeadOk
-        exact step)
-  rcases result with cover | alternative
-  · exact .inl cover
-  · exact .inr alternative
+      HistoricalDirectSafetyEvidence (e := e) pre time :=
+  honestHeadsCover_core sync slots positive minLookahead maxLookahead ring preGloas
+    admitted half votes fits prompt windows history anchored sound anchorSlot anchorBoundary
+    start caller callerUpToDate headNode slotOk beginOk timeEq blockOk parentOk sourceOk boostOk
+    firstOk lastOk beforeOk maximumOk parentParticipantsOk registry aligned increment supportOk
+    discountOk adversaryOk margin callerTime sourceReads drift reserve reference referenceTime
+    referenceUpToDate referenceSlotOk finishOk residual bounded roots unslashed ceiling scoreFits
+    parameters genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
+    historicalEpochOk near epochStartOk epochStartTimeOk historyCovers absent parentCovers reads
+    (fun _ low high _ w receiver k nodes _ atTime upToDate _ tree =>
+      viable w receiver k nodes (atTime ▸ low) (atTime ▸ high) upToDate tree)
+    exits late
 
 end EthLib.Consensus.Models.Network
