@@ -33,7 +33,10 @@ theorem blob_encode (data rest : List UInt8) (h : data.length < 2 ^ 62) :
 /-- Reading a packed field through the list reader preserves its bytes and suffix. -/
 @[simp] theorem bytes_byteArray_append (field : ByteArray) (rest : List UInt8) :
     bytes field.size (field.data.toList ++ rest) = .ok (field.data.toList, rest) := by
-  simpa using bytes_append Error.truncated field.data.toList rest
+  show Base.ByteReader.bytes (Error.truncated field.size (field.data.toList ++ rest).length)
+    field.size (field.data.toList ++ rest) = _
+  simpa using bytes_append (Error.truncated field.size (field.data.toList ++ rest).length)
+    field.data.toList rest
 
 /-- Reading a packed length-prefixed field preserves its bytes and suffix. -/
 theorem blob_byteArray_encode (data : ByteArray) (rest : List UInt8) (h : data.size < 2 ^ 62) :

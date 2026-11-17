@@ -49,7 +49,8 @@ A result of `2^62` or more is rejected, which can happen only when the expected 
 def decodePacketNumber (width : PacketNumberLength) (truncated : Nat) (expected : Nat) :
     Except Error Nat := do
   let window := 256 ^ numberLength width
-  if truncated ≥ window ∨ expected > 2 ^ 62 then throw .packetNumber
+  if truncated ≥ window ∨ expected > 2 ^ 62 then
+    throw (.packetNumber truncated (numberLength width) expected)
   let candidate := expected / window * window + truncated
   let result :=
     if candidate + window / 2 ≤ expected ∧ candidate < 2 ^ 62 - window then
@@ -57,7 +58,8 @@ def decodePacketNumber (width : PacketNumberLength) (truncated : Nat) (expected 
     else if candidate > expected + window / 2 ∧ candidate ≥ window then
       candidate - window
     else candidate
-  if result < 2 ^ 62 then return result else throw .packetNumber
+  if result < 2 ^ 62 then return result
+  else throw (.packetNumber truncated (numberLength width) expected)
 
 /-- Packet types that carry frames, RFC 9000 §12.4, Table 3. -/
 inductive PacketType where
@@ -139,7 +141,7 @@ def encodeList (header : Header) : Except Error (List UInt8) := do
 /-- Read a connection ID with its one-byte length (§17.2). -/
 def connectionId (maximum : Nat) : Reader ByteArray := do
   let n ← byte
-  require (n.toNat ≤ maximum) .connectionIdLength
+  require (n.toNat ≤ maximum) (.connectionIdLength n.toNat maximum)
   return (← bytes n.toNat).toByteArray
 
 /-- Read the Length and truncated Packet Number fields (§17.2). -/
@@ -155,7 +157,7 @@ def versions : List UInt8 → Except Error (List UInt32)
   | a :: b :: c :: d :: rest => do
     let next ← versions rest
     return (UInt32.ofNat (Base.bytesToNat [a, b, c, d])) :: next
-  | _ => .error .truncated
+  | rest => .error (.truncated 4 rest.length)
 
 /-- Decode one authenticated header, returning bytes after its packet-number field.
 
@@ -167,9 +169,9 @@ def decodeList (shortConnectionIdLength : Nat) : Reader Header := do
   let first ← byte
   let width := widthOfFirst first
   if first.toNat < 128 then
-    require (first.toNat / 64 = 1) .fixedBit
-    require (first.toNat / 8 % 4 = 0) .reservedBits
-    require (shortConnectionIdLength ≤ 20) .connectionIdLength
+    require (first.toNat / 64 = 1) (.fixedBit first)
+    require (first.toNat / 8 % 4 = 0) (.reservedBits first)
+    require (shortConnectionIdLength ≤ 20) (.connectionIdLength shortConnectionIdLength 20)
     let destination := (← bytes shortConnectionIdLength).toByteArray
     let number ← uint (numberLength width)
     return .oneRtt destination (first.toNat / 32 % 2 = 1)
@@ -185,8 +187,8 @@ def decodeList (shortConnectionIdLength : Nat) : Reader Header := do
       return .versionNegotiation destination source
         ⟨first.toNat % 128, Nat.mod_lt _ (by decide)⟩ vs
     else
-      require (version = 1) .version
-      require (first.toNat / 64 % 2 = 1) .fixedBit
+      require (version = 1) (.version version)
+      require (first.toNat / 64 % 2 = 1) (.fixedBit first)
       if first.toNat / 16 % 4 = 3 then
         let rest ← remainder
         require (16 < rest.length) .packetLength
@@ -196,9 +198,9 @@ def decodeList (shortConnectionIdLength : Nat) : Reader Header := do
           return .retry destination source token.toByteArray
             ⟨tag.toArray, by simpa using h⟩
             ⟨first.toNat % 16, Nat.mod_lt _ (by decide)⟩
-        else throw .truncated
+        else throw (.truncated 16 tag.length)
       else
-        require (first.toNat / 4 % 4 = 0) .reservedBits
+        require (first.toNat / 4 % 4 = 0) (.reservedBits first)
         if first.toNat / 16 % 4 = 0 then
           let token ← blob
           let (length, number) ← lengthAndNumber width

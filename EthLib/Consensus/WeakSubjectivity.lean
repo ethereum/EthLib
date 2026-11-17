@@ -58,8 +58,10 @@ inductive WeakSubjectivityError where
   | forkChoice (error : ForkChoiceError)
   /-- A 64-bit operation has no result. -/
   | arith (error : ArithError)
-  /-- The state does not hold the root of the checkpoint at the checkpoint's epoch. -/
-  | blockRootMismatch
+  /-- The state does not hold the root of the checkpoint at the checkpoint's epoch.
+
+  The error gives the root of the checkpoint, then the root that the state holds there. -/
+  | blockRootMismatch (checkpointRoot stateRoot : Root)
   /-- The state is not at the epoch of the checkpoint. -/
   | epochMismatch (checkpointEpoch stateEpoch : Epoch)
   deriving Repr
@@ -69,8 +71,20 @@ def WeakSubjectivityError.code : WeakSubjectivityError → UInt32
   | .accessor _ => 1
   | .forkChoice _ => 2
   | .arith _ => 3
-  | .blockRootMismatch => 4
+  | .blockRootMismatch .. => 4
   | .epochMismatch .. => 5
+
+/-- The message of an error, with the values that its check compared. -/
+instance : ToString WeakSubjectivityError where
+  toString
+    | .accessor error => s!"a state accessor fails: {reprStr error}"
+    | .forkChoice error => s!"fork choice: {error}"
+    | .arith error => s!"arithmetic: {reprStr error}"
+    | .blockRootMismatch checkpointRoot stateRoot =>
+      s!"expected checkpoint root {hexString checkpointRoot.toList}, " ++
+        s!"got the block root {hexString stateRoot.toList} that the state holds at that epoch"
+    | .epochMismatch checkpointEpoch stateEpoch =>
+      s!"state epoch {stateEpoch}, expected the checkpoint epoch {checkpointEpoch}"
 
 /-! ## Phase 0 -/
 
@@ -174,7 +188,7 @@ def isWithinWeakSubjectivityPeriod {storeFork : Base.Fork} (config : Config)
     (store : Store preset storeFork) (wsState : BeaconState preset fork)
     (wsCheckpoint : Checkpoint) : Except WeakSubjectivityError Bool := do
   let root ← (getBlockRoot wsState wsCheckpoint.epoch).mapError .accessor
-  if root ≠ wsCheckpoint.root then throw .blockRootMismatch
+  if root ≠ wsCheckpoint.root then throw (.blockRootMismatch wsCheckpoint.root root)
   let wsStateEpoch := computeEpochAtSlot preset wsState.slot
   if wsStateEpoch ≠ wsCheckpoint.epoch then throw (.epochMismatch wsCheckpoint.epoch wsStateEpoch)
   let wsPeriod ← computeWeakSubjectivityPeriod config wsState

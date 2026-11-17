@@ -44,6 +44,38 @@ Not yet released.
   `receiver_fullMaximum_of_head_window` takes the receiver's own finalized checkpoint on its own justified chain, `finalizedRead`, instead of `compatible`, `bounded`, `slots` and `epochOk`.
   `SelectedCheckpoint`, `FinalizedCheckpointCompatibility`, `ResidualFinalizedCheckpointCompatibility` and `compatibility_of_residual` are removed: no proof read them any more.
 
+- The transaction, inclusion and network-form errors carry the values that their failed check compared.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  The messages of transaction and inclusion errors name each value, as `(name := value)`, with hashes and addresses in hex.
+  For example, `nonceTooLow 3 1` becomes `nonceTooLow (expected := 3) (nonce := 1)`, and `insufficientGas 21000 0` becomes `insufficientGas (needed := 21000) (gas := 0)`.
+  In Lean, these constructors take arguments:
+  - `Transactions.TransactionError.nonceOverflow nonce`, the nonce of the transaction, or of the sender when a simulation skips the nonce check;
+  - `Transactions.TransactionError.priorityFeeGreaterThanMaxFee priorityFee maxFee`;
+  - `Transactions.TransactionError.invalidBlobVersionedHash index hash`, the first versioned hash with the wrong version;
+  - `Transactions.InclusionError.senderNotEoa sender`;
+  - `Transactions.NetworkError.versionedHashMismatch index expected actual`, the first commitment whose hash `expected` is not the versioned hash `actual`.
+  `emptyTransaction`, `noBlobData` and `emptyAuthorizationList` stay bare, since each fires on an empty input.
+  `invalidSignature` stays bare: it fires on a bad `v`, a bad y parity, `r` or `s` out of range, or a signature that recovers no key, and the transaction holds each of these values.
+  `NetworkError.proofRejected` stays bare: the batch check of the proofs gives only a verdict.
+  `checkSender_of_skipNonce` states the nonce `2^64 - 1` in its error.
+
+- The QUIC integer, wire and packet protection errors carry the values their failed check compared.
+  Each error fires on the same inputs as before, and codes are unchanged; each message now shows these values.
+  - `Quic.Varint.VarintError.truncated` and `Quic.Wire.Error.truncated` carry the bytes needed and available.
+  - `Quic.Wire.Error.connectionIdLength` carries the length and the maximum, `fixedBit` and `reservedBits` the first byte, and `version` the version.
+  - `Quic.Wire.Error.packetNumber` carries the truncated number, its width in bytes and the expected number, and `protocolViolation` the frame type.
+  - `Quic.Protection.Error.sample` carries the packet number offset and the packet size, `tagLength` the tag size, and `connectionId` the length of the original destination connection ID.
+  - `Quic.Varint.decodeList_nil`, `decodeList_truncated`, `decode_empty`, `decode_truncated`, `decodeList_error_iff`, `decode_error_iff` and `Quic.Protection.sample_eq_error_of_short` state the fields of the error.
+
+- The ENR, discv4 and discv5 errors carry the values their failed check compared.
+  Each error fires on the same inputs as before, and codes are unchanged; each message now shows these values.
+  - `Enr.EnrError.tooFewItems` carries the item count, and `unknownScheme` the value of the `id` pair.
+  - The ENR messages of `repeatedKey`, `unsortedKeys` and `unknownScheme` show the keys and the scheme in hex.
+  - `Discv4.Discv4Error.hashMismatch` carries the stored hash and the Keccak-256 hash of the bytes after it.
+  - `Discv5.PacketError.protocolId` carries the first eight unmasked header bytes, `headerTruncated` the header bytes needed and available, `authdata` the flag and the authdata size, and `whoareyouMessage` the message size.
+  - `Discv5.MessageError.fields` also carries the field count, and `invalid` the message type.
+  - `Discv4.decode_hashMismatch` states both hashes of the error it returns.
+
 - The block, ommer and proof-of-work errors carry the values that their failed check compared.
   Each code keeps its meaning, and each error fires on the same inputs as before.
   The message of each error names each value, as `(name := value)`, and writes each hash, address and byte string in hex.
@@ -64,6 +96,22 @@ Not yet released.
   `Blocks.PowError.wrongMixDigest expected actual` holds the mix digest of Ethash and that of the header, and `Blocks.PowError.resultAboveTarget result target` holds the result and the target.
   `buildPayload_eq_error_of_activeFork_ne` names the active fork and the fork of the build in its error.
   `Blocks.constructorFormat` moves to `EthLib.Execution.constructorFormat`, and `Transactions.Exports.oneLine` to `Blocks.Exports.oneLine`.
+
+- In Lean, the errors of the fork choice, of weak subjectivity and of custody carry the values that their check compared, and their codes keep their meaning.
+  - `ForkChoiceError.anchorStateMismatch` takes the state root of the anchor block and the root of the anchor state.
+  - `futureBlock`, `attestationNotYetDue`, `ptcVoteNotCurrent`, `futureInclusionList` and `inclusionListTooOld` also take the current slot.
+  - `blockNotAfterFinalized` also takes the first slot of the finalized epoch, and `targetEpochNotRecent` the current epoch.
+  - `targetEpochMismatch` also takes the epoch of the slot, `targetNotCheckpointBlock` the root of the checkpoint block, and `terminalBlockHashNotActive` the activation epoch.
+  - `futureVote` also takes the slots of the attestation and of the block, `notPreviousSlot` and `dependentBlockTooLate` the two slots they compared.
+  - `invalidIndexedAttestation` takes the attestation data, and `notSlashable` the data of both attestations.
+  - `invalidPayloadAttestation` and `invalidInclusionListSignature` take the validator index and the slot.
+  - `invalidInclusionListSize` also takes the limit, and `emptyInclusionListTransaction` the position of the first empty transaction.
+  - `WeakSubjectivityError.blockRootMismatch` takes the checkpoint root and the root that the state holds.
+  - `CustodyError.outOfFuel` takes the number of groups found and the number asked for.
+
+  `getForkchoiceStore_mismatch` and `validateTargetEpochAgainstCurrentTime_eq` state the fields of the error.
+  New `ToString` instances of `ForkChoiceError` and `WeakSubjectivityError` write each error with its values.
+  The Python `ForkChoiceError` and `WeakSubjectivityError` carry that text in place of the Lean `Repr` of the error, such as "fork choice: block slot 9 is after the current slot 8".
 
 - The SSZ decoding errors carry the values that their failed check compared.
   Codes and rejection reasons are unchanged; the message `EthLib.Serialization.Ssz.Err.<name>` now ends with these values, in constructor order.

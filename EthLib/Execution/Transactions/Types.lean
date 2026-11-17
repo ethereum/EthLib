@@ -2,6 +2,8 @@ module
 
 public import EthLib.Base.Address
 public import EthLib.Base.Fork
+public import EthLib.Base.Hash32
+public import EthLib.Execution.ErrorFormat
 public import EthLib.Serialization.Rlp.Item
 
 /-!
@@ -277,23 +279,58 @@ inductive TransactionError where
   | initCodeTooLarge (size : Nat)
   /-- The gas limit `gas` is above the limit of a transaction. -/
   | gasLimitExceeded (gas : Nat)
-  /-- The nonce is `2^64 - 1` or more. -/
-  | nonceOverflow
-  /-- The priority fee per gas is above the maximum fee per gas. -/
-  | priorityFeeGreaterThanMaxFee
+  /-- The nonce `nonce`, of the transaction or of its sender, is `2^64 - 1` or more. -/
+  | nonceOverflow (nonce : Nat)
+  /-- The priority fee per gas `priorityFee` is above the maximum fee per gas `maxFee`. -/
+  | priorityFeeGreaterThanMaxFee (priorityFee maxFee : Nat)
   /-- The transaction signs the chain `actual`, not the chain `expected` of the network. -/
   | wrongChainId (expected actual : Nat)
   /-- A blob transaction carries no blob. -/
   | noBlobData
   /-- A blob transaction carries `count` blobs, more than the limit. -/
   | blobCountExceeded (count : Nat)
-  /-- A versioned hash of a blob does not start with the version of a KZG commitment. -/
-  | invalidBlobVersionedHash
+  /-- The versioned hash `hash` at `index`, counted from 0, has the wrong version. -/
+  | invalidBlobVersionedHash (index : Nat) (hash : Hash32)
   /-- A set code transaction carries no authorization. -/
   | emptyAuthorizationList
   /-- The intrinsic gas or the floor, `gas`, is above the limit of the gas of a transaction. -/
   | intrinsicGasAboveLimit (gas : Nat)
-  deriving DecidableEq, Repr
+  deriving DecidableEq
+
+/-- A transaction error constructor, named in full, applied to its arguments. -/
+def transactionErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.Transactions.TransactionError." ++ name) args prec
+
+/-- The form of a transaction error in Lean syntax, with its arguments.
+
+Each value has its name, and each hash is in hex. -/
+def TransactionError.reprPrec : TransactionError → Nat → Std.Format
+  | .emptyTransaction, p => transactionErrorFormat "emptyTransaction" [] p
+  | .unsupportedType type, p => transactionErrorFormat "unsupportedType" [namedArg "type" type] p
+  | .decoding error, p => transactionErrorFormat "decoding" [reprArg error] p
+  | .encoding error, p => transactionErrorFormat "encoding" [reprArg error] p
+  | .invalidSignature, p => transactionErrorFormat "invalidSignature" [] p
+  | .insufficientGas needed gas, p =>
+    transactionErrorFormat "insufficientGas" [namedArg "needed" needed, namedArg "gas" gas] p
+  | .initCodeTooLarge size, p => transactionErrorFormat "initCodeTooLarge" [namedArg "size" size] p
+  | .gasLimitExceeded gas, p => transactionErrorFormat "gasLimitExceeded" [namedArg "gas" gas] p
+  | .nonceOverflow nonce, p => transactionErrorFormat "nonceOverflow" [namedArg "nonce" nonce] p
+  | .priorityFeeGreaterThanMaxFee priorityFee maxFee, p =>
+    transactionErrorFormat "priorityFeeGreaterThanMaxFee"
+      [namedArg "priorityFee" priorityFee, namedArg "maxFee" maxFee] p
+  | .wrongChainId expected actual, p =>
+    transactionErrorFormat "wrongChainId" [namedArg "expected" expected, namedArg "actual" actual] p
+  | .noBlobData, p => transactionErrorFormat "noBlobData" [] p
+  | .blobCountExceeded count, p =>
+    transactionErrorFormat "blobCountExceeded" [namedArg "count" count] p
+  | .invalidBlobVersionedHash index hash, p =>
+    transactionErrorFormat "invalidBlobVersionedHash"
+      [namedArg "index" index, namedArg "hash" hash] p
+  | .emptyAuthorizationList, p => transactionErrorFormat "emptyAuthorizationList" [] p
+  | .intrinsicGasAboveLimit gas, p =>
+    transactionErrorFormat "intrinsicGasAboveLimit" [namedArg "gas" gas] p
+
+instance : Repr TransactionError := ⟨TransactionError.reprPrec⟩
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
@@ -309,12 +346,12 @@ def TransactionError.code : TransactionError → UInt32
   | .insufficientGas .. => 6
   | .initCodeTooLarge _ => 7
   | .gasLimitExceeded _ => 8
-  | .nonceOverflow => 9
-  | .priorityFeeGreaterThanMaxFee => 10
+  | .nonceOverflow _ => 9
+  | .priorityFeeGreaterThanMaxFee .. => 10
   | .wrongChainId .. => 11
   | .noBlobData => 12
   | .blobCountExceeded _ => 13
-  | .invalidBlobVersionedHash => 14
+  | .invalidBlobVersionedHash .. => 14
   | .emptyAuthorizationList => 15
   | .intrinsicGasAboveLimit _ => 16
 

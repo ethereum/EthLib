@@ -54,8 +54,10 @@ inductive NetworkError where
   | wrongVersion (version : Nat)
   /-- The counts of versioned hashes, blobs, commitments and proofs do not match. -/
   | countMismatch (hashes blobs commitments proofs : Nat)
-  /-- A commitment does not hash to the versioned hash at its position. -/
-  | versionedHashMismatch
+  /-- The commitment at `index`, counted from 0, hashes to `expected`, not to its versioned hash.
+
+  That versioned hash, at the same position, is `actual`. -/
+  | versionedHashMismatch (index : Nat) (expected actual : Bytes32)
   /-- A blob, a commitment or a proof is not a valid KZG input. -/
   | kzg (error : KzgError)
   /-- The proofs do not show that the commitments match the blobs. -/
@@ -70,7 +72,7 @@ def NetworkError.code : NetworkError → UInt32
   | .transaction e => e.code
   | .wrongVersion _ => 101
   | .countMismatch .. => 102
-  | .versionedHashMismatch => 103
+  | .versionedHashMismatch .. => 103
   | .kzg _ => 104
   | .proofRejected => 105
 
@@ -186,7 +188,11 @@ def validateBlobs (setup : TrustedSetup) (fork : Fork) (hashes : List Bytes32) (
     (commitments : List KZGCommitment) (proofs : List KZGProof) : Except NetworkError Unit := do
   unless blobCountsMatch fork hashes blobs commitments proofs do
     throw (.countMismatch hashes.length blobs.length commitments.length proofs.length)
-  unless hashesMatch hashes commitments do throw .versionedHashMismatch
+  unless hashesMatch hashes commitments do
+    -- Some pair does not match, so the first such pair has an index below both lengths.
+    let index := (hashes.zip commitments).findIdx fun (h, c) => !decide (versionedHash c = h)
+    let commitment := commitments.getD index (Vector.replicate 48 0)
+    throw (.versionedHashMismatch index (versionedHash commitment) (hashes.getD index 0))
   unless ← (verifyBlobBundle setup fork blobs commitments proofs).mapError .kzg do
     throw .proofRejected
 

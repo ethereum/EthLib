@@ -35,13 +35,22 @@ abbrev PacketNumber := Varint
 
 /-- Failures of packet protection and Retry integrity, reserved bits after AEAD included. -/
 inductive Error where
+  /-- A header does not fit the packet, or is not a protected version 1 header. -/
   | header
-  | sample
+  /-- The 16-byte sample at `offset + 4` does not fit the packet of `size` bytes (RFC 9001 §5.4.2).
+
+  The field `offset` is the packet number offset. -/
+  | sample (offset size : Nat)
+  /-- The packet number does not fit its encoded bytes, or cannot be reconstructed. -/
   | packetNumber
-  | tagLength
+  /-- The authentication tag has `size` bytes, not 16. -/
+  | tagLength (size : Nat)
+  /-- AES-128-GCM failed. -/
   | aes (reason : Aes.Gcm.Error)
+  /-- ChaCha20-Poly1305 failed. -/
   | chacha (reason : ChaCha20Poly1305.ChaCha20Poly1305Error)
-  | connectionId
+  /-- The original destination connection ID has `length` bytes, more than 20. -/
+  | connectionId (length : Nat)
   /-- The payload authenticated, but a reserved bit is set, RFC 9000 §§17.2, 17.3.1. -/
   | reservedBits
   deriving DecidableEq, Repr
@@ -49,12 +58,12 @@ inductive Error where
 /-- Stable codes for packet-protection failures at the Python boundary. -/
 def Error.code : Error → UInt32
   | .header => 1
-  | .sample => 2
+  | .sample .. => 2
   | .packetNumber => 3
-  | .tagLength => 4
+  | .tagLength _ => 4
   | .aes _ => 5
   | .chacha _ => 6
-  | .connectionId => 7
+  | .connectionId _ => 7
   | .reservedBits => 8
 
 /-- XOR the IV with the left-zero-padded, network-order packet number, RFC 9001 §5.3. -/
@@ -98,7 +107,7 @@ def decryptPayload (suite : CipherSuite) (keys : PacketKeys suite) (number : Pac
     if h : tag.size = 16 then
       (ChaCha20Poly1305.decrypt keys.key (nonce keys.iv number) header ciphertext
         (readBytes tag 0 16 (by omega))).mapError .chacha
-    else .error .tagLength
+    else .error (.tagLength tag.size)
 
 /-- One byte's mask, with four low first-byte bits for long headers and five for short ones.
 
@@ -119,7 +128,7 @@ def applyMask (longHeader : Bool) (offset : Nat) (width : Packet.PacketNumberLen
 def sample (bytes : ByteArray) (offset : Nat) : Except Error (Vector UInt8 16) :=
   if h : offset + 4 + 16 ≤ bytes.size then
     .ok (readBytes bytes (offset + 4) 16 h)
-  else .error .sample
+  else .error (.sample offset bytes.size)
 
 /-- The recovered header and ciphertext, before packet-number reconstruction and AEAD. -/
 structure Unmasked where
@@ -263,7 +272,7 @@ def RETRY_NONCE : Vector UInt8 12 :=
 
 The caller checks its header format. -/
 def retryTag (originalDcid retry : ByteArray) : Except Error ByteArray := do
-  ensure (originalDcid.size ≤ 20) .connectionId
+  ensure (originalDcid.size ≤ 20) (.connectionId originalDcid.size)
   let aad := ByteArray.mk #[UInt8.ofNat originalDcid.size] ++ originalDcid ++ retry
   let (_, tag) ← (Aes.Gcm.encrypt (Aes.ciph .aes128 RETRY_KEY) 16
     (packBytes RETRY_NONCE) .empty aad).mapError .aes

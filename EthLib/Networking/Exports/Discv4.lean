@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Hex
 public import EthLib.Networking.Discv4.Packet
 public import EthLib.Networking.Exports.Rlpx
 
@@ -25,12 +26,14 @@ namespace EthLib.Networking.Discv4.Exports
 
 open EthLib.Exports (Result)
 open EthLib.Serialization.Rlp
+open EthLib.Base (hexString)
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
 def message : Discv4Error → String
   | .tooLarge size => s!"packet has {size} bytes, more than {MAX_PACKET_SIZE}"
   | .tooShort size => s!"packet has {size} bytes, too few for a header and a packet type"
-  | .hashMismatch => "packet hash does not match"
+  | .hashMismatch stored computed =>
+    s!"packet hash {hexString stored.data.toList} is not {hexString computed.data.toList}"
   | .invalidSignature => "no public key is recovered from the signature"
   | .secp256k1 e => s!"signing failed: {e.message}"
   | .unknownType type => s!"packet type {type} is unknown"

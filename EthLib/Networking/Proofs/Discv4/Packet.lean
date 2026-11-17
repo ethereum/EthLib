@@ -302,12 +302,15 @@ theorem hash_of_decode {packet : ByteArray} {r : Received} (h : decode packet = 
 /--
 A packet whose first 32 bytes are not the Keccak-256 hash of the bytes after them is rejected.
 
+The error holds the first 32 bytes and the Keccak-256 hash of the bytes after them.
+
 The packet must have the size of a packet, so that the hash is the first check that fails.
 -/
 theorem decode_hashMismatch {packet : ByteArray} (hsize : packet.size ≤ MAX_PACKET_SIZE)
     (hshort : HEADER_SIZE < packet.size)
     (hhash : packet.data.toList.take 32 ≠ (keccak (packet.data.toList.drop 32)).toList) :
-    decode packet = .error .hashMismatch := by
+    decode packet = .error (.hashMismatch ⟨(packet.data.toList.take 32).toArray⟩
+      ⟨(keccak (packet.data.toList.drop 32)).toArray⟩) := by
   have hlen : packet.data.toList.length = packet.size := Array.length_toList
   unfold decode
   rw [ite_eq_right (by omega)]

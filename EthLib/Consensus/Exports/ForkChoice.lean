@@ -33,7 +33,7 @@ open EthLib.Exports (Result PyValue pyExport)
 
 /-- A result of the fork choice, with the code of its error. -/
 def runForkChoice {α : Type} (result : Except ForkChoiceError α) : Result α :=
-  result.mapError fun e => (e.code, s!"fork choice: {reprStr e}")
+  result.mapError fun e => (e.code, s!"fork choice: {e}")
 
 /-- The little-endian bytes of a number, in a given width. -/
 def littleEndian (width value : Nat) : ByteArray :=
@@ -105,7 +105,7 @@ The message carries no prefix, unlike an error of the whole call. -/
 abbrev StepOutcome := Except (UInt32 × String) (Option StepRead)
 
 /-- The outcome of a step that the store rejects. -/
-def rejected (e : ForkChoiceError) : StepOutcome := .error (e.code, reprStr e)
+def rejected (e : ForkChoiceError) : StepOutcome := .error (e.code, toString e)
 
 /-- The store after a step and what the step reads, or the error that rejects it.
 

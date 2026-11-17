@@ -125,7 +125,7 @@ def test_blob_versioned_hash() -> None:
     changed = bytes([commitments[0][0] ^ 1]) + commitments[0][1:]
     raw = b"\x03" + rlp.encode([body, version, blobs, [changed], proofs])
     error = {"code": -32000, "message": "Invalid input"}
-    error["data"] = "a commitment does not hash to its versioned hash"
+    error["data"] = "commitment 0 does not hash to its versioned hash"
     assert _error(raw) == error
 
 

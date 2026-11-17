@@ -49,13 +49,13 @@ INTRINSIC = {"pectra": 21_000, "fusaka": 21_000, "bpo5": 21_000, "glamsterdam": 
 @pytest.mark.parametrize("fork", CAPPED_AT_2_24)
 @pytest.mark.parametrize("gas", WIDTHS)
 def test_eip7825_rejects_every_width(fork: str, gas: int) -> None:
-    with raises(transactions.TransactionError, f"gasLimitExceeded {gas}"):
+    with raises(transactions.TransactionError, f"gasLimitExceeded (gas := {gas})"):
         transactions.check(fork, CHAIN_ID, _fee_market(gas))
 
 
 @pytest.mark.parametrize("gas", [gas for gas in WIDTHS if gas > GLAMSTERDAM_CAP])
 def test_glamsterdam_rejects_every_width_above_its_cap(gas: int) -> None:
-    with raises(transactions.TransactionError, f"gasLimitExceeded {gas}"):
+    with raises(transactions.TransactionError, f"gasLimitExceeded (gas := {gas})"):
         transactions.check("glamsterdam", CHAIN_ID, _fee_market(gas))
 
 

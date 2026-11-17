@@ -155,5 +155,5 @@ def test_type_of_typed_transaction():
     tx = bytes.fromhex(next(iter(fixture.values()))["txbytes"].removeprefix("0x"))
     assert transactions.tx_type("fusaka", tx) == 4
     # Before Pectra, no fork has the type 4.
-    with raises(ValueError, "unsupportedType 4"):
+    with raises(ValueError, "unsupportedType (type := 4)"):
         transactions.tx_type("dencun", tx)

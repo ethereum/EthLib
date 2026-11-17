@@ -43,13 +43,17 @@ theorem capacity_le (width : Width) : capacity width ≤ 2 ^ 62 := by
 
 /-- Reasons to reject the bytes of a QUIC integer. -/
 inductive VarintError where
-  /-- The input ends before the selected integer does. -/
-  | truncated
+  /-- The input ends before the selected integer does.
+
+  The input has `available` bytes, fewer than the `needed` bytes of the integer.
+
+  On an empty input, `needed` is 1, the first byte that selects the length. -/
+  | truncated (needed available : Nat)
   deriving Repr, DecidableEq
 
 /-- One stable code per kind of integer error. -/
 def VarintError.code : VarintError → UInt32
-  | .truncated => 1
+  | .truncated .. => 1
 
 /-- Write a value at a chosen width, a longer form included.
 
@@ -111,13 +115,13 @@ RFC 9000 §16 gives the length in the high two bits of the first byte.
 
 Only the bytes of the integer are measured, so reading many integers stays linear. -/
 def decodeList : List UInt8 → Except VarintError (Varint × List UInt8)
-  | [] => .error .truncated
+  | [] => .error (.truncated 1 0)
   | head :: rest =>
     let count := tailLength (selector head)
     let tail := rest.take count
     if h : tail.length = count then
       .ok (⟨valueOf head tail, valueOf_lt head tail h⟩, rest.drop count)
-    else .error .truncated
+    else .error (.truncated (count + 1) (rest.length + 1))
 
 /-- Write a value at a chosen width as bytes, including longer representations. -/
 def encodeWith (width : Width) (value : Varint) (bound : value.val < capacity width) :

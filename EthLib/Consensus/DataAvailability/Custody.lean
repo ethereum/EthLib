@@ -38,8 +38,10 @@ inductive CustodyError where
   | tooManyGroups (count : UInt64)
   /-- The group index is not below the number of groups. -/
   | groupOutOfRange (group : CustodyIndex)
-  /-- The search for distinct groups ran out of steps. -/
-  | outOfFuel
+  /-- The search for distinct groups ran out of steps.
+
+  The error gives the number of groups found, then the number asked for. -/
+  | outOfFuel (found count : Nat)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -50,7 +52,7 @@ A new constructor takes a new code, so that each code keeps its meaning. -/
 def CustodyError.code : CustodyError → UInt32
   | .tooManyGroups _ => 1
   | .groupOutOfRange _ => 2
-  | .outOfFuel => 3
+  | .outOfFuel .. => 3
 
 /-- The integer of the first eight bytes, least significant first. -/
 def firstUInt64 (bytes : Bytes32) : UInt64 :=
@@ -73,7 +75,7 @@ def collectGroups (config : Config) (count : Nat) :
   | fuel, id, groups =>
     if count ≤ groups.length then .ok groups
     else match fuel with
-      | 0 => .error .outOfFuel
+      | 0 => .error (.outOfFuel groups.length count)
       | fuel + 1 =>
         let group := groupOfId config id
         collectGroups config count fuel (id + 1)

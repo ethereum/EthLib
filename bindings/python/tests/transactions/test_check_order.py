@@ -44,20 +44,24 @@ def test_gas_before_chain() -> None:
     # Signed for chain 2 with a gas limit of 20000, below the intrinsic gas of 21000.
     tx = _fee_market(2, 20_000)
     # In a block, the gas and nonce rules come first, before the chain.
-    with raises(transactions.TransactionError, "insufficientGas 21000 20000"):
+    with raises(transactions.TransactionError, "insufficientGas (needed := 21000) (gas := 20000)"):
         _check_in_block(tx, 30_000_000)
     # Alone, the transaction tests expect the chain first.
-    with raises(transactions.TransactionError, "wrongChainId 1 2"):
+    with raises(transactions.TransactionError, "wrongChainId (expected := 1) (actual := 2)"):
         transactions.check("pectra", 1, tx)
 
 
 def test_block_gas_before_chain() -> None:
     # Signed for chain 2, with a gas limit above the 10000 gas that the block has left.
     tx = _fee_market(2, 21_000)
-    with raises(transactions.TransactionError, "gasAllowanceExceeded 21000 10000"):
+    with raises(
+        transactions.TransactionError, "gasAllowanceExceeded (gas := 21000) (available := 10000)"
+    ):
         _check_in_block(tx, 10_000)
     # On its own chain the same block still rejects it for its gas.
-    with raises(transactions.TransactionError, "gasAllowanceExceeded 21000 10000"):
+    with raises(
+        transactions.TransactionError, "gasAllowanceExceeded (gas := 21000) (available := 10000)"
+    ):
         _check_in_block(_fee_market(1, 21_000), 10_000)
     # And with room in the block it passes.
     included = _check_in_block(_fee_market(1, 21_000), 30_000_000)

@@ -142,7 +142,8 @@ def test_legacy_transaction_in_bytes_before_glamsterdam() -> None:
     block[1] = [rlp.encode([b"", b"", b"", b"", b"", b"", b"", b"", b""])]
     with raises(
         blocks.BlockError,
-        "transaction rejected: EthLib.Execution.Transactions.TransactionError.unsupportedType 201",
+        "transaction rejected: EthLib.Execution.Transactions.TransactionError.unsupportedType "
+        "(type := 201)",
     ) as error:
         blocks.transactions_root("pectra", rlp.encode(block))
     assert error.value.code == 0
@@ -166,7 +167,8 @@ def test_legacy_transaction_in_bytes_from_glamsterdam() -> None:
     block[1] = [b"\xff" + rlp.encode(tx)[1:] for tx in block[1][:1]]
     with raises(
         blocks.BlockError,
-        "transaction rejected: EthLib.Execution.Transactions.TransactionError.unsupportedType 255",
+        "transaction rejected: EthLib.Execution.Transactions.TransactionError.unsupportedType "
+        "(type := 255)",
     ):
         blocks.transactions_root("glamsterdam", rlp.encode(block))
 

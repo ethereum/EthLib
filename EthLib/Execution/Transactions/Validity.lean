@@ -262,7 +262,10 @@ def checkContents (fork : Fork) : Transaction → Except TransactionError Unit
       .error (.blobCountExceeded tx.blobVersionedHashes.length)
     else if tx.blobVersionedHashes.any
         (fun h => h[0] != Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG) then
-      .error .invalidBlobVersionedHash
+      -- Some hash has the wrong version, so the first such hash has an index below the length.
+      let index := tx.blobVersionedHashes.findIdx
+        (fun h => h[0] != Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG)
+      .error (.invalidBlobVersionedHash index (tx.blobVersionedHashes.getD index 0))
     else .ok ()
   | .setCode tx => if tx.authorizations.isEmpty then .error .emptyAuthorizationList else .ok ()
   | _ => .ok ()
@@ -340,8 +343,9 @@ def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction)
   let coversMinimum := ensure (minimum ≤ tx.gas.toNat) (.insufficientGas minimum tx.gas.toNat)
   let initCodeFits := ensure (fork ≥ .shapella → tx.to = none → tx.data.size ≤ maxInitCodeSize fork)
     (.initCodeTooLarge tx.data.size)
-  let nonceFits := ensure (tx.nonce.toNat < 2 ^ 64 - 1) .nonceOverflow
-  let feesOrdered := ensure (feesInverted tx = false) .priorityFeeGreaterThanMaxFee
+  let nonceFits := ensure (tx.nonce.toNat < 2 ^ 64 - 1) (.nonceOverflow tx.nonce.toNat)
+  let feesOrdered := ensure (feesInverted tx = false)
+    (.priorityFeeGreaterThanMaxFee (feeCaps tx).1 (feeCaps tx).2)
   ensure (tx.fork ≤ fork) (.unsupportedType tx.type)
   if fork ≥ .glamsterdam then
     nonceFits
@@ -366,6 +370,14 @@ where
     | .blob tx => tx.maxFeePerGas.toNat < tx.maxPriorityFeePerGas.toNat
     | .setCode tx => tx.maxFeePerGas.toNat < tx.maxPriorityFeePerGas.toNat
     | _ => false
+  /-- The priority fee per gas and the maximum fee per gas, of a transaction that has both.
+
+  A transaction without them gives zeros, and the fee check never fails on it. -/
+  feeCaps : Transaction → Nat × Nat
+    | .feeMarket tx => (tx.maxPriorityFeePerGas.toNat, tx.maxFeePerGas.toNat)
+    | .blob tx => (tx.maxPriorityFeePerGas.toNat, tx.maxFeePerGas.toNat)
+    | .setCode tx => (tx.maxPriorityFeePerGas.toNat, tx.maxFeePerGas.toNat)
+    | _ => (0, 0)
 
 /-- Check that a transaction signs no chain, or the chain `chainId` of the network. -/
 def checkChainId (fork : Fork) (chainId : UInt64) (tx : Transaction) :

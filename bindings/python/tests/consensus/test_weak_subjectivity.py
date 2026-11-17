@@ -232,7 +232,7 @@ def test_no_active_validators():
     # The average balance divides by the number of active validators.
     with raises(
         consensus.WeakSubjectivityError,
-        "EthLib.Consensus.WeakSubjectivityError.arith (EthLib.Base.ArithError.divisionByZero)",
+        "arithmetic: EthLib.Base.ArithError.divisionByZero",
     ) as info:
         consensus.compute_weak_subjectivity_period("mainnet", "phase0", phase0_state(0, 0))
     assert info.value.code == 3
@@ -270,9 +270,12 @@ def test_within_until_the_end_of_the_period():
 
 
 def test_state_without_the_root_of_the_checkpoint():
-    with raises(
-        consensus.WeakSubjectivityError, "EthLib.Consensus.WeakSubjectivityError.blockRootMismatch"
-    ) as info:
+    # The checkpoint names the zero root, and the state holds the root of the checkpoint block.
+    message = (
+        f"expected checkpoint root 0x{'00' * 32}, "
+        f"got the block root 0x{ROOT.hex()} that the state holds at that epoch"
+    )
+    with raises(consensus.WeakSubjectivityError, message) as info:
         _is_within(_ws_state(), _checkpoint(EPOCH, bytes(32)), EPOCH)
     assert info.value.code == 4
 
@@ -282,7 +285,7 @@ def test_state_at_another_epoch():
     state = phase0_state(32768, 32 * GWEI, slot=32 * EPOCH + 1, roots={32 * (EPOCH - 1): ROOT})
     with raises(
         consensus.WeakSubjectivityError,
-        "EthLib.Consensus.WeakSubjectivityError.epochMismatch 9 10",
+        "state epoch 10, expected the checkpoint epoch 9",
     ) as info:
         _is_within(state, _checkpoint(EPOCH - 1, ROOT), EPOCH)
     assert info.value.code == 5
