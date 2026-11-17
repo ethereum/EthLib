@@ -324,7 +324,9 @@ The vote is of a slot before the store's current slot, in a message sent by the 
 
 Byzantine stake below two thirds in each state that counts the votes gives such a signer.
 
-The historical signers derive it from that bound, the stake floors and conditions on the anchor. -/
+It follows from that bound and the stake floors.
+
+It also needs a positive inclusion delay and two conditions on the anchor. -/
 def JustifiedHonestlySigned (epoch : Epoch) (first last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k (slot : Slot), first ≤ (e.world k).time → (e.world k).time ≤ last →
     UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
@@ -335,6 +337,8 @@ def JustifiedHonestlySigned (epoch : Epoch) (first last : Nat) : Prop :=
       data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < slot
 
 /-- Byzantine stake is below two thirds of the total in each state that counts later votes.
+
+The total is the active balance of the state's epoch, at least one increment.
 
 The states are those where an up-to-date honest store over the interval counts votes.
 

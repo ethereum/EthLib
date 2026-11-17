@@ -106,7 +106,7 @@ The anchor state ends a run from a deposited genesis, and the stake floors bound
 
 The anchor's latest header must be the anchor block's, with a zero state root.
 
-The genesis state has one, as `genesis_header` shows.
+The genesis state has one, since its latest header is that of the genesis block.
 
 So has the state after the anchor block, since `process_block` stores a zero state root.
 

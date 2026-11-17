@@ -3032,7 +3032,7 @@ The derivation takes the headline's stake floors, a positive inclusion delay (`P
 The anchor's latest header must be the anchor block's, with a zero state root, as the post-state of a block has.
 The anchor store checks neither, and without them a justified root may be one that no store holds.
 So the late half of the root's viability rests on the Byzantine bound, the stake floors and these conditions.
-The merged companion stays for callers that supply the signer.
+The signed-justification theorem keeps its statement for callers that supply the signer.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
 `getCurrentTarget_eq_ok_iff` states that target as the checkpoint of the store's epoch in the chain of the head, and `epoch_eq_of_getCurrentTarget` gives its epoch.

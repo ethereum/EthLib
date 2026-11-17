@@ -35,7 +35,7 @@ Not yet released.
   `processJustificationAndFinalization_exists_voter` names a voter of a fresh justification, among `quorumVoters`.
   `isValidIndexedAttestation_of_keys` and `processBlock_attestation_checked` carry a block's attestation check to the state of its target.
   `Store.ForwardReachableWith.pubkeysDistinct_of_blockState`, `countedRun_enoughStake` and `stake_activeKeys_eq` bound the stake where a store counts votes.
-  `mapM_congr` holds in any lawful monad, and `lt_size_of_mem_getActiveValidatorIndices` bounds active indices by the registry.
+  `mapM_congr` is new and holds in any lawful monad, and `lt_size_of_mem_getActiveValidatorIndices` bounds active indices by the registry.
   `RunKept.getAttestingIndices_eq` keeps attesters along a run.
   `keys_advanceSlot`, `getAttestingIndices_eq_of_seed`, `Store.getAncestor_of_isAncestor` and `Store.exists_storeTargetCheckpointState` are now public.
 
