@@ -62,6 +62,7 @@ theorem isLeft_iff (p : Position) : p.isLeft = true ↔ p.index % 2 = 0 := by
 
 /-- A node is a right child when its index is odd. -/
 theorem isLeft_eq_false_iff (p : Position) : p.isLeft = false ↔ p.index % 2 = 1 := by
+  -- An index has parity 0 or 1, so not even means odd.
   have := Nat.mod_two_eq_zero_or_one p.index
   simp only [isLeft, decide_eq_false_iff_not]
   omega
@@ -70,13 +71,15 @@ theorem isLeft_eq_false_iff (p : Position) : p.isLeft = false ↔ p.index % 2 = 
 @[simp] theorem sibling_parent (p : Position) : p.sibling.parent = p.parent := by
   ext
   · rfl
-  · simp [Nat.xor_div_two]
+  · -- Halving the index drops the low bit, which is the only bit the sibling changes.
+    simp [Nat.xor_div_two]
 
 /-- The sibling of the sibling of a node is the node. -/
 @[simp] theorem sibling_sibling (p : Position) : p.sibling.sibling = p := by
   ext
   · rfl
-  · simp [Nat.xor_assoc]
+  · -- Flipping the low bit twice restores it.
+    simp [Nat.xor_assoc]
 
 /-- Exactly one of a node and its sibling is a left child. -/
 @[simp] theorem isLeft_sibling (p : Position) : p.sibling.isLeft = !p.isLeft := by
@@ -100,7 +103,8 @@ theorem parent_right (p : Position) : p.parent.right = ⟨p.level, 2 * (p.index 
 /-- The parent of the left child of a node above the leaves is the node. -/
 theorem left_parent {p : Position} (hlevel : p.level ≠ 0) : p.left.parent = p := by
   ext
-  · simp only [parent_level, left_level]
+  · -- Going down then up is the identity on levels above 0.
+    simp only [parent_level, left_level]
     omega
   · simp
 
@@ -109,7 +113,8 @@ theorem right_parent {p : Position} (hlevel : p.level ≠ 0) : p.right.parent = 
   ext
   · simp only [parent_level, right_level]
     omega
-  · simp only [parent_index, right_index]
+  · -- (2j + 1) / 2 = j.
+    simp only [parent_index, right_index]
     omega
 
 /-- A left child is a left child. -/
@@ -125,7 +130,8 @@ theorem parent_left_of_isLeft {p : Position} (h : p.isLeft = true) : p.parent.le
   rw [isLeft_iff] at h
   ext
   · simp
-  · simp only [left_index, parent_index]
+  · -- An even index j satisfies 2 * (j / 2) = j.
+    simp only [left_index, parent_index]
     omega
 
 /-- A right child is the right child of its parent. -/
@@ -134,7 +140,8 @@ theorem parent_right_of_not_isLeft {p : Position} (h : p.isLeft = false) :
   rw [isLeft_eq_false_iff] at h
   ext
   · simp
-  · simp only [right_index, parent_index]
+  · -- An odd index j satisfies 2 * (j / 2) + 1 = j.
+    simp only [right_index, parent_index]
     omega
 
 /-! ## Ancestors -/
@@ -171,7 +178,9 @@ theorem parent_right_of_not_isLeft {p : Position} (h : p.isLeft = false) :
     omega
   · simp [Nat.div_div_eq_div_mul, Nat.pow_add]
 
-/-- The ancestor `k` levels up of a node among the first `2^k` of its level is the first node. -/
+/-- The ancestor `k` levels up of a node among the first `2^k` of its level is the first node.
+
+For example, every leaf of a tree of height `h` has the root as its ancestor `h` levels up. -/
 theorem ancestor_eq_of_index_lt {p : Position} {k : Nat} (h : p.index < 2 ^ k) :
     p.ancestor k = ⟨p.level + k, 0⟩ := by
   ext
@@ -204,9 +213,11 @@ Its index is then the other's index divided by 2 to the power of the level diffe
 theorem isAncestor_iff {a p : Position} :
     a.IsAncestor p ↔ p.level ≤ a.level ∧ a.index = p.index / 2 ^ (a.level - p.level) := by
   constructor
-  · rintro ⟨k, rfl⟩
+  · -- The ancestor `k` levels up is `k` levels higher, at the index divided by `2^k`.
+    rintro ⟨k, rfl⟩
     simp
-  · rintro ⟨hlevel, hindex⟩
+  · -- Conversely, the level difference is the number of levels to climb.
+    rintro ⟨hlevel, hindex⟩
     refine ⟨a.level - p.level, ?_⟩
     ext
     · simp only [ancestor_level]
