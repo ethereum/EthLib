@@ -440,14 +440,10 @@ private theorem rise_consolidationRequest {s t : BeaconState preset fork}
     simp only [switchToCompoundingValidator, bind_ok_iff] at switched
     obtain ⟨_, _, _, set, queued⟩ := switched
     exact (fixed_setValidator set).rise.trans (rise_queueExcess queued)
-  unfold processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact Rise.refl _)
-    | exact compounding (liftAccessor_ok.mp ok)
-    | exact (fixed_queueConsolidation ok).rise
+  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  · exact Rise.refl _
+  · exact compounding switched
+  · exact (fixed_queueConsolidation queued).rise
 
 /-- Withdrawals lower the balances and keep the pending deposits. -/
 private theorem rise_withdrawals {s t : BeaconState preset fork} {capella : .shapella ≤ fork}
@@ -819,14 +815,10 @@ private theorem flags_consolidationRequest {s t : BeaconState preset fork}
     simp only [switchToCompoundingValidator, bind_ok_iff] at switched
     obtain ⟨_, _, _, set, queued⟩ := switched
     exact (fixed_setValidator set).flags.trans (flags_queueExcess queued)
-  unfold processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact Flags.refl _)
-    | exact compounding (liftAccessor_ok.mp ok)
-    | exact (fixed_queueConsolidation ok).flags
+  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  · exact Flags.refl _
+  · exact compounding switched
+  · exact (fixed_queueConsolidation queued).flags
 
 private theorem flags_withdrawals {s t : BeaconState preset fork} {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
