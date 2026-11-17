@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Merkle.Binding
+public import EthLib.Cryptography.Proofs.Merkle.Binding.Collision
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
 
 /-!

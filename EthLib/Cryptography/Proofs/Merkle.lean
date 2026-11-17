@@ -2,15 +2,16 @@ module
 
 public import EthLib.Cryptography.Proofs.Merkle.Position
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
-public import EthLib.Cryptography.Proofs.Merkle.Binding
-public import EthLib.Cryptography.Proofs.Merkle.RandomOracle
-public import EthLib.Cryptography.Proofs.Merkle.VectorBinding
-public import EthLib.Cryptography.Proofs.Merkle.PositionBinding
-public import EthLib.Cryptography.Proofs.Merkle.SecondPreimage
-public import EthLib.Cryptography.Proofs.Merkle.Extraction
-public import EthLib.Cryptography.Proofs.Merkle.Multiproof
-public import EthLib.Cryptography.Proofs.Merkle.MultiproofBinding
-public import EthLib.Cryptography.Proofs.Merkle.MultiproofTrace
+public import EthLib.Cryptography.Proofs.Merkle.Binding.Collision
+public import EthLib.Cryptography.Proofs.Merkle.Binding.SecondPreimage
+public import EthLib.Cryptography.Proofs.Merkle.Binding.Index
+public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Basic
+public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Collision
+public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.SecondPreimage
+public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Extraction
+public import EthLib.Cryptography.Proofs.Merkle.Multiproof.Basic
+public import EthLib.Cryptography.Proofs.Merkle.Multiproof.Binding
+public import EthLib.Cryptography.Proofs.Merkle.Multiproof.Trace
 
 /-!
 # Proofs: Merkle trees

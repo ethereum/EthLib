@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Xmss.Tree
 public import EthLib.Cryptography.Proofs.Xmss.Types
-public import EthLib.Cryptography.Proofs.Merkle.Binding
+public import EthLib.Cryptography.Proofs.Merkle.Binding.SecondPreimage
 
 /-!
 # Proofs: the leanXMSS trees

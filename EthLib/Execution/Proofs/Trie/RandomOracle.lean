@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Trie.Binding
-public import EthLib.Cryptography.Proofs.Merkle.RandomOracle
+public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Collision
 public import EthLib.Cryptography.Proofs.ExceptTAnswers
 public import VCVio.OracleComp.QueryTracking.RandomOracle.CachePartial
 
