@@ -10,47 +10,52 @@ public import EthLib.Serialization.Proofs.Ssz.Merkle.Merkleize
 
 namespace EthLib.Serialization.Ssz
 
-/-- The table holds one entry per depth up to the one it was built for. -/
-theorem zeroRootsUpTo_size (built : Nat) : (zeroRootsUpTo built).size = built + 1 := by
-  induction built with
-  -- The table opens with the zero node alone.
-  | zero => rfl
-  -- Every level after that pushes exactly one entry on the end.
-  | succ built ih => simp [zeroRootsUpTo, ih]
+/-- Recording the hashes of a zero-subtree computation appends the root of each level it climbs. -/
+theorem zeroRootM_record (depth : Nat) (table : Array Bytes) :
+    (zeroRootM (fun left right : Bytes =>
+        (modifyGet fun table => let parent := combine left right; (parent, table.push parent) :
+          StateM (Array Bytes) Bytes)) zeroChunk depth).run table
+      = (zeroRoot combine zeroChunk depth,
+          table ++ Array.ofFn (n := depth) fun level =>
+            zeroRoot combine zeroChunk (level + 1)) := by
+  induction depth generalizing table with
+  | zero => simp [zeroRootM]; rfl
+  | succ depth ih =>
+    simp only [zeroRootM, StateT.run_bind, ih]
+    -- The new level pushes its root after those of the levels below.
+    rw [Array.ofFn_succ, ← Array.push_append]
+    rfl
+
+/-- The table is the zero node, then the zero subtree of each depth up to the cache depth. -/
+theorem zeroRoots_eq :
+    zeroRoots = #[zeroChunk]
+      ++ Array.ofFn (n := maxZeroDepth) fun level => zeroRoot combine zeroChunk (level + 1) := by
+  unfold zeroRoots
+  simp only [zeroRootM_record]
+
+/-- The table holds one entry per depth, from zero up to the cache depth. -/
+theorem zeroRoots_size : zeroRoots.size = maxZeroDepth + 1 := by
+  rw [zeroRoots_eq, Array.size_append, Array.size_ofFn]
+  rfl
 
 /--
 Every entry of the table is the zero subtree of its own depth.
 
-This is what lets an empty subtree be answered by lookup.
-The answer still means what the specification says it means.
+So an empty subtree can be read from the table.
 -/
-theorem zeroRootsUpTo_get (built : Nat) :
-    ∀ depth, depth ≤ built →
-      (zeroRootsUpTo built)[depth]?.getD zeroChunk = zeroRoot combine zeroChunk depth := by
-  induction built with
-  | zero =>
-    -- Only depth zero fits, and the table opens with the zero node itself.
-    intro depth holds
-    obtain rfl : depth = 0 := by omega
-    rfl
-  | succ built ih =>
-    intro depth holds
-    -- Either the entry was already there before this level, or it is the one just added.
-    by_cases below : depth < built + 1
-    · -- A shallower entry was already in the table, and pushing on the end left it alone.
-      simp only [zeroRootsUpTo, Array.getElem?_push, zeroRootsUpTo_size, ite_eq_right (Nat.ne_of_lt below)]
-      exact ih depth (by omega)
-    · -- The new entry folds the previous one against itself, which is the level above.
-      obtain rfl : depth = built + 1 := by omega
-      simp only [zeroRootsUpTo, Array.getElem?_push, zeroRootsUpTo_size, ite_eq_left, Option.getD_some, zeroRoot]
-      -- The entry below it is already known to be the subtree one level down.
-      rw [ih built (Nat.le_refl built)]
+theorem zeroRoots_getElem? {depth : Nat} (covered : depth ≤ maxZeroDepth) :
+    zeroRoots[depth]? = some (zeroRoot combine zeroChunk depth) := by
+  rw [zeroRoots_eq]
+  cases depth with
+  | zero => rfl
+  | succ depth =>
+    rw [Array.getElem?_append_right (by simp)]
+    simp [show depth < maxZeroDepth by omega]
 
 /-- Reading the table at any depth it covers gives the zero subtree of that depth. -/
 theorem zeroRoots_get {depth : Nat} (covered : depth ≤ maxZeroDepth) :
-    zeroRoots[depth]?.getD zeroChunk = zeroRoot combine zeroChunk depth :=
-  -- The table was built through the requested depth, so its entry has the proved recursive meaning.
-  zeroRootsUpTo_get maxZeroDepth depth covered
+    zeroRoots[depth]?.getD zeroChunk = zeroRoot combine zeroChunk depth := by
+  rw [zeroRoots_getElem? covered, Option.getD_some]
 
 /-- Cached and uncached zero roots both describe the same perfect tree. -/
 theorem zeroSubtree_eq (depth : Nat) :
@@ -58,38 +63,22 @@ theorem zeroSubtree_eq (depth : Nat) :
   -- Inside the cache, the table theorem identifies the entry.
   by_cases covered : depth ≤ maxZeroDepth
   · have present : depth < zeroRoots.size := by
-      simpa [zeroRoots, zeroRootsUpTo_size] using Nat.lt_succ_of_le covered
+      rw [zeroRoots_size]
+      omega
     simpa [zeroSubtree, Array.getElem?_eq_getElem present] using zeroRoots_get covered
   · -- Beyond the cache, the recursive definition supplies the root directly.
     have absent : zeroRoots[depth]? = none :=
-      Array.getElem?_eq_none (by simp only [zeroRoots, zeroRootsUpTo_size]; omega)
+      Array.getElem?_eq_none (by rw [zeroRoots_size]; omega)
     simp [zeroSubtree, absent]
-
-/-- The zero roots that SHA-256 computes level by level are the roots in the table. -/
-theorem zeroSubtreeM_sha256 (depth : Nat) :
-    (zeroSubtreeM (m := Id) Cryptography.Hash.Sha256.hash depth).run = zeroSubtree depth := by
-  induction depth with
-  | zero => rfl
-  | succ depth ih =>
-    rw [zeroSubtree_eq, zeroRoot, ← zeroSubtree_eq, ← ih]
-    rfl
 
 /-- The hasher built from SHA-256 alone is the hasher of the specification. -/
 theorem ofHash_sha256 : Hasher.ofHash (m := Id) Cryptography.Hash.Sha256.hash = sha256Hasher := by
   unfold Hasher.ofHash sha256Hasher
   congr 1
   funext depth
-  exact zeroSubtreeM_sha256 depth
-
-/-- The zero roots that any hash computes level by level fold the zero node with that hash. -/
-theorem zeroSubtreeM_eq_zeroRoot (hash : ByteArray → ByteArray) (depth : Nat) :
-    (zeroSubtreeM (m := Id) hash depth).run
-      = zeroRoot (fun a b => (combineM (m := Id) hash a b).run) zeroChunk depth := by
-  induction depth with
-  | zero => rfl
-  | succ depth ih =>
-    rw [zeroRoot, ← ih]
-    rfl
+  -- The table holds the zero roots of the SSZ parent, which is SHA-256 of the two nodes.
+  rw [zeroSubtree_eq]
+  rfl
 
 /-- Any hash in the identity monad walks a subtree as the specification states it. -/
 theorem subtreeAtM_ofHash_eq_subtreeRoot (hash : ByteArray → ByteArray) (chunks : Array Bytes) :
@@ -104,7 +93,7 @@ theorem subtreeAtM_ofHash_eq_subtreeRoot (hash : ByteArray → ByteArray) (chunk
     rw [subtreeAtM.eq_def]
     -- Either the leaf lies past the data, or it is read from it.
     split
-    · show (zeroSubtreeM (m := Id) hash 0).run = _
+    · show (zeroRootM (m := Id) (combineM hash) zeroChunk 0).run = _
       simp [subtreeRoot_zero, padded, Array.getElem?_eq_none (show chunks.size ≤ start by omega)]
       rfl
     · simp [subtreeRoot_zero, padded]
@@ -114,8 +103,7 @@ theorem subtreeAtM_ofHash_eq_subtreeRoot (hash : ByteArray → ByteArray) (chunk
     split
     · -- A subtree wholly past the data is the empty tree of its depth.
       rename_i past
-      show (zeroSubtreeM (m := Id) hash (depth + 1)).run = _
-      rw [zeroSubtreeM_eq_zeroRoot]
+      show zeroRoot (fun a b => (combineM (m := Id) hash a b).run) zeroChunk (depth + 1) = _
       exact (subtreeRoot_padded_past_data _ zeroChunk (depth + 1) chunks (by omega)).symm
     · -- Otherwise both sides fold the same two halves, and the shift lines up.
       show (combineM (m := Id) hash
@@ -143,7 +131,7 @@ theorem subtreeAtM_ofHash_four {m : Type → Type} [Monad m] [LawfulMonad m]
       let right ← combineM hash (padded zeroChunk chunks 2) (padded zeroChunk chunks 3)
       combineM hash left right) := by
   rcases (show chunks.size = 3 ∨ chunks.size = 4 by omega) with count | count <;>
-    simp [subtreeAtM, count, Hasher.ofHash, zeroSubtreeM, padded]
+    simp [subtreeAtM, count, Hasher.ofHash, zeroRootM, padded]
 
 /-- The progressive tree of any hash agrees with the hash-independent definition. -/
 theorem merkleizeProgressiveUncheckedM_ofHash_eq (hash : ByteArray → ByteArray)

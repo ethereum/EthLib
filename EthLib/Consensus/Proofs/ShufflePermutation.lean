@@ -285,6 +285,16 @@ theorem shuffledCommittee_ok {indices : Array ValidatorIndex} {shuffled : Array 
     ↓reduceIte]
   exact ⟨_, rfl⟩
 
+/-- A committee that is cut has the number of indices times one past its position below `2^64`. -/
+theorem fits_of_shuffledCommittee {indices : Array ValidatorIndex}
+    {shuffled : Array UInt64} {index count : UInt64} {committee : Array ValidatorIndex}
+    (cut : shuffledCommittee indices shuffled index count = .ok committee) :
+    indices.size * (index.toNat + 1) < 2 ^ 64 := by
+  unfold shuffledCommittee at cut
+  split at cut
+  · exact (by assumption : _ ∧ _).2
+  · split at cut <;> cases cut
+
 /-- A committee with a position past the length of the indices fails.
 
 The error names the first such position, as the spec's bound check on the shuffle does. -/

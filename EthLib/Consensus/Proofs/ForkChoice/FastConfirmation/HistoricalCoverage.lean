@@ -399,15 +399,17 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
     (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
     (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
-    (membership : VotersInHeadWindow (e := e) time) {anchor : Store preset fork}
+    {n : ℕ} {block : BeaconBlock preset fork}
+    (membership : VotersInHeadWindow (e := e) block.parentRoot (e.world n).time time)
+    {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J)
     (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
       ((e.world n).state u))
     {head root : Root} {source : BeaconState preset fork}
-    {slot first last beforeBlock : Slot} {block parent : BeaconBlock preset fork}
+    {slot first last beforeBlock : Slot} {parent : BeaconBlock preset fork}
     {parentParticipants : Std.TreeSet ValidatorIndex} {boost maximum : Gwei}
     (headNode : ∃ node, ((e.world n).state u).getHead config = .ok node ∧ node.root = head)
     (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot) {begin : UInt64}
@@ -595,7 +597,7 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
           half (fun v hv s c d a dt b dl => votes v hv s c d a dt b (by omega)) fits
           (prompt.of_le high)
           (fun w hw j hj => windows w hw j (by omega))
-          (fun w hw j hj => membership w hw j (by omega))
+          (fun w hw j lo hj => membership w hw j lo (by omega))
           anchored sound anchorSlot anchorBoundary start caller callerUpToDate headNode slotOk
           beginOk timeEq blockOk parentOk sourceOk boostOk firstOk lastOk beforeOk maximumOk
           parentParticipantsOk registry aligned increment supportOk discountOk adversaryOk margin
@@ -669,7 +671,9 @@ After that, each step is the duty-epoch step, which needs a late duty majority a
 
 Both steps read finality only within one store, so no finality across stores is assumed.
 
-The receivers' exits and the late duty majority are assumed.
+The late duty majority is assumed.
+
+So are the exits of each receiver within two epochs of the parent.
 
 The receivers' reads are derived: the justified state from the head walk, the windows from `fit`.
 
@@ -693,7 +697,7 @@ That store is at the horizon or later.
 
 A safety threshold that subtracts the exit reserve would make `reserve` and `exits` fixed bounds.
 
-A voter activated at the target epoch of its far vote is assumed in the head's window. -/
+A voter activated at its vote's target, two epochs after the parent, is assumed in the window. -/
 public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
@@ -704,15 +708,17 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
     (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
-    (newVoters : NewlyActiveVotersInHeadWindow (e := e) time) {anchor : Store preset fork}
+    {n : ℕ} {block : BeaconBlock preset fork}
+    (newVoters : NewlyActiveVotersInHeadWindow (e := e) block.parentRoot (e.world n).time time)
+    {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J)
     (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
       ((e.world n).state u))
     {head root : Root} {source : BeaconState preset fork}
-    {slot first last beforeBlock : Slot} {block parent : BeaconBlock preset fork}
+    {slot first last beforeBlock : Slot} {parent : BeaconBlock preset fork}
     {parentParticipants : Std.TreeSet ValidatorIndex} {boost maximum : Gwei}
     (headNode : ∃ node, ((e.world n).state u).getHead config = .ok node ∧ node.root = head)
     (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot) {begin : UInt64}
@@ -788,7 +794,7 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
       HistoricalDirectSafetyEvidence (e := e) pre time :=
   honestHeadsCover_core sync slots positive minLookahead maxLookahead ring preGloas
     admitted half votes fits prompt windows
-    (Execution.votersInHeadWindow_of_newlyActive time anchored start (UInt64.le_of_eq anchorSlot)
+    (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
       positive minLookahead maxLookahead ring newVoters)
     anchored sound anchorSlot anchorBoundary
     start caller callerUpToDate headNode slotOk beginOk timeEq blockOk parentOk sourceOk boostOk
@@ -821,7 +827,7 @@ That evidence is relative to the anchor, and its drift counts from the anchor.
 
 With enough churn since the anchor, it holds with no accountable key.
 
-A voter activated at the target epoch of its far vote is assumed in the head's window. -/
+A voter activated at its vote's target, two epochs after the parent, is assumed in the window. -/
 public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
@@ -832,15 +838,17 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
     (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
-    (newVoters : NewlyActiveVotersInHeadWindow (e := e) time) {anchor : Store preset fork}
+    {n : ℕ} {block : BeaconBlock preset fork}
+    (newVoters : NewlyActiveVotersInHeadWindow (e := e) block.parentRoot (e.world n).time time)
+    {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J)
     (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
       ((e.world n).state u))
     {head root : Root} {source : BeaconState preset fork}
-    {slot first last beforeBlock : Slot} {block parent : BeaconBlock preset fork}
+    {slot first last beforeBlock : Slot} {parent : BeaconBlock preset fork}
     {parentParticipants : Std.TreeSet ValidatorIndex} {boost maximum : Gwei}
     (headNode : ∃ node, ((e.world n).state u).getHead config = .ok node ∧ node.root = head)
     (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot) {begin : UInt64}
@@ -942,7 +950,7 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     exact read
   exact honestHeadsCover_core sync slots positive minLookahead maxLookahead ring preGloas
     admitted half votes fits prompt windows
-    (Execution.votersInHeadWindow_of_newlyActive time anchored start (UInt64.le_of_eq anchorSlot)
+    (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
       positive minLookahead maxLookahead ring newVoters)
     anchored sound anchorSlot anchorBoundary
     start caller callerUpToDate headNode slotOk beginOk timeEq blockOk parentOk sourceOk boostOk

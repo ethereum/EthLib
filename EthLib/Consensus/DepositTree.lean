@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Containers.Misc
 public import EthLib.Cryptography.Hash.Sha256
+public import EthLib.Serialization.Ssz.Merkle.Tree
 
 /-!
 # The deposit tree and its snapshot
@@ -19,6 +20,10 @@ Finalizing the tree replaces each complete subtree of finalized deposits by its 
 A snapshot holds those roots, with the count, the root and the execution block of the tree.
 
 A node that starts from a checkpoint rebuilds the tree from a snapshot, without older deposits.
+
+The sparse tree is the state this file adds.
+
+Its hashing is that of SSZ, and its climb that of the generic Merkle tree.
 
 The tree, its finalization and the snapshot follow [EIP-4881][eip-4881].
 
@@ -91,23 +96,22 @@ instance : ToString DepositTreeError where
 
 namespace DepositMerkleTree
 
-/-- The parent of two nodes: SHA-256 of the left node, then the right one. -/
+/-- The SSZ parent of two nodes, as a 32-byte root. -/
 def hashPair (left right : Root) : Root :=
-  Cryptography.Hash.Sha256.hash32 ⟨left.toArray ++ right.toArray⟩
+  -- The width holds by unfolding: the SSZ parent is the bytes of a SHA-256 digest.
+  ⟨combine left.toArray right.toArray,
+    (Cryptography.Hash.Sha256.hash32 ⟨left.toArray ++ right.toArray⟩).size_toArray⟩
 
-/-- The root of the subtree of a height whose leaves are all zero. -/
-def zeroNode : Nat → Root
-  | 0 => Vector.replicate 32 0
-  | height + 1 =>
-    -- One recursive call per level: the two children are the same subtree.
-    let below := zeroNode height
-    hashPair below below
+/-- The SSZ root of the all-zero subtree of a height, read from the SSZ table. -/
+def zeroNode (height : Nat) : Root :=
+  -- Every entry is 32 bytes wide, so this copies it whole.
+  Vector.ofFn fun i => (zeroSubtree height)[i.val]?.getD 0
 
-/--
-A root with a count mixed in: the parent of the root and the count as 32 little-endian bytes.
--/
+/-- A root with a count mixed in, as SSZ mixes the length into a list root. -/
 def mixInCount (root : Root) (count : Nat) : Root :=
-  hashPair root (uintToBytes 32 count)
+  -- The width holds by unfolding: the mix-in is the bytes of a SHA-256 digest.
+  ⟨mixIn root.toArray (lengthWord count),
+    (Cryptography.Hash.Sha256.hash32 ⟨root.toArray ++ lengthWord count⟩).size_toArray⟩
 
 end DepositMerkleTree
 
@@ -286,21 +290,26 @@ namespace DepositTreeSnapshot
 open DepositMerkleTree (hashPair zeroNode mixInCount)
 
 /--
-The root below the count, built up from a level, with the finalized roots not yet used.
+The siblings of the climb from the first empty leaf, from a level, given the unused finalized roots.
 
-At each level, a set bit of the count takes the last unused root as the left child.
-
-A clear bit takes the zero subtree of that level as the right child.
+A set bit of the count takes the last unused root, a clear bit the zero subtree of that level.
 -/
-def climbFinalized (pending : List Root) (size : Nat) (root : Root) :
-    (level : Nat) → (levels : Nat) → Except DepositTreeError Root
-  | _, 0 => if pending.isEmpty then .ok root else .error (.extraFinalized pending.length)
+def finalizedSiblings (pending : List Root) (size : Nat) :
+    (level : Nat) → (levels : Nat) → Except DepositTreeError (List Root)
+  | _, 0 => if pending.isEmpty then .ok [] else .error (.extraFinalized pending.length)
   | level, levels + 1 =>
     if size.testBit level then
       match pending with
       | [] => .error (.missingFinalized level)
-      | last :: earlier => climbFinalized earlier size (hashPair last root) (level + 1) levels
-    else climbFinalized pending size (hashPair root (zeroNode level)) (level + 1) levels
+      | last :: earlier => (last :: ·) <$> finalizedSiblings earlier size (level + 1) levels
+    else (zeroNode level :: ·) <$> finalizedSiblings pending size (level + 1) levels
+
+/-- The root below the count: the generic Merkle climb from a node, along those siblings. -/
+def climbFinalized (pending : List Root) (size : Nat) (root : Root) (level levels : Nat) :
+    Except DepositTreeError Root := do
+  let siblings ← finalizedSiblings pending size level levels
+  return (Cryptography.Merkle.climb (m := Id) (fun _ => hashPair) ⟨level, size >>> level⟩ root
+    siblings).run
 
 /--
 The deposit root that finalized roots and a count compute.

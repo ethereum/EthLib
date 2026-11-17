@@ -127,13 +127,13 @@ theorem evalWithAnswerFn_combineM (f : QueryImpl HashOracle Id) (left right : By
   rfl
 
 /-- A zero root, run against a full answer table, is the zero root with that table. -/
-theorem evalWithAnswerFn_zeroSubtreeM (f : QueryImpl HashOracle Id) (depth : Nat) :
-    evalWithAnswerFn f (zeroSubtreeM queryHash depth) =
-      (zeroSubtreeM (m := Id) (tableHash f) depth).run := by
+theorem evalWithAnswerFn_zeroRootM (f : QueryImpl HashOracle Id) (depth : Nat) :
+    evalWithAnswerFn f (zeroRootM (combineM queryHash) zeroChunk depth) =
+      (zeroRootM (m := Id) (combineM (tableHash f)) zeroChunk depth).run := by
   induction depth with
   | zero => rfl
   | succ depth ih =>
-    simp only [zeroSubtreeM, evalWithAnswerFn_bind, ih, evalWithAnswerFn_combineM]
+    simp only [zeroRootM, evalWithAnswerFn_bind, ih, evalWithAnswerFn_combineM]
     rfl
 
 /-- A perfect subtree, run against a full answer table, is the subtree with that table. -/
@@ -145,12 +145,12 @@ theorem evalWithAnswerFn_subtreeAtM (f : QueryImpl HashOracle Id) (chunks : Arra
   | zero =>
     unfold subtreeAtM
     split
-    · exact evalWithAnswerFn_zeroSubtreeM f 0
+    · exact evalWithAnswerFn_zeroRootM f 0
     · rfl
   | succ depth ih =>
     unfold subtreeAtM
     split
-    · exact evalWithAnswerFn_zeroSubtreeM f _
+    · exact evalWithAnswerFn_zeroRootM f _
     · simp only [oracleHasher, Hasher.ofHash] at ih
       simp only [evalWithAnswerFn_bind, ih, oracleHasher, Hasher.ofHash, evalWithAnswerFn_combineM]
       rfl
@@ -315,8 +315,8 @@ theorem combineM_queryBound (left right : Bytes) :
   simp [combineM, queryHash]
 
 /-- The root of an all-zero subtree makes one oracle call per level. -/
-theorem zeroSubtreeM_queryBound (depth : Nat) :
-    IsQueryBoundP (zeroSubtreeM queryHash depth) (fun _ => True) depth := by
+theorem zeroRootM_queryBound (depth : Nat) :
+    IsQueryBoundP (zeroRootM (combineM queryHash) zeroChunk depth) (fun _ => True) depth := by
   induction depth with
   | zero => trivial
   | succ depth ih => exact isQueryBoundP_bind ih fun below _ => combineM_queryBound below below
@@ -331,14 +331,14 @@ theorem subtreeAtM_queryBound (chunks : Array Bytes) (depth start : Nat) :
   | zero =>
     unfold subtreeAtM
     split
-    · exact zeroSubtreeM_queryBound 0
+    · exact zeroRootM_queryBound 0
     · trivial
   | succ depth ih =>
     have below : depth + 1 < 2 ^ (depth + 1) := Nat.lt_two_pow_self
     have half : 1 ≤ 2 ^ depth := Nat.one_le_two_pow
     unfold subtreeAtM
     split
-    · exact (zeroSubtreeM_queryBound (depth + 1)).mono (by omega)
+    · exact (zeroRootM_queryBound (depth + 1)).mono (by omega)
     · refine (isQueryBoundP_bind (ih start) fun _ _ =>
         isQueryBoundP_bind (ih (start + 2 ^ depth)) fun _ _ =>
           combineM_queryBound _ _).mono ?_
@@ -369,12 +369,13 @@ theorem cached_of_subtreeAtM {cache : HashOracle.QueryCache} {f : QueryImpl Hash
       · rename_i past
         -- Past the data, both halves are the all-zero subtree one level below.
         have zero : ∀ position, position ≥ chunks.size →
-            subtreeAtM oracleHasher chunks depth position = zeroSubtreeM queryHash depth := by
+            subtreeAtM oracleHasher chunks depth position
+              = zeroRootM (combineM queryHash) zeroChunk depth := by
           intro position beyond
           unfold subtreeAtM
           rw [ite_eq_left_of_eq_true _ _ (eq_true beyond)]
           rfl
-        simp only [oracleHasher, Hasher.ofHash, zeroSubtreeM, simulateQ_bind] at hrun
+        simp only [oracleHasher, Hasher.ofHash, zeroRootM, simulateQ_bind] at hrun
         obtain ⟨below, hbelow, hroot⟩ := Option.bind_eq_some_iff.mp hrun
         exact ⟨below, below, by rw [zero start past]; exact hbelow,
           by rw [zero _ (Nat.le_add_right_of_le past)]; exact hbelow, hroot⟩

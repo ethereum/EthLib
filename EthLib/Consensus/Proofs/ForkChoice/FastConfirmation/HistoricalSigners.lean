@@ -292,15 +292,17 @@ theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· ∈ J)]
     (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
     (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
-    (newVoters : NewlyActiveVotersInHeadWindow (e := e) time) {anchor : Store preset fork}
+    {n : ℕ} {block : BeaconBlock preset fork}
+    (newVoters : NewlyActiveVotersInHeadWindow (e := e) block.parentRoot (e.world n).time time)
+    {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J)
     (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
       ((e.world n).state u))
     {head root : Root} {source : BeaconState preset fork}
-    {slot first last beforeBlock : Slot} {block parent : BeaconBlock preset fork}
+    {slot first last beforeBlock : Slot} {parent : BeaconBlock preset fork}
     {parentParticipants : Std.TreeSet ValidatorIndex} {boost maximum : Gwei}
     (headNode : ∃ node, ((e.world n).state u).getHead config = .ok node ∧ node.root = head)
     (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot) {begin : UInt64}

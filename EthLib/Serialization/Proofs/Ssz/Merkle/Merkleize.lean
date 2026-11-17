@@ -11,6 +11,16 @@ namespace EthLib.Serialization.Ssz
 
 variable {α : Type}
 
+/-- The zero subtree of depth zero is the zero node. -/
+@[simp] theorem zeroRoot_zero (combine : α → α → α) (zero : α) : zeroRoot combine zero 0 = zero :=
+  rfl
+
+/-- A zero subtree one level up hashes the zero subtree below with itself. -/
+theorem zeroRoot_succ (combine : α → α → α) (zero : α) (depth : Nat) :
+    zeroRoot combine zero (depth + 1)
+      = combine (zeroRoot combine zero depth) (zeroRoot combine zero depth) :=
+  rfl
+
 /-- A tree of depth zero is its one leaf. -/
 theorem subtreeRoot_zero (combine : α → α → α) (leaves : Nat → α) :
     subtreeRoot combine 0 leaves = leaves 0 :=
@@ -79,7 +89,7 @@ theorem subtreeRoot_const_zero (combine : α → α → α) (zero : α) (depth :
   -- The leaf supply is the same constant at every level, so plain induction suffices.
   induction depth with
   | zero => rfl
-  | succ depth ih => simp [subtreeRoot_halves, zeroRoot, ih]
+  | succ depth ih => simp [subtreeRoot_halves, zeroRoot_succ, ih]
 
 /--
 Appending zero nodes to the data changes no leaf.

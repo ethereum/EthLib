@@ -381,7 +381,7 @@ private theorem mem_window_of_near_vote {store : Store preset fork} {v : Validat
     exact Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp headLe)
   have parentVote : (computeEpochAtSlot preset parent.slot).toNat ≤
       (computeEpochAtSlot preset attestation.data.slot).toNat := by
-    have start := (Uint64.addChecked_ok_iff.mp firstOk).2
+    have start := (addChecked_ok_iff.mp firstOk).2
     have low := UInt64.le_iff_toNat_le.mp low
     simp only [UInt64.toNat_one] at start
     simp only [computeEpochAtSlot, UInt64.toNat_div]
@@ -406,28 +406,23 @@ private theorem headState_of_descends {store : Store preset fork}
   obtain ⟨headState, headStored, _, _⟩ := reached.reachable.blockStatesFromParents headKnown
   exact ⟨headState, Store.blockState_ok_iff.mpr headStored⟩
 
-/-- The corner premise places every voter below an ancestor of the head in its window.
+/-- Each voter below the parent is in the head's window, given the premise for newly active ones.
 
-A near vote needs no premise.
-
-A far vote, two epochs after the ancestor, has a window that holds the whole epoch before it.
-
-Its voter was active in that epoch in the head state, so it is in the window.
-
-Otherwise the voter became active at the target epoch, and the premise covers it. -/
+A vote two epochs after the parent has a window that holds the whole epoch before its target. -/
 public theorem Execution.votersInHeadWindow_of_newlyActive {anchor : Store preset fork}
-    (last : Nat) (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    {parentRoot : Root} {first last : Nat}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (newVoters : NewlyActiveVotersInHeadWindow (e := e) last) :
-    VotersInHeadWindow (e := e) last := by
-  intro w honest k time head parentRoot parent current first finish epoch members v attestation
-    headRead parentFound descends slotRead epochRead horizon firstOk lastOk window origin
-    voteDescends low high
+    (newVoters : NewlyActiveVotersInHeadWindow (e := e) parentRoot first last) :
+    VotersInHeadWindow (e := e) parentRoot first last := by
+  intro w honest k after time parent members v attestation inWindow
+  obtain ⟨head, current, first, finish, epoch, headRead, parentFound, descends, slotRead,
+    epochRead, horizon, firstOk, lastOk, window, origin, voteDescends, low, high⟩ := id inWindow
   have reached := e.forwardReachableWith
     (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore) k w
     honest
@@ -468,8 +463,8 @@ public theorem Execution.votersInHeadWindow_of_newlyActive {anchor : Store prese
       origin voteDescends (by omega) previousNat stored (Store.blockState_ok_iff.mp headFound)
     with active | ⟨voter, voterFound, fresh⟩
   · -- The window holds the whole epoch before the target.
-    have firstNat := (Uint64.addChecked_ok_iff.mp firstOk).2
-    have finishNat := (Base.Uint64.subChecked_ok_iff.mp lastOk)
+    have firstNat := (addChecked_ok_iff.mp firstOk).2
+    have finishNat := (subChecked_ok_iff.mp lastOk)
     simp only [UInt64.toNat_one] at firstNat finishNat
     have parentLt : parent.slot.toNat < previous.toNat * preset.SLOTS_PER_EPOCH.toNat := by
       have := Nat.lt_div_mul_add (a := parent.slot.toNat) positive
@@ -484,18 +479,17 @@ public theorem Execution.votersInHeadWindow_of_newlyActive {anchor : Store prese
       exact Nat.le_trans (Nat.mul_le_mul_right _ targetLe) this
     exact Store.mem_getCommitteesBetweenSlots_of_active positive window headFound
       (by omega) (by rw [previousNat]; omega) active
-  · exact newVoters w honest k time head parentRoot parent current first finish epoch members v
-      attestation targetState voter headRead parentFound descends slotRead epochRead horizon
-      firstOk lastOk window origin voteDescends low high far stored voterFound fresh
+  · exact newVoters w honest k after time parent members v attestation targetState voter inWindow
+      far stored voterFound fresh
 
 /-- Every child supporter lies in the actual window, through the window-membership premise. -/
-private theorem mem_window_of_mem_supporters {last n : Nat} {u : ValidatorIndex}
-    (membership : VotersInHeadWindow (e := e) last) (honest : u ∈ J)
-    (time : (e.world n).time ≤ last)
+private theorem mem_window_of_mem_supporters {since last n : Nat} {u : ValidatorIndex}
+    {parentRoot : Root} (membership : VotersInHeadWindow (e := e) parentRoot since last)
+    (honest : u ∈ J) (after : since ≤ (e.world n).time) (time : (e.world n).time ≤ last)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock
       ((e.world n).state u))
     (before : fork < .glamsterdam) (lower : ((e.world n).state u).ParentsBelow)
-    {head : ForkChoiceNode} {parentRoot : Root} {parent : BeaconBlock preset fork}
+    {head : ForkChoiceNode} {parent : BeaconBlock preset fork}
     {current first finish : Slot} {epoch : Epoch} {members : Std.TreeSet ValidatorIndex}
     {nodes : List ForkChoiceNode} {state : BeaconState preset fork} {c : Option Root} {i : Nat}
     (headRead : ((e.world n).state u).getHead config = .ok head)
@@ -521,9 +515,9 @@ private theorem mem_window_of_mem_supporters {last n : Nat} {u : ValidatorIndex}
     Store.blockTree_isChild_iff.mpr ⟨childBlock, childFound, childParent⟩
   have voteDescends := Store.isAncestor_of_blockTree_ancestor (lower := lower) before
     votedFound parentFound (isChild.ancestor.trans above)
-  exact membership u honest n time head parentRoot parent current first finish epoch members _
-    attestation headRead parentFound descends slotRead epochRead horizon firstOk lastOk window
-    origin voteDescends low high
+  exact membership u honest n after time parent members _ attestation
+    ⟨head, current, first, finish, epoch, headRead, parentFound, descends, slotRead, epochRead,
+      horizon, firstOk, lastOk, window, origin, voteDescends, low, high⟩
 
 open Models.ForkChoice in
 /-- The model weight includes every honest supporter counted by the store. -/
@@ -616,16 +610,16 @@ private theorem ancestor_ghost_of_visited_parent {ν β ρ : Type*} [DecidableEq
 open Models.ForkChoice in
 /-- A finite-window margin makes a block heavier than a sibling, including the boost. -/
 private theorem sibling_weight_lt_of_window_margin [DecidablePred (· ∈ J)]
-    {last n : Nat} {u : ValidatorIndex}
-    (membership : VotersInHeadWindow (e := e) last) (honest : u ∈ J)
-    (time : (e.world n).time ≤ last)
+    {since last n : Nat} {u : ValidatorIndex} {root : Root} {block parent : BeaconBlock preset fork}
+    (membership : VotersInHeadWindow (e := e) block.parentRoot since last) (honest : u ∈ J)
+    (after : since ≤ (e.world n).time) (time : (e.world n).time ≤ last)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock
       ((e.world n).state u))
     (before : fork < .glamsterdam) (lower : ((e.world n).state u).ParentsBelow)
     {head : ForkChoiceNode} {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit)
     (nodes : List ForkChoiceNode) (boosted : Option (Option Root)) (score : Nat)
-    {root : Root} {block parent : BeaconBlock preset fork} {sibling : Option Root}
+    {sibling : Option Root}
     {current first finish shortLast : Slot} {epoch : Epoch}
     {members participants : Std.TreeSet ValidatorIndex}
     (headRead : ((e.world n).state u).getHead config = .ok head)
@@ -664,9 +658,9 @@ private theorem sibling_weight_lt_of_window_margin [DecidablePred (· ∈ J)]
         · exact ⟨_, Store.blockTree_isChild_iff.mpr ⟨block, found, rfl⟩, first⟩
         · exact ⟨_, (mem_children.mp siblingChild).2, second⟩
       obtain ⟨c, isChild, supporter⟩ := child
-      have member := mem_window_of_mem_supporters membership honest time reached before lower
-        headRead parentFound descends slotRead epochRead horizon firstOk lastOk window isChild
-        supporter
+      have member := mem_window_of_mem_supporters membership honest after time reached before
+        lower headRead parentFound descends slotRead epochRead horizon firstOk lastOk window
+        isChild supporter
       obtain ⟨below, validator, atIndex, active⟩ :=
         Store.active_of_mem_voters (Finset.mem_of_mem_filter _ supporter)
       have back := toNat_toUInt64_of_lt within below
@@ -772,13 +766,12 @@ public theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
-    {last n : Nat} {u : ValidatorIndex}
-    (membership : VotersInHeadWindow (e := e) last) (honest : u ∈ J)
-    (time : (e.world n).time ≤ last)
+    {last n call : Nat} {u : ValidatorIndex} {root : Root} {block parent : BeaconBlock preset fork}
+    (membership : VotersInHeadWindow (e := e) block.parentRoot (e.world call).time last)
+    (honest : u ∈ J) (time : (e.world n).time ≤ last)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot) (before : fork < .glamsterdam)
     (absent : AnchorParentAbsent (e := e) last)
     {head : ForkChoiceNode} {state : BeaconState preset fork}
-    {root : Root} {block parent : BeaconBlock preset fork}
     {current first finish shortLast : Slot} {epoch : Epoch}
     {members participants : Std.TreeSet ValidatorIndex} {nodes : List ForkChoiceNode}
     (headRead : ((e.world n).state u).getHead config = .ok head)
@@ -786,7 +779,7 @@ public theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
       ((e.world n).state u).justifiedCheckpoint = .ok state)
     (tree : ((e.world n).state u).getFilteredNodeTree config = .ok nodes)
     (found : ((e.world n).state u).blocks[root]? = some block)
-    {caller : ValidatorIndex} {call : Nat}
+    {caller : ValidatorIndex}
     (callerHonest : caller ∈ J) (callerTime : (e.world call).time ≤ last)
     (later : (e.world call).time ≤ (e.world n).time)
     {source : BeaconState preset fork} {shift : Nat}
@@ -935,7 +928,7 @@ public theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
         (Models.ForkChoice.mem_children.mpr ⟨inView, child⟩) above
         (ghostEq ▸ visited)
       intro sibling member distinct
-      exact sibling_weight_lt_of_window_margin membership honest time reached before
+      exact sibling_weight_lt_of_window_margin membership honest later time reached before
         lower within nodes store.boostedRoot
         (store.boostScore config) headRead found parentFound descends slotRead
         epochRead horizon firstOk lastOk window shortWindow shortBefore member distinct modelMargin

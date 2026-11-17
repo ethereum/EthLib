@@ -845,4 +845,30 @@ theorem Store.ForwardReachableWith.checkpointStatesFromBlocks {checks : Signatur
     obtain ⟨_, _, rfl⟩ := onInclusionList_ok ‹_› accepted
     exact ih
 
+/-- A checkpoint state is in the epoch of its checkpoint or a later one.
+
+The epoch of the checkpoint must be that of a slot, so that a zero epoch length is covered.
+
+The state comes from the state of the checkpoint block, perhaps processed to the start of the epoch.
+
+The store is built with one setting of the checks. -/
+theorem Store.ForwardReachableWith.epoch_le_of_checkpointState {checks : SignatureChecks}
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    {slot : Slot} {checkpoint : Checkpoint} {state : BeaconState preset fork}
+    (found : store.checkpointStates[checkpoint]? = some state)
+    (epochOf : checkpoint.epoch = computeEpochAtSlot preset slot) :
+    (computeEpochAtSlot preset slot).toNat ≤ (getCurrentEpoch state).toNat := by
+  obtain ⟨base, start, baseFound, startOk, fromBlock⟩ := reached.checkpointStatesFromBlocks found
+  have startLe : start ≤ state.slot := by
+    rcases fromBlock with ⟨baseLe, rfl⟩ | ⟨-, _, -, slotsOk⟩
+    · exact baseLe
+    · exact (processSlots_slot slotsOk).2 ▸ UInt64.le_refl _
+  rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | positive
+  · rw [computeEpochAtSlot, UInt64.toNat_div, zero, Nat.div_zero]
+    exact Nat.zero_le _
+  · rw [epochOf] at startOk
+    rw [← computeEpochAtSlot_computeStartSlotAtEpoch (UInt64.lt_iff_toNat_lt.mpr positive)
+      startOk, getCurrentEpoch_toNat]
+    exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp startLe)
+
 end EthLib.Consensus
