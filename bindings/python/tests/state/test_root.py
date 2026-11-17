@@ -128,7 +128,7 @@ def test_zero_slot_is_absent() -> None:
 
 def test_rejects_repeated_address() -> None:
     account = [ADDRESS_A, 0, 0, b"", []]
-    with raises(ValueError, "an address is given twice"):
+    with raises(ValueError, f"address 0x{ADDRESS_A.hex()} is given twice"):
         state_root(rlp_encode([account, account]))
 
 

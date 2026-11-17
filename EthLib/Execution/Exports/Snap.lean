@@ -106,7 +106,8 @@ def answerToOption : RangeAnswer → Option Bool
 
 /-- Run a check of a range answer, with its error as a code and a message. -/
 def runRange (act : Except SnapRangeError RangeAnswer) : Result (Option Bool) :=
-  answerToOption <$> act.mapError fun e => (e.code, s!"range answer does not verify: {repr e}")
+  answerToOption <$> act.mapError fun e =>
+    (e.code, s!"range answer does not verify: {(repr e).pretty 1000000}")
 
 /-- An entry of a range from a pair of a key hash and its data. -/
 def toRangeEntry (pair : Base.Hash32 × ByteArray) : RangeEntry := ⟨pair.1, pair.2⟩

@@ -51,6 +51,18 @@ Not yet released.
 
 ### Changes that break callers
 
+- The trie, range, Merkle proof, account proof and state input errors carry the values that their failed check compared.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  Their messages name each value, as `(name := value)`, with hashes and byte strings in hex and words in decimal, on one line.
+  In Lean, these constructors take arguments:
+  - `Trie.HexPrefixError.invalidFirstNibble nibble` and `nonZeroPadding nibble`;
+  - `Trie.ProofError.missingNode hash`, the hash of the node the path needs, an `Option` that is `none` only when a walk runs out of its budget, which no walk does, `hashMismatch expected actual`, the reference and the hash of the node, `invalidReference size` and `unusedNodes count`;
+  - `Trie.RangeError.unsorted index`, `beforeStart index` and `emptyValue index`, each the first entry, counted from 0, that breaks the rule;
+  - `State.StateInputError.repeatedAddress address`, and `State.AccountProofError.slotMismatch index expected actual`, the word that the proof shows and the word of the answer.
+  `Trie.TrieError.emptyValue` stays bare: the root does not depend on the order of the entries, and naming a key would make the error depend on it.
+  `compactToNibbleList_invalidFirstNibble`, `compactToNibbleList_nonZeroPadding`, `verifySlot_eq_slotMismatch` and `verifyRange_eq` state the values in their errors.
+  `ErrorArg` shows a `BitVec`, such as a `U256`, in decimal.
+
 - The errors of the execution payload, the Gloas bid, envelope, parent requests and payload attestations carry the values that their check compared.
   `TransitionError.wrongPayloadParentHash`, `wrongPayloadRandao`, `wrongPayloadGasLimit`, `wrongPayloadBlockHash` and `wrongPayloadRequestsRoot` hold the value of the payload, then the value it must equal.
   `bidWrongParentHash`, `bidWrongParentRoot` and `bidWrongRandao` hold the value of the bid, then the value of the state; `bidRepeatsParentHash` holds the repeated hash, and `selfBuildBidPaid` the value of the bid.
