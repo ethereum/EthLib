@@ -316,7 +316,7 @@ The two justified checkpoints come from the current justified checkpoint of a st
 
 The two finalized checkpoints come from the finalized checkpoint of a state.
 
-Each unrealized justification has the anchor epoch.
+Each unrealized justification has the anchor epoch, at a block whose state is the anchor state.
 
 Otherwise it is the current justified checkpoint of its block state after justification. -/
 private structure Tracked (store : Store preset fork) (anchorState : BeaconState preset fork)
@@ -331,7 +331,8 @@ private structure Tracked (store : Store preset fork) (anchorState : BeaconState
     store.unrealizedFinalizedCheckpoint
   justifications : ∀ (root : Root) (checkpoint : Checkpoint),
     store.unrealizedJustifications[root]? = some checkpoint →
-      checkpoint.epoch = getCurrentEpoch anchorState ∨
+      (checkpoint.epoch = getCurrentEpoch anchorState ∧
+          store.blockStates[root]? = some anchorState) ∨
         ∃ state pulled, store.blockStates[root]? = some state ∧
           processJustificationAndFinalization state = .ok pulled ∧
           checkpoint = pulled.currentJustifiedCheckpoint
@@ -396,7 +397,7 @@ private theorem Tracked.of_grow (tracked : store.Tracked anchorState anchorBlock
   intro root checkpoint found
   rw [justifications] at found
   rcases tracked.justifications root checkpoint found with same | ⟨state, pulled, kept, rest⟩
-  · exact .inl same
+  · exact .inl ⟨same.1, grow same.2⟩
   · exact .inr ⟨state, pulled, grow kept, rest⟩
 
 /-- Replacing the checkpoints at later epochs keeps the store tracked.
@@ -666,7 +667,7 @@ private theorem Store.Reachable.tracked
     store.Tracked anchorState anchorBlock := by
   induction reachable with
   | @anchor st made =>
-    obtain ⟨anchorRoot, hashed, -, -, justified, finalized, unrealizedJustified,
+    obtain ⟨anchorRoot, hashed, -, stateHeld, justified, finalized, unrealizedJustified,
       unrealizedFinalized⟩ := getForkchoiceStore_anchor made
     obtain ⟨anchorRoot', hashed', justifications⟩ :=
       getForkchoiceStore_unrealizedJustifications made
@@ -681,7 +682,8 @@ private theorem Store.Reachable.tracked
     rw [justifications, getElem?_insert_root] at found
     by_cases same : anchorRoot' = root
     · simp only [same, ↓reduceIte, Option.some.injEq] at found
-      exact .inl (by rw [← found])
+      have rootEq : anchorRoot = root := Except.ok.inj (hashed.symm.trans (same ▸ hashed'))
+      exact .inl ⟨by rw [← found], rootEq ▸ stateHeld⟩
     · simp [same] at found
   | tick _ ticked ih => exact ih.onTick ticked
   | block previous added ih => exact ih.onBlock previous added
@@ -697,6 +699,21 @@ private theorem Store.Reachable.tracked
   | inclusionList _ accepted ih =>
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted
     exact ih.of_eq rfl rfl rfl rfl rfl rfl
+
+/-- In a reachable store, each unrealized justification comes from the state of its own block.
+
+It is the current justified checkpoint of that state after justification.
+
+The other case is an entry of the anchor epoch, at a block whose state is the anchor state. -/
+theorem Store.Reachable.unrealizedJustification_origin
+    (reachable : Store.Reachable config anchorState anchorBlock store) {root : Root}
+    {checkpoint : Checkpoint} (found : store.unrealizedJustifications[root]? = some checkpoint) :
+    (checkpoint.epoch = getCurrentEpoch anchorState ∧
+        store.blockStates[root]? = some anchorState) ∨
+      ∃ state pulled, store.blockStates[root]? = some state ∧
+        processJustificationAndFinalization state = .ok pulled ∧
+        checkpoint = pulled.currentJustifiedCheckpoint :=
+  reachable.tracked.justifications root checkpoint found
 
 /-- Finality at or before the anchor epoch is the anchor checkpoint itself. -/
 theorem Store.Reachable.finalized_eq_anchor_of_epoch_le
@@ -731,7 +748,7 @@ theorem Store.Reachable.getCheckpointBlock_of_unrealizedJustification
       hashTreeRoot anchorState = .ok (Vector.replicate 32 0) := by
   rcases reachable.tracked.justifications root checkpoint found with same |
     ⟨state, pulled, stateFound, pulledOk, rfl⟩
-  · rw [same] at later
+  · rw [same.1] at later
     exact absurd later (UInt64.lt_irrefl _)
   · exact reachable.getCheckpointBlock_of_blockState anchor anchorSlot positive window stateFound
       (.inr ⟨pulled, pulledOk, by simp⟩) later
