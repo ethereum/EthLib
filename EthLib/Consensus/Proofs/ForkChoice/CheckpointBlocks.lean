@@ -784,6 +784,18 @@ theorem Store.Reachable.checkpoints_known (anchor : Invariant anchorState)
   · exact .inr (.inl ⟨later, known⟩)
   · exact .inr (.inr zero)
 
+/-- A finalized checkpoint of a reachable store at or before the anchor epoch is the anchor one.
+
+It has the epoch of the anchor state and the root of the anchor block. -/
+theorem Store.Reachable.finalized_anchor
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (early : store.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState) :
+    store.finalizedCheckpoint.epoch = getCurrentEpoch anchorState ∧
+      hashTreeRoot anchorBlock = .ok store.finalizedCheckpoint.root := by
+  rcases reachable.tracked.finalized with anchored | ⟨later, -⟩
+  · exact anchored
+  · exact absurd (UInt64.lt_of_lt_of_le later early) (UInt64.lt_irrefl _)
+
 /-! ## The field that gives each checkpoint of a store -/
 
 /-- A traced checkpoint is the anchor checkpoint, or the field of a block state or of its pull-up.

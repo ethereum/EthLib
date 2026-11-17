@@ -656,6 +656,30 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
     (fun _ _ held => enough (held.elim id id))
     (fun _ _ held => heldEnough (held.elim id id))
 
+/-- In a reachable store, a known block at or below the slot of the anchor block is that block.
+
+Every other known block has a known parent at a lower slot, and none is below the anchor. -/
+private theorem Store.Reachable.eq_anchor_of_slot_le {config : Config}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork}
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (unknown : store.blocks[anchorBlock.parentRoot]? = none)
+    {root : Root} {block : BeaconBlock preset fork} (held : store.blocks[root]? = some block)
+    (below : block.slot ≤ anchorBlock.slot) : block = anchorBlock := by
+  by_contra different
+  obtain ⟨_, -, anchorFound⟩ := reachable.anchor_known
+  obtain ⟨state, stateHeld, -, provenance⟩ := reachable.blockStatesFromParents held
+  obtain ⟨parent, checks, engine, signed, -, message, parentHeld, transition⟩ :=
+    provenance different
+  obtain ⟨parentBlock, parentFound⟩ := reachable.known_of_blockState parentHeld
+  have parentLower := reachable.parentsBelow anchorSlot unknown _ _ _ held parentFound
+  have anchorLower := reachable.orphans_le anchorSlot anchorFound unknown parentFound
+  have lo := UInt64.le_iff_toNat_le.mp anchorLower
+  have hi := UInt64.le_iff_toNat_le.mp below
+  have strict := UInt64.lt_iff_toNat_lt.mp parentLower
+  omega
+
 private theorem Store.Reachable.getCheckpointBlock_anchor {config : Config}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {store : Store preset fork}
@@ -675,19 +699,7 @@ private theorem Store.Reachable.getCheckpointBlock_anchor {config : Config}
     (fun _ _ held orphan => reachable.orphans_le (UInt64.le_of_eq anchorSlot)
       held orphan anchorFound) (node := ⟨root, .pending⟩) found
   obtain ⟨reached, held, below⟩ := Store.getAncestor_le walk
-  have eq : reached = anchorBlock := by
-    by_contra different
-    obtain ⟨state, stateHeld, -, provenance⟩ := reachable.blockStatesFromParents held
-    obtain ⟨parent, checks, engine, signed, -, message, parentHeld, transition⟩ :=
-      provenance different
-    obtain ⟨parentBlock, parentFound⟩ := reachable.known_of_blockState parentHeld
-    have parentLower := lower _ _ _ held parentFound
-    have anchorLower := reachable.orphans_le (UInt64.le_of_eq anchorSlot)
-      anchorFound unknown parentFound
-    have lo := UInt64.le_iff_toNat_le.mp anchorLower
-    have hi := UInt64.le_iff_toNat_le.mp below
-    have strict := UInt64.lt_iff_toNat_lt.mp parentLower
-    omega
+  have eq := reachable.eq_anchor_of_slot_le (UInt64.le_of_eq anchorSlot) unknown held below
   have rooted : node.root = anchorRoot := by
     have roots := reachable.root held
     rw [eq, hashed, Except.ok.injEq] at roots
@@ -773,14 +785,7 @@ theorem Store.Reachable.finalized_prefix_or_accountable {config : Config}
     have notZero : SszType.hashTreeRoot anchorState ≠ .ok (Vector.replicate 32 0) := by
       rw [reachable.anchorState_root]
       exact fun eq => nonzero (Except.ok.inj eq)
-    obtain ⟨epoch, hashed, -⟩ :=
-      (reachableEarlier.checkpoints_known sound (UInt64.le_of_eq anchorSlot) positive window
-        (checkpoint := earlier.finalizedCheckpoint) (by simp)).resolve_right (by
-          rintro (⟨later, -⟩ | zero)
-          · have lo := UInt64.le_iff_toNat_le.mp atAnchor
-            have hi := UInt64.lt_iff_toNat_lt.mp later
-            omega
-          · exact notZero zero)
+    obtain ⟨epoch, hashed⟩ := reachableEarlier.finalized_anchor atAnchor
     have known : store.blocks.contains store.justifiedCheckpoint.root := by
       rcases reachable.checkpoints_known sound (UInt64.le_of_eq anchorSlot) positive window
           (checkpoint := store.justifiedCheckpoint) (by simp) with ⟨-, -, held⟩ |
