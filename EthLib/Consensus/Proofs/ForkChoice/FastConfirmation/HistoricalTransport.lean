@@ -508,7 +508,7 @@ Otherwise the voter became active at the target epoch, and the premise covers it
 public theorem Execution.votersInHeadWindow_of_newlyActive {anchor : Store preset fork}
     (last : Nat) (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
-    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) (early : fork < .glamsterdam)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
@@ -572,7 +572,7 @@ public theorem Execution.votersInHeadWindow_of_newlyActive {anchor : Store prese
       have := Nat.div_mul_le_self current.toNat preset.SLOTS_PER_EPOCH.toNat
       rw [← currentNat] at this
       exact Nat.le_trans (Nat.mul_le_mul_right _ targetLe) this
-    exact Store.mem_getCommitteesBetweenSlots_of_active early positive window headFound
+    exact Store.mem_getCommitteesBetweenSlots_of_active positive window headFound
       (by omega) (by rw [previousNat]; omega) active
   · exact newVoters w honest k time head parentRoot parent current first finish epoch members v
       attestation targetState voter headRead parentFound descends slotRead epochRead horizon

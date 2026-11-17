@@ -5,7 +5,6 @@ public import EthLib.Base.Proofs.FilterM
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.ForkChoice.FastConfirmation
-public import EthLib.Consensus.Proofs.Containers.State
 public import EthLib.Consensus.Proofs.ForkChoice.Store
 public import EthLib.Consensus.Proofs.Transition.Committees
 
@@ -464,7 +463,7 @@ So the checked products of the epoch fit, and its committees hold all its active
 theorem mem_getCommitteesBetweenSlots_of_active {head : Root} {startSlot endSlot : Slot}
     {participants : Std.TreeSet ValidatorIndex} {headState : BeaconState preset fork}
     {epoch : Epoch} {validator : ValidatorIndex}
-    (early : fork < .glamsterdam) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (computed : store.getCommitteesBetweenSlots head startSlot endSlot = .ok participants)
     (stateOk : store.blockState head = .ok headState)
     (low : startSlot.toNat ≤ epoch.toNat * preset.SLOTS_PER_EPOCH.toNat)
@@ -520,10 +519,6 @@ theorem mem_getCommitteesBetweenSlots_of_active {head : Root} {startSlot endSlot
   rw [lastEpoch] at indicesFit seedOk positionEq countEq cut perPos
   simp only [computeCommittee, bind_ok_iff] at cut
   obtain ⟨permuted, permutedOk, sliced⟩ := cut
-  have lengthLt := length_getActiveValidatorIndices_lt
-    (BeaconState.registryWithinLimit_of_lt early headState) epoch
-  have small := (computeShuffledPermutation_ok permutedOk).1
-  simp only [List.size_toArray, UInt64.toNat_ofNat', Nat.mod_eq_of_lt lengthLt] at small
   have bound := fits_of_shuffledCommittee sliced
   simp only [List.size_toArray] at bound
   have countLt := (getCommitteeCountPerSlot headState epoch).toNat_lt
@@ -545,6 +540,14 @@ theorem mem_getCommitteesBetweenSlots_of_active {head : Root} {startSlot endSlot
       omega
     rw [← same]
     exact bound
+  -- So the active validators number below `2^64`, and the shuffle bounds them by `2^40`.
+  have lengthLt : (getActiveValidatorIndices headState epoch).length < 2 ^ 64 := by
+    simp only [UInt64.toNat_one] at perPos
+    have countPos : 1 ≤ (getCommitteeCountPerSlot headState epoch).toNat *
+        preset.SLOTS_PER_EPOCH.toNat := Nat.mul_pos perPos positive
+    exact Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_right _ countPos) fits
+  have small := (computeShuffledPermutation_ok permutedOk).1
+  simp only [List.size_toArray, UInt64.toNat_ofNat', Nat.mod_eq_of_lt lengthLt] at small
   have slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64 := by omega
   -- The committees of the epoch hold the validator, at a slot of the epoch.
   obtain ⟨slot, index, found, slotEpoch, below, foundOk, member⟩ :=

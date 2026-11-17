@@ -775,7 +775,7 @@ public theorem Execution.honestHeadsCover_of_historical_anchor_of_newlyActive
   honestHeadsCover_core sync slots positive minLookahead maxLookahead ring preGloas
     admitted half votes fits prompt windows
     (Execution.votersInHeadWindow_of_newlyActive time anchored start (UInt64.le_of_eq anchorSlot)
-      preGloas positive minLookahead maxLookahead ring newVoters)
+      positive minLookahead maxLookahead ring newVoters)
     anchored sound anchorSlot anchorBoundary
     start caller callerUpToDate headNode slotOk beginOk timeEq blockOk parentOk sourceOk boostOk
     firstOk lastOk beforeOk maximumOk parentParticipantsOk registry aligned increment supportOk
@@ -1072,7 +1072,7 @@ public theorem Execution.honestHeadsCover_of_signed_justification_of_newlyActive
   exact honestHeadsCover_core sync slots positive minLookahead maxLookahead ring preGloas
     admitted half votes fits prompt windows
     (Execution.votersInHeadWindow_of_newlyActive time anchored start (UInt64.le_of_eq anchorSlot)
-      preGloas positive minLookahead maxLookahead ring newVoters)
+      positive minLookahead maxLookahead ring newVoters)
     anchored sound anchorSlot anchorBoundary
     start caller callerUpToDate headNode slotOk beginOk timeEq blockOk parentOk sourceOk boostOk
     firstOk lastOk beforeOk maximumOk parentParticipantsOk registry aligned increment supportOk
