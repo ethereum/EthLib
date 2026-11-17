@@ -287,7 +287,7 @@ def prepareFirstFrame {fork : Fork} (chainId : Nat) (message : Message fork)
   | none =>
     let address := message.currentTarget
     let state := state.recordAccountRead address
-    unless state.accountDeployable address do throw (.addressCollision, state)
+    unless state.accountDeployable address do throw (.addressCollision address, state)
     let meter ← if fork ≥ .glamsterdam ∧ state.getPreStateAccount address = EMPTY_ACCOUNT then
         (GasMeter.chargeState meter NEW_ACCOUNT_STATE_GAS).mapError (·, state)
       else pure meter

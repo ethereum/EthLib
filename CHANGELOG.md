@@ -51,6 +51,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- The EVM errors `invalidJumpDest`, `outOfBoundsRead`, `invalidParameter`, `addressCollision` and `precompile` carry the values that their failed check compared.
+  Each halt keeps its behaviour, and each error fires on the same inputs as before.
+  The message of an EVM error names each value, as `(name := value)`, with the address of a collision in hex and a precompile by its number.
+  In Lean, `Evm.EvmError.invalidJumpDest destination`, `outOfBoundsRead offset size available`, `invalidParameter immediate`, `addressCollision address` and `precompile address` take arguments.
+  `stackUnderflow`, `stackOverflow`, `outOfGas`, `writeInStaticContext`, `invalidContractPrefix` and `revert` stay bare.
+
 - The eth body, session, snap range and era1 errors, and the argument errors of the EVM exports, carry the values that their failed check compared.
   Each code keeps its meaning, and each error fires on the same inputs as before.
   The messages give the new values: `transactions do not have the transactions root of the header` becomes `transactions have the root 0x…, not the transactions root 0x…`, and `the sender must be 20 bytes` becomes `the sender must be 20 bytes, not 19`.
