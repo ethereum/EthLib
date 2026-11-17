@@ -25,22 +25,22 @@ inductive Err where
   | scopeWidthless
   /-- A first offset that does not land on the end of the fixed part. -/
   | firstOffset (expected actual : Nat)
-  /-- An offset above the one after it, which would overlap two bodies. -/
-  | offsetUnordered
-  /-- An offset past the end of the budget. -/
-  | offsetPastScope
-  /-- An offset that is no whole number of table entries. -/
-  | offsetUnaligned
-  /-- An offset pointing inside the table rather than past it. -/
-  | offsetBelowTable
-  /-- Fewer bytes than the budget promised. -/
-  | truncated
+  /-- An offset above the one after it, `next`, which would overlap two bodies. -/
+  | offsetUnordered (offset next : Nat)
+  /-- An offset past the end of a budget of `scope` bytes. -/
+  | offsetPastScope (offset scope : Nat)
+  /-- A first offset that is no whole number of table entries. -/
+  | offsetUnaligned (offset : Nat)
+  /-- A first offset pointing inside the table rather than past it. -/
+  | offsetBelowTable (offset : Nat)
+  /-- A field of the fixed part ending at byte `needed`, past a budget of `available` bytes. -/
+  | truncated (needed available : Nat)
   /-- A boolean written as a byte other than zero or one. -/
   | notABit (value : Nat)
   /-- A count of bytes, bits, or elements other than the one the type has. -/
   | count (expected actual : Nat)
-  /-- Padding bits set above the last declared bit. -/
-  | paddingBits
+  /-- A last byte with padding bits set above the last declared bit. -/
+  | paddingBits (byte : UInt8)
   /-- An empty encoding, where even an empty value takes a byte. -/
   | emptyEncoding
   /-- A bitlist encoding with no closing bit anywhere in it. -/
@@ -181,14 +181,14 @@ def Err.reason : Err → String
   | .scopeUndivided _ _ => "SCOPE_UNDIVIDED"
   | .scopeWidthless => "SCOPE_WIDTHLESS"
   | .firstOffset _ _ => "FIRST_OFFSET"
-  | .offsetUnordered => "OFFSET_UNORDERED"
-  | .offsetPastScope => "OFFSET_PAST_SCOPE"
-  | .offsetUnaligned => "OFFSET_UNALIGNED"
-  | .offsetBelowTable => "OFFSET_BELOW_TABLE"
-  | .truncated => "TRUNCATED"
+  | .offsetUnordered .. => "OFFSET_UNORDERED"
+  | .offsetPastScope .. => "OFFSET_PAST_SCOPE"
+  | .offsetUnaligned .. => "OFFSET_UNALIGNED"
+  | .offsetBelowTable .. => "OFFSET_BELOW_TABLE"
+  | .truncated .. => "TRUNCATED"
   | .notABit _ => "NOT_A_BIT"
   | .count _ _ => "COUNT"
-  | .paddingBits => "PADDING_BITS"
+  | .paddingBits .. => "PADDING_BITS"
   | .emptyEncoding => "EMPTY_ENCODING"
   | .noDelimiter => "NO_DELIMITER"
   | .trailingZeros => "TRAILING_ZEROS"
@@ -265,14 +265,14 @@ def Err.code : Err → UInt32
   | .scopeUndivided .. => 5
   | .scopeWidthless => 6
   | .firstOffset .. => 7
-  | .offsetUnordered => 8
-  | .offsetPastScope => 9
-  | .offsetUnaligned => 10
-  | .offsetBelowTable => 11
-  | .truncated => 12
+  | .offsetUnordered .. => 8
+  | .offsetPastScope .. => 9
+  | .offsetUnaligned .. => 10
+  | .offsetBelowTable .. => 11
+  | .truncated .. => 12
   | .notABit .. => 13
   | .count .. => 14
-  | .paddingBits => 15
+  | .paddingBits .. => 15
   | .emptyEncoding => 16
   | .noDelimiter => 17
   | .trailingZeros => 18

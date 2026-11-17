@@ -42,11 +42,12 @@ def readByteSlots : List Desc → ByteArray → Nat → Except Err (List ByteSlo
   | field :: fields, data, position =>
     match field.fixedSize with
     | some width => do
-      if position + width > data.size then throw .truncated
+      if position + width > data.size then throw (.truncated (position + width) data.size)
       let (rest, ending) ← readByteSlots fields data (position + width)
       return (.inline (data.extract position (position + width)) :: rest, ending)
     | none => do
-      if position + bytesPerOffset > data.size then throw .truncated
+      if position + bytesPerOffset > data.size then
+        throw (.truncated (position + bytesPerOffset) data.size)
       let (rest, ending) ← readByteSlots fields data (position + bytesPerOffset)
       return (.body (readUintBytes data position bytesPerOffset) :: rest, ending)
 

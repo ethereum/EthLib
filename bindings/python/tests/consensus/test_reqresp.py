@@ -174,7 +174,7 @@ def test_metadata(fork: str, data: bytes) -> None:
 
 def test_metadata_syncnets_padding() -> None:
     # Four sync committee subnets leave the top four bits of their byte at zero.
-    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err.paddingBits"):
+    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err.paddingBits 16"):
         consensus.reqresp_message("mainnet", "altair", "MetaData", SEQ_AND_ATTNETS + bytes([0x10]))
 
 

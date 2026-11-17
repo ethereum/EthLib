@@ -227,7 +227,7 @@ def readBitfield (shape : Desc) (document : Json) : Except Err Value := do
   -- A bitfield's hex is its own encoding, so the codec reads it back under the mapping's names.
   match deserialize shape data with
   | .ok value => return value
-  | .error .paddingBits => throw .bitfieldPadding
+  | .error (.paddingBits _) => throw .bitfieldPadding
   | .error .noDelimiter => throw .bitfieldDelimiter
   | .error .trailingZeros => throw .bitfieldTrailingZeros
   | .error (.overLimit limit actual) => throw (.documentOverLimit limit actual)

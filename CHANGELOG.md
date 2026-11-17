@@ -39,6 +39,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- The SSZ decoding errors carry the values that their failed check compared.
+  Codes and rejection reasons are unchanged; the message `EthLib.Serialization.Ssz.Err.<name>` now ends with these values, in constructor order.
+  - `Ssz.Err.offsetUnordered offset next` carries an offset and the smaller offset after it.
+  - `Ssz.Err.offsetPastScope offset scope` carries the offset and the bytes of the budget.
+  - `Ssz.Err.offsetUnaligned offset` and `offsetBelowTable offset` carry the first offset.
+  - `Ssz.Err.truncated needed available` carries the end of the first field of the fixed part that overruns the budget, and the bytes of the budget.
+  - `Ssz.Err.paddingBits byte` carries the last byte, whose bits above the last declared one are set.
+
 - The Snappy, varint and protobuf errors carry the values their failed check compared.
   Codes are unchanged; each message now ends with these values, in constructor order.
   - `SnappyError.literalPastEnd` and `copyPastEnd` carry the bytes needed and the bytes left.
