@@ -210,7 +210,7 @@ theorem mem_foldlM_committees_iff {α : Type}
         v ∈ start ∨ ∃ item ∈ items, ∃ committee, read item = .ok committee ∧ v ∈ committee) :=
   mem_foldlM_add_iff fun _ _ => mem_foldl_insert
 
-/-- A fold over the slots of a range gives all of them, and only them.
+/-- An offset below the length of a range, added to its first slot, gives exactly its slots.
 
 The offsets range below the successor of the last slot minus the first slot.
 
@@ -387,7 +387,7 @@ theorem mem_getSlotCommittee {head : Root} {slot : Slot} {headState : BeaconStat
   · rw [back, committeeOk]
     rfl
 
-/-- A range reads every slot inside it. -/
+/-- A successful read of a range reads every slot inside it. -/
 theorem getSlotCommittee_ok_of_getCommitteesBetweenSlots {head : Root} {first last : Slot}
     {members : Std.TreeSet ValidatorIndex}
     (read : store.getCommitteesBetweenSlots head first last = .ok members)

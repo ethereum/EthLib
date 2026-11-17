@@ -915,7 +915,7 @@ theorem Store.ForwardReachable.justified_epoch_le_current {config : Config}
         (stateBound root state held)
   exact ⟨each _ (.inl rfl), each _ (.inr rfl)⟩
 
-/-- The finalized epoch of a forward-reachable store is the anchor's or before the current one.
+/-- A forward-reachable store finalizes no later than the anchor's epoch or the previous epoch.
 
 A held state finalizes no later than its previous epoch, and its pull-up no later either. -/
 theorem Store.ForwardReachable.finalized_epoch_le_previous {config : Config}

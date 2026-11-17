@@ -617,7 +617,9 @@ theorem Store.getAncestor_of_same_blocks {store receiver : Store preset fork}
   obtain ⟨other, otherFound⟩ := reachable.known_of_blockState parentStateFound
   exact (same _ _ _ parentFound otherFound).symm ▸ otherFound
 
-/-- Ancestor tests agree across reachable stores holding the tip and the ancestor above the anchor.
+/-- An ancestor test that succeeds in one store succeeds in a reachable store with the same blocks.
+
+The ancestor lies above the anchor, and the receiver holds the tip.
 
 The receiver need not hold the ancestor in advance: the walk from the tip reaches it. -/
 theorem Store.isAncestor_of_same_blocks {store receiver : Store preset fork}
