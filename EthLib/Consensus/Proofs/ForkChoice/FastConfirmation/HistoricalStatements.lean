@@ -389,11 +389,7 @@ def ReceiverWindowExits (source : BeaconState preset fork) (firstSlot : Slot)
 
 A receiver is near when its store epoch is at most two epochs after `parentEpoch`.
 
-The last full epoch of a later receiver's window omits every validator that exited since the source.
-
-Those exits can exceed the source's reserve.
-
-The historical-anchor step reads the bound only for a near receiver.
+It is asked only of these receivers, where every step of the historical-anchor proof reads it.
 
 The duty-epoch step, which covers later receivers, does not read it. -/
 def ReceiverWindowExitsNear (parentEpoch : Epoch) (source : BeaconState preset fork)
