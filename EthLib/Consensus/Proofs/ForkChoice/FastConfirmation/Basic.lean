@@ -6,6 +6,7 @@ public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.ForkChoice.FastConfirmation
 public import EthLib.Consensus.Proofs.ForkChoice.Store
+public import EthLib.Consensus.Proofs.Transition.Committees
 
 /-!
 # Proofs: the arithmetic and the updates of the fast confirmation rule
@@ -19,6 +20,10 @@ A sum is the sum of its weights, so at most the sum of bounds on them.
 A range of slots that ends later has every member of the committees of a shorter one.
 
 A member of the committees of the slots between two slots shows that the first is earlier.
+
+The members of the committees of a range are those of the committees of its slots.
+
+Two head states with the same committees on the epochs of a range read the same members for it.
 
 A range that covers a whole epoch weighs the whole active balance.
 
@@ -205,6 +210,47 @@ theorem mem_foldlM_committees_iff {α : Type}
         v ∈ start ∨ ∃ item ∈ items, ∃ committee, read item = .ok committee ∧ v ∈ committee) :=
   mem_foldlM_add_iff fun _ _ => mem_foldl_insert
 
+/-- A fold over the slots of a range gives all of them, and only them.
+
+The fold runs over the offsets below the successor of the last slot.
+
+Each offset is added to the first slot. -/
+theorem exists_offset_eq_iff {first last after slot : Slot}
+    (afterOk : Uint64.addChecked last 1 = .ok after) :
+    (∃ offset ∈ List.range (after.toNat - first.toNat), first + offset.toUInt64 = slot) ↔
+      first ≤ slot ∧ slot ≤ last := by
+  have value := (Uint64.addChecked_ok_iff.mp afterOk).2
+  simp only [UInt64.toNat_one] at value
+  constructor
+  · rintro ⟨offset, inside, rfl⟩
+    have offsetLt := List.mem_range.mp inside
+    have bound := last.toNat_lt
+    have fits : offset < 2 ^ 64 := by omega
+    have sumFits : first.toNat + offset < 2 ^ 64 := by omega
+    rw [UInt64.le_iff_toNat_le, UInt64.le_iff_toNat_le,
+      UInt64.toNat_add, Nat.toUInt64, UInt64.toNat_ofNat',
+      Nat.mod_eq_of_lt fits, Nat.mod_eq_of_lt sumFits]
+    omega
+  · rintro ⟨low, high⟩
+    have lowNat := UInt64.le_iff_toNat_le.mp low
+    have highNat := UInt64.le_iff_toNat_le.mp high
+    refine ⟨slot.toNat - first.toNat, List.mem_range.mpr (by omega), ?_⟩
+    rw [← UInt64.toNat_sub_of_le _ _ low, Nat.toUInt64_eq, UInt64.ofNat_toNat,
+      UInt64.add_comm, UInt64.sub_add_cancel]
+
+/-- A fold reads the same result when its two steps agree on every element of the list. -/
+theorem foldlM_congr_mem {α β ε : Type} {f g : β → α → Except ε β} :
+    ∀ (items : List α) (init : β), (∀ x ∈ items, ∀ acc, f acc x = g acc x) →
+      items.foldlM f init = items.foldlM g init
+  | [], _, _ => rfl
+  | x :: rest, init, agree => by
+    simp only [List.foldlM_cons, agree x List.mem_cons_self init]
+    cases g init x with
+    | error _ => rfl
+    | ok next =>
+      exact foldlM_congr_mem rest next fun y member acc =>
+        agree y (List.mem_cons_of_mem _ member) acc
+
 namespace Store
 
 variable {config : Config} {store : Store preset fork}
@@ -354,6 +400,41 @@ theorem mem_getSlotCommittee {head : Root} {slot : Slot} {headState : BeaconStat
   · rw [back, committeeOk]
     rfl
 
+/-- A range reads every slot inside it. -/
+theorem getSlotCommittee_ok_of_getCommitteesBetweenSlots {head : Root} {first last : Slot}
+    {members : Std.TreeSet ValidatorIndex}
+    (read : store.getCommitteesBetweenSlots head first last = .ok members)
+    {slot : Slot} (low : first ≤ slot) (high : slot ≤ last) :
+    ∃ committee, store.getSlotCommittee head slot = .ok committee := by
+  unfold getCommitteesBetweenSlots at read
+  obtain ⟨after, afterOk, folded⟩ := bind_ok_iff.mp read
+  obtain ⟨offset, inside, same⟩ :=
+    (exists_offset_eq_iff (mapError_ok_iff.mp afterOk)).mpr ⟨low, high⟩
+  obtain ⟨committee, committeeOk⟩ := foldlM_forall_of_ok
+    (fun _ _ _ stepOk => (bind_ok_iff.mp stepOk).imp fun _ read => read.1)
+    _ _ _ folded offset inside
+  exact ⟨committee, same ▸ committeeOk⟩
+
+/-- A range contains exactly the members of the committees that the rule reads for its slots. -/
+theorem mem_getCommitteesBetweenSlots_iff {head : Root} {first last : Slot}
+    {members : Std.TreeSet ValidatorIndex}
+    (read : store.getCommitteesBetweenSlots head first last = .ok members)
+    (v : ValidatorIndex) :
+    v ∈ members ↔ ∃ slot, first ≤ slot ∧ slot ≤ last ∧ ∃ committee,
+      store.getSlotCommittee head slot = .ok committee ∧ v ∈ committee := by
+  unfold getCommitteesBetweenSlots at read
+  obtain ⟨after, afterOk, folded⟩ := bind_ok_iff.mp read
+  have afterOk := mapError_ok_iff.mp afterOk
+  rw [mem_foldlM_committees_iff folded]
+  constructor
+  · rintro (empty | ⟨offset, inside, committee, committeeOk, member⟩)
+    · simp at empty
+    · obtain ⟨low, high⟩ := (exists_offset_eq_iff afterOk).mp ⟨offset, inside, rfl⟩
+      exact ⟨_, low, high, committee, committeeOk, member⟩
+  · rintro ⟨slot, low, high, committee, committeeOk, member⟩
+    obtain ⟨offset, inside, same⟩ := (exists_offset_eq_iff afterOk).mpr ⟨low, high⟩
+    exact .inr ⟨offset, inside, committee, same.symm ▸ committeeOk, member⟩
+
 /-- A member of a committee of a slot of a range, in the state of the head, is one the rule reads.
 
 The index of the committee must be below the count of committees per slot of the epoch of the slot.
@@ -368,23 +449,47 @@ theorem mem_getCommitteesBetweenSlots {head : Root} {startSlot endSlot slot : Sl
     (committeeOk : getBeaconCommittee headState slot index = .ok committee)
     (member : validator ∈ committee) :
     validator ∈ participants := by
-  simp only [getCommitteesBetweenSlots, bind_ok_iff, mapError_ok_iff] at computed
-  obtain ⟨afterEnd, afterEndOk, folded⟩ := computed
-  rw [Uint64.addChecked_ok_iff, UInt64.toNat_one] at afterEndOk
-  rw [UInt64.le_iff_toNat_le] at low high
-  -- The slot is the start moved on by its offset, which lies in the range.
-  have inRange : slot.toNat - startSlot.toNat ∈ List.range (afterEnd.toNat - startSlot.toNat) :=
-    List.mem_range.mpr (by omega)
-  have back : startSlot + (slot.toNat - startSlot.toNat).toUInt64 = slot := by
-    rw [← UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr low), Nat.toUInt64_eq,
-      UInt64.ofNat_toNat, UInt64.add_comm, UInt64.sub_add_cancel]
-  obtain ⟨members, membersOk⟩ := foldlM_forall_of_ok
-    (fun _ _ _ stepOk => (bind_ok_iff.mp stepOk).imp fun _ read => read.1) _ _ _ folded _
-    inRange
-  rw [back] at membersOk
-  have inMembers := mem_getSlotCommittee membersOk stateOk below committeeOk member
-  refine (mem_foldlM_committees_iff folded).mpr (.inr ⟨_, inRange, members, ?_, inMembers⟩)
-  rw [back, membersOk]
+  obtain ⟨members, membersOk⟩ := getSlotCommittee_ok_of_getCommitteesBetweenSlots computed low high
+  exact (mem_getCommitteesBetweenSlots_iff computed validator).mpr
+    ⟨slot, low, high, members, membersOk,
+      mem_getSlotCommittee membersOk stateOk below committeeOk member⟩
+
+/-- Two head states with the same committees of a slot's epoch read the same members for it. -/
+theorem getSlotCommittee_congr {store other : Store preset fork} {head otherHead : Root}
+    {headState otherState : BeaconState preset fork} {slot : Slot}
+    (stateOk : store.blockState head = .ok headState)
+    (otherOk : other.blockState otherHead = .ok otherState)
+    (kept : CommitteesKept (computeEpochAtSlot preset slot) headState otherState)
+    (count : getCommitteeCountPerSlot otherState (computeEpochAtSlot preset slot) =
+      getCommitteeCountPerSlot headState (computeEpochAtSlot preset slot)) :
+    other.getSlotCommittee otherHead slot = store.getSlotCommittee head slot := by
+  simp only [Store.getSlotCommittee, stateOk, otherOk, bind, Except.bind, count]
+  exact foldlM_congr_mem _ _ fun index _ acc => by rw [kept slot index.toUInt64 rfl]
+
+/-- Two head states with the same committees on the epochs of a range read the same members.
+
+The range runs from its first to its last slot, both included. -/
+theorem getCommitteesBetweenSlots_congr {store other : Store preset fork}
+    {head otherHead : Root} {headState otherState : BeaconState preset fork}
+    {first last : Slot}
+    (stateOk : store.blockState head = .ok headState)
+    (otherOk : other.blockState otherHead = .ok otherState)
+    (agree : ∀ slot, first ≤ slot → slot ≤ last →
+      CommitteesKept (computeEpochAtSlot preset slot) headState otherState ∧
+      getCommitteeCountPerSlot otherState (computeEpochAtSlot preset slot) =
+        getCommitteeCountPerSlot headState (computeEpochAtSlot preset slot)) :
+    other.getCommitteesBetweenSlots otherHead first last =
+      store.getCommitteesBetweenSlots head first last := by
+  unfold getCommitteesBetweenSlots
+  cases afterOk : (Uint64.addChecked last 1).mapError ForkChoiceError.arith with
+  | error _ => rfl
+  | ok afterLast =>
+    simp only [bind, Except.bind]
+    refine foldlM_congr_mem _ _ fun offset member acc => ?_
+    obtain ⟨low, high⟩ := (exists_offset_eq_iff (mapError_ok_iff.mp afterOk)).mp
+      ⟨offset, member, rfl⟩
+    obtain ⟨kept, count⟩ := agree _ low high
+    rw [getSlotCommittee_congr stateOk otherOk kept count]
 
 /-- The adversary of a range reads the committee weight, its share, then the equivocators.
 

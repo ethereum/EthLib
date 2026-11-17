@@ -212,68 +212,6 @@ variable {preset : Preset} {fork : Fork} {config : Config}
   {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
   {store : Store preset fork}
 
-/-- A fold reads the same result when its two steps agree on every element of the list. -/
-private theorem foldlM_congr_mem {α β ε : Type} {f g : β → α → Except ε β} :
-    ∀ (items : List α) (init : β), (∀ x ∈ items, ∀ acc, f acc x = g acc x) →
-      items.foldlM f init = items.foldlM g init
-  | [], _, _ => rfl
-  | x :: rest, init, agree => by
-    simp only [List.foldlM_cons, agree x List.mem_cons_self init]
-    cases g init x with
-    | error _ => rfl
-    | ok next =>
-      exact foldlM_congr_mem rest next fun y member acc =>
-        agree y (List.mem_cons_of_mem _ member) acc
-
-/-- Two head states with the same committees of a slot's epoch read the same members for it. -/
-private theorem getSlotCommittee_congr {store other : Store preset fork} {head otherHead : Root}
-    {headState otherState : BeaconState preset fork} {slot : Slot}
-    (stateOk : store.blockState head = .ok headState)
-    (otherOk : other.blockState otherHead = .ok otherState)
-    (kept : CommitteesKept (computeEpochAtSlot preset slot) headState otherState)
-    (count : getCommitteeCountPerSlot otherState (computeEpochAtSlot preset slot) =
-      getCommitteeCountPerSlot headState (computeEpochAtSlot preset slot)) :
-    other.getSlotCommittee otherHead slot = store.getSlotCommittee head slot := by
-  simp only [Store.getSlotCommittee, stateOk, otherOk, bind, Except.bind, count]
-  exact foldlM_congr_mem _ _ fun index _ acc => by rw [kept slot index.toUInt64 rfl]
-
-/-- Two head states with the same committees on the epochs of a range read the same members.
-
-The range runs from its first to its last slot, both included. -/
-private theorem Store.getCommitteesBetweenSlots_congr {store other : Store preset fork}
-    {head otherHead : Root} {headState otherState : BeaconState preset fork}
-    {first last : Slot}
-    (stateOk : store.blockState head = .ok headState)
-    (otherOk : other.blockState otherHead = .ok otherState)
-    (agree : ∀ slot, first ≤ slot → slot ≤ last →
-      CommitteesKept (computeEpochAtSlot preset slot) headState otherState ∧
-      getCommitteeCountPerSlot otherState (computeEpochAtSlot preset slot) =
-        getCommitteeCountPerSlot headState (computeEpochAtSlot preset slot)) :
-    other.getCommitteesBetweenSlots otherHead first last =
-      store.getCommitteesBetweenSlots head first last := by
-  unfold Store.getCommitteesBetweenSlots
-  cases afterOk : (addChecked last 1).mapError ForkChoiceError.arith with
-  | error _ => rfl
-  | ok afterLast =>
-    simp only [bind, Except.bind]
-    have afterNat := addChecked_ok_iff.mp (mapError_ok_iff.mp afterOk)
-    refine foldlM_congr_mem _ _ fun offset member acc => ?_
-    have inRange := List.mem_range.mp member
-    simp only [UInt64.toNat_one] at afterNat
-    -- The slot of the offset lies in the range and does not wrap around.
-    have noWrap : first.toNat + offset < 2 ^ 64 := by
-      have := afterLast.toNat_lt
-      omega
-    have slotNat : (first + offset.toUInt64).toNat = first.toNat + offset := by
-      have small : offset.toUInt64.toNat = offset := by
-        simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat']
-        exact Nat.mod_eq_of_lt (by omega)
-      rw [UInt64.toNat_add, small, Nat.mod_eq_of_lt noWrap]
-    have low : first ≤ first + offset.toUInt64 := UInt64.le_iff_toNat_le.mpr (by omega)
-    have high : first + offset.toUInt64 ≤ last := UInt64.le_iff_toNat_le.mpr (by omega)
-    obtain ⟨kept, count⟩ := agree _ low high
-    rw [getSlotCommittee_congr stateOk otherOk kept count]
-
 /-- Two heads that descend from one parent state agree on the committees near that parent.
 
 The heads may be held by two stores that hold the same parent state. -/
@@ -644,65 +582,6 @@ private theorem caller_margin_sets {checks : SignatureChecks}
   · intro v member
     exact (Finset.mem_filter.mp member).2
 
-private theorem window_offset {first last after : Slot}
-    (afterOk : addChecked last 1 = .ok after) {offset : Nat}
-    (inside : offset ∈ List.range (after.toNat - first.toNat)) :
-    first ≤ first + offset.toUInt64 ∧ first + offset.toUInt64 ≤ last := by
-  have value := (addChecked_ok_iff.mp afterOk).2
-  simp only [UInt64.toNat_one] at value
-  have offsetLt := List.mem_range.mp inside
-  have bound := last.toNat_lt
-  have fits : offset < 2 ^ 64 := by omega
-  have sumFits : first.toNat + offset < 2 ^ 64 := by omega
-  rw [UInt64.le_iff_toNat_le, UInt64.le_iff_toNat_le,
-    UInt64.toNat_add, Nat.toUInt64, UInt64.toNat_ofNat',
-    Nat.mod_eq_of_lt fits, Nat.mod_eq_of_lt sumFits]
-  omega
-
-private theorem window_slot_offset {first last after slot : Slot}
-    (afterOk : addChecked last 1 = .ok after) (low : first ≤ slot) (high : slot ≤ last) :
-    ∃ offset ∈ List.range (after.toNat - first.toNat), first + offset.toUInt64 = slot := by
-  have value := (addChecked_ok_iff.mp afterOk).2
-  simp only [UInt64.toNat_one] at value
-  have lowNat := UInt64.le_iff_toNat_le.mp low
-  have highNat := UInt64.le_iff_toNat_le.mp high
-  refine ⟨slot.toNat - first.toNat, List.mem_range.mpr (by omega), ?_⟩
-  rw [← UInt64.toNat_sub_of_le _ _ low, Nat.toUInt64_eq, UInt64.ofNat_toNat,
-    UInt64.add_comm, UInt64.sub_add_cancel]
-
-/-- A committee window contains exactly the members of its slot committees. -/
-private theorem mem_window_iff {store : Store preset fork} {head : Root} {first last : Slot}
-    {members : Std.TreeSet ValidatorIndex}
-    (read : store.getCommitteesBetweenSlots head first last = .ok members) (v : ValidatorIndex) :
-    v ∈ members ↔ ∃ slot, first ≤ slot ∧ slot ≤ last ∧ ∃ committee,
-      store.getSlotCommittee head slot = .ok committee ∧ v ∈ committee := by
-  unfold Store.getCommitteesBetweenSlots at read
-  obtain ⟨after, afterOk, folded⟩ := bind_ok_iff.mp read
-  have afterOk := mapError_ok_iff.mp afterOk
-  rw [mem_foldlM_committees_iff folded]
-  constructor
-  · rintro (empty | ⟨offset, inside, committee, committeeOk, member⟩)
-    · simp at empty
-    · obtain ⟨low, high⟩ := window_offset afterOk inside
-      exact ⟨_, low, high, committee, committeeOk, member⟩
-  · rintro ⟨slot, low, high, committee, committeeOk, member⟩
-    obtain ⟨offset, inside, same⟩ := window_slot_offset afterOk low high
-    exact .inr ⟨offset, inside, committee, same.symm ▸ committeeOk, member⟩
-
-/-- A successful window reads every slot inside it. -/
-private theorem slotCommittee_ok_of_window {store : Store preset fork} {head : Root}
-    {first last : Slot} {members : Std.TreeSet ValidatorIndex}
-    (read : store.getCommitteesBetweenSlots head first last = .ok members)
-    (slot : Slot) (low : first ≤ slot) (high : slot ≤ last) :
-    ∃ committee, store.getSlotCommittee head slot = .ok committee := by
-  unfold Store.getCommitteesBetweenSlots at read
-  obtain ⟨after, afterOk, folded⟩ := bind_ok_iff.mp read
-  obtain ⟨offset, inside, same⟩ := window_slot_offset (mapError_ok_iff.mp afterOk) low high
-  obtain ⟨committee, committeeOk⟩ := foldlM_forall_of_ok
-    (fun _ _ _ stepOk => (bind_ok_iff.mp stepOk).imp fun _ read => read.1)
-    _ _ _ folded offset inside
-  exact ⟨committee, same ▸ committeeOk⟩
-
 /-- A window reads when its slots read and its end has a checked successor. -/
 private theorem window_ok_of_slots {store : Store preset fork} {head : Root}
     {first last after : Slot} (afterOk : addChecked last 1 = .ok after)
@@ -713,7 +592,7 @@ private theorem window_ok_of_slots {store : Store preset fork} {head : Root}
   simp only [afterOk, Except.mapError, bind, Except.bind]
   apply foldlM_exists_ok_of_invariant (P := fun _ => True)
   · intro acc offset inside _
-    obtain ⟨low, high⟩ := window_offset afterOk inside
+    obtain ⟨low, high⟩ := (exists_offset_eq_iff afterOk).mp ⟨_, inside, rfl⟩
     obtain ⟨committee, committeeOk⟩ := slots _ low high
     exact ⟨committee.foldl (·.insert ·) acc,
       by simp only [committeeOk, pure, Except.pure], trivial⟩
@@ -734,12 +613,12 @@ private theorem window_ok_of_inside {store : Store preset fork} {head : Root}
   have highNat := UInt64.le_iff_toNat_le.mp highLe
   obtain ⟨inner, innerOk⟩ := window_ok_of_slots (after := high + 1)
     (addChecked_of_lt (by simp only [UInt64.toNat_one] at afterNat ⊢; omega))
-    fun slot low' high' => slotCommittee_ok_of_window read slot (UInt64.le_trans lowLe low')
-      (UInt64.le_trans high' highLe)
+    fun slot low' high' => Store.getSlotCommittee_ok_of_getCommitteesBetweenSlots read
+      (UInt64.le_trans lowLe low') (UInt64.le_trans high' highLe)
   refine ⟨inner, innerOk, fun v member => ?_⟩
   obtain ⟨slot, low', high', committee, committeeOk, inside⟩ :=
-    (mem_window_iff innerOk v).mp member
-  exact (mem_window_iff read v).mpr ⟨slot, UInt64.le_trans lowLe low',
+    (Store.mem_getCommitteesBetweenSlots_iff innerOk v).mp member
+  exact (Store.mem_getCommitteesBetweenSlots_iff read v).mpr ⟨slot, UInt64.le_trans lowLe low',
     UInt64.le_trans high' highLe, committee, committeeOk, inside⟩
 
 /-- The members of a window are those of its two halves, split after a middle slot. -/
@@ -753,7 +632,8 @@ private theorem mem_window_split {store : Store preset fork} {head : Root}
     v ∈ members ↔ v ∈ left ∨ v ∈ right := by
   have nextNat := (addChecked_ok_iff.mp nextOk).2
   simp only [UInt64.toNat_one] at nextNat
-  rw [mem_window_iff read, mem_window_iff leftOk, mem_window_iff rightOk]
+  rw [Store.mem_getCommitteesBetweenSlots_iff read, Store.mem_getCommitteesBetweenSlots_iff leftOk,
+    Store.mem_getCommitteesBetweenSlots_iff rightOk]
   constructor
   · rintro ⟨slot, low, high, rest⟩
     by_cases before : slot ≤ middle
@@ -885,9 +765,10 @@ private theorem window_weight_le {store : Store preset fork} {head : Root}
       rw [Nat.succ_mul]
       omega
     obtain ⟨members, membersOk⟩ := window_ok_of_slots finishAfter (fun slot low high =>
-      slotCommittee_ok_of_window windowOk slot low (UInt64.le_trans high finishLe))
+      Store.getSlotCommittee_ok_of_getCommitteesBetweenSlots windowOk low
+        (UInt64.le_trans high finishLe))
     obtain ⟨epochMembers, epochMembersOk⟩ := window_ok_of_slots finishAfter (fun slot low high =>
-      slotCommittee_ok_of_window windowOk slot
+      Store.getSlotCommittee_ok_of_getCommitteesBetweenSlots windowOk
         (UInt64.le_trans (UInt64.le_iff_toNat_le.mpr startLow) low)
         (UInt64.le_trans high finishLe))
     have reserve := exit epoch epochStart next finish epochMembers startOk nextOk finishOk
@@ -907,10 +788,11 @@ private theorem window_weight_le {store : Store preset fork} {head : Root}
       intro v member
       obtain ⟨active, inEpoch⟩ := Finset.mem_filter.mp member
       obtain ⟨slot, low, high, committee, read, inCommittee⟩ :=
-        (mem_window_iff epochMembersOk v).mp inEpoch
-      exact Store.mem_activeMembers.mpr ⟨(mem_window_iff membersOk v).mpr
-        ⟨slot, UInt64.le_trans (UInt64.le_iff_toNat_le.mpr startLow) low, high, committee, read,
-          inCommittee⟩, activeIn v active⟩
+        (Store.mem_getCommitteesBetweenSlots_iff epochMembersOk v).mp inEpoch
+      exact Store.mem_activeMembers.mpr
+        ⟨(Store.mem_getCommitteesBetweenSlots_iff membersOk v).mpr
+          ⟨slot, UInt64.le_trans (UInt64.le_iff_toNat_le.mpr startLow) low, high, committee, read,
+            inCommittee⟩, activeIn v active⟩
     have split : Models.Network.activeVoters source =
         kept ∪ {v ∈ Models.Network.activeVoters source | v ∉ epochMembers} := by
       ext v
@@ -981,8 +863,8 @@ private theorem activeMembers_mono_of_window {store : Store preset fork} {head :
     Store.activeMembers source A ⊆ Store.activeMembers source B := by
   intro v member
   obtain ⟨inA, active⟩ := Store.mem_activeMembers.mp member
-  obtain ⟨s, sLow, sHigh, rest⟩ := (mem_window_iff readA v).mp inA
-  exact Store.mem_activeMembers.mpr ⟨(mem_window_iff readB v).mpr
+  obtain ⟨s, sLow, sHigh, rest⟩ := (Store.mem_getCommitteesBetweenSlots_iff readA v).mp inA
+  exact Store.mem_activeMembers.mpr ⟨(Store.mem_getCommitteesBetweenSlots_iff readB v).mpr
     ⟨s, UInt64.le_trans low sLow, UInt64.le_trans sHigh high, rest⟩, active⟩
 
 open Serialization.Ssz SszType
@@ -2516,7 +2398,8 @@ private theorem window_reserves_and_weight [DecidablePred (· ∈ J)] {n : ℕ}
     have xEmpty : Store.activeMembers source xParticipants = ∅ := by
       refine Finset.eq_empty_of_forall_notMem fun v member => ?_
       obtain ⟨s, low, high, -⟩ :=
-        (mem_window_iff xCaller v).mp (Store.mem_activeMembers.mp member).1
+        (Store.mem_getCommitteesBetweenSlots_iff xCaller v).mp
+          (Store.mem_activeMembers.mp member).1
       have := UInt64.le_iff_toNat_le.mp low
       have := UInt64.le_iff_toNat_le.mp high
       have := UInt64.le_iff_toNat_le.mp finishLast
