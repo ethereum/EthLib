@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalStat
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.TargetVotes
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.SourceWindowMargin
 import EthLib.Consensus.Proofs.ForkChoice.RealizedJustification
+import EthLib.Consensus.Proofs.ForkChoice.SiblingCap
 import EthLib.Consensus.Proofs.Transition.ParticipationFlagsKept
 import EthLib.Consensus.Proofs.HonestAggregation
 
@@ -849,27 +850,12 @@ private theorem seed_recent_epoch_ne (state : BeaconState preset fork)
   have := congrArg UInt64.toNat same
   omega
 
-/-- An active index names a position of the registry. -/
-private theorem seed_active_inside {state : BeaconState preset fork} {epoch : Epoch}
-    {v : ValidatorIndex} (active : v ∈ getActiveValidatorIndices state epoch) :
-    v.toNat < state.validators.data.size := by
-  unfold getActiveValidatorIndices at active
-  obtain ⟨⟨validator, index⟩, member, picked⟩ := List.mem_filterMap.mp active
-  have bound := (List.mem_zipIdx member).2.1
-  by_cases act : isActiveValidator validator epoch = true
-  · simp only [act, ↓reduceIte, Option.some.injEq] at picked
-    subst picked
-    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat']
-    simp only [Array.length_toList, Nat.zero_add] at bound
-    exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) bound
-  · simp [act] at picked
-
 /-- An active index that is not slashed reads an unslashed validator. -/
 private theorem seed_validator_of_active {state : BeaconState preset fork} {epoch : Epoch}
     {v : ValidatorIndex} (active : v ∈ getActiveValidatorIndices state epoch)
     (clean : SeedNotSlashed state v) :
     ∃ validator, getValidator state v = .ok validator ∧ validator.slashed = false := by
-  have found := Array.getElem?_eq_getElem (seed_active_inside active)
+  have found := Array.getElem?_eq_getElem (lt_size_of_mem_getActiveValidatorIndices active)
   exact ⟨_, getValidator_eq_ok_iff.mpr found,
     by simpa [SeedNotSlashed, slashedFlagAt, found] using clean⟩
 
@@ -1848,9 +1834,8 @@ private theorem seed_source_lower {config : Config} {checks : SignatureChecks}
     refine ⟨by rw [list]; exact readW, enough,
       fun v member => ⟨by rw [list]; exact activeW v member, clean v member, ?_⟩⟩
     rcases seedVotes with ⟨altair, flags⟩ | ⟨before, pendings⟩
-    · exact .inl ⟨altair, flagsW altair v.toNat
-        (seed_active_inside (active seed seedState seedStored seedSelf v member))
-        (flags v member)⟩
+    · exact .inl ⟨altair, flagsW altair v.toNat (lt_size_of_mem_getActiveValidatorIndices
+        (active seed seedState seedStored seedSelf v member)) (flags v member)⟩
     · obtain ⟨pending, pendingMember, pendingTarget, indices, indicesOk, mem⟩ :=
         pendings v member
       obtain ⟨-, slotEpoch⟩ := reachable.seedPending sound seedStored before
@@ -2006,28 +1991,6 @@ private theorem votingSource_le_justified
       simp only [held, pure, Except.pure, Except.ok.injEq] at read
       subst source
       exact reached.justified_le_of_blockState sound held
-
-/-- In a reachable store, a tree ancestor of a held block is an ancestor by `isAncestor`. -/
-private theorem isAncestor_of_blockTree {store : Store preset fork}
-    (reached : Store.Reachable config anchorState anchorBlock store)
-    (anchorSlot : anchorBlock.slot = anchorState.slot) (lower : store.ParentsBelow)
-    (before : fork < .glamsterdam) {tip node : Root}
-    {tipBlock nodeBlock : BeaconBlock preset fork}
-    (tipFound : store.blocks[tip]? = some tipBlock)
-    (nodeFound : store.blocks[node]? = some nodeBlock)
-    (above : (Store.blockTree lower).Ancestor (some node) (some tip)) :
-    store.isAncestor ⟨tip, .pending⟩ ⟨node, .pending⟩ = .ok true := by
-  obtain ⟨anc, walk⟩ := Store.getAncestor_ok_of_orphans_le lower (slot := nodeBlock.slot)
-    (node := ⟨tip, .pending⟩)
-    (fun r b found orphan => reached.orphans_le (UInt64.le_of_eq anchorSlot) found orphan
-      nodeFound) tipFound
-  have ancRoot := Store.getAncestor_root_eq (lower := lower) (node := ⟨node, .pending⟩)
-    nodeFound walk above
-  have ancPending := Store.getAncestor_pending_of_lt before rfl walk
-  obtain ⟨r, s⟩ := anc
-  simp only at ancRoot ancPending
-  subst ancRoot ancPending
-  exact Store.isAncestor_of_getAncestor walk
 
 /-- The viability read of a leaf is `true` from its two checks.
 
@@ -3666,9 +3629,9 @@ private theorem root_mem_filtered_of_reads {anchor : Store preset fork} {Δ time
   obtain ⟨leaf, leafBlock, leafFound, leafPath, ⟨verdict, read⟩, member⟩ :=
     Store.exists_leaf_above_through (lower := lower) preGloas rootFound topFound rootPath topPath
       tree
-  have leafTop := isAncestor_of_blockTree reached anchorSlot lower preGloas leafFound topFound
+  have leafTop := Store.isAncestor_of_blockTree_ancestor preGloas leafFound topFound
     leafPath
-  have leafRoot := isAncestor_of_blockTree reached anchorSlot lower preGloas leafFound rootFound
+  have leafRoot := Store.isAncestor_of_blockTree_ancestor preGloas leafFound rootFound
     (topPath.trans leafPath)
   have reads := read
   unfold Store.isViableLeaf at reads
