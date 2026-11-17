@@ -39,6 +39,17 @@ Not yet released.
 
 ### Changes that break callers
 
+- The errors of the execution payload, the Gloas bid, envelope, parent requests and payload attestations carry the values that their check compared.
+  `TransitionError.wrongPayloadParentHash`, `wrongPayloadRandao`, `wrongPayloadGasLimit`, `wrongPayloadBlockHash` and `wrongPayloadRequestsRoot` hold the value of the payload, then the value it must equal.
+  `bidWrongParentHash`, `bidWrongParentRoot` and `bidWrongRandao` hold the value of the bid, then the value of the state; `bidRepeatsParentHash` holds the repeated hash, and `selfBuildBidPaid` the value of the bid.
+  `envelopeWrongBlockRoot`, `envelopeWrongParentRoot` and `envelopeWrongBuilder` hold the value of the envelope, then the expected one; `invalidEnvelopeSignature` holds the builder and the block root.
+  `invalidBidSignature` holds the builder and the slot, and `invalidExecutionPayload` the block hash of the payload.
+  `tooManyBlobCommitments` holds the number of commitments and the limit.
+  `payloadAttestationNotForParent` holds the block root of the attestation and the parent root; `invalidPayloadAttestation` holds the slot and the number of attesters.
+  `parentRequestsNotEmpty` holds the number of requests, which the new `ExecutionRequests.count` gives, and `wrongParentRequestsRoot` the two roots.
+  The codes do not change.
+  `processParentExecutionPayload_of_empty_requests`, `processExecutionPayload_eq_error_of_prepareExecutionPayload` and `processBlockExecution_eq_error_of_prepareExecutionPayload` state these values.
+
 - The precompile errors carry the values that their failed check compared, and their message names each value on one line.
   Each code keeps its meaning, and each error fires on the same inputs as before.
   The message of a failed call no longer wraps: `PrecompileError.sha256\n  (Sha256Error.outOfGas 72 71)` becomes `PrecompileError.sha256 (Sha256Error.outOfGas (cost := 72) (gas := 71))`, with each name in full.

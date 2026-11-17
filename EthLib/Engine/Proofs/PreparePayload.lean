@@ -394,7 +394,9 @@ theorem processExecutionPayload_eq_error_of_prepareExecutionPayload
     (randao : (body.executionPayload bellatrix).prevRandao = attributes.prevRandao)
     (time : (body.executionPayload bellatrix).timestamp = attributes.timestamp)
     (failed : processExecutionPayload config engine checked body bellatrix = .error error) :
-    error = .tooManyBlobCommitments ∨ error = .invalidExecutionPayload ∨
+    error = .tooManyBlobCommitments (body.blobCommitments bellatrix).size
+        (maxBlobsPerBlock config state).toNat ∨
+      error = .invalidExecutionPayload (body.executionPayload bellatrix).blockHash ∨
       ∃ fault, error = .ssz fault := by
   obtain ⟨headed, -, -, timed, mixed, -⟩ := prepareExecutionPayload_eq_ok_some prepared
   unfold processExecutionPayload at failed
@@ -432,8 +434,13 @@ theorem processExecutionPayload_eq_error_of_prepareExecutionPayload
   · rw [(ensure_ok_iff (u := ())).mpr time] at checkFailed
     cases checkFailed
   -- The steps that remain fail only with errors of their own.
+  --
+  -- The blob limit reads only the slot, which the two states share.
+  have blobLimit : maxBlobsPerBlock config checked = maxBlobsPerBlock config state := by
+    simp only [maxBlobsPerBlock, getCurrentEpoch, slot]
   rcases bind_eq_error failed with checkFailed | ⟨_, -, failed⟩
-  · exact .inl (eq_of_ensure_eq_error checkFailed)
+  · rw [blobLimit] at checkFailed
+    exact .inl (eq_of_ensure_eq_error checkFailed)
   rcases bind_eq_error failed with verifyFailed | ⟨_, -, failed⟩
   · cases verified : engine.verifyAndNotifyNewPayload (body.newPayloadRequest checked bellatrix) <;>
       simp [verified, liftSsz, Except.mapError] at verifyFailed
@@ -561,7 +568,9 @@ theorem processBlockExecution_eq_error_of_prepareExecutionPayload
         executionWithdrawal = attributes.withdrawals capella)
     (failed : processBlockExecution config checks engine header block.body bellatrix.1 =
       .error error) :
-    error = .tooManyBlobCommitments ∨ error = .invalidExecutionPayload ∨
+    error = .tooManyBlobCommitments (block.body.blobCommitments bellatrix).size
+        (maxBlobsPerBlock config state).toNat ∨
+      error = .invalidExecutionPayload (block.body.executionPayload bellatrix).blockHash ∨
       (∃ fault, error = .ssz fault) ∨ ∃ fault, error = .accessor fault := by
   have headerInputs := payloadInputs_processBlockHeader headed
   have slot : header.slot = state.slot := headerInputs.slot

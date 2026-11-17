@@ -216,8 +216,14 @@ def test_payload_rejected_by_the_execution_layer():
     )
     pre = snappy.decompress((case / "pre.ssz_snappy").read_bytes())
     body = snappy.decompress((case / "body.ssz_snappy").read_bytes())
+    # The offset of the payload follows the fixed fields of the body and five list offsets.
+    # Those are the reveal, the eth1 data, the graffiti and a minimal sync aggregate of 100 bytes.
+    payload = body[int.from_bytes(body[320:324], "little") :]
+    # The block hash follows 472 bytes, from the parent hash to the base fee, with one offset.
+    block_hash = payload[472:504]
     with raises(
-        consensus.TransitionError, "EthLib.Consensus.TransitionError.invalidExecutionPayload"
+        consensus.TransitionError,
+        f"EthLib.Consensus.TransitionError.invalidExecutionPayload 0x{block_hash.hex()}",
     ) as info:
         consensus.process_operation(
             "minimal", "bellatrix", "execution_payload", pre, body, execution_valid=False
@@ -458,3 +464,17 @@ def test_bad_attestation_signature_names_its_attesters():
     with raises(consensus.TransitionError, message) as info:
         consensus.process_operation("minimal", "phase0", "attestation", pre, forged)
     assert info.value.code == 42
+
+
+def test_paid_self_built_bid_carries_its_value():
+    pre, signed = vector(
+        "heze", "execution_payload_bid", "process_execution_payload_bid_self_build_non_zero_value"
+    )
+    # A signed bid holds the offset of the bid, then the signature.
+    bid = int.from_bytes(signed[:4], "little")
+    # The value of a bid is at byte 172.
+    # It follows four hashes, the fee recipient, the gas limit, the builder and the slot.
+    message = f"{REJECTED}selfBuildBidPaid {u64(signed, bid + 172)}"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation("minimal", "hegota", "execution_payload_bid", pre, signed)
+    assert info.value.code == 21

@@ -81,36 +81,56 @@ inductive TransitionError where
 
   It holds the number of validators in both attestations. -/
   | noneSlashed (candidates : Nat)
-  /-- From Gloas: a payload attestation is not for the parent of the block. -/
-  | payloadAttestationNotForParent
+  /-- From Gloas: a payload attestation is not for the parent of the block.
+
+  It holds the block root of the attestation, then the parent root of the latest block header. -/
+  | payloadAttestationNotForParent (root expected : Root)
   /-- From Gloas: a payload attestation is not for the slot before that of the state. -/
   | payloadAttestationWrongSlot (slot stateSlot : Slot)
-  /-- From Gloas: a payload attestation is not a valid indexed payload attestation. -/
-  | invalidPayloadAttestation
-  /-- From Gloas: a self-built bid has a nonzero value or a signature. -/
-  | selfBuildBidPaid
+  /-- From Gloas: a payload attestation is not a valid indexed payload attestation.
+
+  It holds the slot of the attestation and the number of validators that its indexed form names. -/
+  | invalidPayloadAttestation (slot : Slot) (attesters : Nat)
+  /-- From Gloas: a self-built bid has a nonzero value or a signature.
+
+  It holds the value of the bid.
+
+  A value of zero means that the bid carries a signature. -/
+  | selfBuildBidPaid (value : Gwei)
   /-- From Gloas: the builder of a bid is not active. -/
   | builderNotActive (builder : BuilderIndex)
   /-- From Gloas: the builder of a bid does not build payloads. -/
   | notPayloadBuilder (builder : BuilderIndex)
   /-- From Gloas: the builder of a bid cannot pay its value. -/
   | bidNotCovered (builder : BuilderIndex)
-  /-- From Gloas: a bid is not signed by its builder. -/
-  | invalidBidSignature
-  /-- From Deneb: a block, or from Gloas its bid, commits to more blobs than a block may hold. -/
-  | tooManyBlobCommitments
+  /-- From Gloas: a bid is not signed by its builder.
+
+  It holds the builder and the slot of the bid. -/
+  | invalidBidSignature (builder : BuilderIndex) (slot : Slot)
+  /-- From Deneb: a block, or from Gloas its bid, commits to more blobs than a block may hold.
+
+  It holds the number of commitments, then the most allowed. -/
+  | tooManyBlobCommitments (count limit : Nat)
   /-- From Gloas: a bid is not for the slot of the state. -/
   | bidWrongSlot (bidSlot stateSlot : Slot)
   /-- From Gloas: a bid is for the genesis slot. -/
   | bidAtGenesis
-  /-- From Gloas: the parent hash of a bid is not the hash of the latest payload. -/
-  | bidWrongParentHash
-  /-- From Gloas: the payload hash of a bid is its parent hash. -/
-  | bidRepeatsParentHash
-  /-- From Gloas: the parent block root of a bid is not that of the previous slot. -/
-  | bidWrongParentRoot
-  /-- From Gloas: the RANDAO mix of a bid is not that of the current epoch. -/
-  | bidWrongRandao
+  /-- From Gloas: the parent hash of a bid is not the hash of the latest payload.
+
+  It holds the parent hash of the bid, then the latest block hash of the state. -/
+  | bidWrongParentHash (parentHash expected : Hash32)
+  /-- From Gloas: the payload hash of a bid is its parent hash.
+
+  It holds that hash. -/
+  | bidRepeatsParentHash (blockHash : Hash32)
+  /-- From Gloas: the parent block root of a bid is not that of the previous slot.
+
+  It holds the parent block root of the bid, then the block root of the previous slot. -/
+  | bidWrongParentRoot (parentRoot expected : Root)
+  /-- From Gloas: the RANDAO mix of a bid is not that of the current epoch.
+
+  It holds the mix of the bid, then the mix of the current epoch. -/
+  | bidWrongRandao (prevRandao expected : Bytes32)
   /-- From Heze: at the upgrade, the state has not processed every deposit of the contract. -/
   | depositIndicesDiffer (eth1DepositIndex depositRequestsStartIndex : UInt64)
   /-- The target of an attestation is neither the current nor the previous epoch. -/
@@ -192,14 +212,20 @@ inductive TransitionError where
 
   It holds the state root of the block, then the root of the state after it. -/
   | wrongStateRoot (stateRoot expected : Root)
-  /-- From Bellatrix: the parent hash of a payload is not the block hash of the latest payload. -/
-  | wrongPayloadParentHash
-  /-- From Bellatrix: a payload does not read the RANDAO mix of the current epoch. -/
-  | wrongPayloadRandao
+  /-- From Bellatrix: the parent hash of a payload is not the block hash of the latest payload.
+
+  It holds the parent hash of the payload, then the block hash of the latest payload. -/
+  | wrongPayloadParentHash (parentHash expected : Hash32)
+  /-- From Bellatrix: a payload does not read the RANDAO mix of the current epoch.
+
+  It holds the mix of the payload, then the mix that it must read. -/
+  | wrongPayloadRandao (prevRandao expected : Bytes32)
   /-- From Bellatrix: the time of a payload is not the time of the slot of the state. -/
   | wrongPayloadTimestamp (timestamp expected : UInt64)
-  /-- From Bellatrix: the execution layer rejects a payload. -/
-  | invalidExecutionPayload
+  /-- From Bellatrix: the execution layer rejects a payload.
+
+  It holds the block hash of the payload. -/
+  | invalidExecutionPayload (blockHash : Hash32)
   /-- From Capella: the historical summaries are at their list limit.
 
   It holds the limit. -/
@@ -224,28 +250,46 @@ inductive TransitionError where
   | noCommitteeAttester (index : CommitteeIndex)
   /-- From Electra: the validator of a voluntary exit has a pending partial withdrawal. -/
   | exitPendingWithdrawal (index : ValidatorIndex)
-  /-- From Gloas: the parent payload is empty, but the block carries requests for it. -/
-  | parentRequestsNotEmpty
-  /-- From Gloas: the requests of the block are not those that the parent bid commits to. -/
-  | wrongParentRequestsRoot
+  /-- From Gloas: the parent payload is empty, but the block carries requests for it.
+
+  It holds the total number of requests, over all five types. -/
+  | parentRequestsNotEmpty (count : Nat)
+  /-- From Gloas: the requests of the block are not those that the parent bid commits to.
+
+  It holds the root of the requests, then the root in the parent bid. -/
+  | wrongParentRequestsRoot (root expected : Root)
   /-- From Gloas: a list holds more entries than the most allowed. -/
   | tooManyOperations (count limit : Nat)
   /-- From Gloas: an attestation has an index other than zero or one. -/
   | attestationIndexAboveOne (index : CommitteeIndex)
-  /-- From Gloas: an envelope does not carry the signature of its signer. -/
-  | invalidEnvelopeSignature
-  /-- From Gloas: an envelope names another beacon block than the latest one of the state. -/
-  | envelopeWrongBlockRoot
-  /-- From Gloas: an envelope names another parent than that of the latest beacon block. -/
-  | envelopeWrongParentRoot
-  /-- From Gloas: an envelope names another builder than the bid of its block. -/
-  | envelopeWrongBuilder
-  /-- From Gloas: a payload has another gas limit than the bid of its block. -/
-  | wrongPayloadGasLimit
-  /-- From Gloas: a payload has another block hash than the bid of its block. -/
-  | wrongPayloadBlockHash
-  /-- From Gloas: the requests of a payload are not those that the bid of its block commits to. -/
-  | wrongPayloadRequestsRoot
+  /-- From Gloas: an envelope does not carry the signature of its signer.
+
+  It holds the builder and the beacon block root that the envelope names. -/
+  | invalidEnvelopeSignature (builder : BuilderIndex) (blockRoot : Root)
+  /-- From Gloas: an envelope names another beacon block than the latest one of the state.
+
+  It holds the block root of the envelope, then the root of the latest block. -/
+  | envelopeWrongBlockRoot (blockRoot expected : Root)
+  /-- From Gloas: an envelope names another parent than that of the latest beacon block.
+
+  It holds the parent root of the envelope, then that of the latest block header. -/
+  | envelopeWrongParentRoot (parentRoot expected : Root)
+  /-- From Gloas: an envelope names another builder than the bid of its block.
+
+  It holds the builder of the envelope, then that of the bid. -/
+  | envelopeWrongBuilder (builder expected : BuilderIndex)
+  /-- From Gloas: a payload has another gas limit than the bid of its block.
+
+  It holds the gas limit of the payload, then that of the bid. -/
+  | wrongPayloadGasLimit (gasLimit expected : UInt64)
+  /-- From Gloas: a payload has another block hash than the bid of its block.
+
+  It holds the block hash of the payload, then that of the bid. -/
+  | wrongPayloadBlockHash (blockHash expected : Hash32)
+  /-- From Gloas: the requests of a payload are not those that the bid of its block commits to.
+
+  It holds the root of the requests, then the root in the bid. -/
+  | wrongPayloadRequestsRoot (root expected : Root)
   /-- From Gloas: a payload is for another slot than that of the state. -/
   | wrongPayloadSlot (slot stateSlot : Slot)
   deriving DecidableEq, Repr
@@ -273,21 +317,21 @@ def TransitionError.code : TransitionError → UInt32
   | .notSlashableData .. => 15
   | .invalidIndexedAttestation .. => 16
   | .noneSlashed .. => 17
-  | .payloadAttestationNotForParent => 18
+  | .payloadAttestationNotForParent .. => 18
   | .payloadAttestationWrongSlot .. => 19
-  | .invalidPayloadAttestation => 20
-  | .selfBuildBidPaid => 21
+  | .invalidPayloadAttestation .. => 20
+  | .selfBuildBidPaid .. => 21
   | .builderNotActive _ => 22
   | .notPayloadBuilder _ => 23
   | .bidNotCovered _ => 24
-  | .invalidBidSignature => 25
-  | .tooManyBlobCommitments => 26
+  | .invalidBidSignature .. => 25
+  | .tooManyBlobCommitments .. => 26
   | .bidWrongSlot .. => 27
   | .bidAtGenesis => 28
-  | .bidWrongParentHash => 29
-  | .bidRepeatsParentHash => 30
-  | .bidWrongParentRoot => 31
-  | .bidWrongRandao => 32
+  | .bidWrongParentHash .. => 29
+  | .bidRepeatsParentHash .. => 30
+  | .bidWrongParentRoot .. => 31
+  | .bidWrongRandao .. => 32
   | .depositIndicesDiffer .. => 33
   | .attestationTargetNotRecent .. => 34
   | .attestationTargetNotSlotEpoch .. => 35
@@ -316,10 +360,10 @@ def TransitionError.code : TransitionError → UInt32
   | .slotNotAfter .. => 53
   | .invalidBlockSignature .. => 54
   | .wrongStateRoot .. => 55
-  | .wrongPayloadParentHash => 66
-  | .wrongPayloadRandao => 67
+  | .wrongPayloadParentHash .. => 66
+  | .wrongPayloadRandao .. => 67
   | .wrongPayloadTimestamp .. => 68
-  | .invalidExecutionPayload => 69
+  | .invalidExecutionPayload .. => 69
   | .historicalSummariesFull .. => 70
   | .invalidSyncAggregate .. => 71
   | .invalidSyncCommitteeKey .. => 72
@@ -328,17 +372,17 @@ def TransitionError.code : TransitionError → UInt32
   | .attestationIndexNotZero _ => 75
   | .noCommitteeAttester _ => 76
   | .exitPendingWithdrawal _ => 77
-  | .parentRequestsNotEmpty => 78
-  | .wrongParentRequestsRoot => 79
+  | .parentRequestsNotEmpty .. => 78
+  | .wrongParentRequestsRoot .. => 79
   | .tooManyOperations .. => 80
   | .attestationIndexAboveOne _ => 81
-  | .invalidEnvelopeSignature => 82
-  | .envelopeWrongBlockRoot => 83
-  | .envelopeWrongParentRoot => 84
-  | .envelopeWrongBuilder => 85
-  | .wrongPayloadGasLimit => 86
-  | .wrongPayloadBlockHash => 87
-  | .wrongPayloadRequestsRoot => 88
+  | .invalidEnvelopeSignature .. => 82
+  | .envelopeWrongBlockRoot .. => 83
+  | .envelopeWrongParentRoot .. => 84
+  | .envelopeWrongBuilder .. => 85
+  | .wrongPayloadGasLimit .. => 86
+  | .wrongPayloadBlockHash .. => 87
+  | .wrongPayloadRequestsRoot .. => 88
   | .wrongPayloadSlot .. => 89
 
 /-- The message of an error: its constructor and its values, on one line, with roots in hex.

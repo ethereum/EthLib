@@ -48,6 +48,13 @@ def ExecutionRequests.isEmpty (requests : ExecutionRequests preset fork)
     requests.consolidations.data.isEmpty && (requests.builderDeposits gloas).data.isEmpty &&
     (requests.builderExits gloas).data.isEmpty
 
+/-- From Gloas: the total number of requests of a payload, over all five types. -/
+def ExecutionRequests.count (requests : ExecutionRequests preset fork)
+    (gloas : .glamsterdam ≤ fork) : Nat :=
+  requests.deposits.data.size + requests.withdrawals.data.size +
+    requests.consolidations.data.size + (requests.builderDeposits gloas).data.size +
+    (requests.builderExits gloas).data.size
+
 /-- From Gloas: the position of the pending payment of the block at a slot, if it has one.
 
 A block of the current epoch has its payment in the second half of the pending payments.
@@ -152,10 +159,11 @@ def processParentExecutionPayload (config : Config) (checks : SignatureChecks)
   let parentBid := state.latestExecutionPayloadBid gloas
   let requests := body.parentExecutionRequests gloas
   if bid.parentBlockHash ≠ parentBid.blockHash then
-    ensure (requests.isEmpty gloas) .parentRequestsNotEmpty
+    ensure (requests.isEmpty gloas) (.parentRequestsNotEmpty (requests.count gloas))
     return state
   let root ← liftSsz (hashTreeRoot requests)
-  ensure (root = parentBid.executionRequestsRoot) .wrongParentRequestsRoot
+  ensure (root = parentBid.executionRequestsRoot)
+    (.wrongParentRequestsRoot root parentBid.executionRequestsRoot)
   applyParentExecutionPayload config checks state gloas requests
 
 end EthLib.Consensus
