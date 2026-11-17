@@ -221,9 +221,11 @@ def computeVerifyCellKzgProofBatchChallengeExport
       | .ok _    => pure ()
       | .error _ => throw (.invalidCommitment (some i))
     if commitmentIndices.any (· ≥ commitments.size) then
-      throw .commitmentIndexOutOfBounds
+      let index := (commitmentIndices.find? (· ≥ commitments.size)).getD 0
+      throw (.commitmentIndexOutOfBounds index commitments.size)
     if cellIndices.any (· ≥ Constants.CELLS_PER_EXT_BLOB) then
-      throw .cellIndexOutOfBounds
+      let index := (cellIndices.find? (· ≥ Constants.CELLS_PER_EXT_BLOB)).getD 0
+      throw (.cellIndexOutOfBounds index)
     let proofs ← proofs.mapM parseProof
     for (proof, i) in proofs.zipIdx do
       match bytesToKzgProof proof with

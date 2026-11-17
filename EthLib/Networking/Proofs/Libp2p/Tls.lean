@@ -32,12 +32,13 @@ open EthLib.Serialization
 
 /-- A certificate chain with two or more entries is rejected. -/
 theorem authenticate_single (policy : Policy) (now : Nat) (first second : ByteArray)
-    (rest : List ByteArray) : authenticate policy now (first :: second :: rest) = .error .chain :=
+    (rest : List ByteArray) :
+    authenticate policy now (first :: second :: rest) = .error (.chain (rest.length + 2)) :=
   rfl
 
 /-- An empty certificate chain is rejected. -/
 theorem authenticate_empty (policy : Policy) (now : Nat) :
-    authenticate policy now [] = .error .chain := rfl
+    authenticate policy now [] = .error (.chain 0) := rfl
 
 /-- Success requires exactly one parsed certificate and successful checks on that certificate. -/
 theorem authenticate_ok_iff {policy : Policy} {now : Nat} {chain : List ByteArray}
@@ -73,7 +74,8 @@ theorem authenticateCertificate_ok_iff {policy : Policy} {now : Nat}
 /-- A time outside the certificate's closed validity interval fails the certificate checks. -/
 theorem authenticateCertificate_validity (policy : Policy) (now : Nat) (certificate : Certificate)
     (outside : Int.ofNat now < certificate.notBefore ∨ certificate.notAfter < Int.ofNat now) :
-    authenticateCertificate policy now certificate = .error .validity := by
+    authenticateCertificate policy now certificate =
+      .error (.validity now certificate.notBefore certificate.notAfter) := by
   have invalid : ¬(certificate.notBefore ≤ (now : Int) ∧
       (now : Int) ≤ certificate.notAfter) := by
     simp only [Int.ofNat_eq_natCast] at outside
@@ -84,7 +86,8 @@ theorem authenticateCertificate_validity (policy : Policy) (now : Nat) (certific
 theorem authenticate_validity (policy : Policy) (now : Nat) (bytes : ByteArray)
     (certificate : Certificate) (parsed : readCertificate bytes = .ok certificate)
     (outside : Int.ofNat now < certificate.notBefore ∨ certificate.notAfter < Int.ofNat now) :
-    authenticate policy now [bytes] = .error .validity := by
+    authenticate policy now [bytes] =
+      .error (.validity now certificate.notBefore certificate.notAfter) := by
   simp [authenticate, parsed, bind, Except.bind,
     authenticateCertificate_validity policy now certificate outside]
 
@@ -101,7 +104,7 @@ theorem signedKey_missing {pair : ByteArray × ByteArray} (certificate : Certifi
 theorem signedKey_critical (certificate : Certificate) (ext : Extension)
     (mem : ext ∈ certificate.extensions) (critical : ext.critical = true)
     (other : (ext.oid == libp2pOid) = false) :
-    signedKey certificate = .error .criticalExtension := by
+    signedKey certificate = .error (.criticalExtension (criticalOid certificate.extensions)) := by
   have unknown :
       certificate.extensions.all (fun ext => !ext.critical || ext.oid == libp2pOid) = false := by
     rw [Bool.eq_false_iff]
@@ -578,5 +581,37 @@ theorem readCertificate_validity {bytes : ByteArray} {certificate : Certificate}
         · simp [throw, throwThe, MonadExceptOf.throw] at h
     · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
   · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-! ## The values of the extension errors -/
+
+/-- A list with a repeated value names one that occurs at least twice. -/
+theorem firstRepeated_some (l : List (List UInt8)) (h : ¬ l.Nodup) :
+    ∃ x, firstRepeated l = some x ∧ 2 ≤ l.count x := by
+  induction l with
+  | nil => simp at h
+  | cons a t ih =>
+    by_cases m : a ∈ t
+    · refine ⟨a, by simp [firstRepeated, m], ?_⟩
+      have := List.count_pos_iff.mpr m
+      simp
+      omega
+    · have : ¬ t.Nodup := by simpa [List.nodup_cons, m] using h
+      obtain ⟨x, hx, d⟩ := ih this
+      refine ⟨x, by simp [firstRepeated, m, hx], ?_⟩
+      simp [List.count_cons]
+      omega
+
+/-- When a critical extension other than the libp2p one is present, the error names its OID. -/
+theorem criticalOid_spec (es : List Extension)
+    (h : es.all (fun ext => !ext.critical || ext.oid == libp2pOid) = false) :
+    ∃ e ∈ es, e.critical = true ∧ (e.oid == libp2pOid) = false ∧
+      criticalOid es = e.oid.data.toList := by
+  have : ∃ e ∈ es, (e.critical && !(e.oid == libp2pOid)) = true := by
+    simpa [List.all_eq_false] using h
+  obtain ⟨e, he⟩ := Option.isSome_iff_exists.mp (List.find?_isSome.mpr this)
+  have mem := List.mem_of_find?_eq_some he
+  have q := List.find?_some he
+  simp at q
+  exact ⟨e, mem, q.1, by simpa using q.2, by simp [criticalOid, he]⟩
 
 end EthLib.Networking.Proofs.Libp2p.Tls

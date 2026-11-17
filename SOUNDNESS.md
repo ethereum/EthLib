@@ -3020,6 +3020,19 @@ A sender may carry another honest validator's statement only if an earlier sent 
 `EarlyJustifiedConsistent` assumes the consistency of justified checkpoints of the call's epoch or before, and `RootKeepsViableLeaf` assumes the viable leaf.
 While no later checkpoint is justified, the early premise still carries the whole consistency.
 
+`Execution.honestHeadsCover_of_byzantine_bound` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalSigners.lean` derives that signer.
+`Execution.justifiedHonestlySigned` shows that one count of votes set each later justified checkpoint.
+The count ran in a held state, or on the way from one to a held child.
+The count passed, so with Byzantine stake below two thirds there (`ByzantineCountedStake`), an honest quorum voter voted for the checkpoint.
+That vote was cast in a held block.
+The store reads it with a valid signature in the state of the vote's target, so it is a statement of a sent message.
+Signatures still enter only through the network model's sender rule.
+The derivation takes the headline's stake floors, a positive inclusion delay (`Preset.InclusionDelayPositive`, true on mainnet and minimal) and two conditions on the anchor.
+The anchor's latest header must be the anchor block's, with a zero state root, as the post-state of a block has.
+The anchor store checks neither, and without them a justified root may be one that no store holds.
+So the late half of the root's viability rests on the Byzantine bound, the stake floors and these conditions.
+The signed-justification theorem keeps its statement for callers that supply the signer.
+
 `Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
 `getCurrentTarget_eq_ok_iff` states that target as the checkpoint of the store's epoch in the chain of the head, and `epoch_eq_of_getCurrentTarget` gives its epoch.
 `willCurrentTargetBeJustified_eq_ok_true_iff` states the two-thirds test, with both products checked for overflow.

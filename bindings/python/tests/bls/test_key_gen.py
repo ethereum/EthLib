@@ -135,8 +135,8 @@ def test_rejects_index_out_of_range() -> None:
 @pytest.mark.parametrize(
     "path, code, message",
     [
-        ("M/12381/3600/0/0", 101, "path must start with m"),
-        ("m/12381/3600/0", 104, "ERC-2334 path needs at least four indices"),
+        ("M/12381/3600/0/0", 101, 'path must start with m, not "M"'),
+        ("m/12381/3600/0", 104, "ERC-2334 path needs at least four indices, got 3"),
         ("m/12380/3600/0/0", 105, "invalid path purpose: 12380"),
         ("m/12381/3600/0/0/", 102, "invalid path index: "),
         ("m/12381/3600/-1/0", 102, "invalid path index: -1"),

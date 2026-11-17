@@ -47,7 +47,6 @@ def namedArg {α : Type} [ErrorArg α] (name : String) (value : α) : Std.Format
 def constructorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
   let applied : Std.Format := .group (.nest 2 (args.foldl (fun f a => f ++ .line ++ a) name))
   -- An argument position puts the application in parentheses, as `Repr.addAppParen` does.
-  if prec ≥ max_prec ∧ !args.isEmpty then .group (.nest 1 (.text "(" ++ applied ++ .text ")"))
-  else applied
+  if prec ≥ max_prec then .group (.nest 1 (.text "(" ++ applied ++ .text ")")) else applied
 
 end EthLib.Execution

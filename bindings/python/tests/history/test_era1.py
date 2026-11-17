@@ -189,7 +189,9 @@ def test_one_block_too_many_is_rejected() -> None:
 
 def test_file_without_version_is_rejected() -> None:
     data = _file(0, _chain(0, 1))
-    with raises(Era1Error, _error("e2store (EthLib.Serialization.E2store.E2storeError.noVersion)")):
+    # Without its Version record, the file starts with the header of its first block.
+    fault = f"e2store (EthLib.Serialization.E2store.E2storeError.noVersion (some {HEADER}))"
+    with raises(Era1Error, _error(fault)):
         decode_era1(data[8:])
 
 
@@ -238,7 +240,9 @@ def test_wrong_block_count_is_rejected(count: int) -> None:
 def test_index_of_wrong_size_is_rejected() -> None:
     data = _file(0, _chain(0, 2))
     index = data[len(data) - (16 + 8 * 2) :] + bytes(1)
-    with raises(Era1Error, _error("e2store (EthLib.Serialization.E2store.E2storeError.indexSize)")):
+    # An index of two entries has 32 bytes, and this one has a byte more.
+    fault = "e2store (EthLib.Serialization.E2store.E2storeError.indexSize 33)"
+    with raises(Era1Error, _error(fault)):
         decode_era1(_without_index(data, 2) + _record(BLOCK_INDEX, index))
 
 

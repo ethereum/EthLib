@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.ErrorFormat
 public import EthLib.Execution.Evm.Words
 
 /-!
@@ -31,7 +32,18 @@ def gasCost (size : Nat) : Nat := GAS_BASE + GAS_PER_WORD * wordCount size
 inductive IdentityError where
   /-- The gas given was below the price, so the call consumes all its gas. -/
   | outOfGas (cost gas : Nat)
-  deriving Repr, DecidableEq
+  deriving DecidableEq
+
+/-- A constructor of the error, named in full, applied to its arguments. -/
+def identityErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.Evm.Precompiles.Identity.IdentityError." ++ name) args prec
+
+/-- The form of the error in Lean syntax, with each value named. -/
+def IdentityError.reprPrec : IdentityError → Nat → Std.Format
+  | .outOfGas cost gas, p =>
+    identityErrorFormat "outOfGas" [namedArg "cost" cost, namedArg "gas" gas] p
+
+instance : Repr IdentityError := ⟨IdentityError.reprPrec⟩
 
 /-- The stable code of an error, one per constructor.
 

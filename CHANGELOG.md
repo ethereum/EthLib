@@ -27,6 +27,18 @@ Not yet released.
   `Execution.honestHeadsCover_of_historical_anchor` keeps its statement.
   `slotStart_le_clock` is now public.
 
+- `Execution.honestHeadsCover_of_byzantine_bound` derives the honest signer of the signed-justification headline ([#2656](https://github.com/ethereum/EthLib/issues/2656)).
+  It takes `ByzantineCountedStake`, Byzantine stake below two thirds in each state that counts later votes, instead of `JustifiedHonestlySigned`.
+  It also takes `Preset.InclusionDelayPositive` and two conditions on the anchor: its latest header is the anchor block's, with a zero state root.
+  `Execution.justifiedHonestlySigned` is the derivation; `Execution.honestHeadsCover_of_signed_justification` keeps its statement.
+  The votes behind a justified checkpoint are traced in `ForkChoice/JustifiedVotes.lean`: `Store.ForwardReachableWith.justified_counted`, `held_participation` and `counted_history`, and `Execution.exists_sent_of_votesBelow`.
+  `processJustificationAndFinalization_exists_voter` names a voter of a fresh justification, among `quorumVoters`.
+  `isValidIndexedAttestation_of_keys` and `processBlock_attestation_checked` carry a block's attestation check to the state of its target.
+  `Store.ForwardReachableWith.pubkeysDistinct_of_blockState`, `countedRun_enoughStake` and `stake_activeKeys_eq` bound the stake where a store counts votes.
+  `mapM_congr` is new and holds in any lawful monad, and `lt_size_of_mem_getActiveValidatorIndices` bounds active indices by the registry.
+  `RunKept.getAttestingIndices_eq` keeps attesters along a run.
+  `keys_advanceSlot`, `getAttestingIndices_eq_of_seed`, `Store.getAncestor_of_isAncestor` and `Store.exists_storeTargetCheckpointState` are now public.
+
 - `HonestVoteData.target_read` reads the target of an honest vote from its voter's head, without the reads of a duty vote.
   It needs the target block held by some store reachable from the same anchor.
   The anchor store does not tie the anchor state's latest header to the anchor block, so a read at the anchor needs that block.
@@ -44,6 +56,60 @@ Not yet released.
   `receiver_fullMaximum_of_head_window` takes the receiver's own finalized checkpoint on its own justified chain, `finalizedRead`, instead of `compatible`, `bounded`, `slots` and `epochOk`.
   `SelectedCheckpoint`, `FinalizedCheckpointCompatibility`, `ResidualFinalizedCheckpointCompatibility` and `compatibility_of_residual` are removed: no proof read them any more.
 
+- The errors of the execution payload, the Gloas bid, envelope, parent requests and payload attestations carry the values that their check compared.
+  `TransitionError.wrongPayloadParentHash`, `wrongPayloadRandao`, `wrongPayloadGasLimit`, `wrongPayloadBlockHash` and `wrongPayloadRequestsRoot` hold the value of the payload, then the value it must equal.
+  `bidWrongParentHash`, `bidWrongParentRoot` and `bidWrongRandao` hold the value of the bid, then the value of the state; `bidRepeatsParentHash` holds the repeated hash, and `selfBuildBidPaid` the value of the bid.
+  `envelopeWrongBlockRoot`, `envelopeWrongParentRoot` and `envelopeWrongBuilder` hold the value of the envelope, then the expected one; `invalidEnvelopeSignature` holds the builder and the block root.
+  `invalidBidSignature` holds the builder and the slot, and `invalidExecutionPayload` the block hash of the payload.
+  `tooManyBlobCommitments` holds the number of commitments and the limit.
+  `payloadAttestationNotForParent` holds the block root of the attestation and the parent root; `invalidPayloadAttestation` holds the slot and the number of attesters.
+  `parentRequestsNotEmpty` holds the number of requests, which the new `ExecutionRequests.count` gives, and `wrongParentRequestsRoot` the two roots.
+  The codes do not change.
+  `processParentExecutionPayload_of_empty_requests`, `processExecutionPayload_eq_error_of_prepareExecutionPayload` and `processBlockExecution_eq_error_of_prepareExecutionPayload` state these values.
+
+- The precompile errors carry the values that their failed check compared, and their message names each value on one line.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  The message of a failed call no longer wraps: `PrecompileError.sha256\n  (Sha256Error.outOfGas 72 71)` becomes `PrecompileError.sha256 (Sha256Error.outOfGas (cost := 72) (gas := 71))`, with each name in full.
+  A bare error inside another now prints in parentheses, as Lean's own printer does.
+  In Lean, these constructors take arguments:
+  - `AltBn128Error.invalidFieldElement value`, the coordinate at or above `p`, and `notOnCurve point` and `notInSubgroup point`, the bytes of the point read from the call data, with zeros past its end;
+  - `Bls12381Error.invalidPadding padding`, the 16 bytes in front of the field element, `invalidFieldElement value`, and `notOnCurve point` and `notInSubgroup point`, the unpadded bytes of the point;
+  - `PointEvaluationError.versionedHashMismatch expected actual`, the hash of the commitment and the hash of the call, `invalidCommitment commitment`, `invalidFieldElement value`, the value of `z` or `y`, and `invalidProof proof`.
+  `PointEvaluationError.invalidTrustedSetup`, `proofRejected` and `Bls12381Error.notASquare` stay bare: the first is a constant, the second a verdict of the pairing check, and the third excluded by RFC 9380.
+  `bytesToG1_invalidFieldElement` names the rejected coordinate in its error.
+
+- The AES-GCM, ChaCha20-Poly1305 and ERC-2334 path errors carry the lengths and values that their failed check compared.
+  Codes are unchanged; each message now ends with these values, and a failed tag comparison still carries nothing.
+  - `Aes.Gcm.Error.tagLength declared actual` carries the declared tag length and the length of the tag, in bytes.
+  - `Aes.Gcm.Error.shortTag`, `ivLength`, `textLength` and `aadLength` carry the length that failed, in bytes.
+  - `ChaCha20Poly1305Error.counterExhausted counter length` carries the first block counter and the text length in bytes; the AEAD starts at the counter 1.
+  - `ChaCha20Poly1305Error.aadTooLong length` carries the length of the additional data, in bytes.
+  - `KeyPath.KeyPathError.invalidRoot root` carries the text before the first `/`, and `tooShort count` the number of segments after `m`.
+  - `Gcm.checkLengths_shortTag`, `Gcm.encrypt_shortTag`, `Gcm.decrypt_shortTag` and `ChaCha20Poly1305.crypt_eq_error_of_counter_exhausted` state the error with its fields.
+  - `Aes.Gcm.Error.code_injective` now concludes that two errors with one code share a constructor, `e₁.ctorIdx = e₂.ctorIdx`, as the KZG and secp256k1 forms do.
+
+- The DER and e2store errors carry the values that their failed check compared.
+  Codes are unchanged, and each error fires on the same inputs as before.
+  - `Der.Error.truncated needed available` carries a lower bound on the bytes a value needs, exact once its length is read, and the bytes of the input.
+  - `Der.Error.tag expected actual` carries the tag read, and the tag the reader expects, or `none` when no single tag is expected.
+  - `Der.Error.length first` carries the first length octet, and `trailing count` the bytes left after the value.
+  - `Der.Error.value` keeps no field: the content belongs to the caller, and the reader tracks no position in it.
+  - `E2store.E2storeError.truncatedHeader offset available` and `truncatedData offset length available` carry the position of the record, the announced length of its data, and the size of the input.
+  - `reservedNotZero first second` carries the two reserved bytes, `dataTooLong length` the length of the data, `noVersion type` the type of the first record, `versionData index` the position of the first Version record with data, and `indexSize size` the size of the index data.
+  - `Der.validate_eq_error_tag` concludes `.tag none value.tag`.
+
+- The errors of attestations, deposits, exits, withdrawals, BLS changes, the sync aggregate and the historical lists carry the values that their check compared.
+  `TransitionError.wrongAttestationSource` holds the epoch and root of the source, then those of the justified checkpoint.
+  `invalidAttestation` holds the slot of the attestation and the number of validators its indexed form names.
+  `invalidDepositProof` holds the deposit index, the root of the deposit data and the deposit root.
+  `invalidExitSignature` and `invalidBlsChangeSignature` hold the validator index and the signing root.
+  `wrongWithdrawals` holds the first position at which the withdrawals differ, then the length of the payload's list and of the expected one.
+  `invalidSyncAggregate` holds the slot of the signed block root, the number of signers and the signing root.
+  `invalidSyncCommitteeKey` holds the key that fails to decode or fails key validation, and `unknownSyncCommitteeMember` the key that no validator holds.
+  `tooManyPendingAttestations` holds the count and the limit; `registryFull`, `historicalRootsFull` and `historicalSummariesFull` hold the limit.
+  The codes do not change.
+  `appendHistoricalRoot_eq_error_iff`, `processHistoricalRootsUpdate_eq_error_iff` and `processHistoricalSummariesUpdate_eq_error_iff` state the limit in the error.
+
 - The transaction, inclusion and network-form errors carry the values that their failed check compared.
   Each code keeps its meaning, and each error fires on the same inputs as before.
   The messages of transaction and inclusion errors name each value, as `(name := value)`, with hashes and addresses in hex.
@@ -58,6 +124,15 @@ Not yet released.
   `invalidSignature` stays bare: it fires on a bad `v`, a bad y parity, `r` or `s` out of range, or a signature that recovers no key, and the transaction holds each of these values.
   `NetworkError.proofRejected` stays bare: the batch check of the proofs gives only a verdict.
   `checkSender_of_skipNonce` states the nonce `2^64 - 1` in its error.
+
+- The TLS codec, TLS handshake, TLS crypto and libp2p TLS certificate errors carry the values their failed check compared.
+  Each error fires on the same inputs as before, and codes are unchanged; each message now shows these values.
+  - `Quic.Tls.Wire.Error.truncated` carries the bytes needed and available, `trailing` the count of bytes left, `duplicateExtension` the repeated extension type, and `messageType` the handshake type.
+  - `Quic.Tls.Handshake.Error.missingExtension` and `unsupportedExtension` carry the extension type.
+  - `Quic.Tls.Crypto.Error.group` carries the NamedGroup, and `signatureScheme` the SignatureScheme.
+  - `Libp2p.Tls.TlsCertError.validity` carries the time and the validity bounds, `chain` the certificate count, and `duplicateExtension` and `criticalExtension` the OID bytes.
+  - `Libp2p.Tls.authenticate_single`, `authenticate_empty`, `authenticateCertificate_validity`, `authenticate_validity` and `signedKey_critical`, and `Quic.Tls.encodeExtensions_duplicate`, state the fields of the error.
+  - The new `Quic.Tls.repeatedKind`, `Libp2p.Tls.firstRepeated` and `Libp2p.Tls.criticalOid` compute these fields, and `repeatedKind_spec`, `firstRepeated_some` and `criticalOid_spec` show that each names a real repeated type, repeated OID or critical OID when its check fails.
 
 - The QUIC integer, wire and packet protection errors carry the values their failed check compared.
   Each error fires on the same inputs as before, and codes are unchanged; each message now shows these values.
@@ -75,6 +150,18 @@ Not yet released.
   - `Discv5.PacketError.protocolId` carries the first eight unmasked header bytes, `headerTruncated` the header bytes needed and available, `authdata` the flag and the authdata size, and `whoareyouMessage` the message size.
   - `Discv5.MessageError.fields` also carries the field count, and `invalid` the message type.
   - `Discv4.decode_hashMismatch` states both hashes of the error it returns.
+
+- In Lean, the errors of era files, protocol bounds, light client update chunks, validator duties and proposer steps carry the values that their check compared, and their codes keep their meaning.
+  - `EraError.noState` and `noStateIndex` take the type of the record that the check read, or `none` when the group ends; `stateIndex` takes the number of entries, the position the first one points at and the position of the state.
+  - `EraError.genesisBlocks` takes the number of block records and whether an index of blocks is present, `noBlockIndex` the era, and `blockIndexRange` the first slot and the entries of the index, then those the era expects.
+  - `BoundsError.notAtFork` and `topicNotAtFork` take the protocol or topic name and the fork, and `noRequest` the protocol; their messages do not change.
+  - `ChunkError.truncated` takes the offset of the chunk, the length it needs and the length left, and `digestMismatch` also takes the expected digest.
+  - `ValidatorDutyError.noMessages` takes the slot and the block root of the message to aggregate, and `pendingPayloadStatus` the slot of the vote and of the head block.
+  - `ProposerError.noCommittee` takes the data of the aggregate.
+
+  `attestationDataIndex_of_glamsterdam_of_ne` states the fields of `pendingPayloadStatus`.
+  New `ToString` instances of `ValidatorDutyError`, `ProposerError` and `BoundsError` write each error with its values.
+  The Python `ValidatorDutyError` and `ProposerError` carry that text in place of "validator duty failed with code N" and "proposer step failed with code N", such as "epoch 2 is after 1, the last epoch whose committees are known".
 
 - The block, ommer and proof-of-work errors carry the values that their failed check compared.
   Each code keeps its meaning, and each error fires on the same inputs as before.
@@ -142,6 +229,20 @@ Not yet released.
   - `ReqResp.ReqRespError.contextTruncated` carries the context bytes needed and available.
   - The req/resp messages of a varint or a framing error now end with the inner error.
 
+- The secp256k1, secp256r1 and KZG errors carry the public values that their failed check compared.
+  Codes are unchanged; each message now ends with these values.
+  - `Secp256k1Error.coordinateTooLarge value` and `Secp256r1Error.coordinateTooLarge value` carry the coordinate, written as 32 bytes of hex in the message.
+  - `Secp256k1Error.scalarOutOfRange value` carries the signature integer, `r` or `s`, written the same way; `r` is checked first.
+  - `KzgError.commitmentIndexOutOfBounds index count` carries the first index past the list and the number of commitments.
+  - `KzgError.cellIndexOutOfBounds index` carries the first cell index of 128 or more.
+  - `KzgError.indicesNotAscending previous next` carries the first pair of neighbours whose second index is not larger.
+  - `KzgError.notEnoughCells count` and `tooManyCells count` carry the number of cells given.
+  - `KzgError.duplicateCommitments index` carries the position of the first commitment that repeats an earlier one.
+  - The KZG theorems on these failures take the found index, as `find? … = some index`, in place of `any … = true`, and conclude the error with its fields.
+  - `Base.hexNat width value` writes a number in hex behind `0x`, padded to `width` digits and never cut, for these messages.
+  - `Base.any_eq_true_of_find?_eq_some` turns the found value back into the `any` that the definitions test.
+  - Secret values stay out of the errors: `zeroPrivateKey`, `privateKeyTooLarge`, `unrecoverableNonce` and `noNonce` keep no fields.
+
 - The Snappy, varint and protobuf errors carry the values their failed check compared.
   Codes are unchanged; each message now ends with these values, in constructor order.
   - `SnappyError.literalPastEnd` and `copyPastEnd` carry the bytes needed and the bytes left.
@@ -183,6 +284,17 @@ Not yet released.
 
   The new `ToString` instance of `LightClientError` writes each error with its values, such as "expected trusted block root 0x…, got header root 0x…".
   The Python `LightClientError` carries that message after "light client: ", in place of the Lean name of the constructor.
+
+- The errors of the block header, the RANDAO reveal, the vote on the deposit contract, the slashings, the block signature and the state root carry the values that their check compared.
+  `TransitionError.wrongParent` and `wrongStateRoot` hold the root of the block, then the root that the state gives.
+  `invalidRandaoReveal` holds the proposer and the epoch, and `tooManyEth1Votes` the number of votes and the limit.
+  `headerSlotsDiffer` and `headerProposersDiffer` hold the value of each header, and `sameHeaders` the slot and the proposer.
+  `invalidHeaderSignature` holds the proposer and the signing root, and `invalidBlockSignature` the proposer and the slot.
+  `notSlashableData` holds the source and target epochs of both attestations, `invalidIndexedAttestation` the position of the attestation, 1 or 2, and `noneSlashed` the number of validators in both.
+  The message of a transition error is on one line and writes each root in hex behind `0x`, as in `EthLib.Consensus.TransitionError.wrongParent 0x00… 0x6a…`.
+  A fork choice error that wraps a transition error writes it on one line too.
+  The codes do not change.
+  `processRandao_ne_invalidRandaoReveal` states that the step fails with an invalid reveal for no proposer and no epoch.
 
 - In Lean, every node of a Merkle tree has a `Merkle.Position`, its level and its index, and the tree passes positions instead of a level and an index.
   The node hash has type `Position → α → α → m α`; it had type `Nat → Nat → α → α → m α`, with the level first.

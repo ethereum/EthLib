@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.ErrorFormat
 public import EthLib.Cryptography.Secp256k1.Recovery
 public import EthLib.Cryptography.Secp256k1.Address
 public import EthLib.Execution.Evm.Machine.Memory
@@ -25,7 +26,18 @@ open EthLib.Base (byteAt)
 inductive EcrecoverError where
   /-- The gas given was below the price. -/
   | outOfGas (cost gas : Nat)
-  deriving Repr, DecidableEq
+  deriving DecidableEq
+
+/-- A constructor of the error, named in full, applied to its arguments. -/
+def ecrecoverErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.Evm.Precompiles.Ecrecover.EcrecoverError." ++ name) args prec
+
+/-- The form of the error in Lean syntax, with each value named. -/
+def EcrecoverError.reprPrec : EcrecoverError → Nat → Std.Format
+  | .outOfGas cost gas, p =>
+    ecrecoverErrorFormat "outOfGas" [namedArg "cost" cost, namedArg "gas" gas] p
+
+instance : Repr EcrecoverError := ⟨EcrecoverError.reprPrec⟩
 
 /-- The stable code of an error, one per constructor.
 

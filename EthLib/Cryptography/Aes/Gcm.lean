@@ -77,29 +77,39 @@ def gctr (ciph : Block → Block) (icb : Block) (X : ByteArray) : ByteArray :=
 
 /-- The reasons that GCM rejects an input.
 
-Authenticated decryption returns FAIL for each of them (§7.2, steps 1 and 8). -/
+Authenticated decryption returns FAIL for each of them (§7.2, steps 1 and 8).
+
+Every length is in bytes.
+
+A failed tag comparison carries nothing, so that it reveals nothing about the expected tag. -/
 inductive Error where
-  /-- The tag length is not one of the seven of §5.2.1.2, or the tag has another length. -/
-  | tagLength
-  /-- The tag length is 64 or 32 bits, which Appendix C restricts and this module rejects. -/
-  | shortTag
-  /-- The IV is empty, or longer than `2^64 - 1` bits (§5.2.1.1). -/
-  | ivLength
-  /-- The plaintext or the ciphertext is longer than `2^39 - 256` bits (§5.2.1.1). -/
-  | textLength
-  /-- The additional data is longer than `2^64 - 1` bits (§5.2.1.1). -/
-  | aadLength
+  /-- A tag of `actual` bytes, under a declared tag length of `declared` bytes.
+
+  Either the declared length is not one of the seven of §5.2.1.2, and `actual` is `declared`.
+
+  Or decryption got a tag whose length is not the declared one. -/
+  | tagLength (declared actual : Nat)
+  /-- The tag length, `length`, is 8 or 4 bytes.
+
+  Appendix C restricts these lengths, and this module rejects them. -/
+  | shortTag (length : Nat)
+  /-- The IV, of `length` bytes, is empty, or longer than `2^64 - 1` bits (§5.2.1.1). -/
+  | ivLength (length : Nat)
+  /-- The plaintext or the ciphertext, of `length` bytes, exceeds `2^39 - 256` bits (§5.2.1.1). -/
+  | textLength (length : Nat)
+  /-- The additional data, of `length` bytes, is longer than `2^64 - 1` bits (§5.2.1.1). -/
+  | aadLength (length : Nat)
   /-- The tag does not match (§7.2, step 8). -/
   | authentication
   deriving DecidableEq, Repr
 
 /-- The code of each error, which the bindings report with its message. -/
 def Error.code : Error → UInt32
-  | .tagLength => 1
-  | .shortTag => 2
-  | .ivLength => 3
-  | .textLength => 4
-  | .aadLength => 5
+  | .tagLength .. => 1
+  | .shortTag _ => 2
+  | .ivLength _ => 3
+  | .textLength _ => 4
+  | .aadLength _ => 5
   | .authentication => 6
 
 /-- The supported tag lengths in bytes, for 128, 120, 112, 104 and 96 bits.
@@ -118,11 +128,11 @@ def shortTagLengths : List Nat :=
 
 /-- The length checks of SP 800-38D §5.2.1.1 and §5.2.1.2, all in bits. -/
 def checkLengths (t : Nat) (iv text aad : ByteArray) : Except Error Unit := do
-  if t ∈ shortTagLengths then throw .shortTag
-  unless t ∈ tagLengths do throw .tagLength
-  unless 1 ≤ 8 * iv.size ∧ 8 * iv.size ≤ 2 ^ 64 - 1 do throw .ivLength
-  unless 8 * text.size ≤ 2 ^ 39 - 256 do throw .textLength
-  unless 8 * aad.size ≤ 2 ^ 64 - 1 do throw .aadLength
+  if t ∈ shortTagLengths then throw (.shortTag t)
+  unless t ∈ tagLengths do throw (.tagLength t t)
+  unless 1 ≤ 8 * iv.size ∧ 8 * iv.size ≤ 2 ^ 64 - 1 do throw (.ivLength iv.size)
+  unless 8 * text.size ≤ 2 ^ 39 - 256 do throw (.textLength text.size)
+  unless 8 * aad.size ≤ 2 ^ 64 - 1 do throw (.aadLength aad.size)
 
 /-- The pre-counter block `J_0` of SP 800-38D §7.1, step 2.
 
@@ -177,7 +187,7 @@ The tag length `t` is in bytes. -/
 def decrypt (ciph : Block → Block) (t : Nat) (iv c aad T : ByteArray) : Except Error ByteArray := do
   -- Step 1: the supported lengths, and a tag of `t` bytes.
   checkLengths t iv c aad
-  unless T.size = t do throw .tagLength
+  unless T.size = t do throw (.tagLength t T.size)
   -- Steps 2 and 3: the hash subkey and the pre-counter block.
   let H := ciph zeroBlock
   let J0 := preCounter H iv

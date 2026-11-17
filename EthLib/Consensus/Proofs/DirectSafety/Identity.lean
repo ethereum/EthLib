@@ -49,16 +49,8 @@ theorem selected_vote_key {g a : ForkedBeaconState preset} (run : Run config che
     | block engine signed due ok =>
       rename_i fork before after
       obtain ⟨attestation, _, _, indices, computed, inIndices⟩ := vote
-      have active := mem_getActiveValidatorIndices_of_getAttestingIndices computed inIndices
-      simp only [getActiveValidatorIndices, List.mem_filterMap, List.mem_zipIdx_iff_getElem?,
-        Prod.exists, Option.ite_none_right_eq_some, Option.some.injEq] at active
-      obtain ⟨v, position, found, _, equal⟩ := active
-      have bound : position < before.validators.data.size := by
-        simpa using (List.getElem?_eq_some_iff.mp found).1
-      -- Even a wrapped index is below the position that produced it.
-      have small : i.toNat < before.validators.data.size := by
-        subst equal
-        exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) bound
+      have small := lt_size_of_mem_getActiveValidatorIndices
+        (mem_getActiveValidatorIndices_of_getAttestingIndices computed inIndices)
       exact ⟨before.validators.data[i.toNat], by simp [small]⟩
   obtain ⟨old, oldFound⟩ := atStart
   -- The keys of the state before the step are a prefix of the keys at the end of the run.

@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.Hex
+
 /-!
 # `Secp256r1.Errors`
 
@@ -16,8 +18,10 @@ namespace EthLib.Cryptography.Secp256r1
 inductive Secp256r1Error where
   /-- A public key was not 64 bytes long. -/
   | badPublicKeySize (size : Nat)
-  /-- A coordinate of a public key was `p` or more. -/
-  | coordinateTooLarge
+  /-- A coordinate of a public key, `value`, was `p` or more.
+
+  The key is read `x` first, so `value` is `x` when both coordinates are too large. -/
+  | coordinateTooLarge (value : Nat)
   /-- A hash was not 32 bytes long. -/
   | badHashSize (size : Nat)
   /-- A signature was not 64 bytes long. -/
@@ -27,7 +31,8 @@ deriving DecidableEq, Repr
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
 def Secp256r1Error.message : Secp256r1Error → String
   | .badPublicKeySize size => s!"bad public key size: {size}, expected 64"
-  | .coordinateTooLarge => "bad public key: a coordinate is not below p"
+  | .coordinateTooLarge value =>
+    s!"bad public key: a coordinate is not below p: {Base.hexNat 64 value}"
   | .badHashSize size => s!"bad hash size: {size}, expected 32"
   | .badSignatureSize size => s!"bad signature size: {size}, expected 64"
 
@@ -38,7 +43,7 @@ The code ignores the arguments of the constructor, which the message carries.
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def Secp256r1Error.code : Secp256r1Error → UInt32
   | .badPublicKeySize _ => 1
-  | .coordinateTooLarge => 2
+  | .coordinateTooLarge _ => 2
   | .badHashSize _ => 3
   | .badSignatureSize _ => 4
 

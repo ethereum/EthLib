@@ -33,7 +33,7 @@ REJECTED = [
     # G with y + 1 is off the curve.
     ("04" + GX + GY[:-1] + "9", "point is not on the curve"),
     # x = 2^256 - 1 is not below p.
-    ("02" + "FF" * 32, "point coordinate is not below p"),
+    ("02" + "FF" * 32, "point coordinate is not below p: 0x" + "ff" * 32),
     # x = 0 has no point: 7 is not a square mod p.
     ("02" + "00" * 32, "no point of the curve has this x"),
     # 05 is no prefix.

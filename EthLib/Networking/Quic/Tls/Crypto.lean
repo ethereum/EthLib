@@ -34,21 +34,27 @@ open EthLib.Cryptography
 
 /-- An unsupported algorithm, malformed key, degenerate exchange or exhausted nonce generator. -/
 inductive Error where
-  | group
+  /-- The NamedGroup `group` has no ECDHE backend here (RFC 8446 §4.2.7). -/
+  | group (group : Wire.CodePoint)
+  /-- The private key is not a usable scalar. -/
   | privateKey
+  /-- The peer key share is not a valid public key of its group. -/
   | keyShare
+  /-- The shared secret is degenerate. -/
   | sharedSecret
-  | signatureScheme
+  /-- The SignatureScheme `scheme` has no signing backend here (RFC 8446 §4.2.3). -/
+  | signatureScheme (scheme : Wire.CodePoint)
+  /-- No signing nonce was usable. -/
   | nonce
   deriving Repr, DecidableEq
 
 /-- Stable local error codes for the cryptographic boundary. -/
 def Error.code : Error → UInt32
-  | .group => 1
+  | .group _ => 1
   | .privateKey => 2
   | .keyShare => 3
   | .sharedSecret => 4
-  | .signatureScheme => 5
+  | .signatureScheme _ => 5
   | .nonce => 6
 
 /-- Whether an ECDHE backend implements this NamedGroup, RFC 8446 §4.2.7. -/
@@ -89,7 +95,7 @@ def keyShare (group : Wire.CodePoint) (privateKey : Vector UInt8 32) :
     match Secp256r1.Point.mul scalar .generator with
     | .infinity => throw .privateKey
     | .affine x y => return ⟨(Secp256r1.encodeUncompressed x y).toArray⟩
-  else throw .group
+  else throw (.group group)
 
 /-- Compute ECDHE and reject invalid input or an all-zero X25519 result, RFC 8446 §7.4.2. -/
 def sharedSecret (group : Wire.CodePoint) (privateKey : Vector UInt8 32) (peer : ByteArray) :
@@ -106,7 +112,7 @@ def sharedSecret (group : Wire.CodePoint) (privateKey : Vector UInt8 32) (peer :
     match Secp256r1.Point.mul scalar point with
     | .infinity => throw .sharedSecret
     | .affine x _ => return coordinate x
-  else throw .group
+  else throw (.group group)
 
 /-- Sign CertificateVerify's complete content with P-256/SHA-256, RFC 8446 §4.4.3.
 
@@ -115,7 +121,7 @@ The ECDSA operation is SEC 1 v2 §4.1.3, with the deterministic nonce of RFC 697
 The DER sequence of the signature scalars follows RFC 3279 §2.2.3. -/
 def signCertificateVerify (algorithm : Wire.CodePoint) (privateKey : Vector UInt8 32)
     (content : ByteArray) : Except Error ByteArray := do
-  ensure (algorithm.val = 0x0403) .signatureScheme
+  ensure (algorithm.val = 0x0403) (.signatureScheme algorithm)
   let secret ← readScalar privateKey .privateKey
   match Secp256r1.Ecdsa.sign secret (Hash.Sha256.hash32 content) with
   | none => throw .nonce

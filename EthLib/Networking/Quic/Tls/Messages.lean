@@ -52,16 +52,23 @@ def encodeExtension (extension : Extension) : Except Error (List UInt8) := do
 def uniqueExtensions (extensions : List Extension) : Bool :=
   (extensions.map (·.kind)).eraseDups.length == extensions.length
 
+/-- The first extension type that occurs again later in a block, or 0 when none does. -/
+def repeatedKind : List Extension → CodePoint
+  | [] => ⟨0, by decide⟩
+  | extension :: rest =>
+    if rest.any (·.kind == extension.kind) then extension.kind else repeatedKind rest
+
 /-- Read an extension block, preserving its order and rejecting duplicate types (§4.2). -/
 def readExtensions (minimum : Nat) : Reader (List Extension) := do
   let extensions ← items 2 minimum 65535 readExtension
-  require (uniqueExtensions extensions = true) .duplicateExtension
+  require (uniqueExtensions extensions = true) (.duplicateExtension (repeatedKind extensions))
   return extensions
 
 /-- Encode a block after checking its length and uniqueness (§4.2). -/
 def encodeExtensions (minimum : Nat) (extensions : List Extension) :
     Except Error (List UInt8) := do
-  Base.ensure (uniqueExtensions extensions = true) .duplicateExtension
+  Base.ensure (uniqueExtensions extensions = true)
+    (.duplicateExtension (repeatedKind extensions))
   encodeItems 2 minimum 65535 encodeExtension extensions
 
 /-- The ClientHello fields whose values are not fixed by RFC 8446 §4.1.2.
@@ -201,7 +208,7 @@ def readBody (hashLength : Nat) (kind : UInt8) : Reader Message := do
     let algorithm ← codePoint
     return .certificateVerify algorithm (← blob 2 0 65535).toByteArray
   | 20 => return .finished (← bytes hashLength).toByteArray
-  | _ => throw .messageType
+  | _ => throw (.messageType kind)
 
 /-- Add the type and uint24 body length, RFC 8446 §4. -/
 def frameList (kind : UInt8) (body : List UInt8) : Except Error (List UInt8) := do
@@ -230,7 +237,7 @@ def decodeList (hashLength : Nat) : Reader Message := do
   let (kind, body) ← readFrame
   -- An incomplete field inside an already complete envelope cannot be repaired by more input.
   StateT.lift ((exact (readBody hashLength kind) body).mapError fun
-    | .truncated => .length
+    | .truncated .. => .length
     | error => error)
 
 /-- The ServerHello random that identifies HelloRetryRequest, RFC 8446 §4.1.3. -/

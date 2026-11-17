@@ -43,8 +43,9 @@ def test_out_of_gas(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.p256Verify\n  "
-            "(EthLib.Execution.Evm.Precompiles.P256Verify.P256VerifyError.outOfGas 6900 6899)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.p256Verify "
+            "(EthLib.Execution.Evm.Precompiles.P256Verify.P256VerifyError.outOfGas "
+            "(cost := 6900) (gas := 6899))"
         ),
     ):
         run(fork, 0x100, bytes.fromhex(CASES[0]["Input"]), 6899)

@@ -347,19 +347,22 @@ theorem vector_mapM_eq_ok_iff {n : Nat} {xs : Vector α n} {ys : Vector β n} :
     rw [mapped] at onArray
     exact congrArg Except.ok (Vector.toArray_inj.mp (Except.ok.inj onArray))
 
+/-- Two monadic functions that agree on every element of a list map it to one result.
+
+For `Except`, errors included. -/
+theorem mapM_congr {m : Type → Type} [Monad m] [LawfulMonad m] {xs : List α} {φ g : α → m β}
+    (agree : ∀ x ∈ xs, φ x = g x) : xs.mapM φ = xs.mapM g := by
+  induction xs with
+  | nil => rfl
+  | cons y ys ih =>
+    simp only [List.mapM_cons, agree y (by simp), ih fun x member => agree x (by simp [member])]
+
 /-- Two functions that agree on every entry of a vector map it to one result. -/
 theorem vector_mapM_congr {n : Nat} {xs : Vector α n} {g : α → Except ε β}
     (agree : ∀ (i : Nat) (hi : i < n), f xs[i] = g xs[i]) : xs.mapM f = xs.mapM g := by
-  have onList : ∀ ys : List α, (∀ x ∈ ys, f x = g x) → ys.mapM f = ys.mapM g := by
-    intro ys
-    induction ys with
-    | nil => intro _; rfl
-    | cons y ys ih =>
-      intro same
-      simp only [List.mapM_cons, same y (by simp), ih fun x member => same x (by simp [member])]
   have onArray : Vector.toArray <$> xs.mapM f = Vector.toArray <$> xs.mapM g := by
     rw [Vector.toArray_mapM, Vector.toArray_mapM, Array.mapM_eq_mapM_toList,
-      Array.mapM_eq_mapM_toList, onList]
+      Array.mapM_eq_mapM_toList, mapM_congr]
     intro x member
     rw [Array.mem_toList_iff, Vector.mem_toArray_iff, Vector.mem_iff_getElem] at member
     obtain ⟨i, hi, rfl⟩ := member

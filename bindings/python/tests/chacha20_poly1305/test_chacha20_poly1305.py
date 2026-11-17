@@ -127,7 +127,8 @@ def test_counter_exhaustion() -> None:
     assert len(chacha20_crypt(key, (1 << 32) - 1, nonce, bytes(64))) == 64
     with raises(
         ChaCha20Poly1305Error,
-        "EthLib.Cryptography.ChaCha20Poly1305.ChaCha20Poly1305Error.counterExhausted",
+        "EthLib.Cryptography.ChaCha20Poly1305.ChaCha20Poly1305Error.counterExhausted"
+        f" {(1 << 32) - 1} 65",
     ) as error:
         chacha20_crypt(key, (1 << 32) - 1, nonce, bytes(65))
     assert error.value.code == 1

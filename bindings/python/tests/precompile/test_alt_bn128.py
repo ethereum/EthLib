@@ -53,8 +53,9 @@ def test_absent_before_byzantium(fork: str, address: int) -> None:
 def out_of_gas(cost: int) -> str:
     """The message of a call that has one gas less than its price."""
     return (
-        "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
-        f"(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.outOfGas {cost} {cost - 1})"
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128 "
+        "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.outOfGas "
+        f"(cost := {cost}) (gas := {cost - 1}))"
     )
 
 
@@ -110,16 +111,18 @@ def test_ecadd_errors(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
-            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.notOnCurve)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128 "
+            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.notOnCurve "
+            f"(point := 0x{(word(1) + word(3)).hex()}))"
         ),
     ):
         run(fork, 0x06, word(1) + word(3) + bytes(64), add_price(fork))
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
-            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.invalidFieldElement)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128 "
+            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.invalidFieldElement "
+            f"(value := {bn128.field_modulus}))"
         ),
     ):
         run(fork, 0x06, word(bn128.field_modulus) + word(2) + bytes(64), add_price(fork))
@@ -162,8 +165,9 @@ def test_ecmul_not_on_curve(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
-            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.notOnCurve)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128 "
+            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.notOnCurve "
+            f"(point := 0x{(word(1) + word(3)).hex()}))"
         ),
     ):
         run(fork, 0x07, word(1) + word(3) + word(2), mul_price(fork))
@@ -209,8 +213,9 @@ def test_ecpairing_invalid_length(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
-            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.invalidInputLength 191)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128 "
+            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.invalidInputLength "
+            "(size := 191))"
         ),
     ):
         run(fork, 0x08, bytes(191), 10**6)
@@ -224,8 +229,9 @@ def test_ecpairing_g2_x_is_p(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
-            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.invalidFieldElement)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128 "
+            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.invalidFieldElement "
+            f"(value := {bn128.field_modulus}))"
         ),
     ):
         run(fork, 0x08, bytes(data), pairing_price(fork, 1))
@@ -238,8 +244,9 @@ def test_ecpairing_g2_not_on_curve(fork: str) -> None:
     with raises(
         ValueError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
-            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.notOnCurve)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128 "
+            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.notOnCurve "
+            f"(point := 0x{bytes(data[64:]).hex()}))"
         ),
     ):
         run(fork, 0x08, bytes(data), pairing_price(fork, 1))

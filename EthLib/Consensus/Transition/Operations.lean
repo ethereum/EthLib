@@ -74,7 +74,8 @@ def recordPendingAttestation (state : BeaconState preset fork) (before : fork < 
       ⟨list.data.push pending, by simp only [Array.size_push]; omega⟩
     if current then .ok { state with currentEpochAttestations := fun _ => list }
     else .ok { state with previousEpochAttestations := fun _ => list }
-  else .error .tooManyPendingAttestations
+  else .error (.tooManyPendingAttestations list.data.size
+    (preset.MAX_ATTESTATIONS.toNat * preset.SLOTS_PER_EPOCH.toNat))
 
 /-- From Altair: one flag of one attester, set if the attestation earns it and it is not yet set.
 
@@ -284,7 +285,7 @@ def processAttestationAltair (config : Config) (checks : SignatureChecks)
       (getAttestationParticipationFlagIndices state data (state.slot - data.slot) parentSlot)
     let indexed ← liftAccessor (getIndexedAttestation state attestation)
     let valid ← isValidIndexedAttestation config checks state indexed
-    ensure (valid = true) .invalidAttestation
+    ensure (valid = true) (.invalidAttestation data.slot indexed.attestingIndices.data.size)
     let current := data.target.epoch == currentEpoch
     let participation := if current then state.currentEpochParticipation altair
       else state.previousEpochParticipation altair
@@ -349,11 +350,12 @@ def processAttestation (config : Config) (checks : SignatureChecks)
     let current := data.target.epoch == currentEpoch
     let justified :=
       if current then state.currentJustifiedCheckpoint else state.previousJustifiedCheckpoint
-    ensure (data.source = justified) .wrongAttestationSource
+    ensure (data.source = justified)
+      (.wrongAttestationSource data.source.epoch data.source.root justified.epoch justified.root)
     let updated ← recordPendingAttestation state before current pending
     let indexed ← liftAccessor (getIndexedAttestation updated attestation)
     let valid ← isValidIndexedAttestation config checks updated indexed
-    ensure (valid = true) .invalidAttestation
+    ensure (valid = true) (.invalidAttestation data.slot indexed.attestingIndices.data.size)
     return updated
 
 /-! ## Deposits -/
@@ -420,7 +422,7 @@ def addValidatorToRegistry (state : BeaconState preset fork) (pubkey : BLSPubkey
             fun _ => fits.1
         balances :=
           ⟨state.balances.data.push amount, fun _ => by simp only [Array.size_push]; omega⟩ }
-    else .error .registryFull
+    else .error (.registryFull preset.VALIDATOR_REGISTRY_LIMIT.toNat)
 
 /-- The state after a deposit is credited.
 
@@ -509,7 +511,8 @@ def processDeposit (config : Config) (checks : SignatureChecks) (before : fork <
   let leaf ← liftSsz (hashTreeRoot deposit.data)
   let index := state.eth1DepositIndex before
   ensure (isValidMerkleBranch leaf deposit.proof.toList (DEPOSIT_CONTRACT_TREE_DEPTH.toNat + 1)
-    index.toNat (state.eth1Data before).depositRoot = true) .invalidDepositProof
+    index.toNat (state.eth1Data before).depositRoot = true)
+    (.invalidDepositProof index leaf (state.eth1Data before).depositRoot)
   let next ← liftAccessor (liftArith (addChecked index 1))
   applyDeposit config checks { state with eth1DepositIndex := fun _ => next } deposit.data.pubkey
     deposit.data.withdrawalCredentials deposit.data.amount deposit.data.signature
@@ -605,8 +608,8 @@ def processVoluntaryExit (config : Config) (checks : SignatureChecks)
     checkNoPendingWithdrawal state exit.validatorIndex
     let domain ← voluntaryExitDomain config state exit.epoch
     let signingRoot ← liftSsz (computeSigningRoot exit domain)
-    ensure (checks.verify validator.pubkey (packBytes signingRoot)
-      signed.signature = true) .invalidExitSignature
+    ensure (checks.verify validator.pubkey (packBytes signingRoot) signed.signature = true)
+      (.invalidExitSignature exit.validatorIndex signingRoot)
     liftAccessor (initiateValidatorExit config state exit.validatorIndex)
 
 /-! ## All the operations of a block -/

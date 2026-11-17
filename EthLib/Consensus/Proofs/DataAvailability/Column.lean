@@ -245,7 +245,7 @@ theorem verifyPartialDataColumnSidecarKzgProofs_of_all {preset : Preset} {fork :
       indices.mapM (fun index =>
         if inside : index < commitments.data.size then
           (pure commitments.data[index] : Except Cryptography.Kzg.KzgError _)
-        else throw .commitmentIndexOutOfBounds) =
+        else throw (.commitmentIndexOutOfBounds index commitments.data.size)) =
         pure (indices.map fun i => commitments.data[i]!) := by
     intro indices inside
     induction indices with

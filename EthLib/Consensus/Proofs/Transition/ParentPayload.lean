@@ -46,7 +46,7 @@ theorem processParentExecutionPayload_of_empty_requests {body : BeaconBlockBody 
       (state.latestExecutionPayloadBid gloas).blockHash)
     (requests : (body.parentExecutionRequests gloas).isEmpty gloas = false) :
     processParentExecutionPayload config checks state gloas body =
-      .error .parentRequestsNotEmpty := by
+      .error (.parentRequestsNotEmpty ((body.parentExecutionRequests gloas).count gloas)) := by
   simp [processParentExecutionPayload, empty, requests, ensure, bind, Except.bind]
 
 /-- A parent payload step succeeds only when four lists of requests fit their limits.

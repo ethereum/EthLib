@@ -78,7 +78,14 @@ def test_incomplete_envelope(message: tls.Message, encoded: str) -> None:
     # Every proper prefix ends before the header or before the body length that the header states.
     data = bytes.fromhex(encoded)
     for cut in range(len(data)):
-        with raises(tls.TlsHandshakeError, f"{PREFIX}truncated") as info:
+        # The type byte, the three-byte length, then the body: the error names the cut field.
+        if cut == 0:
+            needed, available = 1, 0
+        elif cut < 4:
+            needed, available = 3, cut - 1
+        else:
+            needed, available = len(data) - 4, cut - 4
+        with raises(tls.TlsHandshakeError, f"{PREFIX}truncated {needed} {available}") as info:
             tls.decode_message(32, data[:cut])
         assert info.value.code == CODES["truncated"]
 
@@ -141,7 +148,7 @@ def test_payload_length_rejected(payload: tls.Payload) -> None:
         ("supported_versions", 43, "00", "length"),
         ("supported_groups", 10, "000100", "length"),
         ("signature_algorithms", 13, "0003040300", "length"),
-        ("selected_version", 43, "030400", "trailing"),
+        ("selected_version", 43, "030400", "trailing 1"),
         ("selected_version", 10, "0304", "constant"),
         ("server_key_share", 51, "00170000", "length"),
         ("client_key_share", 51, "000100", "length"),
@@ -152,27 +159,27 @@ def test_payload_length_rejected(payload: tls.Payload) -> None:
 def test_bad_payload(form: tls.PayloadForm, kind: int, data: str, error: str) -> None:
     with raises(tls.TlsHandshakeError, f"{PREFIX}{error}") as info:
         tls.decode_payload(form, {"kind": kind, "data": bytes.fromhex(data)})
-    assert info.value.code == CODES[error]
+    assert info.value.code == CODES[error.split()[0]]
 
 
 @pytest.mark.parametrize(
     ("encoded", "error"),
     [
-        ("080000030000aa", "trailing"),
+        ("080000030000aa", "trailing 1"),
         ("080000030001aa", "length"),
-        ("0800000a00080039000000390000", "duplicateExtension"),
+        ("0800000a00080039000000390000", "duplicateExtension 57"),
         ("0b000009000000050000000000", "length"),
-        ("ff000000", "messageType"),
+        ("ff000000", "messageType 255"),
         # A peer cannot send the transcript's synthetic message_hash (§4.4.1).
-        ("fe000020" + "00" * 32, "messageType"),
+        ("fe000020" + "00" * 32, "messageType 254"),
         ("1400001f" + "00" * 31, "length"),
-        ("14000021" + "00" * 33, "trailing"),
+        ("14000021" + "00" * 33, "trailing 1"),
     ],
 )
 def test_bad_message(encoded: str, error: str) -> None:
     with raises(tls.TlsHandshakeError, f"{PREFIX}{error}") as info:
         tls.decode_message(32, bytes.fromhex(encoded))
-    assert info.value.code == CODES[error]
+    assert info.value.code == CODES[error.split()[0]]
 
 
 def test_legacy_constants() -> None:
@@ -196,7 +203,7 @@ def test_unknown_extensions_keep_their_order() -> None:
 
 
 def test_duplicate_extension_encoding() -> None:
-    with raises(tls.TlsHandshakeError, f"{PREFIX}duplicateExtension") as info:
+    with raises(tls.TlsHandshakeError, f"{PREFIX}duplicateExtension 57") as info:
         tls.encode_message(32, ("encrypted_extensions", [PARAMETERS, PARAMETERS]))
     assert info.value.code == CODES["duplicateExtension"]
 
@@ -207,7 +214,7 @@ def test_duplicate_extension_type_with_different_data() -> None:
         {"kind": 0xAAAA, "data": bytes([0xAB])},
         {"kind": 0xAAAA, "data": bytes([0xCD])},
     ]
-    error = f"{PREFIX}duplicateExtension"
+    error = f"{PREFIX}duplicateExtension {0xAAAA}"
     with raises(tls.TlsHandshakeError, error) as info:
         tls.encode_message(32, ("encrypted_extensions", extensions))
     assert info.value.code == CODES["duplicateExtension"]

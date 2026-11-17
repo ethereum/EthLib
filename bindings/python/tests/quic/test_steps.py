@@ -541,7 +541,7 @@ def test_server_requires_handshake_extensions(kind: int) -> None:
     replace_extension(hello[1]["extensions"], kind, None)
     # RFC 8446 Appendix D.2: an offer without supported_versions is a TLS 1.2 offer.
     expected, code = {16: ("noApplicationProtocol", 0x178), 43: ("protocolVersion", 0x146)}.get(
-        kind, ("missingExtension", 0x16D)
+        kind, (f"missingExtension {kind}", 0x16D)
     )
     with raises(hs.TlsStepError, PREFIX + expected) as error:
         hs.server_step(server_config, hs.server_start(server_config), message("initial", hello))
@@ -688,7 +688,8 @@ def test_client_rejects_a_client_hello_instead_of_server_hello() -> None:
     ("change", "expected", "code"),
     [
         ("context", "illegalParameter", 0x12F),
-        ("no_signature_algorithms", "missingExtension", 0x16D),
+        # The missing extension is signature_algorithms, type 13.
+        ("no_signature_algorithms", "missingExtension 13", 0x16D),
         ("no_common_scheme", "handshakeFailure", 0x128),
         ("misplaced_extension", "illegalParameter", 0x12F),
     ],
@@ -961,7 +962,8 @@ def test_psk_offer_requires_modes_and_valid_framing(modes: list[int] | None) -> 
     if modes is not None:
         hello[1]["extensions"].append({"kind": 45, "data": bytes(modes)})
     hello[1]["extensions"].append({"kind": 41, "data": b""})
-    expected, code = ("missingExtension", 0x16D) if modes is None else ("decodeError", 0x132)
+    # Without psk_key_exchange_modes, type 45, the PSK offer misses an extension.
+    expected, code = ("missingExtension 45", 0x16D) if modes is None else ("decodeError", 0x132)
     with raises(hs.TlsStepError, PREFIX + expected) as error:
         hs.server_step(server_config, hs.server_start(server_config), message("initial", hello))
     assert error.value.code == code
@@ -1007,7 +1009,9 @@ def test_client_requires_alpn_and_quic_parameters(kind: int) -> None:
     encrypted = decoded(flight[1])
     assert encrypted[0] == "encrypted_extensions"
     replace_extension(encrypted[1], kind, None)
-    expected, code = ("noApplicationProtocol", 0x178) if kind == 16 else ("missingExtension", 0x16D)
+    expected, code = (
+        ("noApplicationProtocol", 0x178) if kind == 16 else (f"missingExtension {kind}", 0x16D)
+    )
     with raises(hs.TlsStepError, PREFIX + expected) as error:
         hs.client_step(
             client_config, SERVER_PEER_ID, client["state"], message("handshake", encrypted)
@@ -1020,7 +1024,7 @@ def test_client_rejects_a_response_to_an_unoffered_extension() -> None:
     encrypted = decoded(flight[1])
     assert encrypted[0] == "encrypted_extensions"
     encrypted[1].append({"kind": 0xAAAA, "data": b""})
-    with raises(hs.TlsStepError, PREFIX + "unsupportedExtension") as error:
+    with raises(hs.TlsStepError, PREFIX + f"unsupportedExtension {0xAAAA}") as error:
         hs.client_step(
             client_config, SERVER_PEER_ID, client["state"], message("handshake", encrypted)
         )
@@ -1069,7 +1073,7 @@ COOKIE: tls.Extension = {"kind": 44, "data": bytes([0, 1, 7])}
         # RFC 8446 §4.1.4: an extension that the client did not offer is unsupported_extension.
         pytest.param(
             [COOKIE, {"kind": 0xAAAA, "data": b""}],
-            "unsupportedExtension",
+            f"unsupportedExtension {0xAAAA}",
             0x16E,
             id="unoffered-extension",
         ),
@@ -1166,7 +1170,8 @@ CERTIFICATE_CASES = [
     # RFC 8446 §4.4.2: the context of a handshake Certificate is empty.
     pytest.param("context", "illegalParameter", 0x12F, id="context"),
     # RFC 8446 §4.4.2: an entry extension answers one that the receiver offered.
-    pytest.param("entry_extension", "unsupportedExtension", 0x16E, id="entry-extension"),
+    # The entry carries status_request, type 5.
+    pytest.param("entry_extension", "unsupportedExtension 5", 0x16E, id="entry-extension"),
 ]
 
 

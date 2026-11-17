@@ -60,18 +60,31 @@ open EthLib.Base (ensure)
 
 /-- Certificate parsing or a required libp2p authentication check failed. -/
 inductive TlsCertError where
+  /-- The DER reader rejected the bytes. -/
   | der (error : Der.Error)
+  /-- A DER value does not have the shape that X.509 gives its place (RFC 5280 §4.1). -/
   | certificate
-  | validity
-  | chain
+  /-- The time `now` is outside the validity period from `notBefore` to `notAfter`. -/
+  | validity (now : Nat) (notBefore notAfter : Int)
+  /-- The chain holds `count` certificates, not exactly one. -/
+  | chain (count : Nat)
+  /-- The certificate has no libp2p extension. -/
   | missingExtension
-  | duplicateExtension
-  | criticalExtension
+  /-- The extension with the OID bytes `oid` occurs more than once. -/
+  | duplicateExtension (oid : List UInt8)
+  /-- The extension with the OID bytes `oid` is critical, and only the libp2p one is understood. -/
+  | criticalExtension (oid : List UInt8)
+  /-- A unique identifier is present, and the policy rejects it. -/
   | uniqueId
+  /-- An algorithm is unsupported, disabled by the policy, or inconsistent in the certificate. -/
   | algorithm
+  /-- A public key is not a valid key of its type. -/
   | publicKey
+  /-- The self-signature of the certificate does not verify. -/
   | selfSignature
+  /-- The host signature of the libp2p extension does not verify. -/
   | hostSignature
+  /-- The certificate authenticates another peer than the expected one. -/
   | peerId
   deriving Repr, DecidableEq
 
@@ -79,17 +92,22 @@ inductive TlsCertError where
 def TlsCertError.code : TlsCertError → UInt32
   | .der _ => 1
   | .certificate => 2
-  | .validity => 3
-  | .chain => 4
+  | .validity .. => 3
+  | .chain _ => 4
   | .missingExtension => 5
-  | .duplicateExtension => 6
-  | .criticalExtension => 7
+  | .duplicateExtension _ => 6
+  | .criticalExtension _ => 7
   | .uniqueId => 8
   | .algorithm => 9
   | .publicKey => 10
   | .selfSignature => 11
   | .hostSignature => 12
   | .peerId => 13
+
+/-- The first value of a list that occurs again later in it, if any. -/
+def firstRepeated : List (List UInt8) → Option (List UInt8)
+  | [] => none
+  | oid :: rest => if oid ∈ rest then some oid else firstRepeated rest
 
 /-- Lift a DER reader's error to the certificate boundary. -/
 def der {α : Type} (value : Except Der.Error α) : Except TlsCertError α :=
@@ -218,7 +236,9 @@ def readTail (version : Nat) (tail : List Der.Value) :
       let values ← fields 0x30 sequence
       ensure (values ≠ []) .certificate
       let extensions ← values.mapM readExtension
-      ensure ((extensions.map (·.oid)).Nodup) .duplicateExtension
+      -- When the check fails, some OID repeats, so the error names a real OID.
+      ensure ((extensions.map (·.oid)).Nodup)
+        (.duplicateExtension ((firstRepeated (extensions.map (·.oid.data.toList))).getD []))
       pure extensions
     | _ => throw .certificate
   return (issuer, subject, extensions)
@@ -335,18 +355,24 @@ def readSignedKey (bytes : ByteArray) : Except TlsCertError (ByteArray × ByteAr
     return (key.content, signature.content)
   | _ => throw .certificate
 
+/-- The OID bytes of the first critical extension other than the libp2p one, or else `[]`. -/
+def criticalOid (extensions : List Extension) : List UInt8 :=
+  ((extensions.find? fun ext => ext.critical && !(ext.oid == libp2pOid)).map
+    (·.oid.data.toList)).getD []
+
 /-- Find the libp2p extension after rejecting every other critical extension.
 
 No other extension is understood here.
 
 libp2p TLS "Peer Authentication" requires an abort on a critical extension not understood. -/
 def signedKey (certificate : Certificate) : Except TlsCertError (ByteArray × ByteArray) := do
+  -- When the check fails, some extension is critical, so the error names its real OID.
   ensure (certificate.extensions.all (fun ext => !ext.critical || ext.oid == libp2pOid))
-    .criticalExtension
+    (.criticalExtension (criticalOid certificate.extensions))
   match certificate.extensions.filter (fun ext => ext.oid == libp2pOid) with
   | [] => throw .missingExtension
   | [extension] => readSignedKey extension.value
-  | _ => throw .duplicateExtension
+  | _ => throw (.duplicateExtension libp2pOid.data.toList)
 
 /-- The message the host key signs: `libp2p-tls-handshake:`, then the certificate's SPKI. -/
 def hostMessage (spki : ByteArray) : ByteArray := "libp2p-tls-handshake:".toUTF8 ++ spki
@@ -388,7 +414,8 @@ The only implemented self-signature backend is P-256/SHA-256, with absent parame
 The caller's policy must explicitly enable it. -/
 def authenticateCertificate (policy : Policy) (now : Nat) (certificate : Certificate) :
     Except TlsCertError AuthenticatedPeer := do
-  ensure (certificate.notBefore ≤ Int.ofNat now ∧ Int.ofNat now ≤ certificate.notAfter) .validity
+  ensure (certificate.notBefore ≤ Int.ofNat now ∧ Int.ofNat now ≤ certificate.notAfter)
+    (.validity now certificate.notBefore certificate.notAfter)
   ensure (policy.rejectUniqueIds = false ∨
     (certificate.issuerUniqueId = false ∧ certificate.subjectUniqueId = false)) .uniqueId
   ensure (.p256Sha256 ∈ policy.certificateAlgorithms ∧
@@ -405,7 +432,7 @@ def authenticate (policy : Policy) (now : Nat) (chain : List ByteArray) :
     Except TlsCertError AuthenticatedPeer := do
   match chain with
   | [bytes] => authenticateCertificate policy now (← readCertificate bytes)
-  | _ => throw .chain
+  | _ => throw (.chain chain.length)
 
 /-- A dialer also checks the intended peer ID, libp2p TLS "libp2p Public Key Extension". -/
 def authenticatePeer (policy : Policy) (now : Nat) (expected : ByteArray)

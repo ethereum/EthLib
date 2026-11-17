@@ -128,7 +128,7 @@ def computeMinEpochsForBlockRequestsExport (args : PyValue) : Result PyValue :=
 def protocolAtFork (fork : Fork) (text : String) : Result ProtocolId := do
   let some id := ProtocolId.parse? text | throw (0, s!"{text} names no protocol")
   unless (protocolIds fork).contains id do
-    throw (BoundsError.notAtFork.code, s!"{text} is not a protocol of {fork.name}")
+    throw (BoundsError.notAtFork text fork).fault
   return id
 
 /-- The smallest and the largest length of a request payload. -/
@@ -139,7 +139,7 @@ def reqRespRequestBoundsOf (args : String × String × String) : Result (Nat × 
   let fork ← forkUpTo .hegota fork.toUTF8
   let id ← protocolAtFork fork protocol
   let some (low, high) := requestBounds preset config fork id
-    | throw (BoundsError.noRequest.code, s!"{id.toString} carries no request")
+    | throw (BoundsError.noRequest id.toString).fault
   return (low.toNat, high.toNat)
 
 /-- The smallest and the largest length of a request payload, as a pair.
@@ -158,9 +158,9 @@ def reqRespResponseBoundsOf (args : String × String × String) : Result (Nat ×
   let config ← configOf name
   let fork ← forkUpTo .hegota chunkFork.toUTF8
   let id ← protocolAtFork fork protocol
-  -- Every version that a fork defines has a response type.
+  -- Every version that a fork defines has a response type, so this case is unreachable.
   let some (low, high) := responseBounds preset config fork id
-    | throw (BoundsError.notAtFork.code, s!"{id.toString} has no response at {fork.name}")
+    | throw (BoundsError.notAtFork id.toString fork).fault
   return (low.toNat, high.toNat)
 
 /-- The smallest and the largest length of the payload of a successful response chunk, as a pair.
