@@ -146,6 +146,58 @@ def test_blocks_by_root(items: list[ResponseBlock], valid: bool, version: int) -
     assert consensus.reqresp_is_valid_response("pectra", protocol, A + B, items) is valid
 
 
+# Blocks by head: the root C and a count of 3.
+# A block is its slot, parent root and root, and the response walks back from the block at C.
+
+BLOCKS_BY_HEAD = C + _u64(3)
+
+D = _root(0xD)
+
+
+def _ancestry(head_slot: int, length: int) -> list[ResponseBlock]:
+    # Blocks at descending slots from the head, each the parent of the one before it.
+    return [(head_slot - i, _root(i + 1), _root(i)) for i in range(length)]
+
+
+@pytest.mark.parametrize(
+    "items, valid",
+    [
+        pytest.param([], True, id="empty"),
+        pytest.param([(20, B, C)], True, id="head-only"),
+        pytest.param([(20, B, C), (18, A, B)], True, id="parent-linked"),
+        pytest.param([(20, B, C), (18, A, B), (9, D, A)], True, id="full-count"),
+        pytest.param([(20, B, A)], False, id="other-head"),
+        pytest.param([(18, A, B)], False, id="starts-below-head"),
+        pytest.param([(20, B, C), (18, A, D)], False, id="parent-not-linked"),
+        pytest.param([(20, B, C), (21, A, B)], False, id="slots-ascend"),
+        pytest.param([(20, B, C), (20, A, B)], False, id="slot-repeats"),
+        pytest.param([(20, B, C), (18, A, B), (9, D, A), (5, C, D)], False, id="over-count"),
+    ],
+)
+def test_blocks_by_head(items: list[ResponseBlock], valid: bool) -> None:
+    protocol = _id("beacon_blocks_by_head")
+    assert consensus.reqresp_is_valid_response("fusaka", protocol, BLOCKS_BY_HEAD, items) is valid
+
+
+@pytest.mark.parametrize("fork", ["fusaka", "glamsterdam", "hegota"])
+def test_blocks_by_head_request_limit(fork: str) -> None:
+    # A count of 200 blocks allows more than the request limit of 128.
+    request, protocol = _root(0) + _u64(200), _id("beacon_blocks_by_head")
+    assert consensus.reqresp_is_valid_response(fork, protocol, request, _ancestry(1000, 128))
+    over = _ancestry(1000, 129)
+    assert not consensus.reqresp_is_valid_response(fork, protocol, request, over)
+
+
+def test_blocks_by_head_slots_descend_along_the_list() -> None:
+    # The second block may be at any lower slot, and the third must be lower still.
+    protocol = _id("beacon_blocks_by_head")
+    request = _root(0) + _u64(3)
+    gap = [(100, _root(1), _root(0)), (50, _root(2), _root(1)), (49, _root(3), _root(2))]
+    assert consensus.reqresp_is_valid_response("fusaka", protocol, request, gap)
+    back = [(100, _root(1), _root(0)), (50, _root(2), _root(1)), (60, _root(3), _root(2))]
+    assert not consensus.reqresp_is_valid_response("fusaka", protocol, request, back)
+
+
 # Light client updates by range: start period 1500, count 4, so periods 1500 to 1503.
 # Each update is the slot of its attested header and the fork of its chunk.
 # Periods 1422 to 1606 are those of Electra, whose fork is named pectra.
@@ -525,7 +577,7 @@ def test_committee_read_only_for_inclusion_lists() -> None:
         ("pectra", _id("metadata", 2)),
         ("pectra", _id("goodbye")),
         ("pectra", _id("light_client_bootstrap")),
-        ("fusaka", _id("beacon_blocks_by_head")),
+        ("pectra", _id("light_client_finality_update")),
     ],
 )
 def test_protocol_without_check(fork: str, protocol: str) -> None:

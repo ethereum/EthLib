@@ -207,6 +207,9 @@ def reqRespResponseValidOf
   | .beaconBlocksByRoot =>
     return isValidBlocksByRootResponse
       (← decodeRequest (BeaconBlocksByRootRequest config fork) request) (← block items)
+  | .beaconBlocksByHead =>
+    return isValidBlocksByHeadResponse config
+      (← decodeRequest BeaconBlocksByHeadRequest request) (← block items)
   | .lightClientUpdatesByRange =>
     let request ← decodeRequest LightClientUpdatesByRangeRequest request
     let fields ← decodeItems (Slot × String) (fun fields => fields) items
