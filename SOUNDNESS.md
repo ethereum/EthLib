@@ -3042,14 +3042,18 @@ A common state must be no later than the head state and within one seed lookahea
 The headlines assume `NewlyActiveVotersInHeadWindow` instead, which that premise implies.
 It asks only about a vote two epochs after the parent of the tested block, whose voter became active at the vote's target epoch.
 Such a voter must lie in the head's window, from the slot after the parent to the slot before the current one.
-It fails only when the head state's shuffling places such a voter at or after the current slot.
+It can fail when the head state's shuffling places such a voter at or after the current slot, or when the head's branch has not activated it at that epoch.
 Every other voter lies in the window by a proof (`Execution.votersInHeadWindow_of_newlyActive`), since the window holds the whole epoch before the target.
-If the rule's window weight also counted one epoch's activation churn, the premise would go.
+A proposed follow-up, not part of these theorems, would remove it: a rule change whose window weight also counts one epoch's activation churn.
 
-`SourceWindowReads` assumes that each later window read also succeeds with the caller's source state as the balance source.
-A window that holds no whole epoch reads each member's balance in that state.
-So it holds while every member of a later window is in the source state's registry.
-It fails when such a window has a member that the source state does not yet hold, such as a validator deposited after it.
+`SourceWindowReads` assumes two reads in the caller's source state.
+Each later window weight that a receiver computes with its own balances must also compute with the source state's.
+The source state's proposer score must also compute.
+A window that holds no whole epoch reads the validator record of each member in the source state.
+It sums the balances of the members active there.
+One way the premise fails is such a member that the source state does not hold, such as a validator deposited after it.
+The reads also fail on Gwei overflow, in the window's total or in the proposer score.
+So it holds, barring overflow, when every member of each such window is in the source state.
 
 `ReceiverWindowExitsNear` asks the exit bound only of receivers within two epochs of the parent, where every step reads it.
 The former premise asked the same bound of every receiver up to the horizon.
