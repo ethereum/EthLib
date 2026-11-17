@@ -96,7 +96,15 @@ def AssignmentWindowAgreement (last : Nat) : Prop :=
     ∀ v ∈ J, v ∈ participants ↔ ∃ slot committeeIndex, first ≤ slot ∧ slot ≤ finish ∧
       assignment.committee v slot = some committeeIndex
 
-/-- Each later successful window read also succeeds with the source state's weights and boost. -/
+/-- Each later successful window read also succeeds with the source state's weights and boost.
+
+A window that holds no whole epoch reads the balance of each of its members in the source state.
+
+So it holds while every member of a later window is in the registry of the source state.
+
+It fails when such a window has a member that the source state does not yet hold.
+
+A validator deposited after the source state and active in a later window is one. -/
 def SourceWindowReads (call last : Nat) (source : BeaconState preset fork) : Prop :=
   ∀ w ∈ J, ∀ k (head : ForkChoiceNode) state current first finish maximum,
     (e.world call).time ≤ (e.world k).time → (e.world k).time ≤ last →
@@ -114,7 +122,17 @@ def HonestStoreEpochsBounded (horizon : Epoch) (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ last →
     ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon
 
-/-- Recent vote targets and the actual head have a common committee-preserving history. -/
+/-- Recent vote targets and the actual head have a common committee-preserving history.
+
+It fails on ordinary runs.
+
+Take an epoch with no block, and then a vote with the current target.
+
+A common state must be no later than the head state and within one seed lookahead of the target.
+
+No state is both.
+
+The headlines assume `NewlyActiveVotersInHeadWindow` instead, which this premise implies. -/
 def VoteCommitteeCommonHistory (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
     ∀ (head : ForkChoiceNode) headState current v (attestation : Attestation preset fork)
@@ -414,6 +432,12 @@ A receiver is near when its store epoch is at most two epochs after `parentEpoch
 
 It is asked only of these receivers, where every step of the historical-anchor proof reads it.
 
+`ReceiverWindowExits` asks the bound of every receiver up to the horizon.
+
+A receiver several epochs past the parent has several epochs of exits in its window.
+
+They count against one reserve, so that form fails while validators keep exiting.
+
 The duty-epoch step, which covers later receivers, does not read it. -/
 def ReceiverWindowExitsNear (parentEpoch : Epoch) (source : BeaconState preset fork)
     (firstSlot : Slot) (first last : Nat) : Prop :=
@@ -427,14 +451,6 @@ def ReceiverWindowExitsNear (parentEpoch : Epoch) (source : BeaconState preset f
     WindowExitBound (config := config) ((e.world k).state w) source head.root firstSlot finish
 
 omit [DecidablePred (· ∈ J)] in
-/-- `ReceiverWindowExits` gives the bound for near receivers, at any parent epoch. -/
-theorem receiverWindowExitsNear_of_exits {parentEpoch : Epoch}
-    {source : BeaconState preset fork} {firstSlot : Slot} {first last : Nat}
-    (exits : ReceiverWindowExits (e := e) source firstSlot first last) :
-    ReceiverWindowExitsNear (e := e) parentEpoch source firstSlot first last :=
-  fun w hw k head current finish _ lowK highK upToDate headOk currentOk finishOk _ _ =>
-    exits w hw k head current finish lowK highK upToDate headOk currentOk finishOk
-
 open Classical in
 /-- The honest duties of one complete epoch outweigh the rest of the stake and the boost.
 
