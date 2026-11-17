@@ -18,8 +18,8 @@ namespace EthLib.Base
 inductive ArithError where
   /-- The result is `2^64` or more. -/
   | overflow
-  /-- The result is below zero. -/
-  | underflow
+  /-- The difference `minuend - subtrahend` is below zero, as `subtrahend` is the larger. -/
+  | underflow (minuend subtrahend : UInt64)
   /-- The divisor is zero. -/
   | divisionByZero
   deriving DecidableEq, Repr
@@ -32,7 +32,7 @@ def addChecked (a b : UInt64) : Except ArithError UInt64 :=
 
 /-- `a - b`, an underflow if `b > a`. -/
 def subChecked (a b : UInt64) : Except ArithError UInt64 :=
-  if b ≤ a then .ok (a - b) else .error .underflow
+  if b ≤ a then .ok (a - b) else .error (.underflow a b)
 
 /-- `a * b`, an overflow if the product is `2^64` or more. -/
 def mulChecked (a b : UInt64) : Except ArithError UInt64 :=

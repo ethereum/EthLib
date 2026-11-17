@@ -21,7 +21,8 @@ theorem decodeSextet_encodeSextet : ∀ v : Fin 64, decodeSextet (encodeSextet v
   decide
 
 /-- The character of a value below 64 reads back as that value. -/
-theorem readSextet_encodeSextet (v : Nat) (h : v < 64) : readSextet (encodeSextet v) = .ok v := by
+theorem readSextet_encodeSextet {position : Nat} (v : Nat) (h : v < 64) :
+    readSextet position (encodeSextet v) = .ok v := by
   simp only [readSextet, decodeSextet_encodeSextet ⟨v, h⟩]
 
 /-- A byte is the byte of its value. -/
@@ -29,7 +30,8 @@ private theorem ofNat_eq (b : UInt8) (n : Nat) (h : n = b.toNat) : UInt8.ofNat n
   rw [h, UInt8.ofNat_toNat]
 
 /-- The decoder undoes the encoder, three bytes at a time. -/
-theorem decodeList_encodeList : (bytes : List UInt8) → decodeList (encodeList bytes) = .ok bytes
+theorem decodeList_encodeList {start : Nat} :
+    (bytes : List UInt8) → decodeList start (encodeList bytes) = .ok bytes
   | b0 :: b1 :: b2 :: rest => by
     have h0 := b0.toNat_lt
     have h1 := b1.toNat_lt
@@ -108,7 +110,8 @@ theorem encodeSextet_of_decodeSextet {c : Char} {v : Nat} (h : decodeSextet c = 
   · cases h
 
 /-- A character that reads as a value is the character of that value. -/
-theorem encodeSextet_of_readSextet {c : Char} {v : Nat} (h : readSextet c = .ok v) :
+theorem encodeSextet_of_readSextet {position : Nat} {c : Char} {v : Nat}
+    (h : readSextet position c = .ok v) :
     v < 64 ∧ encodeSextet v = c := by
   unfold readSextet at h
   split at h
@@ -146,8 +149,8 @@ private theorem encodeList_one (n : Nat) (hn : n < 2 ^ 24) (hz : n % 2 ^ 16 = 0)
   rw [show n / 2 ^ 16 % 256 * 2 ^ 16 = n by omega]
 
 /-- The encoder writes back every list of characters that the decoder accepts. -/
-theorem encodeList_decodeList :
-    (text : List Char) → (bytes : List UInt8) → decodeList text = .ok bytes →
+theorem encodeList_decodeList {start : Nat} :
+    (text : List Char) → (bytes : List UInt8) → decodeList start text = .ok bytes →
       encodeList bytes = text
   | c0 :: c1 :: c2 :: c3 :: rest, bytes, h => by
     simp only [decodeList, bind, Except.bind, pure, Except.pure] at h

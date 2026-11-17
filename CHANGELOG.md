@@ -52,6 +52,16 @@ Not yet released.
   - `Protobuf.ProtobufError.truncated` carries the bytes needed and the bytes left.
   - A nested error now starts on a new line of the message when the longer message no longer fits one line.
 
+- In Lean, `Base.ArithError.underflow` carries its operands, `underflow minuend subtrahend`, so a failed subtraction names the two values it compared.
+  `Base.Uint64.subChecked a b` fails with `.underflow a b`.
+  `overflow` and `divisionByZero` keep no fields.
+
+- In Lean, `Base.Base64.Base64Error` names where the decoder stopped, counting the characters of the text from 0.
+  `invalidChar position c` adds the position of the character, `invalidLength length` carries the length of the text, and `nonZeroPadBits position c` carries the last character and its position.
+  `Base64.readSextet` takes the position of its character, and `Base64.decodeList` the position of its first character, as a new first argument; `Base64.decode` starts at 0.
+  The ENR text decoder starts after the four characters of `enr:`, so its positions count the whole text.
+  The lemmas `readSextet_encodeSextet`, `decodeList_encodeList`, `encodeSextet_of_readSextet` and `encodeList_decodeList` hold at every starting position, an implicit argument.
+
 - In Lean, every node of a Merkle tree has a `Merkle.Position`, its level and its index, and the tree passes positions instead of a level and an index.
   The node hash has type `Position → α → α → m α`; it had type `Nat → Nat → α → α → m α`, with the level first.
   `Merkle.node hash leaves ⟨level, j⟩`, `Merkle.siblings hash leaves p n`, `Merkle.ordered p` and `Merkle.climb hash p current siblings` take a position; `Merkle.root` and `Merkle.path` keep their arguments.

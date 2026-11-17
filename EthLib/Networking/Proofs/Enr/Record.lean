@@ -180,18 +180,11 @@ theorem fromText_toText (r : Enr) (text : String) (bytes : ByteArray) (he : r.en
     fromText text = .ok r := by
   simp only [Enr.toText, he, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at ht
   subst ht
-  have hdec := Base64.decode_encode bytes
-  simp only [Base64.decode, bind, Except.bind, pure, Except.pure] at hdec
   unfold fromText
   simp only [String.toList_append, String.toList_ofList, TEXT_PREFIX, List.cons_append,
-    List.nil_append]
-  split at hdec
-  · cases hdec
-  rename_i list hlist
-  simp only [Except.ok.injEq] at hdec
-  simp only [Base64.encode, String.toList_ofList] at hlist
-  simp only [Base64.encode, String.toList_ofList, hlist, Except.mapError, bind, Except.bind,
-    hdec, decode_encode r bytes he hs hk hid]
+    List.nil_append, Base64.encode, Base64.decodeList_encodeList, Except.mapError, bind,
+    Except.bind]
+  simpa using decode_encode r bytes he hs hk hid
 
 /-! ## Canonical encodings -/
 
@@ -260,7 +253,7 @@ theorem toText_of_fromText {text : String} {r : Enr} (h : fromText text = .ok r)
   unfold fromText at h
   split at h
   · rename_i rest htext
-    cases hb : Base64.decodeList rest with
+    cases hb : Base64.decodeList TEXT_PREFIX.length rest with
     | error e => simp [hb, Except.mapError, bind, Except.bind] at h
     | ok bytes =>
       simp only [hb, Except.mapError, bind, Except.bind] at h
