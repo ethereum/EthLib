@@ -1020,4 +1020,337 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
           (leaf w receiver k nodes lowK highK upToDate tree))
     exits late
 
+
+/-- The root of a checked call is viable at each time from the call, or an alternative holds.
+
+At each time T of the interval, the root's coverage before T gives its viability at T.
+
+The alternatives are a collision, historical or cross-store evidence, and held-state evidence.
+
+The root is held from the call on, from the honest vote behind the caller's margin.
+
+The root's realized justification is recent: the call's epoch is at most one after the start's.
+
+The root is above the start on the walk, and its own epoch is at most one after its justification.
+
+The viability at each time then follows from the root's step over the call's interval. -/
+private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J)] {Δ : ℕ}
+    (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (preGloas : fork < .glamsterdam) {time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
+    (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
+    (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
+    (fit : config.CommitteeWindowsFit preset)
+    {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
+      ((e.world n).state u))
+    {root : Root} {source : BeaconState preset fork}
+    {slot first last : Slot} {block parent : BeaconBlock preset fork} {boost maximum : Gwei}
+    (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot) {begin : UInt64}
+    (beginOk : computeTimeAtSlotMs config genesisTimeMs slot = .ok begin)
+    (timeEq : (e.world n).time = begin.toNat)
+    (blockOk : ((e.world n).state u).block root = .ok block)
+    (parentOk : ((e.world n).state u).block block.parentRoot = .ok parent)
+    (firstOk : addChecked parent.slot 1 = .ok first) (lastOk : subChecked slot 1 = .ok last)
+    {head : ForkChoiceNode}
+    (maximumOk : ((e.world n).state u).computeCommitteeWeightBetweenSlots head.root source first
+      last = .ok maximum)
+    {shift : ℕ} {support discount adversary : Gwei} (registry : source.RegistryWithinLimit)
+    (aligned : EffectiveBalancesAligned source)
+    (increment : preset.EFFECTIVE_BALANCE_INCREMENT.toNat % 100 = 0)
+    (supportOk : ((e.world n).state u).scoreFromTally (((e.world n).state u).tallyVotes source)
+      ⟨root, .pending⟩ = .ok support)
+    (discountOk : ((e.world n).state u).computeEmptySlotSupportDiscount config head.root source
+      root = .ok discount)
+    (adversaryOk : ((e.world n).state u).getAdversarialWeight config head.root source root =
+      .ok adversary)
+    (marginLt : maximum.toNat + boost.toNat + 2 * adversary.toNat + shift <
+      discount.toNat + 2 * support.toNat)
+    (callerTime : (e.world n).time ≤ time)
+    {finish : Slot}
+    (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) head.root
+      source first finish)
+    {x : ValidatorIndex} (reference : x ∈ J) {m : ℕ} (referenceTime : time ≤ (e.world m).time)
+    (referenceUpToDate : UpToDate config checks sources (e.world m).time ((e.world m).view x)
+      ((e.world m).state x))
+    {referenceSlot : Slot}
+    (referenceSlotOk : ((e.world m).state x).getCurrentSlot config = .ok referenceSlot)
+    (finishOk : subChecked referenceSlot 1 = .ok finish)
+    {horizon : Epoch}
+    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time)
+    (unslashed : HonestCountedStatesUnslashed (e := e) time)
+    (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) time)
+    (enough : HeldRunStakeFloor (e := e) pre horizon time)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon time)
+    (headDescends : ((e.world n).state u).isAncestor ⟨head.root, .pending⟩ ⟨root, .pending⟩ =
+      .ok true)
+    {historical : Root} {callerEpoch historicalEpoch : Epoch}
+    (historicalBelow : ((e.world n).state u).isAncestor ⟨block.parentRoot, .pending⟩
+      ⟨historical, .pending⟩ = .ok true)
+    (callerEpochOk : ((e.world n).state u).getCurrentStoreEpoch config = .ok callerEpoch)
+    (historicalEpochOk : ((e.world n).state u).getBlockEpoch historical = .ok historicalEpoch)
+    (near : callerEpoch.toNat ≤ historicalEpoch.toNat + 1)
+    (absent : AnchorParentAbsent (e := e) time)
+    {anchorEpoch : Epoch} {margin : ℕ}
+    (anchorEpochOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
+    (pinned : JustifiedPinned (e := e) anchorEpoch margin 0 time)
+    (signedAll : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
+    (included : TargetIncluded (e := e) time)
+    (quorumDrift : QuorumDriftWithin (e := e) horizon time)
+    (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    {fcr : FastConfirmationStore} {startRoot : Root} {chain later : List Root}
+    (headOk : ((e.world n).state u).getHead config = .ok head)
+    (inputs : CallCheckpointInputs (e := e) margin anchor.finalizedCheckpoint.root u n fcr
+      head startRoot root)
+    (walked : ((e.world n).state u).getAncestorRoots head.root startRoot =
+      .ok (chain ++ root :: later))
+    (realized : AcceptedRealizedRecent ((e.world n).state u) (chain ++ [root]))
+    (realizedHead : AcceptedRealizedHead ((e.world n).state u) config head.root (chain ++ [root]))
+    (startCovers : HonestHeadsCover (e := e) startRoot (e.world n).time (time + 1))
+    (rollover : CallRolloverRead (e := e) u n head.root time) :
+    (∀ T, (e.world n).time ≤ T → T ≤ time →
+      HonestHeadsCover (e := e) root (e.world n).time T → RootViableAt (e := e) root T) ∨
+      HonestCollision (e := e) time ∨ HistoricalDirectSafetyEvidence (e := e) pre time ∨
+      CrossStoreJustifiedEvidence (e := e) pre time ∨
+        HeldStateFinalityEvidence (e := e) pre time := by
+  -- Selected checkpoints agree across honest stores, or the justified evidence holds.
+  rcases e.selectedCheckpointsAgree_or_evidence anchored start anchorSlot roots absent parameters
+      genesis pre heldEarly enough terminal with selected | crossJustified
+  swap
+  · exact .inr (.inr (.inr (.inl crossJustified)))
+  -- Honest stores agree on blocks, or two collide.
+  rcases Store.blocks_agree_or_collision (fun i : ValidatorIndex × ℕ => (e.world i.2).state i.1)
+      (fun i => i.1 ∈ J ∧ (e.world i.2).time ≤ time) with agreeAll | collision
+  swap
+  · obtain ⟨⟨a, i⟩, ⟨ha, hi⟩, ⟨b, j⟩, ⟨hb, hj⟩, r, evidence, searched⟩ := collision
+    exact .inr (.inl ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩)
+  have agree : HonestBlocksAgree (e := e) time := fun a ha b hb i j hi hj =>
+    agreeAll ⟨a, i⟩ ⟨ha, hi⟩ ⟨b, j⟩ ⟨hb, hj⟩
+  -- Each store's justified checkpoint reads its earlier finality, or historical evidence holds.
+  rcases e.finalizedFamily_or_historical_evidence anchored start sound anchorSlot anchorBoundary
+      slots bounded roots absent parameters genesis pre heldEarly enough terminal caller callerTime
+    with family | historicalEvidence
+  swap
+  · exact .inr (.inr (.inl historicalEvidence))
+  -- The root's realized justification is at most two epochs before the call's epoch.
+  have known := Store.block_ok_iff.mp blockOk
+  obtain ⟨rootBlock, rootState, rootKnown, rootStored, rootRecent⟩ := realized root (by simp)
+  rw [known, Option.some.injEq] at rootKnown
+  subst rootKnown
+  obtain ⟨epoch, -, rootEpoch, startEpoch, epochOk, -, rootEpochOk, startEpochOk, startRecent, -⟩ :=
+    inputs.1
+  have epochEq : computeEpochAtSlot preset slot = epoch := by
+    simpa [Store.getCurrentStoreEpoch, slotOk, bind, Except.bind, pure, Except.pure] using epochOk
+  subst epochEq
+  obtain ⟨rootAgain, startBlock, rootAgainOk, startBlockOk, startLt⟩ :=
+    Store.slot_lt_of_mem_getAncestorRoots (member := root) walked (by simp) (by simp)
+  rw [blockOk, Except.ok.injEq] at rootAgainOk
+  subst rootAgainOk
+  simp only [Store.getBlockEpoch, blockOk, startBlockOk, bind, Except.bind, pure, Except.pure,
+    Except.ok.injEq] at rootEpochOk startEpochOk
+  subst rootEpochOk
+  subst startEpochOk
+  have startRootLe := epoch_le_of_slot_le (preset := preset) startBlock.slot block.slot
+    (Nat.le_of_lt (UInt64.lt_iff_toNat_lt.mp startLt))
+  have recency : (computeEpochAtSlot preset slot).toNat ≤
+      rootState.currentJustifiedCheckpoint.epoch.toNat + 2 := by omega
+  -- The root is held from the call on, from the honest vote behind the margin.
+  have vote := e.honest_vote_of_caller_margin slots minLookahead maxLookahead ring preGloas
+    anchored anchorSlot start caller slotOk blockOk parentOk firstOk lastOk maximumOk registry
+    aligned increment supportOk discountOk adversaryOk marginLt callerTime reserve reference
+    referenceTime referenceUpToDate referenceSlotOk finishOk headDescends historicalBelow
+    callerEpochOk historicalEpochOk near absent
+  rcases e.rootHeld_of_honest_vote pre sync slots positive window preGloas fits admitted prompt
+      anchored sound anchorSlot anchorBoundary start bounded roots absent parameters genesis
+      heldEarly enough terminal caller beginOk timeEq callerTime known rootStored recency vote with
+    holds | collision | heldEvidence
+  rotate_left
+  · exact .inr (.inl collision)
+  · exact .inr (.inr (.inr (.inr heldEvidence)))
+  -- The root's step at each time, split once on its evidence.
+  by_cases heldEvidence : HeldStateFinalityEvidence (e := e) pre time
+  · exact .inr (.inr (.inr (.inr heldEvidence)))
+  exact .inl fun T low high covers =>
+    (e.rootViableAt_of_checked pre sync slots positive preGloas admitted fits prompt votes windows
+      fit ring incrementPositive anchored sound anchorSlot anchorBoundary start anchorEpochOk
+      bounded roots absent agree selected pinned signedAll quorumDrift unslashed terminal
+      anchorGenesis parameters genesis heldEarly enough included family caller callerUpToDate slotOk
+      beginOk timeEq headOk rollover inputs walked realized realizedHead startCovers holds T low
+      high covers).resolve_right heldEvidence
+
+/-- Every up-to-date honest head descends from the confirmed root of a checked call.
+
+This holds from the call to the horizon, or one of four alternatives holds.
+
+One is a collision of two honest stores, and one is historical direct-safety evidence.
+
+One is cross-store justified evidence.
+
+The last is a held state whose justification conflicts with a store's finality.
+
+The call's checks replace the consistency, the leaf and the call-epoch signer.
+
+Those are premises of `Execution.honestHeadsCover_of_signed_justification`.
+
+The root is held from the call on, by the honest vote behind the caller's margin.
+
+The newly active voters give the window membership, as in the merged headlines.
+
+The root's step at each time gives the viability that the induction reads. -/
+public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈ J)] {Δ : ℕ}
+    (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (preGloas : fork < .glamsterdam) {time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
+    (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
+    (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
+    (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
+    {n : ℕ} {block : BeaconBlock preset fork}
+    (newVoters : NewlyActiveVotersInHeadWindow (e := e) block.parentRoot (e.world n).time time)
+    {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J)
+    (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
+      ((e.world n).state u))
+    {head root : Root} {source : BeaconState preset fork}
+    {slot first last beforeBlock : Slot} {parent : BeaconBlock preset fork}
+    {parentParticipants : Std.TreeSet ValidatorIndex} {boost maximum : Gwei}
+    (headNode : ∃ node, ((e.world n).state u).getHead config = .ok node ∧ node.root = head)
+    (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot) {begin : UInt64}
+    (beginOk : computeTimeAtSlotMs config genesisTimeMs slot = .ok begin)
+    (timeEq : (e.world n).time = begin.toNat)
+    (blockOk : ((e.world n).state u).block root = .ok block)
+    (parentOk : ((e.world n).state u).block block.parentRoot = .ok parent)
+    {checkpoint : Checkpoint}
+    (sourceOk : ((e.world n).state u).checkpointState checkpoint = .ok source)
+    (boostOk : computeProposerScore config source = .ok boost)
+    (firstOk : addChecked parent.slot 1 = .ok first) (lastOk : subChecked slot 1 = .ok last)
+    (beforeOk : subChecked block.slot 1 = .ok beforeBlock)
+    (maximumOk : ((e.world n).state u).computeCommitteeWeightBetweenSlots head source first last =
+      .ok maximum)
+    (parentParticipantsOk : ((e.world n).state u).getCommitteesBetweenSlots head first
+      beforeBlock = .ok parentParticipants)
+    {shift : ℕ} {support discount adversary : Gwei} (registry : source.RegistryWithinLimit)
+    (aligned : EffectiveBalancesAligned source)
+    (increment : preset.EFFECTIVE_BALANCE_INCREMENT.toNat % 100 = 0)
+    (supportOk : ((e.world n).state u).scoreFromTally (((e.world n).state u).tallyVotes source)
+      ⟨root, .pending⟩ = .ok support)
+    (discountOk : ((e.world n).state u).computeEmptySlotSupportDiscount config head source root =
+      .ok discount)
+    (adversaryOk : ((e.world n).state u).getAdversarialWeight config head source root =
+      .ok adversary)
+    (marginLt : maximum.toNat + boost.toNat + 2 * adversary.toNat + shift <
+      discount.toNat + 2 * support.toNat)
+    (callerTime : (e.world n).time ≤ time) (sourceReads : SourceWindowReads (e := e) n time source)
+    (drift : WindowMarginDrift (e := e) n time source shift)
+    {finish : Slot}
+    (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) head source
+      first finish)
+    {x : ValidatorIndex} (reference : x ∈ J) {m : ℕ} (referenceTime : time ≤ (e.world m).time)
+    (referenceUpToDate : UpToDate config checks sources (e.world m).time ((e.world m).view x)
+      ((e.world m).state x))
+    {referenceSlot : Slot}
+    (referenceSlotOk : ((e.world m).state x).getCurrentSlot config = .ok referenceSlot)
+    (finishOk : subChecked referenceSlot 1 = .ok finish)
+    {horizon : Epoch}
+    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time)
+    (unslashed : HonestCountedStatesUnslashed (e := e) time)
+    (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) time)
+    (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
+    (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) time)
+    (enough : HeldRunStakeFloor (e := e) pre horizon time)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon time)
+    (headDescends : ((e.world n).state u).isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
+    {historical : Root} {callerEpoch historicalEpoch : Epoch} {epochStart : Slot}
+    {epochStartTime : UInt64}
+    (historicalBelow : ((e.world n).state u).isAncestor ⟨block.parentRoot, .pending⟩
+      ⟨historical, .pending⟩ = .ok true)
+    (callerEpochOk : ((e.world n).state u).getCurrentStoreEpoch config = .ok callerEpoch)
+    (historicalEpochOk : ((e.world n).state u).getBlockEpoch historical = .ok historicalEpoch)
+    (near : callerEpoch.toNat ≤ historicalEpoch.toNat + 1)
+    (epochStartOk : computeStartSlotAtEpoch preset callerEpoch = .ok epochStart)
+    (epochStartTimeOk : computeTimeAtSlotMs config genesisTimeMs epochStart = .ok epochStartTime)
+    (historyCovers : HonestHeadsCover (e := e) historical epochStartTime.toNat (e.world n).time)
+    (absent : AnchorParentAbsent (e := e) time)
+    (parentCovers : HonestHeadsCover (e := e) block.parentRoot (e.world n).time (time + 1))
+    (fit : config.CommitteeWindowsFit preset)
+    {anchorEpoch : Epoch} {margin : ℕ}
+    (anchorEpochOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
+    (pinned : JustifiedPinned (e := e) anchorEpoch margin 0 time)
+    (signedAll : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
+    (included : TargetIncluded (e := e) time)
+    (quorumDrift : QuorumDriftWithin (e := e) horizon time)
+    (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    {fcr : FastConfirmationStore} {headOfCall : ForkChoiceNode} {startRoot : Root}
+    {chain later : List Root}
+    (headOk : ((e.world n).state u).getHead config = .ok headOfCall)
+    (headEq : headOfCall.root = head)
+    (inputs : CallCheckpointInputs (e := e) margin anchor.finalizedCheckpoint.root u n fcr
+      headOfCall startRoot root)
+    (walked : ((e.world n).state u).getAncestorRoots head startRoot = .ok (chain ++ root :: later))
+    (realized : AcceptedRealizedRecent ((e.world n).state u) (chain ++ [root]))
+    (realizedHead : AcceptedRealizedHead ((e.world n).state u) config head (chain ++ [root]))
+    (startCovers : HonestHeadsCover (e := e) startRoot (e.world n).time (time + 1))
+    (rollover : CallRolloverRead (e := e) u n head time)
+    (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
+      (e.world n).time time)
+    (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
+      (e.world n).time time) :
+    HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
+      (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
+        ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
+          some evidence) ∨
+      HistoricalDirectSafetyEvidence (e := e) pre time ∨
+      CrossStoreJustifiedEvidence (e := e) pre time ∨
+        HeldStateFinalityEvidence (e := e) pre time := by
+  subst headEq
+  rcases viableAt_or_alternative_of_checked_call sync slots positive minLookahead maxLookahead ring
+      preGloas admitted votes fits prompt windows fit anchored sound anchorSlot anchorBoundary start
+      caller callerUpToDate slotOk beginOk timeEq blockOk parentOk firstOk lastOk maximumOk
+      registry aligned increment supportOk discountOk adversaryOk marginLt callerTime reserve
+      reference referenceTime referenceUpToDate referenceSlotOk finishOk bounded roots unslashed
+      parameters genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
+      historicalEpochOk near absent anchorEpochOk pinned signedAll included quorumDrift
+      anchorGenesis window incrementPositive headOk inputs walked realized realizedHead startCovers
+      rollover with
+    viable | alternatives
+  swap
+  · exact .inr alternatives
+  rcases honestHeadsCover_core sync slots minLookahead maxLookahead ring preGloas
+      admitted half votes fits prompt windows
+      (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
+        positive minLookahead maxLookahead ring newVoters)
+      anchored sound anchorSlot anchorBoundary start caller callerUpToDate headNode slotOk beginOk
+      timeEq blockOk parentOk sourceOk boostOk firstOk lastOk beforeOk maximumOk
+      parentParticipantsOk registry aligned increment supportOk discountOk adversaryOk marginLt
+      callerTime sourceReads drift reserve reference referenceTime referenceUpToDate
+      referenceSlotOk finishOk bounded roots unslashed ceiling scoreFits parameters genesis pre
+      heldEarly enough terminal headDescends historicalBelow callerEpochOk historicalEpochOk near
+      epochStartOk epochStartTimeOk historyCovers absent parentCovers fit viable exits late with
+    cover | collision | historicalEvidence
+  · exact .inl cover
+  · exact .inr (.inl collision)
+  · exact .inr (.inr (.inl historicalEvidence))
+
 end EthLib.Consensus.Models.Network
