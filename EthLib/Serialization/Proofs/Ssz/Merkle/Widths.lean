@@ -18,7 +18,7 @@ namespace EthLib.Serialization.Ssz
 @[simp] theorem zeroRoot_size (depth : Nat) :
     (zeroRoot combine zeroChunk depth).size = bytesPerChunk := by
   -- At depth zero the root is a complete leaf, and every deeper root is a digest.
-  cases depth <;> simp [zeroRoot]
+  cases depth <;> simp [zeroRoot_succ]
 
 /-- Cached empty subtrees have the same width at every depth. -/
 @[simp] theorem zeroSubtree_size (depth : Nat) : (zeroSubtree depth).size = bytesPerChunk := by

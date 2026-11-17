@@ -15,12 +15,16 @@ Not yet released.
   It assumes the honest count `HonestTargetVotes`, and that every honest head descends from a block of the target's epoch until then.
   It also assumes `HonestBlocksAgree`, that honest stores agree on the blocks that they both hold.
   `RolloverWindowRead` assumes that the caller has a head at the start of the next epoch and reads its committee window over the target's epoch.
+  `headState_of_descends` is now public, and the proof reads it.
 
 - `quorum_of_current_target` names the honest voters of `HonestTargetVotes` when the two-thirds test on the current target passes.
   Three times their stake is at least twice the total active balance plus the margin of the count.
   `quorum_of_count` and `headState_epoch_le` are now public.
 
 - `Store.Reachable.blockState_slot_eq` states that a known block's state is at the block's slot, when the anchor block is at the anchor state's slot.
+
+- `le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch` shows that a slot at the start of an epoch is at most the first slot of the epoch of each later slot.
+  `HonestVoteData.target_read`, `Store.Reachable.getCheckpointBlock_anchor`, a step of `DutySupport.lean` and `Execution.honestTargetVotes_signed_of_checked` read it.
 
 - `Execution.honestHeadsCover_of_historical_anchor` keeps a confirmed block on every honest head chain from the call to a horizon, by induction on time ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   It no longer assumes the root's own earlier coverage.
@@ -62,7 +66,24 @@ Not yet released.
   It asks that the anchor block is not after the anchor state and that its parent root names no known block.
   `Store.isViableLeaf_checkpointBlock` gives the checkpoint block that a viable leaf reads.
 
+- `VotersInHeadWindow` states that, between two times, each voter below a given parent block lies in each honest head's window after that parent ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  `VoteInHeadWindow` is the vote and the window that it reads.
+  `Execution.votersInHeadWindow_of_newlyActive` derives it from `NewlyActiveVotersInHeadWindow`, which asks it only of a voter activated at the target epoch of a vote two epochs after that parent.
+  `Store.mem_getCommitteesBetweenSlots_of_active`, `Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin` and `Store.ForwardReachableWith.epoch_le_of_checkpointState` are the general steps.
+  `fits_of_shuffledCommittee` states that a cut committee has the number of indices times one past its position below `2^64`.
+  `ReceiverWindowExitsNear` asks the receivers' exit bound only of receivers within two epochs of the parent.
+
 ### Changes that break callers
+
+- In Lean, the historical-anchor theorems assume less about recent votes and receiver exits ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  Each new statement implies the old one.
+  `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` take `newVoters : NewlyActiveVotersInHeadWindow` in place of the common vote history, `history`, and `exits : ReceiverWindowExitsNear` in place of the exit bound for every receiver.
+  `Execution.isAncestor_getHead_of_historical_anchor` and `ancestor_head_of_window_margin` take `membership : VotersInHeadWindow` in place of `history`.
+  Both window premises name the parent of the tested block and hold only from the call's time.
+  `ancestor_head_of_window_margin` also drops `minLookahead`, `maxLookahead` and `ring`, which now only the derivation of the window membership reads.
+  A caller with the common vote history passes the window membership that it implies, or the corner premise.
+  A caller with the old exit bound passes its restriction to receivers within two epochs of the parent.
+  `VoteCommitteeCommonHistory` and `ReceiverWindowExits` are removed: no statement reads them any more.
 
 - In Lean, the historical-anchor theorems no longer assume finality across honest stores ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `Execution.source_surplus_or_historical_evidence`, `Execution.isAncestor_getHead_of_historical_anchor`, `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` drop their `residual` argument; their conclusions are unchanged.

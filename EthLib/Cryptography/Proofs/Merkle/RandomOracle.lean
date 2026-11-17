@@ -179,38 +179,6 @@ theorem prEvent_experimentWith_le [SampleableType R] {γ β : Type}
   exact collision (QueryImpl.simulateQ_toPartialImpl_snd_of_mem_support_run_simulateQ_withCaching
     _ (extraction claim) hz) hwins
 
-/-- Some queried input has the fixed target digest as its answer. -/
-def Hits (r : R) (c : (D →ₒ R).QueryCache) : Prop := ∃ x, c x = some r
-
-/-- A target digest fixed before the run is hit with probability at most `q / N` in `q` queries.
-
-Each fresh answer is uniform, so it equals the target with probability `1 / N`.
-
-Nothing here ties the target to the digest of any input.
--/
-theorem prEvent_hits_le [SampleableType R]
-    (r : R) (oa : OracleComp (unifSpec + (D →ₒ R)) α) {q : Nat}
-    (hq : IsQueryBoundP oa (fun t => t.isRight = true) q) :
-    Pr{let z ← (simulateQ (D →ₒ R).romImpl oa).run ∅}[Hits r z.2] ≤
-      (q : ℝ≥0∞) / Nat.card R := by
-  classical
-  have hfresh (t : D) (c : (D →ₒ R).QueryCache) (hc : ¬ Hits r c) (_ht : c t = none) :
-      Pr{let u ← $ᵗ R}[Hits r (c.cacheQuery t u)] ≤ 1 / (Nat.card R : ℝ≥0∞) := by
-    calc
-      -- A new hit can only be the new answer, so the new answer must be the target.
-      _ ≤ Pr{let u ← $ᵗ R}[u = r] := prEvent_mono _ _ _ fun u ⟨x, hx⟩ => by
-        by_cases hxt : x = t
-        · subst x
-          simpa using hx
-        · rw [QueryCache.cacheQuery_of_ne _ _ hxt] at hx
-          exact (hc ⟨x, hx⟩).elim
-      _ = _ := by simp [SampleableType.prEvent_uniformSample_eq_singleton_natCard, one_div]
-  have h := prEvent_run_le_of_fresh_bound_of_isQueryBoundP (Hits r)
-    (by simp [Hits]) (1 / (Nat.card R : ℝ≥0∞))
-    (ENNReal.div_ne_top (by simp) (by exact_mod_cast (Nat.card_pos.ne' : Nat.card R ≠ 0)))
-    hfresh oa hq
-  simpa [div_eq_mul_inv] using h
-
 /-- An oracle input includes the parent position and its ordered children.
 
 This models a node hash tweaked by its position.
@@ -543,24 +511,6 @@ theorem evalWithAnswerFn_node (g : NodeInput R → R) (leaves : Nat → R) : ∀
       evalWithAnswerFn_liftM_query, QueryImpl.ofFn_apply]
     rfl
 
-/-- A fixed target is hit with probability at most `q / N`, among queried inputs.
-
-The oracle answers only inputs other than one honest input.
-
-The target `r` is fixed before the run.
-
-As a second-preimage bound, `r` is the honest digest, and the other answers stay uniform.
-
-That conditioning is a modelling step, not a proved one: nothing here ties `r` to that input.
--/
-theorem prEvent_secondPreimage_le [SampleableType R] (honest : D) (r : R)
-    (oa : OracleComp (unifSpec + ({x : D // x ≠ honest} →ₒ R)) α) {q : Nat}
-    (hq : IsQueryBoundP oa (fun t => t.isRight = true) q) :
-    Pr{let z ← (simulateQ ({x : D // x ≠ honest} →ₒ R).romImpl oa).run ∅}[∃ x,
-      z.2 x = some r] ≤ (q : ℝ≥0∞) / Nat.card R :=
-  -- The honest input is out of reach, so this is the bound for a fixed target.
-  prEvent_hits_le r oa hq
-
 /-- A parent computed by a replay from a cache has its final call in that cache.
 
 The call hashes the parent's two honest children, at the parent's position.
@@ -658,5 +608,90 @@ theorem card_bytes32 : Nat.card (Vector UInt8 32) = 2 ^ 256 := by
   rw [Nat.card_congr (arrayVectorEquivFin UInt8 32), Nat.card_fun,
     Nat.card_eq_fintype_card (α := UInt8), ← FinEnum.card_eq_fintypeCard, FinEnum.card_UInt8]
   simp
+
+/-! ## The tree read from a cache -/
+
+/-- Answering every call of a climb from a complete table gives the climb of that table's hash. -/
+theorem evalWithAnswerFn_climb (g : NodeInput R → R) : ∀ (t : List R) (p : Position) (b : R),
+    evalWithAnswerFn (QueryImpl.ofFn g) (climb queryNode p b t) =
+      (climb (nodeHash g) p b t).run
+  | [], _, _ => rfl
+  | v :: t, p, b => by
+    simp only [climb, evalWithAnswerFn_bind, queryNode, evalWithAnswerFn_liftM_query,
+      QueryImpl.ofFn_apply]
+    exact evalWithAnswerFn_climb g t _ _
+
+/-- Answering every call of the siblings from a complete table gives the siblings of its hash. -/
+theorem evalWithAnswerFn_siblings (g : NodeInput R → R) (leaves : Nat → R) :
+    ∀ (n : Nat) (p : Position),
+      evalWithAnswerFn (QueryImpl.ofFn g) (siblings queryNode (fun j => pure (leaves j)) p n) =
+        (siblings (nodeHash g) (fun j => pure (leaves j)) p n).run := by
+  intro n
+  induction n with
+  | zero => intro p; rfl
+  | succ n ih =>
+    intro p
+    simp only [siblings, evalWithAnswerFn_bind, evalWithAnswerFn_node, ih, evalWithAnswerFn_pure]
+    rfl
+
+/-- A cache that replays node `i / 2^k` at level `level + k` replays node `i` at level `level`. -/
+theorem partial_node_go_isSome (c : (NodeInput R →ₒ R).QueryCache) (leaves : Nat → R)
+    (level : Nat) : ∀ (k i : Nat),
+      (simulateQ c.toPartialImpl
+        (node.go queryNode (fun j => pure (leaves j)) (level + k) (i / 2 ^ k))).isSome →
+      (simulateQ c.toPartialImpl
+        (node.go queryNode (fun j => pure (leaves j)) level i)).isSome
+  | 0, i, h => by simpa using h
+  | k + 1, i, h => by
+    apply partial_node_go_isSome c leaves level k i
+    obtain ⟨r, hr⟩ := Option.isSome_iff_exists.mp h
+    rw [show level + (k + 1) = level + k + 1 by omega, node.go, simulateQ_bind] at hr
+    obtain ⟨a, ha, hr⟩ := Option.bind_eq_some_iff.mp hr
+    rw [simulateQ_bind] at hr
+    obtain ⟨b, hb, -⟩ := Option.bind_eq_some_iff.mp hr
+    -- Node `i / 2^k` is a child of node `i / 2^(k + 1)`.
+    have hdiv : i / 2 ^ (k + 1) = i / 2 ^ k / 2 := by
+      rw [Nat.pow_succ, Nat.div_div_eq_div_mul]
+    rcases Nat.mod_two_eq_zero_or_one (i / 2 ^ k) with h2 | h2
+    · have : i / 2 ^ k = 2 * (i / 2 ^ (k + 1)) := by omega
+      rw [this, ha]; rfl
+    · have : i / 2 ^ k = 2 * (i / 2 ^ (k + 1)) + 1 := by omega
+      rw [this, hb]; rfl
+
+/-- A cache that replays the ancestor of a node, `k` levels up, replays the node. -/
+theorem partial_node_isSome_of_ancestor (c : (NodeInput R →ₒ R).QueryCache)
+    (leaves : Nat → R) (k : Nat) (p : Position)
+    (h : (simulateQ c.toPartialImpl
+      (node queryNode (fun j => pure (leaves j)) (p.ancestor k))).isSome) :
+    (simulateQ c.toPartialImpl (node queryNode (fun j => pure (leaves j)) p)).isSome :=
+  partial_node_go_isSome c leaves p.level k p.index h
+
+/-- A cache that replays the ancestor of a node, `n` levels up, replays its `n` siblings. -/
+theorem partial_siblings_isSome (c : (NodeInput R →ₒ R).QueryCache) (leaves : Nat → R) :
+    ∀ (n : Nat) (p : Position),
+      (simulateQ c.toPartialImpl
+        (node queryNode (fun j => pure (leaves j)) (p.ancestor n))).isSome →
+      (simulateQ c.toPartialImpl
+        (siblings queryNode (fun j => pure (leaves j)) p n)).isSome := by
+  intro n
+  induction n with
+  | zero => intro p _; rfl
+  | succ n ih =>
+    intro p h
+    -- The sibling and the parent sit below the same ancestor.
+    obtain ⟨s, hs⟩ := Option.isSome_iff_exists.mp (partial_node_isSome_of_ancestor c leaves
+      (n + 1) p.sibling (by rwa [← Position.ancestor_parent, Position.sibling_parent,
+        Position.ancestor_parent]))
+    obtain ⟨rest, hrest⟩ := Option.isSome_iff_exists.mp
+      (ih p.parent (by rwa [Position.ancestor_parent]))
+    simp [siblings, simulateQ_bind, hs, hrest]
+
+/-- A climb against the oracle makes one call per sibling. -/
+theorem climb_queryBound : ∀ (t : List R) (p : Position) (b : R),
+    IsTotalQueryBound (climb queryNode p b t) t.length
+  | [], _, _ => trivial
+  | v :: t, p, b => by
+    simp only [climb, queryNode, List.length_cons, isTotalQueryBound_query_bind_iff]
+    exact ⟨by omega, fun x => by simpa using climb_queryBound t p.parent x⟩
 
 end EthLib.Cryptography.Merkle.RandomOracle

@@ -177,7 +177,7 @@ theorem hashTreeRootM_beaconBlockHeader {m : Type → Type} [Monad m] [LawfulMon
   simp only [merkleizeBoundedUncheckedM, List.size_toArray, List.length_cons, List.length_nil,
     Nat.zero_add, Nat.reduceAdd, Nat.lt_irrefl, ↓reduceIte, ExceptT.run_lift,
     show depthFor 5 = 3 by simp [depthFor]]
-  simp [subtreeAtM, combineM, padded, Hasher.ofHash, zeroSubtreeM]
+  simp [subtreeAtM, combineM, padded, Hasher.ofHash, zeroRootM]
   rfl
 
 /-- Two equal replayed roots of beacon headers come from equal headers, or the cache collides.

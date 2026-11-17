@@ -39,7 +39,13 @@ At that time the caller's up-to-date store has a head and reads its window over 
 
 An honest voter that has not voted by the call needs a duty in the target's epoch.
 
-`AssignmentWindowAgreement` gives that duty only through the past window of an actual head. -/
+`AssignmentWindowAgreement` gives that duty only through the past window of an actual head.
+
+The read has two halves, a head and its window, and both are stated conditions here.
+
+The head half is an assumed head read, which head totality of an honest store would discharge.
+
+The window half could be derived under a committee-window fit condition on the head's state. -/
 def RolloverWindowRead (u : ValidatorIndex) (target : Checkpoint) (first : Slot) (begin : ℕ) :
     Prop :=
   ∀ k epochStart last, (e.world k).time = begin →
@@ -170,110 +176,6 @@ private theorem pulled_epoch {store : Store preset fork}
     have rawLe := headState_epoch_le forward currentOk rawOk
     rw [epochEq] at rawLe
     exact UInt64.le_antisymm (UInt64.le_iff_toNat_le.mpr rawLe) (UInt64.not_lt.mp notOld)
-
-/-- A complete epoch range of a head contains every validator active in the head's state. -/
-private theorem mem_range_of_active {store : Store preset fork}
-    {head : Root} {epoch next : Epoch} {first boundary last : Slot}
-    {members : Std.TreeSet ValidatorIndex} {state : BeaconState preset fork}
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
-    (nextOk : addChecked epoch 1 = .ok next)
-    (firstOk : computeStartSlotAtEpoch preset epoch = .ok first)
-    (boundaryOk : computeStartSlotAtEpoch preset next = .ok boundary)
-    (lastOk : subChecked boundary 1 = .ok last)
-    (read : store.getCommitteesBetweenSlots head first last = .ok members)
-    (stateOk : store.blockState head = .ok state)
-    {v : ValidatorIndex} (active : v ∈ getActiveValidatorIndices state epoch) :
-    v ∈ members := by
-  have firstNat := (computeStartSlotAtEpoch_ok_iff.mp firstOk).2
-  have boundaryNat := (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2
-  have nextNat := (addChecked_ok_iff.mp nextOk).2
-  have lastNat := (subChecked_ok_iff.mp lastOk).2
-  simp only [UInt64.toNat_one] at nextNat lastNat
-  rw [nextNat, Nat.add_mul, Nat.one_mul] at boundaryNat
-  have low : first ≤ last := UInt64.le_iff_toNat_le.mpr (by omega)
-  have lastEpoch : computeEpochAtSlot preset last = epoch := by
-    apply UInt64.toNat_inj.mp
-    simp only [computeEpochAtSlot, UInt64.toNat_div]
-    exact Nat.div_eq_of_lt_le (by omega) (by rw [Nat.add_mul, Nat.one_mul]; omega)
-  have lastMod : (last % preset.SLOTS_PER_EPOCH).toNat + 1 =
-      preset.SLOTS_PER_EPOCH.toNat := by
-    have divided := congrArg UInt64.toNat lastEpoch
-    simp only [computeEpochAtSlot, UInt64.toNat_div] at divided
-    have decomposed := Nat.div_add_mod last.toNat preset.SLOTS_PER_EPOCH.toNat
-    rw [divided, Nat.mul_comm] at decomposed
-    rw [UInt64.toNat_mod]
-    omega
-  have perPos : 0 < (getCommitteeCountPerSlot state epoch).toNat := UInt64.le_iff_toNat_le.mp
-    (one_le_getCommitteeCountPerSlot state epoch)
-  -- The last committee of the last slot of the epoch has a value.
-  obtain ⟨slotMembers, slotOk⟩ :=
-    Store.getSlotCommittee_ok_of_getCommitteesBetweenSlots read low (UInt64.le_refl _)
-  simp only [Store.getSlotCommittee, stateOk, bind, Except.bind, lastEpoch] at slotOk
-  obtain ⟨committee, committeeOk⟩ := foldlM_forall_of_ok
-    (P := fun index : Nat => ∃ committee,
-      getBeaconCommittee state last index.toUInt64 = .ok committee)
-    (fun _ _ _ stepOk => by
-      obtain ⟨c, cOk, -⟩ := bind_ok_iff.mp stepOk
-      exact ⟨c, mapError_ok_iff.mp cOk⟩)
-    _ _ _ slotOk ((getCommitteeCountPerSlot state epoch).toNat - 1) (List.mem_range.mpr (by omega))
-  obtain ⟨seed, position, count, seedOk, positionNat, countNat, computed⟩ :=
-    getBeaconCommittee_ok committeeOk
-  rw [lastEpoch] at seedOk positionNat countNat computed
-  have indexNat : (((getCommitteeCountPerSlot state epoch).toNat - 1).toUInt64).toNat =
-      (getCommitteeCountPerSlot state epoch).toNat - 1 := by
-    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat']
-    exact Nat.mod_eq_of_lt (by have := (getCommitteeCountPerSlot state epoch).toNat_lt; omega)
-  rw [indexNat] at positionNat
-  simp only [computeCommittee, bind_ok_iff] at computed
-  obtain ⟨shuffled, shuffledOk, cut⟩ := computed
-  have small := (computeShuffledPermutation_ok shuffledOk).1
-  unfold shuffledCommittee at cut
-  have product : (getActiveValidatorIndices state epoch).length * (position.toNat + 1) <
-      2 ^ 64 := by
-    split at cut
-    · rename_i fits
-      simpa only [List.size_toArray] using fits.2
-    · simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at cut
-      split at cut <;> cases cut
-  have positionEq : position.toNat + 1 =
-      (getCommitteeCountPerSlot state epoch).toNat * preset.SLOTS_PER_EPOCH.toNat := by
-    rw [positionNat]
-    calc
-      _ = (last % preset.SLOTS_PER_EPOCH).toNat * (getCommitteeCountPerSlot state epoch).toNat +
-          (getCommitteeCountPerSlot state epoch).toNat := by omega
-      _ = ((last % preset.SLOTS_PER_EPOCH).toNat + 1) *
-          (getCommitteeCountPerSlot state epoch).toNat := by
-        rw [Nat.add_mul, Nat.one_mul]
-      _ = _ := by rw [lastMod, Nat.mul_comm]
-  rw [positionEq] at product
-  obtain ⟨a, shuffledPair, shuffle⟩ := attesterShuffle_ok_of_getBeaconCommittee committeeOk
-  rw [lastEpoch] at shuffle
-  have indicesOk := getActiveValidatorIndicesChecked_of_attesterShuffle shuffle
-  have slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64 := by
-    have bound := boundary.toNat_lt
-    rw [Nat.add_mul, Nat.one_mul]
-    omega
-  obtain ⟨slot, i, c, epochOk, below, cOk, member⟩ := exists_mem_getBeaconCommittee indicesOk
-    seedOk (by intro zero; simp only [zero, UInt64.toNat_zero, Nat.lt_irrefl] at positive)
-    slotsFit (by
-      have lengthLt : (getActiveValidatorIndices state epoch).length < 2 ^ 64 :=
-        Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_right _ (by positivity)) product
-      simpa only [List.size_toArray, UInt64.toNat_ofNat', Nat.mod_eq_of_lt lengthLt]
-        using small)
-    product active
-  have lower : first ≤ slot := UInt64.le_iff_toNat_le.mpr (by
-    have bound := Nat.div_mul_le_self slot.toNat preset.SLOTS_PER_EPOCH.toNat
-    have eq := congrArg UInt64.toNat epochOk
-    simp only [computeEpochAtSlot, UInt64.toNat_div] at eq
-    rw [eq] at bound
-    omega)
-  have upper : slot ≤ last := UInt64.le_iff_toNat_le.mpr (by
-    have bound := Nat.lt_mul_div_succ slot.toNat positive
-    have eq := congrArg UInt64.toNat epochOk
-    simp only [computeEpochAtSlot, UInt64.toNat_div] at eq
-    rw [eq, Nat.mul_comm, Nat.add_mul, Nat.one_mul] at bound
-    omega)
-  exact Store.mem_getCommitteesBetweenSlots read lower upper stateOk (epochOk ▸ below) cOk member
 
 /-- Two honest stores agree on an epoch's active validators below a common origin of the epoch.
 
@@ -443,8 +345,8 @@ private theorem duty_of_active {anchor : Store preset fork} {time : ℕ}
     ∃ slot index, first ≤ slot ∧ slot ≤ last ∧ assignment.committee v slot = some index := by
   have forwardN := e.forwardReachable
     (fun a ha => (start a ha) ▸ Store.ForwardReachable.anchor anchored) n u caller
-  have forwardK := e.forwardReachable
-    (fun a ha => (start a ha) ▸ Store.ForwardReachable.anchor anchored) k u caller
+  have forwardK := e.forwardReachableWith
+    (fun a ha => (start a ha) ▸ Store.ForwardReachableWith.anchor anchored) k u caller
   have pending := Store.getHead_pending preGloas headOk
   have nodeEq : hd = ⟨hd.root, .pending⟩ := by
     cases hd
@@ -453,9 +355,8 @@ private theorem duty_of_active {anchor : Store preset fork} {time : ℕ}
   unfold Store.isAncestor at originRead
   obtain ⟨otherOrigin, otherKnown, _⟩ := bind_ok_iff.mp originRead
   have otherKnown := Store.block_ok_iff.mp otherKnown
-  obtain ⟨headBlock, headKnown, _⟩ := Store.slot_le_of_isAncestor otherKnown descends
-  obtain ⟨headState, headStateHeld, _⟩ := forwardK.reachable.blockStatesFromParents headKnown
-  have headStateOk := Store.blockState_ok_iff.mpr headStateHeld
+  obtain ⟨headState, headStateOk⟩ := headState_of_descends forwardK otherKnown
+    (by rw [← nodeEq]; exact descends)
   have activeEq := active_eq_of_common_origin anchored start anchorSlot preGloas caller caller
     same originKnown otherKnown countRead headStateOk countDescends
     (by rw [← nodeEq]; exact descends)
@@ -464,24 +365,24 @@ private theorem duty_of_active {anchor : Store preset fork} {time : ℕ}
   have activeAt : v ∈ getActiveValidatorIndices headState epoch := by
     rw [← activeEq, ← stateEpoch]
     exact List.mem_toFinset.mp active
-  have member := mem_range_of_active positive nextOk firstOk boundaryOk lastOk read headStateOk
-    activeAt
+  have firstNat := (computeStartSlotAtEpoch_ok_iff.mp firstOk).2
+  have boundaryNat := (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2
+  have nextNat := (addChecked_ok_iff.mp nextOk).2
   have lastNat := (subChecked_ok_iff.mp lastOk).2
   have lastPos := (subChecked_ok_iff.mp lastOk).1
-  have past : last < boundary := UInt64.lt_iff_toNat_lt.mpr (by
-    simp only [UInt64.toNat_one] at lastNat lastPos
-    omega)
+  simp only [UInt64.toNat_one] at nextNat lastNat lastPos
+  have member := Store.mem_getCommitteesBetweenSlots_of_active positive read headStateOk
+    (by omega) (by rw [← nextNat, ← boundaryNat]; omega) activeAt
+  have past : last < boundary := UInt64.lt_iff_toNat_lt.mpr (by omega)
   have epochBoundary := computeEpochAtSlot_computeStartSlotAtEpoch
     (UInt64.lt_iff_toNat_lt.mpr positive) boundaryOk
   have epochFirst := computeEpochAtSlot_computeStartSlotAtEpoch
     (UInt64.lt_iff_toNat_lt.mpr positive) firstOk
-  have nextNat := (addChecked_ok_iff.mp nextOk).2
   obtain ⟨slot, index, low, high, duty⟩ := (windows u caller k kBound hd boundary first last
     participants headOk slotOk past (fun found foundOk => by
-      have le := headState_epoch_le forwardK slotOk foundOk
+      have le := headState_epoch_le forwardK.forwardReachable slotOk foundOk
       rw [epochBoundary] at le
       rw [epochFirst]
-      simp only [UInt64.toNat_one] at nextNat
       omega) read v honest).mp member
   exact ⟨slot, index, low, high, duty⟩
 

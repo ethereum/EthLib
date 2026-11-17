@@ -37,26 +37,14 @@ abbrev maxZeroDepth : Nat :=
   64
 
 /--
-Roots of the all-zero perfect trees up to a depth, each built from the one below.
+Roots of the all-zero perfect trees, indexed by depth up to the cache depth.
 
-Building each entry from the one below keeps the table linear in the depth.
-
-Building each from scratch would make it exponential.
--/
-def zeroRootsUpTo : Nat → Array Bytes
-  | 0 => #[zeroChunk]
-  | depth + 1 =>
-    let below := zeroRootsUpTo depth
-    let deepest := below[depth]?.getD zeroChunk
-    below.push (combine deepest deepest)
-
-/--
-Roots of the all-zero perfect trees, indexed by depth.
-
-Index zero is the zero node, and each following entry doubles the leaves covered.
+It records the hashes of one computation of the deepest root, so entry `d` is the root of depth `d`.
 -/
 def zeroRoots : Array Bytes :=
-  zeroRootsUpTo maxZeroDepth
+  let record (left right : Bytes) : StateM (Array Bytes) Bytes :=
+    modifyGet fun table => let parent := combine left right; (parent, table.push parent)
+  ((zeroRootM record zeroChunk maxZeroDepth).run #[zeroChunk]).2
 
 /-- Root of an all-zero subtree at any depth, using cached roots where available. -/
 def zeroSubtree (depth : Nat) : Bytes :=
@@ -85,16 +73,9 @@ structure Hasher (m : Type → Type) where
 def sha256Hasher : Hasher Id :=
   ⟨Cryptography.Hash.Sha256.hash, zeroSubtree⟩
 
-/-- The root of the all-zero perfect tree of a depth, hashed from the root one level below. -/
-def zeroSubtreeM {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray) : Nat → m Bytes
-  | 0 => pure zeroChunk
-  | depth + 1 => do
-    let below ← zeroSubtreeM hash depth
-    combineM hash below below
-
 /-- A hasher that computes the roots of the all-zero subtrees with its own hash, one per level. -/
 def Hasher.ofHash {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray) : Hasher m :=
-  ⟨hash, zeroSubtreeM hash⟩
+  ⟨hash, zeroRootM (combineM hash) zeroChunk⟩
 
 /-- Bytes right-padded to a node boundary and split into nodes. -/
 def packBytes (data : Bytes) : Array Bytes :=

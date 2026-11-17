@@ -71,6 +71,6 @@ theorem merkleizeFlat_eq (combine : α → α → α) (zero : α) (depth : Nat) 
     merkleizeFlat combine zero depth level
       = subtreeRoot combine depth (paddedList zero level) := by
   -- A walk of the full depth starts at height zero, where the padding is the zero node.
-  simpa [merkleizeFlat, zeroRoot] using foldUpTo_headD combine zero depth 0 level
+  simpa [merkleizeFlat, zeroRoot_zero] using foldUpTo_headD combine zero depth 0 level
 
 end EthLib.Serialization.Ssz
