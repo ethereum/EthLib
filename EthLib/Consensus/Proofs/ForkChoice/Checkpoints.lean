@@ -557,11 +557,19 @@ private theorem CheckpointStatesFromBlocks.of_maps {allowed : SignatureChecks �
   exact holds found
 
 /-- Replacing the checkpoints keeps the unrealized justified checkpoint. -/
-private theorem updateCheckpoints_unrealizedJustifiedCheckpoint (justified finalized : Checkpoint) :
+theorem updateCheckpoints_unrealizedJustifiedCheckpoint (justified finalized : Checkpoint) :
     (store.updateCheckpoints justified finalized).unrealizedJustifiedCheckpoint =
       store.unrealizedJustifiedCheckpoint := by
   unfold updateCheckpoints
   split <;> dsimp only <;> split <;> rfl
+
+/-- Replacing the checkpoints keeps the justified checkpoint, or adopts the given one. -/
+theorem updateCheckpoints_justifiedCheckpoint (s : Store preset fork) (j f : Checkpoint) :
+    (s.updateCheckpoints j f).justifiedCheckpoint = s.justifiedCheckpoint ∨
+      (s.updateCheckpoints j f).justifiedCheckpoint = j := by
+  unfold Store.updateCheckpoints
+  split <;> dsimp only <;> split
+  all_goals first | exact .inl rfl | exact .inr rfl
 
 /-! ### What a forward tick does to the two justified checkpoints -/
 
@@ -666,11 +674,9 @@ private theorem onTickPerSlot_realizes {s t : Store preset fork} {time : UInt64}
     have cross := epoch_lt_of_offset_zero lt (mapError_ok_iff.mp offsetOk)
     split at tick <;>
     · cases Except.ok.inj tick
-      refine ⟨updateCheckpoints_unrealizedJustifiedCheckpoint _ _, ?_,
+      exact ⟨updateCheckpoints_unrealizedJustifiedCheckpoint _ _,
+        (updateCheckpoints_justifiedCheckpoint _ _ _).imp id fun eq => ⟨eq, cross⟩,
         fun _ _ => justified_le_updateCheckpoints _ _⟩
-      simp only [Store.updateCheckpoints]
-      split <;> dsimp only <;> split
-      all_goals first | exact .inr ⟨rfl, cross⟩ | exact .inl rfl
   · rename_i kept
     split at tick <;>
     · cases Except.ok.inj tick
@@ -685,7 +691,7 @@ private theorem onTickPerSlot_realizes {s t : Store preset fork} {time : UInt64}
 It keeps the justified one, or adopts the unrealized one at a crossed epoch.
 
 It adopts it whenever it crosses an epoch. -/
-private theorem onTick_justifiedCheckpoint_of_unrealized {s t : Store preset fork} {time : UInt64}
+theorem onTick_justifiedCheckpoint_of_unrealized {s t : Store preset fork} {time : UInt64}
     {old : Slot}
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (oldOk : s.getCurrentSlot config = .ok old) (forward : s.timeMs ≤ time)
