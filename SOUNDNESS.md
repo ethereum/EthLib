@@ -3144,8 +3144,9 @@ It is not hash injectivity: it concerns only the blocks that honest stores hold.
 `RolloverWindowRead` assumes that at the start of the next epoch the caller's store has a head and reads that head's committee window over the target's epoch.
 No theorem yet shows that the head read of an honest store succeeds, so the head half is assumed.
 Head totality would discharge it, and it is an outstanding obligation of the endpoint safety issue [#2060](https://github.com/ethereum/EthLib/issues/2060).
-The window half could be derived under the committee-window fit condition `CommitteeWindowsFit` of [#2702](https://github.com/ethereum/EthLib/pull/2702).
-Both halves remain stated conditions here.
+Given the head half, `Config.CommitteeWindowsFit` gives the window half through `Store.getCommitteesBetweenSlots_exists`.
+The head's state is held, and the window ends before the current slot.
+The theorem does not take that bound, so both halves remain stated conditions here.
 The theorem also assumes `AssignmentWindowAgreement`, `ValidatedDutyVotes`, `Prompt` and `DelayFits`.
 It also requires an anchor block at an epoch start, and a historical vector longer than the seed lookahead by more than two epochs.
 
