@@ -28,6 +28,10 @@ Not yet released.
 - `mem_getUnslashedParticipatingIndices_of_recent_flag` places an active, unslashed validator with a flag among the participants of the current or the previous epoch.
   `mem_getUnslashedParticipatingIndices_of_flag` keeps its statement and is now its case of the previous epoch.
 
+- `Store.onTick_slot_induction` passes a fact of a store at its slot through a forward tick, from each tick within a slot.
+  `epoch_lt_of_offset_zero` places a slot at the start of its epoch in a later epoch than each earlier slot.
+  The proofs of the justified and finalized ages of a forward-reachable store read them.
+
 - `Execution.honestTargetVotes_signed_of_checked` shows that an accepted current-target test has honest signers with two thirds of the active balance ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).
   Three times their stake is at least twice the total active balance plus the margin of the count.
   Each of them is active in the pulled-up head state, and sent a vote for the target before the start of the next epoch.

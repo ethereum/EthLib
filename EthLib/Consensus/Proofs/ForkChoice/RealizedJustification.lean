@@ -32,29 +32,19 @@ section Transition
 variable {config : Config} {checks : SignatureChecks} {engine : ExecutionEngine preset fork}
   {state after : BeaconState preset fork}
 
-/-- Weighing votes cannot lower a justified epoch that is at most the previous epoch. -/
-private theorem weighJustificationAndFinalization_currentJustified_mono
-    {total previous current : Gwei}
-    (settled : state.currentJustifiedCheckpoint.epoch ≤ getPreviousEpoch state)
-    (computed : weighJustificationAndFinalization state total previous current = .ok after) :
-    state.currentJustifiedCheckpoint.epoch ≤ after.currentJustifiedCheckpoint.epoch := by
-  obtain ⟨_, justified, _, _⟩ := weighJustificationAndFinalization_checkpoints computed
-  rcases justified with same | previous | current
-  · rw [same]
-    exact UInt64.le_refl _
-  · rw [previous]
-    exact settled
-  · rw [current]
-    exact UInt64.le_trans settled (getPreviousEpoch_le state)
-
 /-- Justification and finalization cannot lower a settled current justified epoch. -/
 private theorem processJustificationAndFinalization_currentJustified_mono
     (settled : JustifiedSettled state)
     (computed : processJustificationAndFinalization state = .ok after) :
     state.currentJustifiedCheckpoint.epoch ≤ after.currentJustifiedCheckpoint.epoch := by
-  obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
-  · exact UInt64.le_refl _
-  · exact weighJustificationAndFinalization_currentJustified_mono settled weighed
+  rcases processJustificationAndFinalization_currentJustified computed with same | ⟨recent, -⟩
+  · rw [same]
+    exact UInt64.le_refl _
+  · rcases recent with previous | current
+    · rw [previous]
+      exact settled
+    · rw [current]
+      exact UInt64.le_trans settled (getPreviousEpoch_le state)
 
 /-- An epoch transition cannot lower the current justified epoch of an invariant state. -/
 private theorem processEpoch_currentJustified_mono (holds : Invariant state)
@@ -150,7 +140,7 @@ private theorem justification_step (holds : Invariant state) (below : FinalBelow
   obtain ⟨threshold, previousWeight, currentWeight, thresholdOk, previousOk, currentOk, bit0,
     bit1, -, -, finalized⟩ := weighJustificationAndFinalization_bits weighed
   have mono := UInt64.le_iff_toNat_le.mp
-    (weighJustificationAndFinalization_currentJustified_mono holds.settled weighed)
+    (processJustificationAndFinalization_currentJustified_mono holds.settled computed)
   have ordered := holds.ordered
   have previousLe := UInt64.le_iff_toNat_le.mp ordered.2
   have linkAfter : after.justificationBits.bits[0] = true →

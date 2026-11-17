@@ -1029,22 +1029,6 @@ private theorem finalized_advance_bound {state after : BeaconState preset fork} 
     rw [frame.finalized, step]
     exact bound
 
-private theorem finalized_slots_bound {state after : BeaconState preset fork} {base : ℕ}
-    (holds : Invariant state)
-    (bound : state.finalizedCheckpoint.epoch.toNat ≤ base ∨
-      state.finalizedCheckpoint.epoch.toNat + 2 ≤ (getCurrentEpoch state).toNat)
-    {count : ℕ} (advanced : advanceSlots config checks count state = .ok after) :
-    after.finalizedCheckpoint.epoch.toNat ≤ base ∨
-      after.finalizedCheckpoint.epoch.toNat + 2 ≤ (getCurrentEpoch after).toNat := by
-  induction count generalizing state with
-  | zero =>
-    cases Except.ok.inj advanced
-    exact bound
-  | succ count ih =>
-    simp only [advanceSlots, bind_ok_iff] at advanced
-    obtain ⟨next, step, rest⟩ := advanced
-    exact ih (advanceSlot_invariant holds step).1 (finalized_advance_bound bound step) rest
-
 private theorem finalized_transition_bound {state after : BeaconState preset fork} {base : ℕ}
     {signed : SignedBeaconBlock preset fork} {engine : ExecutionEngine preset fork}
     (holds : Invariant state)
@@ -1058,7 +1042,13 @@ private theorem finalized_transition_bound {state after : BeaconState preset for
   simp only [processSlots, bind_ok_iff, ensure_ok_iff] at slots
   obtain ⟨_, _, slots⟩ := slots
   simpa only [frame.finalized, getCurrentEpoch, frame.slot] using
-    finalized_slots_bound holds bound slots
+    (advanceSlots_invariant_of
+      (fun s t => (s.finalizedCheckpoint.epoch.toNat ≤ base ∨
+          s.finalizedCheckpoint.epoch.toNat + 2 ≤ (getCurrentEpoch s).toNat) →
+        t.finalizedCheckpoint.epoch.toNat ≤ base ∨
+          t.finalizedCheckpoint.epoch.toNat + 2 ≤ (getCurrentEpoch t).toNat)
+      (fun _ kept => kept) (fun _ one two kept => two (one kept))
+      (fun _ step kept => finalized_advance_bound kept step) holds slots).2.2 bound
 
 private theorem finalized_states_bound {store : Store preset fork}
     (sound : Invariant anchorState)
@@ -1121,7 +1111,6 @@ private theorem resetAge_realize {anchor : ℕ} {s : Store preset fork} {a b : E
   have := h.2
   omega
 
-
 private theorem resetAge_tick_slot {anchor : ℕ} {s t : Store preset fork}
     {time : UInt64} {old new : Slot} (oldOk : s.getCurrentSlot config = .ok old)
     (newOk : t.getCurrentSlot config = .ok new) (le : old ≤ new)
@@ -1145,94 +1134,9 @@ private theorem resetAge_tick_slot {anchor : ℕ} {s t : Store preset fork}
     | cases Except.ok.inj tick
       exact resetAge_mono h epochLe
     | have boundary : old < new ∧ offset = 0 := by assumption
-      have lt : computeEpochAtSlot preset old < computeEpochAtSlot preset new := by
-        obtain ⟨higher, zero⟩ := boundary
-        have higher := UInt64.lt_iff_toNat_lt.mp higher
-        have offsetOk := mapError_ok_iff.mp offsetOk
-        unfold computeSlotsSinceEpochStart at offsetOk
-        rw [bind_ok_iff] at offsetOk
-        obtain ⟨start, startOk, sub⟩ := offsetOk
-        have startEq := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
-        have subEq : new - start = 0 := by simpa [zero] using Except.ok.inj sub
-        have subEq := congrArg UInt64.toNat subEq
-        simp only [UInt64.toNat_sub, UInt64.toNat_zero] at subEq
-        rw [UInt64.lt_iff_toNat_lt, computeEpochAtSlot, computeEpochAtSlot, UInt64.toNat_div,
-          UInt64.toNat_div]
-        rw [computeEpochAtSlot, UInt64.toNat_div] at startEq
-        have startBound := start.toNat_lt
-        have newBound := new.toNat_lt
-        have eq : new.toNat = new.toNat / preset.SLOTS_PER_EPOCH.toNat *
-            preset.SLOTS_PER_EPOCH.toNat := by omega
-        have pos : 0 < preset.SLOTS_PER_EPOCH.toNat := by
-          by_contra notPos
-          have zero : preset.SLOTS_PER_EPOCH.toNat = 0 := by omega
-          simp [zero] at eq
-          omega
-        have bound := Nat.div_mul_le_self old.toNat preset.SLOTS_PER_EPOCH.toNat
-        apply (Nat.mul_lt_mul_right pos).mp
-        omega
+      obtain ⟨higher, rfl⟩ := boundary
       cases Except.ok.inj tick
-      exact resetAge_realize h lt
-
-private theorem resetAge_catchUp {anchor : ℕ} {s t : Store preset fork}
-    {target old : Slot} (oldOk : s.getCurrentSlot config = .ok old) (le : old ≤ target)
-    (h : ResetAge anchor s (computeEpochAtSlot preset old))
-    (caught : Store.catchUp config s target = .ok t) :
-    t.getCurrentSlot config = .ok target ∧
-      ResetAge anchor t (computeEpochAtSlot preset target) := by
-  induction s using Store.catchUp.induct config target generalizing old with
-  | case1 s ih =>
-    rw [Store.catchUp.eq_1] at caught
-    rw [bind_ok_iff] at caught
-    obtain ⟨current, currentOk, caught⟩ := caught
-    rw [oldOk, Except.ok.injEq] at currentOk
-    subst current
-    split at caught
-    · rename_i lt
-      rw [bind_ok_iff] at caught
-      obtain ⟨next, nextOk, caught⟩ := caught
-      rw [bind_ok_iff] at caught
-      obtain ⟨time, timeOk, caught⟩ := caught
-      rw [bind_ok_iff] at caught
-      obtain ⟨ticked, tick, caught⟩ := caught
-      split at caught
-      · have nextOk := mapError_ok_iff.mp nextOk
-        have timeOk := mapError_ok_iff.mp timeOk
-        have tickSlot : ticked.getCurrentSlot config = .ok next := by
-          unfold Store.getCurrentSlot
-          rw [(Store.onTickPerSlot_frame tick).1, (Store.onTickPerSlot_frame tick).2.1,
-            computeSlotAtTimeMs_computeTimeAtSlotMs (Store.slotDuration_pos oldOk) timeOk]
-          rfl
-        have sum := (addChecked_ok_iff.mp nextOk).2
-        have low : old ≤ next := UInt64.le_iff_toNat_le.mpr (by simp_all)
-        have high : next ≤ target := UInt64.le_iff_toNat_le.mpr (by
-          have := UInt64.lt_iff_toNat_lt.mp lt
-          simp only [UInt64.toNat_one] at sum
-          omega)
-        exact ih ticked ‹_› tickSlot high (resetAge_tick_slot oldOk tickSlot low h tick) caught
-      · cases caught
-    · rename_i notLt
-      have eq : old = target := UInt64.le_antisymm le (UInt64.not_lt.mp notLt)
-      cases Except.ok.inj caught
-      subst target
-      exact ⟨oldOk, h⟩
-
-private theorem resetAge_tick {anchor : ℕ} {s t : Store preset fork}
-    {time : UInt64} {old : Slot} (oldOk : s.getCurrentSlot config = .ok old)
-    (forward : s.timeMs ≤ time) (h : ResetAge anchor s (computeEpochAtSlot preset old))
-    (tick : s.onTick config time = .ok t) :
-    ∃ current, t.getCurrentSlot config = .ok current ∧
-      ResetAge anchor t (computeEpochAtSlot preset current) := by
-  have finalSlot := Store.getCurrentSlot_onTick tick
-  unfold Store.onTick at tick
-  simp only [bind_ok_iff] at tick
-  obtain ⟨target, targetOk, caught, caughtOk, tick⟩ := tick
-  have low : old ≤ target := computeSlotAtTimeMs_mono forward
-    (mapError_ok_iff.mp oldOk) (mapError_ok_iff.mp targetOk)
-  have targetFinal := finalSlot.trans targetOk
-  obtain ⟨caughtSlot, h⟩ := resetAge_catchUp oldOk low h caughtOk
-  exact ⟨target, targetFinal,
-    resetAge_tick_slot caughtSlot targetFinal (UInt64.le_refl _) h tick⟩
+      exact resetAge_realize h (epoch_lt_of_offset_zero higher (mapError_ok_iff.mp offsetOk))
 
 /-- Importing a block keeps realized finality two epochs old and unrealized finality one. -/
 private theorem resetAge_block {sources : BlockSources preset fork} {s t : Store preset fork}
@@ -1348,7 +1252,11 @@ private theorem resetAge_forward {store : Store preset fork}
     exact ⟨.inl (Nat.le_refl _), .inl (Nat.le_refl _)⟩
   | tick _ le tick ih =>
     obtain ⟨current, clock, h⟩ := ih
-    exact resetAge_tick clock le h tick
+    obtain ⟨current', clock', -, h'⟩ := Store.onTick_slot_induction
+      (fun s slot =>
+        ResetAge (getCurrentEpoch anchorState).toNat s (computeEpochAtSlot preset slot))
+      (fun oldOk newOk le _ h tick => resetAge_tick_slot oldOk newOk le h tick) clock le h tick
+    exact ⟨current', clock', h'⟩
   | block reached added ih =>
     obtain ⟨current, clock, h⟩ := ih
     exact ⟨current, (Store.onBlock_sameClock added).getCurrentSlot.trans clock,

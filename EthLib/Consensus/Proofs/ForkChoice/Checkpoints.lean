@@ -565,25 +565,64 @@ private theorem updateCheckpoints_unrealizedJustifiedCheckpoint (justified final
 
 /-! ### What a forward tick does to the two justified checkpoints -/
 
-/-- A slot at the start of its epoch is in a later epoch than any earlier slot. -/
-private theorem epoch_lt_of_offset_zero {old new : Slot}
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (lt : old < new)
-    (zero : computeSlotsSinceEpochStart preset new = .ok 0) :
-    computeEpochAtSlot preset old < computeEpochAtSlot preset new := by
-  simp only [computeSlotsSinceEpochStart, computeStartSlotAtEpoch_computeEpochAtSlot, bind,
-    Except.bind, pure, Except.pure, Except.ok.injEq] at zero
-  have rounded := (computeStartSlotAtEpoch_ok_iff.mp
-    (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) new)).2
-  rw [computeEpochAtSlot, UInt64.toNat_div] at rounded
-  have below := Nat.div_mul_le_self new.toNat preset.SLOTS_PER_EPOCH.toNat
-  have le : new / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH ≤ new :=
-    UInt64.le_iff_toNat_le.mpr (by omega)
-  have sub := congrArg UInt64.toNat zero
-  rw [UInt64.toNat_sub_of_le _ _ le, UInt64.toNat_zero] at sub
-  have ltNat := UInt64.lt_iff_toNat_lt.mp lt
-  apply UInt64.lt_iff_toNat_lt.mpr
-  simp only [computeEpochAtSlot, UInt64.toNat_div]
-  exact (Nat.div_lt_iff_lt_mul positive).mpr (by omega)
+/-- A forward tick passes a fact of a store at its slot to the store after it.
+
+Each tick within a slot must pass it on, from a slot to a slot at most one later. -/
+theorem onTick_slot_induction (P : Store preset fork → Slot → Prop)
+    (step : ∀ {s t : Store preset fork} {time : UInt64} {old new : Slot},
+      s.getCurrentSlot config = .ok old → t.getCurrentSlot config = .ok new → old ≤ new →
+      new.toNat ≤ old.toNat + 1 → P s old → s.onTickPerSlot config time = .ok t → P t new)
+    {s t : Store preset fork} {time : UInt64} {old : Slot}
+    (oldOk : s.getCurrentSlot config = .ok old) (forward : s.timeMs ≤ time) (holds : P s old)
+    (tick : s.onTick config time = .ok t) :
+    ∃ current, t.getCurrentSlot config = .ok current ∧ old ≤ current ∧ P t current := by
+  -- The catch-up loop ticks once for each slot up to the target.
+  have catchUp : ∀ {s t : Store preset fork} {old target : Slot},
+      s.getCurrentSlot config = .ok old → old ≤ target → P s old →
+      Store.catchUp config s target = .ok t →
+      t.getCurrentSlot config = .ok target ∧ P t target := by
+    intro s t old target oldOk le holds caught
+    induction s using Store.catchUp.induct config target generalizing old with
+    | case1 s ih =>
+      rw [Store.catchUp.eq_1, bind_ok_iff] at caught
+      obtain ⟨current, currentOk, caught⟩ := caught
+      rw [oldOk, Except.ok.injEq] at currentOk
+      subst current
+      split at caught
+      · rename_i lt
+        simp only [bind_ok_iff] at caught
+        obtain ⟨next, nextOk, time, timeOk, ticked, tick, caught⟩ := caught
+        split at caught
+        · have nextOk := mapError_ok_iff.mp nextOk
+          have timeOk := mapError_ok_iff.mp timeOk
+          have tickSlot : ticked.getCurrentSlot config = .ok next := by
+            unfold Store.getCurrentSlot
+            rw [(Store.onTickPerSlot_frame tick).1, (Store.onTickPerSlot_frame tick).2.1,
+              computeSlotAtTimeMs_computeTimeAtSlotMs (Store.slotDuration_pos oldOk) timeOk]
+            rfl
+          have sum := (addChecked_ok_iff.mp nextOk).2
+          simp only [UInt64.toNat_one] at sum
+          have high : next ≤ target := UInt64.le_iff_toNat_le.mpr (by
+            have lt := UInt64.lt_iff_toNat_lt.mp lt
+            omega)
+          exact ih ticked ‹_› tickSlot high
+            (step oldOk tickSlot (UInt64.le_iff_toNat_le.mpr (by omega)) (by omega) holds tick)
+            caught
+        · cases caught
+      · have same : old = target := UInt64.le_antisymm le (UInt64.not_lt.mp ‹_›)
+        cases Except.ok.inj caught
+        subst target
+        exact ⟨oldOk, holds⟩
+  have finalSlot := Store.getCurrentSlot_onTick tick
+  unfold Store.onTick at tick
+  simp only [bind_ok_iff] at tick
+  obtain ⟨target, targetOk, caught, caughtOk, tick⟩ := tick
+  have low : old ≤ target := computeSlotAtTimeMs_mono forward
+    (mapError_ok_iff.mp oldOk) (mapError_ok_iff.mp targetOk)
+  have targetFinal := finalSlot.trans targetOk
+  obtain ⟨caughtSlot, caughtHolds⟩ := catchUp oldOk low holds caughtOk
+  exact ⟨target, targetFinal, low,
+    step caughtSlot targetFinal (UInt64.le_refl _) (by omega) caughtHolds tick⟩
 
 /-- A tick within a slot keeps the unrealized justified checkpoint.
 
@@ -626,7 +665,7 @@ private theorem onTickPerSlot_realizes {s t : Store preset fork} {time : UInt64}
   split at tick
   · rename_i realize
     obtain ⟨lt, rfl⟩ := realize
-    have cross := epoch_lt_of_offset_zero positive lt (mapError_ok_iff.mp offsetOk)
+    have cross := epoch_lt_of_offset_zero lt (mapError_ok_iff.mp offsetOk)
     split at tick <;>
     · cases Except.ok.inj tick
       refine ⟨updateCheckpoints_unrealizedJustifiedCheckpoint _ _, ?_,
@@ -642,74 +681,6 @@ private theorem onTickPerSlot_realizes {s t : Store preset fork} {time : UInt64}
       rw [zero] at offsetOk
       have eq : offset = 0 := by simpa [Except.mapError] using offsetOk.symm
       exact (kept ⟨lt, eq⟩).elim
-
-/-- The catch-up loop keeps the unrealized justified checkpoint.
-
-It keeps the justified one, or adopts the unrealized one at a crossed epoch.
-
-It adopts it whenever it crosses an epoch. -/
-private theorem catchUp_realizes {s t : Store preset fork} {old target : Slot}
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
-    (oldOk : s.getCurrentSlot config = .ok old) (le : old ≤ target)
-    (caught : Store.catchUp config s target = .ok t) :
-    t.getCurrentSlot config = .ok target ∧
-      t.unrealizedJustifiedCheckpoint = s.unrealizedJustifiedCheckpoint ∧
-      (t.justifiedCheckpoint = s.justifiedCheckpoint ∨
-        t.justifiedCheckpoint = s.unrealizedJustifiedCheckpoint ∧
-          computeEpochAtSlot preset old < computeEpochAtSlot preset target) ∧
-      (computeEpochAtSlot preset old < computeEpochAtSlot preset target →
-        s.unrealizedJustifiedCheckpoint.epoch ≤ t.justifiedCheckpoint.epoch) := by
-  induction s using Store.catchUp.induct config target generalizing old with
-  | case1 s ih =>
-    rw [Store.catchUp.eq_1] at caught
-    rw [bind_ok_iff] at caught
-    obtain ⟨current, currentOk, caught⟩ := caught
-    rw [oldOk, Except.ok.injEq] at currentOk
-    subst current
-    split at caught
-    · rename_i lt
-      simp only [bind_ok_iff] at caught
-      obtain ⟨next, nextOk, time, timeOk, ticked, tick, caught⟩ := caught
-      split at caught
-      · have nextOk := mapError_ok_iff.mp nextOk
-        have timeOk := mapError_ok_iff.mp timeOk
-        have tickSlot : ticked.getCurrentSlot config = .ok next := by
-          unfold Store.getCurrentSlot
-          rw [(Store.onTickPerSlot_frame tick).1, (Store.onTickPerSlot_frame tick).2.1,
-            computeSlotAtTimeMs_computeTimeAtSlotMs (Store.slotDuration_pos oldOk) timeOk]
-          rfl
-        have sum := (addChecked_ok_iff.mp nextOk).2
-        simp only [UInt64.toNat_one] at sum
-        have high : next ≤ target := UInt64.le_iff_toNat_le.mpr (by
-          have lt := UInt64.lt_iff_toNat_lt.mp lt
-          omega)
-        have nextLe : computeEpochAtSlot preset next ≤ computeEpochAtSlot preset target := by
-          rw [UInt64.le_iff_toNat_le]
-          simp only [computeEpochAtSlot, UInt64.toNat_div]
-          exact Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp high)
-        have oldLe : computeEpochAtSlot preset old ≤ computeEpochAtSlot preset next := by
-          rw [UInt64.le_iff_toNat_le]
-          simp only [computeEpochAtSlot, UInt64.toNat_div]
-          exact Nat.div_le_div_right (by omega)
-        obtain ⟨clock, pending, justified, realized⟩ := ih ticked ‹_› tickSlot high caught
-        obtain ⟨same, step, stepRealized⟩ := onTickPerSlot_realizes positive oldOk tickSlot tick
-        refine ⟨clock, pending.trans same, ?_, ?_⟩
-        · rcases justified with eq | ⟨eq, cross⟩
-          · rcases step with eq' | ⟨eq', cross'⟩
-            · exact .inl (eq.trans eq')
-            · exact .inr ⟨eq.trans eq', UInt64.lt_of_lt_of_le cross' nextLe⟩
-          · exact .inr ⟨eq.trans same, UInt64.lt_of_le_of_lt oldLe cross⟩
-        · intro cross
-          by_cases first : computeEpochAtSlot preset old < computeEpochAtSlot preset next
-          · exact UInt64.le_trans (stepRealized (by omega) first)
-              (Store.catchUp_frame caught).2.1.1.epoch_le
-          · rw [← same]
-            exact realized (UInt64.lt_of_le_of_lt (UInt64.not_lt.mp first) cross)
-      · cases caught
-    · have same : old = target := UInt64.le_antisymm le (UInt64.not_lt.mp ‹_›)
-      cases Except.ok.inj caught
-      subst target
-      exact ⟨oldOk, rfl, .inl rfl, fun cross => (UInt64.lt_irrefl _ cross).elim⟩
 
 /-- A forward tick keeps the unrealized justified checkpoint.
 
@@ -728,22 +699,32 @@ private theorem onTick_justifiedCheckpoint_of_unrealized {s t : Store preset for
           computeEpochAtSlot preset old < computeEpochAtSlot preset current) ∧
       (computeEpochAtSlot preset old < computeEpochAtSlot preset current →
         s.unrealizedJustifiedCheckpoint.epoch ≤ t.justifiedCheckpoint.epoch) := by
-  have finalSlot := Store.getCurrentSlot_onTick tick
-  unfold Store.onTick at tick
-  simp only [bind_ok_iff] at tick
-  obtain ⟨target, targetOk, caught, caughtOk, tick⟩ := tick
-  have low : old ≤ target := computeSlotAtTimeMs_mono forward
-    (mapError_ok_iff.mp oldOk) (mapError_ok_iff.mp targetOk)
-  have targetFinal := finalSlot.trans targetOk
-  obtain ⟨caughtSlot, pending, justified, realized⟩ := catchUp_realizes positive oldOk low caughtOk
-  obtain ⟨same, step, _⟩ := onTickPerSlot_realizes positive caughtSlot targetFinal tick
-  refine ⟨target, targetFinal, low, same.trans pending, ?_, fun cross =>
-    UInt64.le_trans (realized cross) (Store.onTickPerSlot_frame tick).2.2.1.1.epoch_le⟩
-  rcases step with eq | ⟨_, cross⟩
-  · rcases justified with eq' | ⟨eq', cross⟩
-    · exact .inl (eq.trans eq')
-    · exact .inr ⟨eq.trans eq', cross⟩
-  · exact (UInt64.lt_irrefl _ cross).elim
+  obtain ⟨current, currentOk, le, pending, justified, realized, -⟩ := onTick_slot_induction
+    (fun u slot => u.unrealizedJustifiedCheckpoint = s.unrealizedJustifiedCheckpoint ∧
+      (u.justifiedCheckpoint = s.justifiedCheckpoint ∨
+        u.justifiedCheckpoint = s.unrealizedJustifiedCheckpoint ∧
+          computeEpochAtSlot preset old < computeEpochAtSlot preset slot) ∧
+      (computeEpochAtSlot preset old < computeEpochAtSlot preset slot →
+        s.unrealizedJustifiedCheckpoint.epoch ≤ u.justifiedCheckpoint.epoch) ∧
+      computeEpochAtSlot preset old ≤ computeEpochAtSlot preset slot)
+    (fun {u v _ before after} beforeOk afterOk le next ⟨pending, justified, realized, oldLe⟩
+        tick => by
+      obtain ⟨same, step, stepRealized⟩ := onTickPerSlot_realizes positive beforeOk afterOk tick
+      have afterLe : computeEpochAtSlot preset before ≤ computeEpochAtSlot preset after :=
+        UInt64.le_iff_toNat_le.mpr (epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp le))
+      refine ⟨same.trans pending, ?_, fun cross => ?_, UInt64.le_trans oldLe afterLe⟩
+      · rcases step with eq | ⟨eq, cross⟩
+        · rcases justified with eq' | ⟨eq', cross'⟩
+          · exact .inl (eq.trans eq')
+          · exact .inr ⟨eq.trans eq', UInt64.lt_of_lt_of_le cross' afterLe⟩
+        · exact .inr ⟨eq.trans pending, UInt64.lt_of_le_of_lt oldLe cross⟩
+      · by_cases first : computeEpochAtSlot preset old < computeEpochAtSlot preset before
+        · exact UInt64.le_trans (realized first) (Store.onTickPerSlot_frame tick).2.2.1.1.epoch_le
+        · rw [← pending]
+          exact stepRealized next (UInt64.lt_of_le_of_lt (UInt64.not_lt.mp first) cross))
+    oldOk forward
+    ⟨rfl, .inl rfl, fun cross => (UInt64.lt_irrefl _ cross).elim, UInt64.le_refl _⟩ tick
+  exact ⟨current, currentOk, le, pending, justified, realized⟩
 
 /-! ### The pull-up of a held block reaches the justified checkpoint after its epoch -/
 
@@ -791,26 +772,11 @@ private theorem adoption_block {before after : Store preset fork} {epoch : Epoch
       added
     obtain ⟨_, _, rfl⟩ := Store.recordBlockPtcVotes_onlyPtcVotes vote
     have pendingRecord : recorded.unrealizedJustifiedCheckpoint =
-        before.unrealizedJustifiedCheckpoint := by
-      unfold Store.recordBlockTimeliness at record
-      simp only [bind_ok_iff, pure, Except.pure] at record
-      obtain ⟨_, _, _, _, _, _, _, _, record⟩ := record
-      split at record
-      · simp only [bind_ok_iff, Except.ok.injEq] at record
-        obtain ⟨_, _, rfl⟩ := record
-        rfl
-      · cases record
-        rfl
+        before.unrealizedJustifiedCheckpoint :=
+      (Store.recordBlockTimeliness_frame record).2.2.2.2.1.unrealizedJustified
     have pendingBoost : boosted.unrealizedJustifiedCheckpoint =
-        before.unrealizedJustifiedCheckpoint := by
-      unfold Store.updateProposerBoostRoot at boost
-      split at boost
-      rotate_left
-      · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at boost
-      simp only [bind_ok_iff, pure_bind] at boost
-      obtain ⟨_, _, _, _, _, _, boost⟩ := boost
-      split at boost <;> simp only [pure, Except.pure, Except.ok.injEq] at boost <;>
-        subst boosted <;> exact pendingRecord
+        before.unrealizedJustifiedCheckpoint :=
+      (Store.updateProposerBoostRoot_frame boost).2.2.2.2.1.unrealizedJustified.trans pendingRecord
     have maps := (Store.computePulledUpTip_frame added).2.2.1
     have blockMaps := (Store.computePulledUpTip_frame added).2.1
     have fields : after.blockStates = before.blockStates.insert blockRoot state := by
