@@ -70,7 +70,9 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred 
       discount.toNat + 2 * support.toNat)
     (callerTime : (e.world n).time ≤ time) (sourceReads : SourceWindowReads (e := e) n time source)
     (drift : WindowMarginDrift (e := e) n time source shift)
-    (reserve : SourceWindowReserve (e := e) n source) {horizon : Epoch}
+    {receiverLast : Slot}
+    (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) head source
+      first receiverLast) {horizon : Epoch}
     (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon time)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
@@ -99,7 +101,7 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred 
     (known : ((e.world k).state w).blocks[root]? = some block)
     (finality : ReceiverFinalityCovers (e := e) w k root block)
     {receiverHead : ForkChoiceNode} {state : BeaconState preset fork}
-    {current receiverLast : Slot} {receiverEpoch : Epoch} {score : Gwei}
+    {current : Slot} {receiverEpoch : Epoch} {score : Gwei}
     {window participants : Std.TreeSet ValidatorIndex}
     (receiverHeadOk : ((e.world k).state w).getHead config = .ok receiverHead)
     (receiverParent : ((e.world k).state w).isAncestor receiverHead
@@ -135,7 +137,7 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred 
     rootCovers headDescends historicalBelow callerEpochOk historicalEpochOk near epochStartOk
     epochStartTimeOk historyCovers receiver atTime upToDate known finality receiverHeadOk
     receiverParent stateOk currentOk receiverEpochOk receiverNear receiverLastOk windowOk
-    participantsOk exit absent route
+    participantsOk exit absent
   have applyHead (headRoute) := ancestor_head_of_window_margin anchored start history receiver
     (by rw [atTime]) (UInt64.le_of_eq anchorSlot) preGloas absent minLookahead maxLookahead ring
     receiverHeadOk stateOk tree known caller callerTime (by rw [atTime]; exact callerTime) drift

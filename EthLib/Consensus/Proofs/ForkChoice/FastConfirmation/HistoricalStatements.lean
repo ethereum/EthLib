@@ -182,11 +182,15 @@ def CheckpointStakeCeiling (cap last : Nat) : Prop :=
 
 variable [DecidablePred (· ∈ J)]
 
-/-- At the call time, each nonempty window covers Byzantine stake plus the weighted exit reserve. -/
-def SourceWindowReserve (call : Nat) (source : BeaconState preset fork) : Prop :=
-  ∀ w ∈ J, ∀ k head first finish participants,
-    (e.world k).time = (e.world call).time → first ≤ finish →
-    ((e.world k).state w).getCommitteesBetweenSlots head first finish = .ok participants →
+/-- Each nonempty window of the head between the two slots has little Byzantine stake.
+
+Its Byzantine stake plus half the exit reserve is within the threshold share of its active stake.
+
+Stakes are the source state's balances of the window's members active at the source. -/
+def SourceWindowReserve (store : Store preset fork) (head : Root)
+    (source : BeaconState preset fork) (first last : Slot) : Prop :=
+  ∀ low high participants, first ≤ low → low ≤ high → high ≤ last →
+    store.getCommitteesBetweenSlots head low high = .ok participants →
     100 * stake (fun v => balanceAt source v.toNat)
         {v ∈ Store.activeMembers source participants | v ∉ J} +
       50 * exitReserve config source ≤ config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat *

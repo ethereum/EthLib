@@ -2497,14 +2497,16 @@ Otherwise the receiver's first epochs lie in the caller's window.
 
 Then the receiver's weight is at most the caller's. -/
 private theorem window_reserves_and_weight [DecidablePred (· ∈ J)] {n : ℕ}
-    {source : BeaconState preset fork} (reserve : SourceWindowReserve (e := e) n source)
-    {u : ValidatorIndex} (caller : u ∈ J) {callerHead : Root} {receiverStore : Store preset fork}
-    {receiverHead : Root} {first last slot startSlot finish receiverLast current : Slot}
+    {source : BeaconState preset fork} {u : ValidatorIndex} {callerHead : Root}
+    {receiverStore : Store preset fork} {receiverHead : Root}
+    {first last slot startSlot finish receiverLast current : Slot}
+    (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) callerHead
+      source first receiverLast)
     {maximum sourceMaximum : Gwei}
     {advParticipants wcParticipants xParticipants members : Std.TreeSet ValidatorIndex}
     (slotNext : addChecked last 1 = .ok slot)
     (currentNext : addChecked receiverLast 1 = .ok current)
-    (nonempty : first ≤ last)
+    (nonempty : first ≤ last) (firstStart : first ≤ startSlot) (lastLe : last ≤ receiverLast)
     (startCases : startSlot ≤ last ∨ Store.activeMembers source advParticipants = ∅)
     (finishLe : finish ≤ receiverLast)
     (advOk : ((e.world n).state u).getCommitteesBetweenSlots callerHead startSlot last =
@@ -2582,13 +2584,13 @@ private theorem window_reserves_and_weight [DecidablePred (· ∈ J)] {n : ℕ}
               (UInt64.le_trans ordered (UInt64.le_iff_toNat_le.mpr (by omega)))]
           exact or_and_right
         rw [← vEq]
-        exact reserve u caller n callerHead startSlot finish vParticipants rfl
-          (UInt64.le_trans ordered (UInt64.le_of_lt longer)) vCaller
+        exact reserve startSlot finish vParticipants firstStart
+          (UInt64.le_trans ordered (UInt64.le_of_lt longer)) finishLe vCaller
       · rw [empty, Finset.empty_union]
-        exact reserve u caller n callerHead slot finish xParticipants rfl
+        exact reserve slot finish xParticipants firstSlot
           (UInt64.le_iff_toNat_le.mpr (by
             have := UInt64.lt_iff_toNat_lt.mp longer
-            omega)) xCaller
+            omega)) finishLe xCaller
     -- The receiver's first epochs are the caller's window and the new members.
     have membersIn : Store.activeMembers source members ⊆
         Store.activeMembers source wcParticipants ∪ Store.activeMembers source xParticipants := by
@@ -2605,7 +2607,7 @@ private theorem window_reserves_and_weight [DecidablePred (· ∈ J)] {n : ℕ}
       rcases weightCases with bound | ⟨-, bound⟩ <;> omega
     refine ⟨exitReserve config source, ?_, reserveV, ?_⟩
     · rcases startCases with ordered | empty
-      · exact .inr (reserve u caller n callerHead startSlot last advParticipants rfl ordered advOk)
+      · exact .inr (reserve startSlot last advParticipants firstStart ordered lastLe advOk)
       · left
         simp [empty]
     · rcases Nat.le_total preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -2631,7 +2633,7 @@ private theorem window_reserves_and_weight [DecidablePred (· ∈ J)] {n : ℕ}
           stake (fun v => balanceAt source v.toNat)
             (Store.activeMembers source advParticipants) := by
       rcases startCases with ordered | empty
-      · have := reserve u caller n callerHead startSlot last advParticipants rfl ordered advOk
+      · have := reserve startSlot last advParticipants firstStart ordered lastLe advOk
         omega
       · simp [empty]
     refine ⟨0, .inr (by omega), by rw [xEmpty, Finset.union_empty]; omega, ?_⟩
@@ -2709,7 +2711,9 @@ public theorem Execution.source_surplus_or_accountable [DecidablePred (· ∈ J)
     (margin : maximum.toNat + boost.toNat + 2 * adversary.toNat + shift <
       discount.toNat + 2 * support.toNat)
     (callerTime : (e.world n).time ≤ time) (sourceReads : SourceWindowReads (e := e) n time source)
-    (reserve : SourceWindowReserve (e := e) n source) {horizon : Epoch}
+    {receiverLast : Slot}
+    (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) head source
+      first receiverLast) {horizon : Epoch}
     (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon time)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
@@ -2738,7 +2742,7 @@ public theorem Execution.source_surplus_or_accountable [DecidablePred (· ∈ J)
     (known : ((e.world k).state w).blocks[root]? = some block)
     (finality : ReceiverFinalityCovers (e := e) w k root block)
     {receiverHead : ForkChoiceNode} {state : BeaconState preset fork}
-    {current receiverLast : Slot} {receiverEpoch : Epoch}
+    {current : Slot} {receiverEpoch : Epoch}
     {window participants : Std.TreeSet ValidatorIndex}
     (receiverHeadOk : ((e.world k).state w).getHead config = .ok receiverHead)
     (receiverParent : ((e.world k).state w).isAncestor receiverHead
@@ -2755,10 +2759,7 @@ public theorem Execution.source_surplus_or_accountable [DecidablePred (· ∈ J)
       beforeBlock = .ok participants)
     (exit : WindowExitBound (config := config) ((e.world k).state w) source receiverHead.root
       first receiverLast)
-    (absent : AnchorParentAbsent (e := e) time) {nodes : List ForkChoiceNode}
-    (route : ((e.world k).state w).isAncestor
-        ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
-      (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes) :
+    (absent : AnchorParentAbsent (e := e) time) :
     ((e.world k).state w).isAncestor
         ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
       (∃ receiverMaximum sourceMaximum sourceScore,
@@ -2783,8 +2784,6 @@ public theorem Execution.source_surplus_or_accountable [DecidablePred (· ∈ J)
   classical
   set callerStore := (e.world n).state u
   set receiverStore := (e.world k).state w
-  rcases route with justifiedAbove | _
-  · exact .inl justifiedAbove
   -- The finalized prefixes form one family, or the history holds accountable evidence.
   rcases e.finalizedFamily_or_historical_evidence anchored start sound anchorSlot anchorBoundary
       slots bounded roots absent parameters genesis pre heldEarly enough terminal caller
@@ -2937,14 +2936,15 @@ public theorem Execution.source_surplus_or_accountable [DecidablePred (· ∈ J)
       (fun a ha b hb => by simp [start a ha, anchorEmpty] at hb) n caller v (equivocators v member)
   -- The Byzantine stake of a caller window is within its share.
   have byzantineOf : ∀ {low high : Slot} {A : Std.TreeSet ValidatorIndex},
+      first ≤ low → high ≤ receiverLast →
       callerStore.getCommitteesBetweenSlots callerHead.root low high = .ok A →
       (low ≤ high ∨ Store.activeMembers source A = ∅) →
       100 * stake (fun v => balanceAt source v.toNat) {v ∈ Store.activeMembers source A | v ∉ J} ≤
         config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat *
           stake (fun v => balanceAt source v.toNat) (Store.activeMembers source A) := by
-    intro low high A read cases
+    intro low high A lowLe highLe read cases
     rcases cases with ordered | empty
-    · have := reserve u caller n callerHead.root low high A rfl ordered read
+    · have := reserve low high A lowLe ordered highLe read
       omega
     · simp [empty]
   -- The caller's discount is at most its honest parent voters.
@@ -2952,7 +2952,8 @@ public theorem Execution.source_surplus_or_accountable [DecidablePred (· ∈ J)
     (J := J) blockOk parentOk firstOk beforeOk parentParticipantsOk discountOk aligned increment
     (fun v member => e.equivocatingIndices_honest slots
       (fun a ha b hb => by simp [start a ha, anchorEmpty] at hb) n caller v member)
-    ⟨by norm_num, byzantineOf parentParticipantsOk (by
+    ⟨by norm_num, byzantineOf (UInt64.le_refl first) (UInt64.le_trans beforeLast lastBefore)
+      parentParticipantsOk (by
       by_cases ordered : first ≤ beforeBlock
       · exact .inl ordered
       · right
@@ -3023,9 +3024,9 @@ public theorem Execution.source_surplus_or_accountable [DecidablePred (· ∈ J)
   have currentNext : addChecked receiverLast 1 = .ok current :=
     addChecked_ok_iff.mpr ⟨by have := current.toNat_lt; simp only [UInt64.toNat_one]; omega,
       by simp only [UInt64.toNat_one]; omega⟩
-  obtain ⟨X, reserveAdv, reserveV, weight⟩ := window_reserves_and_weight reserve caller
-    slotNext currentNext nonempty startCases finishLe advOk wcCaller xCaller wcReceiver
-    xReceiver membersOk
+  obtain ⟨X, reserveAdv, reserveV, weight⟩ := window_reserves_and_weight reserve
+    slotNext currentNext nonempty firstStart lastBefore startCases finishLe advOk wcCaller xCaller
+    wcReceiver xReceiver membersOk
     (fun ordered _ => by
       obtain ⟨vParticipants, vReceiver, -⟩ := inside firstStart finishLe
       exact ⟨vParticipants, (agreeReads (UInt64.le_trans firstAbove firstStart) finishNear) ▸
@@ -3037,7 +3038,7 @@ public theorem Execution.source_surplus_or_accountable [DecidablePred (· ∈ J)
         (by rw [← supportEq]; exact margin) supIn equivocatorsIn apart equivocatorsDishonest cover
         discountHonest (by
           rcases startCases with ordered | empty
-          · exact .inr (byzantineOf advOk (.inl ordered))
+          · exact .inr (byzantineOf firstStart lastBefore advOk (.inl ordered))
           · left
             simp [empty]) with ⟨v, supporter, honest⟩ | ⟨v, voter⟩
     · obtain ⟨message, -, latest, -⟩ :=
