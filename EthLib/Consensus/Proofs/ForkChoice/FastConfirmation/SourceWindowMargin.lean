@@ -1681,19 +1681,6 @@ private theorem caller_supporter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
   · exact .inl (.inl member)
   · exact .inr ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
 
-/-- A validator that the source holds, active and not slashed, is in its unslashed active list. -/
-private theorem mem_unslashedActive {state : BeaconState preset fork} {v : ValidatorIndex}
-    {validator : Validator} (found : state.validators.data[v.toNat]? = some validator)
-    (unslashed : validator.slashed = false)
-    (active : isActiveValidator validator (getCurrentEpoch state) = true) :
-    v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset := by
-  simp only [List.mem_toFinset, List.mem_map, unslashedActiveBalances, List.mem_filterMap,
-    Option.ite_none_right_eq_some, Option.some.injEq, Prod.mk.injEq, Prod.exists]
-  refine ⟨v, validator.effectiveBalance, ⟨validator, v.toNat, ?_, ?_, ?_, rfl⟩, rfl⟩
-  · exact List.mem_zipIdx_iff_getElem?.mpr (by simpa using found)
-  · simp [active, unslashed]
-  · exact UInt64.ofNat_toNat
-
 /-- An honest active committee member is unslashed in the caller's checkpoint state. -/
 private theorem honest_unslashedActive_of_checkpointState {time : ℕ}
     (counted : HonestCountedStatesUnslashed (e := e) time) {anchor : Store preset fork}
@@ -1711,7 +1698,7 @@ private theorem honest_unslashedActive_of_checkpointState {time : ℕ}
   obtain ⟨_, validator, found, active⟩ := Store.mem_activeMembers.mp member
   have flag : validator.slashed = false := by
     simpa [slashedFlagAt, found] using unslashed
-  exact mem_unslashedActive found flag active
+  exact List.mem_toFinset.mpr (mem_unslashedActiveBalances_of_found found active flag)
 
 /-- A head state's epoch is at most the current epoch of a forward-reachable store. -/
 private theorem headState_epoch_le {store : Store preset fork}
@@ -2013,10 +2000,42 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
   rcases Execution.mem_supportersOf_of_latest_signed anchored start preGloas honest receiver
       receivedOk notCounted upToDate receiverTime dueOk dueLt allFresh
       (fun earlier low high => rootCovers earlier low (atTime ▸ high)) known rootAbove
-      (mem_unslashedActive validatorFound unslashed isActive)
+      (List.mem_toFinset.mpr
+        (mem_unslashedActiveBalances_of_found validatorFound isActive unslashed))
     with member | ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
   · exact .inl (.inl member)
   · exact .inr ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
+
+/-- Validated duty votes give the honest votes of every slot range that ends by their horizon.
+
+The range ends when its last slot does, and the votes of that slot are due before then. -/
+public theorem ValidatedDutyVotes.votesInSlots {Δ last : ℕ}
+    (votes : ValidatedDutyVotes (e := e) last) (fits : DelayFits fork config genesisTimeMs Δ)
+    {begin next : Slot} {endTime : UInt64}
+    (endTimeOk : computeTimeAtSlotMs config genesisTimeMs next = .ok endTime)
+    (complete : endTime.toNat ≤ last) :
+    VotesInSlots e begin next := by
+  intro a honestA dutySlot committee deadline _ before assigned deadlineOk begun
+  have nextFits : dutySlot.toNat + (1 : UInt64).toNat < 2 ^ 64 := by
+    have lt := UInt64.lt_iff_toNat_lt.mp before
+    have bound := next.toNat_lt
+    simp only [UInt64.toNat_one]
+    omega
+  have nextOk := addChecked_of_lt nextFits
+  have nextLe : dutySlot + 1 ≤ next := by
+    have lt := UInt64.lt_iff_toNat_lt.mp before
+    have value := (addChecked_ok_iff.mp nextOk).2
+    rw [UInt64.le_iff_toNat_le, value]
+    simp only [UInt64.toNat_one]
+    omega
+  obtain ⟨following, followingOk, _, followingLe⟩ :=
+    exists_timeAtSlotMs_of_le nextLe endTimeOk
+  obtain ⟨startTime, startOk, _, _⟩ :=
+    exists_timeAtSlotMs_of_le (UInt64.le_of_lt before) endTimeOk
+  have dueBound := fits.before_boundary nextOk startOk followingOk deadlineOk
+  apply votes a honestA dutySlot committee deadline assigned deadlineOk begun
+  have followingLe := UInt64.le_iff_toNat_le.mp followingLe
+  omega
 
 /-- An honest member of the receiver's window from the caller's slot supports the root there.
 
@@ -2095,29 +2114,8 @@ private theorem receiver_window_member_reaches {Δ : ℕ} (sync : e.Synchronous 
   have started : e.startTime ≤ (e.world n).time := by
     have := e.monotone_time (Nat.zero_le n)
     simpa [Execution.world_zero, World.initial] using this
-  have windowVotes : VotesInSlots e slot (finish + 1) := by
-    intro a honestA dutySlot committee deadline _ before assigned deadlineOk begun
-    have nextFits : dutySlot.toNat + (1 : UInt64).toNat < 2 ^ 64 := by
-      have lt := UInt64.lt_iff_toNat_lt.mp before
-      have bound := (finish + 1).toNat_lt
-      simp only [UInt64.toNat_one]
-      omega
-    have nextOk := addChecked_of_lt nextFits
-    have nextLe : dutySlot + 1 ≤ finish + 1 := by
-      have lt := UInt64.lt_iff_toNat_lt.mp before
-      have value := (addChecked_ok_iff.mp nextOk).2
-      rw [UInt64.le_iff_toNat_le, value]
-      simp only [UInt64.toNat_one]
-      omega
-    obtain ⟨following, followingOk, _, followingLe⟩ :=
-      exists_timeAtSlotMs_of_le nextLe endTimeOk
-    obtain ⟨startTime, startOk, _, _⟩ :=
-      exists_timeAtSlotMs_of_le (UInt64.le_of_lt before) endTimeOk
-    have dueBound := fits.before_boundary nextOk startOk followingOk deadlineOk
-    apply votes a honestA dutySlot committee deadline assigned deadlineOk begun
-    have followingLe := UInt64.le_iff_toNat_le.mp followingLe
-    rw [upToDate.1, atTime] at endLe
-    omega
+  have windowVotes := votes.votesInSlots fits (begin := slot) endTimeOk
+    (by rw [upToDate.1, atTime] at endLe; exact endLe)
   exact e.mem_supportersOf_of_duty_interval_core sync slots preGloas admitted fits prompt
     anchored anchorSlot anchorBoundary start started chain nonzero windowVotes beginOk endTimeOk
     (le_of_eq timeEq) (by rw [← atTime, ← upToDate.1]; exact endLe) rootCovers receiver atTime
@@ -2867,7 +2865,8 @@ public theorem Execution.source_surplus_or_historical_evidence [DecidablePred (�
     stake_counted_eq fun v member => by
       obtain ⟨-, ⟨validator, validatorFound, unslashedV, activeV⟩, -⟩ :=
         Store.mem_parentVotersOf.mp (Finset.mem_filter.mp member).1
-      exact mem_unslashedActive validatorFound unslashedV activeV]
+      exact List.mem_toFinset.mpr
+        (mem_unslashedActiveBalances_of_found validatorFound activeV unslashedV)]
   exact surplus
 
 end EthLib.Consensus.Models.Network

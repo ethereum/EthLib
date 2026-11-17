@@ -3001,6 +3001,17 @@ The direct-safety branch requires deposited genesis, a fixed-fork history before
 The theorem also retains the stated slot, epoch, tree, viable-route and successful-read conditions.
 These conditions are recorded in `HistoricalStatements.lean` and in the endpoint's statement; the theorem is not unconditional safety of every successful confirmation call.
 
+`Execution.honestHeadsCover_of_historical_anchor` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalCoverage.lean` removes the assumed coverage of the root.
+An induction on time applies the historical-anchor theorem at each time until two epochs after the parent's epoch, and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` after that.
+It concludes that every up-to-date honest head from the call to the horizon descends from the block, or one of the same two alternatives.
+The coverage of the parent over the same interval and the coverage of the historical anchor before the call remain hypotheses.
+Residual finalized-checkpoint compatibility is carried unchanged, so cross-store finality safety stays assumed.
+Receiver finality coverage and the receiver's block lookup are derived from `RootViable`, the root's viability at each honest store, which is assumed.
+It assumes that no up-to-date honest justified checkpoint over the interval conflicts with the root: the checkpoint-consistency half of the safety of the confirmation, not derived.
+`HonestHeadReads` assumes that each honest head reads its justified state and its committee windows.
+`ReceiverWindowExits` assumes the exit bound of each receiver's window, and `LateDutyMajority` assumes the honest duty majority of the duty-epoch theorem.
+The receiver's proposer score is derived from the checkpoint stake ceiling and `Config.ProposerScoreFits`, a bound on the boost that mainnet and minimal satisfy.
+
 `Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
 `getCurrentTarget_eq_ok_iff` states that target as the checkpoint of the store's epoch in the chain of the head, and `epoch_eq_of_getCurrentTarget` gives its epoch.
 `willCurrentTargetBeJustified_eq_ok_true_iff` states the two-thirds test, with both products checked for overflow.

@@ -37,42 +37,6 @@ private theorem addChecked_one_of_subChecked {a b : Slot}
   constructor <;> omega
 
 
-/-- A finite active stake supplies the checked total, without bounding inactive balances. -/
-private theorem activeTotal_exists {state : BeaconState preset fork}
-    (within : state.RegistryWithinLimit)
-    (bounded : stake (fun v => balanceAt state v.toNat)
-      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset < 2 ^ 64) :
-    ∃ total, getTotalActiveBalance state = .ok total := by
-  let value := max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-    (stake (fun v => balanceAt state v.toNat)
-      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
-  have fits : value < 2 ^ 64 := max_lt preset.EFFECTIVE_BALANCE_INCREMENT.toNat_lt bounded
-  refine ⟨value.toUInt64, ?_⟩
-  unfold getTotalActiveBalance
-  rw [getActiveValidatorIndicesChecked_of_within within]
-  apply getTotalBalance_ok_iff_stake.mpr
-  refine ⟨?_, bounded, UInt64.toNat_ofNat_of_lt' fits⟩
-  intro v member
-  obtain ⟨validator, found, _⟩ := (mem_getActiveValidatorIndices within).mp member
-  exact (Array.getElem?_eq_some_iff.mp found).1
-
-/-- A successful total also bounds a subset, without bounding inactive balances. -/
-private theorem totalBalance_exists_of_subset {state : BeaconState preset fork}
-    {indices all : List ValidatorIndex} {total : Gwei}
-    (read : getTotalBalance state all = .ok total)
-    (subset : ∀ v ∈ indices, v ∈ all) :
-    ∃ result, getTotalBalance state indices = .ok result := by
-  obtain ⟨inside, bounded, -⟩ := getTotalBalance_ok_iff_stake.mp read
-  have small : stake (fun v => balanceAt state v.toNat) indices.toFinset < 2 ^ 64 :=
-    lt_of_le_of_lt (stake_mono fun v member =>
-      List.mem_toFinset.mpr (subset v (List.mem_toFinset.mp member))) bounded
-  let value := max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-    (stake (fun v => balanceAt state v.toNat) indices.toFinset)
-  have fits : value < 2 ^ 64 := max_lt preset.EFFECTIVE_BALANCE_INCREMENT.toNat_lt small
-  refine ⟨value.toUInt64, getTotalBalance_ok_iff_stake.mpr
-    ⟨fun v member => inside v (subset v member), small, ?_⟩⟩
-  exact UInt64.toNat_ofNat_of_lt' fits
-
 /-- Registry lookups and a checked active total supply a checked filtered total. -/
 private theorem filteredTotal_exists {state : BeaconState preset fork}
     {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
@@ -87,7 +51,7 @@ private theorem filteredTotal_exists {state : BeaconState preset fork}
     (list := participants.toList) (fun v member => by
       obtain ⟨validator, found⟩ := inside v (Std.TreeSet.mem_toList.mp member)
       exact ⟨isActiveValidator validator (getCurrentEpoch state), by simp [found]⟩)
-  obtain ⟨result, resultOk⟩ := totalBalance_exists_of_subset
+  obtain ⟨result, resultOk⟩ := getTotalBalance_exists_of_subset
     (indices := active) (getTotalActiveBalance_ok read) (fun v member => by
       have passed := passes_of_mem_filterM_ok filtered member
       simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at passed
@@ -535,19 +499,12 @@ private theorem honest_supporters_le_weight [DecidablePred (· ∈ J)]
     obtain ⟨⟨index, balance⟩, ⟨entry, _⟩, same⟩ := supporter
     simp only at same
     subst index
-    simp only [unslashedActiveBalances, List.mem_filterMap, Option.ite_none_right_eq_some,
-      Option.some.injEq, Prod.mk.injEq, Prod.exists] at entry
-    obtain ⟨validator, position, inZip, flags, indexEq, _⟩ := entry
-    have atIndex := List.mem_zipIdx_iff_getElem?.mp inZip
-    have atArray : state.validators.data[position]? = some validator := by
-      simpa using atIndex
-    have below : position < state.validators.data.size := by
-      simpa using (List.getElem?_eq_some_iff.mp atIndex).1
-    have back := toNat_toUInt64_of_lt within below
+    obtain ⟨validator, found, active, unslashed⟩ :=
+      (mem_unslashedActiveBalances_iff within).mp (List.mem_map.mpr ⟨_, entry, rfl⟩)
     have voter : v.toNat ∈ Store.voters state := by
-      rw [← indexEq, back]
       simp only [Store.voters, Finset.mem_filter, Finset.mem_range]
-      exact ⟨below, by simpa [Store.counts, atArray] using flags⟩
+      exact ⟨(Array.getElem?_eq_some_iff.mp found).1, by
+        simp [Store.counts, found, active, unslashed]⟩
     refine Finset.mem_filter.mpr ⟨voter, ?_⟩
     refine ⟨some message.root, ?_, ancestry⟩
     change store.latestVote v.toNat.toUInt64 = some (some message.root)
@@ -683,7 +640,7 @@ private theorem sibling_weight_lt_of_window_margin [DecidablePred (· ∈ J)]
   omega
 
 /-- A receiver's ancestor parent agrees with the caller's parent or supplies a block collision. -/
-private theorem parent_read_or_collision {caller receiver : Store preset fork}
+public theorem parent_read_or_collision {caller receiver : Store preset fork}
     (callerReached : Store.Reachable config anchorState anchorBlock caller)
     (receiverReached : Store.Reachable config anchorState anchorBlock receiver)
     {parent : BeaconBlock preset fork} {parentRoot : Root} {head : ForkChoiceNode}
@@ -755,22 +712,10 @@ private theorem guarded_parentVoters_le [DecidablePred (· ∈ J)]
   intro v member active
   obtain ⟨member, honest⟩ := Finset.mem_filter.mp member
   obtain ⟨inCommittee, _, clean, vote⟩ := Store.mem_parentVotersOf.mp member
-  obtain ⟨⟨index, balance⟩, entry, same⟩ := List.mem_map.mp (List.mem_toFinset.mp active)
-  simp only at same
-  subst index
-  simp only [unslashedActiveBalances, List.mem_filterMap, Option.ite_none_right_eq_some,
-    Option.some.injEq, Prod.mk.injEq, Prod.exists] at entry
-  obtain ⟨validator, position, inZip, flags, indexEq, _⟩ := entry
-  have atIndex := List.mem_zipIdx_iff_getElem?.mp inZip
-  have below : position < state.validators.data.size := by
-    simpa using (List.getElem?_eq_some_iff.mp atIndex).1
-  have back := toNat_toUInt64_of_lt within below
-  have found : state.validators.data[v.toNat]? = some validator := by
-    rw [← indexEq, back]
-    simpa using atIndex
-  simp only [Bool.and_eq_true, Bool.not_eq_true'] at flags
+  obtain ⟨validator, found, isActive, unslashed⟩ :=
+    (mem_unslashedActiveBalances_iff within).mp (List.mem_toFinset.mp active)
   exact Finset.mem_filter.mpr ⟨Store.mem_parentVotersOf.mpr
-    ⟨inCommittee, ⟨validator, found, flags.2, flags.1⟩, clean, vote⟩, honest⟩
+    ⟨inCommittee, ⟨validator, found, unslashed, isActive⟩, clean, vote⟩, honest⟩
 
 /-- A source margin and approved drift give head ancestry or a collision at the caller's parent. -/
 public theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
@@ -1406,7 +1351,7 @@ public theorem receiver_fullMaximum_of_head_window {anchor : Store preset fork}
   -- Only the range arithmetic is reused; the balance state and committee read are the receiver's.
   obtain ⟨covered, coverage⟩ := coverage_exists_of_maximum nonempty read afterOk
   have stakeBound := ceiling w receiver k _ state inTime cached
-  obtain ⟨total, totalOk⟩ := activeTotal_exists
+  obtain ⟨total, totalOk⟩ := getTotalActiveBalance_exists
     (BeaconState.registryWithinLimit_of_lt early state) (by change _ ≤ _ at stakeBound; omega)
   exact maximum_exists_of_total coverage windowOk totalOk
     (registry_of_head_window anchorStore anchored sound anchorSlot boundary

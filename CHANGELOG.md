@@ -9,6 +9,13 @@ Not yet released.
 
 ### Proof additions
 
+- `Execution.honestHeadsCover_of_historical_anchor` keeps a confirmed block on every honest head chain from the call to a horizon, by induction on time ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  It no longer assumes the root's own earlier coverage.
+  It assumes the parent's coverage, the root's viability, the receivers' reads and exits, and a late duty majority.
+  The root's viability rules out honest justified checkpoints that conflict with the root, so it assumes the checkpoint-consistency half of safety.
+  The alternatives are a block collision between honest stores and `HistoricalDirectSafetyEvidence`, which holds with no accountable key once the churn since the anchor is large enough.
+  `Config.ProposerScoreFits` bounds the proposer boost so that the score fits in 64 bits; mainnet and minimal satisfy it.
+
 - `Execution.mem_supportersOf_of_duty_epoch_or_accountable` and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` add accountable companions to the honest-duty results.
   They use a proved historical finalized-prefix family instead of assumed compatibility, while preserving the original theorems.
   They retain the network and duty conditions and require deposited genesis history, preset bounds, a fixed-fork horizon, stake floors and an absent anchor parent.
