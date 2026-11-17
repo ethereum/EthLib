@@ -13,7 +13,7 @@ Honest validators then sign that target with two thirds of the active balance of
 
 The honest count and the coverage of honest heads by a block of the epoch are assumed.
 
-So is the caller's committee read at the start of the next epoch.
+So is the caller's head at the start of the next epoch.
 -/
 
 @[expose] public section
@@ -29,30 +29,22 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
-/-- The caller's rollover read at the start of the epoch after the target's.
+/-- The caller's head read at the start of the epoch after the target's.
 
-At that time the caller's up-to-date store has a head and reads its window over the target's epoch.
+At that time the caller's up-to-date store has a head.
 
 An honest voter that has not voted by the call needs a duty in the target's epoch.
 
 `AssignmentWindowAgreement` gives that duty only through the past window of an actual head.
 
-The read has two halves, a head and its window, and both are stated conditions here.
+This head read is assumed, and head totality of an honest store would discharge it.
 
-The head half is an assumed head read, which head totality of an honest store would discharge.
-
-With the head half, `Config.CommitteeWindowsFit` gives the window half. -/
-def RolloverWindowRead (u : ValidatorIndex) (target : Checkpoint) (first : Slot) (begin : ℕ) :
-    Prop :=
-  ∀ k epochStart last, (e.world k).time = begin →
+The window of that head over the target's epoch then reads under `Config.CommitteeWindowsFit`. -/
+def RolloverWindowRead (u : ValidatorIndex) (begin : ℕ) : Prop :=
+  ∀ k, (e.world k).time = begin →
     UpToDate config checks sources (e.world k).time ((e.world k).view u)
       ((e.world k).state u) →
-    computeStartSlotAtEpoch preset target.epoch = .ok epochStart →
-    subChecked first 1 = .ok last →
-    ∃ (hd : ForkChoiceNode) (participants : Std.TreeSet ValidatorIndex),
-      ((e.world k).state u).getHead config = .ok hd ∧
-      ((e.world k).state u).getCommitteesBetweenSlots hd.root epochStart last =
-        .ok participants
+    ∃ hd : ForkChoiceNode, ((e.world k).state u).getHead config = .ok hd
 
 /-- A successful pulled-up state read has the store's current epoch. -/
 private theorem pulled_epoch {store : Store preset fork}
@@ -217,13 +209,13 @@ private theorem slot_at_later_start (slots : 0 < config.SLOT_DURATION_MS)
   rw [common, clock]
   exact mapError_ok_iff.mpr (slot_at_start_of_genesis_offset slots beginOk offset)
 
-/-- An active counted voter has a duty in the epoch, read from the rollover window. -/
+/-- An active counted voter has a duty in the epoch, read from the window of a later head. -/
 private theorem duty_of_active {anchor : Store preset fork} {time : ℕ}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (preGloas : fork < .glamsterdam)
     (retained : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (windows : AssignmentWindowAgreement (e := e) time)
+    (windows : AssignmentWindowAgreement (e := e) time) (fit : config.CommitteeWindowsFit preset)
     {u : ValidatorIndex} (caller : u ∈ J) {n k : ℕ} (kBound : (e.world k).time ≤ time)
     (same : ∀ (r : Root) left right, ((e.world n).state u).blocks[r]? = some left →
       ((e.world k).state u).blocks[r]? = some right → left = right)
@@ -240,10 +232,9 @@ private theorem duty_of_active {anchor : Store preset fork} {time : ℕ}
     (epochOk : ((e.world n).state u).getCurrentStoreEpoch config = .ok epoch)
     (countDescends : ((e.world n).state u).isAncestor ⟨countHead, .pending⟩
       ⟨origin, .pending⟩ = .ok true)
-    {hd : ForkChoiceNode} {participants : Std.TreeSet ValidatorIndex}
+    {hd : ForkChoiceNode}
     (headOk : ((e.world k).state u).getHead config = .ok hd)
     (slotOk : ((e.world k).state u).getCurrentSlot config = .ok boundary)
-    (read : ((e.world k).state u).getCommitteesBetweenSlots hd.root first last = .ok participants)
     (descends : ((e.world k).state u).isAncestor hd ⟨origin, .pending⟩ = .ok true)
     {v : ValidatorIndex} (honest : v ∈ J)
     (active : v ∈ (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset) :
@@ -276,9 +267,11 @@ private theorem duty_of_active {anchor : Store preset fork} {time : ℕ}
   have lastNat := (subChecked_ok_iff.mp lastOk).2
   have lastPos := (subChecked_ok_iff.mp lastOk).1
   simp only [UInt64.toNat_one] at nextNat lastNat lastPos
+  have past : last < boundary := UInt64.lt_iff_toNat_lt.mpr (by omega)
+  obtain ⟨participants, read⟩ := Store.getCommitteesBetweenSlots_exists (first := first) fit
+    headStateOk (BeaconState.registryWithinLimit_of_lt preGloas headState) slotOk past
   have member := Store.mem_getCommitteesBetweenSlots_of_active positive read headStateOk
     (by omega) (by rw [← nextNat, ← boundaryNat]; omega) activeAt
-  have past : last < boundary := UInt64.lt_iff_toNat_lt.mpr (by omega)
   have epochBoundary := computeEpochAtSlot_computeStartSlotAtEpoch
     (UInt64.lt_iff_toNat_lt.mpr positive) boundaryOk
   have epochFirst := computeEpochAtSlot_computeStartSlotAtEpoch
@@ -465,7 +458,7 @@ The block `origin` is of epoch E, and the head descends from it.
 
 Every up-to-date honest head descends from `origin` from the call through the start of E + 1.
 
-At the start of E + 1, the caller has a head and reads its committee window over epoch E.
+At the start of E + 1 the caller has a head, and `fit` lets it read its window over epoch E.
 
 Then honest validators with two thirds of the pulled-up head state's active balance sign the target.
 
@@ -480,7 +473,7 @@ theorem Execution.honestTargetVotes_signed_of_checked {anchor : Store preset for
     (retained : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     (preGloas : fork < .glamsterdam) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (votes : ValidatedDutyVotes (e := e) time)
-    (windows : AssignmentWindowAgreement (e := e) time)
+    (windows : AssignmentWindowAgreement (e := e) time) (fit : config.CommitteeWindowsFit preset)
     (nonzero : HeldBlockStateRootsNonzero (e := e) time)
     (agree : HonestBlocksAgree (e := e) time)
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -506,7 +499,7 @@ theorem Execution.honestTargetVotes_signed_of_checked {anchor : Store preset for
     (beginOk : computeTimeAtSlotMs config genesisTimeMs first = .ok begin)
     (bounded : begin.toNat ≤ time)
     (covers : HonestHeadsCover (e := e) origin (e.world n).time (begin.toNat + 1))
-    (rollover : RolloverWindowRead (e := e) u target first begin.toNat) :
+    (rollover : RolloverWindowRead (e := e) u begin.toNat) :
     ∃ (state : BeaconState preset fork) (total : Gwei) (voters : Finset ValidatorIndex),
       ((e.world n).state u).getPulledUpHeadState config head.root = .ok state ∧
       getTotalActiveBalance state = .ok total ∧
@@ -566,8 +559,7 @@ theorem Execution.honestTargetVotes_signed_of_checked {anchor : Store preset for
     have := e.monotone_time (Nat.zero_le n)
     simpa [Execution.world_zero, World.initial] using this
   obtain ⟨k, atK, readyK⟩ := (prompt u caller first begin beginOk (by omega) bounded).1
-  obtain ⟨hd, rolloverParticipants, hdOk, rolloverRead⟩ :=
-    rollover k epochStart (first - 1) atK readyK epochStartOk lastOk
+  obtain ⟨hd, hdOk⟩ := rollover k atK readyK
   have slotK := slot_at_later_start slots callSlotOk callBeginOk atCall upToDate beginOk atK
     readyK
   have nBound : (e.world n).time ≤ time := by omega
@@ -583,9 +575,9 @@ theorem Execution.honestTargetVotes_signed_of_checked {anchor : Store preset for
   · obtain ⟨j, before, rest⟩ := signed
     exact ⟨j, by omega, rest⟩
   · obtain ⟨dutySlot, index, low, high, duty⟩ := duty_of_active anchored start anchorSlot
-      positive preGloas retained windows caller kBound
+      positive preGloas retained windows fit caller kBound
       (agree u caller u caller n k nBound kBound) originKnown originEpoch nextOk epochStartOk
-      firstOk lastOk stateOk epochOk descends hdOk slotK rolloverRead hdDescends honest active
+      firstOk lastOk stateOk epochOk descends hdOk slotK hdDescends honest active
     have after := duty_after_call anchored start positive retained windows caller nBound headOk
       callSlotOk (slotEpoch ▸ epochStartOk) lastCallOk participantsOk honest unseen
       (by rw [← slotEpoch] at epochStartOk; exact low)
