@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Committees
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.CheckpointConsistency
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedRoot
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedWalk
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.DutySupport
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.DutyWindows
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalStatements
@@ -59,4 +60,6 @@ It retains committee agreement, historical coverage, drift and finality conditio
 When the two-thirds test on the current target passes, honest voters sign that target.
 
 Those voters hold two thirds of the active balance, given an honest count and coverage of the heads.
+
+Another module gives the coverage of a walk of roots from that of its start and a step per member.
 -/
