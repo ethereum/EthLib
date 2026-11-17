@@ -160,7 +160,9 @@ def test_changed_byte_fails(position: int) -> None:
     # The hash covers every byte after it, so any change breaks it.
     changed = bytearray(PING)
     changed[position] ^= 0x01
-    with raises(discv4.Discv4Error, "packet hash does not match") as info:
+    stored, computed = bytes(changed[:32]), keccak.keccak256(bytes(changed[32:]))
+    message = f"packet hash 0x{stored.hex()} is not 0x{computed.hex()}"
+    with raises(discv4.Discv4Error, message) as info:
         discv4.decode(bytes(changed))
     assert info.value.code == 3
 

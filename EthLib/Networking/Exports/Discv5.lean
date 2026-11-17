@@ -180,8 +180,8 @@ def runMessage {α : Type} (act : Except MessageError α) : Result α :=
     | .empty => "invalid message: empty"
     | .unknownType t => s!"invalid message: unknown type {t}"
     | .rlp _ => "invalid message: not one RLP list, or a field of the wrong form"
-    | .fields t => s!"invalid message: wrong field count for type {t}"
-    | .invalid => "invalid message: a size or a distance is out of range")
+    | .fields t count => s!"invalid message: type {t} with {count} fields"
+    | .invalid t => s!"invalid message: type {t} has a size or a distance out of range")
 
 /-- The RLP bytes of an item, for a record inside a message, or `None` when it has none. -/
 def itemBytes (item : Serialization.Rlp.Item) : PyValue :=

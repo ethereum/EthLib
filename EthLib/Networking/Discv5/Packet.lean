@@ -76,16 +76,18 @@ structure Packet where
 inductive PacketError where
   /-- The packet has fewer than 63 or more than 1280 bytes. -/
   | size (size : Nat)
-  /-- The header does not start with "discv5" and version `0x0001`. -/
-  | protocolId
-  /-- The packet ends inside its header. -/
-  | headerTruncated
+  /-- The header does not start with "discv5" and version `0x0001`, but with `found`. -/
+  | protocolId (found : List UInt8)
+  /-- The packet ends inside its header: the header needs `needed` bytes after the masking IV.
+
+  Only `available` bytes follow the IV. -/
+  | headerTruncated (needed available : Nat)
   /-- The flag is not 0, 1 or 2. -/
   | flag (flag : UInt8)
-  /-- The authdata does not have the size or the layout of its flag. -/
-  | authdata
-  /-- A WHOAREYOU packet carries a message. -/
-  | whoareyouMessage
+  /-- The authdata of `size` bytes does not have the size or the layout of the flag `flag`. -/
+  | authdata (flag : UInt8) (size : Nat)
+  /-- A WHOAREYOU packet carries a message of `size` bytes. -/
+  | whoareyouMessage (size : Nat)
   /-- A field is too long for its size field. -/
   | fieldTooLong
   deriving DecidableEq, Repr
@@ -97,11 +99,11 @@ The code ignores the arguments of the constructor, which the message carries.
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def PacketError.code : PacketError → UInt32
   | .size _ => 1
-  | .protocolId => 2
-  | .headerTruncated => 3
+  | .protocolId _ => 2
+  | .headerTruncated .. => 3
   | .flag _ => 4
-  | .authdata => 5
-  | .whoareyouMessage => 6
+  | .authdata .. => 5
+  | .whoareyouMessage _ => 6
   | .fieldTooLong => 7
 
 namespace Authdata
@@ -137,15 +139,15 @@ def decode (flag : UInt8) (bytes : List UInt8) : Except PacketError Authdata :=
   if flag = 0 then
     match vectorOf 32 bytes with
     | some srcId => .ok (.message srcId)
-    | none => .error .authdata
+    | none => .error (.authdata flag bytes.length)
   else if flag = 1 then
     -- The ID nonce, then the ENR sequence number as 8 big-endian bytes.
     match vectorOf 16 (bytes.take 16) with
     | some idNonce =>
       if bytes.length = 24 then
         .ok (.whoareyou idNonce (UInt64.ofNat (Base.bytesToNat (bytes.drop 16))))
-      else .error .authdata
-    | none => .error .authdata
+      else .error (.authdata flag bytes.length)
+    | none => .error (.authdata flag bytes.length)
   else if flag = 2 then
     match vectorOf 32 (bytes.take 32), bytes.drop 32 with
     | some srcId, sigSize :: keySize :: rest =>
@@ -154,8 +156,8 @@ def decode (flag : UInt8) (bytes : List UInt8) : Except PacketError Authdata :=
         let ephemeralPubkey := (rest.drop sigSize.toNat).take keySize.toNat
         let record := rest.drop (sigSize.toNat + keySize.toNat)
         .ok (.handshake srcId ⟨idSignature.toArray⟩ ⟨ephemeralPubkey.toArray⟩ ⟨record.toArray⟩)
-      else .error .authdata
-    | _, _ => .error .authdata
+      else .error (.authdata flag bytes.length)
+    | _, _ => .error (.authdata flag bytes.length)
   else .error (.flag flag)
 
 end Authdata
@@ -203,14 +205,16 @@ def Packet.decode (destId : NodeId) (bytes : ByteArray) : Except PacketError Pac
   let rest := all.drop 16
   let plain := mask destId maskingIv rest
   -- The static header: protocol ID, version, flag, nonce and authdata size.
-  unless plain.take 8 = PROTOCOL_ID ++ VERSION do throw .protocolId
-  let some flag := plain[8]? | throw .headerTruncated
-  let some nonce := Authdata.vectorOf 12 ((plain.drop 9).take 12) | throw .headerTruncated
+  unless plain.take 8 = PROTOCOL_ID ++ VERSION do throw (.protocolId (plain.take 8))
+  let some flag := plain[8]? | throw (.headerTruncated STATIC_HEADER_SIZE rest.length)
+  let some nonce := Authdata.vectorOf 12 ((plain.drop 9).take 12)
+    | throw (.headerTruncated STATIC_HEADER_SIZE rest.length)
   let authdataSize := Base.bytesToNat ((plain.drop 21).take 2)
-  if rest.length < STATIC_HEADER_SIZE + authdataSize then throw .headerTruncated
+  if rest.length < STATIC_HEADER_SIZE + authdataSize then
+    throw (.headerTruncated (STATIC_HEADER_SIZE + authdataSize) rest.length)
   let authdata ← Authdata.decode flag ((plain.drop STATIC_HEADER_SIZE).take authdataSize)
   let message := rest.drop (STATIC_HEADER_SIZE + authdataSize)
-  if flag = 1 ∧ message ≠ [] then throw .whoareyouMessage
+  if flag = 1 ∧ message ≠ [] then throw (.whoareyouMessage message.length)
   return ⟨maskingIv, ⟨nonce, authdata⟩, ⟨message.toArray⟩⟩
 
 /-- The additional data of the message: the masking IV, then the unmasked header. -/

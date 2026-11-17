@@ -39,6 +39,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- The ENR, discv4 and discv5 errors carry the values their failed check compared.
+  Each error fires on the same inputs as before, and codes are unchanged; each message now shows these values.
+  - `Enr.EnrError.tooFewItems` carries the item count, and `unknownScheme` the value of the `id` pair.
+  - The ENR messages of `repeatedKey`, `unsortedKeys` and `unknownScheme` show the keys and the scheme in hex.
+  - `Discv4.Discv4Error.hashMismatch` carries the stored hash and the Keccak-256 hash of the bytes after it.
+  - `Discv5.PacketError.protocolId` carries the first eight unmasked header bytes, `headerTruncated` the header bytes needed and available, `authdata` the flag and the authdata size, and `whoareyouMessage` the message size.
+  - `Discv5.MessageError.fields` also carries the field count, and `invalid` the message type.
+  - `Discv4.decode_hashMismatch` states both hashes of the error it returns.
+
 - The block, ommer and proof-of-work errors carry the values that their failed check compared.
   Each code keeps its meaning, and each error fires on the same inputs as before.
   The message of each error names each value, as `(name := value)`, and writes each hash, address and byte string in hex.
