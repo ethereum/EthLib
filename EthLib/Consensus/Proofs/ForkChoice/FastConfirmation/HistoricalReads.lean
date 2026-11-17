@@ -81,35 +81,13 @@ That evidence is relative to the anchor, and its drift counts from the anchor.
 
 With enough churn since the anchor, it holds with no accountable key. -/
 public theorem Execution.selectedCheckpointsAgree_or_evidence {anchor : Store preset fork}
-    {g : ForkedBeaconState preset}
-    (unique : ∀ {x a b : ForkedBeaconState preset}
-      (shared : Run config checks g x) (left : Run config checks x a)
-      (right : Run config checks x b) (va : DirectSafety.TerminalView a)
-      (vb : DirectSafety.TerminalView b), DirectSafety.Parameters preset →
-      Genesis config checks g → ∀ j k : Checkpoint,
-      DirectSafety.EnoughStake (shared.append left) j.epoch.toNat →
-      DirectSafety.EnoughStake (shared.append right) j.epoch.toNat →
-      va.enough j.epoch.toNat → vb.enough j.epoch.toNat →
-      (j = va.state.previousJustifiedCheckpoint ∨ j = va.state.currentJustifiedCheckpoint) →
-      (k = vb.state.previousJustifiedCheckpoint ∨ k = vb.state.currentJustifiedCheckpoint) →
-      j.epoch = k.epoch →
-      x.state.slot.toNat ≤ j.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat →
-      j = k ∨
-        Models.stake (DirectSafety.effectiveWeight x.state)
-            (DirectSafety.unslashedKeys x.state) ≤
-          3 * Models.stake (DirectSafety.effectiveWeight x.state)
-            (DirectSafety.accountableKeys shared left right) +
-          2 * max (DirectSafety.derivedDrift j.epoch.toNat left)
-            (DirectSafety.derivedDrift j.epoch.toNat right) ∨
-        DirectSafety.HashEvidence ((shared.append left).hashObjects ++
-          (shared.append right).hashObjects))
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
     (anchorSlot : anchorBlock.slot = anchorState.slot)
     {horizon : Epoch} {last : Nat}
     (roots : HeldBlockStateRootsNonzero (e := e) last)
     (absent : AnchorParentAbsent (e := e) last)
-    (parameters : DirectSafety.Parameters preset)
+    (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
     (early : HeldStatesBeforeUpgrade (e := e) last)
     (enough : HeldRunStakeFloor (e := e) pre horizon last)
@@ -128,7 +106,7 @@ public theorem Execution.selectedCheckpointsAgree_or_evidence {anchor : Store pr
       honestA).reachable.anchor_known
   have nonzero : anchorBlock.stateRoot ≠ Vector.replicate 32 0 :=
     roots a honestA i timeA root anchorBlock anchorFound
-  rcases e.justified_eq_or_accountable unique anchorStore anchored parameters genesis pre
+  rcases e.justified_eq_or_accountable anchorStore anchored parameters genesis pre
       anchorSlot nonzero absent early enough terminal honestA honestB timeA timeB selectedFirst
       selectedSecond epoch inHorizon with same | evidence
   · exact absurd same different

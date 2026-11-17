@@ -1042,34 +1042,11 @@ We assume that no upgrade is due at a held slot, so the stores' transitions are 
 
 We assume a stake floor at the epoch calls of every run from the anchor to a held state.
 
-We assume it too at each held state up to one epoch past the common epoch, for the step.
-
-The premise `unique` compares two justified fields of terminal views at one epoch. -/
+We assume it too at each held state up to one epoch past the common epoch, for the step. -/
 theorem Store.Reachable.justified_eq_or_accountable {config : Config}
     {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {store other : Store preset fork} {g : ForkedBeaconState preset}
-    (unique : ∀ {x a b : ForkedBeaconState preset}
-      (shared : Run config checks g x) (left : Run config checks x a)
-      (right : Run config checks x b) (va : DirectSafety.TerminalView a)
-      (vb : DirectSafety.TerminalView b), DirectSafety.Parameters preset →
-      Genesis config checks g → ∀ j k : Checkpoint,
-      DirectSafety.EnoughStake (shared.append left) j.epoch.toNat →
-      DirectSafety.EnoughStake (shared.append right) j.epoch.toNat →
-      va.enough j.epoch.toNat → vb.enough j.epoch.toNat →
-      (j = va.state.previousJustifiedCheckpoint ∨ j = va.state.currentJustifiedCheckpoint) →
-      (k = vb.state.previousJustifiedCheckpoint ∨ k = vb.state.currentJustifiedCheckpoint) →
-      j.epoch = k.epoch →
-      x.state.slot.toNat ≤ j.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat →
-      j = k ∨
-        Models.stake (DirectSafety.effectiveWeight x.state)
-            (DirectSafety.unslashedKeys x.state) ≤
-          3 * Models.stake (DirectSafety.effectiveWeight x.state)
-            (DirectSafety.accountableKeys shared left right) +
-          2 * max (DirectSafety.derivedDrift j.epoch.toNat left)
-            (DirectSafety.derivedDrift j.epoch.toNat right) ∨
-        DirectSafety.HashEvidence ((shared.append left).hashObjects ++
-          (shared.append right).hashObjects))
     (reachable : Store.Reachable config anchorState anchorBlock store)
     (reachableOther : Store.Reachable config anchorState anchorBlock other)
     (parameters : DirectSafety.Parameters preset)
@@ -1171,7 +1148,7 @@ theorem Store.Reachable.justified_eq_or_accountable {config : Config}
     have epochLt := UInt64.lt_iff_toNat_lt.mp afterA
     rw [getCurrentEpoch_toNat] at epochLt
     exact Nat.le_of_lt ((Nat.div_lt_iff_lt_mul positive).mp epochLt)
-  rcases unique pre left right va vb parameters
+  rcases DirectSafety.accountable_justified_unique_terminal pre left right va vb parameters
       genesis first second (enough (.inl heldA) left) (enough (.inr heldB) right) terminalA
       terminalB (.inr fieldA) (.inr fieldB) epoch starts with
     same | bound
@@ -1381,27 +1358,6 @@ theorem Execution.justified_eq_or_accountable {ν κ : Type*} [DecidableEq ν]
     {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {anchor : Store preset fork} {g : ForkedBeaconState preset} {time : ℕ} {horizon : Epoch}
-    (unique : ∀ {x a b : ForkedBeaconState preset}
-      (shared : Run config checks g x) (left : Run config checks x a)
-      (right : Run config checks x b) (va : DirectSafety.TerminalView a)
-      (vb : DirectSafety.TerminalView b), DirectSafety.Parameters preset →
-      Genesis config checks g → ∀ j k : Checkpoint,
-      DirectSafety.EnoughStake (shared.append left) j.epoch.toNat →
-      DirectSafety.EnoughStake (shared.append right) j.epoch.toNat →
-      va.enough j.epoch.toNat → vb.enough j.epoch.toNat →
-      (j = va.state.previousJustifiedCheckpoint ∨ j = va.state.currentJustifiedCheckpoint) →
-      (k = vb.state.previousJustifiedCheckpoint ∨ k = vb.state.currentJustifiedCheckpoint) →
-      j.epoch = k.epoch →
-      x.state.slot.toNat ≤ j.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat →
-      j = k ∨
-        Models.stake (DirectSafety.effectiveWeight x.state)
-            (DirectSafety.unslashedKeys x.state) ≤
-          3 * Models.stake (DirectSafety.effectiveWeight x.state)
-            (DirectSafety.accountableKeys shared left right) +
-          2 * max (DirectSafety.derivedDrift j.epoch.toNat left)
-            (DirectSafety.derivedDrift j.epoch.toNat right) ∨
-        DirectSafety.HashEvidence ((shared.append left).hashObjects ++
-          (shared.append right).hashObjects))
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor)
     (parameters : DirectSafety.Parameters preset) (genesis : Genesis config checks g)
@@ -1456,7 +1412,7 @@ theorem Execution.justified_eq_or_accountable {ν κ : Type*} [DecidableEq ν]
     (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) n w honest
   obtain ⟨calls, terminal⟩ := e.held_floors enough heldEnough honestA honestB timeA timeB
     inHorizon
-  exact (forward i a honestA).reachable.justified_eq_or_accountable unique
+  exact (forward i a honestA).reachable.justified_eq_or_accountable
     (forward j b honestB).reachable parameters genesis pre anchorSlot nonzero
     (unknown a honestA i timeA) (unknown b honestB j timeB)
     (forward i a honestA).blockStatesFromParents (forward j b honestB).blockStatesFromParents
