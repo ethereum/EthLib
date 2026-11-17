@@ -4050,7 +4050,7 @@ That lower bound is positive only when `2 * drift x high < U`.
 `AccountableDriftBound` and `AccountableWindowBound` take the premises of `source_safety`, and `AccountableWindowBound` also takes the guard.
 Like the envelope, `drift` is an upper bound, and nothing says that a run attains it.
 
-To check what `accountable_safety_apriori` says, read four layers in `DirectSafety/Apriori.lean`, each in terms of the next.
+To check what `accountable_safety_apriori` says, read four layers in `DirectSafety/Apriori/Bound.lean`, each in terms of the next.
 
 First, the theorem is `AccountableDriftBound` and `AccountableWindowBound` together.
 `AccountableDriftBound` has the conclusion of `source_safety`, with `2 * drift x high` in place of the source envelope.
