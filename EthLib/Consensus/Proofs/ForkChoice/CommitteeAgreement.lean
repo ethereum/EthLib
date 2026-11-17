@@ -16,6 +16,12 @@ When the vote is at most one epoch after that block, the two states agree on tho
 
 They also agree on the count of committees per slot of the epoch of the vote.
 
+When the vote is at most two epochs after that block, the states agree on activity before it.
+
+That covers the epoch before the vote.
+
+So its voter was active in the head state then, unless it became active in the epoch of the vote.
+
 The store must run every handler with one setting of the signature checks.
 -/
 
@@ -212,5 +218,141 @@ theorem Store.ForwardReachableWith.committeesKept_of_voteOrigin {checks : Signat
       (UInt64.le_trans (UInt64.le_of_lt above) headAbove) targetFound headFound
     exact run.committees_count (by omega) (le_activityFixedEpoch maxLookahead (by omega))
       headInRing
+
+/-- A validator of the registry that is active at an epoch is one of its active validators. -/
+private theorem mem_getActiveValidatorIndices_of_found {state : BeaconState preset fork}
+    {epoch : Epoch} {index : ValidatorIndex} {validator : Validator}
+    (found : state.validators.data[index.toNat]? = some validator)
+    (active : isActiveValidator validator epoch = true) :
+    index ∈ getActiveValidatorIndices state epoch := by
+  unfold getActiveValidatorIndices
+  refine List.mem_filterMap.mpr ⟨(validator, index.toNat), ?_, by simp [active]⟩
+  exact List.mem_zipIdx_iff_getElem?.mpr (by simpa using found)
+
+/-- The voter of a vote was active in the head state in the epoch before the target of the vote.
+
+Otherwise it became active at the target epoch itself.
+
+The voted block and the head descend from a known block.
+
+The target is at most two epochs after that block.
+
+The two states agree on activity up to one epoch after that block.
+
+That covers the epoch before the target.
+
+The store is built with one setting of the checks, and the anchor block is not after its state. -/
+theorem Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin {checks : SignatureChecks}
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    {root head : Root} {block : BeaconBlock preset fork} {validator : ValidatorIndex}
+    {attestation : Attestation preset fork} {targetState headState : BeaconState preset fork}
+    {previous : Epoch}
+    (found : store.blocks[root]? = some block)
+    (headDescends : store.isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
+    (origin : store.VoteOrigin config validator attestation)
+    (voteDescends : store.isAncestor ⟨attestation.data.beaconBlockRoot, .pending⟩
+      ⟨root, .pending⟩ = .ok true)
+    (near : attestation.data.target.epoch.toNat ≤ (computeEpochAtSlot preset block.slot).toNat + 2)
+    (before : previous.toNat + 1 = attestation.data.target.epoch.toNat)
+    (targetFound : store.checkpointStates[attestation.data.target]? = some targetState)
+    (headFound : store.blockStates[head]? = some headState) :
+    validator ∈ getActiveValidatorIndices headState previous ∨
+      ∃ voter : Validator, targetState.validators.data[validator.toNat]? = some voter ∧
+        voter.activationEpoch = attestation.data.target.epoch := by
+  have reachable := reached.reachable
+  -- The target is the ancestor of the voted block at the start of the epoch of the vote.
+  have targetWalk := origin.targetRoot
+  simp only [Store.getCheckpointBlock, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at targetWalk
+  obtain ⟨start, startOk, node, walk, rooted⟩ := targetWalk
+  -- The voted block and the head walk back to the block at its slot.
+  obtain ⟨voteReach, voteWalk, voteRooted⟩ := Store.getAncestor_of_isAncestor found voteDescends
+  obtain ⟨headReach, headWalk, headRooted⟩ := Store.getAncestor_of_isAncestor found headDescends
+  obtain ⟨headBlock, headBlockFound, headAbove⟩ := Store.slot_le_of_isAncestor found headDescends
+  -- The target state is the state of the target block, perhaps processed to the start.
+  obtain ⟨base, start', baseFound, startOk', fromBlock⟩ :=
+    reached.checkpointStatesFromBlocks targetFound
+  rw [startOk, Except.ok.injEq] at startOk'
+  subst startOk'
+  have baseToTarget : RunKept base targetState := by
+    rcases fromBlock with ⟨-, rfl⟩ | ⟨-, _, -, slotsOk⟩
+    · exact RunKept.refl _
+    · exact runKept_processSlots slotsOk
+  -- The two states have the same active validators in the epoch before the target.
+  have same : getActiveValidatorIndices headState previous =
+      getActiveValidatorIndices targetState previous := by
+    by_cases low : block.slot ≤ start
+    · -- Both states run from the state of the block, which keeps activity a little past it.
+      rw [Store.getAncestor_trans low walk] at voteWalk
+      rw [← rooted] at baseFound
+      obtain ⟨common, commonFound, -, -⟩ := reachable.blockStatesFromParents found
+      have commonLe := reachable.slot_le_of_blockState anchorSlot found commonFound
+      have blockEpochLe : (computeEpochAtSlot preset block.slot).toNat ≤
+          (getCurrentEpoch common).toNat := by
+        rw [getCurrentEpoch_toNat]
+        exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp commonLe)
+      have fixed := le_activityFixedEpoch (state := common) (epoch := previous) maxLookahead
+        (by omega)
+      rw [← voteRooted] at commonFound
+      have toTarget := reachable.runKept_of_getAncestor anchorSlot voteWalk baseFound commonFound
+      rw [voteRooted, ← headRooted] at commonFound
+      have toHead := reachable.runKept_of_getAncestor anchorSlot headWalk headFound commonFound
+      rw [toHead.active.getActiveValidatorIndices_eq fixed,
+        (toTarget.trans baseToTarget).active.getActiveValidatorIndices_eq fixed]
+    · -- The target block is the ancestor of the head at the start, so the target state runs on.
+      have above := UInt64.not_le.mp low
+      have voteTrans := Store.getAncestor_trans (UInt64.le_of_lt above) voteWalk
+      rw [walk] at voteTrans
+      obtain ⟨reach, reachWalk, reachRooted⟩ :=
+        Store.getAncestor_ok_of_status headReach.payloadStatus voteTrans.symm
+      have sameNode : (⟨voteReach.root, headReach.payloadStatus⟩ : ForkChoiceNode) = headReach := by
+        rw [voteRooted, ← headRooted]
+      rw [sameNode] at reachWalk
+      have checkpoint : store.getCheckpointBlock head attestation.data.target.epoch =
+          .ok attestation.data.target.root := by
+        simp only [Store.getCheckpointBlock, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
+          Except.ok.injEq]
+        exact ⟨start, startOk, reach,
+          (Store.getAncestor_trans (UInt64.le_of_lt above) headWalk).trans reachWalk,
+          reachRooted.trans rooted⟩
+      have run := reached.runKept_of_checkpointState anchorSlot checkpoint headBlockFound startOk
+        (UInt64.le_trans (UInt64.le_of_lt above) headAbove) targetFound headFound
+      -- The target state is at or after the start of the target epoch.
+      have targetLe : start ≤ targetState.slot := by
+        rcases fromBlock with ⟨baseLe, rfl⟩ | ⟨-, _, -, slotsOk⟩
+        · exact baseLe
+        · exact (processSlots_slot slotsOk).2 ▸ UInt64.le_refl _
+      have targetEpochLe : attestation.data.target.epoch.toNat ≤
+          (getCurrentEpoch targetState).toNat := by
+        rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | positive
+        · rw [origin.targetEpoch, computeEpochAtSlot, UInt64.toNat_div, zero, Nat.div_zero]
+          exact Nat.zero_le _
+        · rw [← computeEpochAtSlot_computeStartSlotAtEpoch
+            (UInt64.lt_iff_toNat_lt.mpr positive) startOk, getCurrentEpoch_toNat]
+          exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp targetLe)
+      exact run.active.getActiveValidatorIndices_eq
+        (le_activityFixedEpoch maxLookahead (by omega))
+  rw [same]
+  -- The voter is in a committee of the target epoch, so active then in the target state.
+  obtain ⟨stored, index, committee, storedFound, -, committeeOk, member⟩ :=
+    origin.exists_mem_committee
+  rw [targetFound, Option.some.injEq] at storedFound
+  subst storedFound
+  have activeAtTarget := mem_getActiveValidatorIndices_of_getBeaconCommittee committeeOk member
+  obtain ⟨_, _, shuffleOk⟩ := attesterShuffle_ok_of_getBeaconCommittee committeeOk
+  obtain ⟨voter, voterFound, isActive⟩ := (mem_iff_of_getActiveValidatorIndicesChecked_ok
+    (getActiveValidatorIndicesChecked_of_attesterShuffle shuffleOk)).mp activeAtTarget
+  rw [← origin.targetEpoch] at isActive
+  by_cases fresh : voter.activationEpoch = attestation.data.target.epoch
+  · exact .inr ⟨voter, voterFound, fresh⟩
+  · -- Active at the target epoch and activated before it, so active in the epoch before.
+    refine .inl (mem_getActiveValidatorIndices_of_found voterFound ?_)
+    have notSame : voter.activationEpoch.toNat ≠ attestation.data.target.epoch.toNat :=
+      fun eq => fresh (UInt64.toNat_inj.mp eq)
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, UInt64.le_iff_toNat_le,
+      UInt64.lt_iff_toNat_lt] at isActive ⊢
+    omega
 
 end EthLib.Consensus
