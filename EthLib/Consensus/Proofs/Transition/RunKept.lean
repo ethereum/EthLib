@@ -252,6 +252,23 @@ theorem RunKept.getAttestingIndices_eq (run : RunKept state after)
   let ⟨active, checked, seed⟩ := run.seedKept final fixed inRing
   getAttestingIndices_eq_of_seed active checked seed
 
+/-- A run through the next epoch keeps the attesters of a pending attestation of its start.
+
+The attestation's epoch is at most the start's, and the run ends at most one epoch after it. -/
+theorem RunKept.getPendingAttestingIndices_eq (run : RunKept state after)
+    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {pending : PendingAttestation preset}
+    (starts : computeEpochAtSlot preset pending.data.slot ≤ getCurrentEpoch state)
+    (ends : (getCurrentEpoch after).toNat ≤
+      (computeEpochAtSlot preset pending.data.slot).toNat + 1) :
+    getPendingAttestingIndices after pending = getPendingAttestingIndices state pending := by
+  have startsNat := UInt64.le_iff_toNat_le.mp starts
+  have committees : CommitteesKept (computeEpochAtSlot preset pending.data.slot) state after :=
+    run.committeesKept (by omega)
+      (UInt64.le_trans starts (getCurrentEpoch_le_activityFixedEpoch state)) (by omega)
+  unfold getPendingAttestingIndices
+  rw [committees pending.data.slot pending.data.index rfl]
+
 /-- A run keeps the committees of an epoch, and their count per slot.
 
 The count needs no bound beyond those the committees need. -/

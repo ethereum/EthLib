@@ -369,6 +369,34 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
 variable {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
   genesisTimeMs) J}
 
+/-- An honest voter set of a call keeps its stake in each counting state, up to the quorum reserve.
+
+The call reads the pulled-up head state and the current target of an honest store.
+
+The counting state belongs to an honest store whose chain reads that target.
+
+It is the state of that chain's block or a later slot of it, in the target's epoch or the next.
+
+Then the stake of unslashed active voters of the call drifts by at most the call's reserve. -/
+def QuorumDriftWithin (horizon : Epoch) (last : ℕ) : Prop :=
+  ∀ u ∈ J, ∀ n (head : Root) (pulled anc : BeaconState preset fork) (target : Checkpoint),
+    (e.world n).time ≤ last →
+    ((e.world n).state u).getPulledUpHeadState config head = .ok pulled →
+    ((e.world n).state u).getCurrentTarget config head = .ok target →
+    ((e.world n).state u).blockStates[target.root]? = some anc →
+    ∀ w ∈ J, ∀ k (root : Root) (rootState state : BeaconState preset fork),
+    (e.world k).time ≤ last → ((e.world k).state w).blockStates[root]? = some rootState →
+    ((e.world k).state w).getCheckpointBlock root target.epoch = .ok target.root →
+    (state = rootState ∨ ∃ slot, processSlots config checks rootState slot = .ok state) →
+    target.epoch ≤ getCurrentEpoch state →
+    (getCurrentEpoch state).toNat ≤ target.epoch.toNat + 1 → getCurrentEpoch state ≤ horizon →
+    ∀ (voters : Finset ValidatorIndex) (total pulledTotal : Gwei),
+    (∀ v ∈ voters, v ∈ activeVoters pulled ∧ (slashedFlagAt state v.toNat).getD false = false) →
+    getTotalActiveBalance state = .ok total → getTotalActiveBalance pulled = .ok pulledTotal →
+    2 * total.toNat + 3 * stake (fun v => balanceAt pulled v.toNat) voters ≤
+      2 * pulledTotal.toNat + 3 * stake (fun v => balanceAt state v.toNat) voters +
+        quorumReserve config pulled anc
+
 /-- Every honest voter set of a call keeps its stake in each counting state, up to the pin reserve.
 
 The call reads the pulled-up head state and the current target of an honest store.
