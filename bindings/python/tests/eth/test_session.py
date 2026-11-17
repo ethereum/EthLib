@@ -120,7 +120,9 @@ def test_send_before_status() -> None:
 
 
 def test_message_before_status() -> None:
-    with raises(EthWireError, "event 0: message came before the peer's Status") as info:
+    with raises(
+        EthWireError, f"event 0: message ID {TRANSACTIONS} came before the peer's Status"
+    ) as info:
         _run((RECEIVED, TRANSACTIONS, _transactions(TX0)))
     assert info.value.code == 701
 
