@@ -101,20 +101,6 @@ theorem view_same_epoch {g a b : ForkedBeaconState preset}
   · rw [target₁, target₂]
     exact epoch
 
-/-- Two quorum calls with different targets at one epoch make their common voters slashable.
-
-Each common voter has a vote of the runs for each target, so it voted twice in that epoch.
-
-The runs start at one genesis built from deposits, and the preset meets the parameters. -/
-theorem same_epoch_histories {g a b : ForkedBeaconState preset}
-    (left : Run config checks g a) (right : Run config checks g b)
-    (parameters : Parameters preset) (genesis : Genesis config checks g)
-    (one : QuorumCall left) (two : QuorumCall right)
-    (epoch : one.target.epoch = two.target.epoch) (different : one.target ≠ two.target) :
-    ∀ key ∈ one.voters ∩ two.voters, Slashable left right key :=
-  view_same_epoch left right parameters genesis (va := .realized) (vb := .realized)
-    (.inl one) (.inl two) epoch different
-
 private theorem view_surround {g a b : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
