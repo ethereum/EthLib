@@ -1,5 +1,9 @@
 """The exceptions of the bindings carry the code and the message of the Lean error."""
 
+import copy
+import pickle
+from collections.abc import Callable
+
 import pytest
 
 from ethlib import consensus, errors
@@ -266,3 +270,36 @@ def test_classes_keep_the_old_bases(cls: type, bases: tuple[type, ...]) -> None:
     assert issubclass(cls, errors.EthLibError)
     for base in bases:
         assert issubclass(cls, base)
+
+
+@pytest.mark.parametrize("cls", [getattr(errors, name) for name in errors.__all__])
+@pytest.mark.parametrize("clone", [copy.copy, copy.deepcopy])
+def test_errors_can_be_copied(
+    cls: type[errors.EthLibError],
+    clone: Callable[[errors.EthLibError], errors.EthLibError],
+) -> None:
+    error = cls(7, "bad step")
+    error.__dict__["details"] = ["step 3"]
+    restored = clone(error)
+    assert restored is not error
+    assert type(restored) is cls
+    assert (restored.code, restored.message) == (7, "bad step")
+    assert restored.args == ("bad step",)
+    assert str(restored) == "bad step"
+    assert restored.__dict__ == error.__dict__
+    assert (restored.__dict__["details"] is error.__dict__["details"]) == (clone is copy.copy)
+
+
+@pytest.mark.parametrize("cls", [getattr(errors, name) for name in errors.__all__])
+@pytest.mark.parametrize("protocol", range(pickle.HIGHEST_PROTOCOL + 1))
+def test_errors_can_be_pickled(cls: type[errors.EthLibError], protocol: int) -> None:
+    error = cls(7, "bad step")
+    error.__dict__["details"] = ["step 3"]
+    restored = pickle.loads(pickle.dumps(error, protocol=protocol))
+    assert restored is not error
+    assert type(restored) is cls
+    assert (restored.code, restored.message) == (7, "bad step")
+    assert restored.args == ("bad step",)
+    assert str(restored) == "bad step"
+    assert restored.__dict__ == error.__dict__
+    assert restored.__dict__["details"] is not error.__dict__["details"]

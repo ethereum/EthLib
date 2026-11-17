@@ -34,6 +34,10 @@ class EthLibError(Exception):
         self.code = code
         self.message = message
 
+    def __reduce__(self) -> tuple[type["EthLibError"], tuple[int, str], dict[str, object]]:
+        """Keep the constructor arguments and instance state when copying or unpickling."""
+        return type(self), (self.code, self.message), self.__dict__
+
 
 class KzgError(EthLibError, RuntimeError):
     """A KZG operation rejected its input."""
