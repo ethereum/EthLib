@@ -22,7 +22,7 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
 
 /-- The state is held by the store or obtained by processing slots toward a held child. -/
-def Counts (store : Store preset fork) (config : Config)
+def CountedState (store : Store preset fork) (config : Config)
     (state : BeaconState preset fork) : Prop :=
   ∃ (root : Root) (base : BeaconState preset fork), store.blockStates[root]? = some base ∧
     (state = base ∨ ∃ (checks : SignatureChecks) (slot : Slot) (childRoot : Root)
@@ -135,7 +135,7 @@ def HeldBlockStateRootsNonzero (last : Nat) : Prop :=
 /-- No honest validator has a true slashed flag in a counted state through the horizon. -/
 def HonestCountedStatesUnslashed (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k state, (e.world k).time ≤ last →
-    Counts ((e.world k).state w) config state →
+    CountedState ((e.world k).state w) config state →
     ∀ v ∈ J, (slashedFlagAt state v.toNat).getD false = false
 
 /-- Every up-to-date honest head descends from the root throughout the half-open time interval. -/

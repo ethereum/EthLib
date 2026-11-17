@@ -1042,15 +1042,7 @@ private theorem Store.ForwardReachable.finalized_epoch_le_previous {config : Con
     store.finalizedCheckpoint.epoch.toNat ≤
       max (getCurrentEpoch anchorState).toNat (epoch.toNat - 1) := by
   have reached := forward.reachable
-  obtain ⟨current, currentOk, _, states⟩ := forward.slots_le_current slots anchorSlot
-  have epochEq : computeEpochAtSlot preset current = epoch := by
-    simpa [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
-      using epochOk
-  have stateBound : ∀ (r : Root) (s : BeaconState preset fork),
-      store.blockStates[r]? = some s → getCurrentEpoch s ≤ epoch := by
-    intro r s held
-    rw [← epochEq, UInt64.le_iff_toNat_le]
-    exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp (states r s held))
+  have stateBound := forward.blockState_epoch_le_current slots anchorSlot epochOk
   -- A held state's previous epoch is before the store's current epoch.
   have previousBound : ∀ (r : Root) (s : BeaconState preset fork),
       store.blockStates[r]? = some s → (getPreviousEpoch s).toNat ≤ epoch.toNat - 1 := by
