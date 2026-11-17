@@ -390,42 +390,6 @@ private theorem duty_of_active {anchor : Store preset fork} {time : ℕ}
       omega) read v honest).mp member
   exact ⟨slot, index, low, high, duty⟩
 
-/-- A counted voter outside the past committees has no duty before the call's slot. -/
-private theorem duty_after_call {time : ℕ} {anchor : Store preset fork}
-    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (start : ∀ w ∈ J, e.start w = anchor) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
-    (retained : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (windows : AssignmentWindowAgreement (e := e) time)
-    {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ} (nBound : (e.world n).time ≤ time)
-    {head : ForkChoiceNode} (headOk : ((e.world n).state u).getHead config = .ok head)
-    {current first last : Slot} {participants : Std.TreeSet ValidatorIndex}
-    (currentOk : ((e.world n).state u).getCurrentSlot config = .ok current)
-    (firstOk : computeStartSlotAtEpoch preset (computeEpochAtSlot preset current) = .ok first)
-    (lastOk : subChecked current 1 = .ok last)
-    (participantsOk : ((e.world n).state u).getCommitteesBetweenSlots head.root first last =
-      .ok participants)
-    {v : ValidatorIndex} (honest : v ∈ J) (unseen : v ∉ participants)
-    {slot : Slot} {index : CommitteeIndex} (low : first ≤ slot)
-    (duty : assignment.committee v slot = some index) :
-    current ≤ slot := by
-  have forward := e.forwardReachable
-    (fun a ha => (start a ha) ▸ Store.ForwardReachable.anchor anchored) n u caller
-  have lastNat := (subChecked_ok_iff.mp lastOk).2
-  have lastPos := (subChecked_ok_iff.mp lastOk).1
-  simp only [UInt64.toNat_one] at lastNat lastPos
-  have past : last < current := UInt64.lt_iff_toNat_lt.mpr (by omega)
-  have epochFirst := computeEpochAtSlot_computeStartSlotAtEpoch
-    (UInt64.lt_iff_toNat_lt.mpr positive) firstOk
-  by_contra early
-  have high : slot ≤ last := UInt64.le_iff_toNat_le.mpr (by
-    have := UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp early)
-    omega)
-  exact unseen ((windows u caller n nBound head current first last participants headOk currentOk
-    past (fun found foundOk => by
-      have le := headState_epoch_le forward currentOk foundOk
-      rw [epochFirst]
-      omega) participantsOk v honest).mpr ⟨slot, index, low, high, duty⟩)
-
 /-- A counted voter with a duty from the call's slot to the end of the epoch signs the target.
 
 At the duty its head descends from the origin, which is in the target's epoch.
