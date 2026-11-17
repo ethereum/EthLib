@@ -106,7 +106,8 @@ def test_frame_encoding_error(encoded: str) -> None:
     ],
 )
 def test_forbidden_packet_types(packet: quic.PacketType, encoded: str) -> None:
-    message = "QUIC frame rejected: EthLib.Networking.Quic.Wire.Error.protocolViolation"
+    kind = int(encoded[:2], 16)
+    message = f"QUIC frame rejected: EthLib.Networking.Quic.Wire.Error.protocolViolation {kind}"
     with raises(quic.QuicError, message) as info:
         quic.decode_frame(packet, bytes.fromhex(encoded))
     assert info.value.code == 9
@@ -124,7 +125,7 @@ def test_table_3(frame: quic.Frame, encoded: str, packet: quic.PacketType) -> No
     if allowed:
         assert quic.decode_frame(packet, bytes.fromhex(encoded)) == (frame, b"")
     else:
-        message = "QUIC frame rejected: EthLib.Networking.Quic.Wire.Error.protocolViolation"
+        message = f"QUIC frame rejected: EthLib.Networking.Quic.Wire.Error.protocolViolation {kind}"
         with raises(quic.QuicError, message):
             quic.decode_frame(packet, bytes.fromhex(encoded))
 

@@ -39,6 +39,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- The QUIC integer, wire and packet protection errors carry the values their failed check compared.
+  Each error fires on the same inputs as before, and codes are unchanged; each message now shows these values.
+  - `Quic.Varint.VarintError.truncated` and `Quic.Wire.Error.truncated` carry the bytes needed and available.
+  - `Quic.Wire.Error.connectionIdLength` carries the length and the maximum, `fixedBit` and `reservedBits` the first byte, and `version` the version.
+  - `Quic.Wire.Error.packetNumber` carries the truncated number, its width in bytes and the expected number, and `protocolViolation` the frame type.
+  - `Quic.Protection.Error.sample` carries the packet number offset and the packet size, `tagLength` the tag size, and `connectionId` the length of the original destination connection ID.
+  - `Quic.Varint.decodeList_nil`, `decodeList_truncated`, `decode_empty`, `decode_truncated`, `decodeList_error_iff`, `decode_error_iff` and `Quic.Protection.sample_eq_error_of_short` state the fields of the error.
+
 - The ENR, discv4 and discv5 errors carry the values their failed check compared.
   Each error fires on the same inputs as before, and codes are unchanged; each message now shows these values.
   - `Enr.EnrError.tooFewItems` carries the item count, and `unknownScheme` the value of the `id` pair.

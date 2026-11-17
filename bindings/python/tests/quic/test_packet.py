@@ -57,12 +57,34 @@ def test_version_negotiation_connection_ids_are_version_independent() -> None:
     assert quic.decode_header(0, quic.encode_header(header)) == (header, b"")
 
 
+# The byte sizes of the fields of INITIAL in order (§17.2.2), without its empty source ID.
+# The fields are the first byte, the version, the destination ID length and the ID itself.
+# Then come the source ID length, the token length, the Length and the packet number.
+INITIAL_FIELDS = [1, 4, 1, 8, 1, 1, 2, 4]
+
+# The start of the Length, a two-byte integer whose first byte selects its size (§16).
+LENGTH_START = 16
+
+
+def _truncation(prefix: int) -> tuple[int, int]:
+    # The size of the field that the prefix ends inside, and the bytes of it that the prefix holds.
+    start = 0
+    for size in INITIAL_FIELDS:
+        if prefix < start + size:
+            # Before its first byte, an integer needs only that byte.
+            return (1 if prefix == LENGTH_START else size), prefix - start
+        start += size
+    raise AssertionError(prefix)
+
+
 @pytest.mark.parametrize("prefix", range(len(bytes.fromhex(INITIAL))))
 def test_initial_truncation(prefix: int) -> None:
     # Every proper prefix ends inside a required field (§17.2.2).
-    with raises(
-        quic.QuicError, "QUIC header rejected: EthLib.Networking.Quic.Wire.Error.truncated"
-    ):
+    needed, available = _truncation(prefix)
+    message = (
+        f"QUIC header rejected: EthLib.Networking.Quic.Wire.Error.truncated {needed} {available}"
+    )
+    with raises(quic.QuicError, message):
         quic.decode_header(0, bytes.fromhex(INITIAL)[:prefix])
 
 
@@ -82,13 +104,14 @@ def test_packet_number_window_edges(expected: int, truncated: int, number: int) 
 @pytest.mark.parametrize(
     ("encoded", "error", "code"),
     [
-        ("800000000100000100", "fixedBit", 3),
-        ("c4000000010000000100", "reservedBits", 5),
-        ("4800", "reservedBits", 5),
-        ("c00000000200000100", "version", 4),
+        # The first byte, in decimal, follows the name of a bit error.
+        ("800000000100000100", "fixedBit 128", 3),
+        ("c4000000010000000100", "reservedBits 196", 5),
+        ("4800", "reservedBits 72", 5),
+        ("c00000000200000100", "version 2", 4),
         # Only version 1 limits connection IDs to 20 bytes (§17.2).
-        ("c00000000215" + "00" * 21 + "00", "version", 4),
-        ("c00000000115", "connectionIdLength", 2),
+        ("c00000000215" + "00" * 21 + "00", "version 2", 4),
+        ("c00000000115", "connectionIdLength 21 20", 2),
         # A Length shorter than the packet-number field.
         ("c3000000010000000300000000", "packetLength", 6),
     ],
@@ -119,7 +142,7 @@ def test_encoder_rejects_invalid_headers(header: quic.Header) -> None:
 
 
 def test_short_connection_id_length_bound() -> None:
-    message = "QUIC header rejected: EthLib.Networking.Quic.Wire.Error.connectionIdLength"
+    message = "QUIC header rejected: EthLib.Networking.Quic.Wire.Error.connectionIdLength 21 20"
     with raises(quic.QuicError, message) as info:
         quic.decode_header(21, bytes.fromhex("40" + "00" * 22))
     assert info.value.code == 2
@@ -130,7 +153,11 @@ def test_short_connection_id_length_bound() -> None:
 )
 def test_packet_number_rejections(width: int, truncated: int, expected: int) -> None:
     # A truncated value wider than its field, an expectation past 2^62, and a result of 2^62.
-    message = "QUIC packet number rejected: EthLib.Networking.Quic.Wire.Error.packetNumber"
+    # The error holds the truncated number, its width in bytes and the expected number.
+    message = (
+        "QUIC packet number rejected: EthLib.Networking.Quic.Wire.Error.packetNumber "
+        f"{truncated} {width + 1} {expected}"
+    )
     with raises(quic.QuicError, message) as info:
         quic.decode_packet_number(width, truncated, expected)
     assert info.value.code == 7

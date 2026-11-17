@@ -52,7 +52,13 @@ def test_decode_accepts_longer_forms(encoded: str) -> None:
     ],
 )
 def test_decode_rejects_every_truncation(encoded: str, length: int) -> None:
-    message = "QUIC integer rejected: EthLib.Networking.Quic.Varint.VarintError.truncated"
+    # The error holds the bytes of the selected integer and the bytes of the input.
+    # An empty input needs one byte, the first, which selects the length.
+    needed = len(encoded) // 2 if length else 1
+    message = (
+        "QUIC integer rejected: EthLib.Networking.Quic.Varint.VarintError.truncated "
+        f"{needed} {length}"
+    )
     with raises(quic.QuicVarintError, message) as info:
         quic.decode_varint(bytes.fromhex(encoded)[:length])
     assert info.value.code == 1

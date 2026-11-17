@@ -214,7 +214,7 @@ def ack (ecnPresent : Bool) : Reader Ack := do
 def vector (n : Nat) : Reader (Vector UInt8 n) := do
   let data ← bytes n
   if h : data.length = n then return ⟨data.toArray, by simpa using h⟩
-  else throw .truncated
+  else throw (.truncated n data.length)
 
 /-- Read a frame's fields after its shortest one-byte type (§19). -/
 def decodeBody (kind : Nat) : Reader Frame := do
@@ -275,7 +275,7 @@ def decodeList (packet : Packet.PacketType) : Reader Frame := do
   let kind ← byte
   let frame ← fun input => (decodeBody kind.toNat input).mapError fun _ => .frameEncoding
   let _ ← StateT.lift (validate frame)
-  require (frame.allowed packet = true) .protocolViolation
+  require (frame.allowed packet = true) (.protocolViolation kind.toNat)
   return frame
 
 
