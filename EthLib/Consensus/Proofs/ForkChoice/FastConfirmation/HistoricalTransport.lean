@@ -647,7 +647,7 @@ private theorem sibling_weight_lt_of_window_margin [DecidablePred (· ∈ J)]
   omega
 
 /-- A receiver's ancestor parent agrees with the caller's parent or supplies a block collision. -/
-private theorem parent_read_or_collision {caller receiver : Store preset fork}
+public theorem parent_read_or_collision {caller receiver : Store preset fork}
     (callerReached : Store.Reachable config anchorState anchorBlock caller)
     (receiverReached : Store.Reachable config anchorState anchorBlock receiver)
     {parent : BeaconBlock preset fork} {parentRoot : Root} {head : ForkChoiceNode}
