@@ -122,38 +122,6 @@ def HonestStoreEpochsBounded (horizon : Epoch) (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ last →
     ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon
 
-/-- Recent vote targets and the actual head have a common committee-preserving history.
-
-It fails on ordinary runs.
-
-Take an epoch with no block, and then a vote with the current target.
-
-A common state must be no later than the head state and within one seed lookahead of the target.
-
-No state is both.
-
-The headlines assume `NewlyActiveVotersInHeadWindow` instead, which this premise implies. -/
-def VoteCommitteeCommonHistory (last : Nat) : Prop :=
-  ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
-    ∀ (head : ForkChoiceNode) headState current v (attestation : Attestation preset fork)
-      targetState,
-    ((e.world k).state w).getHead config = .ok head →
-    ((e.world k).state w).blockState head.root = .ok headState →
-    ((e.world k).state w).getCurrentStoreEpoch config = .ok current →
-    attestation.data.target.epoch.toNat ≤ current.toNat →
-    current.toNat ≤ attestation.data.target.epoch.toNat + 1 →
-    ((e.world k).state w).VoteOrigin config v attestation →
-    ((e.world k).state w).checkpointStates[attestation.data.target]? = some targetState →
-    ∃ common : BeaconState preset fork,
-      RunKept common headState ∧ RunKept common targetState ∧
-      attestation.data.target.epoch.toNat ≤
-        (getCurrentEpoch common).toNat + preset.MIN_SEED_LOOKAHEAD.toNat ∧
-      attestation.data.target.epoch ≤ activityFixedEpoch common ∧
-      (getCurrentEpoch headState).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
-        attestation.data.target.epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat ∧
-      (getCurrentEpoch targetState).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
-        attestation.data.target.epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
-
 /-- Each voter below an ancestor of an honest head lies in the head's window after that ancestor.
 
 The ancestor is a known block, `parent`, and the store's current epoch is at most two after it.
@@ -401,29 +369,13 @@ def ByzantineCountedStake (epoch : Epoch) (first last : Nat) : Prop :=
     3 * stake (fun v => balanceAt state v.toNat) {v ∈ quorumVoters state | v ∉ J} <
       2 * total.toNat
 
-/-- Each honest head of the interval omits at most the exit reserve per full window epoch.
-
-The window starts at the given slot and ends at the slot before the store's current slot. -/
-def ReceiverWindowExits (source : BeaconState preset fork) (firstSlot : Slot)
-    (first last : Nat) : Prop :=
-  ∀ w ∈ J, ∀ k (head : ForkChoiceNode) (current finish : Slot),
-    first ≤ (e.world k).time → (e.world k).time ≤ last →
-    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
-    ((e.world k).state w).getHead config = .ok head →
-    ((e.world k).state w).getCurrentSlot config = .ok current → subChecked current 1 = .ok finish →
-    WindowExitBound (config := config) ((e.world k).state w) source head.root firstSlot finish
-
-/-- The exit bound of `ReceiverWindowExits`, asked only of receivers near the parent.
+/-- Each near honest head of the interval omits at most the exit reserve per full window epoch.
 
 A receiver is near when its store epoch is at most two epochs after `parentEpoch`.
 
+The window starts at the given slot and ends at the slot before the store's current slot.
+
 It is asked only of these receivers, where every step of the historical-anchor proof reads it.
-
-`ReceiverWindowExits` asks the bound of every receiver up to the horizon.
-
-A receiver several epochs past the parent has several epochs of exits in its window.
-
-They count against one reserve, so that form fails while validators keep exiting.
 
 The duty-epoch step, which covers later receivers, does not read it. -/
 def ReceiverWindowExitsNear (parentEpoch : Epoch) (source : BeaconState preset fork)

@@ -52,7 +52,7 @@ Not yet released.
 - `VotersInHeadWindow` states that each voter below an ancestor of an honest head lies in the head's window after it ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `Execution.votersInHeadWindow_of_newlyActive` derives it from `NewlyActiveVotersInHeadWindow`, which asks it only of a voter activated at the target epoch of a vote two epochs after that ancestor.
   `Store.mem_getCommitteesBetweenSlots_of_active` and `Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin` are the general steps.
-  `ReceiverWindowExitsNear` asks the exit bound of `ReceiverWindowExits` only of receivers within two epochs of the parent.
+  `ReceiverWindowExitsNear` asks the receivers' exit bound only of receivers within two epochs of the parent.
 
 ### Changes that break callers
 
@@ -65,10 +65,12 @@ Not yet released.
 
 - In Lean, the historical-anchor theorems assume less about recent votes and receiver exits ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   Each new statement implies the old one.
-  `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` take `newVoters : NewlyActiveVotersInHeadWindow` in place of `history : VoteCommitteeCommonHistory`, and `exits : ReceiverWindowExitsNear` in place of `exits : ReceiverWindowExits`.
+  `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` take `newVoters : NewlyActiveVotersInHeadWindow` in place of the common vote history, `history`, and `exits : ReceiverWindowExitsNear` in place of the exit bound for every receiver.
   `Execution.isAncestor_getHead_of_historical_anchor` and `ancestor_head_of_window_margin` take `membership : VotersInHeadWindow` in place of `history`.
   `ancestor_head_of_window_margin` also drops `minLookahead`, `maxLookahead` and `ring`, which only the common history read.
-  A caller with `history` passes the corner premise or the window membership that it implies; a caller with `ReceiverWindowExits` passes its restriction to near receivers.
+  A caller with the common vote history passes the window membership that it implies, or the corner premise.
+  A caller with the old exit bound passes its restriction to near receivers.
+  `VoteCommitteeCommonHistory` and `ReceiverWindowExits` are removed: no statement reads them any more.
 
 - In Lean, the historical-anchor theorems no longer assume finality across honest stores ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `Execution.source_surplus_or_historical_evidence`, `Execution.isAncestor_getHead_of_historical_anchor`, `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` drop their `residual` argument; their conclusions are unchanged.

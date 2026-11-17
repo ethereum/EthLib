@@ -3038,9 +3038,11 @@ The signed-justification theorem keeps its statement for callers that supply the
 
 Three premises of these headlines are worth stating with when they hold.
 
-The headlines do not assume `VoteCommitteeCommonHistory`, a common committee-preserving state behind every recent vote and the head.
-It fails on ordinary runs: after an epoch with no block, a vote with the current target has no such state.
-They assume `NewlyActiveVotersInHeadWindow` instead, which that premise implies.
+The headlines do not assume a common vote history: a common committee-preserving state behind every recent vote and the head.
+That former premise fails on ordinary runs.
+Take an epoch with no block, and then a vote with the current target.
+A common state must be no later than the head state and within one seed lookahead of the target, and no state is both.
+The headlines assume `NewlyActiveVotersInHeadWindow` instead, which that premise implies.
 It asks only about a vote two epochs after the parent of the tested block, whose voter became active at the vote's target epoch.
 Such a voter must lie in the head's window, from the slot after the parent to the slot before the current one.
 It fails only when the head state's shuffling places such a voter at or after the current slot.
@@ -3053,9 +3055,9 @@ So it holds while every member of a later window is in the source state's regist
 It fails when such a window has a member that the source state does not yet hold, such as a validator deposited after it.
 
 `ReceiverWindowExitsNear` asks the exit bound only of receivers within two epochs of the parent, where every step reads it.
-The earlier form, `ReceiverWindowExits`, asked it of every receiver to the horizon.
+The former premise asked the same bound of every receiver up to the horizon.
 A receiver several epochs past the parent has several epochs of exits in its window.
-They count against one reserve, so that form fails while validators keep exiting.
+They count against one reserve, so that form can fail while validators keep exiting.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
 `getCurrentTarget_eq_ok_iff` states that target as the checkpoint of the store's epoch in the chain of the head, and `epoch_eq_of_getCurrentTarget` gives its epoch.
