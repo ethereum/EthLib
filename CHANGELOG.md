@@ -51,6 +51,19 @@ Not yet released.
 
 ### Changes that break callers
 
+- The eth body, session, snap range and era1 errors, and the argument errors of the EVM exports, carry the values that their failed check compared.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  The messages give the new values: `transactions do not have the transactions root of the header` becomes `transactions have the root 0x…, not the transactions root 0x…`, and `the sender must be 20 bytes` becomes `the sender must be 20 bytes, not 19`.
+  The era1 and snap range errors print each value named, `(name := value)`, with hashes in hex, on one line: `blockCount 3 2` becomes `blockCount (counted := 3) (held := 2)`.
+  In Lean, these constructors take arguments:
+  - `Network.BodyError.wrongTransactionsRoot`, `wrongWithdrawalsRoot` and `wrongOmmersHash`, each with the header's value `expected` and the body's value `actual`, and `untypedTransaction first`, the first byte, or `none` for an empty string;
+  - `Network.EthSessionError.beforeStatus id`, the ID of the message;
+  - `Network.SnapRangeError.slimAccount hash` and `tooManyRanges ranges accounts`;
+  - `History.Era1Error.blockNumber i expected actual`, `parentHash i expected actual`, `totalDifficulty i expected actual` and `accumulator expected actual`;
+  - `Evm.Exports.ArgumentError.senderLength size` and `saltLength size`, and `readWord` takes the error as a function of the size.
+  `ArgumentError.code_injective` concludes that the two errors come from one constructor, since errors with one code now differ in their size.
+  `receiveEth_beforeStatus` and the created-address lemmas of the EVM exports state the new values in their errors.
+
 - The trie, range, Merkle proof, account proof and state input errors carry the values that their failed check compared.
   Each code keeps its meaning, and each error fires on the same inputs as before.
   Their messages name each value, as `(name := value)`, with hashes and byte strings in hex and words in decimal, on one line.

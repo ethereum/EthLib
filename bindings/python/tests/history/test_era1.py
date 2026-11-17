@@ -183,7 +183,7 @@ def test_full_era_of_8192_blocks_decodes() -> None:
 
 def test_one_block_too_many_is_rejected() -> None:
     blocks = _chain(0, 8193)
-    with raises(Era1Error, _error("tooManyBlocks 8193")):
+    with raises(Era1Error, _error("tooManyBlocks (count := 8193)")):
         decode_era1(_file(0, blocks, accumulator=bytes(32)))
 
 
@@ -205,7 +205,7 @@ def test_cut_block_is_rejected() -> None:
     blocks = _chain(0, 2)
     # A lone header among the other records is a block cut short.
     lone = snappy.encode_frames(blocks[1].header)
-    with raises(Era1Error, _error("misplacedRecord 768")):
+    with raises(Era1Error, _error("misplacedRecord (type := 768)")):
         decode_era1(_file(0, blocks[:1], others=[(HEADER, lone)]))
 
 
@@ -220,12 +220,12 @@ def test_wrong_size_total_difficulty_is_rejected() -> None:
     header_start = len(_record(VERSION, b""))
     index_start = len(out)
     out += _record(BLOCK_INDEX, _int64(0) + _int64(header_start - index_start) + _int64(1))
-    with raises(Era1Error, _error("wrongSize 1536 31")):
+    with raises(Era1Error, _error("wrongSize (type := 1536) (size := 31)")):
         decode_era1(out)
 
 
 def test_wrong_size_accumulator_is_rejected() -> None:
-    with raises(Era1Error, _error("wrongSize 1792 31")):
+    with raises(Era1Error, _error("wrongSize (type := 1792) (size := 31)")):
         decode_era1(_file(0, _chain(0, 2), accumulator=bytes(31)))
 
 
@@ -233,7 +233,7 @@ def test_wrong_size_accumulator_is_rejected() -> None:
 def test_wrong_block_count_is_rejected(count: int) -> None:
     data = _without_index(_file(0, _chain(0, 2)), 2)
     index = _int64(0) + _int64(0) * count + _int64(count)
-    with raises(Era1Error, _error(f"blockCount {count} 2")):
+    with raises(Era1Error, _error(f"blockCount (counted := {count}) (held := 2)")):
         decode_era1(data + _record(BLOCK_INDEX, index))
 
 
@@ -248,7 +248,7 @@ def test_index_of_wrong_size_is_rejected() -> None:
 
 @pytest.mark.parametrize("shift", [-1, 1, 8])
 def test_offset_off_its_header_is_rejected(shift: int) -> None:
-    with raises(Era1Error, _error("blockOffset 2")):
+    with raises(Era1Error, _error("blockOffset (i := 2)")):
         decode_era1(_file(0, _chain(0, 3), last_offset_shift=shift))
 
 
@@ -261,7 +261,7 @@ def test_bad_frame_is_rejected() -> None:
     data[body + 8 + 10 + 4] ^= 1
     with raises_shape(
         Era1Error,
-        _error("frame 1 (EthLib.Networking.Snappy.FrameError.checksumMismatch {n} {n})"),
+        _error("frame (i := 1) (EthLib.Networking.Snappy.FrameError.checksumMismatch {n} {n})"),
     ):
         decode_era1(bytes(data))
 
@@ -269,14 +269,18 @@ def test_bad_frame_is_rejected() -> None:
 def test_body_that_is_not_one_item_is_rejected() -> None:
     blocks = _chain(0, 2)
     blocks[1] = dataclasses.replace(blocks[1], body=_rlp([]) + b"\x00")
-    with raises(Era1Error, _error("rlp 1 (EthLib.Serialization.Rlp.RlpError.trailingBytes 1)")):
+    with raises(
+        Era1Error, _error("rlp (i := 1) (EthLib.Serialization.Rlp.RlpError.trailingBytes 1)")
+    ):
         decode_era1(_file(0, blocks))
 
 
 def test_receipts_that_are_not_one_item_are_rejected() -> None:
     blocks = _chain(0, 2)
     blocks[0] = dataclasses.replace(blocks[0], receipts=b"")
-    with raises(Era1Error, _error("rlp 0 (EthLib.Serialization.Rlp.RlpError.inputTooShort 1 0)")):
+    with raises(
+        Era1Error, _error("rlp (i := 0) (EthLib.Serialization.Rlp.RlpError.inputTooShort 1 0)")
+    ):
         decode_era1(_file(0, blocks))
 
 
@@ -284,12 +288,14 @@ def test_header_with_too_few_fields_is_rejected() -> None:
     blocks = _chain(0, 1)
     # A list of 7 fields has neither a difficulty nor a number, the ninth field.
     blocks[0] = dataclasses.replace(blocks[0], header=_rlp([bytes(32)] * 7))
-    with raises(Era1Error, _error("rlp 0 (EthLib.Serialization.Rlp.RlpError.wrongFieldCount 9 7)")):
+    with raises(
+        Era1Error, _error("rlp (i := 0) (EthLib.Serialization.Rlp.RlpError.wrongFieldCount 9 7)")
+    ):
         decode_era1(_file(0, blocks))
 
 
 def test_wrong_start_is_rejected() -> None:
-    with raises(Era1Error, _error("blockNumber 0")):
+    with raises(Era1Error, _error("blockNumber (i := 0) (expected := 1) (actual := 0)")):
         decode_era1(_file(1, _chain(0, 3)))
 
 
@@ -298,7 +304,7 @@ def test_wrong_number_is_rejected() -> None:
     # The last header keeps its parent link but carries the number 3.
     header = _header(keccak.keccak256(blocks[1].header), 1002, 3)
     blocks[2] = dataclasses.replace(blocks[2], header=header)
-    with raises(Era1Error, _error("blockNumber 2")):
+    with raises(Era1Error, _error("blockNumber (i := 2) (expected := 2) (actual := 3)")):
         decode_era1(_file(0, blocks))
 
 
@@ -306,7 +312,9 @@ def test_broken_parent_link_is_rejected() -> None:
     blocks = _chain(0, 3)
     header = _header(bytes(32), 1002, 2)
     blocks[2] = dataclasses.replace(blocks[2], header=header)
-    with raises(Era1Error, _error("parentHash 2")):
+    expected = keccak.keccak256(blocks[1].header).hex()
+    fault = f"parentHash (i := 2) (expected := 0x{expected}) (actual := 0x{bytes(32).hex()})"
+    with raises(Era1Error, _error(fault)):
         decode_era1(_file(0, blocks))
 
 
@@ -315,7 +323,10 @@ def test_wrong_total_difficulty_is_rejected(index: int, start: int) -> None:
     blocks = _chain(start, 3)
     block = blocks[index]
     blocks[index] = dataclasses.replace(block, total_difficulty=block.total_difficulty + 1)
-    with raises(Era1Error, _error(f"totalDifficulty {index}")):
+    # The chain gives the block its old total difficulty, and the file holds one more.
+    td = block.total_difficulty
+    fault = f"totalDifficulty (i := {index}) (expected := {td}) (actual := {td + 1})"
+    with raises(Era1Error, _error(fault)):
         decode_era1(_file(start, blocks))
 
 
@@ -326,8 +337,11 @@ def test_first_total_difficulty_after_genesis_is_free() -> None:
 
 
 def test_wrong_accumulator_is_rejected() -> None:
-    with raises(Era1Error, _error("accumulator")):
-        decode_era1(_file(0, _chain(0, 2), accumulator=bytes(32)))
+    blocks = _chain(0, 2)
+    root = _accumulator([(keccak.keccak256(b.header), b.total_difficulty) for b in blocks])
+    fault = f"accumulator (expected := 0x{root.hex()}) (actual := 0x{bytes(32).hex()})"
+    with raises(Era1Error, _error(fault)):
+        decode_era1(_file(0, blocks, accumulator=bytes(32)))
 
 
 def test_argument_of_wrong_type_is_rejected() -> None:

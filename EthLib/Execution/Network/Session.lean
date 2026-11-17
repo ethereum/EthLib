@@ -80,8 +80,8 @@ inductive EthVerdict where
 
 /-- Every way the session rejects a received message. -/
 inductive EthSessionError where
-  /-- A message other than Status came before the peer's Status. -/
-  | beforeStatus
+  /-- The message with ID `id`, not a Status, came before the peer's Status. -/
+  | beforeStatus (id : Nat)
   /-- The peer's Status fails the checks of a Status. -/
   | badStatus (error : StatusError)
   /-- A second Status came in an active session.
@@ -110,7 +110,7 @@ The other codes start at 701, above every code of the other errors of the eth me
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def EthSessionError.code : EthSessionError → UInt32
-  | .beforeStatus => 701
+  | .beforeStatus _ => 701
   | .badStatus e => e.code
   | .secondStatus => 702
   | .unsolicited _ => 703
@@ -157,7 +157,7 @@ def receiveEth (s : Schedule) (number timestamp : Nat) (session : EthSession) (m
     Except EthSessionError (EthSession × EthVerdict) := do
   match session.remoteStatus with
   | none =>
-    let .status status := m | throw .beforeStatus
+    let .status status := m | throw (.beforeStatus m.id)
     (checkStatus session.version s number timestamp status).mapError .badStatus
     return ({ session with remoteStatus := some status }, .accept)
   | some _ =>

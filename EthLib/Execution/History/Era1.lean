@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.U256
+public import EthLib.Execution.ErrorFormat
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Execution.Network.Blocks
 public import EthLib.Networking.Snappy.Frame
@@ -126,19 +127,51 @@ inductive Era1Error where
   | frame (i : Nat) (e : Networking.Snappy.FrameError)
   /-- A record of the block `i` is not one RLP item, or its header lacks a field. -/
   | rlp (i : Nat) (e : Rlp.RlpError)
-  /-- The header of the block `i` has another number than the index gives it. -/
-  | blockNumber (i : Nat)
-  /-- The header of the block `i` does not name the hash of the block before as its parent. -/
-  | parentHash (i : Nat)
-  /-- The total difficulty of the block `i` is not the one before plus its difficulty.
+  /-- The header of the block `i` has the number `actual`, not `expected`, the one of the index. -/
+  | blockNumber (i expected actual : Nat)
+  /-- The header of the block `i` names the parent `actual`, not `expected`, the block before. -/
+  | parentHash (i : Nat) (expected actual : Hash32)
+  /-- The total difficulty `actual` of the block `i` is not `expected`.
 
-  For the genesis block, it is not its difficulty. -/
-  | totalDifficulty (i : Nat)
+  It is the one before plus the difficulty of the block, or for the genesis block its difficulty.
+  -/
+  | totalDifficulty (i expected actual : Nat)
   /-- The SSZ root of the header records fails. -/
   | ssz (e : Ssz.Err)
-  /-- The accumulator is not the root of the header records of the blocks. -/
-  | accumulator
-  deriving Repr
+  /-- The accumulator `actual` of the file is not `expected`, the root of its header records. -/
+  | accumulator (expected actual : Bytes32)
+
+/-- A constructor of the error, named in full, applied to its arguments. -/
+def era1ErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.History.Era1Error." ++ name) args prec
+
+/-- The form of the error in Lean syntax, with each value named and each hash in hex. -/
+def Era1Error.reprPrec : Era1Error → Nat → Std.Format
+  | .e2store e, p => era1ErrorFormat "e2store" [reprArg e] p
+  | .noTrailer, p => era1ErrorFormat "noTrailer" [] p
+  | .misplacedRecord type, p => era1ErrorFormat "misplacedRecord" [namedArg "type" type] p
+  | .tooManyBlocks count, p => era1ErrorFormat "tooManyBlocks" [namedArg "count" count] p
+  | .wrongSize type size, p =>
+    era1ErrorFormat "wrongSize" [namedArg "type" type, namedArg "size" size] p
+  | .blockCount counted held, p =>
+    era1ErrorFormat "blockCount" [namedArg "counted" counted, namedArg "held" held] p
+  | .blockOffset i, p => era1ErrorFormat "blockOffset" [namedArg "i" i] p
+  | .frame i e, p => era1ErrorFormat "frame" [namedArg "i" i, reprArg e] p
+  | .rlp i e, p => era1ErrorFormat "rlp" [namedArg "i" i, reprArg e] p
+  | .blockNumber i expected actual, p =>
+    era1ErrorFormat "blockNumber"
+      [namedArg "i" i, namedArg "expected" expected, namedArg "actual" actual] p
+  | .parentHash i expected actual, p =>
+    era1ErrorFormat "parentHash"
+      [namedArg "i" i, namedArg "expected" expected, namedArg "actual" actual] p
+  | .totalDifficulty i expected actual, p =>
+    era1ErrorFormat "totalDifficulty"
+      [namedArg "i" i, namedArg "expected" expected, namedArg "actual" actual] p
+  | .ssz e, p => era1ErrorFormat "ssz" [reprArg e] p
+  | .accumulator expected actual, p =>
+    era1ErrorFormat "accumulator" [namedArg "expected" expected, namedArg "actual" actual] p
+
+instance : Repr Era1Error := ⟨Era1Error.reprPrec⟩
 
 /-- The stable code of an error, one per constructor.
 
@@ -153,11 +186,11 @@ def Era1Error.code : Era1Error → UInt32
   | .blockOffset _ => 7
   | .frame _ _ => 8
   | .rlp _ _ => 9
-  | .blockNumber _ => 10
-  | .parentHash _ => 11
-  | .totalDifficulty _ => 12
+  | .blockNumber .. => 10
+  | .parentHash .. => 11
+  | .totalDifficulty .. => 12
   | .ssz _ => 13
-  | .accumulator => 14
+  | .accumulator .. => 14
 
 /-- The blocks at the front of the records, four records each, and the records after them.
 
@@ -208,7 +241,7 @@ def readBlock (start i : Nat) (records : Record × Record × Record × Record) :
   discard <| rlpItem i body
   discard <| rlpItem i receipts
   let number ← (Execution.Network.headerNumber item).mapError (.rlp i)
-  unless number = start + i do throw (.blockNumber i)
+  unless number = start + i do throw (.blockNumber i (start + i) number)
   let difficulty ← (Execution.Network.headerDifficulty item).mapError (.rlp i)
   let parent ← (Execution.Network.headerParent item).mapError (.rlp i)
   let td := BitVec.ofNat 256 (Base.bytesToUint (← bytes32Of t))
@@ -234,10 +267,10 @@ def readBlocks (start : Nat) :
     let td := block.totalDifficulty.toNat
     match before with
     | some (hash, tdBefore) =>
-      unless parent = hash do throw (.parentHash i)
-      unless td = tdBefore + difficulty do throw (.totalDifficulty i)
+      unless parent = hash do throw (.parentHash i hash parent)
+      unless td = tdBefore + difficulty do throw (.totalDifficulty i (tdBefore + difficulty) td)
     | none =>
-      if start = 0 ∧ td ≠ difficulty then throw (.totalDifficulty i)
+      if start = 0 ∧ td ≠ difficulty then throw (.totalDifficulty i difficulty td)
     let hash := Cryptography.Hash.Keccak.keccak256 block.header
     return block :: (← readBlocks start (i + 1) (some (hash, td)) rest)
 
@@ -295,7 +328,8 @@ def decodeEra1 (bytes : ByteArray) : Except Era1Error Era1 := do
   if let some i := misplaced then throw (.blockOffset i)
   let blocks ← readBlocks index.start 0 none tuples
   let accumulator ← bytes32Of acc
-  unless (← accumulatorRoot blocks) = accumulator do throw .accumulator
+  let root ← accumulatorRoot blocks
+  unless root = accumulator do throw (.accumulator root accumulator)
   return ⟨index.start, index.offsets, blocks, others, accumulator⟩
 
 end EthLib.Execution.History
