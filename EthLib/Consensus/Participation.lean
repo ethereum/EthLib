@@ -199,6 +199,6 @@ def getAttestationParticipationFlagIndices (state : BeaconState preset fork)
         [TIMELY_TARGET_FLAG_INDEX] else []) ++
       (if matchingHead && inclusionDelay == preset.MIN_ATTESTATION_INCLUSION_DELAY then
         [TIMELY_HEAD_FLAG_INDEX] else [])
-  else throw .wrongSource
+  else throw (.wrongSource data.source.epoch data.source.root justified.epoch justified.root)
 
 end EthLib.Consensus

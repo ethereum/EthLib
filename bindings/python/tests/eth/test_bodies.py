@@ -9,6 +9,7 @@ from ethlib.execution.history import decode_era1
 from ethlib.execution.network import EthWireError, check_body
 from ethlib.serialization import rlp
 from raising import raises
+from trie_reference import Trie
 
 # The rules come from "Block Encoding and Validity" in caps/eth.md of ethereum/devp2p at the pin.
 # The accepted bodies are the blocks of tests/execution/blocks/blockchain_tests.json.
@@ -99,6 +100,11 @@ def test_empty_body_accepted() -> None:
 # A legacy transaction as an empty list, which has the bytes 0xc0, and so a nonempty value.
 TRANSACTION = []
 WITHDRAWAL = [b"\x01", b"\x02", bytes(20), b"\x03"]
+
+# The roots of the trie of one transaction or one withdrawal, at the key of the index 0.
+TRANSACTIONS_ROOT = Trie({rlp.encode(b""): rlp.encode(TRANSACTION)}).root
+WITHDRAWALS_ROOT = Trie({rlp.encode(b""): rlp.encode(WITHDRAWAL)}).root
+
 # An ommer with a number after that of the header, and the header that commits to it.
 LATE_OMMER = rlp.decode(_header(number=101))
 LATE_HEADER = _header(ommers_hash=keccak.keccak256(rlp.encode([LATE_OMMER])))
@@ -138,7 +144,7 @@ LATE_HEADER = _header(ommers_hash=keccak.keccak256(rlp.encode([LATE_OMMER])))
             _header(),
             rlp.encode([[b""], []]),
             610,
-            "a transaction is a byte string that does not start with a type",
+            "a transaction is an empty byte string",
             id="untyped-transaction-empty",
         ),
         pytest.param(
@@ -147,7 +153,7 @@ LATE_HEADER = _header(ommers_hash=keccak.keccak256(rlp.encode([LATE_OMMER])))
             # A legacy transaction, the empty list 0xc0, sent as a byte string.
             rlp.encode([[rlp.encode(TRANSACTION)], []]),
             610,
-            "a transaction is a byte string that does not start with a type",
+            "a transaction is a byte string that starts with 0xc0, not a type",
             id="untyped-transaction-legacy-as-bytes",
         ),
         pytest.param(
@@ -155,7 +161,7 @@ LATE_HEADER = _header(ommers_hash=keccak.keccak256(rlp.encode([LATE_OMMER])))
             _header(),
             rlp.encode([[b"\x80\x01"], []]),
             610,
-            "a transaction is a byte string that does not start with a type",
+            "a transaction is a byte string that starts with 0x80, not a type",
             id="untyped-transaction-first-byte-0x80",
         ),
         pytest.param(
@@ -163,7 +169,8 @@ LATE_HEADER = _header(ommers_hash=keccak.keccak256(rlp.encode([LATE_OMMER])))
             _header(),
             rlp.encode([[TRANSACTION], []]),
             603,
-            "transactions do not have the transactions root of the header",
+            f"transactions have the root 0x{TRANSACTIONS_ROOT.hex()}, "
+            f"not the transactions root 0x{EMPTY_TRIE_ROOT.hex()}",
             id="wrong-transactions-root",
         ),
         pytest.param(
@@ -187,7 +194,8 @@ LATE_HEADER = _header(ommers_hash=keccak.keccak256(rlp.encode([LATE_OMMER])))
             _header(withdrawals_root=EMPTY_TRIE_ROOT),
             rlp.encode([[], [], [WITHDRAWAL]]),
             606,
-            "withdrawals do not have the withdrawals root of the header",
+            f"withdrawals have the root 0x{WITHDRAWALS_ROOT.hex()}, "
+            f"not the withdrawals root 0x{EMPTY_TRIE_ROOT.hex()}",
             id="wrong-withdrawals-root",
         ),
         pytest.param(
@@ -203,7 +211,8 @@ LATE_HEADER = _header(ommers_hash=keccak.keccak256(rlp.encode([LATE_OMMER])))
             _header(),
             rlp.encode([[], [[]]]),
             608,
-            "ommers do not have the ommers hash of the header",
+            f"ommers have the hash 0x{keccak.keccak256(rlp.encode([[]])).hex()}, "
+            f"not the ommers hash 0x{EMPTY_OMMERS_HASH.hex()}",
             id="wrong-ommers-hash",
         ),
         pytest.param(

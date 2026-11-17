@@ -56,6 +56,19 @@ Not yet released.
   `receiver_fullMaximum_of_head_window` takes the receiver's own finalized checkpoint on its own justified chain, `finalizedRead`, instead of `compatible`, `bounded`, `slots` and `epochOk`.
   `SelectedCheckpoint`, `FinalizedCheckpointCompatibility`, `ResidualFinalizedCheckpointCompatibility` and `compatibility_of_residual` are removed: no proof read them any more.
 
+- The eth body, session, snap range and era1 errors, and the argument errors of the EVM exports, carry the values that their failed check compared.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  The messages give the new values: `transactions do not have the transactions root of the header` becomes `transactions have the root 0x…, not the transactions root 0x…`, and `the sender must be 20 bytes` becomes `the sender must be 20 bytes, not 19`.
+  The era1 and snap range errors print each value named, `(name := value)`, with hashes in hex, on one line: `blockCount 3 2` becomes `blockCount (counted := 3) (held := 2)`.
+  In Lean, these constructors take arguments:
+  - `Network.BodyError.wrongTransactionsRoot`, `wrongWithdrawalsRoot` and `wrongOmmersHash`, each with the header's value `expected` and the body's value `actual`, and `untypedTransaction first`, the first byte, or `none` for an empty string;
+  - `Network.EthSessionError.beforeStatus id`, the ID of the message;
+  - `Network.SnapRangeError.slimAccount hash` and `tooManyRanges ranges accounts`;
+  - `History.Era1Error.blockNumber i expected actual`, `parentHash i expected actual`, `totalDifficulty i expected actual` and `accumulator expected actual`;
+  - `Evm.Exports.ArgumentError.senderLength size` and `saltLength size`, and `readWord` takes the error as a function of the size.
+  `ArgumentError.code_injective` concludes that the two errors come from one constructor, since errors with one code now differ in their size.
+  `receiveEth_beforeStatus` and the created-address lemmas of the EVM exports state the new values in their errors.
+
 - The trie, range, Merkle proof, account proof and state input errors carry the values that their failed check compared.
   Each code keeps its meaning, and each error fires on the same inputs as before.
   Their messages name each value, as `(name := value)`, with hashes and byte strings in hex and words in decimal, on one line.
@@ -67,6 +80,16 @@ Not yet released.
   `Trie.TrieError.emptyValue` stays bare: the root does not depend on the order of the entries, and naming a key would make the error depend on it.
   `compactToNibbleList_invalidFirstNibble`, `compactToNibbleList_nonZeroPadding`, `verifySlot_eq_slotMismatch` and `verifyRange_eq` state the values in their errors.
   `ErrorArg` shows a `BitVec`, such as a `U256`, in decimal.
+
+- The state accessor, shuffle and deposit tree errors carry the values that their check compared, and their codes keep their meaning.
+  - `AccessorError.balanceOverflow` holds the total that reached 2^64, and `AccessorError.ssz` the error of the root.
+  - `AccessorError.invalidPubkeys` holds the number of keys and the position of the first key that is not valid, if any.
+  - `AccessorError.wrongSource` holds the epoch and root of the source, then those of the justified checkpoint.
+  - `ShuffleError.noCommittee` holds the index of the committee, and `ShuffleError.overflow` the number of indices and that index.
+  - `DepositTreeError.treeFull` holds the number of deposits, `missingFinalized` the level that finds no root, and `extraFinalized` the number of roots left over.
+  - `DepositTreeError.rootMismatch` holds the deposit root, then the root that the finalized roots compute.
+  The message of a deposit tree error is on one line, with roots in hex, as in `EthLib.Consensus.DepositTreeError.rootMismatch 0x00… 0xd7…`.
+  `getPendingBalanceToWithdraw_eq_error_iff` names the total in the error, and `map_getRoot_pushLeaves` names the cap of the tree.
 
 - The errors of the execution payload, the Gloas bid, envelope, parent requests and payload attestations carry the values that their check compared.
   `TransitionError.wrongPayloadParentHash`, `wrongPayloadRandao`, `wrongPayloadGasLimit`, `wrongPayloadBlockHash` and `wrongPayloadRequestsRoot` hold the value of the payload, then the value it must equal.

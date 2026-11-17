@@ -181,18 +181,27 @@ def checkPartialReceiptsExport (gasLimits : ByteArray) (blockGasLimit : UInt64)
   (checkPartialReceipts limits blockGasLimit.toNat sizes).map (fun _ => true)
     |>.mapError fun e => (e.code, partialMessage e)
 
+/-- A hash in hex, as a message writes it. -/
+def hex (hash : Base.Hash32) : String :=
+  Base.hexString hash.toList
+
 /-- A message for a refused body, phrased for someone reading a Python traceback. -/
 def bodyMessage : BodyError → String
   | .decoding e => s!"body is not the RLP list of its parts: {reprStr e}"
   | .trie e => s!"a root of the body cannot be computed: {reprStr e}"
-  | .wrongTransactionsRoot => "transactions do not have the transactions root of the header"
+  | .wrongTransactionsRoot expected actual =>
+    s!"transactions have the root {hex actual}, not the transactions root {hex expected}"
   | .missingWithdrawals => "body has no withdrawals, which the fork asks for"
   | .unexpectedWithdrawals => "body has withdrawals, which the fork does not have"
-  | .wrongWithdrawalsRoot => "withdrawals do not have the withdrawals root of the header"
+  | .wrongWithdrawalsRoot expected actual =>
+    s!"withdrawals have the root {hex actual}, not the withdrawals root {hex expected}"
   | .tooManyOmmers c => s!"body holds {c} ommers, more than {Blocks.MAX_OMMERS}"
-  | .wrongOmmersHash => "ommers do not have the ommers hash of the header"
+  | .wrongOmmersHash expected actual =>
+    s!"ommers have the hash {hex actual}, not the ommers hash {hex expected}"
   | .ommerAfterBlock i n => s!"ommer {i} has number {n}, after the block"
-  | .untypedTransaction => "a transaction is a byte string that does not start with a type"
+  | .untypedTransaction none => "a transaction is an empty byte string"
+  | .untypedTransaction (some first) =>
+    s!"a transaction is a byte string that starts with {Base.hexString [first]}, not a type"
 
 /-- Whether the body `body` of a BlockBodies answer belongs to the header `header` at a fork.
 

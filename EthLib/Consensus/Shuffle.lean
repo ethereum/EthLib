@@ -30,10 +30,14 @@ open Base
 inductive ShuffleError where
   /-- The index is not below the number of indices. -/
   | indexOutOfRange (index count : UInt64)
-  /-- There are no committees to cut the indices into. -/
-  | noCommittee
-  /-- A bound of the committee is `2^64` or more. -/
-  | overflow
+  /-- There are no committees to cut the indices into.
+
+  It holds the index of the committee asked for. -/
+  | noCommittee (index : UInt64)
+  /-- A bound of the committee is `2^64` or more.
+
+  It holds the number of indices and the index of the committee. -/
+  | overflow (size : Nat) (index : UInt64)
   /-- The count is above `2^40`, so a position has a bucket number of more than 4 bytes. -/
   | countTooLarge (count : UInt64)
   deriving DecidableEq, Repr
@@ -49,8 +53,8 @@ The custody errors take the codes from 1, and the subnet errors from 101, in the
 So the shuffle errors take the codes from 201. -/
 def ShuffleError.code : ShuffleError → UInt32
   | .indexOutOfRange _ _ => 201
-  | .noCommittee => 202
-  | .overflow => 203
+  | .noCommittee _ => 202
+  | .overflow .. => 203
   | .countTooLarge _ => 204
 
 namespace Shuffle
@@ -174,9 +178,9 @@ It takes the shuffled positions as an argument, so the committees of an epoch ca
 It gives the committee of the rule when those positions are the shuffle of the list. -/
 def shuffledCommittee (indices : Array ValidatorIndex) (shuffled : Array UInt64)
     (index count : UInt64) : Except ShuffleError (Array ValidatorIndex) := do
-  if count = 0 then throw .noCommittee
+  if count = 0 then throw (.noCommittee index)
   unless index.toNat + 1 < 2 ^ 64 ∧ indices.size * (index.toNat + 1) < 2 ^ 64 do
-    throw .overflow
+    throw (.overflow indices.size index)
   let start := indices.size * index.toNat / count.toNat
   let stop := indices.size * (index.toNat + 1) / count.toNat
   -- The first position to shuffle at or past the length is the larger of the two.
