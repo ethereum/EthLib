@@ -608,18 +608,6 @@ private theorem Plain.compounding {a b : BeaconState preset fork} {electra : .pe
   obtain ⟨_, found, _, set, queued⟩ := ok
   exact (Plain.of_setValidator found set rfl rfl).trans (Plain.excess queued)
 
-/-- A consolidation request with one key for both validators can only switch it to compounding. -/
-private theorem Plain.sameKey {a b : BeaconState preset fork} {electra : .pectra ≤ fork}
-    {request : ConsolidationRequest} (same : request.sourcePubkey = request.targetPubkey)
-    (ok : processConsolidationRequest config a electra request = .ok b) : Plain a b := by
-  unfold processConsolidationRequest at ok
-  simp only [same, beq_self_eq_true, ↓reduceIte, bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact Plain.refl _)
-    | exact Plain.compounding (liftAccessor_ok.mp ok)
-
 end Plain
 
 /-! ## The steps that start an exit or move a queue -/
@@ -834,14 +822,12 @@ private theorem moves_consolidationRequest (rates : Rates preset config)
     {a b : BeaconState preset fork} {electra : .pectra ≤ fork} {request : ConsolidationRequest}
     (computed : processConsolidationRequest config a electra request = .ok b) :
     Moves config start ceiling 0 a b := by
-  by_cases same : request.sourcePubkey = request.targetPubkey
-  · exact (Plain.sameKey same computed).moves
-  · rcases eq_or_queueConsolidation_of_processConsolidationRequest same computed with
-      rfl | ⟨_, _, _, _, accepted, queued⟩
-    · exact Moves.refl _
-    · obtain ⟨churn, churnOk, above⟩ := accepted.churn
-      exact moves_queueConsolidation rates churnOk above accepted.sourceAt accepted.sourceStays
-        queued
+  rcases consolidationRequest_cases computed with
+    rfl | ⟨_, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
+  · exact Moves.refl _
+  · exact (Plain.compounding switched).moves
+  · obtain ⟨churn, churnOk, above⟩ := accepted.churn
+    exact moves_queueConsolidation rates churnOk above accepted.sourceAt accepted.sourceStays queued
 
 end Exits
 

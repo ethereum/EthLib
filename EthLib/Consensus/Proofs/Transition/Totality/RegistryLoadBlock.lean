@@ -210,14 +210,10 @@ private theorem loadKept_processWithdrawalRequest {electra : .pectra ≤ fork}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     LoadKept state after := by
   refine loadKept_of_sameSizes (sameSizes_processWithdrawalRequest computed) ?_
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; rfl)
-    | exact (loadKeptLaws.initiateValidatorExit (liftAccessor_ok.mp computed)).2
-    | exact (loadKept_requestPartialWithdrawal computed).2
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · rfl
+  · exact (loadKeptLaws.initiateValidatorExit exited).2
+  · exact (loadKept_requestPartialWithdrawal withdrawn).2
 
 /-- A consolidation of two validators keeps the count. -/
 private theorem loadKept_queueConsolidation {electra : .pectra ≤ fork}
@@ -439,15 +435,11 @@ private theorem processConsolidationRequest_registryLoad_le {electra : .pectra �
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     registryLoad after ≤ registryLoad state + 1 := by
-  unfold processConsolidationRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; omega)
-    | exact switchToCompoundingValidator_registryLoad_le (liftAccessor_ok.mp computed)
-    | exact Nat.le_trans (Nat.le_of_eq (loadKept_queueConsolidation computed).registryLoad_eq)
-        (Nat.le_add_right _ _)
+  rcases consolidationRequest_cases computed with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  · omega
+  · exact switchToCompoundingValidator_registryLoad_le switched
+  · exact Nat.le_trans (Nat.le_of_eq (loadKept_queueConsolidation queued).registryLoad_eq)
+      (Nat.le_add_right _ _)
 
 /-- In Electra and Fulu a payload raises the count by at most its requests.
 
@@ -707,46 +699,6 @@ private theorem processDeposit_size_le {before : fork < .hegota} {deposit : Depo
       applied
   · exact (applyPendingDeposit_validators_size_le_and_mem applied).1
 
-/-- Queueing the excess balance of a validator keeps the registry size. -/
-private theorem queueExcessActiveBalance_size {electra : .pectra ≤ fork}
-    {index : ValidatorIndex}
-    (computed : queueExcessActiveBalance state electra index = .ok after) :
-    after.validators.data.size = state.validators.data.size := by
-  simp only [queueExcessActiveBalance, bind_ok_iff] at computed
-  obtain ⟨_, _, computed⟩ := computed
-  split at computed
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, pending, appended, _, set, rfl⟩ := computed
-    obtain ⟨_, rfl⟩ := setBalance_ok set
-    rfl
-  · cases computed
-    rfl
-
-/-- A switch to compounding credentials keeps the registry size. -/
-private theorem switchToCompoundingValidator_size {electra : .pectra ≤ fork}
-    {index : ValidatorIndex}
-    (computed : switchToCompoundingValidator state electra index = .ok after) :
-    after.validators.data.size = state.validators.data.size := by
-  simp only [switchToCompoundingValidator, bind_ok_iff] at computed
-  obtain ⟨_, _, _, set, queued⟩ := computed
-  have one := (loadKept_setValidator set).1
-  have two := queueExcessActiveBalance_size queued
-  omega
-
-/-- A consolidation request keeps the registry size. -/
-private theorem processConsolidationRequest_size {electra : .pectra ≤ fork}
-    {request : ConsolidationRequest}
-    (computed : processConsolidationRequest config state electra request = .ok after) :
-    after.validators.data.size = state.validators.data.size := by
-  unfold processConsolidationRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; rfl)
-    | exact switchToCompoundingValidator_size (liftAccessor_ok.mp computed)
-    | exact (loadKept_queueConsolidation computed).1
-
 /-- A deposit request keeps the registry size. -/
 private theorem processDepositRequest_size {electra : .pectra ≤ fork}
     {request : DepositRequest}
@@ -774,7 +726,7 @@ private theorem processExecutionRequests_size {body : BeaconBlockBody preset for
   have one := foldlM_size_eq (fun _ _ _ ok => processDepositRequest_size ok) depositsOk
   have two := foldlM_size_eq (fun _ _ _ ok => (loadKept_processWithdrawalRequest ok).1)
     withdrawalsOk
-  have three := foldlM_size_eq (fun _ _ _ ok => processConsolidationRequest_size ok)
+  have three := foldlM_size_eq (fun _ _ _ ok => (sameSizes_processConsolidationRequest ok).1)
     consolidationsOk
   omega
 
@@ -793,7 +745,7 @@ private theorem processParentExecutionPayload_size {gloas : .glamsterdam ≤ for
   have one := foldlM_size_eq (fun _ _ _ ok => processDepositRequest_size ok) depositsOk
   have two := foldlM_size_eq (fun _ _ _ ok => (loadKept_processWithdrawalRequest ok).1)
     withdrawalsOk
-  have three := foldlM_size_eq (fun _ _ _ ok => processConsolidationRequest_size ok)
+  have three := foldlM_size_eq (fun _ _ _ ok => (sameSizes_processConsolidationRequest ok).1)
     consolidationsOk
   have four := foldlM_size_eq (fun _ _ _ ok => by
     obtain ⟨_, rfl⟩ := processBuilderDepositRequest_builders ok

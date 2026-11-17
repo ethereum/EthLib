@@ -388,16 +388,11 @@ private theorem listed_consolidationRequest {electra : .pectra ≤ fork}
   have inside {i : ValidatorIndex} {v : Validator} (found : s.validators.data[i.toNat]? = some v) :
       i.toNat < s.validators.data.size :=
     (Array.getElem?_eq_some_iff.mp found).1
-  unfold processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact listed)
-    | exact (Kept.compounding (liftAccessor_ok.mp ok)).listed listed
-    | exact listed_queueConsolidation
-        (inside (getElem?_toNat_of_ofNatChecked (by assumption)))
-        (inside (getElem?_toNat_of_ofNatChecked (by assumption))) ok listed
+  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
+  · exact listed
+  · exact (Kept.compounding switched).listed listed
+  · exact listed_queueConsolidation (inside accepted.sourceAt) (inside accepted.targetAt) queued
+      listed
 
 /-- The requests of the execution layer keep the facts. -/
 private theorem listed_executionRequests {body : BeaconBlockBody preset fork}
@@ -522,14 +517,10 @@ private theorem kept_queueConsolidation {electra : .pectra ≤ fork}
 private theorem kept_consolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (ok : processConsolidationRequest config s electra request = .ok t) : BlockKept s t := by
-  unfold processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact BlockKept.refl _)
-    | exact (Kept.compounding (liftAccessor_ok.mp ok)).kept
-    | exact kept_queueConsolidation ok
+  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  · exact BlockKept.refl _
+  · exact (Kept.compounding switched).kept
+  · exact kept_queueConsolidation queued
 
 /-- The requests of the execution layer keep the history, the carry and the scores. -/
 private theorem kept_executionRequests {body : BeaconBlockBody preset fork}

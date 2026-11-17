@@ -206,14 +206,10 @@ private theorem stepKeeps_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     StepKeeps state after := by
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact StepKeeps.refl _)
-    | exact stepKeeps_initiateValidatorExit (liftAccessor_ok.mp computed)
-    | exact stepKeeps_requestPartialWithdrawal computed
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact StepKeeps.refl _
+  · exact stepKeeps_initiateValidatorExit exited
+  · exact stepKeeps_requestPartialWithdrawal withdrawn
 
 private theorem stepKeeps_queueExcessActiveBalance {electra : .pectra ≤ fork}
     {index : ValidatorIndex}
@@ -288,17 +284,12 @@ private theorem stepKeeps_processConsolidationRequest {electra : .pectra ≤ for
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     StepKeeps state after := by
-  unfold processConsolidationRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals try first
-    | (cases computed; done)
-    | (cases computed; exact StepKeeps.refl _)
-    | exact stepKeeps_switchToCompoundingValidator (liftAccessor_ok.mp computed)
+  rcases consolidationRequest_cases computed with
+    rfl | ⟨_, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
+  · exact StepKeeps.refl _
+  · exact stepKeeps_switchToCompoundingValidator switched
   -- The source had not started to exit.
-  rename_i bothFar _ _ _ _ _ _ _ _
-  exact stepKeeps_queueConsolidation (getElem?_toNat_of_ofNatChecked (by assumption))
-    (beq_iff_eq.mp ((Bool.and_eq_true _ _).mp bothFar).1) computed
+  · exact stepKeeps_queueConsolidation accepted.sourceAt accepted.sourceStays queued
 
 private theorem stepKeeps_processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}

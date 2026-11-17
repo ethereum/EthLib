@@ -140,15 +140,10 @@ private theorem stays_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) (index : Nat) :
     BalanceStays index state after := by
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact BalanceStays.refl _ _)
-    | exact BalanceStays.of_balances
-        (balances_initiateValidatorExit (liftAccessor_ok.mp computed))
-    | exact stays_requestPartialWithdrawal computed index
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact BalanceStays.refl _ _
+  · exact BalanceStays.of_balances (balances_initiateValidatorExit exited)
+  · exact stays_requestPartialWithdrawal withdrawn index
 
 /-- A step keeps the balance at a position, and keeps the keys as a prefix. -/
 private def Stay (index : Nat) (state after : BeaconState preset fork) : Prop :=
