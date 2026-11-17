@@ -67,6 +67,48 @@ theorem BalanceNotLowered.of_balances (same : after.balances = state.balances) (
   intro earlier found
   exact ⟨earlier, by rw [same]; exact found, UInt64.le_refl _⟩
 
+/-- An active, unslashed validator with a flag of a recent epoch participates with it there.
+
+The epoch is the current one when asked, and the previous one otherwise.
+
+This holds when the read of the participants succeeds.
+
+The previous epoch must not be the current one. -/
+theorem mem_getUnslashedParticipatingIndices_of_recent_flag {altair : .altair ≤ fork}
+    {flagIndex : UInt64} {result : List ValidatorIndex} (current : Bool)
+    (computed : getUnslashedParticipatingIndices state altair flagIndex
+      (if current then getCurrentEpoch state else getPreviousEpoch state) = .ok result)
+    (differ : getPreviousEpoch state ≠ getCurrentEpoch state) {index : ValidatorIndex}
+    (active : index ∈ getActiveValidatorIndices state
+      (if current then getCurrentEpoch state else getPreviousEpoch state))
+    {validator : Validator} (found : getValidator state index = .ok validator)
+    (unslashed : validator.slashed = false) {flags : ParticipationFlags}
+    (flagged : (if current then state.currentEpochParticipation altair
+      else state.previousEpochParticipation altair).data[index.toNat]? = some flags)
+    (set : hasFlag flags flagIndex = true) :
+    index ∈ result := by
+  have recent : (if current then getCurrentEpoch state else getPreviousEpoch state) =
+      getPreviousEpoch state ∨
+      (if current then getCurrentEpoch state else getPreviousEpoch state) =
+        getCurrentEpoch state := by
+    cases current <;> simp
+  have participation : (if (if current then getCurrentEpoch state else getPreviousEpoch state) =
+      getCurrentEpoch state then (state.currentEpochParticipation altair).data
+      else (state.previousEpochParticipation altair).data)[index.toNat]? = some flags := by
+    cases current <;> simpa [differ] using flagged
+  unfold getUnslashedParticipatingIndices at computed
+  dsimp only at computed
+  rw [ite_eq_left recent] at computed
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨activeIndices, checked, read, readOk, rfl⟩ := computed
+  have member : index ∈ activeIndices := (getActiveValidatorIndicesChecked_ok checked).symm ▸ active
+  obtain ⟨entry, listed, step⟩ := exists_mem_of_mapM_ok readOk member
+  rw [participation] at step
+  simp only [found, bind, Except.bind, Except.ok.injEq] at step
+  subst step
+  simp only [List.mem_map, List.mem_filter]
+  exact ⟨_, ⟨listed, by simp [set, unslashed]⟩, rfl⟩
+
 /-- A validator with a flag of the previous epoch participates with it there.
 
 This holds when the read of the participants succeeds.
@@ -87,22 +129,12 @@ theorem mem_getUnslashedParticipatingIndices_of_flag {altair : .altair ≤ fork}
     index.toUInt64 ∈ result := by
   have fits : index.toUInt64.toNat = index := by
     rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
-  unfold getUnslashedParticipatingIndices at computed
-  dsimp only at computed
-  rw [ite_eq_left (Or.inl rfl), ite_eq_right differ] at computed
-  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨activeIndices, checked, read, readOk, rfl⟩ := computed
-  have member : index.toUInt64 ∈ activeIndices :=
-    (mem_iff_of_getActiveValidatorIndicesChecked_ok checked).mpr
-      ⟨validator, by rw [fits]; exact found, active⟩
-  obtain ⟨entry, listed, step⟩ := exists_mem_of_mapM_ok readOk member
-  have looked : getValidator state index.toUInt64 = .ok validator :=
-    getValidator_eq_ok_iff.mpr (by rw [fits]; exact found)
-  rw [fits, flagged] at step
-  simp only [looked, bind, Except.bind, Except.ok.injEq] at step
-  subst step
-  simp only [List.mem_map, List.mem_filter]
-  exact ⟨_, ⟨listed, by simp [set, unslashed]⟩, rfl⟩
+  refine mem_getUnslashedParticipatingIndices_of_recent_flag false computed differ
+    (mem_getActiveValidatorIndices_of_isActiveAt
+      (isActiveAt_eq_true_iff.mpr ⟨validator, by rw [fits]; exact found, active⟩))
+    (getValidator_eq_ok_iff.mpr (by rw [fits]; exact found)) unslashed ?_ set
+  rw [fits]
+  exact flagged
 
 /-- From Altair, a pending deposit keeps each validator and the consolidations.
 

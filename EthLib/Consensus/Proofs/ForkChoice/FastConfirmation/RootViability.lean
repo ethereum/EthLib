@@ -6,6 +6,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.TargetVotes
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.SourceWindowMargin
 import EthLib.Consensus.Proofs.ForkChoice.RealizedJustification
 import EthLib.Consensus.Proofs.ForkChoice.SiblingCap
+import EthLib.Consensus.Proofs.Transition.InactivityLeakVoter
 import EthLib.Consensus.Proofs.Transition.ParticipationFlagsKept
 import EthLib.Consensus.Proofs.HonestAggregation
 
@@ -852,41 +853,6 @@ private theorem seed_validator_of_active {state : BeaconState preset fork} {epoc
   exact ⟨_, getValidator_eq_ok_iff.mpr found,
     by simpa [SeedNotSlashed, slashedFlagAt, found] using clean⟩
 
-private theorem seed_mem_target_indices {state : BeaconState preset fork}
-    (counted : GENESIS_EPOCH + 1 < getCurrentEpoch state)
-    (altair : .altair ≤ fork) (recent : Bool) {indices : List ValidatorIndex}
-    (read : getUnslashedParticipatingIndices state altair TIMELY_TARGET_FLAG_INDEX
-      (if recent then getCurrentEpoch state else getPreviousEpoch state) = .ok indices)
-    {v : ValidatorIndex}
-    (active : v ∈ getActiveValidatorIndices state
-      (if recent then getCurrentEpoch state else getPreviousEpoch state))
-    (clean : SeedNotSlashed state v)
-    (flagged : TargetFlagAt (recentParticipation state altair recent) v.toNat) :
-    v ∈ indices := by
-  have ne := seed_recent_epoch_ne state counted
-  have selected : (if recent then getCurrentEpoch state else getPreviousEpoch state) =
-      getPreviousEpoch state ∨
-      (if recent then getCurrentEpoch state else getPreviousEpoch state) =
-        getCurrentEpoch state := by cases recent <;> simp
-  unfold getUnslashedParticipatingIndices at read
-  dsimp only at read
-  rw [ite_eq_left selected] at read
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at read
-    obtain ⟨activeIndices, activeOk, entries, entriesOk, rfl⟩ := read
-    obtain ⟨validator, validatorOk, unslashed⟩ := seed_validator_of_active active clean
-    have member : v ∈ activeIndices :=
-      (getActiveValidatorIndicesChecked_ok activeOk).symm ▸ active
-    obtain ⟨entry, entryMem, entryOk⟩ := exists_mem_of_mapM_ok entriesOk member
-    obtain ⟨flags, found, set⟩ := flagged
-    have flagsEq : (if (if recent then getCurrentEpoch state else getPreviousEpoch state) =
-        getCurrentEpoch state then (state.currentEpochParticipation altair).data
-        else (state.previousEpochParticipation altair).data)[v.toNat]? = some flags := by
-      cases recent <;> simpa [recentParticipation, ne] using found
-    simp only [flagsEq, validatorOk, set, unslashed, Bool.not_false, Bool.and_self,
-      bind, Except.bind, Except.ok.injEq] at entryOk
-    subst entry
-    exact List.mem_map.mpr ⟨(v, true), List.mem_filter.mpr ⟨entryMem, rfl⟩, rfl⟩
-
 private theorem seed_mem_pending_indices {state : BeaconState preset fork}
     (counted : GENESIS_EPOCH + 1 < getCurrentEpoch state)
     (before : fork < .altair) (recent : Bool) {root : Root}
@@ -1013,9 +979,10 @@ private theorem seed_processJustificationAndFinalization_justifies
     apply enough (if recent then current else previous) _ (by cases recent <;> assumption)
     intro v member
     obtain ⟨active, clean, flags | ⟨before, -⟩⟩ := voted v member
-    · obtain ⟨_, flags⟩ := flags
-      exact List.mem_toFinset.mpr
-        (seed_mem_target_indices counted altair recent read active clean flags)
+    · obtain ⟨_, flags, found, set⟩ := flags
+      obtain ⟨validator, validatorOk, unslashed⟩ := seed_validator_of_active active clean
+      exact List.mem_toFinset.mpr (mem_getUnslashedParticipatingIndices_of_recent_flag recent read
+        (seed_recent_epoch_ne state counted) active validatorOk unslashed found set)
     · exact False.elim (Nat.not_lt_of_ge altair before)
   · rename_i notAltair
     simp only [bind_ok_iff, liftAccessor_ok, totalOk, Except.ok.injEq,

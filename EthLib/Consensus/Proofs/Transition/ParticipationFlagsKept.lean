@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.TargetFlags
 public import EthLib.Consensus.Proofs.Transition.Invariants
 import EthLib.Consensus.Proofs.PayloadTimeliness
+import EthLib.Consensus.Proofs.Transition.BlockRewards
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 import EthLib.Consensus.Proofs.Transition.Totality.SupplyBlock
 
@@ -83,20 +84,6 @@ private theorem flags_processExecutionRequests {body : BeaconBlockBody preset fo
 
 /-! ## Flags kept forward -/
 
-/-- Adding a flag keeps each flag that was set. -/
-private theorem hasFlag_addFlag_keeps {flags : ParticipationFlags} {flagIndex : UInt64}
-    (added : UInt64) (set : hasFlag flags flagIndex = true) :
-    hasFlag (addFlag flags added) flagIndex = true := by
-  simp only [hasFlag, addFlag, beq_iff_eq] at set ⊢
-  have bits := congrArg UInt8.toBitVec set
-  apply UInt8.toBitVec_inj.mp
-  simp only [UInt8.toBitVec_and, UInt8.toBitVec_or] at bits ⊢
-  ext k
-  have bit := congrArg (·[k]) bits
-  simp only [BitVec.getElem_and, BitVec.getElem_or] at bit ⊢
-  cases a : flags.toBitVec[k] <;> cases b : (flagBit added).toBitVec[k] <;>
-    cases c : (flagBit flagIndex).toBitVec[k] <;> simp_all
-
 /-- One flag of one attester keeps the target flag. -/
 private theorem addFlagReward_keeps {total : Gwei} {earned : List UInt64}
     {index : ValidatorIndex} {flags flags' : ParticipationFlags} {numerator numerator' : Gwei}
@@ -110,7 +97,10 @@ private theorem addFlagReward_keeps {total : Gwei} {earned : List UInt64}
   split at computed
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
     obtain ⟨_, _, _, _, _, _, rfl, _⟩ := computed
-    exact hasFlag_addFlag_keeps _ set
+    by_cases same : flag = ⟨1, by decide⟩
+    · subst same
+      exact hasFlag_addFlag flags TIMELY_TARGET_FLAG_INDEX
+    · exact (hasFlag_addFlag_of_ne flags (other := ⟨1, by decide⟩) (Ne.symm same)).trans set
   · simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
     obtain ⟨rfl, _⟩ := computed
     exact set
