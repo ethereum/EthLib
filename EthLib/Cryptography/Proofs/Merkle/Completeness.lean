@@ -34,15 +34,7 @@ theorem node_succ (leaves : Nat → m α) (level j : Nat) :
       hash ⟨level + 1, j⟩ left right) :=
   rfl
 
-/-- The parent of a node hashes its two children at its own position, the left subtree first. -/
-theorem node_parent (leaves : Nat → m α) (p : Position) :
-    node hash leaves p.parent = (do
-      let left ← node hash leaves p.parent.left
-      let right ← node hash leaves p.parent.right
-      hash p.parent left right) :=
-  rfl
-
-/-- A node above level 0 hashes its two children at its own position, the left subtree first. -/
+/-- At any position above level 0, a node hashes its left child, then its right child. -/
 theorem node_children (leaves : Nat → m α) {p : Position} (hlevel : p.level ≠ 0) :
     node hash leaves p = (do
       let left ← node hash leaves p.left
@@ -82,6 +74,13 @@ theorem climb_take_succ [LawfulMonad m] (p : Position) (current : α) (s : List 
   unfold ordered
   split <;> rfl
 
+/-- A climb step puts the held node on the left when its index is even. -/
+theorem ordered_eq_ite (p : Position) (current sibling : α) :
+    ordered p current sibling
+      = if p.index % 2 = 0 then (current, sibling) else (sibling, current) := by
+  unfold ordered
+  simp only [Position.isLeft_iff]
+
 /-- Ordering two mapped children maps the ordered pair. -/
 theorem ordered_map {β : Type} (f : α → β) (p : Position) (current sibling : α) :
     ordered p (f current) (f sibling) = Prod.map f f (ordered p current sibling) := by
@@ -116,7 +115,7 @@ theorem node_congr (hash' : Position → α → α → m α) (leaves : Nat → m
     rw [node_succ, node_succ, ih (2 * j) below, ih (2 * j + 1) below,
       agree ⟨level + 1, j⟩ (by simp) (Nat.le_refl _)]
 
-/-- The `n` siblings from a node up hash only at levels 1 to `level + n - 1`. -/
+/-- The `n` siblings from a node up hash only at the levels from 1 to `n - 1` above it. -/
 theorem siblings_congr (hash' : Position → α → α → m α) (leaves : Nat → m α) :
     ∀ (n : Nat) (p : Position),
       (∀ q : Position, 1 ≤ q.level → q.level < p.level + n → hash q = hash' q) →
@@ -135,7 +134,7 @@ theorem path_congr (hash' : Position → α → α → m α) (leaves : Nat → m
     path hash leaves h j = path hash' leaves h j :=
   siblings_congr hash hash' leaves h ⟨0, j⟩ (by simpa using agree)
 
-/-- A climb from a node over `n` siblings hashes only at levels `level + 1` to `level + n`. -/
+/-- A climb from a node over `n` siblings hashes only at the `n` levels above the node. -/
 theorem climb_congr (hash' : Position → α → α → m α) :
     ∀ (siblings : List α) (p : Position) (current : α),
       (∀ q : Position, p.level < q.level → q.level ≤ p.level + siblings.length →
@@ -248,13 +247,6 @@ theorem node_succ_run (leaves : Nat → Id α) (level j : Nat) :
           (node hash leaves ⟨level, 2 * j + 1⟩).run).run :=
   rfl
 
-/-- The parent of a node is the hash of its two children, at its own position. -/
-theorem node_parent_run (leaves : Nat → Id α) (p : Position) :
-    (node hash leaves p.parent).run
-      = (hash p.parent (node hash leaves p.parent.left).run
-          (node hash leaves p.parent.right).run).run :=
-  rfl
-
 /-- A node above level 0 is the hash of its two children, at its own position. -/
 theorem node_children_run (leaves : Nat → Id α) {p : Position} (hlevel : p.level ≠ 0) :
     (node hash leaves p).run
@@ -343,15 +335,14 @@ theorem climb_siblings (leaves : Nat → Id α) :
     -- The held node and its sibling are the children of the parent, so the step reaches it.
     rw [siblings_succ_toList, climb_cons, ordered_sibling (fun q => (node hash leaves q).run)]
     dsimp only
-    rw [← node_parent_run hash leaves p, ih, Position.ancestor_parent]
+    rw [← node_children_run hash leaves (p := p.parent) (by simp), ih, Position.ancestor_parent]
 
 /-- Climbing from leaf `j` with its path reaches its ancestor on level `h`. -/
 theorem climb_path (leaves : Nat → Id α) (h j : Nat) :
     (climb hash ⟨0, j⟩ (leaves j).run (path hash leaves h j).run.toList).run
       = (node hash leaves ⟨h, j / 2 ^ h⟩).run := by
   have := climb_siblings hash leaves h ⟨0, j⟩
-  simp only [Position.ancestor, Nat.zero_add] at this
-  exact this
+  rwa [Position.ancestor_mk_zero] at this
 
 /-- The top two nodes below the root, in order, from a path of a tree of height `n + 1`.
 
@@ -361,11 +352,11 @@ The last sibling is the other node on level `n`.
 
 The ancestor's position puts the two in order. -/
 theorem ordered_climb_path_last (leaves : Nat → Id α) {h n : Nat} (hn : h = n + 1) (j : Nat) :
-    ordered ⟨n, j / 2 ^ n⟩
+    ordered ((⟨0, j⟩ : Position).ancestor n)
         (climb hash ⟨0, j⟩ (leaves j).run ((path hash leaves h j).run.toList.take n)).run
         ((path hash leaves h j).run[n]'(by omega))
-      = ((node hash leaves (Position.parent ⟨n, j / 2 ^ n⟩).left).run,
-          (node hash leaves (Position.parent ⟨n, j / 2 ^ n⟩).right).run) := by
+      = ((node hash leaves ((⟨0, j⟩ : Position).ancestor (n + 1)).left).run,
+          (node hash leaves ((⟨0, j⟩ : Position).ancestor (n + 1)).right).run) := by
   subst hn
   -- The path is the `n` siblings below level `n`, then the other node on level `n`.
   have hsplit := siblings_succ_toList_concat hash leaves n ⟨0, j⟩
@@ -377,11 +368,8 @@ theorem ordered_climb_path_last (leaves : Nat → Id α) {h n : Nat} (hn : h = n
   simp only [hlength, Nat.sub_self, List.getElem_cons_zero]
   -- The climb over those siblings reaches the leaf's ancestor on level `n`.
   have hclimb := climb_siblings hash leaves n ⟨0, j⟩
-  have hanc : (⟨0, j⟩ : Position).ancestor n = ⟨n, j / 2 ^ n⟩ := by
-    ext <;> simp
-  rw [hanc] at hclimb
-  rw [show (leaves j).run = (node hash leaves ⟨0, j⟩).run from rfl, hclimb, hanc]
-  exact ordered_sibling (fun q => (node hash leaves q).run) ⟨n, j / 2 ^ n⟩
+  rw [show (leaves j).run = (node hash leaves ⟨0, j⟩).run from rfl, hclimb,
+    ordered_sibling (fun q => (node hash leaves q).run), Position.parent_ancestor]
 
 /-- Completeness: climbing from a leaf `j < 2^h` with its path reaches the root. -/
 theorem climb_path_root (leaves : Nat → Id α) {h j : Nat} (hj : j < 2 ^ h) :
@@ -401,7 +389,7 @@ theorem node_const_shift (combine : α → α → Id α) :
         = (node (fun _ => combine) (fun t => leaves (j * 2 ^ level + t)) ⟨level, 0⟩).run := by
   intro level
   induction level with
-  | zero => intro leaves j; simp [node, nodeAt]
+  | zero => intro leaves j; simp [node_zero]
   | succ l ih =>
     intro leaves j
     simp only [node_succ_run, Nat.mul_zero, Nat.zero_add]

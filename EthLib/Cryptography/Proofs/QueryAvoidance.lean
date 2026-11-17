@@ -75,15 +75,9 @@ theorem merkleSiblings_isQueryBoundP_zero {α : Type}
     (hash : Merkle.Position → α → α → OracleComp spec α) (leaves : Nat → OracleComp spec α)
     (hleaves : ∀ j, IsQueryBoundP (leaves j) p 0)
     (hhash : ∀ q left right, IsQueryBoundP (hash q left right) p 0) :
-    ∀ (q : Merkle.Position) (k : Nat), IsQueryBoundP (Merkle.siblings hash leaves q k) p 0
-  | _, 0 => isQueryBoundP_pure _ _ _
-  | q, k + 1 => by
-    rw [Merkle.siblings]
-    exact isQueryBoundP_bind_zero _ _
-      (merkleNode_isQueryBoundP_zero hash leaves hleaves hhash _) fun _ =>
-        isQueryBoundP_bind_zero _ _
-          (merkleSiblings_isQueryBoundP_zero hash leaves hleaves hhash _ k)
-          fun _ => isQueryBoundP_pure _ _ _
+    ∀ (q : Merkle.Position) (k : Nat), IsQueryBoundP (Merkle.siblings hash leaves q k) p 0 :=
+  Merkle.siblings_rec hash (fun x => IsQueryBoundP x p 0) (fun _ => isQueryBoundP_pure _ _ _)
+    (fun hx hf => isQueryBoundP_bind_zero _ _ hx hf) leaves hleaves hhash
 
 /-- A climb queries `p` nowhere when no node hash does. -/
 theorem climb_isQueryBoundP_zero {α : Type}

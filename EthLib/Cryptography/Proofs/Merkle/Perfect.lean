@@ -104,8 +104,8 @@ theorem climb_eq_climbM_shift :
     rw [PerfectMerkleTree.climbM_cons, climb]
     simp only [climb_eq_climbM_shift rest p.parent, Position.parent_level, Position.parent_index,
       ← Nat.add_assoc, Nat.add_right_comm _ 1 p.level]
-    unfold ordered Position.isLeft Position.parent
-    split <;> simp_all
+    rw [ordered_eq_ite]
+    split <;> simp_all <;> rfl
 
 /-- A climb from a leaf is the framework's climb. -/
 theorem climb_eq_climbM (j : Nat) (current : α) (siblings : List α) :

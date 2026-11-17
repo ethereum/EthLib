@@ -235,7 +235,7 @@ theorem collision_of_findSecondPreimage [DecidableEq R] (g : NodeInput R → R)
       c (w.position, w.y.1, w.y.2) = some (g (w.position, w.y.1, w.y.2)))
     (h : (findSecondPreimage (nodeHash g) leaves p b t).isSome) : Collision c := by
   obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp h
-  obtain ⟨⟨hne, heq⟩, hancestor, -⟩ := findSecondPreimage_valid (nodeHash g) leaves t p b w hw
+  obtain ⟨⟨hlevel, hne, heq⟩, -, -⟩ := findSecondPreimage_valid (nodeHash g) leaves t p b w hw
   obtain ⟨hx, hy⟩ := hcovered w hw
   let x := ((node (nodeHash g) leaves w.position.left).run,
     (node (nodeHash g) leaves w.position.right).run)
@@ -244,10 +244,6 @@ theorem collision_of_findSecondPreimage [DecidableEq R] (g : NodeInput R → R)
   · intro hxy
     exact hne (by simpa [x] using congrArg (fun z : NodeInput R => z.2) hxy)
   · -- The honest node lies above the leaves, so it is the hash of its honest children.
-    have hlevel : w.position.level ≠ 0 := by
-      have := hancestor.level_le
-      simp only [Position.parent_level] at this
-      omega
     rw [node_children_run _ leaves hlevel] at heq
     change g (w.position, w.y.1, w.y.2) = g (w.position, x.1, x.2) at heq
     exact hx.trans (congrArg some heq.symm)
@@ -493,7 +489,8 @@ theorem cached_parent_of_partial_node (g : NodeInput R → R)
     c (p.parent,
       (node (nodeHash g) (fun j => pure (leaves j)) p.parent.left).run,
       (node (nodeHash g) (fun j => pure (leaves j)) p.parent.right).run) = some a := by
-  simp only [node_parent, simulateQ_bind] at ha
+  rw [node_children _ _ (p := p.parent) (by simp)] at ha
+  simp only [simulateQ_bind] at ha
   obtain ⟨left, hl, ha⟩ := Option.bind_eq_some_iff.mp ha
   obtain ⟨right, hr, ha⟩ := Option.bind_eq_some_iff.mp ha
   have hleft := c.evalWithAnswerFn_eq_of_agreesWithFn hf _ hl

@@ -45,7 +45,7 @@ namespace EthLib.Cryptography.Merkle
 /-! ## Positions -/
 
 /-- The position of a node: its level, counted from the leaves, and its index within the level. -/
-structure Position where
+@[ext] structure Position where
   /-- The level of the node, 0 for the leaves. -/
   level : Nat
   /-- The index of the node within its level, from the left, starting at 0. -/
@@ -62,11 +62,15 @@ def parent (p : Position) : Position :=
 def sibling (p : Position) : Position :=
   ⟨p.level, p.index ^^^ 1⟩
 
-/-- The left child of a node above the leaves. -/
+/-- The left child of a node above the leaves.
+
+At level 0 it is the node at level 0 and index `2j`, which is not a child. -/
 def left (p : Position) : Position :=
   ⟨p.level - 1, 2 * p.index⟩
 
-/-- The right child of a node above the leaves. -/
+/-- The right child of a node above the leaves.
+
+At level 0 it is the node at level 0 and index `2j + 1`, which is not a child. -/
 def right (p : Position) : Position :=
   ⟨p.level - 1, 2 * p.index + 1⟩
 
@@ -74,7 +78,7 @@ def right (p : Position) : Position :=
 def ancestor (p : Position) (k : Nat) : Position :=
   ⟨p.level + k, p.index / 2 ^ k⟩
 
-/-- A node is an ancestor of another when it sits some number of levels above it, on its path. -/
+/-- A node is an ancestor of another when it sits zero or more levels above it, on its path. -/
 def IsAncestor (a p : Position) : Prop :=
   ∃ k, a = p.ancestor k
 
@@ -101,19 +105,21 @@ variable {m : Type → Type} [Monad m] {α : Type} (hash : Position → α → �
 
 /-! ## Nodes -/
 
-/-- The node at level `level` and index `j`, by recursion on the level. -/
-def nodeAt (leaves : Nat → m α) : (level j : Nat) → m α
+/-- The recursion behind a node: the node at level `level` and index `j`.
+
+It recurses on the level, so it unfolds by definition. -/
+def node.go (leaves : Nat → m α) : (level j : Nat) → m α
   | 0, j => leaves j
   | level + 1, j => do
-    let left ← nodeAt leaves level (2 * j)
-    let right ← nodeAt leaves level (2 * j + 1)
+    let left ← node.go leaves level (2 * j)
+    let right ← node.go leaves level (2 * j + 1)
     hash ⟨level + 1, j⟩ left right
 
 /-- The node at a position.
 
-Computing it evaluates the `2^level` leaves below it. -/
+Computing it evaluates the `2^l` leaves below it, for the level `l` of the position. -/
 def node (leaves : Nat → m α) (p : Position) : m α :=
-  nodeAt hash leaves p.level p.index
+  node.go hash leaves p.level p.index
 
 /-- The root of the tree of height `h`: its node at level `h` and index 0. -/
 def root (leaves : Nat → m α) (h : Nat) : m α :=

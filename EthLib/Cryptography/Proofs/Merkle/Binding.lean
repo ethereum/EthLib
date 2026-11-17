@@ -250,9 +250,12 @@ structure SecondPreimage (α : Type) where
   /-- The pair, left child first. -/
   y : α × α
 
-/-- The pair is not the honest children, and hashes to the honest node. -/
+/-- The node lies above the leaves, so it has children.
+
+The pair is not those honest children, and hashes to the honest node. -/
 def SecondPreimage.Valid (leaves : Nat → Id α) (w : SecondPreimage α) : Prop :=
-  w.y ≠ ((node hash leaves w.position.left).run, (node hash leaves w.position.right).run) ∧
+  w.position.level ≠ 0 ∧
+    w.y ≠ ((node hash leaves w.position.left).run, (node hash leaves w.position.right).run) ∧
     (hash w.position w.y.1 w.y.2).run = (node hash leaves w.position).run
 
 /-- The second preimage a climb from a position runs into, at the lowest level where one exists.
@@ -308,7 +311,7 @@ theorem findSecondPreimage_valid [DecidableEq α] (leaves : Nat → Id α) :
     · -- This level is the second preimage.
       rename_i hfound
       cases h
-      exact ⟨hfound, Position.IsAncestor.refl _, by simp⟩
+      exact ⟨⟨by simp, hfound⟩, Position.IsAncestor.refl _, by simp⟩
     · -- The second preimage is further up: one level higher in the count.
       obtain ⟨hvalid, hancestor, hlevel⟩ := ih p.parent _ w h
       refine ⟨hvalid, hancestor.trans ⟨1, by simp⟩, ?_⟩
@@ -330,7 +333,7 @@ theorem findSecondPreimage_honest [DecidableEq α] (leaves : Nat → Id α) :
     rw [ordered_sibling (fun q => (node hash leaves q).run) p]
     simp only [ne_eq, not_true_eq_false, false_and, ↓reduceIte]
     -- One level up, the climb holds the honest parent.
-    rw [← node_parent_run]
+    rw [← node_children_run hash leaves (p := p.parent) (by simp)]
     exact ih p.parent
 
 /-- Binding against an honest tree.
