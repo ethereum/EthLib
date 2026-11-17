@@ -44,7 +44,9 @@ def getNextSyncCommitteeIndices (state : BeaconState preset fork) :
 
 Each key must be valid, and there must be at least one. -/
 def aggregatePubkeys (pubkeys : Array BLSPubkey) : Except AccessorError BLSPubkey :=
-  (Cryptography.Bls.Signatures.ethAggregatePubkeys pubkeys).mapError fun _ => .invalidPubkeys
+  (Cryptography.Bls.Signatures.ethAggregatePubkeys pubkeys).mapError fun
+    | .invalidPubkey position => .invalidPubkeys pubkeys.size position
+    | _ => .invalidPubkeys pubkeys.size none
 
 /-- From Altair: the sync committee of the next period, with possible repeats.
 

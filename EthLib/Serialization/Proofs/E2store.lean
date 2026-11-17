@@ -39,7 +39,7 @@ open EthLib.Base
 /-- The header at the start of eight bytes, read from their values. -/
 private theorem readHeader_mk (b0 b1 b2 b3 b4 b5 b6 b7 : UInt8) :
     readHeader ⟨#[b0, b1, b2, b3, b4, b5, b6, b7]⟩ 0 =
-      if b6 ≠ 0 ∨ b7 ≠ 0 then .error .reservedNotZero
+      if b6 ≠ 0 ∨ b7 ≠ 0 then .error (.reservedNotZero b6 b7)
       else .ok ⟨UInt16.ofNat (bytesToNat [b0, b1]), bytesToUint #v[b2, b3, b4, b5]⟩ :=
   rfl
 
@@ -153,7 +153,7 @@ private theorem foldlM_encode_eq_ok (records : List Record) (out bytes : ByteArr
         if record.data.size < 2 ^ 32 then
           (Except.ok (out ++ encodeHeader record.type record.data.size ++ record.data) :
             Except E2storeError ByteArray)
-        else Except.error E2storeError.dataTooLong) out = .ok bytes ↔
+        else Except.error (E2storeError.dataTooLong record.data.size)) out = .ok bytes ↔
       (∀ record ∈ records, record.data.size < 2 ^ 32) ∧
         bytes = out ++ records.foldr (fun record out =>
           encodeHeader record.type record.data.size ++ record.data ++ out) .empty := by

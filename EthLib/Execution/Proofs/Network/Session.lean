@@ -41,7 +41,7 @@ private theorem byteArray_beq_iff (a b : ByteArray) : (a == b) = true ↔ a = b 
 /-- Before the peer's Status, every message other than Status is rejected. -/
 theorem receiveEth_beforeStatus (s : Schedule) (number timestamp : Nat) (session : EthSession)
     (m : Message) (h : session.remoteStatus = none) (hm : ∀ st, m ≠ .status st) :
-    receiveEth s number timestamp session m = .error .beforeStatus := by
+    receiveEth s number timestamp session m = .error (.beforeStatus m.id) := by
   cases m <;> simp_all [receiveEth] <;> rfl
 
 /-- Before the peer's Status, a Status is accepted exactly when it passes the checks of Status.

@@ -475,7 +475,8 @@ theorem newPayloadOnChain_of_not_terminal {transition : TransitionConfiguration}
     (hTerminal : parent.header.difficulty ≤ totalDifficulty → isTerminalPowBlock transition
       totalDifficulty (totalDifficulty - parent.header.difficulty) = false) :
     newPayloadOnChain transition totalDifficulty chain version params =
-      .ok (⟨.invalid, some 0⟩, some .invalidTerminalBlock, none) := by
+      .ok (⟨.invalid, some 0⟩, some (.invalidTerminalBlock checked.block.header.parentHash),
+        none) := by
   have hFail : passesTerminalCheck transition totalDifficulty parent = false := by
     have hp : decide (Fork.paris ≤ parent.fork) = false := decide_eq_false (Nat.not_le.mpr hPow)
     rw [passesTerminalCheck, hp, Bool.false_or]

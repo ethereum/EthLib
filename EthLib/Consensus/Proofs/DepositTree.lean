@@ -20,6 +20,8 @@ Finalization keeps the root, and a snapshot rebuilds a tree with the same later 
 A proof that the tree gives is at an index past its finalized deposits and below its count.
 
 It passes the Merkle check of a deposit against the deposit root, for at most `2^32` deposits.
+
+Its root and its proofs are the generic Merkle root and path of the deposits it holds.
 -/
 
 @[expose] public section
@@ -40,11 +42,31 @@ namespace DepositMerkleTree
 /-- The root of an empty subtree is the SSZ root of the zero subtree of that height. -/
 @[simp] theorem toArray_zeroNode (height : Nat) :
     (zeroNode height).toArray = zeroSubtree height := by
+  apply Array.ext
+  · simp [zeroNode, zeroSubtree_size, bytesPerChunk]
+  · intro i _ within
+    simp only [zeroNode, Vector.getElem_toArray, Vector.getElem_ofFn,
+      Array.getElem?_eq_getElem within, Option.getD_some]
+
+/-- The empty subtree of height zero is the zero leaf. -/
+@[simp] theorem zeroNode_zero : zeroNode 0 = Vector.replicate 32 0 := by
+  apply Vector.toArray_inj.mp
+  rw [toArray_zeroNode, zeroSubtree_eq]
+  rfl
+
+/-- An empty subtree one level up is the parent of two empty subtrees one level down. -/
+theorem zeroNode_succ (height : Nat) :
+    zeroNode (height + 1) = hashPair (zeroNode height) (zeroNode height) := by
+  apply Vector.toArray_inj.mp
+  rw [toArray_hashPair, toArray_zeroNode, toArray_zeroNode, zeroSubtree_eq, zeroSubtree_eq]
+  rfl
+
+/-- An empty subtree is the zero subtree of the deposit node hash. -/
+theorem zeroNode_eq (height : Nat) :
+    zeroNode height = zeroRoot hashPair (Vector.replicate 32 0) height := by
   induction height with
-  | zero => rw [zeroSubtree_eq]; rfl
-  | succ height ih =>
-    rw [zeroNode, toArray_hashPair, ih, zeroSubtree_eq, zeroSubtree_eq]
-    rfl
+  | zero => rw [zeroNode_zero]; rfl
+  | succ height ih => rw [zeroNode_succ, zeroRoot_succ, ih]
 
 /-- A root with a count mixed in is the SSZ root with that length mixed in. -/
 @[simp] theorem toArray_mixInCount (root : Root) (count : Nat) :
@@ -110,32 +132,53 @@ theorem pushLeaf_create (leaf : Root) (leaves : List Root) (height : Nat)
         simp [split, ih _ rest, List.take_append_of_le_length (Nat.le_of_not_lt half),
           List.drop_append_of_le_length (Nat.le_of_not_lt half)]
 
+/-- The root of the subtree of leaves that fit is their Merkle root, padded with zero leaves. -/
+theorem root_create (leaves : List Root) (height : Nat) (fits : leaves.length ≤ 2 ^ height) :
+    (create leaves height).root
+      = subtreeRoot hashPair height (padded (Vector.replicate 32 0) leaves.toArray) := by
+  induction height generalizing leaves with
+  | zero =>
+    match leaves, fits with
+    | [], _ => simp [create, root, subtreeRoot_zero, padded]
+    | [_], _ => rfl
+  | succ height ih =>
+    by_cases empty : leaves = []
+    · -- No leaf: the root of a tree of zero leaves.
+      subst empty
+      rw [create, root, zeroNode_eq]
+      exact (subtreeRoot_const_zero hashPair _ (height + 1)).symm
+    · -- Each half of the split is the matching half of the padded leaves.
+      simp only [Nat.pow_succ] at fits
+      rw [create_succ_of_ne_nil empty, root, ih _ (by simp; omega), ih _ (by simp; omega),
+        subtreeRoot_halves]
+      congr 1
+      · apply subtreeRoot_congr
+        intro i below
+        simp only [padded, List.getElem?_toArray, List.getElem?_take]
+        grind
+      · apply subtreeRoot_congr
+        intro i below
+        simp only [padded, List.getElem?_toArray, List.getElem?_drop]
+        grind
+
+/-- A Merkle root over roots, read as bytes, is the Merkle root over their bytes. -/
+theorem toArray_subtreeRoot (height : Nat) (leaves : Nat → Root) :
+    (subtreeRoot hashPair height leaves).toArray
+      = subtreeRoot combine height fun i => (leaves i).toArray := by
+  induction height generalizing leaves with
+  | zero => rfl
+  | succ height ih => rw [subtreeRoot_halves, subtreeRoot_halves, toArray_hashPair, ih, ih]
+
 /-- The root of the subtree of some leaves is the SSZ root of those leaves, padded with zeros. -/
 theorem toArray_root_create (leaves : List Root) (height : Nat)
     (fits : leaves.length ≤ 2 ^ height) :
     (create leaves height).root.toArray
       = subtreeAt (leaves.map Vector.toArray).toArray height 0 := by
-  induction height generalizing leaves with
-  | zero =>
-    match leaves, fits with
-    | [], _ => simp [create, root, subtreeAt_leaf, zeroNode]; rfl
-    | [_], _ => simp [create, root, subtreeAt_leaf]
-  | succ height ih =>
-    by_cases empty : leaves = []
-    · subst empty
-      simp [create, root, subtreeAt_past]
-    · simp only [Nat.pow_succ] at fits
-      rw [create_succ_of_ne_nil empty, root, toArray_hashPair, ih _ (by simp; omega),
-        ih _ (by simp; omega), subtreeAt_split]
-      congr 1
-      · apply subtreeAt_congr
-        intro i below
-        simp only [Nat.zero_add, List.getElem?_toArray, List.getElem?_map, List.getElem?_take]
-        grind
-      · apply subtreeAt_congr
-        intro i below
-        simp only [Nat.zero_add, List.getElem?_toArray, List.getElem?_map, List.getElem?_drop]
-        grind
+  rw [root_create leaves height fits, toArray_subtreeRoot, subtreeAt_eq_subtreeRoot]
+  congr 1
+  funext i
+  simp only [padded, Nat.zero_add, List.getElem?_toArray, List.getElem?_map]
+  cases leaves[i]? <;> rfl
 
 /-- Finalization keeps the root of every subtree. -/
 @[simp] theorem root_finalize (tree : DepositMerkleTree) (count height : Nat) :
@@ -160,7 +203,7 @@ theorem root_create_append {left right : List Root} {height : Nat}
       = hashPair (create left height).root (create right height).root := by
   by_cases empty : left ++ right = []
   · obtain ⟨rfl, rfl⟩ := List.append_eq_nil_iff.mp empty
-    simp [create, root, zeroNode]
+    simp [create, root, zeroNode_succ]
   · have split : min (2 ^ height) (left ++ right).length = left.length := by
       rcases packed with rfl | full <;> simp <;> omega
     rw [create_succ_of_ne_nil empty, root, split]
@@ -241,6 +284,12 @@ theorem root_eq {height : Nat} {tree : DepositMerkleTree} {leaves : List Root}
   | finalized => rfl
   | node hl hr packed ihl ihr =>
     rw [root, ihl, ihr, root_create_append hl.length_le hr.length_le packed]
+
+/-- A sparse subtree has the Merkle root of the leaves it holds, padded with zero leaves. -/
+theorem root_eq_subtreeRoot {height : Nat} {tree : DepositMerkleTree} {leaves : List Root}
+    (holds : Holds height tree leaves) :
+    tree.root = subtreeRoot hashPair height (padded (Vector.replicate 32 0) leaves.toArray) :=
+  holds.root_eq.trans (root_create leaves height holds.length_le)
 
 /-- A subtree is full exactly when it holds as many leaves as it has room for. -/
 theorem isFull_eq {height : Nat} {tree : DepositMerkleTree} {leaves : List Root}
@@ -414,6 +463,42 @@ namespace DepositTreeSnapshot
 
 open DepositMerkleTree
 
+/-- A climb across no level stays at its node, and fails unless every root was used. -/
+theorem climbFinalized_zero (pending : List Root) (size : Nat) (root : Root) (level : Nat) :
+    climbFinalized pending size root level 0
+      = if pending.isEmpty then .ok root else .error (.extraFinalized pending.length) := by
+  simp only [climbFinalized, finalizedSiblings]
+  split <;> rfl
+
+/--
+A climb across one more level hashes its node with the sibling of that level, then climbs on.
+-/
+theorem climbFinalized_succ (pending : List Root) (size : Nat) (root : Root)
+    (level levels : Nat) :
+    climbFinalized pending size root level (levels + 1)
+      = if size.testBit level then
+          match pending with
+          | [] => .error (.missingFinalized level)
+          | last :: earlier => climbFinalized earlier size (hashPair last root) (level + 1) levels
+        else climbFinalized pending size (hashPair root (zeroNode level)) (level + 1) levels := by
+  have parent : (⟨level, size >>> level⟩ : Cryptography.Merkle.Position).parent
+      = ⟨level + 1, size >>> (level + 1)⟩ := by
+    simp [Cryptography.Merkle.Position.parent, Nat.shiftRight_succ]
+  have side : (⟨level, size >>> level⟩ : Cryptography.Merkle.Position).isLeft
+      = !size.testBit level := by
+    simp only [Cryptography.Merkle.Position.isLeft, Nat.testBit_eq_decide_div_mod_eq,
+      Nat.shiftRight_eq_div_pow]
+    cases Nat.mod_two_eq_zero_or_one (size / 2 ^ level) <;> simp [*]
+  simp only [climbFinalized, finalizedSiblings]
+  split
+  · cases pending with
+    | nil => rfl
+    | cons last earlier =>
+      simp [Cryptography.Merkle.climb, Cryptography.Merkle.ordered, *]
+      rfl
+  · simp [Cryptography.Merkle.climb, Cryptography.Merkle.ordered, *]
+    rfl
+
 /-- The climb reads only the bits of the count at the levels it crosses. -/
 theorem climbFinalized_congr {size other : Nat} (pending : List Root) (root : Root)
     (level levels : Nat)
@@ -421,11 +506,11 @@ theorem climbFinalized_congr {size other : Nat} (pending : List Root) (root : Ro
     climbFinalized pending size root level levels
       = climbFinalized pending other root level levels := by
   induction levels generalizing pending root level with
-  | zero => rfl
+  | zero => simp only [climbFinalized_zero]
   | succ levels ih =>
     have next : ∀ i, level + 1 ≤ i → i < level + 1 + levels →
         size.testBit i = other.testBit i := fun i low high => same i (by omega) (by omega)
-    simp only [climbFinalized, same level (Nat.le_refl _) (by omega)]
+    simp only [climbFinalized_succ, same level (Nat.le_refl _) (by omega)]
     split
     · split <;> simp [ih _ _ _ next]
     · exact ih _ _ _ next
@@ -441,19 +526,19 @@ theorem exists_of_climbFinalized_add {pending : List Root} {size : Nat} {root re
   | zero => exact ⟨[], pending, root, rfl, rfl, by simpa using climbed⟩
   | succ levels ih =>
     rw [show levels + 1 + more = levels + more + 1 by omega] at climbed
-    unfold climbFinalized at climbed
+    rw [climbFinalized_succ] at climbed
     split at climbed
     · rename_i bit
       match pending, climbed with
       | last :: earlier, climbed =>
         obtain ⟨lower, upper, middle, split, low, high⟩ := ih climbed
         refine ⟨last :: lower, upper, middle, by simp [split], ?_, ?_⟩
-        · simp [climbFinalized, bit, low]
+        · simp [climbFinalized_succ, bit, low]
         · rwa [Nat.add_right_comm, Nat.add_assoc] at high
     · rename_i bit
       obtain ⟨lower, upper, middle, split, low, high⟩ := ih climbed
       refine ⟨lower, upper, middle, split, ?_, ?_⟩
-      · simp [climbFinalized, bit, low]
+      · simp [climbFinalized_succ, bit, low]
       · rwa [Nat.add_right_comm, Nat.add_assoc] at high
 
 end DepositTreeSnapshot
@@ -477,11 +562,11 @@ theorem root_fromSnapshotParts {roots : List Root} {count height : Nat}
     | nil =>
       simp only [fromSnapshotParts, Option.some.injEq] at parts
       subst parts
-      simp only [List.reverse_nil, climbFinalized, List.isEmpty_nil, ite_true,
+      simp only [List.reverse_nil, climbFinalized_zero, List.isEmpty_nil, ite_true,
         Except.ok.injEq] at climbed
       rw [← climbed]
       rfl
-    | cons first rest => simp [climbFinalized] at climbed
+    | cons first rest => simp [climbFinalized_zero] at climbed
   | succ height ih =>
     obtain ⟨lower, upper, middle, split, low, high⟩ :=
       exists_of_climbFinalized_add (more := 1) climbed
@@ -496,7 +581,8 @@ theorem root_fromSnapshotParts {roots : List Root} {count height : Nat}
     by_cases bit : count.testBit height
     · match upper, high with
       | [last], high =>
-        simp only [climbFinalized, bit, List.isEmpty_nil, ite_true, Except.ok.injEq] at high
+        simp only [climbFinalized_succ, climbFinalized_zero, bit, List.isEmpty_nil, ite_true,
+          Except.ok.injEq] at high
         subst high
         obtain rfl : roots = last :: lower.reverse := by
           simpa using congrArg List.reverse split
@@ -530,15 +616,15 @@ theorem root_fromSnapshotParts {roots : List Root} {count height : Nat}
           obtain ⟨right, rebuilt, rfl⟩ := parts
           rw [rem] at low'
           simp [root, ih (by omega) low' rebuilt]
-      | [], high => simp [climbFinalized, bit] at high
-      | _ :: _ :: _, high => simp [climbFinalized, bit] at high
+      | [], high => simp [climbFinalized_succ, bit] at high
+      | _ :: _ :: _, high => simp [climbFinalized_succ, climbFinalized_zero, bit] at high
     · have half : count < 2 ^ height := Nat.lt_of_not_le fun over =>
         bit (Nat.testBit_of_two_pow_le_and_two_pow_add_one_gt over below)
       cases upper with
-      | cons _ _ => simp [climbFinalized, bit] at high
+      | cons _ _ => simp [climbFinalized_succ, climbFinalized_zero, bit] at high
       | nil =>
-      simp only [climbFinalized, bit, Bool.false_eq_true, List.isEmpty_nil, ite_true, ite_false,
-        Except.ok.injEq] at high
+      simp only [climbFinalized_succ, climbFinalized_zero, bit, Bool.false_eq_true,
+        List.isEmpty_nil, ite_true, ite_false, Except.ok.injEq] at high
       subst high
       rw [List.append_nil] at split
       rw [← split] at low
@@ -549,14 +635,14 @@ theorem root_fromSnapshotParts {roots : List Root} {count height : Nat}
         simp only [fromSnapshotParts, Option.some.injEq] at parts
         subst parts
         have := ih half low (by rw [fromSnapshotParts.eq_def])
-        simp [root, zeroNode, ← this]
+        simp [root, zeroNode_succ, ← this]
       | cons first rest =>
         by_cases zero : count = 0
         · simp only [fromSnapshotParts, zero, ite_true, Option.some.injEq] at parts
           subst parts
           subst zero
           have := ih half low (empty _ half (by simp))
-          simp [root, zeroNode, ← this]
+          simp [root, zeroNode_succ, ← this]
         · simp only [fromSnapshotParts, zero, notAll, notPast, Nat.le_of_lt half, ite_true,
             ite_false, Option.map_eq_map, Option.map_eq_some_iff] at parts
           obtain ⟨left, rebuilt, rfl⟩ := parts
@@ -662,6 +748,197 @@ theorem Holds.getElem?_generateProof {height : Nat} {tree : DepositMerkleTree}
       rw [e]
       exact ihr w (by omega)
 
+/-- Flipping the low bit of a number gives its neighbour in the pair that shares its parent. -/
+private theorem xor_one_eq (x : Nat) : x ^^^ 1 = if x % 2 = 0 then x + 1 else x - 1 := by
+  -- The low bit flips and the higher bits stay.
+  apply Nat.eq_of_testBit_eq
+  intro i
+  rcases i with _ | i
+  · split <;> simp <;> omega
+  · rw [Nat.testBit_xor]
+    split
+    · rw [show (x + 1).testBit (i + 1) = (x / 2).testBit i by
+        rw [Nat.testBit_succ]; congr 1; omega]
+      simp [Nat.testBit_succ]
+    · rw [show (x - 1).testBit (i + 1) = (x / 2).testBit i by
+        rw [Nat.testBit_succ]; congr 1; omega]
+      simp [Nat.testBit_succ]
+
+/-- Flipping the low bit of a number commutes with adding an even number. -/
+private theorem xor_one_add_two_mul (x c : Nat) : (x + 2 * c) ^^^ 1 = (x ^^^ 1) + 2 * c := by
+  -- An even shift keeps the parity.
+  rw [xor_one_eq, xor_one_eq]
+  split <;> split <;> omega
+
+/-- Two leaf supplies that agree on the block under a node give the same node. -/
+private theorem node_hashPair_congr (k q : Nat) {f g : Nat → Root}
+    (agree : ∀ t, t < 2 ^ k → f (q * 2 ^ k + t) = g (q * 2 ^ k + t)) :
+    (Cryptography.Merkle.node (m := Id) (fun _ => hashPair) f ⟨k, q⟩).run
+      = (Cryptography.Merkle.node (m := Id) (fun _ => hashPair) g ⟨k, q⟩).run := by
+  rw [Cryptography.Merkle.node_const_shift hashPair k f q,
+    Cryptography.Merkle.node_const_shift hashPair k g q]
+  exact subtreeRoot_congr hashPair k agree
+
+/--
+A node past the first `2^h` leaves is a node of the tree over the leaves shifted by that width.
+-/
+private theorem node_hashPair_shift {k h : Nat} (le : k ≤ h) (q : Nat) (f : Nat → Root) :
+    (Cryptography.Merkle.node (m := Id) (fun _ => hashPair) f ⟨k, q + 2 ^ (h - k)⟩).run
+      = (Cryptography.Merkle.node (m := Id) (fun _ => hashPair) (fun u => f (2 ^ h + u))
+          ⟨k, q⟩).run := by
+  rw [Cryptography.Merkle.node_const_shift hashPair k f (q + 2 ^ (h - k)),
+    Cryptography.Merkle.node_const_shift hashPair k (fun u => f (2 ^ h + u)) q]
+  have start : (q + 2 ^ (h - k)) * 2 ^ k = 2 ^ h + q * 2 ^ k := by
+    rw [Nat.add_mul, ← Nat.pow_add, Nat.sub_add_cancel le, Nat.add_comm]
+  simp only [start, Nat.add_assoc]
+
+/-- Padding the leaves of a left half and a right half reads the left half below the split. -/
+private theorem padded_append_left {left right : List Root} {h : Nat}
+    (packed : right = [] ∨ left.length = 2 ^ h) {i : Nat} (inside : i < 2 ^ h) :
+    padded (Vector.replicate 32 0) (left ++ right).toArray i
+      = padded (Vector.replicate 32 0) left.toArray i := by
+  simp only [padded, List.getElem?_toArray]
+  by_cases short : i < left.length
+  · rw [List.getElem?_append_left short]
+  · -- Past the left half, the right half is empty.
+    have : right = [] := by
+      rcases packed with rfl | full
+      · rfl
+      · omega
+    subst this
+    simp
+
+/-- Padding the leaves of a left half and a right half reads the right half from the split. -/
+private theorem padded_append_right {left right : List Root} {h : Nat}
+    (fits : left.length ≤ 2 ^ h) (packed : right = [] ∨ left.length = 2 ^ h) (u : Nat) :
+    padded (Vector.replicate 32 0) (left ++ right).toArray (2 ^ h + u)
+      = padded (Vector.replicate 32 0) right.toArray u := by
+  simp only [padded, List.getElem?_toArray]
+  rcases packed with rfl | full
+  · rw [List.append_nil, List.getElem?_eq_none (by omega)]
+    simp
+  · rw [List.getElem?_append_right (by omega)]
+    congr 3
+    omega
+
+/-- The block under the sibling of a node below the height lies below the height. -/
+private theorem sibling_block_lt {k h m : Nat} (le : k < h) (inside : m < 2 ^ h) {t : Nat}
+    (bound : t < 2 ^ k) : ((m / 2 ^ k) ^^^ 1) * 2 ^ k + t < 2 ^ h := by
+  -- The level has an even number of nodes, so flipping a low bit stays inside it.
+  have pos : 2 ^ (h - k) = 2 * 2 ^ (h - k - 1) := by
+    rw [← Nat.pow_succ']; congr 1; omega
+  have split : 2 ^ h = 2 ^ (h - k) * 2 ^ k := by
+    rw [← Nat.pow_add]; congr 1; omega
+  have div : m / 2 ^ k < 2 ^ (h - k) := by
+    rw [Nat.div_lt_iff_lt_mul (Nat.two_pow_pos k), ← split]
+    exact inside
+  have flip : (m / 2 ^ k) ^^^ 1 < 2 ^ (h - k) :=
+    Nat.xor_lt_two_pow div (by have := Nat.two_pow_pos (h - k - 1); omega)
+  have : (((m / 2 ^ k) ^^^ 1) + 1) * 2 ^ k ≤ 2 ^ (h - k) * 2 ^ k :=
+    Nat.mul_le_mul_right _ flip
+  rw [Nat.add_mul, Nat.one_mul] at this
+  omega
+
+/--
+A walk down to a leaf lists the siblings of the leaf, from the leaf up, in the tree of the leaves.
+-/
+private theorem toList_generateProof {height : Nat} {tree : DepositMerkleTree}
+    {leaves : List Root} (holds : Holds height tree leaves) {index : Nat} {leaf : Root}
+    {branch : Vector Root height} (walked : tree.generateProof index height = some (leaf, branch)) :
+    branch.toList = List.ofFn fun k : Fin height =>
+      (Cryptography.Merkle.node (m := Id) (fun _ => hashPair)
+        (padded (Vector.replicate 32 0) leaves.toArray)
+        ⟨k, ((index % 2 ^ height) / 2 ^ k.val) ^^^ 1⟩).run := by
+  induction holds generalizing index leaf with
+  | zero h =>
+    cases h with
+    | zero => simp
+    | succ h => simp [generateProof] at walked
+  | leaf hash => simp
+  | @finalized h leaves full =>
+    cases h with
+    | zero => simp
+    | succ h => simp [generateProof] at walked
+  | @node h left right leftLeaves rightLeaves hl hr packed ihl ihr =>
+    have fitsl := hl.length_le
+    have fitsr := hr.length_le
+    have split : index % 2 ^ (h + 1) = index % 2 ^ h + 2 ^ h * (index / 2 ^ h % 2) := by
+      simpa using Nat.mod_pow_succ (x := index) (b := 2) (k := h)
+    have top : index % 2 ^ (h + 1) / 2 ^ h = index / 2 ^ h % 2 := by
+      rw [Nat.pow_succ, Nat.mod_mul_right_div_self]
+    have bit : index.testBit h = decide (index / 2 ^ h % 2 = 1) := by
+      simp [Nat.testBit_eq_decide_div_mod_eq]
+    have lt := Nat.mod_lt index (Nat.two_pow_pos h)
+    -- Split off the top sibling, which the walk pushes last.
+    rw [List.ofFn_succ_last]
+    cases hb : index.testBit h
+    · simp only [generateProof, hb, Bool.false_eq_true, ↓reduceIte, Option.bind_eq_bind,
+        Option.bind_eq_some_iff, Option.pure_def, Option.some.injEq, Prod.exists] at walked
+      obtain ⟨_, bb, w, rfl, rfl⟩ := walked
+      have zero : index / 2 ^ h % 2 = 0 := by
+        rw [hb] at bit; simpa using bit
+      rw [Vector.toList_push, ihl w]
+      refine (congrArg (· ++ _) ?_).trans (congrArg (_ ++ [·]) ?_)
+      · -- Below the height the walk reads the left half.
+        congr 1
+        funext k
+        simp only [Fin.val_castSucc, split, zero, Nat.mul_zero, Nat.add_zero]
+        apply node_hashPair_congr
+        intro t bound
+        symm
+        exact padded_append_left packed (sibling_block_lt k.isLt lt bound)
+      · -- The last sibling is the root of the right half.
+        simp only [Fin.val_last, top, zero, Nat.zero_xor]
+        rw [Holds.root_eq_subtreeRoot hr]
+        have := node_hashPair_shift (k := h) (h := h) (Nat.le_refl h) 0
+          (padded (Vector.replicate 32 0) (leftLeaves ++ rightLeaves).toArray)
+        rw [Nat.sub_self, Nat.pow_zero, Nat.zero_add] at this
+        rw [this]
+        exact (subtreeRoot_congr hashPair h fun u _ => padded_append_right fitsl packed u).symm
+    · simp only [generateProof, hb, ↓reduceIte, Option.bind_eq_bind,
+        Option.bind_eq_some_iff, Option.pure_def, Option.some.injEq, Prod.exists] at walked
+      obtain ⟨_, bb, w, rfl, rfl⟩ := walked
+      have one : index / 2 ^ h % 2 = 1 := by
+        rw [hb] at bit; simpa using bit
+      rw [Vector.toList_push, ihr w]
+      refine (congrArg (· ++ _) ?_).trans (congrArg (_ ++ [·]) ?_)
+      · -- Below the height the walk reads the right half, shifted.
+        congr 1
+        funext k
+        rw [split, one, Nat.mul_one]
+        simp only [Fin.val_castSucc]
+        have le : k.val < h := k.isLt
+        have div : (index % 2 ^ h + 2 ^ h) / 2 ^ k.val
+            = index % 2 ^ h / 2 ^ k.val + 2 ^ (h - k.val) := by
+          rw [show 2 ^ h = 2 ^ (h - k.val) * 2 ^ k.val by
+            rw [← Nat.pow_add]; congr 1; omega]
+          exact Nat.add_mul_div_right _ _ (Nat.two_pow_pos _)
+        have pos : 2 ^ (h - k.val) = 2 * 2 ^ (h - k.val - 1) := by
+          rw [← Nat.pow_succ']; congr 1; omega
+        rw [div, pos, xor_one_add_two_mul, ← pos]
+        rw [node_hashPair_shift (Nat.le_of_lt le)]
+        apply node_hashPair_congr
+        intro t bound
+        exact (padded_append_right fitsl packed _).symm
+      · -- The last sibling is the root of the left half.
+        simp only [Fin.val_last, top, one, Nat.xor_self]
+        rw [Holds.root_eq_subtreeRoot hl]
+        exact (subtreeRoot_congr hashPair h fun u inside => padded_append_left packed inside).symm
+
+/-- A walk down to a leaf gives the generic Merkle path of that leaf among the held leaves. -/
+theorem Holds.generateProof_eq_path {height : Nat} {tree : DepositMerkleTree}
+    {leaves : List Root} (holds : Holds height tree leaves) {index : Nat} {leaf : Root}
+    {branch : Vector Root height} (walked : tree.generateProof index height = some (leaf, branch))
+    (below : index < 2 ^ height) :
+    branch = (Cryptography.Merkle.path (m := Id) (fun _ => hashPair)
+      (padded (Vector.replicate 32 0) leaves.toArray) height index).run := by
+  apply Vector.toList_inj.mp
+  rw [toList_generateProof holds walked, Nat.mod_eq_of_lt below, Cryptography.Merkle.path,
+    ← Cryptography.Merkle.ofFn_take_siblings (fun _ => hashPair)
+      (padded (Vector.replicate 32 0) leaves.toArray) ⟨0, index⟩ height height (Nat.le_refl height),
+    List.take_of_length_le (by simp)]
+  simp [Cryptography.Merkle.Position.ancestor, Cryptography.Merkle.Position.sibling]
+
 end DepositMerkleTree
 
 namespace DepositTree
@@ -679,6 +956,8 @@ theorem getRoot_eq {tree : DepositTree} {held : List Root}
 Pushing deposits into a tree gives the deposit root of all its leaves.
 
 It refuses them when they are more than the deposit contract accepts.
+
+Its error then holds that limit, `2^32 - 1`.
 -/
 theorem map_getRoot_pushLeaves {tree : DepositTree} {held : List Root}
     (holds : Holds DEPOSIT_CONTRACT_TREE_DEPTH.toNat tree.tree held)
@@ -688,7 +967,7 @@ theorem map_getRoot_pushLeaves {tree : DepositTree} {held : List Root}
       = if (held ++ leaves).length ≤ 2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat - 1 then
           .ok (mixInCount (create (held ++ leaves) DEPOSIT_CONTRACT_TREE_DEPTH.toNat).root
             (held ++ leaves).length)
-        else .error .treeFull := by
+        else .error (.treeFull (2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat - 1)) := by
   induction leaves generalizing tree held with
   | nil =>
     simp only [List.append_nil, room, ite_true, ← getRoot_eq holds counted]
@@ -701,7 +980,9 @@ theorem map_getRoot_pushLeaves {tree : DepositTree} {held : List Root}
         simp
         omega
       rw [ite_eq_right over]
-      simp [pushLeaf, full]
+      -- The tree holds no more than the cap, so a full tree holds exactly the cap.
+      have atCap : tree.mixInLength = 2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat - 1 := by omega
+      simp [pushLeaf, atCap]
       rfl
     · obtain ⟨pushed, pushes, pushedHolds⟩ := holds.pushLeaf leaf (by omega)
       have step : tree.pushLeaf leaf
@@ -1021,6 +1302,8 @@ theorem isValidMerkleBranch_getProof {tree : DepositTree} {index : Nat} {leaf : 
   have top : index.testBit DEPOSIT_CONTRACT_TREE_DEPTH.toNat = false :=
     Nat.testBit_lt_two_pow (Nat.lt_trans below fits)
   simp [climbBranch_cons, gindexBit, top, getRoot, mixInCount]
+  -- The mix-in is the parent of the root and the length word.
+  rfl
 
 /--
 The leaf of a proof that the tree gives is the deposit at that index.

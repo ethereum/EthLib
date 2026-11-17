@@ -1458,7 +1458,8 @@ theorem appendHistoricalRoot_eq_error_iff
     {roots : SszList Root preset.HISTORICAL_ROOTS_LIMIT.toNat} {root : Root}
     {error : TransitionError} :
     appendHistoricalRoot roots root = .error error ↔
-      preset.HISTORICAL_ROOTS_LIMIT.toNat ≤ roots.data.size ∧ error = .historicalRootsFull := by
+      preset.HISTORICAL_ROOTS_LIMIT.toNat ≤ roots.data.size ∧
+        error = .historicalRootsFull preset.HISTORICAL_ROOTS_LIMIT.toNat := by
   unfold appendHistoricalRoot
   split
   · rename_i fits
@@ -1555,7 +1556,7 @@ theorem processHistoricalRootsUpdate_eq_error_iff (before : fork < .shapella)
       ((getCurrentEpoch state).toNat + 1) %
           (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH).toNat = 0 ∧
         preset.HISTORICAL_ROOTS_LIMIT.toNat ≤ state.historicalRoots.data.size ∧
-        error = .historicalRootsFull := by
+        error = .historicalRootsFull preset.HISTORICAL_ROOTS_LIMIT.toNat := by
   have notCapella : ¬ Fork.shapella ≤ fork := Nat.not_le.mpr before
   obtain ⟨nextEpoch, next, sum⟩ := addChecked_getCurrentEpoch_one_ok fits
   have boundary := nextEpoch_span_iff (preset := preset) sum
@@ -1638,7 +1639,7 @@ theorem processHistoricalSummariesUpdate_eq_error_iff {capella : .shapella ≤ f
       ((getCurrentEpoch state).toNat + 1) %
           (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH).toNat = 0 ∧
         preset.HISTORICAL_ROOTS_LIMIT.toNat ≤ (state.historicalSummaries capella).data.size ∧
-        error = .historicalSummariesFull := by
+        error = .historicalSummariesFull preset.HISTORICAL_ROOTS_LIMIT.toNat := by
   obtain ⟨nextEpoch, next, sum⟩ := addChecked_getCurrentEpoch_one_ok fits
   have boundary := nextEpoch_span_iff (preset := preset) sum
   simp only [processHistoricalSummariesUpdate, next, liftAccessor, liftArith, Except.mapError,

@@ -80,7 +80,8 @@ private theorem verifyAccountRange_of_checks {root' start : Hash32}
     {proof : List ByteArray} {more : Bool}
     (hstate : accounts ≠ [] ∨ proof ≠ [])
     (hconvert : accounts.mapM (fun entry => do
-      let some value := fullAccount entry.data | Except.error SnapRangeError.slimAccount
+      let some value := fullAccount entry.data
+        | Except.error (SnapRangeError.slimAccount entry.hash)
       Except.ok (entry.hash, value)) = .ok entries)
     (hcheck : verifyRange keccak256 root' start entries proof = .ok more) :
     verifyAccountRange root' start accounts proof = .ok (.ofMore more) := by
@@ -94,7 +95,8 @@ private theorem verifyAccountRange_of_checks {root' start : Hash32}
 /-- The account conversion gives the full encodings, in order. -/
 private theorem mapM_accountRangeWitness (data : List AccountRangeWitness) :
     (data.map AccountRangeWitness.rangeEntry).mapM (fun entry => do
-      let some value := fullAccount entry.data | Except.error SnapRangeError.slimAccount
+      let some value := fullAccount entry.data
+        | Except.error (SnapRangeError.slimAccount entry.hash)
       Except.ok (entry.hash, value)) = .ok (data.map AccountRangeWitness.hashedEntry) := by
   rw [List.mapM_map]
   apply mapM_eq_ok_map

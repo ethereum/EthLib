@@ -26,15 +26,6 @@ private theorem mapM_window {α β ε : Type} (f : α → Except ε β)
     have := ih 0 count
     simp_all
 
-private theorem mapM_congr_on {α β ε : Type} (f g : α → Except ε β)
-    (xs : List α) (same : ∀ x ∈ xs, f x = g x) : xs.mapM f = xs.mapM g := by
-  -- Equal roots at every occupied position give equal traversals, including errors.
-  induction xs with
-  | nil => rfl
-  | cons x xs ih =>
-    simp only [List.mapM_cons, same x (by simp),
-      ih (fun y hy => same y (by simp [hy]))]
-
 /-- Type depth bounds all recursion, so larger budgets give exactly the same root or error. -/
 theorem hashTreeRootAt_budget_eq (shape : Desc) (value : Value) (left right : Nat)
     (leftEnough : shape.nesting ≤ left) (rightEnough : shape.nesting ≤ right) :
@@ -61,7 +52,7 @@ theorem hashTreeRootAt_budget_eq (shape : Desc) (value : Value) (left right : Na
             List.drop_zero, Nat.sub_zero, List.take_length]
           apply congrArg (fun result : Except Err (List Bytes) =>
             result.bind (fun nodes => .ok nodes.toArray))
-          apply mapM_congr_on
+          apply Base.mapM_congr
           intro slot member
           cases slot with
           | none => rfl
@@ -135,7 +126,7 @@ theorem layoutChunksAt_budget_eq (layout : MerkleLayout) (left right : Nat)
     simp only [layoutChunksAt_eq]
     apply congrArg (fun result : Except Err (List Bytes) =>
       result.bind (fun nodes => .ok nodes.toArray))
-    apply mapM_congr_on
+    apply Base.mapM_congr
     intro slot member
     cases slot with
     | none => rfl

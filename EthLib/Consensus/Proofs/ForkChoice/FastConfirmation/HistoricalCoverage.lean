@@ -15,7 +15,9 @@ An induction on time removes that assumption, so the block stays on every honest
 
 Within two epochs after the parent, each step is the historical-anchor step.
 
-Later, each step is the step of an honest duty epoch, which needs only the same-store finality.
+Later, each step is the step of an honest duty epoch.
+
+Both steps need only the finality within one store.
 
 Each step may instead name two honest stores that collide, or historical direct-safety evidence.
 -/
@@ -397,15 +399,17 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
     (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
     (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
-    (history : VoteCommitteeCommonHistory (e := e) time) {anchor : Store preset fork}
+    {n : ℕ} {block : BeaconBlock preset fork}
+    (membership : VotersInHeadWindow (e := e) block.parentRoot (e.world n).time time)
+    {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J)
     (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
       ((e.world n).state u))
     {head root : Root} {source : BeaconState preset fork}
-    {slot first last beforeBlock : Slot} {block parent : BeaconBlock preset fork}
+    {slot first last beforeBlock : Slot} {parent : BeaconBlock preset fork}
     {parentParticipants : Std.TreeSet ValidatorIndex} {boost maximum : Gwei}
     (headNode : ∃ node, ((e.world n).state u).getHead config = .ok node ∧ node.root = head)
     (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot) {begin : UInt64}
@@ -445,7 +449,6 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
     (referenceSlotOk : ((e.world m).state x).getCurrentSlot config = .ok referenceSlot)
     (finishOk : subChecked referenceSlot 1 = .ok finish)
     {horizon : Epoch}
-    (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon time)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (unslashed : HonestCountedStatesUnslashed (e := e) time)
@@ -479,7 +482,8 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
       ((e.world k).state w).isAncestor
           ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
         (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes)
-    (exits : ReceiverWindowExits (e := e) source first (e.world n).time time)
+    (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
+      (e.world n).time time)
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
@@ -571,7 +575,7 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
           half (fun v hv s c d a dt b dl => votes v hv s c d a dt b (by omega)) fits
           (prompt.of_le high)
           (fun w hw j hj => windows w hw j (by omega))
-          (fun w hw j hj => history w hw j (by omega))
+          (fun w hw j lo hj => membership w hw j lo (by omega))
           anchored sound anchorSlot anchorBoundary start caller callerUpToDate headNode slotOk
           beginOk timeEq blockOk parentOk sourceOk boostOk firstOk lastOk beforeOk maximumOk
           parentParticipantsOk registry aligned increment supportOk discountOk adversaryOk margin
@@ -581,7 +585,6 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
             (by omega))
           (receiverLast := receiverLast)
           (fun lo hi ps a b c => reserve lo hi ps a b (UInt64.le_trans c lastLe))
-          (fun a ha b hb i j hi hj => residual a ha b hb i j (by omega) (by omega))
           (fun w hw j ep hj => bounded w hw j ep (by omega))
           (fun w hw j hj => roots w hw j (by omega))
           (fun w hw j st hj => unslashed w hw j st (by omega))
@@ -594,8 +597,8 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
           epochStartTimeOk historyCovers receiver atTime upToDate known finality receiverHeadOk
           receiverParent stateOk currentOk receiverEpochOk nearParent receiverLastOk windowOk
           scoreOk participantsOk
-          (exits w receiver k receiverHead current receiverLast lowK highK upToDate receiverHeadOk
-            currentOk receiverLastOk)
+          (exits w receiver k receiverHead current receiverLast receiverEpoch lowK highK upToDate
+            receiverHeadOk currentOk receiverLastOk receiverEpochOk nearParent)
           (fun a ha i hi => absent a ha i (by omega)) tree route
         exact step
       · -- Duty-epoch step at time `T`, with the late majority's complete epoch after the call.
@@ -644,9 +647,11 @@ Until two epochs after the parent's epoch, each step is the historical-anchor st
 
 After that, each step is the duty-epoch step, which needs a late duty majority at the receiver.
 
-The cross-store finality of the historical-anchor step, `residual`, stays an assumption.
+Both steps read finality only within one store, so no finality across stores is assumed.
 
-The receivers' reads, their exits and the late duty majority are assumed.
+The receivers' reads and the late duty majority are assumed.
+
+So are the exits of each receiver within two epochs of the parent.
 
 The root's viability is assumed too.
 
@@ -664,7 +669,9 @@ The reserve is read up to `finish`, the slot before the current slot of an hones
 
 That store is at the horizon or later.
 
-A safety threshold that subtracts the exit reserve would make `reserve` and `exits` fixed bounds. -/
+A safety threshold that subtracts the exit reserve would make `reserve` and `exits` fixed bounds.
+
+A voter activated at its vote's target, two epochs after the parent, is assumed in the window. -/
 public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
@@ -675,15 +682,17 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
     (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
-    (history : VoteCommitteeCommonHistory (e := e) time) {anchor : Store preset fork}
+    {n : ℕ} {block : BeaconBlock preset fork}
+    (newVoters : NewlyActiveVotersInHeadWindow (e := e) block.parentRoot (e.world n).time time)
+    {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J)
     (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
       ((e.world n).state u))
     {head root : Root} {source : BeaconState preset fork}
-    {slot first last beforeBlock : Slot} {block parent : BeaconBlock preset fork}
+    {slot first last beforeBlock : Slot} {parent : BeaconBlock preset fork}
     {parentParticipants : Std.TreeSet ValidatorIndex} {boost maximum : Gwei}
     (headNode : ∃ node, ((e.world n).state u).getHead config = .ok node ∧ node.root = head)
     (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot) {begin : UInt64}
@@ -723,7 +732,6 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     (referenceSlotOk : ((e.world m).state x).getCurrentSlot config = .ok referenceSlot)
     (finishOk : subChecked referenceSlot 1 = .ok finish)
     {horizon : Epoch}
-    (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon time)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (unslashed : HonestCountedStatesUnslashed (e := e) time)
@@ -749,7 +757,8 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     (parentCovers : HonestHeadsCover (e := e) block.parentRoot (e.world n).time (time + 1))
     (reads : HonestHeadReads (e := e) first (e.world n).time time)
     (viable : RootViable (e := e) root (e.world n).time time)
-    (exits : ReceiverWindowExits (e := e) source first (e.world n).time time)
+    (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
+      (e.world n).time time)
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
@@ -758,11 +767,14 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
           some evidence) ∨
       HistoricalDirectSafetyEvidence (e := e) pre time :=
   honestHeadsCover_core sync slots positive minLookahead maxLookahead ring preGloas
-    admitted half votes fits prompt windows history anchored sound anchorSlot anchorBoundary
+    admitted half votes fits prompt windows
+    (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
+      positive minLookahead maxLookahead ring newVoters)
+    anchored sound anchorSlot anchorBoundary
     start caller callerUpToDate headNode slotOk beginOk timeEq blockOk parentOk sourceOk boostOk
     firstOk lastOk beforeOk maximumOk parentParticipantsOk registry aligned increment supportOk
     discountOk adversaryOk margin callerTime sourceReads drift reserve reference referenceTime
-    referenceUpToDate referenceSlotOk finishOk residual bounded roots unslashed ceiling scoreFits
+    referenceUpToDate referenceSlotOk finishOk bounded roots unslashed ceiling scoreFits
     parameters genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
     historicalEpochOk near epochStartOk epochStartTimeOk historyCovers absent parentCovers reads
     (fun _ low high _ w receiver k nodes _ atTime upToDate _ tree =>
@@ -787,7 +799,9 @@ The other premises and the conclusion are those of the historical-anchor headlin
 
 That evidence is relative to the anchor, and its drift counts from the anchor.
 
-With enough churn since the anchor, it holds with no accountable key. -/
+With enough churn since the anchor, it holds with no accountable key.
+
+A voter activated at its vote's target, two epochs after the parent, is assumed in the window. -/
 public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
@@ -798,15 +812,17 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
     (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
-    (history : VoteCommitteeCommonHistory (e := e) time) {anchor : Store preset fork}
+    {n : ℕ} {block : BeaconBlock preset fork}
+    (newVoters : NewlyActiveVotersInHeadWindow (e := e) block.parentRoot (e.world n).time time)
+    {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J)
     (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
       ((e.world n).state u))
     {head root : Root} {source : BeaconState preset fork}
-    {slot first last beforeBlock : Slot} {block parent : BeaconBlock preset fork}
+    {slot first last beforeBlock : Slot} {parent : BeaconBlock preset fork}
     {parentParticipants : Std.TreeSet ValidatorIndex} {boost maximum : Gwei}
     (headNode : ∃ node, ((e.world n).state u).getHead config = .ok node ∧ node.root = head)
     (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot) {begin : UInt64}
@@ -846,7 +862,6 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     (referenceSlotOk : ((e.world m).state x).getCurrentSlot config = .ok referenceSlot)
     (finishOk : subChecked referenceSlot 1 = .ok finish)
     {horizon : Epoch}
-    (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon time)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (unslashed : HonestCountedStatesUnslashed (e := e) time)
@@ -874,7 +889,8 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     (consistent : EarlyJustifiedConsistent (e := e) root callerEpoch (e.world n).time time)
     (leaf : RootKeepsViableLeaf (e := e) root (e.world n).time time)
     (signed : JustifiedHonestlySigned (e := e) callerEpoch (e.world n).time time)
-    (exits : ReceiverWindowExits (e := e) source first (e.world n).time time)
+    (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
+      (e.world n).time time)
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
@@ -907,11 +923,14 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
       Except.ok.injEq] at read
     exact read
   exact honestHeadsCover_core sync slots positive minLookahead maxLookahead ring preGloas
-    admitted half votes fits prompt windows history anchored sound anchorSlot anchorBoundary
+    admitted half votes fits prompt windows
+    (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
+      positive minLookahead maxLookahead ring newVoters)
+    anchored sound anchorSlot anchorBoundary
     start caller callerUpToDate headNode slotOk beginOk timeEq blockOk parentOk sourceOk boostOk
     firstOk lastOk beforeOk maximumOk parentParticipantsOk registry aligned increment supportOk
     discountOk adversaryOk margin callerTime sourceReads drift reserve reference referenceTime
-    referenceUpToDate referenceSlotOk finishOk residual bounded roots unslashed ceiling scoreFits
+    referenceUpToDate referenceSlotOk finishOk bounded roots unslashed ceiling scoreFits
     parameters genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
     historicalEpochOk near epochStartOk epochStartTimeOk historyCovers absent parentCovers reads
     (fun T low high covers w receiver k nodes hd atTime upToDate headOk tree => by

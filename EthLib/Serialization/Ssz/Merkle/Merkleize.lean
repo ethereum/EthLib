@@ -27,14 +27,16 @@ It is the Merkle tree of that depth, hashing every node alike.
 def subtreeRoot (combine : α → α → α) (depth : Nat) (leaves : Nat → α) : α :=
   (Cryptography.Merkle.root (m := Id) (fun _ => combine) leaves depth).run
 
-/--
-Root of the perfect binary tree of a given depth whose every leaf is zero.
+/-- Root of the perfect tree of a given depth whose leaves are all zero, one hash per level. -/
+def zeroRootM {m : Type → Type} [Monad m] (combine : α → α → m α) (zero : α) : Nat → m α
+  | 0 => pure zero
+  | depth + 1 => do
+    let below ← zeroRootM combine zero depth
+    combine below below
 
-A value with a large capacity is mostly padding, so implementations precompute this.
--/
-def zeroRoot (combine : α → α → α) (zero : α) : Nat → α
-  | 0 => zero
-  | depth + 1 => combine (zeroRoot combine zero depth) (zeroRoot combine zero depth)
+/-- The same root, with a pure hash. -/
+def zeroRoot (combine : α → α → α) (zero : α) (depth : Nat) : α :=
+  (zeroRootM (m := Id) combine zero depth).run
 
 /-- Smallest depth whose perfect tree holds the given number of leaves. -/
 def depthFor (leafCount : Nat) : Nat :=

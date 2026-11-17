@@ -140,10 +140,17 @@ The first is `climb_binding`, about two climbs from one position that reach one 
 They are equal, or `findCollision` returns a collision of the node hash at an ancestor of that position.
 The second is `climb_binding_node`, about a climb that reaches an honest node but is not the honest climb.
 Then `findSecondPreimage` returns a second preimage of an honest ancestor.
+`root_binding_leaves` (`Proofs/Merkle/VectorBinding.lean`) applies the first theorem at every leaf: the root binds the vector.
 
 Both searches are explicit algorithms, proved to return valid answers.
 Each can return nothing: on one climb compared with itself (`findCollision_self`), and on the honest climb (`findSecondPreimage_honest`).
 So the statements say something, even though every compressing hash has collisions.
+
+`Proofs/Merkle/PositionBinding.lean` covers a path whose index or length is wrong.
+`climb_root_honest`: a climb from leaf `j` that reaches the root is the honest opening, or `findSecondPreimage` or `findPositionCollision` succeeds.
+The second search finds two inputs at different positions with one output, which is free for a hash that ignores the position.
+With such a hash, the verifier must check `j < 2^h` and the path length itself (`climb_const_shift_root`, `climb_const_interior`).
+An empty path and a tree of height 0 are not covered.
 
 `Proofs/Merkle/RandomOracle.lean` bounds classical searches against an ideal random oracle with `N` outputs and an empty initial cache.
 `prEvent_collision_le` bounds a collision among queried inputs by `q^2 / N` for at most `q` hash calls, and private uniform sampling is not counted.
@@ -151,10 +158,8 @@ This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `
 `prEvent_experimentWith_le` applies it to an experiment where the adversary outputs a claim and an extraction then runs on it with the oracle alone.
 It bounds a win by `q^2 / N` when every replayed win of the extraction leaves a collision in the cache.
 
-`prEvent_secondPreimage_le` bounds by `q / N` a hit on a target digest fixed before the run, among queried inputs other than one honest input.
-The theorem does not tie the target to the digest of the honest input.
-Reading it as a second-preimage bound conditions on the honest digest and assumes that the other oracle answers stay independent and uniform.
-That conditioning is a modelling step, not a proved one.
+`prEvent_secondPreimageGame_le` bounds a second preimage of one fixed tree of height `h` by `(Q_f + h) / N`, for a forger with `Q_f` hash calls.
+The forger sees the root and all honest paths.
 
 The Merkle applications model the tuple `(level, position, left, right)` as the oracle input.
 They require an injective encoding of that tuple, for levels and positions inside the encodable range, not a hash that ignores the position.
@@ -2988,15 +2993,14 @@ In that case the evidence names no accountable stake.
 The theorem does not assume hash injectivity.
 
 The endpoint assumes synchrony, prompt processing, block admission and validated honest duty votes through its time horizon.
-It also assumes agreement between assignment duties and head committee windows, common history for vote committees, and successful source-weight window reads.
+It also assumes agreement between assignment duties and head committee windows, the window membership of voters below the parent (`VotersInHeadWindow`), and successful source-weight window reads.
 Its stake hypotheses include a Byzantine and exit reserve for each nonempty committee window of the caller's head, from the caller's first slot to the receiver's last slot.
 They also include unslashed honest validators in counted states, a checkpoint stake ceiling and an explicit drift bound.
-Earlier honest-head coverage, receiver-finality coverage and residual finalized-checkpoint compatibility remain hypotheses.
+Earlier honest-head coverage and receiver-finality coverage remain hypotheses.
 The coverage of earlier honest heads is assumed from the call up to the receiver's time, and the theorem extends it to the receiver's head at that time.
-Residual finalized-checkpoint compatibility carries cross-store finality safety.
-A checkpoint that an honest store selects, at an epoch from an honest finalized epoch up to the horizon, reads back that finalized checkpoint.
-That safety is assumed, not derived.
-Only the case of one store's later justified checkpoint is left out: that case is proved, or the direct-safety evidence holds.
+Finality across honest stores is not assumed.
+The proof reads finality only within one store: the receiver's finalized checkpoint lies on the chain of its own justified checkpoint.
+That is proved, or the direct-safety evidence holds.
 The direct-safety branch requires deposited genesis, a fixed-fork history before the next upgrade, direct-safety parameters and stake floors for held runs and terminal states.
 The theorem also retains the stated slot, epoch, tree, viable-route and successful-read conditions.
 These conditions are recorded in `HistoricalStatements.lean` and in the endpoint's statement; the theorem is not unconditional safety of every successful confirmation call.
@@ -3005,11 +3009,12 @@ These conditions are recorded in `HistoricalStatements.lean` and in the endpoint
 An induction on time applies the historical-anchor theorem at each time until two epochs after the parent's epoch, and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` after that.
 It concludes that every up-to-date honest head from the call to the horizon descends from the block, or one of the same two alternatives.
 The coverage of the parent over the same interval and the coverage of the historical anchor before the call remain hypotheses.
-Residual finalized-checkpoint compatibility is carried unchanged, so cross-store finality safety stays assumed.
+Like the historical-anchor theorem, it does not assume finality across honest stores.
 Receiver finality coverage and the receiver's block lookup are derived from `RootViable`, the root's viability at each honest store, which is assumed.
 It assumes that no up-to-date honest justified checkpoint over the interval conflicts with the root: the checkpoint-consistency half of the safety of the confirmation, not derived.
 `HonestHeadReads` assumes that each honest head reads its justified state and its committee windows.
-`ReceiverWindowExits` assumes the exit bound of each receiver's window, and `LateDutyMajority` assumes the honest duty majority of the duty-epoch theorem.
+`ReceiverWindowExitsNear` assumes the exit bound of the window of each receiver within two epochs of the parent.
+`LateDutyMajority` assumes the honest duty majority of the duty-epoch theorem.
 The receiver's proposer score is derived from the checkpoint stake ceiling and `Config.ProposerScoreFits`, a bound on the boost that mainnet and minimal satisfy.
 
 `Execution.honestHeadsCover_of_signed_justification` in the same file splits `RootViable` and derives one part of it.
@@ -3020,6 +3025,58 @@ Signatures enter only through the network model.
 A sender may carry another honest validator's statement only if an earlier sent message carried it; an honest sender must also follow the protocol (`Allowed` in `Consensus/Proofs/Models/Network/Model.lean`).
 `EarlyJustifiedConsistent` assumes the consistency of justified checkpoints of the call's epoch or before, and `RootKeepsViableLeaf` assumes the viable leaf.
 While no later checkpoint is justified, the early premise still carries the whole consistency.
+
+`Execution.honestHeadsCover_of_byzantine_bound` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalSigners.lean` derives that signer.
+`Execution.justifiedHonestlySigned` shows that one count of votes set each later justified checkpoint.
+The count ran in a held state, or on the way from one to a held child.
+The count passed, so with Byzantine stake below two thirds there (`ByzantineCountedStake`), an honest quorum voter voted for the checkpoint.
+That vote was cast in a held block.
+The store reads it with a valid signature in the state of the vote's target, so it is a statement of a sent message.
+Signatures still enter only through the network model's sender rule.
+The derivation takes the headline's stake floors, a positive inclusion delay (`Preset.InclusionDelayPositive`, true on mainnet and minimal) and two conditions on the anchor.
+The anchor's latest header must be the anchor block's, with a zero state root, as the post-state of a block has.
+The anchor store checks neither, and without them a justified root may be one that no store holds.
+So the late half of the root's viability rests on the Byzantine bound, the stake floors and these conditions.
+The signed-justification theorem keeps its statement for callers that supply the signer.
+
+Three premises of these headlines need a word on when they hold.
+
+The headlines do not assume a common committee-preserving state behind every recent vote and the head.
+That assumption fails on ordinary runs.
+Let `MIN_SEED_LOOKAHEAD` be 1, as on mainnet, and take an epoch with no block.
+Then take a vote with the current target while the head block is still from before that epoch.
+A common state must be no later than the head state and within one seed lookahead of the target, and no state is both.
+The headlines assume `NewlyActiveVotersInHeadWindow` instead, which that assumption implies.
+It reads only the parent of the tested block, and only honest stores from the call's time to the horizon.
+It asks only about a far vote, one whose target is two epochs after the parent.
+Its voter must also have become active at that target epoch.
+Such a voter must lie in the head's window, from the slot after the parent to the slot before the current one.
+Every other voter below the parent lies in the window by a proof (`Execution.votersInHeadWindow_of_newlyActive`).
+A vote at most one epoch after the parent reads committees that the head state shares.
+For a far vote, the window holds the whole epoch before the target, where every validator active in the head state has a committee.
+
+The premise fails when the head state's shuffling places a newly active far voter at or after the current slot.
+An adversary can bring that about.
+Take a validator activated two epochs after the parent's epoch.
+It votes on a branch that left the head's branch after the parent, within the parent's epoch.
+With `MIN_SEED_LOOKAHEAD` 1, that branch has a different RANDAO mix, so a different seed for the target epoch, and the head's shuffling may place the voter late.
+Each such occurrence leaves out at most that voter's balance.
+Let the maximum seed lookahead be at least two epochs, as on mainnet.
+Then the parent's state already sets that activation epoch, so the head's branch activates the voter too.
+
+`SourceWindowReads` assumes two reads in the caller's source state.
+Each later window weight that a receiver computes with its own balances must also compute with the source state's.
+The source state's proposer score must also compute.
+A window that holds no whole epoch reads the validator record of each member in the source state.
+It sums the balances of the members active there.
+One way the premise fails is such a member that the source state does not hold, such as a validator deposited after it.
+The reads also fail on Gwei overflow, in the window's total or in the proposer score.
+With positive `SLOTS_PER_EPOCH`, it holds, barring overflow, when every member of each such window is in the source state.
+
+`ReceiverWindowExitsNear` asks the exit bound only of receivers within two epochs of the parent, where every step reads it.
+The former premise asked the same bound of every receiver up to the horizon.
+A receiver several epochs past the parent has several epochs of exits in its window.
+They count against one reserve, so that form can fail while validators keep exiting.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
 `getCurrentTarget_eq_ok_iff` states that target as the checkpoint of the store's epoch in the chain of the head, and `epoch_eq_of_getCurrentTarget` gives its epoch.
@@ -6031,8 +6088,8 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   The failure bounds of the codeword searches of leanSPHINCS rest on the same oracle.
 - Merkle search bounds: each new `(level, position, left, right)` input receives an independent uniform answer from a finite nonempty range.
   Repeated inputs receive the same answer, and the initial cache is empty.
-  The fixed-target bound excludes one honest input from the oracle domain and fixes the target before the run.
-  Reading it as a second-preimage bound conditions on the honest digest, a modelling step that no theorem proves.
+  The second-preimage game fixes the leaves independently of the oracle and covers one tree, with no tree address.
+  Its forger receives the root and every honest path.
   Only classical queries are counted.
   No SHA-256, Keccak or quantum security claim follows from this model.
 - SSZ root bound: the SHA-256 node hash is a random oracle on byte strings, shared by every node of the tree.
@@ -6308,6 +6365,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Merkle/`
 - `EthLib/Cryptography/Proofs/ProgrammedPermutation.lean`
 - `EthLib/Cryptography/Proofs/QueryAvoidance.lean`
+- `EthLib/Cryptography/Proofs/RandomOracleFromCache.lean`
 - `EthLib/Cryptography/Proofs/RandomOracleTable.lean`
 - `EthLib/Cryptography/Proofs/Secp256k1/`
 - `EthLib/Cryptography/Proofs/Sphincs/`

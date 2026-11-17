@@ -117,7 +117,7 @@ theorem returndatacopyStep_eq_error_iff {evm : Evm fork Meter} {start offset siz
     (paid : GasMeter.charge evm.gas
       (OPCODE_RETURNDATACOPY_BASE + OPCODE_RETURNDATACOPY_PER_WORD * wordCount size.toNat +
         (extendMemory evm.memory.size [(start, size)]).cost) = .ok gas) :
-    returndatacopyStep evm = .error .outOfBoundsRead ↔
+    returndatacopyStep evm = .error (.outOfBoundsRead offset.toNat size.toNat evm.returnData.size) ↔
       evm.returnData.size < offset.toNat + size.toNat := by
   have hstack : evm.stack = ⟨start :: offset :: size :: rest, h ▸ evm.stack.property⟩ :=
     Subtype.ext h

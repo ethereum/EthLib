@@ -76,7 +76,8 @@ def immediateByte (code : ByteArray) (pc : Nat) : UInt8 :=
 /-- DUPN: push a copy of the `n`th item from the top, counted from 1. -/
 def dupnStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let evm ← chargeGas evm OPCODE_DUPN
-  let some n := decodeSingle (immediateByte evm.code evm.pc) | .error .invalidParameter
+  let some n := decodeSingle (immediateByte evm.code evm.pc)
+    | .error (.invalidParameter (immediateByte evm.code evm.pc))
   match evm.stack.val[n - 1]? with
   | none => .error .stackUnderflow
   | some x =>
@@ -86,14 +87,16 @@ def dupnStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
 /-- SWAPN: exchange the top item with the item `n` below it. -/
 def swapnStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let evm ← chargeGas evm OPCODE_SWAPN
-  let some n := decodeSingle (immediateByte evm.code evm.pc) | .error .invalidParameter
+  let some n := decodeSingle (immediateByte evm.code evm.pc)
+    | .error (.invalidParameter (immediateByte evm.code evm.pc))
   let some stack := exchangeItems evm.stack 0 n | .error .stackUnderflow
   return advance { evm with stack } 2
 
 /-- EXCHANGE: exchange the items `n` and `m` below the top. -/
 def exchangeStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let evm ← chargeGas evm OPCODE_EXCHANGE
-  let some (n, m) := decodePair (immediateByte evm.code evm.pc) | .error .invalidParameter
+  let some (n, m) := decodePair (immediateByte evm.code evm.pc)
+    | .error (.invalidParameter (immediateByte evm.code evm.pc))
   let some stack := exchangeItems evm.stack n m | .error .stackUnderflow
   return advance { evm with stack } 2
 

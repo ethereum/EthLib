@@ -25,6 +25,8 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
 
 The receiver's head descends from the block at the receiver's time.
 
+The voters below the parent lie in the head's window by the window-membership premise.
+
 This extends the coverage of earlier honest heads, assumed from the call up to that time.
 
 The direct-safety evidence is relative to the anchor, and its drift counts from the anchor.
@@ -44,15 +46,17 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred 
     (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
     (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
-    (history : VoteCommitteeCommonHistory (e := e) time) {anchor : Store preset fork}
+    {n : ℕ} {block : BeaconBlock preset fork}
+    (membership : VotersInHeadWindow (e := e) block.parentRoot (e.world n).time time)
+    {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J)
     (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
       ((e.world n).state u))
     {head root : Root} {source : BeaconState preset fork}
-    {slot first last beforeBlock : Slot} {block parent : BeaconBlock preset fork}
+    {slot first last beforeBlock : Slot} {parent : BeaconBlock preset fork}
     {parentParticipants : Std.TreeSet ValidatorIndex} {boost maximum : Gwei}
     (headNode : ∃ node, ((e.world n).state u).getHead config = .ok node ∧ node.root = head)
     (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot) {begin : UInt64}
@@ -85,7 +89,6 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred 
     {receiverLast : Slot}
     (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) head source
       first receiverLast) {horizon : Epoch}
-    (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon time)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (unslashed : HonestCountedStatesUnslashed (e := e) time)
@@ -145,14 +148,14 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred 
     anchorSlot anchorBoundary start caller callerUpToDate headNode slotOk beginOk timeEq blockOk
     parentOk sourceOk boostOk firstOk lastOk beforeOk maximumOk parentParticipantsOk registry
     aligned increment supportOk discountOk adversaryOk margin callerTime sourceReads reserve
-    residual bounded roots unslashed ceiling parameters genesis pre heldEarly enough terminal
+    bounded roots unslashed ceiling parameters genesis pre heldEarly enough terminal
     rootCovers headDescends historicalBelow callerEpochOk historicalEpochOk near epochStartOk
     epochStartTimeOk historyCovers receiver atTime upToDate known finality receiverHeadOk
     receiverParent stateOk currentOk receiverEpochOk receiverNear receiverLastOk windowOk
     participantsOk exit absent
-  have applyHead (headRoute) := ancestor_head_of_window_margin anchored start history receiver
-    (by rw [atTime]) (UInt64.le_of_eq anchorSlot) preGloas absent minLookahead maxLookahead ring
-    receiverHeadOk stateOk tree known caller callerTime (by rw [atTime]; exact callerTime) drift
+  have applyHead (headRoute) := ancestor_head_of_window_margin anchored start membership
+    receiver (by rw [atTime]) (UInt64.le_of_eq anchorSlot) preGloas absent receiverHeadOk stateOk
+    tree known caller callerTime (by rw [atTime]; exact callerTime) drift
     (Store.block_ok_iff.mp parentOk) currentOk receiverEpochOk receiverNear firstOk receiverLastOk
     windowOk participantsOk beforeOk headRoute scoreOk
   rcases sourceResult with justified | surplus | collision | evidence
