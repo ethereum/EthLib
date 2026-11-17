@@ -128,7 +128,7 @@ A precompile that fails halts the frame exceptionally. -/
 def runPrecompile (fork : Fork) (address : Nat) (evm : Evm fork Meter) : Option (Evm fork Meter) :=
   match Precompiles.run fork address evm.message.data (GasMeter.gasLeft evm.gas) with
   | none => none
-  | some (.error _) => some (exceptionalHalt evm .precompile)
+  | some (.error _) => some (exceptionalHalt evm (.precompile address))
   | some (.ok output) =>
     match GasMeter.charge evm.gas ((Precompiles.price fork address evm.message.data).getD 0) with
     | .error e => some (exceptionalHalt evm e)
