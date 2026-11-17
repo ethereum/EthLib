@@ -87,7 +87,7 @@ def unblindOf (args : String × String × ByteArray × ByteArray) :
     let payload ← (·.executionPayload) <$> runSsz "payload rejected"
       (SszType.deserialize (RevealedPayload preset fork) revealed)
     match signed.unblind range payload with
-    | .error .headerMismatch => return none
+    | .error (.headerMismatch ..) => return none
     | .error (.header fault) => runSsz "header rejected" (.error fault)
     | .ok full =>
       let root ← runSsz "root rejected" (SszType.hashTreeRoot full)
@@ -107,12 +107,12 @@ def unblindExport (args : PyValue) : Result PyValue := pyExport unblindOf args
 
 /-- The name of the rule that refuses a registration. -/
 def RegistrationError.reason : BuilderApi.RegistrationError → String
-  | .unknownValidator => "unknown_validator"
-  | .notEligible => "not_eligible"
-  | .clockOverflow => "clock_overflow"
-  | .tooFarInFuture => "too_far_in_future"
-  | .olderThanPrevious => "older_than_previous"
-  | .badSignature => "bad_signature"
+  | .unknownValidator _ => "unknown_validator"
+  | .notEligible .. => "not_eligible"
+  | .clockOverflow .. => "clock_overflow"
+  | .tooFarInFuture .. => "too_far_in_future"
+  | .olderThanPrevious .. => "older_than_previous"
+  | .badSignature _ => "bad_signature"
   | .root _ => "root"
 
 /-- None when a builder keeps a signed registration, or the rule that refuses it. -/
@@ -178,9 +178,9 @@ def isEligibleForBidExport (args : PyValue) : Result PyValue :=
 
 /-- The name of the rule that refuses a bid. -/
 def BidError.reason : BuilderApi.BidError → String
-  | .wrongParentHash => "wrong_parent_hash"
-  | .wrongFeeRecipient => "wrong_fee_recipient"
-  | .badSignature => "bad_signature"
+  | .wrongParentHash .. => "wrong_parent_hash"
+  | .wrongFeeRecipient .. => "wrong_fee_recipient"
+  | .badSignature _ => "bad_signature"
   | .root _ => "root"
 
 /-- None when a proposer accepts a signed bid, or the rule that refuses it. -/
@@ -240,14 +240,14 @@ def isEligibleForBidGloasExport (args : PyValue) : Result PyValue :=
 
 /-- The name of the rule that refuses a fetched bid. -/
 def ValidateBidError.reason : BuilderApi.ValidateBidError → String
-  | .inactiveBuilder => "inactive_builder"
-  | .wrongSlot => "wrong_slot"
-  | .wrongFeeRecipient => "wrong_fee_recipient"
-  | .wrongParentHash => "wrong_parent_hash"
-  | .wrongParentRoot => "wrong_parent_root"
-  | .wrongPrevRandao => "wrong_prev_randao"
-  | .incompatibleGasLimit => "incompatible_gas_limit"
-  | .cannotCoverBid => "cannot_cover_bid"
+  | .inactiveBuilder _ => "inactive_builder"
+  | .wrongSlot .. => "wrong_slot"
+  | .wrongFeeRecipient .. => "wrong_fee_recipient"
+  | .wrongParentHash .. => "wrong_parent_hash"
+  | .wrongParentRoot .. => "wrong_parent_root"
+  | .wrongPrevRandao .. => "wrong_prev_randao"
+  | .incompatibleGasLimit .. => "incompatible_gas_limit"
+  | .cannotCoverBid .. => "cannot_cover_bid"
   | .fault _ => "fault"
 
 /-- From Gloas: None when a proposer accepts a fetched bid, or the rule that refuses it. -/

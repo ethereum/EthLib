@@ -232,7 +232,8 @@ theorem BeaconBlockBody.blind_unblind {full : BeaconBlockBody preset fork}
 theorem BlindedBeaconBlockBody.unblind_eq_headerMismatch_iff
     {body : BlindedBeaconBlockBody preset fork} {range : HasBuilderApi fork}
     {payload : ExecutionPayload preset fork} :
-    body.unblind range payload = .error .headerMismatch ↔
+    body.unblind range payload =
+        .error (.headerMismatch (body.executionPayloadHeader range).blockHash payload.blockHash) ↔
       ∃ header, payload.header = .ok header ∧ header ≠ body.executionPayloadHeader range := by
   unfold BlindedBeaconBlockBody.unblind
   constructor

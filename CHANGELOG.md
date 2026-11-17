@@ -47,6 +47,17 @@ Not yet released.
   - `Ssz.Err.truncated needed available` carries the end of the first field of the fixed part that overruns the budget, and the bytes of the budget.
   - `Ssz.Err.paddingBits byte` carries the last byte, whose bits above the last declared one are set.
 
+- In Lean, the errors of the Builder API carry the values that their check compared, and their codes and rule names keep their meaning.
+  - `ValidateBidError`: `inactiveBuilder` takes the builder index; `wrongSlot`, `wrongFeeRecipient`, `wrongParentRoot` and `wrongPrevRandao` take the expected value, then the value of the bid.
+    `wrongParentHash` takes the parent hash of the bid, then the two hashes it may equal; `incompatibleGasLimit` takes the parent's gas limit, the bid's and the target; `cannotCoverBid` takes the builder index and the value.
+  - `BidError`: `wrongParentHash` and `wrongFeeRecipient` take the expected value, then the header's; `badSignature` takes the builder key.
+  - `RegistrationError`: `unknownValidator` and `badSignature` take the validator key, and `notEligible` the key and the current epoch.
+    `clockOverflow` takes the clock and the lookahead, `tooFarInFuture` the timestamp, the clock and the lookahead, and `olderThanPrevious` the timestamp and the kept one.
+  - `UnblindError.headerMismatch` takes the block hash of the blinded header, then that of the payload.
+
+  `validateBid_zero_value` now states that no `cannotCoverBid` error, whatever its fields, comes from a bid of value zero.
+  `processRegistration_exited` and `BlindedBeaconBlockBody.unblind_eq_headerMismatch_iff` state the fields of the error.
+
 - The Snappy, varint and protobuf errors carry the values their failed check compared.
   Codes are unchanged; each message now ends with these values, in constructor order.
   - `SnappyError.literalPastEnd` and `copyPastEnd` carry the bytes needed and the bytes left.

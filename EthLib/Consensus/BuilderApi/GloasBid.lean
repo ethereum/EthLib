@@ -79,22 +79,38 @@ def isEligibleForBidGloas (state : BeaconState preset fork) (gloas : .glamsterda
 
 /-- Why a proposer refuses a bid it fetched from a builder. -/
 inductive ValidateBidError where
-  /-- The builder of the bid is not active. -/
-  | inactiveBuilder
-  /-- The slot of the bid is not that of the state. -/
-  | wrongSlot
-  /-- The fee recipient of the bid is not the proposer's. -/
-  | wrongFeeRecipient
-  /-- The bid builds on neither the parent with its payload nor the parent without it. -/
-  | wrongParentHash
-  /-- The parent root of the bid is not the root of the latest block header. -/
-  | wrongParentRoot
-  /-- The RANDAO mix of the bid is not that of the current epoch. -/
-  | wrongPrevRandao
-  /-- The gas limit of the bid is not the step from the parent's limit toward the target. -/
-  | incompatibleGasLimit
-  /-- The builder cannot pay the value of the bid. -/
-  | cannotCoverBid
+  /-- The builder of the bid, whose index the error gives, is not active. -/
+  | inactiveBuilder (builderIndex : BuilderIndex)
+  /-- The slot of the bid is not that of the state.
+
+  The error gives the slot of the state, then the slot of the bid. -/
+  | wrongSlot (expected actual : Slot)
+  /-- The fee recipient of the bid is not the proposer's.
+
+  The error gives the proposer's fee recipient, then that of the bid. -/
+  | wrongFeeRecipient (expected actual : ExecutionAddress)
+  /-- The bid builds on neither the parent with its payload nor the parent without it.
+
+  The error gives the parent hash of the bid.
+
+  It also gives the block hash of the latest bid of the state, then its latest block hash. -/
+  | wrongParentHash (parentHash withPayload withoutPayload : Hash32)
+  /-- The parent root of the bid is not the root of the latest block header.
+
+  The error gives the root of that header, then the parent root of the bid. -/
+  | wrongParentRoot (expected actual : Root)
+  /-- The RANDAO mix of the bid is not that of the current epoch.
+
+  The error gives the mix of the current epoch, then that of the bid. -/
+  | wrongPrevRandao (expected actual : Bytes32)
+  /-- The gas limit of the bid is not the step from the parent's limit toward the target.
+
+  The error gives the gas limit of the parent, that of the bid and the target. -/
+  | incompatibleGasLimit (parentGasLimit gasLimit targetGasLimit : UInt64)
+  /-- The builder cannot pay the value of the bid.
+
+  The error gives the index of the builder and the value of the bid. -/
+  | cannotCoverBid (builderIndex : BuilderIndex) (value : Gwei)
   /-- A value that the rules read cannot be computed. -/
   | fault (error : TransitionError)
   deriving Repr
@@ -116,20 +132,24 @@ def validateBid (config : Config) (checks : SignatureChecks) (state : BeaconStat
   let lift {α : Type} (result : Except TransitionError α) : Except ValidateBidError α :=
     result.mapError .fault
   unless ← lift (liftAccessor (isActiveBuilder state gloas bid.builderIndex)) do
-    throw .inactiveBuilder
-  unless bid.slot = state.slot do throw .wrongSlot
-  unless bid.feeRecipient = feeRecipient do throw .wrongFeeRecipient
-  unless isParentBlockHash state gloas bid.parentBlockHash do throw .wrongParentHash
-  unless bid.parentBlockRoot = (← lift (liftSsz (SszType.hashTreeRoot state.latestBlockHeader))) do
-    throw .wrongParentRoot
-  unless bid.prevRandao = (← lift (liftAccessor (getRandaoMix state (getCurrentEpoch state)))) do
-    throw .wrongPrevRandao
+    throw (.inactiveBuilder bid.builderIndex)
+  unless bid.slot = state.slot do throw (.wrongSlot state.slot bid.slot)
+  unless bid.feeRecipient = feeRecipient do
+    throw (.wrongFeeRecipient feeRecipient bid.feeRecipient)
+  unless isParentBlockHash state gloas bid.parentBlockHash do
+    throw (.wrongParentHash bid.parentBlockHash (state.latestExecutionPayloadBid gloas).blockHash
+      (state.latestBlockHash gloas))
+  let parentRoot ← lift (liftSsz (SszType.hashTreeRoot state.latestBlockHeader))
+  unless bid.parentBlockRoot = parentRoot do
+    throw (.wrongParentRoot parentRoot bid.parentBlockRoot)
+  let randao ← lift (liftAccessor (getRandaoMix state (getCurrentEpoch state)))
+  unless bid.prevRandao = randao do throw (.wrongPrevRandao randao bid.prevRandao)
   unless ← lift (liftAccessor (liftArith
       (isGasLimitTargetCompatible parentGasLimit bid.gasLimit preferences.targetGasLimit))) do
-    throw .incompatibleGasLimit
+    throw (.incompatibleGasLimit parentGasLimit bid.gasLimit preferences.targetGasLimit)
   if 0 < bid.value then
     unless ← lift (liftAccessor (canBuilderCoverBid state gloas bid.builderIndex bid.value)) do
-      throw .cannotCoverBid
+      throw (.cannotCoverBid bid.builderIndex bid.value)
   lift (verifyExecutionPayloadBidSignature config checks state gloas signed)
 
 end EthLib.Consensus.BuilderApi
