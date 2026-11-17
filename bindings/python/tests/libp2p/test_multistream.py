@@ -54,8 +54,8 @@ PREFIX = "multistream message rejected: EthLib.Networking.Libp2p.Multistream.Mul
         ("00", "empty", 2),
         # The length counts three bytes, and two follow.
         ("036e61", "truncated 3 2", 3),
-        # The last counted byte is not a newline.
-        ("036e6161", "missingNewline", 4),
+        # The last counted byte is 0x61, not a newline.
+        ("036e6161", "missingNewline 97", 4),
     ],
 )
 def test_decode_rejected(data: str, fault: str, code: int) -> None:

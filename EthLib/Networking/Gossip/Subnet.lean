@@ -44,12 +44,14 @@ inductive SubnetError (ε : Type) where
   | zeroSubnetCount
   /-- A subscription lasts zero epochs. -/
   | zeroEpochsPerSubscription
-  /-- The epoch plus the offset of the node is 2^64 or more. -/
-  | epochOverflow
+  /-- The epoch `epoch` plus the offset `offset` of the node is 2^64 or more. -/
+  | epochOverflow (epoch offset : UInt64)
   /-- The prefix has 64 bits or more, so the number of prefixes is not below 2^64. -/
   | prefixBitsTooLarge (bits : Nat)
-  /-- The permuted prefix plus the index of the subnet is 2^64 or more. -/
-  | subnetOverflow
+  /-- A sum or a product on the way to a subnet, of `left` and `right`, is 2^64 or more.
+
+  For the subnets of a node, it is the permuted prefix plus the index of the subnet. -/
+  | subnetOverflow (left right : UInt64)
   /-- The shuffle failed. -/
   | shuffle (error : ε)
   deriving Repr, DecidableEq
@@ -66,9 +68,9 @@ The codes start at 101, since the consensus errors of the bindings share one cla
 def SubnetError.code {ε : Type} : SubnetError ε → UInt32
   | .zeroSubnetCount => 101
   | .zeroEpochsPerSubscription => 102
-  | .epochOverflow => 103
+  | .epochOverflow .. => 103
   | .prefixBitsTooLarge _ => 104
-  | .subnetOverflow => 105
+  | .subnetOverflow .. => 105
   | .shuffle _ => 106
 
 variable {ε : Type}
@@ -104,7 +106,8 @@ def computeShuffledPrefix (config : SubnetParameters)
   let nodePrefix := nodeId.toNat >>> (NODE_ID_BITS - bits)
   if config.EPOCHS_PER_SUBNET_SUBSCRIPTION = 0 then throw .zeroEpochsPerSubscription
   let nodeOffset := (nodeId.toNat % config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat).toUInt64
-  let shifted ← (Base.Uint64.addChecked epoch nodeOffset).mapError fun _ => .epochOverflow
+  let shifted ← (Base.Uint64.addChecked epoch nodeOffset).mapError
+    fun _ => .epochOverflow epoch nodeOffset
   let period := shifted / config.EPOCHS_PER_SUBNET_SUBSCRIPTION
   let seed := Cryptography.Hash.Sha256.hash32 ⟨(Base.uintToBytes 8 period.toNat).toArray⟩
   if 64 ≤ bits then throw (.prefixBitsTooLarge bits)
@@ -118,7 +121,8 @@ def computeSubscribedSubnet (config : SubnetParameters)
     (shuffle : UInt64 → UInt64 → Base.Bytes32 → Except ε UInt64)
     (nodeId : NodeID) (epoch index : UInt64) : Except (SubnetError ε) SubnetID := do
   let permuted ← computeShuffledPrefix config shuffle nodeId epoch
-  let subnet ← (Base.Uint64.addChecked permuted index).mapError fun _ => .subnetOverflow
+  let subnet ← (Base.Uint64.addChecked permuted index).mapError
+    fun _ => .subnetOverflow permuted index
   return subnet % config.ATTESTATION_SUBNET_COUNT
 
 /-- The subnets of a node in an epoch, one for each index below the subnets per node. -/

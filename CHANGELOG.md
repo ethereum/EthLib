@@ -79,6 +79,16 @@ Not yet released.
   `validateBid_zero_value` now states that no `cannotCoverBid` error, whatever its fields, comes from a bid of value zero.
   `processRegistration_exited` and `BlindedBeaconBlockBody.unblind_eq_headerMismatch_iff` state the fields of the error.
 
+- The Noise, libp2p identity, multistream, gossip topic and subnet, and req/resp errors carry the values their failed check compared.
+  Codes are unchanged; each message now shows these values.
+  - `NoiseError.wrongPhase` carries the role and the number of messages handled, `truncated` the bytes needed and available, `messageTooLong` the size, and `frameLength` the declared and actual lengths.
+  - `Libp2p.IdentityError.peerId` carries the first two bytes of the peer ID, or fewer when it is shorter.
+  - `Multistream.MultistreamError.missingNewline` carries the last counted byte.
+  - `Gossip.TopicError.forkDigest` carries the nine characters after `/eth2/`, or fewer where the string ends, and `name` the name.
+  - `Gossip.SubnetError.epochOverflow` carries the epoch and the node offset, and `subnetOverflow` the two operands of the sum or product.
+  - `ReqResp.ReqRespError.contextTruncated` carries the context bytes needed and available.
+  - The req/resp messages of a varint or a framing error now end with the inner error.
+
 - The Snappy, varint and protobuf errors carry the values their failed check compared.
   Codes are unchanged; each message now ends with these values, in constructor order.
   - `SnappyError.literalPastEnd` and `copyPastEnd` carry the bytes needed and the bytes left.

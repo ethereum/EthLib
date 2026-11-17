@@ -49,16 +49,24 @@ deriving DecidableEq
 
 /-- A malformed message, exhausted nonce, invalid phase or state, primitive or identity failure. -/
 inductive NoiseError where
-  /-- The operation does not belong to the current phase of the handshake. -/
-  | wrongPhase
+  /-- The operation does not belong to the current phase of the handshake.
+
+  The fields hold the role, initiator or not, and the number of messages already handled. -/
+  | wrongPhase (initiator : Bool) (step : Nat)
   /-- A remote public key that the message pattern needs has not been received. -/
   | missingKey
-  /-- A message or frame is shorter than its fixed fields, or a decrypted key is not 32 bytes. -/
-  | truncated
-  /-- A message or its payload would be longer than 65535 bytes, the limit of Noise §3. -/
-  | messageTooLong
-  /-- A frame length does not match the bytes that follow it. -/
-  | frameLength
+  /-- A message or frame is shorter than its fixed fields, or a decrypted key is not 32 bytes.
+
+  The fields hold the bytes needed and the bytes available.
+
+  For a decrypted key, the bytes available may be more than needed. -/
+  | truncated (needed available : Nat)
+  /-- A message or its payload would be `size` bytes, more than 65535, the limit of Noise §3.
+
+  For a libp2p payload, `size` may be the sum of its fields, below the size of their encoding. -/
+  | messageTooLong (size : Nat)
+  /-- A frame declares a length of `declared` bytes, but `actual` bytes follow it. -/
+  | frameLength (declared actual : Nat)
   /-- The nonce reached `2^64 - 1`, after which Noise §5.1 signals an error. -/
   | nonceExhausted
   /-- ChaCha20-Poly1305 rejected its input or the authentication tag. -/
@@ -87,11 +95,11 @@ The code ignores the arguments of the constructor, which the message carries.
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def NoiseError.code : NoiseError → UInt32
-  | .wrongPhase => 1
+  | .wrongPhase .. => 1
   | .missingKey => 2
-  | .truncated => 3
-  | .messageTooLong => 4
-  | .frameLength => 5
+  | .truncated .. => 3
+  | .messageTooLong _ => 4
+  | .frameLength .. => 5
   | .nonceExhausted => 6
   | .cipher _ => 7
   | .protobuf => 8
@@ -122,10 +130,10 @@ def encryptWithAd (s : CipherState) (aad plaintext : ByteArray) :
     Except NoiseError (CipherState × ByteArray) := do
   match s.key with
   | none =>
-    if plaintext.size > 65535 then throw .messageTooLong
+    if plaintext.size > 65535 then throw (.messageTooLong plaintext.size)
     return (s, plaintext)
   | some key =>
-    if plaintext.size + 16 > 65535 then throw .messageTooLong
+    if plaintext.size + 16 > 65535 then throw (.messageTooLong (plaintext.size + 16))
     if s.nonce = 2 ^ 64 - 1 then throw .nonceExhausted
     let (ciphertext, tag) ← (ChaCha20Poly1305.encrypt key (cipherNonce s.nonce)
       aad plaintext).mapError NoiseError.cipher
@@ -134,7 +142,7 @@ def encryptWithAd (s : CipherState) (aad plaintext : ByteArray) :
 /-- Authenticate before advancing the nonce or returning plaintext, Noise §5.1. -/
 def decryptWithAd (s : CipherState) (aad ciphertext : ByteArray) :
     Except NoiseError (CipherState × ByteArray) := do
-  if ciphertext.size > 65535 then throw .messageTooLong
+  if ciphertext.size > 65535 then throw (.messageTooLong ciphertext.size)
   match s.key with
   | none => return (s, ciphertext)
   | some key =>
@@ -144,7 +152,7 @@ def decryptWithAd (s : CipherState) (aad ciphertext : ByteArray) :
       let plaintext ← (ChaCha20Poly1305.decrypt key (cipherNonce s.nonce) aad
         (ciphertext.extract 0 (ciphertext.size - 16)) tag).mapError NoiseError.cipher
       return (⟨s.key, s.nonce + 1⟩, plaintext)
-    else throw .truncated
+    else throw (.truncated 16 ciphertext.size)
 
 /--
 The two outputs of `HKDF(chaining_key, input_key_material, 2)`, Noise §4.3.
@@ -223,37 +231,38 @@ def requireKey : Option Key → Except NoiseError Key
 
 /-- A decrypted static coordinate has exactly `DHLEN` bytes, Noise §5.3. -/
 def readKey (bytes : ByteArray) : Except NoiseError Key :=
-  if h : bytes.size = 32 then .ok ⟨bytes.data, h⟩ else .error .truncated
+  if h : bytes.size = 32 then .ok ⟨bytes.data, h⟩ else .error (.truncated 32 bytes.size)
 
 /-- The next XX outgoing message, including its implicit payload, Noise §§5.3 and 7.5. -/
 def writeMessage (s : HandshakeState) (payload : ByteArray) :
     Except NoiseError (HandshakeState × ByteArray) := do
   let (symmetric, header) ← (match s.initiator, s.step with
     | true, 0 => do
-      if payload.size + 32 > 65535 then throw .messageTooLong
+      if payload.size + 32 > 65535 then throw (.messageTooLong (payload.size + 32))
       let ephemeral := packBytes (X25519.publicKey s.ephemeralKey)
       return (mixHash s.symmetric ephemeral, ephemeral)
     | false, 1 => do
-      if payload.size + 96 > 65535 then throw .messageTooLong
+      if payload.size + 96 > 65535 then throw (.messageTooLong (payload.size + 96))
       let remote ← requireKey s.remoteEphemeral
       let ephemeral := packBytes (X25519.publicKey s.ephemeralKey)
       let symmetric := mixKey (mixHash s.symmetric ephemeral) (X25519.x25519 s.ephemeralKey remote)
       let (symmetric, static) ← encryptAndHash symmetric (packBytes (X25519.publicKey s.staticKey))
       return (mixKey symmetric (X25519.x25519 s.staticKey remote), ephemeral ++ static)
     | true, 2 => do
-      if payload.size + 64 > 65535 then throw .messageTooLong
+      if payload.size + 64 > 65535 then throw (.messageTooLong (payload.size + 64))
       let remote ← requireKey s.remoteEphemeral
       let (symmetric, static) ← encryptAndHash s.symmetric
         (packBytes (X25519.publicKey s.staticKey))
       return (mixKey symmetric (X25519.x25519 s.staticKey remote), static)
-    | _, _ => throw .wrongPhase : Except NoiseError (SymmetricState × ByteArray))
+    | _, _ => throw (.wrongPhase s.initiator s.step)
+    : Except NoiseError (SymmetricState × ByteArray))
   let (symmetric, ciphertext) ← encryptAndHash symmetric payload
   return ({ s with symmetric := symmetric, step := s.step + 1 }, header ++ ciphertext)
 
 /-- The next XX incoming message; each static key comes from its decrypted token, Noise §5.3. -/
 def readMessage (s : HandshakeState) (message : ByteArray) :
     Except NoiseError (HandshakeState × ByteArray) := do
-  if message.size > 65535 then throw .messageTooLong
+  if message.size > 65535 then throw (.messageTooLong message.size)
   let (s, remaining) ← (match s.initiator, s.step with
     | false, 0 => do
       if h : 32 ≤ message.size then
@@ -261,7 +270,7 @@ def readMessage (s : HandshakeState) (message : ByteArray) :
         return ({ s with
           remoteEphemeral := some remote
           symmetric := mixHash s.symmetric (packBytes remote) }, message.extract 32 message.size)
-      else throw .truncated
+      else throw (.truncated 32 message.size)
     | true, 1 => do
       if h : 96 ≤ message.size then
         let remote := readBytes message 0 32 (by omega)
@@ -274,7 +283,7 @@ def readMessage (s : HandshakeState) (message : ByteArray) :
           remoteEphemeral := some remote
           remoteStatic := some static
           symmetric := symmetric }, message.extract 80 message.size)
-      else throw .truncated
+      else throw (.truncated 96 message.size)
     | false, 2 => do
       if 64 ≤ message.size then
         let (symmetric, staticBytes) ← decryptAndHash s.symmetric (message.extract 0 48)
@@ -282,8 +291,9 @@ def readMessage (s : HandshakeState) (message : ByteArray) :
         let symmetric := mixKey symmetric (X25519.x25519 s.ephemeralKey static)
         return ({ s with remoteStatic := some static, symmetric := symmetric },
           message.extract 48 message.size)
-      else throw .truncated
-    | _, _ => throw .wrongPhase : Except NoiseError (HandshakeState × ByteArray))
+      else throw (.truncated 64 message.size)
+    | _, _ => throw (.wrongPhase s.initiator s.step)
+    : Except NoiseError (HandshakeState × ByteArray))
   let (symmetric, payload) ← decryptAndHash s.symmetric remaining
   return ({ s with symmetric := symmetric, step := s.step + 1 }, payload)
 
@@ -292,19 +302,20 @@ def transport (s : HandshakeState) : Except NoiseError (CipherState × CipherSta
   if s.step = 3 then
     let (forward, backward) := split s.symmetric
     .ok (if s.initiator then (forward, backward) else (backward, forward))
-  else .error .wrongPhase
+  else .error (.wrongPhase s.initiator s.step)
 
 /-- Prefix a message with its 16-bit big-endian length, noise-libp2p "Wire Format". -/
 def frame (message : ByteArray) : Except NoiseError ByteArray :=
   if message.size ≤ 65535 then
     .ok (⟨(natToBytes 2 message.size).toArray⟩ ++ message)
-  else .error .messageTooLong
+  else .error (.messageTooLong message.size)
 
 /-- Decode exactly one complete frame, noise-libp2p "Wire Format". -/
 def unframe (bytes : ByteArray) : Except NoiseError ByteArray := do
   if h : 2 ≤ bytes.size then
     let size := bytesToNat (readBytes bytes 0 2 h).toList
-    if size + 2 = bytes.size then return bytes.extract 2 bytes.size else throw .frameLength
-  else throw .truncated
+    if size + 2 = bytes.size then return bytes.extract 2 bytes.size
+    else throw (.frameLength size (bytes.size - 2))
+  else throw (.truncated 2 bytes.size)
 
 end EthLib.Networking.Noise

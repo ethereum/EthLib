@@ -270,15 +270,16 @@ def test_first_message_extensions() -> None:
 
 def test_incomplete_and_wrong_order(exchange: Exchange) -> None:
     initiator, responder = libp2p_pair()
-    with raises(NoiseError, ERROR + "wrongPhase"):
+    # The fields are the role, true for the initiator, and the messages already handled.
+    with raises(NoiseError, ERROR + "wrongPhase true 0"):
         libp2p_complete(initiator)
-    with raises(NoiseError, ERROR + "wrongPhase"):
+    with raises(NoiseError, ERROR + "wrongPhase false 0"):
         libp2p_write(responder, IDENTITY_R, None)
     initiator, _ = libp2p_write(initiator, IDENTITY_I, None)
     initiator = libp2p_read(initiator, exchange[3])
-    with raises(NoiseError, ERROR + "wrongPhase"):
+    with raises(NoiseError, ERROR + "wrongPhase true 2"):
         libp2p_complete(initiator)
-    with raises(NoiseError, ERROR + "wrongPhase"):
+    with raises(NoiseError, ERROR + "wrongPhase true 2"):
         libp2p_read(initiator, exchange[3])
 
 
@@ -338,7 +339,8 @@ def test_completion_needs_stored_remote(exchange: Exchange, component: str) -> N
 def test_truncated_second_message(exchange: Exchange, length: int) -> None:
     initiator, _ = libp2p_pair()
     initiator, _ = libp2p_write(initiator, IDENTITY_I, None)
-    with raises(NoiseError, ERROR + "truncated"):
+    # The second message needs 96 bytes: an ephemeral key, a static key and its tag, a payload tag.
+    with raises(NoiseError, ERROR + f"truncated 96 {length}"):
         libp2p_read(initiator, exchange[3][:length])
 
 
@@ -366,11 +368,12 @@ def test_cipher_failure_and_nonce() -> None:
 
 
 def test_transport_size_limit() -> None:
-    with raises(NoiseError, ERROR + "messageTooLong"):
+    # Under a key, the message is the plaintext and its 16-byte tag.
+    with raises(NoiseError, ERROR + "messageTooLong 65536"):
         cipher_encrypt((bytes(32), 0), b"", bytes(65520))
-    with raises(NoiseError, ERROR + "messageTooLong"):
+    with raises(NoiseError, ERROR + "messageTooLong 65536"):
         cipher_decrypt((bytes(32), 0), b"", bytes(65536))
-    with raises(NoiseError, ERROR + "messageTooLong"):
+    with raises(NoiseError, ERROR + "messageTooLong 65536"):
         cipher_encrypt((None, 0), b"", bytes(65536))
 
 
@@ -382,13 +385,13 @@ def test_framing(size: int) -> None:
 
 
 def test_bad_frames() -> None:
-    with raises(NoiseError, ERROR + "messageTooLong"):
+    with raises(NoiseError, ERROR + "messageTooLong 65536"):
         frame(bytes(65536))
-    with raises(NoiseError, ERROR + "truncated"):
+    with raises(NoiseError, ERROR + "truncated 2 1"):
         unframe(b"\x00")
-    with raises(NoiseError, ERROR + "frameLength"):
+    with raises(NoiseError, ERROR + "frameLength 2 1"):
         unframe(b"\x00\x02x")
-    with raises(NoiseError, ERROR + "frameLength"):
+    with raises(NoiseError, ERROR + "frameLength 0 1"):
         unframe(b"\x00\x00x")
 
 
