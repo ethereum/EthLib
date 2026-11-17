@@ -20,7 +20,7 @@ noncomputable def bottomRootFromCache (cache : QueryCache HashSpec)
         (message, signature.randomness)) with
   | none => none
   | some encoding =>
-      some ((Merkle.climb (CacheView.nodeAt cache publicKey.parameter .bottom) 0 leafIndex.val
+      some ((Merkle.climb (CacheView.nodeAt cache publicKey.parameter .bottom) ⟨0, leafIndex.val⟩
         (CacheView.leafHash cache publicKey.parameter leafIndex
           (XmssSecurity.recoveredEndpoints
             (fun chain => CacheView.chainStep cache publicKey.parameter leafIndex chain)
@@ -34,7 +34,7 @@ noncomputable def verifyTopFromCache (cache : QueryCache HashSpec)
       (CacheView.topEncodingHash cache publicKey.parameter key (root, part.randomness)) with
   | none => false
   | some encoding =>
-      decide ((Merkle.climb (CacheView.nodeAt cache publicKey.parameter .top) 0 key.val
+      decide ((Merkle.climb (CacheView.nodeAt cache publicKey.parameter .top) ⟨0, key.val⟩
         (CacheView.topLeafHash cache publicKey.parameter key
           (XmssSecurity.recoveredEndpoints
             (fun chain => CacheView.topChainStep cache publicKey.parameter key chain)
@@ -55,7 +55,7 @@ theorem verifyTopFromCache_eq_true_iff (cache : QueryCache HashSpec)
         TargetSum.decodeDigest
           (CacheView.topEncodingHash cache publicKey.parameter key (root, part.randomness)) =
             some encoding ∧
-        (Merkle.climb (CacheView.nodeAt cache publicKey.parameter .top) 0 key.val
+        (Merkle.climb (CacheView.nodeAt cache publicKey.parameter .top) ⟨0, key.val⟩
           (CacheView.topLeafHash cache publicKey.parameter key
             (XmssSecurity.recoveredEndpoints
               (fun chain => CacheView.topChainStep cache publicKey.parameter key chain)
@@ -85,7 +85,7 @@ theorem verifyFromCache_eq_true_iff (cache : QueryCache HashSpec)
           (CacheView.encodingHash cache publicKey.parameter leafIndex
             (message, signature.randomness)) = some encoding ∧
         verifyTopFromCache cache publicKey (topKeyOf leafIndex)
-          ((Merkle.climb (CacheView.nodeAt cache publicKey.parameter .bottom) 0 leafIndex.val
+          ((Merkle.climb (CacheView.nodeAt cache publicKey.parameter .bottom) ⟨0, leafIndex.val⟩
             (CacheView.leafHash cache publicKey.parameter leafIndex
               (XmssSecurity.recoveredEndpoints
                 (fun chain => CacheView.chainStep cache publicKey.parameter leafIndex chain)

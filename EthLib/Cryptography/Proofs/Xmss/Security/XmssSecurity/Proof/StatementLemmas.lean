@@ -127,17 +127,18 @@ def nodeInput (parameter : PublicParameter) (layer : EthLib.Cryptography.Xmss.La
   XmssSecurity.tweakableHashInput parameter (nodeDomain layer level j)
     (Concrete.nodePayload left right)
 
-/-- The node at position `(level, j)` of a layer's tree, from its two children, read from the cache.
+/-- The node at a position of a layer's tree, from its two children, read from the cache.
 
 The level is the parent's, from 1 to 16, and the address holds the children's level. -/
 def nodeAt (cache : QueryCache HashSpec) (parameter : PublicParameter)
-    (layer : EthLib.Cryptography.Xmss.Layer) : Nat → Nat → Digest → Digest → Id Digest
-  | level + 1, j, left, right =>
+    (layer : EthLib.Cryptography.Xmss.Layer) :
+    EthLib.Cryptography.Merkle.Position → Digest → Digest → Id Digest
+  | ⟨level + 1, j⟩, left, right =>
       if hlevel : level < treeHeight then
         pure (digestAt cache (nodeInput parameter layer ⟨level, hlevel⟩ j left right))
       else
         pure 0
-  | 0, _, _, _ => pure 0
+  | ⟨0, _⟩, _, _ => pure 0
 
 /-- The oracle input of a bottom node is its Merkle input, at its index modulo the node count. -/
 theorem nodeInput_bottom (parameter : PublicParameter) (level : MerkleLevel) (j : Nat)
@@ -157,7 +158,7 @@ theorem nodeInput_top (parameter : PublicParameter) (level : MerkleLevel) (j : N
 
 theorem nodeAt_bottom (cache : QueryCache HashSpec) (parameter : PublicParameter)
     (level : MerkleLevel) (j : Nat) (left right : Digest) :
-    (nodeAt cache parameter .bottom (level.val + 1) j left right).run =
+    (nodeAt cache parameter .bottom ⟨level.val + 1, j⟩ left right).run =
       merkleHash cache parameter level (Concrete.merkleNodeOfNat j) left right := by
   simp [nodeAt, level.isLt]
   rfl
@@ -165,7 +166,7 @@ theorem nodeAt_bottom (cache : QueryCache HashSpec) (parameter : PublicParameter
 /-- A node of the top tree, read from the cache, is the hash of its address. -/
 theorem nodeAt_top (cache : QueryCache HashSpec) (parameter : PublicParameter)
     (level : MerkleLevel) (j : Nat) (left right : Digest) :
-    (nodeAt cache parameter .top (level.val + 1) j left right).run =
+    (nodeAt cache parameter .top ⟨level.val + 1, j⟩ left right).run =
       topMerkleHash cache parameter level (Concrete.topNodeOfNat j) left right := by
   simp [nodeAt, level.isLt]
   rfl
@@ -188,8 +189,8 @@ def leafAt (cache : QueryCache HashSpec) (parameter : PublicParameter)
 def treeNode (cache : QueryCache HashSpec) (parameter : PublicParameter)
     (secret : LeafIndex → ChainIndex → Digest) (levels : Nat) (node : MerkleNode) : Digest :=
   (EthLib.Cryptography.Merkle.node (CacheView.nodeAt cache parameter .bottom)
-    (fun j => pure (leafAt cache parameter secret (Concrete.merkleNodeOfNat j))) levels
-    node.val).run
+    (fun j => pure (leafAt cache parameter secret (Concrete.merkleNodeOfNat j)))
+    ⟨levels, node.val⟩).run
 
 attribute [irreducible] treeNode
 
@@ -206,8 +207,8 @@ def topLeafAt (cache : QueryCache HashSpec) (parameter : PublicParameter)
 def topTreeNode (cache : QueryCache HashSpec) (parameter : PublicParameter)
     (topSecret : TopIndex → ChainIndex → Digest) (levels : Nat) (node : TopNode) : Digest :=
   (EthLib.Cryptography.Merkle.node (CacheView.nodeAt cache parameter .top)
-    (fun j => pure (topLeafAt cache parameter topSecret (Concrete.topNodeOfNat j))) levels
-    node.val).run
+    (fun j => pure (topLeafAt cache parameter topSecret (Concrete.topNodeOfNat j)))
+    ⟨levels, node.val⟩).run
 
 attribute [irreducible] topTreeNode
 
@@ -234,16 +235,16 @@ theorem topNodeOfNat_val (node : TopNode) : topNodeOfNat node.val = node :=
 /-- A node hash reads its index only modulo the layer's leaves. -/
 theorem nodeAt_mod {m : Type → Type} [Monad m] [HasQuery HashSpec m] (parameter : PublicParameter)
     (layer : EthLib.Cryptography.Xmss.Layer) (level j : Nat) :
-    nodeAt (m := m) parameter layer level j =
-      nodeAt parameter layer level (j % layerLeaves layer) := by
+    nodeAt (m := m) parameter layer ⟨level, j⟩ =
+      nodeAt parameter layer ⟨level, j % layerLeaves layer⟩ := by
   funext left right
   cases level <;> simp [nodeAt]
 
 /-- A node hash read from the cache reads its index only modulo the layer's leaves. -/
 theorem CacheView.nodeAt_mod (cache : QueryCache HashSpec) (parameter : PublicParameter)
     (layer : EthLib.Cryptography.Xmss.Layer) (level j : Nat) :
-    CacheView.nodeAt cache parameter layer level j =
-      CacheView.nodeAt cache parameter layer level (j % layerLeaves layer) := by
+    CacheView.nodeAt cache parameter layer ⟨level, j⟩ =
+      CacheView.nodeAt cache parameter layer ⟨level, j % layerLeaves layer⟩ := by
   funext left right
   cases level <;> cases layer <;>
     simp [CacheView.nodeAt, CacheView.nodeInput, nodeDomain, layerLeaves,

@@ -275,7 +275,7 @@ theorem erases_node (seed : MasterSeed) (d : Derivations) (layer : Xmss.Layer) (
       Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (realPrf seed)
           layer level j : OracleComp HashSpec Xmss.Digest)
         (ofDigest <$> EthLib.Cryptography.Merkle.node (Concrete.nodeAt d.parameter layer) leaves
-          level j)
+          ⟨level, j⟩)
   | 0, _, j, hj => by
     simpa [EthLib.Cryptography.Merkle.node_zero] using hleaves j (by simpa using hj)
   | l + 1, hlevel, j, hj => by

@@ -326,9 +326,9 @@ theorem relTriple_node_run (layer : EthLib.Cryptography.Xmss.Layer)
       KeygenRunRelation parameter leftStart rightStart leftWarm rightWarm leftCache rightCache →
       RelTriple
         ((simulateQ randomOracle (EthLib.Cryptography.Merkle.node (Concrete.nodeAt parameter layer)
-          leftLeaves levels j : OracleComp HashSpec Digest)).run leftCache)
+          leftLeaves ⟨levels, j⟩ : OracleComp HashSpec Digest)).run leftCache)
         ((simulateQ randomOracle (EthLib.Cryptography.Merkle.node (Concrete.nodeAt parameter layer)
-          rightLeaves levels j : OracleComp HashSpec Digest)).run rightCache)
+          rightLeaves ⟨levels, j⟩ : OracleComp HashSpec Digest)).run rightCache)
         (KeygenRunResult parameter leftStart rightStart leftWarm rightWarm)
   | 0, j, leftCache, rightCache, hrel => hleaves j leftCache rightCache hrel
   | levels + 1, j, leftCache, rightCache, hrel => by
