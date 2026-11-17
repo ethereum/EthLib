@@ -614,6 +614,27 @@ theorem filterNodeTree_leaf {config : Config} :
     have childIn := filterNodeTree_self belowOk (List.ne_nil_of_mem xMem)
     exact absurd (List.mem_append_left _ (lift child childIn)) (leaf child childMem)
 
+/-- A viable leaf has a checkpoint block at the finalized epoch.
+
+That block is the finalized block, unless the finalized epoch is genesis. -/
+theorem isViableLeaf_checkpointBlock {config : Config} {node : ForkChoiceNode}
+    (viable : store.isViableLeaf config node = .ok true) :
+    ∃ checkpointBlock,
+      store.getCheckpointBlock node.root store.finalizedCheckpoint.epoch = .ok checkpointBlock ∧
+        (store.finalizedCheckpoint.epoch = GENESIS_EPOCH ∨
+          store.finalizedCheckpoint.root = checkpointBlock) := by
+  unfold isViableLeaf at viable
+  simp only [bind_ok_iff] at viable
+  obtain ⟨_, -, _, -, viable⟩ := viable
+  -- Both branches of the justified check end with the finalized check.
+  split at viable <;>
+    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Bool.and_eq_true,
+      Bool.or_eq_true, decide_eq_true_eq] at viable
+  · obtain ⟨_, -, checkpointBlock, checkpointOk, -, finalized⟩ := viable
+    exact ⟨checkpointBlock, checkpointOk, finalized⟩
+  · obtain ⟨_, -, _, -, checkpointBlock, checkpointOk, -, finalized⟩ := viable
+    exact ⟨checkpointBlock, checkpointOk, finalized⟩
+
 /-- A viable leaf agrees with the finalized checkpoint.
 
 Its checkpoint block at the finalized epoch is the finalized block, unless that epoch is genesis. -/
@@ -622,22 +643,7 @@ theorem isViableLeaf_finalized {config : Config} {node : ForkChoiceNode}
     store.finalizedCheckpoint.epoch = GENESIS_EPOCH ∨
       store.getCheckpointBlock node.root store.finalizedCheckpoint.epoch =
         .ok store.finalizedCheckpoint.root := by
-  unfold isViableLeaf at viable
-  simp only [bind_ok_iff] at viable
-  obtain ⟨_, -, _, -, viable⟩ := viable
-  -- Both branches of the justified check end with the finalized check.
-  have checked : ∃ checkpointBlock,
-      store.getCheckpointBlock node.root store.finalizedCheckpoint.epoch = .ok checkpointBlock ∧
-        (store.finalizedCheckpoint.epoch = GENESIS_EPOCH ∨
-          store.finalizedCheckpoint.root = checkpointBlock) := by
-    split at viable <;>
-      simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Bool.and_eq_true,
-        Bool.or_eq_true, decide_eq_true_eq] at viable
-    · obtain ⟨_, -, checkpointBlock, checkpointOk, -, finalized⟩ := viable
-      exact ⟨checkpointBlock, checkpointOk, finalized⟩
-    · obtain ⟨_, -, _, -, checkpointBlock, checkpointOk, -, finalized⟩ := viable
-      exact ⟨checkpointBlock, checkpointOk, finalized⟩
-  obtain ⟨checkpointBlock, checkpointOk, finalized⟩ := checked
+  obtain ⟨checkpointBlock, checkpointOk, finalized⟩ := isViableLeaf_checkpointBlock viable
   rcases finalized with genesis | same
   · exact .inl genesis
   · exact .inr (same ▸ checkpointOk)
