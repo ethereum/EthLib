@@ -25,6 +25,8 @@ Failing that, the runs to the two held states of those checkpoints bound the acc
 
 Or their hashes show a collision or a zero root.
 
+Each viable leaf of the store descends from the finalized block, at every finalized epoch.
+
 [Gasper] §4.1 pairs a block with an epoch.
 
 [Gasper]: https://arxiv.org/abs/2003.03052v3
@@ -799,6 +801,44 @@ theorem Store.Reachable.finalized_prefix_or_accountable {config : Config}
       found hashed)
   · exact .inl read
   · exact .inr evidence
+
+/-- A viable leaf of a reachable store descends from the finalized block, at every epoch.
+
+Its checkpoint block at the finalized epoch is the finalized block.
+
+The viability check passes at a genesis finalized epoch whatever the root.
+
+Then the finalized checkpoint is the anchor one, and the chain of the leaf ends at the anchor.
+
+The anchor block must not be after the anchor state.
+
+Its parent root must name no known block. -/
+theorem Store.Reachable.isViableLeaf_finalized {config : Config}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork}
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (unknownParent : store.blocks[anchorBlock.parentRoot]? = none)
+    {node : ForkChoiceNode} (viable : store.isViableLeaf config node = .ok true) :
+    store.getCheckpointBlock node.root store.finalizedCheckpoint.epoch =
+      .ok store.finalizedCheckpoint.root := by
+  obtain ⟨checkpointBlock, checkpointOk, genesis | same⟩ :=
+    Store.isViableLeaf_checkpointBlock viable
+  · obtain ⟨-, hashed⟩ := reachable.finalized_anchor
+      (UInt64.le_iff_toNat_le.mpr (by simp [genesis, GENESIS_EPOCH]))
+    obtain ⟨start, startOk, reachedNode, walk, rfl⟩ :=
+      Store.getCheckpointBlock_ok_iff.mp checkpointOk
+    -- The walk ends at slot 0, which only the anchor block can hold.
+    obtain ⟨reached, held, below⟩ := Store.getAncestor_le walk
+    have zero := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
+    rw [genesis] at zero
+    have atAnchor : reached.slot ≤ anchorBlock.slot := by
+      have := UInt64.le_iff_toNat_le.mp below
+      exact UInt64.le_iff_toNat_le.mpr (by simp [GENESIS_EPOCH] at zero; omega)
+    have roots := reachable.root held
+    rw [reachable.eq_anchor_of_slot_le anchorSlot unknownParent held atAnchor, hashed] at roots
+    rw [checkpointOk, Except.ok.inj roots]
+  · rw [checkpointOk, same]
 
 namespace Models.Network
 

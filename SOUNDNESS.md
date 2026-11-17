@@ -3825,6 +3825,9 @@ A checkpoint may come from one justification and finalization step on a held sta
 The drift of that bound is counted from the anchor, so the bound loosens as the justified epoch moves away from the anchor epoch.
 The theorem assumes that every block was imported with the setting of the signature checks of the run from genesis, and that no upgrade is due at a held slot.
 It also assumes a run from a genesis built from deposits to the anchor state, and the stake floor at each held state up to one epoch past the justified epoch.
+`Store.Reachable.isViableLeaf_finalized` shows that each viable leaf of a reachable store has the finalized block as its checkpoint block at the finalized epoch.
+The viability check of the specification passes at a genesis finalized epoch whatever the root, so `Store.isViableLeaf_finalized` (`Ghost.lean`) leaves that epoch out.
+In a reachable store the finalized checkpoint is then the anchor checkpoint, and only the anchor block can hold the leaf's chain at slot 0.
 
 Without a collision of header roots, the pairs of consecutive slots order the roots by ancestry.
 `RootsAbove.of_chainStep` then keeps each justified checkpoint below every root that the state records from its epoch on, which gives the source block of each recent link in the chain of its target block.

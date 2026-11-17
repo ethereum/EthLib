@@ -14,6 +14,12 @@ Not yet released.
   They retain the network and duty conditions and require deposited genesis history, preset bounds, a fixed-fork horizon, stake floors and an absent anchor parent.
   The alternative is the reference-stake inequality with derived drift, or `DirectSafety.HashEvidence`, not an a priori drift bound.
 
+- `Store.Reachable.isViableLeaf_finalized` shows that each viable leaf of a reachable store descends from the finalized block, also at a genesis finalized epoch ([#1423](https://github.com/ethereum/EthLib/issues/1423)).
+  Its checkpoint block at the finalized epoch is the finalized block.
+  It asks that the anchor block is not after the anchor state and that its parent root names no known block.
+  `Store.isViableLeaf_checkpointBlock` gives the checkpoint block that a viable leaf reads.
+  `Store.Reachable.finalized_anchor` shows that a finalized checkpoint at or before the anchor epoch is the anchor checkpoint.
+
 ### Changes that break callers
 
 - In Lean, the theorems of the `Toolchain` proof modules move to sub-namespaces, and the theorems that repeat them are removed ([#2627](https://github.com/ethereum/EthLib/issues/2627)).
