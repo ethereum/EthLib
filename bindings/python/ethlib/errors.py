@@ -1,5 +1,7 @@
 """The exceptions that the specification raises through the bindings."""
 
+from collections.abc import Callable
+
 
 # Each primitive has one exception class.
 # `KeyDerivationError` alone subclasses another, `BlsError`, so a BLS handler also catches it.
@@ -33,6 +35,20 @@ class EthLibError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+    def __reduce__(
+        self,
+    ) -> tuple[
+        Callable[..., object], tuple[type["EthLibError"], tuple[object, ...]], dict[str, object]
+    ]:
+        """Rebuild the error from its class, arguments and attributes, without `__init__`."""
+        # As for `BaseException`, a subclass with another constructor signature still copies.
+        return _rebuild, (type(self), self.args), self.__dict__
+
+
+def _rebuild(cls: type[EthLibError], args: tuple[object, ...]) -> EthLibError:
+    """Create an error of the class with these arguments, as `BaseException` does when unpickled."""
+    return cls.__new__(cls, *args)
 
 
 class KzgError(EthLibError, RuntimeError):
