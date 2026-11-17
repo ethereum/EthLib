@@ -145,21 +145,23 @@ def recoverCellsAndKzgProofs (setup : TrustedSetup)
 
   -- At least 50% of cells must be provided.
   if cellIndices.size < CELLS_PER_EXT_BLOB / 2 then
-    throw .notEnoughCells
+    throw (.notEnoughCells cellIndices.size)
 
   -- There must not be more cells than can exist in a single blob.
   if cellIndices.size > CELLS_PER_EXT_BLOB then
-    throw .tooManyCells
+    throw (.tooManyCells cellIndices.size)
 
   -- Cell indices must be within bounds.
   if cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) then
-    throw .cellIndexOutOfBounds
+    throw (.cellIndexOutOfBounds ((cellIndices.find? (· ≥ CELLS_PER_EXT_BLOB)).getD 0))
 
   -- Cell indices must be strictly ascending.
   --
   -- This enforces two requirements at once: no duplicates, and ascending order.
   if (cellIndices.zip (cellIndices.extract 1)).any (fun (prev, next) => next ≤ prev) then
-    throw .indicesNotAscending
+    let pairs := cellIndices.zip (cellIndices.extract 1)
+    let (previous, next) := (pairs.find? (fun (prev, next) => next ≤ prev)).getD (0, 0)
+    throw (.indicesNotAscending previous next)
 
   -- Convert cells to coset evaluations.
   let cosetsEvals : Array CosetEvals ← cells.mapM fun c =>

@@ -55,8 +55,8 @@ def recover (hash : Vector UInt8 32) (r s : Nat) (recoveryId : Fin 2) : Except S
       let q := Point.mulAdd (rInv * ⟨s, hs.2⟩) R (-(rInv * e)) .generator
       -- A public key is never `O`.
       if q = .infinity then .error .pointAtInfinity else .ok q
-    else .error .scalarOutOfRange
-  else .error .scalarOutOfRange
+    else .error (.scalarOutOfRange s)
+  else .error (.scalarOutOfRange r)
 
 end Ecdsa
 

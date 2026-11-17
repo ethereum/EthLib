@@ -96,7 +96,12 @@ def test_sizes() -> None:
     [
         (bytes(63), "bad public key size: 63, expected 64"),
         (bytes(65), "bad public key size: 65, expected 64"),
-        (b"\xff" * 64, "bad public key: a coordinate is not below p"),
+        (b"\xff" * 64, "bad public key: a coordinate is not below p: 0x" + "ff" * 32),
+        # x = 1 is below p, so the error names y.
+        (
+            bytes(31) + b"\x01" + b"\xff" * 32,
+            "bad public key: a coordinate is not below p: 0x" + "ff" * 32,
+        ),
     ],
 )
 def test_bad_public_key_raises(public_key: bytes, message: str) -> None:

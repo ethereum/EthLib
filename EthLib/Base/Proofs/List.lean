@@ -24,6 +24,8 @@ A sum of a value where a test holds, and zero elsewhere, is its sum over the pas
 Dropping the front where a test holds keeps each member that fails the test.
 
 Numbering the front of a list gives the front of the numbered list.
+
+An array holds an element that passes a test whenever a search for one finds it.
 -/
 
 @[expose] public section
@@ -181,5 +183,10 @@ theorem zipIdx_take {α : Type} (l : List α) (i : Nat) : (l.take i).zipIdx = l.
   intro n
   simp only [List.getElem?_zipIdx, List.getElem?_take]
   split <;> simp
+
+/-- An array holds an element that passes a test whenever a search for one finds it. -/
+theorem any_eq_true_of_find?_eq_some {α : Type} {p : α → Bool} {xs : Array α} {x : α}
+    (found : xs.find? p = some x) : xs.any p = true :=
+  Array.any_eq_true'.mpr ⟨x, Array.mem_of_find?_eq_some found, Array.find?_some found⟩
 
 end EthLib.Base

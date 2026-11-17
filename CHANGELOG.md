@@ -137,6 +137,20 @@ Not yet released.
   - `ReqResp.ReqRespError.contextTruncated` carries the context bytes needed and available.
   - The req/resp messages of a varint or a framing error now end with the inner error.
 
+- The secp256k1, secp256r1 and KZG errors carry the public values that their failed check compared.
+  Codes are unchanged; each message now ends with these values.
+  - `Secp256k1Error.coordinateTooLarge value` and `Secp256r1Error.coordinateTooLarge value` carry the coordinate, written as 32 bytes of hex in the message.
+  - `Secp256k1Error.scalarOutOfRange value` carries the signature integer, `r` or `s`, written the same way; `r` is checked first.
+  - `KzgError.commitmentIndexOutOfBounds index count` carries the first index past the list and the number of commitments.
+  - `KzgError.cellIndexOutOfBounds index` carries the first cell index of 128 or more.
+  - `KzgError.indicesNotAscending previous next` carries the first pair of neighbours whose second index is not larger.
+  - `KzgError.notEnoughCells count` and `tooManyCells count` carry the number of cells given.
+  - `KzgError.duplicateCommitments index` carries the position of the first commitment that repeats an earlier one.
+  - The KZG theorems on these failures take the found index, as `find? … = some index`, in place of `any … = true`, and conclude the error with its fields.
+  - `Base.hexNat width value` writes a number in hex behind `0x`, padded to `width` digits and never cut, for these messages.
+  - `Base.any_eq_true_of_find?_eq_some` turns the found value back into the `any` that the definitions test.
+  - Secret values stay out of the errors: `zeroPrivateKey`, `privateKeyTooLarge`, `unrecoverableNonce` and `noNonce` keep no fields.
+
 - The Snappy, varint and protobuf errors carry the values their failed check compared.
   Codes are unchanged; each message now ends with these values, in constructor order.
   - `SnappyError.literalPastEnd` and `copyPastEnd` carry the bytes needed and the bytes left.
