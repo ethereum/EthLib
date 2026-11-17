@@ -39,9 +39,11 @@ Not yet released.
 
 ### Changes that break callers
 
-- In Lean, `HonestHeadReads` no longer asks for the receiver's justified state ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
-  It keeps only the committee windows, so a caller that builds it drops its first conjunct; the historical-anchor theorems keep their statements otherwise.
-  `Store.checkpointState_justified_of_getHead` derives the state: a head that has a viable node besides the justified block read it.
+- In Lean, the historical-anchor theorems no longer assume the receivers' reads ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  `Execution.honestHeadsCover_of_historical_anchor` and `Execution.honestHeadsCover_of_signed_justification` take `fit : config.CommitteeWindowsFit preset` instead of `reads`; their conclusions are unchanged.
+  `Config.CommitteeWindowsFit` bounds the registry limit, the committees of an epoch and the clock; `Config.committeeWindowsFit_mainnet` and `Config.committeeWindowsFit_minimal` prove it for both presets, so a caller on either passes that proof.
+  `HonestHeadReads` is removed.
+  The receiver's justified state comes from `Store.checkpointState_justified_of_getHead`, and its committee windows from `Store.getCommitteesBetweenSlots_exists`.
 
 - In Lean, the historical-anchor theorems no longer assume finality across honest stores ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `Execution.source_surplus_or_historical_evidence`, `Execution.isAncestor_getHead_of_historical_anchor`, `Execution.honestHeadsCover_of_historical_anchor` and `Execution.honestHeadsCover_of_signed_justification` drop their `residual` argument; their conclusions are unchanged.
