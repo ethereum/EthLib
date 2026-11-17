@@ -250,16 +250,17 @@ theorem processBlock_attestation_checked
   have before : getIndexedAttestation state attestation = .ok indexed := by
     rw [← indexedOk]
     simp only [getIndexedAttestation, attesters]
-  -- The attestation reads the slot of the state where the attestations start.
-  have midFrame : Frame input mid :=
-    (BlockFrame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok)
-      proposers).toFrame.trans <|
-    (BlockFrame.foldlM (fun _ _ _ ok => frame_processAttesterSlashing ok)
-      slashings).toFrame.trans
-        (Frame.foldlM (fun _ _ _ ok => frame_processAttestation ok) earlier)
-  have slot : mid.slot = state.slot := midFrame.slot.trans (frame_operationsInput started).slot
-  refine ⟨input, _, indexed, started,
-    .attestation split proposers slashings earlier processedA indexedOk, before, valid, ?_⟩
+  have site : AttestationSite config checks input block.body state.latestBlockHeader.slot
+      (if .altair ≤ fork then mid else next) indexed :=
+    .attestation split proposers slashings earlier processedA indexedOk
+  -- The attestation reads the slot of the state before the block, which the site's frame keeps.
+  have slot : mid.slot = state.slot := by
+    have checkedSlot := site.frame.slot.trans (frame_operationsInput started).slot
+    by_cases altair : Fork.altair ≤ fork
+    · simpa only [altair, ↓reduceIte] using checkedSlot
+    · simp only [altair, ↓reduceIte] at checkedSlot
+      exact (frame_processAttestation processedA).slot.symm.trans checkedSlot
+  refine ⟨input, _, indexed, started, site, before, valid, ?_⟩
   rw [← slot]
   exact processAttestation_includedAfter processedA
 

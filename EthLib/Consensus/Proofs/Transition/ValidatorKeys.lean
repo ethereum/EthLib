@@ -121,18 +121,7 @@ theorem isValidIndexedAttestation_of_keys {one other common : BeaconState preset
   unfold isValidIndexedAttestation at valid ⊢
   simp only [bind_pure_comp, Array.mapM_eq_mapM_toList] at valid ⊢
   -- The two reads of the keys agree on every signer, so the two maps agree.
-  have congr : ∀ indices : List ValidatorIndex, (∀ index ∈ indices,
-      (Validator.pubkey <$> liftAccessor (getValidator other index)) =
-        (Validator.pubkey <$> liftAccessor (getValidator one index))) →
-      indices.mapM (fun index => Validator.pubkey <$> liftAccessor (getValidator other index)) =
-        indices.mapM (fun index => Validator.pubkey <$> liftAccessor (getValidator one index)) := by
-    intro indices same
-    induction indices with
-    | nil => rfl
-    | cons index rest ih =>
-      simp only [List.mapM_cons]
-      rw [same index List.mem_cons_self, ih fun i m => same i (List.mem_cons_of_mem _ m)]
-  rw [congr _ keys, domain]
+  rw [mapM_congr keys, domain]
   exact valid
 
 /-- One slot keeps the public keys as a prefix, and keeps distinct keys distinct. -/
