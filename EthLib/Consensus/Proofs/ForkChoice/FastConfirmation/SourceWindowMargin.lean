@@ -2497,7 +2497,6 @@ public theorem Execution.source_surplus_or_historical_evidence [DecidablePred (Â
     {receiverLast : Slot}
     (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) head source
       first receiverLast) {horizon : Epoch}
-    (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon time)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (unslashed : HonestCountedStatesUnslashed (e := e) time)
@@ -2597,9 +2596,9 @@ public theorem Execution.source_surplus_or_historical_evidence [DecidablePred (Â
     callerAbsent slotOk blockOk parentOk firstOk lastOk supportOk discountOk margin
   -- The receiver reads its full maximum, then the source maximum and score.
   rcases receiver_fullMaximum_of_head_window anchored start sound anchorSlot anchorBoundary
-      positive slots preGloas (compatibility_of_residual residual family) bounded ceiling absent
-      caller receiver callerTime receiverTime parentOk receiverParent firstOk receiverHeadOk
-      stateOk receiverEpochOk receiverLastOk windowOk nonempty maximumOk with
+      positive preGloas ceiling absent caller receiver callerTime receiverTime
+      (family w receiver k k le_rfl receiverTime) parentOk receiverParent firstOk receiverHeadOk
+      stateOk receiverLastOk windowOk nonempty maximumOk with
     âŸ¨receiverMaximum, receiverMaximumOkâŸ© | collision
   swap
   Â· exact .inr (.inr (.inl collision))

@@ -7,7 +7,8 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalTran
 
 The finality companion supplies the finalized-prefix family or explicit evidence.
 
-Residual compatibility extends that family to the checkpoint comparisons used by source surplus.
+Source surplus reads the family only within one store: each receiver's own finalized checkpoint
+lies on the chain of its own justified checkpoint.
 -/
 
 namespace EthLib.Consensus.Models.Network
@@ -20,20 +21,6 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
-
-/-- The finalized-prefix family discharges the same-store cases of residual compatibility. -/
-public theorem compatibility_of_residual {horizon : Epoch} {last : Nat}
-    (residual : ResidualFinalizedCheckpointCompatibility (e := e) horizon last)
-    (family : ∀ w ∈ J, ∀ i k, i ≤ k → (e.world k).time ≤ last →
-      ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
-        ((e.world i).state w).finalizedCheckpoint.epoch =
-          .ok ((e.world i).state w).finalizedCheckpoint.root) :
-    FinalizedCheckpointCompatibility (e := e) horizon last := by
-  intro a honestA b honestB i j timeI timeJ checkpoint selected ordered bounded
-  by_cases sameStore : a = b ∧ i ≤ j ∧ checkpoint = ((e.world j).state b).justifiedCheckpoint
-  · obtain ⟨rfl, later, rfl⟩ := sameStore
-    exact family a honestA i j later timeJ
-  · exact residual a honestA b honestB i j timeI timeJ checkpoint selected sameStore ordered bounded
 
 /-- Each honest store's justified checkpoint reads back its earlier finalized checkpoints.
 

@@ -1137,13 +1137,14 @@ private theorem registry_of_nongenesis_window {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
     (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
-    (positive : 0 < preset.SLOTS_PER_EPOCH) (slots : 0 < config.SLOT_DURATION_MS)
-    (early : fork < .glamsterdam) {horizon : Epoch} {time : Nat}
-    (compatible : FinalizedCheckpointCompatibility (e := e) horizon time)
-    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
-    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat} (inTime : (e.world n).time ≤ time)
+    (positive : 0 < preset.SLOTS_PER_EPOCH) (early : fork < .glamsterdam)
+    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat}
+    (walk : ((e.world n).state u).getCheckpointBlock
+      ((e.world n).state u).justifiedCheckpoint.root
+      ((e.world n).state u).finalizedCheckpoint.epoch =
+        .ok ((e.world n).state u).finalizedCheckpoint.root)
     {head : ForkChoiceNode} {headState state : BeaconState preset fork}
-    {first last : Slot} {current : Epoch} {members : Std.TreeSet ValidatorIndex}
+    {first last : Slot} {members : Std.TreeSet ValidatorIndex}
     (headRead : ((e.world n).state u).getHead config = .ok head)
     (different : head.root ≠ ((e.world n).state u).justifiedCheckpoint.root)
     (notGenesis : ((e.world n).state u).finalizedCheckpoint.epoch ≠ GENESIS_EPOCH)
@@ -1154,7 +1155,6 @@ private theorem registry_of_nongenesis_window {anchor : Store preset fork}
     (parentNext : addChecked parent.slot 1 = .ok first)
     (cached : ((e.world n).state u).checkpointState
       ((e.world n).state u).justifiedCheckpoint = .ok state)
-    (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok current)
     (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first last =
       .ok members) :
     ∀ v ∈ members, ∃ validator, validatorAt state v = .ok validator := by
@@ -1172,10 +1172,6 @@ private theorem registry_of_nongenesis_window {anchor : Store preset fork}
       (Store.checkpointState_ok_iff.mp cached)
   obtain ⟨block, found⟩ := reached.reachable.known_of_blockState baseFound
   have ordered := reached.reachable.finalized_le_justified anchorInvariant
-  have upper := UInt64.le_trans
-    (reached.forwardReachable.justified_epoch_le_current anchorInvariant slots
-      (UInt64.le_of_eq anchorSlot) epochRead).1 (bounded u honest n current inTime epochRead)
-  have walk := compatible u honest u honest n n inTime inTime _ (.inl rfl) ordered upper
   obtain ⟨start, boundaryBlock, startOk, boundaryFound, _, _⟩ :=
     Store.isAncestor_of_getCheckpointBlock early walk
   obtain ⟨boundaryBase, boundaryBaseFound, _, _⟩ :=
@@ -1226,13 +1222,14 @@ private theorem registry_of_head_window {anchor : Store preset fork}
     (anchored : ∀ w ∈ J, e.start w = anchor)
     (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (positive : 0 < preset.SLOTS_PER_EPOCH) (slots : 0 < config.SLOT_DURATION_MS)
-    (early : fork < .glamsterdam) {horizon : Epoch} {time : Nat}
-    (compatible : FinalizedCheckpointCompatibility (e := e) horizon time)
-    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
-    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat} (inTime : (e.world n).time ≤ time)
+    (positive : 0 < preset.SLOTS_PER_EPOCH) (early : fork < .glamsterdam)
+    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat}
+    (walk : ((e.world n).state u).getCheckpointBlock
+      ((e.world n).state u).justifiedCheckpoint.root
+      ((e.world n).state u).finalizedCheckpoint.epoch =
+        .ok ((e.world n).state u).finalizedCheckpoint.root)
     {head : ForkChoiceNode} {state : BeaconState preset fork}
-    {first last : Slot} {current : Epoch} {members : Std.TreeSet ValidatorIndex}
+    {first last : Slot} {members : Std.TreeSet ValidatorIndex}
     {parent : BeaconBlock preset fork} {parentRoot : Root}
     (parentFound : ((e.world n).state u).blocks[parentRoot]? = some parent)
     (unknown : ((e.world n).state u).blocks[anchorBlock.parentRoot]? = none)
@@ -1240,7 +1237,6 @@ private theorem registry_of_head_window {anchor : Store preset fork}
     (headRead : ((e.world n).state u).getHead config = .ok head)
     (cached : ((e.world n).state u).checkpointState
       ((e.world n).state u).justifiedCheckpoint = .ok state)
-    (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok current)
     (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first last =
       .ok members) :
     ∀ v ∈ members, ∃ validator, validatorAt state v = .ok validator := by
@@ -1259,8 +1255,8 @@ private theorem registry_of_head_window {anchor : Store preset fork}
   · exact registry_of_genesis_window anchorStore anchored anchorInvariant anchorSlot boundary
       positive early honest genesis unknown headFound headStateFound cached window
   exact registry_of_nongenesis_window anchorStore anchored anchorInvariant anchorSlot positive
-    slots early compatible bounded honest inTime headRead same genesis headStateFound
-    parentFound unknown parentNext cached epochRead window
+    early honest walk headRead same genesis headStateFound parentFound unknown parentNext cached
+    window
 
 /-- Held-state flags suffice for a cached checkpoint through its fixed-check lookahead origin. -/
 public theorem Execution.notSlashed_checkpointState {anchor : Store preset fork}
@@ -1301,23 +1297,27 @@ public theorem Execution.latest_eq_of_rank_eq (slots : 0 < config.SLOT_DURATION_
     signedFirst signedSecond honest epoch
   simp only [LatestMessage.ofAttestation, same]
 
-/-- A nonempty caller range supplies arithmetic for the receiver's full-window maximum. -/
+/-- A nonempty caller range supplies arithmetic for the receiver's full-window maximum.
+
+The receiver's own finalized checkpoint must be on the chain of its own justified checkpoint. -/
 public theorem receiver_fullMaximum_of_head_window {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (slots : 0 < config.SLOT_DURATION_MS)
-    (early : fork < .glamsterdam) {horizon : Epoch} {time : Nat}
-    (compatible : FinalizedCheckpointCompatibility (e := e) horizon time)
-    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (early : fork < .glamsterdam) {time : Nat}
     (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) time)
     (absent : AnchorParentAbsent (e := e) time)
     {u w : ValidatorIndex} (caller : u ∈ J) (receiver : w ∈ J) {n k : Nat}
     (callerTime : (e.world n).time ≤ time) (inTime : (e.world k).time ≤ time)
+    (finalizedRead : ((e.world k).state w).getCheckpointBlock
+      ((e.world k).state w).justifiedCheckpoint.root
+      ((e.world k).state w).finalizedCheckpoint.epoch =
+        .ok ((e.world k).state w).finalizedCheckpoint.root)
     {head : ForkChoiceNode} {state source : BeaconState preset fork} {callerHead : Root}
     {parent : BeaconBlock preset fork} {parentRoot : Root}
-    {current first last finish : Slot} {epoch : Epoch}
+    {current first last finish : Slot}
     {window : Std.TreeSet ValidatorIndex} {maximum : Gwei}
     (parentOk : ((e.world n).state u).block parentRoot = .ok parent)
     (parentSafe : ((e.world k).state w).isAncestor head ⟨parentRoot, .pending⟩ = .ok true)
@@ -1325,7 +1325,6 @@ public theorem receiver_fullMaximum_of_head_window {anchor : Store preset fork}
     (headOk : ((e.world k).state w).getHead config = .ok head)
     (cached : ((e.world k).state w).checkpointState
       ((e.world k).state w).justifiedCheckpoint = .ok state)
-    (epochOk : ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch)
     (lastOk : subChecked current 1 = .ok finish)
     (windowOk : ((e.world k).state w).getCommitteesBetweenSlots head.root first finish =
       .ok window)
@@ -1355,8 +1354,8 @@ public theorem receiver_fullMaximum_of_head_window {anchor : Store preset fork}
     (BeaconState.registryWithinLimit_of_lt early state) (by change _ ≤ _ at stakeBound; omega)
   exact maximum_exists_of_total coverage windowOk totalOk
     (registry_of_head_window anchorStore anchored sound anchorSlot boundary
-      (UInt64.lt_iff_toNat_lt.mpr positive) slots early compatible bounded receiver inTime
-      parentFound (absent w receiver k inTime) firstOk headOk cached epochOk windowOk)
+      (UInt64.lt_iff_toNat_lt.mpr positive) early receiver finalizedRead parentFound
+      (absent w receiver k inTime) firstOk headOk cached windowOk)
 
 end Models.Network
 
