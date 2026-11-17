@@ -1227,24 +1227,6 @@ private theorem slotStart_le_clock {store : Store preset fork}
   rw [(addChecked_ok_iff.mp sumOk).2, productNat]
   omega
 
-/-- An ancestry read in one store holds in another that agrees on blocks and holds the node.
-
-The other store need not hold the ancestor in advance: the walk reaches it. -/
-private theorem isAncestor_transfer {store receiver : Store preset fork}
-    (storeReached : Store.Reachable config anchorState anchorBlock store)
-    (receiverReached : Store.Reachable config anchorState anchorBlock receiver)
-    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) (before : fork < .glamsterdam)
-    (same : ∀ (r : Root) b c, store.blocks[r]? = some b → receiver.blocks[r]? = some c → b = c)
-    {node : ForkChoiceNode} {root : Root} {rootBlock : BeaconBlock preset fork}
-    (rootKnown : store.blocks[root]? = some rootBlock)
-    (nodeKnown : ∃ block, receiver.blocks[node.root]? = some block)
-    (descends : store.isAncestor node ⟨root, .pending⟩ = .ok true) :
-    receiver.isAncestor node ⟨root, .pending⟩ = .ok true := by
-  have walk := Store.getAncestor_of_isAncestor_of_lt before rootKnown descends
-  have aboveAnchor := storeReached.anchorSlot_le anchorSlot rootKnown
-  exact Store.isAncestor_of_getAncestor
-    (Store.getAncestor_of_same_blocks receiverReached same aboveAnchor nodeKnown walk)
-
 /-- An honest signature delivered by a time comes from the signer's validated duty vote.
 
 The signer signed at the deadline of its duty, which is before the next slot starts. -/
@@ -1400,9 +1382,9 @@ private theorem latest_rank_of_signed {Δ : ℕ} (sync : e.Synchronous Δ)
     rw [headOk, Except.ok.injEq] at hOk
     subst hOk
     rw [headEq]
-    exact isAncestor_transfer (reached a holder i) (reached v honest n)
-      (UInt64.le_of_eq anchorSlot) preGloas
+    exact Store.isAncestor_of_same_blocks (reached v honest n) preGloas
       (agree (a, i) ⟨holder, heldTime⟩ (v, n) ⟨honest, dutyTime⟩) heldRoot
+      ((reached a holder i).anchorSlot_le (UInt64.le_of_eq anchorSlot) heldRoot)
       ⟨headBlock, by rw [← sameData, dataRoot]; exact headKnown⟩ heldDescends
   -- A fit of the voted block in every honest store is a fit of the signer's head.
   have headFits : ∀ {epoch : Epoch} {checkpoint : Root},
@@ -1812,9 +1794,9 @@ private theorem caller_supporter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
       have := congrArg LatestMessage.root otherEq
       simpa [LatestMessage.ofAttestation] using this.symm
     rw [tipRoot] at tipFound
-    have receiverDescends := isAncestor_transfer (reached u caller n) (reached w receiver k)
-      (UInt64.le_of_eq anchorSlot) preGloas
-      (agree (u, n) ⟨caller, callerTime⟩ (w, k) ⟨receiver, le_of_eq atTime⟩) found ⟨tip, tipFound⟩
+    have receiverDescends := Store.isAncestor_of_same_blocks (reached w receiver k) preGloas
+      (agree (u, n) ⟨caller, callerTime⟩ (w, k) ⟨receiver, le_of_eq atTime⟩) found
+      ((reached u caller n).anchorSlot_le (UInt64.le_of_eq anchorSlot) found) ⟨tip, tipFound⟩
       voteDescends
     left
     left

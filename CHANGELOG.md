@@ -21,6 +21,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Store.isAncestor_of_same_blocks` no longer takes the hypothesis that the receiver holds the ancestor ([#2648](https://github.com/ethereum/EthLib/issues/2648)).
+  Remove the `targetKnown` argument, which came after `sourceKnown`.
+  The walk from the tip in the receiver reaches the ancestor, so the conclusion is unchanged.
+
 - In Lean, the theorems of the `Toolchain` proof modules move to sub-namespaces, and the theorems that repeat them are removed ([#2627](https://github.com/ethereum/EthLib/issues/2627)).
   `Base.Toolchain.mkObj_eq`, `isNull_eq`, the `isNull` theorem of each constructor, and `getArr?_eq`, `getStr?_eq`, `getNat?_eq`, `getBool?_eq` and `getObjVal?_eq` move to `Base.Toolchain.Json`.
   `Base.Toolchain.compare_eq` becomes `Base.Toolchain.String.compare_eq`, and `filterM_eq`, `filterAuxM_nil` and `filterAuxM_cons` move to `Base.Toolchain.List`.

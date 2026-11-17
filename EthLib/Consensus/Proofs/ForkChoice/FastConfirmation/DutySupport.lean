@@ -175,7 +175,7 @@ theorem mem_supportersOf_of_latest_signed {anchor : Store preset fork}
   obtain ⟨tip, tipKnown, _⟩ := origin.voted
   have descends := Store.isAncestor_of_same_blocks reached preGloas
     (oneBlock v honest w receiver n k ((e.monotone_time earlier.le).trans bounded) bounded)
-    sourceKnown known aboveAnchor ⟨tip, dataRoot ▸ tipKnown⟩ supported
+    sourceKnown aboveAnchor ⟨tip, dataRoot ▸ tipKnown⟩ supported
   have pending := Store.getHead_pending preGloas headOk
   have headEq : head = ⟨attestation.data.beaconBlockRoot, .pending⟩ := by
     cases head
