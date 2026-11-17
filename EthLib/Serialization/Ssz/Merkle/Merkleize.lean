@@ -93,22 +93,40 @@ Positions past the end of the array read as zero.
 def padded (zero : α) (chunks : Array α) : Nat → α :=
   fun position => chunks[position]?.getD zero
 
-/-- A spine of perfect trees with capacities 1, 4, 16, and so on.
+/--
+The root of a progressive spine: each subtree root hashed against the spine after it.
 
-Source: [EIP-7916](https://eips.ethereum.org/EIPS/eip-7916). -/
-def progressiveRoot (combine : α → α → α) (zero : α) (chunks : List α)
-    (level : Nat := 0) : α :=
-  -- EIP-7916 closes an empty suffix with a single zero node.
-  if chunks.isEmpty then zero
-  else
-    let width := 4 ^ level
-    let left := subtreeRoot combine (depthFor width) (padded zero (chunks.take width).toArray)
-    combine left (progressiveRoot combine zero (chunks.drop width) (level + 1))
+A zero node closes the spine, and the hash may answer in a monad.
+-/
+def spineM {m : Type → Type} [Monad m] (combine : α → α → m α) (zero : α) (tops : List α) : m α :=
+  tops.foldrM combine zero
+
+/-- The same spine, with a pure hash. -/
+def spine (combine : α → α → α) (zero : α) (tops : List α) : α :=
+  (spineM (m := Id) combine zero tops).run
+
+/--
+The runs of nodes that the subtrees of a progressive spine hold, each with its level.
+
+The run at `level` holds the next `4 ^ level` nodes, and the runs go on while nodes remain.
+-/
+def progressiveWindows (chunks : List α) (level : Nat := 0) : List (List α × Nat) :=
+  if chunks.isEmpty then []
+  else (chunks.take (4 ^ level), level) :: progressiveWindows (chunks.drop (4 ^ level)) (level + 1)
 termination_by chunks.length
 decreasing_by
   have positive : 0 < 4 ^ level := Nat.pos_of_neZero _
   have nonempty : 0 < chunks.length := by cases chunks <;> simp_all
   simp only [List.length_drop]
   omega
+
+/-- A spine of perfect trees with capacities 1, 4, 16, and so on.
+
+Source: [EIP-7916](https://eips.ethereum.org/EIPS/eip-7916). -/
+def progressiveRoot (combine : α → α → α) (zero : α) (chunks : List α)
+    (level : Nat := 0) : α :=
+  -- EIP-7916 closes an empty suffix with a single zero node.
+  spine combine zero <| (progressiveWindows chunks level).map fun (window, windowLevel) =>
+    subtreeRoot combine (depthFor (4 ^ windowLevel)) (padded zero window.toArray)
 
 end EthLib.Serialization.Ssz

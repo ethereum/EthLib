@@ -30,6 +30,7 @@ namespace SphincsSecurity.Completeness
 variable [Params]
 
 open Concrete Seeded
+open EthLib.Cryptography
 
 -- The attempt limits are `2^32`, so unfolding them would unfold the loops that many times.
 attribute [local irreducible] digestAttemptLimit encodingAttemptLimit
@@ -226,49 +227,6 @@ So the fold of the signed leaf through it climbs the honest tree.
 At each level, the verifier hashes the same pair as the honest node.
 -/
 
-omit [Params] in
-private theorem even_parts (value : Nat) (hbit : value.testBit 0 = false) :
-    value = 2 * (value / 2) ∧ Nat.xor value 1 = 2 * (value / 2) + 1 := by
-  have heven : Even value := Nat.even_iff.mpr (Nat.mod_two_eq_zero_iff_testBit_zero.mpr hbit)
-  have hmod : value % 2 = 0 := Nat.even_iff.mp heven
-  refine ⟨by omega, ?_⟩
-  show value ^^^ 1 = _
-  rw [Nat.xor_one_of_even heven]
-  omega
-
-omit [Params] in
-private theorem odd_parts (value : Nat) (hbit : value.testBit 0 = true) :
-    value = 2 * (value / 2) + 1 ∧ Nat.xor value 1 = 2 * (value / 2) := by
-  have hodd : Odd value := Nat.odd_iff.mpr (Nat.mod_two_eq_one_iff_testBit_zero.mpr hbit)
-  have hmod : value % 2 = 1 := Nat.odd_iff.mp hodd
-  refine ⟨by omega, ?_⟩
-  show value ^^^ 1 = _
-  rw [Nat.xor_one_of_odd hodd]
-  omega
-
-omit [Params] in
-private theorem testBit_div_pow (value level : Nat) :
-    (value / 2 ^ level).testBit 0 = value.testBit level := by
-  simpa only [Nat.zero_add] using (Nat.testBit_add value 0 level).symm
-
-omit [Params] in
-private theorem parts_odd (value level : Nat) (hbit : value.testBit level = true) :
-    value / 2 ^ level = 2 * (value / 2 ^ (level + 1)) + 1
-      ∧ Nat.xor (value / 2 ^ level) 1 = 2 * (value / 2 ^ (level + 1)) := by
-  have hdiv : value / 2 ^ (level + 1) = value / 2 ^ level / 2 := by
-    rw [pow_succ, Nat.div_div_eq_div_mul]
-  rw [hdiv]
-  exact odd_parts (value / 2 ^ level) (by rw [testBit_div_pow, hbit])
-
-omit [Params] in
-private theorem parts_even (value level : Nat) (hbit : value.testBit level = false) :
-    value / 2 ^ level = 2 * (value / 2 ^ (level + 1))
-      ∧ Nat.xor (value / 2 ^ level) 1 = 2 * (value / 2 ^ (level + 1)) + 1 := by
-  have hdiv : value / 2 ^ (level + 1) = value / 2 ^ level / 2 := by
-    rw [pow_succ, Nat.div_div_eq_div_mul]
-  rw [hdiv]
-  exact even_parts (value / 2 ^ level) (by rw [testBit_div_pow, hbit])
-
 theorem leafOfNat_val (leaf : LeafIndex) : leafOfNat leaf.val = leaf :=
   Fin.ext (Nat.mod_eq_of_lt leaf.isLt)
 
@@ -283,14 +241,49 @@ theorem node_succ (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
       = truncateHash (f (tweakableHashInput parameter (.node lay tree (level + 1) nodeIdx)
           (nodePayload (node f parameter lay tree seed level (2 * nodeIdx))
             (node f parameter lay tree seed level (2 * nodeIdx + 1))))) := by
-  simp only [node, Seeded.treeNode, evalWithAnswerFn_bind, eval_tweakableHash]
+  simp only [node, Seeded.treeNode_succ, evalWithAnswerFn_bind, eval_tweakableHash]
 
 theorem node_zero (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
     (seed : MasterSeed) (leaf : LeafIndex) :
     node f parameter lay tree seed 0 leaf.val
       = evalWithAnswerFn f (leafHash parameter lay tree leaf
           (otsEndpoint f parameter lay tree leaf seed) : OracleComp HashSpec Digest) := by
-  simp only [node, Seeded.treeNode, evalWithAnswerFn_bind, leafOfNat_val, eval_oneTimePublicKey]
+  simp only [node, Seeded.treeNode_zero, Seeded.treeLeaf, evalWithAnswerFn_bind, leafOfNat_val,
+    eval_oneTimePublicKey]
+
+omit [Params] in
+/-- Climbing from a leaf with the siblings of its ancestors reaches its ancestor, under the answers.
+
+It is the completeness of a Merkle tree, read through the fixed answers. -/
+theorem eval_climb_siblings
+    {hash : Merkle.Position → Digest → Digest → OracleComp HashSpec Digest}
+    {leaves : Nat → OracleComp HashSpec Digest} (j : Nat) (path : Nat → Digest) (levels : Nat)
+    (hpath : ∀ level, level < levels → path level =
+      evalWithAnswerFn f (Merkle.node hash leaves ⟨level, Nat.xor (j / 2 ^ level) 1⟩)) :
+    evalWithAnswerFn f (Merkle.climb hash ⟨0, j⟩ (evalWithAnswerFn f (leaves j))
+        (List.ofFn fun level : Fin levels => path level.val))
+      = evalWithAnswerFn f (Merkle.node hash leaves ⟨levels, j / 2 ^ levels⟩) := by
+  -- Read the node hash and the leaves through the answers.
+  let φ : ∀ {β : Type}, OracleComp HashSpec β → Id β := fun x => evalWithAnswerFn f x
+  have hbind : ∀ {β γ : Type} (x : OracleComp HashSpec β) (g : β → OracleComp HashSpec γ),
+      φ (x >>= g) = φ x >>= fun b => φ (g b) := fun _ _ => evalWithAnswerFn_bind _ _ _
+  have hnode := Merkle.node_map hash φ hbind leaves
+  -- The path holds the honest siblings, one per level.
+  have hsiblings : (List.ofFn fun level : Fin levels => path level.val) =
+      (Merkle.siblings (fun q left right => φ (hash q left right)) (fun i => φ (leaves i))
+        ⟨0, j⟩ levels).run.toList := by
+    rw [← Merkle.ofFn_take_siblings _ _ _ levels levels le_rfl, List.take_of_length_le (by simp)]
+    congr 1
+    funext level
+    rw [hpath level.val level.isLt, Merkle.Position.ancestor_mk_zero]
+    exact hnode _
+  -- The climb from the honest leaf with the honest siblings reaches the honest ancestor.
+  refine (Merkle.climb_map_monad hash φ (fun _ => rfl) hbind _ ⟨0, j⟩ _).trans ?_
+  rw [hsiblings]
+  refine (Merkle.climb_siblings (fun q left right => φ (hash q left right))
+    (fun i => φ (leaves i)) levels ⟨0, j⟩).trans ?_
+  rw [Merkle.Position.ancestor_mk_zero]
+  exact (hnode _).symm
 
 /-- Folding the honest leaf through the honest siblings reaches the honest node above it. -/
 theorem eval_treeFold_path (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
@@ -299,24 +292,8 @@ theorem eval_treeFold_path (parameter : PublicParameter) (lay : Layer) (tree : T
         path level = node f parameter lay tree seed level (Nat.xor (leaf.val / 2 ^ level) 1)) →
       evalWithAnswerFn f (treeFold parameter lay tree leaf path levels
           (node f parameter lay tree seed 0 leaf.val) : OracleComp HashSpec Digest)
-        = node f parameter lay tree seed levels (leaf.val / 2 ^ levels) := by
-  intro levels
-  induction levels with
-  | zero => intro _; simp [treeFold]
-  | succ levels ih =>
-      intro hpath
-      rw [treeFold, evalWithAnswerFn_bind,
-        ih (fun level hlevel => hpath level (Nat.lt_succ_of_lt hlevel))]
-      rw [hpath levels (Nat.lt_succ_self levels), node_succ]
-      cases hbit : leaf.val.testBit levels with
-      | true =>
-          obtain ⟨hcur, hsib⟩ := parts_odd leaf.val levels hbit
-          simp only [ite_true, eval_tweakableHash]
-          rw [hsib, hcur]
-      | false =>
-          obtain ⟨hcur, hsib⟩ := parts_even leaf.val levels hbit
-          simp only [Bool.false_eq_true, ite_false, eval_tweakableHash]
-          rw [hsib, hcur]
+        = node f parameter lay tree seed levels (leaf.val / 2 ^ levels) :=
+  fun levels hpath => eval_climb_siblings f leaf.val path levels hpath
 
 /-!
 ## FORS
@@ -353,8 +330,8 @@ private theorem forsNodeValue_zero_mod (node : Nat) :
     forsNodeValue f parameter index κ seed 0 node =
       forsLeafValue f parameter index κ seed
         ⟨node % 2 ^ forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩ := by
-  simp only [forsNodeValue, Seeded.forsNode, forsLeafHash, evalWithAnswerFn_bind,
-    eval_tweakableHash, forsLeafValue, forsSecretValue]
+  simp only [forsNodeValue, Seeded.forsNode_zero, Seeded.forsLeaf, forsLeafHash,
+    evalWithAnswerFn_bind, eval_tweakableHash, forsLeafValue, forsSecretValue]
 
 theorem forsNodeValue_zero (leaf : FLeaf) :
     forsNodeValue f parameter index κ seed 0 leaf.val =
@@ -370,7 +347,7 @@ theorem forsNodeValue_succ (level node : Nat) (hlevel : level < forsHeight) :
             ⟨node % 2 ^ forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩)
           (nodePayload (forsNodeValue f parameter index κ seed level (2 * node))
             (forsNodeValue f parameter index κ seed level (2 * node + 1))))) := by
-  simp only [forsNodeValue, Seeded.forsNode, evalWithAnswerFn_bind, dite_eq_left hlevel,
+  simp only [forsNodeValue, Seeded.forsNode_succ, evalWithAnswerFn_bind, dite_eq_left hlevel,
     eval_tweakableHash]
 
 /-- Folding the honest leaf through the honest siblings reaches the honest node above it. -/
@@ -381,32 +358,11 @@ theorem eval_forsFold_path (leaf : FLeaf) (path : Fin forsHeight → Digest) :
           forsNodeValue f parameter index κ seed level (Nat.xor (leaf.val / 2 ^ level) 1)) →
       evalWithAnswerFn f (forsFold parameter index κ leaf path levels
           (forsNodeValue f parameter index κ seed 0 leaf.val) : OracleComp HashSpec Digest)
-        = forsNodeValue f parameter index κ seed levels (leaf.val / 2 ^ levels) := by
-  intro levels
-  induction levels with
-  | zero => intro _ _; simp [forsFold]
-  | succ levels ih =>
-      intro hheight hpath
-      have hlevels : levels < forsHeight := Nat.lt_of_succ_le hheight
-      rw [forsFold, evalWithAnswerFn_bind,
-        ih (Nat.le_of_succ_le hheight)
-          (fun level hlevel hlt => hpath level hlevel (Nat.lt_succ_of_lt hlt))]
-      rw [dite_eq_left hlevels, hpath levels hlevels (Nat.lt_succ_self levels),
-        forsNodeValue_succ f parameter index κ seed levels _ hlevels]
-      have hnode :
-          (⟨leaf.val / 2 ^ (levels + 1),
-            Nat.lt_of_le_of_lt (Nat.div_le_self _ _) leaf.isLt⟩ : FLeaf)
-          = ⟨leaf.val / 2 ^ (levels + 1) % 2 ^ forsHeight, Nat.mod_lt _ (Nat.two_pow_pos _)⟩ :=
-        Fin.ext (Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) leaf.isLt)).symm
-      cases hbit : leaf.val.testBit levels with
-      | true =>
-          obtain ⟨hcur, hsib⟩ := parts_odd leaf.val levels hbit
-          simp only [ite_true, eval_tweakableHash, hnode]
-          rw [hsib, hcur]
-      | false =>
-          obtain ⟨hcur, hsib⟩ := parts_even leaf.val levels hbit
-          simp only [Bool.false_eq_true, ite_false, eval_tweakableHash, hnode]
-          rw [hsib, hcur]
+        = forsNodeValue f parameter index κ seed levels (leaf.val / 2 ^ levels) :=
+  fun levels hheight hpath => eval_climb_siblings f leaf.val (extendPath path) levels
+    fun level hlevel => by
+      rw [extendPath, dite_eq_left (by omega)]
+      exact hpath level (by omega) hlevel
 
 end Tree
 

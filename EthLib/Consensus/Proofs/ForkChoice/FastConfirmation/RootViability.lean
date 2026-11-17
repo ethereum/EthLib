@@ -45,7 +45,7 @@ The read has two halves, a head and its window, and both are stated conditions h
 
 The head half is an assumed head read, which head totality of an honest store would discharge.
 
-The window half could be derived under a committee-window fit condition on the head's state. -/
+With the head half, `Config.CommitteeWindowsFit` gives the window half. -/
 def RolloverWindowRead (u : ValidatorIndex) (target : Checkpoint) (first : Slot) (begin : ℕ) :
     Prop :=
   ∀ k epochStart last, (e.world k).time = begin →

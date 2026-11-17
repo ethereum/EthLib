@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Verify
+public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofPositions
 
 /-! Requested paths and their missing siblings form a finite proof frontier. -/
 
@@ -22,29 +23,73 @@ def claimPaths (indices : List Nat) : List Nat :=
   indices.flatMap fun index =>
     (List.range (Nat.log2 index)).map fun step => index >>> step
 
-/-- Successful path collection fixes both the ancestors and the validity of every claim. -/
-theorem collectPathIndices_info {indices paths : List Nat}
-    (collected : collectPathIndices indices = .ok paths) :
-    paths = claimPaths indices ∧ ∀ index ∈ indices, 2 ≤ index := by
-  -- Validation is performed once for every requested branch.
-  induction indices generalizing paths with
-  | nil => simp_all [collectPathIndices, claimPaths]
-  | cons index rest ih =>
-    unfold collectPathIndices at collected
-    cases measured : gindexLength index with
-    | error error => simp [getPathIndices, measured, Bind.bind, Except.bind] at collected
-    | ok depth =>
-      obtain ⟨same, -, nonzero⟩ := gindexLength_ok measured
-      subst depth
-      cases rec : collectPathIndices rest with
-      | error error => simp [getPathIndices, measured, rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at collected
-      | ok remaining =>
-        obtain ⟨shape, valid⟩ := ih rec
-        simp [getPathIndices, measured, rec, Bind.bind, Except.bind, Pure.pure,
-          Except.pure] at collected
-        refine ⟨by rw [← collected, shape]; rfl, ?_⟩
-        simp only [List.mem_cons, forall_eq_or_imp]
-        exact ⟨two_le_of_level_positive (depth := Nat.log2 index) rfl (by omega), valid⟩
+/-- Every claim that passes the path checks names a node below the root. -/
+theorem rejectClaimPaths_valid {indices : List Nat} :
+    ∀ {pending : List Nat}, rejectClaimPaths indices pending = .ok () →
+      ∀ index ∈ pending, 2 ≤ index
+  | [], _ => by simp
+  | claim :: rest, accepted => by
+    unfold rejectClaimPaths at accepted
+    cases measured : getPathIndices claim with
+    | error fault => simp [measured, Bind.bind, Except.bind] at accepted
+    | ok path =>
+      cases ancestors : rejectAncestors indices claim (path.drop 1) <;>
+        simp only [measured, ancestors, Bind.bind, Except.bind, reduceCtorEq] at accepted
+      intro index member
+      rcases List.mem_cons.mp member with rfl | member
+      · -- A path exists only for an index with a positive depth.
+        unfold getPathIndices at measured
+        cases length : gindexLength index <;>
+          simp only [length, Bind.bind, Except.bind, reduceCtorEq] at measured
+        obtain ⟨same, -, nonzero⟩ := gindexLength_ok length
+        exact two_le_of_level_positive (depth := Nat.log2 index) rfl (by omega)
+      · exact rejectClaimPaths_valid accepted index member
+
+/-- Every claim of a request that passes the checks names a node below the root. -/
+theorem rejectRelated_valid {indices : List Nat} (accepted : rejectRelated indices = .ok ()) :
+    ∀ index ∈ indices, 2 ≤ index := by
+  -- The last check runs over every claim.
+  by_cases empty : indices.isEmpty <;> by_cases same : indices.eraseDups.length = indices.length <;>
+    simp_all [rejectRelated, Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+  all_goals exact rejectClaimPaths_valid accepted
+
+/-- The helper indices of a request that passes the checks: the Merkle helpers, as indices. -/
+theorem getHelperIndices_ok {indices helpers : List Nat}
+    (built : getHelperIndices indices = .ok helpers) :
+    rejectRelated indices = .ok () ∧
+      helpers = (Cryptography.Merkle.helpers (gindexHeight indices)
+        (indices.map (gindexPosition (gindexHeight indices)))).map
+          (positionGindex (gindexHeight indices)) := by
+  unfold getHelperIndices claimPositions at built
+  cases accepted : rejectRelated indices with
+  | error fault => simp [accepted, Bind.bind, Except.bind] at built
+  | ok checked =>
+    cases checked
+    simp only [accepted, Bind.bind, Except.bind, Pure.pure, Except.pure, Except.ok.injEq] at built
+    exact ⟨rfl, built.symm⟩
+
+/-- A request that passes the checks has its claims at their positions in its tree. -/
+theorem claimPositions_ok {indices : List Nat} (accepted : rejectRelated indices = .ok ()) :
+    claimPositions indices =
+      .ok (gindexHeight indices, indices.map (gindexPosition (gindexHeight indices))) := by
+  simp [claimPositions, accepted, Bind.bind, Except.bind, Pure.pure, Except.pure]
+
+/-- A request that passes the checks has the Merkle helpers, as indices, for helper indices. -/
+theorem getHelperIndices_of_rejectRelated {indices : List Nat}
+    (accepted : rejectRelated indices = .ok ()) :
+    getHelperIndices indices = .ok ((Cryptography.Merkle.helpers (gindexHeight indices)
+      (indices.map (gindexPosition (gindexHeight indices)))).map
+        (positionGindex (gindexHeight indices))) := by
+  simp [getHelperIndices, claimPositions_ok accepted, Bind.bind, Except.bind, Pure.pure,
+    Except.pure]
+
+/-- The claims of a request that passes the checks lie in the tree as deep as the deepest one. -/
+theorem rejectRelated_inTree {indices : List Nat} (accepted : rejectRelated indices = .ok ()) :
+    ∀ p ∈ indices.map (gindexPosition (gindexHeight indices)), InTree (gindexHeight indices) p := by
+  intro p member
+  obtain ⟨g, claimed, rfl⟩ := List.mem_map.mp member
+  exact gindexPosition_inTree (by have := rejectRelated_valid accepted g claimed; omega)
+    (log2_le_gindexHeight claimed)
 
 /-- A successful request always names at least one branch. -/
 theorem rejectRelated_nonempty {indices : List Nat}
@@ -60,22 +105,37 @@ theorem getHelperIndices_frontier {indices helpers : List Nat}
     indices ≠ [] ∧ (∀ index ∈ indices, 2 ≤ index) ∧
       ∀ index, index ∈ helpers ↔
         index ∈ (claimPaths indices).map gindexSibling ∧ index ∉ claimPaths indices := by
-  -- Sorting changes only the order, while deduplication changes only multiplicity.
-  unfold getHelperIndices at built
-  cases accepted : rejectRelated indices with
-  | error error => simp [accepted, Bind.bind, Except.bind] at built
-  | ok checked =>
-    cases checked
-    cases collected : collectPathIndices indices with
-    | error error => simp [accepted, collected, Bind.bind, Except.bind] at built
-    | ok paths =>
-      obtain ⟨shape, valid⟩ := collectPathIndices_info collected
-      simp only [bind, Except.bind, accepted, collected, pure, Except.pure, List.contains_eq_mem,
-        Except.ok.injEq] at built
-      subst helpers
-      refine ⟨rejectRelated_nonempty accepted, valid, ?_⟩
-      intro index
-      simp [List.mem_mergeSort, List.mem_filter, List.mem_eraseDups, shape]
+  obtain ⟨accepted, rfl⟩ := getHelperIndices_ok built
+  have valid := rejectRelated_valid accepted
+  refine ⟨rejectRelated_nonempty accepted, valid, fun index => ?_⟩
+  -- Read the Merkle helpers through the positions of the claims.
+  have inside := rejectRelated_inTree accepted
+  have paths : claimPaths indices = ((indices.map (gindexPosition (gindexHeight indices))).flatMap
+      (Cryptography.Merkle.pathTo (gindexHeight indices))).map
+        (positionGindex (gindexHeight indices)) :=
+    (paths_gindexPosition fun g claimed =>
+      ⟨by have := valid g claimed; omega, log2_le_gindexHeight claimed⟩).symm
+  rw [paths]
+  constructor
+  · -- A helper is the sibling of a path node, and no path node has its index.
+    intro mapped
+    obtain ⟨q, member, rfl⟩ := List.mem_map.mp mapped
+    obtain ⟨sibling, outside⟩ := (Cryptography.Merkle.mem_helpers inside).mp member
+    obtain ⟨r, onPath, rfl⟩ := List.mem_map.mp sibling
+    have low := (Cryptography.Merkle.mem_paths.mp onPath).choose_spec.2.2
+    refine ⟨List.mem_map.mpr ⟨_, List.mem_map_of_mem onPath, (positionGindex_sibling low).symm⟩,
+      fun same => outside ?_⟩
+    obtain ⟨r', onPath', same⟩ := List.mem_map.mp same
+    rwa [positionGindex_injective (Cryptography.Merkle.paths_inside inside onPath')
+      (Cryptography.Merkle.helpers_inside inside member) same] at onPath'
+  · -- The sibling of a path node that no path node holds is a helper.
+    rintro ⟨sibling, outside⟩
+    obtain ⟨y, mapped, rfl⟩ := List.mem_map.mp sibling
+    obtain ⟨r, onPath, rfl⟩ := List.mem_map.mp mapped
+    have low := (Cryptography.Merkle.mem_paths.mp onPath).choose_spec.2.2
+    refine List.mem_map.mpr ⟨r.sibling, (Cryptography.Merkle.mem_helpers inside).mpr
+      ⟨List.mem_map_of_mem onPath, fun onPath' => outside ?_⟩, positionGindex_sibling low⟩
+    exact List.mem_map.mpr ⟨_, onPath', positionGindex_sibling low⟩
 
 /-- An ancestor strictly below the root still has an index of at least two. -/
 theorem path_shift_positive {index step : Nat} (named : 1 ≤ index)

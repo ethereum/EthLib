@@ -89,11 +89,11 @@ theorem progressive_root_ofHash (trees : List CommitmentTree) (level : Nat)
   -- Both computations consume the same prefix before continuing down the right spine.
   induction trees, level using progressive.induct with
   | case1 trees level empty =>
-    rw [progressive, ite_eq_left empty, progressiveRoot, ite_eq_left (by simpa using empty)]
+    rw [progressive, ite_eq_left empty, progressiveRoot_unfold, ite_eq_left (by simpa using empty)]
     rfl
   | case2 trees level nonempty ih =>
     -- The level splits into a bounded prefix and the progressive suffix, rooted by recursion.
-    rw [progressive, ite_eq_right nonempty, progressiveRoot,
+    rw [progressive, ite_eq_right nonempty, progressiveRoot_unfold,
       ite_eq_right (by simpa using nonempty)]
     simp only [root, bounded_root_ofHash (hash := hash), subtreeAtM_ofHash_zero_eq, ih,
       List.map_toArray, List.map_take, List.map_drop]

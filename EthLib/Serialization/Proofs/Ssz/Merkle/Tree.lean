@@ -138,15 +138,14 @@ theorem merkleizeProgressiveUncheckedM_ofHash_eq (hash : ByteArray → ByteArray
     (chunks : List Bytes) (level : Nat) :
     (merkleizeProgressiveUncheckedM (Hasher.ofHash (m := Id) hash) chunks level).run
       = progressiveRoot (fun a b => (combineM (m := Id) hash a b).run) zeroChunk chunks level := by
-  -- Both definitions consume one level's leaves before continuing down the spine.
-  induction chunks, level using
-    progressiveRoot.induct (fun a b => (combineM (m := Id) hash a b).run) zeroChunk with
+  -- Both definitions root the same runs of leaves before folding the spine.
+  induction chunks, level using progressiveWindows.induct with
   | case1 chunks level empty =>
-    rw [merkleizeProgressiveUncheckedM.eq_def, progressiveRoot, ite_eq_left empty,
+    rw [merkleizeProgressiveUncheckedM_unfold, progressiveRoot_unfold, ite_eq_left empty,
       ite_eq_left empty]
     rfl
-  | case2 chunks level nonempty width ih =>
-    rw [merkleizeProgressiveUncheckedM.eq_def, progressiveRoot, ite_eq_right nonempty,
+  | case2 chunks level nonempty ih =>
+    rw [merkleizeProgressiveUncheckedM_unfold, progressiveRoot_unfold, ite_eq_right nonempty,
       ite_eq_right nonempty]
     show (combineM (m := Id) hash
       (subtreeAtM (Hasher.ofHash (m := Id) hash) (chunks.take (4 ^ level)).toArray

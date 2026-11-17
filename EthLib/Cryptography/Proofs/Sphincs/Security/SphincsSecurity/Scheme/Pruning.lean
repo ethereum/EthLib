@@ -179,7 +179,7 @@ theorem eval_treeFold_spine (parameter : PublicParameter) (lay : Layer) (tree : 
       rw [hkept]
       rfl
   | succ steps ih =>
-      rw [Nat.add_succ, treeFold, evalWithAnswerFn_bind,
+      rw [Nat.add_succ, treeFold_succ, evalWithAnswerFn_bind,
         ih (fun t ht => hhigh t (Nat.lt_succ_of_lt ht)), hhigh steps (Nat.lt_succ_self _)]
       have hbit : leaf.val.testBit (keptHeight lay + steps) =
           (keptPosition parameter lay / 2 ^ steps).testBit 0 := by

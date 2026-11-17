@@ -513,7 +513,7 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
     (historyCovers : HonestHeadsCover (e := e) historical epochStartTime.toNat (e.world n).time)
     (absent : AnchorParentAbsent (e := e) time)
     (parentCovers : HonestHeadsCover (e := e) block.parentRoot (e.world n).time (time + 1))
-    (reads : HonestHeadReads (e := e) first (e.world n).time time)
+    (fit : config.CommitteeWindowsFit preset)
     (viableAt : ∀ T, (e.world n).time ≤ T → T ≤ time →
       HonestHeadsCover (e := e) root (e.world n).time T →
       ∀ w ∈ J, ∀ k (nodes : List ForkChoiceNode) (hd : ForkChoiceNode), (e.world k).time = T →
@@ -567,8 +567,30 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
         known | ⟨r, evidence, searched⟩
       swap
       · exact .inr (.inl ⟨u, caller, w, receiver, n, k, callerTime, highK, r, evidence, searched⟩)
-      obtain ⟨⟨state, stateOk⟩, windowsOk⟩ :=
-        reads w receiver k receiverHead lowK highK upToDate receiverHeadOk
+      -- A root below the justified block is below the head, with no read.
+      obtain ⟨justifiedBlock, justifiedFound⟩ := Store.filterNodeTree_known tree
+      by_cases settled : ((e.world k).state w).isAncestor
+          ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true
+      · exact .inl (Store.isAncestor_trans_of_lt preGloas justifiedFound known
+          (Store.isAncestor_getHead_of_lt_gloas preGloas receiverHeadOk) settled)
+      -- Otherwise the root is a viable node above the justified block, so the head read its state.
+      obtain ⟨state, stateOk⟩ := Store.checkpointState_justified_of_getHead preGloas tree
+        receiverHeadOk (route.resolve_left settled) fun same => settled (by
+          rw [same]
+          exact Store.isAncestor_self (node := ⟨_, .pending⟩) justifiedFound)
+      -- The receiver's head holds its state, so each window before the current slot reads.
+      obtain ⟨headBlock, headFound, -⟩ := Store.slot_le_of_isAncestor justifiedFound
+        (Store.isAncestor_getHead_of_lt_gloas preGloas receiverHeadOk)
+      obtain ⟨headState, headStateFound, -, -⟩ :=
+        (e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored) k w
+          receiver).blockStatesFromParents headFound
+      have windowsOk : ∀ current high, ((e.world k).state w).getCurrentSlot config = .ok current →
+          high < current → ∃ participants,
+            ((e.world k).state w).getCommitteesBetweenSlots receiverHead.root first high =
+              .ok participants :=
+        fun _ _ currentOk before => Store.getCommitteesBetweenSlots_exists fit
+          (Store.blockState_ok_iff.mpr headStateFound)
+          (BeaconState.registryWithinLimit_of_lt preGloas headState) currentOk before
       -- The ceiling and the parameter bound give the receiver's proposer score.
       obtain ⟨score, scoreOk⟩ := computeProposerScore_exists scoreFits positive
         (BeaconState.registryWithinLimit_of_lt preGloas state)
@@ -690,9 +712,13 @@ After that, each step is the duty-epoch step, which needs a late duty majority a
 
 Both steps read finality only within one store, so no finality across stores is assumed.
 
-The receivers' reads and the late duty majority are assumed.
+The late duty majority is assumed.
 
 So are the exits of each receiver within two epochs of the parent.
+
+The receivers' reads are derived: the justified state from the head walk, the windows from `fit`.
+
+Mainnet and minimal satisfy `fit`.
 
 The root's viability is assumed too.
 
@@ -796,7 +822,7 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     (historyCovers : HonestHeadsCover (e := e) historical epochStartTime.toNat (e.world n).time)
     (absent : AnchorParentAbsent (e := e) time)
     (parentCovers : HonestHeadsCover (e := e) block.parentRoot (e.world n).time (time + 1))
-    (reads : HonestHeadReads (e := e) first (e.world n).time time)
+    (fit : config.CommitteeWindowsFit preset)
     (viable : RootViable (e := e) root (e.world n).time time)
     (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
       (e.world n).time time)
@@ -817,7 +843,7 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     discountOk adversaryOk margin callerTime sourceReads drift reserve reference referenceTime
     referenceUpToDate referenceSlotOk finishOk bounded roots unslashed ceiling scoreFits
     parameters genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
-    historicalEpochOk near epochStartOk epochStartTimeOk historyCovers absent parentCovers reads
+    historicalEpochOk near epochStartOk epochStartTimeOk historyCovers absent parentCovers fit
     (fun _ low high _ w receiver k nodes _ atTime upToDate _ tree =>
       viable w receiver k nodes (atTime ▸ low) (atTime ▸ high) upToDate tree)
     exits late
@@ -926,7 +952,7 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     (historyCovers : HonestHeadsCover (e := e) historical epochStartTime.toNat (e.world n).time)
     (absent : AnchorParentAbsent (e := e) time)
     (parentCovers : HonestHeadsCover (e := e) block.parentRoot (e.world n).time (time + 1))
-    (reads : HonestHeadReads (e := e) first (e.world n).time time)
+    (fit : config.CommitteeWindowsFit preset)
     (consistent : EarlyJustifiedConsistent (e := e) root callerEpoch (e.world n).time time)
     (leaf : RootKeepsViableLeaf (e := e) root (e.world n).time time)
     (signed : JustifiedHonestlySigned (e := e) callerEpoch (e.world n).time time)
@@ -973,7 +999,7 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     discountOk adversaryOk margin callerTime sourceReads drift reserve reference referenceTime
     referenceUpToDate referenceSlotOk finishOk bounded roots unslashed ceiling scoreFits
     parameters genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
-    historicalEpochOk near epochStartOk epochStartTimeOk historyCovers absent parentCovers reads
+    historicalEpochOk near epochStartOk epochStartTimeOk historyCovers absent parentCovers fit
     (fun T low high covers w receiver k nodes hd atTime upToDate headOk tree => by
       have lowK : (e.world n).time ≤ (e.world k).time := atTime ▸ low
       have highK : (e.world k).time ≤ time := atTime ▸ high
