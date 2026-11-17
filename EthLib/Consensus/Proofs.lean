@@ -172,6 +172,7 @@ public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.SigningRandomOracle
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
+public import EthLib.Consensus.Proofs.Transition.ActivationReserve
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
 public import EthLib.Consensus.Proofs.Transition.BalanceCappedBlock
 public import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
@@ -237,9 +238,11 @@ public import EthLib.Consensus.Proofs.Transition.PendingTail
 public import EthLib.Consensus.Proofs.Transition.ProposerBalance
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Requests
+public import EthLib.Consensus.Proofs.Transition.RetiredValidator
 public import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.RootLinks
 public import EthLib.Consensus.Proofs.Transition.RunKept
+public import EthLib.Consensus.Proofs.Transition.SlashedExit
 public import EthLib.Consensus.Proofs.Transition.SlashedFlags
 public import EthLib.Consensus.Proofs.Transition.SlashedPersistence
 public import EthLib.Consensus.Proofs.Transition.SlashingsHistory
@@ -309,6 +312,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Upgrades
 public import EthLib.Consensus.Proofs.Transition.Upgrade
 public import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 public import EthLib.Consensus.Proofs.Transition.ValidatorKeys
+public import EthLib.Consensus.Proofs.Transition.ValidatorStep
 public import EthLib.Consensus.Proofs.Transition.WeakSubjectivitySafety
 public import EthLib.Consensus.Proofs.Transition.WithdrawalAmounts
 public import EthLib.Consensus.Proofs.Transition.Withdrawals

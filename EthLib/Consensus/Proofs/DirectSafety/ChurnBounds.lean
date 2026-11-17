@@ -7,7 +7,6 @@ public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.SlashedPersistence
-import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 
 /-!
 # Departure charges and the Electra crossing

@@ -20,7 +20,11 @@ import EthLib.Consensus.Proofs.Transition.BalanceNotRaisedBlock
 import EthLib.Consensus.Proofs.Transition.BlockRewards
 import EthLib.Consensus.Proofs.Transition.EpochParticipation
 import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
+import EthLib.Consensus.Proofs.Transition.SlashedExit
+import EthLib.Consensus.Proofs.Transition.RetiredValidator
+import EthLib.Consensus.Proofs.Transition.ActivationReserve
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
+import EthLib.Consensus.Proofs.Transition.Invariants
 import Mathlib.Algebra.BigOperators.Ring.Finset
 import Mathlib.Tactic.Ring
 import EthLib.Consensus.Proofs.Transition.Totality.PendingDeposits

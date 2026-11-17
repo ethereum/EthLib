@@ -3,7 +3,7 @@ module
 public import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
-import EthLib.Consensus.Proofs.Transition.ValidatorCaps
+import EthLib.Consensus.Proofs.Transition.Invariants
 
 /-!
 # Funding across an epoch

@@ -2873,4 +2873,37 @@ theorem stateTransition_invariant
   rw [frame.finalized]
   exact finalized
 
+/-- An epoch stage other than justification is a frame step. -/
+theorem EpochStage.Edge.frame {f : Fork} {a b : BeaconState preset f} {k : EpochStage}
+    (edge : EpochStage.Edge config checks k a b) (other : k ≠ .justification) :
+    Frame a b := by
+  by_cases ordinary : k ≠ .payments ∧ k ≠ .participation ∧ k ≠ .pendingDeposits
+  · exact mutatorEpochFrameLaws.toEpochStepLaws.epochEdge
+      ⟨other, ordinary⟩ (EpochStage.action_cases.mpr edge) |>.toFrame
+  cases k
+  case payments =>
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · exact (frame_processBuilderPendingPayments edge).toFrame
+    · cases edge; exact Frame.refl _
+  case participation =>
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · cases edge; exact (frame_processParticipationFlagUpdates _ _).toFrame
+    · exact (frame_processParticipationRecordUpdates edge).toFrame
+  case pendingDeposits =>
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · exact (frame_processPendingDeposits edge).toFrame
+    · cases edge; exact Frame.refl _
+  all_goals exact (ordinary ⟨nofun, nofun, nofun⟩).elim
+
+/-- An epoch stage other than justification preserves matching registry and balance sizes. -/
+theorem EpochStage.Edge.balancesMatch_of_not_justification
+    {preset : Preset} {config : Config} {checks : SignatureChecks}
+    {f : Fork} {a b : BeaconState preset f} {k : EpochStage}
+    (edge : EpochStage.Edge config checks k a b) (other : k ≠ .justification)
+    (matched : BalancesMatch a) : BalancesMatch b :=
+  (edge.frame other).balancesMatch matched
+
 end EthLib.Consensus
