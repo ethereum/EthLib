@@ -165,23 +165,11 @@ Its branch still has to be rebuilt to authenticate the new root.
 Every node is trusted to be 32 bytes wide.
 -/
 def merkleizeProgressiveUncheckedM {m : Type → Type} [Monad m] (hasher : Hasher m)
-    (chunks : List Bytes) (level : Nat := 0) : m Bytes :=
+    (chunks : List Bytes) (level : Nat := 0) : m Bytes := do
+  let tops ← (progressiveWindows chunks level).mapM fun (window, windowLevel) =>
+    subtreeAtM hasher window.toArray (depthFor (4 ^ windowLevel)) 0
   -- An exhausted input closes the spine with a plain zero node, not a zero subtree.
-  if chunks.isEmpty then pure zeroChunk
-  else do
-    let width := 4 ^ level
-    let here ← subtreeAtM hasher (chunks.take width).toArray (depthFor width) 0
-    let rest ← merkleizeProgressiveUncheckedM hasher (chunks.drop width) (level + 1)
-    combineM hasher.hash here rest
-termination_by chunks.length
-decreasing_by
-  have : 0 < 4 ^ level := Nat.pos_of_neZero (4 ^ level)
-  simp only [List.length_drop]
-  have : 0 < chunks.length := by
-    cases chunks with
-    | nil => simp_all
-    | cons _ _ => simp
-  omega
+  spineM (combineM hasher.hash) zeroChunk tops
 
 /-- Root of the progressive tree over a node sequence, with SHA-256 and the zero table. -/
 def merkleizeProgressiveUnchecked (chunks : List Bytes) (level : Nat := 0) : Bytes :=

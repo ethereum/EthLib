@@ -127,4 +127,49 @@ theorem subtreeRoot_padded_past_data (combine : α → α → α) (zero : α) (d
   refine subtreeRoot_congr combine depth fun position _ => ?_
   simp [padded, Array.getElem?_eq_none (show chunks.size ≤ start + position by omega)]
 
+/-- An empty spine is the zero node. -/
+@[simp] theorem spineM_nil {m : Type → Type} [Monad m] (combine : α → α → m α) (zero : α) :
+    spineM combine zero [] = pure zero :=
+  rfl
+
+/-- A spine hashes its first top against the spine of the tops after it, computed first. -/
+theorem spineM_cons {m : Type → Type} [Monad m] [LawfulMonad m] (combine : α → α → m α)
+    (zero top : α) (rest : List α) :
+    spineM combine zero (top :: rest) = (do combine top (← spineM combine zero rest)) := by
+  simp [spineM, List.foldrM_cons]
+
+/-- An empty pure spine is the zero node. -/
+@[simp] theorem spine_nil (combine : α → α → α) (zero : α) : spine combine zero [] = zero :=
+  rfl
+
+/-- A pure spine hashes its first top against the spine of the tops after it. -/
+theorem spine_cons (combine : α → α → α) (zero top : α) (rest : List α) :
+    spine combine zero (top :: rest) = combine top (spine combine zero rest) := by
+  simp only [spine, spineM_cons]
+  rfl
+
+/-- The runs of a progressive spine: none past the data, else the next `4 ^ level` nodes first. -/
+theorem progressiveWindows_unfold (chunks : List α) (level : Nat) :
+    progressiveWindows chunks level
+      = if chunks.isEmpty then []
+        else (chunks.take (4 ^ level), level)
+          :: progressiveWindows (chunks.drop (4 ^ level)) (level + 1) := by
+  rw [progressiveWindows]
+
+/-- The progressive root closes an empty suffix with a zero node.
+
+Otherwise it hashes the root of one level against the root of the rest. -/
+theorem progressiveRoot_unfold (combine : α → α → α) (zero : α) (chunks : List α) (level : Nat) :
+    progressiveRoot combine zero chunks level
+      = if chunks.isEmpty then zero
+        else combine
+          (subtreeRoot combine (depthFor (4 ^ level))
+            (padded zero (chunks.take (4 ^ level)).toArray))
+          (progressiveRoot combine zero (chunks.drop (4 ^ level)) (level + 1)) := by
+  rw [progressiveRoot, progressiveWindows_unfold]
+  split
+  · rfl
+  · rw [List.map_cons, spine_cons]
+    rfl
+
 end EthLib.Serialization.Ssz
