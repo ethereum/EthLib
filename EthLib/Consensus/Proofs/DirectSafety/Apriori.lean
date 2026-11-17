@@ -13495,7 +13495,6 @@ private theorem retained_upgrades {s t : ForkedBeaconState preset}
     processUpgrades_slot ok]
   rfl
 
-set_option maxHeartbeats 800000 in
 private theorem retained_slot {a b : ForkedBeaconState preset}
     (x : ForkedBeaconState preset) (electra : .pectra ≤ a.fork)
     (early : b.fork < .glamsterdam)
