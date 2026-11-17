@@ -140,6 +140,7 @@ The first is `climb_binding`, about two climbs from one position that reach one 
 They are equal, or `findCollision` returns a collision of the node hash at an ancestor of that position.
 The second is `climb_binding_node`, about a climb that reaches an honest node but is not the honest climb.
 Then `findSecondPreimage` returns a second preimage of an honest ancestor.
+`root_binding_leaves` (`Proofs/Merkle/VectorBinding.lean`) applies the first theorem at every leaf: the root binds the vector.
 
 Both searches are explicit algorithms, proved to return valid answers.
 Each can return nothing: on one climb compared with itself (`findCollision_self`), and on the honest climb (`findSecondPreimage_honest`).
