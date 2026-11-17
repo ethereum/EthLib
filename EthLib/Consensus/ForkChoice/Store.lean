@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Hex
 public import EthLib.Consensus.Accessors
 public import EthLib.Consensus.Containers.State
 public import EthLib.Consensus.InclusionList
@@ -118,8 +119,10 @@ def Checkpoint.compare (a b : Checkpoint) : Ordering :=
 
 /-- An error of the fork choice. -/
 inductive ForkChoiceError where
-  /-- The anchor block does not commit to the anchor state. -/
-  | anchorStateMismatch
+  /-- The anchor block does not commit to the anchor state.
+
+  The error gives the state root of the block, then the root of the state. -/
+  | anchorStateMismatch (blockStateRoot stateRoot : Root)
   /-- No block of the store has the root. -/
   | unknownBlock (root : Root)
   /-- The store holds no state for the checkpoint. -/
@@ -140,26 +143,44 @@ inductive ForkChoiceError where
   | transition (error : TransitionError)
   /-- The store holds no timeliness for the block with the root. -/
   | unknownBlockTimeliness (root : Root)
-  /-- A block is from a slot after the current one. -/
-  | futureBlock (slot : Slot)
-  /-- A block is not after the first slot of the finalized epoch. -/
-  | blockNotAfterFinalized (slot : Slot)
+  /-- A block is from a slot after the current one.
+
+  The error gives the slot of the block, then the current slot. -/
+  | futureBlock (slot currentSlot : Slot)
+  /-- A block is not after the first slot of the finalized epoch.
+
+  The error gives the slot of the block, then that first slot. -/
+  | blockNotAfterFinalized (slot finalizedSlot : Slot)
   /-- The chain of a block does not hold the finalized block. -/
   | notDescendantOfFinalized (root : Root)
-  /-- The target of an attestation is neither in the current epoch nor in the previous one. -/
-  | targetEpochNotRecent (epoch : Epoch)
-  /-- The target epoch of an attestation is not the epoch of its slot. -/
-  | targetEpochMismatch (epoch : Epoch)
-  /-- An attestation votes for a block from a slot after its own. -/
-  | futureVote (root : Root)
-  /-- The target of an attestation is not the checkpoint block of the chain of its vote. -/
-  | targetNotCheckpointBlock (root : Root)
-  /-- An attestation is from the current slot or a later one. -/
-  | attestationNotYetDue (slot : Slot)
-  /-- An indexed attestation is not valid in the state of its target. -/
-  | invalidIndexedAttestation
-  /-- The two attestations of an attester slashing are not slashable together. -/
-  | notSlashable
+  /-- The target of an attestation is neither in the current epoch nor in the previous one.
+
+  The error gives the target epoch, then the current epoch. -/
+  | targetEpochNotRecent (epoch currentEpoch : Epoch)
+  /-- The target epoch of an attestation is not the epoch of its slot.
+
+  The error gives the target epoch, then the epoch of the slot. -/
+  | targetEpochMismatch (epoch slotEpoch : Epoch)
+  /-- An attestation votes for a block from a slot after its own.
+
+  The error gives the root of the block, the slot of the attestation and the slot of the block. -/
+  | futureVote (root : Root) (attestationSlot blockSlot : Slot)
+  /-- The target of an attestation is not the checkpoint block of the chain of its vote.
+
+  The error gives the target root, then the root of that checkpoint block. -/
+  | targetNotCheckpointBlock (root checkpointRoot : Root)
+  /-- An attestation is from the current slot or a later one.
+
+  The error gives the slot of the attestation, then the current slot. -/
+  | attestationNotYetDue (slot currentSlot : Slot)
+  /-- An indexed attestation is not valid in the state that checks it.
+
+  The error gives the data of the attestation. -/
+  | invalidIndexedAttestation (data : AttestationData)
+  /-- The two attestations of an attester slashing are not slashable together.
+
+  The error gives the data of the first attestation, then that of the second. -/
+  | notSlashable (data1 data2 : AttestationData)
   /-- The proposer asks for its head while that head still holds the boost. -/
   | boostNotWornOff (root : Root)
   /-- A tick does not move the clock to a later slot. -/
@@ -170,8 +191,10 @@ inductive ForkChoiceError where
   | unknownPowBlock (hash : Hash32)
   /-- The proof-of-work block of the hash is not terminal. -/
   | notTerminalPowBlock (hash : Hash32)
-  /-- A block uses the configured terminal block hash before the epoch that activates it. -/
-  | terminalBlockHashNotActive (epoch : Epoch)
+  /-- A block uses the configured terminal block hash before the epoch that activates it.
+
+  The error gives the epoch of the block, then the activation epoch. -/
+  | terminalBlockHashNotActive (epoch activationEpoch : Epoch)
   /-- The payload of a block does not follow the configured terminal block hash. -/
   | notTerminalBlockHash (hash : Hash32)
   /-- The node does not hold the blobs of the block with the root. -/
@@ -188,8 +211,10 @@ inductive ForkChoiceError where
   | unknownPayloadVotes (root : Root)
   /-- A choice between the full and the empty node is asked of the pending node of a block. -/
   | pendingNode (root : Root)
-  /-- The block with the root is not from the slot before the current one. -/
-  | notPreviousSlot (root : Root)
+  /-- The block with the root is not from the slot before the current one.
+
+  The error gives the root, the slot of the block and the current slot. -/
+  | notPreviousSlot (root : Root) (blockSlot currentSlot : Slot)
   /-- From Gloas the index of an attestation, its vote on the payload, is neither 0 nor 1. -/
   | invalidAttestationIndex (index : UInt64)
   /-- An attestation from the slot of the block with the root says that the payload is present. -/
@@ -198,28 +223,44 @@ inductive ForkChoiceError where
   | payloadNotVerified (root : Root)
   /-- The validator is not in the payload committee of the slot that it votes for. -/
   | notInPtc (index : ValidatorIndex)
-  /-- A vote of the payload committee from the wire is not for the current slot. -/
-  | ptcVoteNotCurrent (slot : Slot)
-  /-- The signature of a vote of the payload committee does not verify. -/
-  | invalidPayloadAttestation
+  /-- A vote of the payload committee from the wire is not for the current slot.
+
+  The error gives the slot of the vote, then the current slot. -/
+  | ptcVoteNotCurrent (slot currentSlot : Slot)
+  /-- The signature of a vote of the payload committee does not verify.
+
+  The error gives the index of the voter and the slot of the vote. -/
+  | invalidPayloadAttestation (validatorIndex : ValidatorIndex) (slot : Slot)
   /-- From Heze: the store has no answer on the inclusion lists of the payload of a block. -/
   | unknownInclusionListSatisfaction (root : Root)
-  /-- From Heze: an inclusion list is for a slot after the current one. -/
-  | futureInclusionList (slot : Slot)
-  /-- From Heze: an inclusion list is for a slot before the window that the node keeps. -/
-  | inclusionListTooOld (slot : Slot)
-  /-- From Heze: the transactions of an inclusion list have no bytes, or more than the limit. -/
-  | invalidInclusionListSize (size : Nat)
-  /-- From Heze: a transaction of an inclusion list has no bytes. -/
-  | emptyInclusionListTransaction
-  /-- From Heze: the dependent block of an inclusion list comes after the dependent slot. -/
-  | dependentBlockTooLate (root : Root)
+  /-- From Heze: an inclusion list is for a slot after the current one.
+
+  The error gives the slot of the list, then the current slot. -/
+  | futureInclusionList (slot currentSlot : Slot)
+  /-- From Heze: an inclusion list is for a slot before the window that the node keeps.
+
+  The error gives the slot of the list, then the current slot. -/
+  | inclusionListTooOld (slot currentSlot : Slot)
+  /-- From Heze: the transactions of an inclusion list have no bytes, or more than the limit.
+
+  The error gives their size in bytes, then the limit. -/
+  | invalidInclusionListSize (size limit : Nat)
+  /-- From Heze: a transaction of an inclusion list has no bytes.
+
+  The error gives the position of the first such transaction in the list. -/
+  | emptyInclusionListTransaction (position : Nat)
+  /-- From Heze: the dependent block of an inclusion list comes after the dependent slot.
+
+  The error gives the root of the block, its slot and the dependent slot. -/
+  | dependentBlockTooLate (root : Root) (blockSlot dependentSlot : Slot)
   /-- From Heze: the dependent block of an inclusion list cannot fix the committee of its slot. -/
   | notPossibleDependentBlock (root : Root)
   /-- From Heze: the sender of an inclusion list has no seat in the committee of its slot. -/
   | notInInclusionListCommittee (index : ValidatorIndex)
-  /-- From Heze: the signature of an inclusion list does not verify. -/
-  | invalidInclusionListSignature
+  /-- From Heze: the signature of an inclusion list does not verify.
+
+  The error gives the index of the sender and the slot of the list. -/
+  | invalidInclusionListSignature (validatorIndex : ValidatorIndex) (slot : Slot)
   /-- From Heze: the payload of the block with the root is not optimistic. -/
   | payloadNotOptimistic (root : Root)
   /-- The discount of the block with the root exceeds the committee weight since its parent. -/
@@ -232,7 +273,7 @@ The code ignores the arguments of the constructor, which the message carries.
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def ForkChoiceError.code : ForkChoiceError → UInt32
-  | .anchorStateMismatch => 1
+  | .anchorStateMismatch .. => 1
   | .unknownBlock _ => 2
   | .unknownCheckpointState _ => 3
   | .unknownBlockState _ => 4
@@ -243,22 +284,22 @@ def ForkChoiceError.code : ForkChoiceError → UInt32
   | .accessor _ => 9
   | .transition _ => 10
   | .unknownBlockTimeliness _ => 11
-  | .futureBlock _ => 12
-  | .blockNotAfterFinalized _ => 13
+  | .futureBlock .. => 12
+  | .blockNotAfterFinalized .. => 13
   | .notDescendantOfFinalized _ => 14
-  | .targetEpochNotRecent _ => 15
-  | .targetEpochMismatch _ => 16
-  | .futureVote _ => 17
-  | .targetNotCheckpointBlock _ => 18
-  | .attestationNotYetDue _ => 19
-  | .invalidIndexedAttestation => 20
-  | .notSlashable => 21
+  | .targetEpochNotRecent .. => 15
+  | .targetEpochMismatch .. => 16
+  | .futureVote .. => 17
+  | .targetNotCheckpointBlock .. => 18
+  | .attestationNotYetDue .. => 19
+  | .invalidIndexedAttestation _ => 20
+  | .notSlashable .. => 21
   | .boostNotWornOff _ => 22
   | .tickNotAdvancing _ => 23
   | .forkNotYetSpecified _ => 24
   | .unknownPowBlock _ => 25
   | .notTerminalPowBlock _ => 26
-  | .terminalBlockHashNotActive _ => 27
+  | .terminalBlockHashNotActive .. => 27
   | .notTerminalBlockHash _ => 28
   | .blobsUnavailable _ => 29
   | .kzg _ => 30
@@ -267,24 +308,121 @@ def ForkChoiceError.code : ForkChoiceError → UInt32
   | .invalidColumns _ => 33
   | .unknownPayloadVotes _ => 34
   | .pendingNode _ => 35
-  | .notPreviousSlot _ => 36
+  | .notPreviousSlot .. => 36
   | .invalidAttestationIndex _ => 37
   | .sameSlotPayloadVote _ => 38
   | .payloadNotVerified _ => 39
   | .notInPtc _ => 40
-  | .ptcVoteNotCurrent _ => 41
-  | .invalidPayloadAttestation => 42
+  | .ptcVoteNotCurrent .. => 41
+  | .invalidPayloadAttestation .. => 42
   | .unknownInclusionListSatisfaction _ => 43
-  | .futureInclusionList _ => 44
-  | .inclusionListTooOld _ => 45
-  | .invalidInclusionListSize _ => 46
-  | .emptyInclusionListTransaction => 47
-  | .dependentBlockTooLate _ => 48
+  | .futureInclusionList .. => 44
+  | .inclusionListTooOld .. => 45
+  | .invalidInclusionListSize .. => 46
+  | .emptyInclusionListTransaction _ => 47
+  | .dependentBlockTooLate .. => 48
   | .notPossibleDependentBlock _ => 49
   | .notInInclusionListCommittee _ => 50
-  | .invalidInclusionListSignature => 51
+  | .invalidInclusionListSignature .. => 51
   | .payloadNotOptimistic _ => 52
   | .supportDiscountAboveMaximum _ => 53
+
+/-- A root or a hash in hex, for the message of an error. -/
+def ForkChoiceError.hex {n : Nat} (bytes : Vector UInt8 n) : String :=
+  hexString bytes.toList
+
+/-- The slot, the block root and the target of attestation data, for the message of an error. -/
+def ForkChoiceError.describeData (data : AttestationData) : String :=
+  s!"slot {data.slot}, block {hex data.beaconBlockRoot}, source epoch {data.source.epoch}, " ++
+    s!"target epoch {data.target.epoch}"
+
+open ForkChoiceError in
+/-- The message of an error, with the values that its check compared. -/
+instance : ToString ForkChoiceError where
+  toString
+    | .anchorStateMismatch blockStateRoot stateRoot =>
+      s!"expected the anchor state root {hex stateRoot}, got the block's state root " ++
+        hex blockStateRoot
+    | .unknownBlock root => s!"no known block has root {hex root}"
+    | .unknownCheckpointState checkpoint =>
+      s!"no state for the checkpoint at epoch {checkpoint.epoch}, root {hex checkpoint.root}"
+    | .unknownBlockState root => s!"no state after the block {hex root}"
+    | .unknownUnrealizedJustification root =>
+      s!"no unrealized justified checkpoint for the block {hex root}"
+    | .parentSlotNotLower root => s!"the block {hex root} has a parent at no lower slot"
+    | .arith error => s!"arithmetic: {reprStr error}"
+    | .ssz error => s!"a root cannot be computed: {reprStr error}"
+    | .accessor error => s!"a state accessor fails: {reprStr error}"
+    | .transition error => s!"the state transition fails: {reprStr error}"
+    | .unknownBlockTimeliness root => s!"no timeliness for the block {hex root}"
+    | .futureBlock slot currentSlot => s!"block slot {slot} is after the current slot {currentSlot}"
+    | .blockNotAfterFinalized slot finalizedSlot =>
+      s!"block slot {slot} is not after the start slot {finalizedSlot} of the finalized epoch"
+    | .notDescendantOfFinalized root =>
+      s!"the block {hex root} does not descend from the finalized block"
+    | .targetEpochNotRecent epoch currentEpoch =>
+      s!"target epoch {epoch} is neither the current epoch {currentEpoch} nor the one before"
+    | .targetEpochMismatch epoch slotEpoch =>
+      s!"target epoch {epoch}, expected the epoch of the slot {slotEpoch}"
+    | .futureVote root attestationSlot blockSlot =>
+      s!"the attestation at slot {attestationSlot} votes for the block {hex root} " ++
+        s!"at the later slot {blockSlot}"
+    | .targetNotCheckpointBlock root checkpointRoot =>
+      s!"expected target root {hex checkpointRoot}, got {hex root}"
+    | .attestationNotYetDue slot currentSlot =>
+      s!"the attestation at slot {slot} is not before the current slot {currentSlot}"
+    | .invalidIndexedAttestation data =>
+      s!"the indexed attestation is not valid: {describeData data}"
+    | .notSlashable data1 data2 =>
+      s!"the attestations are not slashable together: {describeData data1}; {describeData data2}"
+    | .boostNotWornOff root => s!"the head {hex root} still holds the proposer boost"
+    | .tickNotAdvancing slot => s!"a tick at slot {slot} does not advance the clock"
+    | .forkNotYetSpecified fork => s!"the fork choice of {fork.name} is not specified"
+    | .unknownPowBlock hash => s!"no known proof-of-work block has hash {hex hash}"
+    | .notTerminalPowBlock hash => s!"the proof-of-work block {hex hash} is not terminal"
+    | .terminalBlockHashNotActive epoch activationEpoch =>
+      s!"epoch {epoch} is before the terminal block hash activation epoch {activationEpoch}"
+    | .notTerminalBlockHash hash => s!"parent hash {hex hash} is not the terminal block hash"
+    | .blobsUnavailable root => s!"the blobs of the block {hex root} are not available"
+    | .kzg error => s!"KZG: {reprStr error}"
+    | .blobsNotMatching root => s!"the blobs of the block {hex root} do not match its commitments"
+    | .columnsUnavailable root => s!"the sampled columns of the block {hex root} are not available"
+    | .invalidColumns root => s!"a column of the block {hex root} is not valid"
+    | .unknownPayloadVotes root => s!"no payload committee votes for the block {hex root}"
+    | .pendingNode root => s!"the node of the block {hex root} is pending"
+    | .notPreviousSlot root blockSlot currentSlot =>
+      s!"the block {hex root} at slot {blockSlot} is not from the slot before " ++
+        s!"the current slot {currentSlot}"
+    | .invalidAttestationIndex index => s!"attestation index {index} is neither 0 nor 1"
+    | .sameSlotPayloadVote root =>
+      s!"an attestation in the slot of the block {hex root} votes for its payload"
+    | .payloadNotVerified root => s!"the payload of the block {hex root} is not verified"
+    | .notInPtc index => s!"validator {index} is not in the payload committee"
+    | .ptcVoteNotCurrent slot currentSlot =>
+      s!"payload committee vote at slot {slot}, expected the current slot {currentSlot}"
+    | .invalidPayloadAttestation index slot =>
+      s!"the payload committee vote of validator {index} at slot {slot} has an invalid signature"
+    | .unknownInclusionListSatisfaction root =>
+      s!"no inclusion list answer for the payload of the block {hex root}"
+    | .futureInclusionList slot currentSlot =>
+      s!"inclusion list slot {slot} is after the current slot {currentSlot}"
+    | .inclusionListTooOld slot currentSlot =>
+      s!"inclusion list slot {slot} is too old for the current slot {currentSlot}"
+    | .invalidInclusionListSize size limit =>
+      s!"inclusion list transactions of {size} bytes, expected from 1 to {limit}"
+    | .emptyInclusionListTransaction position =>
+      s!"inclusion list transaction {position} is empty"
+    | .dependentBlockTooLate root blockSlot dependentSlot =>
+      s!"the dependent block {hex root} at slot {blockSlot} is after the dependent slot " ++
+        toString dependentSlot
+    | .notPossibleDependentBlock root => s!"the block {hex root} cannot be the dependent block"
+    | .notInInclusionListCommittee index =>
+      s!"validator {index} is not in the inclusion list committee"
+    | .invalidInclusionListSignature index slot =>
+      s!"the inclusion list of validator {index} at slot {slot} has an invalid signature"
+    | .payloadNotOptimistic root => s!"the payload of the block {hex root} is not optimistic"
+    | .supportDiscountAboveMaximum root =>
+      s!"the support discount of the block {hex root} exceeds the committee weight since its parent"
 
 variable (preset : Preset) (fork : Fork)
 
@@ -347,7 +485,8 @@ From Heze the store holds no inclusion list and no answer on inclusion lists yet
 def getForkchoiceStore (config : Config) (anchorState : BeaconState preset fork)
     (anchorBlock : BeaconBlock preset fork) : Except ForkChoiceError (Store preset fork) := do
   let stateRoot ← (SszType.hashTreeRoot anchorState).mapError .ssz
-  if anchorBlock.stateRoot ≠ stateRoot then throw .anchorStateMismatch
+  if anchorBlock.stateRoot ≠ stateRoot then
+    throw (.anchorStateMismatch anchorBlock.stateRoot stateRoot)
   let anchorRoot ← (SszType.hashTreeRoot anchorBlock).mapError .ssz
   let anchorEpoch := getCurrentEpoch anchorState
   let checkpoint : Checkpoint := ⟨anchorEpoch, anchorRoot⟩

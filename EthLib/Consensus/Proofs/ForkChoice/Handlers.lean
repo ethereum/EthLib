@@ -1544,7 +1544,7 @@ theorem validateTargetEpochAgainstCurrentTime_eq {attestation : Attestation pres
     store.validateTargetEpochAgainstCurrentTime config attestation =
       if attestation.data.target.epoch = epoch ∨
           attestation.data.target.epoch.toNat + 1 = epoch.toNat then .ok ()
-      else .error (.targetEpochNotRecent attestation.data.target.epoch) := by
+      else .error (.targetEpochNotRecent attestation.data.target.epoch epoch) := by
   have recent : (attestation.data.target.epoch = epoch ∨
       attestation.data.target.epoch = saturatingSub epoch 1) ↔
       (attestation.data.target.epoch = epoch ∨

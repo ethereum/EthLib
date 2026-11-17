@@ -34,7 +34,7 @@ open EthLib.Exports (Result PyValue pyExport)
 
 /-- The result of weak subjectivity, with the code and the text of its error. -/
 def runWeakSubjectivity {α : Type} (result : Except WeakSubjectivityError α) : Result α :=
-  result.mapError fun e => (e.code, reprStr e)
+  result.mapError fun e => (e.code, toString e)
 
 /-- The weak subjectivity period of a state, in epochs. -/
 def computeWeakSubjectivityPeriodOf

@@ -60,6 +60,22 @@ Not yet released.
   `buildPayload_eq_error_of_activeFork_ne` names the active fork and the fork of the build in its error.
   `Blocks.constructorFormat` moves to `EthLib.Execution.constructorFormat`, and `Transactions.Exports.oneLine` to `Blocks.Exports.oneLine`.
 
+- In Lean, the errors of the fork choice, of weak subjectivity and of custody carry the values that their check compared, and their codes keep their meaning.
+  - `ForkChoiceError.anchorStateMismatch` takes the state root of the anchor block and the root of the anchor state.
+  - `futureBlock`, `attestationNotYetDue`, `ptcVoteNotCurrent`, `futureInclusionList` and `inclusionListTooOld` also take the current slot.
+  - `blockNotAfterFinalized` also takes the first slot of the finalized epoch, and `targetEpochNotRecent` the current epoch.
+  - `targetEpochMismatch` also takes the epoch of the slot, `targetNotCheckpointBlock` the root of the checkpoint block, and `terminalBlockHashNotActive` the activation epoch.
+  - `futureVote` also takes the slots of the attestation and of the block, `notPreviousSlot` and `dependentBlockTooLate` the two slots they compared.
+  - `invalidIndexedAttestation` takes the attestation data, and `notSlashable` the data of both attestations.
+  - `invalidPayloadAttestation` and `invalidInclusionListSignature` take the validator index and the slot.
+  - `invalidInclusionListSize` also takes the limit, and `emptyInclusionListTransaction` the position of the first empty transaction.
+  - `WeakSubjectivityError.blockRootMismatch` takes the checkpoint root and the root that the state holds.
+  - `CustodyError.outOfFuel` takes the number of groups found and the number asked for.
+
+  `getForkchoiceStore_mismatch` and `validateTargetEpochAgainstCurrentTime_eq` state the fields of the error.
+  New `ToString` instances of `ForkChoiceError` and `WeakSubjectivityError` write each error with its values.
+  The Python `ForkChoiceError` and `WeakSubjectivityError` carry that text in place of the Lean `Repr` of the error, such as "fork choice: block slot 9 is after the current slot 8".
+
 - The SSZ decoding errors carry the values that their failed check compared.
   Codes and rejection reasons are unchanged; the message `EthLib.Serialization.Ssz.Err.<name>` now ends with these values, in constructor order.
   - `Ssz.Err.offsetUnordered offset next` carries an offset and the smaller offset after it.

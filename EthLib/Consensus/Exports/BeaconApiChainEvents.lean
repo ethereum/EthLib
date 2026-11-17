@@ -28,7 +28,7 @@ open EthLib.Exports (Result PyValue pyExport)
 
 /-- The code and the message of an error of the events. -/
 def chainEventError : BeaconApi.ChainEventError → UInt32 × String
-  | .forkChoice e => (e.code, s!"fork choice: {reprStr e}")
+  | .forkChoice e => (e.code, s!"fork choice: {e}")
   | .dependentRoot e => (0, s!"dependent root: {e.message}")
 
 /-- An event of the stream as the name of its topic and the text of its data. -/
