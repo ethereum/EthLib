@@ -1633,6 +1633,7 @@ private theorem active_of_committeeWindow {store : Store preset fork} {head : Ro
   · simp at empty
   · exact ⟨_, active_of_slotCommittee early held read v inside⟩
 
+@[expose]
 public def NotSlashed (state : BeaconState preset fork) (v : ValidatorIndex) : Prop :=
   (state.validators.data[v.toNat]?.map (·.slashed)).getD false = false
 
@@ -2004,7 +2005,7 @@ private theorem sibling_weight_lt_of_window_margin [DecidablePred (· ∈ J)]
   omega
 
 /-- A held block's checked predecessor is no later than the current slot's predecessor. -/
-private theorem previousBlockSlot_le_previousCurrentSlot
+public theorem previousBlockSlot_le_previousCurrentSlot
     {store : Store preset fork}
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
@@ -2687,7 +2688,7 @@ private theorem registry_of_justified_window {anchor : Store preset fork}
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
 /-- Honest stores at ordered times have ordered predecessor slots. -/
-private theorem previousSlot_le_of_time_le {anchor : Store preset fork}
+public theorem previousSlot_le_of_time_le {anchor : Store preset fork}
     (anchored : ∀ w ∈ J, e.start w = anchor)
     {u w : ValidatorIndex} (callerHonest : u ∈ J) (receiverHonest : w ∈ J) {n k : Nat}
     (later : (e.world n).time ≤ (e.world k).time)
@@ -3341,7 +3342,7 @@ private theorem filteredTotal_of_voteOrigins {anchor : Store preset fork}
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
 /-- Held-state flags suffice for a cached checkpoint through its fixed-check lookahead origin. -/
-private theorem notSlashed_checkpointState {anchor : Store preset fork}
+public theorem notSlashed_checkpointState {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
     {u : ValidatorIndex} (honest : u ∈ J) {n : ℕ}
