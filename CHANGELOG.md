@@ -18,7 +18,6 @@ Not yet released.
   Its checkpoint block at the finalized epoch is the finalized block.
   It asks that the anchor block is not after the anchor state and that its parent root names no known block.
   `Store.isViableLeaf_checkpointBlock` gives the checkpoint block that a viable leaf reads.
-  `Store.Reachable.finalized_eq_anchor_of_epoch_le` shows that a finalized checkpoint at or before the anchor epoch is the anchor checkpoint.
 
 ### Changes that break callers
 
