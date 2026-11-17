@@ -32,7 +32,7 @@ variable {preset : Preset} {fork : Fork} {config : Config}
 /-- A node that descends from a known pending node walks back to its root.
 
 The walk stops at the slot of the block of that root. -/
-private theorem Store.getAncestor_of_isAncestor {node : ForkChoiceNode} {root : Root}
+theorem Store.getAncestor_of_isAncestor {node : ForkChoiceNode} {root : Root}
     {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
     (descends : store.isAncestor node ⟨root, .pending⟩ = .ok true) :
     ∃ reached, store.getAncestor node block.slot = .ok reached ∧ reached.root = root := by

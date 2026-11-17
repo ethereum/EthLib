@@ -27,15 +27,6 @@ def finishLayout (layout : MerkleLayout) (chunks : Array Bytes) : Except Err Byt
     | none => root
     | some word => mixIn root word
 
-/-- Mapping two functions that agree on every element of a list gives the same result. -/
-private theorem mapM_congr_mem {α β ε : Type} (f g : α → Except ε β) :
-    ∀ (xs : List α), (∀ x ∈ xs, f x = g x) → xs.mapM f = xs.mapM g
-  | [], _ => rfl
-  | x :: xs, same => by
-    -- The heads agree by assumption, and the tails by induction.
-    simp only [List.mapM_cons]
-    rw [same x (by simp), mapM_congr_mem f g xs fun y member => same y (by simp [member])]
-
 /-- The root of a value is its layout's root, each nested value rooted on its own budget. -/
 theorem hashTreeRoot_unfold (shape : Desc) (value : Value) :
     hashTreeRoot shape value = (do
@@ -61,7 +52,7 @@ theorem hashTreeRoot_unfold (shape : Desc) (value : Value) :
       simp only [layoutChunksAt_eq, leafChunks, Leaves.count, List.drop_zero, Nat.sub_zero,
         Option.getD_none, List.take_length, Bind.bind, Except.bind, pure, Except.pure]
       -- Each nested value has a smaller nesting, which the remaining budget covers.
-      rw [mapM_congr_mem _ slotRoot values ?same]
+      rw [Base.mapM_congr (xs := values) (g := slotRoot) ?same]
       case same =>
         intro slot member
         match slot with

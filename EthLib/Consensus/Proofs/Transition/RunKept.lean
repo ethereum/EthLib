@@ -194,6 +194,32 @@ theorem runKept_of_processSlots_of_stateTransition {middle : Slot}
     (fun ok => runKept_processSlots ok) (fun ok => runKept_processBlock ok)
     midOk atOrAfter computed
 
+/-- A run keeps the active indices and the attester seed of each early enough epoch.
+
+The epoch is at most the start's current epoch plus `MIN_SEED_LOOKAHEAD`.
+
+The epoch must also be at most the fixed epoch of activity of the start.
+
+The run must end before the mix that the seed of the epoch reads is written again. -/
+private theorem RunKept.seedKept (run : RunKept state after)
+    {epoch : Epoch}
+    (final : epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
+    (fixed : epoch ≤ activityFixedEpoch state)
+    (inRing : (getCurrentEpoch after).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+      epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
+    getActiveValidatorIndices after epoch = getActiveValidatorIndices state epoch ∧
+      getActiveValidatorIndicesChecked after epoch = getActiveValidatorIndicesChecked state epoch ∧
+      getSeed after epoch DOMAIN_BEACON_ATTESTER = getSeed state epoch DOMAIN_BEACON_ATTESTER := by
+  refine ⟨run.active.getActiveValidatorIndices_eq fixed,
+    run.active.getActiveValidatorIndicesChecked_eq fixed,
+    getSeed_eq_of_mix _ fun shifted reads => run.mixes shifted fun written low high same => ?_⟩
+  have lowLe := UInt64.le_iff_toNat_le.mp low
+  have highLe := UInt64.le_iff_toNat_le.mp high
+  have same := congrArg UInt64.toNat same
+  rw [UInt64.toNat_mod, UInt64.toNat_mod] at same
+  exact Nat.mod_ne_of_sub_lt (low := written.toNat) (high := shifted.toNat)
+    (length := preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) (by omega) (by omega) same.symm
+
 /-- A run keeps the committees of each epoch up to its start plus `MIN_SEED_LOOKAHEAD`.
 
 The epoch must also be at most the fixed epoch of activity of the start.
@@ -207,16 +233,24 @@ theorem RunKept.committeesKept (run : RunKept state after)
     (fixed : epoch ≤ activityFixedEpoch state)
     (inRing : (getCurrentEpoch after).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
       epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
-    CommitteesKept epoch state after := by
-  refine CommitteesKept.of_seed (run.active.getActiveValidatorIndices_eq fixed)
-    (run.active.getActiveValidatorIndicesChecked_eq fixed)
-    (getSeed_eq_of_mix _ fun shifted reads => run.mixes shifted fun written low high same => ?_)
-  have lowLe := UInt64.le_iff_toNat_le.mp low
-  have highLe := UInt64.le_iff_toNat_le.mp high
-  have same := congrArg UInt64.toNat same
-  rw [UInt64.toNat_mod, UInt64.toNat_mod] at same
-  exact Nat.mod_ne_of_sub_lt (low := written.toNat) (high := shifted.toNat)
-    (length := preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) (by omega) (by omega) same.symm
+    CommitteesKept epoch state after :=
+  let ⟨active, checked, seed⟩ := run.seedKept final fixed inRing
+  CommitteesKept.of_seed active checked seed
+
+/-- A run keeps the attesters of each attestation of an early enough epoch.
+
+The bounds on the epoch are those of the committees. -/
+theorem RunKept.getAttestingIndices_eq (run : RunKept state after)
+    {attestation : Attestation preset fork}
+    (final : (computeEpochAtSlot preset attestation.data.slot).toNat ≤
+      (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
+    (fixed : computeEpochAtSlot preset attestation.data.slot ≤ activityFixedEpoch state)
+    (inRing : (getCurrentEpoch after).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
+      (computeEpochAtSlot preset attestation.data.slot).toNat +
+        preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
+    getAttestingIndices after attestation = getAttestingIndices state attestation :=
+  let ⟨active, checked, seed⟩ := run.seedKept final fixed inRing
+  getAttestingIndices_eq_of_seed active checked seed
 
 /-- A run keeps the committees of an epoch, and their count per slot.
 

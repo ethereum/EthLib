@@ -70,17 +70,6 @@ private theorem map_eq_of_mem_zip {α β γ : Type} {f : α → γ} {g : β → 
     · exact same.1
     · exact map_eq_of_mem_zip same.2 a b mem
 
-/-- Two monadic maps agree when their steps agree on every element of the list. -/
-private theorem mapM_congr_mem {m : Type → Type} [Monad m] [LawfulMonad m] {α β : Type}
-    {f g : α → m β} :
-    ∀ {xs : List α}, (∀ x, x ∈ xs → f x = g x) → xs.mapM f = xs.mapM g
-  | [], _ => rfl
-  | x :: xs, same => by
-    rw [List.mapM_cons, List.mapM_cons, same x List.mem_cons_self]
-    congr 1
-    funext y
-    rw [mapM_congr_mem fun z hz => same z (List.mem_cons_of_mem x hz)]
-
 /-- When each result reports the logs of its receipt, traced transfers change no call result. -/
 theorem callsJson_trace {b : SimulatedBlock}
     (h : b.results.map (·.simulatedLogs) = b.record.receipts.map (·.2.logs)) :
@@ -97,7 +86,7 @@ theorem callsJson_trace {b : SimulatedBlock}
   unfold SimulatedBlock.callsJson
   dsimp only
   congr 1
-  apply mapM_congr_mem
+  apply EthLib.Base.mapM_congr
   intro ⟨⟨tx, ⟨type, receipt⟩, result⟩, index⟩ mem
   have inner := (List.of_mem_zip
     (List.mem_of_getElem? (List.mem_zipIdx_iff_getElem?.mp mem))).2

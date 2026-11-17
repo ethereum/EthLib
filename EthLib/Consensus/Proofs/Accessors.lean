@@ -292,6 +292,21 @@ theorem mem_getActiveValidatorIndices {state : BeaconState preset fork}
   mem_iff_of_getActiveValidatorIndicesChecked_ok
     (getActiveValidatorIndicesChecked_of_within within epoch)
 
+/-- Each active index names a position of the registry.
+
+It needs no bound on the registry: a position that wraps to 64 bits only gets smaller. -/
+theorem lt_size_of_mem_getActiveValidatorIndices {state : BeaconState preset fork}
+    {epoch : Epoch} {index : ValidatorIndex}
+    (member : index ∈ getActiveValidatorIndices state epoch) :
+    index.toNat < state.validators.data.size := by
+  simp only [getActiveValidatorIndices, List.mem_filterMap, Option.ite_none_right_eq_some,
+    Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists] at member
+  obtain ⟨_, position, found, -, rfl⟩ := member
+  have inside := (List.getElem?_eq_some_iff.mp found).1
+  simp only [Array.length_toList] at inside
+  simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat']
+  exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) inside
+
 /-- The positions of the validators that pass a test increase strictly, as 64-bit indices.
 
 That needs each position that passes to be below `2^64`. -/
