@@ -126,7 +126,7 @@ theorem isValidIndexedAttestation_of_keys {post : Fork} {one other : BeaconState
   exact valid
 
 /-- One slot keeps the public keys as a prefix, and keeps distinct keys distinct. -/
-private theorem keys_advanceSlot {state after : BeaconState preset fork}
+theorem keys_advanceSlot {state after : BeaconState preset fork}
     (computed : advanceSlot config checks state = .ok after) :
     validatorKeys state <+: validatorKeys after ∧
       (PubkeysDistinct state → PubkeysDistinct after) := by

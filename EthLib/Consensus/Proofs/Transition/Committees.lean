@@ -336,7 +336,7 @@ theorem CommitteesKept.of_activeKept {post : Base.Fork} {other : BeaconState pre
 /-- Two states agree on the attesters of an attestation, given the same active indices and seed.
 
 Both are those of the epoch of its slot. -/
-private theorem getAttestingIndices_eq_of_seed {other : BeaconState preset fork}
+theorem getAttestingIndices_eq_of_seed {other : BeaconState preset fork}
     {attestation : Attestation preset fork}
     (active : getActiveValidatorIndices other (computeEpochAtSlot preset attestation.data.slot) =
       getActiveValidatorIndices state (computeEpochAtSlot preset attestation.data.slot))

@@ -174,31 +174,41 @@ theorem AttestationSite.frame {fork : Fork} {input checked : BeaconState preset 
     · exact mid
     · exact mid.trans (frame_processAttestation processed)
 
-/-- An attestation is included at least the least inclusion delay after its slot.
+/-- An attestation targets a recent epoch, the epoch of its slot, and is included late enough.
+
+Its target is the current or the previous epoch.
+
+It is included at least the least inclusion delay after its slot.
 
 That holds at every fork, as `process_attestation` checks it. -/
-private theorem processAttestation_includedAfter {fork : Fork}
+private theorem processAttestation_window {fork : Fork}
     {state after : BeaconState preset fork} {parentSlot : Slot}
     {attestation : Attestation preset fork}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
-    attestation.data.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤
-      state.slot.toNat := by
+    (attestation.data.target.epoch = getPreviousEpoch state ∨
+        attestation.data.target.epoch = getCurrentEpoch state) ∧
+      attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
+      attestation.data.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤
+        state.slot.toNat := by
   by_cases altair : Fork.altair ≤ fork
   · unfold processAttestation at computed
     simp only [altair, ↓reduceDIte] at computed
     unfold processAttestationAltair at computed
     simp only [bind_ok_iff, liftAccessor_ok, ensure_ok_iff, liftArith, mapError_ok_iff,
       Uint64.addChecked_ok_iff] at computed
-    obtain ⟨_, -, _, -, earliest, ⟨_, sum⟩, _, early, -⟩ := computed
+    obtain ⟨_, recent, _, epoch, earliest, ⟨_, sum⟩, _, early, -⟩ := computed
     have := UInt64.le_iff_toNat_le.mp early
-    omega
-  · exact (processAttestation_checks (Nat.lt_of_not_le altair) computed).2.2.1
+    exact ⟨recent, epoch, by omega⟩
+  · obtain ⟨recent, epoch, early, -⟩ := processAttestation_checks (Nat.lt_of_not_le altair) computed
+    exact ⟨recent, epoch, early⟩
 
 /-- A block checks each of its attestations, and accepts it.
 
 The check runs on a state inside the block, after the operations start.
 
 It checks the indexed form that the state before the block reads, since the attesters agree.
+
+Its target is the current or the previous epoch of that state, and the epoch of its slot.
 
 The attestation was included at least the least inclusion delay after its slot.
 
@@ -217,6 +227,9 @@ theorem processBlock_attestation_checked
         indexed ∧
       getIndexedAttestation state attestation = .ok indexed ∧
       isValidIndexedAttestation config checks checked indexed = .ok true ∧
+      (attestation.data.target.epoch = getPreviousEpoch state ∨
+        attestation.data.target.epoch = getCurrentEpoch state) ∧
+      attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
       attestation.data.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤
         state.slot.toNat := by
   obtain ⟨input, proposersDone, slashingsDone, _, started, proposers, slashings, folded, -⟩ :=
@@ -261,8 +274,9 @@ theorem processBlock_attestation_checked
     · simp only [altair, ↓reduceIte] at checkedSlot
       exact (frame_processAttestation processedA).slot.symm.trans checkedSlot
   refine ⟨input, _, indexed, started, site, before, valid, ?_⟩
-  rw [← slot]
-  exact processAttestation_includedAfter processedA
+  have window := processAttestation_window processedA
+  simp only [getPreviousEpoch, getCurrentEpoch, slot] at window
+  exact window
 
 /-- A vote of a block that applies is in an indexed attestation that the block checked.
 
