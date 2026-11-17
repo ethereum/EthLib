@@ -331,9 +331,9 @@ theorem listSlices_eq (element : Desc) (limit : Option Nat) (data : Bytes) :
       | none =>
         if scope < bytesPerOffset then throw (.scopeTooSmall bytesPerOffset scope)
         let first := readUint data 0 bytesPerOffset
-        if first < bytesPerOffset then throw .offsetBelowTable
-        if first % bytesPerOffset != 0 then throw .offsetUnaligned
-        if first > scope then throw .offsetPastScope
+        if first < bytesPerOffset then throw (.offsetBelowTable first)
+        if first % bytesPerOffset != 0 then throw (.offsetUnaligned first)
+        if first > scope then throw (.offsetPastScope first scope)
         let count := first / bytesPerOffset
         if let some cap := limit then
           if count > cap then throw (.overLimit cap count)
@@ -367,14 +367,14 @@ theorem offsetSpans_nil (scope : Nat) : offsetSpans [] scope = .ok [] := rfl
 /-- The last body is closed by the budget. -/
 theorem offsetSpans_single (start scope : Nat) :
     offsetSpans [start] scope =
-      if scope < start then .error .offsetPastScope else .ok [scope - start] := by
+      if scope < start then .error (.offsetPastScope start scope) else .ok [scope - start] := by
   simp only [offsetSpans, offsetSpansFrom]
   split <;> rfl
 
 /-- Every other body ends where the next one begins. -/
 theorem offsetSpans_cons_cons (start next : Nat) (rest : List Nat) (scope : Nat) :
     offsetSpans (start :: next :: rest) scope =
-      if next < start then .error .offsetUnordered
+      if next < start then .error (.offsetUnordered start next)
       else do return (next - start) :: (← offsetSpans (next :: rest) scope) := by
   simp only [offsetSpans, offsetSpansFrom]
   split

@@ -176,7 +176,9 @@ REJECTION = {
     "LIMIT": lambda fault: re.fullmatch(r"overLimit \d+ \d+", fault) is not None,
     "NO_SELECTOR": lambda fault: fault == "noSelector",
     "SCOPE": _scope(lambda budget, width: budget > width),
-    "TRUNCATED": lambda fault: fault == "truncated" or _short(fault),
+    "TRUNCATED": lambda fault: (
+        re.fullmatch(r"truncated \d+ \d+", fault) is not None or _short(fault)
+    ),
     "UNKNOWN_SELECTOR": lambda fault: re.fullmatch(r"unknownSelector \d+", fault) is not None,
 }
 
