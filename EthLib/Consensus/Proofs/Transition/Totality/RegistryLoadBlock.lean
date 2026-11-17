@@ -699,32 +699,6 @@ private theorem processDeposit_size_le {before : fork < .hegota} {deposit : Depo
       applied
   · exact (applyPendingDeposit_validators_size_le_and_mem applied).1
 
-/-- Queueing the excess balance of a validator keeps the registry size. -/
-private theorem queueExcessActiveBalance_size {electra : .pectra ≤ fork}
-    {index : ValidatorIndex}
-    (computed : queueExcessActiveBalance state electra index = .ok after) :
-    after.validators.data.size = state.validators.data.size := by
-  simp only [queueExcessActiveBalance, bind_ok_iff] at computed
-  obtain ⟨_, _, computed⟩ := computed
-  split at computed
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, pending, appended, _, set, rfl⟩ := computed
-    obtain ⟨_, rfl⟩ := setBalance_ok set
-    rfl
-  · cases computed
-    rfl
-
-/-- A switch to compounding credentials keeps the registry size. -/
-private theorem switchToCompoundingValidator_size {electra : .pectra ≤ fork}
-    {index : ValidatorIndex}
-    (computed : switchToCompoundingValidator state electra index = .ok after) :
-    after.validators.data.size = state.validators.data.size := by
-  simp only [switchToCompoundingValidator, bind_ok_iff] at computed
-  obtain ⟨_, _, _, set, queued⟩ := computed
-  have one := (loadKept_setValidator set).1
-  have two := queueExcessActiveBalance_size queued
-  omega
-
 /-- A deposit request keeps the registry size. -/
 private theorem processDepositRequest_size {electra : .pectra ≤ fork}
     {request : DepositRequest}
