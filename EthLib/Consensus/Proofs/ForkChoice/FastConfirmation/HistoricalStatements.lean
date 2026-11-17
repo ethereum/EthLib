@@ -246,6 +246,75 @@ def HonestHeadsCover (root : Root) (first last : Nat) : Prop :=
     ((e.world i).state a).getHead config = .ok hd →
     ((e.world i).state a).isAncestor hd ⟨root, .pending⟩ = .ok true
 
+/-- Each up-to-date honest head in the interval reads its justified state and its windows.
+
+A window starts at the given slot and ends before the store's current slot. -/
+def HonestHeadReads (firstSlot : Slot) (first last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k (head : ForkChoiceNode), first ≤ (e.world k).time → (e.world k).time ≤ last →
+    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    ((e.world k).state w).getHead config = .ok head →
+    (∃ state, ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint =
+      .ok state) ∧
+    ∀ current high, ((e.world k).state w).getCurrentSlot config = .ok current →
+      high < current → ∃ participants,
+        ((e.world k).state w).getCommitteesBetweenSlots head.root firstSlot high = .ok participants
+
+/-- Each up-to-date honest store has the root in its filtered tree or below its justified block. -/
+def RootViable (root : Root) (first last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k (nodes : List ForkChoiceNode), first ≤ (e.world k).time → (e.world k).time ≤ last →
+    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    ((e.world k).state w).getFilteredNodeTree config = .ok nodes →
+    ((e.world k).state w).isAncestor
+        ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
+      (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes
+
+/-- Each honest head of the interval omits at most the exit reserve per full window epoch.
+
+The window starts at the given slot and ends at the slot before the store's current slot. -/
+def ReceiverWindowExits (source : BeaconState preset fork) (firstSlot : Slot)
+    (first last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k (head : ForkChoiceNode) (current finish : Slot),
+    first ≤ (e.world k).time → (e.world k).time ≤ last →
+    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    ((e.world k).state w).getHead config = .ok head →
+    ((e.world k).state w).getCurrentSlot config = .ok current → subChecked current 1 = .ok finish →
+    WindowExitBound (config := config) ((e.world k).state w) source head.root firstSlot finish
+
+open Classical in
+/-- The honest duties of one complete epoch outweigh the rest of the stake and the boost.
+
+The epoch starts at the first time or later and ends by the given time.
+
+The stakes are the balances of the state's unslashed active validators. -/
+def LateMargin (preset : Preset) (config : Config) (genesisTimeMs : UInt64)
+    (assignment : Assignment preset) (J : Set ValidatorIndex) [DecidablePred (· ∈ J)]
+    (first time : ℕ) (state : BeaconState preset fork) (boost : ℕ) : Prop :=
+  ∃ (epoch : Epoch) (begin next : Slot) (beginTime endTime : UInt64),
+    computeStartSlotAtEpoch preset epoch = .ok begin ∧
+    addChecked begin preset.SLOTS_PER_EPOCH = .ok next ∧
+    computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime ∧
+    computeTimeAtSlotMs config genesisTimeMs next = .ok endTime ∧
+    first ≤ beginTime.toNat ∧ endTime.toNat ≤ time ∧
+    stake (fun v => balanceAt state v.toNat)
+        ((unslashedActiveBalances state).map (·.1)).toFinset + boost <
+      2 * stake (fun v => balanceAt state v.toNat)
+        {v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset | v ∈ J ∧
+          ∃ slot committeeIndex, begin ≤ slot ∧ slot < next ∧
+            assignment.committee v slot = some committeeIndex}
+
+/-- Honest stores more than two epochs past the parent's epoch have the late majority.
+
+The majority reads the stakes of the store's justified state and its boost. -/
+def LateDutyMajority (parentEpoch : Epoch) (first last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k (epoch : Epoch) (state : BeaconState preset fork),
+    first ≤ (e.world k).time → (e.world k).time ≤ last →
+    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch →
+    parentEpoch.toNat + 2 < epoch.toNat →
+    ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint = .ok state →
+    LateMargin preset config genesisTimeMs assignment J first (e.world k).time state
+      (((e.world k).state w).boostScore config)
+
 /-- The receiver can relate the root to each earlier finalized checkpoint in its current store. -/
 def ReceiverFinalityCovers (w : ValidatorIndex) (k : Nat) (root : Root)
     (block : BeaconBlock preset fork) : Prop :=
