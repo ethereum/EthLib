@@ -145,19 +145,6 @@ private theorem addAttesterFlags_keeps {total : Gwei} {earned : List UInt64}
     · exact ⟨value, by rw [Array.getElem?_set]; simp [same, found], set⟩
   · cases computed
 
-/-- From Altair, setting the flags of attesters keeps each target flag. -/
-private theorem foldlM_addAttesterFlags_keeps {total : Gwei} {earned : List UInt64}
-    {attesters : List ValidatorIndex} {participation updated : EpochParticipation preset fork}
-    {numerator numerator' : Gwei}
-    (computed : attesters.foldlM (addAttesterFlags state total earned) (participation, numerator) =
-      .ok (updated, numerator')) :
-    ∀ position, TargetFlagAt participation position → TargetFlagAt updated position := fun
-    position flagged =>
-  foldlM_ok_invariant
-    (fun (carried : EpochParticipation preset fork × Gwei) => TargetFlagAt carried.1 position)
-    (fun ⟨_, _⟩ _ ⟨_, _⟩ holds ok => (addAttesterFlags_keeps ok).2 position holds) flagged
-    computed
-
 /-- From Altair, an attestation keeps each target flag of both epochs. -/
 private theorem processAttestationAltair_keepsTargetFlag {attestation : Attestation preset fork}
     {altair : .altair ≤ fork} {parentSlot : Slot}
@@ -183,7 +170,10 @@ private theorem processAttestationAltair_keepsTargetFlag {attestation : Attestat
   unfold recentParticipation at flagged ⊢
   rw [kept]
   generalize (attestation.data.target.epoch == getCurrentEpoch state) = same at fold ⊢
-  have moved := foldlM_addAttesterFlags_keeps fold position
+  have moved : TargetFlagAt _ position → TargetFlagAt _ position := fun holds =>
+    foldlM_ok_invariant
+      (fun (carried : EpochParticipation preset fork × Gwei) => TargetFlagAt carried.1 position)
+      (fun ⟨_, _⟩ _ ⟨_, _⟩ holds ok => (addAttesterFlags_keeps ok).2 position holds) holds fold
   cases same <;> cases current
   · simpa [setEpochParticipation] using moved (by simpa using flagged)
   · simpa [setEpochParticipation] using flagged

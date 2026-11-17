@@ -724,14 +724,6 @@ private theorem NodePath.mem_filterNodeTree {node leaf : ForkChoiceNode}
     simpa [viable, bind, Except.bind, pure, Except.pure] using belowOk.symm
   exact lift leaf (result ▸ List.mem_singleton_self leaf)
 
-/-- A viable leaf retains the start of its child path. -/
-private theorem NodePath.self_mem_filterNodeTree {node leaf : ForkChoiceNode}
-    (path : store.NodePath node leaf) {nodes : List ForkChoiceNode}
-    (walk : store.filterNodeTree config node = .ok nodes)
-    (terminal : store.getNodeChildren leaf = .ok [])
-    (viable : store.isViableLeaf config leaf = .ok true) : node ∈ nodes :=
-  filterNodeTree_self walk (List.ne_nil_of_mem (path.mem_filterNodeTree walk terminal viable))
-
 /-- Before Gloas, every ancestor relation between held roots gives a child path. -/
 private theorem nodePath_of_ancestor (before : fork < .glamsterdam)
     {root leaf : Root} {block : BeaconBlock preset fork}
@@ -825,7 +817,8 @@ private theorem exists_leaf_above_through (before : fork < .glamsterdam) {start 
   · exact (toMid.trans (toTop.trans leafPath)).isViableLeaf_ok walk terminal
   intro viable
   obtain ⟨result, resultOk, lift⟩ := toMid.filterNodeTree walk
-  exact lift _ ((toTop.trans leafPath).self_mem_filterNodeTree resultOk terminal viable)
+  exact lift _ (filterNodeTree_self resultOk (List.ne_nil_of_mem
+    ((toTop.trans leafPath).mem_filterNodeTree resultOk terminal viable)))
 
 end EthLib.Consensus.Store
 
