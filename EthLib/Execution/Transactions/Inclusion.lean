@@ -111,11 +111,45 @@ inductive InclusionError where
   | nonceTooHigh (expected nonce : Nat)
   /-- The balance `balance` of the sender is below the most `cost` that the transaction costs. -/
   | insufficientBalance (balance cost : Nat)
-  /-- The sender has code, and that code is not a delegation indicator that the fork allows. -/
-  | senderNotEoa
+  /-- The sender `sender` has code, and that code is not a delegation indicator the fork allows. -/
+  | senderNotEoa (sender : Address)
   /-- The state does not hold the code of the sender, whose hash is `codeHash`. -/
   | missingCode (codeHash : Hash32)
-  deriving DecidableEq, Repr
+  deriving DecidableEq
+
+/-- An inclusion error constructor, named in full, applied to its arguments. -/
+def inclusionErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.Transactions.InclusionError." ++ name) args prec
+
+/-- The form of an inclusion error in Lean syntax, with its arguments.
+
+Each value has its name, and each hash and address is in hex. -/
+def InclusionError.reprPrec : InclusionError → Nat → Std.Format
+  | .transaction error, p => inclusionErrorFormat "transaction" [reprArg error] p
+  | .gasAllowanceExceeded gas available, p =>
+    inclusionErrorFormat "gasAllowanceExceeded"
+      [namedArg "gas" gas, namedArg "available" available] p
+  | .blobGasLimitExceeded blobGas available, p =>
+    inclusionErrorFormat "blobGasLimitExceeded"
+      [namedArg "blobGas" blobGas, namedArg "available" available] p
+  | .insufficientMaxFeePerGas maxFee baseFee, p =>
+    inclusionErrorFormat "insufficientMaxFeePerGas"
+      [namedArg "maxFee" maxFee, namedArg "baseFee" baseFee] p
+  | .insufficientMaxFeePerBlobGas maxFee blobGasPrice, p =>
+    inclusionErrorFormat "insufficientMaxFeePerBlobGas"
+      [namedArg "maxFee" maxFee, namedArg "blobGasPrice" blobGasPrice] p
+  | .nonceTooLow expected nonce, p =>
+    inclusionErrorFormat "nonceTooLow" [namedArg "expected" expected, namedArg "nonce" nonce] p
+  | .nonceTooHigh expected nonce, p =>
+    inclusionErrorFormat "nonceTooHigh" [namedArg "expected" expected, namedArg "nonce" nonce] p
+  | .insufficientBalance balance cost, p =>
+    inclusionErrorFormat "insufficientBalance"
+      [namedArg "balance" balance, namedArg "cost" cost] p
+  | .senderNotEoa sender, p => inclusionErrorFormat "senderNotEoa" [namedArg "sender" sender] p
+  | .missingCode codeHash, p =>
+    inclusionErrorFormat "missingCode" [namedArg "codeHash" codeHash] p
+
+instance : Repr InclusionError := ⟨InclusionError.reprPrec⟩
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
@@ -133,7 +167,7 @@ def InclusionError.code : InclusionError → UInt32
   | .nonceTooLow .. => 205
   | .nonceTooHigh .. => 206
   | .insufficientBalance .. => 207
-  | .senderNotEoa => 208
+  | .senderNotEoa _ => 208
   | .missingCode _ => 209
 
 /-- What a transaction that may enter its block brings to its run. -/
@@ -184,7 +218,8 @@ The nonce of the sender must then still be below `2^64 - 1`, as EIP-2681 asks.
 def checkSender (fork : Fork) (state : TransactionState) (sender : Address) (tx : Transaction)
     (signed : Bool := true) (skipNonce : Bool := false) : Except InclusionError Unit := do
   let account := state.getAccount sender
-  if skipNonce then failIf (2 ^ 64 - 1 ≤ account.nonce) (.transaction .nonceOverflow)
+  if skipNonce then
+    failIf (2 ^ 64 - 1 ≤ account.nonce) (.transaction (.nonceOverflow account.nonce))
   else
     failIf (tx.nonce.toNat < account.nonce) (.nonceTooLow account.nonce tx.nonce.toNat)
     failIf (account.nonce < tx.nonce.toNat) (.nonceTooHigh account.nonce tx.nonce.toNat)
@@ -193,7 +228,7 @@ def checkSender (fork : Fork) (state : TransactionState) (sender : Address) (tx 
   if signed then
     let code ← (state.getCode account.codeHash).mapError fun _ => .missingCode account.codeHash
     failIf (account.codeHash ≠ EMPTY_CODE_HASH ∧ !(fork ≥ .pectra ∧ isValidDelegation code))
-      .senderNotEoa
+      (.senderNotEoa sender)
 
 /-- Check that a transaction may enter its block at `fork`, on the chain `chainId`.
 

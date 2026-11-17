@@ -112,7 +112,7 @@ The cost behind 809 also counts the blob gas at its fee cap, beyond "gas * price
 def rpcCode : InclusionError → Option ErrorCode
   | .transaction (.insufficientGas ..) => some intrinsicGasTooLow
   | .gasAllowanceExceeded .. => some gasLimitAboveBlock
-  | .transaction (.priorityFeeGreaterThanMaxFee) => some priorityFeeAboveCap
+  | .transaction (.priorityFeeGreaterThanMaxFee ..) => some priorityFeeAboveCap
   | .transaction (.invalidSignature) => some invalidSender
   | .insufficientMaxFeePerGas .. => some feeCapBelowBaseFee
   | .nonceTooLow .. => some nonceTooLow
@@ -131,12 +131,14 @@ def transactionErrorText : TransactionError → String
     s!"gas limit {gas} is below {needed}, the intrinsic gas or the call data floor"
   | .initCodeTooLarge size => s!"init code of {size} bytes is above the limit"
   | .gasLimitExceeded gas => s!"gas limit {gas} is above the limit of a transaction"
-  | .nonceOverflow => "the nonce is at least 2^64 - 1"
-  | .priorityFeeGreaterThanMaxFee => "the priority fee per gas is above the maximum fee per gas"
+  | .nonceOverflow nonce => s!"the nonce {nonce} is at least 2^64 - 1"
+  | .priorityFeeGreaterThanMaxFee priorityFee maxFee =>
+    s!"the priority fee per gas {priorityFee} is above the maximum fee per gas {maxFee}"
   | .wrongChainId expected actual => s!"chain ID {actual}, not {expected}"
   | .noBlobData => "a blob transaction carries no blob"
   | .blobCountExceeded count => s!"{count} blobs are above the limit"
-  | .invalidBlobVersionedHash => "a versioned hash has the wrong version"
+  | .invalidBlobVersionedHash index hash =>
+    s!"versioned hash {index}, {hexString hash.toList}, has the wrong version"
   | .emptyAuthorizationList => "a set code transaction carries no authorization"
   | .intrinsicGasAboveLimit gas =>
     s!"intrinsic gas or floor {gas} is above the limit of a transaction"
@@ -154,7 +156,8 @@ def inclusionErrorText : InclusionError → String
   | .nonceTooLow expected nonce => s!"nonce {nonce} is below the nonce {expected} of the sender"
   | .nonceTooHigh expected nonce => s!"nonce {nonce} is above the nonce {expected} of the sender"
   | .insufficientBalance balance cost => s!"balance {balance} is below the cost {cost}"
-  | .senderNotEoa => "the sender has code that is not an allowed delegation"
+  | .senderNotEoa sender =>
+    s!"the sender {hexString sender.toList} has code that is not an allowed delegation"
   | .missingCode _ => "the state does not hold the code of the sender"
 
 /-- The error object of a failed check: the code of its condition, else `-32003`. -/
@@ -166,7 +169,7 @@ def networkErrorText : NetworkError → String
   | .transaction e => transactionErrorText e
   | .wrongVersion version => s!"wrapper version {version}, not 1"
   | .countMismatch .. => "the counts of blobs, commitments and proofs do not match"
-  | .versionedHashMismatch => "a commitment does not hash to its versioned hash"
+  | .versionedHashMismatch index _ _ => s!"commitment {index} does not hash to its versioned hash"
   | .kzg _ => "a blob, a commitment or a proof is not a valid KZG input"
   | .proofRejected => "the proofs do not match the blobs"
 

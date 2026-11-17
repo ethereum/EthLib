@@ -177,5 +177,5 @@ def test_typed_transaction_wrapped_in_rlp_string(method: str) -> None:
         "status": "INVALID",
         "latestValidHash": None,
         "validationError": f"401: transaction {index} does not decode: "
-        f"EthLib.Execution.Transactions.TransactionError.unsupportedType {first}",
+        f"EthLib.Execution.Transactions.TransactionError.unsupportedType (type := {first})",
     }

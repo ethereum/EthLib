@@ -39,6 +39,21 @@ Not yet released.
 
 ### Changes that break callers
 
+- The transaction, inclusion and network-form errors carry the values that their failed check compared.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  The messages of transaction and inclusion errors name each value, as `(name := value)`, with hashes and addresses in hex.
+  For example, `nonceTooLow 3 1` becomes `nonceTooLow (expected := 3) (nonce := 1)`, and `insufficientGas 21000 0` becomes `insufficientGas (needed := 21000) (gas := 0)`.
+  In Lean, these constructors take arguments:
+  - `Transactions.TransactionError.nonceOverflow nonce`, the nonce of the transaction, or of the sender when a simulation skips the nonce check;
+  - `Transactions.TransactionError.priorityFeeGreaterThanMaxFee priorityFee maxFee`;
+  - `Transactions.TransactionError.invalidBlobVersionedHash index hash`, the first versioned hash with the wrong version;
+  - `Transactions.InclusionError.senderNotEoa sender`;
+  - `Transactions.NetworkError.versionedHashMismatch index expected actual`, the first commitment whose hash `expected` is not the versioned hash `actual`.
+  `emptyTransaction`, `noBlobData` and `emptyAuthorizationList` stay bare, since each fires on an empty input.
+  `invalidSignature` stays bare: it fires on a bad `v`, a bad y parity, `r` or `s` out of range, or a signature that recovers no key, and the transaction holds each of these values.
+  `NetworkError.proofRejected` stays bare: the batch check of the proofs gives only a verdict.
+  `checkSender_of_skipNonce` states the nonce `2^64 - 1` in its error.
+
 - The QUIC integer, wire and packet protection errors carry the values their failed check compared.
   Each error fires on the same inputs as before, and codes are unchanged; each message now shows these values.
   - `Quic.Varint.VarintError.truncated` and `Quic.Wire.Error.truncated` carry the bytes needed and available.
