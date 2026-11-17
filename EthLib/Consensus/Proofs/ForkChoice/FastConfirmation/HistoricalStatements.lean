@@ -316,6 +316,37 @@ def ReceiverWindowExits (source : BeaconState preset fork) (firstSlot : Slot)
     ((e.world k).state w).getCurrentSlot config = .ok current → subChecked current 1 = .ok finish →
     WindowExitBound (config := config) ((e.world k).state w) source head.root firstSlot finish
 
+/-- The exit bound of `ReceiverWindowExits`, asked only of receivers near the parent.
+
+A receiver is near when its store epoch is at most two epochs after `parentEpoch`.
+
+The last full epoch of a later receiver's window omits every validator that exited since the source.
+
+Those exits can exceed the source's reserve.
+
+The historical-anchor step reads the bound only for a near receiver.
+
+The duty-epoch step, which covers later receivers, does not read it. -/
+def ReceiverWindowExitsNear (parentEpoch : Epoch) (source : BeaconState preset fork)
+    (firstSlot : Slot) (first last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k (head : ForkChoiceNode) (current finish : Slot) (receiverEpoch : Epoch),
+    first ≤ (e.world k).time → (e.world k).time ≤ last →
+    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    ((e.world k).state w).getHead config = .ok head →
+    ((e.world k).state w).getCurrentSlot config = .ok current → subChecked current 1 = .ok finish →
+    ((e.world k).state w).getCurrentStoreEpoch config = .ok receiverEpoch →
+    receiverEpoch.toNat ≤ parentEpoch.toNat + 2 →
+    WindowExitBound (config := config) ((e.world k).state w) source head.root firstSlot finish
+
+omit [DecidablePred (· ∈ J)] in
+/-- `ReceiverWindowExits` gives the bound for near receivers, at any parent epoch. -/
+theorem receiverWindowExitsNear_of_exits {parentEpoch : Epoch}
+    {source : BeaconState preset fork} {firstSlot : Slot} {first last : Nat}
+    (exits : ReceiverWindowExits (e := e) source firstSlot first last) :
+    ReceiverWindowExitsNear (e := e) parentEpoch source firstSlot first last :=
+  fun w hw k head current finish _ lowK highK upToDate headOk currentOk finishOk _ _ =>
+    exits w hw k head current finish lowK highK upToDate headOk currentOk finishOk
+
 open Classical in
 /-- The honest duties of one complete epoch outweigh the rest of the stake and the boost.
 

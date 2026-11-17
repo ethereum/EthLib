@@ -27,6 +27,9 @@ Not yet released.
   `Execution.honestHeadsCover_of_historical_anchor` keeps its statement.
   `slotStart_le_clock` is now public.
 
+- `ReceiverWindowExitsNear` asks the exit bound of `ReceiverWindowExits` only of receivers within two epochs of the parent, the only receivers whose steps read it.
+  `receiverWindowExitsNear_of_exits` derives it from `ReceiverWindowExits`, so `Execution.honestHeadsCover_of_historical_anchor` and `Execution.honestHeadsCover_of_signed_justification` keep their statements.
+
 - `HonestVoteData.target_read` reads the target of an honest vote from its voter's head, without the reads of a duty vote.
   It needs the target block held by some store reachable from the same anchor.
   The anchor store does not tie the anchor state's latest header to the anchor block, so a read at the anchor needs that block.
