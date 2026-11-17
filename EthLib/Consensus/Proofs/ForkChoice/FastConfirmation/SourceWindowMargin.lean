@@ -2018,6 +2018,37 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
   · exact .inl (.inl member)
   · exact .inr ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
 
+/-- Validated duty votes give the honest votes of every slot range that ends by their horizon.
+
+The range ends when its last slot does, and the votes of that slot are due before then. -/
+public theorem ValidatedDutyVotes.votesInSlots {Δ last : ℕ}
+    (votes : ValidatedDutyVotes (e := e) last) (fits : DelayFits fork config genesisTimeMs Δ)
+    {begin next : Slot} {endTime : UInt64}
+    (endTimeOk : computeTimeAtSlotMs config genesisTimeMs next = .ok endTime)
+    (complete : endTime.toNat ≤ last) :
+    VotesInSlots e begin next := by
+  intro a honestA dutySlot committee deadline _ before assigned deadlineOk begun
+  have nextFits : dutySlot.toNat + (1 : UInt64).toNat < 2 ^ 64 := by
+    have lt := UInt64.lt_iff_toNat_lt.mp before
+    have bound := next.toNat_lt
+    simp only [UInt64.toNat_one]
+    omega
+  have nextOk := addChecked_of_lt nextFits
+  have nextLe : dutySlot + 1 ≤ next := by
+    have lt := UInt64.lt_iff_toNat_lt.mp before
+    have value := (addChecked_ok_iff.mp nextOk).2
+    rw [UInt64.le_iff_toNat_le, value]
+    simp only [UInt64.toNat_one]
+    omega
+  obtain ⟨following, followingOk, _, followingLe⟩ :=
+    exists_timeAtSlotMs_of_le nextLe endTimeOk
+  obtain ⟨startTime, startOk, _, _⟩ :=
+    exists_timeAtSlotMs_of_le (UInt64.le_of_lt before) endTimeOk
+  have dueBound := fits.before_boundary nextOk startOk followingOk deadlineOk
+  apply votes a honestA dutySlot committee deadline assigned deadlineOk begun
+  have followingLe := UInt64.le_iff_toNat_le.mp followingLe
+  omega
+
 /-- An honest member of the receiver's window from the caller's slot supports the root there.
 
 Otherwise the receiver's justified block descends from the root, or bounded honest stores collide.
@@ -2095,29 +2126,8 @@ private theorem receiver_window_member_reaches {Δ : ℕ} (sync : e.Synchronous 
   have started : e.startTime ≤ (e.world n).time := by
     have := e.monotone_time (Nat.zero_le n)
     simpa [Execution.world_zero, World.initial] using this
-  have windowVotes : VotesInSlots e slot (finish + 1) := by
-    intro a honestA dutySlot committee deadline _ before assigned deadlineOk begun
-    have nextFits : dutySlot.toNat + (1 : UInt64).toNat < 2 ^ 64 := by
-      have lt := UInt64.lt_iff_toNat_lt.mp before
-      have bound := (finish + 1).toNat_lt
-      simp only [UInt64.toNat_one]
-      omega
-    have nextOk := addChecked_of_lt nextFits
-    have nextLe : dutySlot + 1 ≤ finish + 1 := by
-      have lt := UInt64.lt_iff_toNat_lt.mp before
-      have value := (addChecked_ok_iff.mp nextOk).2
-      rw [UInt64.le_iff_toNat_le, value]
-      simp only [UInt64.toNat_one]
-      omega
-    obtain ⟨following, followingOk, _, followingLe⟩ :=
-      exists_timeAtSlotMs_of_le nextLe endTimeOk
-    obtain ⟨startTime, startOk, _, _⟩ :=
-      exists_timeAtSlotMs_of_le (UInt64.le_of_lt before) endTimeOk
-    have dueBound := fits.before_boundary nextOk startOk followingOk deadlineOk
-    apply votes a honestA dutySlot committee deadline assigned deadlineOk begun
-    have followingLe := UInt64.le_iff_toNat_le.mp followingLe
-    rw [upToDate.1, atTime] at endLe
-    omega
+  have windowVotes := votes.votesInSlots fits (begin := slot) endTimeOk
+    (by rw [upToDate.1, atTime] at endLe; exact endLe)
   exact e.mem_supportersOf_of_duty_interval_core sync slots preGloas admitted fits prompt
     anchored anchorSlot anchorBoundary start started chain nonzero windowVotes beginOk endTimeOk
     (le_of_eq timeEq) (by rw [← atTime, ← upToDate.1]; exact endLe) rootCovers receiver atTime

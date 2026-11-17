@@ -37,42 +37,6 @@ private theorem addChecked_one_of_subChecked {a b : Slot}
   constructor <;> omega
 
 
-/-- A finite active stake supplies the checked total, without bounding inactive balances. -/
-private theorem activeTotal_exists {state : BeaconState preset fork}
-    (within : state.RegistryWithinLimit)
-    (bounded : stake (fun v => balanceAt state v.toNat)
-      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset < 2 ^ 64) :
-    ∃ total, getTotalActiveBalance state = .ok total := by
-  let value := max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-    (stake (fun v => balanceAt state v.toNat)
-      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
-  have fits : value < 2 ^ 64 := max_lt preset.EFFECTIVE_BALANCE_INCREMENT.toNat_lt bounded
-  refine ⟨value.toUInt64, ?_⟩
-  unfold getTotalActiveBalance
-  rw [getActiveValidatorIndicesChecked_of_within within]
-  apply getTotalBalance_ok_iff_stake.mpr
-  refine ⟨?_, bounded, UInt64.toNat_ofNat_of_lt' fits⟩
-  intro v member
-  obtain ⟨validator, found, _⟩ := (mem_getActiveValidatorIndices within).mp member
-  exact (Array.getElem?_eq_some_iff.mp found).1
-
-/-- A successful total also bounds a subset, without bounding inactive balances. -/
-private theorem totalBalance_exists_of_subset {state : BeaconState preset fork}
-    {indices all : List ValidatorIndex} {total : Gwei}
-    (read : getTotalBalance state all = .ok total)
-    (subset : ∀ v ∈ indices, v ∈ all) :
-    ∃ result, getTotalBalance state indices = .ok result := by
-  obtain ⟨inside, bounded, -⟩ := getTotalBalance_ok_iff_stake.mp read
-  have small : stake (fun v => balanceAt state v.toNat) indices.toFinset < 2 ^ 64 :=
-    lt_of_le_of_lt (stake_mono fun v member =>
-      List.mem_toFinset.mpr (subset v (List.mem_toFinset.mp member))) bounded
-  let value := max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-    (stake (fun v => balanceAt state v.toNat) indices.toFinset)
-  have fits : value < 2 ^ 64 := max_lt preset.EFFECTIVE_BALANCE_INCREMENT.toNat_lt small
-  refine ⟨value.toUInt64, getTotalBalance_ok_iff_stake.mpr
-    ⟨fun v member => inside v (subset v member), small, ?_⟩⟩
-  exact UInt64.toNat_ofNat_of_lt' fits
-
 /-- Registry lookups and a checked active total supply a checked filtered total. -/
 private theorem filteredTotal_exists {state : BeaconState preset fork}
     {participants : Std.TreeSet ValidatorIndex} {total : Gwei}
@@ -87,7 +51,7 @@ private theorem filteredTotal_exists {state : BeaconState preset fork}
     (list := participants.toList) (fun v member => by
       obtain ⟨validator, found⟩ := inside v (Std.TreeSet.mem_toList.mp member)
       exact ⟨isActiveValidator validator (getCurrentEpoch state), by simp [found]⟩)
-  obtain ⟨result, resultOk⟩ := totalBalance_exists_of_subset
+  obtain ⟨result, resultOk⟩ := getTotalBalance_exists_of_subset
     (indices := active) (getTotalActiveBalance_ok read) (fun v member => by
       have passed := passes_of_mem_filterM_ok filtered member
       simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at passed
@@ -1406,7 +1370,7 @@ public theorem receiver_fullMaximum_of_head_window {anchor : Store preset fork}
   -- Only the range arithmetic is reused; the balance state and committee read are the receiver's.
   obtain ⟨covered, coverage⟩ := coverage_exists_of_maximum nonempty read afterOk
   have stakeBound := ceiling w receiver k _ state inTime cached
-  obtain ⟨total, totalOk⟩ := activeTotal_exists
+  obtain ⟨total, totalOk⟩ := getTotalActiveBalance_exists
     (BeaconState.registryWithinLimit_of_lt early state) (by change _ ≤ _ at stakeBound; omega)
   exact maximum_exists_of_total coverage windowOk totalOk
     (registry_of_head_window anchorStore anchored sound anchorSlot boundary
