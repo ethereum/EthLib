@@ -18,6 +18,8 @@ A block writes the checkpoints of such a state, and those it reaches at the end 
 
 A new epoch writes the unrealized checkpoints, which are in order too.
 
+The justified epoch of the store is at least the current justified epoch of each held state.
+
 From Gloas, a vote of the payload committee and an envelope keep the checkpoints.
 
 From Heze, an inclusion list keeps them too.
@@ -153,6 +155,13 @@ theorem updateUnrealizedCheckpoints_ordered {justified finalized : Checkpoint}
   · exact UInt64.le_trans o2 (UInt64.le_of_lt j)
   · exact UInt64.le_trans le (le_of_not_lt' j)
   · exact o2
+
+/-- Replacing the checkpoints leaves a justified epoch at least that of the given one. -/
+private theorem justified_le_updateCheckpoints (justified finalized : Checkpoint) :
+    justified.epoch ≤ (store.updateCheckpoints justified finalized).justifiedCheckpoint.epoch := by
+  unfold updateCheckpoints
+  split <;> dsimp only <;> split
+  all_goals first | exact UInt64.le_refl _ | exact UInt64.not_lt.mp ‹_›
 
 /-- A store with the checkpoints of an ordered store is ordered. -/
 private theorem EpochsOrdered.of_checkpoints (ordered : store.EpochsOrdered)
@@ -667,6 +676,73 @@ theorem Store.Reachable.finalized_le_justified (anchor : Invariant anchorState)
     (reachable : Store.Reachable config anchorState anchorBlock store) :
     store.finalizedCheckpoint.epoch ≤ store.justifiedCheckpoint.epoch :=
   (reachable.ordered anchor).1.1
+
+/-- The current justified epoch of each held state is at most the justified epoch of the store.
+
+A block passes the current justified checkpoint of its state to the store.
+
+The justified epoch of the store never decreases.
+
+The anchor state must keep the invariant of the state transition. -/
+theorem Store.Reachable.justified_le_of_blockState (anchor : Invariant anchorState)
+    (reachable : Store.Reachable config anchorState anchorBlock store) {root : Root}
+    {state : BeaconState preset fork} (held : store.blockStates[root]? = some state) :
+    state.currentJustifiedCheckpoint.epoch ≤ store.justifiedCheckpoint.epoch := by
+  have all : ∀ (r : Root) (s : BeaconState preset fork), store.blockStates[r]? = some s →
+      s.currentJustifiedCheckpoint.epoch ≤ store.justifiedCheckpoint.epoch := by
+    clear held state root
+    induction reachable with
+    | anchor made =>
+      obtain ⟨anchorRoot, _, _, states⟩ := getForkchoiceStore_maps made
+      obtain ⟨_, _, _, _, justified, _⟩ := getForkchoiceStore_anchor made
+      intro r s found
+      rw [states, getElem?_insert_root] at found
+      split at found
+      · cases Option.some.inj found
+        rw [justified]
+        exact UInt64.le_trans anchor.settled (getPreviousEpoch_le _)
+      · simp at found
+    | @block before after checks sources signed _ added ih =>
+      have forward := Store.onBlock_checkpointsAdvance added
+      unfold Store.onBlock at added
+      simp only [bind_ok_iff] at added
+      obtain ⟨_, _, added⟩ := added
+      split at added
+      · cases added
+        exact ih
+      · unfold Store.addBlock at added
+        simp only [bind_ok_iff] at added
+        obtain ⟨state, _, head, _, voted, vote, recorded, record, boosted, boost, added⟩ := added
+        obtain ⟨_, _, bs0⟩ := (Store.recordBlockPtcVotes_onlyPtcVotes vote).frame
+        obtain ⟨_, _, bs1, _⟩ := Store.recordBlockTimeliness_frame record
+        obtain ⟨_, _, bs2, _⟩ := Store.updateProposerBoostRoot_frame boost
+        obtain ⟨later, _, bs3, _⟩ := Store.computePulledUpTip_frame added
+        intro r s found
+        rw [bs3, Store.updateCheckpoints_blockStates, bs2, bs1, bs0,
+          Std.TreeMap.getElem?_insert] at found
+        split at found
+        · cases found
+          exact UInt64.le_trans (Store.justified_le_updateCheckpoints _ _) later.1.epoch_le
+        · exact UInt64.le_trans (ih _ _ found) forward.1.epoch_le
+    | tick _ handled ih =>
+      obtain ⟨_, le, _, states⟩ := Store.onTick_frame handled
+      exact fun r s found => UInt64.le_trans (ih r s (states ▸ found)) le.1.epoch_le
+    | attestation _ handled ih =>
+      obtain ⟨le, _, states, -⟩ := Store.onAttestation_frame handled
+      exact fun r s found => UInt64.le_trans (ih r s (states ▸ found)) le.1.epoch_le
+    | attesterSlashing _ handled ih =>
+      obtain ⟨le, _, states, -⟩ := Store.onAttesterSlashing_frame handled
+      exact fun r s found => UInt64.le_trans (ih r s (states ▸ found)) le.1.epoch_le
+    | payloadAttestation _ handled ih =>
+      obtain ⟨le, _, states⟩ := (Store.onPayloadAttestationMessage_onlyPtcVotes handled).frame
+      exact fun r s found => UInt64.le_trans (ih r s (states ▸ found)) le.1.epoch_le
+    | envelope _ handled ih =>
+      obtain ⟨le, _, states⟩ := Store.onExecutionPayloadEnvelope_frame handled
+      exact fun r s found => UInt64.le_trans (ih r s (states ▸ found)) le.1.epoch_le
+    | inclusionList _ handled ih =>
+      obtain ⟨le, _, states⟩ := Store.onInclusionList_frame handled
+      exact fun r s found => UInt64.le_trans (ih r s (states ▸ found)) le.1.epoch_le
+  exact all root state held
 
 /-- The state of a block of a reachable store, pulled up to the current epoch, keeps the invariant.
 
