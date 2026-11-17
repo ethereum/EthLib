@@ -30,7 +30,7 @@ open EthLib.Exports (Result PyValue pyExport)
 
 /-- The result of a step of a proposer, with the code of its error. -/
 def runProposer {α : Type} (result : Except ProposerError α) : Result α :=
-  result.mapError fun e => (e.code, s!"proposer step failed with code {e.code}")
+  result.mapError fun e => (e.code, toString e)
 
 /-- The proof of a condition on the fork, or code 0 with a message. -/
 def holds (condition : Prop) [Decidable condition] (message : String) :

@@ -135,7 +135,7 @@ def decodePayload (form : PayloadForm) (extension : Extension) : Except Error Pa
   Base.ensure (extension.kind = form.type) .constant
   Base.ensure (extension.data.size ≤ 65535) .length
   (exact (readPayload form) extension.data.data.toList).mapError fun
-    | .truncated => .length
+    | .truncated .. => .length
     | error => error
 
 end EthLib.Networking.Quic.Tls

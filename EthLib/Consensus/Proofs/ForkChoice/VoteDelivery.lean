@@ -486,7 +486,8 @@ private theorem validateOnAttestation_of_facts {store : Store preset fork}
       ← epoch, checkpoint, dueOk, currentOk, dueBound, bind, Except.bind, pure, Except.pure,
       Except.mapError, discard, Functor.mapConst, Except.map]
 
-private theorem Store.exists_storeTargetCheckpointState {store : Store preset fork}
+/-- A store that can compute the state of a target can store it and read it back. -/
+theorem Store.exists_storeTargetCheckpointState {store : Store preset fork}
     {target : Checkpoint} {state : BeaconState preset fork}
     (computed : store.computeCheckpointState config checks target = .ok state) :
     ∃ withTarget targetState,

@@ -171,7 +171,11 @@ def test_update_of_another_fork_than_its_epoch_is_refused() -> None:
 def test_decode_refuses_a_truncated_body() -> None:
     served = Served(ALTAIR_CASE)
     body = served.ssz(served.updates[0][0], 1)
-    message = "chunk rejected: EthLib.Consensus.BeaconApi.ChunkError.truncated"
+    # The one chunk starts at offset 0 and needs the whole body, one byte more than is left.
+    message = (
+        "chunk rejected: EthLib.Consensus.BeaconApi.ChunkError.truncated "
+        f"0 {len(body)} {len(body) - 1}"
+    )
     with raises(consensus.ConsensusError, message) as error:
         consensus.api_light_client_decode_updates("minimal", served.root, body[:-1], served.config)
     assert error.value.code == 0

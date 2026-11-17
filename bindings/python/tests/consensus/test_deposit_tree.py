@@ -221,7 +221,8 @@ def test_snapshot_of_unfinalized_tree() -> None:
 
 def test_snapshot_with_wrong_root() -> None:
     # The empty tree has the root of an empty snapshot, not the zero root.
-    with raises(DepositTreeError, "EthLib.Consensus.DepositTreeError.rootMismatch"):
+    message = f"EthLib.Consensus.DepositTreeError.rootMismatch 0x{'00' * 32} 0x{EMPTY_ROOT.hex()}"
+    with raises(DepositTreeError, message):
         consensus.deposit_tree_from_snapshot(([], bytes(32), 0, bytes(32), 0))
 
 
@@ -229,14 +230,17 @@ def test_snapshot_with_extra_root() -> None:
     # A leading root that no bit of the count uses would place every subtree one slot right.
     roots, root, count, block_hash, height = cases()[100].snapshot
     extra = ([bytes(32), *roots], root, count, block_hash, height)
-    with raises(DepositTreeError, "EthLib.Consensus.DepositTreeError.extraFinalized"):
+    # The count uses every root but the one in front.
+    with raises(DepositTreeError, "EthLib.Consensus.DepositTreeError.extraFinalized 1"):
         consensus.deposit_tree_from_snapshot(extra)
 
 
 def test_snapshot_with_missing_root() -> None:
     roots, root, count, block_hash, height = cases()[100].snapshot
     missing = (roots[1:], root, count, block_hash, height)
-    with raises(DepositTreeError, "EthLib.Consensus.DepositTreeError.missingFinalized"):
+    # The roots are used from the lowest level up, so the highest set bit of the count finds none.
+    message = f"EthLib.Consensus.DepositTreeError.missingFinalized {count.bit_length() - 1}"
+    with raises(DepositTreeError, message):
         consensus.deposit_tree_from_snapshot(missing)
 
 
@@ -274,9 +278,11 @@ def test_finalize_again_at_the_same_count() -> None:
 
 def test_finalize_with_a_wrong_root() -> None:
     tree = pushed(consensus.deposit_tree_new(), cases()[:3])
-    _, count, block_hash = cases()[1].eth1_data
-    with raises(DepositTreeError, "EthLib.Consensus.DepositTreeError.rootMismatch"):
-        consensus.deposit_tree_finalize(tree, (cases()[2].eth1_data[0], count, block_hash), 7)
+    computed, count, block_hash = cases()[1].eth1_data
+    wrong = cases()[2].eth1_data[0]
+    message = f"EthLib.Consensus.DepositTreeError.rootMismatch 0x{wrong.hex()} 0x{computed.hex()}"
+    with raises(DepositTreeError, message):
+        consensus.deposit_tree_finalize(tree, (wrong, count, block_hash), 7)
 
 
 def test_finalize_nothing() -> None:
@@ -290,7 +296,7 @@ def test_full_tree() -> None:
     # The deposit contract stops one deposit short of the leaves of its tree.
     root = bytes(32)
     tree: DepositTree = (almost_full(DEPTH, root), 2**DEPTH - 1, (root, 0))
-    with raises(DepositTreeError, "EthLib.Consensus.DepositTreeError.treeFull"):
+    with raises(DepositTreeError, f"EthLib.Consensus.DepositTreeError.treeFull {2**DEPTH - 1}"):
         consensus.deposit_tree_push_leaf(tree, root)
 
 

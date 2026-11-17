@@ -208,7 +208,7 @@ def test_versions(version: int) -> None:
 
     assert update(1, None) == NOT_TERMINAL
     assert update(4, None) == _status("VALID", _hash(4))
-    with raises(engine.EngineError, INVALID_STATE) as error:
+    with raises(engine.EngineError, f"{INVALID_STATE} {ZERO} {ZERO}") as error:
         update(4, _hash(3))
     assert error.value.code == 38002
 
@@ -238,7 +238,7 @@ TRANSITION_TREE = [_pow(1, 0, 105, 90), _payload(2, 1), _payload(3, 2)]
 )
 def test_zero_after_transition(safe: str, finalized: str) -> None:
     """Once the known finalized block is a payload, a zero safe or finalized hash is refused."""
-    with raises(engine.EngineError, INVALID_STATE) as error:
+    with raises(engine.EngineError, f"{INVALID_STATE} {safe} {finalized}") as error:
         _update(
             TRANSITION_TREE,
             3,

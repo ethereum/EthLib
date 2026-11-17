@@ -42,7 +42,7 @@ open EthLib.Execution.Transactions
 /-- A missing build process returns unknown payload, before any fork or bundle check. -/
 theorem getPayload_eq_error_of_store_eq_none (config : ChainConfig) (setup : TrustedSetup)
     (store : PayloadStore) (version : Nat) (id : PayloadId) (h : store id = none) :
-    getPayload config setup store version id = .error (.engine .unknownPayload) := by
+    getPayload config setup store version id = .error (.engine (.unknownPayload id)) := by
   simp [getPayload, h, throw, throwThe, MonadExceptOf.throw]
 
 /-- A returned payload is the stored block's, at its configured fork, with a checked bundle. -/
@@ -138,7 +138,9 @@ variable {config : ChainConfig} {setup : TrustedSetup} {store : PayloadStore} {v
 theorem getPayload_eq_error_of_activeFork_ne (hs : store id = some stored)
     (hf : config.activeFork stored.built.block.header.number
       stored.built.block.header.timestamp.toNat ≠ some stored.fork) :
-    getPayload config setup store version id = .error .wrongFork := by
+    getPayload config setup store version id =
+      .error (.wrongFork stored.fork (config.activeFork stored.built.block.header.number
+        stored.built.block.header.timestamp.toNat)) := by
   simp [getPayload, hs, hf, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- A build at a fork that the requested version does not return is refused. -/
@@ -146,7 +148,8 @@ theorem getPayload_eq_error_of_acceptsGetPayloadFork_eq_false (hs : store id = s
     (hf : config.activeFork stored.built.block.header.number
       stored.built.block.header.timestamp.toNat = some stored.fork)
     (hv : acceptsGetPayloadFork version stored.fork = false) :
-    getPayload config setup store version id = .error (.engine .unsupportedFork) := by
+    getPayload config setup store version id =
+      .error (.engine (.unsupportedFork (some stored.fork))) := by
   simp [getPayload, hs, hf, hv, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- A build whose stored requests do not have the shape of its fork is refused. -/
@@ -165,7 +168,7 @@ theorem getPayload_eq_error_of_blockValue_ge (hs : store id = some stored)
     (hv : acceptsGetPayloadFork version stored.fork = true)
     (hr : requestsOfFork stored.fork stored.built.requests = true)
     (hb : ¬stored.built.blockValue < 2 ^ 256) :
-    getPayload config setup store version id = .error .blockValue := by
+    getPayload config setup store version id = .error (.blockValue stored.built.blockValue) := by
   simp [getPayload, hs, hf, hv, hr, hb, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- A build whose block has no payload form is refused. -/

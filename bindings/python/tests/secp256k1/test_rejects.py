@@ -21,16 +21,16 @@ INVALID = json.loads(FIXTURES.read_bytes())["invalid"]
 
 # The SEC 1 v2 §2.3.4 decoding error that each malformed public key of the fixtures meets.
 # Each value is the message and the code of the Lean error.
-# In a message, {prefix} stands for the first byte of the key.
+# In a message, {prefix} stands for the first byte of the key, and {x} and {y} for its coordinates.
 KEY_ERRORS = {
     "Bad sequence prefix": ("bad point encoding prefix: {prefix}", 2),
     "Bad X coordinate (== 0)": ("point is not on the curve", 4),
     "Bad Y coordinate (== 0)": ("point is not on the curve", 4),
     "Bad X/Y coordinate (== 0)": ("point is not on the curve", 4),
-    "Bad X coordinate (== P)": ("point coordinate is not below p", 3),
-    "Bad Y coordinate (== P)": ("point coordinate is not below p", 3),
-    "Bad X coordinate (> P)": ("point coordinate is not below p", 3),
-    "Bad Y coordinate (> P)": ("point coordinate is not below p", 3),
+    "Bad X coordinate (== P)": ("point coordinate is not below p: {x}", 3),
+    "Bad Y coordinate (== P)": ("point coordinate is not below p: {y}", 3),
+    "Bad X coordinate (> P)": ("point coordinate is not below p: {x}", 3),
+    "Bad Y coordinate (> P)": ("point coordinate is not below p: {y}", 3),
 }
 
 BAD_KEYS = [c for c in INVALID["verify"] if c.get("exception") == "Expected Point"]
@@ -49,7 +49,8 @@ def test_verify_rejects_key(case: dict) -> None:
     # 0^3 + 7 has no square root mod p, so no point has that x (SEC 1 v2 §2.3.4, step 2.4.1).
     if len(q) == 33 and case["description"] == "Bad X coordinate (== 0)":
         message, code = "no point of the curve has this x", 5
-    with raises(Secp256k1Error, message.format(prefix=q[0])) as error:
+    x, y = f"0x{q[1:33].hex()}", f"0x{q[33:65].hex()}"
+    with raises(Secp256k1Error, message.format(prefix=q[0], x=x, y=y)) as error:
         secp256k1.verify(q, m, s)
     assert error.value.code == code
 
@@ -68,12 +69,13 @@ def test_verify_rejects_signature(case: dict) -> None:
 
 
 # The error EthLib names for each invalid recovery of the fixtures, message and code.
+# In a message, {r} and {s} stand for the two integers of the signature; r is checked first.
 RECOVER_ERRORS = {
-    "Invalid r, s values (== 0)": ("signature integer is not in [1, n - 1]", 7),
-    "Invalid r value (== 0)": ("signature integer is not in [1, n - 1]", 7),
-    "Invalid s value (== 0)": ("signature integer is not in [1, n - 1]", 7),
-    "Invalid r value (>= n)": ("signature integer is not in [1, n - 1]", 7),
-    "Invalid s value (>= n)": ("signature integer is not in [1, n - 1]", 7),
+    "Invalid r, s values (== 0)": ("signature integer is not in [1, n - 1]: {r}", 7),
+    "Invalid r value (== 0)": ("signature integer is not in [1, n - 1]: {r}", 7),
+    "Invalid s value (== 0)": ("signature integer is not in [1, n - 1]: {s}", 7),
+    "Invalid r value (>= n)": ("signature integer is not in [1, n - 1]: {r}", 7),
+    "Invalid s value (>= n)": ("signature integer is not in [1, n - 1]: {s}", 7),
     # Recovery ids 2 and 3 name x = r + n, which Ethereum never uses; EthLib takes 0 or 1.
     "Invalid r value for r (should be less than p - order)": (
         "bad recovery id: 2, expected 0 or 1",
@@ -89,7 +91,8 @@ RECOVER_ERRORS = {
 def test_recover_rejects(case: dict) -> None:
     m, s = bytes.fromhex(case["m"]), bytes.fromhex(case["signature"])
     message, code = RECOVER_ERRORS[case["description"]]
-    with raises(Secp256k1Error, message) as error:
+    r, s_value = f"0x{s[:32].hex()}", f"0x{s[32:64].hex()}"
+    with raises(Secp256k1Error, message.format(r=r, s=s_value)) as error:
         secp256k1.recover(m, s, case.get("recoveryId", 0))
     assert error.value.code == code
 

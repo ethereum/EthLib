@@ -219,7 +219,7 @@ def getBlobsParamsJson (hashes : List Bytes32) (bits : Option CellBitarray) : Js
 From Fusaka the version is an unsupported fork. -/
 def getBlobsV1 (pool : BlobPool) (fork : Fork) (hashes : List Bytes32) :
     Except EngineError (List (Option BlobAndProofV1)) := do
-  if fork ≥ .fusaka then throw .unsupportedFork
+  if fork ≥ .fusaka then throw (.unsupportedFork (some fork))
   checkRequestSize pool.maxRequest hashes.length
   return hashes.map fun h => if pool.serving then (pool.lookup h).bind PooledBlob.toV1 else none
 

@@ -26,23 +26,30 @@ namespace EthLib.Networking.Quic.Tls.Wire
 
 A fixed field with another value, or an extension of the wrong type, is a constant error. -/
 inductive Error where
-  | truncated
+  /-- A field needs `needed` bytes, and only `available` are left. -/
+  | truncated (needed available : Nat)
+  /-- A length is outside the bounds of its field, or does not fit its length field (§3.4). -/
   | length
-  | trailing
+  /-- A field that must fill its input leaves `count` bytes after it. -/
+  | trailing (count : Nat)
+  /-- A fixed field has another value, or an extension has the wrong type. -/
   | constant
-  | duplicateExtension
-  | messageType
+  /-- The extension type `type` occurs twice in one block (§4.2). -/
+  | duplicateExtension (type : Fin (2 ^ 16))
+  /-- The handshake type `type` is not one this codec reads (§4). -/
+  | messageType (type : UInt8)
+  /-- The transcript cannot take a retry here: it has already retried, or has more messages. -/
   | retry
   deriving Repr, DecidableEq
 
 /-- Stable local codes, independent of the TLS alert numbers. -/
 def Error.code : Error → UInt32
-  | .truncated => 1
+  | .truncated .. => 1
   | .length => 2
-  | .trailing => 3
+  | .trailing _ => 3
   | .constant => 4
-  | .duplicateExtension => 5
-  | .messageType => 6
+  | .duplicateExtension _ => 5
+  | .messageType _ => 6
   | .retry => 7
 
 /-- A reader consumes a prefix of a byte list. -/
@@ -53,10 +60,12 @@ abbrev require (condition : Prop) [Decidable condition] (error : Error) : Reader
   Base.ByteReader.require condition error
 
 /-- Read exactly `n` bytes, without padding an incomplete field. -/
-abbrev bytes (n : Nat) : Reader (List UInt8) := Base.ByteReader.bytes .truncated n
+abbrev bytes (n : Nat) : Reader (List UInt8) := fun input =>
+  Base.ByteReader.bytes (.truncated n input.length) n input
 
 /-- Read a big-endian integer of the given width, RFC 8446 §3.3. -/
-abbrev uint (width : Nat) : Reader Nat := Base.ByteReader.uint .truncated width
+abbrev uint (width : Nat) : Reader Nat := fun input =>
+  Base.ByteReader.uint (.truncated width input.length) width input
 
 /-- A two-byte protocol identifier, without an algorithm-selection policy. -/
 abbrev CodePoint := Fin (2 ^ 16)
@@ -70,7 +79,8 @@ def codePoint : Reader CodePoint := do
 def vector (n : Nat) : Reader (Vector UInt8 n) := do
   let data ← bytes n
   if h : data.length = n then return ⟨data.toArray, by simpa using h⟩
-  else throw .truncated
+  -- Unreachable: the read above returns exactly `n` bytes.
+  else throw (.truncated n data.length)
 
 /-- Read a vector whose encoded byte length lies between the inclusive bounds (§3.4). -/
 def blob (width minimum maximum : Nat) : Reader (List UInt8) := do
@@ -88,7 +98,7 @@ def encodeBlob (width minimum maximum : Nat) (data : List UInt8) :
 /-- Parse an isolated field and reject any bytes its reader leaves. -/
 def exact (reader : Reader α) (input : List UInt8) : Except Error α := do
   let (value, rest) ← reader input
-  if rest = [] then return value else throw .trailing
+  if rest = [] then return value else throw (.trailing rest.length)
 
 /-- Read consecutive entries until the isolated vector ends.
 

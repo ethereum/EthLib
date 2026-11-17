@@ -240,7 +240,7 @@ def runTrie (act : Except Trie.TrieError Hash32) : Result ByteArray :=
   match act with
   | .ok hash => return ⟨hash.toArray⟩
   | .error (.rlp e) => throw (e.code, s!"no root: {reprStr e}")
-  | .error e => throw (0, s!"no root: {reprStr e}")
+  | .error e => throw (0, s!"no root: {oneLine e}")
 
 /-- The transactions root of the transactions of a block, decoded at the fork. -/
 @[export eth_block_transactions_root]

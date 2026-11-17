@@ -22,6 +22,7 @@ LEAN_ROOTS = (
     "EthLib.Engine.Exports.NewPayload",
     "EthLib.Cryptography.Exports.Keccak",
     "EthLib.Serialization.Exports.Rlp",
+    "EthLib.Serialization.Exports.Ssz",
 )
 # The test module; pytest also loads each conftest file on the way to it.
 TEST_MODULE = "bindings/python/tests/parity/test_execution.py"

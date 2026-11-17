@@ -177,7 +177,8 @@ def test_no_terminal_block_asks_nothing(bellatrix: bytes, chain: list):
 
 def test_terminal_block_with_an_unknown_parent(bellatrix: bytes):
     chain = [pow_block(_hash(2), _hash(1), TTD)]
-    with raises(PROPOSER_ERROR, "proposer step failed with code 14") as info:
+    message = f"no known proof-of-work block has hash 0x{_hash(1).hex()}"
+    with raises(PROPOSER_ERROR, message) as info:
         prepare("bellatrix", bellatrix, chain)
     assert info.value.code == 14
 
@@ -223,14 +224,16 @@ def test_withdrawals_and_parent_root(fork: str):
 
 def test_time_of_a_slot_beyond_64_bits():
     # The slot times 12000 milliseconds overflows 64 bits.
-    with raises(PROPOSER_ERROR, "proposer step failed with code 1") as info:
+    with raises(PROPOSER_ERROR, "arithmetic: EthLib.Base.ArithError.overflow") as info:
         prepare("shapella", state_at("shapella", slot=2**63))
     assert info.value.code == 1
 
 
 def test_expected_withdrawals_fail():
     # Validator 1 has no balance, so the sweep of withdrawals cannot read it.
-    with raises(PROPOSER_ERROR, "proposer step failed with code 5") as info:
+    message = "the state transition fails: EthLib.Consensus.TransitionError.accessor"
+    message += " (EthLib.Consensus.AccessorError.indexOutOfRange 1)"
+    with raises(PROPOSER_ERROR, message) as info:
         prepare("shapella", state_at("shapella", balances=1))
     assert info.value.code == 5
 

@@ -65,10 +65,10 @@ theorem ecmul_size {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray
   cases h
   simp [ByteArray.size, length_g1ToBytes]
 
-/-- A coordinate at or above `p` is rejected. -/
+/-- A first coordinate at or above `p` is rejected, and the error holds it. -/
 theorem bytesToG1_invalidFieldElement {raw : List UInt8}
     (hx : Fp.modulus ≤ EthLib.Base.bytesToNat (raw.take 32)) :
-    bytesToG1 raw = .error .invalidFieldElement := by
+    bytesToG1 raw = .error (.invalidFieldElement (EthLib.Base.bytesToNat (raw.take 32))) := by
   simp [bytesToG1, Nat.not_lt.mpr hx, throw, throwThe, MonadExceptOf.throw]
 
 /-! ## Success -/

@@ -194,7 +194,7 @@ theorem verifySlot_eq_slotMismatch {storageRoot : Hash32} {index : Nat} {s : Sto
     {bytes : ByteArray} {word : U256}
     (hv : verifyProof hash storageRoot true ⟨s.key.toArray⟩ s.proof = .ok (some bytes))
     (hd : (Codec.decode bytes : Except RlpError U256) = .ok word) (hne : word ≠ s.value) :
-    verifySlot hash storageRoot index s = .error (.slotMismatch index) := by
+    verifySlot hash storageRoot index s = .error (.slotMismatch index word s.value) := by
   simp [verifySlot, hv, hd, hne, Except.mapError, bind, Except.bind, throw, throwThe,
     MonadExceptOf.throw]
 

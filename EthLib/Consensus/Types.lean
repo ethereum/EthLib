@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Address
 public import EthLib.Base.Bytes
+public import EthLib.Base.Hex
 
 /-!
 # `Consensus.Types`
@@ -83,5 +84,15 @@ abbrev RowIndex := UInt64
 
 [EIP-7732](https://eips.ethereum.org/EIPS/eip-7732#types) defines it. -/
 abbrev BuilderIndex := UInt64
+
+namespace HexRepr
+
+/-- Bytes in an error, such as a root, as hex digits behind `0x`, which keeps its message short.
+
+An error type opens this namespace where it derives its rendering, for the rest of its file. -/
+scoped instance (priority := high) instReprBytesHex {n : Nat} : Repr (Vector UInt8 n) where
+  reprPrec bytes _ := Base.hexString bytes.toList
+
+end HexRepr
 
 end EthLib.Consensus

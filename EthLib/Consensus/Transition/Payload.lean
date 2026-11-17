@@ -118,34 +118,44 @@ def verifyExecutionPayloadEnvelope (config : Config) (checks : SignatureChecks)
   let envelope := signed.message
   let payload := envelope.payload
   let signatureValid ← verifyExecutionPayloadEnvelopeSignature config checks state gloas signed
-  ensure (signatureValid = true) .invalidEnvelopeSignature
+  ensure (signatureValid = true)
+    (.invalidEnvelopeSignature envelope.builderIndex envelope.beaconBlockRoot)
   let stateRoot ← liftSsz (hashTreeRoot state)
   let blockRoot ← liftSsz (hashTreeRoot { state.latestBlockHeader with stateRoot })
-  ensure (envelope.beaconBlockRoot = blockRoot) .envelopeWrongBlockRoot
+  ensure (envelope.beaconBlockRoot = blockRoot)
+    (.envelopeWrongBlockRoot envelope.beaconBlockRoot blockRoot)
   ensure (envelope.parentBeaconBlockRoot = state.latestBlockHeader.parentRoot)
-    .envelopeWrongParentRoot
+    (.envelopeWrongParentRoot envelope.parentBeaconBlockRoot state.latestBlockHeader.parentRoot)
   let bid := state.latestExecutionPayloadBid gloas
-  ensure (envelope.builderIndex = bid.builderIndex) .envelopeWrongBuilder
-  ensure (payload.prevRandao = bid.prevRandao) .wrongPayloadRandao
-  ensure (payload.gasLimit = bid.gasLimit) .wrongPayloadGasLimit
-  ensure (payload.blockHash = bid.blockHash) .wrongPayloadBlockHash
+  ensure (envelope.builderIndex = bid.builderIndex)
+    (.envelopeWrongBuilder envelope.builderIndex bid.builderIndex)
+  ensure (payload.prevRandao = bid.prevRandao)
+    (.wrongPayloadRandao payload.prevRandao bid.prevRandao)
+  ensure (payload.gasLimit = bid.gasLimit) (.wrongPayloadGasLimit payload.gasLimit bid.gasLimit)
+  ensure (payload.blockHash = bid.blockHash)
+    (.wrongPayloadBlockHash payload.blockHash bid.blockHash)
   let requestsRoot ← liftSsz (hashTreeRoot envelope.executionRequests)
-  ensure (requestsRoot = bid.executionRequestsRoot) .wrongPayloadRequestsRoot
+  ensure (requestsRoot = bid.executionRequestsRoot)
+    (.wrongPayloadRequestsRoot requestsRoot bid.executionRequestsRoot)
   ensure (payload.slotNumber gloas = state.slot)
     (.wrongPayloadSlot (payload.slotNumber gloas) state.slot)
-  ensure (payload.parentHash = state.latestBlockHash gloas) .wrongPayloadParentHash
+  ensure (payload.parentHash = state.latestBlockHash gloas)
+    (.wrongPayloadParentHash payload.parentHash (state.latestBlockHash gloas))
   let time ← liftAccessor (liftArith (computeTimeAtSlot config state.genesisTime state.slot))
   ensure (payload.timestamp = time) (.wrongPayloadTimestamp payload.timestamp time)
   have capella : .shapella ≤ fork := Nat.le_trans (by decide) gloas
   let withdrawalsRoot ← liftSsz (hashTreeRoot (payload.withdrawals capella))
   let expectedRoot ← liftSsz (hashTreeRoot (state.payloadExpectedWithdrawals gloas))
-  ensure (withdrawalsRoot = expectedRoot) .wrongWithdrawals
+  let carried := (payload.withdrawals capella).data
+  let expected := (state.payloadExpectedWithdrawals gloas).data
+  ensure (withdrawalsRoot = expectedRoot)
+    (.wrongWithdrawals (firstDifference carried expected) carried.size expected.size)
   let commitments := bid.blobKzgCommitments.data
   if bound : commitments.size ≤ preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat then
     let request := envelope.newPayloadRequest commitments bound
     let accepted ← liftSsz (engine.verifyAndNotifyNewPayload request)
-    ensure (accepted = true) .invalidExecutionPayload
-  else throw .tooManyBlobCommitments
+    ensure (accepted = true) (.invalidExecutionPayload payload.blockHash)
+  else throw (.tooManyBlobCommitments commitments.size preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat)
 
 /-- The position in the pending payments of a bid for a slot, in the second epoch of the list.
 
@@ -170,7 +180,7 @@ def checkBidBuilder (config : Config) (checks : SignatureChecks)
   let builder := bid.builderIndex
   if builder = BUILDER_INDEX_SELF_BUILD then
     ensure (bid.value = 0 ∧ signed.signature = Signatures.infinitySignature)
-      .selfBuildBidPaid
+      (.selfBuildBidPaid bid.value)
   else
     let active ← liftAccessor (isActiveBuilder state gloas builder)
     ensure (active = true) (.builderNotActive builder)
@@ -179,7 +189,7 @@ def checkBidBuilder (config : Config) (checks : SignatureChecks)
     let covered ← liftAccessor (canBuilderCoverBid state gloas builder bid.value)
     ensure (covered = true) (.bidNotCovered builder)
     let valid ← verifyExecutionPayloadBidSignature config checks state gloas signed
-    ensure (valid = true) .invalidBidSignature
+    ensure (valid = true) (.invalidBidSignature builder bid.slot)
 
 /-- The checks of the bid of a block.
 
@@ -195,15 +205,17 @@ def checkExecutionPayloadBid (config : Config) (checks : SignatureChecks)
   checkBidBuilder config checks state gloas signed
   let bid := signed.message
   let limit := (config.getBlobParameters (getCurrentEpoch state)).maxBlobsPerBlock
-  ensure (bid.blobKzgCommitments.data.size ≤ limit.toNat) .tooManyBlobCommitments
+  ensure (bid.blobKzgCommitments.data.size ≤ limit.toNat)
+    (.tooManyBlobCommitments bid.blobKzgCommitments.data.size limit.toNat)
   ensure (bid.slot = state.slot) (.bidWrongSlot bid.slot state.slot)
   ensure (GENESIS_SLOT < state.slot) .bidAtGenesis
-  ensure (bid.parentBlockHash = state.latestBlockHash gloas) .bidWrongParentHash
-  ensure (bid.blockHash ≠ bid.parentBlockHash) .bidRepeatsParentHash
+  ensure (bid.parentBlockHash = state.latestBlockHash gloas)
+    (.bidWrongParentHash bid.parentBlockHash (state.latestBlockHash gloas))
+  ensure (bid.blockHash ≠ bid.parentBlockHash) (.bidRepeatsParentHash bid.blockHash)
   let parentRoot ← liftAccessor (getBlockRootAtSlot state (state.slot - 1))
-  ensure (bid.parentBlockRoot = parentRoot) .bidWrongParentRoot
+  ensure (bid.parentBlockRoot = parentRoot) (.bidWrongParentRoot bid.parentBlockRoot parentRoot)
   let mix ← liftAccessor (getRandaoMix state (getCurrentEpoch state))
-  ensure (bid.prevRandao = mix) .bidWrongRandao
+  ensure (bid.prevRandao = mix) (.bidWrongRandao bid.prevRandao mix)
 
 /-- The payment that a bid with a value owes to the proposer of its block. -/
 def bidPayment (bid : ExecutionPayloadBid preset fork) (proposer : ValidatorIndex) :

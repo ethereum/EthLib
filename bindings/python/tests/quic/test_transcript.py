@@ -54,10 +54,13 @@ def test_misplaced_retry(messages: list[bytes]) -> None:
 
 
 def test_transcript_requires_complete_separate_messages() -> None:
-    with raises(tls.TlsHandshakeError, f"{PREFIX}trailing") as info:
+    # The ServerHello is left after the ClientHello.
+    with raises(tls.TlsHandshakeError, f"{PREFIX}trailing {len(SERVER_HELLO)}") as info:
         tls.transcript([CLIENT_HELLO + SERVER_HELLO])
     assert info.value.code == CODES["trailing"]
-    with raises(tls.TlsHandshakeError, f"{PREFIX}truncated") as info:
+    # The body after the four-byte header lacks its last byte.
+    body = len(CLIENT_HELLO) - 4
+    with raises(tls.TlsHandshakeError, f"{PREFIX}truncated {body} {body - 1}") as info:
         tls.transcript([CLIENT_HELLO[:-1]])
     assert info.value.code == CODES["truncated"]
     assert tls.transcript([]) == (b"", hashlib.sha256(b"").digest())

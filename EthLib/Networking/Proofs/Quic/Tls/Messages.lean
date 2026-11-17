@@ -128,7 +128,8 @@ theorem length_frameList {kind : UInt8} {body encoded : List UInt8}
 /-- A duplicate extension type cannot be emitted in a handshake block (§4.2). -/
 theorem encodeExtensions_duplicate (minimum : Nat) (extensions : List Extension)
     (duplicate : uniqueExtensions extensions = false) :
-    encodeExtensions minimum extensions = .error .duplicateExtension := by
+    encodeExtensions minimum extensions =
+      .error (.duplicateExtension (repeatedKind extensions)) := by
   simp [encodeExtensions, Base.ensure, duplicate, bind, Except.bind]
 
 /-- A Finished message with the wrong hash length cannot be encoded (§4.4.4). -/
@@ -140,12 +141,12 @@ theorem encodeBody_finished_length (hashLength : Nat) (data : ByteArray)
 /-- The legacy version bytes read as `0x0303`. -/
 @[simp] theorem uint_legacy (rest : List UInt8) :
     uint 2 (3 :: 3 :: rest) = .ok (0x0303, rest) := by
-  exact uint_encode Wire.Error.truncated 2 0x0303 rest
+  exact uint_encode (Wire.Error.truncated 2 (3 :: 3 :: rest).length) 2 0x0303 rest
 
 /-- The compression vector reads back unchanged. -/
 @[simp] theorem bytes_compression (rest : List UInt8) :
     bytes 2 (1 :: 0 :: rest) = .ok ([1, 0], rest) := by
-  simpa using bytes_append Wire.Error.truncated [1, 0] rest
+  exact bytes_append (Wire.Error.truncated 2 (1 :: 0 :: rest).length) [1, 0] rest
 
 /-- Every successfully encoded message body recovers all fields with arbitrary trailing bytes. -/
 theorem readBody_encodeBody {hashLength : Nat} {message : Message} {body : List UInt8}
@@ -184,7 +185,8 @@ theorem readBody_encodeBody {hashLength : Nat} {message : Message} {body : List 
     have length := EthLib.Base.ensure_ok_iff.mp size
     have read : bytes data.size (data.data.toList ++ rest) =
         .ok (data.data.toList, rest) := by
-      simpa using bytes_append Wire.Error.truncated data.data.toList rest
+      exact bytes_append
+        (Wire.Error.truncated data.size (data.data.toList ++ rest).length) data.data.toList rest
     simp [readBody, Message.type, ← length, read]
 
 /-- A successful frame always has a body within the uint24 bound. -/
@@ -236,7 +238,8 @@ theorem encodeExtensions_of_readExtensions {minimum : Nat} {input rest : List UI
     (parsed : readExtensions minimum input = .ok (extensions, rest)) :
     ∃ encoded, encodeExtensions minimum extensions = .ok encoded ∧ input = encoded ++ rest := by
   change (items 2 minimum 65535 readExtension input >>= fun (values, suffix) =>
-    require (uniqueExtensions values = true) .duplicateExtension suffix >>= fun (_, trailing) =>
+    require (uniqueExtensions values = true) (.duplicateExtension (repeatedKind values)) suffix >>=
+      fun (_, trailing) =>
       .ok (values, trailing)) = .ok (extensions, rest) at parsed
   simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
   obtain ⟨⟨values, suffix⟩, valuesRead, ⟨u, trailing⟩, checked, rfl, rfl⟩ := parsed
@@ -445,7 +448,7 @@ theorem encodeList_of_decodeList {hashLength : Nat} {input rest : List UInt8} {m
     ∃ encoded, encodeList hashLength message = .ok encoded ∧ input = encoded ++ rest := by
   change (readFrame input >>= fun ((kind, body), suffix) =>
     (Wire.exact (readBody hashLength kind) body).mapError
-      (fun error => match error with | .truncated => .length | error => error) >>=
+      (fun error => match error with | .truncated .. => .length | error => error) >>=
         fun decoded => .ok (decoded, suffix)) = .ok (message, rest) at parsed
   simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
   obtain ⟨⟨⟨kind, body⟩, suffix⟩, frameRead, decoded, bodyRead, rfl, rfl⟩ := parsed
@@ -564,5 +567,48 @@ theorem decode_eq_ok_iff {hashLength : Nat} {input rest : ByteArray} {message : 
   · exact encode_of_decode
   · rintro ⟨encoded, written, rfl⟩
     exact decode_encode written rest
+
+/-! ## The value of the duplicate extension error -/
+
+private theorem eraseDups_of_nodup {α : Type} [BEq α] [LawfulBEq α] :
+    ∀ (l : List α), l.Nodup → l.eraseDups = l
+  | [], _ => rfl
+  | a :: t, n => by
+    rw [List.nodup_cons] at n
+    have f : t.filter (fun b => !b == a) = t :=
+      List.filter_eq_self.mpr (fun b hb => by
+        simp
+        intro e
+        subst e
+        exact n.1 hb)
+    rw [List.eraseDups_cons, f, eraseDups_of_nodup t n.2]
+
+/-- A block with a repeated extension type names a type that occurs at least twice in it. -/
+theorem repeatedKind_spec (es : List Extension) (h : uniqueExtensions es = false) :
+    2 ≤ (es.map (·.kind)).count (repeatedKind es) := by
+  have notNodup : ¬ (es.map (·.kind)).Nodup := by
+    intro n
+    simp [uniqueExtensions, eraseDups_of_nodup _ n] at h
+  clear h
+  induction es with
+  | nil => simp at notNodup
+  | cons a t ih =>
+    by_cases m : t.any (·.kind == a.kind) = true
+    · simp only [repeatedKind, m, ite_true, List.map_cons]
+      have mm : a.kind ∈ t.map (·.kind) := by
+        simp at m
+        obtain ⟨b, hb, e⟩ := m
+        exact List.mem_map.mpr ⟨b, hb, e⟩
+      have := List.count_pos_iff.mpr mm
+      simp only [List.count_cons, beq_self_eq_true, ite_true]
+      omega
+    · have m' : a.kind ∉ t.map (·.kind) := by
+        simp at m ⊢
+        intro b hb e
+        exact m b hb e
+      simp only [repeatedKind, m, Bool.false_eq_true, ite_false, List.map_cons]
+      have := ih (by simpa [List.nodup_cons, m'] using notNodup)
+      simp only [List.count_cons]
+      split <;> omega
 
 end EthLib.Networking.Quic.Tls

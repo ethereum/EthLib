@@ -34,7 +34,7 @@ open EthLib.Exports (Result PyValue pyExport)
 
 /-- The result of a duty, with the code of its error. -/
 def runDuty {α : Type} (result : Except ValidatorDutyError α) : Result α :=
-  result.mapError fun e => (e.code, s!"validator duty failed with code {e.code}")
+  result.mapError fun e => (e.code, toString e)
 
 /-- The proof that a fork is at least Altair, or code 0. -/
 def altairOf (fork : Fork) : Result (PLift (.altair ≤ fork)) :=

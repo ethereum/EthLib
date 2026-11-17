@@ -86,7 +86,7 @@ def attestationDataIndex (fork : Base.Fork) (slot headSlot : Slot)
       match payloadStatus with
       | .empty => .ok 0
       | .full => .ok 1
-      | .pending => .error .pendingPayloadStatus
+      | .pending => .error (.pendingPayloadStatus slot headSlot)
   else if .pectra ≤ fork then .ok 0
   else .ok committeeIndex
 
@@ -175,7 +175,7 @@ def constructAggregate (state : BeaconState preset fork) (before : fork < .pectr
     (data : AttestationData) (attestations : List (Attestation preset fork)) :
     Except ValidatorDutyError (Attestation preset fork) := do
   match attestations.filter (·.data = data) with
-  | [] => throw .noMessages
+  | [] => throw (.noMessages data.slot data.beaconBlockRoot)
   | first :: rest =>
     let committee ← (getBeaconCommittee state data.slot data.index).mapError .accessor
     match found : (first :: rest).find? (·.aggregationBits.bits.size ≠ committee.size) with
@@ -217,7 +217,7 @@ def constructAggregateOfSingleAttestations (state : BeaconState preset fork)
   if inside : committeeIndex < preset.MAX_COMMITTEES_PER_SLOT then
     let same := singles.filter fun single =>
       single.data = data ∧ single.committeeIndex = committeeIndex
-    if same.isEmpty then throw .noMessages
+    if same.isEmpty then throw (.noMessages data.slot data.beaconBlockRoot)
     else
       let committee ← (getBeaconCommittee state data.slot committeeIndex).mapError .accessor
       match same.find? (·.attesterIndex ∉ committee) with
@@ -287,7 +287,7 @@ def constructSyncCommitteeContribution (state : BeaconState preset fork)
     let seatKey := syncSubcommitteeKey committee subcommitteeIndex inRange
     let same := messages.filter fun message =>
       message.slot = state.slot ∧ message.beaconBlockRoot = blockRoot
-    if same.isEmpty then throw .noMessages
+    if same.isEmpty then throw (.noMessages state.slot blockRoot)
     else
       let keyed ← same.mapM fun message => do
         let validator ← (getValidator state message.validatorIndex).mapError .accessor

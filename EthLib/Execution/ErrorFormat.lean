@@ -35,6 +35,10 @@ instance instErrorArgVector {n : Nat} : ErrorArg (Vector UInt8 n) :=
 instance instErrorArgByteArray : ErrorArg ByteArray :=
   ⟨fun bytes => hexString bytes.toList⟩
 
+/-- A word shows as its number in decimal. -/
+instance instErrorArgBitVec {n : Nat} : ErrorArg (BitVec n) :=
+  ⟨fun word => repr word.toNat⟩
+
 /-- An optional value shows as `none`, or as `some` before the value. -/
 instance instErrorArgOption {α : Type} [ErrorArg α] : ErrorArg (Option α) :=
   ⟨fun | none => "none" | some a => "some " ++ ErrorArg.format a⟩
@@ -47,7 +51,6 @@ def namedArg {α : Type} [ErrorArg α] (name : String) (value : α) : Std.Format
 def constructorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
   let applied : Std.Format := .group (.nest 2 (args.foldl (fun f a => f ++ .line ++ a) name))
   -- An argument position puts the application in parentheses, as `Repr.addAppParen` does.
-  if prec ≥ max_prec ∧ !args.isEmpty then .group (.nest 1 (.text "(" ++ applied ++ .text ")"))
-  else applied
+  if prec ≥ max_prec then .group (.nest 1 (.text "(" ++ applied ++ .text ")")) else applied
 
 end EthLib.Execution

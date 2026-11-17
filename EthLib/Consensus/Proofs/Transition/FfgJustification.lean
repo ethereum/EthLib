@@ -426,4 +426,194 @@ theorem processJustificationAndFinalization_linkWithChurn
   rw [checkpoint]
   exact link recent threshold weight _ thresholdOk weightOk passed rootOk
 
+/-- The validators whose votes a state can count for a target.
+
+Each is active in the epoch of the state or in the one before, and is not slashed. -/
+def quorumVoters (state : BeaconState preset fork) : Finset ValidatorIndex :=
+  {v ∈ (getActiveValidatorIndices state (getCurrentEpoch state) ++
+      getActiveValidatorIndices state (getPreviousEpoch state)).toFinset |
+    (state.validators.data[v.toNat]?.map (·.slashed)).getD true = false}
+
+/-- The votes for the links of the two recent epochs have a target epoch at most the current one.
+
+A target flag comes from a vote for the link of the current or the previous epoch.
+
+A pending attestation is a vote for the link of the epoch of its list.
+
+Either epoch is at most the current one.
+
+So every such vote lies in the set of votes whose target epoch is at most the current epoch. -/
+theorem TargetFlagsVoted.earlier {votes : Set (ValidatorIndex × AttestationData)}
+    {state : BeaconState preset fork}
+    (flags : TargetFlagsVoted votes state) (pending : PendingVoted votes state) :
+    TargetFlagsVoted {vote | vote.2.target.epoch ≤ getCurrentEpoch state} state ∧
+      PendingVoted {vote | vote.2.target.epoch ≤ getCurrentEpoch state} state := by
+  -- The current and the previous epoch are both at most the current one.
+  have recent : ∀ current : Bool,
+      (if current then getCurrentEpoch state else getPreviousEpoch state) ≤
+        getCurrentEpoch state := fun current => by
+    cases current
+    · exact getPreviousEpoch_le state
+    · exact UInt64.le_refl _
+  refine ⟨fun altair current position flagged => ?_, fun before current attestation member => ?_⟩
+  · -- The vote behind a flag has the target epoch of the flag.
+    obtain ⟨vote, -, link⟩ := flags altair current position flagged
+    exact ⟨vote, show _ ≤ _ from link.2.1 ▸ recent current, link⟩
+  · -- Each vote of a pending attestation holds its data, whose target epoch is that of its list.
+    obtain ⟨epoch, slot, source, -⟩ := pending before current attestation member
+    exact ⟨epoch, slot, source, fun _ _ _ _ => show _ ≤ _ from epoch ▸ recent current⟩
+
+/-- Each attester that justification counts for a recent epoch is a quorum voter with a vote.
+
+It is active in that epoch, the current or the previous one, and not slashed.
+
+It cast a vote of the set for the link of that epoch.
+
+From Altair the target flags give the vote, and before Altair the pending attestations do.
+
+Justification must run, so the current epoch must be past the first two. -/
+private theorem counted_quorumVoter {attested : Set (ValidatorIndex × AttestationData)}
+    {state : BeaconState preset fork}
+    (flagsVoted : TargetFlagsVoted attested state) (pendingVoted : PendingVoted attested state)
+    (late : GENESIS_EPOCH + 1 < getCurrentEpoch state) (current : Bool)
+    {indices : List ValidatorIndex}
+    (counted : targetIndices state
+      (if current then getCurrentEpoch state else getPreviousEpoch state) = .ok indices)
+    {index : ValidatorIndex} (member : index ∈ indices) :
+    index ∈ quorumVoters state ∧
+      ∃ vote ∈ attested, LinkVote state current index.toNat vote := by
+  -- An active validator of a recent epoch that is not slashed is a quorum voter.
+  have voter : index ∈ getActiveValidatorIndices state
+        (if current then getCurrentEpoch state else getPreviousEpoch state) →
+      (∃ validator, getValidator state index = .ok validator ∧ validator.slashed = false) →
+      index ∈ quorumVoters state := by
+    rintro active ⟨validator, found, unslashed⟩
+    rw [getValidator_eq_ok_iff] at found
+    simp only [quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append, found,
+      Option.map_some, Option.getD_some, unslashed, and_true]
+    cases current
+    · exact .inr active
+    · exact .inl active
+  rcases targetIndices_ok counted with ⟨altair, counted⟩ |
+    ⟨before, pending, pendingOk, indicesOk⟩
+  · -- From Altair the counted attesters are unslashed and hold the target flag of the epoch.
+    obtain ⟨active, unslashed, -⟩ := mem_getUnslashedParticipatingIndices counted index member
+    obtain ⟨-, vote, link, cast⟩ := TargetFlagsVoted.attester altair flagsVoted
+      (UInt64.not_le.mpr late) current counted member
+    exact ⟨voter active unslashed, vote, cast, link⟩
+  · -- Before Altair the counted attesters cast a pending attestation of the epoch.
+    have early : JustifiedEarly state := fun first => absurd first (UInt64.not_le.mpr late)
+    obtain ⟨active, data, link, cast⟩ := PendingVoted.attester before
+      pendingVoted early current pendingOk indicesOk member
+    -- The filter of unslashed attesters kept the attester, so its validator is not slashed.
+    simp only [getUnslashedAttestingIndices, bind_ok_iff, unslashedAmong] at indicesOk
+    obtain ⟨_, _, filtered⟩ := indicesOk
+    have passes := passes_of_mem_filterM_ok filtered member
+    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at passes
+    obtain ⟨validator, found, fresh⟩ := passes
+    exact ⟨voter active ⟨validator, found, by simpa using fresh⟩, (index, data), cast, link⟩
+
+/-- When justification moves the current justified checkpoint, a voter with a property voted for it.
+
+The property must leave out too little stake to justify alone.
+
+That is, three times the stake of the quorum voters without the property is below twice the total.
+
+The step justifies the checkpoint of the current or the previous epoch only when its test passes.
+
+That is the justification rule of `process_justification_and_finalization`.
+
+It follows Gasper §4.4, Definition 4.5, a supermajority link to the checkpoint.
+
+The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
+
+The test asks twice the total active balance to be at most three times the target balance.
+
+The target balance counts unslashed attesters that are active in that epoch.
+
+So they are quorum voters.
+
+If none of them had the property, the test would fail by the bound on the voters without it.
+
+So one of them has it, and it cast a vote of the set for the link of the epoch.
+
+The target of that vote is the new checkpoint.
+
+Its epoch is that epoch, and its root is the block root that the state records for that epoch.
+
+The active stake of the current epoch must be more than one and a half increments.
+
+Then the test compares stakes, without the floor of one increment on each balance. -/
+theorem processJustificationAndFinalization_exists_voter
+    {attested : Set (ValidatorIndex × AttestationData)} {state after : BeaconState preset fork}
+    (p : ValidatorIndex → Prop) [DecidablePred p]
+    (flagsVoted : TargetFlagsVoted attested state) (pendingVoted : PendingVoted attested state)
+    (large : 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+      2 * stake (fun index => balanceAt state index.toNat)
+        (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
+    (few : ∀ total, getTotalActiveBalance state = .ok total →
+      3 * stake (fun index => balanceAt state index.toNat) {v ∈ quorumVoters state | ¬p v} <
+        2 * total.toNat)
+    (computed : processJustificationAndFinalization state = .ok after)
+    (changed : after.currentJustifiedCheckpoint ≠ state.currentJustifiedCheckpoint) :
+    ∃ current : Bool, ∃ vote ∈ attested, p vote.1 ∧
+      LinkVote state current vote.1.toNat vote ∧
+      vote.2.target = after.currentJustifiedCheckpoint := by
+  -- In the first two epochs the step changes nothing, so justification ran.
+  rcases processJustificationAndFinalization_reads computed with ⟨-, same⟩ | ⟨late, previous,
+    current, total, previousBalance, currentBalance, previousOk, currentOk, totalOk,
+    previousBalanceOk, currentBalanceOk, weighed⟩
+  · exact absurd (same ▸ rfl) changed
+  -- The checkpoint moved, so the test of a recent epoch passed, and the checkpoint is its own.
+  rcases weighJustificationAndFinalization_currentJustified weighed with ⟨same, -⟩ | ⟨recent,
+    threshold, weight, thresholdOk, weightOk, passed, epoch, rootOk⟩
+  · exact absurd same changed
+  have counted : targetIndices state
+      (if recent then getCurrentEpoch state else getPreviousEpoch state) =
+        .ok (if recent then current else previous) := by
+    cases recent
+    · exact previousOk
+    · exact currentOk
+  have balanceOk : getTotalBalance state (if recent then current else previous) =
+      .ok (if recent then currentBalance else previousBalance) := by
+    cases recent
+    · exact previousBalanceOk
+    · exact currentBalanceOk
+  by_cases found : ∃ index ∈ (if recent then current else previous), p index
+  · obtain ⟨index, member, holds⟩ := found
+    obtain ⟨-, vote, cast, link⟩ :=
+      counted_quorumVoter flagsVoted pendingVoted late recent counted member
+    -- The vote is cast by the attester itself.
+    have voter : vote.1 = index := UInt64.toNat_inj.mp link.1
+    refine ⟨recent, vote, cast, voter ▸ holds, voter ▸ link, ?_⟩
+    -- The target has the epoch of the new checkpoint, and the root the state records for it.
+    obtain ⟨-, targetEpoch, -, targetRoot⟩ := link
+    have sameEpoch : vote.2.target.epoch = after.currentJustifiedCheckpoint.epoch :=
+      targetEpoch.trans epoch.symm
+    rw [sameEpoch, rootOk, Except.ok.injEq] at targetRoot
+    -- Two checkpoints with the same epoch and the same root are equal.
+    cases target : vote.2.target
+    cases checkpoint : after.currentJustifiedCheckpoint
+    rw [target] at sameEpoch targetRoot
+    rw [checkpoint] at sameEpoch targetRoot
+    simp only at sameEpoch targetRoot
+    rw [sameEpoch, targetRoot]
+  · -- Otherwise every counted attester is a quorum voter without the property.
+    exfalso
+    have subset : (if recent then current else previous).toFinset ⊆
+        {v ∈ quorumVoters state | ¬p v} := fun index member => by
+      have listed := List.mem_toFinset.mp member
+      exact Finset.mem_filter.mpr
+        ⟨(counted_quorumVoter flagsVoted pendingVoted late recent counted listed).1,
+          fun holds => found ⟨index, listed, holds⟩⟩
+    -- Above one and a half increments, the passing test bounds the active stake.
+    have test := (justificationTest_iff_stake (getTotalActiveBalance_ok totalOk) balanceOk
+      thresholdOk weightOk large).mp passed
+    have attesters := stake_mono (w := fun index => balanceAt state index.toNat) subset
+    -- The total is the active stake, since that is above one increment.
+    obtain ⟨-, -, totalEq⟩ := getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok totalOk)
+    have bound := few total totalOk
+    rw [totalEq] at bound
+    omega
+
 end EthLib.Consensus
