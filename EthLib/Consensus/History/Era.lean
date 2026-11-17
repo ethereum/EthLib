@@ -98,14 +98,22 @@ structure EraGroup (preset : Preset) where
 inductive EraError where
   /-- The bytes are not an e2store file, or an index does not read. -/
   | e2store (e : E2store.E2storeError)
-  /-- A group has no CompressedBeaconState record after its blocks. -/
-  | noState
-  /-- The last record of a group is not a SlotIndex record. -/
-  | noStateIndex
+  /-- A group has no CompressedBeaconState record after its blocks.
+
+  The error gives the type of the record after the blocks, or none when the group ends there. -/
+  | noState (found : Option UInt16)
+  /-- The last record of a group is not a SlotIndex record.
+
+  The error gives the type of the last record, or none when the state is the last record. -/
+  | noStateIndex (found : Option UInt16)
   /-- A record between the state and the indices has a type of the era document. -/
   | misplacedRecord (type : UInt16)
-  /-- The index of the state does not have one entry, or it does not point at the state. -/
-  | stateIndex
+  /-- The index of the state does not have one entry, or it does not point at the state.
+
+  The error gives the number of entries and the position that the first one points at, if any.
+
+  It then gives the position of the state record. -/
+  | stateIndex (entries : Nat) (pointed : Option Int) (statePosition : Nat)
   /-- The record of the slot is not a valid Snappy framed stream. -/
   | frame (slot : Nat) (e : Networking.Snappy.FrameError)
   /-- The record of the slot does not decode, or a root fails. -/
@@ -114,12 +122,18 @@ inductive EraError where
   | stateSlot (slot : Nat)
   /-- The current version of the state is not that of its fork in the configuration. -/
   | forkVersion (slot : Nat)
-  /-- The group of era 0 holds a block or an index of blocks. -/
-  | genesisBlocks
-  /-- A group after era 0 has no index of blocks. -/
-  | noBlockIndex
-  /-- The index of the blocks does not cover the slots of the era. -/
-  | blockIndexRange
+  /-- The group of era 0 holds a block or an index of blocks.
+
+  The error gives the number of block records and whether an index of blocks is present. -/
+  | genesisBlocks (blocks : Nat) (hasBlockIndex : Bool)
+  /-- A group after era 0, whose era the error gives, has no index of blocks. -/
+  | noBlockIndex (era : Nat)
+  /-- The index of the blocks does not cover the slots of the era.
+
+  The error gives the first slot and the number of entries of the index.
+
+  It then gives the first slot and the number of slots of the era. -/
+  | blockIndexRange (start entries expectedStart expectedEntries : Nat)
   /-- The index points the slot elsewhere than at the next block record. -/
   | blockOffset (slot : Nat)
   /-- The block record at the position is not pointed at by the index. -/
@@ -143,17 +157,17 @@ inductive EraError where
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def EraError.code : EraError → UInt32
   | .e2store _ => 1
-  | .noState => 2
-  | .noStateIndex => 3
+  | .noState _ => 2
+  | .noStateIndex _ => 3
   | .misplacedRecord _ => 4
-  | .stateIndex => 5
+  | .stateIndex .. => 5
   | .frame _ _ => 6
   | .ssz _ _ => 7
   | .stateSlot _ => 8
   | .forkVersion _ => 9
-  | .genesisBlocks => 10
-  | .noBlockIndex => 11
-  | .blockIndexRange => 12
+  | .genesisBlocks .. => 10
+  | .noBlockIndex _ => 11
+  | .blockIndexRange .. => 12
   | .blockOffset _ => 13
   | .unindexedBlock _ => 14
   | .blockSlot _ => 15
@@ -274,14 +288,16 @@ def readGroup (preset : Preset) (config : Config) (group : List Located) :
     Except EraError (EraGroup preset) := do
   let isBlock (record : Located) := record.2.type == COMPRESSED_SIGNED_BEACON_BLOCK
   let blockRecords := group.takeWhile isBlock
-  let stateAt :: tail := group.dropWhile isBlock | throw .noState
-  unless stateAt.2.type = COMPRESSED_BEACON_STATE do throw .noState
-  let some (others, blockIndexAt, stateIndexAt) := splitIndices tail | throw .noStateIndex
+  let stateAt :: tail := group.dropWhile isBlock | throw (.noState none)
+  unless stateAt.2.type = COMPRESSED_BEACON_STATE do throw (.noState (some stateAt.2.type))
+  let some (others, blockIndexAt, stateIndexAt) := splitIndices tail
+    | throw (.noStateIndex (tail.getLast?.map (·.2.type)))
   if let some other := others.find? (ERA_TYPES.contains ·.2.type) then
     throw (.misplacedRecord other.2.type)
   let stateIndex ← (E2store.readIndex stateIndexAt.2.data).mapError .e2store
   unless stateIndex.offsets.map ((stateIndexAt.1 : Int) + ·) = [(stateAt.1 : Int)] do
-    throw .stateIndex
+    throw (.stateIndex stateIndex.offsets.length
+      (stateIndex.offsets.head?.map ((stateIndexAt.1 : Int) + ·)) stateAt.1)
   let slot := stateIndex.start
   let fork := forkAtSlot preset config slot
   let bytes ← (Networking.Snappy.decodeFrames stateAt.2.data).mapError (.frame slot)
@@ -293,12 +309,14 @@ def readGroup (preset : Preset) (config : Config) (group : List Located) :
   let others := others.map (·.2)
   let stateIndex := (stateIndexAt.1, stateIndex)
   if era = 0 then
-    unless blockRecords.isEmpty ∧ blockIndexAt.isNone do throw .genesisBlocks
+    unless blockRecords.isEmpty ∧ blockIndexAt.isNone do
+      throw (.genesisBlocks blockRecords.length blockIndexAt.isSome)
     return ⟨0, [], fork, state, others, none, stateIndex⟩
-  let some blockIndexAt := blockIndexAt | throw .noBlockIndex
+  let some blockIndexAt := blockIndexAt | throw (.noBlockIndex era)
   let blockIndex ← (E2store.readIndex blockIndexAt.2.data).mapError .e2store
   unless blockIndex.start + slotsPerEra = slot ∧ blockIndex.offsets.length = slotsPerEra do
-    throw .blockIndexRange
+    throw (.blockIndexRange blockIndex.start blockIndex.offsets.length (slot - slotsPerEra)
+      slotsPerEra)
   let slots ← matchBlocks (indexedSlots blockIndexAt.1 blockIndex) blockRecords
   let blocks ← slots.mapM fun (slot, record) => readBlock preset config state slot record
   checkEmptySlots state blockIndex

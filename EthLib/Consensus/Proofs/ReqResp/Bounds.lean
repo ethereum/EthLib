@@ -69,6 +69,6 @@ theorem _root_.EthLib.Consensus.BoundsError.code_injective (e₁ e₂ : BoundsEr
 
 /-- Every code is above 300, past the codes of custody, subnet and shuffle errors. -/
 theorem _root_.EthLib.Consensus.BoundsError.code_gt (e : BoundsError) : 300 < e.code := by
-  cases e <;> decide
+  cases e <;> simp [BoundsError.code]
 
 end EthLib.Consensus.Proofs.ReqResp.Bounds

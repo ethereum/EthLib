@@ -236,7 +236,9 @@ def test_no_assignment_for_an_unknown_validator():
 
 
 def test_assignment_after_the_next_epoch():
-    with raises(consensus.ValidatorDutyError, "validator duty failed with code 5") as info:
+    # The state is in epoch 0, so the committees of epoch 1 are the last known.
+    message = "epoch 2 is after 1, the last epoch whose committees are known"
+    with raises(consensus.ValidatorDutyError, message) as info:
         consensus.get_committee_assignment("mainnet", "phase0", phase0_state(64), 2, 0)
     assert info.value.code == 5
 
@@ -257,7 +259,8 @@ def test_assignment_in_the_last_epoch():
 
 def test_no_assignment_in_the_epoch_whose_slots_overflow():
     state = phase0_state(64, slot=LAST_EPOCH * SLOTS_PER_EPOCH)
-    with raises(consensus.ValidatorDutyError, "validator duty failed with code 4") as info:
+    message = "arithmetic: EthLib.Base.ArithError.overflow"
+    with raises(consensus.ValidatorDutyError, message) as info:
         consensus.get_committee_assignment("mainnet", "phase0", state, LAST_EPOCH + 1, 0)
     assert info.value.code == 4
 
@@ -274,7 +277,8 @@ def test_sync_committee_assignment():
     assert consensus.is_assigned_to_sync_committee("mainnet", "altair", state, 2, 5)
     assert consensus.is_assigned_to_sync_committee("mainnet", "altair", state, 256, 5)
     # A period of 256 epochs: epoch 512 is two periods ahead.
-    with raises(consensus.ValidatorDutyError, "validator duty failed with code 6") as info:
+    message = "sync committee period 2 is neither the current period 0 nor the next"
+    with raises(consensus.ValidatorDutyError, message) as info:
         consensus.is_assigned_to_sync_committee("mainnet", "altair", state, 512, 5)
     assert info.value.code == 6
 
@@ -386,7 +390,9 @@ def test_ptc_assignment(gloas: bytes, epoch: int):
 
 
 def test_ptc_assignment_after_the_lookahead(gloas: bytes):
-    with raises(consensus.ValidatorDutyError, "validator duty failed with code 5") as info:
+    # The state is in epoch 1, so the committees of epoch 2 are the last known.
+    message = "epoch 3 is after 2, the last epoch whose committees are known"
+    with raises(consensus.ValidatorDutyError, message) as info:
         consensus.get_ptc_assignment("mainnet", "glamsterdam", gloas, 3, 0, config=GLOAS)
     assert info.value.code == 5
 

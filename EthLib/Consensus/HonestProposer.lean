@@ -60,8 +60,10 @@ inductive ProposerError where
   | transition (error : TransitionError)
   /-- There is no network aggregate to join. -/
   | noAggregates
-  /-- A network aggregate has no committee bit set. -/
-  | noCommittee
+  /-- A network aggregate has no committee bit set.
+
+  The error gives the data of that aggregate. -/
+  | noCommittee (data : AttestationData)
   /-- The joined aggregation bits exceed the limit of an attestation. -/
   | tooManyBits (count limit : Nat)
   /-- A request has no type byte, or a type byte that names no request. -/
@@ -89,7 +91,7 @@ def ProposerError.code : ProposerError → UInt32
   | .bls _ => 4
   | .transition _ => 5
   | .noAggregates => 6
-  | .noCommittee => 7
+  | .noCommittee _ => 7
   | .tooManyBits .. => 8
   | .unknownRequestType _ => 9
   | .emptyRequest _ => 10
@@ -99,6 +101,31 @@ def ProposerError.code : ProposerError → UInt32
   | .unknownPowBlock _ => 14
   | .forkChoice _ => 15
   | .duty _ => 16
+
+/-- The message of an error, with the values that its check compared. -/
+instance : ToString ProposerError where
+  toString
+    | .arith error => s!"arithmetic: {reprStr error}"
+    | .accessor error => s!"a state accessor fails: {reprStr error}"
+    | .ssz error => s!"a value cannot be encoded, decoded or hashed: {reprStr error}"
+    | .bls error => s!"BLS: {error.message}"
+    | .transition error => s!"the state transition fails: {reprStr error}"
+    | .noAggregates => "there is no network aggregate to join"
+    | .noCommittee data =>
+      s!"the network aggregate at slot {data.slot} for block " ++
+        s!"{hexString data.beaconBlockRoot.toList} has no committee bit set"
+    | .tooManyBits count limit => s!"{count} joined aggregation bits exceed the limit {limit}"
+    | .unknownRequestType request =>
+      s!"a request of {request.size} bytes has no type byte that names a request"
+    | .emptyRequest type => s!"the request of type {type} has nothing after its type byte"
+    | .requestTypeOrder previous type =>
+      s!"request type {type} does not come after the type before it, {previous}"
+    | .subcommitteeOutOfRange index =>
+      s!"subcommittee {index} is not below the number of subnets"
+    | .repeatedSubcommittee index => s!"two contributions name subcommittee {index}"
+    | .unknownPowBlock hash => s!"no known proof-of-work block has hash {hexString hash.toList}"
+    | .forkChoice error => s!"fork choice: {error}"
+    | .duty error => s!"validator duty: {error}"
 
 /-! ## The Eth1 vote -/
 
@@ -241,7 +268,7 @@ def committeeOfAggregate (electra : .pectra ≤ fork) (aggregate : Attestation p
     Except ProposerError (CommitteeIndex × Attestation preset fork) :=
   match (getCommitteeIndices (aggregate.committeeBits electra)).head? with
   | some index => .ok (index, aggregate)
-  | none => .error .noCommittee
+  | none => .error (.noCommittee aggregate.data)
 
 /-- From Electra: one attestation on chain from network aggregates of the same data.
 

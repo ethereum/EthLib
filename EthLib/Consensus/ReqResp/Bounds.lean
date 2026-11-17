@@ -64,12 +64,16 @@ def requestBounds (preset : Preset) (config : Config) (fork : Fork) (id : Protoc
 
 /-- Why a protocol or a topic has no length bound. -/
 inductive BoundsError where
-  /-- The fork does not define the protocol version. -/
-  | notAtFork
-  /-- The protocol version carries no request. -/
-  | noRequest
-  /-- The fork does not list the gossip topic. -/
-  | topicNotAtFork
+  /-- The fork does not define the protocol version.
+
+  The error gives the protocol ID and the fork. -/
+  | notAtFork (protocol : String) (fork : Fork)
+  /-- The protocol version, whose ID the error gives, carries no request. -/
+  | noRequest (protocol : String)
+  /-- The fork does not list the gossip topic.
+
+  The error gives the name of the topic and the fork. -/
+  | topicNotAtFork (topic : String) (fork : Fork)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor.
@@ -80,8 +84,19 @@ A new constructor takes a new code, so that each code keeps its meaning.
 
 Code 304 stays unused, so that no code takes a second meaning. -/
 def BoundsError.code : BoundsError → UInt32
-  | .notAtFork => 301
-  | .noRequest => 302
-  | .topicNotAtFork => 303
+  | .notAtFork .. => 301
+  | .noRequest _ => 302
+  | .topicNotAtFork .. => 303
+
+/-- The message of an error, with the protocol or the topic and the fork. -/
+instance : ToString BoundsError where
+  toString
+    | .notAtFork protocol fork => s!"{protocol} is not a protocol of {fork.name}"
+    | .noRequest protocol => s!"{protocol} carries no request"
+    | .topicNotAtFork topic fork => s!"{topic} is not a topic of {fork.name}"
+
+/-- The code and the message of an error, as the C exports return them. -/
+def BoundsError.fault (error : BoundsError) : UInt32 × String :=
+  (error.code, toString error)
 
 end EthLib.Consensus

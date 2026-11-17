@@ -145,14 +145,18 @@ inductive ChunkError where
   | ssz (fault : Err)
   /-- A chunk is too long for its length field of eight bytes. -/
   | tooLong (length : Nat)
-  /-- The bytes end inside a chunk. -/
-  | truncated
+  /-- The bytes end inside a chunk.
+
+  The error gives the offset of the chunk, the length it needs from there, and the length left. -/
+  | truncated (offset needed available : Nat)
   /-- A chunk is shorter than its digest. -/
   | shortChunk (length : Nat)
   /-- No fork of the configuration has the digest of a chunk. -/
   | unknownDigest (digest : ForkDigest)
-  /-- The digest of a chunk is not the digest of the epoch of its update's attested header. -/
-  | digestMismatch (digest : ForkDigest)
+  /-- The digest of a chunk is not the digest of the epoch of its update's attested header.
+
+  The error gives the digest of the chunk, then the digest of that epoch. -/
+  | digestMismatch (digest expected : ForkDigest)
   deriving Repr
 
 /-- The epoch of the attested header of an update, which selects the digest of its chunk. -/
@@ -209,12 +213,12 @@ def decodeUpdateChunksFrom (preset : Preset) (config : Config) (genesisValidator
       let update ← (SszType.deserialize (LightClientUpdate preset fork) payload).mapError .ssz
       let expected ←
         (computeForkDigest config genesisValidatorsRoot (contextEpoch update)).mapError .ssz
-      unless expected = digest do throw (.digestMismatch digest)
+      unless expected = digest do throw (.digestMismatch digest expected)
       let rest ← decodeUpdateChunksFrom preset config genesisValidatorsRoot data
         (start + 8 + length)
       return ⟨fork, update⟩ :: rest
-    else .error .truncated
-  else .error .truncated
+    else .error (.truncated start (8 + length) (data.size - start))
+  else .error (.truncated start 8 (data.size - start))
 termination_by data.size - start
 decreasing_by omega
 

@@ -556,22 +556,28 @@ private theorem constructSyncCommitteeContribution_noMessages_iff
     {messages : List SyncCommitteeMessage}
     (inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT) :
     (constructSyncCommitteeContribution state committee blockRoot subcommitteeIndex messages =
-      .error .noMessages ↔
+      .error (.noMessages state.slot blockRoot) ↔
         ∀ message ∈ messages, message.slot = state.slot → message.beaconBlockRoot ≠ blockRoot) ∧
+      (∀ slot root, constructSyncCommitteeContribution state committee blockRoot
+        subcommitteeIndex messages = .error (.noMessages slot root) →
+          slot = state.slot ∧ root = blockRoot) ∧
       ∀ index limit, constructSyncCommitteeContribution state committee blockRoot
         subcommitteeIndex messages ≠ .error (.indexOutOfRange index limit) := by
   by_cases empty : (messages.filter fun message =>
       message.slot = state.slot ∧ message.beaconBlockRoot = blockRoot).isEmpty
   · have failed : constructSyncCommitteeContribution state committee blockRoot subcommitteeIndex
-        messages = .error .noMessages := by
+        messages = .error (.noMessages state.slot blockRoot) := by
       simp only [constructSyncCommitteeContribution, inRange, dite_true, empty, ite_true]
       rfl
     rw [failed]
-    refine ⟨iff_of_true rfl ?_, fun _ _ => by simp⟩
-    simpa [List.filter_eq_nil_iff] using empty
+    refine ⟨iff_of_true rfl ?_, fun _ _ same => ?_, fun _ _ => by simp⟩
+    · simpa [List.filter_eq_nil_iff] using empty
+    · simp only [Except.error.injEq, ValidatorDutyError.noMessages.injEq] at same
+      exact ⟨same.1.symm, same.2.symm⟩
   have never : ∀ fault, constructSyncCommitteeContribution state committee blockRoot
       subcommitteeIndex messages = .error fault →
-        fault ≠ .noMessages ∧ ∀ index limit, fault ≠ .indexOutOfRange index limit := by
+        (∀ slot root, fault ≠ .noMessages slot root) ∧
+          ∀ index limit, fault ≠ .indexOutOfRange index limit := by
     intro fault failed
     simp only [constructSyncCommitteeContribution, inRange, dite_true, empty,
       Bool.false_eq_true, ite_false] at failed
@@ -592,7 +598,8 @@ private theorem constructSyncCommitteeContribution_noMessages_iff
   have present : ¬∀ message ∈ messages, message.slot = state.slot →
       message.beaconBlockRoot ≠ blockRoot := by
     simpa [List.filter_eq_nil_iff] using empty
-  exact ⟨iff_of_false (fun failed => (never _ failed).1 rfl) present,
+  exact ⟨iff_of_false (fun failed => (never _ failed).1 _ _ rfl) present,
+    fun slot root failed => absurd rfl ((never _ failed).1 slot root),
     fun index limit failed => (never _ failed).2 index limit rfl⟩
 
 /-- From Altair, the contribution answer refuses with a code other than 500 in three cases only.
@@ -645,7 +652,7 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
     simp [Except.mapError, internalError, bind, Except.bind, notInternal, @eq_comm _ 500 code]
   | ok committee =>
     simp only [Except.mapError, bind, Except.bind, Except.ok.injEq, exists_eq_left']
-    obtain ⟨noMessages, noIndex⟩ := constructSyncCommitteeContribution_noMessages_iff
+    obtain ⟨noMessages, sameFields, noIndex⟩ := constructSyncCommitteeContribution_noMessages_iff
       (state := state) (committee := committee) (blockRoot := root)
       (messages := messages.filter (inSubcommittee state (syncSubcommitteePubkeys committee
         subcommitteeIndex.toNat))) inRange
@@ -662,7 +669,7 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
             validator.pubkey ∈ syncSubcommitteePubkeys committee subcommitteeIndex.toNat) ↔
         constructSyncCommitteeContribution state committee root subcommitteeIndex
           (messages.filter (inSubcommittee state (syncSubcommitteePubkeys committee
-            subcommitteeIndex.toNat))) = .error .noMessages := by
+            subcommitteeIndex.toNat))) = .error (.noMessages state.slot root) := by
       rw [noMessages]
       simp only [List.mem_filter, keyed]
       constructor
@@ -678,8 +685,11 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
     | error fault =>
       cases fault
       case indexOutOfRange index limit => exact absurd built (noIndex index limit)
-      all_goals simp [throw, throwThe, MonadExceptOf.throw, noMatch, constructionError,
-        internalError, notInternal, @eq_comm _ 404 code, @eq_comm _ 500 code]
+      case noMessages slot blockRoot =>
+        obtain ⟨rfl, rfl⟩ := sameFields slot blockRoot built
+        simp [throw, throwThe, MonadExceptOf.throw, noMatch, @eq_comm _ 404 code]
+      all_goals simp [throw, throwThe, MonadExceptOf.throw, constructionError,
+        internalError, notInternal, @eq_comm _ 500 code]
 
 /-! ## Responses -/
 

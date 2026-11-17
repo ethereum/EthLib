@@ -168,20 +168,23 @@ def test_inclusion_lists_from_heze() -> None:
 
 
 def test_pending_head() -> None:
-    with raises(PROPOSER_ERROR, "proposer step failed with code 15") as info:
+    message = f"fork choice: the node of the block {block_root('gloas')} is pending"
+    with raises(PROPOSER_ERROR, message) as info:
         prepare("gloas", PENDING)
     assert info.value.code == 15
 
 
 def test_unknown_head() -> None:
-    with raises(PROPOSER_ERROR, "proposer step failed with code 15") as info:
+    message = f"fork choice: no known block has root 0x{bytes(32).hex()}"
+    with raises(PROPOSER_ERROR, message) as info:
         prepare("gloas", FULL, root=bytes(32))
     assert info.value.code == 15
 
 
 def test_full_head_without_its_payload() -> None:
     # Two slots later, a full head is followed whatever the committee says, but the store lacks it.
-    with raises(PROPOSER_ERROR, "proposer step failed with code 15") as info:
+    message = f"fork choice: the payload of the block {block_root('gloas')} is not verified"
+    with raises(PROPOSER_ERROR, message) as info:
         prepare(
             "gloas", FULL, proposer_state("gloas", 3), steps("gloas", False, 3 * SECONDS_PER_SLOT)
         )
@@ -192,7 +195,9 @@ def test_inclusion_lists_at_slot_0() -> None:
     # The proposer builds on the anchor, at slot 0, which has no slot before it.
     checks = YAML(typ="safe").load((FILES / "heze" / CASE / "steps.yaml").read_text())[1]["checks"]
     anchor_root = bytes.fromhex(checks["head"]["root"][2:])
-    with raises(PROPOSER_ERROR, "proposer step failed with code 16") as info:
+    # The inclusion lists of the slot before slot 0 need 0 - 1, which underflows.
+    message = "validator duty: arithmetic: EthLib.Base.ArithError.underflow 0 1"
+    with raises(PROPOSER_ERROR, message) as info:
         prepare("heze", EMPTY, _read("heze", "anchor_state"), [], anchor_root)
     assert info.value.code == 16
 

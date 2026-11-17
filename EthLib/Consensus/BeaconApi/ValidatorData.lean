@@ -204,7 +204,7 @@ def produceSyncCommitteeContribution (state : BeaconState preset fork) (altair :
   let members := messages.filter (inSubcommittee state keys)
   match constructSyncCommitteeContribution state committee root subcommitteeIndex members with
   | .ok contribution => return contribution
-  | .error .noMessages => throw (noMatch "sync committee message")
+  | .error (.noMessages ..) => throw (noMatch "sync committee message")
   | .error fault => throw (constructionError fault)
 
 /-! ## Responses -/
