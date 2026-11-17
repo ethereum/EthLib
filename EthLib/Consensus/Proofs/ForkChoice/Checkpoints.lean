@@ -557,7 +557,7 @@ private theorem CheckpointStatesFromBlocks.of_maps {allowed : SignatureChecks â†
   exact holds found
 
 /-- Replacing the checkpoints keeps the unrealized justified checkpoint. -/
-theorem updateCheckpoints_unrealizedJustifiedCheckpoint (justified finalized : Checkpoint) :
+private theorem updateCheckpoints_unrealizedJustifiedCheckpoint (justified finalized : Checkpoint) :
     (store.updateCheckpoints justified finalized).unrealizedJustifiedCheckpoint =
       store.unrealizedJustifiedCheckpoint := by
   unfold updateCheckpoints
@@ -716,7 +716,7 @@ private theorem catchUp_realizes {s t : Store preset fork} {old target : Slot}
 It keeps the justified one, or adopts the unrealized one at a crossed epoch.
 
 It adopts it whenever it crosses an epoch. -/
-theorem onTick_justifiedCheckpoint_of_unrealized {s t : Store preset fork} {time : UInt64}
+private theorem onTick_justifiedCheckpoint_of_unrealized {s t : Store preset fork} {time : UInt64}
     {old : Slot}
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (oldOk : s.getCurrentSlot config = .ok old) (forward : s.timeMs â‰¤ time)
