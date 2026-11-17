@@ -45,7 +45,7 @@ A chain from a later state keeps its keys distinct when they are distinct in tha
 
 namespace EthLib.Consensus
 
-open Base Serialization.Ssz
+open Base Serialization.Ssz Cryptography.Bls
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
@@ -64,6 +64,76 @@ theorem validators_getElem?_of_validatorKeys_prefix {post : Fork}
   refine ⟨after.validators.data[i], by simp [afterSmall], ?_⟩
   have same := kept.getElem small
   simpa [validatorKeys, oldEq] using same.symm
+
+/-- An indexed attestation valid in one state is valid in another state.
+
+The check reads the keys of the signers, the fork versions and the genesis validators root.
+
+It reads nothing else of the state.
+
+So it is enough that both registries are prefixes of the keys of a common state.
+
+The signers must be in the other registry.
+
+The two states must agree on the fork versions and the genesis validators root. -/
+theorem isValidIndexedAttestation_of_keys {one other common : BeaconState preset fork}
+    {indexed : IndexedAttestation preset fork}
+    (valid : isValidIndexedAttestation config checks one indexed = .ok true)
+    (oneKeys : validatorKeys one <+: validatorKeys common)
+    (otherKeys : validatorKeys other <+: validatorKeys common)
+    (forkVersions : other.forkVersions = one.forkVersions)
+    (genesisValidatorsRoot : other.genesisValidatorsRoot = one.genesisValidatorsRoot)
+    (inside : ∀ index ∈ indexed.attestingIndices.data.toList,
+      index.toNat < other.validators.data.size) :
+    isValidIndexedAttestation config checks other indexed = .ok true := by
+  -- Each signer has one key, read in either state.
+  have keys : ∀ index ∈ indexed.attestingIndices.data.toList,
+      (Validator.pubkey <$> liftAccessor (getValidator other index)) =
+        (Validator.pubkey <$> liftAccessor (getValidator one index)) := by
+    intro index member
+    obtain ⟨pubkeys, -, -, pubkeysOk, -⟩ := isValidIndexedAttestation_signature valid
+    simp only [bind_pure_comp, Array.mapM_eq_mapM_toList] at pubkeysOk
+    obtain ⟨ys, mappedOk⟩ : ∃ ys, indexed.attestingIndices.data.toList.mapM
+        (fun index => Validator.pubkey <$> liftAccessor (getValidator one index)) = .ok ys := by
+      cases mapped : indexed.attestingIndices.data.toList.mapM
+          (fun index => Validator.pubkey <$> liftAccessor (getValidator one index)) with
+      | error e =>
+        rw [mapped] at pubkeysOk
+        cases pubkeysOk
+      | ok ys => exact ⟨ys, rfl⟩
+    obtain ⟨key, read⟩ := mapM_ok_of_mem mappedOk index member
+    obtain ⟨v, found⟩ : ∃ v, one.validators.data[index.toNat]? = some v := by
+      cases h : one.validators.data[index.toNat]? with
+      | none =>
+        simp [getValidator, h, liftAccessor, Except.mapError, Functor.map, Except.map] at read
+      | some v => exact ⟨v, rfl⟩
+    obtain ⟨w, foundOther⟩ : ∃ w, other.validators.data[index.toNat]? = some w :=
+      ⟨_, Array.getElem?_eq_getElem (inside index member)⟩
+    obtain ⟨c, foundC, keyC⟩ := validators_getElem?_of_validatorKeys_prefix oneKeys found
+    obtain ⟨c', foundC', keyC'⟩ := validators_getElem?_of_validatorKeys_prefix otherKeys foundOther
+    rw [foundC, Option.some.injEq] at foundC'
+    subst foundC'
+    simp [getValidator, found, foundOther, liftAccessor, Except.mapError, Functor.map,
+      Except.map, ← keyC, keyC']
+  have domain : getDomain config other DOMAIN_BEACON_ATTESTER (some indexed.data.target.epoch) =
+      getDomain config one DOMAIN_BEACON_ATTESTER (some indexed.data.target.epoch) := by
+    simp only [getDomain, Option.getD_some, forkVersions, genesisValidatorsRoot]
+  unfold isValidIndexedAttestation at valid ⊢
+  simp only [bind_pure_comp, Array.mapM_eq_mapM_toList] at valid ⊢
+  -- The two reads of the keys agree on every signer, so the two maps agree.
+  have congr : ∀ indices : List ValidatorIndex, (∀ index ∈ indices,
+      (Validator.pubkey <$> liftAccessor (getValidator other index)) =
+        (Validator.pubkey <$> liftAccessor (getValidator one index))) →
+      indices.mapM (fun index => Validator.pubkey <$> liftAccessor (getValidator other index)) =
+        indices.mapM (fun index => Validator.pubkey <$> liftAccessor (getValidator one index)) := by
+    intro indices same
+    induction indices with
+    | nil => rfl
+    | cons index rest ih =>
+      simp only [List.mapM_cons]
+      rw [same index List.mem_cons_self, ih fun i m => same i (List.mem_cons_of_mem _ m)]
+  rw [congr _ keys, domain]
+  exact valid
 
 /-- One slot keeps the public keys as a prefix, and keeps distinct keys distinct. -/
 private theorem keys_advanceSlot {state after : BeaconState preset fork}
