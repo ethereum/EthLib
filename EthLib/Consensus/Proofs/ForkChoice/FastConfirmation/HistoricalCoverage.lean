@@ -329,6 +329,7 @@ public theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
     (admitted : BlocksAdmitted e 0 Δ time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (votes : ValidatedDutyVotes (e := e) time)
     (windows : AssignmentWindowAgreement (e := e) time)
+    (fit : config.CommitteeWindowsFit preset)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -393,7 +394,7 @@ public theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
       high startCovers covers holds receiver atTime upToDate hdOk early
     exact route_of_split route fun above different =>
       (e.rootInFilteredTree_of_checked pre sync slots positive preGloas admitted fits prompt votes
-        windows ring anchored sound anchorSlot anchorBoundary start anchorEpochOk bounded roots
+        windows fit ring anchored sound anchorSlot anchorBoundary start anchorEpochOk bounded roots
         absent agree selected pinned signedAll quorumDrift unslashed terminal anchorGenesis
         parameters genesis heldEarly enough included family caller callerUpToDate atSlot headOk
         rollover inputs walked realized realizedHead low high startCovers covers receiver atTime
