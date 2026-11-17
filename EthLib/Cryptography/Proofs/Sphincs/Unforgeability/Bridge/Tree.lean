@@ -169,7 +169,7 @@ theorem node_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.Public
       ring
     rw [Merkle.node_succ, node_queryH S P lay tree level (2 * j) (by omega) (by omega),
       node_queryH S P lay tree level (2 * j + 1) (by omega) (by omega)]
-    simp only [SphincsSecurity.Seeded.treeNode, bind_map_left, map_bind]
+    simp only [SphincsSecurity.Seeded.treeNode_succ, bind_map_left, map_bind]
     refine bind_congr fun left => bind_congr fun right => ?_
     exact nodeHash_queryH P lay tree (level + 1) j left right
 
@@ -257,34 +257,16 @@ theorem path_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.Public
 
 /-! ## Folding a path -/
 
-/-- The climb from a height is the model's fold, continued from that height. -/
-theorem climb_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurity.Layer)
+/-- The climb of a tree with a path is the model's fold, value for value. -/
+theorem treeFold_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecurity.Layer)
     (tree : SphincsSecurity.TreeIndex) (leaf : SphincsSecurity.LeafIndex)
-    (path : Nat → SphincsSecurity.Digest) (v : SphincsSecurity.Digest) :
-    ∀ (n level : Nat),
-      ofDigest <$> SphincsSecurity.Concrete.treeFold (m := m) P lay tree leaf path (level + n) v
-        = SphincsSecurity.Concrete.treeFold (m := m) P lay tree leaf path level v >>= fun c =>
-            Merkle.climb (nodeHash (queryH (m := m)) (ofParam P) (layerOf lay) tree.val)
-              ((⟨0, leaf.val⟩ : Merkle.Position).ancestor level) (ofDigest c)
-              (List.ofFn fun i : Fin n => ofDigest (path (level + i.val)))
-  | 0, level => by simp [Merkle.climb]
-  | n + 1, level => by
-    rw [show level + (n + 1) = level + 1 + n by omega,
-      climb_queryH P lay tree leaf path v n (level + 1)]
-    simp only [SphincsSecurity.Concrete.treeFold, bind_assoc, List.ofFn_succ, Fin.val_zero,
-      Nat.add_zero, Fin.val_succ]
-    refine bind_congr fun c => ?_
-    have hlist : (List.ofFn fun i : Fin n => ofDigest (path (level + (i.val + 1))))
-        = List.ofFn fun i : Fin n => ofDigest (path (level + 1 + i.val)) :=
-      congrArg List.ofFn (funext fun i => by rw [Nat.add_right_comm, Nat.add_assoc])
-    rw [Merkle.climb, Merkle.Position.parent_ancestor]
-    simp only [Merkle.Position.ancestor_mk_zero]
-    rw [hlist, Nat.testBit_eq_decide_div_mod_eq]
-    rcases Nat.mod_two_eq_zero_or_one (leaf.val / 2 ^ level) with h | h
-    · simp only [h, Merkle.ordered_eq_ite, ↓reduceIte, Nat.zero_ne_one, decide_false,
-        Bool.false_eq_true]
-      rw [nodeHash_queryH P lay tree (level + 1), bind_map_left]
-    · simp only [h, Merkle.ordered_eq_ite, ↓reduceIte, Nat.one_ne_zero, decide_true]
-      rw [nodeHash_queryH P lay tree (level + 1), bind_map_left]
+    (path : Nat → SphincsSecurity.Digest) (levels : Nat) (v : SphincsSecurity.Digest) :
+    ofDigest <$> SphincsSecurity.Concrete.treeFold (m := m) P lay tree leaf path levels v
+      = Merkle.climb (nodeHash (queryH (m := m)) (ofParam P) (layerOf lay) tree.val)
+          ⟨0, leaf.val⟩ (ofDigest v) (List.ofFn fun i : Fin levels => ofDigest (path i.val)) := by
+  rw [SphincsSecurity.Concrete.treeFold, ← Merkle.climb_map
+    (SphincsSecurity.Concrete.merkleHash (m := m) P (.node lay tree)) _ ofDigest
+    fun p left right => nodeHash_queryH P lay tree p.level p.index left right, List.map_ofFn]
+  rfl
 
 end EthLib.Cryptography.Sphincs.Unforgeability.Bridge

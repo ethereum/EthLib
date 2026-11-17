@@ -582,22 +582,6 @@ private theorem caller_margin_sets {checks : SignatureChecks}
   · intro v member
     exact (Finset.mem_filter.mp member).2
 
-/-- A window reads when its slots read and its end has a checked successor. -/
-private theorem window_ok_of_slots {store : Store preset fork} {head : Root}
-    {first last after : Slot} (afterOk : addChecked last 1 = .ok after)
-    (slots : ∀ slot, first ≤ slot → slot ≤ last →
-      ∃ committee, store.getSlotCommittee head slot = .ok committee) :
-    ∃ members, store.getCommitteesBetweenSlots head first last = .ok members := by
-  unfold Store.getCommitteesBetweenSlots
-  simp only [afterOk, Except.mapError, bind, Except.bind]
-  apply foldlM_exists_ok_of_invariant (P := fun _ => True)
-  · intro acc offset inside _
-    obtain ⟨low, high⟩ := (exists_offset_eq_iff afterOk).mp ⟨_, inside, rfl⟩
-    obtain ⟨committee, committeeOk⟩ := slots _ low high
-    exact ⟨committee.foldl (·.insert ·) acc,
-      by simp only [committeeOk, pure, Except.pure], trivial⟩
-  · trivial
-
 /-- A successful window reads every window inside it. -/
 private theorem window_ok_of_inside {store : Store preset fork} {head : Root}
     {first last low high : Slot} {members : Std.TreeSet ValidatorIndex}
@@ -611,7 +595,7 @@ private theorem window_ok_of_inside {store : Store preset fork} {head : Root}
   obtain ⟨after, afterOk, -⟩ := bind_ok_iff.mp outer
   have afterNat := (addChecked_ok_iff.mp (mapError_ok_iff.mp afterOk)).1
   have highNat := UInt64.le_iff_toNat_le.mp highLe
-  obtain ⟨inner, innerOk⟩ := window_ok_of_slots (after := high + 1)
+  obtain ⟨inner, innerOk⟩ := Store.getCommitteesBetweenSlots_ok_of_slots (after := high + 1)
     (addChecked_of_lt (by simp only [UInt64.toNat_one] at afterNat ⊢; omega))
     fun slot low' high' => Store.getSlotCommittee_ok_of_getCommitteesBetweenSlots read
       (UInt64.le_trans lowLe low') (UInt64.le_trans high' highLe)
@@ -764,13 +748,14 @@ private theorem window_weight_le {store : Store preset fork} {head : Root}
         startNat.trans (congrArg (· * preset.SLOTS_PER_EPOCH.toNat) lastFirstEpoch)
       rw [Nat.succ_mul]
       omega
-    obtain ⟨members, membersOk⟩ := window_ok_of_slots finishAfter (fun slot low high =>
-      Store.getSlotCommittee_ok_of_getCommitteesBetweenSlots windowOk low
+    obtain ⟨members, membersOk⟩ := Store.getCommitteesBetweenSlots_ok_of_slots finishAfter
+      (fun slot low high => Store.getSlotCommittee_ok_of_getCommitteesBetweenSlots windowOk low
         (UInt64.le_trans high finishLe))
-    obtain ⟨epochMembers, epochMembersOk⟩ := window_ok_of_slots finishAfter (fun slot low high =>
-      Store.getSlotCommittee_ok_of_getCommitteesBetweenSlots windowOk
-        (UInt64.le_trans (UInt64.le_iff_toNat_le.mpr startLow) low)
-        (UInt64.le_trans high finishLe))
+    obtain ⟨epochMembers, epochMembersOk⟩ :=
+      Store.getCommitteesBetweenSlots_ok_of_slots finishAfter (fun slot low high =>
+        Store.getSlotCommittee_ok_of_getCommitteesBetweenSlots windowOk
+          (UInt64.le_trans (UInt64.le_iff_toNat_le.mpr startLow) low)
+          (UInt64.le_trans high finishLe))
     have reserve := exit epoch epochStart next finish epochMembers startOk nextOk finishOk
       (UInt64.le_iff_toNat_le.mpr startLow) finishLe epochMembersOk
     have totalOk := weightOk

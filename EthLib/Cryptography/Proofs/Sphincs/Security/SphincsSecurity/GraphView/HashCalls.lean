@@ -122,9 +122,11 @@ theorem hashCalls_treeNode (f : QueryImpl HashSpec Id) (parameter : PublicParame
       OracleComp HashSpec Digest) =
       258 * 2 ^ level - 1 := by
   induction level generalizing nodeIdx with
-  | zero => simp [Seeded.treeNode, hashCalls_bind, hashCalls_oneTimePublicKey, leafHash]
+  | zero =>
+      simp [Seeded.treeNode_zero, Seeded.treeLeaf, hashCalls_bind, hashCalls_oneTimePublicKey,
+        leafHash]
   | succ level ih =>
-      simp only [Seeded.treeNode, hashCalls_bind, ih, hashCalls_tweakableHash]
+      simp only [Seeded.treeNode_succ, hashCalls_bind, ih, hashCalls_tweakableHash]
       have hpos : 0 < 2 ^ level := Nat.two_pow_pos level
       rw [pow_succ]
       omega
@@ -139,11 +141,11 @@ theorem hashCalls_forsNode (f : QueryImpl HashSpec Id) (parameter : PublicParame
       3 * 2 ^ level - 1 := by
   induction level generalizing node with
   | zero =>
-      rw [Seeded.forsNode, hashCalls_bind, Seeded.forsSecret, hashCalls_deriveKey, forsLeafHash,
-        hashCalls_tweakableHash]
+      rw [Seeded.forsNode_zero, Seeded.forsLeaf, hashCalls_bind, Seeded.forsSecret,
+        hashCalls_deriveKey, forsLeafHash, hashCalls_tweakableHash]
       rfl
   | succ level ih =>
-      rw [Seeded.forsNode, hashCalls_bind, hashCalls_bind, dite_eq_left (by omega),
+      rw [Seeded.forsNode_succ, hashCalls_bind, hashCalls_bind, dite_eq_left (by omega),
         hashCalls_tweakableHash, ih _ (by omega), ih _ (by omega)]
       have hp : 0 < 2 ^ level := Nat.two_pow_pos level
       rw [pow_succ]

@@ -365,7 +365,7 @@ theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· ∈ J)]
     (historyCovers : HonestHeadsCover (e := e) historical epochStartTime.toNat (e.world n).time)
     (absent : AnchorParentAbsent (e := e) time)
     (parentCovers : HonestHeadsCover (e := e) block.parentRoot (e.world n).time (time + 1))
-    (reads : HonestHeadReads (e := e) first (e.world n).time time)
+    (fit : config.CommitteeWindowsFit preset)
     (consistent : EarlyJustifiedConsistent (e := e) root callerEpoch (e.world n).time time)
     (leaf : RootKeepsViableLeaf (e := e) root (e.world n).time time)
     (anchorHeader : anchorState.latestBlockHeader.slot = anchorBlock.slot ∧
@@ -401,7 +401,7 @@ theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· ∈ J)]
     callerTime sourceReads drift reserve reference referenceTime referenceUpToDate
     referenceSlotOk finishOk bounded roots unslashed ceiling scoreFits parameters
     genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
-    historicalEpochOk near epochStartOk epochStartTimeOk historyCovers absent parentCovers reads
+    historicalEpochOk near epochStartOk epochStartTimeOk historyCovers absent parentCovers fit
     consistent leaf
     (Execution.justifiedHonestlySigned anchored start anchorSlot anchorHeader anchorZero slots
         parameters delay genesis pre roots absent heldEarly bounded enough terminal afterAnchor

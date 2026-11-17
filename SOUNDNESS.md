@@ -152,6 +152,14 @@ The second search finds two inputs at different positions with one output, which
 With such a hash, the verifier must check `j < 2^h` and the path length itself (`climb_const_shift_root`, `climb_const_interior`).
 An empty path and a tree of height 0 are not covered.
 
+A multiproof opens several nodes at once, with the helper nodes their paths need (`Merkle/Multiproof.lean`).
+`verify_complete` (`Proofs/Merkle/Multiproof.lean`) shows that an honest multiproof rebuilds the root.
+`verify_binding` (`Proofs/Merkle/MultiproofBinding.lean`) is about two accepted multiproofs for the same positions and root.
+The opened positions are distinct and lie in the tree, and none is an ancestor of another.
+Each list of values has one value per position.
+They open the same values, or `findMultiproofCollision` returns a collision of the node hash.
+That search walks both rebuilds down from the root, and returns nothing on one rebuild compared with itself (`findMultiproofCollision_self`).
+
 `Proofs/Merkle/RandomOracle.lean` bounds classical searches against an ideal random oracle with `N` outputs and an empty initial cache.
 `prEvent_collision_le` bounds a collision among queried inputs by `q^2 / N` for at most `q` hash calls, and private uniform sampling is not counted.
 This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`: at most 4 for `q >= 2`, and close to 2 for large `q`.
@@ -193,8 +201,10 @@ It rests on `climb_binding`, above.
 `findBranchCollision_valid_of_width` states the collision for any hash with 32-byte digests.
 
 Multiproof binding is `verifyMerkleMultiproof_binding` and `verifyMerkleMultiproof_overlap_binding` (`Proofs/Ssz/Merkle/MultiproofBinding.lean`).
-Two accepted requests for one root agree on every position they both claim, or `findMessageCollision` returns a collision.
-That search tries each input one verifier hashes against each input the other hashes.
+Two accepted requests for one root agree on every position they both claim, or `findMultiproofMessageCollision` returns a collision.
+That search is the Merkle multiproof search over the two rebuilds, and returns the two inputs hashed at one node.
+Each input is one its own verifier hashes, in the record of `verifiedMultiproofMessages` (`findMultiproofCollision_recorded`, `Proofs/Merkle/MultiproofTrace.lean`).
+It rests on `rebuild_go_binding` (`Proofs/Merkle/MultiproofBinding.lean`).
 
 Whole-value binding is `hashTreeRoot_binding` (`Proofs/Ssz/Codec/Binding.lean`).
 Two values of one type with one root are equal, or `findMessageCollision` returns a collision between the hash inputs of the two root computations.
@@ -210,7 +220,7 @@ Two legal progressive containers with one root have one layout, or `findMixinCol
 It computes the roots of the all-zero subtrees with that hash too.
 
 No theorem bounds the probability of finding a collision in a multiproof.
-Its verifier hashes each pair with `combine` in `foldLevelNodes`, which takes no node hash as an argument, so no experiment runs it against the oracle.
+Its verifier is the Merkle rebuild, which takes the node hash as an argument, but no experiment runs it against the oracle.
 
 `Proofs/Ssz/RandomOracle.lean` bounds whole-value binding, with the node hash a random oracle.
 The merkleization takes its hash in any monad, so the experiment runs the root of the specification with a hasher that queries the oracle.
@@ -3012,7 +3022,10 @@ The coverage of the parent over the same interval and the coverage of the histor
 Like the historical-anchor theorem, it does not assume finality across honest stores.
 Receiver finality coverage and the receiver's block lookup are derived from `RootViable`, the root's viability at each honest store, which is assumed.
 It assumes that no up-to-date honest justified checkpoint over the interval conflicts with the root: the checkpoint-consistency half of the safety of the confirmation, not derived.
-`HonestHeadReads` assumes that each honest head reads its justified state and its committee windows.
+The receivers' reads are derived.
+When the root is above the justified block, the head computation weighed a child of that block and so read its state (`Store.checkpointState_justified_of_getHead`).
+Each committee window before the current slot reads from the head's state (`Store.getCommitteesBetweenSlots_exists`).
+That needs `Config.CommitteeWindowsFit`, a bound on the registry limit, the committees, the clock and the seed lookahead, which mainnet and minimal satisfy.
 `ReceiverWindowExitsNear` assumes the exit bound of the window of each receiver within two epochs of the parent.
 `LateDutyMajority` assumes the honest duty majority of the duty-epoch theorem.
 The receiver's proposer score is derived from the checkpoint stake ceiling and `Config.ProposerScoreFits`, a bound on the boost that mainnet and minimal satisfy.

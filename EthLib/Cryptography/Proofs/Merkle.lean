@@ -8,6 +8,9 @@ public import EthLib.Cryptography.Proofs.Merkle.VectorBinding
 public import EthLib.Cryptography.Proofs.Merkle.PositionBinding
 public import EthLib.Cryptography.Proofs.Merkle.SecondPreimage
 public import EthLib.Cryptography.Proofs.Merkle.Extraction
+public import EthLib.Cryptography.Proofs.Merkle.Multiproof
+public import EthLib.Cryptography.Proofs.Merkle.MultiproofBinding
+public import EthLib.Cryptography.Proofs.Merkle.MultiproofTrace
 
 /-!
 # Proofs: Merkle trees

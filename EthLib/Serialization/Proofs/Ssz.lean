@@ -95,9 +95,8 @@ public import EthLib.Serialization.Proofs.Ssz.Merkle.Multiproof
 public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofAcceptance
 public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofBinding
 public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofClaims
+public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofPositions
 public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofSize
-public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofTrace
-public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofTree
 public import EthLib.Serialization.Proofs.Ssz.Merkle.ProgressiveLevels
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Singleton
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree

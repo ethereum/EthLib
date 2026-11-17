@@ -125,12 +125,23 @@ theorem hashTreeRoot_progressiveList_leaves (data : Array α) :
       slotRoot, List.mapM_map, Function.comp_def, rooted, finishLayout, bind, Except.bind, pure,
       Except.pure, leaves, sequenceLeaves]
 
+/-- An empty spine is the zero node. -/
+@[simp] theorem spineRoot_nil (level : Nat) : spineRoot level [] = zeroChunk :=
+  rfl
+
+/-- A spine hashes the top of its first tree against the spine of the trees after it. -/
+theorem spineRoot_cons (level : Nat) (levels : List (Array Bytes))
+    (rest : List (List (Array Bytes))) :
+    spineRoot level (levels :: rest)
+      = combine (topOfLevels (2 * level) levels) (spineRoot (level + 1) rest) := by
+  simp [spineRoot, List.zipIdx_cons, spine_cons]
+
 /-- The spine trees from a leaf on fold to the progressive root of the leaves from there on. -/
 theorem spineRoot_spineLevels (leaves : Array Bytes) :
     ∀ (start level : Nat), spineRoot level (spineLevels leaves start level)
       = merkleizeProgressiveUnchecked (leaves.toList.drop start) level := by
   intro start level
-  induction start, level using spineLevels.induct leaves with
+  induction start, level using spineLevels_induct leaves with
   | case1 start level inside ih =>
     have nonempty : (leaves.toList.drop start).isEmpty = false := by simp; omega
     have slice : ((leaves.toList.drop start).take (4 ^ level)).toArray
@@ -141,11 +152,11 @@ theorem spineRoot_spineLevels (leaves : Array Bytes) :
     have depth : depthFor (4 ^ level) = 2 * level := by
       rw [show 4 ^ level = 2 ^ (2 * level) by rw [Nat.pow_mul]]
       exact depthFor_pow _
-    rw [spineLevels.eq_1 leaves, ite_eq_left inside, spineRoot, ih,
+    rw [spineLevels_unfold leaves, ite_eq_left inside, spineRoot_cons, ih,
       merkleizeProgressiveUnchecked_unfold (leaves.toList.drop start), nonempty]
     simp only [Bool.false_eq_true, ↓reduceIte, slice, depth, List.drop_drop, topOfLevels_eq]
   | case2 start level outside =>
-    rw [spineLevels.eq_1 leaves, ite_eq_right outside, spineRoot,
+    rw [spineLevels_unfold leaves, ite_eq_right outside, spineRoot_nil,
       merkleizeProgressiveUnchecked_unfold, List.drop_eq_nil_of_le (by simp; omega)]
     rfl
 

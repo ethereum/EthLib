@@ -161,7 +161,8 @@ theorem evalWithAnswerFn_merkleizeProgressiveUncheckedM (f : QueryImpl HashOracl
     evalWithAnswerFn f (merkleizeProgressiveUncheckedM oracleHasher chunks level) =
       (merkleizeProgressiveUncheckedM (Hasher.ofHash (m := Id) (tableHash f)) chunks
         level).run := by
-  rw [merkleizeProgressiveUncheckedM, merkleizeProgressiveUncheckedM]
+  rw [merkleizeProgressiveUncheckedM_unfold oracleHasher chunks level,
+    merkleizeProgressiveUncheckedM_unfold (Hasher.ofHash (m := Id) (tableHash f)) chunks level]
   split
   · rfl
   · rename_i hempty

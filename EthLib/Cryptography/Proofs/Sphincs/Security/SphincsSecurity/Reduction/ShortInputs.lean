@@ -175,7 +175,7 @@ theorem Only.treeFold (parameter : PublicParameter) (lay : Layer) (tree : TreeIn
       OracleComp HashSpec Digest)
   | 0, value => Only.pure' _
   | levels + 1, value => by
-      rw [Concrete.treeFold]
+      rw [Concrete.treeFold_succ]
       refine Only.bind (Only.treeFold parameter lay tree leaf path levels value) ?_
       intro current
       split <;> exact Only.tweakableHash _ _ _ (by rw [nodePayload_length]; omega)
@@ -191,7 +191,7 @@ theorem Only.forsFold (parameter : PublicParameter) (index : Index) (κ : FTree)
       OracleComp HashSpec Digest)
   | 0, value => Only.pure' _
   | levels + 1, value => by
-      rw [Concrete.forsFold]
+      rw [Concrete.forsFold_succ]
       refine Only.bind (Only.forsFold parameter index κ leaf path levels value) ?_
       intro current
       dsimp only
@@ -302,11 +302,11 @@ theorem Only.treeNode (parameter : PublicParameter) (lay : Layer) (tree : TreeIn
         (treeNode parameter lay tree seed level nodeIdx :
       OracleComp HashSpec Digest)
   | 0, nodeIdx => by
-      rw [SphincsSecurity.Seeded.treeNode]
+      rw [SphincsSecurity.Seeded.treeNode_zero, SphincsSecurity.Seeded.treeLeaf]
       exact Short.Only.bind (Only.oneTimePublicKey _ _ _ _ _)
           (fun _ => Short.Only.leafHash _ _ _ _ _)
   | level + 1, nodeIdx => by
-      rw [SphincsSecurity.Seeded.treeNode]
+      rw [SphincsSecurity.Seeded.treeNode_succ]
       exact Short.Only.bind (Only.treeNode parameter lay tree seed level _) (fun _ =>
         Short.Only.bind (Only.treeNode parameter lay tree seed level _) (fun _ =>
           Short.Only.tweakableHash _ _ _ (by rw [nodePayload_length]; omega)))
@@ -321,10 +321,10 @@ theorem Only.forsNode (parameter : PublicParameter) (index : Index) (κ : FTree)
     ∀ level node, Short.Only (forsNode parameter index κ seed level node :
         OracleComp HashSpec Digest)
   | 0, node => by
-      rw [SphincsSecurity.Seeded.forsNode]
+      rw [SphincsSecurity.Seeded.forsNode_zero, SphincsSecurity.Seeded.forsLeaf]
       exact Short.Only.bind (Only.forsSecret _ _ _ _ _) (fun _ => Short.Only.forsLeafHash _ _ _ _ _)
   | level + 1, node => by
-      rw [SphincsSecurity.Seeded.forsNode]
+      rw [SphincsSecurity.Seeded.forsNode_succ]
       refine Short.Only.bind (Only.forsNode parameter index κ seed level _) (fun _ =>
         Short.Only.bind (Only.forsNode parameter index κ seed level _) (fun _ => ?_))
       split

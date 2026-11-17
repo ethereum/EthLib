@@ -240,6 +240,32 @@ theorem exists_offset_eq_iff {first last after slot : Slot}
     rw [← UInt64.toNat_sub_of_le _ _ low, Nat.toUInt64_eq, UInt64.ofNat_toNat,
       UInt64.add_comm, UInt64.sub_add_cancel]
 
+/-- The parameter bounds that, with a held head state, let every committee window read.
+
+The windows are those that end before a store's current slot. -/
+structure Config.CommitteeWindowsFit (config : Config) (preset : Preset) : Prop where
+  /-- The registry limit is at most `2^40`, the most validators the shuffle takes. -/
+  registry : preset.VALIDATOR_REGISTRY_LIMIT.toNat ≤ 2 ^ 40
+  /-- The validators of a full registry times a bound on the committees of an epoch fit in 64 bits.
+  -/
+  committees : preset.VALIDATOR_REGISTRY_LIMIT.toNat *
+    (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64
+  /-- The epoch of the latest 64-bit time, plus the history of mixes, fits in 64 bits. -/
+  seeds : (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) +
+    preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64
+  /-- The shortest seed lookahead is shorter than the history of mixes. -/
+  lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
+  /-- An epoch has a slot. -/
+  positive : 0 < preset.SLOTS_PER_EPOCH.toNat
+
+/-- The committee windows of mainnet fit. -/
+theorem Config.committeeWindowsFit_mainnet : Config.mainnet.CommitteeWindowsFit Preset.mainnet := by
+  constructor <;> decide
+
+/-- The committee windows of minimal fit. -/
+theorem Config.committeeWindowsFit_minimal : Config.minimal.CommitteeWindowsFit Preset.minimal := by
+  constructor <;> decide
+
 namespace Store
 
 variable {config : Config} {store : Store preset fork}
@@ -403,6 +429,77 @@ theorem getSlotCommittee_ok_of_getCommitteesBetweenSlots {head : Root} {first la
     (fun _ _ _ stepOk => (bind_ok_iff.mp stepOk).imp fun _ read => read.1)
     _ _ _ folded offset inside
   exact ⟨committee, same ▸ committeeOk⟩
+
+/-- A window reads when its slots read and its end has a checked successor. -/
+theorem getCommitteesBetweenSlots_ok_of_slots {head : Root} {first last after : Slot}
+    (afterOk : Uint64.addChecked last 1 = .ok after)
+    (slots : ∀ slot, first ≤ slot → slot ≤ last →
+      ∃ committee, store.getSlotCommittee head slot = .ok committee) :
+    ∃ members, store.getCommitteesBetweenSlots head first last = .ok members := by
+  unfold getCommitteesBetweenSlots
+  simp only [afterOk, Except.mapError, bind, Except.bind]
+  apply foldlM_exists_ok_of_invariant (P := fun _ => True)
+  · intro acc offset inside _
+    obtain ⟨low, high⟩ := (exists_offset_eq_iff afterOk).mp ⟨_, inside, rfl⟩
+    obtain ⟨committee, committeeOk⟩ := slots _ low high
+    exact ⟨committee.foldl (·.insert ·) acc,
+      by simp only [committeeOk, pure, Except.pure], trivial⟩
+  · trivial
+
+/-- The committees of a slot read from a held head state whose registry and seed fit. -/
+private theorem getSlotCommittee_exists {head : Root} {headState : BeaconState preset fork}
+    {slot : Slot} (stateOk : store.blockState head = .ok headState)
+    (seedRoom : (computeEpochAtSlot preset slot).toNat +
+      preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (few : headState.validators.data.size ≤ 2 ^ 40)
+    (committeeRoom : headState.validators.data.size *
+      (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) :
+    ∃ committee, store.getSlotCommittee head slot = .ok committee := by
+  simp only [getSlotCommittee, stateOk, bind, Except.bind]
+  apply foldlM_exists_ok_of_invariant (P := fun _ => True)
+  · intro acc index inside _
+    -- Each index of the fold is below the count of committees of the slot.
+    have indexLt := List.mem_range.mp inside
+    have below : index.toUInt64 <
+        getCommitteeCountPerSlot headState (computeEpochAtSlot preset slot) := by
+      rw [UInt64.lt_iff_toNat_lt, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt'
+        (Nat.lt_trans indexLt (UInt64.toNat_lt _))]
+      exact indexLt
+    obtain ⟨committee, committeeOk⟩ :=
+      getBeaconCommittee_exists seedRoom lookahead few committeeRoom positive below
+    exact ⟨committee.foldl (·.insert ·) acc,
+      by simp only [committeeOk, Except.mapError, pure, Except.pure], trivial⟩
+  · trivial
+
+/-- Every committee window that ends before the current slot reads, from a held head state.
+
+The registry of that state stays within its limit, and the parameter bounds hold. -/
+theorem getCommitteesBetweenSlots_exists {head : Root} {headState : BeaconState preset fork}
+    {first last current : Slot} (fit : config.CommitteeWindowsFit preset)
+    (stateOk : store.blockState head = .ok headState) (within : headState.RegistryWithinLimit)
+    (currentOk : store.getCurrentSlot config = .ok current) (before : last < current) :
+    ∃ participants, store.getCommitteesBetweenSlots head first last = .ok participants := by
+  have currentLe := computeSlotAtTimeMs_le (mapError_ok_iff.mp currentOk)
+  have lastLt := UInt64.lt_iff_toNat_lt.mp before
+  have registryLe : headState.validators.data.size ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat :=
+    within
+  refine getCommitteesBetweenSlots_ok_of_slots (Uint64.addChecked_of_lt (by
+    have := current.toNat_lt
+    simp only [UInt64.toNat_one]
+    omega)) fun slot _ high => getSlotCommittee_exists stateOk ?_ fit.lookahead
+      (Nat.le_trans registryLe fit.registry)
+      (Nat.lt_of_le_of_lt (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ registryLe))
+        fit.committees) fit.positive
+  -- The epoch of the slot is at most that of the current slot, so its seed fits.
+  have slotLe := UInt64.le_iff_toNat_le.mp high
+  have epochLe : (computeEpochAtSlot preset slot).toNat ≤
+      (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) := by
+    rw [computeEpochAtSlot, UInt64.toNat_div, ← Nat.div_div_eq_div_mul]
+    exact Nat.div_le_div_right (by omega)
+  have := fit.seeds
+  omega
 
 /-- A range contains exactly the members of the committees that the rule reads for its slots. -/
 theorem mem_getCommitteesBetweenSlots_iff {head : Root} {first last : Slot}

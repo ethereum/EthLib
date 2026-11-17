@@ -126,9 +126,10 @@ theorem outside_witness_address (f : QueryImpl HashSpec Id) (parameter : PublicP
         reference.val (canonicalTreePath f parameter topLayer rootTree seed reference)
         (Completeness.node f parameter topLayer rootTree seed 0 reference.val)
             (layerHeight topLayer) := by
-    rw [hroot, merkleValue, merkleFold_treeFold]
+    rw [treeFold] at hfold
+    rw [hroot, merkleValue]
     exact hfold
-  rcases merkleFold_classification f parameter
+  rcases merkleValue_classification f parameter
       (fun height index => .node topLayer rootTree height index)
     leaf.val reference.val path (canonicalTreePath f parameter topLayer rootTree seed reference)
     value (Completeness.node f parameter topLayer rootTree seed 0 reference.val)
@@ -694,7 +695,7 @@ theorem treeHit_hit (hboundary : BoundaryCorrect f parameter seed labels) (pk : 
         value level ∈ SignatureWitness.trace f pk message signature := by
     intro level hlevel
     apply hrun
-    rw [← merkleFold_treeFold]
+    rw [treeFold]
     exact merkleInput_mem f pk.parameter _ leaf.val path value (layerHeight lay) level hlevel
   rcases hcase with ⟨reference, hreference, level, hlevel, hparent, hne, hout⟩ |
     ⟨hlaytop, level, hlevel, ⟨hlower, hpositive, hsurrogate⟩, haddress⟩

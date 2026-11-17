@@ -49,9 +49,9 @@ theorem tree_refined (leaf : FLeaf) (secret : Digest) (path : Fin forsHeight →
       (leafValue f parameter index κ leaf
         (Completeness.forsSecretValue f parameter index κ seed leaf))
       forsHeight := by
-    simp only [merkleValue, merkleFold_forsFold _ _ _ _ _ _ le_rfl]
+    simp only [merkleValue, climb_forsFold _ _ _ _ _ _ le_rfl]
     exact hroot.trans (canonical_root f parameter index κ seed leaf).symm
-  rcases merkleFold_same_index f parameter _ leaf.val _ _ _ _ forsHeight hfold with
+  rcases merkleValue_same_index f parameter _ leaf.val _ _ _ _ forsHeight hfold with
     ⟨hleaf, hpath⟩ | hmatch
   · refine Or.inl ⟨?_, ?_⟩
     · funext level

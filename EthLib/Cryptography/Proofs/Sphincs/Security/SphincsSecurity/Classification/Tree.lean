@@ -25,6 +25,7 @@ namespace SphincsSecurity.Security
 
 variable [Params]
 open Concrete
+open EthLib.Cryptography
 
 /-- The inputs that a computation queries when a fixed function answers every query. -/
 def queriedInputs {α : Type} (f : QueryImpl HashSpec Id) (oa : OracleComp HashSpec α) :
@@ -114,20 +115,16 @@ theorem orderedPayload_cross {bit bit' : Bool} (hne : bit ≠ bit')
   · exact nodePayload_injective h
   · exact (nodePayload_injective h).symm
 
-/-- The binary fold shared by the tree of each layer and each FORS tree. -/
-def merkleFold (parameter : PublicParameter) (domain : Nat → Nat → HashDomain)
-    (index : Nat) (path : Nat → Digest) : Nat → Digest → OracleComp HashSpec Digest
-  | 0, value => pure value
-  | levels + 1, value => do
-      let current ← merkleFold parameter domain index path levels value
-      tweakableHash parameter (domain (levels + 1) (index / 2 ^ (levels + 1)))
-        (orderedPayload (index.testBit levels) current (path levels))
-
+/-- The node that a climb reaches from a leaf, under the answers `f`. -/
 def merkleValue (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (domain : Nat → Nat → HashDomain) (index : Nat) (path : Nat → Digest)
     (value : Digest) (levels : Nat) : Digest :=
-  evalWithAnswerFn f (merkleFold parameter domain index path levels value)
+  evalWithAnswerFn f (Merkle.climb (merkleHash parameter domain) ⟨0, index⟩ value
+    (List.ofFn fun level : Fin levels => path level.val))
 
+/-- The oracle input of the climb step from level `level`, by the parent index and the child bit.
+
+The two-index classification compares these parts across leaves, so it keeps them explicit. -/
 def merkleInput (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (domain : Nat → Nat → HashDomain) (index : Nat) (path : Nat → Digest)
     (value : Digest) (level : Nat) : HashInput :=
@@ -144,34 +141,26 @@ theorem merkleValue_succ (f : QueryImpl HashSpec Id) (parameter : PublicParamete
     (value : Digest) (level : Nat) :
     merkleValue f parameter domain index path value (level + 1) =
       truncateHash (f (merkleInput f parameter domain index path value level)) := by
-  simp only [merkleValue, merkleFold, evalWithAnswerFn_bind, Completeness.eval_tweakableHash]
-  rfl
+  simp only [merkleValue, Merkle.climb_ofFn_succ, evalWithAnswerFn_bind, merkleInput]
+  cases index.testBit level <;>
+    simp [merkleHash, orderedPayload, Completeness.eval_tweakableHash]
 
 theorem merkleInput_mem (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (domain : Nat → Nat → HashDomain) (index : Nat) (path : Nat → Digest) (value : Digest)
     (levels level : Nat) (hlevel : level < levels) :
     merkleInput f parameter domain index path value level ∈
-      queriedInputs f (merkleFold parameter domain index path levels value) := by
+      queriedInputs f (Merkle.climb (merkleHash parameter domain) ⟨0, index⟩ value
+        (List.ofFn fun level : Fin levels => path level.val)) := by
   induction levels with
   | zero => omega
   | succ levels ih =>
-      rw [merkleFold, queriedInputs_bind, queriedInputs_tweakableHash, List.mem_append]
+      rw [Merkle.climb_ofFn_succ, queriedInputs_bind, List.mem_append]
       rcases Nat.lt_succ_iff_lt_or_eq.mp hlevel with hlt | rfl
       · exact Or.inl (ih hlt)
-      · exact Or.inr (by simp only [List.mem_singleton]; rfl)
-
-theorem merkleFold_treeFold (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
-    (leaf : LeafIndex) (path : Nat → Digest) (levels : Nat) (value : Digest) :
-    merkleFold parameter (fun level index => .node lay tree level index) leaf.val
-        path levels value =
-      (treeFold parameter lay tree leaf path levels value : OracleComp HashSpec Digest) := by
-  induction levels with
-  | zero => rfl
-  | succ levels ih =>
-      rw [merkleFold, treeFold, ih]
-      apply bind_congr
-      intro current
-      cases leaf.val.testBit levels <;> rfl
+      · -- The last step queries the input of the last level.
+        refine Or.inr ?_
+        cases hbit : index.testBit level <;>
+          simp [merkleHash, merkleInput, merkleValue, orderedPayload, hbit]
 
 omit [Params] in
 theorem quotient_eq_of_parent_bit_eq (index reference level : Nat)
@@ -223,7 +212,7 @@ Two folds that reach the same value at the same position agree, cross, or have a
 
 No assumption on the hash function is used.
 -/
-theorem merkleFold_classification (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
+theorem merkleValue_classification (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (domain : Nat → Nat → HashDomain) (index reference : Nat) (path referencePath : Nat → Digest)
     (value referenceValue : Digest) :
     ∀ levels,
@@ -270,7 +259,7 @@ theorem merkleFold_classification (f : QueryImpl HashSpec Id) (parameter : Publi
       · refine Or.inr (Or.inr ⟨levels, Nat.lt_succ_self _, hparent, hinput, ?_⟩)
         rwa [← merkleValue_succ]
 
-theorem merkleFold_same_index (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
+theorem merkleValue_same_index (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (domain : Nat → Nat → HashDomain) (index : Nat) (path referencePath : Nat → Digest)
     (value referenceValue : Digest) (levels : Nat)
     (hfold : merkleValue f parameter domain index path value levels =
@@ -278,7 +267,7 @@ theorem merkleFold_same_index (f : QueryImpl HashSpec Id) (parameter : PublicPar
     (value = referenceValue ∧ ∀ level, level < levels → path level = referencePath level) ∨
     ∃ level, level < levels ∧
       MerkleMatch f parameter domain index index path referencePath value referenceValue level := by
-  rcases merkleFold_classification f parameter domain index index path referencePath value
+  rcases merkleValue_classification f parameter domain index index path referencePath value
       referenceValue levels rfl hfold with hgood | ⟨level, _, _, hbit, _⟩ | hmatch
   · exact Or.inl hgood.2
   · exact False.elim (hbit rfl)
@@ -316,7 +305,7 @@ theorem canonicalTreePath_root (f : QueryImpl HashSpec Id) (parameter : PublicPa
       (Completeness.node f parameter lay tree seed 0 leaf.val) (layerHeight lay) =
         evalWithAnswerFn f
           (Seeded.treeRoot parameter lay tree seed : OracleComp HashSpec Digest) := by
-  rw [merkleValue, merkleFold_treeFold]
+  rw [merkleValue]
   apply Completeness.eval_treeFold_pruned_path f parameter lay tree seed leaf hkept
   intro level hlevel
   exact dite_eq_left hlevel
@@ -352,9 +341,9 @@ theorem inside_subtree_treeFold_witness (f : QueryImpl HashSpec Id)
       MerkleMatch f parameter (fun height index => .node lay tree height index)
         leaf.val leaf.val path (canonicalTreePath f parameter lay tree seed leaf)
         value (Completeness.node f parameter lay tree seed 0 leaf.val) level := by
-  apply merkleFold_same_index
+  apply merkleValue_same_index
   rw [canonicalTreePath_root f parameter lay tree seed leaf hkept,
-    merkleValue, merkleFold_treeFold]
+    merkleValue]
   exact hfold
 
 end SphincsSecurity.Security
