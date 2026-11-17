@@ -35,7 +35,13 @@ At that time the caller's up-to-date store has a head and reads its window over 
 
 An honest voter that has not voted by the call needs a duty in the target's epoch.
 
-`AssignmentWindowAgreement` gives that duty only through the past window of an actual head. -/
+`AssignmentWindowAgreement` gives that duty only through the past window of an actual head.
+
+The read has two halves, a head and its window, and both are stated conditions here.
+
+The head half is an assumed head read, which head totality of an honest store would discharge.
+
+The window half could be derived under a committee-window fit condition on the head's state. -/
 def RolloverWindowRead (u : ValidatorIndex) (target : Checkpoint) (first : Slot) (begin : ℕ) :
     Prop :=
   ∀ k epochStart last, (e.world k).time = begin →

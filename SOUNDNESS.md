@@ -3126,8 +3126,13 @@ It does not show that a later state counts these votes, or that the target is ju
 `HonestTargetVotes` stands in for a bound on Byzantine stake and remains a hypothesis.
 `HonestHeadsCover` assumes that every up-to-date honest head descends from a block of the target's epoch, from the call through the start of the next epoch.
 `HonestBlocksAgree` assumes that honest stores agree on every block that they both hold, and `HeldBlockStateRootsNonzero` that their blocks have nonzero state roots.
+A reachable store keeps each block at its own root, so `HonestBlocksAgree` holds when no two different blocks held by honest stores share a root.
+It is not hash injectivity: it concerns only the blocks that honest stores hold.
 `RolloverWindowRead` assumes that at the start of the next epoch the caller's store has a head and reads that head's committee window over the target's epoch.
-No theorem yet shows that the head read of an honest store succeeds, so this read is assumed.
+No theorem yet shows that the head read of an honest store succeeds, so the head half is assumed.
+Head totality would discharge it, and it is an outstanding obligation of the endpoint safety issue [#2060](https://github.com/ethereum/EthLib/issues/2060).
+The window half could be derived under the committee-window fit condition `CommitteeWindowsFit` of [#2702](https://github.com/ethereum/EthLib/pull/2702).
+Both halves remain stated conditions here.
 The theorem also assumes `AssignmentWindowAgreement`, `ValidatedDutyVotes`, `Prompt` and `DelayFits`.
 It also requires an anchor block at an epoch start, and a historical vector longer than the seed lookahead by more than two epochs.
 
