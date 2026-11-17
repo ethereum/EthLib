@@ -303,3 +303,29 @@ def test_errors_can_be_pickled(cls: type[errors.EthLibError], protocol: int) -> 
     assert str(restored) == "bad step"
     assert restored.__dict__ == error.__dict__
     assert restored.__dict__["details"] is not error.__dict__["details"]
+
+
+def _subclasses(cls: type[errors.EthLibError]) -> set[type[errors.EthLibError]]:
+    return {cls}.union(*(_subclasses(sub) for sub in cls.__subclasses__()))
+
+
+def test_every_error_class_is_exported() -> None:
+    # The copy and pickle tests take their classes from the exports, so each class must be there.
+    assert _subclasses(errors.EthLibError) == {getattr(errors, name) for name in errors.__all__}
+
+
+class _MessageOnly(errors.RlpError):
+    def __init__(self, message: str) -> None:
+        super().__init__(42, message)
+
+
+@pytest.mark.parametrize(
+    "clone",
+    [copy.copy, copy.deepcopy, lambda error: pickle.loads(pickle.dumps(error))],
+)
+def test_subclass_with_another_constructor_can_be_copied(
+    clone: Callable[[errors.EthLibError], errors.EthLibError],
+) -> None:
+    restored = clone(_MessageOnly("boom"))
+    assert type(restored) is _MessageOnly
+    assert (restored.code, restored.message, restored.args) == (42, "boom", ("boom",))
