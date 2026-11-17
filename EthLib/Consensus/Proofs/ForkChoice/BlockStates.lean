@@ -259,6 +259,23 @@ theorem Store.Reachable.slot_le_of_blockState
     rw [(stateTransition_slot transition).2, message]
     exact UInt64.le_refl _
 
+/-- In a reachable store, a known block's state is at the block's slot.
+
+The anchor block must be at the anchor state's slot, since its state is the anchor state. -/
+theorem Store.Reachable.blockState_slot_eq
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot = anchorState.slot) {root : Root}
+    {block : BeaconBlock preset fork} {state : BeaconState preset fork}
+    (found : store.blocks[root]? = some block)
+    (stateFound : store.blockStates[root]? = some state) : state.slot = block.slot := by
+  obtain ⟨kept, keptFound, isAnchor, notAnchor⟩ := reachable.blockStatesFromParents found
+  rw [stateFound, Option.some.injEq] at keptFound
+  subst keptFound
+  by_cases same : block = anchorBlock
+  · rw [isAnchor same, same, anchorSlot]
+  · obtain ⟨_, _, _, _, -, message, -, transition⟩ := notAnchor same
+    rw [(stateTransition_slot transition).2, message]
+
 /-- In a store built with one setting of the checks, each block state comes from its parent.
 
 Each transition runs with that setting.
