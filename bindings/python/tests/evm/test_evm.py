@@ -334,6 +334,69 @@ def test_integers_out_of_range() -> None:
         memory_gas_cost(-1)
 
 
+@pytest.mark.parametrize("argument", ["opcode", "immediate"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        -1,
+        256,
+        2**32,
+        2**32 + 0xE6,
+        -(2**32),
+        0xE6 - 2**32,
+        2**64,
+        2**64 + 0xE6,
+        -(2**64),
+        0xE6 - 2**64,
+        2**128,
+        -(2**128),
+    ],
+)
+def test_immediate_depths_integer_out_of_range(argument: str, value: int) -> None:
+    # Each argument is a byte; values must not wrap at a 32-bit or 64-bit C boundary.
+    opcode, immediate = (value, 0) if argument == "opcode" else (0xE6, value)
+    with raises(OverflowError, "the opcode and the immediate must be below 256"):
+        immediate_depths(opcode, immediate)
+
+
+@pytest.mark.parametrize(
+    "opcode, immediate, message",
+    [(0.0, 0, "opcode must be int"), (0xE6, 0.0, "immediate must be int")],
+)
+def test_immediate_depths_wrong_type(opcode, immediate, message: str) -> None:
+    with raises(TypeError, message):
+        immediate_depths(opcode, immediate)
+
+
+class _Index:
+    # Not an int, but convertible through `__index__`, which the binding refuses.
+    def __index__(self) -> int:
+        return 0xE6
+
+
+class _Int(int):
+    pass
+
+
+def test_immediate_depths_rejects_index_objects() -> None:
+    # The calls pass the wrong type on purpose, to check the runtime error.
+    with raises(TypeError, "opcode must be int"):
+        immediate_depths(_Index(), 0)  # ty: ignore[invalid-argument-type]
+    with raises(TypeError, "immediate must be int"):
+        immediate_depths(0xE6, _Index())  # ty: ignore[invalid-argument-type]
+
+
+def test_immediate_depths_accepts_bool_and_int_subclasses() -> None:
+    assert immediate_depths(0xE6, True) == immediate_depths(0xE6, 1)
+    assert immediate_depths(_Int(0xE6), _Int(0)) == immediate_depths(0xE6, 0)
+
+
+def test_immediate_depths_opcode_255_reaches_lean() -> None:
+    # 255 is the largest byte, so Lean decides it rather than the range check of the binding.
+    with raises(EvmError, "byte 0 encodes no depth of opcode 255"):
+        immediate_depths(0xFF, 0)
+
+
 @pytest.mark.parametrize(
     "size, cost",
     [
