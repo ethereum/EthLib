@@ -1988,7 +1988,7 @@ private theorem scoresBelow_run {x y : ForkedBeaconState preset} (tail : Run con
           (getCurrentEpoch l.state).toNat - (getCurrentEpoch x.state).toNat := by omega
     rwa [Nat.add_assoc, ← Nat.mul_add, epochs] at moved
 
-/-- S2's score bound: after the update of pass `s`, each score of the registry at `x` is small.
+/-- After the update of pass `s`, each inactivity score of the registry at `x` is small.
 
 The pass ends epoch `s` of a branch from `x` from Altair, in the slot step from its last state `z`.
 
@@ -3555,7 +3555,7 @@ private theorem epoch_total_transport {r s : ForkedBeaconState preset}
     ((activeKept_of_chainSteps inner.chainSteps).mono
       (getCurrentEpoch_le_activityFixedEpoch _)) same effective).symm.trans computed
 
-/-! ## The active-stake ceiling S1
+/-! ## The active-stake ceiling
 
 From a start `v` from Electra, the effective stake active at each state of a branch has a ceiling.
 
@@ -3573,7 +3573,7 @@ So the funding at the start of `t + 1` is at most the ceiling of `t + 1`.
 
 The other credits, the floor of the active stake and a few facts of the preset are hypotheses.
 
-The floor is read only at earlier epochs, so S2+S9 can supply it by a strong induction.
+The floor is read only at earlier epochs, so a strong induction can supply it.
 -/
 
 /-- The funding credit of an event, unless it is a reward or a sync credit. -/
@@ -4114,7 +4114,7 @@ private theorem ceiling_ge (ceiling : Nat → Nat) {start allowance : Nat}
     have := grows t
     omega
 
-/-- S1 over the prefixes of a branch from `v`, one epoch at a time.
+/-- The active-stake ceiling over the prefixes of a branch from `v`, one epoch at a time.
 
 Each prefix ends inside an epoch that started at a state `r`.
 
@@ -4323,13 +4323,13 @@ private theorem ceilingAt_mono {x : ForkedBeaconState preset} (electra : .pectra
   simp only [stakeCeilingAt, stakeCeiling, zero, Nat.lt_irrefl, false_and, ↓reduceIte]
   omega
 
-/-- S1: from an Electra start `x`, the stake active at each state of a branch is at most `T_plus`.
+/-- From an Electra start `x`, the stake active at each state of a branch is at most `T_plus`.
 
 `T_plus` is read at the epoch of the state, and the stake is the effective stake of the active keys.
 
 The keys active at the previous epoch of the state weigh at most the same `T_plus`.
 
-The hypotheses are left to the floor S2 and to the allowance SW.
+Two hypotheses remain: a floor and the whistleblower allowance.
 
 The floor `T_minus` bounds the total active balance of each state of an earlier epoch from below.
 
@@ -6192,7 +6192,7 @@ private theorem slashing_credits_le_allowance_of_guard {g x y : ForkedBeaconStat
   exact slashing_credits_le_allowance shared genesis tail caps aligned early regime finite
     positive high endEpoch forks replayed
 
-/-- SW: from Electra, the guarded whistleblower allowance pays every other funding credit. -/
+/-- From Electra, the guarded whistleblower allowance pays every other funding credit. -/
 private theorem otherCredit_le_allowance_electra {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (tail : Run config checks x y) (caps : CapOrder preset)
@@ -6588,7 +6588,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
 open Classical
 
-namespace Rev36
+namespace Apriori.Internal
 
 abbrev ix (x u : ForkedBeaconState preset) :=
   (getCurrentEpoch u.state).toNat - (getCurrentEpoch x.state).toNat
@@ -7807,14 +7807,6 @@ def Supported (_shared : Run config checks g x) (_tail : Run config checks x y) 
   Genesis (config := config) (checks := checks) g ∧ Parameters preset ∧ CapOrder preset ∧
     MaxEffectiveBalancesAligned preset ∧ y.fork < .glamsterdam ∧
     (getCurrentEpoch y.state).toNat ≤ high + 1 ∧ aprioriGuardAt config x high
-def OmegaProducer : Prop := ∀ (_shared : Run config checks g x),
-  Genesis (config := config) (checks := checks) g → CapOrder preset →
-  MaxEffectiveBalancesAligned preset → .pectra ≤ x.fork →
-  2 ≤ preset.SLOTS_PER_EPOCH.toNat → ∀ high, aprioriGuardAt config x high →
-  ∀ {u : ForkedBeaconState preset} (head : Run config checks x u),
-    u.fork < .glamsterdam → (getCurrentEpoch u.state).toNat ≤ high + 1 → ∀ events,
-    head.balanceEvents high = .ok events → (events.map otherCredit).sum ≤
-        whistleblowerAllowanceAt (config := config) x high
 def FirstDown (tail : Run config checks x y) (i : Nat) : Prop :=
   ∃ j before after, tail.balancePath[j]? = some before ∧
     tail.balancePath[j + 1]? = some after ∧ effectiveAt after i < effectiveAt before i ∧
@@ -9635,7 +9627,7 @@ private theorem stepTotal_le_ceiling {g x y : ForkedBeaconState preset}
   rw [value]
   exact max_le (unit.trans (ceilingAt_mono electra high (Nat.zero_le _))) stake
 
-private theorem run_joint_departures_budget_of_S1 {g x y : ForkedBeaconState preset}
+private theorem run_joint_departures_budget_of_ceiling {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork)
     (early : y.fork < .glamsterdam) (high : Nat)
@@ -9814,7 +9806,7 @@ private theorem stopped_partial_occurrences {g x y : ForkedBeaconState preset}
       exact Nat.add_le_add (Finset.sum_le_sum_of_subset (subset e (by simp)))
         (ih (fun e member => subset e (by simp [member])))
   exact prefixBound.trans bound
-private theorem stopped_joint_budget_of_S1 {g x y : ForkedBeaconState preset}
+private theorem stopped_joint_budget_of_ceiling {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork)
     (early : y.fork < .glamsterdam) (high : Nat)
@@ -9843,8 +9835,8 @@ private theorem stopped_joint_budget_of_S1 {g x y : ForkedBeaconState preset}
     (∑ i ∈ carrier, charge i) + partialTotal ≤ departureBudgetAt (config := config) x high +
         duePartialWithdrawals x (driftHorizon x high) := by
   have selectedBound := stopped_charges_le_run tail stops carrier charge (high + 1) selected
-  have joint := run_joint_departures_budget_of_S1 shared genesis tail electra early high endpoint
-    guard maxAligned unit others floor replayed
+  have joint := run_joint_departures_budget_of_ceiling shared genesis tail electra early high
+    endpoint guard maxAligned unit others floor replayed
   omega
 private theorem Stop.charge_of_new_exit {x y : ForkedBeaconState preset}
     {tail : Run config checks x y} {i : Nat} (stop : Stop tail i)
@@ -10506,7 +10498,7 @@ private theorem Stop.firstUpdate_of_firstDown_regime
   have stopEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps stop.post.chainSteps) early
   have localSupported : Supported shared stop.pre high :=
     ⟨genesis, parameters, caps, aligned, stopEarly, stopEpoch, guard⟩
-  exact Rev36.firstUpdate_of_firstDown_regime shared stop.pre localSupported
+  exact Internal.firstUpdate_of_firstDown_regime shared stop.pre localSupported
     (regime_prefix regime stop.post) i v u
     initial final unslashed clean activated
     (localHigh := (getCurrentEpoch stop.state.state).toNat) (by omega)
@@ -11421,7 +11413,7 @@ private theorem NewCohortCuts.stopped_debit_regime
   obtain ⟨increment, _, _, _, _, _, _, quotient, _, delay, _⟩ := positive
   apply cohort.stopped_debit_of_replay shared genesis caps unique early increment twoSlots
     (by omega) guard endpoint member replayed
-    (Rev36.base x i) (minSlashingPenaltyQuotient preset (preElectraEpochs config x high)) quotient
+    (base x i) (minSlashingPenaltyQuotient preset (preElectraEpochs config x high)) quotient
   intro m n pre step post _split
   constructor
   · exact slashing_quotient_le_of_regime (shared.append tail) genesis endpoint guard pre
@@ -11445,7 +11437,7 @@ private theorem NewCohortCuts.stopped_debit_electra
         (if i ∈ ledger.falling then preset.EFFECTIVE_BALANCE_INCREMENT.toNat else 0)) := by
   exact cohort.stopped_debit_regime shared supported unique (.inl electra) twoSlots member
     replayed
-private theorem NewCohortCuts.ledger_budget_of_S1
+private theorem NewCohortCuts.ledger_budget_of_ceiling
     {g x y : ForkedBeaconState preset} {tail : Run config checks x y}
     {ledger : LedgerCuts tail}
     (allocation : NewCohortCuts tail high ledger)
@@ -11487,7 +11479,7 @@ private theorem NewCohortCuts.ledger_budget_of_S1
   have partials := stopped_partial_occurrences shared genesis tail early endpoint replayed
     allocation.cohort parts indices (fun i _ => included i)
   refine ⟨parts, reads, ?_⟩
-  apply stopped_joint_budget_of_S1 shared genesis tail electra early high endpoint
+  apply stopped_joint_budget_of_ceiling shared genesis tail electra early high endpoint
     guard maxAligned unit others floor replayed ledger.stops
     (allocation.boundary ∪ allocation.departed) allocation.charge ?_ _ partials
   intro i member
@@ -11966,11 +11958,6 @@ private theorem total_le_ceiling_of_read
   obtain ⟨_, _, value⟩ := getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok read)
   rw [value]
   exact max_le unit stake
-private theorem omegaProducer : OmegaProducer (config := config) (checks := checks)
-    (g := g) (x := x) := by
-  intro shared genesis caps aligned electra twoSlots high guard u head early within events replayed
-  exact otherCredit_le_allowance_electra shared genesis head caps aligned electra early
-    twoSlots high within guard replayed
 private theorem NewCohortCuts.debit_budget_of_penaltyProducer
     (producer : PenaltyProducer (config := config) (checks := checks)
       (g := g) (x := x) (y := y))
@@ -12127,7 +12114,7 @@ private theorem NewCohortCuts.allocation_electra_of_replay
     exact cohort.retained_debit_electra shared supported unique electra member retained
       notBoundary (reads i)
   · exact selected
-private theorem NewCohortCuts.allocation_electra_of_S1
+private theorem NewCohortCuts.allocation_electra_of_ceiling
     (producer : PenaltyProducer (config := config) (checks := checks)
       (g := g) (x := x) (y := y))
     (shared : Run config checks g x) (tail : Run config checks x y)
@@ -12164,7 +12151,7 @@ private theorem NewCohortCuts.allocation_electra_of_S1
           ((parts i).map (floorPartialDebit (UInt64.ofNat i))).sum) := by
   have support := supported
   obtain ⟨genesis, _parameters, _caps, aligned, early, endpoint, guard⟩ := supported
-  obtain ⟨parts, reads, joint⟩ := cohort.ledger_budget_of_S1 shared genesis electra early
+  obtain ⟨parts, reads, joint⟩ := cohort.ledger_budget_of_ceiling shared genesis electra early
     unique endpoint guard aligned unit others floor replayed
   obtain ⟨allocation, same, debit, partials⟩ := cohort.allocation_electra_of_replay producer
     shared tail support ledger unique electra twoSlots replayed parts reads joint owned tokens
@@ -12180,10 +12167,6 @@ def ScheduledBoundaryProducer : Prop :=
         isActiveValidator v (getCurrentEpoch x.state) && !v.slashed &&
         decide (v.exitEpoch.toNat = j)) then effectiveAt y i - 2 * effectiveAt x i else 0) ≤
       exitCohortGrowth x high
-def PreForkGainProducer : Prop :=
-  ∀ (shared : Run config checks g x) (tail : Run config checks x y) high,
-  Supported shared tail high → 2 ≤ preset.SLOTS_PER_EPOCH.toNat → y.fork < .pectra →
-    gainWithoutPreviousOnly x y ≤ activationBudget (config := config) x high
 def StateProducer : Prop := ∀ (shared : Run config checks g x) (tail : Run config checks x y)
   high, Supported shared tail high → 2 ≤ preset.SLOTS_PER_EPOCH.toNat →
     stateDrift x y ≤ drift (config := config) x high
@@ -12502,7 +12485,7 @@ The segment `mid` runs from `m`, and each of its steps starts at the epoch of `m
 
 The blocks of the segment read the total of `m`, and so does its rewards pass, if it has one.
 
-That total is at most `W_t`, by the ceiling S1, whose floor is read at earlier epochs only.
+That total is at most `W_t`, by the active-stake ceiling, whose floor reads only earlier epochs.
 
 The floor `T_minus_t` bounds it below only when the segment ends the epoch, and so runs a pass.
 
@@ -12933,9 +12916,9 @@ private theorem run_penalties_le {g x y : ForkedBeaconState preset}
   exact run_penalties_upto shared genesis caps aligned electra twoSlots high guard unit
     tail early endEpoch floor eligible (ix x y + 1) (steps_before_end tail) replayed
 
-/-- The penalty envelope of the a priori bound, from Electra, under the floor of S2.
+/-- The penalty envelope of the a priori bound, from Electra, under the floor of the active stake.
 
-`PenaltyProducer` with its frozen conclusion, conditional on the hypotheses S1 also reads:
+It takes the hypotheses that the active-stake ceiling also reads:
 
 - `unit`, the lower bound on the initial ceiling.
 - `floor`, the floor `T_minus` of the total active balance at each state before the epoch of `y`.
@@ -12998,10 +12981,10 @@ private theorem LedgerCuts.roundLedger_of_floor
     (run_partials_le_paid_of_endpoint_floor shared supported.1 tail electra
       supported.2.2.2.2.1 high supported.2.2.2.2.2.1 supported.2.2.2.2.2.2
       supported.2.2.2.1 unit
-      (fun head early within found replayed => omegaProducer shared supported.1
-        supported.2.2.1 supported.2.2.2.1 electra twoSlots high
-        supported.2.2.2.2.2.2 head early within found replayed) floor replayed)
-end Rev36
+      (fun head early within found replayed => otherCredit_le_allowance_electra shared
+        supported.1 head supported.2.2.1 supported.2.2.2.1 electra early twoSlots high within
+        supported.2.2.2.2.2.2 replayed) floor replayed)
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -13014,7 +12997,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
 open Classical
 
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The cohort keys of `x` still retained at `cutoff`, as a queue of virtual consolidations.
 
@@ -13234,7 +13217,7 @@ private theorem retained_slashings {fork : Fork} {s t : BeaconState preset fork}
       exact Nat.sub_eq_zero_of_le (UInt64.le_iff_toNat_le.mp below)
   simpa only [zero, Nat.add_zero] using bound
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -13247,7 +13230,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
 open Classical
 
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem retained_registry {fork : Fork} {s t : BeaconState preset fork}
     (x : ForkedBeaconState preset) (queue : List PendingConsolidation) (cutoff : Epoch)
@@ -13548,7 +13531,7 @@ private theorem retained_slot {a b : ForkedBeaconState preset}
     (Step.slot ok).chainStep.currentEpoch_le
   omega
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -13561,7 +13544,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
 open Classical
 
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A key retained after a block was retained before it, at a cutoff by the block's epoch.
 
@@ -13697,7 +13680,7 @@ private theorem retained_block_reachable {g x : ForkedBeaconState preset} {high 
     (retained_slashed_bound pre caps early guard cutoff
       ((UInt64.le_iff_toNat_le.mp cutoffLe).trans endEpoch))
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -13707,7 +13690,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem retained_run_bound {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
@@ -13791,21 +13774,11 @@ private theorem retained_anchor_le_ceiling {g x r : ForkedBeaconState preset}
   change _ ≤ _ + ix x r * _ + _ at conserved
   omega
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
 
-namespace EthLib.Consensus.DirectSafety.Rev36
-open EthLib.Consensus.DirectSafety.Apriori
-variable {preset : Preset} {config : Config} {checks : SignatureChecks}
-  {g x y : ForkedBeaconState preset}
-private theorem preForkGainProducer :
-    PreForkGainProducer (config := config) (checks := checks) (g := g) (x := x) (y := y) := by
-  intro shared tail high supported twoSlots early
-  obtain ⟨genesis, _, caps, aligned, _, within, guard⟩ := supported
-  exact pre_gain_budget shared tail genesis caps aligned twoSlots early high within guard
-end EthLib.Consensus.DirectSafety.Rev36
 
 
 section
@@ -13816,7 +13789,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
 open Classical
 
-namespace Rev36
+namespace Apriori.Internal
 
 /-- Let `r` be a state earlier than a state `z`, in the same epoch.
 
@@ -13904,7 +13877,7 @@ private theorem eligible_le_retained_anchor {g x r z y : ForkedBeaconState prese
     rw [← effective i (inside i member)]
     simp [effectiveAt, foundZ]
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -13917,7 +13890,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
 open Classical
 
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A branch splits at the first state of the epoch of its end.
 
@@ -14344,7 +14317,7 @@ private theorem electra_anchor_budgets {g x r : ForkedBeaconState preset} {high 
     run_penalties_upto shared genesis caps aligned electra twoSlots high guard unit
       pre early endEpoch floor eligible (ix x r)
       (fun step member => by have := starts step member; simp only [ix]; omega) replayed⟩
-  exact stopped_joint_budget_of_S1 shared genesis pre electra early high endEpoch guard aligned
+  exact stopped_joint_budget_of_ceiling shared genesis pre electra early high endEpoch guard aligned
     unit others floor replayed stops carrier charge selected _
     (stopped_partial_occurrences shared genesis pre early endEpoch replayed keys parts
       (fun i member => penaltyCohort_inside xEarly (inside member)) prefixes)
@@ -14493,7 +14466,7 @@ private theorem endpoint_floor_le_total {g x u : ForkedBeaconState preset} {high
     (fun head post divided before => eligible head (post.append inner)
       (by rw [split, divided, Run.append_assoc]) (by rw [same]; exact before)) starts stops replayed
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -14504,7 +14477,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- Along a trace, the balance plus the debt stays above `low`.
 
@@ -14702,7 +14675,7 @@ private theorem floorProducer_proved {g x y : ForkedBeaconState preset} :
   if before : x.fork < .pectra then floorProducer_pre before
   else floorProducer_electra (Nat.le_of_not_lt before)
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -14759,7 +14732,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem issuance_of_endpoint_floor {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y) (high : Nat)
@@ -14812,7 +14785,7 @@ private theorem issuance_of_endpoint_floor {g x y : ForkedBeaconState preset}
   simpa [windowIssuance, noFork, ix, ← List.sum_toFinset _ List.nodup_range,
     List.toFinset_range] using sumLe
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -14822,7 +14795,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem eligible_le_ceiling_of_floor {g x z y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
@@ -14876,7 +14849,7 @@ private theorem penaltyProducer_of_prior_floor {g x y : ForkedBeaconState preset
   exact (eligible_le_ceiling_of_floor shared genesis caps aligned electra twoSlots pre post early
     high endEpoch before guard unit floor).trans (Nat.le_add_right _ _)
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -14887,7 +14860,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A floor step that reads only strictly earlier epochs gives the floor throughout the window. -/
 private theorem floor_by_epoch_induction {x : ForkedBeaconState preset} {high : Nat}
@@ -14972,7 +14945,7 @@ private theorem issuance_of_floor_all_runs {g x y : ForkedBeaconState preset}
       guard electra twoSlots producer head early (within.trans endEpoch) total read)
     replayed
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -14983,7 +14956,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- From Electra, take a branch from `x` within its window, and a pre-Glamsterdam state of it.
 
@@ -15033,7 +15006,7 @@ private theorem issuance_electra {g x y : ForkedBeaconState preset}
   issuance_of_floor_all_runs shared tail high supported twoSlots electra
     (floorProducer_electra electra) replayed
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -15043,7 +15016,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem ceilingFloor_electra {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y) (high : Nat)
@@ -15089,7 +15062,7 @@ private theorem LedgerCuts.roundLedger_closed_electra
       electra twoSlots pre post early high endEpoch before guard unit strict).trans
         (Nat.le_add_right _ _))
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -15100,13 +15073,13 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
-namespace EthLib.Consensus.DirectSafety.Rev36
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -15335,8 +15308,8 @@ private theorem pre_stopped_joint_budget (shared : Run config checks g x)
   rw [pre_partial_zero shared tail high supported early replayed] at partialBudget
   omega
 
-end EthLib.Consensus.DirectSafety.Rev36
-namespace EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -15365,8 +15338,8 @@ private theorem pre_total_transport (shared : Run config checks g x)
   obtain ⟨events, replayed⟩ := inner.balanceEvents_ok supported.2.2.2.2.1 high
   exact epoch_total_transport inner altair supported.2.2.2.2.1 same high replayed computed
 
-end EthLib.Consensus.DirectSafety.Rev36
-namespace EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -15393,8 +15366,8 @@ private theorem pre_increment_le_ceiling (shared : Run config checks g x)
     (Nat.lt_trans xEarly (by decide)) supported.2.2.2.2.2.2).trans
     (pre_reference_le_ceiling shared tail high supported early within)
 
-end EthLib.Consensus.DirectSafety.Rev36
-namespace EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -15437,8 +15410,8 @@ private theorem pre_segment_penalties_le (shared : Run config checks g x)
   · exact ((floor_le_initial x high _).trans ((floor_initial_le_reference x high).trans
       (pre_reference_le_ceiling shared (toM.append mid) high supported early within))).trans
       (Nat.le_add_right _ _)
-end EthLib.Consensus.DirectSafety.Rev36
-namespace EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -15469,8 +15442,8 @@ private theorem pre_run_penalties_upto (shared : Run config checks g x)
     exact pre_segment_penalties_le shared toM mid high supportedN nEarly starts
       (fun head headEarly before => floor head headEarly (by omega)) eligible ok
 
-end EthLib.Consensus.DirectSafety.Rev36
-namespace EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -15534,7 +15507,7 @@ private theorem pre_floor_all_runs (shared : Run config checks g x)
       (Nat.not_le_of_gt xEarly)
   exact strict run preFork before amount read
 
-end EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
 
 
 section
@@ -15543,7 +15516,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The initial ownership: the units of the four initial pots, each owned by its key.
 
@@ -16024,7 +15997,7 @@ private theorem initialOwnership_exists {g x : ForkedBeaconState preset}
       subst w
       exact now active
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -16036,7 +16009,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A payment funded by its source's original stake and held tokens has an owned transfer.
 
@@ -16106,7 +16079,7 @@ private theorem ownedTransfer_exists (before : Ownership) (p : Payment preset)
   · have notMoved : token ∉ moved := fun move => notHeld (inside move)
     simp [after, notMoved, notNew, notHeld]
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -16118,7 +16091,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- An owned transfer between two different keys gives the target the whole payment in tokens.
 
@@ -16213,7 +16186,7 @@ private theorem ownedTransfer_held {position : Nat} {p : Payment preset}
           ⟨(Finset.mem_union.mp present).resolve_right notNew, owner⟩
     · exact stays notSrc
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -16224,7 +16197,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private def eventCreditUnits (e : BalanceEvent preset) (i : Nat) : Nat :=
   if e.source = .deposits ∧
@@ -16415,7 +16388,7 @@ private theorem creditOwnership_held {e : BalanceEvent preset} {before : Ownersh
   intro a b equal
   exact TokenOrigin.credit.inj equal |>.2.2
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -16426,7 +16399,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A balance growth that may append validators keeps the reserve cut.
 
@@ -16686,7 +16659,7 @@ private theorem reservedEvent_zero_credit {x : ForkedBeaconState preset}
     rw [epoch]
     exact reserveCut_balance_decrease fork registry decreases reserve
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -16696,7 +16669,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem ownedCredit_endpoint_growth {e : BalanceEvent preset}
     (credit : OwnedCredit position e before after)
@@ -16853,7 +16826,7 @@ private theorem reserveCut_credit_non_deposit {x : ForkedBeaconState preset}
   reserveCut_credit_eligible (fun _ _ deposit => absurd deposit notDeposit) fork registry
     matched fresh credit reserve
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -16864,7 +16837,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- An owned credit only lowers original stakes.
 
@@ -16888,7 +16861,7 @@ private theorem assignmentCut_append_fresh {rounding : Nat → Nat}
   · exact cut tag old position fresh
   · exact freshBound tag new position fresh
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -16899,9 +16872,9 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -16911,7 +16884,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A same-registry credit with no due deposit target is a reserved event that keeps the queue.
 
@@ -16961,7 +16934,7 @@ private theorem reservedEvent_credit_non_deposit {x : ForkedBeaconState preset}
   reservedEvent_credit_eligible (fun _ _ deposit => absurd deposit notDeposit) notTransfer fork
     registry epoch matched fresh credit reserve assignment
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -16972,7 +16945,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A paid pending consolidation between distinct keys pays the source's capped balance.
 
@@ -17131,7 +17104,7 @@ private theorem TagEvent.queue_shape {e : BalanceEvent preset} {position : Nat}
   · obtain ⟨_, _, _, _, _, _, _, _, _, _, _, pass, _⟩ := pending
     exact Or.inl pass.suffix_sublist
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -17141,7 +17114,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem reservedEvent_bounded_non_deposit {x : ForkedBeaconState preset}
     {e : BalanceEvent preset} {before : Ownership}
@@ -17161,7 +17134,7 @@ private theorem reservedEvent_bounded_non_deposit {x : ForkedBeaconState preset}
   reservedEvent_credit_non_deposit notDeposit notTransfer fork registry epoch matched fresh
     (ownedCredit_of_bounded reserve.1 fresh electra notTransfer matched bounded) reserve assignment
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -17171,9 +17144,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -17184,7 +17157,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- Raising one balance whose validator is not yet due is an eligible same-registry credit.
 
@@ -17206,7 +17179,7 @@ private theorem increaseBalance_credit_eligible {fork : Fork} {s t : BeaconState
   · obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp ok
     simp [actualBalanceAt, BeaconState.putBalance, same] at grew
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -17217,7 +17190,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A churned deposit to a known key is an eligible same-registry credit.
 
@@ -17256,7 +17229,7 @@ private theorem applyPendingDeposit_churn_eligible {fork : Fork} {s t : BeaconSt
     simp only [Option.map_some, Option.getD_some, decide_eq_false_iff_not]
     omega
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -17267,7 +17240,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A deposit to a key no validator has raises no balance inside the registry.
 
@@ -17536,7 +17509,7 @@ private theorem appended_credit_obligations {x : ForkedBeaconState preset}
     (withdrawalMaxEffectiveBalance preset e.after.fork w).toNat
   omega
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -17546,7 +17519,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem pending_source_not_withdrawn {fork : Fork} {s : BeaconState preset fork}
     (ordered : PendingConsolidationsOrdered config (getCurrentEpoch s).toNat s)
@@ -17589,7 +17562,7 @@ private theorem epochTrace_pendingConsolidationsOrdered {fork : Fork}
     (fun _ u => PendingConsolidationsOrdered config (getCurrentEpoch u).toNat u) ordered
     (fun _ _ _ _ ok held => (EpochStage.action_cases.mp ok).pendingConsolidationsOrdered held)
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -17599,7 +17572,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem due_not_active {v : Validator} {current epoch : Epoch}
     (finite : current < FAR_FUTURE_EPOCH)
@@ -17685,7 +17658,7 @@ private theorem bypass_reserve_hidden {fork : Fork} {s : BeaconState preset fork
   exact due_reserve_hidden found finite (exits w (Array.mem_of_getElem? found))
     (delay i w found) due noQueue
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -17695,9 +17668,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -17707,7 +17680,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem pass_deposit_due_hidden_of_shape {fork : Fork}
     {nextEpoch : Epoch} {s : BeaconState preset fork} {pass : PendingDepositsPass preset fork}
@@ -17745,7 +17718,7 @@ private theorem pass_deposit_due_hidden_of_shape {fork : Fork}
     exact bypass_reserve_hidden electra ordered exits finite delay suffixIn next status known w
         found
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -17755,9 +17728,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -17767,7 +17740,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem ownedCredit_deposit {e : BalanceEvent preset} {before : Ownership}
     (deposit : e.source = .deposits) (electra : .pectra ≤ e.before.fork)
@@ -17778,7 +17751,7 @@ private theorem ownedCredit_deposit {e : BalanceEvent preset} {before : Ownershi
   simp only [deposit, electra, eventCreditUnits, funding_deposit_credit, true_and, ↓reduceIte]
   exact Nat.le_refl _
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -17789,7 +17762,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- Take an unslashed validator that had not exited at the window start and has not exited yet.
 
@@ -18144,7 +18117,7 @@ private theorem endpointCover_mono {x u v : ForkedBeaconState preset} {before af
   have kept := endpointKept i
   omega
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -18155,7 +18128,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem due_exit_before {v : Validator} {current next : Epoch}
     (finite : next < FAR_FUTURE_EPOCH)
@@ -18195,7 +18168,7 @@ private theorem endpoint_sourceGone {v : Validator} {current next : Epoch}
     finite ordered delay due (by simpa only [UInt64.reduceToNat] using nextEq.le)
   exact (UInt64.not_le.mpr exited) covered
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -18206,7 +18179,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The pending deposits keep the reserve cut, the endpoint cover and the future cover.
 
@@ -18299,7 +18272,7 @@ private theorem processPendingDeposits_reserve_covers {fork : Fork}
   · exact reserve
 
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -18309,7 +18282,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem reservedEvent_processPendingDeposits_cover {fork : Fork}
     {s t : BeaconState preset fork} {x : ForkedBeaconState preset}
@@ -18353,7 +18326,7 @@ private theorem reservedEvent_processPendingDeposits_cover {fork : Fork}
     rw [epoch]
     exact transported.1
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -18363,9 +18336,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -18376,7 +18349,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem deposit_prefix_facts {fork : Fork} {s t : BeaconState preset fork}
     (trace : EpochTrace (EpochStage.action config checks)
@@ -18421,7 +18394,7 @@ private theorem deposit_prefix_facts {fork : Fork} {s t : BeaconState preset for
         prior.2.2.2.1)
   exact finish.2
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -18431,7 +18404,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem tagEvent_processPendingDeposits {fork : Fork} {s t : BeaconState preset fork}
     {queue : List TaggedEntry} (electra : .pectra ≤ fork)
@@ -18446,7 +18419,7 @@ private theorem tagEvent_processPendingDeposits {fork : Fork} {s t : BeaconState
   exact ⟨erasure, same ▸ erasure,
     Or.inl ⟨by change BalanceSource.deposits ≠ .consolidations; decide, rfl, rfl, rfl, rfl⟩⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -18456,9 +18429,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -18468,7 +18441,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private def OwnershipBefore (eventPosition paymentPosition : Nat) (owned : Ownership) : Prop :=
   ∀ token ∈ owned.issued, match token with
@@ -19098,7 +19071,7 @@ private theorem ReservedReplay.counters
     OwnershipBefore (eventPosition + events.length) (paymentPosition + payments.length) after :=
   (history.counters_provenance prior).1
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -19108,9 +19081,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -19121,7 +19094,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem ReservedReplay.append
     (first : ReservedReplay (config := config) (checks := checks) x high rounding
@@ -19150,7 +19123,7 @@ private theorem ReservedReplay.append
     simpa only [List.cons_append, List.append_assoc] using
       ReservedReplay.cons frame tagged event joined
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -19160,7 +19133,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem reservedFrame_refl
     (reserve : ReserveCut x high u epoch (queue.map (·.entry)) owned)
@@ -19194,7 +19167,7 @@ private theorem ReservedReplay.singleton_nonconsolidation {e : BalanceEvent pres
     simpa only [same] using last
   exact ReservedReplay.cons frame tagged event (.nil aligned)
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -19204,7 +19177,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem reservedCredit_facts {e : BalanceEvent preset}
     (electra : .pectra ≤ e.before.fork)
@@ -19279,7 +19252,7 @@ private theorem reservedReplay_processPendingDeposits_frame {fork : Fork}
   exact ⟨ReservedReplay.singleton_nonconsolidation notTransfer frame tagged owned,
     reservedFrame_refl reserveT.2 owned.2.2.1 tagged.2.1, cover, future⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -19289,9 +19262,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -19301,9 +19274,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -19315,7 +19288,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem reservedReplay_rewards_owned {fork : Fork} {s t : BeaconState preset fork}
     {recorded : List (BalanceEvent preset)}
@@ -19419,7 +19392,7 @@ private theorem reservedReplay_rewards_owned {fork : Fork} {s t : BeaconState pr
 
 
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -19431,7 +19404,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- Each validator after a switch to compounding credentials is the one before at its index.
 
@@ -19552,7 +19525,7 @@ private theorem endpointCover_switch {x : ForkedBeaconState preset} {fork : Fork
   rw [← epoch]
   exact current
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -19564,7 +19537,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- After the registry updates, each validator is the one before at its index.
 
@@ -19904,7 +19877,7 @@ private theorem reserveCut_of_kept {x : ForkedBeaconState preset} {high : Nat} {
     rw [effectiveEq i w w₀ found foundU effective, key]
     exact old
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -19915,7 +19888,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The registry updates keep the reserve cut at the current epoch, under four explicit facts.
 
@@ -20055,7 +20028,7 @@ private theorem reserveCut_registry_final {x : ForkedBeaconState preset} {high :
     exact finite
   · exact late
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20065,7 +20038,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private def RetiredActivated {f : Fork} (u : BeaconState preset f)
     (retired : Finset Nat) : Prop :=
@@ -20121,7 +20094,7 @@ private theorem lifecycle_start_active_assigned {x u : ForkedBeaconState preset}
   rw [kept.activationEpoch assigned]
   exact assigned
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20131,7 +20104,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem reservedFrame_registry {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (ok : processRegistryUpdates config s = .ok t)
@@ -20157,7 +20130,7 @@ private theorem reservedFrame_registry {fork : Fork} {s t : BeaconState preset f
     assignment, assignment,
     erasure, sameQueue ▸ erasure, reserve, after⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20167,7 +20140,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem reservedReplay_slashings_frame {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam) (matched : BalancesMatch s)
@@ -20232,7 +20205,7 @@ private theorem reservedReplay_slashings_frame {fork : Fork} {s t : BeaconState 
     futureCover_credit ⟨#[], by simp only [Array.append_empty]; exact registry⟩ epoch matched
       appended fresh credit⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20242,9 +20215,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20255,7 +20228,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem reservedReplay_registrySlashings_frame {fork : Fork}
     {s registered slashed : BeaconState preset fork}
@@ -20307,7 +20280,7 @@ private theorem reservedReplay_registrySlashings_frame {fork : Fork}
   exact ⟨replay, last, fun initial => cover (endpointCover_registry registry initial),
     fun initial => future (futureCover_registry registry initial)⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20317,9 +20290,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20331,7 +20304,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- With at least two slots in an epoch, the epoch after the current one is before the far future.
 
@@ -20359,7 +20332,7 @@ private theorem consolidation_sourceGone {fork : Fork} {s : BeaconState preset f
     (due : w.withdrawableEpoch ≤ next) (covered : getCurrentEpoch s ≤ w.exitEpoch) : False :=
   endpoint_sourceGone (consolidationNext_finite twoSlots nextOk) ordered delay due nextOk covered
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20371,9 +20344,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20384,7 +20357,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem endpointCoverAll_records {x : ForkedBeaconState preset} {fork : Fork}
     {u v : BeaconState preset fork} {o : Ownership}
@@ -20394,7 +20367,7 @@ private theorem endpointCoverAll_records {x : ForkedBeaconState preset} {fork : 
   simpa only [EndpointCoverAll, validators, actualBalanceAt, balances, getCurrentEpoch, slot]
     using cover
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20404,7 +20377,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem reservedReplay_epochRewardStart_owned {fork : Fork}
     {s justified scored rewarded : BeaconState preset fork}
@@ -20463,7 +20436,7 @@ private theorem reservedReplay_epochRewardStart_owned {fork : Fork}
       simp only [getCurrentEpoch, scoredOk.slot_eq]
       exact UInt64.le_refl _) justifiedFuture
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20473,9 +20446,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20488,7 +20461,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 /-- Queueing a consolidation keeps the endpoint cover.
 
 Only the source changes: the step sets its exit epoch, which was the far future.
@@ -20563,7 +20536,7 @@ private theorem endpointCover_processConsolidationRequest {x : ForkedBeaconState
   -- The source had not started to exit.
   · exact endpointCover_queueConsolidation accepted.sourceAt accepted.sourceStays queued cover
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20574,9 +20547,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20587,9 +20560,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20600,7 +20573,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 /-- The paid step of a pending consolidation keeps the registry and the slot.
 
 It credits the target by at most the moved amount, and raises no other balance. -/
@@ -20857,7 +20830,7 @@ private theorem reserveCut_pendingTransfer {x : ForkedBeaconState preset} {fork 
   · rintro ⟨q, member, same⟩
     exact sourceAbsent ⟨q, member, UInt64.toNat_inj.mp same⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20867,7 +20840,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem reserveCut_payment_funded {x : ForkedBeaconState preset} {fork : Fork}
     {s : BeaconState preset fork} {c : PendingConsolidation} {suffix : List PendingConsolidation}
@@ -20931,7 +20904,7 @@ private theorem payment_ownedTransfer_exists {x : ForkedBeaconState preset} {for
     ⟨c.sourceIndex.toNat, c.targetIndex.toNat, (min b w.effectiveBalance).toNat,
       next.toNat, ⟨fork, s⟩, ⟨fork, t⟩⟩ position sourceRound reserve.1 fresh unretired funded
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -20942,7 +20915,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 /-- A source due at `next` is never supported at `next` or later.
 
 Its exit is before every such epoch, so it is active at neither that epoch nor the one before.
@@ -21010,7 +20983,7 @@ private theorem assignmentCut_drop_head {rounding : Nat → Nat} {tag : TaggedEn
     (cut : AssignmentCut rounding (tag :: tags) owned) : AssignmentCut rounding tags owned :=
   assignmentCut_transport cut (fun _ => Nat.le_refl _) (List.sublist_cons_self _ _)
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -21020,7 +20993,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem OwnedInitial.retiredActivated {x : ForkedBeaconState preset}
     (initial : OwnedInitial x high owned) : RetiredActivated x.state owned.retired := by
@@ -21038,7 +21011,7 @@ private theorem RetiredActivated.transfer {p : Payment preset}
   rw [transfer.source_retirement.2]
   exact (prior.insert p.source v found assigned).lifecycle life
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -21048,7 +21021,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- An owned transfer keeps the future cover when its source is not guarded.
 
@@ -21397,7 +21370,7 @@ private theorem TaggedPass.reserved_of_pass {x : ForkedBeaconState preset} {high
       | initial n => simpa only [taggedTag] using release
       | fresh n => trivial
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -21408,7 +21381,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 /-- A pairing of tagged payments with allocations gives each payment its allocation by index.
 
 An initial tag has no baseline. -/
@@ -21433,7 +21406,7 @@ private theorem reserveCut_records {x : ForkedBeaconState preset} {high : Nat} {
   simpa only [ReserveCut, FundingRelevant, effectiveAt, actualBalanceAt, validators, balances]
     using reserve
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -21443,7 +21416,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The pending consolidations leave exactly the suffix of the tagged pass as the actual queue.
 
@@ -21619,7 +21592,7 @@ private theorem reservedEvent_consolidations {x : ForkedBeaconState preset} {hig
   · simp only [↓reduceIte]
     exact ⟨fork, s, t, u, electra, next, rfl, rfl, nextOk, ok, validators, balances, history⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -21629,7 +21602,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A consolidation event's reserved accounting does not depend on its credit and debit limits.
 
@@ -21719,7 +21692,7 @@ private theorem reservedReplay_consolidations_cons_payload {fork : Fork}
     (reservedEvent_consolidations_payload.mp event) (demand ▸ rest)
   simpa only [List.length_nil, Nat.add_zero, List.nil_append] using replay
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -21730,7 +21703,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 private theorem nonreference_before_unset_exit {x u : ForkedBeaconState preset} {i : Nat}
     {v : Validator} (life : RegistryLifecycle x.state u.state)
@@ -21772,7 +21745,7 @@ private theorem nonreference_before_unset_exit {x u : ForkedBeaconState preset} 
       simp [inactive] at now
     simp [inactive, previous]
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -21783,7 +21756,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- Valid ownership, left unchanged, is an owned frame. -/
 private theorem OwnedFrame.refl {owned : Ownership} (valid : OwnershipValid owned) :
@@ -22103,7 +22076,7 @@ private theorem reservedFrame_epochSuffix_lifecycle {x : ForkedBeaconState prese
         (fun v member => activation v (by rw [← validators]; exact member)) (c0.1 endpoint)
         (c0.2 future))))))))
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -22114,7 +22087,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 /-- Support at the epoch after `c` puts the exit after `c`.
 
 The validator is active at that epoch or at `c` itself, with no wrap. -/
@@ -22227,7 +22200,7 @@ private theorem reservedEvent_consolidations_suffix_retired {x : ForkedBeaconSta
     counted, retiredT, frame, endpointT matchedT covered,
     futureW matchedT activationT covered futureT, retiredT.lifecycle life⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -22237,7 +22210,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The epoch stages from the start to the eth1 reset, as one trace of their actual edges. -/
 private theorem epochResetTrace {fork : Fork}
@@ -22502,7 +22475,7 @@ private theorem reservedReplay_epochPrefixDeposits_facts {fork : Fork}
   exact ⟨after, history, frame, erasureT, counters, matchedT, retiredT, cover, future, slotT, lifeT,
     exitsT, delayT, activationT⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -22512,7 +22485,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The pending consolidations and the silent suffix of the epoch, as one reserved replay.
 
@@ -22595,7 +22568,7 @@ private theorem reservedReplay_consolidations_suffix {x : ForkedBeaconState pres
   simpa only [List.length_singleton, List.length_append, List.length_nil, Nat.add_zero]
     using countedZ
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -22605,7 +22578,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The whole-epoch reserved replay, with the facts the prefix fixes at the consolidation input. -/
 private theorem reservedReplay_epoch_facts {fork : Fork}
@@ -22914,7 +22887,7 @@ private theorem epochPrefix_slashedSpan {x outer : ForkedBeaconState preset}
   Run.slashed_withdrawableEpoch_mono_epoch run activation compounding early cached
     (epochDepositTrace justifiedOk scoredOk rewardsOk registry slashings resetOk depositsOk)
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -22924,7 +22897,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- Support at the epoch after `c` is support at `c`, or an activation exactly at that epoch.
 
@@ -23062,13 +23035,13 @@ Then the cut at the current epoch moves to the next one.
 
 `reserveCut_next` asks for this bound in two cases.
 
-- A source of the start's queue (O1) has its exit assigned at `x`.
+- A source of the start's queue has its exit assigned at `x`.
   If it is unslashed at `x`, it withdraws there at most the delay after its exit.
   The exit stays the same up to `u`, where the delay is at least met.
   So the withdrawable epoch at `x` is at most the one at `u`.
   If it is slashed at `x`, `slashedLater` keeps its withdrawable epoch from decreasing.
   Either way the source is due by `next`, and so by the horizon, already at `x`.
-- Any other queued source (O2) had an unset exit at `x`, by the queue provenance.
+- Any other queued source had an unset exit at `x`, by the queue provenance.
   At `x` a slashed key has its exit assigned, so this source was unslashed at `x`.
   A source that is no new reference was then inactive at `x`, read at `x` itself.
   A later slashing of the source does not enter: only the source at `x` is read. -/
@@ -23097,7 +23070,7 @@ private theorem reserveCut_next_of_provenance {x : ForkedBeaconState preset} {fo
     (reserve : ReserveCut x high ⟨fork, u⟩ (getCurrentEpoch u) (queue.map (·.entry)) owned) :
     ReserveCut x high ⟨fork, u⟩ next (queue.map (·.entry)) owned := by
   refine reserveCut_next nextOk exits start ?_ ?_ future reserve
-  -- O1: a source of the start's queue that is due by `next` is initially pending.
+  -- A source of the start's queue that is due by `next` is initially pending.
   · intro q _ ⟨p, queued, sameIndex⟩ v found ready
     unfold pendingQueue at queued
     split at queued
@@ -23122,7 +23095,7 @@ private theorem reserveCut_next_of_provenance {x : ForkedBeaconState preset} {fo
     · have grown :=
         UInt64.le_iff_toNat_le.mp (slashedLater _ initial v initialAt found flag assigned)
       omega
-  -- O2: any other queued source had an unset exit at `x`, so it was unslashed and inactive there.
+  -- Any other queued source had an unset exit at `x`, so it was unslashed and inactive there.
   · intro q member notQueued notReference v _ _
     rcases provenance q member with queued | unset
     · exact absurd ⟨q, queued, rfl⟩ notQueued
@@ -23277,12 +23250,12 @@ private theorem run_queue_provenance {g x outer : ForkedBeaconState preset}
     (by simpa [Function.comp_def] using member : c ∈
           (x.state.pendingConsolidations electraX).data.toList)
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
 
-namespace EthLib.Consensus.DirectSafety.Rev36
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -23389,9 +23362,9 @@ private theorem composition_conditional_of_call_ledger
       omega
     · exact .inr hashes
 
-end EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
 
-namespace EthLib.Consensus.DirectSafety.Rev36
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -23426,9 +23399,9 @@ private theorem selected_call_commonLedger {g x y : ForkedBeaconState preset}
   have read := ledger call.before shared pre high support twoSlots cutoff absent cutoffLe
   simpa only [cached.2.2.2, commonSlashed, cached.2.1] using read
 
-end EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
 
-namespace EthLib.Consensus.DirectSafety.Rev36
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -23544,9 +23517,9 @@ private theorem cachedAbsence_proved :
     | inr call => exact selected_call_absence shared right genesis parameters call _ later lower
   exact ⟨selected one (Nat.min_le_left _ _), selected two (Nat.min_le_right _ _)⟩
 
-end EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
 
-namespace EthLib.Consensus.DirectSafety.Rev36
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -23572,7 +23545,7 @@ private theorem reducedTransfer_proved :
     exact bound
   · exact .inr hashes
 
-end EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
 
 section
 namespace EthLib.Consensus.DirectSafety
@@ -23580,7 +23553,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- Take the drift on the unslashed keys outside `c`.
 
@@ -23635,7 +23608,7 @@ private theorem reducedIdentity (x y : ForkedBeaconState preset) (c : Finset BLS
   rw [loss, gain]
   omega
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -23646,7 +23619,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- With distinct keys, a key set weighs at most the validators that pass a test.
 
@@ -23688,7 +23661,7 @@ private theorem keys_stake_le_validators {x : ForkedBeaconState preset}
   rw [counted]
   exact (List.filter_sublist.map _).sum_le_sum (fun _ _ => Nat.zero_le _)
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -23699,7 +23672,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The slashed common stake is paid from the scheduled keys' common reserve.
 
@@ -23816,7 +23789,7 @@ private theorem commonSlashed_le_commonReserve {x y : ForkedBeaconState preset}
           obtain ⟨k, inside, rfl⟩ := Finset.mem_image.mp member
           exact (reserved k inside).1)
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -23829,7 +23802,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
 open Classical
 
-namespace Rev36
+namespace Apriori.Internal
 
 /-- New boundary keys outside the initial reference.
 
@@ -23969,12 +23942,12 @@ private theorem nonreference_boundary_le {x y : ForkedBeaconState preset}
   rw [same]
   omega
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
 
-namespace EthLib.Consensus.DirectSafety.Rev36
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -24013,7 +23986,7 @@ private theorem penaltyProducer_proved {g x y : ForkedBeaconState preset} :
     penaltyProducer_electra shared tail high supported twoSlots (Nat.le_of_not_lt before)
       events replayed
 
-end EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
 
 section
 namespace EthLib.Consensus.DirectSafety
@@ -24021,9 +23994,9 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-/-! ## (C) Scheduled boundary growth within `exitCohortGrowth`
+/-! ## Scheduled boundary growth within the exit-cohort growth
 
 For each exit epoch through `horizonEnd x high`, sum `cap - 2e` over the keys that exit there.
 
@@ -24139,7 +24112,7 @@ private theorem scheduledBoundaryProducer {g x y : ForkedBeaconState preset} :
         exact sum_range_getElem? F _
     _ ≤ exitCohortGrowth x high := cohort_le_Rhat x high j within
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -24149,7 +24122,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- Queueing a consolidation keeps the balances and the slot.
 
@@ -24563,7 +24536,7 @@ private theorem reservedReplay_consolidationRequest {fork : Fork} {s t : BeaconS
     simp only [Array.length_toList, List.length_append, List.length_singleton] at grown
     omega
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -24574,7 +24547,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The stake of one exit cohort within the horizon is at most `adjacentExitStake`. -/
 private theorem cohort_le_Bd (x : ForkedBeaconState preset) {high t : Nat}
@@ -24744,12 +24717,12 @@ private theorem oldBoundary_le {g x y : ForkedBeaconState preset}
     simp only [Models.stake, Finset.sum_empty, Nat.mul_zero, Nat.zero_add]
     omega
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
 
-namespace EthLib.Consensus.DirectSafety.Rev36
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -24965,9 +24938,9 @@ private theorem selected_capacity {x : ForkedBeaconState preset} {high : Nat}
       rw [movedEq, carryEq, start]
       exact Nat.add_le_add_left (Nat.mul_le_mul_right _ flow) _
 
-end EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
 
-namespace EthLib.Consensus.DirectSafety.Rev36
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -25129,7 +25102,7 @@ private theorem TagReplay.unique {position : Nat} {events : List (BalanceEvent p
       obtain ⟨rfl, rfl, rfl, rfl⟩ := ih rest'
       exact ⟨rfl, rfl, rfl, rfl⟩
 
-end EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
 
 section
 namespace EthLib.Consensus.DirectSafety
@@ -25137,7 +25110,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- `DerivedProducer` follows from the state bound at every prefix of the tail.
 
@@ -25159,7 +25132,7 @@ private theorem derivedProducer_of_state {g x y : ForkedBeaconState preset}
       twoSlots)
     tail
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -25169,7 +25142,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The tags of a queue name its entries in order. -/
 private theorem initialTags_entries (queue : List PendingConsolidation) :
@@ -25211,7 +25184,7 @@ private theorem reservedFrame_initial {g x : ForkedBeaconState preset}
   rw [initialTags_entries, ← queueEq]
   exact reserve
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -25222,21 +25195,17 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-/-! ## Staged final assembly
+/-! ## Final assembly
 
-The headline follows from four producers that are not yet proved.
+The headline follows from four producers, each proved below.
 
-They are `SelectedInputs`, `SelectedReleaseProducer` and the two common ledgers.
-
-The two common ledgers are for after Electra and before it.
+They are the selected payments, their release, and the common ledgers after and before Electra.
 
 Every other input on the path is proved above. -/
 
-/-- What the release reads of the selected consolidation payments, after Electra.
-
-It is `SelectedProducer` without the conjuncts that no reader uses. -/
+/-- What the release reads of the selected consolidation payments, after Electra. -/
 private def SelectedInputs {g x y : ForkedBeaconState preset} : Prop :=
   ∀ (_shared : Run config checks g x) (tail : Run config checks x y) high,
   Supported _shared tail high → 2 ≤ preset.SLOTS_PER_EPOCH.toNat →
@@ -25380,7 +25349,7 @@ private theorem headline_staged
       AccountableWindowBound (preset := preset) (config := config) (checks := checks) :=
   composition_of_ledger (commonLedger_proved hSelected hRelease hLedgerElectra hLedgerPre)
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -25391,7 +25360,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- Before Electra, every ledger cut extends to a rounding ledger.
 
@@ -25485,7 +25454,7 @@ private theorem NewCohortCuts.loss_boundary_pre {g x y : ForkedBeaconState prese
       regime member retained notBoundary (reads i))
   omega
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -25496,7 +25465,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A validator active at the previous epoch is active at the current one or the one before it.
 
@@ -25677,7 +25646,7 @@ private theorem NewCohortCuts.selected_of_terminal {g x y : ForkedBeaconState pr
   rw [supportedX, weightY, sameKey, weightX]
   simp [effectiveAt, xFound, yFound]
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -25688,7 +25657,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- From Electra, the new cohort allocation for any terminal allocation.
 
@@ -25708,16 +25677,16 @@ private theorem newCohortAllocation_electra {g x y : ForkedBeaconState preset}
   obtain ⟨cohort⟩ := NewCohortCuts.exists tail ledger.toLedgerCuts high uniqueY early twoSlots
     endpoint
   have unit := ceiling_unit_of_guard shared genesis aligned startEarly electra guard
-  obtain ⟨_, _, allocation, _⟩ := cohort.allocation_electra_of_S1 penaltyProducer_proved
+  obtain ⟨_, _, allocation, _⟩ := cohort.allocation_electra_of_ceiling penaltyProducer_proved
     shared tail support ledger uniqueY electra twoSlots unit
-    (fun head headEarly within found read => omegaProducer shared genesis caps aligned electra
-      twoSlots high guard head headEarly within found read)
+    (fun head headEarly within found read => otherCredit_le_allowance_electra shared genesis
+      head caps aligned electra headEarly twoSlots high within guard read)
     (fun head headEarly before total read => floor_all_runs_electra shared genesis parameters
       caps aligned guard electra twoSlots head headEarly (by omega) total read)
     replayed o tokens (cohort.selected_of_terminal shared genesis early terminal)
   exact ⟨allocation⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -25728,7 +25697,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- Releases of initial tags have baseline zero.
 
@@ -25828,7 +25797,7 @@ private theorem ownership_counts {x y : ForkedBeaconState preset} {high : Nat}
     refine Finset.sum_congr rfl fun t _ => ?_
     cases t <;> simp
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -25839,7 +25808,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The scheduled allocation of a tail, read off its two ends.
 
@@ -25896,7 +25865,7 @@ private theorem ScheduledAllocation.ofReads {x y : ForkedBeaconState preset}
     obtain ⟨⟨active, _⟩, _, before⟩ := within
     simp [Array.getElem?_toList, found, active, effectiveAt, before]
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -25907,7 +25876,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The key at a registry position, or the default key past the end. -/
 private def keyAt {fork : Fork} (s : BeaconState preset fork) (i : Nat) : BLSPubkey :=
@@ -26337,7 +26306,7 @@ private theorem stateDrift_scheduledReserve_le {x y : ForkedBeaconState preset}
   simp only [drift, guard, ↓reduceIte]
   omega
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -26348,7 +26317,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The boundary keys of the new cohort are recent at the end of the tail. -/
 private theorem NewCohortCuts.boundary_supported {x y : ForkedBeaconState preset}
@@ -26475,15 +26444,16 @@ private theorem commonLedger_pre {g x y : ForkedBeaconState preset}
     endEpoch
   obtain ⟨events, replayed⟩ := tail.balanceEvents_ok early high
   have funded : gainWithoutPreviousOnly x y ≤ gainBudget (config := config) x high := by
-    have gain := preForkGainProducer (config := config) (checks := checks) shared tail high
-      supported twoSlots yBefore
+    obtain ⟨genesis, _, caps, aligned, _, within, guard⟩ := id supported
+    have gain : gainWithoutPreviousOnly x y ≤ activationBudget (config := config) x high :=
+      pre_gain_budget shared tail genesis caps aligned twoSlots yBefore high within guard
     unfold gainBudget
     omega
   exact commonLedger_of_cuts shared tail high supported twoSlots cuts
     (cuts.loss_boundary_pre shared tail supported ledger uniqueY before twoSlots replayed
       cuts.boundary_supported) funded cutoff apart within
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -26493,7 +26463,7 @@ open Apriori
 open Base Classical Cryptography.Bls Uint64
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- Every slashed validator of a state has an exit epoch. -/
 private def SlashedExitAssigned {fork : Fork} (s : BeaconState preset fork) : Prop :=
@@ -26575,7 +26545,7 @@ private def FreshExits {fork : Fork} (s : BeaconState preset fork)
     s.validators.data[tag.entry.sourceIndex.toNat]? = some v ∧
       v.exitEpoch.toNat = tag.epoch ∧ v.exitEpoch ≠ FAR_FUTURE_EPOCH
 
-/-- The R2 interface: one block operation from `s` to `t` that records `added`.
+/-- The replay of one block operation from `s` to `t` that records `added`.
 
 The premises are the cut, the ownership and the run facts at the operation's input.
 
@@ -26623,7 +26593,7 @@ private def OperationReplayAt (x : ForkedBeaconState preset) (high : Nat)
         (t.earliestConsolidationEpoch electra) (t.consolidationBalanceToConsume electra) ∧
       ConsolidationCallSites preset config calls sites
 
-/-- The R2 interface for every queue, ownership and position. -/
+/-- The replay of one block operation for every queue, ownership and position. -/
 private def OperationReplay (x : ForkedBeaconState preset) (high : Nat) (rounding : Nat → Nat)
     {fork : Fork} (electra : .pectra ≤ fork) (s t : BeaconState preset fork)
     (added : List (BalanceEvent preset)) (sites : List (ForkedBeaconState preset)) : Prop :=
@@ -26632,7 +26602,7 @@ private def OperationReplay (x : ForkedBeaconState preset) (high : Nat) (roundin
     OperationReplayAt (config := config) (checks := checks) x high rounding electra s t added
       sites queue owned eventPosition paymentPosition callPosition
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -26643,7 +26613,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- From Electra the upgrades of a slot record no crossing. -/
 private theorem upgradeBalanceReplay_electra_nil {u : ForkedBeaconState preset}
@@ -26724,7 +26694,7 @@ private theorem upgrades_reserved_facts {x u v : ForkedBeaconState preset} {high
   · simpa only [EndpointCoverAll, actualBalanceAt, registry, balances, cap, epoch] using cover
   · simpa only [FutureEffectiveCover, effectiveAt, registry, epoch] using future
 
-/-- R3: from Electra and before Gloas, the upgrades of a slot record nothing and are one frame. -/
+/-- From Electra and before Gloas, the upgrades of a slot record nothing and are one frame. -/
 private theorem reservedReplay_upgrades {x u v : ForkedBeaconState preset} {high : Nat}
     {rounding : Nat → Nat} {crossings : List (BalanceEvent preset)}
     {queue : List TaggedEntry} {owned : Ownership}
@@ -26758,7 +26728,7 @@ private theorem reservedReplay_upgrades {x u v : ForkedBeaconState preset} {high
       assignment, assignment, erasure, erasureV, reserve, reserveV⟩,
     reservedFrame_refl reserveV assignment erasureV, retiredV, coverV, futureV⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -26769,7 +26739,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The deposit requests of a block change only the pending deposits and their start index.
 
@@ -26813,7 +26783,7 @@ private theorem depositRequests_kept {fork : Fork} {electra : .pectra ≤ fork}
   exact ⟨registry, balances, slot, pending, earliest, consume,
     foldlM_framePath _ requests ok fun _ _ _ _ eq => .depositRequest electra eq⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -26824,7 +26794,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The staged headline with both common ledgers proved.
 
@@ -26839,17 +26809,17 @@ private theorem headline_ledger
   headline_staged hSelected hRelease (@commonLedger_of_allocation preset config checks)
     (@commonLedger_pre preset config checks)
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
 
-namespace EthLib.Consensus.DirectSafety.Rev36
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
-/-- hFreshNotInitial: a paid pair carries a fresh tag exactly when its source is new.
+/-- A paid pair carries a fresh tag exactly when its source is new.
 
 A new source is one that is not an initial pending source at `x`. -/
 private theorem ReservedReplay.fresh_not_initial {g x y : ForkedBeaconState preset} {high : Nat}
@@ -26962,7 +26932,7 @@ private theorem ReservedReplay.actual_payment_coverage {x y : ForkedBeaconState 
     rw [initial]
     rfl
 
-/-- hReleaseRounding: SelectedRelease's release partition, source rounds and both rho sums.
+/-- The release partition of the selected release, the source rounds and both rho sums.
 
 They come from the history's fresh payments. -/
 private theorem ReservedReplay.release_rounding {x y : ForkedBeaconState preset} {high : Nat}
@@ -27044,7 +27014,7 @@ private theorem ReservedReplay.release_rounding {x y : ForkedBeaconState preset}
     simp only [List.map_map, Function.comp_def] at rounds ⊢
     omega
 
-end EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
 
 section
 namespace EthLib.Consensus.DirectSafety
@@ -27052,7 +27022,7 @@ open Apriori
 open Base Classical Cryptography.Bls Uint64
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A strict drop of `i`'s effective balance between consecutive states of a path. -/
 private def PathDrop (path : List (ForkedBeaconState preset)) (i : Nat) : Prop :=
@@ -27072,8 +27042,8 @@ private def BlockAssigned (rounding : Nat → Nat) {f h : Fork} (m : BeaconState
     v.exitEpoch = FAR_FUTURE_EPOCH → w.exitEpoch ≠ FAR_FUTURE_EPOCH →
     o.original i ≤ v.effectiveBalance.toNat + rounding i
 
-/-- (a) A proposer slashing records one slashings event with its limits read at `s`. -/
-private def R2a_proposer : Prop :=
+/-- A proposer slashing records one slashings event with its limits read at `s`. -/
+private def ProposerSlashingReplay : Prop :=
   ∀ (x : ForkedBeaconState preset) (high : Nat) (rounding : Nat → Nat) {fork : Fork}
     (electra : .pectra ≤ fork) (_early : fork < .glamsterdam)
     (_delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
@@ -27083,8 +27053,8 @@ private def R2a_proposer : Prop :=
     OperationReplay (config := config) (checks := checks) x high rounding electra s t
       [⟨.slashings, ⟨fork, s⟩, ⟨fork, t⟩, credit, debit⟩] []
 
-/-- (a) An attester slashing records one slashings event with its limits read at `s`. -/
-private def R2a_attester : Prop :=
+/-- An attester slashing records one slashings event with its limits read at `s`. -/
+private def AttesterSlashingReplay : Prop :=
   ∀ (x : ForkedBeaconState preset) (high : Nat) (rounding : Nat → Nat) {fork : Fork}
     (electra : .pectra ≤ fork) (_early : fork < .glamsterdam)
     (_delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
@@ -27095,16 +27065,16 @@ private def R2a_attester : Prop :=
     OperationReplay (config := config) (checks := checks) x high rounding electra s t
       [⟨.slashings, ⟨fork, s⟩, ⟨fork, t⟩, credit, debit⟩] []
 
-/-- (b) The voluntary exits of a block record nothing. -/
-private def R2b_exits : Prop :=
+/-- The voluntary exits of a block record nothing. -/
+private def VoluntaryExitsReplay : Prop :=
   ∀ (x : ForkedBeaconState preset) (high : Nat) (rounding : Nat → Nat) {fork : Fork}
     (electra : .pectra ≤ fork) (_early : fork < .glamsterdam)
     {s t : BeaconState preset fork} (exits : List SignedVoluntaryExit),
     exits.foldlM (processVoluntaryExit config checks) s = .ok t →
     OperationReplay (config := config) (checks := checks) x high rounding electra s t [] []
 
-/-- (b) The withdrawal requests of a block record nothing. -/
-private def R2b_withdrawals : Prop :=
+/-- The withdrawal requests of a block record nothing. -/
+private def WithdrawalRequestsReplay : Prop :=
   ∀ (x : ForkedBeaconState preset) (high : Nat) (rounding : Nat → Nat) {fork : Fork}
     (electra : .pectra ≤ fork) (_early : fork < .glamsterdam)
     {s t : BeaconState preset fork} (requests : List WithdrawalRequest),
@@ -27124,10 +27094,10 @@ private def BlockOperationReplay (x : ForkedBeaconState preset) (high : Nat)
     OperationReplayAt (config := config) (checks := checks) x high rounding electra s t added
       sites queue owned eventPosition paymentPosition callPosition
 
-/-- The R2 block fold: a block step's replay is one `BlockOperationReplay` over its events.
+/-- A block step's replay is one block operation replay over its events.
 
 Its sites are the block's consolidation sites. -/
-private def R2_block : Prop :=
+private def BlockReplay : Prop :=
   ∀ (x : ForkedBeaconState preset) (high : Nat) (rounding : Nat → Nat) {fork : Fork}
     (electra : .pectra ≤ fork) (_early : fork < .glamsterdam)
     (_delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
@@ -27140,12 +27110,12 @@ private def R2_block : Prop :=
     BlockOperationReplay (config := config) (checks := checks) x high rounding electra s t
       events (Step.block (checks := checks) engine signed due ok).consolidationSites
 
-/-- R1 statement: one slot step of a shared run, from `u` to `v`, inside the horizon.
+/-- The replay of one slot step of a shared run, from `u` to `v`, inside the horizon.
 
-The run facts at the epoch input come from `shared` and `pre`.
+The run facts at the epoch input come from the shared run and the branch prefix.
 
-`provenance` and `initialZero` are what R4 supplies from its history up to `u`. -/
-private def R1_slotStep : Prop :=
+The run-level replay supplies the queue provenance and the zero initial tags from its history. -/
+private def SlotStepReplay : Prop :=
   ∀ {g x u v : ForkedBeaconState preset} {high : Nat} {rounding : Nat → Nat}
     {queue : List TaggedEntry} {owned : Ownership}
     {eventPosition paymentPosition callPosition : Nat}
@@ -27202,7 +27172,7 @@ private def R1_slotStep : Prop :=
           (v.state.earliestConsolidationEpoch target)
           (v.state.consolidationBalanceToConsume target)
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -27213,7 +27183,7 @@ open Apriori
 open Base Classical Cryptography.Bls Uint64
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A registry step keeps the slot and the registry size.
 
@@ -27514,17 +27484,17 @@ private theorem operationReplay_quiet {x : ForkedBeaconState preset} {high : Nat
   obtain ⟨w, located, kept'⟩ := step.validators _ v read
   exact ⟨w, located, (kept'.exitEpoch assigned) ▸ exit, (kept'.exitEpoch assigned) ▸ assigned⟩
 
-/-- R2(b): the voluntary exits of a block record nothing. -/
+/-- The voluntary exits of a block record nothing. -/
 private theorem reservedReplay_voluntaryExits :
-    R2b_exits (preset := preset) (config := config) (checks := checks) :=
+    VoluntaryExitsReplay (preset := preset) (config := config) (checks := checks) :=
   fun _ _ _ _ electra _ _ _ exits ok =>
   operationReplay_quiet (foldlM_framePath _ exits ok fun _ _ _ _ eq => .exit eq)
     (foldlM_step (QuietStep electra) (fun _ => .refl) .trans (·.1.2.2.2.2.2.2) (·.1.2.2.2.1) _
       (fun _ _ _ step => QuietStep.voluntaryExit step) exits ok)
 
-/-- R2(b): the withdrawal requests of a block record nothing. -/
+/-- The withdrawal requests of a block record nothing. -/
 private theorem reservedReplay_withdrawalRequests :
-    R2b_withdrawals (preset := preset) (config := config) (checks := checks) :=
+    WithdrawalRequestsReplay (preset := preset) (config := config) (checks := checks) :=
   fun _ _ _ _ electra _ _ _ requests ok =>
   operationReplay_quiet
     (foldlM_framePath _ requests ok fun _ _ _ _ eq => .withdrawalRequest electra eq)
@@ -27718,9 +27688,9 @@ private theorem operationReplay_slashing {x : ForkedBeaconState preset} {high : 
   obtain ⟨w, located, kept'⟩ := lifecycle.validators _ v read
   exact ⟨w, located, (kept'.exitEpoch assigned) ▸ exit, (kept'.exitEpoch assigned) ▸ assigned⟩
 
-/-- R2(a): a proposer slashing records one slashings event with its limits read at `s`. -/
+/-- A proposer slashing records one slashings event with its limits read at `s`. -/
 private theorem reservedReplay_proposerSlashing :
-    R2a_proposer (preset := preset) (config := config) (checks := checks) := by
+    ProposerSlashingReplay (preset := preset) (config := config) (checks := checks) := by
   intro _ _ _ _ _ early delay s _ slashing _ _ limits ok
   obtain ⟨credit', debit', limits', credits, _⟩ := proposer_slashing_bounds slashing ok
   obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Except.ok.inj (limits'.symm.trans limits))
@@ -27765,9 +27735,9 @@ private theorem SlashStep.foldlM_slashIfSlashable {fork : Fork} {electra : .pect
       exact ⟨held.trans step, epoch ▸ bounded⟩)
     (b := (s, flag)) ⟨.refl ordered, finite⟩ ok).1
 
-/-- R2(a): an attester slashing records one slashings event with its limits read at `s`. -/
+/-- An attester slashing records one slashings event with its limits read at `s`. -/
 private theorem reservedReplay_attesterSlashing :
-    R2a_attester (preset := preset) (config := config) (checks := checks) := by
+    AttesterSlashingReplay (preset := preset) (config := config) (checks := checks) := by
   intro _ _ _ _ _ early delay s _ slashing _ _ limits ok
   obtain ⟨credit', debit', limits', credits, _⟩ := attester_slashing_bounds slashing ok
   obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Except.ok.inj (limits'.symm.trans limits))
@@ -27779,14 +27749,11 @@ private theorem reservedReplay_attesterSlashing :
   exact operationReplay_slashing
     (fun ordered finite => .foldlM_slashIfSlashable early _ folded ordered finite) credits held
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
 
-/-! Revision 20: lowering `original` at the effective-balance update.
-
-The same revision weakens `assigned` at in-block consolidation requests. -/
 
 section
 namespace EthLib.Consensus.DirectSafety
@@ -27794,7 +27761,7 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-! ## Lowering the original baseline -/
 
@@ -28222,7 +28189,7 @@ private theorem originalDown_block {x : ForkedBeaconState preset} {fork : Fork}
   · rw [ite_eq_right f] at d
     split <;> omega
 
-/-- A slot step keeps the bound, given R1's effective bound for the step. -/
+/-- A slot step keeps the bound, given the effective-balance bound of the slot replay. -/
 private theorem originalDown_slot {x m n : ForkedBeaconState preset}
     (pre : Run config checks x m) (step : Step config checks m n) {o o' : Ownership}
     (down : OriginalDown pre o)
@@ -28362,7 +28329,7 @@ private def RequestAssigned (rounding : Nat → Nat) {fork : Fork} (s t : Beacon
     (∃ w, t.validators.data[i]? = some w ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH) →
     owned.original i ≤ v.effectiveBalance.toNat + rounding i
 
-/-- R4's discharge at a block input, from the carried bound and the run-level rounding premise.
+/-- The block assignment bound at a block input, from the carried bound and the rounding premise.
 
 A key above its effective balance has a positive original.
 
@@ -28427,7 +28394,7 @@ private theorem requestAssigned_of_block {x : ForkedBeaconState preset} {high : 
     simp only [effectiveAt, none, Option.map_none, Option.getD_none] at zero
     omega
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -28438,7 +28405,7 @@ open Apriori
 open Base Classical Cryptography.Bls Uint64
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A change of BLS credentials to an execution address is quiet.
 
@@ -28475,7 +28442,7 @@ private theorem QuietStep.blsChange {fork : Fork} {electra : .pectra ≤ fork}
   obtain ⟨_, rfl⟩ := setValidator_ok set
   exact ⟨registry, rfl, rfl, rfl, rfl, held⟩
 
-/-- R2 (5): the BLS credential changes of a block record nothing. -/
+/-- The BLS credential changes of a block record nothing. -/
 private theorem operationReplay_blsChanges (x : ForkedBeaconState preset) (high : Nat)
     (rounding : Nat → Nat) {fork : Fork} (electra : .pectra ≤ fork)
     {s t : BeaconState preset fork} (body : BeaconBlockBody preset fork)
@@ -28573,12 +28540,12 @@ private theorem runFacts_consolidationRequest {x : ForkedBeaconState preset} {fo
   runFacts_of_frame (frame_processConsolidationRequest ok)
     (registryLifecycle_processConsolidationRequest ok)
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
 
-namespace EthLib.Consensus.DirectSafety.Rev36
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -28681,14 +28648,14 @@ private theorem selectedInputs_of_history {g x y : ForkedBeaconState preset}
         history.paired_rounds.length_eq] at covered
     exact covered
 
-end EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
 section
 namespace EthLib.Consensus.DirectSafety
 open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The facts at the epoch input of a slot step, read from the run and its cache step.
 
@@ -28743,7 +28710,7 @@ private theorem FreshExits.lifecycle {f h : Fork} {s : BeaconState preset f}
   have same := kept.exitEpoch assigned
   exact ⟨w, located, same ▸ epochEq, same ▸ assigned⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -28753,7 +28720,7 @@ open Apriori
 open Base Classical Cryptography.Bls Uint64
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A slot step inside an epoch records no balance event and moves only the slot and roots.
 
@@ -28821,7 +28788,7 @@ private theorem reservedReplay_slot_inside {x u v : ForkedBeaconState preset} {h
   · intro i
     rfl
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -28831,7 +28798,7 @@ open Apriori
 open Base Classical Cryptography.Bls Uint64
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The last slot of an epoch, before any upgrade.
 
@@ -29106,7 +29073,7 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
     rw [sameEffective i] at bound
     exact bound
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -29116,9 +29083,9 @@ open Apriori
 open Base Classical Cryptography.Bls Uint64
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-/-- R1: the reserved replay of one slot step of a shared run.
+/-- The reserved replay of one slot step of a shared run.
 
 Inside an epoch the step is one frame.
 
@@ -29126,7 +29093,7 @@ At the last slot of an epoch it runs the cache, the epoch and the slot write.
 
 The fork upgrades follow, and they record nothing from Electra. -/
 private theorem reservedReplay_slotStep :
-    R1_slotStep (preset := preset) (config := config) (checks := checks) := by
+    SlotStepReplay (preset := preset) (config := config) (checks := checks) := by
   intro g x u v high rounding queue owned eventPosition paymentPosition callPosition shared pre
     genesis caps twoSlots delayTwo _ electra early endEpoch ok events replayed reserve assignment
     erasure prior retired cover future fresh provenance initialZero
@@ -29247,7 +29214,7 @@ private theorem reservedReplay_slotStep :
       · rw [ite_eq_right d] at bound
         split <;> omega
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -29257,7 +29224,7 @@ open Apriori
 open Base Classical Cryptography.Bls Uint64
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- A switch to compounding credentials keeps the reserve cut, with the same ownership.
 
@@ -29380,7 +29347,7 @@ private theorem reservedReplay_switchToCompounding {fork : Fork} {s t : BeaconSt
       · exact absurd ‹_› notTransfer
       · exact ⟨reserve, reserveT⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -29390,13 +29357,13 @@ open Apriori
 open Base Classical Cryptography.Bls Uint64
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The reserved replay of a tail from Electra, built step by step.
 
 The replay starts at `x` with the initial ownership and frame of `reservedFrame_initial`.
 
-A slot step extends it by `R1_slotStep`, and a block step by `R2_block`.
+A slot step extends it by `SlotStepReplay`, and a block step by `BlockReplay`.
 
 Each step reads the queue provenance and the zero originals of initial tags from the replay so far.
 
@@ -29423,8 +29390,8 @@ private theorem reservedReplay_run {g x y : ForkedBeaconState preset}
         v.exitEpoch = FAR_FUTURE_EPOCH → w.exitEpoch ≠ FAR_FUTURE_EPOCH →
         NewReference x i → FirstDown pre i →
         rounding i = preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
-    (slotStep : R1_slotStep (preset := preset) (config := config) (checks := checks))
-    (block : R2_block (preset := preset) (config := config) (checks := checks))
+    (slotStep : SlotStepReplay (preset := preset) (config := config) (checks := checks))
+    (block : BlockReplay (preset := preset) (config := config) (checks := checks))
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
     ∃ (before after : Ownership) (queue : List TaggedEntry)
       (payments : List (TaggedEntry × Payment preset)) (allocations : List OwnedRelease)
@@ -29453,7 +29420,7 @@ private theorem reservedReplay_run {g x y : ForkedBeaconState preset}
         (y.state.consolidationBalanceToConsume electraY)) ∧
       ConsolidationCallSites preset config calls tail.consolidationSites ∧
       OriginalDown tail after := by
-  unfold R1_slotStep at slotStep
+  unfold SlotStepReplay at slotStep
   obtain ⟨genesis, _, caps, _, early, endEpoch, guard⟩ := supported
   have delayTwo : 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
     obtain ⟨_, _, _, _, _, _, _, _, _, delay, _⟩ := id guard
@@ -29602,7 +29569,7 @@ private theorem reservedReplay_run {g x y : ForkedBeaconState preset}
         · obtain ⟨site, inside, read⟩ := sites' called new
           exact ⟨site, List.mem_append_right _ inside, read⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -29612,7 +29579,7 @@ open Apriori
 open Base Classical Cryptography.Bls Uint64
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- From Electra a block deposit keeps every validator and every balance.
 
@@ -29825,20 +29792,20 @@ private theorem operationReplay_deposit {x : ForkedBeaconState preset} {high : N
   · intro called member
     cases member
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
 
-namespace EthLib.Consensus.DirectSafety.Rev36
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
-/-- hTagProjection: the run's reserved history and its counters give the selected inputs. -/
+/-- The run's reserved history and its counters give the selected inputs. -/
 private theorem selectedInputs_of_run
-    (slotStep : R1_slotStep (preset := preset) (config := config) (checks := checks))
-    (block : R2_block (preset := preset) (config := config) (checks := checks))
+    (slotStep : SlotStepReplay (preset := preset) (config := config) (checks := checks))
+    (block : BlockReplay (preset := preset) (config := config) (checks := checks))
     {g x y : ForkedBeaconState preset} :
     SelectedInputs (config := config) (checks := checks) (g := g) (x := x) (y := y) := by
   intro shared tail high supported twoSlots events replayed electra
@@ -29858,9 +29825,9 @@ private theorem selectedInputs_of_run
       slotStep block replayed
   exact selectedInputs_of_history shared tail supported replayed electra history paying
 
-end EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
 
-namespace EthLib.Consensus.DirectSafety.Rev36
+namespace EthLib.Consensus.DirectSafety.Apriori.Internal
 open EthLib.Consensus.DirectSafety.Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
@@ -29869,7 +29836,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 The given calls are the run's own calls, by the uniqueness of the tag replay. -/
 private theorem selected_capacity_of_run
-    (block : R2_block (preset := preset) (config := config) (checks := checks))
+    (block : BlockReplay (preset := preset) (config := config) (checks := checks))
     {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y) (high : Nat)
     (supported : Supported shared tail high) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
@@ -29977,18 +29944,18 @@ private theorem selected_capacity_of_run
       exact paidBy _ (freshPairs _ inside).1
   exact selected_capacity electra (trace electraY) firsts rates injection cutoff
 
-end EthLib.Consensus.DirectSafety.Rev36
+end EthLib.Consensus.DirectSafety.Apriori.Internal
 section
 namespace EthLib.Consensus.DirectSafety
 open Apriori
 open Base Classical Cryptography.Bls Uint64
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- `SelectedReleaseProducer` from the run's reserved replay.
 
-R4 builds the replay with the ledger's source-falling rounding.
+The run replay rounds with the ledger's source-falling keys.
 
 The given fresh coverage replays the same tags.
 
@@ -29996,7 +29963,7 @@ So `TagReplay.unique` makes its queue, calls and payments the replay's own.
 
 The deposit funding and the selected capacity are taken as hypotheses. -/
 private theorem selectedReleaseProducer_of_run {g x y : ForkedBeaconState preset}
-    (block : R2_block (preset := preset) (config := config) (checks := checks))
+    (block : BlockReplay (preset := preset) (config := config) (checks := checks))
     (deposits : ∀ (shared : Run config checks g x) (tail : Run config checks x y) high,
       Supported shared tail high → 2 ≤ preset.SLOTS_PER_EPOCH.toNat → .pectra ≤ x.fork →
       ∀ events, tail.balanceEvents high = .ok events →
@@ -30024,7 +29991,7 @@ private theorem selectedReleaseProducer_of_run {g x y : ForkedBeaconState preset
     obtain ⟨_, _, _, _, _, _, _, _, _, delay, _⟩ := id guard
     exact delay
   have delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by omega
-  -- R4's replay, rounding each source-falling key by one increment.
+  -- The run replay, rounding each source-falling key by one increment.
   obtain ⟨before, after, queue, allPayments, allAllocations, runCalls, initial, history, cut,
     _⟩ := reservedReplay_run shared tail high supported twoSlots electra
       (fun i => if i ∈ ledger.sourceFalling then preset.EFFECTIVE_BALANCE_INCREMENT.toNat else 0)
@@ -30055,8 +30022,8 @@ private theorem selectedReleaseProducer_of_run {g x y : ForkedBeaconState preset
     ⟨initialEq, creditBound, releasesEq,
       deposits shared tail high supported twoSlots electra events replayed,
       issuance_electra shared tail high supported twoSlots electra replayed,
-      omegaProducer shared genesis caps aligned electra twoSlots high guard tail early endEpoch
-        events replayed,
+      otherCredit_le_allowance_electra shared genesis tail caps aligned electra early twoSlots
+        high endEpoch guard replayed,
       capacity shared tail high supported twoSlots events replayed electra selected payments tags
         actual chosen queue consumed runCalls ⟨allPayments, coverReplay, tagsEq, paymentsEq⟩
         freshTags,
@@ -30070,7 +30037,7 @@ private theorem selectedReleaseProducer_of_run {g x y : ForkedBeaconState preset
     ScheduledAllocation.ofReads tail high, demand, cumulativeFunding_bound electra initial funding,
     partition, rounds, roundSum, baselineSum⟩
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -30080,15 +30047,15 @@ open Apriori
 open Base Classical Cryptography.Bls Uint64
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The headline from the block replay and the deposit funding bound.
 
-The selected inputs come from R1 and R2, and the release from its assembly.
+The selected inputs come from the slot and block replays, and the release from its assembly.
 
 The release's selected capacity is `selected_capacity_of_run`. -/
 private theorem headline_of_block
-    (block : R2_block (preset := preset) (config := config) (checks := checks))
+    (block : BlockReplay (preset := preset) (config := config) (checks := checks))
     (deposits : ∀ g x y : ForkedBeaconState preset,
       (∀ (shared : Run config checks g x) (tail : Run config checks x y) high,
         Supported shared tail high → 2 ≤ preset.SLOTS_PER_EPOCH.toNat → .pectra ≤ x.fork →
@@ -30106,7 +30073,7 @@ private theorem headline_of_block
         selected_capacity_of_run block shared tail high supported twoSlots replayed electra
           chosen fresh unique))
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -30117,9 +30084,9 @@ open Apriori
 open Base Classical Cryptography.Bls
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
-/-! ## R2 block fold: composition and the carried pieces -/
+/-! ## The block fold: composition and the carried pieces -/
 
 /-- Take an operation that keeps the registry, the balances and the slot.
 
@@ -30142,7 +30109,7 @@ private theorem operationReplay_carry {x : ForkedBeaconState preset} {high : Nat
       congrFun earliest electra, congrFun consume electra,
       fun held => by simpa only [SlashedExitAssigned, registry] using held⟩
 
-/-- R2(d): the deposit requests of a block record nothing and are one frame. -/
+/-- The deposit requests of a block record nothing and are one frame. -/
 private theorem r2d_depositRequests (x : ForkedBeaconState preset) (high : Nat)
     (rounding : Nat → Nat) {fork : Fork} (electra : .pectra ≤ fork)
     {s t : BeaconState preset fork} (requests : List DepositRequest)
@@ -30715,8 +30682,9 @@ private theorem keptSame {f : Fork} {a b : BeaconState preset f}
     (same : b.validators = a.validators) : RegistryLifecycle a b ∧ EffectiveKept a b :=
   ⟨.of_data (congrArg (·.data) same), effectiveKept_data (congrArg (·.data) same)⟩
 
-/-- R2: the replay of a block is one operation under the block's assignment bound. -/
-private theorem r2Block : R2_block (preset := preset) (config := config) (checks := checks) := by
+/-- The replay of a block is one operation under the block's assignment bound. -/
+private theorem blockReplay_proved :
+    BlockReplay (preset := preset) (config := config) (checks := checks) := by
   intro x high rounding fork electra early delay compounding s t engine signed due ok events
     replayed
   have altair : Fork.altair ≤ fork := Nat.le_trans (by decide) electra
@@ -30949,7 +30917,7 @@ private theorem r2Block : R2_block (preset := preset) (config := config) (checks
     eventPosition paymentPosition callPosition held reserve assignment erasure prior retired
     cover future matched exits life start finite slashed fresh
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -30960,7 +30928,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- The pending deposits of an epoch read at most the exit flow of that epoch.
 
@@ -31072,15 +31040,15 @@ private theorem depositExits_proved {g x y : ForkedBeaconState preset}
     simp [Finset.sum, Finset.range_val, Multiset.range]
   omega
 
-/-- The headline with its `deposits` premise discharged; it waits only on `R2_block`. -/
+/-- The headline with its `deposits` premise discharged; it waits only on `BlockReplay`. -/
 private theorem headline_of_block_deposits
-    (block : R2_block (preset := preset) (config := config) (checks := checks)) :
+    (block : BlockReplay (preset := preset) (config := config) (checks := checks)) :
     AccountableDriftBound (preset := preset) (config := config) (checks := checks) ∧
       AccountableWindowBound (preset := preset) (config := config) (checks := checks) :=
   headline_of_block block fun _ _ _ shared tail high supported twoSlots electra events replayed =>
     depositExits_proved shared tail high supported twoSlots electra events replayed
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
@@ -31091,7 +31059,7 @@ open Apriori
 open Base Classical
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 noncomputable section
-namespace Rev36
+namespace Apriori.Internal
 
 /-- Accountable safety with an a priori drift bound, before Glamsterdam.
 
@@ -31113,9 +31081,9 @@ Those keys are absent from both calls. -/
 public theorem _root_.EthLib.Consensus.DirectSafety.accountable_safety_apriori :
     AccountableDriftBound (preset := preset) (config := config) (checks := checks) ∧
       AccountableWindowBound (preset := preset) (config := config) (checks := checks) :=
-  headline_of_block_deposits r2Block
+  headline_of_block_deposits blockReplay_proved
 
-end Rev36
+end Apriori.Internal
 end
 end EthLib.Consensus.DirectSafety
 end
