@@ -52,12 +52,20 @@ def syncParticipantPubkeys (committee : SyncCommittee preset)
     return #[committee.aggregatePubkey]
   else if size / 2 < signed then
     let absent := (pairs.filter (!·.2)).map (·.1)
-    let absentSum ← (Signatures.ethAggregatePubkeys absent).mapError
-      fun _ => .invalidSyncCommitteeKey
+    -- A failed sum names its first bad key by its position among the members that did not sign.
+    --
+    -- Some member did not sign, so the list is not empty and a bad key is the only failure.
+    --
+    -- The position comes from the list itself, so the fallback key is never read.
+    let absentSum ← (Signatures.ethAggregatePubkeys absent).mapError fun
+      | .invalidPubkey (some i) =>
+        .invalidSyncCommitteeKey (absent.getD i committee.aggregatePubkey)
+      | _ => .invalidSyncCommitteeKey committee.aggregatePubkey
     let total ← (G1.uncompress committee.aggregatePubkey).mapError
-      fun _ => .invalidSyncCommitteeKey
+      fun _ => .invalidSyncCommitteeKey committee.aggregatePubkey
+    -- The sum of the absent keys is no key of the committee, so this error names the aggregate key.
     let absentPoint ← (G1.uncompress absentSum).mapError
-      fun _ => .invalidSyncCommitteeKey
+      fun _ => .invalidSyncCommitteeKey committee.aggregatePubkey
     return #[Signatures.pointToPubkey (G1.add total (G1.neg absentPoint))]
   else
     return (pairs.filter (·.2)).map (·.1)
@@ -115,7 +123,7 @@ def validatorIndexOfPubkey (state : BeaconState preset fork) (pubkey : BLSPubkey
     Except TransitionError ValidatorIndex :=
   match state.validators.data.findIdx? (·.pubkey == pubkey) with
   | some position => liftAccessor (liftArith (ofNatChecked position))
-  | none => .error .unknownSyncCommitteeMember
+  | none => .error (.unknownSyncCommitteeMember pubkey)
 
 /-- From Altair: the state after the sync aggregate of a block.
 
@@ -142,7 +150,8 @@ def processSyncAggregate (config : Config) (checks : SignatureChecks)
   let root ← liftAccessor (getBlockRootAtSlot state previousSlot)
   let signingRoot ← liftSsz (computeSigningRoot root domain)
   ensure (syncAggregateVerify checks pubkeys (packBytes signingRoot)
-    aggregate.syncCommitteeSignature = true) .invalidSyncAggregate
+    aggregate.syncCommitteeSignature = true)
+    (.invalidSyncAggregate previousSlot (bits.bits.toArray.countP id) signingRoot)
   let reward ← syncParticipantReward state
   let proposerReward ← syncProposerReward reward
   let members ← committee.pubkeys.toArray.mapM (validatorIndexOfPubkey state)

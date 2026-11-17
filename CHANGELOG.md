@@ -70,6 +70,18 @@ Not yet released.
   - `reservedNotZero first second` carries the two reserved bytes, `dataTooLong length` the length of the data, `noVersion type` the type of the first record, `versionData index` the position of the first Version record with data, and `indexSize size` the size of the index data.
   - `Der.validate_eq_error_tag` concludes `.tag none value.tag`.
 
+- The errors of attestations, deposits, exits, withdrawals, BLS changes, the sync aggregate and the historical lists carry the values that their check compared.
+  `TransitionError.wrongAttestationSource` holds the epoch and root of the source, then those of the justified checkpoint.
+  `invalidAttestation` holds the slot of the attestation and the number of validators its indexed form names.
+  `invalidDepositProof` holds the deposit index, the root of the deposit data and the deposit root.
+  `invalidExitSignature` and `invalidBlsChangeSignature` hold the validator index and the signing root.
+  `wrongWithdrawals` holds the first position at which the withdrawals differ, then the length of the payload's list and of the expected one.
+  `invalidSyncAggregate` holds the slot of the signed block root, the number of signers and the signing root.
+  `invalidSyncCommitteeKey` holds the key that fails to decode or fails key validation, and `unknownSyncCommitteeMember` the key that no validator holds.
+  `tooManyPendingAttestations` holds the count and the limit; `registryFull`, `historicalRootsFull` and `historicalSummariesFull` hold the limit.
+  The codes do not change.
+  `appendHistoricalRoot_eq_error_iff`, `processHistoricalRootsUpdate_eq_error_iff` and `processHistoricalSummariesUpdate_eq_error_iff` state the limit in the error.
+
 - The transaction, inclusion and network-form errors carry the values that their failed check compared.
   Each code keeps its meaning, and each error fires on the same inputs as before.
   The messages of transaction and inclusion errors name each value, as `(name := value)`, with hashes and addresses in hex.

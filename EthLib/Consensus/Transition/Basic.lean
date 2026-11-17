@@ -125,18 +125,29 @@ inductive TransitionError where
   | committeeIndexOutOfRange (index count : UInt64)
   /-- An attestation does not have one bit for each member of its committee. -/
   | aggregationBitsLength (bits committee : Nat)
-  /-- The source of an attestation is not the justified checkpoint of its target epoch. -/
-  | wrongAttestationSource
-  /-- The pending attestations of an epoch are at their list limit. -/
-  | tooManyPendingAttestations
-  /-- The indexed form of an attestation is not a valid indexed attestation. -/
-  | invalidAttestation
+  /-- The source of an attestation is not the justified checkpoint of its target epoch.
+
+  It holds the epoch and root of the source, then those of the justified checkpoint. -/
+  | wrongAttestationSource (sourceEpoch : Epoch) (sourceRoot : Root) (justifiedEpoch : Epoch)
+      (justifiedRoot : Root)
+  /-- The pending attestations of an epoch are at their list limit.
+
+  It holds the number of pending attestations, then the limit. -/
+  | tooManyPendingAttestations (count limit : Nat)
+  /-- The indexed form of an attestation is not a valid indexed attestation.
+
+  It holds the slot of the attestation and the number of validators that its indexed form names. -/
+  | invalidAttestation (slot : Slot) (attesters : Nat)
   /-- A block does not hold the number of deposits that the state expects. -/
   | wrongDepositCount (count expected : Nat)
-  /-- The Merkle branch of a deposit does not lead to the deposit root. -/
-  | invalidDepositProof
-  /-- The registry of validators is at its list limit. -/
-  | registryFull
+  /-- The Merkle branch of a deposit does not lead to the deposit root.
+
+  It holds the deposit index, the root of the deposit data, and the deposit root of the state. -/
+  | invalidDepositProof (index : UInt64) (leaf depositRoot : Root)
+  /-- The registry of validators is at its list limit.
+
+  It holds the limit. -/
+  | registryFull (limit : Nat)
   /-- The validator of a voluntary exit is not active. -/
   | exitingValidatorNotActive (index : ValidatorIndex)
   /-- The validator of a voluntary exit has already started to exit. -/
@@ -145,22 +156,32 @@ inductive TransitionError where
   | exitNotYetValid (epoch currentEpoch : Epoch)
   /-- The validator of a voluntary exit has not been active for long enough. -/
   | exitTooSoon (index : ValidatorIndex)
-  /-- A voluntary exit is not signed by its validator. -/
-  | invalidExitSignature
+  /-- A voluntary exit is not signed by its validator.
+
+  It holds the index of the validator and the signing root that the signature fails on. -/
+  | invalidExitSignature (index : ValidatorIndex) (signingRoot : Root)
   /-- A pending attestation was included with no delay, which no reward can divide by. -/
   | zeroInclusionDelay
   /-- From Capella: the withdrawals before those of a reading leave it no place. -/
   | priorWithdrawalsAtLimit (count limit : Nat)
-  /-- From Capella: a payload does not carry the withdrawals that the state expects. -/
-  | wrongWithdrawals
+  /-- From Capella: a payload does not carry the withdrawals that the state expects.
+
+  It holds the first position at which the two lists differ, then the length of each list.
+
+  The payload's list comes first. -/
+  | wrongWithdrawals (position count expected : Nat)
   /-- From Capella: a change of BLS credentials is for a validator without BLS credentials. -/
   | notBlsCredentials (index : ValidatorIndex)
   /-- From Capella: the credentials of a validator do not commit to the key of a change. -/
   | wrongBlsKey (index : ValidatorIndex)
-  /-- From Capella: a change of BLS credentials is not signed by its key. -/
-  | invalidBlsChangeSignature
-  /-- The historical roots are at their list limit. -/
-  | historicalRootsFull
+  /-- From Capella: a change of BLS credentials is not signed by its key.
+
+  It holds the index of the validator and the signing root that the signature fails on. -/
+  | invalidBlsChangeSignature (index : ValidatorIndex) (signingRoot : Root)
+  /-- The historical roots are at their list limit.
+
+  It holds the limit. -/
+  | historicalRootsFull (limit : Nat)
   /-- The target slot is not after the slot of the state. -/
   | slotNotAfter (slot stateSlot : Slot)
   /-- A block does not carry the signature of its proposer.
@@ -179,14 +200,22 @@ inductive TransitionError where
   | wrongPayloadTimestamp (timestamp expected : UInt64)
   /-- From Bellatrix: the execution layer rejects a payload. -/
   | invalidExecutionPayload
-  /-- From Capella: the historical summaries are at their list limit. -/
-  | historicalSummariesFull
-  /-- From Altair: the sync aggregate is not the signature of its members on the parent block. -/
-  | invalidSyncAggregate
-  /-- From Altair: a key of the sync committee does not decode, as the check of its sum needs. -/
-  | invalidSyncCommitteeKey
-  /-- From Altair: no validator holds the key of a member of the sync committee. -/
-  | unknownSyncCommitteeMember
+  /-- From Capella: the historical summaries are at their list limit.
+
+  It holds the limit. -/
+  | historicalSummariesFull (limit : Nat)
+  /-- From Altair: the sync aggregate is not the signature of its members on the parent block.
+
+  It holds the slot of the signed block root, the number of signers, and the signing root. -/
+  | invalidSyncAggregate (slot : Slot) (participants : Nat) (signingRoot : Root)
+  /-- From Altair: a key of the sync committee does not decode, as the check of its sum needs.
+
+  It holds the key that fails to decode or fails key validation. -/
+  | invalidSyncCommitteeKey (pubkey : Cryptography.Bls.BLSPubkey)
+  /-- From Altair: no validator holds the key of a member of the sync committee.
+
+  It holds that key. -/
+  | unknownSyncCommitteeMember (pubkey : Cryptography.Bls.BLSPubkey)
   /-- A block is of another fork than the state at its slot. -/
   | blockForkMismatch (block state : Fork)
   /-- From Electra: an attestation has a committee index other than zero. -/
@@ -266,24 +295,24 @@ def TransitionError.code : TransitionError → UInt32
   | .attestationTooLate .. => 37
   | .committeeIndexOutOfRange .. => 38
   | .aggregationBitsLength .. => 39
-  | .wrongAttestationSource => 40
-  | .tooManyPendingAttestations => 41
-  | .invalidAttestation => 42
+  | .wrongAttestationSource .. => 40
+  | .tooManyPendingAttestations .. => 41
+  | .invalidAttestation .. => 42
   | .wrongDepositCount .. => 43
-  | .invalidDepositProof => 44
-  | .registryFull => 45
+  | .invalidDepositProof .. => 44
+  | .registryFull .. => 45
   | .exitingValidatorNotActive _ => 46
   | .exitAlreadyInitiated _ => 47
   | .exitNotYetValid .. => 48
   | .exitTooSoon _ => 49
-  | .invalidExitSignature => 50
+  | .invalidExitSignature .. => 50
   | .zeroInclusionDelay => 51
   | .priorWithdrawalsAtLimit .. => 61
-  | .wrongWithdrawals => 62
+  | .wrongWithdrawals .. => 62
   | .notBlsCredentials _ => 63
   | .wrongBlsKey _ => 64
-  | .invalidBlsChangeSignature => 65
-  | .historicalRootsFull => 52
+  | .invalidBlsChangeSignature .. => 65
+  | .historicalRootsFull .. => 52
   | .slotNotAfter .. => 53
   | .invalidBlockSignature .. => 54
   | .wrongStateRoot .. => 55
@@ -291,10 +320,10 @@ def TransitionError.code : TransitionError → UInt32
   | .wrongPayloadRandao => 67
   | .wrongPayloadTimestamp .. => 68
   | .invalidExecutionPayload => 69
-  | .historicalSummariesFull => 70
-  | .invalidSyncAggregate => 71
-  | .invalidSyncCommitteeKey => 72
-  | .unknownSyncCommitteeMember => 73
+  | .historicalSummariesFull .. => 70
+  | .invalidSyncAggregate .. => 71
+  | .invalidSyncCommitteeKey .. => 72
+  | .unknownSyncCommitteeMember .. => 73
   | .blockForkMismatch .. => 74
   | .attestationIndexNotZero _ => 75
   | .noCommitteeAttester _ => 76
@@ -317,6 +346,12 @@ def TransitionError.code : TransitionError → UInt32
 Two roots in hex pass the width at which a rendering would otherwise wrap. -/
 instance : ToString TransitionError where
   toString error := (repr error).pretty 1000000
+
+/-- The first position at which two arrays differ.
+
+When one array starts the other, it is the length of the shorter one. -/
+def firstDifference {α : Type} [BEq α] (a b : Array α) : Nat :=
+  ((a.zip b).findIdx? fun (x, y) => x != y).getD (min a.size b.size)
 
 /-- An error of a state accessor, as an error of the transition. -/
 def liftAccessor {α : Type} (result : Except AccessorError α) : Except TransitionError α :=

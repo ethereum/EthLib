@@ -306,17 +306,21 @@ def test_proposer_slashing_headers_disagree():
     assert info.value.code == 12
 
 
+def signing_root(pre: bytes, object_root: bytes, domain_type: int, epoch: int) -> bytes:
+    """The root that a signature signs: an object root under the domain of the state's fork."""
+    # The fork of a state follows genesis_time, genesis_validators_root and slot.
+    previous, current, fork_epoch = pre[48:52], pre[52:56], u64(pre, 56)
+    version = previous if epoch < fork_epoch else current
+    # A domain is its type, then 28 bytes of the root of the fork version and the genesis root.
+    fork_data_root = hashlib.sha256(version + bytes(28) + pre[8:40]).digest()
+    domain = domain_type.to_bytes(4, "little") + fork_data_root[:28]
+    return hashlib.sha256(object_root + domain).digest()
+
+
 def test_header_signature_carries_the_signing_root():
     pre, slashing = vector("phase0", "proposer_slashing", "invalid_incorrect_sig_1")
-    # The fork of a state follows genesis_time, genesis_validators_root and slot.
-    previous, current, epoch = pre[48:52], pre[52:56], u64(pre, 56)
-    # A minimal epoch has 8 slots.
-    header_epoch = u64(slashing, 0) // 8
-    version = previous if header_epoch < epoch else current
-    # The domain of a proposer is its type, zero, then 28 bytes of the root of the fork data.
-    fork_data_root = hashlib.sha256(version + bytes(28) + pre[8:40]).digest()
-    domain = bytes(4) + fork_data_root[:28]
-    root = hashlib.sha256(header_root(slashing[:112]) + domain).digest()
+    # A minimal epoch has 8 slots, and the proposer domain has type 0.
+    root = signing_root(pre, header_root(slashing[:112]), 0, u64(slashing, 0) // 8)
     message = f"{REJECTED}invalidHeaderSignature {u64(slashing, 8)} 0x{root.hex()}"
     with raises(consensus.TransitionError, message) as info:
         consensus.process_operation("minimal", "phase0", "proposer_slashing", pre, slashing)
@@ -359,3 +363,98 @@ def test_invalid_second_attestation_names_position_two():
     with raises(consensus.TransitionError, message) as info:
         consensus.process_operation("minimal", "phase0", "attester_slashing", pre, forged, False)
     assert info.value.code == 16
+
+
+# Deposit data, as SSZ describes it.
+DEPOSIT_DATA = {
+    "container": [
+        ["pubkey", {"byte_vector": 48}],
+        ["withdrawal_credentials", {"byte_vector": 32}],
+        ["amount", {"uint": 8}],
+        ["signature", {"byte_vector": 96}],
+    ]
+}
+
+
+def test_bad_deposit_proof_carries_the_roots():
+    pre, deposit = vector("phase0", "deposit", "invalid_bad_merkle_proof")
+    # A minimal phase0 state holds its eth1 data at byte 4276.
+    # It follows the 64 block roots, the 64 state roots and the offset of the historical roots.
+    # The deposit root starts the eth1 data; the deposit index follows the eth1 data and an offset.
+    deposit_root, index = pre[4276:4308], u64(pre, 4352)
+    # A deposit holds a branch of 33 roots, then its data.
+    data = deposit[33 * 32 :]
+    leaf = ssz.hash_tree_root(DEPOSIT_DATA, ssz.deserialize(DEPOSIT_DATA, data))
+    message = f"{REJECTED}invalidDepositProof {index} 0x{leaf.hex()} 0x{deposit_root.hex()}"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation("minimal", "phase0", "deposit", pre, deposit)
+    assert info.value.code == 44
+
+
+def test_bad_exit_signature_carries_the_signing_root():
+    pre, signed = vector("phase0", "voluntary_exit", "invalid_incorrect_signature")
+    # An exit holds its epoch and the index of its validator, each a chunk of its root.
+    epoch, index = u64(signed, 0), u64(signed, 8)
+    exit_root = hashlib.sha256(signed[:8] + bytes(24) + signed[8:16] + bytes(24)).digest()
+    # The domain of a voluntary exit has type 4.
+    root = signing_root(pre, exit_root, 4, epoch)
+    message = f"{REJECTED}invalidExitSignature {index} 0x{root.hex()}"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation("minimal", "phase0", "voluntary_exit", pre, signed)
+    assert info.value.code == 50
+
+
+def test_bad_sync_aggregate_carries_the_signing_root():
+    pre, aggregate = vector("altair", "sync_aggregate", "invalid_signature_bad_domain")
+    # The members sign the root of the block at the slot before the state's.
+    # A minimal state keeps 64 block roots from byte 176.
+    slot = u64(pre, 40) - 1
+    block_root = pre[176 + 32 * (slot % 64) : 176 + 32 * (slot % 64 + 1)]
+    # The domain of the sync committee has type 7, at the epoch of that slot.
+    root = signing_root(pre, block_root, 7, slot // 8)
+    # A minimal sync committee has 32 members, one bit each in the first 4 bytes.
+    participants = int.from_bytes(aggregate[:4], "little").bit_count()
+    message = f"{REJECTED}invalidSyncAggregate {slot} {participants} 0x{root.hex()}"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation("minimal", "altair", "sync_aggregate", pre, aggregate)
+    assert info.value.code == 71
+
+
+@pytest.mark.parametrize("fork", ["capella", "electra"])
+def test_wrong_withdrawals_names_the_first_difference(fork):
+    # The payload carries the one expected partial withdrawal, with a wrong amount.
+    # The lists then differ at position 0, and each holds one withdrawal.
+    pre, payload = vector(fork, "withdrawals", "invalid_incorrect_amount_partial")
+    with raises(consensus.TransitionError, f"{REJECTED}wrongWithdrawals 0 1 1") as info:
+        consensus.process_operation("minimal", FORKS[fork], "withdrawals", pre, payload)
+    assert info.value.code == 62
+
+
+def test_wrong_attestation_source_carries_both_checkpoints():
+    pre, attestation = vector("phase0", "attestation", "one_basic_attestation")
+    # An attestation holds the offset of its bits, then its data.
+    # The source checkpoint is at bytes 48 to 88 of the data: an epoch, then a root.
+    source_epoch, source_root = u64(attestation, 52), attestation[60:92]
+    forged = attestation[:60] + b"\x11" * 32 + attestation[92:]
+    # The valid attestation votes for the justified checkpoint that the check expects.
+    message = (
+        f"{REJECTED}wrongAttestationSource {source_epoch} 0x{'11' * 32} "
+        f"{source_epoch} 0x{source_root.hex()}"
+    )
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation("minimal", "phase0", "attestation", pre, forged, False)
+    assert info.value.code == 40
+
+
+def test_bad_attestation_signature_names_its_attesters():
+    pre, attestation = vector("phase0", "attestation", "one_basic_attestation")
+    # The signature follows the offset and the data; the aggregation bits come last.
+    forged = attestation[:132] + bytes(96) + attestation[228:]
+    bits = attestation[228:]
+    # The last set bit of a bit list marks its length, so it names no attester.
+    attesters = sum(byte.bit_count() for byte in bits) - 1
+    data_slot = u64(attestation, 4)
+    message = f"{REJECTED}invalidAttestation {data_slot} {attesters}"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation("minimal", "phase0", "attestation", pre, forged)
+    assert info.value.code == 42
