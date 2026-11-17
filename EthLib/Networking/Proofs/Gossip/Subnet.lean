@@ -175,7 +175,8 @@ theorem computeSubscribedSubnet_eq_ok_iff {index : UInt64} {subnet : SubnetID} :
   apply and_congr_right
   intro _
   have mapError_ok {sum : UInt64} :
-      (Base.Uint64.addChecked permuted index).mapError (fun _ => SubnetError.subnetOverflow)
+      (Base.Uint64.addChecked permuted index).mapError
+          (fun _ => SubnetError.subnetOverflow permuted index)
         = (.ok sum : Except (SubnetError ε) UInt64) ↔
         Base.Uint64.addChecked permuted index = .ok sum := by
     cases Base.Uint64.addChecked permuted index <;> simp [Except.mapError]

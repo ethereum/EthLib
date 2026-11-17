@@ -31,8 +31,10 @@ open EthLib.Cryptography.Secp256k1
 inductive IdentityError where
   /-- The bytes are not the canonical protobuf of a compressed point of the curve. -/
   | publicKey
-  /-- The bytes do not start with the identity code 0 and the length 37. -/
-  | peerId
+  /-- The bytes do not start with the identity code 0 and the length 37.
+
+  The field holds the first two bytes, or fewer when the input is shorter. -/
+  | peerId (header : List UInt8)
   /-- The secret is 0, or, in the exports, its bytes give a value at least the group order. -/
   | privateKey
   /-- The bytes are not a strict DER signature with r in [1, n) and s in [1, n/2]. -/
@@ -44,7 +46,7 @@ deriving Repr, DecidableEq
 /-- The stable code of an error, one per constructor. -/
 def IdentityError.code : IdentityError → UInt32
   | .publicKey => 1
-  | .peerId => 2
+  | .peerId _ => 2
   | .privateKey => 3
   | .signature => 4
   | .signing _ => 5
@@ -76,7 +78,7 @@ Text forms and hashed peer IDs of longer keys are not read. -/
 def decodePeerId (id : ByteArray) : Except IdentityError Point :=
   match id.data.toList with
   | 0x00 :: 0x25 :: key => decodePublicKey ⟨key.toArray⟩
-  | _ => .error .peerId
+  | bytes => .error (.peerId (bytes.take 2))
 
 /-- Derive and serialize the public key of a secp256k1 secret scalar, which must be nonzero.
 

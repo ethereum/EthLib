@@ -79,7 +79,9 @@ def test_subnet_for_attestation() -> None:
 
 def test_subnet_for_attestation_overflow() -> None:
     with raises(
-        ConsensusError, "subnet rejected: EthLib.Networking.Gossip.SubnetError.subnetOverflow"
+        ConsensusError,
+        "subnet rejected: EthLib.Networking.Gossip.SubnetError.subnetOverflow "
+        "9223372036854775808 2",
     ) as caught:
         consensus.compute_subnet_for_attestation(2**63, 2, 0)
     assert caught.value.code == 105
@@ -127,7 +129,9 @@ def test_subscribed_subnets(name: str) -> None:
 
 def test_subscribed_subnets_epoch_overflow() -> None:
     with raises(
-        ConsensusError, "subnet rejected: EthLib.Networking.Gossip.SubnetError.epochOverflow"
+        ConsensusError,
+        "subnet rejected: EthLib.Networking.Gossip.SubnetError.epochOverflow "
+        "18446744073709551615 255",
     ) as caught:
         consensus.compute_subscribed_subnets(255, 2**64 - 1)
     assert caught.value.code == 103
