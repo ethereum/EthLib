@@ -1,5 +1,6 @@
 """The light client sync and update ranking vectors of consensus-specs."""
 
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -206,6 +207,23 @@ def test_trusted_root_length():
     with raises(consensus.LightClientError, "expected 32 bytes, got 31") as info:
         consensus.light_client_sync("minimal", "altair", "altair", bytes(31), bytes(32), b"", [])
     assert info.value.code == 0
+
+
+def test_untrusted_bootstrap_header():
+    # The zero header of a minimal Altair bootstrap passes the header check, then fails on the root.
+    # Its five zero fields pad to eight zero leaves, so its root is the zero hash of depth 3.
+    root = bytes(32)
+    for _ in range(3):
+        root = sha256(root + root).digest()
+    trusted = "11" * 32
+    message = (
+        f"light client: expected trusted block root 0x{trusted}, got header root 0x{root.hex()}"
+    )
+    with raises(consensus.LightClientError, message) as info:
+        consensus.light_client_sync(
+            "minimal", "altair", "altair", bytes.fromhex(trusted), bytes(32), bytes(1856), []
+        )
+    assert info.value.code == 3
 
 
 @pytest.mark.parametrize(
