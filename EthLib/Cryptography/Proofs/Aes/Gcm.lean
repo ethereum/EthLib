@@ -54,19 +54,19 @@ theorem mem_of_checkLengths {t : Nat} {iv text aad : ByteArray}
 
 /-- The length checks reject a 64-bit or 32-bit tag before any other check. -/
 theorem checkLengths_shortTag {t : Nat} (ht : t ∈ shortTagLengths) (iv text aad : ByteArray) :
-    checkLengths t iv text aad = .error .shortTag := by
+    checkLengths t iv text aad = .error (.shortTag t) := by
   simp [checkLengths, ht]
   rfl
 
 /-- Encryption rejects a 64-bit or 32-bit tag, for every input. -/
 theorem encrypt_shortTag (ciph : Block → Block) {t : Nat} (ht : t ∈ shortTagLengths)
-    (iv p aad : ByteArray) : encrypt ciph t iv p aad = .error .shortTag := by
+    (iv p aad : ByteArray) : encrypt ciph t iv p aad = .error (.shortTag t) := by
   simp only [encrypt, checkLengths_shortTag ht]
   rfl
 
 /-- Decryption rejects a 64-bit or 32-bit tag, for every input. -/
 theorem decrypt_shortTag (ciph : Block → Block) {t : Nat} (ht : t ∈ shortTagLengths)
-    (iv c aad T : ByteArray) : decrypt ciph t iv c aad T = .error .shortTag := by
+    (iv c aad T : ByteArray) : decrypt ciph t iv c aad T = .error (.shortTag t) := by
   simp only [decrypt, checkLengths_shortTag ht]
   rfl
 
@@ -149,8 +149,9 @@ theorem decrypt_eq_ok_iff (ciph : Block → Block) (t : Nat) (iv c aad T p : Byt
     decrypt ciph t iv c aad T = .ok p ↔ encrypt ciph t iv p aad = .ok (c, T) :=
   ⟨encrypt_eq_ok_of_decrypt_eq_ok ciph t iv c aad T p, decrypt_encrypt ciph t iv p aad c T⟩
 
-/-- Two errors with one code are the same error. -/
-theorem Error.code_injective (e₁ e₂ : Error) (h : e₁.code = e₂.code) : e₁ = e₂ := by
+/-- Two errors with one code come from one constructor. -/
+theorem Error.code_injective (e₁ e₂ : Error) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
   -- Two distinct constructors have two distinct literal codes, which `decide` separates.
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [Error.code] at h; exact absurd h (by decide))
