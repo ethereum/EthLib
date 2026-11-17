@@ -44,8 +44,14 @@ inductive ProtobufError where
   | fieldNumber (field : Nat)
   /-- A key holds the wire type 6 or 7, or a group end outside any group. -/
   | wireType (wire : Nat)
-  /-- The input ends inside a value or inside a group. -/
-  | truncated
+  /-- The input ends inside a value or inside a group.
+
+  A value needs `needed` bytes and only `available` remain.
+
+  Input that ends inside a group usually fails on the next key, as a varint error.
+
+  This error comes instead, with one byte needed, when the group reader runs out of steps. -/
+  | truncated (needed available : Nat)
   /-- A group ends with the number of another field. -/
   | groupEnd (field : Nat)
   deriving Repr, DecidableEq
@@ -55,7 +61,7 @@ def ProtobufError.code : ProtobufError → UInt32
   | .varint _ => 1
   | .fieldNumber _ => 2
   | .wireType _ => 3
-  | .truncated => 4
+  | .truncated .. => 4
   | .groupEnd _ => 5
 
 /-- The value of a record, by wire type.
@@ -105,7 +111,7 @@ It may run to ten bytes, and its value must be below `2^64`. -/
 def readVarint (bytes : List UInt8) : Except ProtobufError (UInt64 × List UInt8) := do
   let (head, rest) := Varint.split bytes
   let groups ← (Varint.groups Varint.maxLength head).mapError .varint
-  if 2 ^ 64 ≤ Varint.valueOf groups then throw (.varint .overflow)
+  if 2 ^ 64 ≤ Varint.valueOf groups then throw (.varint (.overflow (Varint.valueOf groups)))
   return (UInt64.ofNat (Varint.valueOf groups), rest)
 
 /-- The field number and the wire type of the key at the start of the input. -/
@@ -119,7 +125,7 @@ def readKey (bytes : List UInt8) : Except ProtobufError (Nat × Nat × List UInt
 def readFixed (n : Nat) (bytes : List UInt8) : Except ProtobufError (Vector UInt8 n × List UInt8) :=
   if h : n ≤ bytes.length then
     .ok (⟨(bytes.take n).toArray, by simp [Nat.min_eq_left h]⟩, bytes.drop n)
-  else .error .truncated
+  else .error (.truncated n bytes.length)
 
 /-- A length-delimited value: a varint length, then that many bytes. -/
 def readLen (bytes : List UInt8) : Except ProtobufError (ByteArray × List UInt8) := do
@@ -143,7 +149,8 @@ The list holds the field numbers of the open groups, innermost first.
 Each step reads a key, so a budget of one step per input byte never runs out. -/
 def skipGroup : Nat → List Nat → List UInt8 → Except ProtobufError (List UInt8)
   | _, [], bytes => .ok bytes
-  | 0, _ :: _, _ => .error .truncated
+  -- Out of steps inside a group: one more byte is needed, for an end key.
+  | 0, _ :: _, bytes => .error (.truncated 1 bytes.length)
   | fuel + 1, expected :: outer, bytes => do
     let (field, wire, rest) ← readKey bytes
     match wire with
@@ -166,7 +173,8 @@ where
   /-- Each record takes at least one byte, so a budget of the input length never runs out. -/
   go : Nat → List UInt8 → List Record → Except ProtobufError (List Record)
     | _, [], acc => .ok acc.reverse
-    | 0, _ :: _, _ => .error .truncated
+    -- Out of fuel: unreachable, so the fields are arbitrary.
+    | 0, bytes@(_ :: _), _ => .error (.truncated 1 bytes.length)
     | fuel + 1, bytes@(_ :: _), acc => do
       let (record, rest) ← readRecord bytes
       go fuel rest (record :: acc)

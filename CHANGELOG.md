@@ -39,6 +39,19 @@ Not yet released.
 
 ### Changes that break callers
 
+- The Snappy, varint and protobuf errors carry the values their failed check compared.
+  Codes are unchanged; each message now ends with these values, in constructor order.
+  - `SnappyError.literalPastEnd` and `copyPastEnd` carry the bytes needed and the bytes left.
+  - `SnappyError.copyOffsetZero` carries the output position of the copy.
+  - `SnappyError.copyOffsetTooLarge` also carries the bytes written so far, after the offset.
+  - `Snappy.FrameError.missingStreamIdentifier` carries the type of the first chunk, or `none` for an empty stream.
+  - `Snappy.FrameError.headerTruncated` carries the bytes left, and `chunkPastEnd` the declared length and the bytes left.
+  - `Snappy.FrameError.badStreamIdentifier` and `checksumTruncated` carry the length of the chunk data.
+  - `Varint.VarintError.trailingBytes` carries the count of extra bytes, `overflow` the value, and `nonMinimal` the encoding length.
+  - `Uvarint.UvarintError.tooLarge` carries the value.
+  - `Protobuf.ProtobufError.truncated` carries the bytes needed and the bytes left.
+  - A nested error now starts on a new line of the message when the longer message no longer fits one line.
+
 - In Lean, every node of a Merkle tree has a `Merkle.Position`, its level and its index, and the tree passes positions instead of a level and an index.
   The node hash has type `Position → α → α → m α`; it had type `Nat → Nat → α → α → m α`, with the level first.
   `Merkle.node hash leaves ⟨level, j⟩`, `Merkle.siblings hash leaves p n`, `Merkle.ordered p` and `Merkle.climb hash p current siblings` take a position; `Merkle.root` and `Merkle.path` keep their arguments.

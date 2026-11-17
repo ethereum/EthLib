@@ -66,14 +66,14 @@ def continuation : Nat := groupSize
 inductive VarintError where
   /-- The input ended while a continuation bit was still set, or the input was empty. -/
   | unterminated
-  /-- A last byte was followed by more bytes. -/
-  | trailingBytes
+  /-- A last byte was followed by `count` more bytes. -/
+  | trailingBytes (count : Nat)
   /-- Ten bytes carry the continuation bit, and another byte follows. -/
   | tooLong
-  /-- The value is 2^64 or more, outside the 64-bit range. -/
-  | overflow
-  /-- The encoding ends in a zero group that a shorter encoding would not need. -/
-  | nonMinimal
+  /-- The encoding denotes `value`, which is 2^64 or more, outside the 64-bit range. -/
+  | overflow (value : Nat)
+  /-- The encoding of `length` bytes ends in a zero group that a shorter one would not need. -/
+  | nonMinimal (length : Nat)
   deriving Repr, DecidableEq
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -83,10 +83,10 @@ The code ignores the arguments of the constructor, which the message carries.
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def VarintError.code : VarintError → UInt32
   | .unterminated => 1
-  | .trailingBytes => 2
+  | .trailingBytes _ => 2
   | .tooLong => 3
-  | .overflow => 4
-  | .nonMinimal => 5
+  | .overflow _ => 4
+  | .nonMinimal _ => 5
 
 /-- The varint bytes of `n`, using at most `fuel` bytes.
 
@@ -151,7 +151,7 @@ def groups : Nat → List UInt8 → Except VarintError (List UInt8)
         -- A last byte must also be the last byte of the input.
         match bs with
         | [] => .ok [b]
-        | _ :: _ => .error .trailingBytes
+        | more@(_ :: _) => .error (.trailingBytes more.length)
       else
         -- A continued byte: keep it, and read the rest with one byte less of budget.
         (groups fuel bs).map (b :: ·)
@@ -198,9 +198,9 @@ def decode (bs : List UInt8) : Except VarintError UInt64 :=
   | .error e => .error e
   | .ok gs =>
       if nonMinimal gs then
-        .error .nonMinimal
+        .error (.nonMinimal gs.length)
       else if 2 ^ 64 ≤ valueOf gs then
-        .error .overflow
+        .error (.overflow (valueOf gs))
       else
         .ok (UInt64.ofNat (valueOf gs))
 

@@ -71,14 +71,22 @@ inductive SnappyError where
   | preambleTooLong
   /-- The preamble declared more than 2^32 - 1 bytes. -/
   | preambleTooLarge (declared : Nat)
-  /-- A literal, or its length bytes, ran past the end of the input. -/
-  | literalPastEnd
-  /-- The offset bytes of a copy ran past the end of the input. -/
-  | copyPastEnd
-  /-- A copy with offset zero, which the format forbids (§2.2). -/
-  | copyOffsetZero
-  /-- A copy reaching before the first byte of the output (§2.2). -/
-  | copyOffsetTooLarge (offset : Nat)
+  /-- A literal, or its length bytes, ran past the end of the input.
+
+  It needs `needed` more input bytes for its length or its data, and only `available` remain. -/
+  | literalPastEnd (needed available : Nat)
+  /-- The offset bytes of a copy ran past the end of the input.
+
+  The copy needs `needed` offset bytes, and `available` are left after its tag. -/
+  | copyPastEnd (needed available : Nat)
+  /-- A copy with offset zero, which the format forbids (§2.2).
+
+  The copy would have started at the output position `position`. -/
+  | copyOffsetZero (position : Nat)
+  /-- A copy reaching before the first byte of the output (§2.2).
+
+  The copy reaches `offset` bytes back, at least one, and the output holds only `written` bytes. -/
+  | copyOffsetTooLarge (offset written : Nat)
   /-- The output stops short of the declared length, or an element would take it past. -/
   | lengthMismatch (declared actual : Nat)
   deriving Repr, DecidableEq
@@ -92,10 +100,10 @@ def SnappyError.code : SnappyError → UInt32
   | .preambleTruncated => 1
   | .preambleTooLong => 2
   | .preambleTooLarge _ => 3
-  | .literalPastEnd => 4
-  | .copyPastEnd => 5
-  | .copyOffsetZero => 6
-  | .copyOffsetTooLarge _ => 7
+  | .literalPastEnd .. => 4
+  | .copyPastEnd .. => 5
+  | .copyOffsetZero _ => 6
+  | .copyOffsetTooLarge .. => 7
   | .lengthMismatch .. => 8
 
 /-- Read the preamble, at most `fuel` more bytes deep.
@@ -153,7 +161,7 @@ def copyBytes (out : ByteArray) (offset : Nat) : Nat → Except SnappyError Byte
         copyBytes (out.push out[out.size - max offset 1]) offset len
       else
         -- The copy reaches before the first byte written.
-        .error (.copyOffsetTooLarge offset)
+        .error (.copyOffsetTooLarge offset out.size)
 
 -- Each length an element declares is checked in as many steps as that length.
 attribute [local instance high] Base.Length.decideLeLength Base.Length.decideLengthLt
@@ -172,7 +180,8 @@ def decompressElements (declared : Nat) :
     List UInt8 → ByteArray → Nat → Except SnappyError ByteArray
   | [], out, _ => .ok out
   -- Out of fuel: unreachable when the fuel is at least the input length.
-  | _ :: _, _, 0 => .error .literalPastEnd
+  -- The fields of this error are therefore arbitrary.
+  | l@(_ :: _), _, 0 => .error (.literalPastEnd (l.length + 1) l.length)
   | tag :: rest, out, fuel + 1 =>
       -- The element kind, and the six bits above it.
       let t := tag.toNat % 4
@@ -182,7 +191,7 @@ def decompressElements (declared : Nat) :
         if upper < 60 then
           let len := upper + 1
           if rest.length < len then
-            .error .literalPastEnd
+            .error (.literalPastEnd len rest.length)
           else if declared < out.size + len then
             .error (.lengthMismatch declared (out.size + len))
           else
@@ -191,12 +200,12 @@ def decompressElements (declared : Nat) :
         else
           let extra := upper - 59
           if rest.length < extra then
-            .error .literalPastEnd
+            .error (.literalPastEnd extra rest.length)
           else
             let len := bytesToUint (rest.take extra).toArray.toVector + 1
             let rest := rest.drop extra
             if rest.length < len then
-              .error .literalPastEnd
+              .error (.literalPastEnd len rest.length)
             else if declared < out.size + len then
               .error (.lengthMismatch declared (out.size + len))
             else
@@ -207,14 +216,14 @@ def decompressElements (declared : Nat) :
         -- The length minus 4 is in tag bits 2 to 4 for a one-byte offset, else the length minus 1.
         let len := if t == 1 then 4 + upper % 8 else upper + 1
         if rest.length < width then
-          .error .copyPastEnd
+          .error (.copyPastEnd width rest.length)
         else
           -- A one-byte-offset copy keeps the top three of its 11 offset bits in tag bits 5 to 7.
           let offset :=
             if t == 1 then upper / 8 * 256 + bytesToUint (rest.take 1).toArray.toVector
             else bytesToUint (rest.take width).toArray.toVector
           if offset == 0 then
-            .error .copyOffsetZero
+            .error (.copyOffsetZero out.size)
           else if declared < out.size + len then
             .error (.lengthMismatch declared (out.size + len))
           else

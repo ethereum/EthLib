@@ -33,16 +33,16 @@ def bound : Nat := 2 ^ 63
 inductive UvarintError where
   /-- The prefix is not a minimal protobuf varint of a 64-bit value. -/
   | varint (error : Varint.VarintError)
-  /-- The value is from `2^63` to below `2^64`, so its encoding needs a tenth byte.
+  /-- The value `value` is from `2^63` to below `2^64`, so its encoding needs a tenth byte.
 
   A larger value fails earlier, as a varint that overflows or runs too long. -/
-  | tooLarge
+  | tooLarge (value : UInt64)
   deriving Repr, DecidableEq
 
 /-- The stable code of an error, one per constructor. -/
 def UvarintError.code : UvarintError → UInt32
   | .varint _ => 1
-  | .tooLarge => 2
+  | .tooLarge _ => 2
 
 /-- The unsigned varint of a value below `2^63`.
 
@@ -56,7 +56,7 @@ def encode (n : Nat) : List UInt8 :=
 def decode (bytes : List UInt8) : Except UvarintError (Nat × List UInt8) := do
   let (head, rest) := Varint.split bytes
   let value ← (Varint.decode head).mapError .varint
-  if bound ≤ value.toNat then throw .tooLarge
+  if bound ≤ value.toNat then throw (.tooLarge value)
   return (value.toNat, rest)
 
 end EthLib.Networking.Encoding.Uvarint
