@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalStatements
-public import EthLib.Consensus.Proofs.Transition.FfgJustification
 
 /-!
 # The reserves of the quorum of a fast-confirmation call
@@ -396,58 +395,5 @@ def QuorumDriftWithin (horizon : Epoch) (last : ℕ) : Prop :=
     2 * total.toNat + 3 * stake (fun v => balanceAt pulled v.toNat) voters ≤
       2 * pulledTotal.toNat + 3 * stake (fun v => balanceAt state v.toNat) voters +
         quorumReserve config pulled anc
-
-/-- Every honest voter set of a call keeps its stake in each counting state, up to the pin reserve.
-
-The call reads the pulled-up head state and the current target of an honest store.
-
-It also reads the finalized block's state of the target state, once finality has passed the anchor.
-
-Before that, the anchor state takes its place.
-
-The counting state belongs to an honest store, and is in the target's epoch or the next.
-
-Each held chain that it is built from must contain the finalized checkpoint of the target's state.
-
-Then the quorum voters of the counting state and the voters of the call fit the bound.
--/
-def PinDriftWithin (horizon : Epoch) (last : ℕ) : Prop :=
-  -- Fast confirmation was implemented at Fulu, so no pre-Electra queue or churn case arises.
-  .fusaka ≤ fork →
-  ∀ u ∈ J, ∀ n (head : Root) (pulled anc fin : BeaconState preset fork)
-    (target : Checkpoint),
-    (e.world n).time ≤ last →
-    ((e.world n).state u).getPulledUpHeadState config head = .ok pulled →
-    ((e.world n).state u).getCurrentTarget config head = .ok target →
-    ((e.world n).state u).blockStates[target.root]? = some anc →
-    (getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
-      ((e.world n).state u).blockStates[anc.finalizedCheckpoint.root]? = some fin) →
-    (anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState → fin = anchorState) →
-    ∀ w ∈ J, ∀ k (counted : BeaconState preset fork), (e.world k).time ≤ last →
-    CountedState ((e.world k).state w) config counted →
-    target.epoch ≤ getCurrentEpoch counted →
-    (getCurrentEpoch counted).toNat ≤ target.epoch.toNat + 1 → getCurrentEpoch counted ≤ horizon →
-    -- Every held chain that the counting state is built from reads the finalized checkpoint.
-    --
-    -- That checkpoint is the one of the target block's state, as `pinReserve` reads it.
-    --
-    -- The read is asked only once finality has passed the anchor.
-    --
-    -- Before that, every walk stops at the anchor, and the drift counts from the anchor state.
-    (getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
-    ∀ (r : Root) (base : BeaconState preset fork),
-      ((e.world k).state w).blockStates[r]? = some base →
-      (counted = base ∨
-        ∃ (checks' : SignatureChecks) (slot : Slot),
-          processSlots config checks' base slot = .ok counted) →
-      ((e.world k).state w).getCheckpointBlock r anc.finalizedCheckpoint.epoch =
-        .ok anc.finalizedCheckpoint.root) →
-    ∀ (voters : Finset ValidatorIndex) (total pulledTotal : Gwei),
-    (∀ v ∈ voters, v ∈ J ∧ v ∈ activeVoters pulled) →
-    getTotalActiveBalance counted = .ok total → getTotalActiveBalance pulled = .ok pulledTotal →
-    3 * stake (fun v => balanceAt counted v.toNat) (quorumVoters counted) +
-        3 * stake (fun v => balanceAt pulled v.toNat) voters ≤
-      2 * total.toNat + pulledTotal.toNat + pinReserve config pulled anc fin +
-        3 * stake (fun v => balanceAt counted v.toNat) {v ∈ quorumVoters counted | v ∈ voters}
 
 end EthLib.Consensus.Models.Network
