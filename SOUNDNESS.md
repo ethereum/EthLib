@@ -2988,7 +2988,7 @@ In that case the evidence names no accountable stake.
 The theorem does not assume hash injectivity.
 
 The endpoint assumes synchrony, prompt processing, block admission and validated honest duty votes through its time horizon.
-It also assumes agreement between assignment duties and head committee windows, common history for vote committees, and successful source-weight window reads.
+It also assumes agreement between assignment duties and head committee windows, the window membership of voters below the parent (`VotersInHeadWindow`), and successful source-weight window reads.
 Its stake hypotheses include a Byzantine and exit reserve for each nonempty committee window of the caller's head, from the caller's first slot to the receiver's last slot.
 They also include unslashed honest validators in counted states, a checkpoint stake ceiling and an explicit drift bound.
 Earlier honest-head coverage and receiver-finality coverage remain hypotheses.
@@ -3011,7 +3011,7 @@ The receivers' reads are derived.
 When the root is above the justified block, the head computation weighed a child of that block and so read its state (`Store.checkpointState_justified_of_getHead`).
 Each committee window before the current slot reads from the head's state (`Store.getCommitteesBetweenSlots_exists`).
 That needs `Config.CommitteeWindowsFit`, a bound on the registry limit, the committees and the clock, which mainnet and minimal satisfy.
-`ReceiverWindowExits` assumes the exit bound of each receiver's window, and `LateDutyMajority` assumes the honest duty majority of the duty-epoch theorem.
+`ReceiverWindowExitsNear` assumes the exit bound of each near receiver's window, and `LateDutyMajority` assumes the honest duty majority of the duty-epoch theorem.
 The receiver's proposer score is derived from the checkpoint stake ceiling and `Config.ProposerScoreFits`, a bound on the boost that mainnet and minimal satisfy.
 
 `Execution.honestHeadsCover_of_signed_justification` in the same file splits `RootViable` and derives one part of it.
@@ -3035,6 +3035,27 @@ The anchor's latest header must be the anchor block's, with a zero state root, a
 The anchor store checks neither, and without them a justified root may be one that no store holds.
 So the late half of the root's viability rests on the Byzantine bound, the stake floors and these conditions.
 The signed-justification theorem keeps its statement for callers that supply the signer.
+
+Three premises of these headlines are worth stating with when they hold.
+
+The headlines do not assume `VoteCommitteeCommonHistory`, a common committee-preserving state behind every recent vote and the head.
+It fails on ordinary runs: after an epoch with no block, a vote with the current target has no such state.
+They assume `NewlyActiveVotersInHeadWindow` instead, which that premise implies.
+It asks only about a vote two epochs after the parent of the tested block, whose voter became active at the vote's target epoch.
+Such a voter must lie in the head's window, from the slot after the parent to the slot before the current one.
+It fails only when the head state's shuffling places such a voter at or after the current slot.
+Every other voter lies in the window by a proof (`Execution.votersInHeadWindow_of_newlyActive`), since the window holds the whole epoch before the target.
+If the rule's window weight also counted one epoch's activation churn, the premise would go.
+
+`SourceWindowReads` assumes that each later window read also succeeds with the caller's source state as the balance source.
+A window that holds no whole epoch reads each member's balance in that state.
+So it holds while every member of a later window is in the source state's registry.
+It fails when such a window has a member that the source state does not yet hold, such as a validator deposited after it.
+
+`ReceiverWindowExitsNear` asks the exit bound only of receivers within two epochs of the parent, where every step reads it.
+The earlier form, `ReceiverWindowExits`, asked it of every receiver to the horizon.
+A receiver several epochs past the parent has several epochs of exits in its window.
+They count against one reserve, so that form fails while validators keep exiting.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/Indicators.lean` also states the two FFG tests of the rule on the target of the current epoch.
 `getCurrentTarget_eq_ok_iff` states that target as the checkpoint of the store's epoch in the chain of the head, and `epoch_eq_of_getCurrentTarget` gives its epoch.

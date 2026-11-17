@@ -343,67 +343,6 @@ variable {config : Config} {checks : SignatureChecks} {sources : BlockSources pr
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
-/-- A far target within the parent's two-epoch horizon is the actual receiver epoch. -/
-private theorem common_history_of_far_vote {last n : Nat} {u v : ValidatorIndex}
-    (history : VoteCommitteeCommonHistory (e := e) last) (honest : u ∈ J)
-    (time : (e.world n).time ≤ last)
-    {head : ForkChoiceNode} {headState targetState : BeaconState preset fork}
-    {current : Epoch} {parent : BeaconBlock preset fork} {attestation : Attestation preset fork}
-    (headRead : ((e.world n).state u).getHead config = .ok head)
-    (headFound : ((e.world n).state u).blockState head.root = .ok headState)
-    (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok current)
-    (horizon : current.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2)
-    (far : (computeEpochAtSlot preset parent.slot).toNat + 1 < attestation.data.target.epoch.toNat)
-    (origin : ((e.world n).state u).VoteOrigin config v attestation)
-    (targetRead : ((e.world n).state u).checkpointState attestation.data.target = .ok targetState) :
-    ∃ common, RunKept common targetState ∧ RunKept common headState ∧
-      attestation.data.target.epoch ≤ activityFixedEpoch common ∧
-      attestation.data.target.epoch.toNat ≤
-        (getCurrentEpoch common).toNat + preset.MIN_SEED_LOOKAHEAD.toNat ∧
-      (getCurrentEpoch targetState).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
-        attestation.data.target.epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat ∧
-      (getCurrentEpoch headState).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
-        attestation.data.target.epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
-  obtain ⟨slot, slotRead, past⟩ := origin.past
-  have currentEq : computeEpochAtSlot preset slot = current := by
-    simpa [Store.getCurrentStoreEpoch, slotRead, bind, Except.bind, pure, Except.pure]
-      using epochRead
-  have targetLe : attestation.data.target.epoch.toNat ≤ current.toNat := by
-    rw [origin.targetEpoch, ← currentEq]
-    simp only [computeEpochAtSlot, UInt64.toNat_div]
-    exact Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp (UInt64.le_of_lt past))
-  have same : current.toNat = attestation.data.target.epoch.toNat := by omega
-  obtain ⟨common, headRun, targetRun, final, fixed, headRing, targetRing⟩ := history u honest n time
-    head headState current v attestation targetState headRead headFound epochRead targetLe
-    (by omega) origin (Store.checkpointState_ok_iff.mp targetRead)
-  exact ⟨common, targetRun, headRun, fixed, final, targetRing, headRing⟩
-
-/-- A far vote belongs to the receiver's actual window through the approved common history. -/
-private theorem mem_window_of_far_vote {last n : Nat} {u v : ValidatorIndex}
-    (history : VoteCommitteeCommonHistory (e := e) last) (honest : u ∈ J)
-    (time : (e.world n).time ≤ last)
-    {head : ForkChoiceNode} {headState : BeaconState preset fork}
-    {current : Epoch} {parent : BeaconBlock preset fork} {attestation : Attestation preset fork}
-    {first finish : Slot} {members : Std.TreeSet ValidatorIndex}
-    (headRead : ((e.world n).state u).getHead config = .ok head)
-    (headFound : ((e.world n).state u).blockState head.root = .ok headState)
-    (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok current)
-    (horizon : current.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2)
-    (far : (computeEpochAtSlot preset parent.slot).toNat + 1 < attestation.data.target.epoch.toNat)
-    (origin : ((e.world n).state u).VoteOrigin config v attestation)
-    (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first finish = .ok members)
-    (low : first ≤ attestation.data.slot) (high : attestation.data.slot ≤ finish) :
-    v ∈ members := by
-  obtain ⟨targetState, index, committee, stored, below, committeeOk, member⟩ :=
-    origin.exists_mem_committee
-  obtain ⟨common, toTarget, toHead, fixed, final, targetRing, headRing⟩ :=
-    common_history_of_far_vote history honest time headRead headFound epochRead horizon far
-      origin (Store.checkpointState_ok_iff.mpr stored)
-  obtain ⟨kept, count⟩ := toTarget.committees_agree toHead final fixed targetRing headRing
-  rw [origin.targetEpoch] at kept count
-  exact Store.mem_getCommitteesBetweenSlots window low high headFound (count ▸ below)
-    ((kept _ _ rfl).trans committeeOk) member
-
 /-- A near vote below an ancestor of the head lies in the head's window after that ancestor.
 
 Its target is at most one epoch after the ancestor, so the two states agree on its committees. -/
@@ -466,35 +405,6 @@ private theorem headState_of_descends {store : Store preset fork}
   obtain ⟨headBlock, headKnown, _⟩ := Store.slot_le_of_isAncestor parentFound descends
   obtain ⟨headState, headStored, _, _⟩ := reached.reachable.blockStatesFromParents headKnown
   exact ⟨headState, Store.blockState_ok_iff.mpr headStored⟩
-
-/-- Master's common history places every voter below an ancestor of the head in its window.
-
-A near vote needs no premise.
-
-A far vote, two epochs after the ancestor, reads the common history. -/
-public theorem Execution.votersInHeadWindow_of_commonHistory {anchor : Store preset fork}
-    (last : Nat) (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (anchored : ∀ w ∈ J, e.start w = anchor)
-    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
-    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
-    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (history : VoteCommitteeCommonHistory (e := e) last) :
-    VotersInHeadWindow (e := e) last := by
-  intro w honest k time head parentRoot parent current first finish epoch members v attestation
-    headRead parentFound descends slotRead epochRead horizon firstOk _ window origin voteDescends
-    low high
-  have reached := e.forwardReachableWith
-    (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore) k w
-    honest
-  obtain ⟨headState, headFound⟩ := headState_of_descends reached parentFound descends
-  by_cases near : attestation.data.target.epoch.toNat ≤
-      (computeEpochAtSlot preset parent.slot).toNat + 1
-  · exact mem_window_of_near_vote reached anchorSlot minLookahead maxLookahead ring headFound
-      parentFound descends slotRead epochRead horizon firstOk window origin voteDescends low high
-      near
-  · exact mem_window_of_far_vote history honest time headRead headFound epochRead horizon
-      (by omega) origin window low high
 
 /-- The corner premise places every voter below an ancestor of the head in its window.
 
@@ -858,7 +768,7 @@ private theorem guarded_parentVoters_le [DecidablePred (· ∈ J)]
 /-- A source margin and approved drift give head ancestry or a collision at the caller's parent.
 
 The voters below the parent lie in the head's window by the window-membership premise. -/
-public theorem ancestor_head_of_window_membership [DecidablePred (· ∈ J)]
+public theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
@@ -1035,76 +945,6 @@ public theorem ancestor_head_of_window_membership [DecidablePred (· ∈ J)]
   simp only at pending
   subst status
   exact answer
-
-/-- A source margin and approved drift give head ancestry or a collision at the caller's parent. -/
-public theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
-    {anchor : Store preset fork}
-    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (anchored : ∀ w ∈ J, e.start w = anchor)
-    {last n : Nat} {u : ValidatorIndex}
-    (history : VoteCommitteeCommonHistory (e := e) last) (honest : u ∈ J)
-    (time : (e.world n).time ≤ last)
-    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) (before : fork < .glamsterdam)
-    (absent : AnchorParentAbsent (e := e) last)
-    (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
-    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
-    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    {head : ForkChoiceNode} {state : BeaconState preset fork}
-    {root : Root} {block parent : BeaconBlock preset fork}
-    {current first finish shortLast : Slot} {epoch : Epoch}
-    {members participants : Std.TreeSet ValidatorIndex} {nodes : List ForkChoiceNode}
-    (headRead : ((e.world n).state u).getHead config = .ok head)
-    (stateRead : ((e.world n).state u).checkpointState
-      ((e.world n).state u).justifiedCheckpoint = .ok state)
-    (tree : ((e.world n).state u).getFilteredNodeTree config = .ok nodes)
-    (found : ((e.world n).state u).blocks[root]? = some block)
-    {caller : ValidatorIndex} {call : Nat}
-    (callerHonest : caller ∈ J) (callerTime : (e.world call).time ≤ last)
-    (later : (e.world call).time ≤ (e.world n).time)
-    {source : BeaconState preset fork} {shift : Nat}
-    (drift : WindowMarginDrift (e := e) call last source shift)
-    (callerParentFound : ((e.world call).state caller).blocks[block.parentRoot]? = some parent)
-    (slotRead : ((e.world n).state u).getCurrentSlot config = .ok current)
-    (epochRead : ((e.world n).state u).getCurrentStoreEpoch config = .ok epoch)
-    (horizon : epoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2)
-    (firstOk : addChecked parent.slot 1 = .ok first)
-    (lastOk : subChecked current 1 = .ok finish)
-    (window : ((e.world n).state u).getCommitteesBetweenSlots head.root first finish =
-      .ok members)
-    (shortWindow : ((e.world n).state u).getCommitteesBetweenSlots head.root first shortLast =
-      .ok participants)
-    (shortLastOk : subChecked block.slot 1 = .ok shortLast)
-    (route : (((e.world n).state u).isAncestor
-        ⟨((e.world n).state u).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true) ∨
-      ((⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes ∧
-        ((e.world n).state u).isAncestor head
-          ⟨block.parentRoot, .pending⟩ = .ok true ∧
-        ∃ maximum sourceMaximum sourceScore,
-      ((e.world n).state u).computeCommitteeWeightBetweenSlots head.root state first finish =
-        .ok maximum ∧
-      ((e.world n).state u).computeCommitteeWeightBetweenSlots head.root source first finish =
-        .ok sourceMaximum ∧
-      computeProposerScore config source = .ok sourceScore ∧
-      sourceMaximum.toNat + sourceScore.toNat + shift <
-      2 * Models.stake (fun v =>
-        if v ∈ ((unslashedActiveBalances source).map (·.1)).toFinset
-        then balanceAt source v.toNat else 0)
-        {v ∈ ((e.world n).state u).supportersOf source ⟨root, .pending⟩ | v ∈ J} +
-      Models.stake (fun v =>
-        if v ∈ ((unslashedActiveBalances source).map (·.1)).toFinset
-        then balanceAt source v.toNat else 0)
-        {v ∈ ((e.world n).state u).parentVotersOf source participants block parent | v ∈ J}))
-    (scoreOk : computeProposerScore config state = .ok (score : Gwei)) :
-    ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true ∨
-    ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ last ∧ (e.world j).time ≤ last ∧
-      ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-        some evidence :=
-  ancestor_head_of_window_membership anchorStore anchored
-    (Execution.votersInHeadWindow_of_commonHistory last anchorStore anchored anchorSlot
-      minLookahead maxLookahead ring history)
-    honest time anchorSlot before absent headRead stateRead tree found callerHonest callerTime
-    later drift callerParentFound slotRead epochRead horizon firstOk lastOk window shortWindow
-    shortLastOk route scoreOk
 
 /-- Held-state finality supplies the source bound at the store's realized checkpoint.
 

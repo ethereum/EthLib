@@ -292,7 +292,7 @@ theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· ∈ J)]
     (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
     (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
-    (history : VoteCommitteeCommonHistory (e := e) time) {anchor : Store preset fork}
+    (newVoters : NewlyActiveVotersInHeadWindow (e := e) time) {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
@@ -373,7 +373,8 @@ theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· ∈ J)]
     (anchorZero : anchorState.latestBlockHeader.stateRoot = Vector.replicate 32 0)
     (delay : preset.InclusionDelayPositive)
     (byzantine : ByzantineCountedStake (e := e) callerEpoch (e.world n).time time)
-    (exits : ReceiverWindowExits (e := e) source first (e.world n).time time)
+    (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
+      (e.world n).time time)
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
@@ -392,7 +393,7 @@ theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· ∈ J)]
     (UInt64.le_of_eq anchorSlot) callerEpochOk anchorRoot anchorState stateHeld
   exact Execution.honestHeadsCover_of_signed_justification
     sync slots positive minLookahead maxLookahead ring preGloas admitted half votes fits prompt
-    windows history anchored sound anchorSlot anchorBoundary start caller callerUpToDate headNode
+    windows newVoters anchored sound anchorSlot anchorBoundary start caller callerUpToDate headNode
     slotOk beginOk timeEq blockOk parentOk sourceOk boostOk firstOk lastOk beforeOk maximumOk
     parentParticipantsOk registry aligned increment supportOk discountOk adversaryOk margin
     callerTime sourceReads drift reserve reference referenceTime referenceUpToDate
