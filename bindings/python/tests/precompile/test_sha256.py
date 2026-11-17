@@ -51,8 +51,9 @@ def test_one_gas_short(fork: str, i: int) -> None:
     gas = cost(len(message))
     with raises(
         ValueError,
-        "EthLib.Execution.Evm.Precompiles.PrecompileError.sha256\n  "
-        f"(EthLib.Execution.Evm.Precompiles.Sha256.Sha256Error.outOfGas {gas} {gas - 1})",
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.sha256 "
+        "(EthLib.Execution.Evm.Precompiles.Sha256.Sha256Error.outOfGas "
+        f"(cost := {gas}) (gas := {gas - 1}))",
     ):
         run(fork, ADDRESS, message, gas - 1)
 

@@ -39,6 +39,17 @@ Not yet released.
 
 ### Changes that break callers
 
+- The precompile errors carry the values that their failed check compared, and their message names each value on one line.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  The message of a failed call no longer wraps: `PrecompileError.sha256\n  (Sha256Error.outOfGas 72 71)` becomes `PrecompileError.sha256 (Sha256Error.outOfGas (cost := 72) (gas := 71))`, with each name in full.
+  A bare error inside another now prints in parentheses, as Lean's own printer does.
+  In Lean, these constructors take arguments:
+  - `AltBn128Error.invalidFieldElement value`, the coordinate at or above `p`, and `notOnCurve point` and `notInSubgroup point`, the bytes of the point read from the call data, with zeros past its end;
+  - `Bls12381Error.invalidPadding padding`, the 16 bytes in front of the field element, `invalidFieldElement value`, and `notOnCurve point` and `notInSubgroup point`, the unpadded bytes of the point;
+  - `PointEvaluationError.versionedHashMismatch expected actual`, the hash of the commitment and the hash of the call, `invalidCommitment commitment`, `invalidFieldElement value`, the value of `z` or `y`, and `invalidProof proof`.
+  `PointEvaluationError.invalidTrustedSetup`, `proofRejected` and `Bls12381Error.notASquare` stay bare: the first is a constant, the second a verdict of the pairing check, and the third excluded by RFC 9380.
+  `bytesToG1_invalidFieldElement` names the rejected coordinate in its error.
+
 - The AES-GCM, ChaCha20-Poly1305 and ERC-2334 path errors carry the lengths and values that their failed check compared.
   Codes are unchanged; each message now ends with these values, and a failed tag comparison still carries nothing.
   - `Aes.Gcm.Error.tagLength declared actual` carries the declared tag length and the length of the tag, in bytes.

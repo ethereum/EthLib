@@ -55,7 +55,26 @@ inductive PrecompileError where
   | bls12381 (e : Bls12381.Bls12381Error)
   /-- P256VERIFY failed. -/
   | p256Verify (e : P256Verify.P256VerifyError)
-  deriving Repr, DecidableEq
+  deriving DecidableEq
+
+/-- The form of a precompile error in Lean syntax: the precompile, then its own error. -/
+def PrecompileError.reprPrec : PrecompileError → Nat → Std.Format
+  | .ecrecover e, p => precompileFormat "ecrecover" (reprArg e) p
+  | .sha256 e, p => precompileFormat "sha256" (reprArg e) p
+  | .ripemd160 e, p => precompileFormat "ripemd160" (reprArg e) p
+  | .identity e, p => precompileFormat "identity" (reprArg e) p
+  | .modexp e, p => precompileFormat "modexp" (reprArg e) p
+  | .altBn128 e, p => precompileFormat "altBn128" (reprArg e) p
+  | .blake2f e, p => precompileFormat "blake2f" (reprArg e) p
+  | .pointEvaluation e, p => precompileFormat "pointEvaluation" (reprArg e) p
+  | .bls12381 e, p => precompileFormat "bls12381" (reprArg e) p
+  | .p256Verify e, p => precompileFormat "p256Verify" (reprArg e) p
+where
+  /-- A constructor of the precompile error, named in full, applied to the error it holds. -/
+  precompileFormat (name : String) (error : Std.Format) (prec : Nat) : Std.Format :=
+    constructorFormat ("EthLib.Execution.Evm.Precompiles.PrecompileError." ++ name) [error] prec
+
+instance : Repr PrecompileError := ⟨PrecompileError.reprPrec⟩
 
 /-- The stable code of an error: one per precompile, for the C exports.
 

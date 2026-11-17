@@ -67,9 +67,9 @@ def test_identity_call(fork: str, data: bytes, gas: int, succeeds: bool) -> None
     else:
         with raises(
             PrecompileError,
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.identity\n  "
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.identity "
             "(EthLib.Execution.Evm.Precompiles.Identity.IdentityError.outOfGas "
-            f"{PRICES[len(data)]} {gas})",
+            f"(cost := {PRICES[len(data)]}) (gas := {gas}))",
         ) as error:
             run(fork, IDENTITY, data, gas)
         assert error.value.code != 0
