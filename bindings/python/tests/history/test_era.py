@@ -303,9 +303,10 @@ def test_other_records_are_kept() -> None:
 
 def test_truncated_file_is_rejected() -> None:
     data, _ = _file(Group(0))
-    with raises(
-        EraError, _error("e2store (EthLib.Serialization.E2store.E2storeError.truncatedData)")
-    ):
+    # The last record, a slot index of one entry, has 24 bytes of data after its 8-byte header.
+    last = len(data) - 32
+    fault = f"truncatedData {last} 24 {len(data) - 1}"
+    with raises(EraError, _error(f"e2store (EthLib.Serialization.E2store.E2storeError.{fault})")):
         _decode(data[:-1])
 
 
@@ -429,7 +430,8 @@ def test_empty_slot_with_a_new_root_is_rejected() -> None:
 
 
 def test_empty_file_is_rejected() -> None:
-    with raises(EraError, _error("e2store (EthLib.Serialization.E2store.E2storeError.noVersion)")):
+    fault = "e2store (EthLib.Serialization.E2store.E2storeError.noVersion none)"
+    with raises(EraError, _error(fault)):
         _decode(b"")
 
 
@@ -461,7 +463,9 @@ def test_state_that_does_not_decode_is_rejected() -> None:
 def test_index_of_the_wrong_size_is_rejected() -> None:
     data = _record(VERSION, b"") + _record(STATE, snappy.encode_frames(_state(0, [])[1]))
     data += _record(SLOT_INDEX, _index(0, [-(len(data) - 8)])[:-1])
-    with raises(EraError, _error("e2store (EthLib.Serialization.E2store.E2storeError.indexSize)")):
+    # An index of one entry has 24 bytes, and this one lost its last byte.
+    fault = "e2store (EthLib.Serialization.E2store.E2storeError.indexSize 23)"
+    with raises(EraError, _error(fault)):
         _decode(data)
 
 

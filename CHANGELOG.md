@@ -60,6 +60,16 @@ Not yet released.
   - `Gcm.checkLengths_shortTag`, `Gcm.encrypt_shortTag`, `Gcm.decrypt_shortTag` and `ChaCha20Poly1305.crypt_eq_error_of_counter_exhausted` state the error with its fields.
   - `Aes.Gcm.Error.code_injective` now concludes that two errors with one code share a constructor, `e₁.ctorIdx = e₂.ctorIdx`, as the KZG and secp256k1 forms do.
 
+- The DER and e2store errors carry the values that their failed check compared.
+  Codes are unchanged, and each error fires on the same inputs as before.
+  - `Der.Error.truncated needed available` carries a lower bound on the bytes a value needs, exact once its length is read, and the bytes of the input.
+  - `Der.Error.tag expected actual` carries the tag read, and the tag the reader expects, or `none` when no single tag is expected.
+  - `Der.Error.length first` carries the first length octet, and `trailing count` the bytes left after the value.
+  - `Der.Error.value` keeps no field: the content belongs to the caller, and the reader tracks no position in it.
+  - `E2store.E2storeError.truncatedHeader offset available` and `truncatedData offset length available` carry the position of the record, the announced length of its data, and the size of the input.
+  - `reservedNotZero first second` carries the two reserved bytes, `dataTooLong length` the length of the data, `noVersion type` the type of the first record, `versionData index` the position of the first Version record with data, and `indexSize size` the size of the index data.
+  - `Der.validate_eq_error_tag` concludes `.tag none value.tag`.
+
 - The transaction, inclusion and network-form errors carry the values that their failed check compared.
   Each code keeps its meaning, and each error fires on the same inputs as before.
   The messages of transaction and inclusion errors name each value, as `(name := value)`, with hashes and addresses in hex.
