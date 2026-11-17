@@ -86,27 +86,32 @@ theorem VoteAt.data_head {anchor : Store preset fork}
   exact ⟨dataSlot.trans atSlot, by simpa [getCurrentEpoch, atSlot] using epoch,
     head, block, headOk, known, dataRoot, blocks head.root block known⟩
 
-/-- An honest duty vote names the checkpoint obtained by walking its voted head.
+/-- An honest vote names the checkpoint obtained by walking its voter's head.
+
+Some store reachable from the same anchor must hold the target block.
+
+The anchor store does not tie the anchor state's latest header to the anchor block.
+
+So a target read from lookahead at the anchor names the anchor only when that block is held.
 
 The anchor starts at an epoch boundary; nonzero state roots prevent repeated header filling. -/
-theorem VoteAt.data_target {anchor : Store preset fork}
-    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+theorem HonestVoteData.target_read {store other : Store preset fork}
+    (reachable : Store.Reachable config anchorState anchorBlock store)
     (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorAtBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (start : ∀ u ∈ J, e.start u = anchor) {v : ValidatorIndex} (honest : v ∈ J) {slot : Slot}
-    {committeeIndex : CommitteeIndex} {time n : ℕ} {attestation : Attestation preset fork}
-    {indexed : IndexedAttestation preset fork}
-    (vote : VoteAt e v slot committeeIndex time n attestation indexed)
-    (nonzero : ∀ (root : Root) (block : BeaconBlock preset fork),
-      ((e.world n).state v).blocks[root]? = some block →
-        block.stateRoot ≠ Vector.replicate 32 0) :
-    ((e.world n).state v).getCheckpointBlock attestation.data.beaconBlockRoot
-      attestation.data.target.epoch = .ok attestation.data.target.root := by
-  have reachable := e.reachable
-    (fun u hu => (start u hu) ▸ Store.Reachable.anchor anchored) n v honest
-  obtain ⟨head, block, headState, state, headOk, found, stored, advanced, made⟩ := vote.honestData
+    (nonzero : ∀ (root : Root) (block : BeaconBlock preset fork), store.blocks[root]? = some block →
+      block.stateRoot ≠ Vector.replicate 32 0)
+    {slot : Slot} {committeeIndex : CommitteeIndex} {data : AttestationData}
+    (made : HonestVoteData config checks store slot committeeIndex data)
+    (holder : Store.Reachable config anchorState anchorBlock other)
+    {targetBlock : BeaconBlock preset fork}
+    (known : other.blocks[data.target.root]? = some targetBlock) :
+    ∃ head, store.getHead config = .ok head ∧
+      store.getCheckpointBlock head.root data.target.epoch = .ok data.target.root := by
+  obtain ⟨head, block, headState, state, headOk, found, stored, advanced, dataOk⟩ := made
+  refine ⟨head, headOk, ?_⟩
   have stored' := Store.blockState_ok_iff.mp stored
-  obtain ⟨-, boundary, -, dataRoot, -, epoch⟩ := getAttestationData_eq_ok_iff.mp made
+  obtain ⟨-, boundary, -, -, -, epoch⟩ := getAttestationData_eq_ok_iff.mp dataOk
   have headLe : block.slot ≤ state.slot := by
     have le := Store.Reachable.slot_le_of_blockState
       (UInt64.le_of_eq anchorSlot) reachable found stored'
@@ -129,35 +134,18 @@ theorem VoteAt.data_target {anchor : Store preset fork}
       subst state
       exact le
   let first := state.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH
-  have firstOk : computeStartSlotAtEpoch preset attestation.data.target.epoch = .ok first := by
+  have firstOk : computeStartSlotAtEpoch preset data.target.epoch = .ok first := by
     rw [epoch]
     exact computeStartSlotAtEpoch_computeEpochAtSlot state.slot
-  have known : ∃ targetBlock,
-      ((e.world n).state v).blocks[attestation.data.target.root]? = some targetBlock := by
-    obtain ⟨withTarget, targetState, storing, reading, -⟩ := vote.reads
-    unfold Store.storeTargetCheckpointState at storing
-    split at storing
-    · simp only [pure, Except.pure, Except.ok.injEq] at storing
-      subst withTarget
-      obtain ⟨base, _, held, -⟩ := reachable.checkpointStatesFromBlocks
-        (Store.checkpointState_ok_iff.mp reading)
-      exact reachable.known_of_blockState held
-    · simp only [bind_ok_iff] at storing
-      obtain ⟨computedState, computed, -⟩ := storing
-      unfold Store.computeCheckpointState at computed
-      simp only [bind_ok_iff] at computed
-      obtain ⟨base, held, -⟩ := computed
-      exact reachable.known_of_blockState (Store.blockState_ok_iff.mp held)
-  rw [dataRoot]
   unfold Store.getCheckpointBlock
   rw [firstOk]
   simp only [Except.mapError, bind, Except.bind]
-  change (·.root) <$> ((e.world n).state v).getAncestor ⟨head.root, .pending⟩ first = _
+  change (·.root) <$> store.getAncestor ⟨head.root, .pending⟩ first = _
   rcases getEpochBoundaryBlockRoot_eq_ok_iff.mp boundary with ⟨onBoundary, targetEq⟩ | ⟨-, read⟩
   · have eq : first = state.slot := div_mul_eq_self_iff.mpr onBoundary
     rw [eq, Store.getAncestor_of_le (node := ⟨head.root, .pending⟩) found headLe]
     simp [targetEq]
-  · have read' : getBlockRootAtSlot state first = .ok attestation.data.target.root := by
+  · have read' : getBlockRootAtSlot state first = .ok data.target.root := by
       unfold getBlockRoot at read
       rw [← epoch, firstOk] at read
       exact read
@@ -179,9 +167,53 @@ theorem VoteAt.data_target {anchor : Store preset fork}
       rw [epoch] at b
       simp only [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div] at b
       exact UInt64.le_iff_toNat_le.mpr (by omega)
-    obtain ⟨targetBlock, targetKnown⟩ := known
-    exact reachable.lookahead_history_ancestor (UInt64.le_of_eq anchorSlot) nonzero
-      stored' targetKnown advanced read' firstAfter .pending
+    exact reachable.lookahead_history_ancestor_of_held (UInt64.le_of_eq anchorSlot) nonzero
+      holder stored' known advanced read' firstAfter .pending
+
+/-- An honest duty vote names the checkpoint obtained by walking its voted head.
+
+The anchor starts at an epoch boundary; nonzero state roots prevent repeated header filling. -/
+theorem VoteAt.data_target {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorAtBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (start : ∀ u ∈ J, e.start u = anchor) {v : ValidatorIndex} (honest : v ∈ J) {slot : Slot}
+    {committeeIndex : CommitteeIndex} {time n : ℕ} {attestation : Attestation preset fork}
+    {indexed : IndexedAttestation preset fork}
+    (vote : VoteAt e v slot committeeIndex time n attestation indexed)
+    (nonzero : ∀ (root : Root) (block : BeaconBlock preset fork),
+      ((e.world n).state v).blocks[root]? = some block →
+        block.stateRoot ≠ Vector.replicate 32 0) :
+    ((e.world n).state v).getCheckpointBlock attestation.data.beaconBlockRoot
+      attestation.data.target.epoch = .ok attestation.data.target.root := by
+  have reachable := e.reachable
+    (fun u hu => (start u hu) ▸ Store.Reachable.anchor anchored) n v honest
+  -- The voter reads its own attestation, so it holds the target block.
+  have known : ∃ targetBlock,
+      ((e.world n).state v).blocks[attestation.data.target.root]? = some targetBlock := by
+    obtain ⟨withTarget, targetState, storing, reading, -⟩ := vote.reads
+    unfold Store.storeTargetCheckpointState at storing
+    split at storing
+    · simp only [pure, Except.pure, Except.ok.injEq] at storing
+      subst withTarget
+      obtain ⟨base, _, held, -⟩ := reachable.checkpointStatesFromBlocks
+        (Store.checkpointState_ok_iff.mp reading)
+      exact reachable.known_of_blockState held
+    · simp only [bind_ok_iff] at storing
+      obtain ⟨computedState, computed, -⟩ := storing
+      unfold Store.computeCheckpointState at computed
+      simp only [bind_ok_iff] at computed
+      obtain ⟨base, held, -⟩ := computed
+      exact reachable.known_of_blockState (Store.blockState_ok_iff.mp held)
+  obtain ⟨targetBlock, targetKnown⟩ := known
+  obtain ⟨head, headOk, read⟩ := vote.honestData.target_read reachable anchorSlot
+    anchorAtBoundary nonzero reachable targetKnown
+  -- The vote names the same head.
+  obtain ⟨head', _, _, _, headOk', -, -, -, made⟩ := vote.honestData
+  rw [headOk, Except.ok.injEq] at headOk'
+  subst head'
+  rw [(getAttestationData_eq_ok_iff.mp made).2.2.2.1]
+  exact read
 
 /-- Processing through a time supplies processing through every earlier time. -/
 theorem Prompt.of_le {last later : ℕ} (prompt : Prompt e later) (le : last ≤ later) :
