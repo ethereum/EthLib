@@ -118,7 +118,7 @@ def test_preserves_the_exact_signed_and_public_key_bytes() -> None:
 
 @pytest.mark.parametrize("chain", [[], [CERTIFICATE, CERTIFICATE]])
 def test_chain_must_have_exactly_one_certificate(chain: list[bytes]) -> None:
-    with raises(tls.TlsCertificateError, ERROR + "chain") as info:
+    with raises(tls.TlsCertificateError, ERROR + f"chain {len(chain)}") as info:
         tls.authenticate(POLICY, NOW, chain)
     assert info.value.code == 4
 
@@ -131,7 +131,10 @@ def test_checks_the_dialled_peer() -> None:
 
 @pytest.mark.parametrize("now", [NOT_BEFORE - 1, NOT_AFTER + 1])
 def test_rejects_times_outside_the_validity_interval(now: int) -> None:
-    with raises(tls.TlsCertificateError, ERROR + "validity") as info:
+    # The error holds the time, then the bounds of the validity interval.
+    with raises(
+        tls.TlsCertificateError, ERROR + f"validity {now} {NOT_BEFORE} {NOT_AFTER}"
+    ) as info:
         tls.authenticate(POLICY, now, [CERTIFICATE])
     assert info.value.code == 3
 

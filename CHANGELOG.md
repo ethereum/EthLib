@@ -54,6 +54,15 @@ Not yet released.
   `NetworkError.proofRejected` stays bare: the batch check of the proofs gives only a verdict.
   `checkSender_of_skipNonce` states the nonce `2^64 - 1` in its error.
 
+- The TLS codec, TLS handshake, TLS crypto and libp2p TLS certificate errors carry the values their failed check compared.
+  Each error fires on the same inputs as before, and codes are unchanged; each message now shows these values.
+  - `Quic.Tls.Wire.Error.truncated` carries the bytes needed and available, `trailing` the count of bytes left, `duplicateExtension` the repeated extension type, and `messageType` the handshake type.
+  - `Quic.Tls.Handshake.Error.missingExtension` and `unsupportedExtension` carry the extension type.
+  - `Quic.Tls.Crypto.Error.group` carries the NamedGroup, and `signatureScheme` the SignatureScheme.
+  - `Libp2p.Tls.TlsCertError.validity` carries the time and the validity bounds, `chain` the certificate count, and `duplicateExtension` and `criticalExtension` the OID bytes.
+  - `Libp2p.Tls.authenticate_single`, `authenticate_empty`, `authenticateCertificate_validity`, `authenticate_validity` and `signedKey_critical`, and `Quic.Tls.encodeExtensions_duplicate`, state the fields of the error.
+  - The new `Quic.Tls.repeatedKind`, `Libp2p.Tls.firstRepeated` and `Libp2p.Tls.criticalOid` compute these fields, and `repeatedKind_spec`, `firstRepeated_some` and `criticalOid_spec` show that each names a real repeated type, repeated OID or critical OID when its check fails.
+
 - The QUIC integer, wire and packet protection errors carry the values their failed check compared.
   Each error fires on the same inputs as before, and codes are unchanged; each message now shows these values.
   - `Quic.Varint.VarintError.truncated` and `Quic.Wire.Error.truncated` carry the bytes needed and available.
