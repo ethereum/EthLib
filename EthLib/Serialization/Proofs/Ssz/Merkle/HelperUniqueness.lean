@@ -38,23 +38,20 @@ theorem rejectRelated_nodup {indices : List Nat}
 /-- Sorting the deduplicated helper frontier preserves uniqueness. -/
 theorem getHelperIndices_nodup {indices helpers : List Nat}
     (built : getHelperIndices indices = .ok helpers) : helpers.Nodup := by
-  -- Filtering and sorting preserve the uniqueness established by deduplication.
-  unfold getHelperIndices at built
-  cases accepted : rejectRelated indices <;> cases collected : collectPathIndices indices <;>
-    simp [accepted, collected, Bind.bind, Except.bind, pure, Except.pure] at built
-  subst helpers
-  exact (List.mergeSort_perm _ _).symm.nodup ((eraseDups_sublist_nodup _).2.filter _)
+  -- The Merkle helpers repeat no position, and nodes of the tree have distinct indices.
+  obtain ⟨accepted, rfl⟩ := getHelperIndices_ok built
+  have inside := rejectRelated_inTree accepted
+  exact List.pairwise_map.mpr ((Cryptography.Merkle.helpers_nodup _ _).imp_of_mem
+    fun ha hb distinct same => distinct (positionGindex_injective
+      (Cryptography.Merkle.helpers_inside inside ha)
+      (Cryptography.Merkle.helpers_inside inside hb) same))
 
 /-- Claimed nodes and required helpers never assign two values to the same index. -/
 theorem getHelperIndices_all_nodup {indices helpers : List Nat}
     (built : getHelperIndices indices = .ok helpers) : (indices ++ helpers).Nodup := by
   -- Claims lie on their own paths, whereas helpers are explicitly excluded from every claim path.
   obtain ⟨_, valid, frontier⟩ := getHelperIndices_frontier built
-  have claims : indices.Nodup := by
-    unfold getHelperIndices at built
-    cases accepted : rejectRelated indices with
-    | error fault => simp [accepted, Bind.bind, Except.bind] at built
-    | ok checked => cases checked; exact rejectRelated_nodup accepted
+  have claims : indices.Nodup := rejectRelated_nodup (getHelperIndices_ok built).1
   -- Uniqueness of the combined frontier also requires the claim and helper sets to be disjoint.
   refine List.nodup_append.mpr ⟨claims, getHelperIndices_nodup built, ?_⟩
   rintro claim claimed _ supplied rfl

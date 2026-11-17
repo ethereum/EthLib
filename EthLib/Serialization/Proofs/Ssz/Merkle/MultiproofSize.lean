@@ -19,14 +19,10 @@ theorem claimPaths_length (indices : List Nat) :
 theorem getHelperIndices_length_le_claimPaths {indices helpers : List Nat}
     (built : getHelperIndices indices = .ok helpers) :
     helpers.length ≤ (claimPaths indices).length := by
-  unfold getHelperIndices at built
-  cases accepted : rejectRelated indices <;> cases collected : collectPathIndices indices <;>
-    simp [accepted, collected, Bind.bind, Except.bind, Pure.pure, Except.pure] at built
-  subst helpers
-  obtain ⟨shape, _⟩ := collectPathIndices_info collected
-  rw [← shape, List.length_mergeSort]
-  refine Nat.le_trans (List.length_filter_le _ _) ?_
-  refine Nat.le_trans (eraseDups_sublist_nodup _).1.length_le ?_
+  -- The helpers repeat no index, and each is the sibling of a path node.
+  obtain ⟨_, _, frontier⟩ := getHelperIndices_frontier built
+  refine Nat.le_trans ((getHelperIndices_nodup built).length_le_of_subset
+    fun index member => ((frontier index).mp member).1) ?_
   simp
 
 private theorem sum_map_levelOf {indices : List Nat} {depth : Nat}
@@ -211,11 +207,7 @@ theorem getHelperIndices_length_add_le {indices helpers : List Nat} {depth : Nat
     (uniform : ∀ index ∈ indices, levelOf index = depth) :
     helpers.length + 2 * indices.length ≤ (sharedPaths indices).length + 2 := by
   obtain ⟨_, valid, _⟩ := getHelperIndices_frontier built
-  have accepted : rejectRelated indices = .ok () := by
-    unfold getHelperIndices at built
-    cases checked : rejectRelated indices with
-    | error fault => simp [checked, Bind.bind, Except.bind] at built
-    | ok checkedUnit => cases checkedUnit; rfl
+  have accepted : rejectRelated indices = .ok () := (getHelperIndices_ok built).1
   have claims : indices.Nodup := rejectRelated_nodup accepted
   have pigeon := (frontier_nodup built).length_le_of_subset
     (frontier_subset_children built uniform)

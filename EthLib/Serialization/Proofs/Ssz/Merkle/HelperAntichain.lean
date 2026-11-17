@@ -73,55 +73,78 @@ theorem shift_below_depth {claim step : Nat} (named : 1 ≤ claim)
   rw [← Nat.shiftRight_add, show Nat.log2 claim + (step - Nat.log2 claim) = step by omega] at upper
   omega
 
-private theorem sibling_strict_shift (index step : Nat) (positive : 0 < step) :
-    gindexSibling index >>> step = index >>> step := by
-  -- Siblings differ only in the lowest bit, which the first upward step discards.
-  have distance : step - 1 + 1 = step := by omega
-  rw [← distance, Nat.add_comm (step - 1) 1, Nat.shiftRight_add, Nat.shiftRight_add]
-  have half := gindexSibling_half index
-  simpa [Nat.shiftRight_eq_div_pow] using congrArg (fun n => n >>> (step - 1)) half
+/-- The positions of the claims of a request that passes the checks form an antichain. -/
+theorem rejectRelated_antichain {indices : List Nat} (accepted : rejectRelated indices = .ok ()) :
+    ∀ a ∈ indices.map (gindexPosition (gindexHeight indices)),
+      ∀ b ∈ indices.map (gindexPosition (gindexHeight indices)), a.IsAncestor b → a = b := by
+  have valid := rejectRelated_valid accepted
+  intro a ha b hb ab
+  obtain ⟨ga, claimedA, rfl⟩ := List.mem_map.mp ha
+  obtain ⟨gb, claimedB, rfl⟩ := List.mem_map.mp hb
+  obtain ⟨k, hk⟩ := ab
+  have twoA := valid ga claimedA
+  have twoB := valid gb claimedB
+  have deepA := log2_le_gindexHeight claimedA
+  have deepB := log2_le_gindexHeight claimedB
+  -- Climbing `k` levels from one claim lands on the other, which is `k` levels shallower.
+  have levels := congrArg Cryptography.Merkle.Position.level hk
+  simp only [gindexPosition, Cryptography.Merkle.Position.ancestor_level] at levels
+  have depthA : 1 ≤ Nat.log2 ga := (Nat.le_log2 (by omega)).mpr twoA
+  by_cases zero : k = 0
+  · subst zero
+    simpa using hk
+  have short : k < Nat.log2 gb := by omega
+  rw [gindexPosition_ancestor (by omega) deepB (by omega)] at hk
+  -- So the first claim is a strict ancestor of the second, which the checks refuse.
+  have shifted : 2 ≤ gb >>> k := path_shift_positive (by omega) short
+  have same := congrArg (positionGindex (gindexHeight indices)) hk
+  rw [positionGindex_gindexPosition (by omega) deepA,
+    positionGindex_gindexPosition (by omega)
+      (Nat.le_trans (levelOf_mono (by omega) (shiftRight_le gb k)) deepB)] at same
+  exact absurd (same ▸ claimedA)
+    (rejectRelated_strict_shift accepted claimedB (by omega) short)
 
 /-- No supplied claim or helper is a strict ancestor of another supplied node. -/
 theorem getHelperIndices_antichain {indices helpers : List Nat}
     (built : getHelperIndices indices = .ok helpers) :
     ∀ i ∈ indices ++ helpers, ∀ j ∈ indices ++ helpers, ∀ step,
       i >>> step = j → i = j := by
-  -- Every strict ancestor of a helper is also an ancestor of the claim that required that helper.
-  obtain ⟨_, valid, frontier⟩ := getHelperIndices_frontier built
-  have accepted : rejectRelated indices = .ok () := by
-    unfold getHelperIndices at built
-    cases checked : rejectRelated indices <;> simp [checked, Bind.bind, Except.bind] at built ⊢
-  intro i supplied j target step shifted
-  -- Zero upward steps preserve the supplied position itself.
-  -- Every positive step must be excluded.
-  by_cases zero : step = 0
-  · simpa [zero] using shifted
-  have positive : 0 < step := by omega
-  -- Both claims and helpers lie below the root, so the target ancestor still has a positive branch depth.
-  have jBelow : 2 ≤ j := by
-    rcases List.mem_append.mp target with claim | helper
-    · exact valid j claim
-    · exact (helperFrontier_sibling built (Or.inr helper)).1
-  -- Climbing from a helper discards its differing child bit and rejoins an original claim path.
-  have origin : ∃ claim ∈ indices, ∃ distance, 0 < distance ∧ claim >>> distance = j := by
-    rcases List.mem_append.mp supplied with claim | helper
-    · exact ⟨i, claim, step, positive, shifted⟩
-    · obtain ⟨mapped, _⟩ := (frontier i).mp helper
-      obtain ⟨node, path, same⟩ := List.mem_map.mp mapped
-      obtain ⟨claim, claimed, member⟩ := List.mem_flatMap.mp path
-      obtain ⟨base, _, baseEq⟩ := List.mem_map.mp member
-      refine ⟨claim, claimed, base + step, by omega, ?_⟩
-      rw [Nat.shiftRight_add, baseEq, ← sibling_strict_shift node step positive, same]
-      exact shifted
-  obtain ⟨claim, claimed, distance, strict, reaches⟩ := origin
-  have below := shift_below_depth (by have := valid claim claimed; omega)
-    (show 2 ≤ claim >>> distance by omega)
-  -- The target ancestor is therefore a reconstructible path node rather than a missing sibling.
-  have onPath : j ∈ claimPaths indices := List.mem_flatMap.mpr
-    ⟨claim, claimed, List.mem_map.mpr ⟨distance, List.mem_range.mpr below, reaches⟩⟩
-  -- A claimed target violates ancestor rejection, while a helper target violates path exclusion.
-  rcases List.mem_append.mp target with target | target
-  · exact False.elim (rejectRelated_strict_shift accepted claimed strict below (reaches ▸ target))
-  · exact False.elim (((frontier j).mp target).2 onPath)
+  obtain ⟨accepted, shape⟩ := getHelperIndices_ok built
+  have valid := rejectRelated_valid accepted
+  have inside := rejectRelated_inTree accepted
+  -- Each supplied index is the index of a claim position or a Merkle helper, in the tree.
+  have supplied : ∀ i ∈ indices ++ helpers,
+      ∃ a ∈ indices.map (gindexPosition (gindexHeight indices)) ++
+        Cryptography.Merkle.helpers (gindexHeight indices)
+          (indices.map (gindexPosition (gindexHeight indices))),
+      InTree (gindexHeight indices) a ∧ positionGindex (gindexHeight indices) a = i := by
+    intro i member
+    rcases List.mem_append.mp member with claimed | helper
+    · refine ⟨_, List.mem_append_left _ (List.mem_map_of_mem claimed),
+        inside _ (List.mem_map_of_mem claimed), ?_⟩
+      exact positionGindex_gindexPosition (by have := valid i claimed; omega)
+        (log2_le_gindexHeight claimed)
+    · rw [shape] at helper
+      obtain ⟨a, ha, rfl⟩ := List.mem_map.mp helper
+      exact ⟨a, List.mem_append_right _ ha, Cryptography.Merkle.helpers_inside inside ha, rfl⟩
+  intro i hi j hj step shifted
+  obtain ⟨a, ha, aInside, rfl⟩ := supplied i hi
+  obtain ⟨b, hb, bInside, rfl⟩ := supplied j hj
+  obtain ⟨aNamed, aDepth⟩ := positionGindex_bounds aInside
+  obtain ⟨bNamed, -⟩ := positionGindex_bounds bInside
+  by_cases reach : a.level + step ≤ gindexHeight indices
+  · -- The shift is the ancestor `step` levels up, which the antichain makes the node itself.
+    rw [← positionGindex_ancestor aInside reach] at shifted
+    have same := positionGindex_injective (inTree_ancestor aInside reach) bInside shifted
+    have := Cryptography.Merkle.helpers_antichain (rejectRelated_antichain accepted) b hb a ha
+      ⟨step, same.symm⟩
+    rw [this]
+  · -- Past the root, the shift is 0, which is no index.
+    have small : positionGindex (gindexHeight indices) a < 2 ^ step := by
+      have := Nat.lt_log2_self (n := positionGindex (gindexHeight indices) a)
+      have low : a.level ≤ gindexHeight indices := aInside.level_le
+      exact Nat.lt_of_lt_of_le this (Nat.pow_le_pow_right (by decide) (by omega))
+    rw [Nat.shiftRight_eq_div_pow, Nat.div_eq_of_lt small] at shifted
+    omega
 
 end EthLib.Serialization.Ssz

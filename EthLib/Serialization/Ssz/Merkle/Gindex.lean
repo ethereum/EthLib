@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Ssz.Error
+public import EthLib.Cryptography.Merkle.Multiproof
 
 /-! Generalized indices: naming one node of a tree, and the nodes a proof of it needs. -/
 
@@ -124,26 +125,36 @@ def rejectRelated (indices : List Nat) : Except Err Unit := do
   if indices.eraseDups.length != indices.length then throw .repeatedIndex
   rejectClaimPaths indices indices
 
-/-- The paths of several claims, flattened in the order the claims were supplied. -/
-def collectPathIndices : List Nat → Except Err (List Nat)
-  | [] => .ok []
-  | index :: rest => do
-    let path ← getPathIndices index
-    let paths ← collectPathIndices rest
-    return path ++ paths
+/-- Levels a node sits below the root, which its index carries in its leading bit. -/
+def levelOf (index : Nat) : Nat :=
+  Nat.log2 index
+
+/-- Levels the deepest of several indices sits below the root: the height of their tree. -/
+def gindexHeight (indices : List Nat) : Nat :=
+  (indices.map levelOf).foldl max 0
+
+/-- The position of the node at an index, in a tree of the given height. -/
+def gindexPosition (height index : Nat) : Cryptography.Merkle.Position :=
+  ⟨height - Nat.log2 index, index - 2 ^ Nat.log2 index⟩
+
+/-- The index of the node at a position, in a tree of the given height. -/
+def positionGindex (height : Nat) (p : Cryptography.Merkle.Position) : Nat :=
+  2 ^ (height - p.level) + p.index
+
+/-- The height of the tree of a request that passes the checks, and the positions of its claims. -/
+def claimPositions (indices : List Nat) :
+    Except Err (Nat × List Cryptography.Merkle.Position) := do
+  rejectRelated indices
+  let height := gindexHeight indices
+  return (height, indices.map (gindexPosition height))
 
 /--
 Nodes a proof must carry to authenticate all the given ones at once.
 
-Every sibling on every branch, less the paths the verifier can rebuild.
-
-Descending order fixes which proof value belongs to each helper index.
+They are the helper nodes of the Merkle multiproof, in decreasing order of their indices.
 -/
 def getHelperIndices (indices : List Nat) : Except Err (List Nat) := do
-  rejectRelated indices
-  -- Flattening the paths together is what makes a shared branch appear only once.
-  let paths ← collectPathIndices indices
-  let helpers := (paths.map gindexSibling).eraseDups.filter fun node => !paths.contains node
-  return helpers.mergeSort fun a b => b ≤ a
+  let (height, opened) ← claimPositions indices
+  return (Cryptography.Merkle.helpers height opened).map (positionGindex height)
 
 end EthLib.Serialization.Ssz
