@@ -155,6 +155,30 @@ theorem processSlots_split {middle slot : Slot} (low : state.slot < middle)
     omega)
   exact ⟨mid, ⟨(), low, midOk⟩, (), midSlot ▸ high, midSlot ▸ restOk⟩
 
+/-- Compose a relation from an actual intermediate slot through the remaining slots and block. -/
+theorem relation_of_processSlots_of_stateTransition
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (slots : ∀ {s t : BeaconState preset fork} {slot : Slot},
+      processSlots config checks s slot = .ok t → R s t)
+    (block : ∀ {s t : BeaconState preset fork} {b : BeaconBlock preset fork},
+      processBlock config checks engine s b = .ok t → R s t)
+    {middle : Slot}
+    {mid : BeaconState preset fork} {signed : SignedBeaconBlock preset fork}
+    {validateResult : Bool} (midOk : processSlots config checks state middle = .ok mid)
+    (atOrAfter : middle ≤ signed.message.slot)
+    (computed : stateTransition config checks engine state signed validateResult = .ok after) :
+    R mid after := by
+  obtain ⟨advanced, slotsOk, -, -, blockOk, -⟩ := stateTransition_ok computed
+  rcases UInt64.lt_or_eq_of_le atOrAfter with before | same
+  · obtain ⟨mid', midOk', restOk⟩ :=
+      processSlots_split (processSlots_slot midOk).1 before slotsOk
+    rw [midOk'.symm.trans midOk |> Except.ok.inj] at restOk
+    exact trans (slots restOk) (block blockOk)
+  · rw [← same] at slotsOk
+    rw [Except.ok.inj (slotsOk.symm.trans midOk)] at blockOk
+    exact block blockOk
+
 /-- Take the state before a block, with its slots processed to a slot at or before the block.
 
 That state runs on to the state after the block.
@@ -165,16 +189,10 @@ theorem runKept_of_processSlots_of_stateTransition {middle : Slot}
     {validateResult : Bool} (midOk : processSlots config checks state middle = .ok mid)
     (atOrAfter : middle ≤ signed.message.slot)
     (computed : stateTransition config checks engine state signed validateResult = .ok after) :
-    RunKept mid after := by
-  obtain ⟨advanced, slotsOk, -, -, blockOk, -⟩ := stateTransition_ok computed
-  rcases UInt64.lt_or_eq_of_le atOrAfter with before | same
-  · obtain ⟨mid', midOk', restOk⟩ :=
-      processSlots_split (processSlots_slot midOk).1 before slotsOk
-    rw [midOk'.symm.trans midOk |> Except.ok.inj] at restOk
-    exact (runKept_processSlots restOk).trans (runKept_processBlock blockOk)
-  · rw [← same] at slotsOk
-    rw [Except.ok.inj (slotsOk.symm.trans midOk)] at blockOk
-    exact runKept_processBlock blockOk
+    RunKept mid after :=
+  relation_of_processSlots_of_stateTransition RunKept (fun one two => one.trans two)
+    (fun ok => runKept_processSlots ok) (fun ok => runKept_processBlock ok)
+    midOk atOrAfter computed
 
 /-- A run keeps the committees of each epoch up to its start plus `MIN_SEED_LOOKAHEAD`.
 

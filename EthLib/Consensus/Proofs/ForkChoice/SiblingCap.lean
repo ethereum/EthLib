@@ -152,7 +152,7 @@ private theorem stake_le_of_active_of_reads {head : Root} {state : BeaconState p
 /-- A vote in the subtree of a child of a known parent is from a slot after the parent, before now.
 
 Those are the slots from the one after the parent to the one before the current slot. -/
-private theorem slot_mem_range_of_voteOrigin (lower : store.ParentsBelow)
+theorem slot_mem_range_of_voteOrigin (lower : store.ParentsBelow)
     {child parentRoot : Root} {childBlock parentBlock : BeaconBlock preset fork}
     {currentSlot firstSlot lastSlot : Slot} {v : ValidatorIndex}
     {attestation : Attestation preset fork}
@@ -264,7 +264,7 @@ private theorem mem_committees_of_voteOrigin {checks : SignatureChecks}
 /-- A supporter of a child of a root voted with an attestation that the store checked.
 
 Its vote is in the subtree of the child, which is a known block with that parent root. -/
-private theorem exists_voteOrigin_of_mem_supporters {checks : SignatureChecks}
+theorem exists_voteOrigin_of_mem_supporters {checks : SignatureChecks}
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     {lower : store.ParentsBelow} {state : BeaconState preset fork} {nodes : List ForkChoiceNode}
     {c : Option Root} {parentRoot : Root} {i : ℕ}
@@ -314,8 +314,23 @@ private theorem not_mem_supporters_of_latest {lower : store.ParentsBelow}
   rw [voteRoot] at above
   exact absurd isChild.height_lt (Nat.not_lt.mpr above.height_le)
 
+/-- A voter counted for a parent supports no child of that parent. -/
+theorem Store.not_mem_supporters_of_mem_parentVotersOf {lower : store.ParentsBelow}
+    {state : BeaconState preset fork} {nodes : List ForkChoiceNode} {c : Option Root}
+    {block parentBlock : BeaconBlock preset fork} {participants : Std.TreeSet ValidatorIndex}
+    {v : ValidatorIndex}
+    (isChild : (Store.blockTree lower).IsChild c (some block.parentRoot))
+    (member : v ∈ store.parentVotersOf state participants block parentBlock) :
+    v.toNat ∉ supporters (Store.voters state) (Store.view lower nodes) c := by
+  obtain ⟨-, -, honest, message, supported, latest, supportedOk, isParent⟩ :=
+    Store.mem_parentVotersOf.mp member
+  have voteRoot : message.root = block.parentRoot := by
+    rw [← Store.getSupportedNode_root supportedOk]
+    rcases isParent with rfl | rfl <;> rfl
+  exact not_mem_supporters_of_latest isChild honest latest voteRoot
+
 /-- Each model voter is a registry index that is active in the balance state. -/
-private theorem active_of_mem_voters {state : BeaconState preset fork} {i : ℕ}
+theorem active_of_mem_voters {state : BeaconState preset fork} {i : ℕ}
     (member : i ∈ Store.voters state) :
     i < state.validators.data.size ∧ ∃ validator,
       state.validators.data[i]? = some validator ∧
@@ -599,15 +614,10 @@ theorem Store.ForwardReachableWith.weight_add_weight_le_withBoost
       exact ⟨fun read readOk =>
         Store.mem_getCommitteesBetweenSlots_of_le participantsOk readOk shortLe inShort,
         validator, atIndex, isActive⟩)
-    (fun v member => by
-      obtain ⟨-, -, honest, message, supported, latest, supportedOk, isParent⟩ :=
-        Store.mem_parentVotersOf.mp member
-      have voteRoot : message.root = block.parentRoot := by
-        rw [← Store.getSupportedNode_root supportedOk]
-        rcases isParent with rfl | rfl <;> rfl
-      exact ⟨not_mem_supporters_of_latest
-          (Store.blockTree_isChild_iff.mpr ⟨block, found, rfl⟩) honest latest voteRoot,
-        not_mem_supporters_of_latest (mem_children.mp siblingChild).2 honest latest voteRoot⟩)
+    (fun v member =>
+      ⟨Store.not_mem_supporters_of_mem_parentVotersOf
+        (Store.blockTree_isChild_iff.mpr ⟨block, found, rfl⟩) member,
+      Store.not_mem_supporters_of_mem_parentVotersOf (mem_children.mp siblingChild).2 member⟩)
   omega
 
 end EthLib.Consensus

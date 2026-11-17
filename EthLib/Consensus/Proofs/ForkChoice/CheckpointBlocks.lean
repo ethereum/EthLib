@@ -698,6 +698,16 @@ private theorem Store.Reachable.tracked
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted
     exact ih.of_eq rfl rfl rfl rfl rfl rfl
 
+/-- Finality at or before the anchor epoch is the anchor checkpoint itself. -/
+theorem Store.Reachable.finalized_eq_anchor_of_epoch_le
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (atAnchor : store.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState) :
+    store.finalizedCheckpoint.epoch = getCurrentEpoch anchorState ∧
+      Serialization.Ssz.SszType.hashTreeRoot anchorBlock = .ok store.finalizedCheckpoint.root := by
+  rcases reachable.tracked.finalized with anchored | ⟨later, _⟩
+  · exact anchored
+  · exact False.elim (UInt64.not_lt.mpr atAnchor later)
+
 /-- In a reachable store, the unrealized justification of a block names an ancestor of it.
 
 Its epoch must be after the anchor epoch.
@@ -856,6 +866,24 @@ theorem Store.Reachable.finalized_origins {config : Config}
   rintro checkpoint (rfl | rfl)
   exacts [reachable.tracked.finalized.origin, reachable.tracked.unrealizedFinalized.origin]
 
+/-- Every held state's epoch is no later than the store's current epoch. -/
+theorem Store.ForwardReachable.blockState_epoch_le_current {config : Config}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork}
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (slots : 0 < config.SLOT_DURATION_MS)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) {epoch : Epoch}
+    (epochOk : store.getCurrentStoreEpoch config = .ok epoch) :
+    ∀ (r : Root) (s : BeaconState preset fork),
+      store.blockStates[r]? = some s → getCurrentEpoch s ≤ epoch := by
+  obtain ⟨current, currentOk, _, states⟩ := forward.slots_le_current slots anchorSlot
+  have epochEq : computeEpochAtSlot preset current = epoch := by
+    simpa [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
+      using epochOk
+  intro r s held
+  rw [← epochEq, UInt64.le_iff_toNat_le]
+  exact Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp (states r s held))
+
 /-- Both justified fields are no later than the current epoch of a forward-reachable store. -/
 theorem Store.ForwardReachable.justified_epoch_le_current {config : Config}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
@@ -867,15 +895,7 @@ theorem Store.ForwardReachable.justified_epoch_le_current {config : Config}
     store.justifiedCheckpoint.epoch ≤ epoch ∧
       store.unrealizedJustifiedCheckpoint.epoch ≤ epoch := by
   have reached := forward.reachable
-  obtain ⟨current, currentOk, _, states⟩ := forward.slots_le_current slots anchorSlot
-  have epochEq : computeEpochAtSlot preset current = epoch := by
-    simpa [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
-      using epochOk
-  have stateBound : ∀ (r : Root) (s : BeaconState preset fork),
-      store.blockStates[r]? = some s → getCurrentEpoch s ≤ epoch := by
-    intro r s held
-    rw [← epochEq, UInt64.le_iff_toNat_le]
-    exact Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp (states r s held))
+  have stateBound := forward.blockState_epoch_le_current slots anchorSlot epochOk
   have anchorBound : getCurrentEpoch anchorState ≤ epoch := by
     obtain ⟨root, _, held⟩ := reached.anchor_known
     obtain ⟨state, found, same, _⟩ := reached.blockStatesFromParents held

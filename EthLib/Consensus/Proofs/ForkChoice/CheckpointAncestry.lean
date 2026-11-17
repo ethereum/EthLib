@@ -656,7 +656,7 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
     (fun _ _ held => enough (held.elim id id))
     (fun _ _ held => heldEnough (held.elim id id))
 
-private theorem Store.Reachable.getCheckpointBlock_anchor {config : Config}
+theorem Store.Reachable.getCheckpointBlock_anchor {config : Config}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {store : Store preset fork}
     (reachable : Store.Reachable config anchorState anchorBlock store)
