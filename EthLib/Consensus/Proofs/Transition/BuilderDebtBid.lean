@@ -262,14 +262,10 @@ theorem builderFrame_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     BuilderFrame state after := by
-  unfold processConsolidationRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact BuilderFrame.refl _)
-    | exact builderFrame_switchToCompoundingValidator (liftAccessor_ok.mp computed)
-    | exact builderFrame_queueConsolidation computed
+  rcases consolidationRequest_cases computed with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  · exact BuilderFrame.refl _
+  · exact builderFrame_switchToCompoundingValidator switched
+  · exact builderFrame_queueConsolidation queued
 
 /-- The deposit, withdrawal and consolidation requests of validators run in turn.
 

@@ -227,14 +227,10 @@ private theorem down_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after)
     (index : Nat) : BalanceDown index state after := by
-  unfold processConsolidationRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact BalanceDown.refl _ _)
-    | exact down_switchToCompoundingValidator (liftAccessor_ok.mp computed) index
-    | exact down_queueConsolidation computed index
+  rcases consolidationRequest_cases computed with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  · exact BalanceDown.refl _ _
+  · exact down_switchToCompoundingValidator switched index
+  · exact down_queueConsolidation queued index
 
 /-- A deposit request keeps the balances. -/
 private theorem down_processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
@@ -518,14 +514,10 @@ private theorem fixed_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     BlockFixed state after := by
-  unfold processConsolidationRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact BlockFixed.refl _)
-    | exact fixed_switchToCompoundingValidator (liftAccessor_ok.mp computed)
-    | exact fixed_queueConsolidation computed
+  rcases consolidationRequest_cases computed with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  · exact BlockFixed.refl _
+  · exact fixed_switchToCompoundingValidator switched
+  · exact fixed_queueConsolidation queued
 
 /-- One step of an attester slashing keeps the fields. -/
 private theorem fixed_slashIfSlashable {step next : BeaconState preset fork × Bool}

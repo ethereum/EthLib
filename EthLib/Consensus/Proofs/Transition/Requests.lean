@@ -651,4 +651,22 @@ theorem withdrawalRequest_cases {fork : Fork} {s t : BeaconState preset fork}
     | exact .inr (.inl ⟨_, liftAccessor_ok.mp ok⟩)
     | exact .inr (.inr ⟨_, _, _, ok⟩)
 
+/-- Consolidation requests either do nothing, switch to compounding, or queue an accepted source. -/
+theorem consolidationRequest_cases {fork : Fork} {s t : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {request : ConsolidationRequest}
+    (ok : processConsolidationRequest config s electra request = .ok t) :
+    t = s ∨ (∃ index, switchToCompoundingValidator s electra index = .ok t) ∨
+      ∃ sourceIndex source targetIndex target,
+        ConsolidationAccepted config s electra request sourceIndex source targetIndex target ∧
+          queueConsolidation config s electra sourceIndex source targetIndex = .ok t := by
+  by_cases same : request.sourcePubkey = request.targetPubkey
+  · unfold processConsolidationRequest at ok
+    simp only [same, beq_self_eq_true, ↓reduceIte, bind, Except.bind, pure, Except.pure] at ok
+    repeat' split at ok
+    all_goals first
+      | (cases ok; exact .inl rfl)
+      | (cases ok)
+      | exact .inr (.inl ⟨_, liftAccessor_ok.mp ok⟩)
+  · exact (eq_or_queueConsolidation_of_processConsolidationRequest same ok).imp_right .inr
+
 end EthLib.Consensus

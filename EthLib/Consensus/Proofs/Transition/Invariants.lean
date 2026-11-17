@@ -1132,14 +1132,11 @@ theorem queueConsolidation {electra : .pectra ≤ fork} {sourceIndex : Validator
 theorem processConsolidationRequest {electra : .pectra ≤ fork} {request : ConsolidationRequest}
     (computed : Consensus.processConsolidationRequest config state electra request = .ok after) :
     R state after := by
-  unfold Consensus.processConsolidationRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact laws.refl _)
-    | exact laws.switchToCompoundingValidator keep (liftAccessor_ok.mp computed)
-    | exact laws.queueConsolidation keep (getElem?_toNat_of_ofNatChecked (by assumption)) computed
+  rcases consolidationRequest_cases computed with
+    rfl | ⟨_, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
+  · exact laws.refl _
+  · exact laws.switchToCompoundingValidator keep switched
+  · exact laws.queueConsolidation keep accepted.sourceAt queued
 
 theorem processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
