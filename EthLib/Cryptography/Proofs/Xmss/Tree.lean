@@ -66,7 +66,7 @@ theorem path_eq_ofFnInOrder [LawfulMonad m] (e : Nat) :
     | zero => intro level j; rfl
     | succ n ih =>
       intro level j
-      simp only [Merkle.siblings, ofFnInOrder, Merkle.Position.parent, ih]
+      simp only [Merkle.siblings, ofFnInOrder, Merkle.Position.parent_mk, ih]
       -- Entry `i + 1` is entry `i` one level up, with the index halved once more.
       have shift :
           (fun i : Fin n => node H pp prf layer (level + 1 + i.val) ((j / 2 / 2 ^ i.val) ^^^ 1))

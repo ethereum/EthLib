@@ -521,6 +521,7 @@ theorem topPathCollision_afterKeygen (key : TopIndex) (part : LayerSignature)
       (keygenTopTargetInput keyResult.1.2 keyResult.2) := by
   obtain ⟨output, hforged⟩ := hcached
   obtain ⟨hne, heq⟩ := Merkle.CollidesAt.pairs _ hevent
+  rw [EthLib.Cryptography.Merkle.Position.ancestor_mk_zero] at heq
   exact topMerkleCollision_afterKeygen keyResult hkeygen finalCache hle key level _ _ output
     hforged hne heq (Concrete.CacheReplay.pairAt_honestTopPath finalCache keyResult.1.2 key level)
 

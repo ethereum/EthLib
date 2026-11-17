@@ -479,7 +479,7 @@ theorem climb_nodeAt (P : XmssSecurity.PublicParameter) (layer : Layer) :
     have hlevel : level < XmssSecurity.treeHeight := by simp at hlength; omega
     have hhalf : j / 2 < XmssSecurity.Concrete.layerLeaves layer :=
       (Nat.div_le_self j 2).trans_lt hj
-    simp only [Merkle.climb, Merkle.Position.parent, XmssSecurity.Concrete.nodeAt, hlevel,
+    simp only [Merkle.climb, Merkle.Position.parent_mk, XmssSecurity.Concrete.nodeAt, hlevel,
       ↓reduceIte, Nat.mod_eq_of_lt hhalf]
     exact congrArg _ (funext fun parent =>
       climb_nodeAt P layer rest ⟨level + 1, j / 2⟩ parent (by simp at hlength ⊢; omega) hhalf)

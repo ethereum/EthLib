@@ -293,7 +293,7 @@ theorem climb_query_cached (parameter : PublicParameter) (layer : EthLib.Cryptog
         rw [eval_climb] at hcurrentEval
         rw [Merkle.pairAt, hcurrentEval]
         rw [EthLib.Cryptography.Merkle.Position.parent_ancestor,
-          Merkle.leaf_ancestor j (levels + 1)] at hnode
+          EthLib.Cryptography.Merkle.Position.ancestor_mk_zero j (levels + 1)] at hnode
         simp only [List.getElem_ofFn] at hnode
         rw [nodeAt_eq parameter layer ⟨levels, hlevel⟩, nodeAt_eq parameter layer ⟨levels, hlevel⟩]
           at hnode

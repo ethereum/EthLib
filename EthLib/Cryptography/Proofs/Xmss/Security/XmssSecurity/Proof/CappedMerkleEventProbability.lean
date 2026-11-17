@@ -248,6 +248,7 @@ theorem merkle_path_collision_afterKeygen_orientation
       (keygenMerkleTargetInput keyResult.1.2 keyResult.2) := by
   subst leafIndex
   obtain ⟨hne, heq⟩ := Merkle.CollidesAt.pairs _ hevent
+  rw [EthLib.Cryptography.Merkle.Position.ancestor_mk_zero] at heq
   have hgame := CappedLeaf.afterKeygen_execution_mem_detailedGame adversary
     keyResult hkeygen execution hafter
   obtain ⟨forgedOutput, hforgedCached⟩ :=

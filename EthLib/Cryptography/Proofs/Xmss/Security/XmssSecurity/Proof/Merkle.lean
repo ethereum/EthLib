@@ -34,19 +34,13 @@ def CollidesAt [DecidableEq α] (j : Nat) (leftPath rightPath : Fin treeHeight �
   ∃ c, findCollision hash ⟨0, j⟩ left right (List.ofFn leftPath) (List.ofFn rightPath) = some c ∧
     c.position.level = level
 
-/-- The ancestor of leaf `j` on a level is the node at that level and at `j / 2^level`. -/
-theorem leaf_ancestor (j level : Nat) :
-    (⟨0, j⟩ : Position).ancestor level = ⟨level, j / 2 ^ level⟩ := by
-  ext <;> simp
-
 /-- One more level of the climb hashes the pair below it, at the position of the parent. -/
 theorem climb_take_succ_run (j : Nat) (path : Fin treeHeight → α) (leaf : α)
     (level : Fin treeHeight) :
     (climb hash ⟨0, j⟩ leaf ((List.ofFn path).take (level.val + 1))).run =
-      (hash ⟨level.val + 1, j / 2 ^ (level.val + 1)⟩ (pairAt hash j path leaf level).1
+      (hash ((⟨0, j⟩ : Position).ancestor (level.val + 1)) (pairAt hash j path leaf level).1
         (pairAt hash j path leaf level).2).run := by
-  rw [climb_take_succ hash ⟨0, j⟩ leaf _ level.val (by simp), pairAt,
-    Position.parent_ancestor, leaf_ancestor j (level.val + 1)]
+  rw [climb_take_succ hash ⟨0, j⟩ leaf _ level.val (by simp), pairAt, Position.parent_ancestor]
   unfold ordered
   split <;> simp
 
@@ -56,29 +50,25 @@ variable (leaves : Nat → Id α)
 
 /-- The honest path of leaf `j` climbs to the leaf's ancestor on each level.
 
-Its sibling on level `l` is node `floor(j / 2^l) xor 1`. -/
+Its sibling on level `l` is the sibling of the leaf's ancestor `l` levels up. -/
 theorem climb_honest (j : Nat) :
     ∀ n, n ≤ treeHeight →
       (climb hash ⟨0, j⟩ (leaves j).run ((List.ofFn fun level : Fin treeHeight =>
-          (node hash leaves ⟨level, (j / 2 ^ level.val) ^^^ 1⟩).run).take n)).run =
-        (node hash leaves ⟨n, j / 2 ^ n⟩).run := fun n hn => by
+          (node hash leaves ((⟨0, j⟩ : Position).ancestor level).sibling).run).take n)).run =
+        (node hash leaves ((⟨0, j⟩ : Position).ancestor n)).run := fun n hn => by
   -- The honest siblings are the shared tree's siblings, which climb to the ancestor.
-  have hsiblings := ofFn_take_siblings hash leaves ⟨0, j⟩ treeHeight n hn
-  simp only [leaf_ancestor, Position.sibling] at hsiblings
-  rw [hsiblings]
-  simpa [node_zero, leaf_ancestor] using climb_siblings hash leaves n ⟨0, j⟩
+  rw [ofFn_take_siblings hash leaves ⟨0, j⟩ treeHeight n hn]
+  exact climb_siblings hash leaves n ⟨0, j⟩
 
 /-- The pair the honest path of leaf `j` hashes above `level` is the next ancestor's children. -/
 theorem pairAt_honest (j : Nat) (level : Fin treeHeight) :
-    pairAt hash j (fun level => (node hash leaves ⟨level, (j / 2 ^ level.val) ^^^ 1⟩).run)
+    pairAt hash j
+        (fun level => (node hash leaves ((⟨0, j⟩ : Position).ancestor level).sibling).run)
         (leaves j).run level =
-      ((node hash leaves ⟨level, 2 * (j / 2 ^ (level.val + 1))⟩).run,
-        (node hash leaves ⟨level, 2 * (j / 2 ^ (level.val + 1)) + 1⟩).run) := by
-  have hsibling := ordered_sibling (fun q => (node hash leaves q).run)
-    ⟨level.val, j / 2 ^ level.val⟩
-  simp only [Position.sibling, Position.parent, Position.left, Position.right,
-    Nat.add_sub_cancel, Nat.div_div_eq_div_mul, ← Nat.pow_succ] at hsibling
-  rw [pairAt, climb_honest hash leaves j level.val level.isLt.le, leaf_ancestor, hsibling]
+      ((node hash leaves ((⟨0, j⟩ : Position).ancestor (level.val + 1)).left).run,
+        (node hash leaves ((⟨0, j⟩ : Position).ancestor (level.val + 1)).right).run) := by
+  rw [pairAt, climb_honest hash leaves j level.val level.isLt.le,
+    ordered_sibling (fun q => (node hash leaves q).run), Position.parent_ancestor]
 
 end Honest
 
@@ -89,15 +79,15 @@ theorem CollidesAt.pairs [DecidableEq α] {j : Nat} {leftPath rightPath : Fin tr
     {left right : α} {level : Fin treeHeight}
     (hcollision : CollidesAt hash j leftPath rightPath left right (level.val + 1)) :
     pairAt hash j leftPath left level ≠ pairAt hash j rightPath right level ∧
-      (hash ⟨level.val + 1, j / 2 ^ (level.val + 1)⟩ (pairAt hash j leftPath left level).1
+      (hash ((⟨0, j⟩ : Position).ancestor (level.val + 1)) (pairAt hash j leftPath left level).1
           (pairAt hash j leftPath left level).2).run =
-        (hash ⟨level.val + 1, j / 2 ^ (level.val + 1)⟩ (pairAt hash j rightPath right level).1
+        (hash ((⟨0, j⟩ : Position).ancestor (level.val + 1)) (pairAt hash j rightPath right level).1
           (pairAt hash j rightPath right level).2).run := by
   obtain ⟨c, hfound, hlevel⟩ := hcollision
   obtain ⟨⟨hne, heq⟩, k, s, t, hs, ht, hposition, hx, hy⟩ :=
     findCollision_valid hash _ _ _ _ _ c hfound
   -- The search names the pairs after `k` levels, and `k` is the level below the parent.
-  rw [hposition, leaf_ancestor] at hlevel heq
+  rw [hposition] at hlevel heq
   obtain rfl : k = level.val := by simp at hlevel; omega
   have hs' : s = leftPath level := by simpa using hs.symm
   have ht' : t = rightPath level := by simpa using ht.symm
