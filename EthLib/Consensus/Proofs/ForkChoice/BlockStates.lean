@@ -204,6 +204,42 @@ theorem Store.Reachable.blockStatesFromParents
     obtain ⟨-, blocks, states⟩ := Store.onInclusionList_frame accepted
     exact .of_maps blocks states ih
 
+/-- A property holds at each held state when it holds at the anchor state and follows the blocks.
+
+It must pass from the state of a block's parent to the state of the block.
+
+Only the transitions the store ran count, with an allowed setting of the checks. -/
+theorem Store.Reachable.blockState_induction {allowed : SignatureChecks → Prop}
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (imported : store.BlockStatesFromParents config allowed anchorState anchorBlock)
+    (P : Root → BeaconState preset fork → Prop)
+    (anchor : ∀ ⦃root : Root⦄, store.blocks[root]? = some anchorBlock → P root anchorState)
+    (step : ∀ ⦃root : Root⦄ ⦃block : BeaconBlock preset fork⦄
+      ⦃parentState state : BeaconState preset fork⦄ ⦃checks : SignatureChecks⦄
+      ⦃engine : ExecutionEngine preset fork⦄ ⦃signed : SignedBeaconBlock preset fork⦄,
+      store.blocks[root]? = some block → store.blockStates[root]? = some state →
+      block ≠ anchorBlock → allowed checks → signed.message = block →
+      store.blockStates[block.parentRoot]? = some parentState →
+      stateTransition config checks engine parentState signed true = .ok state →
+      P block.parentRoot parentState → P root state)
+    {root : Root} {state : BeaconState preset fork}
+    (held : store.blockStates[root]? = some state) : P root state := by
+  induction hslot : state.slot.toNat using Nat.strong_induction_on generalizing root state with
+  | _ n ih =>
+  obtain ⟨block, found⟩ := reachable.known_of_blockState held
+  obtain ⟨kept, keptFound, isAnchor, notAnchor⟩ := imported found
+  rw [held, Option.some.injEq] at keptFound
+  subst keptFound
+  by_cases same : block = anchorBlock
+  · rw [isAnchor same]
+    exact anchor (same ▸ found)
+  · obtain ⟨parentState, checks, engine, signed, ok, message, parentHeld, transitioned⟩ :=
+      notAnchor same
+    -- The parent state is at an earlier slot, so the property already holds there.
+    have bounds := stateTransition_slot transitioned
+    exact step found held same ok message parentHeld transitioned
+      (ih _ (hslot ▸ bounds.2 ▸ UInt64.lt_iff_toNat_lt.mp bounds.1) parentHeld rfl)
+
 /-- In a reachable store, a known block is at or before the slot of its state.
 
 The anchor block must not be after the anchor state. -/
