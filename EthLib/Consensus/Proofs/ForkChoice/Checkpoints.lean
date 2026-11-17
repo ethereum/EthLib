@@ -614,9 +614,7 @@ theorem onTick_slot_induction (P : Store preset fork → Slot → Prop)
         subst target
         exact ⟨oldOk, holds⟩
   have finalSlot := Store.getCurrentSlot_onTick tick
-  unfold Store.onTick at tick
-  simp only [bind_ok_iff] at tick
-  obtain ⟨target, targetOk, caught, caughtOk, tick⟩ := tick
+  obtain ⟨target, caught, targetOk, caughtOk, tick⟩ := onTick_ok tick
   have low : old ≤ target := computeSlotAtTimeMs_mono forward
     (mapError_ok_iff.mp oldOk) (mapError_ok_iff.mp targetOk)
   have targetFinal := finalSlot.trans targetOk
