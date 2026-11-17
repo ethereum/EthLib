@@ -231,6 +231,20 @@ def HonestHeadsCover (root : Root) (first last : Nat) : Prop :=
     ((e.world i).state a).getHead config = .ok hd →
     ((e.world i).state a).isAncestor hd ⟨root, .pending⟩ = .ok true
 
+/-- The root is viable at one time in every up-to-date honest store at that time.
+
+It is in the store's filtered tree, or below the store's justified block.
+
+Only stores whose head read succeeds are covered. -/
+def RootViableAt (root : Root) (T : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k (nodes : List ForkChoiceNode) (hd : ForkChoiceNode), (e.world k).time = T →
+    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    ((e.world k).state w).getHead config = .ok hd →
+    ((e.world k).state w).getFilteredNodeTree config = .ok nodes →
+    ((e.world k).state w).isAncestor
+        ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
+      (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes
+
 /-- Each up-to-date honest head in the interval reads its justified state and its windows.
 
 A window starts at the given slot and ends before the store's current slot. -/

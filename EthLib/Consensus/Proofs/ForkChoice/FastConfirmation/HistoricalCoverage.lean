@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalAnchor
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootViability
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalTransport
 import EthLib.Consensus.Proofs.HonestAggregation
 
@@ -308,6 +309,123 @@ private theorem route_of_split {store : Store preset fork} {root : Root}
     exact Store.isAncestor_self (node := ⟨store.justifiedCheckpoint.root, .pending⟩)
       (Store.block_ok_iff.mp found)
   · exact .inr (leaf above same)
+
+/-- The confirmed root of a call is viable at each time from the call to the horizon.
+
+At a time T, honest heads must descend from the root before T, and from the start to the horizon.
+
+The other case is a held state whose justification conflicts with a store's finality.
+
+A receiver's justified checkpoint of the call's epoch or earlier is comparable with the root.
+
+If the root strictly descends from it, the root is in the filtered tree.
+
+A later justified checkpoint has an honest signer, which puts it above the root. -/
+public theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
+    {anchor : Store preset fork} {Δ time : ℕ} {anchorEpoch horizon : Epoch} {margin : ℕ}
+    {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
+    (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (preGloas : fork < .glamsterdam)
+    (admitted : BlocksAdmitted e 0 Δ time) (fits : DelayFits fork config genesisTimeMs Δ)
+    (prompt : Prompt e time) (votes : ValidatedDutyVotes (e := e) time)
+    (windows : AssignmentWindowAgreement (e := e) time)
+    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (start : ∀ w ∈ J, e.start w = anchor)
+    (anchorEpochOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time) (absent : AnchorParentAbsent (e := e) time)
+    (agree : HonestBlocksAgree (e := e) time)
+    (selected : SelectedCheckpointsAgree (e := e) horizon time)
+    (pinned : JustifiedPinned (e := e) anchorEpoch margin 0 time)
+    (signedAll : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
+    (quorumDrift : QuorumDriftWithin (e := e) horizon time)
+    (unslashed : HonestCountedStatesUnslashed (e := e) time)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon time)
+    (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
+    (parameters : DirectSafety.Parameters preset) (genesis : Genesis config checks g)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) time)
+    (enough : HeldRunStakeFloor (e := e) pre horizon time)
+    (included : TargetIncluded (e := e) time)
+    (family : ∀ w ∈ J, ∀ i k, i ≤ k → (e.world k).time ≤ time →
+      ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
+        ((e.world i).state w).finalizedCheckpoint.epoch =
+          .ok ((e.world i).state w).finalizedCheckpoint.root)
+    {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
+      ((e.world n).state u))
+    {slot : Slot} {begin : UInt64}
+    (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot)
+    (beginOk : computeTimeAtSlotMs config genesisTimeMs slot = .ok begin)
+    (timeEq : (e.world n).time = begin.toNat)
+    {fcr : FastConfirmationStore} {head : ForkChoiceNode} {startRoot root : Root}
+    {chain later : List Root} (headOk : ((e.world n).state u).getHead config = .ok head)
+    (rollover : CallRolloverRead (e := e) u n head.root time)
+    (inputs : CallCheckpointInputs (e := e) margin anchor.finalizedCheckpoint.root u n fcr head
+      startRoot root)
+    (walked : ((e.world n).state u).getAncestorRoots head.root startRoot =
+      .ok (chain ++ root :: later))
+    (realized : AcceptedRealizedRecent ((e.world n).state u) (chain ++ [root]))
+    (realizedHead : AcceptedRealizedHead ((e.world n).state u) config head.root (chain ++ [root]))
+    (startCovers : HonestHeadsCover (e := e) startRoot (e.world n).time (time + 1))
+    (holds : HonestHoldsFrom (e := e) root (e.world n).time time)
+    (T : ℕ) (low : (e.world n).time ≤ T) (high : T ≤ time)
+    (covers : HonestHeadsCover (e := e) root (e.world n).time T) :
+    RootViableAt (e := e) root T ∨ HeldStateFinalityEvidence (e := e) pre time := by
+  by_cases evidence : HeldStateFinalityEvidence (e := e) pre time
+  · exact .inr evidence
+  left
+  intro w receiver k nodes hd atTime upToDate hdOk tree
+  have callerEpochOk : ((e.world n).state u).getCurrentStoreEpoch config =
+      .ok (computeEpochAtSlot preset slot) := by
+    simp [Store.getCurrentStoreEpoch, slotOk, bind, Except.bind, pure, Except.pure]
+  by_cases early : ((e.world k).state w).justifiedCheckpoint.epoch ≤ computeEpochAtSlot preset slot
+  · -- An early checkpoint is comparable with the root, and a strict descent keeps the root.
+    have atSlot : ∃ slot begin, ((e.world n).state u).getCurrentSlot config = .ok slot ∧
+        computeTimeAtSlotMs config genesisTimeMs slot = .ok begin ∧
+        (e.world n).time = begin.toNat := ⟨slot, begin, slotOk, beginOk, timeEq⟩
+    have route := e.justified_comparable_of_checked anchored sound anchorSlot anchorBoundary
+      start preGloas slots fits windows parameters incrementPositive anchorEpochOk bounded roots
+      agree selected pinned signedAll caller callerUpToDate atSlot headOk callerEpochOk inputs low
+      high startCovers covers holds receiver atTime upToDate hdOk early
+    exact route_of_split route fun above different =>
+      (e.rootInFilteredTree_of_checked pre sync slots positive preGloas admitted fits prompt votes
+        windows ring anchored sound anchorSlot anchorBoundary start anchorEpochOk bounded roots
+        absent agree selected pinned signedAll quorumDrift unslashed terminal anchorGenesis
+        parameters genesis heldEarly enough included family caller callerUpToDate atSlot headOk
+        rollover inputs walked realized realizedHead low high startCovers covers receiver atTime
+        upToDate tree above different).resolve_right evidence
+  · -- A late checkpoint has an honest signer, which puts it above the root.
+    have late : computeEpochAtSlot preset slot <
+        ((e.world k).state w).justifiedCheckpoint.epoch := UInt64.lt_iff_toNat_lt.mpr
+      (Nat.lt_of_not_le fun h => early (UInt64.le_iff_toNat_le.mpr h))
+    have forward := e.forwardReachable
+      (fun a ha => (start a ha) ▸ Store.ForwardReachable.anchor anchored)
+    obtain ⟨current, currentOk, -, -⟩ := (forward k w receiver).slots_le_current slots
+      (UInt64.le_of_eq anchorSlot)
+    obtain ⟨anchorRoot, -, -, -, anchorJustified, -⟩ := getForkchoiceStore_anchor anchored
+    have anchorLt : anchorEpoch < ((e.world k).state w).justifiedCheckpoint.epoch := by
+      have callEpochs := (inputs.2.2.2.2.2 _ callerEpochOk).2
+      rw [← anchorEpochOk, anchorJustified]
+      exact UInt64.lt_trans callEpochs late
+    have signer := signedAll w receiver k current (Nat.zero_le _) (atTime ▸ high) upToDate
+      currentOk anchorLt
+    obtain ⟨block, callerHeld⟩ : ∃ b, ((e.world n).state u).blocks[root]? = some b := by
+      have read := inputs.2.1
+      unfold Store.isAncestor at read
+      obtain ⟨b, ok, -⟩ := bind_ok_iff.mp read
+      exact ⟨b, Store.block_ok_iff.mp ok⟩
+    obtain ⟨callerCurrent, callerCurrentOk, callerBlocks, -⟩ :=
+      (forward n u caller).slots_le_current slots (UInt64.le_of_eq anchorSlot)
+    rw [slotOk, Except.ok.injEq] at callerCurrentOk
+    subst callerCurrentOk
+    exact .inl (justified_descends_of_signer anchored start anchorSlot anchorBoundary positive
+      preGloas fits roots agree caller callerHeld (low.trans high) beginOk timeEq
+      (callerBlocks root block callerHeld) rfl covers high receiver atTime upToDate hdOk
+      currentOk late signer)
 
 /-- The induction of the historical-anchor headline, with the root's viability given per time.
 
