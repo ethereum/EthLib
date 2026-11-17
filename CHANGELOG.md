@@ -21,6 +21,17 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, ten general lemmas that [#2647](https://github.com/ethereum/EthLib/pull/2647) made public move into the namespaces of the objects they describe ([#2648](https://github.com/ethereum/EthLib/issues/2648)).
+  Statements are unchanged; use the new names.
+  - `active_of_mem_voters` becomes `Store.active_of_mem_voters`.
+  - `slot_mem_range_of_voteOrigin` becomes `Store.slot_mem_range_of_voteOrigin`.
+  - `exists_voteOrigin_of_mem_supporters` and `previousBlockSlot_le_previousCurrentSlot` become `Store.ForwardReachableWith.exists_voteOrigin_of_mem_supporters` and `Store.ForwardReachableWith.previousBlockSlot_le_previousCurrentSlot`.
+  - `data_eq_of_signed_of_target_epoch`, `latest_slot_floor_of_signed_rank`, `mem_supportersOf_of_latest_signed`, `latest_eq_of_rank_eq`, `notSlashed_checkpointState` and `previousSlot_le_of_time_le` get the prefix `Execution.`.
+
+- In Lean, `Store.isAncestor_of_same_blocks` no longer takes the hypothesis that the receiver holds the ancestor ([#2648](https://github.com/ethereum/EthLib/issues/2648)).
+  Remove the `targetKnown` argument, which came after `sourceKnown`.
+  The walk from the tip in the receiver reaches the ancestor, so the conclusion is unchanged.
+
 - In Lean, the theorems of the `Toolchain` proof modules move to sub-namespaces, and the theorems that repeat them are removed ([#2627](https://github.com/ethereum/EthLib/issues/2627)).
   `Base.Toolchain.mkObj_eq`, `isNull_eq`, the `isNull` theorem of each constructor, and `getArr?_eq`, `getStr?_eq`, `getNat?_eq`, `getBool?_eq` and `getObjVal?_eq` move to `Base.Toolchain.Json`.
   `Base.Toolchain.compare_eq` becomes `Base.Toolchain.String.compare_eq`, and `filterM_eq`, `filterAuxM_nil` and `filterAuxM_cons` move to `Base.Toolchain.List`.

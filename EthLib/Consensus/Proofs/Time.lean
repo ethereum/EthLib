@@ -8,6 +8,8 @@ public import EthLib.Consensus.Time
 
 The first slot of an epoch lies in that epoch, and every slot lies after its epoch's first slot.
 
+A later slot is in the same epoch or a later one.
+
 The slots of an epoch exist exactly when its first slot plus its length fits in 64 bits.
 
 The slot at the start time of a slot is that slot, in milliseconds and in seconds.
@@ -111,6 +113,12 @@ theorem computeStartSlotAtEpoch_le_lt {slot start : Slot}
   · exact Nat.div_mul_le_self _ _
   · have := Nat.lt_div_mul_add (a := slot.toNat) positive
     exact this
+
+/-- A later slot is in the same epoch or a later one. -/
+theorem epoch_le_of_slot_le (a b : Slot) (le : a.toNat ≤ b.toNat) :
+    (computeEpochAtSlot preset a).toNat ≤ (computeEpochAtSlot preset b).toNat := by
+  simp only [computeEpochAtSlot, UInt64.toNat_div]
+  exact Nat.div_le_div_right le
 
 /-- A time before the next slot maps to the slot whose start time it follows. -/
 theorem computeSlotAtTimeMs_inside {genesisTimeMs startTime timeMs due : UInt64} {slot : Slot}

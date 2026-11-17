@@ -350,6 +350,27 @@ private theorem notSlashed_lookahead {config : Config} {checks : SignatureChecks
   · rw [slashedFlagAt_processSlots (mapError_ok_iff.mp run) v.toNat]
   · cases run; rfl
 
+/-- A held block's checked predecessor is no later than the current slot's predecessor. -/
+public theorem Store.ForwardReachableWith.previousBlockSlot_le_previousCurrentSlot
+    {config : Config} {checks : SignatureChecks} {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    {root : Root} {block : BeaconBlock preset fork} {current first last : Slot}
+    (found : store.blocks[root]? = some block)
+    (slotRead : store.getCurrentSlot config = .ok current)
+    (blockLast : subChecked block.slot 1 = .ok first)
+    (currentLast : subChecked current 1 = .ok last) : first ≤ last := by
+  obtain ⟨state, stateFound, _, _⟩ := reached.reachable.blockStatesFromParents found
+  have blockLe := reached.reachable.slot_le_of_blockState anchorSlot found stateFound
+  have stateLe := reached.forwardReachable.slot_le_of_blockState_of_getCurrentSlot
+    stateFound slotRead
+  have := (subChecked_ok_iff.mp blockLast).2
+  have := (subChecked_ok_iff.mp currentLast).2
+  have := UInt64.le_iff_toNat_le.mp blockLe
+  have := UInt64.le_iff_toNat_le.mp stateLe
+  exact UInt64.le_iff_toNat_le.mpr (by omega)
+
 namespace Models.Network
 
 variable {config : Config} {checks : SignatureChecks} {sources : BlockSources preset fork}
@@ -450,8 +471,8 @@ private theorem mem_window_of_mem_supporters {last n : Nat} {u : ValidatorIndex}
     (supporter : i ∈ Models.ForkChoice.supporters (Store.voters state)
       (Store.view lower nodes) c) : i.toUInt64 ∈ members := by
   obtain ⟨childRoot, childBlock, attestation, -, childFound, childParent, origin, above⟩ :=
-    exists_voteOrigin_of_mem_supporters reached child supporter
-  obtain ⟨low, high⟩ := slot_mem_range_of_voteOrigin lower parentFound childFound childParent
+    reached.exists_voteOrigin_of_mem_supporters child supporter
+  obtain ⟨low, high⟩ := Store.slot_mem_range_of_voteOrigin lower parentFound childFound childParent
     slotRead firstOk lastOk origin above
   by_cases near : attestation.data.target.epoch.toNat ≤
       (computeEpochAtSlot preset parent.slot).toNat + 1
@@ -642,7 +663,7 @@ private theorem sibling_weight_lt_of_window_margin [DecidablePred (· ∈ J)]
         lower minLookahead maxLookahead ring headRead headFound parentFound descends slotRead
         epochRead horizon firstOk lastOk window isChild supporter
       obtain ⟨below, validator, atIndex, active⟩ :=
-        active_of_mem_voters (Finset.mem_of_mem_filter _ supporter)
+        Store.active_of_mem_voters (Finset.mem_of_mem_filter _ supporter)
       have back := toNat_toUInt64_of_lt within below
       exact Store.mem_activeMembers.mpr ⟨member, validator, by simpa only [back] using atIndex,
         active⟩)
@@ -660,26 +681,6 @@ private theorem sibling_weight_lt_of_window_margin [DecidablePred (· ∈ J)]
       Store.not_mem_supporters_of_mem_parentVotersOf (mem_children.mp siblingChild).2
         (Finset.mem_filter.mp member).1⟩)
   omega
-
-/-- A held block's checked predecessor is no later than the current slot's predecessor. -/
-public theorem previousBlockSlot_le_previousCurrentSlot
-    {store : Store preset fork}
-    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
-    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    {root : Root} {block : BeaconBlock preset fork} {current first last : Slot}
-    (found : store.blocks[root]? = some block)
-    (slotRead : store.getCurrentSlot config = .ok current)
-    (blockLast : subChecked block.slot 1 = .ok first)
-    (currentLast : subChecked current 1 = .ok last) : first ≤ last := by
-  obtain ⟨state, stateFound, _, _⟩ := reached.reachable.blockStatesFromParents found
-  have blockLe := reached.reachable.slot_le_of_blockState anchorSlot found stateFound
-  have stateLe := reached.forwardReachable.slot_le_of_blockState_of_getCurrentSlot
-    stateFound slotRead
-  have := (subChecked_ok_iff.mp blockLast).2
-  have := (subChecked_ok_iff.mp currentLast).2
-  have := UInt64.le_iff_toNat_le.mp blockLe
-  have := UInt64.le_iff_toNat_le.mp stateLe
-  exact UInt64.le_iff_toNat_le.mpr (by omega)
 
 /-- A receiver's ancestor parent agrees with the caller's parent or supplies a block collision. -/
 private theorem parent_read_or_collision {caller receiver : Store preset fork}
@@ -882,7 +883,7 @@ public theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     dsimp only [store] at transported supportTransport parentTransport ⊢
     omega
   have lower := reached.reachable.parentsBelow anchorSlot (absent u honest n time)
-  have shortBefore := previousBlockSlot_le_previousCurrentSlot reached anchorSlot
+  have shortBefore := reached.previousBlockSlot_le_previousCurrentSlot anchorSlot
     found slotRead shortLastOk lastOk
   have pending := Store.getHead_pending before headRead
   have pendingHead : (⟨head.root, .pending⟩ : ForkChoiceNode) = head := by
@@ -1100,7 +1101,7 @@ private theorem registry_of_justified_window {anchor : Store preset fork}
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
 /-- Honest stores at ordered times have ordered predecessor slots. -/
-public theorem previousSlot_le_of_time_le {anchor : Store preset fork}
+public theorem Execution.previousSlot_le_of_time_le {anchor : Store preset fork}
     (anchored : ∀ w ∈ J, e.start w = anchor)
     {u w : ValidatorIndex} (callerHonest : u ∈ J) (receiverHonest : w ∈ J) {n k : Nat}
     (later : (e.world n).time ≤ (e.world k).time)
@@ -1317,7 +1318,7 @@ private theorem registry_of_head_window {anchor : Store preset fork}
     parentFound unknown parentNext cached epochRead window
 
 /-- Held-state flags suffice for a cached checkpoint through its fixed-check lookahead origin. -/
-public theorem notSlashed_checkpointState {anchor : Store preset fork}
+public theorem Execution.notSlashed_checkpointState {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
     {u : ValidatorIndex} (honest : u ∈ J) {n : ℕ}
@@ -1334,7 +1335,7 @@ public theorem notSlashed_checkpointState {anchor : Store preset fork}
   exact (notSlashed_lookahead advanced v).mpr (flags checkpoint.root base stored v member)
 
 /-- Equal-rank honest latest votes agree before Gloas, even across different stores. -/
-public theorem latest_eq_of_rank_eq (slots : 0 < config.SLOT_DURATION_MS)
+public theorem Execution.latest_eq_of_rank_eq (slots : 0 < config.SLOT_DURATION_MS)
     (preGloas : fork < .glamsterdam) {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
@@ -1350,7 +1351,7 @@ public theorem latest_eq_of_rank_eq (slots : 0 < config.SLOT_DURATION_MS)
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
   have epoch : a.data.target.epoch = b.data.target.epoch := by
     simpa [LatestMessage.rank, LatestMessage.ofAttestation, notGloas] using rank
-  have same := data_eq_of_signed_of_target_epoch slots
+  have same := Execution.data_eq_of_signed_of_target_epoch slots
     (e.view_subset_sent n u seenFirst) (e.view_subset_sent k w seenSecond)
     signedFirst signedSecond honest epoch
   simp only [LatestMessage.ofAttestation, same]

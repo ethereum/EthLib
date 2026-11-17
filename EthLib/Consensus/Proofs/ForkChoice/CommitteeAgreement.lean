@@ -58,18 +58,6 @@ private theorem Store.getAncestor_ok_of_status {node reached : ForkChoiceNode} {
     simp only [Functor.map, Except.map, Except.ok.injEq] at same
     exact ⟨other', rfl, same.symm⟩
 
-/-- A state at or after the start of the epoch of a slot is in that epoch or later. -/
-private theorem epochAtSlot_le_of_start_le {slot start : Slot} {state : BeaconState preset fork}
-    (startOk : computeStartSlotAtEpoch preset (computeEpochAtSlot preset slot) = .ok start)
-    (le : start ≤ state.slot) :
-    (computeEpochAtSlot preset slot).toNat ≤ (getCurrentEpoch state).toNat := by
-  obtain ⟨-, value⟩ := computeStartSlotAtEpoch_ok_iff.mp startOk
-  rw [getCurrentEpoch_toNat]
-  rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | positive
-  · rw [computeEpochAtSlot, UInt64.toNat_div, zero, Nat.div_zero]
-    exact Nat.zero_le _
-  · exact (Nat.le_div_iff_mul_le positive).mpr (value ▸ UInt64.le_iff_toNat_le.mp le)
-
 /-- A state at the start of the epoch of a slot is in that epoch. -/
 private theorem getCurrentEpoch_eq_of_start {slot start : Slot} {state : BeaconState preset fork}
     (startOk : computeStartSlotAtEpoch preset (computeEpochAtSlot preset slot) = .ok start)
@@ -153,7 +141,15 @@ theorem Store.ForwardReachableWith.committeesKept_of_voteOrigin {checks : Signat
     rcases fromBlock with ⟨baseLe, rfl⟩ | ⟨-, _, -, slotsOk⟩
     · exact baseLe
     · exact (processSlots_slot slotsOk).2 ▸ UInt64.le_refl _
-  have targetEpochLe := epochAtSlot_le_of_start_le startEpoch targetLe
+  -- The epoch of the vote is that of its first slot, which is no later than the target state.
+  have targetEpochLe : (computeEpochAtSlot preset attestation.data.slot).toNat ≤
+      (getCurrentEpoch targetState).toNat := by
+    rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | positive
+    · rw [computeEpochAtSlot, UInt64.toNat_div, zero, Nat.div_zero]
+      exact Nat.zero_le _
+    · rw [← computeEpochAtSlot_computeStartSlotAtEpoch (UInt64.lt_iff_toNat_lt.mpr positive)
+        startEpoch, getCurrentEpoch_toNat]
+      exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp targetLe)
   by_cases low : block.slot ≤ start
   · -- The block is the ancestor of the target block at its slot: both states run from its state.
     rw [Store.getAncestor_trans low walk] at voteWalk
@@ -163,8 +159,8 @@ theorem Store.ForwardReachableWith.committeesKept_of_voteOrigin {checks : Signat
     have commonLe := reachable.slot_le_of_blockState anchorSlot found commonFound
     have blockEpochLe : (computeEpochAtSlot preset block.slot).toNat ≤
         (getCurrentEpoch common).toNat := by
-      rw [getCurrentEpoch_toNat, computeEpochAtSlot, UInt64.toNat_div]
-      exact Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp commonLe)
+      rw [getCurrentEpoch_toNat]
+      exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp commonLe)
     have final : (computeEpochAtSlot preset attestation.data.slot).toNat ≤
         (getCurrentEpoch common).toNat + preset.MIN_SEED_LOOKAHEAD.toNat := by omega
     have fixed := le_activityFixedEpoch (state := common)

@@ -617,7 +617,11 @@ theorem Store.getAncestor_of_same_blocks {store receiver : Store preset fork}
   obtain ⟨other, otherFound⟩ := reachable.known_of_blockState parentStateFound
   exact (same _ _ _ parentFound otherFound).symm ▸ otherFound
 
-/-- Ancestor tests agree across reachable stores holding the tip and ancestor above the anchor. -/
+/-- An ancestor test that succeeds in one store succeeds in a reachable store with the same blocks.
+
+The ancestor lies above the anchor, and the receiver holds the tip.
+
+The receiver need not hold the ancestor in advance: the walk from the tip reaches it. -/
 theorem Store.isAncestor_of_same_blocks {store receiver : Store preset fork}
     (reachable : Store.Reachable config anchorState anchorBlock receiver)
     (before : fork < .glamsterdam)
@@ -625,15 +629,13 @@ theorem Store.isAncestor_of_same_blocks {store receiver : Store preset fork}
       receiver.blocks[r]? = some c → b = c)
     {node ancestor : ForkChoiceNode} {block : BeaconBlock preset fork}
     (sourceKnown : store.blocks[ancestor.root]? = some block)
-    (targetKnown : receiver.blocks[ancestor.root]? = some block)
     (aboveAnchor : anchorBlock.slot ≤ block.slot)
     (known : ∃ tip, receiver.blocks[node.root]? = some tip)
     (descends : store.isAncestor node ancestor = .ok true) :
     receiver.isAncestor node ancestor = .ok true := by
   have walk := Store.getAncestor_of_isAncestor_of_lt before sourceKnown descends
-  have transferred := Store.getAncestor_of_same_blocks reachable same aboveAnchor known walk
-  simp [Store.isAncestor, Store.block_ok_iff.mpr targetKnown,
-    transferred, bind, Except.bind, pure, Except.pure]
+  exact Store.isAncestor_of_getAncestor
+    (Store.getAncestor_of_same_blocks reachable same aboveAnchor known walk)
 
 /-- Checkpoint reads agree across reachable stores holding the tip above the anchor boundary. -/
 theorem Store.getCheckpointBlock_of_same_blocks {store receiver : Store preset fork}

@@ -32,14 +32,6 @@ private theorem window_reserve_core {β a n q j r Wa X : ℕ} (half : 2 * β ≤
     nlinarith
   · nlinarith
 
-private theorem stake_disjoint_union {ν : Type*} [DecidableEq ν] {w : ν → ℕ} {S T : Finset ν}
-    (apart : Disjoint S T) : stake w (S ∪ T) = stake w S + stake w T :=
-  Finset.sum_union apart
-
-private theorem stake_filter_split {ν : Type*} {w : ν → ℕ} (S : Finset ν) (p : ν → Prop)
-    [DecidablePred p] : stake w {v ∈ S | p v} + stake w {v ∈ S | ¬ p v} = stake w S :=
-  Finset.sum_filter_add_sum_filter_not S p w
-
 private theorem source_surplus_of_sets {ν : Type*} [DecidableEq ν] {J : Set ν}
     [DecidablePred (· ∈ J)] {w : ν → ℕ}
     {Wadv Wc Xm Sup I Hd P Q : Finset ν} {β maximum boost shift A D sM X : ℕ}
@@ -92,20 +84,23 @@ private theorem source_surplus_of_sets {ν : Type*} [DecidableEq ν] {J : Set ν
       · exact q
     have pBound := stake_mono (w := w) inP
     have qBound := stake_mono (w := w) inQ
-    rw [stake_disjoint_union hsRest, stake_disjoint_union newRest] at pBound
     have unionY := stake_mono (w := w) (Finset.subset_union_left (s₁ := Y ∩ Wc) (s₂ := Hd ∩ P))
     have unionD := stake_mono (w := w) (Finset.subset_union_right (s₁ := Y ∩ Wc) (s₂ := Hd ∩ P))
     have parentSplit : stake w (Hd ∩ P) + stake w (Hd \ P) = stake w Hd :=
       Finset.sum_inter_add_sum_sdiff Hd P w
+    -- The three disjoint parts of the reached set weigh as much as their sum.
+    unfold stake at pBound qBound unionY unionD parentSplit ⊢
+    rw [Finset.sum_union hsRest, Finset.sum_union newRest] at pBound
     omega
   -- The caller's Byzantine supporters and equivocators fit in the adversary range.
   have byzantine := ForkChoice.byzantine_support_add_le (w := w) (J := J) supIn equivocatorsIn
     apart equivocatorsDishonest
-  have supSplit := stake_filter_split (w := w) Sup (· ∈ J)
+  have supSplit : stake w {v ∈ Sup | v ∈ J} + stake w {v ∈ Sup | v ∉ J} = stake w Sup :=
+    Finset.sum_filter_add_sum_filter_not Sup (· ∈ J) w
   -- The receiver window splits into the caller window and its new members.
   have windowSplit : stake w (Wc ∪ Xm) = stake w Wc + stake w (Xm \ Wc) := by
     rw [← Finset.union_sdiff_self_eq_union]
-    exact stake_disjoint_union Finset.disjoint_sdiff
+    exact Finset.sum_union Finset.disjoint_sdiff
   -- The reserve window splits into the adversary range, the new members and the repeats.
   have vEq : Wadv ∪ Xm = Wadv ∪ ((Xm \ Wc) ∪ ((Xm \ Wadv) ∩ Wc)) := by
     ext v
@@ -131,13 +126,15 @@ private theorem source_surplus_of_sets {ν : Type*} [DecidableEq ν] {J : Set ν
     Finset.disjoint_left.mpr fun v x y => (Finset.mem_sdiff.mp x).2 (Finset.mem_inter.mp y).2
   have vStake : stake w (Wadv ∪ Xm) =
       stake w Wadv + stake w (Xm \ Wc) + stake w ((Xm \ Wadv) ∩ Wc) := by
-    rw [vEq, stake_disjoint_union vApart, stake_disjoint_union xApart, Nat.add_assoc]
+    unfold stake
+    rw [vEq, Finset.sum_union vApart, Finset.sum_union xApart, Nat.add_assoc]
   have vFilter : {v ∈ Wadv ∪ Xm | v ∉ J} =
       {v ∈ Wadv | v ∉ J} ∪ ({v ∈ Xm \ Wc | v ∉ J} ∪ {v ∈ (Xm \ Wadv) ∩ Wc | v ∉ J}) := by
     rw [vEq, Finset.filter_union, Finset.filter_union]
   have vDishonest : stake w {v ∈ Wadv ∪ Xm | v ∉ J} = stake w {v ∈ Wadv | v ∉ J} +
       stake w {v ∈ Xm \ Wc | v ∉ J} + stake w {v ∈ (Xm \ Wadv) ∩ Wc | v ∉ J} := by
-    rw [vFilter, stake_disjoint_union, stake_disjoint_union, Nat.add_assoc]
+    unfold stake
+    rw [vFilter, Finset.sum_union, Finset.sum_union, Nat.add_assoc]
     · exact Finset.disjoint_filter_filter xApart
     · rw [← Finset.filter_union]; exact Finset.disjoint_filter_filter vApart
   -- The honest new and repeated members are exactly the parts of `Y`.
@@ -153,8 +150,11 @@ private theorem source_surplus_of_sets {ν : Type*} [DecidableEq ν] {J : Set ν
     ext v
     simp only [Y, Finset.mem_filter, Finset.mem_inter]
     tauto
-  have newSplit := stake_filter_split (w := w) (Xm \ Wc) (· ∈ J)
-  have repeatSplit := stake_filter_split (w := w) ((Xm \ Wadv) ∩ Wc) (· ∈ J)
+  have newSplit : stake w {v ∈ Xm \ Wc | v ∈ J} + stake w {v ∈ Xm \ Wc | v ∉ J} =
+      stake w (Xm \ Wc) := Finset.sum_filter_add_sum_filter_not (Xm \ Wc) (· ∈ J) w
+  have repeatSplit : stake w {v ∈ (Xm \ Wadv) ∩ Wc | v ∈ J} +
+      stake w {v ∈ (Xm \ Wadv) ∩ Wc | v ∉ J} = stake w ((Xm \ Wadv) ∩ Wc) :=
+    Finset.sum_filter_add_sum_filter_not ((Xm \ Wadv) ∩ Wc) (· ∈ J) w
   rw [newHonest] at newSplit
   rw [repeatHonest] at repeatSplit
   have aLe : stake w {v ∈ Wadv | v ∉ J} ≤ stake w Wadv := stake_mono (Finset.filter_subset _ _)
@@ -190,7 +190,8 @@ private theorem honest_vote_of_margin {ν : Type*} [DecidableEq ν] {J : Set ν}
   have empty : Hd = ∅ := Finset.not_nonempty_iff_eq_empty.mp noVoter
   have noHonest : {v ∈ Sup | v ∈ J} = ∅ :=
     Finset.filter_eq_empty_iff.mpr fun v member honest => noSupporter ⟨v, member, honest⟩
-  have supSplit := stake_filter_split (w := w) Sup (· ∈ J)
+  have supSplit : stake w {v ∈ Sup | v ∈ J} + stake w {v ∈ Sup | v ∉ J} = stake w Sup :=
+    Finset.sum_filter_add_sum_filter_not Sup (· ∈ J) w
   rw [noHonest] at supSplit
   have zeroHonest : stake w (∅ : Finset ν) = 0 := Finset.sum_empty
   have zeroVoters : stake w Hd = 0 := by rw [empty]; exact Finset.sum_empty
@@ -210,74 +211,6 @@ open Base Uint64 Models
 variable {preset : Preset} {fork : Fork} {config : Config}
   {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
   {store : Store preset fork}
-
-/-- A later slot is in the same epoch or a later one. -/
-private theorem epoch_le_of_slot_le (a b : Slot) (le : a.toNat ≤ b.toNat) :
-    (computeEpochAtSlot preset a).toNat ≤ (computeEpochAtSlot preset b).toNat := by
-  simp only [computeEpochAtSlot, UInt64.toNat_div]
-  exact Nat.div_le_div_right le
-
-/-- A fold reads the same result when its two steps agree on every element of the list. -/
-private theorem foldlM_congr_mem {α β ε : Type} {f g : β → α → Except ε β} :
-    ∀ (items : List α) (init : β), (∀ x ∈ items, ∀ acc, f acc x = g acc x) →
-      items.foldlM f init = items.foldlM g init
-  | [], _, _ => rfl
-  | x :: rest, init, agree => by
-    simp only [List.foldlM_cons, agree x List.mem_cons_self init]
-    cases g init x with
-    | error _ => rfl
-    | ok next =>
-      exact foldlM_congr_mem rest next fun y member acc =>
-        agree y (List.mem_cons_of_mem _ member) acc
-
-/-- Two head states with the same committees of a slot's epoch read the same members for it. -/
-private theorem getSlotCommittee_congr {store other : Store preset fork} {head otherHead : Root}
-    {headState otherState : BeaconState preset fork} {slot : Slot}
-    (stateOk : store.blockState head = .ok headState)
-    (otherOk : other.blockState otherHead = .ok otherState)
-    (kept : CommitteesKept (computeEpochAtSlot preset slot) headState otherState)
-    (count : getCommitteeCountPerSlot otherState (computeEpochAtSlot preset slot) =
-      getCommitteeCountPerSlot headState (computeEpochAtSlot preset slot)) :
-    other.getSlotCommittee otherHead slot = store.getSlotCommittee head slot := by
-  simp only [Store.getSlotCommittee, stateOk, otherOk, bind, Except.bind, count]
-  exact foldlM_congr_mem _ _ fun index _ acc => by rw [kept slot index.toUInt64 rfl]
-
-/-- Two head states with the same committees on the epochs of a range read the same members.
-
-The range runs from its first to its last slot, both included. -/
-private theorem Store.getCommitteesBetweenSlots_congr {store other : Store preset fork}
-    {head otherHead : Root} {headState otherState : BeaconState preset fork}
-    {first last : Slot}
-    (stateOk : store.blockState head = .ok headState)
-    (otherOk : other.blockState otherHead = .ok otherState)
-    (agree : ∀ slot, first ≤ slot → slot ≤ last →
-      CommitteesKept (computeEpochAtSlot preset slot) headState otherState ∧
-      getCommitteeCountPerSlot otherState (computeEpochAtSlot preset slot) =
-        getCommitteeCountPerSlot headState (computeEpochAtSlot preset slot)) :
-    other.getCommitteesBetweenSlots otherHead first last =
-      store.getCommitteesBetweenSlots head first last := by
-  unfold Store.getCommitteesBetweenSlots
-  cases afterOk : (addChecked last 1).mapError ForkChoiceError.arith with
-  | error _ => rfl
-  | ok afterLast =>
-    simp only [bind, Except.bind]
-    have afterNat := addChecked_ok_iff.mp (mapError_ok_iff.mp afterOk)
-    refine foldlM_congr_mem _ _ fun offset member acc => ?_
-    have inRange := List.mem_range.mp member
-    simp only [UInt64.toNat_one] at afterNat
-    -- The slot of the offset lies in the range and does not wrap around.
-    have noWrap : first.toNat + offset < 2 ^ 64 := by
-      have := afterLast.toNat_lt
-      omega
-    have slotNat : (first + offset.toUInt64).toNat = first.toNat + offset := by
-      have small : offset.toUInt64.toNat = offset := by
-        simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat']
-        exact Nat.mod_eq_of_lt (by omega)
-      rw [UInt64.toNat_add, small, Nat.mod_eq_of_lt noWrap]
-    have low : first ≤ first + offset.toUInt64 := UInt64.le_iff_toNat_le.mpr (by omega)
-    have high : first + offset.toUInt64 ≤ last := UInt64.le_iff_toNat_le.mpr (by omega)
-    obtain ⟨kept, count⟩ := agree _ low high
-    rw [getSlotCommittee_congr stateOk otherOk kept count]
 
 /-- Two heads that descend from one parent state agree on the committees near that parent.
 
@@ -649,65 +582,6 @@ private theorem caller_margin_sets {checks : SignatureChecks}
   · intro v member
     exact (Finset.mem_filter.mp member).2
 
-private theorem window_offset {first last after : Slot}
-    (afterOk : addChecked last 1 = .ok after) {offset : Nat}
-    (inside : offset ∈ List.range (after.toNat - first.toNat)) :
-    first ≤ first + offset.toUInt64 ∧ first + offset.toUInt64 ≤ last := by
-  have value := (addChecked_ok_iff.mp afterOk).2
-  simp only [UInt64.toNat_one] at value
-  have offsetLt := List.mem_range.mp inside
-  have bound := last.toNat_lt
-  have fits : offset < 2 ^ 64 := by omega
-  have sumFits : first.toNat + offset < 2 ^ 64 := by omega
-  rw [UInt64.le_iff_toNat_le, UInt64.le_iff_toNat_le,
-    UInt64.toNat_add, Nat.toUInt64, UInt64.toNat_ofNat',
-    Nat.mod_eq_of_lt fits, Nat.mod_eq_of_lt sumFits]
-  omega
-
-private theorem window_slot_offset {first last after slot : Slot}
-    (afterOk : addChecked last 1 = .ok after) (low : first ≤ slot) (high : slot ≤ last) :
-    ∃ offset ∈ List.range (after.toNat - first.toNat), first + offset.toUInt64 = slot := by
-  have value := (addChecked_ok_iff.mp afterOk).2
-  simp only [UInt64.toNat_one] at value
-  have lowNat := UInt64.le_iff_toNat_le.mp low
-  have highNat := UInt64.le_iff_toNat_le.mp high
-  refine ⟨slot.toNat - first.toNat, List.mem_range.mpr (by omega), ?_⟩
-  rw [← UInt64.toNat_sub_of_le _ _ low, Nat.toUInt64_eq, UInt64.ofNat_toNat,
-    UInt64.add_comm, UInt64.sub_add_cancel]
-
-/-- A committee window contains exactly the members of its slot committees. -/
-private theorem mem_window_iff {store : Store preset fork} {head : Root} {first last : Slot}
-    {members : Std.TreeSet ValidatorIndex}
-    (read : store.getCommitteesBetweenSlots head first last = .ok members) (v : ValidatorIndex) :
-    v ∈ members ↔ ∃ slot, first ≤ slot ∧ slot ≤ last ∧ ∃ committee,
-      store.getSlotCommittee head slot = .ok committee ∧ v ∈ committee := by
-  unfold Store.getCommitteesBetweenSlots at read
-  obtain ⟨after, afterOk, folded⟩ := bind_ok_iff.mp read
-  have afterOk := mapError_ok_iff.mp afterOk
-  rw [mem_foldlM_committees_iff folded]
-  constructor
-  · rintro (empty | ⟨offset, inside, committee, committeeOk, member⟩)
-    · simp at empty
-    · obtain ⟨low, high⟩ := window_offset afterOk inside
-      exact ⟨_, low, high, committee, committeeOk, member⟩
-  · rintro ⟨slot, low, high, committee, committeeOk, member⟩
-    obtain ⟨offset, inside, same⟩ := window_slot_offset afterOk low high
-    exact .inr ⟨offset, inside, committee, same.symm ▸ committeeOk, member⟩
-
-/-- A successful window reads every slot inside it. -/
-private theorem slotCommittee_ok_of_window {store : Store preset fork} {head : Root}
-    {first last : Slot} {members : Std.TreeSet ValidatorIndex}
-    (read : store.getCommitteesBetweenSlots head first last = .ok members)
-    (slot : Slot) (low : first ≤ slot) (high : slot ≤ last) :
-    ∃ committee, store.getSlotCommittee head slot = .ok committee := by
-  unfold Store.getCommitteesBetweenSlots at read
-  obtain ⟨after, afterOk, folded⟩ := bind_ok_iff.mp read
-  obtain ⟨offset, inside, same⟩ := window_slot_offset (mapError_ok_iff.mp afterOk) low high
-  obtain ⟨committee, committeeOk⟩ := foldlM_forall_of_ok
-    (fun _ _ _ stepOk => (bind_ok_iff.mp stepOk).imp fun _ read => read.1)
-    _ _ _ folded offset inside
-  exact ⟨committee, same ▸ committeeOk⟩
-
 /-- A window reads when its slots read and its end has a checked successor. -/
 private theorem window_ok_of_slots {store : Store preset fork} {head : Root}
     {first last after : Slot} (afterOk : addChecked last 1 = .ok after)
@@ -718,7 +592,7 @@ private theorem window_ok_of_slots {store : Store preset fork} {head : Root}
   simp only [afterOk, Except.mapError, bind, Except.bind]
   apply foldlM_exists_ok_of_invariant (P := fun _ => True)
   · intro acc offset inside _
-    obtain ⟨low, high⟩ := window_offset afterOk inside
+    obtain ⟨low, high⟩ := (exists_offset_eq_iff afterOk).mp ⟨_, inside, rfl⟩
     obtain ⟨committee, committeeOk⟩ := slots _ low high
     exact ⟨committee.foldl (·.insert ·) acc,
       by simp only [committeeOk, pure, Except.pure], trivial⟩
@@ -739,12 +613,12 @@ private theorem window_ok_of_inside {store : Store preset fork} {head : Root}
   have highNat := UInt64.le_iff_toNat_le.mp highLe
   obtain ⟨inner, innerOk⟩ := window_ok_of_slots (after := high + 1)
     (addChecked_of_lt (by simp only [UInt64.toNat_one] at afterNat ⊢; omega))
-    fun slot low' high' => slotCommittee_ok_of_window read slot (UInt64.le_trans lowLe low')
-      (UInt64.le_trans high' highLe)
+    fun slot low' high' => Store.getSlotCommittee_ok_of_getCommitteesBetweenSlots read
+      (UInt64.le_trans lowLe low') (UInt64.le_trans high' highLe)
   refine ⟨inner, innerOk, fun v member => ?_⟩
   obtain ⟨slot, low', high', committee, committeeOk, inside⟩ :=
-    (mem_window_iff innerOk v).mp member
-  exact (mem_window_iff read v).mpr ⟨slot, UInt64.le_trans lowLe low',
+    (Store.mem_getCommitteesBetweenSlots_iff innerOk v).mp member
+  exact (Store.mem_getCommitteesBetweenSlots_iff read v).mpr ⟨slot, UInt64.le_trans lowLe low',
     UInt64.le_trans high' highLe, committee, committeeOk, inside⟩
 
 /-- The members of a window are those of its two halves, split after a middle slot. -/
@@ -758,7 +632,8 @@ private theorem mem_window_split {store : Store preset fork} {head : Root}
     v ∈ members ↔ v ∈ left ∨ v ∈ right := by
   have nextNat := (addChecked_ok_iff.mp nextOk).2
   simp only [UInt64.toNat_one] at nextNat
-  rw [mem_window_iff read, mem_window_iff leftOk, mem_window_iff rightOk]
+  rw [Store.mem_getCommitteesBetweenSlots_iff read, Store.mem_getCommitteesBetweenSlots_iff leftOk,
+    Store.mem_getCommitteesBetweenSlots_iff rightOk]
   constructor
   · rintro ⟨slot, low, high, rest⟩
     by_cases before : slot ≤ middle
@@ -890,9 +765,10 @@ private theorem window_weight_le {store : Store preset fork} {head : Root}
       rw [Nat.succ_mul]
       omega
     obtain ⟨members, membersOk⟩ := window_ok_of_slots finishAfter (fun slot low high =>
-      slotCommittee_ok_of_window windowOk slot low (UInt64.le_trans high finishLe))
+      Store.getSlotCommittee_ok_of_getCommitteesBetweenSlots windowOk low
+        (UInt64.le_trans high finishLe))
     obtain ⟨epochMembers, epochMembersOk⟩ := window_ok_of_slots finishAfter (fun slot low high =>
-      slotCommittee_ok_of_window windowOk slot
+      Store.getSlotCommittee_ok_of_getCommitteesBetweenSlots windowOk
         (UInt64.le_trans (UInt64.le_iff_toNat_le.mpr startLow) low)
         (UInt64.le_trans high finishLe))
     have reserve := exit epoch epochStart next finish epochMembers startOk nextOk finishOk
@@ -912,10 +788,11 @@ private theorem window_weight_le {store : Store preset fork} {head : Root}
       intro v member
       obtain ⟨active, inEpoch⟩ := Finset.mem_filter.mp member
       obtain ⟨slot, low, high, committee, read, inCommittee⟩ :=
-        (mem_window_iff epochMembersOk v).mp inEpoch
-      exact Store.mem_activeMembers.mpr ⟨(mem_window_iff membersOk v).mpr
-        ⟨slot, UInt64.le_trans (UInt64.le_iff_toNat_le.mpr startLow) low, high, committee, read,
-          inCommittee⟩, activeIn v active⟩
+        (Store.mem_getCommitteesBetweenSlots_iff epochMembersOk v).mp inEpoch
+      exact Store.mem_activeMembers.mpr
+        ⟨(Store.mem_getCommitteesBetweenSlots_iff membersOk v).mpr
+          ⟨slot, UInt64.le_trans (UInt64.le_iff_toNat_le.mpr startLow) low, high, committee, read,
+            inCommittee⟩, activeIn v active⟩
     have split : Models.Network.activeVoters source =
         kept ∪ {v ∈ Models.Network.activeVoters source | v ∉ epochMembers} := by
       ext v
@@ -986,57 +863,11 @@ private theorem activeMembers_mono_of_window {store : Store preset fork} {head :
     Store.activeMembers source A ⊆ Store.activeMembers source B := by
   intro v member
   obtain ⟨inA, active⟩ := Store.mem_activeMembers.mp member
-  obtain ⟨s, sLow, sHigh, rest⟩ := (mem_window_iff readA v).mp inA
-  exact Store.mem_activeMembers.mpr ⟨(mem_window_iff readB v).mpr
+  obtain ⟨s, sLow, sHigh, rest⟩ := (Store.mem_getCommitteesBetweenSlots_iff readA v).mp inA
+  exact Store.mem_activeMembers.mpr ⟨(Store.mem_getCommitteesBetweenSlots_iff readB v).mpr
     ⟨s, UInt64.le_trans low sLow, UInt64.le_trans sHigh high, rest⟩, active⟩
 
 open Serialization.Ssz SszType
-
-/-- The finalized epoch of a forward-reachable store is the anchor's or before the current one.
-
-A held state finalizes no later than its previous epoch, and its pull-up no later either. -/
-private theorem Store.ForwardReachable.finalized_epoch_le_previous {config : Config}
-    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
-    {store : Store preset fork}
-    (forward : Store.ForwardReachable config anchorState anchorBlock store)
-    (sound : Invariant anchorState) (slots : 0 < config.SLOT_DURATION_MS)
-    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) {epoch : Epoch}
-    (epochOk : store.getCurrentStoreEpoch config = .ok epoch) :
-    store.finalizedCheckpoint.epoch.toNat ≤
-      max (getCurrentEpoch anchorState).toNat (epoch.toNat - 1) := by
-  have reached := forward.reachable
-  have stateBound := forward.blockState_epoch_le_current slots anchorSlot epochOk
-  -- A held state's previous epoch is before the store's current epoch.
-  have previousBound : ∀ (r : Root) (s : BeaconState preset fork),
-      store.blockStates[r]? = some s → (getPreviousEpoch s).toNat ≤ epoch.toNat - 1 := by
-    intro r s held
-    have bound := UInt64.le_iff_toNat_le.mp (stateBound r s held)
-    rw [getPreviousEpoch_toNat]
-    omega
-  rcases reached.finalized_origins _ (.inl rfl) with
-    ⟨root, _, same⟩ | ⟨root, state, held, same⟩ | ⟨root, state, pulled, held, run, same⟩
-  · rw [same]
-    exact le_max_left _ _
-  · -- The finalized epoch of an ordered, settled state is at most its previous epoch.
-    have inv := (reached.ordered sound).2 held
-    have ordered := inv.ordered
-    have settled := UInt64.le_iff_toNat_le.mp inv.settled
-    have one := UInt64.le_iff_toNat_le.mp ordered.1
-    have two := UInt64.le_iff_toNat_le.mp ordered.2
-    have prev := previousBound root state held
-    rw [same]
-    omega
-  · -- The pull-up finalizes no later than the state's current justified epoch.
-    have inv := (reached.ordered sound).2 held
-    have settled := UInt64.le_iff_toNat_le.mp inv.settled
-    have one := UInt64.le_iff_toNat_le.mp inv.ordered.1
-    have two := UInt64.le_iff_toNat_le.mp inv.ordered.2
-    have prev := previousBound root state held
-    rw [same]
-    rcases processJustificationAndFinalization_ok run with rfl | ⟨_, _, _, weighed⟩
-    · omega
-    · obtain ⟨-, -, finalized, -⟩ := weighJustificationAndFinalization_checkpoints weighed
-      rcases finalized with eq | eq | eq <;> rw [eq] <;> omega
 
 namespace Models.Network
 
@@ -1227,24 +1058,6 @@ private theorem slotStart_le_clock {store : Store preset fork}
   rw [(addChecked_ok_iff.mp sumOk).2, productNat]
   omega
 
-/-- An ancestry read in one store holds in another that agrees on blocks and holds the node.
-
-The other store need not hold the ancestor in advance: the walk reaches it. -/
-private theorem isAncestor_transfer {store receiver : Store preset fork}
-    (storeReached : Store.Reachable config anchorState anchorBlock store)
-    (receiverReached : Store.Reachable config anchorState anchorBlock receiver)
-    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) (before : fork < .glamsterdam)
-    (same : ∀ (r : Root) b c, store.blocks[r]? = some b → receiver.blocks[r]? = some c → b = c)
-    {node : ForkChoiceNode} {root : Root} {rootBlock : BeaconBlock preset fork}
-    (rootKnown : store.blocks[root]? = some rootBlock)
-    (nodeKnown : ∃ block, receiver.blocks[node.root]? = some block)
-    (descends : store.isAncestor node ⟨root, .pending⟩ = .ok true) :
-    receiver.isAncestor node ⟨root, .pending⟩ = .ok true := by
-  have walk := Store.getAncestor_of_isAncestor_of_lt before rootKnown descends
-  have aboveAnchor := storeReached.anchorSlot_le anchorSlot rootKnown
-  exact Store.isAncestor_of_getAncestor
-    (Store.getAncestor_of_same_blocks receiverReached same aboveAnchor nodeKnown walk)
-
 /-- An honest signature delivered by a time comes from the signer's validated duty vote.
 
 The signer signed at the deadline of its duty, which is before the next slot starts. -/
@@ -1385,8 +1198,8 @@ private theorem latest_rank_of_signed {Δ : ℕ} (sync : e.Synchronous Δ)
     vote.data_head anchored (UInt64.le_of_eq anchorSlot) start honest deadlineOk dueOk dueLt
   -- The duty vote and the signature share the target epoch, so they carry one data.
   obtain ⟨dutySent, dutySigned⟩ := vote.signed_sent anchored start honest
-  have sameData := data_eq_of_signed_of_target_epoch slots dutySent sent dutySigned signed honest
-    (by rw [dataEpoch, signedEpoch])
+  have sameData := Execution.data_eq_of_signed_of_target_epoch slots dutySent sent dutySigned
+    signed honest (by rw [dataEpoch, signedEpoch])
   -- The signer's head at the duty is the voted block, which descends from the root.
   have pending := Store.getHead_pending preGloas headOk
   have headEq : head = ⟨attestation.data.beaconBlockRoot, .pending⟩ := by
@@ -1400,9 +1213,9 @@ private theorem latest_rank_of_signed {Δ : ℕ} (sync : e.Synchronous Δ)
     rw [headOk, Except.ok.injEq] at hOk
     subst hOk
     rw [headEq]
-    exact isAncestor_transfer (reached a holder i) (reached v honest n)
-      (UInt64.le_of_eq anchorSlot) preGloas
+    exact Store.isAncestor_of_same_blocks (reached v honest n) preGloas
       (agree (a, i) ⟨holder, heldTime⟩ (v, n) ⟨honest, dutyTime⟩) heldRoot
+      ((reached a holder i).anchorSlot_le (UInt64.le_of_eq anchorSlot) heldRoot)
       ⟨headBlock, by rw [← sameData, dataRoot]; exact headKnown⟩ heldDescends
   -- A fit of the voted block in every honest store is a fit of the signer's head.
   have headFits : ∀ {epoch : Epoch} {checkpoint : Root},
@@ -1802,8 +1615,8 @@ private theorem caller_supporter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
   rcases UInt64.lt_or_eq_of_le rankLe with greater | same
   swap
   · -- The same rank gives the same vote, which supports the root at the receiver too.
-    have sameVote := latest_eq_of_rank_eq slots preGloas anchored start caller receiver honest
-      latest receivedOk same
+    have sameVote := Execution.latest_eq_of_rank_eq slots preGloas anchored start caller receiver
+      honest latest receivedOk same
     subst sameVote
     obtain ⟨other, otherIn, otherSeen, otherEq, -, otherOrigin⟩ :=
       e.exists_signed_origin_of_latestMessages anchored start receiver receivedOk
@@ -1812,9 +1625,9 @@ private theorem caller_supporter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
       have := congrArg LatestMessage.root otherEq
       simpa [LatestMessage.ofAttestation] using this.symm
     rw [tipRoot] at tipFound
-    have receiverDescends := isAncestor_transfer (reached u caller n) (reached w receiver k)
-      (UInt64.le_of_eq anchorSlot) preGloas
-      (agree (u, n) ⟨caller, callerTime⟩ (w, k) ⟨receiver, le_of_eq atTime⟩) found ⟨tip, tipFound⟩
+    have receiverDescends := Store.isAncestor_of_same_blocks (reached w receiver k) preGloas
+      (agree (u, n) ⟨caller, callerTime⟩ (w, k) ⟨receiver, le_of_eq atTime⟩) found
+      ((reached u caller n).anchorSlot_le (UInt64.le_of_eq anchorSlot) found) ⟨tip, tipFound⟩
       voteDescends
     left
     left
@@ -1861,8 +1674,8 @@ private theorem caller_supporter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
       (w := w) (k := k) with allFresh | collision
   swap
   · exact .inr collision
-  rcases mem_supportersOf_of_latest_signed anchored start preGloas honest receiver receivedOk
-      notCounted upToDate (le_of_eq atTime) dueOk dueLt allFresh
+  rcases Execution.mem_supportersOf_of_latest_signed anchored start preGloas honest receiver
+      receivedOk notCounted upToDate (le_of_eq atTime) dueOk dueLt allFresh
       (fun earlier low high => rootCovers earlier low (atTime ▸ high)) known rootAbove active
     with member | ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
   · exact .inl (.inl member)
@@ -1892,7 +1705,7 @@ private theorem honest_unslashedActive_of_checkpointState {time : ℕ}
     {participants : Std.TreeSet ValidatorIndex} {v : ValidatorIndex} (honest : v ∈ J)
     (member : v ∈ Store.activeMembers source participants) :
     v ∈ ((unslashedActiveBalances source).map (·.1)).toFinset := by
-  have unslashed := notSlashed_checkpointState anchored start caller
+  have unslashed := Execution.notSlashed_checkpointState anchored start caller
     (fun root base found => counted u caller n base callerTime ⟨root, base, found, .inl rfl⟩)
     sourceOk v honest
   obtain ⟨_, validator, found, active⟩ := Store.mem_activeMembers.mp member
@@ -2125,8 +1938,8 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
   rcases UInt64.lt_or_eq_of_le rankLe with greater | same
   swap
   · -- The same rank gives the same vote, for the parent at the receiver too.
-    have sameVote := latest_eq_of_rank_eq slots preGloas anchored start caller receiver honest
-      latest receivedOk same
+    have sameVote := Execution.latest_eq_of_rank_eq slots preGloas anchored start caller receiver
+      honest latest receivedOk same
     subst sameVote
     obtain ⟨historicalParent, historicalParentFound, historicalLe⟩ :=
       Store.slot_le_of_isAncestor historicalFound historicalBelow
@@ -2140,9 +1953,9 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
         using receiverEpochOk
     have historicalParent := epoch_le_of_slot_le (preset := preset) historicalBlock.slot parent.slot
       (UInt64.le_iff_toNat_le.mp historicalLe)
-    have callerBefore := previousBlockSlot_le_previousCurrentSlot (forward u caller n)
+    have callerBefore := (forward u caller n).previousBlockSlot_le_previousCurrentSlot
       (UInt64.le_of_eq anchorSlot) found slotOk beforeOk lastOk
-    have receiverBefore := previousBlockSlot_le_previousCurrentSlot (forward w receiver k)
+    have receiverBefore := (forward w receiver k).previousBlockSlot_le_previousCurrentSlot
       (UInt64.le_of_eq anchorSlot) known currentOk beforeOk receiverLastOk
     have lastNat := (subChecked_ok_iff.mp lastOk).2
     have receiverLastNat := (subChecked_ok_iff.mp receiverLastOk).2
@@ -2197,8 +2010,8 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
       (w := w) (k := k) with allFresh | collision
   swap
   · exact .inr collision
-  rcases mem_supportersOf_of_latest_signed anchored start preGloas honest receiver receivedOk
-      notCounted upToDate receiverTime dueOk dueLt allFresh
+  rcases Execution.mem_supportersOf_of_latest_signed anchored start preGloas honest receiver
+      receivedOk notCounted upToDate receiverTime dueOk dueLt allFresh
       (fun earlier low high => rootCovers earlier low (atTime ▸ high)) known rootAbove
       (mem_unslashedActive validatorFound unslashed isActive)
     with member | ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
@@ -2585,7 +2398,8 @@ private theorem window_reserves_and_weight [DecidablePred (· ∈ J)] {n : ℕ}
     have xEmpty : Store.activeMembers source xParticipants = ∅ := by
       refine Finset.eq_empty_of_forall_notMem fun v member => ?_
       obtain ⟨s, low, high, -⟩ :=
-        (mem_window_iff xCaller v).mp (Store.mem_activeMembers.mp member).1
+        (Store.mem_getCommitteesBetweenSlots_iff xCaller v).mp
+          (Store.mem_activeMembers.mp member).1
       have := UInt64.le_iff_toNat_le.mp low
       have := UInt64.le_iff_toNat_le.mp high
       have := UInt64.le_iff_toNat_le.mp finishLast
@@ -2849,10 +2663,10 @@ public theorem Execution.source_surplus_or_historical_evidence [DecidablePred (�
   have historicalNear : callerEpoch.toNat ≤
       (computeEpochAtSlot preset historicalBlock.slot).toNat + 1 := historicalEq ▸ near
   -- Slot order: the caller's last slot is no later than the receiver's.
-  have lastBefore := previousSlot_le_of_time_le start caller receiver
+  have lastBefore := Execution.previousSlot_le_of_time_le start caller receiver
     (by rw [atTime]; exact callerTime) upToDate slotOk currentOk lastOk receiverLastOk
   have lastBeforeNat := UInt64.le_iff_toNat_le.mp lastBefore
-  have beforeLast := previousBlockSlot_le_previousCurrentSlot (forward u caller n)
+  have beforeLast := (forward u caller n).previousBlockSlot_le_previousCurrentSlot
     (UInt64.le_of_eq anchorSlot) found slotOk beforeOk lastOk
   have parentBelowNat := UInt64.lt_iff_toNat_lt.mp parentBelow
   -- The receiver holds the parent, below both heads.

@@ -915,4 +915,50 @@ theorem Store.ForwardReachable.justified_epoch_le_current {config : Config}
         (stateBound root state held)
   exact ⟨each _ (.inl rfl), each _ (.inr rfl)⟩
 
+/-- A forward-reachable store finalizes no later than the anchor's epoch or the previous epoch.
+
+A held state finalizes no later than its previous epoch, and its pull-up no later either. -/
+theorem Store.ForwardReachable.finalized_epoch_le_previous {config : Config}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork}
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (sound : Invariant anchorState) (slots : 0 < config.SLOT_DURATION_MS)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) {epoch : Epoch}
+    (epochOk : store.getCurrentStoreEpoch config = .ok epoch) :
+    store.finalizedCheckpoint.epoch.toNat ≤
+      max (getCurrentEpoch anchorState).toNat (epoch.toNat - 1) := by
+  have reached := forward.reachable
+  have stateBound := forward.blockState_epoch_le_current slots anchorSlot epochOk
+  -- A held state's previous epoch is before the store's current epoch.
+  have previousBound : ∀ (r : Root) (s : BeaconState preset fork),
+      store.blockStates[r]? = some s → (getPreviousEpoch s).toNat ≤ epoch.toNat - 1 := by
+    intro r s held
+    have bound := UInt64.le_iff_toNat_le.mp (stateBound r s held)
+    rw [getPreviousEpoch_toNat]
+    omega
+  rcases reached.finalized_origins _ (.inl rfl) with
+    ⟨root, _, same⟩ | ⟨root, state, held, same⟩ | ⟨root, state, pulled, held, run, same⟩
+  · rw [same]
+    exact le_max_left _ _
+  · -- The finalized epoch of an ordered, settled state is at most its previous epoch.
+    have inv := (reached.ordered sound).2 held
+    have ordered := inv.ordered
+    have settled := UInt64.le_iff_toNat_le.mp inv.settled
+    have one := UInt64.le_iff_toNat_le.mp ordered.1
+    have two := UInt64.le_iff_toNat_le.mp ordered.2
+    have prev := previousBound root state held
+    rw [same]
+    omega
+  · -- The pull-up finalizes no later than the state's current justified epoch.
+    have inv := (reached.ordered sound).2 held
+    have settled := UInt64.le_iff_toNat_le.mp inv.settled
+    have one := UInt64.le_iff_toNat_le.mp inv.ordered.1
+    have two := UInt64.le_iff_toNat_le.mp inv.ordered.2
+    have prev := previousBound root state held
+    rw [same]
+    rcases processJustificationAndFinalization_ok run with rfl | ⟨_, _, _, weighed⟩
+    · omega
+    · obtain ⟨-, -, finalized, -⟩ := weighJustificationAndFinalization_checkpoints weighed
+      rcases finalized with eq | eq | eq <;> rw [eq] <;> omega
+
 end EthLib.Consensus

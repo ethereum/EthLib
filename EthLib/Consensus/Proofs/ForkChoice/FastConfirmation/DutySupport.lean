@@ -33,7 +33,7 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
     genesisTimeMs) J}
 
 /-- Honest signatures for one target epoch carry the same attestation data. -/
-theorem data_eq_of_signed_of_target_epoch (slots : 0 < config.SLOT_DURATION_MS)
+theorem Execution.data_eq_of_signed_of_target_epoch (slots : 0 < config.SLOT_DURATION_MS)
     {n k : ℕ} {first second : Message preset fork} (sentFirst : first ∈ (e.world n).sent)
     (sentSecond : second ∈ (e.world k).sent) {v : ValidatorIndex} {data other : AttestationData}
     (signedFirst : (v, data) ∈ statements config checks anchorState anchorBlock first)
@@ -46,7 +46,7 @@ theorem data_eq_of_signed_of_target_epoch (slots : 0 < config.SLOT_DURATION_MS)
   simp [isSlashableAttestationData, different, epoch] at nonslashable
 
 /-- A latest vote at or above a signed vote's rank cannot come from an older slot. -/
-theorem latest_slot_floor_of_signed_rank
+theorem Execution.latest_slot_floor_of_signed_rank
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     {v : ValidatorIndex} (honest : v ∈ J) {n k : ℕ}
     {message other : Message preset fork}
@@ -63,7 +63,7 @@ theorem latest_slot_floor_of_signed_rank
   have targetLe : data.target.epoch ≤ attestation.data.target.epoch := by
     simpa [LatestMessage.rank, LatestMessage.ofAttestation, notGloas] using rank
   by_cases same : data.target.epoch = attestation.data.target.epoch
-  · have dataEq := data_eq_of_signed_of_target_epoch slots sent sentOther
+  · have dataEq := Execution.data_eq_of_signed_of_target_epoch slots sent sentOther
       signed signedOther honest same
     exact dataEq ▸ floor
   · have targetLt := UInt64.lt_of_le_of_ne targetLe same
@@ -82,7 +82,7 @@ theorem latest_slot_floor_of_signed_rank
 Each signed origin of the latest message must have a slot that starts at or after `first`.
 
 The honest signer then chose its head inside the safe interval. -/
-theorem mem_supportersOf_of_latest_signed {anchor : Store preset fork}
+theorem Execution.mem_supportersOf_of_latest_signed {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ u ∈ J, e.start u = anchor) {last : ℕ}
     (preGloas : fork < .glamsterdam)
@@ -175,7 +175,7 @@ theorem mem_supportersOf_of_latest_signed {anchor : Store preset fork}
   obtain ⟨tip, tipKnown, _⟩ := origin.voted
   have descends := Store.isAncestor_of_same_blocks reached preGloas
     (oneBlock v honest w receiver n k ((e.monotone_time earlier.le).trans bounded) bounded)
-    sourceKnown known aboveAnchor ⟨tip, dataRoot ▸ tipKnown⟩ supported
+    sourceKnown aboveAnchor ⟨tip, dataRoot ▸ tipKnown⟩ supported
   have pending := Store.getHead_pending preGloas headOk
   have headEq : head = ⟨attestation.data.beaconBlockRoot, .pending⟩ := by
     cases head
@@ -617,7 +617,7 @@ theorem Execution.mem_supportersOf_of_duty_interval_core {Δ : ℕ} (sync : e.Sy
     (fun u hu v hv => by simp [start u hu, anchorEmpty] at hv)
     j receiver v member honest
   -- Each signed origin of the latest vote is at or after the duty slot, a lower bound on its start.
-  refine (mem_supportersOf_of_latest_signed anchored start preGloas honest receiver
+  refine (Execution.mem_supportersOf_of_latest_signed anchored start preGloas honest receiver
     latestOk (counted k) upToDate (by omega) dueOk dueLt ?_
     (fun earlier hfirst htime => safe earlier hfirst (by omega)) known rootAbove active).imp
       Or.inl id
@@ -626,7 +626,7 @@ theorem Execution.mem_supportersOf_of_duty_interval_core {Δ : ℕ} (sync : e.Sy
     e.exists_signed_origin_of_latestMessages anchored start receiver latestOk
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
   -- The two signed origins share the target epoch of the latest vote, so they carry one data.
-  have sameData := data_eq_of_signed_of_target_epoch slots
+  have sameData := Execution.data_eq_of_signed_of_target_epoch slots
     (e.view_subset_sent k w originSeen) (e.view_subset_sent k w seen) originSigned signedOther
     honest (by
       have both := originEq.symm.trans latestEq
@@ -634,7 +634,7 @@ theorem Execution.mem_supportersOf_of_duty_interval_core {Δ : ℕ} (sync : e.Sy
       simpa [LatestMessage.rank, LatestMessage.ofAttestation, notGloas] using ranks)
   -- The duty vote is a sent message that signs its own data.
   obtain ⟨dutySent, dutySigned⟩ := vote.signed_sent anchored start honest
-  have floor := latest_slot_floor_of_signed_rank slots preGloas honest dutySent
+  have floor := Execution.latest_slot_floor_of_signed_rank slots preGloas honest dutySent
     (e.view_subset_sent k w originSeen) dutySigned originSigned originVote
     (by rw [dataEpoch, dataSlot]) (by rw [← originEq]; exact rank) (UInt64.le_of_eq dataSlot.symm)
   rw [sameData] at floor

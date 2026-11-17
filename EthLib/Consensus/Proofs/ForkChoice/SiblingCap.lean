@@ -152,7 +152,7 @@ private theorem stake_le_of_active_of_reads {head : Root} {state : BeaconState p
 /-- A vote in the subtree of a child of a known parent is from a slot after the parent, before now.
 
 Those are the slots from the one after the parent to the one before the current slot. -/
-theorem slot_mem_range_of_voteOrigin (lower : store.ParentsBelow)
+theorem Store.slot_mem_range_of_voteOrigin (lower : store.ParentsBelow)
     {child parentRoot : Root} {childBlock parentBlock : BeaconBlock preset fork}
     {currentSlot firstSlot lastSlot : Slot} {v : ValidatorIndex}
     {attestation : Attestation preset fork}
@@ -217,7 +217,7 @@ private theorem mem_committees_of_voteOrigin {checks : SignatureChecks}
     (above : (Store.blockTree lower).Ancestor (some child)
       (some attestation.data.beaconBlockRoot)) :
     v ∈ participants := by
-  obtain ⟨low, high⟩ := slot_mem_range_of_voteOrigin lower parentFound childFound childParent
+  obtain ⟨low, high⟩ := Store.slot_mem_range_of_voteOrigin lower parentFound childFound childParent
     slotOk firstOk lastOk origin above
   obtain ⟨voted, votedFound, -⟩ := origin.voted
   have isChild : (Store.blockTree lower).IsChild (some child) (some parentRoot) :=
@@ -264,7 +264,7 @@ private theorem mem_committees_of_voteOrigin {checks : SignatureChecks}
 /-- A supporter of a child of a root voted with an attestation that the store checked.
 
 Its vote is in the subtree of the child, which is a known block with that parent root. -/
-theorem exists_voteOrigin_of_mem_supporters {checks : SignatureChecks}
+theorem Store.ForwardReachableWith.exists_voteOrigin_of_mem_supporters {checks : SignatureChecks}
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     {lower : store.ParentsBelow} {state : BeaconState preset fork} {nodes : List ForkChoiceNode}
     {c : Option Root} {parentRoot : Root} {i : ℕ}
@@ -330,7 +330,7 @@ theorem Store.not_mem_supporters_of_mem_parentVotersOf {lower : store.ParentsBel
   exact not_mem_supporters_of_latest isChild honest latest voteRoot
 
 /-- Each model voter is a registry index that is active in the balance state. -/
-theorem active_of_mem_voters {state : BeaconState preset fork} {i : ℕ}
+theorem Store.active_of_mem_voters {state : BeaconState preset fork} {i : ℕ}
     (member : i ∈ Store.voters state) :
     i < state.validators.data.size ∧ ∃ validator,
       state.validators.data[i]? = some validator ∧
@@ -394,7 +394,7 @@ theorem Store.weight_add_weight_add_stake_le_stake_withBoost
     intro i member
     have member : i ∈ Store.voters state := by
       rcases Finset.mem_union.mp member with h | h <;> exact Finset.mem_of_mem_filter _ h
-    exact toNat_toUInt64_of_lt within (active_of_mem_voters member).1
+    exact toNat_toUInt64_of_lt within (Store.active_of_mem_voters member).1
   -- A latest vote cannot lie in the subtrees of two distinct children.
   have apart : Disjoint S S' := by
     refine Finset.disjoint_left.mpr fun v hv hv' => ?_
@@ -510,7 +510,7 @@ theorem Store.ForwardReachableWith.weight_add_weight_add_stake_le_withBoost
       state.validators.data[i]? = some validator ∧
         isActiveValidator validator (getCurrentEpoch state) = true := by
     intro i member
-    apply active_of_mem_voters
+    apply Store.active_of_mem_voters
     rcases Finset.mem_union.mp member with h | h <;> exact Finset.mem_of_mem_filter _ h
   have back : ∀ i ∈ S ∪ S', i.toUInt64.toNat = i := fun i member =>
     toNat_toUInt64_of_lt within (voter i member).1
@@ -531,8 +531,8 @@ theorem Store.ForwardReachableWith.weight_add_weight_add_stake_le_withBoost
     rcases Finset.mem_union.mp hi with h | h
     exacts [⟨_, isChild, h⟩, ⟨_, siblingIsChild, h⟩]
   obtain ⟨child, childBlock, attestation, -, childFound, childParent, origin, above⟩ :=
-    exists_voteOrigin_of_mem_supporters reached cIsChild supporter
-  obtain ⟨low, high⟩ := slot_mem_range_of_voteOrigin lower parentFound childFound childParent
+    reached.exists_voteOrigin_of_mem_supporters cIsChild supporter
+  obtain ⟨low, high⟩ := Store.slot_mem_range_of_voteOrigin lower parentFound childFound childParent
     slotOk firstOk lastOk origin above
   exact mem_committees_of_voteOrigin before lower anchorSlot reached minLookahead maxLookahead
     ring parentFound childFound childParent descends slotOk firstOk lastOk
