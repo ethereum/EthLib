@@ -34,10 +34,15 @@ namespace EthLib.Cryptography.Bls.KeyPath
 
 /-- Invalid path text or an index outside the range of ERC-2333, The Tree Structure. -/
 inductive KeyPathError where
-  | invalidRoot
+  /-- The text before the first `/`, `root`, is not `m`. -/
+  | invalidRoot (root : String)
+  /-- A segment, `segment`, is not a decimal number. -/
   | invalidIndex (segment : String)
+  /-- A decimal index, `value`, is `2^32` or more. -/
   | indexOutOfRange (value : Nat)
-  | tooShort
+  /-- The path has `count` segments after `m`, fewer than four. -/
+  | tooShort (count : Nat)
+  /-- The first index, `value`, is not the purpose 12381. -/
   | invalidPurpose (value : UInt32)
 deriving DecidableEq, Repr
 
@@ -45,18 +50,18 @@ deriving DecidableEq, Repr
 
 The codes start at 101, since the path errors share their Python class with the BLS errors. -/
 def KeyPathError.code : KeyPathError → UInt32
-  | .invalidRoot => 101
+  | .invalidRoot _ => 101
   | .invalidIndex _ => 102
   | .indexOutOfRange _ => 103
-  | .tooShort => 104
+  | .tooShort _ => 104
   | .invalidPurpose _ => 105
 
 /-- The reason that parsing failed. -/
 def KeyPathError.message : KeyPathError → String
-  | .invalidRoot => "path must start with m"
+  | .invalidRoot root => s!"path must start with m, not \"{root}\""
   | .invalidIndex segment => s!"invalid path index: {segment}"
   | .indexOutOfRange value => s!"path index out of range: {value}"
-  | .tooShort => "ERC-2334 path needs at least four indices"
+  | .tooShort count => s!"ERC-2334 path needs at least four indices, got {count}"
   | .invalidPurpose value => s!"invalid path purpose: {value.toNat}"
 
 /-- The fixed purpose of ERC-2334, Purpose. -/
@@ -95,15 +100,15 @@ def parsePath (text : String) : Except KeyPathError Path := do
   -- The character splitter reduces in the kernel; splitting on the string "/" does not.
   match text.splitToList (· == '/') with
   | root :: parts =>
-    if root != "m" then throw .invalidRoot
+    if root != "m" then throw (.invalidRoot root)
     match parts with
     | purpose :: coinType :: account :: use :: subpath =>
       let purpose ← parseIndex purpose
       if purpose != PURPOSE then throw (.invalidPurpose purpose)
       return ⟨← parseIndex coinType, ← parseIndex account, ← parseIndex use,
         ← subpath.mapM parseIndex⟩
-    | _ => throw .tooShort
-  | [] => throw .invalidRoot
+    | _ => throw (.tooShort parts.length)
+  | [] => throw (.invalidRoot "")
 
 /-- Write a path with decimal indices and no spaces, as ERC-2334, Validator keys, does. -/
 def Path.toString (path : Path) : String :=

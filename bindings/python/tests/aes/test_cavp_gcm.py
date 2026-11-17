@@ -152,7 +152,7 @@ def test_whole_file(archive: Path, name: str) -> None:
 def _encrypt(case: dict) -> None:
     tag_length = case["Taglen"] // 8
     if case["Taglen"] in SHORT_TAGS:
-        with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.shortTag") as error:
+        with raises(AesError, f"EthLib.Cryptography.Aes.Gcm.Error.shortTag {tag_length}") as error:
             aes.gcm_encrypt(case["Key"], case["IV"], case["PT"], case["AAD"], tag_length)
         assert error.value.code == 2
         return
@@ -164,7 +164,7 @@ def _decrypt(case: dict) -> None:
     tag_length = case["Taglen"] // 8
     args = (case["Key"], case["IV"], case["CT"], case["AAD"], case["Tag"], tag_length)
     if case["Taglen"] in SHORT_TAGS:
-        with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.shortTag") as error:
+        with raises(AesError, f"EthLib.Cryptography.Aes.Gcm.Error.shortTag {tag_length}") as error:
             aes.gcm_decrypt(*args)
         assert error.value.code == 2
     elif case.get("FAIL"):

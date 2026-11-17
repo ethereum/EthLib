@@ -39,6 +39,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- The AES-GCM, ChaCha20-Poly1305 and ERC-2334 path errors carry the lengths and values that their failed check compared.
+  Codes are unchanged; each message now ends with these values, and a failed tag comparison still carries nothing.
+  - `Aes.Gcm.Error.tagLength declared actual` carries the declared tag length and the length of the tag, in bytes.
+  - `Aes.Gcm.Error.shortTag`, `ivLength`, `textLength` and `aadLength` carry the length that failed, in bytes.
+  - `ChaCha20Poly1305Error.counterExhausted counter length` carries the first block counter and the text length in bytes; the AEAD starts at the counter 1.
+  - `ChaCha20Poly1305Error.aadTooLong length` carries the length of the additional data, in bytes.
+  - `KeyPath.KeyPathError.invalidRoot root` carries the text before the first `/`, and `tooShort count` the number of segments after `m`.
+  - `Gcm.checkLengths_shortTag`, `Gcm.encrypt_shortTag`, `Gcm.decrypt_shortTag` and `ChaCha20Poly1305.crypt_eq_error_of_counter_exhausted` state the error with its fields.
+  - `Aes.Gcm.Error.code_injective` now concludes that two errors with one code share a constructor, `e₁.ctorIdx = e₂.ctorIdx`, as the KZG and secp256k1 forms do.
+
 - The transaction, inclusion and network-form errors carry the values that their failed check compared.
   Each code keeps its meaning, and each error fires on the same inputs as before.
   The messages of transaction and inclusion errors name each value, as `(name := value)`, with hashes and addresses in hex.
