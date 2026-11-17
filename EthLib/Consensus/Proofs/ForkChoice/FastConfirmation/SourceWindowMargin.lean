@@ -1023,25 +1023,21 @@ public theorem slotStart_le_clock {store : Store preset fork}
   have read := mapError_ok_iff.mp currentOk
   change computeSlotAtTimeMs config _ _ = .ok current at read
   rw [genesisEq] at read
-  simp only [computeSlotAtTimeMs, bind_ok_iff] at read
-  obtain ⟨elapsed, elapsedOk, quotient⟩ := read
-  obtain ⟨_, elapsedNat⟩ := subChecked_ok_iff.mp elapsedOk
-  obtain ⟨_, quotientNat⟩ := divChecked_ok_iff.mp quotient
-  have floor := Nat.div_mul_le_self elapsed.toNat config.SLOT_DURATION_MS.toNat
-  have targetLe := Nat.mul_le_mul_right config.SLOT_DURATION_MS.toNat
-    (UInt64.le_iff_toNat_le.mp before)
-  rw [quotientNat] at targetLe
-  have clock := store.timeMs.toNat_lt
-  have productFits : target.toNat * config.SLOT_DURATION_MS.toNat < 2 ^ 64 := by omega
-  have productOk := mulChecked_of_lt productFits
-  have productNat := (mulChecked_ok_iff.mp productOk).2
-  have sumFits : genesisTimeMs.toNat + (target * config.SLOT_DURATION_MS).toNat < 2 ^ 64 := by
-    rw [productNat]
-    omega
-  have sumOk := addChecked_of_lt sumFits
-  refine ⟨_, by simp only [computeTimeAtSlotMs, productOk, bind, Except.bind]; exact sumOk, ?_⟩
-  rw [(addChecked_ok_iff.mp sumOk).2, productNat]
-  omega
+  exact slotStart_le_of_slotAtTime read before
+
+/-- The slot after one before a store's current slot exists, and starts by the store's clock.
+
+The store must follow the model's time of genesis. -/
+public theorem nextSlotStart_le_clock {store : Store preset fork}
+    (genesisEq : store.genesisTimeMs = genesisTimeMs) {current slot : Slot}
+    (currentOk : store.getCurrentSlot config = .ok current) (before : slot < current) :
+    addChecked slot 1 = .ok (slot + 1) ∧ ∃ following,
+      computeTimeAtSlotMs config genesisTimeMs (slot + 1) = .ok following ∧
+      following.toNat ≤ store.timeMs.toNat := by
+  have read := mapError_ok_iff.mp currentOk
+  change computeSlotAtTimeMs config _ _ = .ok current at read
+  rw [genesisEq] at read
+  exact nextSlotStart_le_of_slotAtTime read before
 
 /-- An honest duty lies between the call and a store's time.
 
@@ -1069,33 +1065,86 @@ public theorem duty_window_of_slot_le {anchor : Store preset fork} {Δ : ℕ}
   obtain ⟨callStart', callStartOk', -, callLe⟩ := exists_timeAtSlotMs_of_le after dutyStartOk
   rw [callStartOk, Except.ok.injEq] at callStartOk'
   subst callStart'
-  -- The store follows the signer's time of genesis, so its current slot starts by its clock.
+  -- The store follows the signer's time of genesis.
   have senderGenesis := (e.clock_bounds v k').1
   have receiverGenesis := (e.clock_bounds w k).1
   rw [start v honest] at senderGenesis
   rw [start w receiver] at receiverGenesis
-  obtain ⟨endTime, endOk, endLe⟩ := slotStart_le_clock
-    (receiverGenesis.trans (senderGenesis.symm.trans genesis)) currentOk (UInt64.le_refl _)
-  -- The deadline and the delay fall before the slot after the duty starts.
-  have nextFits : data.slot.toNat + (1 : UInt64).toNat < 2 ^ 64 := by
-    have := UInt64.lt_iff_toNat_lt.mp before
-    have := current.toNat_lt
-    simp only [UInt64.toNat_one]
-    omega
-  have nextOk := addChecked_of_lt nextFits
-  have nextLe : data.slot + 1 ≤ current := UInt64.le_iff_toNat_le.mpr (by
-    have := UInt64.lt_iff_toNat_lt.mp before
-    rw [(addChecked_ok_iff.mp nextOk).2]
-    simp only [UInt64.toNat_one]
-    omega)
-  obtain ⟨following, followingOk, -, followingLe⟩ := exists_timeAtSlotMs_of_le nextLe endOk
+  -- The deadline and the delay fall before the next slot, which starts by the store's clock.
+  obtain ⟨nextOk, following, followingOk, followingLe⟩ := nextSlotStart_le_clock
+    (receiverGenesis.trans (senderGenesis.symm.trans genesis)) currentOk before
   have bound := fits.before_boundary nextOk dutyStartOk followingOk deadline
-  have followingNat := UInt64.le_iff_toNat_le.mp followingLe
   refine ⟨?_, ?_⟩
   · have := UInt64.le_iff_toNat_le.mp callLe
     omega
   · rw [← upToDate.1]
     omega
+
+/-- A checkpoint read on a head above a block is above the block.
+
+The block must be at or before the first slot of the checkpoint's epoch. -/
+public theorem isAncestor_of_getCheckpointBlock_above {store : Store preset fork}
+    (before : fork < .glamsterdam) {head root checkpoint : Root}
+    {rootBlock : BeaconBlock preset fork} {epoch : Epoch}
+    (rootKnown : store.blocks[root]? = some rootBlock)
+    (supports : store.isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
+    (read : store.getCheckpointBlock head epoch = .ok checkpoint)
+    (blockLe : rootBlock.slot.toNat ≤ epoch.toNat * preset.SLOTS_PER_EPOCH.toNat) :
+    store.isAncestor ⟨checkpoint, .pending⟩ ⟨root, .pending⟩ = .ok true := by
+  have rootWalk := Store.getAncestor_of_isAncestor_of_lt before rootKnown supports
+  have split := read
+  unfold Store.getCheckpointBlock at split
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at split
+  obtain ⟨boundary, boundaryOk, reached, boundaryWalk, reachedRoot⟩ := split
+  have blockBelow : rootBlock.slot ≤ boundary := by
+    apply UInt64.le_iff_toNat_le.mpr
+    rw [(computeStartSlotAtEpoch_ok_iff.mp (mapError_ok_iff.mp boundaryOk)).2]
+    exact blockLe
+  have reachedPending := Store.getAncestor_pending_of_lt before rfl boundaryWalk
+  have reachedEq : reached = ⟨checkpoint, .pending⟩ := by
+    obtain ⟨r, s⟩ := reached
+    simp only at reachedRoot reachedPending
+    rw [reachedRoot, reachedPending]
+  rw [reachedEq] at boundaryWalk
+  have through := Store.getAncestor_trans blockBelow boundaryWalk
+  rw [rootWalk] at through
+  exact Store.isAncestor_of_getAncestor through.symm
+
+/-- An honest duty's signer reads the duty's target on a head above a covered root.
+
+The duty falls inside the stretch that the root is covered over.
+
+An honest store holds the target's block. -/
+public theorem signerHead_of_duty {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (preGloas : fork < .glamsterdam) {time first T : ℕ}
+    (roots : HeldBlockStateRootsNonzero (e := e) time)
+    {root : Root} (covers : HonestHeadsCover (e := e) root first T)
+    {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J) {k k' : ℕ}
+    {data : AttestationData}
+    (duty : MaySign config checks sources anchorState anchorBlock assignment genesisTimeMs v
+      (e.world k').time ((e.world k').view v) ((e.world k').state v) data)
+    (low : first ≤ (e.world k').time) (lt : (e.world k').time < T)
+    (k'Bound : (e.world k').time ≤ time) {checkpointBlock : BeaconBlock preset fork}
+    (checkpointKnown : ((e.world k).state w).blocks[data.target.root]? = some checkpointBlock) :
+    ∃ head, ((e.world k').state v).isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true ∧
+      ((e.world k').state v).getCheckpointBlock head data.target.epoch = .ok data.target.root := by
+  obtain ⟨_, -, -, -, current, honestData, -⟩ := duty
+  have reachedV := e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored) k' v
+    honest
+  have reachedW := e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored) k w
+    receiver
+  obtain ⟨signerHead, signerHeadOk, targetRead⟩ := honestData.target_read reachedV anchorSlot
+    anchorBoundary (roots v honest k' k'Bound) reachedW checkpointKnown
+  have supports := covers (e.world k').time low lt v honest k' signerHead rfl current signerHeadOk
+  have pending : signerHead = ⟨signerHead.root, .pending⟩ := by
+    have p := Store.getHead_pending preGloas signerHeadOk
+    cases signerHead
+    simp_all
+  rw [pending] at supports
+  exact ⟨signerHead.root, supports, targetRead⟩
 
 /-- A store's justified checkpoint descends from a root, given an honest duty vote for it.
 
@@ -1131,7 +1180,6 @@ public theorem justified_descends_of_duty {anchor : Store preset fork} {time T :
     (beforeStore : (e.world k').time < (e.world k).time) :
     ((e.world k).state w).isAncestor
       ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true := by
-  obtain ⟨_, -, -, -, current', honestData, -⟩ := duty
   have k'Bound : (e.world k').time ≤ time := by omega
   have reachedV := e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored) k' v
     honest
@@ -1140,44 +1188,21 @@ public theorem justified_descends_of_duty {anchor : Store preset fork} {time T :
   -- The store holds its justified block, which is the signer's target.
   obtain ⟨justifiedBlock, justifiedKnown⟩ := justifiedKnown
   rw [← target] at justifiedKnown blockLe ⊢
-  obtain ⟨signerHead, signerHeadOk, targetRead⟩ := honestData.target_read reachedV anchorSlot
-    anchorBoundary (roots v honest k' k'Bound) reachedW justifiedKnown
-  have supports := covers (e.world k').time afterCall (by omega) v honest k' signerHead rfl
-    current' signerHeadOk
-  have pending : signerHead = ⟨signerHead.root, .pending⟩ := by
-    have p := Store.getHead_pending preGloas signerHeadOk
-    cases signerHead
-    simp_all
-  rw [pending] at supports
+  obtain ⟨head, supports, targetRead⟩ := signerHead_of_duty anchored start anchorSlot
+    anchorBoundary preGloas roots covers honest receiver duty afterCall (by omega) k'Bound
+    justifiedKnown
   -- The signer holds the root, as the same block as the caller.
   have rootRead := supports
   unfold Store.isAncestor at rootRead
   obtain ⟨b', b'Ok, -⟩ := bind_ok_iff.mp rootRead
   have b'Found := Store.block_ok_iff.mp b'Ok
   rw [agree v honest u caller k' n k'Bound callerTime root b' block b'Found callerHeld] at b'Found
-  have rootWalk := Store.getAncestor_of_isAncestor_of_lt preGloas b'Found supports
   -- The target is the head's ancestor at the first slot of its epoch, which is above the block.
-  have split := targetRead
-  unfold Store.getCheckpointBlock at split
-  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at split
-  obtain ⟨boundary, boundaryOk, reached, boundaryWalk, reachedRoot⟩ := split
-  have blockBelow : block.slot ≤ boundary := by
-    apply UInt64.le_iff_toNat_le.mpr
-    rw [(computeStartSlotAtEpoch_ok_iff.mp (mapError_ok_iff.mp boundaryOk)).2]
-    exact blockLe
-  have reachedPending := Store.getAncestor_pending_of_lt preGloas rfl boundaryWalk
-  have reachedEq : reached = ⟨data.target.root, .pending⟩ := by
-    obtain ⟨r, s⟩ := reached
-    simp only at reachedRoot reachedPending
-    rw [reachedRoot, reachedPending]
-  rw [reachedEq] at boundaryWalk
-  have through := Store.getAncestor_trans blockBelow boundaryWalk
-  rw [rootWalk] at through
+  have up := isAncestor_of_getCheckpointBlock_above preGloas b'Found supports targetRead blockLe
   -- The store agrees with the signer on the walk.
   exact Store.isAncestor_of_same_blocks reachedW preGloas
     (agree v honest w receiver k' k k'Bound (by omega)) b'Found
-    (reachedV.anchorSlot_le (UInt64.le_of_eq anchorSlot) b'Found) ⟨_, justifiedKnown⟩
-    (Store.isAncestor_of_getAncestor through.symm)
+    (reachedV.anchorSlot_le (UInt64.le_of_eq anchorSlot) b'Found) ⟨_, justifiedKnown⟩ up
 
 /-- An honest signature delivered by a time comes from the signer's validated duty vote.
 

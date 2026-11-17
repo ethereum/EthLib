@@ -415,20 +415,13 @@ private theorem comparable_of_duty {anchor : Store preset fork}
     ((e.world k).state w).isAncestor ⟨data.target.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
       ((e.world k).state w).isAncestor ⟨root, .pending⟩ ⟨data.target.root, .pending⟩ =
         .ok true := by
-  obtain ⟨_, -, -, -, current, honestData, -⟩ := duty
   have k'Bound : (e.world k').time ≤ time := by omega
   have reachedV := e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored) k' v
     honest
   have reachedW := e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored) k w
     receiver
-  obtain ⟨signerHead, signerHeadOk, targetRead⟩ := honestData.target_read reachedV anchorSlot
-    anchorBoundary (roots v honest k' k'Bound) reachedW checkpointKnown
-  have supports := covers (e.world k').time low lt v honest k' signerHead rfl current signerHeadOk
-  have pending : signerHead = ⟨signerHead.root, .pending⟩ := by
-    have p := Store.getHead_pending preGloas signerHeadOk
-    cases signerHead
-    simp_all
-  rw [pending] at supports
+  obtain ⟨head, supports, targetRead⟩ := signerHead_of_duty anchored start anchorSlot
+    anchorBoundary preGloas roots covers honest receiver duty low lt k'Bound checkpointKnown
   exact comparable_of_target_read anchorSlot reachedV reachedW preGloas
     (agree v honest w receiver k' k k'Bound kBound) known checkpointKnown supports targetRead
 

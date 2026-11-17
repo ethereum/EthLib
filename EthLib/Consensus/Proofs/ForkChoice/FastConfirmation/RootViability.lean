@@ -2039,38 +2039,33 @@ private theorem slot_le_of_epoch_lt (positive : 0 < preset.SLOTS_PER_EPOCH.toNat
   have := (Nat.div_lt_iff_lt_mul positive).mp lt
   omega
 
-/-- A checkpoint read on a head above a block, at an epoch after the block's, is above the block. -/
-private theorem above_of_read {store : Store preset fork} (before : fork < .glamsterdam)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) {head root checkpoint : Root}
-    {rootBlock : BeaconBlock preset fork} {epoch : Epoch}
-    (rootKnown : store.blocks[root]? = some rootBlock)
-    (supports : store.isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
-    (read : store.getCheckpointBlock head epoch = .ok checkpoint)
-    (later : computeEpochAtSlot preset rootBlock.slot < epoch) :
-    store.isAncestor ⟨checkpoint, .pending⟩ ⟨root, .pending⟩ = .ok true := by
-  have rootWalk := Store.getAncestor_of_isAncestor_of_lt before rootKnown supports
-  have split := read
-  unfold Store.getCheckpointBlock at split
-  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at split
-  obtain ⟨boundary, boundaryOk, reached, boundaryWalk, reachedRoot⟩ := split
-  have boundaryOk := mapError_ok_iff.mp boundaryOk
-  have blockBelow : rootBlock.slot ≤ boundary := by
-    have startNat := (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2
-    have lt := UInt64.lt_iff_toNat_lt.mp later
-    simp only [computeEpochAtSlot, UInt64.toNat_div] at lt
-    have := (Nat.div_lt_iff_lt_mul positive).mp lt
-    apply UInt64.le_iff_toNat_le.mpr
-    rw [startNat]
-    omega
-  have reachedPending := Store.getAncestor_pending_of_lt before rfl boundaryWalk
-  have reachedEq : reached = ⟨checkpoint, .pending⟩ := by
-    obtain ⟨r, s⟩ := reached
-    simp only at reachedRoot reachedPending
-    rw [reachedRoot, reachedPending]
-  rw [reachedEq] at boundaryWalk
-  have through := Store.getAncestor_trans blockBelow boundaryWalk
-  rw [rootWalk] at through
-  exact Store.isAncestor_of_getAncestor through.symm
+/-- A checked call's epoch is at most one after the epoch of a root on the walk from its head. -/
+private theorem call_epoch_le_root_add_one {store : Store preset fork}
+    {fcr : FastConfirmationStore} {head start root : Root} {chain later : List Root}
+    {callSlot : Slot} {rootBlock : BeaconBlock preset fork}
+    (checked : store.FastConfirmationChecked config fcr head start root)
+    (walk : store.getAncestorRoots head start = .ok (chain ++ root :: later))
+    (callSlotOk : store.getCurrentSlot config = .ok callSlot)
+    (rootFound : store.blocks[root]? = some rootBlock) :
+    (computeEpochAtSlot preset callSlot).toNat ≤
+      (computeEpochAtSlot preset rootBlock.slot).toNat + 1 := by
+  have callEpochOk : store.getCurrentStoreEpoch config =
+      .ok (computeEpochAtSlot preset callSlot) := by
+    simp [Store.getCurrentStoreEpoch, callSlotOk, bind, Except.bind, pure, Except.pure]
+  obtain ⟨cEpoch, -, -, sEpoch, cEpochOk, -, -, sEpochOk, recent, -⟩ := checked
+  rw [callEpochOk, Except.ok.injEq] at cEpochOk
+  subst cEpoch
+  obtain ⟨b, t, bOk, tOk, lt⟩ := Store.slot_lt_of_mem_getAncestorRoots walk (by simp)
+    (show root ∈ chain ++ root :: later by simp)
+  rw [Store.block_ok_iff.mpr rootFound, Except.ok.injEq] at bOk
+  subst bOk
+  have sEq : sEpoch = computeEpochAtSlot preset t.slot := by
+    simpa [Store.getBlockEpoch, tOk, bind, Except.bind, pure, Except.pure] using sEpochOk.symm
+  subst sEq
+  have mono := Nat.div_le_div_right (c := preset.SLOTS_PER_EPOCH.toNat)
+    (Nat.le_of_lt (UInt64.lt_iff_toNat_lt.mp lt))
+  simp only [computeEpochAtSlot, UInt64.toNat_div] at recent ⊢
+  omega
 
 /-- Two blocks above each other are the same block, before Gloas. -/
 private theorem eq_of_isAncestor_antisymm {store : Store preset fork} (before : fork < .glamsterdam)
@@ -2185,20 +2180,7 @@ private theorem late_justified_not_in_call_epoch {anchor : Store preset fork} {�
     simpa [Store.getBlockEpoch, Store.block_ok_iff.mpr callerFound, bind, Except.bind, pure,
       Except.pure] using rEpochOk.symm
   subst rEq
-  have callRecent : (computeEpochAtSlot preset callSlot').toNat ≤
-      (computeEpochAtSlot preset callerBlock.slot).toNat + 1 := by
-    obtain ⟨b, t, bOk, tOk, lt⟩ := Store.slot_lt_of_mem_getAncestorRoots walk (by simp)
-      (show root ∈ chain ++ root :: later by simp)
-    rw [Store.block_ok_iff.mpr callerFound, Except.ok.injEq] at bOk
-    subst bOk
-    have sEq : sEpoch = computeEpochAtSlot preset t.slot := by
-      simpa [Store.getBlockEpoch, tOk, bind, Except.bind, pure, Except.pure] using sEpochOk.symm
-    subst sEq
-    have mono := Nat.div_le_div_right (c := preset.SLOTS_PER_EPOCH.toNat)
-      (Nat.le_of_lt (UInt64.lt_iff_toNat_lt.mp lt))
-    rw [slotEpochNat] at recent ⊢
-    rw [slotEpochNat] at recent ⊢
-    omega
+  have callRecent := call_epoch_le_root_add_one inputs.1 walk callSlotOk callerFound
   -- So the receiver's justified epoch is the call's.
   have aboveNat := UInt64.lt_iff_toNat_lt.mp above
   have notAfterNat := UInt64.le_iff_toNat_le.mp notAfter
@@ -2227,7 +2209,8 @@ private theorem late_justified_not_in_call_epoch {anchor : Store preset fork} {�
   have viaCaller (read : ((e.world n).state u).getCheckpointBlock head.root
       ((e.world k).state w).justifiedCheckpoint.epoch =
         .ok ((e.world k).state w).justifiedCheckpoint.root) : False := by
-    have up := above_of_read preGloas positive callerFound headAbove read above
+    have up := isAncestor_of_getCheckpointBlock_above preGloas callerFound headAbove read
+      (slot_le_of_epoch_lt positive above)
     exact close (Store.isAncestor_of_same_blocks reachedW preGloas oneBlock callerFound
       (reachedU.anchorSlot_le (UInt64.le_of_eq anchorSlot) callerFound)
       ⟨_, justifiedFound⟩ up)
@@ -2458,25 +2441,16 @@ private theorem findBlockCollision_held {first second : Store preset fork} {root
     · exact ih found
 
 /-- The start of a later slot is more than one delay after the start of an earlier slot. -/
-private theorem delay_before_later_slot {Δ : ℕ}
+private theorem delay_before_later_slot {Δ : ℕ} (slots : 0 < config.SLOT_DURATION_MS)
     (fits : DelayFits fork config genesisTimeMs Δ)
     {slot current : Slot} {begin currentBegin : UInt64} (later : slot < current)
     (beginOk : computeTimeAtSlotMs config genesisTimeMs slot = .ok begin)
     (currentOk : computeTimeAtSlotMs config genesisTimeMs current = .ok currentBegin) :
     begin.toNat + Δ < currentBegin.toNat := by
-  have lt := UInt64.lt_iff_toNat_lt.mp later
-  have bound := current.toNat_lt
-  have nextOk : addChecked slot 1 = .ok (slot + 1) :=
-    addChecked_ok_iff.mpr ⟨by simp only [UInt64.toNat_one]; omega,
-      by rw [UInt64.toNat_add, UInt64.toNat_one]; exact Nat.mod_eq_of_lt (by omega)⟩
-  have nextNat : (slot + 1).toNat = slot.toNat + 1 := by
-    rw [UInt64.toNat_add, UInt64.toNat_one]
-    exact Nat.mod_eq_of_lt (by omega)
-  obtain ⟨following, followingOk, _, followingLe⟩ := exists_timeAtSlotMs_of_le
-    (UInt64.le_iff_toNat_le.mpr (by rw [nextNat]; omega)) currentOk
+  obtain ⟨nextOk, following, followingOk, followingLe⟩ := nextSlotStart_le_of_slotAtTime
+    (computeSlotAtTimeMs_computeTimeAtSlotMs slots currentOk) later
   obtain ⟨due, dueOk⟩ := fits.1
   have fit := fits.2 slot (slot + 1) begin due following nextOk beginOk dueOk followingOk
-  have le := UInt64.le_iff_toNat_le.mp followingLe
   omega
 
 /-- A late receiver of a root before the call's epoch passes the justified test above the head.
@@ -2574,23 +2548,7 @@ private theorem late_previous_receiver_source {anchor : Store preset fork} {Δ t
       .ok (computeEpochAtSlot preset current) := by
     simp [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
   -- The call's epoch is the one after the root's: the walk starts at most one epoch back.
-  have callRecent : (computeEpochAtSlot preset callSlot).toNat ≤
-      (computeEpochAtSlot preset callerBlock.slot).toNat + 1 := by
-    obtain ⟨cEpoch, -, -, sEpoch, cEpochOk, -, -, sEpochOk, recent, -⟩ := inputs.1
-    rw [callEpochOk, Except.ok.injEq] at cEpochOk
-    subst cEpoch
-    obtain ⟨b, t, bOk, tOk, lt⟩ := Store.slot_lt_of_mem_getAncestorRoots walk (by simp)
-      (show root ∈ chain ++ root :: later by simp)
-    rw [Store.block_ok_iff.mpr callerFound, Except.ok.injEq] at bOk
-    subst bOk
-    have sEq : sEpoch = computeEpochAtSlot preset t.slot := by
-      simpa [Store.getBlockEpoch, tOk, bind, Except.bind, pure, Except.pure] using sEpochOk.symm
-    subst sEq
-    have mono := Nat.div_le_div_right (c := preset.SLOTS_PER_EPOCH.toNat)
-      (Nat.le_of_lt (UInt64.lt_iff_toNat_lt.mp lt))
-    rw [slotEpochNat] at recent ⊢
-    rw [slotEpochNat] at recent ⊢
-    omega
+  have callRecent := call_epoch_le_root_add_one inputs.1 walk callSlotOk callerFound
   -- The caller's head realized the root's epoch.
   obtain ⟨headState, headStored, headAbove, headRealized⟩ :=
     realizedHead root rootMem _ callerBlock callEpochOk callerFound previous
@@ -2614,7 +2572,7 @@ private theorem late_previous_receiver_source {anchor : Store preset fork} {Δ t
     rw [slotEpochNat, slotEpochNat] at isLate
     rw [slotEpochNat, slotEpochNat] at callRecent
     omega
-  have delay := delay_before_later_slot fits callBefore callBeginOk currentBeginOk
+  have delay := delay_before_later_slot slots fits callBefore callBeginOk currentBeginOk
   -- The receiver's finality is held, as the anchor state's root is not zero.
   obtain ⟨anchorKey, -, anchorFound⟩ := reachedW.anchor_known
   have nonzero := roots w receiver k receiverBound anchorKey anchorBlock anchorFound
@@ -2969,12 +2927,12 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
   rw [ready.1, atTime] at currentBeginLe
   have callLt : callSlot < current := UInt64.lt_iff_toNat_lt.mpr (Nat.lt_of_div_lt_div
     (c := preset.SLOTS_PER_EPOCH.toNat) (by rw [← slotEpochNat, ← slotEpochNat]; omega))
-  have callBefore := delay_before_later_slot fits callLt callBeginOk currentBeginOk
+  have callBefore := delay_before_later_slot slots fits callLt callBeginOk currentBeginOk
   have callBeforeT : (e.world n).time < T := by omega
   obtain ⟨next, boundary, nextOk, boundaryOk, boundaryLt⟩ := lc_next_boundary positive lateNat
   obtain ⟨begin, beginOk, -, -⟩ :=
     exists_timeAtSlotMs_of_le (UInt64.le_of_lt boundaryLt) currentBeginOk
-  have beginBefore := delay_before_later_slot fits boundaryLt beginOk currentBeginOk
+  have beginBefore := delay_before_later_slot slots fits boundaryLt beginOk currentBeginOk
   have beginLe : begin.toNat ≤ time := by omega
   -- The record of the target check of the call's epoch.
   obtain ⟨readEpoch, readSlot, rootEpoch, startEpoch, readEpochOk, -, readRootOk, startEpochOk, -,

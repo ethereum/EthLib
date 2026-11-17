@@ -219,6 +219,47 @@ theorem computeSlotAtTimeMs_le {genesisTimeMs timeMs : UInt64} {slot : Slot}
   rw [value]
   exact Nat.div_le_div_right (by have := elapsed.toNat_lt; omega)
 
+/-- A slot no later than the slot at a time starts by that time. -/
+theorem slotStart_le_of_slotAtTime {genesisTimeMs timeMs : UInt64} {current target : Slot}
+    (currentOk : computeSlotAtTimeMs config genesisTimeMs timeMs = .ok current)
+    (before : target ≤ current) :
+    ∃ targetTime, computeTimeAtSlotMs config genesisTimeMs target = .ok targetTime ∧
+      targetTime.toNat ≤ timeMs.toNat := by
+  simp only [computeSlotAtTimeMs, bind_ok_iff] at currentOk
+  obtain ⟨elapsed, elapsedOk, quotient⟩ := currentOk
+  obtain ⟨_, elapsedNat⟩ := subChecked_ok_iff.mp elapsedOk
+  obtain ⟨_, quotientNat⟩ := divChecked_ok_iff.mp quotient
+  have floor := Nat.div_mul_le_self elapsed.toNat config.SLOT_DURATION_MS.toNat
+  have targetLe := Nat.mul_le_mul_right config.SLOT_DURATION_MS.toNat
+    (UInt64.le_iff_toNat_le.mp before)
+  rw [quotientNat] at targetLe
+  have clock := timeMs.toNat_lt
+  have productFits : target.toNat * config.SLOT_DURATION_MS.toNat < 2 ^ 64 := by omega
+  have productOk := mulChecked_of_lt productFits
+  have productNat := (mulChecked_ok_iff.mp productOk).2
+  have sumFits : genesisTimeMs.toNat + (target * config.SLOT_DURATION_MS).toNat < 2 ^ 64 := by
+    rw [productNat]
+    omega
+  have sumOk := addChecked_of_lt sumFits
+  refine ⟨_, by simp only [computeTimeAtSlotMs, productOk, bind, Except.bind]; exact sumOk, ?_⟩
+  rw [(addChecked_ok_iff.mp sumOk).2, productNat]
+  omega
+
+/-- The slot after a slot before the slot at a time exists, and starts by that time. -/
+theorem nextSlotStart_le_of_slotAtTime {genesisTimeMs timeMs : UInt64} {slot current : Slot}
+    (currentOk : computeSlotAtTimeMs config genesisTimeMs timeMs = .ok current)
+    (before : slot < current) :
+    addChecked slot 1 = .ok (slot + 1) ∧ ∃ following,
+      computeTimeAtSlotMs config genesisTimeMs (slot + 1) = .ok following ∧
+      following.toNat ≤ timeMs.toNat := by
+  have lt := UInt64.lt_iff_toNat_lt.mp before
+  have bound := current.toNat_lt
+  have nextNat : (slot + 1).toNat = slot.toNat + 1 := by
+    rw [UInt64.toNat_add, UInt64.toNat_one]
+    exact Nat.mod_eq_of_lt (by omega)
+  refine ⟨addChecked_ok_iff.mpr ⟨by simp only [UInt64.toNat_one]; omega, nextNat⟩, ?_⟩
+  exact slotStart_le_of_slotAtTime currentOk (UInt64.le_iff_toNat_le.mpr (by rw [nextNat]; omega))
+
 /-- A whole number of seconds that fits keeps its value, in milliseconds.
 
 It fits when it is at most the largest 64-bit integer divided by 1000. -/

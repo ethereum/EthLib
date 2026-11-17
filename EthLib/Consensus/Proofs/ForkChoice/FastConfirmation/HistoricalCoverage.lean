@@ -321,7 +321,7 @@ A receiver's justified checkpoint of the call's epoch or earlier is comparable w
 If the root strictly descends from it, the root is in the filtered tree.
 
 A later justified checkpoint has an honest signer, which puts it above the root. -/
-public theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
+private theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
     {anchor : Store preset fork} {Δ time : ℕ} {anchorEpoch horizon : Epoch} {margin : ℕ}
     {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)

@@ -3166,7 +3166,7 @@ Its other premises are those of that headline, with the root fixed to the root t
 The root is held by every up-to-date honest store from the call on.
 An honest supporter behind the caller's margin sent a vote above the root before the call's slot (`Execution.honest_vote_of_caller_margin`).
 `Execution.rootHeld_of_honest_vote` then delivers the root.
-The root's viability at each time comes from `Execution.rootViableAt_of_checked`.
+The root's viability at each time is a private step of the same file.
 A justified checkpoint of the call's epoch or before is comparable with the root (`Execution.justified_comparable_of_checked`).
 If the root strictly descends from it, `Execution.rootInFilteredTree_of_checked` keeps the root in the filtered tree.
 A later justified checkpoint has an honest signer, which puts it above the root.

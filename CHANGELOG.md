@@ -15,7 +15,7 @@ Not yet released.
   Stores whose `getHead` returns an error are not covered, pending [#2060](https://github.com/ethereum/EthLib/issues/2060).
   `Execution.honestHeadsCover_of_checked_call` keeps the root on every up-to-date honest head chain over the same interval.
   It replaces the consistency, the leaf and the call-epoch signer of `Execution.honestHeadsCover_of_signed_justification` with the rule's checks.
-  `Execution.rootViableAt_of_checked`, `Execution.rootInFilteredTree_of_checked` and `Execution.justified_comparable_of_checked` are the root's step at one time.
+  `Execution.rootInFilteredTree_of_checked` and `Execution.justified_comparable_of_checked` give the root's step at one time.
   `Execution.rootHeld_of_honest_vote` holds the root from the call on, from the honest vote that `Execution.honest_vote_of_caller_margin` finds behind the caller's margin.
   `Execution.heldFinality_or_evidence` reads a store's finalized checkpoint on a held state's justified chain, or gives `HeldStateFinalityEvidence`.
   `DelayFits.deadline_add_le`, `Store.ForwardReachable.finalized_add_two_le_or_anchor` and `Store.getCheckpointBlock_trans` are general steps.
@@ -31,6 +31,12 @@ Not yet released.
 - `Store.onTick_slot_induction` passes a fact of a store at its slot through a forward tick, from each tick within a slot.
   `epoch_lt_of_offset_zero` places a slot at the start of its epoch in a later epoch than each earlier slot.
   The proofs of the justified and finalized ages of a forward-reachable store read them.
+
+- `slotStart_le_of_slotAtTime` shows that each slot up to the slot at a time starts by that time.
+  `nextSlotStart_le_of_slotAtTime` shows it for the slot after an earlier one, and `nextSlotStart_le_clock` reads that at a store's clock.
+  `slotStart_le_clock`, `DelayFits.deadline_add_le` and `duty_window_of_slot_le` read them.
+  `isAncestor_of_getCheckpointBlock_above` places a checkpoint read above a block at or before the epoch's first slot.
+  `signerHead_of_duty` gives the head on which an honest duty's signer reads its target.
 
 - `Execution.honestTargetVotes_signed_of_checked` shows that an accepted current-target test has honest signers with two thirds of the active balance ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).
   Three times their stake is at least twice the total active balance plus the margin of the count.
