@@ -74,6 +74,19 @@ Not yet released.
   The codes do not change.
   `processParentExecutionPayload_of_empty_requests`, `processExecutionPayload_eq_error_of_prepareExecutionPayload` and `processBlockExecution_eq_error_of_prepareExecutionPayload` state these values.
 
+- The Engine API errors carry the values that their failed check compared.
+  Codes are unchanged, and the JSON-RPC error objects keep the messages and the `null` data that the Engine API fixes.
+  The bindings messages, which print the error in Lean form, now end with these values; hashes and payload IDs print in hex.
+  - `EngineError.unsupportedFork fork` carries the fork the method was asked to serve: that of the payload, of the attributes' block or of the stored build, or the node's fork for blobs; `none` when no fork is active.
+  - `EngineError.invalidForkchoiceState safe finalized` carries the safe and finalized hashes of the forkchoice state.
+  - `EngineError.tooLargeRequest count limit` carries the number of items asked for and the node's maximum.
+  - `EngineError.unknownPayload id` carries the payload ID.
+  - `PayloadError.wrongVersionedHashes expected actual` carries the expected hashes and those of the blob transactions.
+  - `PayloadError.invalidTerminalBlock parent` carries the hash of the parent.
+  - `GetPayloadError.wrongFork stored active` carries the stored fork and the configured one, and `blockValue value` the block value.
+  - `Jwt.JwtError.secretLength size` carries the size of the secret, `compact count` the number of parts of the token, and `algorithm name` the algorithm the header names, or `none`.
+  - The theorems on these errors state them with their fields: `forkchoiceUpdated_zero_after_transition`, `forkchoiceUpdated_eq_error_iff`, `checkAttributes_eq_error_of_unsupportedFork`, `checkRequestSize_eq_error_iff`, `bodiesByHash_eq_error_iff`, `bodiesByRange_eq_error_iff`, `getBlobsV1_of_fusaka`, `getPayload_eq_error_of_store_eq_none`, `getPayload_eq_error_of_activeFork_ne`, `getPayload_eq_error_of_acceptsGetPayloadFork_eq_false`, `getPayload_eq_error_of_blockValue_ge`, `newPayloadOnChain_of_not_terminal` and `issuedAt_eq_error_of_algorithm_ne`.
+
 - The precompile errors carry the values that their failed check compared, and their message names each value on one line.
   Each code keeps its meaning, and each error fires on the same inputs as before.
   The message of a failed call no longer wraps: `PrecompileError.sha256\n  (Sha256Error.outOfGas 72 71)` becomes `PrecompileError.sha256 (Sha256Error.outOfGas (cost := 72) (gas := 71))`, with each name in full.

@@ -120,7 +120,7 @@ theorem bodiesByHash_eq_ok_iff (store : BodyStore) (hashes : List Hash32)
 /-- A request by hash fails exactly when it is too large. -/
 theorem bodiesByHash_eq_error_iff (store : BodyStore) (hashes : List Hash32) (e : EngineError) :
     bodiesByHash store hashes = .error e ↔
-      store.maxRequest < hashes.length ∧ e = .tooLargeRequest := by
+      store.maxRequest < hashes.length ∧ e = .tooLargeRequest hashes.length store.maxRequest := by
   unfold bodiesByHash checkRequestSize
   by_cases h : store.maxRequest < hashes.length
   · simp [h, throw, throwThe, MonadExceptOf.throw, bind, Except.bind, eq_comm]
@@ -188,7 +188,8 @@ theorem bodiesByRange_eq_error_iff (store : BodyStore) (start count : UInt64) (e
     bodiesByRange store start count = .error e ↔
       (start = 0 ∧ e = .invalidParams "start: below 1") ∨
       (start ≠ 0 ∧ count = 0 ∧ e = .invalidParams "count: below 1") ∨
-      (start ≠ 0 ∧ count ≠ 0 ∧ store.maxRequest < count.toNat ∧ e = .tooLargeRequest) := by
+      (start ≠ 0 ∧ count ≠ 0 ∧ store.maxRequest < count.toNat ∧
+        e = .tooLargeRequest count.toNat store.maxRequest) := by
   unfold bodiesByRange checkRequestSize
   by_cases hs : start = 0
   · subst hs; simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind, eq_comm]

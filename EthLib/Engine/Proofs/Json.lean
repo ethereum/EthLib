@@ -633,7 +633,8 @@ theorem checkRequestSize_eq_ok_iff (maxRequest count : Nat) :
 
 /-- A request is too large exactly when it asks for more items than the node takes. -/
 theorem checkRequestSize_eq_error_iff (maxRequest count : Nat) (e : EngineError) :
-    checkRequestSize maxRequest count = .error e ↔ maxRequest < count ∧ e = .tooLargeRequest := by
+    checkRequestSize maxRequest count = .error e ↔
+      maxRequest < count ∧ e = .tooLargeRequest count maxRequest := by
   unfold checkRequestSize
   by_cases h : maxRequest < count
   · simp [h, throw, throwThe, MonadExceptOf.throw, eq_comm]

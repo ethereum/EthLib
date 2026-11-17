@@ -88,9 +88,13 @@ def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyVal
     fun e => (0, s!"setup: {e.message}")
   let r ← (getPayload config setup (fun id => entries.lookup id) version id).mapError fun
     | .engine e => (e.code, s!"engine error: {reprStr e}")
-    | .wrongFork => (0, "store: the fork is not the configured fork at the block")
+    | .wrongFork stored active =>
+      let active := match active with
+        | some fork => fork.name
+        | none => "no fork"
+      (0, s!"store: the fork {stored.name} is not the configured fork at the block, {active}")
     | .requests => (0, "store: execution requests out of order, too short or before Pectra")
-    | .blockValue => (0, "store: block value above 2^256")
+    | .blockValue value => (0, s!"store: block value {value} is 2^256 or more")
     | .noPayload => (0, "store: the block has no payload form")
     | .header e => (0, s!"store: the payload does not give the block: error {e.code}")
     | .bundle e => (0, s!"store: bundle error {e.code}")
