@@ -43,9 +43,11 @@ From Fulu, a request names the blocks along the ancestry of a block root, that b
 
 So the slots of the blocks decrease along the whole list.
 
-The walk also stops at the first block before the epochs that clients must serve.
+The walk also stops before an ancestor outside the epochs that clients must serve.
 
 That rule needs the current epoch, so it stays out with the rule that asks for at least one block.
+
+A block item carries no fork, so the check does not compare the context bytes of a chunk.
 
 ## Light client updates by range
 
