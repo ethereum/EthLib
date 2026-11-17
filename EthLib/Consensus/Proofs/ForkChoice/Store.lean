@@ -24,6 +24,8 @@ Each node of a block descends from the pending node of its parent at an earlier 
 
 The walk to a lower slot can stop at a higher slot on the way, and go on from there.
 
+So before Gloas, a checkpoint read goes through the checkpoint the root reads at a later epoch.
+
 From Gloas the walk gives each parent an empty or full status.
 
 It reaches the same blocks whatever the status of its start.
@@ -587,6 +589,42 @@ theorem isAncestor_of_getCheckpointBlock {root checkpoint : Root} {epoch : Epoch
     simp_all
   subst ancestor
   exact ⟨boundary, block, mapError_ok_iff.mp boundaryOk, held, le, descends⟩
+
+/-- Before Gloas, a checkpoint read at an epoch goes through the checkpoint at any later epoch.
+
+The read of the root at the later epoch names the block that the earlier read starts from. -/
+theorem getCheckpointBlock_trans {root through : Root} {high low : Epoch}
+    (before : fork < .glamsterdam)
+    (read : store.getCheckpointBlock root high = .ok through) (le : low ≤ high) :
+    store.getCheckpointBlock root low = store.getCheckpointBlock through low := by
+  have split := read
+  unfold getCheckpointBlock at split
+  simp only [bind_ok_iff] at split
+  obtain ⟨boundary, boundaryOk, node, walked, result⟩ := split
+  have rootEq : node.root = through := Except.ok.inj result
+  have pending := getAncestor_pending_of_lt before rfl walked
+  have nodeEq : node = ⟨through, .pending⟩ := by
+    cases node
+    simp only at rootEq pending
+    rw [rootEq, pending]
+  subst nodeEq
+  have boundaryNat := (computeStartSlotAtEpoch_ok_iff.mp (mapError_ok_iff.mp boundaryOk))
+  obtain ⟨lowSlot, lowOk⟩ : ∃ s, computeStartSlotAtEpoch preset low = .ok s := by
+    refine ⟨low * preset.SLOTS_PER_EPOCH, computeStartSlotAtEpoch_ok_iff.mpr ⟨?_, ?_⟩⟩
+    · have := UInt64.le_iff_toNat_le.mp le
+      have := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat this
+      omega
+    · rw [UInt64.toNat_mul, Nat.mod_eq_of_lt]
+      have := UInt64.le_iff_toNat_le.mp le
+      have := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat this
+      omega
+  have below : lowSlot ≤ boundary := by
+    apply UInt64.le_iff_toNat_le.mpr
+    rw [(computeStartSlotAtEpoch_ok_iff.mp lowOk).2, boundaryNat.2]
+    exact Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp le)
+  have through' := getAncestor_trans below walked
+  unfold getCheckpointBlock
+  simp only [lowOk, Except.mapError, bind, Except.bind, through']
 
 end Store
 
