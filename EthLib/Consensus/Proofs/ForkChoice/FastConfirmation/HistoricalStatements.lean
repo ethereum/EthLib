@@ -7,6 +7,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.SharedAncestry
 public import EthLib.Consensus.Proofs.ForkChoice.Supporters
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.DutySupport
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets
+public import EthLib.Consensus.Proofs.Transition.FfgJustification
 
 /-!
 # Observations for historical-anchor transport
@@ -321,9 +322,9 @@ An honest validator signed a vote with that checkpoint as its target.
 
 The vote is of a slot before the store's current slot, in a message sent by the store's time.
 
-Byzantine stake below two thirds in each state that counts the votes would give such a signer.
+Byzantine stake below two thirds in each state that counts the votes gives such a signer.
 
-That is not derived here. -/
+The historical signers derive it from that bound, the stake floors and conditions on the anchor. -/
 def JustifiedHonestlySigned (epoch : Epoch) (first last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k (slot : Slot), first ≤ (e.world k).time → (e.world k).time ≤ last →
     UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
@@ -332,6 +333,24 @@ def JustifiedHonestlySigned (epoch : Epoch) (first last : Nat) : Prop :=
     ∃ v ∈ J, ∃ i, (e.world i).time ≤ (e.world k).time ∧ ∃ m ∈ (e.world i).sent, ∃ data,
       (v, data) ∈ statements config checks anchorState anchorBlock m ∧
       data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < slot
+
+/-- Byzantine stake is below two thirds of the total in each state that counts later votes.
+
+The states are those where an up-to-date honest store over the interval counts votes.
+
+Their epoch is after the given one.
+
+The Byzantine stake is that of the quorum voters outside the honest set.
+
+The quorum voters are the unslashed validators active in the state's epoch or the one before. -/
+def ByzantineCountedStake (epoch : Epoch) (first last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k (state : BeaconState preset fork) (total : Gwei),
+    first ≤ (e.world k).time → (e.world k).time ≤ last →
+    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    CountedState ((e.world k).state w) config state → epoch < getCurrentEpoch state →
+    getTotalActiveBalance state = .ok total →
+    3 * stake (fun v => balanceAt state v.toNat) {v ∈ quorumVoters state | v ∉ J} <
+      2 * total.toNat
 
 /-- Each honest head of the interval omits at most the exit reserve per full window epoch.
 

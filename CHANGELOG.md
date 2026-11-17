@@ -27,6 +27,18 @@ Not yet released.
   `Execution.honestHeadsCover_of_historical_anchor` keeps its statement.
   `slotStart_le_clock` is now public.
 
+- `Execution.honestHeadsCover_of_byzantine_bound` derives the honest signer of the signed-justification headline ([#2656](https://github.com/ethereum/EthLib/issues/2656)).
+  It takes `ByzantineCountedStake`, Byzantine stake below two thirds in each state that counts later votes, instead of `JustifiedHonestlySigned`.
+  It also takes `Preset.InclusionDelayPositive` and two conditions on the anchor: its latest header is the anchor block's, with a zero state root.
+  `Execution.justifiedHonestlySigned` is the derivation; `Execution.honestHeadsCover_of_signed_justification` keeps its statement.
+  The votes behind a justified checkpoint are traced in `ForkChoice/JustifiedVotes.lean`: `Store.ForwardReachableWith.justified_counted`, `held_participation` and `counted_history`, and `Execution.exists_sent_of_votesBelow`.
+  `processJustificationAndFinalization_exists_voter` names a voter of a fresh justification, among `quorumVoters`.
+  `isValidIndexedAttestation_of_keys` and `processBlock_attestation_checked` carry a block's attestation check to the state of its target.
+  `Store.ForwardReachableWith.pubkeysDistinct_of_blockState`, `countedRun_enoughStake` and `stake_activeKeys_eq` bound the stake where a store counts votes.
+  `mapM_congr` holds in any lawful monad, and `lt_size_of_mem_getActiveValidatorIndices` bounds active indices by the registry.
+  `RunKept.getAttestingIndices_eq` keeps attesters along a run.
+  `keys_advanceSlot`, `getAttestingIndices_eq_of_seed`, `Store.getAncestor_of_isAncestor` and `Store.exists_storeTargetCheckpointState` are now public.
+
 - `HonestVoteData.target_read` reads the target of an honest vote from its voter's head, without the reads of a duty vote.
   It needs the target block held by some store reachable from the same anchor.
   The anchor store does not tie the anchor state's latest header to the anchor block, so a read at the anchor needs that block.
