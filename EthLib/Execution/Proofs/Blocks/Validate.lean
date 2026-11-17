@@ -61,7 +61,7 @@ theorem gasUsed_le_of_validateHeader
     (hv : validateHeader hFork parent header schedule = .ok ()) :
     header.gasUsed ≤ header.gasLimit := by
   have := check_of_validateHeader hv (c := (decide (header.gasUsed ≤ header.gasLimit),
-    .gasUsedAboveLimit)) (by simp [headerChecks])
+    .gasUsedAboveLimit header.gasUsed header.gasLimit)) (by simp [headerChecks])
   simpa using this
 
 /-- A valid header has a gas limit that the rule accepts, across a London transition too. -/
@@ -69,7 +69,7 @@ theorem checkGasLimitAcross_of_validateHeader
     (hv : validateHeader hFork parent header schedule = .ok ()) :
     GasLimit.checkGasLimitAcross parentFork fork header.gasLimit parent.gasLimit = true :=
   check_of_validateHeader hv (c := (GasLimit.checkGasLimitAcross parentFork fork header.gasLimit
-    parent.gasLimit, .invalidGasLimit)) (by simp [headerChecks])
+    parent.gasLimit, .invalidGasLimit header.gasLimit parent.gasLimit)) (by simp [headerChecks])
 
 /-- With a parent from London on, a valid header has a gas limit that the plain rule accepts. -/
 theorem checkGasLimit_of_validateHeader (hLondon : .london ≤ parentFork)
@@ -122,7 +122,8 @@ theorem excessBlobGas_of_validateHeader (hLondon : .london ≤ parentFork) (h : 
 theorem london_le_of_validateHeader (h : .paris ≤ fork)
     (hv : validateHeader hFork parent header schedule = .ok ()) : .london ≤ parentFork := by
   have := check_of_validateHeader hv
-    (c := (decide (.london ≤ parentFork), .parentBeforeLondon)) (by simp [headerChecks, h])
+    (c := (decide (.london ≤ parentFork), .parentBeforeLondon parentFork))
+    (by simp [headerChecks, h])
   simpa using this
 
 /-- A valid header follows its parent: one number higher, and later in time. -/
@@ -131,9 +132,11 @@ theorem number_timestamp_of_validateHeader
     header.number = parent.number + 1 ∧ parent.timestamp.toNat < header.timestamp.toNat := by
   constructor
   · simpa using check_of_validateHeader hv
-      (c := (decide (header.number = parent.number + 1), .wrongNumber)) (by simp [headerChecks])
+      (c := (decide (header.number = parent.number + 1),
+        .wrongNumber (parent.number + 1) header.number)) (by simp [headerChecks])
   · simpa using check_of_validateHeader hv
-      (c := (decide (parent.timestamp.toNat < header.timestamp.toNat), .timestampNotAfterParent))
+      (c := (decide (parent.timestamp.toNat < header.timestamp.toNat),
+        .timestampNotAfterParent header.timestamp.toNat parent.timestamp.toNat))
       (by simp [headerChecks])
 
 /-- Before Paris, a valid header has the difficulty that its parent gives. -/

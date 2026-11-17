@@ -153,7 +153,8 @@ private theorem outputChecks_receipts {fork : Fork} {header : Header fork}
     (h : firstFailure (outputChecks header output roots) = .ok ()) :
     roots.receipts = header.receiptRoot := by
   have all := (firstFailure_eq_ok_iff _).mp h
-  have := all (decide (roots.receipts = header.receiptRoot), .wrongReceiptRoot)
+  have := all (decide (roots.receipts = header.receiptRoot),
+    .wrongReceiptRoot header.receiptRoot roots.receipts)
     (by simp [outputChecks])
   simpa using this
 

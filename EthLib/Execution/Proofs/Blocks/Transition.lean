@@ -239,10 +239,13 @@ theorem of_outputChecks {header : Header fork} {output : BlockOutput fork} {root
   -- The first five checks come first in the list, before the checks of later forks.
   have first : ∀ c ∈ [(decide (output.gas.gasUsed = header.gasUsed),
       BlockError.wrongGasUsed header.gasUsed output.gas.gasUsed),
-      (decide (roots.transactions = header.transactionsRoot), .wrongTransactionsRoot),
-      (decide (roots.state = header.stateRoot), .wrongStateRoot),
-      (decide (roots.receipts = header.receiptRoot), .wrongReceiptRoot),
-      (decide (logsBloom output.logs = header.bloom), .wrongBloom)], c.1 = true :=
+      (decide (roots.transactions = header.transactionsRoot),
+        .wrongTransactionsRoot header.transactionsRoot roots.transactions),
+      (decide (roots.state = header.stateRoot), .wrongStateRoot header.stateRoot roots.state),
+      (decide (roots.receipts = header.receiptRoot),
+        .wrongReceiptRoot header.receiptRoot roots.receipts),
+      (decide (logsBloom output.logs = header.bloom),
+        .wrongBloom header.bloom (logsBloom output.logs))], c.1 = true :=
     fun c hc => get c (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _
       (List.mem_append_left _ hc))))
   refine ⟨?_, ?_, ?_⟩
@@ -289,8 +292,8 @@ theorem outputChecks_transactions {header : Header fork} {output : BlockOutput f
     {roots : OutputRoots} (h : firstFailure (outputChecks header output roots) = .ok ()) :
     roots.transactions = header.transactionsRoot := by
   have all := (firstFailure_eq_ok_iff _).mp h
-  have := all (decide (roots.transactions = header.transactionsRoot), .wrongTransactionsRoot)
-    (by simp [outputChecks])
+  have := all (decide (roots.transactions = header.transactionsRoot),
+    .wrongTransactionsRoot header.transactionsRoot roots.transactions) (by simp [outputChecks])
   simpa using this
 
 /-- From Shapella, a block that passes its output checks has the withdrawals root of its body. -/
@@ -300,7 +303,8 @@ theorem outputChecks_withdrawals {header : Header fork} {output : BlockOutput fo
     roots.withdrawals = some (header.withdrawalsRoot hs) := by
   have all := (firstFailure_eq_ok_iff _).mp h
   have := all (decide (roots.withdrawals = some (header.withdrawalsRoot hs)),
-    .wrongWithdrawalsRoot) (by simp [outputChecks, hs])
+    .wrongWithdrawalsRoot (header.withdrawalsRoot hs) roots.withdrawals)
+    (by simp [outputChecks, hs])
   simpa using this
 
 /-- From Glamsterdam, a block that passes the checks commits to the list of its body.
@@ -312,7 +316,8 @@ theorem accessListHash_of_outputChecks {header : Header fork} {output : BlockOut
     output.accessListHash = some (header.blockAccessListHash hFork) := by
   have all := (firstFailure_eq_ok_iff _).mp h
   have last : (decide (output.accessListHash = some (header.blockAccessListHash hFork)),
-      BlockError.wrongBlockAccessListHash) ∈ outputChecks header output roots := by
+      BlockError.wrongBlockAccessListHash (header.blockAccessListHash hFork)
+        output.accessListHash) ∈ outputChecks header output roots := by
     unfold outputChecks
     simp only [hFork, ↓reduceDIte]
     exact List.mem_append_right _ (List.mem_singleton_self _)

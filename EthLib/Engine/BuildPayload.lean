@@ -166,8 +166,8 @@ def buildPayload (chain : BlockChain) (attributes : PayloadAttributes fork)
   if .hegota ≤ fork then throw (.aborted (.forkNotYetSpecified fork))
   let some parent := chain.recent.getLast? | throw .noParent
   let number := parent.header.number + 1
-  unless chain.config.activeFork number attributes.timestamp.toNat = some fork do
-    throw .wrongFork
+  let active := chain.config.activeFork number attributes.timestamp.toNat
+  unless active = some fork do throw (.wrongFork active fork)
   let parentHash ← parent.header.hash.mapError .encoding
   let header := buildHeader chain.config parent parentHash attributes choices
   let result ← runBody chain ⟨header, transactions, [], attributes.withdrawals⟩

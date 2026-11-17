@@ -89,7 +89,7 @@ def checkOf (args : String × ByteArray) : Result Bool := do
   let ⟨fork, header⟩ ← headerOf args.1.toUTF8 args.2
   if .paris ≤ fork then throw (0, "a header from Paris on has no proof of work")
   (checkProofOfWork header).map (fun () => true) |>.mapError
-    fun e => (e.code, s!"proof of work invalid: {reprStr e}")
+    fun e => (e.code, s!"proof of work invalid: {oneLine e}")
 
 /-- Check the proof of work of a header in RLP form, at a named fork before Paris.
 
@@ -121,6 +121,6 @@ def validateOmmersExport (forks recent block : ByteArray) (checkSeal : UInt8) :
   let ⟨_, b⟩ ← blockOnChain config
     (← (Serialization.Rlp.decode block).mapError (rlpError "block rejected"))
   (validateOmmers config (checkSeal != 0) recentBlocks b.header b.ommers).map (fun () => 1)
-    |>.mapError fun e => (e.code, s!"ommers invalid: {reprStr e}")
+    |>.mapError fun e => (e.code, s!"ommers invalid: {oneLine e}")
 
 end EthLib.Execution.Blocks.Exports

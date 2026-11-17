@@ -67,9 +67,12 @@ def test_header_result_is_above_its_target(name: str) -> None:
     #     first:  result 0xdd47... > 2^256 / 0x020000
     #     second: result 0xab9b... > 2^256 / 0x020040
     case = _POW[name]
-    assert int(case["result"], 16) > 2**256 // _difficulty(bytes.fromhex(case["header"]))
+    result, target = int(case["result"], 16), 2**256 // _difficulty(bytes.fromhex(case["header"]))
+    assert result > target
     with raises(
-        BlockError, "proof of work invalid: EthLib.Execution.Blocks.PowError.resultAboveTarget"
+        BlockError,
+        "proof of work invalid: EthLib.Execution.Blocks.PowError.resultAboveTarget "
+        f"(result := {result}) (target := {target})",
     ) as error:
         check_proof_of_work(FORK, bytes.fromhex(case["header"]))
     assert error.value.code == 223
@@ -96,8 +99,12 @@ def test_wrong_mix_digest_is_rejected() -> None:
     header = bytearray(bytes.fromhex(case["header"]))
     at = header.rindex(bytes.fromhex(case["mixHash"])) + 31
     header[at] ^= 1
+    # Ethash still gives the case's mix digest, and the header holds the changed one.
+    changed = bytes(header[at - 31 : at + 1])
     with raises(
-        BlockError, "proof of work invalid: EthLib.Execution.Blocks.PowError.wrongMixDigest"
+        BlockError,
+        "proof of work invalid: EthLib.Execution.Blocks.PowError.wrongMixDigest "
+        f"(expected := 0x{case['mixHash']}) (actual := 0x{changed.hex()})",
     ) as error:
         check_proof_of_work(FORK, bytes(header))
     assert error.value.code == 222

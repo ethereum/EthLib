@@ -39,6 +39,27 @@ Not yet released.
 
 ### Changes that break callers
 
+- The block, ommer and proof-of-work errors carry the values that their failed check compared.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  The message of each error names each value, as `(name := value)`, and writes each hash, address and byte string in hex.
+  It stays on one line, so `header invalid: EthLib.Execution.Blocks.BlockError.gasUsedAboveLimit` becomes `header invalid: EthLib.Execution.Blocks.BlockError.gasUsedAboveLimit (gasUsed := 30000001) (gasLimit := 30000000)`.
+  The values that the errors already carried get names too: `wrongBaseFee 7 8` becomes `wrongBaseFee (expected := 7) (actual := 8)`.
+  In Lean, these constructors of `Blocks.BlockError` take arguments:
+  - `gasUsedAboveLimit gasUsed gasLimit`, `invalidGasLimit gasLimit parentGasLimit` and `timestampNotAfterParent timestamp parentTimestamp`;
+  - `wrongNumber expected actual`, `extraDataTooLong size`, `nonzeroDifficulty difficulty`, `nonzeroNonce nonce` and `wrongOmmersHash ommersHash`;
+  - `wrongParentHash expected actual`, whose expected hash is `none` only for a parent at a later fork than the header whose header has no RLP form;
+  - `parentBeforeLondon parentFork`, `wrongFork active fork`, `ommersAfterParis count` and `wrongDaoExtraData extraData`;
+  - `wrongTransactionsRoot`, `wrongStateRoot`, `wrongReceiptRoot`, `wrongBloom` and `wrongRequestsHash`, each with the header's value `expected` and the body's value `actual`;
+  - `wrongWithdrawalsRoot` and `wrongBlockAccessListHash`, whose body value is an `Option`.
+  `genesisNumber` and `noParent` stay bare: the number of the first is always 0, and the second fires on an empty recent chain.
+  These constructors of `Blocks.OmmerError` take arguments:
+  - `wrongOmmersHash expected actual`, `numberOutOfRange number blockNumber`, `parentMissing number` and `tooManyOmmers count`;
+  - `duplicateOmmer hash`, `ommerInChain hash`, `ommerAlreadyIncluded hash`, `wrongAge hash age`, `parentNotRecent hash parentHash` and `siblingOfBlock hash`, each with the hash of the ommer;
+  - `wrongDaoExtraData extraData`.
+  `Blocks.PowError.wrongMixDigest expected actual` holds the mix digest of Ethash and that of the header, and `Blocks.PowError.resultAboveTarget result target` holds the result and the target.
+  `buildPayload_eq_error_of_activeFork_ne` names the active fork and the fork of the build in its error.
+  `Blocks.constructorFormat` moves to `EthLib.Execution.constructorFormat`, and `Transactions.Exports.oneLine` to `Blocks.Exports.oneLine`.
+
 - The SSZ decoding errors carry the values that their failed check compared.
   Codes and rejection reasons are unchanged; the message `EthLib.Serialization.Ssz.Err.<name>` now ends with these values, in constructor order.
   - `Ssz.Err.offsetUnordered offset next` carries an offset and the smaller offset after it.
