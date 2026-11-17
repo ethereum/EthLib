@@ -240,21 +240,23 @@ theorem exists_offset_eq_iff {first last after slot : Slot}
     rw [← UInt64.toNat_sub_of_le _ _ low, Nat.toUInt64_eq, UInt64.ofNat_toNat,
       UInt64.add_comm, UInt64.sub_add_cancel]
 
-/-- The parameters under which every committee window before a store's current slot reads.
+/-- The parameter bounds that, with a held head state, let every committee window read.
 
-- `registry`: the shuffle takes at most `2^40` validators, so the registry limit must not exceed it.
-- `committees`: the position of a committee in its epoch fits in 64 bits for a full registry.
-- `seeds`: the epoch of a slot of the clock, plus the history of mixes, fits in 64 bits.
-
-A current slot is at most `(2^64 - 1) / SLOT_DURATION_MS`.
-
-So its epoch is at most `(2^64 - 1) / (SLOT_DURATION_MS * SLOTS_PER_EPOCH)`. -/
+The windows are those that end before a store's current slot. -/
 structure Config.CommitteeWindowsFit (config : Config) (preset : Preset) : Prop where
+  /-- The registry limit is at most `2^40`, the most validators the shuffle takes. -/
   registry : preset.VALIDATOR_REGISTRY_LIMIT.toNat ≤ 2 ^ 40
+  /-- The validators of a full registry times a bound on the committees of an epoch fit in 64 bits.
+  -/
   committees : preset.VALIDATOR_REGISTRY_LIMIT.toNat *
     (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64
+  /-- The epoch of the latest 64-bit time, plus the history of mixes, fits in 64 bits. -/
   seeds : (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) +
     preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64
+  /-- The shortest seed lookahead is shorter than the history of mixes. -/
+  lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
+  /-- An epoch has a slot. -/
+  positive : 0 < preset.SLOTS_PER_EPOCH.toNat
 
 /-- The committee windows of mainnet fit. -/
 theorem Config.committeeWindowsFit_mainnet : Config.mainnet.CommitteeWindowsFit Preset.mainnet := by
@@ -473,31 +475,23 @@ private theorem getSlotCommittee_exists {head : Root} {headState : BeaconState p
 
 /-- Every committee window that ends before the current slot reads, from a held head state.
 
-The registry of that state stays within its limit, and `Config.CommitteeWindowsFit` holds. -/
+The registry of that state stays within its limit, and the parameter bounds hold. -/
 theorem getCommitteesBetweenSlots_exists {head : Root} {headState : BeaconState preset fork}
     {first last current : Slot} (fit : config.CommitteeWindowsFit preset)
-    (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (stateOk : store.blockState head = .ok headState) (within : headState.RegistryWithinLimit)
     (currentOk : store.getCurrentSlot config = .ok current) (before : last < current) :
     ∃ participants, store.getCommitteesBetweenSlots head first last = .ok participants := by
-  -- The current slot is a quotient by the slot duration of a time below `2^64`.
-  have currentLe : current.toNat ≤ (2 ^ 64 - 1) / config.SLOT_DURATION_MS.toNat := by
-    unfold getCurrentSlot computeSlotAtTimeMs at currentOk
-    obtain ⟨elapsed, -, divided⟩ := bind_ok_iff.mp (mapError_ok_iff.mp currentOk)
-    obtain ⟨-, value⟩ := Uint64.divChecked_ok_iff.mp divided
-    rw [value]
-    exact Nat.div_le_div_right (by have := elapsed.toNat_lt; omega)
+  have currentLe := computeSlotAtTimeMs_le (mapError_ok_iff.mp currentOk)
   have lastLt := UInt64.lt_iff_toNat_lt.mp before
   have registryLe : headState.validators.data.size ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat :=
     within
   refine getCommitteesBetweenSlots_ok_of_slots (Uint64.addChecked_of_lt (by
     have := current.toNat_lt
     simp only [UInt64.toNat_one]
-    omega)) fun slot _ high => getSlotCommittee_exists stateOk ?_ lookahead
+    omega)) fun slot _ high => getSlotCommittee_exists stateOk ?_ fit.lookahead
       (Nat.le_trans registryLe fit.registry)
       (Nat.lt_of_le_of_lt (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ registryLe))
-        fit.committees) positive
+        fit.committees) fit.positive
   -- The epoch of the slot is at most that of the current slot, so its seed fits.
   have slotLe := UInt64.le_iff_toNat_le.mp high
   have epochLe : (computeEpochAtSlot preset slot).toNat ≤

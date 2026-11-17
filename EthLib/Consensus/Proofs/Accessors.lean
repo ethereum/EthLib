@@ -948,7 +948,9 @@ theorem beaconCommitteeOf_ok {slot : Slot} {index : CommitteeIndex} {perSlot : U
 
 /-- A beacon committee is cut when its index is below the count of committees of a slot.
 
-An epoch must have a slot, and the bounds of `beaconCommitteeOf_ok` must fit in 64 bits. -/
+An epoch must have a slot.
+
+The count of the epoch, and the active validators times it, must fit in 64 bits. -/
 theorem beaconCommitteeOf_ok_of_lt {slot : Slot} {index : CommitteeIndex} {perSlot : UInt64}
     {active : Array ValidatorIndex} {shuffled : Array UInt64}
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
@@ -969,13 +971,7 @@ theorem beaconCommitteeOf_ok_of_lt {slot : Slot} {index : CommitteeIndex} {perSl
     _ ≤ e * p := Nat.mul_le_mul_right _ remainder
     _ = p * e := Nat.mul_comm _ _
 
-/-- A beacon committee whose index is below the count of its slot is cut.
-
-The epoch of the slot plus the length of the history of mixes must fit in 64 bits.
-
-The seed lookahead must be shorter than that history, and the registry at most `2^40` validators.
-
-The validators times a bound on the committees of an epoch must be below `2^64`. -/
+/-- A beacon committee whose index is below the count of its slot is cut, when its bounds fit. -/
 theorem getBeaconCommittee_exists {state : BeaconState preset fork} {slot : Slot}
     {index : CommitteeIndex}
     (seedRoom : (computeEpochAtSlot preset slot).toNat +

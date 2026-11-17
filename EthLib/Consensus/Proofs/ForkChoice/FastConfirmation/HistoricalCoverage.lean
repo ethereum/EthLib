@@ -547,8 +547,8 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
           high < current → ∃ participants,
             ((e.world k).state w).getCommitteesBetweenSlots receiverHead.root first high =
               .ok participants :=
-        fun _ _ currentOk before => Store.getCommitteesBetweenSlots_exists fit (by omega)
-          positive (Store.blockState_ok_iff.mpr headStateFound)
+        fun _ _ currentOk before => Store.getCommitteesBetweenSlots_exists fit
+          (Store.blockState_ok_iff.mpr headStateFound)
           (BeaconState.registryWithinLimit_of_lt preGloas headState) currentOk before
       -- The ceiling and the parameter bound give the receiver's proposer score.
       obtain ⟨score, scoreOk⟩ := computeProposerScore_exists scoreFits positive

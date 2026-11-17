@@ -824,11 +824,9 @@ theorem getAttestationScore_ok_of_getHead (before : fork < .glamsterdam)
   | error error => simp [scoreOk] at weightOk
   | ok score => exact ⟨score, scoreOk⟩
 
-/-- Before Gloas, a head with a viable node besides the justified block read the justified state.
+/-- Before Gloas, a head with a viable node besides the justified block has read its state.
 
-The head computation reads that state only when it weighs a child of the justified block.
-
-A viable node other than the justified block gives that block a viable child to weigh. -/
+It gives a receiver's justified state without assuming the read. -/
 theorem checkpointState_justified_of_getHead (before : fork < .glamsterdam)
     {nodes : List ForkChoiceNode} {head node : ForkChoiceNode}
     (tree : store.getFilteredNodeTree config = .ok nodes)

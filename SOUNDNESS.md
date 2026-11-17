@@ -3015,7 +3015,7 @@ It assumes that no up-to-date honest justified checkpoint over the interval conf
 The receivers' reads are derived.
 When the root is above the justified block, the head computation weighed a child of that block and so read its state (`Store.checkpointState_justified_of_getHead`).
 Each committee window before the current slot reads from the head's state (`Store.getCommitteesBetweenSlots_exists`).
-That needs `Config.CommitteeWindowsFit`, a bound on the registry limit, the committees and the clock, which mainnet and minimal satisfy.
+That needs `Config.CommitteeWindowsFit`, a bound on the registry limit, the committees, the clock and the seed lookahead, which mainnet and minimal satisfy.
 `ReceiverWindowExitsNear` assumes the exit bound of the window of each receiver within two epochs of the parent.
 `LateDutyMajority` assumes the honest duty majority of the duty-epoch theorem.
 The receiver's proposer score is derived from the checkpoint stake ceiling and `Config.ProposerScoreFits`, a bound on the boost that mainnet and minimal satisfy.
