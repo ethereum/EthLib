@@ -78,8 +78,12 @@ def BeaconBlock.blind (block : BeaconBlock preset fork) (range : HasBuilderApi f
 
 /-- Why a blinded body does not unblind with a payload. -/
 inductive UnblindError where
-  /-- The header of the payload is not the header that the blinded body holds. -/
-  | headerMismatch
+  /-- The header of the payload is not the header that the blinded body holds.
+
+  The error gives the block hash of the blinded header, then the block hash of the payload.
+
+  The two hashes agree when the headers differ only in another field. -/
+  | headerMismatch (expected actual : Hash32)
   /-- The header of the payload cannot be computed. -/
   | header (fault : Err)
   deriving DecidableEq, Repr
@@ -103,7 +107,7 @@ def BlindedBeaconBlockBody.unblind (body : BlindedBeaconBlockBody preset fork)
         fun gloas => absurd gloas (Nat.not_le_of_lt range.2),
         fun gloas => absurd gloas (Nat.not_le_of_lt range.2),
         fun gloas => absurd gloas (Nat.not_le_of_lt range.2)⟩
-    else .error .headerMismatch
+    else .error (.headerMismatch (body.executionPayloadHeader range).blockHash payload.blockHash)
 
 /-- From Bellatrix to Fulu: the block that a blinded block and a revealed payload give.
 

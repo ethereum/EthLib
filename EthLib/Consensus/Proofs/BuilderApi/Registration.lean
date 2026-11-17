@@ -83,7 +83,8 @@ theorem processRegistration_exited {config : Config} {checks : SignatureChecks}
     (found : validatorOfPubkey? state signed.message.pubkey = some validator)
     (activated : validator.activationEpoch ≤ getCurrentEpoch state)
     (exited : validator.exitEpoch ≤ getCurrentEpoch state) :
-    processRegistration config checks state registry signed now = .error .notEligible := by
+    processRegistration config checks state registry signed now =
+      .error (.notEligible signed.message.pubkey (getCurrentEpoch state)) := by
   have refused : isEligibleForRegistration state validator = false := by
     simp only [isEligibleForRegistration, isActiveValidator, isPendingForRegistration,
       Bool.or_eq_false_iff, Bool.and_eq_false_iff, decide_eq_false_iff_not]

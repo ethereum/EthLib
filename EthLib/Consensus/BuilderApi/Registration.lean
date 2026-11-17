@@ -58,18 +58,26 @@ def isEligibleForRegistration (state : BeaconState preset fork) (validator : Val
 
 /-- Why a builder refuses a registration. -/
 inductive RegistrationError where
-  /-- No validator of the state has the key. -/
-  | unknownValidator
-  /-- The validator is neither active nor pending in the current epoch. -/
-  | notEligible
-  /-- The builder's clock plus the lookahead does not fit in 64 bits. -/
-  | clockOverflow
-  /-- The time of the registration is too far ahead of the builder's clock. -/
-  | tooFarInFuture
-  /-- The time of the registration is earlier than that of the one the builder keeps. -/
-  | olderThanPrevious
-  /-- The signature does not verify. -/
-  | badSignature
+  /-- No validator of the state has the key that the error gives. -/
+  | unknownValidator (pubkey : BLSPubkey)
+  /-- The validator is neither active nor pending in the current epoch.
+
+  The error gives the key of the validator and the current epoch. -/
+  | notEligible (pubkey : BLSPubkey) (epoch : Epoch)
+  /-- The builder's clock plus the lookahead does not fit in 64 bits.
+
+  The error gives the time of the clock and the lookahead, in seconds. -/
+  | clockOverflow (now lookahead : UInt64)
+  /-- The time of the registration is too far ahead of the builder's clock.
+
+  The error gives the time of the registration, the time of the clock and the lookahead. -/
+  | tooFarInFuture (timestamp now lookahead : UInt64)
+  /-- The time of the registration is earlier than that of the one the builder keeps.
+
+  The error gives the time of the registration, then the time of the kept one. -/
+  | olderThanPrevious (timestamp previous : UInt64)
+  /-- The signature does not verify against the validator key that the error gives. -/
+  | badSignature (pubkey : BLSPubkey)
   /-- The signing root cannot be computed. -/
   | root (fault : Err)
   deriving DecidableEq, Repr
@@ -107,16 +115,19 @@ def processRegistration (config : Config) (checks : SignatureChecks)
     (signed : SignedValidatorRegistrationV1) (now : UInt64) : Except RegistrationError Unit := do
   let registration := signed.message
   let some validator := validatorOfPubkey? state registration.pubkey
-    | throw .unknownValidator
-  unless isEligibleForRegistration state validator do throw .notEligible
-  unless now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat < 2 ^ 64 do throw .clockOverflow
+    | throw (.unknownValidator registration.pubkey)
+  unless isEligibleForRegistration state validator do
+    throw (.notEligible registration.pubkey (getCurrentEpoch state))
+  unless now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat < 2 ^ 64 do
+    throw (.clockOverflow now MAX_REGISTRATION_LOOKAHEAD)
   unless registration.timestamp.toNat ≤ now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat do
-    throw .tooFarInFuture
+    throw (.tooFarInFuture registration.timestamp now MAX_REGISTRATION_LOOKAHEAD)
   if let some previous := registry.find? registration.pubkey then
-    unless previous.message.timestamp ≤ registration.timestamp do throw .olderThanPrevious
+    unless previous.message.timestamp ≤ registration.timestamp do
+      throw (.olderThanPrevious registration.timestamp previous.message.timestamp)
   match verifyRegistrationSignature config checks signed with
   | .error fault => throw (.root fault)
-  | .ok false => throw .badSignature
+  | .ok false => throw (.badSignature registration.pubkey)
   | .ok true => pure ()
 
 /-- The status of a request that registers one validator: 200 when kept, 400 otherwise. -/
