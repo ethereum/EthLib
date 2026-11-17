@@ -28,14 +28,16 @@ So every byte string has exactly one text.
 
 namespace EthLib.Base.Base64
 
-/-- Why the base64 decoder refused its input. -/
+/-- Why the base64 decoder refused its input.
+
+A position counts the characters of the text from 0. -/
 inductive Base64Error where
-  /-- A character outside the URL-safe alphabet. -/
-  | invalidChar (c : Char)
-  /-- A last group of one character, which holds no whole byte. -/
-  | invalidLength
-  /-- A last character whose unused low bits are not zero. -/
-  | nonZeroPadBits
+  /-- The character `c` at `position` is outside the URL-safe alphabet. -/
+  | invalidChar (position : Nat) (c : Char)
+  /-- A text of `length` characters, whose last group of one character holds no whole byte. -/
+  | invalidLength (length : Nat)
+  /-- The last character `c`, at `position`, has unused low bits that are not zero. -/
+  | nonZeroPadBits (position : Nat) (c : Char)
   deriving Repr, DecidableEq
 
 /-- The character of a six-bit value, from Table 2 of RFC 4648 §5.
@@ -75,35 +77,38 @@ def encodeList : List UInt8 → List Char
     [encodeSextet (n / 2 ^ 18), encodeSextet (n / 2 ^ 12 % 64)]
   | [] => []
 
-/-- The six-bit value of a character, or an error for a character outside the alphabet. -/
-def readSextet (c : Char) : Except Base64Error Nat :=
+/-- The six-bit value of the character at a position, or an error outside the alphabet. -/
+def readSextet (position : Nat) (c : Char) : Except Base64Error Nat :=
   match decodeSextet c with
   | some v => .ok v
-  | none => .error (.invalidChar c)
+  | none => .error (.invalidChar position c)
 
-/-- The bytes of a list of characters, four characters at a time. -/
-def decodeList : List Char → Except Base64Error (List UInt8)
+/-- The bytes of a list of characters, four characters at a time.
+
+The first character of the list is at position `start` of the text. -/
+def decodeList (start : Nat) : List Char → Except Base64Error (List UInt8)
   | c0 :: c1 :: c2 :: c3 :: rest => do
-    let n := (← readSextet c0) * 2 ^ 18 + (← readSextet c1) * 2 ^ 12
-      + (← readSextet c2) * 2 ^ 6 + (← readSextet c3)
-    let bytes ← decodeList rest
+    let n := (← readSextet start c0) * 2 ^ 18 + (← readSextet (start + 1) c1) * 2 ^ 12
+      + (← readSextet (start + 2) c2) * 2 ^ 6 + (← readSextet (start + 3) c3)
+    let bytes ← decodeList (start + 4) rest
     return UInt8.ofNat (n / 2 ^ 16) :: UInt8.ofNat (n / 2 ^ 8 % 256) :: UInt8.ofNat (n % 256)
       :: bytes
   -- Three characters hold two bytes, and their last two bits must be zero.
   | [c0, c1, c2] => do
-    let n := (← readSextet c0) * 2 ^ 18 + (← readSextet c1) * 2 ^ 12 + (← readSextet c2) * 2 ^ 6
+    let n := (← readSextet start c0) * 2 ^ 18 + (← readSextet (start + 1) c1) * 2 ^ 12
+      + (← readSextet (start + 2) c2) * 2 ^ 6
     if n % 2 ^ 8 = 0 then
       return [UInt8.ofNat (n / 2 ^ 16), UInt8.ofNat (n / 2 ^ 8 % 256)]
     else
-      throw .nonZeroPadBits
+      throw (.nonZeroPadBits (start + 2) c2)
   -- Two characters hold one byte, and their last four bits must be zero.
   | [c0, c1] => do
-    let n := (← readSextet c0) * 2 ^ 18 + (← readSextet c1) * 2 ^ 12
+    let n := (← readSextet start c0) * 2 ^ 18 + (← readSextet (start + 1) c1) * 2 ^ 12
     if n % 2 ^ 16 = 0 then
       return [UInt8.ofNat (n / 2 ^ 16)]
     else
-      throw .nonZeroPadBits
-  | [_] => throw .invalidLength
+      throw (.nonZeroPadBits (start + 1) c1)
+  | [_] => throw (.invalidLength (start + 1))
   | [] => return []
 
 /-- The URL-safe base64 text of a byte string, without padding. -/
@@ -114,7 +119,7 @@ def encode (bytes : ByteArray) : String :=
 
 It fails unless the encoder writes exactly this text. -/
 def decode (text : String) : Except Base64Error ByteArray := do
-  let bytes ← decodeList text.toList
+  let bytes ← decodeList 0 text.toList
   return ⟨bytes.toArray⟩
 
 end EthLib.Base.Base64

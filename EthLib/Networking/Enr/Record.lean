@@ -77,7 +77,9 @@ inductive EnrError where
   | unsortedKeys (key next : ByteArray)
   /-- The text does not start with `enr:`. -/
   | missingPrefix
-  /-- The text after `enr:` is not base64. -/
+  /-- The text after `enr:` is not base64.
+
+  Its positions count the characters of the whole text, `enr:` included. -/
   | base64 (e : Base64.Base64Error)
   /-- The record has no `id` pair, which names its identity scheme. -/
   | missingId
@@ -189,7 +191,7 @@ It fails unless the text is `enr:`, then the base64 of bytes that the decoder ac
 def fromText (text : String) : Except EnrError Enr :=
   match text.toList with
   | 'e' :: 'n' :: 'r' :: ':' :: rest => do
-    let bytes ← (Base64.decodeList rest).mapError .base64
+    let bytes ← (Base64.decodeList TEXT_PREFIX.length rest).mapError .base64
     decode ⟨bytes.toArray⟩
   | _ => throw .missingPrefix
 
