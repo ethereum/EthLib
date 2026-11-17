@@ -1036,7 +1036,6 @@ The root is above the start on the walk, and its own epoch is at most one after 
 The viability at each time then follows from the root's step over the call's interval. -/
 private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -1108,7 +1107,6 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
     (included : TargetIncluded (e := e) time)
     (quorumDrift : QuorumDriftWithin (e := e) horizon time)
     (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
-    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     {fcr : FastConfirmationStore} {startRoot : Root} {chain later : List Root}
     (headOk : ((e.world n).state u).getHead config = .ok head)
@@ -1125,6 +1123,10 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
       HonestCollision (e := e) time ∨ HistoricalDirectSafetyEvidence (e := e) pre time ∨
       CrossStoreJustifiedEvidence (e := e) pre time ∨
         HeldStateFinalityEvidence (e := e) pre time := by
+  have positive := fit.positive
+  have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+    have := parameters.roots
+    omega
   -- Selected checkpoints agree across honest stores, or the justified evidence holds.
   rcases e.selectedCheckpointsAgree_or_evidence anchored start anchorSlot roots absent parameters
       genesis pre heldEarly enough terminal with selected | crossJustified
@@ -1211,7 +1213,6 @@ The newly active voters give the window membership, as in the merged headlines.
 The root's step at each time gives the viability that the induction reads. -/
 public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -1300,7 +1301,6 @@ public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈
     (included : TargetIncluded (e := e) time)
     (quorumDrift : QuorumDriftWithin (e := e) horizon time)
     (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
-    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     {fcr : FastConfirmationStore} {headOfCall : ForkChoiceNode} {startRoot : Root}
     {chain later : List Root}
@@ -1325,14 +1325,14 @@ public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈
       CrossStoreJustifiedEvidence (e := e) pre time ∨
         HeldStateFinalityEvidence (e := e) pre time := by
   subst headEq
-  rcases viableAt_or_alternative_of_checked_call sync slots positive minLookahead maxLookahead ring
+  rcases viableAt_or_alternative_of_checked_call sync slots minLookahead maxLookahead ring
       preGloas admitted votes fits prompt windows fit anchored sound anchorSlot anchorBoundary start
       caller callerUpToDate slotOk beginOk timeEq blockOk parentOk firstOk lastOk maximumOk
       registry aligned increment supportOk discountOk adversaryOk marginLt callerTime reserve
       reference referenceTime referenceUpToDate referenceSlotOk finishOk bounded roots unslashed
       parameters genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
       historicalEpochOk near absent anchorEpochOk pinned signedAll included quorumDrift
-      anchorGenesis window incrementPositive headOk inputs walked realized realizedHead startCovers
+      anchorGenesis incrementPositive headOk inputs walked realized realizedHead startCovers
       rollover with
     viable | alternatives
   swap
@@ -1340,7 +1340,7 @@ public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈
   rcases honestHeadsCover_core sync slots minLookahead maxLookahead ring preGloas
       admitted half votes fits prompt windows
       (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
-        positive minLookahead maxLookahead ring newVoters)
+        fit.positive minLookahead maxLookahead ring newVoters)
       anchored sound anchorSlot anchorBoundary start caller callerUpToDate headNode slotOk beginOk
       timeEq blockOk parentOk sourceOk boostOk firstOk lastOk beforeOk maximumOk
       parentParticipantsOk registry aligned increment supportOk discountOk adversaryOk marginLt
@@ -1364,7 +1364,6 @@ Stores whose head read fails are not covered.
 The proof reads that headline's coverage before each time, and the root's step at that time. -/
 public theorem Execution.rootViable_of_checked_call [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -1453,7 +1452,6 @@ public theorem Execution.rootViable_of_checked_call [DecidablePred (· ∈ J)] {
     (included : TargetIncluded (e := e) time)
     (quorumDrift : QuorumDriftWithin (e := e) horizon time)
     (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
-    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     {fcr : FastConfirmationStore} {headOfCall : ForkChoiceNode} {startRoot : Root}
     {chain later : List Root}
@@ -1477,7 +1475,7 @@ public theorem Execution.rootViable_of_checked_call [DecidablePred (· ∈ J)] {
       HistoricalDirectSafetyEvidence (e := e) pre time ∨
       CrossStoreJustifiedEvidence (e := e) pre time ∨
         HeldStateFinalityEvidence (e := e) pre time := by
-  rcases e.honestHeadsCover_of_checked_call sync slots positive minLookahead maxLookahead ring
+  rcases e.honestHeadsCover_of_checked_call sync slots minLookahead maxLookahead ring
       preGloas admitted half votes fits prompt windows newVoters anchored sound anchorSlot
       anchorBoundary start caller callerUpToDate headNode slotOk beginOk timeEq blockOk parentOk
       sourceOk boostOk firstOk lastOk beforeOk maximumOk parentParticipantsOk registry aligned
@@ -1486,20 +1484,20 @@ public theorem Execution.rootViable_of_checked_call [DecidablePred (· ∈ J)] {
       ceiling scoreFits parameters genesis pre heldEarly enough terminal headDescends
       historicalBelow callerEpochOk historicalEpochOk near epochStartOk epochStartTimeOk
       historyCovers absent parentCovers fit anchorEpochOk pinned signedAll included quorumDrift
-      anchorGenesis window incrementPositive headOk headEq inputs walked realized realizedHead
+      anchorGenesis incrementPositive headOk headEq inputs walked realized realizedHead
       startCovers rollover exits late with
     cover | alternatives
   swap
   · exact .inr alternatives
   subst headEq
-  rcases viableAt_or_alternative_of_checked_call sync slots positive minLookahead maxLookahead ring
+  rcases viableAt_or_alternative_of_checked_call sync slots minLookahead maxLookahead ring
       preGloas admitted votes fits prompt windows fit anchored sound anchorSlot anchorBoundary start
       caller callerUpToDate slotOk beginOk timeEq blockOk parentOk firstOk lastOk maximumOk
       registry aligned increment supportOk discountOk adversaryOk marginLt callerTime reserve
       reference referenceTime referenceUpToDate referenceSlotOk finishOk bounded roots unslashed
       parameters genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
       historicalEpochOk near absent anchorEpochOk pinned signedAll included quorumDrift
-      anchorGenesis window incrementPositive headOk inputs walked realized realizedHead startCovers
+      anchorGenesis incrementPositive headOk inputs walked realized realizedHead startCovers
       rollover with
     viable | alternatives
   swap
