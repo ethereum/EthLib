@@ -212,12 +212,6 @@ variable {preset : Preset} {fork : Fork} {config : Config}
   {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
   {store : Store preset fork}
 
-/-- A later slot is in the same epoch or a later one. -/
-private theorem epoch_le_of_slot_le (a b : Slot) (le : a.toNat ≤ b.toNat) :
-    (computeEpochAtSlot preset a).toNat ≤ (computeEpochAtSlot preset b).toNat := by
-  simp only [computeEpochAtSlot, UInt64.toNat_div]
-  exact Nat.div_le_div_right le
-
 /-- A fold reads the same result when its two steps agree on every element of the list. -/
 private theorem foldlM_congr_mem {α β ε : Type} {f g : β → α → Except ε β} :
     ∀ (items : List α) (init : β), (∀ x ∈ items, ∀ acc, f acc x = g acc x) →
