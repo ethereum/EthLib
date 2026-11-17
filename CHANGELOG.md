@@ -51,7 +51,7 @@ Not yet released.
 
 - `VotersInHeadWindow` states that each voter below an ancestor of an honest head lies in the head's window after it ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `Execution.votersInHeadWindow_of_newlyActive` derives it from `NewlyActiveVotersInHeadWindow`, which asks it only of a voter activated at the target epoch of a vote two epochs after that ancestor.
-  `Store.mem_getCommitteesBetweenSlots_of_active` and `Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin` are the general steps.
+  `Store.mem_getCommitteesBetweenSlots_of_active`, `Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin` and `Store.ForwardReachableWith.epoch_le_of_checkpointState` are the general steps.
   `ReceiverWindowExitsNear` asks the receivers' exit bound only of receivers within two epochs of the parent.
 
 ### Changes that break callers

@@ -98,13 +98,15 @@ def AssignmentWindowAgreement (last : Nat) : Prop :=
 
 /-- Each later successful window read also succeeds with the source state's weights and boost.
 
-A window that holds no whole epoch reads the balance of each of its members in the source state.
+A window that holds no whole epoch reads the record of each of its members in the source state.
 
-So it holds while every member of a later window is in the registry of the source state.
+It sums the balances of the members active there.
 
-It fails when such a window has a member that the source state does not yet hold.
+One way it fails is a member that the source state does not hold, such as a later deposit.
 
-A validator deposited after the source state and active in a later window is one. -/
+The source reads also fail on overflow, in a total or in the score.
+
+With positive `SLOTS_PER_EPOCH`, it holds, barring overflow, if the source holds every member. -/
 def SourceWindowReads (call last : Nat) (source : BeaconState preset fork) : Prop :=
   ∀ w ∈ J, ∀ k (head : ForkChoiceNode) state current first finish maximum,
     (e.world call).time ≤ (e.world k).time → (e.world k).time ≤ last →
@@ -162,11 +164,11 @@ The window covers all of the epoch before the target.
 
 Every other such voter was active then, so it is in the window with no premise.
 
-The head's shuffling may give a newly active voter a slot at or after the current one.
+It can fail when the head state's shuffling places such a voter at or after the current slot.
 
-That slot is outside the window.
+It can also fail when the head's branch has not activated the voter at that epoch.
 
-If the rule's window weight paid one epoch's activation churn, this premise would go. -/
+A proposed follow-up, a window weight that pays one epoch's activation churn, would remove it. -/
 def NewlyActiveVotersInHeadWindow (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
     ∀ (head : ForkChoiceNode) (parentRoot : Root) (parent : BeaconBlock preset fork)
