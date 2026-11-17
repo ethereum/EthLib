@@ -158,10 +158,8 @@ This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `
 `prEvent_experimentWith_le` applies it to an experiment where the adversary outputs a claim and an extraction then runs on it with the oracle alone.
 It bounds a win by `q^2 / N` when every replayed win of the extraction leaves a collision in the cache.
 
-`prEvent_secondPreimage_le` bounds by `q / N` a hit on a target digest fixed before the run, among queried inputs other than one honest input.
-The theorem does not tie the target to the digest of the honest input.
-Reading it as a second-preimage bound conditions on the honest digest and assumes that the other oracle answers stay independent and uniform.
-That conditioning is a modelling step, not a proved one.
+`prEvent_secondPreimageGame_le` bounds a second preimage of one fixed tree of height `h` by `(Q_f + h) / N`, for a forger with `Q_f` hash calls.
+The forger sees the root and all honest paths.
 
 The Merkle applications model the tuple `(level, position, left, right)` as the oracle input.
 They require an injective encoding of that tuple, for levels and positions inside the encodable range, not a hash that ignores the position.
@@ -6034,8 +6032,8 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   The failure bounds of the codeword searches of leanSPHINCS rest on the same oracle.
 - Merkle search bounds: each new `(level, position, left, right)` input receives an independent uniform answer from a finite nonempty range.
   Repeated inputs receive the same answer, and the initial cache is empty.
-  The fixed-target bound excludes one honest input from the oracle domain and fixes the target before the run.
-  Reading it as a second-preimage bound conditions on the honest digest, a modelling step that no theorem proves.
+  The second-preimage game fixes the leaves independently of the oracle and covers one tree, with no tree address.
+  Its forger receives the root and every honest path.
   Only classical queries are counted.
   No SHA-256, Keccak or quantum security claim follows from this model.
 - SSZ root bound: the SHA-256 node hash is a random oracle on byte strings, shared by every node of the tree.
@@ -6311,6 +6309,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Merkle/`
 - `EthLib/Cryptography/Proofs/ProgrammedPermutation.lean`
 - `EthLib/Cryptography/Proofs/QueryAvoidance.lean`
+- `EthLib/Cryptography/Proofs/RandomOracleFromCache.lean`
 - `EthLib/Cryptography/Proofs/RandomOracleTable.lean`
 - `EthLib/Cryptography/Proofs/Secp256k1/`
 - `EthLib/Cryptography/Proofs/Sphincs/`

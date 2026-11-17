@@ -7,6 +7,7 @@ public import EthLib.Cryptography.Proofs.Merkle
 public import EthLib.Cryptography.Proofs.EvalDistEq
 public import EthLib.Cryptography.Proofs.UniformReads
 public import EthLib.Cryptography.Proofs.RandomOracleTable
+public import EthLib.Cryptography.Proofs.RandomOracleFromCache
 public import EthLib.Cryptography.Proofs.ExceptTAnswers
 public import EthLib.Cryptography.Proofs.HashSig
 public import EthLib.Cryptography.Proofs.HashSig.Oracle
