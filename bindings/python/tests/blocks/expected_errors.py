@@ -87,11 +87,13 @@ def expected_message(
     """The message of the header error for an exception name, from the parent and the header."""
     old, new = rlp.decode(parent), rlp.decode(header)
     if exception == "BlockException.INVALID_GASLIMIT":
-        return INVALID + "invalidGasLimit"
+        limit, parent_limit = _scalar(new[GAS_LIMIT]), _scalar(old[GAS_LIMIT])
+        return f"{INVALID}invalidGasLimit (gasLimit := {limit}) (parentGasLimit := {parent_limit})"
     if exception == "BlockException.INVALID_BASEFEE_PER_GAS":
-        return f"{INVALID}wrongBaseFee {base_fee(old)} {_scalar(new[BASE_FEE])}"
+        actual = _scalar(new[BASE_FEE])
+        return f"{INVALID}wrongBaseFee (expected := {base_fee(old)}) (actual := {actual})"
     if exception == "BlockException.INCORRECT_EXCESS_BLOB_GAS":
         assert schedule is not None, exception
-        due = excess_blob_gas(old, schedule, reserve)
-        return f"{INVALID}wrongExcessBlobGas {due} {_scalar(new[EXCESS_BLOB_GAS])}"
+        due, actual = excess_blob_gas(old, schedule, reserve), _scalar(new[EXCESS_BLOB_GAS])
+        return f"{INVALID}wrongExcessBlobGas (expected := {due}) (actual := {actual})"
     raise KeyError(exception)

@@ -323,12 +323,16 @@ theorem buildPayload_eq_error_of_getLast?_eq_none (hh : ¬ .hegota ≤ fork)
     buildPayload chain attributes choices transactions = .error .noParent := by
   simp [buildPayload, hh, hp, throw, throwThe, MonadExceptOf.throw]
 
-/-- A build whose timestamp and parent do not give its own fork fails for the wrong fork. -/
+/-- A build whose timestamp and parent do not give its own fork fails for the wrong fork.
+
+The error holds the active fork at the next number and the fork of the build. -/
 theorem buildPayload_eq_error_of_activeFork_ne {parent : RecentBlock} (hh : ¬ .hegota ≤ fork)
     (hp : chain.recent.getLast? = some parent)
     (ha : chain.config.activeFork (parent.header.number + 1) attributes.timestamp.toNat
       ≠ some fork) :
-    buildPayload chain attributes choices transactions = .error .wrongFork := by
+    buildPayload chain attributes choices transactions =
+      .error (.wrongFork (chain.config.activeFork (parent.header.number + 1)
+        attributes.timestamp.toNat) fork) := by
   simp [buildPayload, hh, hp, ha, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 /-- A build whose parent header does not encode fails with the error of that encoding. -/

@@ -166,7 +166,8 @@ private theorem plain_checkBlock {config : ChainConfig} {checkSeal : Bool}
     · exact ErrorsMeet.ok _
   have ommers : ErrorsMeet Plain (if fork < .paris then
       (validateOmmers config checkSeal recent block.header block.ommers).mapError .ommers
-    else if block.ommers.isEmpty = true then pure () else throw .ommersAfterParis) := by
+    else if block.ommers.isEmpty = true then pure ()
+    else throw (.ommersAfterParis block.ommers.length)) := by
     split
     · exact ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun, nofun⟩
     · split

@@ -37,7 +37,7 @@ namespace EthLib.Execution.Blocks.Exports
 open EthLib.Exports (Result PyValue forkUpTo pyExport)
 open EthLib.Base
 open EthLib.Serialization.Rlp
-open EthLib.Execution.Transactions.Exports (abortMessage inclusionMessage message oneLine
+open EthLib.Execution.Transactions.Exports (abortMessage inclusionMessage message
   stateEntryItem)
 
 /-- A recent block from its fork name, its header and its ommers, each header in RLP form.
@@ -71,7 +71,7 @@ def accountsItem (state : Execution.State.State) : Item :=
 def blockErrorMessage : BlockError → String
   | .invalidTransaction index e => s!"transaction {index} rejected: {inclusionMessage e}"
   | .aborted e => abortMessage e
-  | .systemCallFailed address e => s!"system call to {oneLine address} failed: {oneLine e}"
+  | .systemCallFailed address e => s!"system call to {hexString address.toList} failed: {oneLine e}"
   | e => s!"block invalid: {(oneLine e).replace "EthLib.Execution.Blocks.BlockError." ""}"
 
 /-- A block from the name of its fork and its RLP form, with its transactions decoded.

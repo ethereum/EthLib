@@ -50,10 +50,7 @@ open EthLib.Exports (Result PyValue forkUpTo pyExport)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
-
-/-- A value printed on one line, however long its numbers are. -/
-def oneLine {α : Type} [Repr α] (a : α) : String :=
-  (repr a).pretty 1000000
+open EthLib.Execution.Blocks.Exports (oneLine)
 
 /-- An RLP error, with the index of each structure field on the way to it. -/
 def rlpMessage : RlpError → String

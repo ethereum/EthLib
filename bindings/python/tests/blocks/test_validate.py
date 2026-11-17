@@ -7,7 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from ethlib.cryptography import ethash
+from ethlib.cryptography.keccak import keccak256
 from ethlib.execution import blocks
+from ethlib.execution.pow import seal_hash
 from ethlib.serialization import rlp
 from raising import raises
 
@@ -60,23 +63,54 @@ def _mutated(header: bytes, index: int, value: bytes) -> bytes:
     return rlp.encode(fields)
 
 
+def _scalar(field: bytes) -> int:
+    return int.from_bytes(field, "big")
+
+
 # Field positions in the header list: gas limit 9, gas used 10, timestamp 11, extra data 12.
+# Each fault names the values of the failed check, read from the parent and the header.
 @pytest.mark.parametrize(
     "index,value,code,fault",
     [
-        (11, b"", 206, "timestampNotAfterParent"),  # timestamp 0, not after the parent
-        (12, b"\x00" * 33, 208, "extraDataTooLong"),  # 33 bytes of extra data
-        (10, (2**63).to_bytes(8, "big"), 203, "gasUsedAboveLimit"),  # gas used above the gas limit
+        # Timestamp 0, not after the parent.
+        (11, b"", 206, "timestampNotAfterParent (timestamp := 0) (parentTimestamp := {stamp})"),
+        # 33 bytes of extra data.
+        (12, b"\x00" * 33, 208, "extraDataTooLong (size := 33)"),
+        # Gas used above the gas limit.
+        (
+            10,
+            (2**63).to_bytes(8, "big"),
+            203,
+            "gasUsedAboveLimit (gasUsed := 9223372036854775808) (gasLimit := {limit})",
+        ),
+        # A gas limit far above the parent's.
         (
             9,
             (2**40).to_bytes(6, "big"),
             204,
-            "invalidGasLimit",
-        ),  # a gas limit far above the parent's
+            "invalidGasLimit (gasLimit := 1099511627776) (parentGasLimit := {parent_limit})",
+        ),
+        # A nonce of 1, where Paris asks for 8 zero bytes.
+        (14, bytes(7) + b"\x01", 210, "nonzeroNonce (nonce := 0x0000000000000001)"),
+        # A parent hash of 32 zero bytes, not the hash of the parent's header.
+        (
+            0,
+            bytes(32),
+            212,
+            "wrongParentHash (expected := some 0x{parent_hash}) (actual := 0x{zero})",
+        ),
     ],
 )
 def test_mutated_header_is_invalid(index: int, value: bytes, code: int, fault: str) -> None:
     parent, header, fork = _headers(PAIRS[0])
+    old, new = rlp.decode(parent), rlp.decode(header)
+    fault = fault.format(
+        stamp=_scalar(old[11]),
+        limit=_scalar(new[9]),
+        parent_limit=_scalar(old[9]),
+        parent_hash=keccak256(parent).hex(),
+        zero=bytes(32).hex(),
+    )
     with raises(blocks.BlockError, _INVALID_HEADER + fault) as error:
         blocks.validate_header(fork, fork, parent, _mutated(header, index, value))
     assert error.value.code == code
@@ -143,7 +177,8 @@ def test_block_at_size_limit_is_valid() -> None:
 
 def test_block_above_size_limit_is_invalid() -> None:
     with raises(
-        blocks.BlockError, "block invalid: EthLib.Execution.Blocks.BlockError.blockTooLarge 8388609"
+        blocks.BlockError,
+        "block invalid: EthLib.Execution.Blocks.BlockError.blockTooLarge (size := 8388609)",
     ) as error:
         blocks.validate_size("fusaka", _block_of_size(MAX_RLP_BLOCK_SIZE + 1))
     assert error.value.code == 214
@@ -165,7 +200,8 @@ def test_paris_header_fails_the_difficulty_before_paris() -> None:
     parent, header, _ = _headers(paris)
     with raises(
         blocks.BlockError,
-        "header invalid: EthLib.Execution.Blocks.BlockError.wrongDifficulty 131072 0",
+        "header invalid: EthLib.Execution.Blocks.BlockError.wrongDifficulty "
+        "(expected := 131072) (actual := 0)",
     ) as error:
         blocks.validate_header("london", "london", parent, header)
     assert error.value.code == 215
@@ -209,7 +245,8 @@ def test_wrong_difficulty_before_paris_is_rejected() -> None:
     difficulty = int.from_bytes(rlp.decode(header)[7], "big") + 1
     with raises(
         blocks.BlockError,
-        "header invalid: EthLib.Execution.Blocks.BlockError.wrongDifficulty 131136 131137",
+        "header invalid: EthLib.Execution.Blocks.BlockError.wrongDifficulty "
+        "(expected := 131136) (actual := 131137)",
     ) as error:
         blocks.check_header(
             fork, fork, parent, _mutated(header, 7, difficulty.to_bytes(8, "big").lstrip(b"\x00"))
@@ -224,10 +261,17 @@ def test_unsealed_header_fails_the_proof_of_work() -> None:
     # The fixtures carry no proof of work, so the full check rejects them before Paris.
     pair = next(p for p in CHAIN_PAIRS if p[0]["network"] == "Frontier")
     parent, header, fork = _headers(pair)
+    # Ethash gives a mix digest that the header does not hold.
+    fields = rlp.decode(header)
+    number = int.from_bytes(fields[8], "big")
+    mix, _ = ethash.hashimoto_light(
+        ethash.dataset_size(number), ethash.cache(number), seal_hash(fork, header), fields[14]
+    )
     with raises(
         blocks.BlockError,
         "header invalid: EthLib.Execution.Blocks.BlockError.proofOfWork "
-        "(EthLib.Execution.Blocks.PowError.wrongMixDigest)",
+        "(EthLib.Execution.Blocks.PowError.wrongMixDigest "
+        f"(expected := 0x{mix.hex()}) (actual := 0x{fields[13].hex()}))",
     ) as error:
         blocks.validate_header(fork, fork, parent, header)
     assert error.value.code == 216

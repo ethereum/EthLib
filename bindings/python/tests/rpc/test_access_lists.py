@@ -212,7 +212,12 @@ def test_forged_access_list_commitment() -> None:
         blocks=(*chain.blocks[:60], forged),
         forkchoice=(block_hash(forged), zero, zero),
     )
-    with raises(rpc.RpcError, "block 60: block invalid: wrongBlockAccessListHash") as error:
+    # The header holds the zero hash, and the body gives the pinned hash.
+    message = (
+        f"block 60: block invalid: wrongBlockAccessListHash (expected := 0x{zero.hex()}) "
+        f"(actual := some {pinned['blockAccessListHash']})"
+    )
+    with raises(rpc.RpcError, message) as error:
         chain.serve([_request(method, ["latest"]) for method in METHODS])
     assert error.value.code == 256
 

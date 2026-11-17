@@ -41,7 +41,8 @@ def test_block_size(archive, source) -> None:
             elif exception.split("|") == [TOO_LARGE]:
                 with raises(
                     blocks.BlockError,
-                    "block invalid: EthLib.Execution.Blocks.BlockError.blockTooLarge 8388609",
+                    "block invalid: EthLib.Execution.Blocks.BlockError.blockTooLarge "
+                    "(size := 8388609)",
                 ) as error:
                     blocks.validate_size("fusaka", data)
                 assert error.value.code == 214

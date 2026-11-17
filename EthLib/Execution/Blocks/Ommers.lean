@@ -73,13 +73,14 @@ On a chain with the DAO Fork, the extra data rule of that fork applies to the om
 def checkOmmerHeader (config : ChainConfig) (checkSeal : Bool) (recent : List RecentBlock)
     (ommer : (f : Fork) × Header f) : Except OmmerError Unit := do
   let some parent := recent.find? (·.header.number + 1 = ommer.2.number)
-    | .error .parentMissing
+    | .error (.parentMissing ommer.2.number)
   if hFork : parent.fork ≤ ommer.1 then
     let check := if checkSeal then validateHeader hFork parent.header ommer.2
       else checkHeader hFork parent.header ommer.2
     check.mapError .invalidHeader
-  else .error (.invalidHeader .wrongParentHash)
-  ensure (daoExtraDataValid config ommer.2) .wrongDaoExtraData
+  else .error (.invalidHeader
+    (.wrongParentHash parent.header.hash.toOption ommer.2.parentHash))
+  ensure (daoExtraDataValid config ommer.2) (.wrongDaoExtraData ommer.2.extraData)
 
 /-- Check the ommers of a block, as section 11.1 of the Yellow Paper asks.
 
@@ -92,22 +93,25 @@ def validateOmmers {fork : Fork} (config : ChainConfig) (checkSeal : Bool)
     (recent : List RecentBlock) (header : Header fork) (ommers : List ((f : Fork) × Header f)) :
     Except OmmerError Unit := do
   let encoded ← (encode (ommersItem ommers)).mapError .encoding
-  ensure (keccak256 encoded == header.ommersHash) .wrongOmmersHash
+  ensure (keccak256 encoded == header.ommersHash)
+    (.wrongOmmersHash header.ommersHash (keccak256 encoded))
   ommers.forM fun ommer => do
-    ensure (1 ≤ ommer.2.number && ommer.2.number < header.number) .numberOutOfRange
+    ensure (1 ≤ ommer.2.number && ommer.2.number < header.number)
+      (.numberOutOfRange ommer.2.number header.number)
     checkOmmerHeader config checkSeal recent ommer
-  ensure (ommers.length ≤ MAX_OMMERS) .tooManyOmmers
+  ensure (ommers.length ≤ MAX_OMMERS) (.tooManyOmmers ommers.length)
   let ommerHashes ← ommers.mapM (headerHash ·.2)
-  ensure ommerHashes.Nodup .duplicateOmmer
+  -- At most two ommers are left, so two equal hashes make the first hash the repeated one.
+  ensure ommerHashes.Nodup (.duplicateOmmer (ommerHashes.headD 0))
   let blockHash ← headerHash header
   let recentHashes ← recent.mapM fun b => headerHash b.header
   let recentOmmerHashes ← (recent.flatMap fun b => b.ommers.map (headerHash ·.2)).mapM id
   (ommers.zip ommerHashes).forM fun (ommer, hash) => do
-    ensure (hash != blockHash && !recentHashes.contains hash) .ommerInChain
-    ensure (!recentOmmerHashes.contains hash) .ommerAlreadyIncluded
+    ensure (hash != blockHash && !recentHashes.contains hash) (.ommerInChain hash)
+    ensure (!recentOmmerHashes.contains hash) (.ommerAlreadyIncluded hash)
     let age := header.number - ommer.2.number
-    ensure (1 ≤ age && age ≤ MAX_OMMER_DEPTH) .wrongAge
-    ensure (recentHashes.contains ommer.2.parentHash) .parentNotRecent
-    ensure (ommer.2.parentHash != header.parentHash) .siblingOfBlock
+    ensure (1 ≤ age && age ≤ MAX_OMMER_DEPTH) (.wrongAge hash age)
+    ensure (recentHashes.contains ommer.2.parentHash) (.parentNotRecent hash ommer.2.parentHash)
+    ensure (ommer.2.parentHash != header.parentHash) (.siblingOfBlock hash)
 
 end EthLib.Execution.Blocks

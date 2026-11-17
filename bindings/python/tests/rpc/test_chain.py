@@ -8,8 +8,10 @@ from typing import Any, Final
 
 import pytest
 
+from ethlib.cryptography import ethash
 from ethlib.cryptography.keccak import keccak256
 from ethlib.execution import rpc, trie
+from ethlib.execution.pow import seal_hash
 from ethlib.serialization import rlp
 from raising import raises
 
@@ -1006,7 +1008,7 @@ BAD_INPUTS = [
     ),
     pytest.param(
         lambda c: replace(c, blocks=c.blocks[:1] + c.blocks[2:]),
-        "block 2: block invalid: wrongNumber",
+        "block 2: block invalid: wrongNumber (expected := 1) (actual := 2)",
         207,
         id="out-of-order",
     ),
@@ -1023,7 +1025,16 @@ def test_bad_input(change: Callable[[ReplayChain], ReplayChain], message: str, c
 
 def test_seal_checked() -> None:
     """With the seal checked, the first block fails, since the test chain carries no real seal."""
-    pow_error = "EthLib.Execution.Blocks.PowError.wrongMixDigest"
+    # Ethash gives a mix digest that the header of block 1 does not hold.
+    fork, raw = replay_chain().blocks[1]
+    header = rlp.decode(raw)[0]
+    mix, _ = ethash.hashimoto_light(
+        ethash.dataset_size(1), ethash.cache(1), seal_hash(fork, rlp.encode(header)), header[14]
+    )
+    pow_error = (
+        f"EthLib.Execution.Blocks.PowError.wrongMixDigest (expected := 0x{mix.hex()}) "
+        f"(actual := 0x{header[13].hex()})"
+    )
     with raises(rpc.RpcError, f"block 1: block invalid: proofOfWork ({pow_error})") as error:
         _build(replay_chain(), check_seal=True)
     assert error.value.code == 216

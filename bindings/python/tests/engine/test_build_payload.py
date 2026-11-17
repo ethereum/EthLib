@@ -212,7 +212,7 @@ def test_extra_data_up_to_32_bytes(size: int) -> None:
 
 def test_extra_data_above_32_bytes() -> None:
     """Extra data of 33 bytes fails the header check, with its block error."""
-    with raises(EngineError, "block invalid: extraDataTooLong") as error:
+    with raises(EngineError, "block invalid: extraDataTooLong (size := 33)") as error:
         _build("Paris", PARIS, extra_data=bytes(33))
     assert error.value.code == 208
 

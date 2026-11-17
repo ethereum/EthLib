@@ -342,11 +342,12 @@ def checkBlock {fork : Fork} (config : ChainConfig) (checkSeal : Bool)
         block.header.timestamp.toNat
     if checkSeal then validateHeader hFork parent.header block.header schedule
     else checkHeader hFork parent.header block.header schedule
-  else throw .wrongParentHash
-  unless daoExtraDataValid config block.header do throw .wrongDaoExtraData
+  else throw (.wrongParentHash parent.header.hash.toOption block.header.parentHash)
+  unless daoExtraDataValid config block.header do
+    throw (.wrongDaoExtraData block.header.extraData)
   if fork < .paris then
     (validateOmmers config checkSeal recent block.header block.ommers).mapError .ommers
-  else unless block.ommers.isEmpty do throw .ommersAfterParis
+  else unless block.ommers.isEmpty do throw (.ommersAfterParis block.ommers.length)
 
 /-- The roots of a block that its body gives, from the post-state `post`.
 
@@ -384,12 +385,16 @@ def outputChecks {fork : Fork} (header : Header fork) (output : BlockOutput fork
     (roots : OutputRoots) : List (Bool × BlockError) :=
   let gasUsed := output.gas.gasUsed
   [(decide (gasUsed = header.gasUsed), .wrongGasUsed header.gasUsed gasUsed),
-    (decide (roots.transactions = header.transactionsRoot), .wrongTransactionsRoot),
-    (decide (roots.state = header.stateRoot), .wrongStateRoot),
-    (decide (roots.receipts = header.receiptRoot), .wrongReceiptRoot),
-    (decide (logsBloom output.logs = header.bloom), .wrongBloom)] ++
+    (decide (roots.transactions = header.transactionsRoot),
+      .wrongTransactionsRoot header.transactionsRoot roots.transactions),
+    (decide (roots.state = header.stateRoot), .wrongStateRoot header.stateRoot roots.state),
+    (decide (roots.receipts = header.receiptRoot),
+      .wrongReceiptRoot header.receiptRoot roots.receipts),
+    (decide (logsBloom output.logs = header.bloom),
+      .wrongBloom header.bloom (logsBloom output.logs))] ++
   (if h : .shapella ≤ fork then
-    [(decide (roots.withdrawals = some (header.withdrawalsRoot h)), .wrongWithdrawalsRoot)]
+    [(decide (roots.withdrawals = some (header.withdrawalsRoot h)),
+      .wrongWithdrawalsRoot (header.withdrawalsRoot h) roots.withdrawals)]
   else []) ++
   (if h : .dencun ≤ fork then
     [(decide (output.gas.blob = (header.blobGasUsed h).toNat),
@@ -397,11 +402,11 @@ def outputChecks {fork : Fork} (header : Header fork) (output : BlockOutput fork
   else []) ++
   (if h : .pectra ≤ fork then
     [(decide (requestsHash output.requests = header.requestsHash h),
-      .wrongRequestsHash)]
+      .wrongRequestsHash (header.requestsHash h) (requestsHash output.requests))]
   else []) ++
   (if h : .glamsterdam ≤ fork then
     [(decide (output.accessListHash = some (header.blockAccessListHash h)),
-      .wrongBlockAccessListHash)]
+      .wrongBlockAccessListHash (header.blockAccessListHash h) output.accessListHash)]
   else [])
 
 /-- What the body of a block gives on its chain: its output, and the roots of the header. -/
@@ -461,8 +466,8 @@ From Hegotá it fails, since the rules of that fork are not yet specified here. 
 def stateTransition (chain : BlockChain) {fork : Fork} (block : Block fork Transaction)
     (checkSeal : Bool := true) : Except BlockError State := do
   if .hegota ≤ fork then throw (.aborted (.forkNotYetSpecified fork))
-  unless chain.config.activeFork block.header.number block.header.timestamp.toNat = some fork do
-    throw .wrongFork
+  let active := chain.config.activeFork block.header.number block.header.timestamp.toNat
+  unless active = some fork do throw (.wrongFork active fork)
   checkBlock chain.config checkSeal chain.recent block
   let result ← runBody chain block
   firstFailure (outputChecks block.header result.output result.roots)
