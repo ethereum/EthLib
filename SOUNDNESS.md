@@ -3332,7 +3332,7 @@ Each evidence alternative is relative to the anchor, so with enough churn since 
 The theorem covers executions whose honest stores verify signatures with BLS (`checks = .bls`).
 The specification's pulled-up head state processes slots with BLS checks, and a run under other checks can differ from it.
 The fork is Fulu or later and before Gloas.
-A private step of the same file shows that each call keeps `CallInvariant`, given the invariant at every earlier call.
+A private step of the same file shows that each call keeps a private call invariant, given the invariant at every earlier call.
 The step derives `QuorumDriftWithin` with `Execution.quorumDriftWithin`, and the honest target count with `Execution.honestTargetVotes_of_byzantineStakeAtMost`.
 So the endpoint takes neither as a premise.
 In their place it takes the parameter facts that the drift bound reads, except for the seed lookahead.

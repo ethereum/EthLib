@@ -33,7 +33,7 @@ Along the accepted walk of a call, the call's balance source is on the chain of 
 
 That source is the observed checkpoint, and the stored root's recency carries from call to call.
 
-Each call keeps the call invariant `CallInvariant`, given the invariant at every earlier call.
+Each call keeps a private call invariant, given the invariant at every earlier call.
 
 It assumes the inputs `CallObligations` of the call.
 
@@ -1310,7 +1310,7 @@ If the root is of the current epoch or the one before, an ancestor of it is too.
 That ancestor covers the honest heads from the start of the current epoch.
 
 A root of the current epoch passes the target checks of the call, covered to the horizon. -/
-def CallInvariant (margin limit : ℕ) (anchorRoot : Root) (u : ValidatorIndex) (n : ℕ)
+private def CallInvariant (margin limit : ℕ) (anchorRoot : Root) (u : ValidatorIndex) (n : ℕ)
     (root : Root) : Prop :=
   (∀ slot next following, ((e.world n).state u).getCurrentSlot config = .ok slot →
     addChecked slot 1 = .ok next →
