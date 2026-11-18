@@ -15,29 +15,23 @@ public import EthLib.Consensus.Proofs.Transition.Upgrade
 public import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 
 /-!
-# The quorum of a fast-confirmation call drifts by at most its reserve
+# The runs behind the quorum drift of a fast-confirmation call
 
 A call of the fast confirmation rule reads the pulled-up head state of an honest store.
 
-Its current target is the checkpoint of the store's epoch on the chain of the head.
+A later state that counts the call's target is on the chain of a block of another honest store.
 
-A later state that counts the target is on the chain of a block of another honest store.
-
-The quorum of the call drifts from the pulled-up head state to that later state.
-
-The drift bound takes runs that start from one state at the start of the target's epoch.
+The drift bound takes runs from one boundary state at the start of the target's epoch.
 
 This file builds those runs from the stores, and so bounds the drift of every call.
 
-```text
-  genesis ──▶ boundary ──edge──▶ middle ──tail──▶ pulled-up head state
-                 │                  │
-           start of epoch           └──────────────▶ later state of the receiver
-```
+The boundary state is right after the epoch transition, so the bands of hysteresis hold there.
 
-- The boundary is right after the epoch transition, so the bands of hysteresis hold there.
-- At most the target block, at the start of the epoch, lies between the boundary and the middle.
-- The middle holds the queue of pending partial withdrawals of the target block.
+At most the target block lies between the boundary state and a middle state at the same slot.
+
+The middle state holds the queue of pending partial withdrawals of the target block.
+
+From the middle state, one run reaches the pulled-up head state and another the later state.
 -/
 
 @[expose] public section
@@ -524,7 +518,7 @@ An assumption on the run: its fork is Fulu or later, and before Gloas.
 
 The bounds read the epoch transition of Fulu; earlier and later forks are not covered.
 
-The anchor store comes from a successful `getForkchoiceStore`.
+The anchor store comes from a successful read of the fork-choice store of the anchor.
 
 Every honest participant starts at the anchor store.
 
@@ -544,7 +538,7 @@ An assumption on the run: the stores stay before the next fork through the horiz
 
 It keeps every run inside one fork, and says nothing about a run that crosses a fork.
 
-An assumption on the run: `bounded` keeps every honest store's current epoch within the horizon.
+An assumption on the run: every honest store's current epoch stays within the horizon.
 
 It ties the horizon to the time bound, and says nothing about stores past it. -/
 theorem Execution.quorumDriftWithin

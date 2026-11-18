@@ -75,7 +75,7 @@ private theorem run_queueFrom {x y : ForkedBeaconState preset} (tail : Run confi
   · have step := riseStep_processBlock altair early delay (applySignedBlock_ok ok).2.1
     have le := currentEpoch_le_of_chainSteps pre.chainSteps
     intro L start electra
-    -- An entry queued before the block keeps its source exit, which master's invariant assigns.
+    -- An entry queued before the block keeps its source exit, which the invariant assigns.
     obtain ⟨old, new⟩ := prior altair L start electra
     obtain ⟨grows, added⟩ := step.2.2 electra
     refine ⟨fun c member => grows c (old c member), fun c member => ?_⟩
@@ -744,7 +744,7 @@ private theorem rise_epoch {f : Fork} {c t : BeaconState preset f} (altair : .al
   have slashedReset : ∀ (i : ℕ) (v w : Validator), c.validators.data[i]? = some v →
       reset.validators.data[i]? = some w → v.slashed = true → w.slashed = true :=
     fun i v w found read flag => frame.slashed i v w (by rw [jRec.1]; exact found) read flag
-  -- Master's registry frame keeps the credentials; the other steps keep the registry.
+  -- The registry frame keeps the credentials; the other steps keep the registry.
   have credReset : ∀ (i : ℕ) (v : Validator), c.validators.data[i]? = some v → ∃ w,
       reset.validators.data[i]? = some w ∧ w.withdrawalCredentials = v.withdrawalCredentials := by
     intro i v found

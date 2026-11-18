@@ -17,9 +17,9 @@ The reserves are meant to bound how much that changes the quorum, from the call'
 
 One covers a later state on the call's own chain, the other a counting state on another branch.
 
-`quorumDrift_le_quorumReserve` proves the bound of the first.
+A theorem proves the bound of the first, before Gloas from Fulu.
 
-`Execution.quorumDriftWithin` derives the drift premise from it.
+The drift premise of the checked-call headlines follows from it.
 
 No theorem derives the bound of the second yet.
 -/
@@ -43,7 +43,7 @@ Every term reads the state, except the queue of partial withdrawals, which the a
 
 It takes the total, the base and sync rewards, the churn and the finality delay from their reads.
 
-It bounds the drift: `quorumDrift_le_quorumReserve` proves it, before Gloas from Fulu.
+It bounds the drift, before Gloas from Fulu.
 
 The reserve is twice the gain of the total plus three times the loss of the voters' stake.
 

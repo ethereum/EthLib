@@ -818,8 +818,6 @@ A withdrawal request appends an entry that is withdrawable only after the curren
 So the blocks of one epoch pay a validator at most the entries of the queue at the epoch's start.
 
 Of those, only the entries due by then count.
-
-Ported from the donor's PendingPartialsKept.lean and DirectSafety/PartialWithdrawalLedger.lean.
 -/
 
 /-- Starting the exit of a validator keeps the queue. -/
@@ -845,9 +843,7 @@ From Electra, only two steps of a block write the queue of pending partial withd
 
 A withdrawal request appends an entry, and the withdrawals of the payload remove the paid ones.
 
-No step of a slot or of an epoch writes it ([EIP-7251]).
-
-[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+No step of a slot or of an epoch writes it.
 -/
 
 section Partials

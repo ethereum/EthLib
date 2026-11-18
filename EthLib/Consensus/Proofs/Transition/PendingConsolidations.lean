@@ -1878,7 +1878,7 @@ theorem withdrawableKept_processRegistryUpdates {f : Fork} {s t : BeaconState pr
 
 /-- The queue keeps a list, and each other entry has a source that exits after an epoch.
 
-Master's `PendingConsolidationInvariant` gives that the exit of each source is assigned. -/
+The invariant of pending consolidations gives that the exit of each source is assigned. -/
 def QueueFrom (L : List PendingConsolidation) (e : Epoch) {f : Fork}
     (s : BeaconState preset f) : Prop :=
   ∀ electra : .pectra ≤ f, (∀ c ∈ L, c ∈ (s.pendingConsolidations electra).data.toList) ∧
@@ -1891,7 +1891,7 @@ Each new entry has a source whose exit is assigned after the current epoch.
 
 The exit is assigned when the entry is queued, so it is part of the step.
 
-It is not read from master's invariant, which holds only at the states of a run. -/
+It is not read from the invariant, which holds only at the states of a run. -/
 def QueueGrows {f : Fork} (s t : BeaconState preset f) : Prop :=
   ∀ electra : .pectra ≤ f,
     (∀ c ∈ (s.pendingConsolidations electra).data.toList,
@@ -1909,7 +1909,7 @@ private theorem QueueGrows.of_same {f : Fork} {s t : BeaconState preset f}
     congrFun (queue electra) electra]
   exact ⟨fun _ h => h, fun _ h => .inl h⟩
 
-/-- Growths compose: master's lifecycle keeps each exit that is assigned. -/
+/-- Growths compose: the registry lifecycle keeps each exit that is assigned. -/
 private theorem QueueGrows.trans {f : Fork} {s u t : BeaconState preset f}
     (one : QueueGrows s u) (two : QueueGrows u t) (life : RegistryLifecycle u t)
     (slot : u.slot = s.slot) : QueueGrows s t := by
@@ -1926,7 +1926,7 @@ private theorem QueueGrows.trans {f : Fork} {s u t : BeaconState preset f}
       exact .inr ⟨w', read', by rw [exit]; exact later, by rw [exit]; exact assigned⟩
   · exact .inr ⟨w, read, epoch ▸ later, assigned⟩
 
-/-- A block step: master's frame and lifecycle, and the growth of the queue. -/
+/-- A block step: the frame, the registry lifecycle and the growth of the queue. -/
 def RiseStep {f : Fork} (s t : BeaconState preset f) : Prop :=
   Frame s t ∧ RegistryLifecycle s t ∧ QueueGrows s t
 
@@ -1961,7 +1961,7 @@ private theorem RiseStep.fold {f : Fork} {s t : BeaconState preset f} {α ε : T
 
 /-! ### The steps of a block that grow the queue
 
-Master gives each frame and lifecycle, and only a consolidation request grows the queue. -/
+Each step has a frame and a lifecycle, and only a consolidation request grows the queue. -/
 
 section RiseSteps
 

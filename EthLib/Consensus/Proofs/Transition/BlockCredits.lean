@@ -142,7 +142,7 @@ section Grow
 
 variable {fork : Fork} {s t : BeaconState preset fork}
 
-/-- The steps of an epoch that `EpochFrameLaws` names keep each flag of an existing validator. -/
+/-- The steps of an epoch that the epoch frame laws name keep each flag of an existing validator. -/
 private theorem growsLaws : EpochFrameLaws (@FlagKeeps preset fork) where
   refl s := FlagKeeps.refl s
   trans one two := one.trans two
@@ -977,7 +977,7 @@ theorem block_balances {engine : ExecutionEngine preset fork}
     (steady_processBlockHeader headedOk).trans <|
       (steady_processBlockExecution early executedOk).trans <|
         (steady_processRandao revealedOk).trans (steady_processEth1Data votedOk)
-  -- The steps before the operations are master's operations input, which keeps both flag lists.
+  -- The steps before the operations form the operations input, which keeps both flag lists.
   have growVoted : ParticipationKept s voted := flags_operationsInput
     ⟨s, headed, executed, revealed, by simp [notGloas]; rfl, headedOk,
       by simpa [bellatrix] using executedOk, revealedOk, by simpa [hegota] using votedOk⟩

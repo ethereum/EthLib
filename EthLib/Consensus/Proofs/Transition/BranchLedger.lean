@@ -29,9 +29,9 @@ import EthLib.Consensus.Proofs.Participation
 /-!
 # The balances along a branch inside one epoch
 
-The branch corrections cover a branch inside one epoch, from Altair and before Gloas.
+A tally follows the blocks of a run inside one epoch, from Altair and before Gloas.
 
-They read every balance change from the last state.
+It reads every balance change of the run from its last state.
 
 Withdrawals and conversions debit a counted set.
 
@@ -615,34 +615,23 @@ theorem Run.withdrawableKept_of_same_epoch {x y : ForkedBeaconState preset}
 
 /-! ## The branch corrections -/
 
-/-- The balances along a branch inside one epoch, from Fulu and before Gloas.
+/-- Along a run inside one epoch, from Fulu and before Gloas, balances move by bounded amounts.
 
-They are read from its last state.
+Read at the last state of the run:
 
-The run moves through the blocks of one epoch.
-
-Read at its last state:
-
-- Off a set of debited validators, a balance falls by at most the sum of its penalties.
-  These are the initial slashing penalty and the sync penalties of the blocks.
-  The debited validators are those that a withdrawal pays or a consolidation request converts.
-  Their number is at most the payload limits per block.
-  Off them the largest effective balance stays.
+- Off the debited validators, a balance falls by at most its slashing and sync penalties.
+- A withdrawal or a conversion debits a validator, at most the payload limits per block.
+- Off the debited validators, the largest effective balance stays.
 - A balance rises by at most the sync rewards of the blocks and its other credits.
-  The other credits are zero off a set of credited validators.
-  That set holds the proposers of the blocks that can credit anything.
-  From Electra, deposits credit no balance in a block, so the deposit amounts are zero.
-- The other credits come from three sources.
-  The first is the proposer rewards of attestations.
-  The second is the proposer share of the sync aggregates.
-  The third is the whistleblower rewards.
-  Together they are at most the sum of the proposer credit and some whistleblower rewards.
-  These are the whistleblower rewards of the validators slashed at the last state.
-  The proposer credit counts the proposer share apart from the participant sync rewards.
-  The bound also holds with only the validators slashed within the run.
-  Each of those was slashable at the first state, which needs the exits to be ordered there.
+- The other credits are zero off the credited validators, the proposers and deposit recipients.
+- From Electra, a block credits no deposit to a balance.
+- The credits apart from deposits sum to at most the proposer credit and whistleblower rewards.
+- The proposer credit covers attestation rewards and the proposer share of sync aggregates.
+- The whistleblower rewards are those of the validators slashed at the last state.
+- The bound also holds with only the validators slashed within the run.
+- Those validators were slashable at the first state, whose exits must be ordered.
 - A validator whose largest effective balance changed was converted.
-  Its balance then ends at most the activation balance above its later credits.
+- A converted balance ends within the activation balance above its later credits.
 - Effective balances stay. -/
 theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
     (tail : Run config checks x y)

@@ -255,7 +255,7 @@ variable {fork : Fork} {s u t : BeaconState preset fork}
 
 Once its exit is set, its withdrawable epoch only rises, and moves only when it is slashed.
 
-Its slashed flag and its exit epoch are read from master's frame and lifecycle. -/
+Its slashed flag and its exit epoch are read from the frame and the registry lifecycle. -/
 structure Later (old w : Validator) : Prop where
   activation : w.activationEpoch = old.activationEpoch
   withdrawable : old.exitEpoch ≠ FAR_FUTURE_EPOCH →
@@ -314,7 +314,7 @@ theorem Lives.refl (s : BeaconState preset fork) : Lives s s :=
 
 /-- Two later registries make one.
 
-The exits of the first come from master's lifecycle.
+The exits of the first come from the registry lifecycle.
 
 The slashes of the second come from its frame. -/
 theorem Lives.trans (one : Lives s u) (two : Lives u t) (life : RegistryLifecycle s u)
@@ -359,7 +359,7 @@ theorem Lives.of_data_right (one : Lives s u)
   ⟨fun index old w found read => one.later index old w found (by rw [← same]; exact read),
     fun index w none read => one.fresh index w none (by rw [← same]; exact read)⟩
 
-/-- A fold whose steps live on, keep master's lifecycle and keep each slash, does all three. -/
+/-- A fold whose steps live on, keep the lifecycle and keep each slash, does all three. -/
 private theorem Lives.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
     (each : ∀ a x b, step a x = .ok b →
       Lives a b ∧ RegistryLifecycle a b ∧ SlashedPersistence a b) {items : List α}
@@ -467,7 +467,7 @@ theorem lives_processAttesterSlashing {slashing : AttesterSlashing preset fork}
 
 /-- From Electra a deposit keeps every old validator.
 
-Master's `UnassignedKept` reads the new one. -/
+The new one keeps both of its epochs unassigned. -/
 theorem lives_processDeposit {before : fork < .hegota} {deposit : Deposit}
     (electra : .pectra ≤ fork)
     (computed : processDeposit config checks before s deposit = .ok t) : Lives s t := by
@@ -575,7 +575,7 @@ private theorem eligible_of_slashable {E : Epoch} {w : Validator}
 
 /-- An eligible validator of a later registry was eligible before.
 
-Its slashed flag comes from master's frame and its exit epoch from master's lifecycle. -/
+Its slashed flag comes from the frame and its exit epoch from the registry lifecycle. -/
 theorem Lives.back (lives : Lives s t) (life : RegistryLifecycle s t)
     (slashed : SlashedPersistence s t) {E : Epoch} {i : ℕ} {w : Validator}
     (found : t.validators.data[i]? = some w) (eligible : Eligible E w) :
