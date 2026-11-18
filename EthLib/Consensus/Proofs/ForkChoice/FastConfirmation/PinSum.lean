@@ -70,7 +70,8 @@ structure PinTerms (preset : Preset) where
   proposerCredit : ℕ
   exitingBands : ℕ
   pendingR : ℕ
-  newKeyRise : ℕ
+  creditGain : ℕ
+  gainHigh : Bool
   pendingRB : ℕ → Bool
   credits : ℕ
   branchR : ℕ
@@ -94,7 +95,7 @@ def PinTerms.total (t : PinTerms preset) : ℕ :=
     t.syncSeats + (∑ i ∈ t.positions with t.current i = true, t.rise i) +
     3 * (∑ i ∈ t.positions with t.current i = true, t.fall i) +
     3 * t.exitingRise + t.exitingCredits + t.exitingBands + t.queueRise + t.reserveW + t.flagged +
-    t.seatShortfall + (33 * t.consolidationsX + 9) / 10 + t.exitedR + t.pendingR + t.newKeyRise)
+    t.seatShortfall + (33 * t.consolidationsX + 9) / 10 + t.exitedR + t.pendingR + t.creditGain)
 
 /-- A verbatim copy of `pinReserve`'s lets (spec rev 2.5.3), returning the named terms. -/
 def pinTerms (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
@@ -422,7 +423,10 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
       decide (finalized + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ v.exitEpoch.toNat) &&
         decide (v.exitEpoch.toNat + 1 ≤ epoch.toNat)),
     (effective i + rise i)
-  let newKeyRise := if 11 * depth * gainRateMax < capMax then 0
+  let consolidationGain := consolidationsX / inc * perIncrement *
+    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
+  let creditGain := if 11 * depth * gainRateMax < capMax
+    then (33 * depth * consolidationGain + 9) / 10
     else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
   let pendingR := if tight then 0 else
     ∑ i ∈ positions with (validator i).any (fun v =>
@@ -431,7 +435,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   { quorum := quorumReserve config state ancestor, exiting, queues, queueDep, queueExit, credits,
     branchR, late, syncSeats, rise, fall, positions, current, exitingRise, exitingCredits,
     queueRise, reserveW, flagged, seatShortfall, consolidationsX, exitedR, depth, syncProposer,
-    proposerCredit, exitingBands, pendingR, newKeyRise,
+    proposerCredit, exitingBands, pendingR, creditGain,
+    gainHigh := !decide (11 * depth * gainRateMax < capMax),
     pendingRB := fun i => (validator i).any (fun v =>
       decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
         v.activationEpoch == FAR_FUTURE_EPOCH),
@@ -889,7 +894,8 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
           bandR events v.toNat)) +
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).pendingRB v.toNat = true,
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
-      (pinTerms config pulled anc fin).newKeyRise) : ℕ) := sorry
+      (if (pinTerms config pulled anc fin).gainHigh then (pinTerms config pulled anc fin).creditGain
+        else 0)) : ℕ) := sorry
 
 /-- K5 bands: the two bands beyond `credits`' one of each credited K5 key, weight 3.
 
@@ -1208,6 +1214,11 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have b13 := bud_exitingCredits (config := config) h tailC highC endEpochC replayedC
   have b17 := bud_exitingBands (config := config) h tailC highC endEpochC replayedC
   have b18 := bud_pendingR (config := config) h
+  -- `stub_J` reads `creditGain` only in its high regime.
+  have gainHighLe : (if (pinTerms config pulled anc fin).gainHigh then
+      (pinTerms config pulled anc fin).creditGain else 0) ≤
+        (pinTerms config pulled anc fin).creditGain := by
+    split <;> omega
   obtain ⟨fromFin⟩ := h.fromFin
   have b15 := bud_consolidations (config := config) h fromFin tail high endEpoch replayed highLeR
     tailC highC endEpochC replayedC highLe shallow band

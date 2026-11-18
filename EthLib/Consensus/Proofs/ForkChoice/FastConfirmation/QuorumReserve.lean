@@ -614,14 +614,21 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
       decide (finalized + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ v.exitEpoch.toNat) &&
         decide (v.exitEpoch.toNat + 1 ≤ epoch.toNat)),
     (effective i + rise i)
-  -- A key created on the other branch compounds its gains from its deposit.
+  -- A credit on the other branch alone compounds its gains over the rest of the window.
   --
-  -- The credits' eleven tenths pay them while eleven gains over the depth stay below the cap.
+  -- While eleven gains over the depth stay below the cap, `credits`' eleven tenths pay a new key's.
   --
-  -- Past that, each deposit the window can apply is charged up to the cap.
+  -- There a K5 key whose exit the call reads has its consolidation credit's gains charged thrice.
+  --
+  -- Past that bound, `rise`'s headroom pays a consolidation target's.
+  --
+  -- There each deposit the window can apply to a new key there is charged up to the cap.
   --
   -- This closes a proof route at degenerate totals; no reachable run is known to need it.
-  let newKeyRise := if 11 * depth * gainRateMax < capMax then 0
+  let consolidationGain := consolidationsX / inc * perIncrement *
+    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
+  let creditGain := if 11 * depth * gainRateMax < capMax
+    then (33 * depth * consolidationGain + 9) / 10
     else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
   -- A key here that is not yet eligible can be topped up on the other branch alone.
   --
@@ -637,7 +644,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     3 * (∑ i ∈ positions with current i = true, fall i) +
     3 * exitingRise + exitingCredits + exitingBands + queueRise + reserveW + flagged +
     seatShortfall + (33 * consolidationsX + 9) / 10 + exitedR + pendingR +
-    newKeyRise)
+    creditGain)
 
 /-- The pin reserve contains the quorum reserve. -/
 theorem quorumReserve_le_pinReserve (config : Config)
