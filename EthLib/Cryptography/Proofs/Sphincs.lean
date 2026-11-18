@@ -32,6 +32,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Sign
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Win
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Count
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Cost
+public import EthLib.Cryptography.Proofs.Sphincs.Cost
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability
 
 /-!
