@@ -63,9 +63,13 @@ def decodeG1 (b : ByteArray) : Except KzgError Bls.G1 :=
   | some b => (Bls.G1.uncompress b).mapError fun _ => .invalidTrustedSetup
   | none => .error .invalidTrustedSetup
 
-/-- Decode one compressed point of `G2` of the setup, or reject it. -/
+/-- Decode one compressed point of `G2` of the setup.
+
+A string of another length than 96 bytes, or one that does not decompress, is rejected. -/
 def decodeG2 (b : ByteArray) : Except KzgError Bls.G2 :=
-  (Bls.G2.uncompress b).mapError fun _ => .invalidTrustedSetup
+  match exactBytes? 96 b with
+  | some b => (Bls.G2.uncompress b).mapError fun _ => .invalidTrustedSetup
+  | none => .error .invalidTrustedSetup
 
 /-- Decode a trusted setup from compressed points.
 

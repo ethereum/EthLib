@@ -69,12 +69,27 @@ theorem coreAggregateVerify_size_ne {pks msgs : Array ByteArray} (h : pks.size �
   unfold coreAggregateVerify
   rw [ite_eq_left_of_eq_true _ _ (by simp [h])]
 
+/-- The core verification rejects a signature that is not 96 bytes. -/
+theorem coreVerify_badSignatureSize {sig : ByteArray} (h : sig.size ≠ 96)
+    (pk msg dst : ByteArray) :
+    coreVerify pk msg sig dst = false := by
+  simp [coreVerify, exactBytes?, h]
+
+/-- The core aggregate verification rejects a signature that is not 96 bytes. -/
+theorem coreAggregateVerify_badSignatureSize {sig : ByteArray} (h : sig.size ≠ 96)
+    (pks msgs : Array ByteArray) (dst : ByteArray) :
+    coreAggregateVerify pks msgs sig dst = false := by
+  simp [coreAggregateVerify, exactBytes?, h]
+
 /-- The core verification rejects a public key that is not 48 bytes. -/
 theorem coreVerify_badPubkeySize {pk : ByteArray} (h : pk.size ≠ 48) (msg sig dst : ByteArray) :
     coreVerify pk msg sig dst = false := by
   unfold coreVerify
   rw [show exactBytes? 48 pk = none by simp [exactBytes?, h]]
-  split <;> simp
+  -- Every branch of the signature checks ends on the rejected key.
+  split
+  · simp
+  · split <;> simp
 
 /-- The secret key decoder gives a key exactly when the decoder of scalars gives its scalar. -/
 theorem SecretKey.fromBytes_eq_ok_iff {bytes : ByteArray} {sk : SecretKey} :

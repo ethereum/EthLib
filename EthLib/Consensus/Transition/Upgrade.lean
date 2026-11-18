@@ -260,7 +260,7 @@ def queuePreActivation {fork : Fork} (state : BeaconState preset fork) (electra 
   let validator ← liftAccessor (getValidator state index)
   let balance ← liftAccessor (getBalance state index)
   let deposit : PendingDeposit := ⟨validator.pubkey, validator.withdrawalCredentials, balance,
-    Cryptography.Bls.Signatures.infinitySignature, GENESIS_SLOT⟩
+    Cryptography.Bls.Signatures.G2_POINT_AT_INFINITY, GENESIS_SLOT⟩
   let pending ← liftAccessor (appendWithinLimit (state.pendingDeposits electra) deposit)
   let validator := { validator with
     effectiveBalance := 0, activationEligibilityEpoch := FAR_FUTURE_EPOCH }

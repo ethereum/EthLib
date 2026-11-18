@@ -38,7 +38,7 @@ That holds for every signature checks that reject an empty key list, as BLS does
 theorem syncAggregateVerify_empty {message : ByteArray} {signature : BLSSignature}
     (rejectsEmpty : checks.fastAggregateVerify #[] message signature = false) :
     syncAggregateVerify checks #[] message signature = true ↔
-      signature = Signatures.infinitySignature := by
+      signature = Signatures.G2_POINT_AT_INFINITY := by
   simp [syncAggregateVerify, rejectsEmpty]
 
 /-- The checks of BLS reject an empty key list. -/

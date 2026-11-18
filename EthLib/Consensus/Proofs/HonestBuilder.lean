@@ -96,7 +96,7 @@ theorem getSelfBuiltExecutionPayloadBid_eq_ok_iff
         inclusionListBits = .ok signed ↔
       getExecutionPayloadBid state payload requests blobKzgCommitments state.slot feeRecipient
           BUILDER_INDEX_SELF_BUILD 0 inclusionListBits = .ok signed.message ∧
-        signed.signature = Signatures.infinitySignature := by
+        signed.signature = Signatures.G2_POINT_AT_INFINITY := by
   unfold getSelfBuiltExecutionPayloadBid
   simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq]
   constructor

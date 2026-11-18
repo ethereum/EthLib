@@ -71,3 +71,13 @@ def test_pairing_rejects_bad_point() -> None:
     # 48 zero bytes lack the compression flag, so they encode no point.
     with raises(BlsError, "invalid G1 point"):
         bls.pairing(bytes(48), g2(G2))
+
+
+def test_pairing_rejects_wrong_length() -> None:
+    # Each input is a valid point with one byte cut or added, so its length is its only fault.
+    for p in (g1(G1)[:-1], g1(G1) + b"\x00"):
+        with raises(BlsError, "invalid G1 point"):
+            bls.pairing(p, g2(G2))
+    for q in (g2(G2)[:-1], g2(G2) + b"\x00"):
+        with raises(BlsError, "invalid G2 point"):
+            bls.pairing(g1(G1), q)

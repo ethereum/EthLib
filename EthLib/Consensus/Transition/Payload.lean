@@ -179,7 +179,7 @@ def checkBidBuilder (config : Config) (checks : SignatureChecks)
   let bid := signed.message
   let builder := bid.builderIndex
   if builder = BUILDER_INDEX_SELF_BUILD then
-    ensure (bid.value = 0 ∧ signed.signature = Signatures.infinitySignature)
+    ensure (bid.value = 0 ∧ signed.signature = Signatures.G2_POINT_AT_INFINITY)
       (.selfBuildBidPaid bid.value)
   else
     let active ← liftAccessor (isActiveBuilder state gloas builder)

@@ -787,7 +787,7 @@ theorem queueExcessActiveBalance_balance {state after : BeaconState preset fork}
     have read := getBalance_setBalance_self setOk
     refine ⟨read, [⟨validator.pubkey,
       validator.withdrawalCredentials, balance - preset.MIN_ACTIVATION_BALANCE,
-      Cryptography.Bls.Signatures.infinitySignature, GENESIS_SLOT⟩], ?_, ?_⟩
+      Cryptography.Bls.Signatures.G2_POINT_AT_INFINITY, GENESIS_SLOT⟩], ?_, ?_⟩
     · show pending.data.toList = _
       rw [appendWithinLimit_data appended, Array.toList_push]
     · simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, Nat.add_zero]

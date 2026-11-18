@@ -75,7 +75,7 @@ def syncParticipantPubkeys (committee : SyncCommittee preset)
 No key and the signature of the point at infinity pass; otherwise the fast aggregate check runs. -/
 def syncAggregateVerify (checks : SignatureChecks) (pubkeys : Array BLSPubkey)
     (message : ByteArray) (signature : BLSSignature) : Bool :=
-  (pubkeys.isEmpty && decide (signature = Signatures.infinitySignature)) ||
+  (pubkeys.isEmpty && decide (signature = Signatures.G2_POINT_AT_INFINITY)) ||
     checks.fastAggregateVerify pubkeys message signature
 
 /-- From Altair: the reward of each member of the sync committee that signs, for one slot.

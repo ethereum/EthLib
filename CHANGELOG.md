@@ -117,6 +117,27 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the compressed encoding of a point of `G2` has its 96 bytes in its type ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  `G2.compress` and `G2.infinityBytes` are a `Vector UInt8 96`, and `G2.uncompress` takes one.
+  A caller that holds bytes of another length reads them with `exactBytes? 96` and rejects `none`, as decompression did.
+  `G2_POINT_AT_INFINITY` is a `BLSSignature`, and the precompile constant `KZG_SETUP_G2_MONOMIAL_1` is a `Vector UInt8 96`.
+  `G2.size_compress` and `G2.uncompress_size_ne` are removed, since the type states the length.
+  `packBytes_pointToSignature` becomes `pointToSignature_eq`, which states that a signature is the compressed point.
+  `TrustedSetup.decodeG2_eq_ok` is new, and relates the decoder of a setup point to decompression.
+  `G2.compress_uncompress`, `isOnTwist_of_uncompress`, `uncompress_injective`, `uncompress_valid`, `valid_of_uncompress` and `Security.decodeSignature_of_uncompress` take the encoding as a vector.
+  `G2.uncompress_uncompressed`, `uncompress_infinity_sign_set`, `uncompress_infinity_nonzero_tail`, `uncompress_noncanonical_c1` and `uncompress_noncanonical_c0` take a vector, read the flags in its first byte, and drop the premise on the length.
+  `G2.compress_congr`, `compress_eq_infinityBytes_iff`, `compress_inf`, `compress_zero`, `uncompress_infinityBytes`, `uncompress_compress` and `uncompress_compress_of_z_one` keep their meaning, and now take or equate vectors.
+  `coreVerify_iff` takes the signature as a vector.
+  `coreVerify_of_represents`, `pointToSignature_bytes` and `Security.encode_signature` state the signature as the bytes of the compressed point, `packBytes (G2.compress S)`.
+  `Security.verify_iff` and `verify_iff_isDh` decompress the signature itself, with no conversion to bytes.
+  `TrustedSetup.ofBytes_g2Monomial` states its fact through `TrustedSetup.decodeG2`.
+  In the security proofs, `G2Sub.encode` is the bytes of the compressed point.
+  No C export or Python function changes.
+
+- In Lean, `infinitySignature` is removed, since it named the same constant as `G2_POINT_AT_INFINITY`.
+  A caller writes `G2_POINT_AT_INFINITY`.
+  No C export or Python function changes.
+
 - In Lean, the historical-anchor theorems read the slot count of an epoch from `fit` ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` drop `positive : 0 < preset.SLOTS_PER_EPOCH.toNat`, which `fit.positive` gives; their conclusions are unchanged.
   A caller drops the argument.
