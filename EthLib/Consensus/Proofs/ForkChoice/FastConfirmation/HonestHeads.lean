@@ -389,28 +389,11 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   obtain ⟨n, attestation, indexed, vote, committees⟩ :=
     votes v hv data.slot committeeIndex _ assigned deadline (startLe k') (k'Le.trans hk)
   -- The duty's timing: its slot, the next slot, and that slot's start before the store's time.
-  have genesisOf : ∀ j, ((e.world j).state w).genesisTimeMs = genesisTimeMs := by
-    intro j
-    have left := (e.clock_bounds v n).1
-    have right := (e.clock_bounds w j).1
-    rw [start v hv] at left
-    rw [start w hw] at right
-    exact right.trans (left.symm.trans vote.genesis)
+  have genesisOf := e.genesisTimeMs_eq_of_honest start hv vote.genesis hw
   have deadlineCopy := deadline
   obtain ⟨slotTime, due, slotTimeOk, dueOk, -⟩ := deadlineCopy
-  have nextFits : data.slot.toNat + (1 : UInt64).toNat < 2 ^ 64 := by
-    have := UInt64.lt_iff_toNat_lt.mp before
-    have := current.toNat_lt
-    simp only [UInt64.toNat_one]
-    omega
-  have nextOk := addChecked_of_lt nextFits
-  have nextLe : data.slot + 1 ≤ current := UInt64.le_iff_toNat_le.mpr (by
-    have := UInt64.lt_iff_toNat_lt.mp before
-    rw [(addChecked_ok_iff.mp nextOk).2]
-    simp only [UInt64.toNat_one]
-    omega)
-  obtain ⟨followingTime, followingTimeOk, followingLe⟩ :=
-    slotStart_le_clock (genesisOf k) currentOk nextLe
+  obtain ⟨nextOk, followingTime, followingTimeOk, followingLe⟩ :=
+    nextSlotStart_le_clock (genesisOf k) currentOk before
   rw [upToDate.1] at followingLe
   have dueLt := fits.due_lt_slot nextOk slotTimeOk followingTimeOk dueOk
   have beforeBoundary := fits.before_boundary nextOk slotTimeOk followingTimeOk deadline
@@ -450,13 +433,9 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
     rw [dueOk, Except.ok.injEq] at dueOk'
     subst startOk' dueOk'
     omega
-  have arrivalSlot : ((e.world arrival).state w).getCurrentSlot config = .ok (data.slot + 1) := by
-    unfold Store.getCurrentSlot
-    rw [genesisOf arrival]
-    have clock : ((e.world arrival).state w).timeMs = followingTime :=
-      UInt64.toNat_inj.mp (arrivalCurrent.1.trans arrivalTime)
-    rw [clock]
-    exact mapError_ok_iff.mpr (computeSlotAtTimeMs_computeTimeAtSlotMs slots followingTimeOk)
+  have arrivalSlot : ((e.world arrival).state w).getCurrentSlot config = .ok (data.slot + 1) :=
+    e.getCurrentSlot_of_slot_start slots (genesisOf arrival) followingTimeOk arrivalTime
+      arrivalCurrent
   -- The voter's head reads the finalized checkpoint that the receiver holds at arrival.
   have targetRead := vote.data_target anchored anchorSlot anchorBoundary start hv
     (roots v hv n nBound)

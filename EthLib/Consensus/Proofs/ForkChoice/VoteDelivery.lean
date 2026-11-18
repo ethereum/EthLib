@@ -298,6 +298,39 @@ theorem Execution.exists_duty_boundaries {Δ : ℕ}
   obtain ⟨k, atTime, current⟩ := preboundary startedBefore
   exact ⟨⟨k, atTime, by omega, current⟩, boundary⟩
 
+/-- Every honest store runs on the genesis time of any one honest store.
+
+All honest stores start from the same anchor, and no move changes the genesis time. -/
+theorem Execution.genesisTimeMs_eq_of_honest {anchor : Store preset fork}
+    (start : ∀ u ∈ J, e.start u = anchor)
+    {v : ValidatorIndex} (honest : v ∈ J) {i : ℕ}
+    (genesis : ((e.world i).state v).genesisTimeMs = genesisTimeMs)
+    {w : ValidatorIndex} (receiver : w ∈ J) :
+    ∀ j, ((e.world j).state w).genesisTimeMs = genesisTimeMs := by
+  intro j
+  have left := (e.clock_bounds v i).1
+  have right := (e.clock_bounds w j).1
+  rw [start v honest] at left
+  rw [start w receiver] at right
+  exact right.trans (left.symm.trans genesis)
+
+/-- A store that is up to date at the start of a slot is at that slot.
+
+It must run on the genesis time of the slot's start, and a slot must have a duration. -/
+theorem Execution.getCurrentSlot_of_slot_start (slots : 0 < config.SLOT_DURATION_MS)
+    {w : ValidatorIndex} {j : ℕ} {slot : Slot} {begin : UInt64}
+    (genesis : ((e.world j).state w).genesisTimeMs = genesisTimeMs)
+    (beginOk : computeTimeAtSlotMs config genesisTimeMs slot = .ok begin)
+    (atTime : (e.world j).time = begin.toNat)
+    (upToDate : UpToDate config checks sources (e.world j).time ((e.world j).view w)
+      ((e.world j).state w)) :
+    ((e.world j).state w).getCurrentSlot config = .ok slot := by
+  unfold Store.getCurrentSlot
+  rw [genesis]
+  have clock : ((e.world j).state w).timeMs = begin := UInt64.toNat_inj.mp (upToDate.1.trans atTime)
+  rw [clock]
+  exact mapError_ok_iff.mpr (computeSlotAtTimeMs_computeTimeAtSlotMs slots beginOk)
+
 /-- A duty inside a complete slot interval has a valid committee vote before the delivery cutoff.
 
 Each vote it assumes also passes the committee check in its target state. -/
