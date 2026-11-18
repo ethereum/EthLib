@@ -508,6 +508,58 @@ private theorem Run.passDebit_le {x y : ForkedBeaconState preset} (tail : Run co
 private def syncDebit (v : ℕ) (event : BalanceEvent preset) : ℕ :=
   if event.source = .sync then actualBalanceAt event.before v - actualBalanceAt event.after v else 0
 
+/-- The balance of a key that stays unslashed falls over a branch only by its debits, as events.
+
+It starts from the smaller of its balance and its largest effective balance.
+
+The debits are the penalties, the sync penalties and the partial withdrawals of its events.
+
+The guards are those of the per-key floor of the a priori bound, `FloorTrace.run_of_le_cap`.
+
+A key with no activation epoch is allowed if the branch starts from Fulu or later. -/
+private theorem Run.balanceFloor_events_or_fulu {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (early : y.fork < .glamsterdam) (high : ℕ)
+    (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    (v : ValidatorIndex) (val : Validator) (initial : x.state.validators.data[v.toNat]? = some val)
+    (unslashed : val.slashed = false)
+    (activated : val.activationEpoch ≠ FAR_FUTURE_EPOCH ∨ .fusaka ≤ x.fork)
+    (quotient : ℕ) (positive : 0 < quotient)
+    (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
+      (step : Step config checks m n) (post : Run config checks n y),
+      (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[v.toNat]? = some w →
+      high + 1 < w.exitEpoch.toNat ∧
+      (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
+        preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
+          (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
+      quotient ≤ (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ∧
+      ∀ events, step.balanceEvents = .ok events → ∀ e ∈ events, e.source ≠ .crossing)
+    (stays : ∀ w, y.state.validators.data[v.toNat]? = some w → w.slashed = false)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
+    min (actualBalanceAt x v.toNat) (withdrawalMaxEffectiveBalance preset x.fork val).toNat ≤
+      actualBalanceAt y v.toNat + (events.map (penaltyDebit v.toNat)).sum +
+        (events.map (syncDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum := by
+  obtain ⟨last, trace, balance, debt, -, w, final, -, used, -⟩ :=
+    FloorTrace.run_of_le_cap_or_fulu shared tail genesis caps delay early high endEpoch v val
+      initial
+      unslashed
+      activated (min (actualBalanceAt x v.toNat)
+        (withdrawalMaxEffectiveBalance preset x.fork val).toNat) 0 quotient
+      (Nat.min_le_right _ _) positive guards replayed
+  have clean : last.slashedHigh = none := by
+    cases flag : last.slashedHigh with
+    | none => rfl
+    | some _ => simp [flag, stays w final] at used
+  have floor := FloorTrace.unslashed_balance_floor trace (by simp) clean
+  have split : (events.map (floorPenaltyDebit v.toNat)).sum =
+      (events.map (penaltyDebit v.toNat)).sum + (events.map (syncDebit v.toNat)).sum := by
+    rw [← List.sum_map_add]
+    rfl
+  rw [balance, debt, split] at floor
+  omega
+
 /-- The balance of a key that stays unslashed falls over a branch only by its debits.
 
 It starts from the smaller of its balance and its largest effective balance.
@@ -551,25 +603,10 @@ private theorem Run.balanceFloor_rates_or_fulu {g x y : ForkedBeaconState preset
       actualBalanceAt y v.toNat +
         ∑ t ∈ Finset.Ico (getCurrentEpoch x.state).toNat (getCurrentEpoch y.state).toNat, pen t +
         (events.map (syncDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum := by
-  obtain ⟨last, trace, balance, debt, -, w, final, -, used, -⟩ :=
-    FloorTrace.run_of_le_cap_or_fulu shared tail genesis caps delay early high endEpoch v val
-      initial
-      unslashed
-      activated (min (actualBalanceAt x v.toNat)
-        (withdrawalMaxEffectiveBalance preset x.fork val).toNat) 0 quotient
-      (Nat.min_le_right _ _) positive guards replayed
-  have clean : last.slashedHigh = none := by
-    cases flag : last.slashedHigh with
-    | none => rfl
-    | some _ => simp [flag, stays w final] at used
-  have floor := FloorTrace.unslashed_balance_floor trace (by simp) clean
+  have floor := Run.balanceFloor_events_or_fulu shared tail genesis caps delay early high endEpoch
+    v val initial unslashed activated quotient positive guards stays replayed
   have inside := (Array.getElem?_eq_some_iff.mp initial).1
   have passes := Run.passDebit_le_rates tail early altair high endEpoch inside pen rate replayed
-  have split : (events.map (floorPenaltyDebit v.toNat)).sum =
-      (events.map (penaltyDebit v.toNat)).sum + (events.map (syncDebit v.toNat)).sum := by
-    rw [← List.sum_map_add]
-    rfl
-  rw [balance, debt, split] at floor
   omega
 
 /-- The balance of a key that stays unslashed falls over a branch only by its debits.
