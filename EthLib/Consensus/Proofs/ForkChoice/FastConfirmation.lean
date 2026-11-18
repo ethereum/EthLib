@@ -64,5 +64,7 @@ Those voters hold two thirds of the active balance, given an honest count and co
 
 Another module gives the coverage of a walk of roots from that of its start and a step per member.
 
-A delay after an event of an honest store, honest stores have justified the epoch it finalized.
+The last confirmed root of one honest validator's consecutive calls is on up-to-date honest heads.
+
+That holds from the slot after the last call to a horizon, unless stores collide or evidence holds.
 -/

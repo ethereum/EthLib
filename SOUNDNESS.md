@@ -3327,6 +3327,8 @@ Votes for the target of epoch E count until start(E+1) − 1, and the conclusion
 
 `Execution.confirmedRoot_covers` in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean` addresses Theorem 1 of [#1458](https://github.com/ethereum/EthLib/issues/1458).
 It takes consecutive calls of the rule by one honest validator, one per slot from `firstSlot`, run from the anchor store.
+The first slot's epoch is at least two and after the anchor state's epoch.
+The rule does not check this; it is an assumption on the run, and runs whose first call is earlier are not covered.
 After the last call, the confirmed root is on every up-to-date honest head from the next slot to the horizon.
 The alternatives are a collision between blocks held by honest stores, or accountable-safety evidence.
 That evidence is `HistoricalDirectSafetyEvidence`, `CrossStoreDirectSafetyEvidence`, `CrossStoreJustifiedEvidence` or `HeldStateFinalityEvidence`.

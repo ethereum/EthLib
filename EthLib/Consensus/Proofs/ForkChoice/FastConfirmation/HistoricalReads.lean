@@ -188,7 +188,7 @@ public theorem Execution.heldFinality_or_evidence {anchor : Store preset fork}
 
 /-- Each honest finalized checkpoint is on every honest justified chain at its epoch or later.
 
-The two stores and their events by the time are independent.
+The two stores may be the same or different, at any events by the time.
 
 Otherwise two runs from the anchor, to held states of the two stores, give direct-safety evidence.
 

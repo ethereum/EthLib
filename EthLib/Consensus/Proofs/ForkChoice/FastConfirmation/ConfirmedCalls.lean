@@ -19,21 +19,13 @@ import EthLib.Consensus.Proofs.HonestAggregation
 /-!
 # The confirmed roots of the calls of one validator
 
-A delay after an event of an honest store, each up-to-date honest store has justified its epoch.
+After consecutive calls of the rule by one honest validator, its last confirmed root covers heads.
 
-That epoch is the one of the finalized checkpoint of the first store at the event.
+It is on every up-to-date honest head from the slot after the last call to a horizon.
 
-The same holds for the unrealized justified checkpoint of a caller at an earlier call.
-
-That needs a later call at which the caller's justified checkpoint is that unrealized one.
-
-Both proofs read the finalized checkpoint of each receiver at the justified root of the sender.
+Otherwise two honest stores collide, or accountable-safety evidence holds.
 
 `CallAt` names one call in a run of calls by one validator.
-
-Along the accepted walk of a call, the call's balance source is on the chain of each parent.
-
-That source is the observed checkpoint, and the stored root's recency carries from call to call.
 
 Each call keeps a private call invariant, given the invariant at every earlier call.
 
@@ -2952,6 +2944,8 @@ The alternatives are a collision of two honest stores and four kinds of accounta
 The evidence is historical, cross-store direct-safety, cross-store justified or held-state finality.
 
 Each call assumes its obligations, and the calls are at consecutive slots from the first slot.
+
+An assumption on the run: the first slot's epoch is at least two and after the anchor state's.
 
 The execution verifies signatures with BLS, as the pulled-up head state of the rule does.
 

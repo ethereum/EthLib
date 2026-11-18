@@ -656,7 +656,7 @@ def HeldStateFinalityEvidence {g : ForkedBeaconState preset}
 
 /-- Two honest stores have two runs from the anchor to held states that give direct-safety evidence.
 
-The stores and their events by the time are independent.
+The two stores may be the same or different, at any events by the time.
 
 A terminal view of the first state has the first store's finalized checkpoint.
 
