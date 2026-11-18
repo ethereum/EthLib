@@ -1214,10 +1214,8 @@ The proposer's share of the sync credits is in `syncF`, so the bound adds the `s
 that `credits`, `exitingCredits` and `branchR` leave. -/
 theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
-    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
     3 * ((∑ v ∈ V, (syncF events v.toNat + syncF eventsC v.toNat)) + (∑ v ∈ (K4 pulled counted V), (syncF events v.toNat + syncF eventsC v.toNat)) +
       (∑ v ∈ (K5 counted V), (syncF events v.toNat + syncF eventsC v.toNat))) +
@@ -1338,7 +1336,7 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have b3 := bud_queues (config := config) h tailC
   have b4 := bud_credits (config := config) h tailC highC endEpochC replayedC
   have b5 := bud_branchR (config := config) h tail high endEpoch replayed
-  have b6 := bud_sync (config := config) h tail high endEpoch replayed tailC highC endEpochC replayedC
+  have b6 := bud_sync (config := config) h tail high replayed tailC highC replayedC
   have b7 := bud_fall (config := config) h
   have b8 := bud_rise (config := config) h
   have b10 := bud_deposits (config := config) h tail high endEpoch replayed
