@@ -94,6 +94,7 @@ Not yet released.
   - `Execution.rootViableAt_of_checked` gives that viability for the root of a checked call.
   - `Store.not_isOneConfirmed_of_slot_eq_current` leaves a block at the current slot unconfirmed.
   - `Store.ForwardReachable.justified_origins_epoch`, `Store.ForwardReachable.pulledUp_le_unrealized`, `Store.Reachable.justified_epoch_le_unrealized` and `Execution.unrealizedJustified_epoch_le_of_le` bound the justified checkpoints of a store.
+    `Store.onBlock_pulledUp` gives the pull-up of a block that the store adds, which their block steps read.
   - `Store.adversaryRange_start` and `Store.ForwardReachableWith.supportersOf_mem_committees_of_near` read the adversary's range of a block and its committees; `Store.ForwardReachableWith.supportersOf_mem_committees` now reads the second.
   - `Store.updateCheckpoints_justifiedCheckpoint`, `Store.onTick_unrealizedJustifiedCheckpoint` and `Store.onBlock_unrealized_epoch_le` are the store steps of the justified bounds above.
     `Store.updateCheckpoints_unrealizedJustifiedCheckpoint` and `Store.onTick_justifiedCheckpoint_of_unrealized` are public again, with their statements unchanged.
