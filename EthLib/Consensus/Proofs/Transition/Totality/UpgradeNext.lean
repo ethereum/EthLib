@@ -150,7 +150,7 @@ theorem advanceSlot_pending {fork : Fork} {state after : BeaconState preset fork
   have stateEpoch := getCurrentEpoch_toNat state
   have afterEpoch := getCurrentEpoch_toNat { epoched with slot := next }
   dsimp only at afterEpoch
-  obtain ⟨boundary, epochedOk⟩ | ⟨inside, h⟩ := epochIfLast_cases epochedOk
+  obtain ⟨boundary, epochedOk⟩ | ⟨inside, kept⟩ := epochIfLast_cases epochedOk
   · obtain ⟨rotated, emptied⟩ := processEpoch_pendingRotation before epochedOk
     refine Or.inr ⟨?_, ?_, emptied⟩
     · rw [afterEpoch, stateEpoch]

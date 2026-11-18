@@ -292,7 +292,7 @@ private theorem ChainHolds.of_advanceSlot {start : RunStart} {step : BlockStep}
   rw [← cachedEpoch] at cachedBounded
   have nextEpoch : (getCurrentEpoch { epoched with slot := next }).toNat =
       next.toNat / preset.SLOTS_PER_EPOCH.toNat := getCurrentEpoch_toNat _
-  obtain ⟨boundary, epochedOk⟩ | ⟨inside, h⟩ := epochIfLast_cases epochedOk
+  obtain ⟨boundary, epochedOk⟩ | ⟨inside, kept⟩ := epochIfLast_cases epochedOk
   · have crossed := nextSlot_epoch_of_boundary sum boundary
     have nextIs : (state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat =
         (getCurrentEpoch state).toNat + 1 := by

@@ -141,7 +141,7 @@ Not yet released.
   `Store.isViableLeaf_checkpointBlock` gives the checkpoint block that a viable leaf reads.
 
 - `epochIfLast_cases` splits the epoch step of a slot.
-  At an epoch boundary it is the epoch transition, and at any other slot it keeps the state.
+  When the next slot starts an epoch it is the epoch transition, and at any other slot it keeps the state.
 
 - `VotersInHeadWindow` states that, between two times, each voter below a given parent block lies in each honest head's window after that parent ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `VoteInHeadWindow` is the vote and the window that it reads.

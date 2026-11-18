@@ -79,8 +79,8 @@ theorem advanceSlot_quiet (ok : advanceSlot config checks state = .ok after)
     rw [sum, UInt64.toNat_add, UInt64.toNat_one]
     simp only [UInt64.size] at bound
     omega
-  obtain ⟨_, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
-  · exact absurd (same ▸ ‹next % preset.SLOTS_PER_EPOCH = 0›) inside
+  obtain ⟨boundary, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
+  · exact absurd (same ▸ boundary) inside
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
   exact ⟨rfl, rfl, rfl⟩
 

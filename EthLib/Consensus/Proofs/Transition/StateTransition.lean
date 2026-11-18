@@ -128,7 +128,7 @@ theorem advanceSlot_ok (computed : advanceSlot config checks state = .ok after) 
   simp only [UInt64.toNat_one] at sum
   exact ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩
 
-/-- The epoch step of a slot runs the epoch transition at an epoch boundary.
+/-- The epoch step of a slot runs the epoch transition when the next slot starts an epoch.
 
 At any other slot it keeps the state. -/
 theorem epochIfLast_cases {next : Slot}
