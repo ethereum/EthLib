@@ -170,5 +170,4 @@ A disagreement with leanVM goes on the issue, with the file and line on both sid
 - R. Canetti, Y. Chen, J. Holmgren, A. Lombardi, G. N. Rothblum, R. D. Rothblum and D. Wichs, [Fiat-Shamir: From Practice to Theory](https://doi.org/10.1145/3313276.3316380).
 - D. Hofheinz, M. Reichle and B. Wagner, [Hint-Free Multi-Signatures](https://eprint.iacr.org/2026/723).
 
-The specification is compared with leanVM at commit `fa4b43935667234e8e29c6cc19ffcfb3ab5164d5`.
-Lean doc comments cite the papers, or state the rule when no paper does; they never cite leanVM.
+Lean doc comments cite the papers, or state the rule when no paper does.
