@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.Chain
 public import EthLib.Consensus.Transition.Genesis
+import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.PayloadInputs
 
 /-!
@@ -132,6 +133,19 @@ theorem Run.contains_split {g a x y : ForkedBeaconState preset}
   | earlier member next ih =>
     obtain ⟨pre, post, same⟩ := ih
     exact ⟨pre, post.snoc next, congrArg (fun run => run.snoc next) same⟩
+
+/-- A step of a pre-Gloas run is pre-Gloas, and its input epoch is at most the run's end epoch. -/
+theorem Run.contains_step_facts {x y u v : ForkedBeaconState preset}
+    {tail : Run config checks x y} {step : Step config checks u v} (member : tail.Contains step)
+    (early : y.fork < .glamsterdam) :
+    ∃ (pre : Run config checks x u) (post : Run config checks v y),
+      tail = (pre.snoc step).append post ∧ u.fork < .glamsterdam ∧
+        (getCurrentEpoch u.state).toNat ≤ (getCurrentEpoch y.state).toNat := by
+  obtain ⟨pre, post, split⟩ := tail.contains_split step member
+  exact ⟨pre, post, split, Nat.lt_of_le_of_lt
+    (Nat.le_trans step.chainStep.fork_le (fork_le_of_chainSteps post.chainSteps)) early,
+    UInt64.le_iff_toNat_le.mp
+      (currentEpoch_le_of_chainSteps ((Run.nil.snoc step).append post).chainSteps)⟩
 
 /-- The number of block steps of a run. -/
 def Run.blockCount {first last : ForkedBeaconState preset} :

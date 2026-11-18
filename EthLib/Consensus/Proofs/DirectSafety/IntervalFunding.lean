@@ -1161,7 +1161,7 @@ private theorem deposit_bounds {fork : Fork} {s t : BeaconState preset fork}
     simpa only [early, ↓reduceIte, balanceCredits, balanceDebits, actualBalanceAt, site]
       using And.intro bounds.2 bounds.1.le
 
-private theorem sync_bounds {fork : Fork} {s t : BeaconState preset fork}
+theorem sync_bounds {fork : Fork} {s t : BeaconState preset fork}
     (altair : .altair ≤ fork) (aggregate : SyncAggregate preset)
     (ok : processSyncAggregate config checks s altair aggregate = .ok t) :
     ∃ reward proposer,

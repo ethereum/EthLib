@@ -215,7 +215,7 @@ private theorem slashing_run_support {config : Config} {checks : SignatureChecks
       exact previous
 
 /-- Uniform per-index bounds over step inputs pay all slashing credits only once. -/
-private theorem slashing_credits_le {config : Config} {checks : SignatureChecks}
+theorem slashing_credits_le {config : Config} {checks : SignatureChecks}
     {g x y : ForkedBeaconState preset} (shared : Run config checks g x)
     (tail : Run config checks x y) (genesis : Genesis (config := config) (checks := checks) g)
     (early : y.fork < .glamsterdam)

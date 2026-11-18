@@ -77,6 +77,20 @@ theorem getCurrentEpoch_le_activityFixedEpoch (state : BeaconState preset fork) 
   have := (getCurrentEpoch state).toNat_lt
   omega
 
+/-- (preset fact) Activity is fixed at least three epochs ahead.
+
+This is item 3's shared fact; the pin's producer reads it. -/
+structure Preset.SeedLookaheadAtLeastThree (preset : Preset) : Prop where
+  lookahead : 3 ≤ preset.MAX_SEED_LOOKAHEAD.toNat
+
+/-- The mainnet preset fixes activity at least three epochs ahead. -/
+theorem Preset.SeedLookaheadAtLeastThree.mainnet : Preset.mainnet.SeedLookaheadAtLeastThree :=
+  ⟨by decide⟩
+
+/-- The minimal preset fixes activity at least three epochs ahead. -/
+theorem Preset.SeedLookaheadAtLeastThree.minimal : Preset.minimal.SeedLookaheadAtLeastThree :=
+  ⟨by decide⟩
+
 /-- A current epoch at least as late gives a fixed epoch at least as late. -/
 theorem activityFixedEpoch_mono {post : Base.Fork} {other : BeaconState preset post}
     (le : getCurrentEpoch state ≤ getCurrentEpoch other) :

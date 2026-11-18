@@ -1598,7 +1598,7 @@ open Cryptography.Bls
 /-- A deposit to a key no validator has raises no balance inside the registry.
 
 It changes nothing, or appends one validator with its balance. -/
-private theorem applyPendingDeposit_absent_balances {fork : Fork}
+theorem applyPendingDeposit_absent_balances {fork : Fork}
     {u v : BeaconState preset fork} {deposit : PendingDeposit} (altair : .altair ≤ fork)
     (absent : u.validators.data.findIdx? (·.pubkey == deposit.pubkey) = none)
     (ok : applyPendingDeposit config checks u deposit = .ok v) {i : Nat}

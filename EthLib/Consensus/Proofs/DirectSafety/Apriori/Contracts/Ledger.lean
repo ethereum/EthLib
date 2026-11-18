@@ -343,28 +343,34 @@ theorem initial_unslashed_debit_le
       simpa only [numeric i hi, numeric j hj] using equal
   rw [← sumImage]
   exact Finset.sum_le_sum_of_subset subset
+/-- A slot records no withdrawal event: its epoch passes and fork crossings pay no withdrawal. -/
+theorem slot_events_no_withdrawals {x y : ForkedBeaconState preset}
+    (ok : advanceSlotAcross config checks x = .ok y) (early : y.fork < .glamsterdam)
+    {events : List (BalanceEvent preset)}
+    (replayed : (Step.slot ok).balanceEvents = .ok events) :
+    ∀ e ∈ events, e.source ≠ .withdrawals := by
+  obtain ⟨advanced, cached, crossings, _, _, _, crossingOk, split⟩ :=
+    Step.balanceEvents_slot ok early replayed
+  rcases split with ⟨_, rfl⟩ |
+    ⟨middle, _, recorded, recordedOk, _, _, _, shape, _, _, _, _, _⟩
+  · intro e member source
+    have crossed := upgradeBalanceReplay_crossing crossingOk e member
+    rw [crossed] at source
+    cases source
+  · intro e member source
+    rw [shape] at member
+    rcases List.mem_append.mp member with recordedMember | crossingMember
+    · exact epochBalanceReplay_no_withdrawals recordedOk e recordedMember source
+    · have crossed := upgradeBalanceReplay_crossing crossingOk e crossingMember
+      rw [crossed] at source
+      cases source
 private theorem slot_partial_sum {x y : ForkedBeaconState preset}
     (ok : advanceSlotAcross config checks x = .ok y) (early : y.fork < .glamsterdam)
     {events : List (BalanceEvent preset)}
     (replayed : (Step.slot ok).balanceEvents = .ok events) :
     (events.map fun e => ∑ i ∈ Finset.range e.before.state.validators.data.size,
       floorPartialDebit (UInt64.ofNat i) e).sum = 0 := by
-  have absent : ∀ e ∈ events, e.source ≠ .withdrawals := by
-    obtain ⟨advanced, cached, crossings, _, _, _, crossingOk, split⟩ :=
-      Step.balanceEvents_slot ok early replayed
-    rcases split with ⟨_, rfl⟩ |
-      ⟨middle, _, recorded, recordedOk, _, _, _, shape, _, _, _, _, _⟩
-    · intro e member source
-      have crossed := upgradeBalanceReplay_crossing crossingOk e member
-      rw [crossed] at source
-      cases source
-    · intro e member source
-      rw [shape] at member
-      rcases List.mem_append.mp member with recordedMember | crossingMember
-      · exact epochBalanceReplay_no_withdrawals recordedOk e recordedMember source
-      · have crossed := upgradeBalanceReplay_crossing crossingOk e crossingMember
-        rw [crossed] at source
-        cases source
+  have absent := slot_events_no_withdrawals ok early replayed
   have each : ∀ e ∈ events,
       (∑ i ∈ Finset.range e.before.state.validators.data.size,
         floorPartialDebit (UInt64.ofNat i) e) = 0 := by

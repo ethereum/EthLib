@@ -824,7 +824,7 @@ Before it, registry updates and pending deposits keep existing effective balance
 The other stages before it keep the validators.
 
 The stages after it keep the validators and the balances. -/
-private theorem balanceDrift_epoch {f : Fork} {s t : BeaconState preset f}
+theorem balanceDrift_epoch {f : Fork} {s t : BeaconState preset f}
     (ok : processEpoch config checks s = .ok t) :
     ∃ before after, EffectiveKept s before ∧
       processEffectiveBalanceUpdates before = .ok after ∧

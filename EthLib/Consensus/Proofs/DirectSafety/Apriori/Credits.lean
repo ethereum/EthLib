@@ -420,7 +420,7 @@ private theorem SiteKept.record {f : Fork} {b : BeaconState preset f}
   exact held.2.step kept.2.1 kept.2.2 kept.1.registryGrows _
 
 /-- Move a fork-conditional replay before its common continuation. -/
-private theorem except_dite_bind {α β : Type} (p : Prop) [Decidable p]
+theorem except_dite_bind {α β : Type} (p : Prop) [Decidable p]
     (yes : p → Except TransitionError α) (no : ¬p → Except TransitionError α)
     (next : α → Except TransitionError β) :
     (if h : p then yes h >>= next else no h >>= next) =

@@ -86,7 +86,7 @@ private theorem list_sum_comm (S : Finset Nat) (f : Nat → BalanceEvent preset 
     simp only [List.map_cons, List.sum_cons, list_sum_comm S f rest, Finset.sum_add_distrib]
 
 /-- The debits of one event over a set of keys are at most its debits over the registry. -/
-private theorem keys_debits_le (S : Finset Nat) (e : BalanceEvent preset) :
+theorem keys_debits_le (S : Finset Nat) (e : BalanceEvent preset) :
     ∑ j ∈ S, (actualBalanceAt e.before j - actualBalanceAt e.after j) ≤ e.debits := by
   unfold BalanceEvent.debits
   refine Finset.sum_le_sum_of_ne_zero fun j _ positive => Finset.mem_range.mpr ?_
@@ -390,40 +390,37 @@ private theorem penalties_succ (x : ForkedBeaconState preset) (high t : Nat) :
 
 /-- Let every step of a branch start before the epoch `epoch x + t`.
 
-Then the penalty and sync debits of the cohort over the branch fit the penalties of `t` epochs.
+Then a cost of the events of the branch fits the sum of a bound over its first `t` epochs.
+
+Each segment of one epoch must fit the bound at its offset from `x`.
 
 The branch from `x` to `y` splits after its last step starting at each epoch `epoch x + t`.
 
 The steps between two such cuts start at one epoch, and so form one segment.
 
-The floor and the eligible stake are read at the states before the epoch of `y`. -/
-private theorem run_penalties_core {x y : ForkedBeaconState preset}
+A property of the states before the epoch of `y` passes to the states of each segment.
+
+The penalties of a cohort are one instance; the debits of one key are another. -/
+theorem run_cuts_le {x y : ForkedBeaconState preset}
     (high : Nat)
     (tail : Run config checks x y) (early : y.fork < .glamsterdam)
+    (P : ForkedBeaconState preset → Prop) (cost : BalanceEvent preset → Nat) (bound : Nat → Nat)
     (eligible : ∀ {z : ForkedBeaconState preset} (pre : Run config checks x z)
       (post : Run config checks z y), tail = pre.append post →
-      (getCurrentEpoch z.state).toNat < (getCurrentEpoch y.state).toNat →
-      ∑ j ∈ penaltyCohort x, eligibleWeight z.state j ≤
-        stakeCeilingAt config x high (ix x z) + slashedUnwithdrawnStake x)
+      (getCurrentEpoch z.state).toNat < (getCurrentEpoch y.state).toNat → P z)
     (segment : ∀ {m n : ForkedBeaconState preset} (_toM : Run config checks x m)
       (mid : Run config checks m n) (_ : Run config checks n y),
       (∀ {u w : ForkedBeaconState preset} (step : Step config checks u w), mid.Contains step →
         getCurrentEpoch u.state = getCurrentEpoch m.state) →
       (∀ {z : ForkedBeaconState preset} (pre : Run config checks m z)
         (post : Run config checks z n), mid = pre.append post →
-        (getCurrentEpoch z.state).toNat < (getCurrentEpoch n.state).toNat →
-        ∑ j ∈ penaltyCohort x, eligibleWeight z.state j ≤
-          stakeCeilingAt config x high (ix x z) + slashedUnwithdrawnStake x) →
+        (getCurrentEpoch z.state).toNat < (getCurrentEpoch n.state).toNat → P z) →
       ∀ {found : List (BalanceEvent preset)}, mid.balanceEvents high = .ok found →
-      (found.map fun e => ∑ j ∈ penaltyCohort x, floorPenaltyDebit j e).sum ≤
-        epochPenalty preset config (startInactivityScore config x)
-          (stakeCeilingAt config x high (ix x m) + slashedUnwithdrawnStake x)
-          (stakeFloorAt config x high (ix x m)) (ix x m))
+      (found.map cost).sum ≤ bound (ix x m))
     (t : Nat) (bounded : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       tail.Contains step → (getCurrentEpoch u.state).toNat < (getCurrentEpoch x.state).toNat + t)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
-    (events.map fun e => ∑ j ∈ penaltyCohort x, floorPenaltyDebit j e).sum ≤
-      windowPenalties (config := config) x high t := by
+    (events.map cost).sum ≤ ((List.range t).map bound).sum := by
   let start := (getCurrentEpoch x.state).toNat
   -- After `t + 1` cuts, the first part pays at most the penalties of `t + 1` epochs.
   have key : ∀ t, ∃ (m : ForkedBeaconState preset) (cut : Run config checks x m)
@@ -433,8 +430,7 @@ private theorem run_penalties_core {x y : ForkedBeaconState preset}
       (start + t < (getCurrentEpoch m.state).toNat ∨
         ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w), ¬ rest.Contains step) ∧
       ∃ found, cut.balanceEvents high = .ok found ∧
-        (found.map fun e => ∑ j ∈ penaltyCohort x, floorPenaltyDebit j e).sum ≤
-          windowPenalties (config := config) x high (t + 1) := by
+        (found.map cost).sum ≤ ((List.range (t + 1)).map bound).sum := by
     intro t
     induction t with
     | zero =>
@@ -442,7 +438,7 @@ private theorem run_penalties_core {x y : ForkedBeaconState preset}
       have mEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps rest.chainSteps) early
       obtain ⟨found, foundOk⟩ := cut.balanceEvents_ok mEarly high
       refine ⟨m, cut, rest, same, outside, begins, found, foundOk, ?_⟩
-      rw [penalties_succ]
+      rw [List.range_succ, List.map_append, List.sum_append]
       have bound := segment .nil cut rest (fun step member => by
         have inner := contains_epochs cut member
         have low := UInt64.le_iff_toNat_le.mp inner.1
@@ -452,7 +448,7 @@ private theorem run_penalties_core {x y : ForkedBeaconState preset}
           exact eligible pre (post.append rest)
             (by rw [same, split]; exact (Run.append_assoc _ _ _).symm)
             (by omega)) foundOk
-      simpa [windowPenalties, ix] using bound
+      simpa [ix] using bound
     | succ t ih =>
       obtain ⟨m, cut, rest, rfl, later, begins, found, foundOk, bound⟩ := ih
       obtain ⟨n, mid, last, rfl, inside, outside, -, ends⟩ :=
@@ -461,7 +457,7 @@ private theorem run_penalties_core {x y : ForkedBeaconState preset}
       obtain ⟨midEvents, midOk⟩ := mid.balanceEvents_ok nEarly high
       refine ⟨n, cut.append mid, last, Run.append_assoc _ _ _, outside, ends,
         found ++ midEvents, balanceEvents_append cut mid high foundOk midOk, ?_⟩
-      rw [penalties_succ, List.map_append, List.sum_append]
+      rw [List.range_succ, List.map_append, List.sum_append, List.map_append, List.sum_append]
       refine Nat.add_le_add bound ?_
       by_cases empty : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
           ¬ mid.Contains step
@@ -489,7 +485,7 @@ private theorem run_penalties_core {x y : ForkedBeaconState preset}
           exact eligible (cut.append pre) (post.append last)
             (by rw [split, ← Run.append_assoc pre post last, Run.append_assoc cut pre])
             (by omega)) midOk
-      rwa [index] at each
+      simpa [index] using each
   cases t with
   | zero =>
     -- No step starts before the epoch of `x`, so the branch is empty.
@@ -514,6 +510,42 @@ private theorem run_penalties_core {x y : ForkedBeaconState preset}
     rw [List.append_nil] at whole
     obtain rfl := Except.ok.inj (replayed.symm.trans whole)
     exact bound
+
+/-- The penalty and sync debits of the cohort over a branch fit the penalties of `t` epochs.
+
+This is `run_cuts_le` for the cohort's debits, with the cohort's eligible stake as the property. -/
+private theorem run_penalties_core {x y : ForkedBeaconState preset}
+    (high : Nat)
+    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
+    (eligible : ∀ {z : ForkedBeaconState preset} (pre : Run config checks x z)
+      (post : Run config checks z y), tail = pre.append post →
+      (getCurrentEpoch z.state).toNat < (getCurrentEpoch y.state).toNat →
+      ∑ j ∈ penaltyCohort x, eligibleWeight z.state j ≤
+        stakeCeilingAt config x high (ix x z) + slashedUnwithdrawnStake x)
+    (segment : ∀ {m n : ForkedBeaconState preset} (_toM : Run config checks x m)
+      (mid : Run config checks m n) (_ : Run config checks n y),
+      (∀ {u w : ForkedBeaconState preset} (step : Step config checks u w), mid.Contains step →
+        getCurrentEpoch u.state = getCurrentEpoch m.state) →
+      (∀ {z : ForkedBeaconState preset} (pre : Run config checks m z)
+        (post : Run config checks z n), mid = pre.append post →
+        (getCurrentEpoch z.state).toNat < (getCurrentEpoch n.state).toNat →
+        ∑ j ∈ penaltyCohort x, eligibleWeight z.state j ≤
+          stakeCeilingAt config x high (ix x z) + slashedUnwithdrawnStake x) →
+      ∀ {found : List (BalanceEvent preset)}, mid.balanceEvents high = .ok found →
+      (found.map fun e => ∑ j ∈ penaltyCohort x, floorPenaltyDebit j e).sum ≤
+        epochPenalty preset config (startInactivityScore config x)
+          (stakeCeilingAt config x high (ix x m) + slashedUnwithdrawnStake x)
+          (stakeFloorAt config x high (ix x m)) (ix x m))
+    (t : Nat) (bounded : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      tail.Contains step → (getCurrentEpoch u.state).toNat < (getCurrentEpoch x.state).toNat + t)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
+    (events.map fun e => ∑ j ∈ penaltyCohort x, floorPenaltyDebit j e).sum ≤
+      windowPenalties (config := config) x high t :=
+  run_cuts_le high tail early (fun z => ∑ j ∈ penaltyCohort x, eligibleWeight z.state j ≤
+      stakeCeilingAt config x high (ix x z) + slashedUnwithdrawnStake x) _
+    (fun t => epochPenalty preset config (startInactivityScore config x)
+      (stakeCeilingAt config x high t + slashedUnwithdrawnStake x) (stakeFloorAt config x high t) t)
+    eligible segment t bounded replayed
 
 /-- The Electra segment bound supplies the shared cut induction. -/
 private theorem run_penalties_upto {g x y : ForkedBeaconState preset}
