@@ -2869,10 +2869,7 @@ private theorem CapStep.depositRequest {f : Fork} {s t : BeaconState preset f}
     CapStep config s t ∧ (UnassignedEligibleBalance s → UnassignedEligibleBalance t) ∧
       (AssignedPartials s → AssignedPartials t) ∧
       (∀ candidate i, preKeyCharge candidate t i ≤ preKeyCharge candidate s i) := by
-  obtain ⟨start, recorded⟩ := recordDepositRequestsStart_eq (state := s) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   exact ⟨CapStep.data rfl, fun held => held.transfer rfl
     (fun _ _ b _ _ read low => ⟨b, read, low⟩), id, fun _ _ => Nat.le_refl _⟩
 

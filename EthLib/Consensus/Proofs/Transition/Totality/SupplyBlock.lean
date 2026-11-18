@@ -768,10 +768,7 @@ private theorem flags_decrease {s t : BeaconState preset fork} {i : ValidatorInd
 private theorem flags_depositRequest {s t : BeaconState preset fork} {electra : .pectra ≤ fork}
     {request : DepositRequest} (ok : processDepositRequest s electra request = .ok t) :
     ParticipationKept s t := by
-  obtain ⟨start, recorded⟩ := recordDepositRequestsStart_eq (state := s) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   exact ⟨rfl, rfl⟩
 
 private theorem flags_queueExcess {s t : BeaconState preset fork} {electra : .pectra ≤ fork}

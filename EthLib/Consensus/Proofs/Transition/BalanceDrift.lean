@@ -395,10 +395,7 @@ theorem effectiveKept_withdrawalRequest {f : Fork} {s t : BeaconState preset f}
 theorem effectiveKept_depositRequest {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {request : DepositRequest}
     (ok : processDepositRequest s electra request = .ok t) : EffectiveKept s t := by
-  obtain ⟨start, recorded⟩ := recordDepositRequestsStart_eq (state := s) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   exact effectiveKept_refl _
 
 private theorem effectiveKept_requests {f : Fork} {s t : BeaconState preset f}

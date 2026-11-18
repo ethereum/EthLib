@@ -185,11 +185,7 @@ theorem builderFrame_processDepositRequest {electra : .pectra ≤ fork}
     {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
     BuilderFrame state after := by
-  obtain ⟨start, recorded⟩ :=
-    recordDepositRequestsStart_eq (state := state) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, rfl⟩ := computed
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok computed
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private theorem builderFrame_requestPartialWithdrawal {electra : .pectra ≤ fork}

@@ -218,10 +218,7 @@ private theorem Kept.withdrawalRequest {electra : .pectra ≤ fork} {request : W
 
 private theorem Kept.depositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : processDepositRequest s electra request = .ok t) : Kept s t := by
-  obtain ⟨start, recorded⟩ := recordDepositRequestsStart_eq (state := s) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private theorem Kept.excess {electra : .pectra ≤ fork} {index : ValidatorIndex}

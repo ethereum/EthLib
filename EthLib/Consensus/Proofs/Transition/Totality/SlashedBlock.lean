@@ -132,10 +132,7 @@ private theorem same_withdrawalRequest {s t : BeaconState preset fork}
 private theorem same_depositRequest {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : processDepositRequest s electra request = .ok t) : t.slashings = s.slashings := by
-  obtain ⟨start, recorded⟩ := recordDepositRequestsStart_eq (state := s) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   rfl
 
 private theorem same_excess {s t : BeaconState preset fork}

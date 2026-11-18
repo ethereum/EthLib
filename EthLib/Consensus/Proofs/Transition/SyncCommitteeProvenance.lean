@@ -185,10 +185,7 @@ private theorem slashValidator {index : ValidatorIndex} {whistleblower : Option 
 private theorem processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : Consensus.processDepositRequest state electra request = .ok after) :
     SameSyncCommittees state after := by
-  obtain ⟨_, recorded⟩ := recordDepositRequestsStart_eq (state := state) (index := request.index)
-  simp only [Consensus.processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   exact ⟨rfl, rfl, rfl⟩
 
 private theorem requestPartialWithdrawal {electra : .pectra ≤ fork} {index : ValidatorIndex}

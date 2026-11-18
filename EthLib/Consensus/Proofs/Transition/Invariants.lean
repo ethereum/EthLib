@@ -1017,11 +1017,7 @@ theorem frame_processVoluntaryExit {signed : SignedVoluntaryExit}
 theorem frame_processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
     BlockFrame state after := by
-  obtain ⟨start, recorded⟩ :=
-    recordDepositRequestsStart_eq (state := state) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, rfl⟩ := computed
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok computed
   exact BlockFrame.of_validators ⟨rfl, rfl⟩
 
 theorem frame_computeExitEpochAndUpdateChurn {electra : .pectra ≤ fork} {exitBalance : Gwei}

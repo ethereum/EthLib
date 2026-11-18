@@ -872,11 +872,7 @@ private theorem Plain.deposit {a b : BeaconState preset fork} {before : fork < .
 private theorem Plain.depositRequest {a b : BeaconState preset fork} {electra : .pectra ≤ fork}
     {request : DepositRequest} (ok : processDepositRequest a electra request = .ok b) :
     Plain a b := by
-  obtain ⟨recordedStart, recorded⟩ :=
-    recordDepositRequestsStart_eq (state := a) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   exact Plain.of_validators
 
 private theorem Plain.withdrawals {a b : BeaconState preset fork} {capella : .shapella ≤ fork}

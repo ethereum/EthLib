@@ -459,12 +459,8 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
       ok⟩ := ok
     have requestOne {a b : BeaconState preset fork} {request : DepositRequest}
         (ok : processDepositRequest a electra request = .ok b) :
-        b.validators = a.validators ∧ b.balances = a.balances := by
-      obtain ⟨_, recorded⟩ := recordDepositRequestsStart_eq (state := a) (index := request.index)
-      simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-        bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-      obtain ⟨_, _, rfl⟩ := ok
-      exact ⟨rfl, rfl⟩
+        b.validators = a.validators ∧ b.balances = a.balances :=
+      ⟨(processDepositRequest_ok ok).2.1, (processDepositRequest_ok ok).2.2.1⟩
     have depositsBound : FundingReplay extra s deposits := by
       apply funding_block_carry _ changedBound depositRequestOk
       intro a b h ok

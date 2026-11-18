@@ -2116,12 +2116,7 @@ private theorem coverage_block {fork : Fork} {s : BeaconState preset fork}
         requested, consolidations, rest⟩ := rest
       have depositsCover := balanceChain_carry (fun _ _ ok =>
         coverage_fold_keeps (action := fun a req => processDepositRequest a electra req)
-          (fun a req b action => by
-          simp only [processDepositRequest, liftAccessor_ok, addPendingDeposit,
-            bind_ok_iff, pure, Except.pure, Except.ok.injEq] at action
-          obtain ⟨_, _, rfl⟩ := action
-          simp only [recordDepositRequestsStart]
-          split <;> first | rfl | (split <;> rfl))
+          (fun _ _ _ action => (processDepositRequest_ok action).2.2.1)
           (by simpa only [← Array.foldlM_toList] using ok)) changedCover depositRequestOk
       have withdrawalsCover := balanceChain_carry (fun _ _ ok =>
         coverage_fold_keeps (fun _ _ _ => coverage_withdrawal_request)
