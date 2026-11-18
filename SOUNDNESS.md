@@ -4806,7 +4806,13 @@ The code of the receipts, their root and the bloom reads only the logs; no theor
 Without the flag, a call reports the log objects of its receipt, with the same `logIndex` (`callLogInfos_false`).
 From Glamsterdam, a message that starts with equal lists of logs ends with equal lists (`simulatedLogs_processMessage`, `Proofs/Evm/Call/SimulatedLogs.lean`).
 So each result reports the logs of its receipt (`runBody_simulatedLogs`, `Proofs/Blocks/SimulatedLogs.lean`).
-A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`); no theorem yet lifts this to the whole answer.
+A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`).
+Each block of a simulation, gap blocks included, is a simulated block at its own fork (`simulateBlocks_mem_exists`, `Proofs/Rpc/SimulateBlocks.lean`).
+So when every block of a simulation is from Glamsterdam, the whole answer is the same with the flag or without (`simulate_traceTransfers`).
+A failed simulation gives the same error either way, since its blocks do not read the flag (`simulateBlocks_traceTransfers`).
+Two cases have no theorem yet:
+- a block before Glamsterdam without calls, such as a gap block, is the same either way, but no theorem states this.
+- no theorem derives the hypothesis on the blocks from the configuration and the base block.
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
