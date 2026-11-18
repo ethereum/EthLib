@@ -194,10 +194,10 @@ private theorem registry_block_bound {fork : Fork} {s t : BeaconState preset for
   rw [head] at bound
   omega
 
-/-- An epoch adds at most one epoch of pending deposits to the registry.
+/-- An epoch adds at most one epoch of pending deposits to the registry, at every fork.
 
 The epoch is cut at its pending deposits: every other stage keeps the size of the registry. -/
-private theorem registry_epoch_bound {fork : Fork} {s t : BeaconState preset fork}
+theorem processEpoch_validators_size_le {fork : Fork} {s t : BeaconState preset fork}
     (ok : processEpoch config checks s = .ok t) :
     t.validators.data.size ≤ s.validators.data.size +
       preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
@@ -265,8 +265,39 @@ private theorem registry_upgrades_size {s t : ForkedBeaconState preset}
     (property := fun t => t.state.validators.data.size = s.state.validators.data.size)
     (fun prior ok => (registry_upgrade_size ok).trans prior) rfl ok
 
+/-- One slot adds at most one epoch of pending deposits to the registry, when it starts an epoch.
+
+The slot advances by one. -/
+theorem advanceSlot_validators_size_le {fork : Fork} {s t : BeaconState preset fork}
+    (ok : advanceSlot config checks s = .ok t) :
+    t.slot.toNat = s.slot.toNat + 1 ∧
+      t.validators.data.size ≤ s.validators.data.size +
+        ((getCurrentEpoch t).toNat - (getCurrentEpoch s).toNat) *
+          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
+  obtain ⟨next, cached, epoched, nextOk, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
+  obtain ⟨_, _, _, _, cacheEq⟩ := processSlot_ok cachedOk
+  have cacheSize : cached.validators.data.size = s.validators.data.size := by rw [cacheEq]
+  have cacheSlot := processSlot_slot cachedOk
+  refine ⟨nextOk, ?_⟩
+  unfold epochIfLast at epochedOk
+  split at epochedOk
+  · rename_i boundary
+    -- Charge the pending-deposit cap only when this slot crosses an epoch boundary.
+    have epochs := nextSlot_epoch_of_boundary nextOk boundary
+    have growth := processEpoch_validators_size_le epochedOk
+    have diff : (getCurrentEpoch { epoched with slot := next }).toNat -
+        (getCurrentEpoch s).toNat = 1 := by
+      rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat]
+      dsimp only
+      omega
+    rw [diff, one_mul]
+    dsimp only
+    omega
+  · cases epochedOk
+    dsimp only
+    omega
+
 private theorem registry_slot_bound {s t : ForkedBeaconState preset}
-    (early : t.fork < .glamsterdam)
     (ok : advanceSlotAcross config checks s = .ok t) :
     t.state.slot.toNat = s.state.slot.toNat + 1 ∧
       t.state.validators.data.size ≤ s.state.validators.data.size +
@@ -276,33 +307,12 @@ private theorem registry_slot_bound {s t : ForkedBeaconState preset}
   obtain ⟨advanced, slot, upgrades⟩ := ok
   have size := registry_upgrades_size upgrades
   have slotEq := processUpgrades_slot upgrades
-  have forward := processUpgrades_fork_le upgrades
-  have oldEarly : s.fork < .glamsterdam := Nat.lt_of_le_of_lt forward early
-  obtain ⟨next, cached, epoched, nextOk, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok slot
-  obtain ⟨_, _, _, _, cacheEq⟩ := processSlot_ok cachedOk
-  have cacheSize : cached.validators.data.size = s.state.validators.data.size := by rw [cacheEq]
-  have cacheSlot := processSlot_slot cachedOk
-  have nextSlot : t.state.slot.toNat = s.state.slot.toNat + 1 := by
-    rw [slotEq]
-    exact nextOk
-  refine ⟨nextSlot, ?_⟩
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    -- Charge the pending-deposit cap only when this slot crosses an epoch boundary.
-    have epochs := nextSlot_epoch_of_boundary nextOk boundary
-    have growth := registry_epoch_bound epochedOk
-    have diff : (getCurrentEpoch t.state).toNat - (getCurrentEpoch s.state).toNat = 1 := by
-      rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, slotEq]
-      dsimp only
-      omega
-    rw [diff, one_mul, size]
-    dsimp only
-    omega
-  · cases epochedOk
-    rw [size]
-    dsimp only
-    omega
+  obtain ⟨nextSlot, growth⟩ := advanceSlot_validators_size_le slot
+  have epochEq : getCurrentEpoch t.state = getCurrentEpoch advanced := by
+    simp only [getCurrentEpoch, slotEq]
+  refine ⟨by rw [slotEq]; exact nextSlot, ?_⟩
+  rw [size, epochEq]
+  exact growth
 
 /-- A block makes its own header the latest one, at the slot of the state. -/
 private theorem registry_block_header {fork : Fork} {s t : BeaconState preset fork}
@@ -345,7 +355,7 @@ private theorem registry_run_bound {x y : ForkedBeaconState preset}
       exact Nat.div_le_div_right slotsBefore
     cases step with
     | slot ok =>
-      obtain ⟨slot, growth⟩ := registry_slot_bound early ok
+      obtain ⟨slot, growth⟩ := registry_slot_bound ok
       have epochsAfter : (getCurrentEpoch middle.state).toNat ≤
           (getCurrentEpoch last.state).toNat := by
         rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat]
