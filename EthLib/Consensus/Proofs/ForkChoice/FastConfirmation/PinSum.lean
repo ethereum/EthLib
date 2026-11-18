@@ -717,7 +717,7 @@ theorem stub_V (h : Setting config checks g split fin pulled anc counted V)
     cV1 pulled counted V + cV2 pulled counted V ≤
       ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) + (∑ v ∈ V, credR tail high v.toNat) +
         (∑ v ∈ V, (syncF events v.toNat + syncF eventsC v.toNat)) + (∑ v ∈ V, credDepR events v.toNat) +
-        (∑ v ∈ V, consAmt events v.toNat) +
+        (∑ v ∈ V, consAmt events v.toNat) + preset.upwardBand * dueAt fin high V +
         (∑ v ∈ (VN counted V), exitQ tailC v.toNat) +
         (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
         (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) : ℕ) := sorry
@@ -1051,7 +1051,14 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have b15 := bud_consolidations (config := config) h fromFin tail high endEpoch replayed highLeR
     tailC highC endEpochC replayedC highLe shallow band
   have b16 := bud_exitedR (config := config) h
-  have b15' := Nat.le_trans (Nat.le_add_right _ _) b15
+  -- The band of each due entry naming a V key is paid by `bud_consolidations`' V share.
+  have bandV : 3 * (preset.upwardBand * dueAt fin high V) ≤
+      preset.upwardBand * (dueAt fin highC (K4 pulled counted V) +
+        dueAt fin highC (K6 pulled counted) + 3 * dueAt fin highC (K5 counted V) +
+        3 * dueAt fin high V) := by
+    rw [Nat.mul_left_comm]
+    exact Nat.mul_le_mul_left _ (by omega)
+  have b15' := Nat.le_trans (Nat.add_le_add_left bandV _) b15
   have qs := queues_split config pulled anc fin
   have b14 := bud_whistle (config := config) h tailC highC endEpochC replayedC
   have w4 : 0 ≤ ∑ v ∈ (K4 pulled counted V), (whistC tailC highC v.toNat : ℤ) :=
