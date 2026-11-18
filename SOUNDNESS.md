@@ -2997,6 +2997,7 @@ These are store-local facts: no theorem here shows that a recorded honest vote i
 It applies `Execution.source_surplus_or_historical_evidence`, which derives the receiver's source-weight surplus from the caller's checked reads, rather than assuming that surplus.
 The conclusion retains alternatives: a collision between blocks held by honest stores, or `HistoricalDirectSafetyEvidence`.
 That evidence is the alternative of `Execution.finalized_prefix_or_accountable`: for two runs from the anchor to held states, the direct-safety stake inequality or hash evidence.
+It also records that the store's later justified root does not read its earlier finalized root, so it is false whenever that read succeeds.
 It is relative to the anchor, and its drift counts from the anchor.
 So with enough churn since the anchor, the stake inequality holds with no accountable key.
 In that case the evidence names no accountable stake.

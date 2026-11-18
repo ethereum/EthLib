@@ -489,6 +489,10 @@ A terminal view of the first state has the store's earlier finalized checkpoint.
 
 A terminal view of the second state has the store's later justified checkpoint.
 
+The earlier finalized epoch is at most the later justified epoch.
+
+The later justified root does not read the earlier finalized root at that epoch.
+
 The evidence is the direct-safety stake inequality, or hash evidence on the two runs.
 
 It is relative to the anchor, and its drift counts from the anchor.
@@ -497,6 +501,11 @@ With enough churn since the anchor, the stake inequality holds with no accountab
 def HistoricalDirectSafetyEvidence {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (time : Nat) : Prop :=
   ∃ w ∈ J, ∃ i k, i ≤ k ∧ (e.world k).time ≤ time ∧
+    ((e.world i).state w).finalizedCheckpoint.epoch ≤
+      ((e.world k).state w).justifiedCheckpoint.epoch ∧
+    ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
+      ((e.world i).state w).finalizedCheckpoint.epoch ≠
+        .ok ((e.world i).state w).finalizedCheckpoint.root ∧
     ∃ (stateA stateB : BeaconState preset fork)
       (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
       (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)

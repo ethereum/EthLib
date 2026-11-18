@@ -1336,6 +1336,11 @@ theorem Execution.mem_supportersOf_of_duty_epoch_or_accountable {Δ : ℕ} (sync
       ∃ root collision, Store.findBlockCollision ((e.world n).state u)
         ((e.world m).state v) [root] = some collision) ∨
     ∃ w ∈ J, ∃ i k, i ≤ k ∧ (e.world k).time ≤ time ∧
+      ((e.world i).state w).finalizedCheckpoint.epoch ≤
+        ((e.world k).state w).justifiedCheckpoint.epoch ∧
+      ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
+        ((e.world i).state w).finalizedCheckpoint.epoch ≠
+          .ok ((e.world i).state w).finalizedCheckpoint.root ∧
       ∃ (stateA stateB : BeaconState preset fork)
         (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
         (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
@@ -1449,6 +1454,11 @@ theorem Execution.isAncestor_getHead_of_duty_epoch_or_accountable {Δ : ℕ} (sy
       ∃ root collision, Store.findBlockCollision ((e.world n).state u)
         ((e.world m).state v) [root] = some collision) ∨
     ∃ w ∈ J, ∃ i k, i ≤ k ∧ (e.world k).time ≤ time ∧
+      ((e.world i).state w).finalizedCheckpoint.epoch ≤
+        ((e.world k).state w).justifiedCheckpoint.epoch ∧
+      ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
+        ((e.world i).state w).finalizedCheckpoint.epoch ≠
+          .ok ((e.world i).state w).finalizedCheckpoint.root ∧
       ∃ (stateA stateB : BeaconState preset fork)
         (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
         (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
