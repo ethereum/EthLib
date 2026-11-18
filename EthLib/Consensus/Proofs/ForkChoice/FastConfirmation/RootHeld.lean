@@ -90,12 +90,7 @@ theorem Execution.rootHeld_of_honest_vote {Δ : ℕ} {anchor : Store preset fork
   -- So the signer held the root then.
   have signerDescends := Store.isAncestor_of_same_blocks (reached v honest k) preGloas same known
     ((reached u caller n).anchorSlot_le anchorLe known) ⟨headBlock, dataRoot ▸ headHeld⟩ descends
-  obtain ⟨signerBlock, signerKnown⟩ :
-      ∃ b : BeaconBlock preset fork, ((e.world k).state v).blocks[root]? = some b := by
-    simp only [Store.isAncestor, bind, Except.bind] at signerDescends
-    cases held : ((e.world k).state v).block root with
-    | error => simp [held] at signerDescends
-    | ok b => exact ⟨b, Store.block_ok_iff.mp held⟩
+  obtain ⟨signerBlock, signerKnown⟩ := Store.held_of_isAncestor signerDescends
   -- The deadline of the vote, plus the delay, is before the call.
   have late : (e.world k).time + Δ ≤ (e.world n).time := by
     rw [atBegin]
