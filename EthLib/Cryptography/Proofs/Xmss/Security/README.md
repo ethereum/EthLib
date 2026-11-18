@@ -87,7 +87,7 @@ Declarations the theorem does not use are removed too, about 1,600 lines, among 
 
 The remaining changes adapt the proof to the versions of Lean, VCVio and EthLib used here:
 
-- leanerVM builds with Lean v4.34.1 and VCVio `afa6593f`, while EthLib builds with Lean v4.36.0 and VCVio `8781becf`, on the same Mathlib as EthLib.
+- leanerVM builds with Lean v4.34.1 and VCVio `afa6593f`, while EthLib builds with Lean v4.36.0 and VCVio `v4.36.0`, on the same Mathlib as EthLib.
 - On Lean v4.35.0, unfolding `RevealProbeOracleSimulation.tableHits` at a concrete index type makes Lean evaluate its decision procedure over every index, past 30 GB of memory.
   So `XmssSecurity/Proof/RevealProbeOracleSimulation.lean` gains `tableHits_eq_true_iff` and `tableHits_eq_false_iff`, proved at a generic index type, and `CappedGlobalChainHighLocalCoupling.lean`, `CappedGlobalChainHighCoverage.lean` and `CappedGlobalChainHighReplay.lean` rewrite with them instead of unfolding.
 - `lake exe check-decls` rejects `opaque` declarations, which the kernel cannot unfold.

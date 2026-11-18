@@ -161,7 +161,7 @@ Not yet released.
   The request names one key twice, the index is the first with that key, and the validator there passes `isValidSwitchToCompoundingRequest`.
   A caller that matched the case as `⟨index, switched⟩` writes `⟨index, validator, accepted, switched⟩`.
 
-- EthLib builds with Lean v4.36.0, Mathlib `v4.36.0` and VCVio `8781becf`.
+- EthLib builds with Lean v4.36.0, Mathlib `v4.36.0` and VCVio `v4.36.0`.
   A Lean package that depends on EthLib moves to the same toolchain and Mathlib.
 
 - The JSON parser of Lean v4.36.0 rejects an object that names one member twice.
