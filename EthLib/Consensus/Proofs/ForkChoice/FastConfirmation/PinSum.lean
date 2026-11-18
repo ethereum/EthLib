@@ -999,15 +999,6 @@ theorem bud_credits (h : Setting config checks g split fin pulled anc counted V)
           (∑ v ∈ (K5 counted V), consAmt eventsC v.toNat)) :=
   sorry
 
-/-- Every cap at a fork from Electra is at least `MAX_EFFECTIVE_BALANCE`. -/
-private theorem cap_ge_maxEffective (caps : CapOrder preset) {f : Fork} (electra : .pectra ≤ f)
-    (v : Validator) :
-    preset.MAX_EFFECTIVE_BALANCE.toNat ≤ (withdrawalMaxEffectiveBalance preset f v).toNat := by
-  simp only [withdrawalMaxEffectiveBalance, electra, ↓reduceIte, getMaxEffectiveBalance]
-  split
-  · exact UInt64.le_iff_toNat_le.mp (UInt64.le_trans caps.activation caps.compounding)
-  · exact UInt64.le_iff_toNat_le.mp caps.activation
-
 /-- The due entries of a queue, summed over two disjoint sets of targets, add up. -/
 private theorem sum_filterMap_filter_add {α β : Type} (L : List α) (look : α → Option β)
     (ok : β → Bool) (p q : α → Bool) (disjoint : ∀ a, ¬ (p a = true ∧ q a = true))
@@ -1110,34 +1101,9 @@ private theorem dueList_sum_le_all (X : BeaconState preset fork) (electra : .pec
   refine (List.Sublist.map f ?_).sum_le_sum fun _ _ => Nat.zero_le _
   exact (List.filter_sublist.filterMap _).filter _
 
-/-- A list whose entries are all at least `c` has a sum of at least `c` for each entry. -/
-private theorem le_sum_of_forall {β : Type} (l : List β) (f : β → ℕ) (c : ℕ)
-    (h : ∀ b, c ≤ f b) : c * l.length ≤ (l.map f).sum := by
-  induction l with
-  | nil => simp
-  | cons b rest ih =>
-    simp only [List.length_cons, List.map_cons, List.sum_cons, Nat.mul_succ]
-    have := h b
-    omega
-
 /-- The two readings of the credit of an event are one definition. -/
 private theorem keyCredit_eq (i : ℕ) (e : BalanceEvent preset) :
     keyCredit i e = PinSplit.keyCredit i e := rfl
-
-/-- A set of positions, as validator indices, has the same members read through `toNat`. -/
-private theorem toNat_mem_image (S : Finset ValidatorIndex) (c : ValidatorIndex) :
-    c.toNat ∈ S.image UInt64.toNat ↔ c ∈ S := by
-  simp only [Finset.mem_image]
-  constructor
-  · rintro ⟨a, ha, e⟩
-    exact UInt64.toNat_inj.mp e ▸ ha
-  · intro hc
-    exact ⟨c, hc, rfl⟩
-
-/-- A sum over the positions of a set is a sum over the set. -/
-private theorem sum_image_toNat (S : Finset ValidatorIndex) (g : ℕ → ℕ) :
-    (S.image UInt64.toNat).sum g = ∑ v ∈ S, g v.toNat :=
-  Finset.sum_image fun _ _ _ _ e => UInt64.toNat_inj.mp e
 
 /-- The consolidation credits of C's branch, charged to `consolidationsX` (the S9 ruling).
 
@@ -1208,18 +1174,20 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
   have boundR := PinSplit.Run.consolidation_credits_le_X_targets (config := config)
     (checks := checks) shared h.genesis h.caps (fromFin.append tail) electra early high wholeR
     endEpoch withinR delay (V.image UInt64.toNat)
-  simp only [toNat_mem_image] at boundC boundR
+  simp only [UInt64.toNat_injective.mem_finset_image] at boundC boundR
   have amountC : (∑ v ∈ Kall, consAmt eventsC v.toNat) ≤
       ((dueList fin electra highC Kall).map fun v =>
         (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
-    rw [← sum_image_toNat Kall (fun i => consAmt eventsC i)]
+    rw [← Finset.sum_image (f := fun i => consAmt eventsC i)
+      (fun _ _ _ _ e => UInt64.toNat_inj.mp e)]
     refine le_trans (Finset.sum_le_sum fun i _ => ?_) boundC
     simp only [consAmt, List.filter_append, List.map_append, List.sum_append]
     exact Nat.le_add_left _ _
   have amountR : (∑ v ∈ V, consAmt events v.toNat) ≤
       ((dueList fin electra high V).map fun v =>
         (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
-    rw [← sum_image_toNat V (fun i => consAmt events i)]
+    rw [← Finset.sum_image (f := fun i => consAmt events i)
+      (fun _ _ _ _ e => UInt64.toNat_inj.mp e)]
     refine le_trans (Finset.sum_le_sum fun i _ => ?_) boundR
     simp only [consAmt, List.filter_append, List.map_append, List.sum_append]
     exact Nat.le_add_left _ _
@@ -1265,12 +1233,18 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
     rw [hKall, dueList_length_union fin electra highC d456,
       dueList_length_union fin electra highC d45]
   -- The caps of the due entries are at least `MAX_EFFECTIVE_BALANCE` each.
-  have floorC := le_sum_of_forall (dueList fin electra highC Kall)
-    (fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
-    preset.MAX_EFFECTIVE_BALANCE.toNat (cap_ge_maxEffective h.caps electra)
-  have floorR := le_sum_of_forall (dueList fin electra high V)
-    (fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
-    preset.MAX_EFFECTIVE_BALANCE.toNat (cap_ge_maxEffective h.caps electra)
+  have floorOf (l : List Validator) : preset.MAX_EFFECTIVE_BALANCE.toNat * l.length ≤
+      (l.map fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
+    have := List.length_nsmul_le_sum
+      (l.map fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
+      preset.MAX_EFFECTIVE_BALANCE.toNat (by
+        simp only [List.mem_map]
+        rintro _ ⟨v, -, rfl⟩
+        exact UInt64.le_iff_toNat_le.mp
+          (Internal.minimum_cap h.caps.activation h.caps.compounding v))
+    simpa [smul_eq_mul, Nat.mul_comm] using this
+  have floorC := floorOf (dueList fin electra highC Kall)
+  have floorR := floorOf (dueList fin electra high V)
   -- Both runs charge entries of X's queue, at most those that `consolidationsX` counts.
   have total : ((dueList fin electra highC Kall).map fun v =>
         (withdrawalMaxEffectiveBalance preset fork v).toNat).sum +
