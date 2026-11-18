@@ -67,7 +67,6 @@ private theorem UpToDate.checkpointState_of_accepted {time : ℕ}
     rfl
   exact ⟨targetState, by simpa [Store.checkpointState, same] using found⟩
 
-
 /-! ## The viable nodes can be computed -/
 
 /-- A monadic flat map succeeds when it succeeds on each element. -/
@@ -208,16 +207,11 @@ private theorem getFilteredNodeTree_exists (preGloas : fork < .glamsterdam)
     exact ⟨_, mulChecked_of_lt fits⟩
   -- The anchor block, the lowest held block, sits at an epoch start at or below that boundary.
   have aboveAnchor : anchorBlock.slot ≤ boundary := by
-    have floor := (computeStartSlotAtEpoch_ok_iff.mp
-      (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) anchorState.slot)).2
-    have rounded : anchorState.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH =
-        anchorState.slot := by
-      apply epoch_floor_eq_of_sub_eq_zero
-      simpa [isStartSlotAtEpoch, computeSlotsSinceEpochStart, anchorSlot,
-        computeStartSlotAtEpoch_computeEpochAtSlot, Except.mapError, bind, Except.bind,
-        pure, Except.pure] using anchorBoundary
-    rw [rounded] at floor
-    rw [anchorSlot, UInt64.le_iff_toNat_le, (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2, floor]
+    have floor := computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) anchorState.slot
+    refine UInt64.le_trans (le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch anchorBoundary
+      (UInt64.le_of_eq anchorSlot) floor) ?_
+    rw [UInt64.le_iff_toNat_le, (computeStartSlotAtEpoch_ok_iff.mp floor).2,
+      (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2]
     exact Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp anchorLe)
   obtain ⟨anchorRoot, -, anchorFound⟩ := reachable.anchor_known
   have orphansLe : ∀ (root : Root) (orphan : BeaconBlock preset fork),
