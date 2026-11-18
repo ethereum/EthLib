@@ -6,7 +6,9 @@ public import EthLib.Consensus.Proofs.Transition.FfgStake
 import EthLib.Base.Proofs.MapM
 import EthLib.Consensus.Proofs.Containers.State
 import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
+import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 import EthLib.Consensus.Proofs.ForkChoice.Ghost
+import EthLib.Consensus.Proofs.ForkChoice.StoreEntries
 import EthLib.Consensus.Proofs.ForkChoice.Supporters
 
 /-!
@@ -42,6 +44,28 @@ namespace EthLib.Consensus
 open Base Uint64 Models
 
 variable {preset : Preset} {fork : Fork}
+
+/-- From Gloas, the head reads that fit 64 bits for active stakes up to a cap.
+
+A slot longer than one millisecond leaves room to name the slot after a held block.
+
+The reorg threshold, a share of the stake up to the cap, fits too. -/
+structure Config.HeadWeightsFit (config : Config) (preset : Preset) (cap : ℕ) : Prop where
+  /-- A slot lasts more than one millisecond. -/
+  slots : 1 < config.SLOT_DURATION_MS
+  /-- The reorg threshold of a stake up to the cap fits in 64 bits. -/
+  reorg : max preset.EFFECTIVE_BALANCE_INCREMENT.toNat cap *
+    config.REORG_HEAD_WEIGHT_THRESHOLD.toNat < 2 ^ 64
+
+/-- The mainnet head reads fit for an active stake up to `2 * 10^17` Gwei. -/
+theorem Config.headWeightsFit_mainnet :
+    Config.mainnet.HeadWeightsFit Preset.mainnet (2 * 10 ^ 17) := by
+  constructor <;> decide
+
+/-- The minimal head reads fit for an active stake up to `2 * 10^17` Gwei. -/
+theorem Config.headWeightsFit_minimal :
+    Config.minimal.HeadWeightsFit Preset.minimal (2 * 10 ^ 17) := by
+  constructor <;> decide
 
 namespace Store
 
@@ -519,6 +543,163 @@ theorem getHead_exists (before : fork < .glamsterdam) {anchorState : BeaconState
     ∃ head, store.getHead config = .ok head :=
   getHead_exists_of_boostHeld before forward anchorSlot unknown
     forward.reachable.boostHeld positive fits tree stateOk bounded
+
+/-! ## From Gloas: the payload decisions and the tiebreaker -/
+
+/-- A held block of a forward store sits at or before its current slot, whose next slot fits.
+
+A slot must last more than one millisecond. -/
+private theorem nextSlot_of_held {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork}
+    (forward : ForwardReachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) (slots : 1 < config.SLOT_DURATION_MS)
+    {root : Root} {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block) :
+    ∃ current, store.getCurrentSlot config = .ok current ∧ block.slot ≤ current ∧
+      addChecked block.slot 1 = .ok (block.slot + 1) := by
+  have long := UInt64.lt_iff_toNat_lt.mp slots
+  obtain ⟨current, currentOk, blocksLe, -⟩ :=
+    forward.slots_le_current (UInt64.lt_trans (by decide) slots) anchorSlot
+  have below := blocksLe root block found
+  have bound := computeSlotAtTimeMs_le (mapError_ok_iff.mp currentOk)
+  have fits : block.slot.toNat + (1 : UInt64).toNat < 2 ^ 64 := by
+    have := UInt64.le_iff_toNat_le.mp below
+    have : (2 ^ 64 - 1) / config.SLOT_DURATION_MS.toNat ≤ (2 ^ 64 - 1) / 2 :=
+      Nat.div_le_div_left (by simp at long; omega) (by omega)
+    simp only [UInt64.toNat_one]
+    omega
+  exact ⟨current, currentOk, below, addChecked_of_lt fits⟩
+
+/-- From Gloas, the decision on the payload of a held node can be computed. -/
+private theorem isPreviousSlotPayloadDecision_ok {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork}
+    (forward : ForwardReachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) (slots : 1 < config.SLOT_DURATION_MS)
+    {node : ForkChoiceNode} {block : BeaconBlock preset fork}
+    (found : store.blocks[node.root]? = some block) :
+    ∃ current, store.getCurrentSlot config = .ok current ∧
+      addChecked block.slot 1 = .ok (block.slot + 1) ∧
+      store.isPreviousSlotPayloadDecision config node = .ok
+        ((block.slot + 1 == current) &&
+          (node.payloadStatus == .empty || node.payloadStatus == .full)) := by
+  obtain ⟨current, currentOk, -, nextOk⟩ := nextSlot_of_held forward anchorSlot slots found
+  refine ⟨current, currentOk, nextOk, ?_⟩
+  simp [isPreviousSlotPayloadDecision, block_ok_iff.mpr found, nextOk, currentOk, bind,
+    Except.bind, pure, Except.pure, Except.mapError]
+
+/-- From Gloas, whether to extend the payload of a held block of the previous slot can be computed.
+
+The votes of the payload committee, the boosted block and its parent are held.
+
+From Heze the answer on the inclusion lists of a verified payload is held. -/
+private theorem shouldExtendPayload_ok {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} (gloas : .glamsterdam ≤ fork)
+    (reachable : Reachable config anchorState anchorBlock store) {root : Root}
+    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block) {current : Slot}
+    (currentOk : store.getCurrentSlot config = .ok current)
+    (previous : addChecked block.slot 1 = .ok current) :
+    ∃ extend, store.shouldExtendPayload config gloas root = .ok extend := by
+  have contains : store.blocks.contains root := by
+    rw [Std.TreeMap.contains_eq_isSome_getElem?, found]; rfl
+  obtain ⟨timely, timelyFound⟩ :=
+    Option.isSome_iff_exists.mp (reachable.payloadTimelinessVote_isSome contains gloas)
+  obtain ⟨available, availableFound⟩ :=
+    Option.isSome_iff_exists.mp (reachable.payloadDataAvailabilityVote_isSome contains gloas)
+  have timelyRead : ptcVotes (store.payloadTimelinessVote gloas) root = .ok timely := by
+    simp [ptcVotes, timelyFound, pure, Except.pure]
+  have availableRead :
+      ptcVotes (store.payloadDataAvailabilityVote gloas) root = .ok available := by
+    simp [ptcVotes, availableFound, pure, Except.pure]
+  have timelyOk : ∀ b, ∃ v, store.payloadTimeliness gloas root b = .ok v := by
+    intro b
+    unfold payloadTimeliness
+    rw [timelyRead]
+    by_cases verified : store.isPayloadVerified gloas root <;>
+      simp [verified, bind, Except.bind, pure, Except.pure]
+  have availableOk : ∀ b, ∃ v, store.payloadDataAvailability gloas root b = .ok v := by
+    intro b
+    unfold payloadDataAvailability
+    rw [availableRead]
+    by_cases verified : store.isPayloadVerified gloas root <;>
+      simp [verified, bind, Except.bind, pure, Except.pure]
+  have satisfiedOk : ∀ heze : .hegota ≤ fork, store.isPayloadVerified gloas root = true →
+      ∃ v, store.isPayloadInclusionListSatisfied heze root = .ok v := by
+    intro heze verified
+    obtain ⟨v, vFound⟩ := Option.isSome_iff_exists.mp
+      (reachable.payloadInclusionListSatisfaction_isSome gloas heze verified)
+    unfold isPayloadInclusionListSatisfied
+    simp only [vFound]
+    by_cases held : store.isPayloadVerified (Nat.le_trans (by decide) heze) root <;>
+      simp [held, pure, Except.pure]
+  obtain ⟨t, tOk⟩ := timelyOk true
+  obtain ⟨a, aOk⟩ := availableOk true
+  -- The boosted block and its parent are held.
+  have boosted : store.proposerBoostRoot = Vector.replicate 32 0 ∨ ∃ boostBlock,
+      store.block store.proposerBoostRoot = .ok boostBlock ∧
+        ∃ parent, store.block boostBlock.parentRoot = .ok parent := by
+    rcases reachable.boostHeld with zero | ⟨boostBlock, parent, held, parentHeld⟩
+    · exact .inl zero
+    · exact .inr ⟨boostBlock, block_ok_iff.mpr held, parent, block_ok_iff.mpr parentHeld⟩
+  unfold shouldExtendPayload
+  simp only [block_ok_iff.mpr found, previous, currentOk, Except.mapError, bind, Except.bind,
+    ne_eq, not_true_eq_false, ↓reduceIte]
+  by_cases verified : store.isPayloadVerified gloas root = true
+  · simp only [verified, Bool.not_true, Bool.false_eq_true, ↓reduceIte]
+    -- From Heze the answer on the inclusion lists comes first.
+    have tail : ∃ extend, (do
+        let payloadIsTimely ← store.payloadTimeliness gloas root true
+        let payloadDataIsAvailable ← store.payloadDataAvailability gloas root true
+        if payloadIsTimely && payloadDataIsAvailable then return true
+        if store.proposerBoostRoot = Vector.replicate 32 0 then return true
+        let proposerBlock ← store.block store.proposerBoostRoot
+        if proposerBlock.parentRoot ≠ root then return true
+        store.isParentNodeFull proposerBlock : Except ForkChoiceError Bool) = .ok extend := by
+      simp only [tOk, aOk, bind, Except.bind]
+      split
+      · exact ⟨_, rfl⟩
+      rcases boosted with zero | ⟨boostBlock, boostOk, parent, parentOk⟩
+      · simp [zero, pure, Except.pure]
+      split
+      · exact ⟨_, rfl⟩
+      simp only [boostOk]
+      split
+      · exact ⟨_, rfl⟩
+      exact ⟨parentPayloadStatus boostBlock parent == .full, by
+        simp [isParentNodeFull, getParentPayloadStatus, parentOk, bind, Except.bind, pure,
+          Except.pure]⟩
+    split
+    · rename_i heze
+      obtain ⟨v, vOk⟩ := satisfiedOk heze verified
+      simp only [vOk]
+      split
+      · exact ⟨_, rfl⟩
+      · exact tail
+    · exact tail
+  · simp [verified, pure, Except.pure]
+
+/-- From Gloas, the payload-status tiebreaker of a held node can be computed. -/
+private theorem tiebreaker_exists_of_gloas {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} (gloas : .glamsterdam ≤ fork)
+    (forward : ForwardReachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) (weights : config.HeadWeightsFit preset cap)
+    {node : ForkChoiceNode} {block : BeaconBlock preset fork}
+    (found : store.blocks[node.root]? = some block) :
+    ∃ t, store.tiebreaker config node = .ok t := by
+  obtain ⟨current, currentOk, nextOk, decided⟩ :=
+    isPreviousSlotPayloadDecision_ok forward anchorSlot weights.slots found
+  simp only [tiebreaker, gloas, ↓reduceDIte, getPayloadStatusTiebreaker, decided, bind,
+    Except.bind]
+  split
+  · rename_i decision
+    split
+    · exact ⟨_, rfl⟩
+    have same : block.slot + 1 = current := by
+      simp only [Bool.and_eq_true, beq_iff_eq] at decision
+      exact decision.1
+    obtain ⟨extend, extendOk⟩ := shouldExtendPayload_ok gloas forward.reachable found currentOk
+      (same ▸ nextOk)
+    simp only [extendOk]
+    split <;> exact ⟨_, rfl⟩
+  · exact ⟨_, rfl⟩
 
 end Store
 
