@@ -955,11 +955,7 @@ The `syncProposer` part of the bound is not here: `bud_sync` uses it.
 
 The bound is scaled by ten, to take the eleven tenths and the rounding of `exitingCredits`.
 
-The band of a K5 key weighs three: `credits` pays one, and this bound pays two.
-
-A proposer pays its two in `exitingCredits`' `depth·slots` bands.
-
-A seat holder has no such two bands there yet, and a ruling of the spec is pending on that step. -/
+The two further bands of each credited K5 key are in `bud_exitingBands`. -/
 theorem bud_exitingCredits (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
