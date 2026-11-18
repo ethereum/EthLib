@@ -2624,7 +2624,7 @@ private theorem walkMembers_cover [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor 
   have rootViable : ∀ T, (e.world n).time ≤ T → T ≤ limit →
       HonestHeadsCover (e := e) after.confirmedRoot (e.world n).time T →
       RootViableAt (e := e) after.confirmedRoot T := fun T low high covers =>
-    (e.rootViableAt_of_checked pre ctx.sync ctx.slots ctx.positive ctx.preGloas ctx.admitted
+    (e.rootViableAt_of_checked pre ctx.sync ctx.slots ctx.preGloas ctx.admitted
       ctx.fits ctx.prompt ctx.votes ctx.windows ctx.fit ctx.ring ctx.incrementPositive
       ctx.anchored ctx.sound ctx.anchorSlot ctx.anchorBoundary ctx.start ctx.anchorEpochOk
       ctx.bounded ctx.roots ctx.absent ctx.pinned ctx.signedAll

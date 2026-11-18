@@ -322,7 +322,7 @@ public theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
     {anchor : Store preset fork} {Δ time : ℕ} {anchorEpoch horizon : Epoch} {margin : ℕ}
     {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (preGloas : fork < .glamsterdam)
+    (preGloas : fork < .glamsterdam)
     (admitted : BlocksAdmitted e 0 Δ time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (votes : ValidatedDutyVotes (e := e) time)
     (windows : AssignmentWindowAgreement (e := e) time)
@@ -419,7 +419,7 @@ public theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
       (forward n u caller).slots_le_current slots (UInt64.le_of_eq anchorSlot)
     rw [slotOk, Except.ok.injEq] at callerCurrentOk
     subst callerCurrentOk
-    exact .inl ((justified_descends_of_signer anchored start anchorSlot anchorBoundary positive
+    exact .inl ((justified_descends_of_signer anchored start anchorSlot anchorBoundary fit.positive
       preGloas fits roots caller callerHeld (low.trans high) beginOk timeEq
       (callerBlocks root block callerHeld) rfl covers high receiver atTime upToDate hdOk
       currentOk late signer).resolve_right collide)
@@ -1313,7 +1313,7 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
   by_cases heldEvidence : HeldStateFinalityEvidence (e := e) pre time
   · exact .inr (.inr (.inr (.inr heldEvidence)))
   refine .inl ⟨fun T low high covers => ?_, exist⟩
-  exact (e.rootViableAt_of_checked pre sync slots positive preGloas admitted fits prompt votes
+  exact (e.rootViableAt_of_checked pre sync slots preGloas admitted fits prompt votes
       windows fit ring incrementPositive anchored sound anchorSlot anchorBoundary start
       anchorEpochOk bounded roots absent pinned signedAll quorumDrift unslashed terminal
       anchorGenesis parameters genesis heldEarly enough included caller callerUpToDate slotOk
