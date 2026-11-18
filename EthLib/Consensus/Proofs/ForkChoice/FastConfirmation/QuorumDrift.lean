@@ -580,6 +580,305 @@ private theorem runs_of_call
   exact ⟨pulledEpoch, boundary, middle, epochAt boundarySlot, epochAt middleSlot, banded, first,
     queue, edge, tail, single, counted, ⟨toStateRun⟩⟩
 
+/-! ## Runs of the pin's window -/
+
+/-- A run from genesis passes a boundary state at the start of the epoch of its last state.
+
+The bands of hysteresis hold at that boundary state.
+
+A last state at the first slot of an epoch is `run_boundaryState`; any other state is in the epoch
+of the state before its last step, at the same fork. -/
+private theorem run_epochBoundary {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (bands : preset.IncrementWithinUpwardBand)
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset) :
+    ∀ {x : ForkedBeaconState preset}, Run config checks g x → x.fork < .glamsterdam →
+      .fusaka ≤ x.fork →
+      ∃ boundary : BeaconState preset x.fork,
+        getCurrentEpoch boundary = getCurrentEpoch x.state ∧ Hysteresis boundary ∧
+        Nonempty (Run config checks g ⟨x.fork, boundary⟩) ∧
+        Nonempty (Run config checks ⟨x.fork, boundary⟩ x) := by
+  intro x run
+  induction run with
+  | nil =>
+    intro _ fulu
+    obtain ⟨_, _, _, initialized⟩ := genesis
+    obtain ⟨phase0, -⟩ := initializeBeaconStateFromEth1_ok initialized
+    exact absurd (Nat.lt_of_le_of_lt fulu phase0) (by decide)
+  | @snoc middle last pre step ih =>
+    intro early fulu
+    by_cases first : last.state.slot % preset.SLOTS_PER_EPOCH = 0
+    · obtain ⟨boundary, atSlot, banded, toBoundary, fromBoundary⟩ :=
+        run_boundaryState genesis bands caps activation (pre.snoc step) early fulu first
+      exact ⟨boundary, by simp only [getCurrentEpoch, atSlot], banded, toBoundary, fromBoundary⟩
+    · cases step with
+      | slot ok =>
+        have next := (advanceSlotAcross_cases ok).1
+        have notFirst : ¬ preset.SLOTS_PER_EPOCH.toNat ∣ middle.state.slot.toNat + 1 := by
+          rw [Nat.dvd_iff_mod_eq_zero, ← next]
+          intro zero
+          exact first (UInt64.toNat_inj.mp (by rw [UInt64.toNat_mod, zero, UInt64.toNat_zero]))
+        have same : getCurrentEpoch last.state = getCurrentEpoch middle.state := by
+          apply UInt64.toNat_inj.mp
+          rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, next, Nat.succ_div]
+          simp [notFirst]
+        obtain ⟨_, _, -, kept⟩ := advanceSlotAcross_of_same_epoch ok same
+        have keptFork : last.fork = middle.fork := by rw [kept]
+        obtain ⟨boundary, epoch, banded, toBoundary, ⟨rest⟩⟩ :=
+          ih (keptFork ▸ early) (keptFork ▸ fulu)
+        have extended := rest.snoc (.slot ok)
+        have epochLast := epoch.trans same.symm
+        subst kept
+        exact ⟨boundary, epochLast, banded, toBoundary, ⟨extended⟩⟩
+      | block engine signed due ok =>
+        have kept := processBlock_slot (applySignedBlock_ok ok).2.1
+        obtain ⟨boundary, epoch, banded, toBoundary, ⟨rest⟩⟩ := ih early fulu
+        exact ⟨boundary, epoch.trans (by simp only [getCurrentEpoch, kept]), banded, toBoundary,
+          ⟨rest.snoc (.block engine signed due ok)⟩⟩
+
+/-- The runs of the pin's window, from a split state at the start of the finalized epoch.
+
+The call is the pulled-up head state and the current target of an honest store.
+
+The counting state is on the chain of a block of another honest store, whose chain reads the
+finalized checkpoint of the target block's state once finality has passed the anchor.
+
+The split state is the lookahead of the finalized block's state to the start of its epoch.
+
+Before finality has passed the anchor, the split state is the anchor state.
+
+A boundary state of the split's epoch, with the bands of hysteresis, runs to the split state.
+
+From the split state, runs reach the call's middle state and the counting state.
+
+The call's own branch is as `runs_of_call` gives it: a boundary state with the bands at the start
+of the target's epoch, at most one block to the middle state, and a tail to the pulled-up state. -/
+private theorem runs_of_finalized
+    {e : Execution (honestForkChoice config .bls sources anchorState anchorBlock assignment
+      genesisTimeMs) J}
+    {limit : ℕ} {anchor : Store preset fork} {horizon : Epoch}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (slots : 0 < config.SLOT_DURATION_MS) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    {g : ForkedBeaconState preset} (genesis : Genesis config .bls g)
+    (history : Run config .bls g ⟨fork, anchorState⟩) (early : fork < .glamsterdam)
+    (fulu : .fusaka ≤ fork) (window : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon limit)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ limit → (e.world j).time ≤ limit →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
+    (bands : preset.IncrementWithinUpwardBand)
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
+    (sound : Invariant anchorState)
+    {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ} (callTime : (e.world n).time ≤ limit)
+    {head : Root} {pulled anc fin : BeaconState preset fork} {target : Checkpoint}
+    (pulledOk : ((e.world n).state u).getPulledUpHeadState config head = .ok pulled)
+    (targetOk : ((e.world n).state u).getCurrentTarget config head = .ok target)
+    (held : ((e.world n).state u).blockStates[target.root]? = some anc)
+    (finHeld : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
+      ((e.world n).state u).blockStates[anc.finalizedCheckpoint.root]? = some fin)
+    (finAnchor : anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState → fin = anchorState)
+    (ancRead : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
+      ((e.world n).state u).getCheckpointBlock target.root anc.finalizedCheckpoint.epoch =
+        .ok anc.finalizedCheckpoint.root)
+    {w : ValidatorIndex} (receiver : w ∈ J) {k : ℕ} (receiveTime : (e.world k).time ≤ limit)
+    {root : Root} {rootState counted : BeaconState preset fork}
+    (stored : ((e.world k).state w).blockStates[root]? = some rootState)
+    (reach : counted = rootState ∨ ∃ slot, processSlots config .bls rootState slot = .ok counted)
+    (finRead : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
+      ((e.world k).state w).getCheckpointBlock root anc.finalizedCheckpoint.epoch =
+        .ok anc.finalizedCheckpoint.root)
+    (later : target.epoch ≤ getCurrentEpoch counted) (inside : getCurrentEpoch counted ≤ horizon) :
+    getCurrentEpoch pulled = target.epoch ∧
+      ∃ common split : BeaconState preset fork,
+        Hysteresis common ∧ Nonempty (Run config .bls g ⟨fork, common⟩) ∧
+        Nonempty (Run config .bls ⟨fork, common⟩ ⟨fork, split⟩) ∧
+        Nonempty (Run config .bls ⟨fork, fin⟩ ⟨fork, split⟩) ∧
+        getCurrentEpoch split = getCurrentEpoch common ∧
+        (∀ electra : .pectra ≤ fork,
+          split.pendingPartialWithdrawals electra = fin.pendingPartialWithdrawals electra) ∧
+        anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch split ∧
+      ∃ boundaryE middleE : BeaconState preset fork,
+        getCurrentEpoch boundaryE = target.epoch ∧ getCurrentEpoch middleE = target.epoch ∧
+        Hysteresis boundaryE ∧ Nonempty (Run config .bls g ⟨fork, boundaryE⟩) ∧
+        (∀ electra : .pectra ≤ fork,
+          middleE.pendingPartialWithdrawals electra = anc.pendingPartialWithdrawals electra) ∧
+        ∃ (edgeE : Run config .bls ⟨fork, boundaryE⟩ ⟨fork, middleE⟩)
+          (_ : Run config .bls ⟨fork, split⟩ ⟨fork, middleE⟩)
+          (tailM : Run config .bls ⟨fork, middleE⟩ ⟨fork, pulled⟩)
+          (_ : Run config .bls ⟨fork, split⟩ ⟨fork, counted⟩),
+          edgeE.blockCount ≤ 1 ∧
+          edgeE.blockCount + tailM.blockCount ≤
+            pulled.slot.toNat - target.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + 1 := by
+  have forward (v : ValidatorIndex) (honest : v ∈ J) (i : ℕ) :=
+    e.forwardReachableWith (anchorState := anchorState) (anchorBlock := anchorBlock)
+      (fun a member => (start a member) ▸ Store.ForwardReachableWith.anchor anchored) i v honest
+  obtain ⟨-, heldBefore⟩ := held_beforeFork window positive slots anchorSlot
+    (forward u caller n).forwardReachable (fun epoch ok => bounded u caller n epoch callTime ok)
+  obtain ⟨-, heldBeforeW⟩ := held_beforeFork window positive slots anchorSlot
+    (forward w receiver k).forwardReachable
+    (fun epoch ok => bounded w receiver k epoch receiveTime ok)
+  obtain ⟨pulledEpoch, epochBefore, startE, startEOk, ancLe, boundaryE, middleE, lookE, middleSlot,
+    boundarySlot, bandedE, firstE, queueE, edgeE, tailM, single, countedE⟩ :=
+    call_runs anchored start anchorSlot slots positive genesis history early fulu window bounded
+      bands caps activation caller callTime pulledOk targetOk held
+  have startENat := (computeStartSlotAtEpoch_ok_iff.mp startEOk).2
+  have epochAt {s : BeaconState preset fork} {epoch : Epoch} {slot : Slot}
+      (startOk : computeStartSlotAtEpoch preset epoch = .ok slot) (atSlot : s.slot = slot) :
+      getCurrentEpoch s = epoch := by
+    simp only [getCurrentEpoch, atSlot]
+    exact computeEpochAtSlot_computeStartSlotAtEpoch (UInt64.lt_iff_toNat_lt.mpr positive) startOk
+  have middleBefore : (∀ next ∈ config.nextFork fork,
+      middleE.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) :=
+    epochBefore _ (by rw [middleSlot, startENat, Nat.mul_div_cancel _ positive])
+  have countedBefore : (∀ next ∈ config.nextFork fork,
+      counted.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) :=
+    beforeFork_of_epoch window positive
+      (by rw [← getCurrentEpoch_toNat]; exact UInt64.le_iff_toNat_le.mp inside)
+  have countedLater := UInt64.le_iff_toNat_le.mp later
+  rw [getCurrentEpoch_toNat] at countedLater
+  have ancReach := reach_of_lookahead lookE
+  refine ⟨pulledEpoch, ?_⟩
+  by_cases guard : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch
+  · -- After the anchor: the split is the finalized block's state at the start of its epoch.
+    have finStored := finHeld guard
+    obtain ⟨startF, fBlock, startFOk, fFound, fLe, -⟩ :=
+      Store.isAncestor_of_getCheckpointBlock early (ancRead guard)
+    have startFNat := (computeStartSlotAtEpoch_ok_iff.mp startFOk).2
+    have finSlot : fin.slot = fBlock.slot :=
+      (forward u caller n).reachable.blockState_slot_eq anchorSlot fFound finStored
+    -- The finalized epoch is at most the target's: the target block's state settled it.
+    have ancHolds := ((forward u caller n).reachable.ordered sound).2 held
+    have settled := UInt64.le_iff_toNat_le.mp (UInt64.le_trans
+      (Store.finalized_le_currentJustified ancHolds.ordered)
+      (UInt64.le_trans ancHolds.settled (getPreviousEpoch_le _)))
+    have ancEpoch : (getCurrentEpoch anc).toNat ≤ target.epoch.toNat := by
+      rw [getCurrentEpoch_toNat]
+      have := UInt64.le_iff_toNat_le.mp ancLe
+      rw [startENat] at this
+      exact Nat.div_le_of_le_mul (by rw [Nat.mul_comm]; exact this)
+    have finalizedLe : startF.toNat ≤ startE.toNat := by
+      rw [startFNat, startENat]
+      exact Nat.mul_le_mul_right _ (by omega)
+    obtain ⟨split, lookF, toMiddleE⟩ := lookahead_runsTo anchorSlot (forward u caller n)
+      startFOk finStored held (ancRead guard) ancReach
+      (by rw [middleSlot, UInt64.le_iff_toNat_le]; exact finalizedLe)
+    -- The receiver holds the same finalized block's state, and so the same split state.
+    obtain ⟨-, fBlockW, -, fFoundW, -, -⟩ := Store.isAncestor_of_getCheckpointBlock early
+      (finRead guard)
+    obtain ⟨finW, finStoredW, -⟩ := (forward w receiver k).reachable.blockStatesFromParents fFoundW
+    obtain rfl : fin = finW := e.blockStates_eq anchored caller receiver (start u caller)
+      (start w receiver) (agree u caller w receiver n k callTime receiveTime) finStored finStoredW
+    obtain ⟨split', lookF', toCounted⟩ := lookahead_runsTo anchorSlot (forward w receiver k)
+      startFOk finStoredW stored (finRead guard) reach
+      (by
+        rw [UInt64.le_iff_toNat_le, startFNat]
+        exact (Nat.le_div_iff_mul_le positive).mp (by omega))
+    obtain rfl : split = split' := Except.ok.inj (lookF.symm.trans lookF')
+    -- The boundary state of the finalized epoch, before the split state.
+    have atStartF : startF % preset.SLOTS_PER_EPOCH = 0 := by
+      apply UInt64.toNat_inj.mp
+      rw [UInt64.toNat_mod, startFNat, Nat.mul_mod_left, UInt64.toNat_zero]
+    have startFBefore :=
+      epochBefore startF (by rw [startFNat, Nat.mul_div_cancel _ positive]; omega)
+    obtain ⟨finRun⟩ := run_of_held (forward u caller n) heldBefore finStored
+    obtain ⟨splitSlot, common, commonSlot, banded, toCommon, edge, -, queue⟩ :=
+      boundary_of_lookahead genesis history early fulu bands caps activation atStartF
+        startFBefore finRun (finSlot ▸ fLe) lookF
+    obtain ⟨fromFin⟩ := (RunsTo.ofReach (checks := .bls) (reach_of_lookahead lookF)).2
+      (splitSlot ▸ startFBefore)
+    obtain ⟨toMiddle⟩ := toMiddleE.2 middleBefore
+    obtain ⟨tailS⟩ := toCounted.2 countedBefore
+    refine ⟨common, split, banded, toCommon, ⟨edge⟩, ⟨fromFin⟩,
+      (epochAt startFOk splitSlot).trans (epochAt startFOk commonSlot).symm, queue,
+      UInt64.le_of_eq (epochAt startFOk splitSlot).symm, boundaryE, middleE,
+      epochAt startEOk boundarySlot, epochAt startEOk middleSlot, bandedE, firstE, queueE, edgeE,
+      toMiddle, tailM, tailS, single, countedE⟩
+  · -- Before finality passes the anchor: the split is the anchor state itself.
+    obtain rfl := finAnchor (UInt64.not_lt.mp guard)
+    obtain ⟨common, commonEpoch, banded, toCommon, edge⟩ :=
+      run_epochBoundary genesis bands caps activation history early fulu
+    obtain ⟨ancRun⟩ := run_of_held (forward u caller n) heldBefore held
+    obtain ⟨ancToMiddle⟩ := (RunsTo.ofReach (checks := .bls) ancReach).2 middleBefore
+    obtain ⟨rootRun⟩ := run_of_held (forward w receiver k) heldBeforeW stored
+    obtain ⟨rootToCounted⟩ := (RunsTo.ofReach (checks := .bls) reach).2 countedBefore
+    exact ⟨common, fin, banded, toCommon, edge, ⟨.nil⟩, commonEpoch.symm, fun _ => rfl,
+      UInt64.not_lt.mp guard, boundaryE, middleE, epochAt startEOk boundarySlot,
+      epochAt startEOk middleSlot, bandedE, firstE, queueE, edgeE, ancRun.append ancToMiddle,
+      tailM, rootRun.append rootToCounted, single, countedE⟩
+
+/-- The runs and epochs of the pin's `Setting`, for one call and one counting state.
+
+The finalized block's state `fin` is reached from genesis, and the split state from `fin`.
+
+From the split state, runs reach the pulled-up head state and the counting state.
+
+The split state is at or after the finalized epoch and at or before the call's epoch. -/
+private theorem setting_runs_of_call
+    {e : Execution (honestForkChoice config .bls sources anchorState anchorBlock assignment
+      genesisTimeMs) J}
+    {limit : ℕ} {anchor : Store preset fork} {horizon : Epoch}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (slots : 0 < config.SLOT_DURATION_MS) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    {g : ForkedBeaconState preset} (genesis : Genesis config .bls g)
+    (history : Run config .bls g ⟨fork, anchorState⟩) (early : fork < .glamsterdam)
+    (fulu : .fusaka ≤ fork) (window : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon limit)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ limit → (e.world j).time ≤ limit →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
+    (bands : preset.IncrementWithinUpwardBand)
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
+    (sound : Invariant anchorState)
+    {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ} (callTime : (e.world n).time ≤ limit)
+    {head : Root} {pulled anc fin : BeaconState preset fork} {target : Checkpoint}
+    (pulledOk : ((e.world n).state u).getPulledUpHeadState config head = .ok pulled)
+    (targetOk : ((e.world n).state u).getCurrentTarget config head = .ok target)
+    (held : ((e.world n).state u).blockStates[target.root]? = some anc)
+    (finHeld : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
+      ((e.world n).state u).blockStates[anc.finalizedCheckpoint.root]? = some fin)
+    (finAnchor : anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState → fin = anchorState)
+    (ancRead : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
+      ((e.world n).state u).getCheckpointBlock target.root anc.finalizedCheckpoint.epoch =
+        .ok anc.finalizedCheckpoint.root)
+    {w : ValidatorIndex} (receiver : w ∈ J) {k : ℕ} (receiveTime : (e.world k).time ≤ limit)
+    {root : Root} {rootState counted : BeaconState preset fork}
+    (stored : ((e.world k).state w).blockStates[root]? = some rootState)
+    (reach : counted = rootState ∨ ∃ slot, processSlots config .bls rootState slot = .ok counted)
+    (finRead : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
+      ((e.world k).state w).getCheckpointBlock root anc.finalizedCheckpoint.epoch =
+        .ok anc.finalizedCheckpoint.root)
+    (later : target.epoch ≤ getCurrentEpoch counted) (inside : getCurrentEpoch counted ≤ horizon) :
+    getCurrentEpoch pulled = target.epoch ∧
+      ∃ split : BeaconState preset fork,
+        Nonempty (Run config .bls g ⟨fork, fin⟩) ∧
+        Nonempty (Run config .bls ⟨fork, fin⟩ ⟨fork, split⟩) ∧
+        Nonempty (Run config .bls ⟨fork, split⟩ ⟨fork, pulled⟩) ∧
+        Nonempty (Run config .bls ⟨fork, split⟩ ⟨fork, counted⟩) ∧
+        anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch split ∧
+        getCurrentEpoch split ≤ getCurrentEpoch pulled ∧
+        getCurrentEpoch pulled ≤ getCurrentEpoch counted := by
+  have forward (v : ValidatorIndex) (honest : v ∈ J) (i : ℕ) :=
+    e.forwardReachableWith (anchorState := anchorState) (anchorBlock := anchorBlock)
+      (fun a member => (start a member) ▸ Store.ForwardReachableWith.anchor anchored) i v honest
+  obtain ⟨-, heldBefore⟩ := held_beforeFork window positive slots anchorSlot
+    (forward u caller n).forwardReachable (fun epoch ok => bounded u caller n epoch callTime ok)
+  obtain ⟨pulledEpoch, common, split, -, -, -, ⟨fromFin⟩, -, -, ancLe, boundaryE, middleE, -, -,
+    -, -, -, edgeE, toMiddle, tailM, tailS, -, -⟩ :=
+    runs_of_finalized anchored start anchorSlot slots positive genesis history early fulu window
+      bounded agree bands caps activation sound caller callTime pulledOk targetOk held
+      finHeld finAnchor ancRead receiver receiveTime stored reach finRead later inside
+  have toPulled := toMiddle.append tailM
+  refine ⟨pulledEpoch, split, ?_, ⟨fromFin⟩, ⟨toPulled⟩, ⟨tailS⟩, ancLe,
+    currentEpoch_le_of_chainSteps toPulled.chainSteps, pulledEpoch ▸ later⟩
+  by_cases guard : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch
+  · obtain ⟨finRun⟩ := run_of_held (forward u caller n) heldBefore (finHeld guard)
+    exact ⟨history.append finRun⟩
+  · obtain rfl := finAnchor (UInt64.not_lt.mp guard)
+    exact ⟨history⟩
+
 /-- The quorum of each call of an honest store drifts by at most its reserve, at every receiver.
 
 For each call, the bound holds or two honest stores collide on a root by the time bound.
