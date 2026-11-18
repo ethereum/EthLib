@@ -14,6 +14,8 @@ The slots of an epoch exist exactly when its first slot plus its length fits in 
 
 The slot at the start time of a slot is that slot, in milliseconds and in seconds.
 
+A genesis offset below one slot duration keeps the slot read at every slot start.
+
 Each conversion fails exactly when its result leaves the 64-bit range.
 
 A part of a slot grows with its basis points and stays below the slot.
@@ -187,6 +189,56 @@ theorem computeSlotAtTimeMs_computeTimeAtSlotMs {genesisTimeMs timeMs : UInt64} 
       refine divChecked_ok_iff.mpr ⟨by intro zero; simp [zero] at positive, ?_⟩
       rw [offsetValue, Nat.mul_div_cancel _ positive]
     simp only [computeSlotAtTimeMs, elapsed, quotient, bind, Except.bind]
+
+/-- A matching slot-start read bounds the genesis offset by one slot duration. -/
+theorem genesis_offset_of_slot_start {genesis actual : UInt64}
+    {slot : Slot} {begin : UInt64}
+    (slots : 0 < config.SLOT_DURATION_MS)
+    (beginOk : computeTimeAtSlotMs config genesis slot = .ok begin)
+    (slotOk : computeSlotAtTimeMs config actual begin = .ok slot) :
+    actual.toNat ≤ genesis.toNat ∧
+      genesis.toNat < actual.toNat + config.SLOT_DURATION_MS.toNat := by
+  simp only [computeTimeAtSlotMs, bind_ok_iff] at beginOk
+  obtain ⟨offset, offsetOk, summed⟩ := beginOk
+  have offsetNat := (mulChecked_ok_iff.mp offsetOk).2
+  have beginNat := (addChecked_ok_iff.mp summed).2
+  simp only [computeSlotAtTimeMs, bind_ok_iff] at slotOk
+  obtain ⟨elapsed, elapsedOk, divided⟩ := slotOk
+  have elapsedNat := (subChecked_ok_iff.mp elapsedOk).2
+  have elapsedBound := (subChecked_ok_iff.mp elapsedOk).1
+  have quotient := (divChecked_ok_iff.mp divided).2
+  have positive := UInt64.lt_iff_toNat_lt.mp slots
+  have lower := Nat.div_mul_le_self elapsed.toNat config.SLOT_DURATION_MS.toNat
+  have upper := Nat.lt_mul_div_succ elapsed.toNat positive
+  rw [← quotient] at lower upper
+  rw [Nat.mul_comm, Nat.add_mul, Nat.one_mul] at upper
+  omega
+
+/-- The same sub-slot genesis offset preserves the slot read at every slot start. -/
+theorem slot_at_start_of_genesis_offset {genesis actual : UInt64}
+    {slot : Slot} {begin : UInt64}
+    (slots : 0 < config.SLOT_DURATION_MS)
+    (beginOk : computeTimeAtSlotMs config genesis slot = .ok begin)
+    (offset : actual.toNat ≤ genesis.toNat ∧
+      genesis.toNat < actual.toNat + config.SLOT_DURATION_MS.toNat) :
+    computeSlotAtTimeMs config actual begin = .ok slot := by
+  have parsed := beginOk
+  simp only [computeTimeAtSlotMs, bind_ok_iff] at parsed
+  obtain ⟨distance, distanceOk, summed⟩ := parsed
+  have distanceNat := (mulChecked_ok_iff.mp distanceOk).2
+  have beginNat := (addChecked_ok_iff.mp summed).2
+  have low : actual ≤ begin := UInt64.le_iff_toNat_le.mpr (by omega)
+  have elapsedNat : (begin - actual).toNat = begin.toNat - actual.toNat :=
+    UInt64.toNat_sub_of_le _ _ low
+  have quotient : (begin - actual).toNat / config.SLOT_DURATION_MS.toNat = slot.toNat := by
+    apply Nat.div_eq_of_lt_le
+    · omega
+    · rw [Nat.add_mul, Nat.one_mul]
+      omega
+  unfold computeSlotAtTimeMs
+  rw [subChecked_ok_iff.mpr ⟨low, elapsedNat⟩]
+  simp only [bind, Except.bind]
+  exact divChecked_ok_iff.mpr ⟨by intro zero; simp [zero] at slots, quotient.symm⟩
 
 /-- The slot at a time does not decrease as the time grows. -/
 theorem computeSlotAtTimeMs_mono {genesisTimeMs timeMs laterMs : UInt64} {slot later : Slot}

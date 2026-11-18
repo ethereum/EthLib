@@ -17,6 +17,8 @@ An up-to-date honest store may accept the current-target test of the fast confir
 
 Honest validators then sign that target with two thirds of the active balance of its head state.
 
+Otherwise two honest stores collide on a block.
+
 The honest count and the coverage of honest heads by a block of the epoch are assumed.
 
 So is the caller's head at the start of the next epoch.
@@ -35,18 +37,8 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
-/-- The caller's head read at the start of the epoch after the target's.
-
-At that time the caller's up-to-date store has a head.
-
-An honest voter that has not voted by the call needs a duty in the target's epoch.
-
-`AssignmentWindowAgreement` gives that duty only through the past window of an actual head.
-
-This head read is assumed, and head totality of an honest store would discharge it.
-
-The window of that head over the target's epoch then reads under `Config.CommitteeWindowsFit`. -/
-def RolloverWindowRead (u : ValidatorIndex) (begin : ℕ) : Prop :=
+/-- At every event at the given time, an up-to-date store of the caller reads a head. -/
+def CallerHeadAt (u : ValidatorIndex) (begin : ℕ) : Prop :=
   ∀ k, (e.world k).time = begin →
     UpToDate config checks sources (e.world k).time ((e.world k).view u)
       ((e.world k).state u) →
@@ -62,7 +54,7 @@ def CallRolloverRead (u : ValidatorIndex) (n : ℕ) (head : Root) (last : ℕ) :
     computeStartSlotAtEpoch preset nextEpoch = .ok first →
     computeTimeAtSlotMs config genesisTimeMs first = .ok begin →
     begin.toNat ≤ last →
-    RolloverWindowRead (e := e) u begin.toNat
+    CallerHeadAt (e := e) u begin.toNat
 
 /-- Each accepted root has a recent realized justification in its own stored post-state.
 
@@ -231,56 +223,6 @@ private theorem active_eq_of_common_origin {anchor : Store preset fork}
   exact ((run.trans pulled).active.getActiveValidatorIndices_eq fixed).trans
     (otherRun.active.getActiveValidatorIndices_eq fixed).symm
 
-/-- A matching slot-start read bounds the genesis offset by one slot duration. -/
-private theorem genesis_offset_of_slot_start {genesis actual : UInt64}
-    {slot : Slot} {begin : UInt64}
-    (slots : 0 < config.SLOT_DURATION_MS)
-    (beginOk : computeTimeAtSlotMs config genesis slot = .ok begin)
-    (slotOk : computeSlotAtTimeMs config actual begin = .ok slot) :
-    actual.toNat ≤ genesis.toNat ∧
-      genesis.toNat < actual.toNat + config.SLOT_DURATION_MS.toNat := by
-  simp only [computeTimeAtSlotMs, bind_ok_iff] at beginOk
-  obtain ⟨offset, offsetOk, summed⟩ := beginOk
-  have offsetNat := (mulChecked_ok_iff.mp offsetOk).2
-  have beginNat := (addChecked_ok_iff.mp summed).2
-  simp only [computeSlotAtTimeMs, bind_ok_iff] at slotOk
-  obtain ⟨elapsed, elapsedOk, divided⟩ := slotOk
-  have elapsedNat := (subChecked_ok_iff.mp elapsedOk).2
-  have elapsedBound := (subChecked_ok_iff.mp elapsedOk).1
-  have quotient := (divChecked_ok_iff.mp divided).2
-  have positive := UInt64.lt_iff_toNat_lt.mp slots
-  have lower := Nat.div_mul_le_self elapsed.toNat config.SLOT_DURATION_MS.toNat
-  have upper := Nat.lt_mul_div_succ elapsed.toNat positive
-  rw [← quotient] at lower upper
-  rw [Nat.mul_comm, Nat.add_mul, Nat.one_mul] at upper
-  omega
-
-/-- The same sub-slot genesis offset preserves the slot read at every slot start. -/
-private theorem slot_at_start_of_genesis_offset {genesis actual : UInt64}
-    {slot : Slot} {begin : UInt64}
-    (slots : 0 < config.SLOT_DURATION_MS)
-    (beginOk : computeTimeAtSlotMs config genesis slot = .ok begin)
-    (offset : actual.toNat ≤ genesis.toNat ∧
-      genesis.toNat < actual.toNat + config.SLOT_DURATION_MS.toNat) :
-    computeSlotAtTimeMs config actual begin = .ok slot := by
-  have parsed := beginOk
-  simp only [computeTimeAtSlotMs, bind_ok_iff] at parsed
-  obtain ⟨distance, distanceOk, summed⟩ := parsed
-  have distanceNat := (mulChecked_ok_iff.mp distanceOk).2
-  have beginNat := (addChecked_ok_iff.mp summed).2
-  have low : actual ≤ begin := UInt64.le_iff_toNat_le.mpr (by omega)
-  have elapsedNat : (begin - actual).toNat = begin.toNat - actual.toNat :=
-    UInt64.toNat_sub_of_le _ _ low
-  have quotient : (begin - actual).toNat / config.SLOT_DURATION_MS.toNat = slot.toNat := by
-    apply Nat.div_eq_of_lt_le
-    · omega
-    · rw [Nat.add_mul, Nat.one_mul]
-      omega
-  unfold computeSlotAtTimeMs
-  rw [subChecked_ok_iff.mpr ⟨low, elapsedNat⟩]
-  simp only [bind, Except.bind]
-  exact divChecked_ok_iff.mpr ⟨by intro zero; simp [zero] at slots, quotient.symm⟩
-
 /-- A store read at a slot start reads each later slot start of the model's clock. -/
 private theorem slot_at_later_start (slots : 0 < config.SLOT_DURATION_MS)
     {u : ValidatorIndex} {n k : ℕ} {reference later : Slot} {referenceBegin begin : UInt64}
@@ -393,7 +335,10 @@ private theorem signs_of_duty {anchor : Store preset fork} {Δ time : ℕ}
     (preGloas : fork < .glamsterdam)
     (fits : DelayFits fork config genesisTimeMs Δ) (votes : ValidatedDutyVotes (e := e) time)
     (nonzero : HeldBlockStateRootsNonzero (e := e) time)
-    (agree : HonestBlocksAgree (e := e) time)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
     {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
     {head : ForkChoiceNode} {target : Checkpoint} {origin : Root}
     {originBlock : BeaconBlock preset fork}
@@ -509,34 +454,18 @@ private theorem signs_of_duty {anchor : Store preset fork} {Δ time : ℕ}
     simp [Execution.world_succ, vote.sends, World.apply]
   exact ⟨k + 1, by omega, _, sent, _, member, targetEq⟩
 
-/-- An accepted current-target test has honest signers with two thirds of the active balance.
+/-- An accepted current-target test has active honest signers with two thirds of the active balance.
 
-The caller is an up-to-date honest store at a slot start of the target's epoch E.
+Each votes for the target before the next epoch, unless two honest stores collide on a block.
 
-Its head passes the current-target test, and `HonestTargetVotes` names the honest count.
-
-The block `origin` is of epoch E, and the head descends from it.
-
-Every up-to-date honest head descends from `origin` from the call through the start of E + 1.
-
-At the start of E + 1 the caller has a head, and `fit` lets it read its window over epoch E.
-
-Then honest validators with two thirds of the pulled-up head state's active balance sign the target.
-
-Three times their stake is at least twice that balance plus the `margin` of the count.
-
-Each of them is active in that state, and sends that signature before the start of E + 1.
-
-A counted voter that has not signed by the call has a duty in E at or after the call's slot. -/
+It assumes the honest count, and honest heads above a block of the epoch until the next one. -/
 theorem Execution.honestTargetVotes_signed_of_checked {anchor : Store preset fork} {Δ time : ℕ}
     {margin : ℕ} (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (retained : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     (preGloas : fork < .glamsterdam) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (votes : ValidatedDutyVotes (e := e) time)
     (windows : AssignmentWindowAgreement (e := e) time) (fit : config.CommitteeWindowsFit preset)
     (nonzero : HeldBlockStateRootsNonzero (e := e) time)
-    (agree : HonestBlocksAgree (e := e) time)
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorAtBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
@@ -560,16 +489,32 @@ theorem Execution.honestTargetVotes_signed_of_checked {anchor : Store preset for
     (beginOk : computeTimeAtSlotMs config genesisTimeMs first = .ok begin)
     (bounded : begin.toNat ≤ time)
     (covers : HonestHeadsCover (e := e) origin (e.world n).time (begin.toNat + 1))
-    (rollover : RolloverWindowRead (e := e) u begin.toNat) :
-    ∃ (state : BeaconState preset fork) (total : Gwei) (voters : Finset ValidatorIndex),
+    (rollover : CallerHeadAt (e := e) u begin.toNat) :
+    (∃ (state : BeaconState preset fork) (total : Gwei) (voters : Finset ValidatorIndex),
       ((e.world n).state u).getPulledUpHeadState config head.root = .ok state ∧
       getTotalActiveBalance state = .ok total ∧
       2 * total.toNat + margin ≤ 3 * stake (fun v => balanceAt state v.toNat) voters ∧
-      ∀ v ∈ voters, v ∈ J ∧ v ∈ activeVoters state ∧ SignsTarget e v target (begin.toNat - 1) := by
+      ∀ v ∈ voters, v ∈ J ∧ v ∈ activeVoters state ∧ SignsTarget e v target (begin.toNat - 1)) ∨
+      ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
+        ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
+          some evidence := by
+  rcases Store.blocks_agree_or_collision
+      (fun i : ValidatorIndex × ℕ => (e.world i.2).state i.1)
+      (fun i => i.1 ∈ J ∧ (e.world i.2).time ≤ time) with agreeAll | collision
+  rotate_left
+  · obtain ⟨⟨a, i⟩, ⟨ha, hi⟩, ⟨b, j⟩, ⟨hb, hj⟩, r, evidence, searched⟩ := collision
+    exact .inr ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
+  have agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right :=
+    fun a ha b hb i j hi hj => agreeAll (a, i) ⟨ha, hi⟩ (b, j) ⟨hb, hj⟩
+  have positive := fit.positive
+  refine .inl ?_
   obtain ⟨callSlot, callBegin, callSlotOk, callBeginOk, atCall⟩ := atSlotStart
   obtain ⟨state, total, target', slot, epochStart, lastCall, participants, voters, stateOk,
-    totalOk, targetOk', slotOk, epochOk, epochStartOk, lastCallOk, participantsOk, -, members,
-    bound⟩ := quorum_of_current_target count justified
+    totalOk, targetOk', slotOk, epochOk, epochStartOk, lastCallOk, participantsOk, targetRead,
+    members, bound⟩ := quorum_of_current_target count justified
   rw [targetOk, Except.ok.injEq] at targetOk'
   subst target'
   rw [callSlotOk, Except.ok.injEq] at slotOk
@@ -626,10 +571,6 @@ theorem Execution.honestTargetVotes_signed_of_checked {anchor : Store preset for
   have nBound : (e.world n).time ≤ time := by omega
   have kBound : (e.world k).time ≤ time := by omega
   have hdDescends := covers (e.world k).time (by omega) (by omega) u caller k hd rfl readyK hdOk
-  have targetRead : ((e.world n).state u).getCheckpointBlock head.root target.epoch =
-      .ok target.root := by
-    obtain ⟨epoch, root, _, read, rfl⟩ := Store.getCurrentTarget_eq_ok_iff.mp targetOk
-    exact read
   refine ⟨state, total, voters, stateOk, totalOk, bound, fun v member => ⟨(members v member).1,
     (members v member).2.1, ?_⟩⟩
   obtain ⟨honest, active, signed | unseen⟩ := members v member
@@ -3080,11 +3021,15 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
   have nextOk' : addChecked target.epoch 1 = .ok next := targetEpoch ▸ nextOk
   have windowRead := rollover target next boundary begin targetN nextOk' boundaryOk beginOk beginLe
   -- The current-target step at the record's call names the honest voters of the target.
-  obtain ⟨pulled', total, voters, pulledOk', totalOk, twoThirds, members⟩ :=
-    Execution.honestTargetVotes_signed_of_checked slots positive (by omega) preGloas fits prompt
-      votes windows fit roots agree anchorStore anchorSlot anchorBoundary anchored caller readyQ
+  obtain ⟨pulled', total, voters, pulledOk', totalOk, twoThirds, members⟩ |
+      ⟨a, ha, b, hb, i, j, hi, hj, r, ⟨r', left, right⟩, found⟩ :=
+    Execution.honestTargetVotes_signed_of_checked slots (by omega) preGloas fits prompt
+      votes windows fit roots anchorStore anchorSlot anchorBoundary anchored caller readyQ
       atSlotQ headQOk checkQ count targetOk originEpochQ originBelow nextOk' boundaryOk beginOk
       beginLe coverage windowRead
+  swap
+  · obtain ⟨leftFound, rightFound, different⟩ := findBlockCollision_held found
+    exact absurd (agree a ha b hb i j hi hj r' left right leftFound rightFound) different
   cases Except.ok.inj (pulledOk'.symm.trans pulledOk)
   -- Assumption 3: a seed above the root carries the voters' target votes.
   have receiverEpochOk : ((e.world k).state w).getCurrentStoreEpoch config =

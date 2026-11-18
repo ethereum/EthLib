@@ -39,17 +39,13 @@ Not yet released.
   `signerHead_of_duty` gives the head on which an honest duty's signer reads its target.
 
 - `Execution.honestTargetVotes_signed_of_checked` shows that an accepted current-target test has honest signers with two thirds of the active balance ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).
-  Three times their stake is at least twice the total active balance plus the margin of the count.
-  Each of them is active in the pulled-up head state, and sent a vote for the target before the start of the next epoch.
-  It assumes the honest count `HonestTargetVotes`, and that every honest head descends from a block of the target's epoch until then.
-  It also assumes `HonestBlocksAgree`, that honest stores agree on the blocks that they both hold.
-  `RolloverWindowRead` assumes that the caller has a head at the start of the next epoch.
-  The theorem takes `fit : config.CommitteeWindowsFit preset` and derives that head's committee window over the target's epoch.
-  `headState_of_descends` is now public, and the proof reads it.
+  Each signer votes for the target before the start of the next epoch, unless two honest stores collide on a block.
+  It assumes the honest count, honest heads above a block of the target's epoch until then, and the caller's head at that time.
+
+- `genesis_offset_of_slot_start` and `slot_at_start_of_genesis_offset` show that a genesis offset below one slot duration keeps the slot read at every slot start.
 
 - `quorum_of_current_target` names the honest voters of `HonestTargetVotes` when the two-thirds test on the current target passes.
   Three times their stake is at least twice the total active balance plus the margin of the count.
-  `quorum_of_count` and `headState_epoch_le` are now public.
 
 - `Store.Reachable.blockState_slot_eq` states that a known block's state is at the block's slot, when the anchor block is at the anchor state's slot.
 

@@ -3135,13 +3135,13 @@ The caller's store is up to date at a slot start of the target's epoch, and its 
 The theorem concludes that honest validators with two thirds of the pulled-up head state's active balance each sent a `SignsTarget` statement before the start of the next epoch.
 Three times their stake is at least twice that balance plus the margin of the count.
 Each of them lies in `activeVoters` of that state, the validators active in its current epoch.
+Otherwise the theorem names two honest stores, up to the horizon, whose blocks collide at one root.
 It does not show that a later state counts these votes, or that the target is justified.
 `HonestTargetVotes` stands in for a bound on Byzantine stake and remains a hypothesis.
 `HonestHeadsCover` assumes that every up-to-date honest head descends from a block of the target's epoch, from the call through the start of the next epoch.
-`HonestBlocksAgree` assumes that honest stores agree on every block that they both hold, and `HeldBlockStateRootsNonzero` that their blocks have nonzero state roots.
-A reachable store keeps each block at its own root, so `HonestBlocksAgree` holds when no two different blocks held by honest stores share a root.
-It is not hash injectivity: it concerns only the blocks that honest stores hold.
-`RolloverWindowRead` assumes that at the start of the next epoch the caller's up-to-date store has a head.
+`HeldBlockStateRootsNonzero` assumes that their blocks have nonzero state roots.
+Block agreement between honest stores is not assumed: `Store.blocks_agree_or_collision` splits it from the collision disjunct.
+`CallerHeadAt` assumes that at the start of the next epoch the caller's up-to-date store has a head.
 No theorem yet shows that the head read of an honest store succeeds, so this read is assumed.
 Head totality would discharge it, and it is an outstanding obligation of the endpoint safety issue [#2060](https://github.com/ethereum/EthLib/issues/2060).
 The window of that head over the target's epoch is derived: the theorem takes `Config.CommitteeWindowsFit` and reads it through `Store.getCommitteesBetweenSlots_exists`.
@@ -3177,7 +3177,7 @@ Off the epoch's first slot the call's count is reserved, and the call's epoch is
 `AcceptedRealizedRecent` and `AcceptedRealizedHead` are assumptions on the run, entries 1 and 3 of the rule's spec changes.
 Each accepted root has a realized justification at most one epoch before its own.
 An accepted root of an earlier epoch is realized as justified by the head's state.
-`CallRolloverRead` assumes the caller's head read at each rollover for the current target of its head, through `RolloverWindowRead` above.
+`CallRolloverRead` assumes the caller's head read at each rollover for the current target of its head, through `CallerHeadAt` above.
 `JustifiedHonestlySigned` assumes the signer of each justified checkpoint after the anchor's epoch, which `Execution.justifiedHonestlySigned` derives from a Byzantine bound.
 `QuorumDriftWithin` assumes that an honest voter set of a call keeps its stake in each counting state, up to the call's quorum reserve.
 No theorem here derives it, and whether the reserve bounds the drift on mainnet is not established.
