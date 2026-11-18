@@ -204,7 +204,7 @@ def frameDecodeExport (args : PyValue) : Result PyValue :=
       fun e => (e.code, s!"QUIC frame rejected: {reprStr e}")
     return (frame, rest)) args
 
-/-- Select packet-number length bits, zero through three, under RFC 9000 §17.1.
+/-- Select the shortest packet-number length bits, zero through three, under RFC 9000 §17.1.
 
 Any acknowledgement must be for this sender in the same connection and packet-number space.
 
@@ -212,7 +212,9 @@ With no acknowledgement, the selected bytes hold the full number.
 
 Otherwise the byte window exceeds twice the gap from the largest acknowledged number.
 
-An invalid acknowledgement order or a range needing more than four bytes raises code 10. -/
+An acknowledged number that is not earlier raises code 10.
+
+A range needing more than four bytes raises code 11. -/
 @[export eth_quic_packet_number_width]
 def packetNumberWidthExport (args : PyValue) : Result PyValue :=
   pyExport (fun (input : Fin (2 ^ 62) × Option (Fin (2 ^ 62))) => do

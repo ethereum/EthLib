@@ -115,7 +115,7 @@ def packet_number_width(number: int, largest_acked: int | None) -> int:
     The returned value is the byte count minus one.
     Any acknowledgement must be for this sender in the same connection and packet-number space.
     With None, the width preserves the full number.
-    Otherwise it covers more than twice the gap from largest_acked.
+    Otherwise the selected bytes cover more than twice the gap from largest_acked.
     Raises QuicError if largest_acked >= number or more than four bytes are needed.
     """
     return _native.quic_packet_number_width(number, largest_acked)

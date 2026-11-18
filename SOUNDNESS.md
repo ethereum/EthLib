@@ -989,7 +989,8 @@ Retry and Version Negotiation consume the rest of the datagram, since neither ha
 `Packet.packetNumberWidth_sufficient` proves that a selected width holds the full number before any acknowledgement, or covers strictly more than twice the gap from the largest acknowledged number afterwards (RFC 9000 §17.1).
 The caller supplies acknowledgements for this sender in the same connection and packet-number space.
 `Packet.packetNumberWidth_minimal` proves that no sufficient width uses fewer bytes, and `Packet.packetNumberWidth_error_iff` proves that selection fails exactly when no width is sufficient.
-`Packet.decodePacketNumber_encodePacketNumber_of_packetNumberWidth` proves reconstruction from the selected bytes when the expected number is zero before any acknowledgement, or one greater than the acknowledged number afterwards.
+`Packet.decodePacketNumber_encodePacketNumber_of_packetNumberWidth` proves reconstruction from the selected bytes at every expected number from one past the acknowledged number, or zero before any acknowledgement, through the number sent.
+These are the expectations of a receiver whose largest received packet lies between the acknowledged number and the one before the number sent, as §17.1 intends.
 
 `Frame.decode_encode` (`Networking/Proofs/Quic/Frame.lean`) proves the round trip for an encoded frame permitted in its packet type.
 A STREAM frame without LEN consumes the remaining packet, so its round trip has no trailing bytes.

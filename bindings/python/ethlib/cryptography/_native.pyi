@@ -1733,7 +1733,7 @@ def quic_frame_decode(packet: QuicPacketType, data: bytes) -> tuple[QuicFrame, b
     ...
 
 def quic_packet_number_width(number: int, largest_acked: int | None) -> int:
-    """Select packet-number length bits, zero through three, under RFC 9000 §17.1."""
+    """Select the shortest packet-number length bits, zero through three, under RFC 9000 §17.1."""
     ...
 
 def quic_packet_number_encode(width: int, number: int) -> bytes:

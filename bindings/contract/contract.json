@@ -12964,16 +12964,18 @@
    "docstring":
    "Read one frame allowed in the given packet type (RFC 9000 §12.4)."},
   {"summary":
-   "Select packet-number length bits, zero through three, under RFC 9000 §17.1.",
+   "Select the shortest packet-number length bits, zero through three, under RFC 9000 §17.1.",
    "signature": "(number: int, largest_acked: int | None) -> int",
    "operation": "EthLib.Networking.Quic.Exports.packetNumberWidthExport",
    "method": "quic_packet_number_width",
    "errors":
    [{"type": "EthLib.Networking.Quic.Packet.WidthError",
-     "codes": [{"constructor": "invalid", "code": 10}]}],
+     "codes":
+     [{"constructor": "acknowledgedNotEarlier", "code": 10},
+      {"constructor": "rangeTooLarge", "code": 11}]}],
    "error_class": "QuicError",
    "docstring":
-   "Select packet-number length bits, zero through three, under RFC 9000 §17.1.\n\nAny acknowledgement must be for this sender in the same connection and packet-number space.\n\nWith no acknowledgement, the selected bytes hold the full number.\n\nOtherwise the byte window exceeds twice the gap from the largest acknowledged number.\n\nAn invalid acknowledgement order or a range needing more than four bytes raises code 10."},
+   "Select the shortest packet-number length bits, zero through three, under RFC 9000 §17.1.\n\nAny acknowledgement must be for this sender in the same connection and packet-number space.\n\nWith no acknowledgement, the selected bytes hold the full number.\n\nOtherwise the byte window exceeds twice the gap from the largest acknowledged number.\n\nAn acknowledged number that is not earlier raises code 10.\n\nA range needing more than four bytes raises code 11."},
   {"summary": "Write the low packet-number bytes (RFC 9000 §17.1).",
    "signature": "(width: int, number: int) -> bytes",
    "operation": "EthLib.Networking.Quic.Exports.packetNumberEncodeExport",

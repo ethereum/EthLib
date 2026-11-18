@@ -153,28 +153,49 @@ def test_packet_number_width_near_protocol_limit() -> None:
     assert quic.decode_packet_number(0, 255, number) == number
 
 
-@pytest.mark.parametrize(
-    ("number", "largest_acked"), [(0, 0), (1, 2), (100 + 2**31, 100), (2**32, None)]
-)
-def test_packet_number_width_rejections(number: int, largest_acked: int | None) -> None:
-    # RFC 9000 §§12.3 and 17.1: increasing packet numbers and a field of at most four bytes.
-    # The error retains both inputs, including whether an acknowledgement was available.
-    acknowledged = "none" if largest_acked is None else f"(some {largest_acked})"
+@pytest.mark.parametrize(("number", "largest_acked"), [(0, 0), (1, 2), (2**62 - 1, 2**62 - 1)])
+def test_packet_number_width_rejects_acknowledgement_not_earlier(
+    number: int, largest_acked: int
+) -> None:
+    # RFC 9000 §12.3: packet numbers increase, so an acknowledgement precedes the next packet.
     message = (
-        "QUIC packet number rejected: EthLib.Networking.Quic.Packet.WidthError.invalid "
-        f"{number} {acknowledged}"
+        "QUIC packet number rejected: "
+        "EthLib.Networking.Quic.Packet.WidthError.acknowledgedNotEarlier "
+        f"{number} {largest_acked}"
     )
     with raises(quic.QuicError, message) as info:
         quic.packet_number_width(number, largest_acked)
     assert info.value.code == 10
 
 
-@pytest.mark.parametrize(("number", "largest_acked"), [(2**62, None), (1, 2**62)])
-def test_packet_number_width_rejects_values_outside_protocol(
+@pytest.mark.parametrize(
+    ("number", "largest_acked"), [(100 + 2**31, 100), (2**32, None), (2**62 - 1, 0)]
+)
+def test_packet_number_width_rejects_range_above_four_bytes(
     number: int, largest_acked: int | None
 ) -> None:
+    # RFC 9000 §17.1: the packet-number field holds at most four bytes.
+    # The error retains both inputs, including whether an acknowledgement was available.
+    acknowledged = "none" if largest_acked is None else f"(some {largest_acked})"
+    message = (
+        "QUIC packet number rejected: EthLib.Networking.Quic.Packet.WidthError.rangeTooLarge "
+        f"{number} {acknowledged}"
+    )
+    with raises(quic.QuicError, message) as info:
+        quic.packet_number_width(number, largest_acked)
+    assert info.value.code == 11
+
+
+@pytest.mark.parametrize(
+    ("number", "largest_acked", "outside"),
+    [(2**62, None, 2**62), (1, 2**62, 2**62), (2**64, None, 2**64), (1, 2**64, 2**64)],
+)
+def test_packet_number_width_rejects_values_outside_protocol(
+    number: int, largest_acked: int | None, outside: int
+) -> None:
     # RFC 9000 §17.1 bounds packet numbers below 2^62, checked by the typed converter.
-    message = f"expected an int below {2**62}, got {2**62}"
+    # Values from 2^64 on reach the converter through a separate hexadecimal path.
+    message = f"expected an int below {2**62}, got {outside}"
     with raises(quic.QuicError, message) as info:
         quic.packet_number_width(number, largest_acked)
     assert info.value.code == 0
