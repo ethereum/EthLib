@@ -63,7 +63,7 @@ private def fallGap (inc down effective low : ℕ) : ℕ :=
   if effective ≤ low + down then 0 else effective - (low - low % inc)
 
 /-- A balance rounded down to an increment grows with the balance. -/
-private theorem rounded_mono (inc : ℕ) {low high : ℕ} (le : low ≤ high) :
+theorem rounded_mono (inc : ℕ) {low high : ℕ} (le : low ≤ high) :
     low - low % inc ≤ high - high % inc := by
   have one := Nat.mod_add_div low inc
   have two := Nat.mod_add_div high inc
