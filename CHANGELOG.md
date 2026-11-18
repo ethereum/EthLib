@@ -93,6 +93,8 @@ Not yet released.
     Its window reserve and its receivers' exits read one reserve value; the headlines pass `exitReserve`.
   - `Execution.rootViableAt_of_checked` gives that viability for the root of a checked call.
   - `Store.not_isOneConfirmed_of_slot_eq_current` leaves a block at the current slot unconfirmed.
+  - `Execution.currentSlot_le_of_time_le` orders the current slots of honest stores at ordered times; `Execution.previousSlot_le_of_time_le` keeps its statement and reads it.
+    Both are in `ForkChoice/VoteDelivery.lean`; `Execution.previousSlot_le_of_time_le` moves there from `FastConfirmation/HistoricalTransport.lean`.
   - `Store.ForwardReachable.justified_origins_epoch`, `Store.ForwardReachable.pulledUp_le_unrealized`, `Store.Reachable.justified_epoch_le_unrealized` and `Execution.unrealizedJustified_epoch_le_of_le` bound the justified checkpoints of a store.
     `Store.onBlock_pulledUp` gives the pull-up of a block that the store adds, which their block steps read.
   - `Store.adversaryRange_start` and `Store.ForwardReachableWith.supportersOf_mem_committees_of_near` read the adversary's range of a block and its committees; `Store.ForwardReachableWith.supportersOf_mem_committees` now reads the second.

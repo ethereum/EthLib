@@ -219,25 +219,8 @@ private theorem finalizedOrder {Δ : ℕ} {anchor : Store preset fork} {last : �
     obtain ⟨blockHeld, stateHeld⟩ := carry known stored read.1
     -- The receiver's clock is at or after the sender's.
     obtain ⟨currentW, currentWOk⟩ := (forward w receiver k).exists_getCurrentSlot slots
-    have genesisU := (e.clock_bounds u n).1
-    have genesisW := (e.clock_bounds w k).1
-    rw [start u sender] at genesisU
-    rw [start w receiver] at genesisW
-    have timeU := (e.clock_bounds u n).2.2
-    have startW := (e.clock_bounds w k).2.1
-    rw [start u sender] at timeU
-    rw [start w receiver] at startW
-    have timeW := upToDate.1
-    have timeLe : ((e.world n).state u).timeMs ≤ ((e.world k).state w).timeMs := by
-      apply UInt64.le_iff_toNat_le.mpr
-      have := UInt64.le_iff_toNat_le.mp startW
-      omega
-    have slotLe : currentU ≤ currentW := by
-      unfold Store.getCurrentSlot at currentUOk currentWOk
-      rw [genesisU] at currentUOk
-      rw [genesisW] at currentWOk
-      exact computeSlotAtTimeMs_mono timeLe (mapError_ok_iff.mp currentUOk)
-        (mapError_ok_iff.mp currentWOk)
+    have slotLe := e.currentSlot_le_of_time_le start sender receiver (by omega) upToDate
+      currentUOk currentWOk
     have epochLe : computeEpochAtSlot preset currentU ≤ computeEpochAtSlot preset currentW :=
       UInt64.le_iff_toNat_le.mpr (epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp slotLe))
     rw [same] at finalLe
@@ -1669,8 +1652,6 @@ private theorem observedStart {Δ : ℕ} {anchor : Store preset fork} {limit : �
       CrossStoreDirectSafetyEvidence (e := e) pre limit)
     {u : ValidatorIndex} (caller : u ∈ J) {events : List ℕ} {firstSlot : Slot}
     (anchorBefore : getCurrentEpoch anchorState < computeEpochAtSlot preset firstSlot)
-    (upToDate : ∀ n ∈ events, UpToDate config checks sources (e.world n).time
-      ((e.world n).view u) ((e.world n).state u))
     (atSlots : ∀ i n, events[i]? = some n → ∃ slot begin,
       ((e.world n).state u).getCurrentSlot config = .ok slot ∧
       slot.toNat = firstSlot.toNat + i ∧
@@ -1862,26 +1843,13 @@ private theorem observedStart {Δ : ℕ} {anchor : Store preset fork} {limit : �
   refine ⟨realized, ?_⟩
   -- Each receiver is in a later epoch than the previous call, so it has justified the epoch.
   intro w receiver k afterCall kBound current
-  have genesisN := (e.clock_bounds u n).1
-  have genesisW := (e.clock_bounds w k).1
-  rw [start u caller] at genesisN
-  rw [start w receiver] at genesisW
-  have timeN := (upToDate n nMem).1
-  have timeW := current.1
-  have timeLe : ((e.world n).state u).timeMs ≤ ((e.world k).state w).timeMs :=
-    UInt64.le_iff_toNat_le.mpr (by omega)
   refine observedOrder sync slots positive window preGloas admitted anchored sound anchorSlot
     start (anchor_le_epochStart anchorSlot anchorBoundary) nonzero agree crossFinal caller
     receiver order callBound (by omega) kBound current realized ?_
   intro currentM currentW currentMOk currentWOk
   obtain rfl : slotM = currentM := Except.ok.inj (slotMOk.symm.trans currentMOk)
-  have slotLe : slotN ≤ currentW := by
-    have readN := slotNOk
-    unfold Store.getCurrentSlot at readN currentWOk
-    rw [genesisN] at readN
-    rw [genesisW] at currentWOk
-    exact computeSlotAtTimeMs_mono timeLe (mapError_ok_iff.mp readN)
-      (mapError_ok_iff.mp currentWOk)
+  have slotLe := e.currentSlot_le_of_time_le start caller receiver afterCall current slotNOk
+    currentWOk
   have epochLe := epoch_le_of_slot_le (preset := preset) _ _ (UInt64.le_iff_toNat_le.mp slotLe)
   exact UInt64.lt_iff_toNat_lt.mpr (by omega)
 
@@ -2299,7 +2267,7 @@ private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : S
       ctx.slots
       ctx.positive ctx.preGloas ctx.admitted ctx.long ctx.window ctx.fits ctx.anchored ctx.sound
       ctx.anchorSlot ctx.anchorBoundary ctx.start ctx.bounded ctx.roots (.inl good.agree)
-      (.inl good.finality) ctx.caller ctx.anchorEpochBefore ctx.upToDate ctx.atSlots calls nBound
+      (.inl good.finality) ctx.caller ctx.anchorEpochBefore ctx.atSlots calls nBound
       slotOk replaces
     rcases rest with ⟨-, later⟩ | collision | justified | direct
     rotate_left
@@ -2739,29 +2707,9 @@ private theorem walk_holds [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store
   obtain ⟨x, xJ, m, referenceSlot, finish, limitLe, xCurrent, referenceOk, finishOk⟩ :=
     ctx.reference
   have reserve := reserveAll x xJ m referenceSlot finish limitLe xCurrent referenceOk finishOk
-  -- The reference slot is no earlier than the call slot.
-  have slotLe : slot ≤ referenceSlot := by
-    have genesisU := (e.clock_bounds u n).1
-    have genesisX := (e.clock_bounds x m).1
-    rw [ctx.start u ctx.caller] at genesisU
-    rw [ctx.start x xJ] at genesisX
-    have timeLe : ((e.world n).state u).timeMs ≤ ((e.world m).state x).timeMs := by
-      rw [UInt64.le_iff_toNat_le, current.1, xCurrent.1]
-      omega
-    have callRead := slotOk
-    have referenceRead := referenceOk
-    unfold Store.getCurrentSlot at callRead referenceRead
-    rw [genesisU] at callRead
-    rw [genesisX] at referenceRead
-    exact computeSlotAtTimeMs_mono timeLe (mapError_ok_iff.mp callRead)
-      (mapError_ok_iff.mp referenceRead)
-  have lastLe : last ≤ finish := by
-    obtain ⟨-, lastValue⟩ := subChecked_ok_iff.mp lastOk
-    obtain ⟨finishLe, finishValue⟩ := subChecked_ok_iff.mp finishOk
-    have := UInt64.le_iff_toNat_le.mp slotLe
-    rw [UInt64.le_iff_toNat_le]
-    simp only [UInt64.toNat_one] at lastValue finishValue finishLe
-    omega
+  -- The reference store's last slot is no earlier than the call's.
+  have lastLe : last ≤ finish := e.previousSlot_le_of_time_le ctx.start ctx.caller xJ
+    (by omega) xCurrent slotOk referenceOk lastOk finishOk
   -- The range of the adversary and its committees.
   have lower := reached.parentsBelow anchorLe (ctx.absent u ctx.caller n nBound)
     after.confirmedRoot block parent blockFound (Store.block_ok_iff.mp parentOk)
