@@ -497,8 +497,7 @@ They are the keys slashed on this branch after the finalized epoch. -/
 theorem slashedR_eq (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).slashedR =
       ((pinTerms config state ancestor finalizedState).positions.filter fun i =>
-        (pinTerms config state ancestor finalizedState).slashedRB i = true).card := by
-  simp [pinTerms]
+        (pinTerms config state ancestor finalizedState).slashedRB i = true).card := rfl
 
 /-- The copy splits `queues` into its deposit part and its exit and consolidation part. -/
 theorem queues_split (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
@@ -528,8 +527,7 @@ theorem queueKeys_unfold (config : Config)
 theorem lowKeys_eq (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).lowKeys =
       ((pinTerms config state ancestor finalizedState).positions.filter fun i =>
-        (pinTerms config state ancestor finalizedState).lowB i = true).card := by
-  simp [pinTerms]
+        (pinTerms config state ancestor finalizedState).lowB i = true).card := rfl
 
 /-! ## D-1's setting -/
 
