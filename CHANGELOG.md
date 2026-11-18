@@ -227,7 +227,7 @@ Not yet released.
   The store holds its justified state because an honest vote for that checkpoint reaches it by the next slot (`VoteAt.accepted_at_next_slot`), and `Handles.checkpointStates_of_found` keeps it.
   `Store.getAttestationScore_eq_of_checked`, `Store.stake_supportersOf_eq_sum`, `Store.isAncestor_ok_of_orphans_le` and `Store.onAttestation_eq_of_reads` are the steps that existing proofs now share.
   `Execution.genesisTimeMs_eq_of_honest` and `Execution.getCurrentSlot_of_slot_start` read an honest receiver's genesis time and its slot at a slot start.
-  `nextSlotStart_le_clock` in `ForkChoice/ForwardClock.lean` shows that the slot after one before the current slot exists and starts by the store's clock.
+  `Store.nextSlotStart_le_clock` in `ForkChoice/ForwardClock.lean` shows that the slot after one before the current slot exists and starts by the store's clock.
 
 ### Changes that break callers
 

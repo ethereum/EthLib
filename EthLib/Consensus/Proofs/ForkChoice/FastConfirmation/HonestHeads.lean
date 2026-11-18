@@ -382,7 +382,7 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have deadlineCopy := deadline
   obtain ⟨slotTime, due, slotTimeOk, dueOk, -⟩ := deadlineCopy
   obtain ⟨nextOk, followingTime, followingTimeOk, followingLe⟩ :=
-    nextSlotStart_le_clock (genesisOf k) currentOk before
+    Store.nextSlotStart_le_clock (genesisOf k) currentOk before
   rw [upToDate.1] at followingLe
   have dueLt := fits.due_lt_slot nextOk slotTimeOk followingTimeOk dueOk
   have beforeBoundary := fits.before_boundary nextOk slotTimeOk followingTimeOk deadline

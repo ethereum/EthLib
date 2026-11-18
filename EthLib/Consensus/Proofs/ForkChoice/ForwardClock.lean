@@ -223,8 +223,6 @@ theorem ForwardReachable.exists_getCurrentSlot
   | inclusionList _ step holds =>
     simpa only [(onInclusionList_sameClock step).getCurrentSlot] using holds
 
-end Store
-
 open Uint64 in
 /-- The slot after one before a store's current slot exists, and starts by the store's clock.
 
@@ -240,5 +238,7 @@ theorem nextSlotStart_le_clock {config : Config} {genesisTimeMs : UInt64}
   change computeSlotAtTimeMs config _ _ = .ok current at read
   rw [genesisEq] at read
   exact nextSlotStart_le_of_slotAtTime read before
+
+end Store
 
 end EthLib.Consensus

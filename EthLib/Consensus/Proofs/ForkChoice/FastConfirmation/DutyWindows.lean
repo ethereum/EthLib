@@ -65,7 +65,7 @@ public theorem duty_window_of_slot_le {anchor : Store preset fork} {Δ : ℕ}
   rw [callStartOk, Except.ok.injEq] at callStartOk'
   subst callStart'
   -- The deadline and the delay fall before the next slot, which starts by the store's clock.
-  obtain ⟨nextOk, following, followingOk, followingLe⟩ := nextSlotStart_le_clock
+  obtain ⟨nextOk, following, followingOk, followingLe⟩ := Store.nextSlotStart_le_clock
     (e.genesisTimeMs_eq_of_honest start honest genesis receiver k) currentOk before
   have bound := fits.before_boundary nextOk dutyStartOk followingOk deadline
   refine ⟨?_, ?_⟩
