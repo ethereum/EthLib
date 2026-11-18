@@ -348,7 +348,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let newKeyFloor := 2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
     preset.MAX_EFFECTIVE_BALANCE.toNat / p.MIN_SLASHING_PENALTY_QUOTIENT.toNat -
       preset.downwardBand - inc
-  let newKeySlack := newKeyFloor - (config.EJECTION_BALANCE.toNat - inc)
+  let exitFloor := max 1 (min (config.EJECTION_BALANCE.toNat - inc) newKeyFloor)
+  let newKeySlack := newKeyFloor - exitFloor
   let lowKeys := (positions.filter fun i =>
     (validator i).any (fun v => decide (finalized < v.withdrawableEpoch.toNat) &&
       decide (v.activationEpoch.toNat ≤ epoch.toNat)) ∧
@@ -367,7 +368,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let newKeySeats := depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope /
     max 1 newKeySlack
   let queueKeys := (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry) /
-    (config.EJECTION_BALANCE.toNat - inc) + 2 + lowKeys + newKeySeats
+    exitFloor + 2 + lowKeys + newKeySeats
   -- The largest gain rate of one key, its gain rate at the largest effective balance.
   let gainRateMax := capMax / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
@@ -426,8 +427,16 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     (effective i + rise i)
   let consolidationGain := consolidationsX / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
+  let otherCredits := 3 * (2 * ((∑ i ∈ positions, ebUp i) +
+        depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
+        consolidationsX + depth * proposerCredit +
+        depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) /
+          p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+      depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope + depth * syncProposer)
+  let otherGain := otherCredits / inc * perIncrement *
+    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   let creditGain := if 11 * depth * gainRateMax < capMax
-    then (33 * depth * consolidationGain + 9) / 10
+    then (33 * depth * consolidationGain + 11 * depth * otherGain + 9) / 10
     else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
   let pendingR := if tight then 0 else
     ∑ i ∈ positions with (validator i).any (fun v =>

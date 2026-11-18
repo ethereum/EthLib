@@ -49,12 +49,16 @@ structure DepartureQueueCall where
 private def departureQueuePotential (high cap : Nat) (epoch : Epoch) (left : Gwei) : Nat :=
   if epoch.toNat ≤ high then left.toNat + (high - epoch.toNat) * cap else 0
 
-/-- A call cannot move the open queue epoch backwards. -/
-private theorem DepartureQueueCall.epoch_mono (call : DepartureQueueCall) :
-    call.earliest.toNat ≤ call.epoch.toNat := by
+/-- A call exits at or after the open queue epoch and at or after its first epoch. -/
+private theorem DepartureQueueCall.epoch_ge (call : DepartureQueueCall) :
+    call.earliest.toNat ≤ call.epoch.toNat ∧ call.first.toNat ≤ call.epoch.toNat := by
   have placed := UInt64.le_iff_toNat_le.mp (churnQueue_spend call.computed).1
   rw [Base.Uint64.toNat_max] at placed
-  omega
+  exact ⟨by omega, by omega⟩
+
+/-- A call cannot move the open queue epoch backwards. -/
+private theorem DepartureQueueCall.epoch_mono (call : DepartureQueueCall) :
+    call.earliest.toNat ≤ call.epoch.toNat := call.epoch_ge.1
 
 /-- Spending beyond the horizon counts nothing and leaves no usable capacity inside it. -/
 private theorem DepartureQueueCall.window_spend (call : DepartureQueueCall) (high cap : Nat)
@@ -134,8 +138,8 @@ private theorem departureCharges_step_indices {x y : ForkedBeaconState preset}
       exact List.nodup_range' _
     exact List.pairwise_map.mp unique
 
-/-- Once assigned, an exit cannot generate a second charge later in the run. -/
-private theorem departureCharges_run_indices {x y : ForkedBeaconState preset}
+/-- A run charges each registry index at most once. -/
+theorem departureCharges_run_indices {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) : (tail.departureCharges.map (·.index)).Nodup := by
   induction tail with
   | nil => simp [Run.departureCharges]
@@ -531,7 +535,7 @@ private theorem DepartureCoverage.foldlM {f : Fork} {α ε : Type}
     (electra : .pectra ≤ f) (cap : Nat) (good : BeaconState preset f → Prop)
     (localTrace : ∀ s item t, operation s item = .ok t → good s →
       ∃ calls : List (IndexedDepartureCall preset config),
-        DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
+        DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat) calls ∧
         DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
           (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
         DepartureCoverage s t calls ∧ (∀ called ∈ calls, called.call.rate.toNat ≤ cap) ∧
@@ -544,7 +548,7 @@ private theorem DepartureCoverage.foldlM {f : Fork} {α ε : Type}
     {items : List α} {s t : BeaconState preset f} (start : good s)
     (ok : items.foldlM operation s = .ok t) :
     ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
+      DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat) calls ∧
       DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
         (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
       DepartureCoverage s t calls ∧ (∀ called ∈ calls, called.call.rate.toNat ≤ cap) ∧
@@ -818,7 +822,7 @@ private theorem queueConsolidation_indexedTrace_site {fork : Fork} {s t : Beacon
     (sourceFound : getValidator s sourceIndex = .ok source)
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
     ∃ called : IndexedDepartureCall preset config,
-      (getCurrentEpoch s).toNat ≤ called.call.first.toNat ∧
+      (getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ called.call.first.toNat ∧
       DepartureQueueTrace (s.earliestConsolidationEpoch electra)
         (s.consolidationBalanceToConsume electra) [called.call]
         (t.earliestConsolidationEpoch electra) (t.consolidationBalanceToConsume electra) ∧
@@ -1320,7 +1324,8 @@ private theorem exit_site_bounds {fork : Fork} {s : BeaconState preset fork}
     {calls : List (IndexedDepartureCall preset config)}
     (sites : ∀ called ∈ calls, exitChurnLimit config s = .ok called.call.rate ∧
       computeActivationExitEpoch preset (getCurrentEpoch s) = .ok called.call.first) :
-    DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧ ∀ called ∈ calls,
+    DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat)
+      calls ∧ ∀ called ∈ calls,
       called.call.rate.toNat ≤ exitCap := by
   refine ⟨fun called member => ?_, fun called member => below _ (sites called member).1⟩
   have first := (computeActivationExitEpoch_ok_iff.mp (sites called member).2).2
@@ -1661,7 +1666,7 @@ private theorem callsFrom_of_sites {fork : Fork} {s : BeaconState preset fork}
     {calls : List (IndexedDepartureCall preset config)}
     (sites : ∀ called ∈ calls, ∃ site : BeaconState preset fork, site.slot = s.slot ∧
       computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first) :
-    DepartureCallsFrom (getCurrentEpoch s).toNat calls := by
+    DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat) calls := by
   intro called member
   obtain ⟨site, slot, first⟩ := sites called member
   have bound := (computeActivationExitEpoch_ok_iff.mp first).2
@@ -1677,7 +1682,8 @@ private theorem exit_sites_bounds {fork : Fork} {s : BeaconState preset fork} (e
     (sites : ∀ called ∈ calls, ∃ site : BeaconState preset fork, site.slot = s.slot ∧
       ExitRateBelow config exitCap site ∧ exitChurnLimit config site = .ok called.call.rate ∧
       computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first) :
-    DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧ ∀ called ∈ calls,
+    DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat)
+      calls ∧ ∀ called ∈ calls,
       called.call.rate.toNat ≤ exitCap := by
   refine ⟨callsFrom_of_sites fun called member => ?_, fun called member => ?_⟩
   · obtain ⟨site, slot, -, -, first⟩ := sites called member
@@ -1692,7 +1698,7 @@ private theorem attesterSlashing_indexedTrace {fork : Fork} {s t : BeaconState p
     (exitCap : Nat) (below : ExitRateBelow config exitCap s)
     (ok : processAttesterSlashing config checks s slashing = .ok t) :
     ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
+      DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat) calls ∧
       DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
         (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
       DepartureCoverage s t calls ∧ (∀ called ∈ calls,
@@ -1711,7 +1717,7 @@ private theorem proposerSlashing_indexedTrace {fork : Fork} {s t : BeaconState p
     (exitCap : Nat) (below : ExitRateBelow config exitCap s)
     (ok : processProposerSlashing config checks s slashing = .ok t) :
     ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
+      DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat) calls ∧
       DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
         (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
       DepartureCoverage s t calls ∧ (∀ called ∈ calls,
@@ -1808,7 +1814,7 @@ private theorem epoch_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
     (exitCap : Nat) (below : ExitRateBelow config exitCap s)
     (ok : processEpoch config checks s = .ok t) :
     ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
+      DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat) calls ∧
       DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
         (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
       DepartureCoverage s t calls ∧ (∀ called ∈ calls,
@@ -1839,7 +1845,7 @@ private theorem slot_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
     (exitCap : Nat) (below : ExitRateBelow config exitCap s)
     (ok : advanceSlot config checks s = .ok t) :
     ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
+      DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat) calls ∧
       DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
         (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
       DepartureCoverage s t calls ∧ (∀ called ∈ calls,
@@ -1912,7 +1918,7 @@ private theorem withdrawalRequests_indexedTrace {fork : Fork} {s t : BeaconState
     (exitCap : Nat) (below : ExitRateBelow config exitCap s)
     (ok : requests.foldlM (processWithdrawalRequest config · electra ·) s = .ok t) :
     ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
+      DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat) calls ∧
       DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
         (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
       DepartureCoverage s t calls ∧ (∀ called ∈ calls,
@@ -1971,7 +1977,7 @@ private theorem voluntaryExits_indexedTrace {fork : Fork} {s t : BeaconState pre
     (exitCap : Nat) (below : ExitRateBelow config exitCap s)
     (ok : exits.foldlM (processVoluntaryExit config checks) s = .ok t) :
     ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
+      DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat) calls ∧
       DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
         (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
       DepartureCoverage s t calls ∧ (∀ called ∈ calls,
@@ -2203,7 +2209,7 @@ private theorem consolidationRequestsSites_indexedTrace_sites {fork : Fork}
     (rates : ∀ site ∈ sites, ∀ (_h : .pectra ≤ site.fork) (rate : Gwei),
       getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap) :
     ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
+      DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat) calls ∧
       DepartureQueueTrace (s.earliestConsolidationEpoch electra)
         (s.consolidationBalanceToConsume electra) (calls.map (·.call))
         (t.earliestConsolidationEpoch electra) (t.consolidationBalanceToConsume electra) ∧
@@ -2317,7 +2323,8 @@ private theorem executionRequests_coverage_sites {fork : Fork} (electra : .pectr
     (rates : ∀ site ∈ sites, ∀ (_h : .pectra ≤ site.fork) (rate : Gwei),
       getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap) :
     ∃ exits consolidations : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat (exits ++ consolidations) ∧
+      DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat)
+        (exits ++ consolidations) ∧
       DepartureCoverage s t (exits ++ consolidations) ∧
       DepartureQueueTrace (deposited.earliestExitEpoch electra)
         (deposited.exitBalanceToConsume electra) (exits.map (·.call))
@@ -2464,7 +2471,8 @@ private theorem operationsPrefix_coverage {fork : Fork} (electra : .pectra ≤ f
       (processVoluntaryExit config checks) deposited = .ok exited)
     (changedOk : processBlsToExecutionChanges config checks exited body = .ok changed) :
     ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧ DepartureCoverage s changed calls ∧
+      DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat)
+        calls ∧ DepartureCoverage s changed calls ∧
       DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
         (calls.map (·.call)) (changed.earliestExitEpoch electra)
         (changed.exitBalanceToConsume electra) ∧
@@ -2733,7 +2741,8 @@ private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fo
         getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap) :
     ∃ sites, blockConsolidationSites config checks engine s block = .ok sites ∧
     ∃ exits consolidations : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat (exits ++ consolidations) ∧
+      DepartureCallsFrom ((getCurrentEpoch s).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat)
+        (exits ++ consolidations) ∧
       DepartureCoverage s t (exits ++ consolidations) ∧
       DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
         (exits.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
@@ -3225,7 +3234,8 @@ private theorem step_indexedTrace_sites_cap {x y : ForkedBeaconState preset}
       ∀ (_h : .pectra ≤ site.fork) (rate : Gwei),
         getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap) :
     ∃ exits consolidations : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch x.state).toNat (exits ++ consolidations) ∧
+      DepartureCallsFrom ((getCurrentEpoch x.state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat)
+        (exits ++ consolidations) ∧
       DepartureCoverage x.state y.state (exits ++ consolidations) ∧
       DepartureQueueTrace (x.state.earliestExitEpoch electra)
         (x.state.exitBalanceToConsume electra) (exits.map (·.call))
@@ -3298,7 +3308,8 @@ private theorem step_indexedTrace_sites {x y : ForkedBeaconState preset}
       ∀ (_h : .pectra ≤ site.fork) (rate : Gwei),
         getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap) :
     ∃ exits consolidations : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch x.state).toNat (exits ++ consolidations) ∧
+      DepartureCallsFrom ((getCurrentEpoch x.state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat)
+        (exits ++ consolidations) ∧
       DepartureCoverage x.state y.state (exits ++ consolidations) ∧
       DepartureQueueTrace (x.state.earliestExitEpoch electra)
         (x.state.exitBalanceToConsume electra) (exits.map (·.call))
@@ -3329,7 +3340,8 @@ private theorem run_indexedTrace_sites_cap {x y : ForkedBeaconState preset}
       ∀ (_h : .pectra ≤ site.fork) (rate : Gwei),
         getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap) :
     ∃ exits consolidations : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch x.state).toNat (exits ++ consolidations) ∧
+      DepartureCallsFrom ((getCurrentEpoch x.state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat)
+        (exits ++ consolidations) ∧
       (∀ charge ∈ tail.departureCharges, ∃ called ∈ exits ++ consolidations,
         called.index = some charge.index ∧ called.call.epoch.toNat = charge.epoch ∧
           called.call.amount.toNat = charge.amount) ∧
@@ -3382,7 +3394,9 @@ private theorem run_indexedTrace_sites_cap {x y : ForkedBeaconState preset}
       ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
     · have ordered := UInt64.le_iff_toNat_le.mp
         (currentEpoch_le_of_chainSteps pre.chainSteps)
-      have lastFrom := DepartureCallsFrom.mono lastFrom ordered
+      have lastFrom := DepartureCallsFrom.mono
+        (start := (getCurrentEpoch x.state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat)
+        lastFrom (by omega)
       intro called member
       simp only [List.mem_append] at member
       rcases member with (one | two) | (three | four)
@@ -3429,7 +3443,8 @@ private theorem run_indexedTrace_sites {x y : ForkedBeaconState preset}
       ∀ (_h : .pectra ≤ site.fork) (rate : Gwei),
         getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap) :
     ∃ exits consolidations : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch x.state).toNat (exits ++ consolidations) ∧
+      DepartureCallsFrom ((getCurrentEpoch x.state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat)
+        (exits ++ consolidations) ∧
       (∀ charge ∈ tail.departureCharges, ∃ called ∈ exits ++ consolidations,
         called.index = some charge.index ∧ called.call.epoch.toNat = charge.epoch ∧
           called.call.amount.toNat = charge.amount) ∧
@@ -3522,7 +3537,8 @@ private theorem exit_calls_le_window_electra_cap {x y : ForkedBeaconState preset
       {available left : Gwei}
       (trace : DepartureQueueTrace first available (calls.map (·.call)) last left) (cap : Nat)
       (rates : ∀ called ∈ calls, called.call.rate.toNat ≤ cap)
-      (firsts : DepartureCallsFrom (getCurrentEpoch x.state).toNat calls) :
+      (firsts : DepartureCallsFrom
+        ((getCurrentEpoch x.state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat) calls) :
       ((calls.filter fun called => called.call.epoch.toNat ≤ high + 1).map
         fun called => called.call.amount.toNat).sum ≤
           (if first.toNat ≤ high + 1 then available.toNat else 0) +
@@ -3535,7 +3551,8 @@ private theorem exit_calls_le_window_electra_cap {x y : ForkedBeaconState preset
       (by
         intro call member
         obtain ⟨called, present, rfl⟩ := List.mem_map.mp member
-        exact firsts called present)
+        have first := firsts called present
+        omega)
     simpa only [List.filter_map, List.map_map, Function.comp_def,
       Nat.add_assoc, Nat.reduceAdd] using budget
   have exitBound := queueBound exitTrace exitCap exitRates
@@ -4185,8 +4202,7 @@ theorem departureCharges_epoch_ge {x y : ForkedBeaconState preset}
       (Nat.le_trans electra step.chainStep.fork_le) (2 ^ 64)
       (fun _ _ _ rate _ => (UInt64.toNat_lt rate).le)
     obtain ⟨called, present, -, epoch, -⟩ := covered.step_charges step charge member
-    have placed := UInt64.le_iff_toNat_le.mp (churnQueue_spend called.call.computed).1
-    rw [Uint64.toNat_max] at placed
+    have placed := called.call.epoch_ge.2
     have first := firsts called present
     omega
   · obtain ⟨⟨old, i⟩, present, added⟩ := List.mem_filterMap.mp member
@@ -4205,6 +4221,22 @@ theorem departureCharges_epoch_ge {x y : ForkedBeaconState preset}
         · exact False.elim (assigned.2 (same.trans assigned.1))
         · exact lower
       · cases added
+
+/-- Each departure charge of a run exits at least the seed lookahead after the next epoch. -/
+theorem Run.departureCharges_epoch_ge_start {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (electra : .pectra ≤ x.fork)
+    (early : y.fork < .glamsterdam) :
+    ∀ c ∈ tail.departureCharges,
+      (getCurrentEpoch x.state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ c.epoch := by
+  obtain ⟨exits, consolidations, firsts, matched, -⟩ :=
+    run_indexedTrace_sites tail electra early
+      (Nat.le_trans electra (fork_le_of_chainSteps tail.chainSteps)) (2 ^ 64)
+      (fun _ _ _ rate _ => (UInt64.toNat_lt rate).le)
+  intro charge member
+  obtain ⟨called, present, -, epoch, -⟩ := matched charge member
+  have placed := called.call.epoch_ge.2
+  have first := firsts called present
+  omega
 
 private theorem pre_electra_charge_step_bounds {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (step : Step config checks x y)
@@ -6445,9 +6477,9 @@ private theorem registry_fold_exit_rates
   obtain ⟨calls, trace, coverage, appended, sites⟩ :=
     registry_fold_exit_sites electra early later ok
   refine ⟨calls, trace, coverage, appended, ?_, ?_⟩
-  · exact callsFrom_of_sites fun called member => by
+  · exact (callsFrom_of_sites (s := s) (calls := calls) fun called member => by
       obtain ⟨site, _, slot, _, first⟩ := sites called member
-      exact ⟨site, slot, first⟩
+      exact ⟨site, slot, first⟩).mono (by omega)
   intro called member
   obtain ⟨site, kept, slot, rate, first⟩ := sites called member
   obtain ⟨total, totalRead⟩ := exitChurnLimit_total early rate
@@ -6487,18 +6519,18 @@ private theorem block_exit_rates
   obtain ⟨calls, cons, covered, trace, appended, consTrace, entries, consSites, sites⟩ :=
     block_exit_sites electra early ok
   refine ⟨calls, cons, covered, trace, appended, consTrace, entries, ?_, ?_, ?_, ?_⟩
-  · exact callsFrom_of_sites fun called member => by
+  · exact (callsFrom_of_sites (s := s) (calls := cons) fun called member => by
       obtain ⟨site, _, slot, _, first⟩ := consSites called member
-      exact ⟨site, slot, first⟩
+      exact ⟨site, slot, first⟩).mono (by omega)
   · intro called member
     obtain ⟨site, kept, _, rate, _⟩ := consSites called member
     obtain ⟨total, totalRead⟩ := consolidationChurnLimit_total early rate
     have read : getTotalActiveBalance s = .ok total :=
       (exit_site_total_eq early kept).symm.trans totalRead
     exact consRate early totalRead rate (ceiling total read)
-  · exact callsFrom_of_sites fun called member => by
+  · exact (callsFrom_of_sites (s := s) (calls := calls) fun called member => by
       obtain ⟨site, _, slot, _, first⟩ := sites called member
-      exact ⟨site, slot, first⟩
+      exact ⟨site, slot, first⟩).mono (by omega)
   intro called member
   obtain ⟨site, kept, slot, rate, first⟩ := sites called member
   obtain ⟨total, totalRead⟩ := exitChurnLimit_total early rate
@@ -6838,14 +6870,7 @@ theorem run_partial_queue_kept {cost : BalanceEvent preset → Nat}
   intro entry member
   obtain ⟨called, present, found⟩ := List.mem_filterMap.mp member
   have pushed := (called.pushed entry found).2
-  have spent := (churnQueue_spend called.call.computed).1
-  rw [UInt64.max_def] at spent
-  replace spent : called.call.first.toNat ≤ called.call.epoch.toNat := by
-    split at spent
-    · exact UInt64.le_iff_toNat_le.mp spent
-    · rename_i order
-      exact (Nat.le_of_lt (UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp order))).trans
-        (UInt64.le_iff_toNat_le.mp spent)
+  have spent := called.call.epoch_ge.2
   have first := firsts called present
   omega
 
