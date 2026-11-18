@@ -964,7 +964,6 @@ theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
       (credC tailC highC v.toNat + credN tailC highC v.toNat / 10) + whistC tailC highC v.toNat + (syncF events v.toNat + syncF eventsC v.toNat) +
       slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
       bandR events v.toNat)) : ℕ) := by
-  classical
   have early := h.early
   have term : ∀ v ∈ K4 pulled counted V, ((eC counted v : ℤ) - eR pulled v) ≤
       (((pinTerms config pulled anc fin).rise v.toNat +
