@@ -972,7 +972,37 @@ theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
     cN pulled counted V ≤ ((∑ v ∈ (K4 pulled counted V), ((pinTerms config pulled anc fin).rise v.toNat +
       (credC tailC highC v.toNat + credN tailC highC v.toNat / 10) + whistC tailC highC v.toNat + (syncF events v.toNat + syncF eventsC v.toNat) +
       slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-      bandR events v.toNat)) : ℕ) := sorry
+      bandR events v.toNat)) : ℕ) := by
+  have early := h.early
+  have term : ∀ v ∈ K4 pulled counted V, ((eC counted v : ℤ) - eR pulled v) ≤
+      (((pinTerms config pulled anc fin).rise v.toNat +
+        (credC tailC highC v.toNat + credN tailC highC v.toNat / 10) +
+        whistC tailC highC v.toNat + (syncF events v.toNat + syncF eventsC v.toNat) +
+        slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
+        bandR events v.toNat : ℕ) : ℤ) := by
+    intro v member
+    have active : v ∈ AR pulled := (Finset.mem_filter.mp member).2.1
+    obtain ⟨w, found, -⟩ := active_of_activeVoters early (s := pulled) active
+    have core := key_core h tail high endEpoch replayed tailC highC endEpochC replayedC v.toNat
+      (Array.getElem?_eq_some_iff.mp found).1
+    simp only [eC, eR]
+    push_cast
+    zify at core
+    omega
+  have eq : cN pulled counted V =
+      ∑ v ∈ K4 pulled counted V, ((eC counted v : ℤ) - eR pulled v) := by
+    unfold cN
+    rw [← Finset.sum_filter]
+    congr 1
+    ext v
+    simp only [K4]
+    rw [Finset.mem_filter, Finset.mem_filter]
+    simp only [U, AC, AR, Q, Finset.mem_union]
+    tauto
+  rw [eq]
+  refine le_trans (Finset.sum_le_sum term) (le_of_eq ?_)
+  exact (Nat.cast_sum _ _).symm
+
 
 /-- D-4 (+ D-8 exits): other keys previous-epoch-only in C. A key whose exit R reads is at its
 balance at R plus its rise; any other one is at its balance when its exit starts on C's branch,
