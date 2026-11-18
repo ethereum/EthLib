@@ -1580,19 +1580,17 @@ private theorem rate_arith {I c M T S : ℕ} (scale : 2 ^ 35 ≤ I * c) (size : 
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- From Electra and before Gloas, the previous epoch's active stake of a state reached from a
-guarded state in its window is within three halves of the total of another such state. -/
-private theorem prevStake_band_of_guard {g x y z : ForkedBeaconState preset} {high : ℕ}
+guarded state in its window is within three halves of its total. -/
+private theorem prevStake_band_of_guard {g x z : ForkedBeaconState preset} {high : ℕ}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (parameters : DirectSafety.Parameters preset) (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
     (electra : .pectra ≤ x.fork) (guard : aprioriGuardAt config x high)
-    (toY : Run config checks x y) (yEarly : y.fork < .glamsterdam)
-    (yWithin : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (toZ : Run config checks x z) (zEarly : z.fork < .glamsterdam)
-    (zWithin : (getCurrentEpoch z.state).toNat ≤ high + 1) {yTotal : Gwei}
-    (yOk : getTotalActiveBalance y.state = .ok yTotal) :
+    (zWithin : (getCurrentEpoch z.state).toNat ≤ high + 1) {total : Gwei}
+    (totalOk : getTotalActiveBalance z.state = .ok total) :
     2 * ∑ i ∈ (getActiveValidatorIndices z.state (getPreviousEpoch z.state)).toFinset,
-        effectiveAt z i.toNat ≤ 3 * yTotal.toNat := by
+        effectiveAt z i.toNat ≤ 3 * total.toNat := by
   have notBefore : ¬ x.fork < .pectra := Nat.not_lt_of_ge electra
   have zero : preElectraEpochs config x high = 0 := by
     simp [preElectraEpochs, notBefore]
@@ -1600,16 +1598,15 @@ private theorem prevStake_band_of_guard {g x y z : ForkedBeaconState preset} {hi
   rw [zero] at ratioGuard
   have ratio := ratioGuard (high + 1 - (getCurrentEpoch x.state).toNat) (Nat.zero_le _)
     (by unfold driftHorizon; omega)
-  obtain ⟨yLow, -⟩ := total_within_guard shared genesis parameters caps aligned twoSlots electra
-    guard toY yEarly yWithin yOk
+  obtain ⟨low, -⟩ := total_within_guard shared genesis parameters caps aligned twoSlots electra
+    guard toZ zEarly zWithin totalOk
   obtain ⟨-, previous, -⟩ := ceilingFloor_electra shared toZ high
     ⟨genesis, parameters, caps, aligned, zEarly, zWithin, guard⟩ twoSlots electra
   have index : ix x z ≤ high + 1 - (getCurrentEpoch x.state).toNat := by
     simp only [ix]
     omega
   have mono := stakeCeilingAt_mono (config := config) (x := x) (high := high) electra index
-  simp only [stakeCeilingAt, stakeFloorAt, zero]
-    at yLow previous mono ⊢
+  simp only [stakeCeilingAt, stakeFloorAt, zero] at low previous mono ⊢
   omega
 
 /-- The reward per increment at a state of a run from the finalized state, times the previous
@@ -1641,8 +1638,7 @@ private theorem rate_of_guard (facts : PinPresetFacts preset)
     electra h.guard toM h.early (Nat.le_succ_of_le inside) toP h.early (Nat.le_succ _)
     totalOk pulledOk
   have stake := prevStake_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
-    electra h.guard toM h.early (Nat.le_succ_of_le inside) toM h.early (Nat.le_succ_of_le inside)
-    totalOk
+    electra h.guard toM h.early (Nat.le_succ_of_le inside) totalOk
   have clamp : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ total.toNat := by
     obtain ⟨-, -, value⟩ := getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok totalOk)
     rw [value]
@@ -1658,6 +1654,120 @@ private theorem rate_of_guard (facts : PinPresetFacts preset)
     split <;> simp [UInt64.toNat_div]
   rw [quarter]
   exact rate_arith facts.rewardScale facts.incrementSize facts.reward clamp high band stake
+
+/-- The effective balance of a key that stays on its path is at most the rise of the main regime. -/
+private theorem rise_arith {inc band capFor high finEB eR eC Bc capHigh S U : Nat}
+    (incPos : 0 < inc)
+    (stay : eC = eR ∨ (eC ≤ Bc + band ∧ eC ≤ max finEB (min (Bc - Bc % inc) capHigh)))
+    (aligned : eC % inc = 0) (capped : eC ≤ capFor) (ceiling : Bc ≤ high + S)
+    (slack : S = 0 ∨ inc ≤ U + 1) :
+    eC ≤ eR + (min capFor (min (high + band - (high + band) % inc)
+      (max finEB (high - high % inc))) - eR) + S + U := by
+  rcases stay with same | ⟨boundary, update⟩
+  · omega
+  · have alignedLe : ∀ x, eC ≤ x → eC ≤ x - x % inc := fun x le => by
+      have := rounded_mono inc le
+      rw [aligned] at this
+      simpa using this
+    have first := alignedLe _ (show eC ≤ high + band + S by omega)
+    have second : eC ≤ max finEB (high - high % inc) + S + U := by
+      have r := rounded_mono inc ceiling
+      have a : eC ≤ max finEB (Bc - Bc % inc) := by
+        omega
+      have b : high + S - (high + S) % inc ≤ high - high % inc + S + U := by
+        rcases slack with z | big
+        · subst z; simp only [Nat.add_zero]; omega
+        · have := Nat.mod_lt high incPos
+          have := Nat.mod_lt (high + S) incPos
+          have := Nat.mod_le high inc
+          have := Nat.mod_le (high + S) inc
+          omega
+      omega
+    have third : eC ≤ high + band - (high + band) % inc + S + U := by
+      have b : high + band + S - (high + band + S) % inc ≤
+          high + band - (high + band) % inc + S + U := by
+        rcases slack with z | big
+        · subst z; simp only [Nat.add_zero]; omega
+        · have := Nat.mod_lt (high + band) incPos
+          have := Nat.mod_lt (high + band + S) incPos
+          have := Nat.mod_le (high + band) inc
+          have := Nat.mod_le (high + band + S) inc
+          omega
+      omega
+    omega
+
+/-- A key's effective balance at the end of a run from the finalized state stays that of R, or is at
+most the ceiling that the balance's ceiling allows. -/
+private theorem key_stay {fin pulled counted : BeaconState preset fork}
+    (rC : Run config checks ⟨fork, fin⟩ ⟨fork, counted⟩)
+    (rR : Run config checks ⟨fork, fin⟩ ⟨fork, pulled⟩)
+    (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork)
+    (later : (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch counted).toNat)
+    (i : ℕ) (inside : i < fin.validators.data.size) (Bc capHigh Bp capP : ℕ)
+    (balanceC : ∀ z ∈ rC.balancePath, actualBalanceAt z i ≤ Bc)
+    (capC : ∀ z ∈ rC.balancePath, PinSplit2.capAt z i ≤ capHigh)
+    (balanceR : ∀ z ∈ rR.balancePath, actualBalanceAt z i ≤ Bp)
+    (capR : ∀ z ∈ rR.balancePath, PinSplit2.capAt z i ≤ capP) :
+    effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i =
+        effectiveAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i ∨
+      (effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ Bc + preset.downwardBand ∧
+        effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤
+          max (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i)
+            (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)) := by
+  obtain ⟨ceilC, sameC, afterC, -⟩ :=
+    PinSplit2.Run.effective_ceiling_of_balance_ceiling rC early fulu i inside Bc capHigh balanceC
+      capC
+  by_cases flat : (getCurrentEpoch counted).toNat ≤ (getCurrentEpoch fin).toNat
+  · obtain ⟨-, sameR, -, -⟩ :=
+      PinSplit2.Run.effective_ceiling_of_balance_ceiling rR early fulu i inside Bp capP balanceR
+        capR
+    have atFin : (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch fin).toNat := by omega
+    exact .inl ((sameC flat).trans (sameR atFin).symm)
+  · have after : (getCurrentEpoch fin).toNat < (getCurrentEpoch counted).toNat := by omega
+    exact .inr ⟨afterC after, ceilC⟩
+
+/-- At a state of a run from genesis, a key's effective balance is a whole number of increments. -/
+private theorem effective_aligned {g x : ForkedBeaconState preset}
+    (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
+    (aligned : MaxEffectiveBalancesAligned preset) (i : ℕ) :
+    effectiveAt x i % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
+  have whole := (run.invariant genesis.invariant).aligned aligned
+  cases found : x.state.validators.data[i]? with
+  | none => simp [effectiveAt, found]
+  | some v =>
+    have := congrArg UInt64.toNat (whole v (Array.mem_of_getElem? found))
+    simpa [effectiveAt, found, UInt64.toNat_mod] using this
+
+/-- A key's effective balance on C's branch is at most its balance on R's, plus the main regime of
+the rise, plus the slacks. -/
+private theorem key_rise_main {g : ForkedBeaconState preset}
+    {fin pulled counted : BeaconState preset fork} (shared : Run config checks g ⟨fork, fin⟩)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (maxAligned : MaxEffectiveBalancesAligned preset)
+    (rC : Run config checks ⟨fork, fin⟩ ⟨fork, counted⟩)
+    (rR : Run config checks ⟨fork, fin⟩ ⟨fork, pulled⟩)
+    (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork)
+    (later : (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch counted).toNat)
+    (i : ℕ) (inside : i < fin.validators.data.size) (Bc capHigh Bp capP : ℕ)
+    (balanceC : ∀ z ∈ rC.balancePath, actualBalanceAt z i ≤ Bc)
+    (capC : ∀ z ∈ rC.balancePath, PinSplit2.capAt z i ≤ capHigh)
+    (balanceR : ∀ z ∈ rR.balancePath, actualBalanceAt z i ≤ Bp)
+    (capR : ∀ z ∈ rR.balancePath, PinSplit2.capAt z i ≤ capP)
+    (capFor high S U : ℕ)
+    (capped : effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ capFor)
+    (ceiling : Bc ≤ high + S)
+    (slack : S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1)
+    (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat) :
+    effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤
+      effectiveAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i +
+        (min capFor (min (high + preset.downwardBand -
+              (high + preset.downwardBand) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+            (max (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i)
+              (high - high % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))) -
+          effectiveAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i) + S + U :=
+  rise_arith incPos
+    (key_stay rC rR early fulu later i inside Bc capHigh Bp capP balanceC capC balanceR capR)
+    (effective_aligned (shared.append rC) genesis maxAligned i) capped ceiling slack
 
 /-- The per-key core of the rise.
 
