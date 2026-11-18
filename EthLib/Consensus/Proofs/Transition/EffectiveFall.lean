@@ -831,10 +831,10 @@ def PartialsSame (state after : BeaconState preset fork) : Prop :=
   ∀ electra : .pectra ≤ fork,
     after.pendingPartialWithdrawals electra = state.pendingPartialWithdrawals electra
 
-theorem PartialsSame.refl (state : BeaconState preset fork) : PartialsSame state state :=
+private theorem PartialsSame.refl (state : BeaconState preset fork) : PartialsSame state state :=
   fun _ => rfl
 
-theorem PartialsSame.trans {first second third : BeaconState preset fork}
+private theorem PartialsSame.trans {first second third : BeaconState preset fork}
     (one : PartialsSame first second) (two : PartialsSame second third) :
     PartialsSame first third :=
   fun electra => (two electra).trans (one electra)
@@ -846,7 +846,7 @@ private theorem PartialsSame.foldlM {α ε : Type} {step : BeaconState preset fo
     (fun _ _ _ before ok => before.trans (frame _ _ _ ok)) (PartialsSame.refl state) computed
 
 /-- Setting a validator at a plain position keeps the queue. -/
-theorem partialsSame_setValidatorAt {position : Nat} {validator : Validator}
+private theorem partialsSame_setValidatorAt {position : Nat} {validator : Validator}
     (set : state.setValidatorAt position validator = .ok after) : PartialsSame state after := by
   obtain ⟨_, rfl⟩ := setValidatorAt_ok set
   exact fun _ => rfl
@@ -863,19 +863,19 @@ private theorem partialsSame_setBalance {index : ValidatorIndex} {balance : Gwei
   exact fun _ => rfl
 
 /-- Raising a balance keeps the queue. -/
-theorem partialsSame_increaseBalance {index : ValidatorIndex} {delta : Gwei}
+private theorem partialsSame_increaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : increaseBalance state index delta = .ok after) : PartialsSame state after :=
   let ⟨_, set⟩ := increaseBalance_ok computed
   partialsSame_setBalance set
 
 /-- Lowering a balance keeps the queue. -/
-theorem partialsSame_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
+private theorem partialsSame_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : decreaseBalance state index delta = .ok after) : PartialsSame state after :=
   let ⟨_, set⟩ := decreaseBalance_ok computed
   partialsSame_setBalance set
 
 /-- Starting the exit of a validator keeps the queue. -/
-theorem partialsSame_initiateValidatorExit {index : ValidatorIndex}
+private theorem partialsSame_initiateValidatorExit {index : ValidatorIndex}
     (computed : initiateValidatorExit config state index = .ok after) :
     PartialsSame state after := by
   obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok computed
@@ -892,7 +892,7 @@ theorem partialsSame_initiateValidatorExit {index : ValidatorIndex}
     exact PartialsSame.refl _
 
 /-- Adding a validator keeps the queue. -/
-theorem partialsSame_addValidatorToRegistry {pubkey withdrawalCredentials amount}
+private theorem partialsSame_addValidatorToRegistry {pubkey withdrawalCredentials amount}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
     PartialsSame state after := by
   unfold addValidatorToRegistry at computed
@@ -906,6 +906,93 @@ theorem partialsSame_addValidatorToRegistry {pubkey withdrawalCredentials amount
     exact fun _ => rfl
   · cases computed
 
+/-! ### Slots keep the queue of pending partial withdrawals
+
+From Electra, only two steps of a block write the queue of pending partial withdrawals.
+
+A withdrawal request appends an entry, and the withdrawals of the payload remove the paid ones.
+
+No step of a slot or of an epoch writes it ([EIP-7251]).
+
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+-/
+
+section Partials
+
+variable {fork : Fork} {state after : BeaconState preset fork}
+
+/-- Keeping the queue satisfies the laws of the epoch steps. -/
+private theorem partialsEpochFrameLaws : EpochFrameLaws (@PartialsSame preset fork) where
+  refl := PartialsSame.refl
+  trans := PartialsSame.trans
+  setValidatorAt := fun set _ _ _ _ _ => partialsSame_setValidatorAt set
+  increaseBalance := partialsSame_increaseBalance
+  decreaseBalance := partialsSame_decreaseBalance
+  initiateValidatorExit := partialsSame_initiateValidatorExit
+  addValidatorToRegistry := fun computed _ => partialsSame_addValidatorToRegistry computed
+  eth1DataVotes _ _ := fun _ => rfl
+  inactivityScores _ _ := fun _ => rfl
+  slashings _ _ := fun _ => rfl
+  randaoMixes _ _ := fun _ => rfl
+  historicalRoots _ _ := fun _ => rfl
+  historicalSummaries _ _ := fun _ => rfl
+  participationRecords _ := fun _ => rfl
+  pendingDeposits _ _ _ := fun _ => rfl
+  pendingConsolidations _ _ := fun _ => rfl
+  syncCommittees _ _ _ := fun _ => rfl
+  proposerLookahead _ _ := fun _ => rfl
+  ptcWindow _ _ := fun _ => rfl
+
+private theorem partialsSame_processJustificationAndFinalization
+    (computed : processJustificationAndFinalization state = .ok after) :
+    PartialsSame state after := by
+  obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
+  · exact PartialsSame.refl _
+  · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
+    exact fun _ => by rw [← rest]
+
+/-- From Altair, the epoch transition keeps the queue. -/
+private theorem partialsSame_processEpoch (altair : .altair ≤ fork)
+    (computed : processEpoch config checks state = .ok after) : PartialsSame state after := by
+  unfold processEpoch at computed
+  simp only [altair, ↓reduceDIte] at computed
+  obtain ⟨justified, rooted, justifiedOk, head, tail⟩ :=
+    partialsEpochFrameLaws.processEpochAltair_rotationSplit
+      (fun _ ok => by rw [processBuilderPendingPayments_eq ok]; exact fun _ => rfl) computed
+  exact (partialsSame_processJustificationAndFinalization justifiedOk).trans <| head.trans <|
+    (show PartialsSame rooted (processParticipationFlagUpdates rooted altair) from
+      fun _ => rfl).trans tail
+
+/-- One slot keeps the queue: it caches roots, and at the end of an epoch runs the transition. -/
+private theorem partialsSame_advanceSlot (altair : .altair ≤ fork)
+    (computed : advanceSlot config checks state = .ok after) : PartialsSame state after := by
+  intro electra
+  obtain ⟨next, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
+  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  unfold epochIfLast at epochedOk
+  split at epochedOk
+  · exact partialsSame_processEpoch altair epochedOk electra
+  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
+    subst epochedOk
+    rfl
+
+/-- From Altair, advancing to a later slot keeps the queue of pending partial withdrawals. -/
+theorem processSlots_pendingPartialWithdrawals (altair : .altair ≤ fork) {slot : Slot}
+    (computed : processSlots config checks state slot = .ok after) : PartialsSame state after := by
+  simp only [Consensus.processSlots, bind_ok_iff, ensure_ok_iff] at computed
+  obtain ⟨-, -, advanced⟩ := computed
+  generalize slot.toNat - state.slot.toNat = count at advanced
+  induction count generalizing state with
+  | zero =>
+    simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at advanced
+    subst advanced
+    exact PartialsSame.refl _
+  | succ count step =>
+    simp only [advanceSlots, bind_ok_iff] at advanced
+    obtain ⟨next, nextOk, rest⟩ := advanced
+    exact (partialsSame_advanceSlot altair nextOk).trans (step rest)
+
+end Partials
 
 private theorem getPendingPartialWithdrawals_loop_ledger {fork : Fork}
     {state : BeaconState preset fork} {prior : Array Withdrawal} {epoch : Epoch} {limit : Nat} :
@@ -1618,6 +1705,66 @@ private theorem owed_card {x y : ForkedBeaconState preset} (run : Run config che
     refine ⟨⟨owed, card, fun v paid => covers v (by
       simpa [runQueuePaid, stepQueuePaid] using paid)⟩, fun none v => ?_⟩
     simpa [runQueuePaid, stepQueuePaid] using zero (by simpa [Run.blockCount] using none) v
+
+/-! ## The bands of hysteresis at the start of an epoch -/
+
+section Epochs
+
+variable {fork : Fork} {state after : BeaconState preset fork}
+
+/-- Right after the epoch transition, each effective balance lies within the bands of its balance.
+
+The update of the effective balances puts them there.
+
+The later stages of the epoch keep the validators and the balances.
+
+The increment must be positive and at most the upward band. -/
+private theorem hysteresis_of_epochTransition (bands : preset.IncrementWithinUpwardBand)
+    (computed : processEpoch config checks state = .ok after) : Hysteresis after := by
+  have trace := processEpoch_trace computed
+  change EpochTrace _ ((EpochStage.prefixStages ++ [.payments]) ++
+    [.effectiveBalances, .slashingsReset, .randaoReset, .history, .participation,
+      .syncCommittees, .proposerLookahead, .ptcWindow]) _ _ at trace
+  obtain ⟨_, -, tail⟩ := EpochTrace.append_iff.mp trace
+  cases tail
+  rename_i updated tail
+  have last := balanceDrift_late tail
+  exact (processEffectiveBalanceUpdates_hysteresis bands
+    (EpochStage.action_cases.mp updated)).of_data (congrArg (·.data) last.1)
+    (congrArg (·.data) last.2) fun _ => rfl
+
+/-- A slot step that reaches the first slot of an epoch ends within the bands of hysteresis. -/
+theorem hysteresis_of_advanceSlot (bands : preset.IncrementWithinUpwardBand)
+    (computed : advanceSlot config checks state = .ok after)
+    (boundary : after.slot % preset.SLOTS_PER_EPOCH = 0) : Hysteresis after := by
+  obtain ⟨next, cached, epoched, -, -, epochOk, rfl⟩ := advanceSlot_ok computed
+  simp only [epochIfLast, show next % preset.SLOTS_PER_EPOCH = 0 from boundary, ↓reduceIte]
+    at epochOk
+  exact (hysteresis_of_epochTransition bands epochOk).of_data rfl rfl fun _ => rfl
+
+/-- The state at the first slot of an epoch, reached by slot steps, is within the bands. -/
+theorem hysteresis_of_processSlots (bands : preset.IncrementWithinUpwardBand)
+    {slot : Slot} (computed : processSlots config checks state slot = .ok after)
+    (boundary : slot % preset.SLOTS_PER_EPOCH = 0) : Hysteresis after := by
+  obtain ⟨later, reached⟩ := processSlots_slot computed
+  simp only [Consensus.processSlots, bind_ok_iff, ensure_ok_iff] at computed
+  obtain ⟨-, -, advanced⟩ := computed
+  have gap := UInt64.lt_iff_toNat_lt.mp later
+  obtain ⟨count, counted⟩ : ∃ count, slot.toNat - state.slot.toNat = count + 1 :=
+    ⟨slot.toNat - state.slot.toNat - 1, by omega⟩
+  rw [counted] at advanced
+  -- The last of the slot steps reaches the slot.
+  clear counted gap later
+  induction count generalizing state with
+  | zero =>
+    obtain ⟨_, first, rest⟩ := bind_ok_iff.mp advanced
+    cases rest
+    exact hysteresis_of_advanceSlot bands first (by rw [reached]; exact boundary)
+  | succ count ih =>
+    obtain ⟨_, first, rest⟩ := bind_ok_iff.mp advanced
+    exact ih rest
+
+end Epochs
 
 /-! ## The floor of a balance over the blocks of one epoch -/
 

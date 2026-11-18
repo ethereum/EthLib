@@ -13,7 +13,7 @@ A call of the fast confirmation rule counts the stake of honest voters in its pu
 
 A later state that counts the same voters can hold a different total and different balances.
 
-The reserves bound how much that changes the quorum, from the call's states alone.
+The reserves are meant to bound how much that changes the quorum, from the call's states alone.
 
 One covers a later state on the call's own chain, the other a counting state on another branch.
 

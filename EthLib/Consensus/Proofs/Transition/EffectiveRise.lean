@@ -1365,7 +1365,7 @@ Every read is at `P`.
 
 The branch of `P` has at most `n` blocks.
 
-`branchCorrections` gives a set of debited validators, at most the payload limits per block.
+Take a set of debited validators, at most the payload limits per block.
 
 Off that set, a balance at `R` exceeds the one at `P` by at most the slashing and sync amounts.
 

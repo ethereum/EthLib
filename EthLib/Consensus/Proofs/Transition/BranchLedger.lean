@@ -2805,7 +2805,7 @@ private theorem block_balances {engine : ExecutionEngine preset fork}
   have syncGrow := growsLaws.processSyncAggregate synced
   have totalSame : activeTotal operated = activeTotal s :=
     (steadyVoted.trans ops.kept.steady).activeTotal
-  obtain ⟨rewardValue, perRead⟩ := rewardRead_of_ok rewardOk
+  obtain ⟨rewardValue, syncRead⟩ := rewardRead_of_ok rewardOk
   rw [rewardRead, totalSame, ← rewardRead] at rewardValue
   -- One proposer earns all the other credits.
   have same : 0 < credit ∨ slashed.Nonempty → 0 < share → proposer' = proposer := by
@@ -2869,7 +2869,7 @@ private theorem block_balances {engine : ExecutionEngine preset fork}
   · intro _
     rw [← rewardValue]
     exact ⟨fun v => by simpa using seats v, shareBound⟩
-  · obtain ⟨reward', rewardOk'⟩ := perRead
+  · obtain ⟨reward', rewardOk'⟩ := syncRead
     exact ⟨reward', (syncParticipantReward_congr
       ((steadyVoted.trans ops.kept.steady).total early).symm).trans rewardOk'⟩
   · intro altair' base count big reads support
@@ -3144,7 +3144,7 @@ private structure Tally (a s : BeaconState preset fork) (n : ℕ)
   propsCard : props.card ≤ n
   idle : n = 0 → credits = 0
   propsPos : props.Nonempty → 0 < credits ∨ 0 < shares ∨ sl.Nonempty
-  perIncrement : 0 < n → SyncRewardRead a
+  syncRead : 0 < n → SyncRewardRead a
   lives : Lives a s
   life : RegistryLifecycle a s
   persists : SlashedPersistence a s
@@ -3171,7 +3171,7 @@ private theorem Tally.start (a : BeaconState preset fork) (matched : BalancesMat
   propsCard := by simp
   idle _ := rfl
   propsPos h := absurd h (by simp)
-  perIncrement h := absurd h (Nat.lt_irrefl 0)
+  syncRead h := absurd h (Nat.lt_irrefl 0)
   lives := Lives.refl a
   life := .refl a
   persists := .refl a
@@ -3203,7 +3203,7 @@ private theorem Tally.block {a s t : BeaconState preset fork} {engine : Executio
     ∃ (deb' conv' props' sl' : Finset ValidatorIndex) (pc' : ValidatorIndex → ℕ)
       (credits' shares' : ℕ), Tally a t (n + 1) deb' conv' props' sl' pc' credits' shares' := by
   obtain ⟨paid, cv, slashed, sync, other, slash, proposer, credit, share, ledger,
-    paidCard, convCard, credited, penalized, newly, rewards, perRead, potential, livesB, lifeB,
+    paidCard, convCard, credited, penalized, newly, rewards, syncRead, potential, livesB, lifeB,
     eligibleB⟩ := block_balances early fulu tally.matched computed
   have altair : .altair ≤ fork := Nat.le_trans (by decide) fulu
   have frame := frame_processBlock computed
@@ -3271,7 +3271,7 @@ private theorem Tally.block {a s t : BeaconState preset fork} {engine : Executio
       propsCard := ?_
       idle := fun h => absurd h (Nat.succ_ne_zero n)
       propsPos := ?_
-      perIncrement := fun _ => (tally.within.read early).mp perRead
+      syncRead := fun _ => (tally.within.read early).mp syncRead
       lives := tally.lives.trans livesB tally.life (.of_frame frame)
       life := tally.life.trans lifeB
       persists := tally.persists.trans (.of_frame frame)
@@ -3604,7 +3604,7 @@ theorem branchCorrections {x y : ForkedBeaconState preset} (tail : Run config ch
       syncProposerReward reward = .ok share ∧ share.toNat = reward.toNat *
         PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) := by
     intro positive
-    obtain ⟨reward, rewardOk⟩ := (tally.within.read early).mpr (tally.perIncrement positive)
+    obtain ⟨reward, rewardOk⟩ := (tally.within.read early).mpr (tally.syncRead positive)
     obtain ⟨total, -, totalOk, -, -, -⟩ := syncParticipantReward_ok rewardOk
     obtain ⟨share, shareOk, shareValue⟩ := syncProposerReward_of_participant rewardOk
     refine ⟨reward, total, share, rewardOk, ?_, totalOk, getTotalActiveBalance_toNat totalOk,

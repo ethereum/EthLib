@@ -40,7 +40,7 @@ Not yet released.
   `processEffectiveBalanceUpdates_hysteresis` establishes it, `Hysteresis.of_data` carries it to a state with the same validators and balances, and `Hysteresis.upgrade` keeps it across upgrades.
   `Preset.ExitWindowFixed` asks the seed lookahead to fix activity three epochs ahead.
   `EpochTrace.through_effectiveBalances` splits an epoch trace after the effective-balance updates.
-  `getTotalActiveBalance_toNat` gives the value of a successful active-balance read, and `depositChurnLimit_toNat_of_lt` the value of a deposit churn read before Gloas.
+  `getTotalActiveBalance_toNat` gives the value of a successful active-balance read.
   `activeFilter_eq` and `activeSum_eq` keep the active positions and their effective balances between two registries, and `seats_eq` the seats of a validator in the sync committee.
   `getBaseReward_congr` reads the same base reward for two validators with the same effective balance, in one state or in two.
   `processRewardsAndPenalties_balance_le_of_inactivityUpdates` bounds each balance after the rewards pass, given a bound on each base reward.
@@ -49,10 +49,12 @@ Not yet released.
   `actualBalanceAt_increaseBalance` and `actualBalanceAt_decreaseBalance` change the balance at one index and keep every other.
   `passPendingConsolidations_balanceNotLowered_of_waiting` keeps the balance of a source that cannot yet leave, and `queueConsolidation_queued` records the exit epoch and the queue entry of a consolidation.
   `processBlock_currentSyncCommittee` keeps the current sync committee across a block.
-  `PartialsSame` holds the queue of pending partial withdrawals, and its `refl`, `trans` and `partialsSame_*` lemmas keep it through the steps that do not touch it.
+  `PartialsSame` says that two states hold the same queue of pending partial withdrawals.
   `flagSumOf` states the flag sums of `SupplyBlock` for any base reward, and `recentFlagSum` adds both recent epochs; `flagRewardWeight` keeps its value.
   `flagSumOf_le` bounds a flag sum by 54 base rewards per position, and `flagSumOf_foldlM_addAttesterFlags` raises it by at least the numerator its attesters gain.
   `processAttestation_keepsFlag` keeps each flag an attestation finds, and `flags_exit` and `flags_processExecutionRequests` keep both lists of flags.
+  `processSlots_pendingPartialWithdrawals` keeps the queue of pending partial withdrawals across slot steps from Altair.
+  `hysteresis_of_advanceSlot` and `hysteresis_of_processSlots` put a state at the first slot of an epoch within the bands of hysteresis.
   `Store.ForwardReachableWith.relation_of_checkpointPrefix_with` composes a relation that needs to hold only for transitions with the store's checks.
 
 - Some earlier private declarations are now public, with unchanged statements.

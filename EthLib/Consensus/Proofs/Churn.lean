@@ -435,25 +435,4 @@ theorem toNat_roundToIncrement (preset : Preset) (amount : Gwei) :
     rw [UInt64.toNat_mod]
     exact Nat.mod_le _ _)), UInt64.toNat_mod]
 
-/-- Before Gloas, a successful deposit churn read is a share of the total active balance.
-
-The share is the total over the churn quotient, or the minimum if that is larger.
-
-It is rounded down to a whole number of increments, then capped by the maximum. -/
-theorem depositChurnLimit_toNat_of_lt {config : Config} {state : BeaconState preset fork}
-    {total churn : Gwei} (early : fork < .glamsterdam)
-    (totalOk : getTotalActiveBalance state = .ok total)
-    (computed : depositChurnLimit config state = .ok churn) :
-    churn.toNat = min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
-      (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
-          (total.toNat / config.CHURN_LIMIT_QUOTIENT.toNat) -
-        max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
-          (total.toNat / config.CHURN_LIMIT_QUOTIENT.toNat) %
-            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
-  rw [depositChurnLimit_of_lt early] at computed
-  simp only [getActivationExitChurnLimit, getBalanceChurnLimit, totalOk, bind, Except.bind,
-    pure, Except.pure, Except.ok.injEq] at computed
-  subst computed
-  rw [toNat_min, toNat_roundToIncrement, toNat_max, UInt64.toNat_div]
-
 end EthLib.Consensus
