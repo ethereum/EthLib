@@ -419,8 +419,6 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- Both branches can credit and debit those seats, so they count twice.
   let syncSeats := 3 * (2 * depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope)
-  let depositCredit := if electra : .pectra ≤ fork then
-      (state.depositBalanceToConsume electra).toNat + depositChurn else 0
   let due := if electra : .pectra ≤ fork then
       (state.pendingConsolidations electra).data.toList.filter fun c =>
         ((validator c.sourceIndex.toNat).map fun v =>
@@ -434,7 +432,8 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- The band of each credited key is not scaled.
   let credits :=
-    (11 * (depth * (proposerCredit + depositCredit) + dueStake + whistleblowerExtra) + 9) / 10 +
+    (11 * (depth * proposerCredit + depositCarry + depthFin * depositChurn + dueStake +
+      whistleblowerExtra) + 9) / 10 +
       creditedKeys * preset.upwardBand
   -- Each key the call's branch credits or debits can move by a rounding step and a band.
   --
