@@ -205,7 +205,7 @@ private theorem foldlM_addAttesterFlags_positions {total : Gwei} {earned : List 
   · cases ok
 
 /-- Each signer of an attestation is active at the epoch of its slot, at its own position. -/
-private theorem isActiveAt_of_getAttestingIndices {attestation : Attestation preset fork}
+theorem isActiveAt_of_getAttestingIndices {attestation : Attestation preset fork}
     {attesters : List ValidatorIndex}
     (computed : getAttestingIndices state attestation = .ok attesters)
     {attester : ValidatorIndex} (mem : attester ∈ attesters) :

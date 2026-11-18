@@ -60,35 +60,24 @@ def FlagsWithinActive (state : BeaconState preset fork) : Prop :=
       activeBalanceAt state (getCurrentEpoch state) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
       blockPerIncrement preset state * 54
 
-/-- The weight of the flags of one epoch of participation, at a base reward per increment. -/
-private def weigh (perIncrement : Nat) (state : BeaconState preset fork)
-    (participation : EpochParticipation preset fork) : Nat :=
-  ((List.range state.validators.data.size).map fun j =>
-    ((participation.data[j]?).map fun flags =>
-      ((List.finRange PARTICIPATION_FLAG_WEIGHTS.length).map fun flag =>
-        if hasFlag flags flag.val.toUInt64 then
-          ((state.validators.data[j]?).map (·.effectiveBalance.toNat)).getD 0 /
-            preset.EFFECTIVE_BALANCE_INCREMENT.toNat * perIncrement *
-              PARTICIPATION_FLAG_WEIGHTS[flag].toNat
-        else 0).sum).getD 0).sum
+/-- From Altair, the weight of the flags is that of the previous plus that of the current epoch.
 
-/-- From Altair, the weight of the flags is that of the previous plus that of the current epoch. -/
+Each epoch weighs its flags by the base reward of each position at the given reward per increment.
+-/
 private theorem flagRewardWeight_eq (altair : .altair ≤ fork) (perIncrement : Nat)
     (state : BeaconState preset fork) :
     flagRewardWeight preset perIncrement state =
-      weigh perIncrement state (state.previousEpochParticipation altair) +
-        weigh perIncrement state (state.currentEpochParticipation altair) := by
+      flagSumOf (fun j => ((state.validators.data[j]?).map (·.effectiveBalance.toNat)).getD 0 /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat * perIncrement)
+          state.validators.data.size (state.previousEpochParticipation altair) +
+        flagSumOf (fun j => ((state.validators.data[j]?).map (·.effectiveBalance.toNat)).getD 0 /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat * perIncrement)
+          state.validators.data.size (state.currentEpochParticipation altair) := by
   unfold flagRewardWeight
   split
   · rfl
   · rename_i no
     exact absurd altair no
-
-/-- The three flag weights add up to 54. -/
-private theorem flag_weights_sum :
-    ((List.finRange PARTICIPATION_FLAG_WEIGHTS.length).map fun flag =>
-      PARTICIPATION_FLAG_WEIGHTS[flag].toNat).sum = 54 := by
-  decide +kernel
 
 /-- No flag is set in a zero byte. -/
 private theorem hasFlag_zero (flag : Fin PARTICIPATION_FLAG_WEIGHTS.length) :
@@ -105,7 +94,9 @@ private theorem weigh_le (perIncrement : Nat) (state : BeaconState preset fork)
     (participation : EpochParticipation preset fork) (marks : Array Bool)
     (marked : ∀ (j : Nat) (flags : ParticipationFlags), participation.data[j]? = some flags →
       flags ≠ 0 → j < state.validators.data.size → (marks[j]?).getD false = true) :
-    weigh perIncrement state participation ≤
+    flagSumOf (fun j => ((state.validators.data[j]?).map (·.effectiveBalance.toNat)).getD 0 /
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat * perIncrement)
+        state.validators.data.size participation ≤
       sumMarked state.validators.data marks / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
         perIncrement * 54 := by
   set inc := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -114,11 +105,8 @@ private theorem weigh_le (perIncrement : Nat) (state : BeaconState preset fork)
     ((state.validators.data[j]?).map (·.effectiveBalance.toNat)).getD 0
   let mark : Nat → Nat → Nat := fun j x => if (marks[j]?).getD false then x else 0
   have term : ∀ j ∈ List.range n,
-      ((participation.data[j]?).map fun flags =>
-        ((List.finRange PARTICIPATION_FLAG_WEIGHTS.length).map fun flag =>
-          if hasFlag flags flag.val.toUInt64 then
-            eff j / inc * perIncrement * PARTICIPATION_FLAG_WEIGHTS[flag].toNat
-          else 0).sum).getD 0 ≤ mark j (eff j / inc) * perIncrement * 54 := by
+      ((participation.data[j]?).map (flagValue · (eff j / inc * perIncrement))).getD 0 ≤
+        mark j (eff j / inc) * perIncrement * 54 := by
     intro j member
     have lt := List.mem_range.mp member
     cases found : participation.data[j]? with
@@ -126,15 +114,11 @@ private theorem weigh_le (perIncrement : Nat) (state : BeaconState preset fork)
     | some flags =>
       by_cases zero : flags = 0
       · subst zero
-        simp [hasFlag_zero]
+        simp [flagValue, hasFlag_zero]
       · have yes := marked j flags found zero lt
         simp only [mark, yes, ite_true, Option.map_some, Option.getD_some]
-        calc _ ≤ ((List.finRange PARTICIPATION_FLAG_WEIGHTS.length).map fun flag =>
-              eff j / inc * perIncrement * PARTICIPATION_FLAG_WEIGHTS[flag].toNat).sum :=
-              List.sum_le_sum fun flag _ => by split <;> omega
-          _ = eff j / inc * perIncrement * 54 := by
-              rw [sum_map_mul_left, flag_weights_sum]
-  have step1 : weigh perIncrement state participation ≤
+        exact flagValue_le flags _
+  have step1 : flagSumOf (fun j => eff j / inc * perIncrement) n participation ≤
       ((List.range n).map fun j => mark j (eff j / inc) * perIncrement * 54).sum :=
     sum_map_le_sum_map (fun j m => term j m)
   have step2 : ((List.range n).map fun j => mark j (eff j / inc) * perIncrement * 54).sum =
@@ -212,7 +196,9 @@ theorem FlagsWithinActive.of_active {state : BeaconState preset fork}
         (∀ (j : Nat) (flags : ParticipationFlags), participation.data[j]? = some flags →
           flags ≠ 0 → ∀ validator, state.validators.data[j]? = some validator →
             isActiveValidator validator epoch) →
-        weigh (blockPerIncrement preset state) state participation ≤
+        flagSumOf (fun j => ((state.validators.data[j]?).map (·.effectiveBalance.toNat)).getD 0 /
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat * blockPerIncrement preset state)
+            state.validators.data.size participation ≤
           activeBalanceAt state epoch / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
             blockPerIncrement preset state * 54 := by
       intro participation epoch flagged

@@ -3238,8 +3238,21 @@ No theorem derives that coverage, nor `startCovers`, the coverage by the start o
 Each accepted root has a realized justification at most one epoch before its own.
 An accepted root of an earlier epoch is realized as justified by the head's state.
 `CallRolloverRead` assumes the caller's head read at each rollover for the current target of its head, through `CallerHeadAt` above.
-`QuorumDriftWithin` assumes that an honest voter set of a call keeps its stake in each counting state, up to the call's quorum reserve, unless two honest stores collide.
-No theorem here derives it, and whether the reserve bounds the drift on mainnet is not established.
+`QuorumDriftWithin` assumes that an honest voter set of a call keeps its stake in each counting state, up to the call's quorum reserve.
+Its alternative is a collision of two honest stores.
+`Execution.quorumDriftWithin` proves it for an honest fork choice with BLS checks, before Gloas from Fulu.
+Its anchor store comes from a successful `getForkchoiceStore`, every honest participant starts at it, and `anchorBlock.slot = anchorState.slot`.
+`SLOT_DURATION_MS` is positive, and an epoch has at least one slot.
+A deposited `Genesis` under BLS checks reaches `anchorState` by a `Run` under BLS checks.
+`Execution.rootViable_of_checked_call` takes the same genesis and run for any signature checks, and this theorem fixes them to BLS.
+The horizon is before the next fork, and `HonestStoreEpochsBounded` holds up to the time bound.
+The seed lookahead covers at least one epoch, and the preset satisfies `IncrementWithinUpwardBand`.
+The withdrawal delay is at least one epoch, and the preset satisfies `CapOrder` and `ActivationWithinMaxEffective`.
+Together these make `MAX_EFFECTIVE_BALANCE` equal to `MIN_ACTIVATION_BALANCE`, as on both presets.
+The theorem bounds the drift by the reserve, but whether the reserve is small enough against the confirmation margin on mainnet is not established.
+`Execution.rootViable_of_checked_call` and `Execution.honestHeadsCover_of_checked_call` still take `QuorumDriftWithin` as a premise.
+A caller with BLS checks from Fulu to before Gloas discharges it with `Execution.quorumDriftWithin`.
+`Execution.heldStatesBeforeUpgrade_of_bounded` likewise discharges `HeldStatesBeforeUpgrade` from the horizon and `HonestStoreEpochsBounded`.
 The model's genesis time must be the anchor state's (`secondsToMilliseconds anchorState.genesisTime = genesisTimeMs`), a fact of the configuration that holds for every real anchor.
 
 `JustifiedPinned` is a further premise, absent from the signed-justification headline.

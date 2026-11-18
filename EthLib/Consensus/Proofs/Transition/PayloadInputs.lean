@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.ParentPayload
+import EthLib.Consensus.Proofs.Transition.Operations
 
 /-!
 # Proofs: what the checks of a payload and of a bid read
@@ -865,5 +866,36 @@ theorem processBlock_parentRoot {block : BeaconBlock preset fork}
   obtain ⟨atSlot, newer, -, parent, -⟩ := processBlockHeader_checks headedOk
   rw [header] at newer parent
   exact ⟨atSlot.trans slot, newer, parent⟩
+
+/-- Adding a validator keeps the inputs of a payload. -/
+theorem payloadInputs_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    PayloadInputs state after := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  split at computed
+  · cases computed
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · cases computed
+
+/-- From Electra, a deposit keeps the inputs of a payload. -/
+theorem payloadInputs_processDeposit {before : fork < .hegota} {deposit : Deposit}
+    (electra : .pectra ≤ fork)
+    (computed : processDeposit config checks before state deposit = .ok after) :
+    PayloadInputs state after := by
+  obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
+  refine PayloadInputs.trans (second := { state with eth1DepositIndex := fun _ => next })
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ ?_
+  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨early, _⟩
+  · exact PayloadInputs.refl _
+  · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · exact (payloadInputs_addValidatorToRegistry added).trans
+      ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · exact absurd electra (Nat.not_le_of_lt early)
 
 end EthLib.Consensus

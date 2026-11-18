@@ -568,7 +568,7 @@ theorem getValidatorsSweepWithdrawals_pays {capella : .shapella ≤ fork}
 /-- The total of a validator over withdrawals that name each validator once.
 
 It is the total over those before its own, plus its own amount. -/
-private theorem withdrawnFrom_split {sweep : Array Withdrawal}
+theorem withdrawnFrom_split {sweep : Array Withdrawal}
     (distinct : (sweep.toList.map (·.validatorIndex.toNat)).Nodup) {k : Nat}
     (inside : k < sweep.size) :
     withdrawnFrom sweep sweep[k].validatorIndex =

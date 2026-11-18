@@ -1056,6 +1056,13 @@ theorem processBlockExecution_currentSyncCommittee {body : BeaconBlockBody prese
     after.currentSyncCommittee altair = state.currentSyncCommittee altair :=
   congrFun (SameSyncCommittees.processBlockExecution ok).1 altair
 
+/-- A block retains the current sync committee. -/
+theorem processBlock_currentSyncCommittee {block : BeaconBlock preset fork}
+    {engine : ExecutionEngine preset fork} (altair : .altair ≤ fork)
+    (ok : processBlock config checks engine state block = .ok after) :
+    after.currentSyncCommittee altair = state.currentSyncCommittee altair :=
+  congrFun (SameSyncCommittees.processBlock ok).1 altair
+
 /-- Block execution leaves the proposer lookahead unchanged. -/
 theorem processBlockExecution_proposerLookahead {body : BeaconBlockBody preset fork}
     {engine : ExecutionEngine preset fork} {bellatrix : .bellatrix ≤ fork}

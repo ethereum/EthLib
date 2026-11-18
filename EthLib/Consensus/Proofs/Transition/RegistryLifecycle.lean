@@ -1152,20 +1152,25 @@ theorem Run.registryLifecycle {first last : ForkedBeaconState preset}
 
 /-! ## Admissions within one step -/
 
--- Keeping both epochs unassigned lets activity checks rule out a later exit request.
-private def Unassigned (v : Validator) : Prop :=
+/-- A validator with neither an activation epoch nor an exit epoch assigned.
+
+Keeping both unassigned lets activity checks exclude a later exit request. -/
+def Unassigned (v : Validator) : Prop :=
   v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH
 
-private def UnassignedFrom (n : Nat) {fork : Fork} (s : BeaconState preset fork) : Prop :=
+/-- Every validator at position `n` or later is unassigned. -/
+def UnassignedFrom (n : Nat) {fork : Fork} (s : BeaconState preset fork) : Prop :=
   ∀ i v, n ≤ i → s.validators.data[i]? = some v → Unassigned v
 
-private theorem unassignedFrom_size (s : BeaconState preset fork) :
+/-- No validator lies past the end of the registry, so the registry size is unassigned from. -/
+theorem unassignedFrom_size (s : BeaconState preset fork) :
     UnassignedFrom s.validators.data.size s := by
   intro i v large found
   have := (Array.getElem?_eq_some_iff.mp found).1
   omega
 
-private def UnassignedKept {f g : Fork} (s : BeaconState preset f)
+/-- Each position from which the earlier registry is unassigned stays so in the later one. -/
+def UnassignedKept {f g : Fork} (s : BeaconState preset f)
     (t : BeaconState preset g) : Prop :=
   ∀ n, UnassignedFrom n s → UnassignedFrom n t
 
@@ -1243,7 +1248,7 @@ private theorem applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {amoun
       (of_data (state := middle))
   · exact applyPendingDeposit ok
 
-private theorem processDeposit {before : fork < .hegota} {deposit : Deposit}
+theorem processDeposit {before : fork < .hegota} {deposit : Deposit}
     (ok : Consensus.processDeposit config checks before state deposit = .ok after) :
     UnassignedKept state after := by
   obtain ⟨_, _, next, _, credited⟩ := processDeposit_ok ok
@@ -1432,5 +1437,16 @@ theorem processOperations_new_validator_epochs_unassigned {body : BeaconBlockBod
     ∀ i v, state.validators.data.size ≤ i → after.validators.data[i]? = some v →
       v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH :=
   newUnassigned_processOperations ok
+
+/-- Once the exit of a validator is set, its withdrawable epoch only rises.
+
+It moves only when the later record is slashed.
+
+The states may be of different forks. -/
+def WithdrawableKept {f g : Fork} (s : BeaconState preset f) (t : BeaconState preset g) : Prop :=
+  ∀ (i : Nat) (v w : Validator), s.validators.data[i]? = some v → t.validators.data[i]? = some w →
+    v.exitEpoch ≠ FAR_FUTURE_EPOCH →
+      v.withdrawableEpoch ≤ w.withdrawableEpoch ∧
+        (w.slashed = true ∨ w.withdrawableEpoch = v.withdrawableEpoch)
 
 end EthLib.Consensus

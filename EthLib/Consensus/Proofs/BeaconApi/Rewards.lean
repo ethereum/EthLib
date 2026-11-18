@@ -434,13 +434,14 @@ private theorem idealFlagReward_eq {altair : .altair ≤ fork}
     UInt64.toNat_zero, Nat.zero_add]
 
 /-- The base reward of a validator depends only on its effective balance. -/
-private theorem getBaseReward_congr {total : Gwei} {first second : ValidatorIndex}
+private theorem getBaseReward_congr_of_getValidator {total : Gwei} {first second : ValidatorIndex}
     {firstValidator secondValidator : Validator}
     (firstRead : getValidator state first = .ok firstValidator)
     (secondRead : getValidator state second = .ok secondValidator)
     (same : firstValidator.effectiveBalance = secondValidator.effectiveBalance) :
-    getBaseReward state total first = getBaseReward state total second := by
-  simp only [getBaseReward, firstRead, secondRead, same, bind, Except.bind]
+    getBaseReward state total first = getBaseReward state total second :=
+  getBaseReward_congr (Array.getElem?_eq_some_iff.mp (getValidator_eq_ok_iff.mp firstRead)).1
+    (by rw [getValidator_eq_ok_iff.mp firstRead, getValidator_eq_ok_iff.mp secondRead]; simp [same])
 
 /-- Each listed balance names a validator of the registry with that effective balance. -/
 private theorem idealBalances_named {balances : List (Gwei × ValidatorIndex)}
@@ -555,7 +556,7 @@ private theorem idealFlagReward_eq_netDelta {altair : .altair ≤ fork}
   obtain rfl := Except.ok.inj (weighed.symm.trans weighed')
   obtain rfl := Except.ok.inj (active.symm.trans active')
   obtain rfl := Except.ok.inj (leaking.symm.trans leaking')
-  rw [getBaseReward_congr firstRead read same, based, Except.ok.injEq] at based'
+  rw [getBaseReward_congr_of_getValidator firstRead read same, based, Except.ok.injEq] at based'
   subst based'
   have penalty := getFlagIndexDeltas_present computed flagged member inside
   simp only [netDelta, penalty, UInt64.toNat_zero, Int.natCast_zero, Int.sub_zero]
@@ -718,7 +719,7 @@ private theorem idealComponentReward_eq_netDelta
   obtain rfl := Except.ok.inj (totalOk.symm.trans totalOk')
   obtain rfl := Except.ok.inj (attestersOk.symm.trans attestersOk')
   obtain rfl := Except.ok.inj (balanceOk.symm.trans balanceOk')
-  rw [getBaseReward_congr firstRead read same, baseOk, Except.ok.injEq] at baseOk'
+  rw [getBaseReward_congr_of_getValidator firstRead read same, baseOk, Except.ok.injEq] at baseOk'
   subst baseOk'
   obtain ⟨leak', leakOk', -, value⟩ := componentDelta_matched delta
   obtain rfl := Except.ok.inj (leakOk.symm.trans leakOk')
@@ -770,7 +771,7 @@ private theorem idealInactivityPenalty_eq_netDelta {config : Config} (before : f
     obtain ⟨total', totalOk', delay', delayOk', penalties', added, rfl⟩ := idealed
     obtain rfl := Except.ok.inj (totalOk.symm.trans totalOk')
     obtain ⟨base', baseOk', timely, -⟩ := addInactivityPenalty_getD_self added
-    rw [getBaseReward_congr firstRead read same, baseOk, Except.ok.injEq] at baseOk'
+    rw [getBaseReward_congr_of_getValidator firstRead read same, baseOk, Except.ok.injEq] at baseOk'
     subst baseOk'
     have set : (Array.replicate state.validators.data.size true).getD first.toNat false =
         true := by
@@ -968,7 +969,7 @@ theorem attestationRewards_ideal_of_lt_altair {config : Config} (before : fork <
   obtain ⟨earliest, base', found', baseOk', -, partValue⟩ := (parted entry.validatorIndex).2
     (matched _ (by simp) attestations attesters sourceListed'' signed)
   have delay := prompt attestations signers earliest sourceListed'' signersOk found'
-  rw [getBaseReward_congr firstRead read same, baseOk', Except.ok.injEq] at baseOk
+  rw [getBaseReward_congr_of_getValidator firstRead read same, baseOk', Except.ok.injEq] at baseOk
   subst baseOk
   obtain ⟨-, rfl⟩ := inclusionAttesterReward_ok_iff.mp inclusionOk
   have shareLe : (proposerReward preset base').toNat ≤ base'.toNat := by
