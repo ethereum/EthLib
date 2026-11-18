@@ -1028,7 +1028,7 @@ private theorem key_floorR (h : Setting config checks g split fin pulled anc cou
   · have window := DirectSafety.Apriori.Internal.short_window_of_guard h.guard
       (show (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch pulled).toNat + 1 by omega)
       ((Run.nil.snoc step).append post)
-    simp only at window
+    try simp only at window ⊢
     omega
   · exact (DirectSafety.Apriori.Internal.slashing_quotient_of_electra pre electra).le
   · intro added addedOk
