@@ -189,17 +189,31 @@ That total is three halves of the call's total active balance.
 
 Those bounds do not model the error branch of the checked churn reads.
 
+Another branch's consolidation carry is charged at its finalized value or one epoch's churn.
+
+The deposits applied on a branch are charged from the finalized block's carry, over its depth.
+
 The sync seats count on both branches, each at an envelope of its reward.
 
 The envelope is read at three halves of the call's total active balance.
 
 A key's fall starts from the lesser of its balance and its cap.
 
+Another branch can keep a lower effective balance that this branch's update raised.
+
+So a key's fall reaches its effective balance at the finalized block's state.
+
+Near the downward band of the envelope, it also reaches its rounded balance.
+
 Past the withdrawability delay, a key's whole balance is charged as its fall.
 
 A key's rise is its headroom once eleven times its gain over the depth reaches its balance bound.
 
 Below that, its gain and the credits are scaled by eleven tenths, rounded up.
+
+Another branch can keep a higher effective balance that this branch's update lowered.
+
+So a key's rise reaches its rounded balance plus the downward band, or its finalized balance.
 
 A key active from the next epoch earns a proposer credit too.
 
@@ -270,8 +284,22 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let consolidationChurn := if .glamsterdam ≤ fork then
       round (wide / config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat)
     else balanceChurn - activationExitChurn
-  let queues := 3 * (depth * depositChurn + capMax) +
-    (if tight then 0 else 3 * (depth * (exitChurn + consolidationChurn) + 2 * capMax))
+  -- Another branch's consolidation carry was set from one epoch's churn, possibly before finality.
+  --
+  -- So it is charged at the larger of the finalized block's carry and the churn here.
+  let consolidationCarry := max (if electra : .pectra ≤ fork then
+      (finalizedState.consolidationBalanceToConsume electra).toNat else 0) consolidationChurn
+  -- The exit carry is at most one epoch's exit churn, which `depositChurn` caps.
+  let exitCarry := max capMax depositChurn
+  let depthFin := epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat
+  -- A deposit postponed at the head of the queue lets the deposits behind it spend the carry.
+  --
+  -- So the deposits applied from the finalized block's state are at most its carry and the churn.
+  let depositCarry := if electra : .pectra ≤ fork then
+      (finalizedState.depositBalanceToConsume electra).toNat else 0
+  let queues := 3 * (depthFin * depositChurn + depositCarry) +
+    (if tight then 0 else
+      3 * (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry))
   -- A sync seat's reward is bounded by its envelope at three halves of the call's total.
   --
   -- The integer reward is not monotone in the total, and the envelope is.
@@ -286,7 +314,6 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- So this bounds the score of a counting state, whose score can rise while the call's falls.
   let scoreFin (i : ℕ) := if altair : .altair ≤ fork then
       (((finalizedState.inactivityScores altair).data[i]?).map (·.toNat)).getD 0 else 0
-  let depthFin := epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat
   -- Sync-seat penalties are charged in aggregate, by the sync-seat terms, not per key.
   let leakAt (eb : ℕ) (i : ℕ) := 2 * (eb / inc * perIncrement) +
     eb * (scoreFin i + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
@@ -324,8 +351,15 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- A partial requested after that state can then be paid on a branch and sit in no queue read
   -- here, so its whole balance is charged.
   let fall (i : ℕ) := if depthFin ≤ partialDelay then
-      let low := min (actual i) (cap i) - (depth * (leak i + gainRate i) + partialsDue i)
-      if effective i ≤ low + preset.downwardBand then 0 else effective i - (low - low % inc)
+      let low := min (actual i) (cap i) - (depthFin * (leak i + gainRate i) + partialsDue i)
+      -- On another branch the key can keep an effective balance that this branch's update raised.
+      --
+      -- Away from the downward band of the envelope, it keeps its finalized effective balance.
+      --
+      -- Near that band, it keeps at least its rounded balance.
+      let floorC := if ebUp i ≤ low + preset.downwardBand then finEB i
+        else min (finEB i) (low - low % inc)
+      effective i - floorC
     else effective i
   -- Gains compound across the window, so the rise reads the gain at eleven tenths, rounded up.
   let gainScaled (i : ℕ) := (11 * gainRate i + 9) / 10
@@ -340,8 +374,14 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     -- It is too once eleven times the gain over the depth reaches that bound on the key's balance.
     if depthFin ≤ partialDelay then
       if 11 * depth * gainRate i ≥ ebUp i then capFor i - effective i
-      else if high ≤ effective i + preset.upwardBand then 0
-      else min (capFor i) (high - high % inc) - effective i
+      -- On another branch the key can keep an effective balance that this branch's update lowered.
+      --
+      -- It is at most the balance at that update plus the downward band, rounded down.
+      --
+      -- It is also its effective balance at the finalized block's state or a rounded balance since.
+      else
+        let kept := high + preset.downwardBand
+        min (capFor i) (min (kept - kept % inc) (max (finEB i) (high - high % inc))) - effective i
     else capFor i - effective i
   -- This follows `syncProposerReward` on natural numbers, at the envelope.
   --
@@ -483,7 +523,8 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let newKeySlack := newKeyFloor - (config.EJECTION_BALANCE.toNat - inc)
   let newKeySeats := depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope /
     max 1 newKeySlack
-  let queueKeys := depth * (exitChurn + consolidationChurn) /
+  -- A carry is a balance that can let several keys exit, so it counts by the ejection balance too.
+  let queueKeys := (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry) /
     (config.EJECTION_BALANCE.toNat - inc) + 2 + lowKeys + newKeySeats
   -- The largest gain rate of one key, its gain rate at the largest effective balance.
   let gainRateMax := capMax / inc * perIncrement *
@@ -504,7 +545,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
       (validator i).any (fun v => decide (finalized < v.withdrawableEpoch.toNat)),
     (effective i + rise i)
   let reserveW := 3 * (exitedSlashable + (if tight then 0 else
-      depth * (exitChurn + consolidationChurn) + 2 * capMax +
+      depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry +
         queueKeys * (preset.upwardBand + depth * gainRateMax))) /
     p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   -- A key active there is meant to pay for its reward unless its effective balance can be low.

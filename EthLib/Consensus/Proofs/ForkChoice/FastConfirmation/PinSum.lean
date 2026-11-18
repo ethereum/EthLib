@@ -36,7 +36,7 @@ import EthLib.Consensus.Proofs.Transition.Totality.Supply
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.Ceiling
 
 /-!
-SCRATCH BASE for D-1 (not for merge): the summation of `pinReserve` at spec rev 2.5.2.
+SCRATCH BASE for D-1 (not for merge): the summation of `pinReserve` at spec rev 2.5.3.
 The per-term lemmas are `sorry` stubs, one owner each; `pinDrift_le_of_stubs` is closed from them.
 Statements are frozen: a prover fills only its own stubs' bodies, with private helpers right above them.
 It reads PinDriftBound's private lemmas by `import all` (a scratch-only waiver).
@@ -89,7 +89,7 @@ def PinTerms.total (t : PinTerms preset) : ℕ :=
     3 * t.exitingRise + t.exitingCredits + t.queueRise + t.reserveW + t.flagged +
     t.seatShortfall + (33 * t.consolidationsX + 9) / 10 + t.exitedR)
 
-/-- A verbatim copy of `pinReserve`'s lets (spec rev 2.5.2), returning the named terms. -/
+/-- A verbatim copy of `pinReserve`'s lets (spec rev 2.5.3), returning the named terms. -/
 def pinTerms (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
     PinTerms preset :=
   let epoch := getCurrentEpoch state
@@ -149,8 +149,15 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let consolidationChurn := if .glamsterdam ≤ fork then
       round (wide / config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat)
     else balanceChurn - activationExitChurn
-  let queueDep := 3 * (depth * depositChurn + capMax)
-  let queueExit := if tight then 0 else 3 * (depth * (exitChurn + consolidationChurn) + 2 * capMax)
+  let consolidationCarry := max (if electra : .pectra ≤ fork then
+      (finalizedState.consolidationBalanceToConsume electra).toNat else 0) consolidationChurn
+  let exitCarry := max capMax depositChurn
+  let depthFin := epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat
+  let depositCarry := if electra : .pectra ≤ fork then
+      (finalizedState.depositBalanceToConsume electra).toNat else 0
+  let queueDep := 3 * (depthFin * depositChurn + depositCarry)
+  let queueExit := if tight then 0 else
+    3 * (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry)
   let queues := queueDep + queueExit
   -- A sync seat's reward is bounded by its envelope at three halves of the call's total.
   --
@@ -166,7 +173,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- So this bounds the score of a counting state, whose score can rise while the call's falls.
   let scoreFin (i : ℕ) := if altair : .altair ≤ fork then
       (((finalizedState.inactivityScores altair).data[i]?).map (·.toNat)).getD 0 else 0
-  let depthFin := epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat
   -- Sync-seat penalties are charged in aggregate, by the sync-seat terms, not per key.
   let leakAt (eb : ℕ) (i : ℕ) := 2 * (eb / inc * perIncrement) +
     eb * (scoreFin i + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
@@ -204,8 +210,10 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- A partial requested after that state can then be paid on a branch and sit in no queue read
   -- here, so its whole balance is charged.
   let fall (i : ℕ) := if depthFin ≤ partialDelay then
-      let low := min (actual i) (cap i) - (depth * (leak i + gainRate i) + partialsDue i)
-      if effective i ≤ low + preset.downwardBand then 0 else effective i - (low - low % inc)
+      let low := min (actual i) (cap i) - (depthFin * (leak i + gainRate i) + partialsDue i)
+      let floorC := if ebUp i ≤ low + preset.downwardBand then finEB i
+        else min (finEB i) (low - low % inc)
+      effective i - floorC
     else effective i
   -- Gains compound across the window, so the rise reads the gain at eleven tenths, rounded up.
   let gainScaled (i : ℕ) := (11 * gainRate i + 9) / 10
@@ -220,8 +228,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     -- It is too once eleven times the gain over the depth reaches that bound on the key's balance.
     if depthFin ≤ partialDelay then
       if 11 * depth * gainRate i ≥ ebUp i then capFor i - effective i
-      else if high ≤ effective i + preset.upwardBand then 0
-      else min (capFor i) (high - high % inc) - effective i
+      else
+        let kept := high + preset.downwardBand
+        min (capFor i) (min (kept - kept % inc) (max (finEB i) (high - high % inc))) - effective i
     else capFor i - effective i
   -- This follows `syncProposerReward` on natural numbers, at the envelope.
   --
@@ -351,7 +360,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let newKeySlack := newKeyFloor - (config.EJECTION_BALANCE.toNat - inc)
   let newKeySeats := depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope /
     max 1 newKeySlack
-  let queueKeys := depth * (exitChurn + consolidationChurn) /
+  let queueKeys := (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry) /
     (config.EJECTION_BALANCE.toNat - inc) + 2 + lowKeys + newKeySeats
   -- The largest gain rate of one key, its gain rate at the largest effective balance.
   let gainRateMax := capMax / inc * perIncrement *
@@ -372,7 +381,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
       (validator i).any (fun v => decide (finalized < v.withdrawableEpoch.toNat)),
     (effective i + rise i)
   let reserveW := 3 * (exitedSlashable + (if tight then 0 else
-      depth * (exitChurn + consolidationChurn) + 2 * capMax +
+      depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry +
         queueKeys * (preset.upwardBand + depth * gainRateMax))) /
     p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   -- A key active there is meant to pay for its reward unless its effective balance can be low.
@@ -455,6 +464,7 @@ structure Setting (config : Config) (checks : SignatureChecks) (g : ForkedBeacon
   parameters : DirectSafety.Parameters preset
   aligned : MaxEffectiveBalancesAligned preset
   twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat
+  pulledTotal : ∃ t, getTotalActiveBalance pulled = .ok t
   room : 2 ^ 32 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat
   below : preset.downwardBand < preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   guard : DirectSafety.Apriori.aprioriGuardAt config ⟨fork, fin⟩ (getCurrentEpoch pulled).toNat
@@ -472,26 +482,10 @@ This is `keyCredit` of the exiting-credit lemmas, verbatim. -/
 def keyCredit (i : ℕ) (e : BalanceEvent preset) : ℕ :=
   actualBalanceAt e.after i - actualBalanceAt e.before i
 
-/-- The credits to the key on R's branch, over the replayed events of the run from the split.
-
-It is the key's credits from every source but the deposits, from the replay of the run.
-
-A key with any credit, deposits included, then moves by one more rounding step and band.
-
-That step is `inc + downwardBand - 1`, the one that `branchR` charges for each credited key. -/
-def credR (events : List (BalanceEvent preset)) (v : ℕ) : ℕ :=
-  ((events.filter fun e =>
-      e.source ≠ .deposits ∧ e.source ≠ .sync ∧ e.source ≠ .consolidations).map (keyCredit v)).sum +
-    if (events.map (keyCredit v)).sum = 0 then 0
-    else preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1
-
 /-- The deposits applied to the key on R's branch, over the replayed events of the run from the
-split, capped at `MAX_EFFECTIVE_BALANCE_ELECTRA`.
-
-The cap is what a deposit can add to an effective balance. -/
+split. -/
 def credDepR (events : List (BalanceEvent preset)) (v : ℕ) : ℕ :=
-  min ((events.filter (·.source = .deposits)).map (keyCredit v)).sum
-    preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
+  ((events.filter (·.source = .deposits)).map (keyCredit v)).sum
 
 /-- The consolidation credits to the key over the replayed events of a run.
 
@@ -554,6 +548,20 @@ def credC {x y : ForkedBeaconState preset} (tail : Run config checks x y) (high 
     preset.upwardBand * (creditScan (fun s => decide (s = .rewards ∨ s = .consolidations))
       (fun s => decide (s = .consolidations ∨ s = .deposits)) v high tail).2
 
+/-- The block credits to the key on R's branch since the split: proposer and whistleblower credits.
+
+A slot step's credits are not here: `fall` reads the epoch rewards at its gain rate.
+
+A key with a proposer, deposit or sync credit then moves by one more rounding step and band.
+
+That step is `inc + downwardBand - 1`, the one that `branchR` charges for each of its keys. -/
+def credR {x y : ForkedBeaconState preset} (tail : Run config checks x y) (high v : ℕ) : ℕ :=
+  (creditScan (fun s => decide (s ≠ .deposits ∧ s ≠ .sync ∧ s ≠ .consolidations))
+    (fun _ => false) v high tail).1 +
+    if (creditScan (fun s => decide (s ≠ .consolidations)) (fun s => decide (s = .deposits))
+        v high tail).1 = 0 then 0
+    else preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1
+
 /-- Whistleblower credits to the key on C's branch since the split.
 
 A whistleblower credit lands in the block of the proposer's own slot, which the band of `propC`
@@ -593,9 +601,12 @@ def syncF (events : List (BalanceEvent preset)) (v : ℕ) : ℕ :=
 
 It is the amount of the key's departure charge, which reads the effective balance at the exit call.
 
-A key has a charge only if its exit was not assigned at the run's start. -/
+A key has a charge only if its exit was not assigned at the run's start.
+
+Only a charge whose exit epoch is at most the run's last epoch counts. -/
 def exitQ {x y : ForkedBeaconState preset} (tail : Run config checks x y) (v : ℕ) : ℕ :=
-  ((tail.departureCharges.find? fun c => c.index == v).map (·.amount)).getD 0
+  ((tail.departureCharges.find? fun c =>
+      c.index == v && decide (c.epoch ≤ (getCurrentEpoch y.state).toNat)).map (·.amount)).getD 0
 
 /-- The epoch-pass reward credits to the key in one step.
 
@@ -704,7 +715,7 @@ theorem stub_V (h : Setting config checks g split fin pulled anc counted V)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
     cV1 pulled counted V + cV2 pulled counted V ≤
-      ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) + (∑ v ∈ V, credR events v.toNat) +
+      ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) + (∑ v ∈ V, credR tail high v.toNat) +
         (∑ v ∈ V, (syncF events v.toNat + syncF eventsC v.toNat)) + (∑ v ∈ V, credDepR events v.toNat) +
         (∑ v ∈ V, consAmt events v.toNat) +
         (∑ v ∈ (VN counted V), exitQ tailC v.toNat) +
@@ -941,7 +952,7 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
-    3 * (∑ v ∈ V, credR events v.toNat) +
+    3 * (∑ v ∈ V, credR tail high v.toNat) +
         3 * ((pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer) ≤
       (pinTerms config pulled anc fin).branchR := sorry
 
@@ -1131,6 +1142,14 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
     positivity
   have proposerPos : 0 ≤ ((pinTerms config pulled anc fin).depth : ℤ) *
       ((pinTerms config pulled anc fin).syncProposer : ℤ) := by positivity
+  -- A key of `K6` whose exit R reads weighs once in the drift and three times in `exiting`.
+  have exitingK6 : 0 ≤ ∑ v ∈ K6 pulled counted with
+      (pinTerms config pulled anc fin).exitingB v.toNat = true, (balanceAt pulled v.toNat : ℤ) :=
+    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+  have riseK6 : 0 ≤ ∑ v ∈ K6 pulled counted with
+      (pinTerms config pulled anc fin).exitingB v.toNat = true,
+        ((pinTerms config pulled anc fin).rise v.toNat : ℤ) :=
+    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
   linarith
 
 end Closure
