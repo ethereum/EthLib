@@ -800,7 +800,7 @@ private theorem runs_of_finalized
       toMiddle, tailM, tailS, single, countedE⟩
   · -- Before finality passes the anchor: the split is the anchor state itself.
     obtain rfl := finAnchor (UInt64.not_lt.mp guard)
-    obtain ⟨common, commonEpoch, banded, toCommon, edge⟩ :=
+    obtain ⟨common, -, commonEpoch, banded, toCommon, edge⟩ :=
       run_boundaryEpoch genesis bands caps activation history early fulu
     obtain ⟨ancRun⟩ := run_of_held (forward u caller n) heldBefore held
     obtain ⟨ancToMiddle⟩ := (RunsTo.ofReach (checks := .bls) ancReach).2 middleBefore
