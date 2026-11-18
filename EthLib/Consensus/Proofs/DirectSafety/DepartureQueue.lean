@@ -49,12 +49,16 @@ structure DepartureQueueCall where
 private def departureQueuePotential (high cap : Nat) (epoch : Epoch) (left : Gwei) : Nat :=
   if epoch.toNat ≤ high then left.toNat + (high - epoch.toNat) * cap else 0
 
-/-- A call cannot move the open queue epoch backwards. -/
-private theorem DepartureQueueCall.epoch_mono (call : DepartureQueueCall) :
-    call.earliest.toNat ≤ call.epoch.toNat := by
+/-- A call exits at or after the open queue epoch and at or after its first epoch. -/
+private theorem DepartureQueueCall.epoch_ge (call : DepartureQueueCall) :
+    call.earliest.toNat ≤ call.epoch.toNat ∧ call.first.toNat ≤ call.epoch.toNat := by
   have placed := UInt64.le_iff_toNat_le.mp (churnQueue_spend call.computed).1
   rw [Base.Uint64.toNat_max] at placed
-  omega
+  exact ⟨by omega, by omega⟩
+
+/-- A call cannot move the open queue epoch backwards. -/
+private theorem DepartureQueueCall.epoch_mono (call : DepartureQueueCall) :
+    call.earliest.toNat ≤ call.epoch.toNat := call.epoch_ge.1
 
 /-- Spending beyond the horizon counts nothing and leaves no usable capacity inside it. -/
 private theorem DepartureQueueCall.window_spend (call : DepartureQueueCall) (high cap : Nat)
@@ -4183,13 +4187,6 @@ private theorem CountCohortStep.run {s t : ForkedBeaconState preset} (bound : Na
     exact (ih middleEarly fun later member => counted later (.earlier member _)).trans
       (CountCohortStep.step bound step early (counted step (.last _ _) middleEarly))
 
-/-- A call exits at or after its first epoch. -/
-private theorem DepartureQueueCall.first_le_epoch (call : DepartureQueueCall) :
-    call.first.toNat ≤ call.epoch.toNat := by
-  have placed := UInt64.le_iff_toNat_le.mp (churnQueue_spend call.computed).1
-  rw [Uint64.toNat_max] at placed
-  omega
-
 /-- Before Gloas, a step charges each departure at an exit epoch no earlier than its input epoch.
 
 Before Electra the exit is placed from the current epoch on.
@@ -4205,7 +4202,7 @@ theorem departureCharges_epoch_ge {x y : ForkedBeaconState preset}
       (Nat.le_trans electra step.chainStep.fork_le) (2 ^ 64)
       (fun _ _ _ rate _ => (UInt64.toNat_lt rate).le)
     obtain ⟨called, present, -, epoch, -⟩ := covered.step_charges step charge member
-    have placed := called.call.first_le_epoch
+    have placed := called.call.epoch_ge.2
     have first := firsts called present
     omega
   · obtain ⟨⟨old, i⟩, present, added⟩ := List.mem_filterMap.mp member
@@ -4237,7 +4234,7 @@ theorem Run.departureCharges_epoch_ge_start {x y : ForkedBeaconState preset}
       (fun _ _ _ rate _ => (UInt64.toNat_lt rate).le)
   intro charge member
   obtain ⟨called, present, -, epoch, -⟩ := matched charge member
-  have placed := called.call.first_le_epoch
+  have placed := called.call.epoch_ge.2
   have first := firsts called present
   omega
 
@@ -6873,7 +6870,7 @@ theorem run_partial_queue_kept {cost : BalanceEvent preset → Nat}
   intro entry member
   obtain ⟨called, present, found⟩ := List.mem_filterMap.mp member
   have pushed := (called.pushed entry found).2
-  have spent := called.call.first_le_epoch
+  have spent := called.call.epoch_ge.2
   have first := firsts called present
   omega
 
