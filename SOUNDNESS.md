@@ -2123,6 +2123,14 @@ From Hegotá a run fails as not yet specified, so there is no gas used to state.
 `prepareFirstFrame_of_applyAuthorizations_error` proves that an error of the authorizations is the error of the first frame.
 `prepareFirstFrame_of_value_eq_zero` gives the first frame of a call that moves no ether and applies no authorization.
 
+`mem_startAccessedStorageKeys` proves that from Berlin a transaction starts with a slot warm exactly when its access list lists it.
+The entry must name the address of the slot and list the slot.
+When two entries name one address, the slots of both count.
+`startAccessedStorageKeys_of_lt_berlin` proves that before Berlin a transaction starts with no slot warm.
+SLOAD and SSTORE read these keys through `accessStorageKey`.
+SLOAD pays 2100 for a cold slot and 100 for a warm one, by EIP-2929, and SSTORE also pays more for a cold slot.
+No theorem yet joins these keys with the price of the first access to a slot in a run.
+
 ### Nonces within 64 bits
 
 EIP-2681 limits every nonce to `2^64 - 1`, and a nonce in EthLib is a natural number.

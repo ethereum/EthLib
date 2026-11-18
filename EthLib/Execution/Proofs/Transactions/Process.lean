@@ -16,6 +16,12 @@ From Berlin, a transaction starts with these addresses accessed:
 - each address of its access list;
 - from Shapella, the beneficiary of its block.
 
+From Berlin, it starts with a slot accessed exactly when an entry of its access list lists it.
+
+That entry must name the address of the slot.
+
+When two entries name one address, the slots of both count.
+
 Before Berlin, it starts with no access.
 
 A first frame that fails to start halts the message with the state from before it.
@@ -132,6 +138,41 @@ theorem startAccessedAddresses_of_lt_berlin (h : fork < .berlin) :
     startAccessedAddresses fork coinbase sender target tx = ∅ := by
   have berlin : ¬Fork.berlin ≤ fork := Nat.not_le_of_lt h
   simp only [startAccessedAddresses, berlin, ↓reduceIte]
+
+/-- A fold of access entries into storage keys keeps the keys it starts from and adds each slot. -/
+private theorem mem_getD_foldl_accesses {address : Address} {key : Bytes32}
+    (accesses : List Access) (keys : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)) :
+    key ∈ (accesses.foldl (fun keys access => keys.insert access.account
+        ((keys.getD access.account ∅).insertMany access.slots)) keys).getD address ∅ ↔
+      key ∈ keys.getD address ∅ ∨
+        ∃ access ∈ accesses, access.account = address ∧ key ∈ access.slots := by
+  induction accesses generalizing keys with
+  | nil => simp
+  | cons access rest ih =>
+    rw [List.foldl_cons, ih]
+    by_cases h : access.account = address
+    · subst h
+      simp only [Std.ExtTreeMap.getD_insert_self, Std.ExtTreeSet.mem_insertMany_list,
+        List.contains_iff_mem, List.mem_cons, exists_eq_or_imp, true_and]
+      exact or_assoc
+    · simp [Std.ExtTreeMap.getD_insert, h]
+
+/-- From Berlin, a transaction starts with a slot accessed exactly when its access list lists it.
+
+Some entry must name the address of the slot and list the slot.
+
+When two entries name one address, the slots of both count. -/
+theorem mem_startAccessedStorageKeys {address : Address} {key : Bytes32} (h : .berlin ≤ fork) :
+    key ∈ (startAccessedStorageKeys fork tx).getD address ∅ ↔
+      ∃ access ∈ tx.accesses, access.account = address ∧ key ∈ access.slots := by
+  simp only [startAccessedStorageKeys, h, ↓reduceIte, mem_getD_foldl_accesses]
+  simp
+
+/-- Before Berlin, a transaction starts with no storage key accessed, since no access counts. -/
+theorem startAccessedStorageKeys_of_lt_berlin (h : fork < .berlin) :
+    startAccessedStorageKeys fork tx = ∅ := by
+  have berlin : ¬Fork.berlin ≤ fork := Nat.not_le_of_lt h
+  simp only [startAccessedStorageKeys, berlin, ↓reduceIte]
 
 /-- From Hegotá, a transaction fails to run, since the rules of that fork are not here yet. -/
 theorem processTransaction_of_hegota_le {env : BlockEnvironment fork}
