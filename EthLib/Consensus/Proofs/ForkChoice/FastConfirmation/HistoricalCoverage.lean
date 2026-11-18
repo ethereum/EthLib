@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalSign
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootHeld
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootViability
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalTransport
+import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HonestHeads
 import EthLib.Consensus.Proofs.HonestAggregation
 
 /-!
@@ -1227,9 +1228,11 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
     (realized : AcceptedRealizedRecent ((e.world n).state u) (chain ++ [root]))
     (realizedHead : AcceptedRealizedHead ((e.world n).state u) config head.root (chain ++ [root]))
     (startCovers : HonestHeadsCover (e := e) startRoot (e.world n).time (time + 1))
-    (rollover : CallRolloverRead (e := e) u n head.root time) :
-    (∀ T, (e.world n).time ≤ T → T ≤ time →
-      HonestHeadsCover (e := e) root (e.world n).time T → RootViableAt (e := e) root T) ∨
+    (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) time)
+    (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17)) :
+    ((∀ T, (e.world n).time ≤ T → T ≤ time →
+      HonestHeadsCover (e := e) root (e.world n).time T → RootViableAt (e := e) root T) ∧
+      HonestHeadsExist (e := e) (e.world n).time time) ∨
       HonestCollision (e := e) time ∨ HistoricalDirectSafetyEvidence (e := e) pre time ∨
       CrossStoreJustifiedEvidence (e := e) pre time ∨
         HeldStateFinalityEvidence (e := e) pre time := by
@@ -1245,6 +1248,24 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
   have signedAll := Execution.justifiedHonestlySigned anchored start anchorSlot anchorHeader
     anchorZero slots parameters delay genesis pre roots absent heldEarly bounded enough terminal
     afterAnchor byzantine
+  -- The caller reads its head at each rollover, and every honest store has a head.
+  have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by omega
+  have signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 time :=
+    anchorEpochOk ▸ signedAll
+  rcases e.callRolloverRead_or_evidence sync slots history preGloas admitted fits prompt votes
+      anchored start anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre
+      heldEarly enough terminal ceiling scoreFits fit caller n head.root with
+    rollover | collision | evidence
+  rotate_left
+  · exact .inr (.inl collision)
+  · exact .inr (.inr (.inl evidence))
+  rcases e.honestHeadsExist_or_evidence sync slots positive preGloas admitted fits prompt votes
+      anchored start anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre
+      heldEarly enough terminal ceiling scoreFits (e.world n).time with
+    exist | collision | evidence
+  rotate_left
+  · exact .inr (.inl collision)
+  · exact .inr (.inr (.inl evidence))
   -- The root's realized justification is at most two epochs before the call's epoch.
   have known := Store.block_ok_iff.mp blockOk
   obtain ⟨rootBlock, rootState, rootKnown, rootStored, rootRecent⟩ := realized root (by simp)
@@ -1287,10 +1308,10 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
   · exact .inr (.inr (.inr (.inl crossJustified)))
   by_cases heldEvidence : HeldStateFinalityEvidence (e := e) pre time
   · exact .inr (.inr (.inr (.inr heldEvidence)))
-  exact .inl fun T low high covers =>
-    (e.rootViableAt_of_checked pre sync slots positive preGloas admitted fits prompt votes windows
-      fit ring incrementPositive anchored sound anchorSlot anchorBoundary start anchorEpochOk
-      bounded roots absent pinned signedAll quorumDrift unslashed terminal
+  refine .inl ⟨fun T low high covers => ?_, exist⟩
+  exact (e.rootViableAt_of_checked pre sync slots positive preGloas admitted fits prompt votes
+      windows fit ring incrementPositive anchored sound anchorSlot anchorBoundary start
+      anchorEpochOk bounded roots absent pinned signedAll quorumDrift unslashed terminal
       anchorGenesis parameters genesis heldEarly enough included caller callerUpToDate slotOk
       beginOk timeEq headOk rollover inputs walked realized realizedHead startCovers holds T low
       high covers).resolve_right (not_or.mpr ⟨collide, not_or.mpr ⟨heldEvidence, crossJustified⟩⟩)
@@ -1404,7 +1425,6 @@ public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈
     (realized : AcceptedRealizedRecent ((e.world n).state u) (chain ++ [root]))
     (realizedHead : AcceptedRealizedHead ((e.world n).state u) config head (chain ++ [root]))
     (startCovers : HonestHeadsCover (e := e) startRoot (e.world n).time (time + 1))
-    (rollover : CallRolloverRead (e := e) u n head time)
     (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
       (e.world n).time time)
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
@@ -1423,7 +1443,7 @@ public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈
       parameters genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
       historicalEpochOk near absent anchorEpochOk pinned anchorHeader anchorZero delay byzantine
       included quorumDrift anchorGenesis incrementPositive headOk inputs walked realized
-      realizedHead startCovers rollover with
+      realizedHead startCovers ceiling scoreFits with
     viable | alternatives
   swap
   · exact .inr alternatives
@@ -1437,7 +1457,7 @@ public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈
       callerTime sourceReads drift reserve reference referenceTime referenceUpToDate
       referenceSlotOk finishOk bounded roots unslashed ceiling scoreFits parameters genesis pre
       heldEarly enough terminal headDescends historicalBelow callerEpochOk historicalEpochOk near
-      epochStartOk epochStartTimeOk historyCovers absent parentCovers fit viable exits late with
+      epochStartOk epochStartTimeOk historyCovers absent parentCovers fit viable.1 exits late with
     cover | collision | historicalEvidence
   · exact .inl cover
   · exact .inr (.inl collision)
@@ -1552,12 +1572,11 @@ public theorem Execution.rootViable_of_checked_call [DecidablePred (· ∈ J)] {
     (realized : AcceptedRealizedRecent ((e.world n).state u) (chain ++ [root]))
     (realizedHead : AcceptedRealizedHead ((e.world n).state u) config head (chain ++ [root]))
     (startCovers : HonestHeadsCover (e := e) startRoot (e.world n).time (time + 1))
-    (rollover : CallRolloverRead (e := e) u n head time)
     (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
       (e.world n).time time)
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
-    (∀ T, (e.world n).time ≤ T → T ≤ time → RootViableAt (e := e) root T) ∨
+    RootViable (e := e) root (e.world n).time time ∨
       HonestCollision (e := e) time ∨
       HistoricalDirectSafetyEvidence (e := e) pre time ∨
       CrossStoreJustifiedEvidence (e := e) pre time ∨
@@ -1572,7 +1591,7 @@ public theorem Execution.rootViable_of_checked_call [DecidablePred (· ∈ J)] {
       historicalBelow callerEpochOk historicalEpochOk near epochStartOk epochStartTimeOk
       historyCovers absent parentCovers fit anchorEpochOk pinned anchorHeader anchorZero delay
       byzantine included quorumDrift anchorGenesis incrementPositive headOk headEq inputs walked
-      realized realizedHead startCovers rollover exits late with
+      realized realizedHead startCovers exits late with
     cover | alternatives
   swap
   · exact .inr alternatives
@@ -1585,12 +1604,15 @@ public theorem Execution.rootViable_of_checked_call [DecidablePred (· ∈ J)] {
       parameters genesis pre heldEarly enough terminal headDescends historicalBelow callerEpochOk
       historicalEpochOk near absent anchorEpochOk pinned anchorHeader anchorZero delay byzantine
       included quorumDrift anchorGenesis incrementPositive headOk inputs walked realized
-      realizedHead startCovers rollover with
+      realizedHead startCovers ceiling scoreFits with
     viable | alternatives
   swap
   · exact .inr alternatives
-  -- The coverage up to the horizon gives the coverage before each time of the interval.
-  exact .inl fun T low high => viable T low high fun earlier lower upper =>
-    cover earlier lower (by omega)
+  -- Each up-to-date honest store has a head, and its coverage before that time gives the root.
+  obtain ⟨viable, exist⟩ := viable
+  refine .inl fun w receiver k nodes low high upToDate tree => ?_
+  obtain ⟨hd, hdOk⟩ := exist w receiver k nodes low high upToDate tree
+  exact viable (e.world k).time low high (fun earlier lower upper => cover earlier lower (by omega))
+    w receiver k nodes hd rfl upToDate hdOk tree
 
 end EthLib.Consensus.Models.Network

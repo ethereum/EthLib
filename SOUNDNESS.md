@@ -3186,19 +3186,20 @@ It does not show that a later state counts these votes, or that the target is ju
 `HeldBlockStateRootsNonzero` assumes that their blocks have nonzero state roots.
 Block agreement between honest stores is not assumed: `Store.blocks_agree_or_collision` splits it from the collision disjunct.
 `CallerHeadAt` assumes that at the start of the next epoch the caller's up-to-date store has a head.
-No theorem yet shows that the head read of an honest store succeeds, so this read is assumed.
-Head totality would discharge it, and it is an outstanding obligation of the endpoint safety issue [#2060](https://github.com/ethereum/EthLib/issues/2060).
+The theorem assumes this read, since its conclusion has no evidence alternative.
+`Execution.callRolloverRead_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/HonestHeads.lean` derives it for the caller of a checked call before Gloas, up to a collision of two honest stores or `HistoricalDirectSafetyEvidence` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
 The window of that head over the target's epoch is derived: the theorem takes `Config.CommitteeWindowsFit` and reads it through `Store.getCommitteesBetweenSlots_exists`.
 The head's state is held, and the window ends before the current slot.
 The theorem also assumes `AssignmentWindowAgreement`, `ValidatedDutyVotes`, `Prompt` and `DelayFits`.
 It also requires an anchor block at an epoch start, and a historical vector longer than the seed lookahead by more than two epochs.
 
 `Execution.rootViable_of_checked_call` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalCoverage.lean` addresses Theorem 3 of [#2058](https://github.com/ethereum/EthLib/issues/2058) for the confirmed root.
-At each up-to-date honest store up to `time` whose fork choice returns a head, the root is in the filtered tree or below the justified block.
+At each up-to-date honest store up to `time`, the root is in the filtered tree or below the justified block.
 The alternatives are a collision between blocks held by honest stores, or accountable-safety evidence.
 That evidence is `HistoricalDirectSafetyEvidence`, `CrossStoreJustifiedEvidence` or `HeldStateFinalityEvidence`.
-Stores whose `getHead` returns an error are not covered, because master does not yet prove that `getHead` always succeeds ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
-Such a store has no head for the confirmation to be unsafe about.
+Each such store has a head, by `Execution.honestHeadsExist_or_evidence` in `HonestHeads.lean`, up to the same alternatives ([#2060](https://github.com/ethereum/EthLib/issues/2060), for pre-Gloas forks).
+It reads `CheckpointStakeCeiling`, `ProposerScoreFits` and the network and duty premises that the headline already takes.
+The store holds its justified state because an honest vote for that checkpoint reaches it by the next slot and is accepted.
 Each evidence alternative is relative to the anchor, and its drift counts from the anchor.
 So with enough churn since the anchor it holds with no accountable key.
 `HeldStateFinalityEvidence` is evidence from runs to two held states, one with an honest store's finality and one justified at that epoch or later.
@@ -3237,7 +3238,8 @@ No theorem derives that coverage, nor `startCovers`, the coverage by the start o
 `AcceptedRealizedRecent` and `AcceptedRealizedHead` restrict the runs in scope; the rule does not check them.
 Each accepted root has a realized justification at most one epoch before its own.
 An accepted root of an earlier epoch is realized as justified by the head's state.
-`CallRolloverRead` assumes the caller's head read at each rollover for the current target of its head, through `CallerHeadAt` above.
+`CallRolloverRead` is the caller's head read at each rollover for the current target of its head, through `CallerHeadAt` above.
+`Execution.rootInFilteredTree_of_checked` assumes it, and the headlines derive it through `Execution.callRolloverRead_or_evidence`, so they do not take it.
 `QuorumDriftWithin` assumes that an honest voter set of a call keeps its stake in each counting state, up to the call's quorum reserve.
 Its alternative is a collision of two honest stores.
 `Execution.quorumDriftWithin` proves it for an honest fork choice with BLS checks, before Gloas from Fulu.
