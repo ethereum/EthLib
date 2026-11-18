@@ -499,12 +499,12 @@ theorem ethAggregatePubkeys_skToPk (sks : List SecretKey) (hne : sks ≠ []) :
 
 /-- With no keys, the Ethereum fast aggregate verification accepts only the point at infinity. -/
 theorem ethFastAggregateVerify_empty (msg : ByteArray) (sig : BLSSignature) :
-    ethFastAggregateVerify #[] msg sig = true ↔ sig = infinitySignature := by
+    ethFastAggregateVerify #[] msg sig = true ↔ sig = G2_POINT_AT_INFINITY := by
   simp [ethFastAggregateVerify]
 
 /-- The signature of the point at infinity is the constant of the Ethereum wrapper. -/
-theorem pointToSignature_zero : pointToSignature G2.zero = infinitySignature := by
-  simp [pointToSignature, infinitySignature, G2_POINT_AT_INFINITY]
+theorem pointToSignature_zero : pointToSignature G2.zero = G2_POINT_AT_INFINITY := by
+  simp [pointToSignature, G2_POINT_AT_INFINITY]
 
 /-- Honest signatures on one message pass the Ethereum fast aggregate verification.
 

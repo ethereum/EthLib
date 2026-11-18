@@ -47,13 +47,8 @@ def POP_DST : ByteArray :=
 
 /-- The compressed encoding of the `G2` point at infinity.
 
-`consensus-specs`, Altair `bls.md`, defines it as a `BLSSignature`. -/
-def G2_POINT_AT_INFINITY : BLSSignature := G2.infinityBytes
-
-/-- The same signature.
-
 The beacon chain uses it where a message carries no signature. -/
-def infinitySignature : BLSSignature := G2_POINT_AT_INFINITY
+def G2_POINT_AT_INFINITY : BLSSignature := G2.infinityBytes
 
 /-! ## Keys and encodings -/
 
@@ -232,7 +227,7 @@ An empty key list passes exactly with the signature of the point at infinity. -/
 def ethFastAggregateVerify
     (pubkeys : Array BLSPubkey) (msg : ByteArray) (sig : BLSSignature) : Bool :=
   if pubkeys.isEmpty then
-    sig = infinitySignature
+    sig = G2_POINT_AT_INFINITY
   else
     fastAggregateVerify pubkeys msg sig
 
