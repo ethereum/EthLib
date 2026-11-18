@@ -651,7 +651,7 @@ theorem tree_path_input (hboundary : BoundaryCorrect f parameter seed labels)
       (Nat.le_of_lt hlevel),
     tree_path_sibling f parameter seed labels hconsistent hboundary lay tree leaf hactive level
       hlevel]
-  simp only [merkleInput]
+  rw [merkleInput_eq]
   have hbit : (leaf.val / 2 ^ level).testBit 0 = leaf.val.testBit level := by
     simpa only [Nat.zero_add] using (Nat.testBit_add leaf.val 0 level).symm
   rw [hbit, Nat.div_div_eq_div_mul, ← Nat.pow_succ]
@@ -902,7 +902,7 @@ theorem fors_path_input (leaf : FLeaf) (level : Nat) (hlevel : level < forsHeigh
     ⟨leaf.val / 2 ^ level, (Nat.div_le_self _ _).trans_lt leaf.isLt⟩,
     fors_path_value f parameter seed labels hconsistent index κ leaf level (Nat.le_of_lt hlevel),
     fors_path_sibling f parameter seed labels hconsistent index κ leaf level hlevel]
-  simp only [merkleInput]
+  rw [merkleInput_eq]
   have hbit : (leaf.val / 2 ^ level).testBit 0 = leaf.val.testBit level := by
     simpa only [Nat.zero_add] using (Nat.testBit_add leaf.val 0 level).symm
   rw [hbit]

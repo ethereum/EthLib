@@ -94,6 +94,14 @@ theorem ordered_eq_ite (p : Position) (current sibling : α) :
   unfold ordered
   simp only [Position.isLeft_iff]
 
+/-- Two climb steps that hold nodes on opposite sides and hash the same pair swap their roles.
+
+The node one step holds is the sibling of the other, and the other way around. -/
+theorem ordered_cross {p q : Position} (hleft : p.isLeft ≠ q.isLeft) {c s c' s' : α}
+    (h : ordered p c s = ordered q c' s') : c = s' ∧ s = c' := by
+  unfold ordered at h
+  cases hp : p.isLeft <;> cases hq : q.isLeft <;> simp_all [Prod.mk.injEq]
+
 /-- A climb from a leaf over `n + 1` path entries climbs `n`, then hashes in entry `n`.
 
 The bit `n` of the leaf index says whether the held node is the right child. -/
@@ -108,6 +116,17 @@ theorem climb_ofFn_succ [LawfulMonad m] (j : Nat) (path : Nat → α) (n : Nat) 
   simp only [climb, bind_pure, Position.ancestor_mk_zero, Position.parent_mk, div_pow_div_two,
     ordered_eq_ite, Fin.val_last, Nat.testBit_eq_decide_div_mod_eq]
   rcases Nat.mod_two_eq_zero_or_one (j / 2 ^ n) with h | h <;> simp [h]
+
+/-- A climb from a leaf over `n + 1` path entries climbs `n`, then takes the step from level `n`.
+
+That step holds the node `n` levels above the leaf and hashes it with entry `n` into its parent. -/
+theorem climb_ofFn_succ_ordered [LawfulMonad m] (j : Nat) (path : Nat → α) (n : Nat) (value : α) :
+    climb hash ⟨0, j⟩ value (List.ofFn fun level : Fin (n + 1) => path level.val) = (do
+      let current ← climb hash ⟨0, j⟩ value (List.ofFn fun level : Fin n => path level.val)
+      let children := ordered ((⟨0, j⟩ : Position).ancestor n) current (path n)
+      hash ((⟨0, j⟩ : Position).ancestor n).parent children.1 children.2) := by
+  rw [List.ofFn_succ_last, climb_append, List.length_ofFn]
+  simp only [climb, bind_pure, Fin.val_last, Fin.val_castSucc]
 
 /-- Ordering two mapped children maps the ordered pair.
 
