@@ -982,7 +982,7 @@ theorem bud_pendingR (h : Setting config checks g split fin pulled anc counted V
         (pinTerms config pulled anc fin).pendingR := sorry
 
 /-- D-4: the keys whose exit R reads. -/
-theorem bud_exiting (h : Setting config checks g split fin pulled anc counted V) :
+theorem bud_exiting :
     (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
       (∑ v ∈ (K5 counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).exitingB v.toNat = true,
@@ -1276,7 +1276,8 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have sN := stub_N (config := config) h tail high endEpoch replayed tailC highC endEpochC replayedC
   have sP := stub_P (config := config) h tail high endEpoch replayed tailC highC endEpochC replayedC
   have sJ := stub_J (config := config) h tail high endEpoch replayed tailC highC endEpochC replayedC
-  have b1 := bud_exiting (config := config) h
+  have b1 := bud_exiting (config := config) (pulled := pulled) (anc := anc) (fin := fin)
+    (counted := counted) (V := V)
   have b2 := bud_late (config := config) h
   have b3 := bud_queues (config := config) h tailC
   have b4 := bud_credits (config := config) h tailC highC endEpochC replayedC
