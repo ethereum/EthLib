@@ -4818,6 +4818,77 @@ private theorem upgrades_electra_epoch {s t : ForkedBeaconState preset}
       rw [scheduled]
   | case2 s notDue => cases ok; exact initial
 
+/-- A call leaves at most the larger of the capacity it found and its rate. -/
+private theorem DepartureQueueCall.left_le (call : DepartureQueueCall) :
+    call.left.toNat ≤ max call.available.toNat call.rate.toNat := by
+  obtain ⟨-, spent, last⟩ := churnQueue_spend call.computed
+  have avail : (if call.earliest < max call.earliest call.first then call.rate
+      else call.available).toNat ≤ max call.available.toNat call.rate.toNat := by
+    split <;> omega
+  rcases last with same | below
+  · rw [same, Nat.sub_self, Nat.zero_mul, Nat.add_zero] at spent
+    omega
+  · omega
+
+/-- A trace of calls with rates at most `cap` leaves at most the larger of its start and `cap`. -/
+private theorem DepartureQueueTrace.left_le {earliest epoch : Epoch} {available left : Gwei}
+    {calls : List DepartureQueueCall}
+    (trace : DepartureQueueTrace earliest available calls epoch left) (cap : Nat)
+    (rates : ∀ call ∈ calls, call.rate.toNat ≤ cap) :
+    left.toNat ≤ max available.toNat cap := by
+  induction trace with
+  | nil => exact Nat.le_max_left _ _
+  | cons call tail ih =>
+    have rest := ih fun c member => rates c (List.mem_cons_of_mem _ member)
+    have first := call.left_le
+    have rate := rates call (List.mem_cons_self)
+    omega
+
+/-- The queues carry bounded capacity at the end `y` of a run from a state `x` after genesis.
+
+The exit capacity at `y` is at most the largest per-epoch exit churn.
+
+The consolidation capacity at `y` is at most the larger of its capacity at `x` and `cap`.
+
+Here `cap` bounds the consolidation churn at each site of the run from `x`. -/
+theorem queueCarry_le_of_run {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
+    (tail : Run config checks x y) (electra : .pectra ≤ x.fork)
+    (early : y.fork < .glamsterdam) (targetElectra : .pectra ≤ y.fork) (cap : Nat)
+    (rates : ∀ site ∈ tail.consolidationSites,
+      ∀ (_h : .pectra ≤ site.fork) (rate : Gwei),
+        getConsolidationChurnLimit config site.state = .ok rate → rate.toNat ≤ cap) :
+    (y.state.exitBalanceToConsume targetElectra).toNat ≤
+        config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat ∧
+      (y.state.consolidationBalanceToConsume targetElectra).toNat ≤
+        max (x.state.consolidationBalanceToConsume electra).toNat cap := by
+  constructor
+  · have gBefore : g.fork < .pectra := by
+      refine Nat.lt_of_not_ge fun late => ?_
+      obtain ⟨hash, time, deposits, ok⟩ := genesis
+      have altair : Fork.altair ≤ g.fork := Nat.le_trans (by decide) late
+      simp [initializeBeaconStateFromEth1, altair, throw] at ok
+    obtain ⟨u, v, head, step, rest, uBefore, vElectra, -⟩ :=
+      split_electra_crossing (shared.append tail) gBefore targetElectra
+    have vEarly : v.fork < .glamsterdam :=
+      Nat.lt_of_le_of_lt (fork_le_of_chainSteps rest.chainSteps) early
+    have initial := crossing_initialized (config := config) step uBefore vElectra vEarly
+    obtain ⟨exits, -, -, -, exitTrace, -, exitRates, -⟩ :=
+      run_indexedTrace_sites rest vElectra early targetElectra (2 ^ 64)
+        (fun _ _ _ rate _ => (UInt64.toNat_lt rate).le)
+    have bound := exitTrace.left_le config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
+      (fun call member => by
+        obtain ⟨called, present, rfl⟩ := List.mem_map.mp member
+        exact exitRates called present)
+    have start := initial.exitCap
+    omega
+  · obtain ⟨-, consolidations, -, -, -, consolidationTrace, -, consolidationRates, -⟩ :=
+      run_indexedTrace_sites tail electra early targetElectra cap rates
+    exact consolidationTrace.left_le cap
+      (fun call member => by
+        obtain ⟨called, present, rfl⟩ := List.mem_map.mp member
+        exact consolidationRates called present)
+
 /-- A state of a run from genesis that is at Electra is at or after its fork epoch. -/
 theorem reachable_electra_epoch {g y : ForkedBeaconState preset}
     (run : Run config checks g y) (genesis : Genesis (config := config) (checks := checks) g) :

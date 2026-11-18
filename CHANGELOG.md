@@ -71,6 +71,7 @@ Not yet released.
   They are also `effectiveKept_setValidator`, `effectiveKept_decrease`, `effectiveKept_exit`, `effectiveKept_requests` and `balanceDrift_upgrades_upper`.
   They are also `Unassigned`, `UnassignedFrom`, `unassignedFrom_size`, `UnassignedKept` and `UnassignedKept.processDeposit`.
   `DirectSafety.total_active_congr` moves from `DirectSafety/DepartureQueue.lean` to `Transition/BalanceDrift.lean`, with its name and statement unchanged.
+  `DirectSafety.queueCarry_le_of_run` bounds the exit and consolidation capacity that the queues carry at the end of a run from a state of a run from genesis.
 
 - `queueConsolidation_steps` states the steps of queueing a consolidation once ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
   The churn call writes only the churn left and the earliest consolidation epoch.
