@@ -144,6 +144,9 @@ Not yet released.
 - `epochIfLast_cases` splits the epoch step of a slot.
   When the next slot starts an epoch it is the epoch transition, and at any other slot it keeps the state.
 
+- `getTotalActiveBalance_bounds` bounds a total active balance below by one increment.
+  It bounds it above by the larger of one increment and the sum of the effective balances.
+
 - `VotersInHeadWindow` states that, between two times, each voter below a given parent block lies in each honest head's window after that parent ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `VoteInHeadWindow` is the vote and the window that it reads.
   `Execution.votersInHeadWindow_of_newlyActive` derives it from `NewlyActiveVotersInHeadWindow`, which asks it only of a voter activated at the target epoch of a vote two epochs after that parent.

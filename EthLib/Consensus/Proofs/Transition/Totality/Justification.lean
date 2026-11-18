@@ -129,9 +129,7 @@ theorem getUnslashedParticipatingIndices_exists_ok (within : state.RegistryWithi
       ∀ index ∈ result, index.toNat < state.validators.data.size := by
   have active : ∀ index ∈ getActiveValidatorIndices state epoch,
       index.toNat < state.validators.data.size := by
-    intro index member
-    obtain ⟨_, found, -⟩ := (mem_getActiveValidatorIndices within).mp member
-    exact (Array.getElem?_eq_some_iff.mp found).1
+    exact fun index member => lt_size_of_mem_getActiveValidatorIndices member
   suffices ∃ result, getUnslashedParticipatingIndices state altair flagIndex epoch = .ok result by
     obtain ⟨result, computed⟩ := this
     exact ⟨result, computed, fun index member =>

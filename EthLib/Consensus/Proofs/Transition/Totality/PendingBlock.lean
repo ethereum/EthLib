@@ -212,10 +212,8 @@ private theorem PendingWellFormed.of_processAttestation
   have newProposer : pending.proposerIndex.toNat < after.validators.data.size := by
     have beforeFulu : ¬.fusaka ≤ fork := Nat.not_le_of_lt (Nat.lt_trans before (by decide))
     have active := mem_getActiveValidatorIndices_of_getBeaconProposerIndex beforeFulu proposerOk
-    obtain ⟨validator, found, -⟩ := (mem_getActiveValidatorIndices
-      (state.validators.bound (Nat.lt_trans before (by decide)))).mp active
     rw [registry.1]
-    exact (Array.getElem?_eq_some_iff.mp found).1
+    exact lt_size_of_mem_getActiveValidatorIndices active
   refine ⟨fun other member => ?_, fun other member => ?_⟩
   · rcases inPrevious other member with old | ⟨rfl, target⟩
     · obtain ⟨epoch, nonzero, proposer⟩ := previous other old
