@@ -605,4 +605,71 @@ theorem Execution.callRolloverRead_or_evidence {Δ : ℕ} (sync : e.Synchronous 
   intro _ _ _ begin _ _ _ _ beginLe k atTime upToDate
   exact heads u caller k (Nat.zero_le _) (atTime ▸ beginLe) upToDate
 
+/-! ## From Gloas: honest registries stay within the limit -/
+
+/-- Honest held block states and justified states have their registries within the limit. -/
+private def HonestRegistriesWithinLimit (last : ℕ) : Prop :=
+  ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
+    HeldRegistriesWithinLimit ((e.world k).state w) ∧
+    ∀ state : BeaconState preset fork,
+      ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint =
+        .ok state → state.RegistryWithinLimit
+
+/-- From Gloas, honest registries stay within the limit while the stores' epochs stay bounded.
+
+The anchor's registry must leave room up to that bound, and the anchor state must be sound.
+
+Soundness bounds the anchor's justified epoch, so the store's justified epoch is not past the clock.
+-/
+private theorem Execution.honestRegistries_of_room (slots : 0 < config.SLOT_DURATION_MS)
+    (gloas : .glamsterdam ≤ fork) {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (sound : Invariant anchorState) {horizon : Epoch} {last : ℕ}
+    (bounded : HonestStoreEpochsBounded (e := e) horizon last)
+    (room : AnchorRegistryRoom preset anchorState horizon) :
+    HonestRegistriesWithinLimit (e := e) last := by
+  intro w member k time
+  have forward := e.forwardReachable
+    (fun w hw => (start w hw) ▸ Store.ForwardReachable.anchor anchored) k w member
+  obtain ⟨current, currentOk, _, _⟩ :=
+    forward.slots_le_current slots anchorSlot
+  have epochOk : ((e.world k).state w).getCurrentStoreEpoch config =
+      .ok (computeEpochAtSlot preset current) := by
+    simp [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
+  have clockLe := bounded w member k _ time epochOk
+  obtain ⟨blockBound, checkpointBound⟩ := forward.reachable.validators_size_le_of_gloas gloas
+  -- A state within the horizon that grew only by its epochs fits in the room of the anchor.
+  have within : ∀ state : BeaconState preset fork, getCurrentEpoch state ≤ horizon →
+      state.validators.data.size ≤ anchorState.validators.data.size +
+        preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+          ((getCurrentEpoch state).toNat - (getCurrentEpoch anchorState).toNat) →
+      state.RegistryWithinLimit := by
+    intro state le bound
+    have epochs := UInt64.le_iff_toNat_le.mp le
+    have more : preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+        ((getCurrentEpoch state).toNat - (getCurrentEpoch anchorState).toNat) ≤
+        preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+          (horizon.toNat - (getCurrentEpoch anchorState).toNat) :=
+      Nat.mul_le_mul_left _ (by omega)
+    unfold AnchorRegistryRoom at room
+    show state.validators.data.size ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat
+    omega
+  have blockLe := forward.blockState_epoch_le_current slots anchorSlot epochOk
+  refine ⟨fun root state held => within state (UInt64.le_trans (blockLe root state held) clockLe)
+    (blockBound root state held), fun state stateOk => ?_⟩
+  have found := Store.checkpointState_ok_iff.mp stateOk
+  refine within state ?_ (checkpointBound _ state found)
+  -- The justified state is a held block state, or that state processed to its epoch's start.
+  obtain ⟨base, startSlot, baseHeld, startOk, kept⟩ :=
+    forward.reachable.checkpointStatesFromBlocks found
+  rcases kept with ⟨-, rfl⟩ | ⟨-, _, -, processed⟩
+  · exact UInt64.le_trans (blockLe _ _ baseHeld) clockLe
+  have justifiedLe := UInt64.le_iff_toNat_le.mp (UInt64.le_trans
+    (forward.justified_epoch_le_current sound slots anchorSlot epochOk).1
+    clockLe)
+  rw [UInt64.le_iff_toNat_le, getCurrentEpoch_toNat, (processSlots_slot processed).2,
+    (computeStartSlotAtEpoch_ok_iff.mp startOk).2]
+  exact Nat.le_trans (Nat.div_le_of_le_mul (Nat.le_of_eq (Nat.mul_comm _ _))) justifiedLe
+
 end EthLib.Consensus.Models.Network

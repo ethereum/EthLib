@@ -425,4 +425,17 @@ theorem Store.Reachable.validators_size_le_of_gloas (gloas : .glamsterdam ≤ fo
   · obtain ⟨second, two⟩ := processSlots_validators_size_le slots
     exact growth_trans first second one two
 
+/-- An assumption on the run: the anchor's registry leaves room in the registry limit.
+
+The room covers one epoch of pending deposits for each epoch from the anchor to the horizon.
+
+From Gloas the type of the registry does not bound it.
+
+With it, each held registry fits within the limit through the horizon. -/
+def AnchorRegistryRoom (preset : Preset) (anchorState : BeaconState preset fork)
+    (horizon : Epoch) : Prop :=
+  anchorState.validators.data.size + preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+      (horizon.toNat - (getCurrentEpoch anchorState).toNat) ≤
+    preset.VALIDATOR_REGISTRY_LIMIT.toNat
+
 end EthLib.Consensus
