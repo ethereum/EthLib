@@ -25,29 +25,11 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
-/-- An honest vote before the call slot, for a block above the root, keeps the root held.
+/-- An honest vote before the call's slot, for a block above the root, keeps the root held.
 
-From the call to the horizon, every up-to-date honest store holds the root.
+Every up-to-date honest store holds the root from the call up to `time`.
 
-One other case is two honest stores that collide.
-
-The last is a held state's justification that conflicts with a store's finality.
-
-The root's realized justification is at most two epochs before the call's epoch.
-
-The signer held the root at its deadline, and the deadline plus the delay is before the call.
-
-Each receiver is up to date at the start of the call's slot, by prompt processing.
-
-There its finality is the anchor's, or at most the root's realized justification.
-
-A justification at or before the anchor epoch makes that finality the anchor checkpoint.
-
-Otherwise `Execution.heldFinality_or_evidence` reads it on the justification's chain.
-
-The root's chain passes through that justification, so the root reads it too.
-
-Synchrony then delivers the root, and blocks persist to later times. -/
+Otherwise two honest stores collide, or a held state's justification conflicts with a finality. -/
 theorem Execution.rootHeld_of_honest_vote {Δ : ℕ} {anchor : Store preset fork} {time : ℕ}
     {horizon : Epoch} {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)

@@ -23,6 +23,12 @@ Later, each step is the step of an honest duty epoch.
 Both steps need only the finality within one store.
 
 Each step may instead name two honest stores that collide, or historical direct-safety evidence.
+
+A Byzantine bound derives the honest signer that the signed-justification form assumes.
+
+For a call of the fast confirmation rule, its checks replace the consistency and the leaf.
+
+Its confirmed root then stays viable up to the time, or accountable-safety evidence holds.
 -/
 
 namespace EthLib.Consensus.Models.Network
@@ -308,17 +314,9 @@ private theorem route_of_split {store : Store preset fork} {root : Root}
       (Store.block_ok_iff.mp found)
   · exact .inr (leaf above same)
 
-/-- The confirmed root of a call is viable at each time from the call to the horizon.
+/-- At a time `T`, the confirmed root of a call is viable, given its coverage before `T`.
 
-At a time T, honest heads must descend from the root before T, and from the start to the horizon.
-
-Otherwise two honest stores collide, or held-state or cross-store evidence holds.
-
-A receiver's justified checkpoint of the call's epoch or earlier is comparable with the root.
-
-If the root strictly descends from it, the root is in the filtered tree.
-
-A later justified checkpoint has an honest signer, which puts it above the root. -/
+Otherwise two honest stores collide, or held-state or cross-store evidence holds. -/
 private theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
     {anchor : Store preset fork} {Δ time : ℕ} {anchorEpoch horizon : Epoch} {margin : ℕ}
     {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
@@ -1139,17 +1137,7 @@ public theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· 
 
 /-- The root of a checked call is viable at each time from the call, or an alternative holds.
 
-At each time T of the interval, the root's coverage before T gives its viability at T.
-
-The alternatives are a collision, historical or cross-store evidence, and held-state evidence.
-
-The root is held from the call on, from the honest vote behind the caller's margin.
-
-The root's realized justification is recent: the call's epoch is at most one after the start's.
-
-The root is above the start on the walk, and its own epoch is at most one after its justification.
-
-The viability at each time then follows from the root's step over the call's interval. -/
+The viability at a time `T` reads the root's coverage before `T`. -/
 private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)

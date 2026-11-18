@@ -3157,7 +3157,9 @@ Stores whose `getHead` returns an error are not covered, because master does not
 Such a store has no head for the confirmation to be unsafe about.
 Each evidence alternative is relative to the anchor, and its drift counts from the anchor.
 So with enough churn since the anchor it holds with no accountable key.
-`HeldStateFinalityEvidence` is the conflict between a held state's justified checkpoint and an honest store's finalized checkpoint, from `Execution.heldFinality_or_evidence`.
+`HeldStateFinalityEvidence` is evidence from runs to two held states, one with an honest store's finality and one justified at that epoch or later.
+`Execution.heldFinality_or_evidence` returns it when the justified checkpoint does not read that finality.
+The predicate itself does not record that failed read.
 
 `Execution.honestHeadsCover_of_checked_call` in the same file gives the coverage that the viability reads.
 Every up-to-date honest head descends from the confirmed root from the call up to `time`, with the same alternatives.
@@ -3175,7 +3177,8 @@ Block agreement between honest stores is not assumed: `Execution.blocksAgree_or_
 The agreement of justified checkpoints across honest stores is not assumed either.
 `Execution.selectedCheckpointsAgree_or_evidence` derives it, or returns `CrossStoreJustifiedEvidence`.
 
-Both headlines assume Byzantine stake below two thirds in every state of an epoch after the anchor's where an up-to-date honest store counts votes, over the whole run up to `time` (`ByzantineCountedStake anchorEpoch 0 time`).
+Both headlines assume Byzantine stake below two thirds in every state where an up-to-date honest store counts votes (`ByzantineCountedStake anchorEpoch 0 time`).
+That covers each such state of an epoch after the anchor's, over the whole run up to `time`.
 `Execution.justifiedHonestlySigned` derives from it the honest signer of each justified checkpoint after the anchor's epoch.
 That bound is wider than the one of `Execution.honestHeadsCover_of_byzantine_bound`, which covers only states of epochs after the caller's, and only from the call on.
 The derivation adds the inclusion delay and the two conditions on the anchor of that headline.

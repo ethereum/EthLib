@@ -584,7 +584,7 @@ theorem Store.ForwardReachableWith.countedRun_enoughStake {config : Config}
 
 The view is the held state itself, or the justification step that fork choice runs on it.
 
-The run to the held state extends the given run to the anchor, as in `checkpoint_terminalView`.
+The run to the held state extends the given run to the anchor.
 
 The step meets the stake floor of the view when the store's held states meet it. -/
 private theorem Store.Reachable.terminalView_of_after {config : Config}
@@ -773,34 +773,8 @@ private theorem Store.Reachable.finalized_ancestor_or_accountable_of_view {confi
 
 Otherwise runs to held states of the two stores bound accountable stake, or show hash evidence.
 
-Both stores are reachable from an anchor whose parent neither holds.
-
-The anchor block is at or before the slot of the anchor state, and the preset meets the parameters.
-
-We assume a run from a genesis built from deposits to the anchor state.
-
-We assume that every block of either store was imported with the signature checks of that run.
-
-We assume that no upgrade is due at a held slot, so the stores' transitions are steps of a run.
-
-The first alternative puts the finalized epoch at or before the epoch of the anchor state.
-
-The second puts the finalized checkpoint at the first slot of its epoch on the justified chain.
-
-The third gives the runs from the anchor to the held states of the two fields.
-
-Each field is that of its held state, or of the justification step that fork choice runs on it.
-
-The bound is that of direct accountable safety on the unslashed active stake at the anchor state.
-
-Its drift observes the runs up to one epoch past the justified epoch.
-
-The drift counts from the anchor, so the bound loosens as the justified epoch moves away from it.
-
-We assume a stake floor at the epoch calls of every run from the anchor to a held state.
-
-We assume it too at each held state up to one epoch past the justified epoch, for that step. -/
-private theorem Store.Reachable.finalized_ancestor_or_accountable_between {config : Config}
+The bound's drift counts from the anchor, up to one epoch past the justified epoch. -/
+theorem Store.Reachable.finalized_ancestor_or_accountable_between {config : Config}
     {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {store earlier : Store preset fork} {g : ForkedBeaconState preset}
@@ -1179,27 +1153,7 @@ theorem Store.Reachable.finalized_prefix_or_accountable {config : Config}
 
 Each checkpoint is the justified or unrealized justified checkpoint of its store.
 
-Both stores are reachable from one anchor with a nonzero state root, whose parent neither holds.
-
-At the anchor epoch both checkpoints are the anchor checkpoint.
-
-After it, each is the current justified field of a terminal view of a held state of its store.
-
-The evidence gives the runs from the anchor to those two held states and the two views.
-
-The bound is that of direct accountable safety on the unslashed active stake at the anchor state.
-
-Its drift observes the runs up to one epoch past the common epoch.
-
-We assume a run from a genesis built from deposits to the anchor state.
-
-We assume that every block of either store was imported with the signature checks of that run.
-
-We assume that no upgrade is due at a held slot, so the stores' transitions are steps of a run.
-
-We assume a stake floor at the epoch calls of every run from the anchor to a held state.
-
-We assume it too at each held state up to one epoch past the common epoch, for the step. -/
+The evidence is runs to held states that bound accountable stake, or hash evidence. -/
 theorem Store.Reachable.justified_eq_or_accountable {config : Config}
     {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}

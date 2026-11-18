@@ -28,6 +28,34 @@ Not yet released.
   `quorumReserve` and `pinReserve` are the reserves that `QuorumDriftWithin`, `JustifiedPinned` and the reserved count of a call read, and `RootViableAt` is the viability of a root at one time.
   `Execution.honestHeadsCover_of_byzantine_bound` moves to `HistoricalCoverage.lean`, so that the checked-call headlines can read `Execution.justifiedHonestlySigned`.
 
+- The checked-call proofs add these general facts.
+  `SelectedCheckpointsAgree` says that honest justified checkpoints agree at each epoch, and `Execution.selectedCheckpointsAgree_or_evidence` derives it or returns evidence.
+  `Execution.justified_eq_or_accountable` and `Store.Reachable.justified_eq_or_accountable` give two equal justified checkpoints of one epoch, or evidence.
+  `Execution.held_finalized_read_or_accountable` reads an honest finality on a held state's justified chain, or gives evidence.
+  `HonestHoldsFrom` says that honest stores hold a root over an interval, and `ReservedTargetVotes` is a call's honest count with its pin reserve.
+  `quorumReserve_le_pinReserve` bounds the quorum reserve by the pin reserve.
+  `includedVotes_votingSource_ge` lifts the voting sources above a block that holds a target's counted votes to that target.
+  `boundary_le_of_duty` and `duty_after_call` place an honest duty in time.
+  `DirectSafety.view_justified_fields` shows that a justified field of a view is the genesis checkpoint, or a quorum targets it.
+
+- The store facts are `Store.getCheckpointBlock_walk`, the one walk of a checkpoint read, and `Store.held_of_isAncestor`.
+  `Store.comparable_of_ancestors` and `Store.eq_of_isAncestor_antisymm` order two ancestors of one head.
+  `Store.getCheckpointBlock_of_shared_origin` passes a checkpoint read to another store that agrees on its blocks.
+  `Store.exists_leaf_above_mem_filterNodeTree`, `Store.isViableLeaf_eq_true`, `Store.filterNodeTree_cases` and `Store.filterNodeTree_sub` read the filtered tree.
+  `Store.ForwardReachable.pulledUpHeadState_epoch`, `Store.ForwardReachable.votingSource_le_justified` and `Store.ForwardReachable.justified_le_of_pulledUp` bound the epochs that a store reads.
+  `Store.Reachable.blockState_induction`, `Store.Reachable.justified_le_of_blockState`, `Store.Reachable.finalizedState_of_blockState`, `Store.Reachable.finalized_lt_justified_or_anchor`, `Store.Reachable.realized_le_source` and `Store.Reachable.unrealizedJustification_origin` read the held states.
+  `DelayFits.start_add_lt_of_lt`, `slot_le_of_epoch_lt` and `exists_nextEpochStart_lt` are facts of the clock.
+
+- The transition facts are in `Transition/IncludedTargetVotes.lean`, `Transition/ParticipationFrames.lean` and their neighbours.
+  `processJustificationAndFinalization_justifies` and `advanceSlot_justifies` justify an epoch whose active, unslashed target voters (`UnslashedAt`) hold two thirds.
+  `weighJustificationAndFinalization_justifies`, `processJustificationAndFinalization_totalActiveBalance` and `advanceSlot_total_of_last` are their steps.
+  `advanceSlots_keepsVotes`, `processBlock_keepsVotes`, `keptVotes_trans` and `recentEpoch_eq` keep those votes inside an epoch.
+  `PendingAtOwnEpoch` and `pendingAtOwnEpoch_stateTransition` keep each pending attestation at its own epoch.
+  `advanceSlots_currentJustified_mono` and `stateTransition_currentJustified_mono` show that slots and blocks never lower the current justified epoch of an invariant state.
+  `TargetFlagAt.of_processBlock` keeps a target flag through a block, read from `processBlock_participationKept`.
+  `ParticipationKept`, `ParticipationKeptBelow`, `ParticipationKept.below` and `ParticipationKept.foldlM` are the participation-flag frames.
+  `RunKept.getPendingAttestingIndices_eq` and `recordPendingAttestation_lists` read pending attestations.
+
 - `advanceSlot_epochs` splits one slot into the end of an epoch or a step inside it, with the epochs on each side.
   `recentPending_advanceSlot` adds the two lists of pending attestations, and `recentPending_pendingFrame` keeps them across a frame.
   `TargetFlagsVoted.of_advanceSlot` and `PendingVoted.of_advanceSlot` read them, as does the proof of `Execution.rootViable_of_checked_call`.
@@ -121,6 +149,9 @@ Not yet released.
   `ReceiverWindowExitsNear` asks the receivers' exit bound only of receivers within two epochs of the parent.
 
 ### Changes that break callers
+
+- In Lean, `headState_epoch_le` moves from the fast-confirmation proofs to `Store.ForwardReachable.headState_epoch_le` in `ForkChoice/BlockStates.lean`, with the same statement.
+  A caller writes `forward.headState_epoch_le` for a forward-reachable store `forward`.
 
 - In Lean, the compressed encoding of a point of `G2` has its 96 bytes in its type ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
   `G2.compress` and `G2.infinityBytes` are a `Vector UInt8 96`, and `G2.uncompress` takes one.

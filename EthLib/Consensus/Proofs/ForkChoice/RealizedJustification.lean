@@ -285,9 +285,7 @@ private theorem walk_realized_le_unrealized {store : Store preset fork}
     exact processJustificationAndFinalization_currentJustified_mono
       ((reachable.ordered sound).2 stored).settled run
 
-/-- Realized justification cannot decrease along a held descendant chain.
-
-It reads `Store.Reachable.relation_of_getAncestor` with the monotone relation. -/
+/-- Realized justification cannot decrease along a held descendant chain. -/
 private theorem walk_realized_mono {store : Store preset fork}
     (reachable : Store.Reachable config anchorState anchorBlock store)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)

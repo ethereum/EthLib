@@ -219,7 +219,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let scoreFin (i : ℕ) := if altair : .altair ≤ fork then
       (((finalizedState.inactivityScores altair).data[i]?).map (·.toNat)).getD 0 else 0
   let depthFin := epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat
-  -- Sync-seat penalties are charged in aggregate (`syncSeats`), not per key.
+  -- Sync-seat penalties are charged in aggregate, by the sync-seat terms, not per key.
   let leak (i : ℕ) := 2 * base i +
     effective i * (scoreFin i + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
       (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat)
@@ -261,7 +261,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     ((syncProposerReward (UInt64.ofNat seatReward)).toOption.getD 0).toNat
   let proposerCredit := (∑ i ∈ positions with (before i || current i) = true, base i) +
     syncProposer
-  -- The slashable keys of the window that the whistleblower term of `quorumReserve` leaves out.
+  -- The slashable keys of the window that the quorum reserve's whistleblower term leaves out.
   --
   -- Those are keys active from the next epoch, or withdrawable after the finalized epoch.
   --

@@ -765,28 +765,9 @@ private theorem justified_comparable_of_pin {anchor : Store preset fork} {Δ tim
 
 /-- At a time `T`, an honest store's justified checkpoint is comparable with the confirmed root.
 
-The store is up to date, and its justified checkpoint is of the call's epoch or earlier.
+The checkpoint is of the call's epoch or earlier.
 
-The call accepted its checks, the root is on its head's chain, and its count is reserved.
-
-Honest heads descend from the start up to the limit, and from the root up to `T`.
-
-An honest validator signed the receiver's justified checkpoint.
-
-An honest set whose stake, times three, exceeds the call's total stake plus the reserve pins it.
-
-At or before the call's epoch's first slot, the signer's duty is from the call on.
-
-Off the first slot, the rule's test gives a counted quorum.
-
-That quorum pins the checkpoint to the call's target.
-
-Otherwise one of its voters is unseen by the call and votes from the call on.
-
-A duty from the call on, before the receiver's time, makes the checkpoint comparable with the root.
-
-Otherwise two honest stores collide on a block, or hold conflicting justified checkpoints.
--/
+Otherwise two honest stores collide on a block, or hold conflicting justified checkpoints. -/
 theorem Execution.justified_comparable_of_checked {anchor : Store preset fork} {Δ time T : ℕ}
     {anchorEpoch horizon : Epoch} {margin : ℕ} {g : ForkedBeaconState preset}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)

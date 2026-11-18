@@ -582,13 +582,11 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
-/-! ## Voting sources and viable leaves -/
-
 /-! ## The justified test above the root -/
 
 /-- A held block above a root, each of whose descendants passes the justified test of fork choice.
 
-That test is the justified half of `isViableLeaf`. -/
+That test is the justified half of the viability of a leaf. -/
 private def JustifiedTestAbove (store : Store preset fork) (config : Config) (root : Root) : Prop :=
   ∃ (top : Root) (topBlock : BeaconBlock preset fork),
     store.blocks[top]? = some topBlock ∧
@@ -1643,9 +1641,7 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
 
 /-! ## The root in the filtered tree -/
 
-/-- An up-to-date honest receiver passes the justified test above the root.
-
-The proof splits on the receiver's epoch, and on the root's epoch against the call's. -/
+/-- An up-to-date honest receiver passes the justified test above the root. -/
 private theorem receiver_source_above_root {anchor : Store preset fork} {Δ time T : ℕ}
     {anchorEpoch horizon : Epoch} {margin : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)

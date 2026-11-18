@@ -585,25 +585,9 @@ theorem accountable_safety_justified {g x a b : ForkedBeaconState preset}
 
 /-- Two justified fields of the views at one epoch are equal, or they bound the accountable stake.
 
-A view is the last state of a run, or one justification step on that state.
+Three times the accountable stake plus twice the drift then covers the unslashed stake at `x`.
 
-`x` is no later than the first slot of that epoch.
-
-The unslashed active stake at `x` is then at most three times the accountable stake at `x`.
-
-Twice the larger drift of the two tails is added.
-
-The drift of a tail is the largest over its states up to one epoch past that epoch.
-
-It covers the test of a step, which counts at the last state within that horizon.
-
-Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
-
-The runs start at one genesis built from deposits, and the preset meets the parameters.
-
-After epoch 1, active stake exceeds 1.5 increments through one epoch past `j.epoch`.
-
-This holds at the epoch calls of each run, and at the step of each view. -/
+Otherwise SHA-256 collides in a header root of the runs, or a header or state has root zero. -/
 theorem accountable_justified_unique_terminal {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a)
     (right : Run config checks x b) (va : TerminalView a) (vb : TerminalView b)
