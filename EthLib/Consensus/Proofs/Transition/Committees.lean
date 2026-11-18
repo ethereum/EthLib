@@ -79,7 +79,15 @@ theorem getCurrentEpoch_le_activityFixedEpoch (state : BeaconState preset fork) 
 
 /-- (preset fact) Activity is fixed at least three epochs ahead.
 
-This is item 3's shared fact; the pin's producer reads it. -/
+It restores the content of `ExitWindowFixed`, which #2863 removed.
+
+The quorum drift bound needs only one epoch of lookahead.
+
+`Run.new_key_effective_floor` reads it.
+
+Its proof starts a key's balance floor two epochs before the key's activation epoch.
+
+It needs the key's activation, and the activity of the epoch after, fixed at that state. -/
 structure Preset.SeedLookaheadAtLeastThree (preset : Preset) : Prop where
   lookahead : 3 ≤ preset.MAX_SEED_LOOKAHEAD.toNat
 
