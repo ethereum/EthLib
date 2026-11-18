@@ -342,7 +342,7 @@ private theorem Stop.selected_local_replay
     exact stop.selected_prefix_exit_gt chosen rest v found
       (getCurrentEpoch_succ_lt_farFuture twoSlots stop.state.state)
 /-- The effective balance of a key reached from genesis is at most its largest. -/
-theorem effectiveAt_le_withdrawalMax (shared : Run config checks g x)
+private theorem effectiveAt_le_withdrawalMax (shared : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
     (early : x.fork < .glamsterdam) {i : Nat} {v : Validator}
     (initial : x.state.validators.data[i]? = some v) :

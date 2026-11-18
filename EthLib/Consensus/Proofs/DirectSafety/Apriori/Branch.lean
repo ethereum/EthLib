@@ -359,7 +359,7 @@ So a key of the registry at `x` has a score of at most `sigma + bias * t` after 
 -/
 
 /-- From Altair, the score of a state at each position `i` below `n` is at most `bound i`. -/
-def ScoresBelowAt (n : Nat) (bound : Nat → Nat) (s : ForkedBeaconState preset) : Prop :=
+private def ScoresBelowAt (n : Nat) (bound : Nat → Nat) (s : ForkedBeaconState preset) : Prop :=
   ∀ altair : .altair ≤ s.fork, ∀ i < n, ∀ score : UInt64,
     (s.state.inactivityScores altair).data[i]? = some score → score.toNat ≤ bound i
 
@@ -371,7 +371,7 @@ private theorem ScoresBelowAt.of_kept {f : Fork} {s t : BeaconState preset f} {n
   below altair i member score (by rw [← kept i member altair]; exact found)
 
 /-- An update of the scores raises each one by at most the score bias. -/
-theorem ScoresBelowAt.inactivity {f : Fork} {s t : BeaconState preset f} {n : Nat}
+private theorem ScoresBelowAt.inactivity {f : Fork} {s t : BeaconState preset f} {n : Nat}
     {bound : Nat → Nat}
     (altair : .altair ≤ f) (computed : processInactivityUpdates config s altair = .ok t)
     (below : ScoresBelowAt n bound ⟨f, s⟩) :
@@ -498,19 +498,6 @@ private theorem ScoresBelowAt.step_all {m l : ForkedBeaconState preset}
       obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
       exact ScoresBelowAt.of_kept (fun i _ => ScoreKept.of_scores rfl i) below
 
-/-- A step from Altair keeps the bound of the scores below `n`, or raises it by the bias.
-
-It raises it only when it ends an epoch, and so moves the epoch on by one. -/
-theorem ScoresBelowAt.step {m l : ForkedBeaconState preset} (step : Step config checks m l)
-    {n : Nat} {bound : Nat → Nat} (altair : .altair ≤ m.fork)
-    (inside : n ≤ m.state.validators.data.size)
-    (early : l.fork < .glamsterdam) (era : .pectra ≤ m.fork ∨ l.fork < .pectra)
-    (below : ScoresBelowAt n bound m) :
-    ScoresBelowAt n (fun i => bound i + config.INACTIVITY_SCORE_BIAS.toNat *
-      ((getCurrentEpoch l.state).toNat - (getCurrentEpoch m.state).toNat)) l := by
-  have _ := inside
-  exact ScoresBelowAt.step_all step altair early era below
-
 /-- On a branch from `x` from Altair, each score below `n` follows its start bound plus `bias * t`.
 
 It needs no premise on the registry at `x`: a validator that the branch adds takes the score zero.
@@ -545,19 +532,6 @@ private theorem scoresBelowAt_run_all {x y : ForkedBeaconState preset}
     rw [Nat.add_assoc, ← Nat.mul_add, epochs] at bound
     exact bound
 
-/-- On a branch from `x` from Altair, each score below `n` follows its start bound plus `bias * t`.
-
-`t` is the number of epochs from `x`, so the number of updates of the scores so far. -/
-theorem scoresBelowAt_run {x y : ForkedBeaconState preset} (tail : Run config checks x y)
-    (altair : .altair ≤ x.fork) (early : y.fork < .glamsterdam)
-    (era : .pectra ≤ x.fork ∨ y.fork < .pectra) {n : Nat}
-    (inside : n ≤ x.state.validators.data.size) {start : Nat → Nat}
-    (initial : ScoresBelowAt n start x) :
-    ScoresBelowAt n (fun i => start i + config.INACTIVITY_SCORE_BIAS.toNat *
-        ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat)) y := by
-  have _ := inside
-  exact scoresBelowAt_run_all tail altair early era initial
-
 /-- From Altair, each score of a state at a position below `n` is at most `bound`. -/
 def ScoresBelow (n bound : Nat) (s : ForkedBeaconState preset) : Prop :=
   ∀ altair : .altair ≤ s.fork, ∀ i < n, ∀ score : UInt64,
@@ -588,7 +562,8 @@ theorem ScoresBelow.step {m l : ForkedBeaconState preset} (step : Step config ch
     (below : ScoresBelow n bound m) :
     ScoresBelow n (bound + config.INACTIVITY_SCORE_BIAS.toNat *
       ((getCurrentEpoch l.state).toNat - (getCurrentEpoch m.state).toNat)) l :=
-  ScoresBelowAt.step (bound := fun _ => bound) step altair inside early era below
+  have _ := inside
+  ScoresBelowAt.step_all (bound := fun _ => bound) step altair early era below
 
 /-- From Altair, each score of a state is at most the start score that the floor reads. -/
 private theorem scoresBelowAt_start (x : ForkedBeaconState preset) (altair : .altair ≤ x.fork)
