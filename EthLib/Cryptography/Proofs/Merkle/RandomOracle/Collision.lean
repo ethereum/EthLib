@@ -40,6 +40,8 @@ These are ideal-oracle statements, not claims about the structure of a concrete 
 - The Merkle searches run against the oracle only make queries.
 - A search that succeeds on covered inputs puts a collision in the cache.
 - So a forged path is found with probability at most the birthday bound of the whole budget.
+
+An experiment whose extraction has no winning replay is won with probability zero.
 -/
 
 @[expose] public section
@@ -152,6 +154,26 @@ theorem prEvent_experimentWith_le [SampleableType R] {γ β : Type}
   rw [QueryImpl.simulateQ_add_liftComp_right] at hz
   -- The final cache replays the extraction without sampling again.
   exact collision (QueryImpl.simulateQ_toPartialImpl_snd_of_mem_support_run_simulateQ_withCaching
+    _ (extraction claim) hz) hwins
+
+/-- An experiment is won with probability zero when no replay of the extraction wins.
+
+The hypothesis: no replay of the extraction ends in a win, from any cache.
+
+The initial cache is empty, and no count of oracle calls is needed. -/
+theorem prEvent_experimentWith_eq_zero [SampleableType R] {γ β : Type}
+    (extraction : γ → OracleComp (D →ₒ R) β) (wins : β → Prop)
+    (noWin : ∀ {cache : (D →ₒ R).QueryCache} {claim : γ} {outcome : β},
+      simulateQ cache.toPartialImpl (extraction claim) = some outcome → ¬wins outcome)
+    (adversary : OracleComp (unifSpec + (D →ₒ R)) γ) :
+    Pr{let z ← (simulateQ (D →ₒ R).romImpl (experimentWith extraction adversary)).run ∅}[
+      wins z.1] = 0 := by
+  refine prEvent_eq_zero_of_forall_mem_support _ _ fun z hz hwins => ?_
+  simp only [experimentWith, simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hz
+  obtain ⟨⟨claim, cache⟩, -, hz⟩ := hz
+  rw [QueryImpl.simulateQ_add_liftComp_right] at hz
+  -- Every outcome is a replay of the extraction from the final cache.
+  exact noWin (QueryImpl.simulateQ_toPartialImpl_snd_of_mem_support_run_simulateQ_withCaching
     _ (extraction claim) hz) hwins
 
 /-- A successful collision search whose witness is covered gives a collision of the cache.

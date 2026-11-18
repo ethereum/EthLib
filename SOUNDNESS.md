@@ -165,6 +165,7 @@ That search walks both rebuilds down from the root, and returns nothing on one r
 This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`: at most 4 for `q >= 2`, and close to 2 for large `q`.
 `prEvent_experimentWith_le` applies it to an experiment where the adversary outputs a claim and an extraction then runs on it with the oracle alone.
 It bounds a win by `q^2 / N` when every replayed win of the extraction leaves a collision in the cache.
+`prEvent_experimentWith_eq_zero` gives a win probability of zero when no replay of the extraction wins, with no count of oracle calls.
 
 `prEvent_secondPreimageGame_le` bounds a second preimage of one fixed tree of height `h` by `(Q_f + h) / N`, for a forger with `Q_f` hash calls.
 The forger sees the root and all honest paths.
@@ -275,7 +276,10 @@ The extraction roots both commitments, reads the subtree index of the first blob
 Every hash is an oracle call, and the climbs take the inclusion proof depth of the preset.
 The adversary wins when the sidecars have one index, one body root and different commitments, and both climbs reach that body root.
 Only the forks from Deneb and before Gloas put the commitments in the body.
-At the other forks the extraction reads no subtree index, so it climbs nothing and no adversary wins; no theorem states this.
+At the other forks the body has no list of commitments.
+`blobKzgCommitmentGindex_of_lt_dencun_or_glamsterdam_le` shows that the lookup of a commitment in the body is then the error of a missing field.
+So the extraction reads no subtree index and climbs neither proof, and `not_blobWins_of_extractBlobSidecars` shows that no replayed outcome wins.
+`prEvent_blobWins_eq_zero` then gives a win probability of zero through `prEvent_experimentWith_eq_zero`, at every preset and every fork before Deneb or from Gloas, for any adversary.
 
 `collision_of_extractBlobSidecars` shows that every win leaves two different cached inputs with one answer.
 By `hashTreeRootM_bytes48` (`Serialization/Proofs/Ssz/BranchRandomOracle.lean`), the root of a commitment is one hash of its 48 bytes and 16 zero bytes.
@@ -342,8 +346,10 @@ At the mainnet limit of 4096 and depth of 4, `prEvent_columnWins_le_mainnet` bou
 Beyond the adversary's own queries, `Q` grows with the limit and the depth, not with the commitments that the headers carry.
 The collision lemma, the bounds and the count of the extraction need a fork before Gloas, where the list has a limit.
 From Gloas the list is progressive, and neither a sidecar nor a partial sidecar carries the proof.
-There the body has no list of commitments, so the extraction reads no subtree index and no adversary wins.
-No theorem states this.
+There the body has no list of commitments, and neither has it before Deneb.
+`blobKzgCommitmentsGindex_of_lt_dencun_or_glamsterdam_le` shows that the lookup of the list is then the error of a missing field.
+So the extraction reads no subtree index, and `not_columnWins_of_extractColumnHeaders` shows that no replayed outcome wins.
+`prEvent_columnWins_eq_zero` then gives a win probability of zero through `prEvent_experimentWith_eq_zero`, at every preset and every fork before Deneb or from Gloas, for any adversary.
 With SHA-256 in place of the oracle, `columnWins_sha256_iff` shows that a win is two such headers that `verifyKzgCommitmentsInclusionProof` accepts.
 It holds at every preset and every fork.
 Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
