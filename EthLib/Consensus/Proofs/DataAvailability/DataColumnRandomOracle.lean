@@ -29,6 +29,8 @@ The count grows with that limit and the depth of the proofs, not with the commit
 
 At mainnet, an adversary of `q` calls gives a bound of `(q + 16392)^2 / 2^256` before Gloas.
 
+At a fork before Deneb or from Gloas no outcome wins, and a win has probability zero.
+
 With SHA-256 as the node hash, a win is two such headers that the inclusion check accepts.
 
 That result holds at every preset and fork.
@@ -53,7 +55,7 @@ namespace EthLib.Consensus
 open Base Serialization.Ssz Serialization.Ssz.RandomOracle
 open OracleComp OracleSpec ENNReal
 open Cryptography.Merkle.RandomOracle (Collision experimentWith experimentWith_queryBound
-  prEvent_experimentWith_le)
+  prEvent_experimentWith_le prEvent_experimentWith_eq_zero)
 
 /-- What the column experiment reports: the two headers, and the climbs of their proofs.
 
@@ -160,6 +162,45 @@ theorem collision_of_extractColumnHeaders {preset : Preset} {fork : Fork}
       subst hout
       exact collision_of_extractBranches hbranches ⟨sameLeaf, by simp, by simp, _, firstClimbed,
         sameRoot ▸ secondClimbed⟩
+  · simp only [simulateQ_pure] at hclimbs
+    cases hclimbs
+
+/-- The generalized index of the list is the error of a missing field when the body has no list.
+
+It needs a fork before Deneb or from Gloas. -/
+theorem blobKzgCommitmentsGindex_of_lt_dencun_or_glamsterdam_le {preset : Preset} {fork : Fork}
+    (outside : fork < .dencun ∨ .glamsterdam ≤ fork) :
+    blobKzgCommitmentsGindex preset fork =
+      .error (.noSuchField (BeaconBlockBody.names fork).length) := by
+  cases fork <;> first | exact absurd outside (by decide) | rfl
+
+/-- A replayed column extraction never wins when the body has no list of commitments.
+
+The extraction then reads no subtree index, so it climbs neither proof.
+
+It needs a fork before Deneb or from Gloas. -/
+theorem not_columnWins_of_extractColumnHeaders {preset : Preset} {fork : Fork}
+    (outside : fork < .dencun ∨ .glamsterdam ≤ fork) {cache : HashOracle.QueryCache}
+    {claim : PartialDataColumnHeader preset fork × PartialDataColumnHeader preset fork}
+    {outcome : ColumnOutcome preset fork}
+    (hrun : simulateQ cache.toPartialImpl (extractColumnHeaders queryHash preset fork claim) =
+      some outcome) :
+    ¬ColumnWins outcome := by
+  intro hwins
+  simp only [extractColumnHeaders, simulateQ_bind] at hrun
+  obtain ⟨_, -, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+  obtain ⟨_, -, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+  obtain ⟨climbs, hclimbs, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+  simp only [simulateQ_pure] at hrun
+  cases hrun
+  obtain ⟨-, -, climbed, present, -⟩ := hwins
+  dsimp only at present
+  subst present
+  split at hclimbs
+  · -- The lookup of the list fails, so no subtree index is read.
+    rename_i _ _ _ located _ _
+    rw [blobKzgCommitmentsGindex_of_lt_dencun_or_glamsterdam_le outside] at located
+    simp [bind, Except.bind] at located
   · simp only [simulateQ_pure] at hclimbs
     cases hclimbs
 
@@ -299,6 +340,22 @@ theorem prEvent_columnWins_le_mainnet {fork : Fork} (beforeGloas : fork < .glams
   have bound := prEvent_columnWins_le_of_adversary .mainnet beforeGloas adversary hq
   rw [Nat.add_assoc, count] at bound
   exact bound
+
+/-- An adversary that outputs two headers wins with probability zero when the body has no list.
+
+Every outcome of the experiment is a replay of the extraction, and no replay wins.
+
+The oracle cache starts empty, and no count of oracle calls is needed.
+
+It needs a fork before Deneb or from Gloas. -/
+theorem prEvent_columnWins_eq_zero [SampleableType Hash32] (preset : Preset) {fork : Fork}
+    (outside : fork < .dencun ∨ .glamsterdam ≤ fork)
+    (adversary : OracleComp (unifSpec + HashOracle)
+      (PartialDataColumnHeader preset fork × PartialDataColumnHeader preset fork)) :
+    Pr{let z ← (simulateQ HashOracle.romImpl
+      (experimentWith (extractColumnHeaders queryHash preset fork) adversary)).run ∅}[
+        ColumnWins z.1] = 0 :=
+  prEvent_experimentWith_eq_zero _ _ (not_columnWins_of_extractColumnHeaders outside) adversary
 
 /-- With SHA-256, the extraction roots each list and reads the index as the spec does. -/
 theorem extractColumnHeaders_sha256 (preset : Preset) (fork : Fork)
