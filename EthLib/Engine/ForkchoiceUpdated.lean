@@ -642,7 +642,7 @@ def payloadId (head : Hash32) (attributes : PayloadAttributes fork) : PayloadId 
   let digest := Cryptography.Hash.Keccak.keccak256 (payloadIdInput head attributes)
   Vector.ofFn fun i => digest[i.val]'(by
     have := i.isLt
-    simp only [Cryptography.Hash.Keccak.DIGEST_LEN]
+    simp only [Cryptography.Hash.Keccak.DIGEST_LEN_256]
     omega)
 
 /-! ## The response -/

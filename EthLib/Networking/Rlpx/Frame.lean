@@ -65,10 +65,10 @@ structure FrameState where
   /-- `mac-secret`, the AES-256 key of the MAC. -/
   macKey : Aes.Key .aes256
   /-- The Keccak-256 state of the MAC. -/
-  mac : Hasher
+  mac : Hasher256
 
 /-- `keccak256.digest(mac)[:16]`, the first 16 bytes of the digest of a MAC state. -/
-def macDigest (h : Hasher) : Aes.Block :=
+def macDigest (h : Hasher256) : Aes.Block :=
   Vector.ofFn fun i => h.digest[i.val]
 
 /--
@@ -76,15 +76,15 @@ The seed `aes(mac-secret, keccak256.digest(mac)[:16]) ^ value` of a MAC update.
 
 `aes` here is the AES-256 forward cipher on one block.
 -/
-def macSeed (macKey : Aes.Key .aes256) (h : Hasher) (value : List UInt8) : ByteArray :=
+def macSeed (macKey : Aes.Key .aes256) (h : Hasher256) (value : List UInt8) : ByteArray :=
   ⟨(List.zipWith (· ^^^ ·) (Aes.ciph .aes256 macKey (macDigest h)).toList value).toArray⟩
 
 /-- The MAC state after it absorbs the seed of `value`. -/
-def macStep (macKey : Aes.Key .aes256) (h : Hasher) (value : List UInt8) : Hasher :=
+def macStep (macKey : Aes.Key .aes256) (h : Hasher256) (value : List UInt8) : Hasher256 :=
   h.absorb (macSeed macKey h value)
 
 /-- The MAC state after the frame ciphertext and the seed of its digest. -/
-def frameMacStep (macKey : Aes.Key .aes256) (h : Hasher) (frameCt : ByteArray) : Hasher :=
+def frameMacStep (macKey : Aes.Key .aes256) (h : Hasher256) (frameCt : ByteArray) : Hasher256 :=
   let h := h.absorb frameCt
   macStep macKey h (macDigest h).toList
 
@@ -113,7 +113,7 @@ def readSize (header : List UInt8) : Nat :=
   (header.take 3).foldl (fun acc b => 256 * acc + b.toNat) 0
 
 /-- A MAC state as the 16 bytes of its MAC. -/
-def macBytes (h : Hasher) : ByteArray := ⟨(macDigest h).toArray⟩
+def macBytes (h : Hasher256) : ByteArray := ⟨(macDigest h).toArray⟩
 
 /--
 The frame of `frameData`, and the state of the direction after it.

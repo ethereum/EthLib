@@ -23,6 +23,6 @@ theorem size_mixDigest (datasetSize : Nat) (cache : Array Item) (headerHash nonc
 /-- The result is 32 bytes: a Keccak-256 digest. -/
 theorem size_result (datasetSize : Nat) (cache : Array Item) (headerHash nonce : ByteArray) :
     (hashimotoLight datasetSize cache headerHash nonce).result.size = 32 := by
-  simp [hashimotoLight, ByteArray.size, Hash.Keccak.DIGEST_LEN]
+  simp [hashimotoLight, ByteArray.size, Hash.Keccak.DIGEST_LEN_256]
 
 end EthLib.Cryptography.Ethash

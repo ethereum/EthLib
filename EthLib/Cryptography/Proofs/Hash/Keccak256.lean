@@ -35,7 +35,7 @@ where
 /-! ## The digest length -/
 
 /-- Every digest is 32 bytes, whatever the message. -/
-theorem size_keccak256 (msg : ByteArray) : (keccak256 msg).toArray.size = DIGEST_LEN :=
+theorem size_keccak256 (msg : ByteArray) : (keccak256 msg).toArray.size = DIGEST_LEN_256 :=
   (keccak256 msg).size_toArray
 
 end EthLib.Cryptography.Hash.Keccak

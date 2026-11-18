@@ -379,7 +379,7 @@ private theorem bytesOfLane_bit (v : UInt64) (m j : Nat) (hm : m < 8) (hj : j < 
 
 /-- Squeezed byte `i` is byte `i % 8` of lane `(i / 8, 0)`. -/
 private theorem squeeze_get (a : Keccak.State) (i : Fin 32) :
-    (Keccak.Internal.squeeze a)[i] =
+    (Keccak.Internal.squeeze256 a)[i] =
       (Keccak.Internal.bytesOfLane (a.lane ⟨i.val / 8, by omega⟩ 0))[i.val % 8]'(by
         simp [Keccak.Internal.bytesOfLane]
         omega) := by
@@ -447,7 +447,7 @@ theorem outputByte_ofLanes (a : Keccak.State) {i : Nat} (hi : i < 200) :
 
 /-- Each of the first 32 output bytes of the model is the squeezed Keccak-256 byte. -/
 theorem outputByte_eq_squeeze (a : Keccak.State) (i : Fin 32) :
-    outputByte (ofLanes a) i.val = (Keccak.Internal.squeeze a)[i] := by
+    outputByte (ofLanes a) i.val = (Keccak.Internal.squeeze256 a)[i] := by
   rw [outputByte_ofLanes a (by omega), squeeze_get]
   have hx : (⟨(i.val / 8) % 5, by omega⟩ : Fin 5) = ⟨i.val / 8, by omega⟩ :=
     Fin.ext (by simp; omega)
@@ -490,9 +490,9 @@ theorem keccak512_getElem (msg : ByteArray) (i : Nat) (h : i < 64) :
 
 /-- The lane implementation of Keccak-256 equals the bit model, for every message. -/
 theorem keccak256_eq (msg : ByteArray) : Keccak.keccak256 msg = keccak256 msg := by
-  simpa only [Keccak.keccak256, Keccak.RATE, Keccak.DIGEST_LEN, keccak256] using
-    sponge_eq_of_squeeze (rate := 136) (outBytes := Keccak.DIGEST_LEN) (by decide) ⟨17, rfl⟩
-      (by decide) (by decide) Keccak.Internal.squeeze
+  simpa only [Keccak.keccak256, Keccak.RATE_256, Keccak.DIGEST_LEN_256, keccak256] using
+    sponge_eq_of_squeeze (rate := 136) (outBytes := Keccak.DIGEST_LEN_256) (by decide) ⟨17, rfl⟩
+      (by decide) (by decide) Keccak.Internal.squeeze256
       (fun a i => (outputByte_eq_squeeze a i).symm) msg
 
 /-- The lane implementation of Keccak-512 equals the bit model, for every message. -/
