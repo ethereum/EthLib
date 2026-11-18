@@ -969,9 +969,8 @@ private theorem depositRequest_departureQueues {fork : Fork} {s t : BeaconState 
     (electra : .pectra ≤ fork) {request : DepositRequest}
     (ok : processDepositRequest s electra request = .ok t) :
     departureQueues electra t = departureQueues electra s := by
-  obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
-  unfold recordDepositRequestsStart
-  split <;> (try split) <;> rfl
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
+  rfl
 
 /-- Attestation processing preserves departure queues before Gloas. -/
 private theorem attestation_departureQueues {fork : Fork} {s t : BeaconState preset fork}
