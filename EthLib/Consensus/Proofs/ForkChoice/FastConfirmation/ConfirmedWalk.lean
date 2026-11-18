@@ -56,10 +56,6 @@ theorem Execution.walk_covers {first last : ℕ} {P : Prop} {start : Root} (memb
   by_cases alternative : P
   · exact Or.inr alternative
   refine Or.inl ?_
-  -- Coverage up to a time gives coverage up to any earlier time.
-  have shorten : ∀ {root : Root} {T T' : ℕ}, T' ≤ T →
-      HonestHeadsCover (e := e) root first T → HonestHeadsCover (e := e) root first T' :=
-    fun le covers earlier atLeast below => covers earlier atLeast (Nat.lt_of_lt_of_le below le)
   -- Every member is covered up to each time up to `last + 1`, by induction on the time.
   have upTo : ∀ T, T ≤ last + 1 → ∀ m ∈ members, HonestHeadsCover (e := e) m first T := by
     intro T
@@ -81,7 +77,7 @@ theorem Execution.walk_covers {first last : ℕ} {P : Prop} {start : Root} (memb
         have parentCovers : HonestHeadsCover (e := e) (parentOf members[i]) first (T + 1) := by
           rw [parents i h]
           split
-          · exact shorten within startCovers
+          · exact honestHeadsCover_mono startCovers le_rfl within
           · exact ihIndex (i - 1) (by omega) (by omega)
         exact (step T (by omega) before members[i] (List.getElem_mem h) parentCovers).resolve_right
           alternative

@@ -310,6 +310,13 @@ def HonestHeadsCover (root : Root) (first last : Nat) : Prop :=
     ((e.world i).state a).getHead config = .ok hd →
     ((e.world i).state a).isAncestor hd ⟨root, .pending⟩ = .ok true
 
+omit [DecidablePred (· ∈ J)] in
+/-- Coverage over an interval covers every subinterval. -/
+theorem honestHeadsCover_mono {root : Root} {first first' last last' : ℕ}
+    (cover : HonestHeadsCover (e := e) root first last) (lower : first ≤ first')
+    (upper : last' ≤ last) : HonestHeadsCover (e := e) root first' last' :=
+  fun earlier low high => cover earlier (lower.trans low) (Nat.lt_of_lt_of_le high upper)
+
 /-- Every up-to-date honest store holds the root at every time of the interval. -/
 def HonestHoldsFrom (root : Root) (first last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, first ≤ (e.world k).time → (e.world k).time ≤ last →

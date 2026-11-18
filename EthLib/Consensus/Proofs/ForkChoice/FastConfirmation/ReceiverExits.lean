@@ -262,11 +262,7 @@ theorem Execution.receiverWindowExitsNear_of_sourceOnParentChain
   have firstLe' := UInt64.le_iff_toNat_le.mp firstLe
   have lastLe' := UInt64.le_iff_toNat_le.mp lastLe
   have receiverNat : receiverEpoch.toNat = current.toNat / preset.SLOTS_PER_EPOCH.toNat := by
-    simp only [Store.getCurrentStoreEpoch, bind_ok_iff, pure, Except.pure] at epochOk
-    obtain ⟨slot', slotOk', read⟩ := epochOk
-    rw [currentOk, Except.ok.injEq] at slotOk'
-    subst slot'
-    rw [← Except.ok.inj read]
+    rw [Store.getCurrentStoreEpoch_eq currentOk epochOk]
     simp only [computeEpochAtSlot, UInt64.toNat_div]
   -- The epoch starts after the parent's slot, so it is after the parent's epoch.
   have afterParent : (computeEpochAtSlot preset parent.slot).toNat < epoch.toNat := by

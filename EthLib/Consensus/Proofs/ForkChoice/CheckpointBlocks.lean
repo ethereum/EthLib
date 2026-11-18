@@ -1490,9 +1490,8 @@ private theorem origins_block {before after : Store preset fork} {epoch : Epoch}
   · exact old
   cases Except.ok.inj (nowOk.symm.trans clock)
   obtain ⟨⟨current, currentOk, slotLe⟩, _⟩ := Store.onBlock_checks hashed fresh original
-  have epochEq : computeEpochAtSlot preset current = epoch := by
-    simpa [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
-      using clock
+  have epochEq : computeEpochAtSlot preset current = epoch :=
+    (Store.getCurrentStoreEpoch_eq currentOk clock).symm
   have blockLe : computeEpochAtSlot preset signed.message.slot ≤ epoch := by
     rw [← epochEq, UInt64.le_iff_toNat_le]
     exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp slotLe)

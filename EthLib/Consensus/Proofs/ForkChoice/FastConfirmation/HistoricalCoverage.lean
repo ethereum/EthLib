@@ -515,14 +515,7 @@ public theorem Execution.honestHeadsCover_of_viableAt [DecidablePred (· ∈ J)]
     (parentCovers : HonestHeadsCover (e := e) block.parentRoot (e.world n).time (time + 1))
     (fit : config.CommitteeWindowsFit preset)
     (viableAt : ∀ T, (e.world n).time ≤ T → T ≤ time →
-      HonestHeadsCover (e := e) root (e.world n).time T →
-      ∀ w ∈ J, ∀ k (nodes : List ForkChoiceNode) (hd : ForkChoiceNode), (e.world k).time = T →
-      UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
-      ((e.world k).state w).getHead config = .ok hd →
-      ((e.world k).state w).getFilteredNodeTree config = .ok nodes →
-      ((e.world k).state w).isAncestor
-          ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
-        (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes)
+      HonestHeadsCover (e := e) root (e.world n).time T → RootViableAt (e := e) root T)
     (exits : ReceiverWindowExitsNearWith (e := e) (computeEpochAtSlot preset parent.slot) source
       first (e.world n).time time exitAllowance)
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)

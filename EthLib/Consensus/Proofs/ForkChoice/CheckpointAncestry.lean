@@ -1499,19 +1499,16 @@ theorem Execution.finalized_prefix_or_accountable {ν κ : Type*} [DecidableEq �
   push Not at family
   obtain ⟨w, honest, i, k, later, inTime, failed⟩ := family
   have earlyTime := (e.monotone_time later).trans inTime
-  have forward (n : ℕ) := e.forwardReachableWith
-    (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) n w honest
+  have forward := e.forwardReachableWith
+    (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) k w honest
   have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
   have ordered := UInt64.le_trans (e.checkpointsAdvance_of_le w later).2.epoch_le
-    ((forward k).reachable.finalized_le_justified sound)
-  obtain ⟨calls, terminal⟩ := e.held_floors enough heldEnough honest honest earlyTime inTime
-    (bounded w honest k inTime)
-  have result := (forward k).reachable.finalized_prefix_or_accountable (forward i).reachable
-    parameters genesis pre anchorSlot boundary nonzero (unknown w honest k inTime)
-    (unknown w honest i earlyTime) (forward k).blockStatesFromParents
-    (forward i).blockStatesFromParents (early w honest k inTime)
-    (early w honest i earlyTime) ordered calls terminal
-  exact .inr ⟨w, honest, i, k, later, inTime, ordered, failed, result.resolve_left failed⟩
+    (forward.reachable.finalized_le_justified sound)
+  rcases e.finalized_read_or_accountable anchored start parameters genesis pre anchorSlot boundary
+      nonzero unknown bounded early enough heldEnough honest honest earlyTime inTime ordered with
+    read | ⟨-, -, evidence⟩
+  · exact absurd read failed
+  · exact .inr ⟨w, honest, i, k, later, inTime, ordered, failed, evidence⟩
 
 /-- Justified checkpoints of one epoch agree across honest nodes, or two held states give evidence.
 

@@ -92,7 +92,7 @@ Not yet released.
   - `Store.viable_of_ancestor` passes viability from a root to its ancestors before Gloas.
   - `Store.held_of_isAncestor` now gives the held block at the root of any ancestor node, not only of a pending one.
   - `Store.Reachable.finalized_known` gives the block of a reachable store's finalized checkpoint; steps of `RootViability.lean` and `RootHeld.lean` read it too.
-  - `Execution.walk_covers` covers a walk of roots from its start and a step.
+  - `Execution.walk_covers` covers a walk of roots from its start and a step, and `honestHeadsCover_mono` shrinks the interval of a coverage.
   - `Execution.honestHeadsCover_of_viableAt` is the induction behind the historical-anchor headlines, with the root's viability given per time.
     Its window reserve and its receivers' exits read one reserve value; the headlines pass `exitReserve`.
   - `Execution.rootViableAt_of_checked` gives that viability for the root of a checked call.

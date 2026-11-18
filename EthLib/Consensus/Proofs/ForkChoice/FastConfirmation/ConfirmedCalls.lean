@@ -1577,12 +1577,7 @@ private theorem observedStart {Δ : ℕ} {anchor : Store preset fork} {limit : �
     rcases reachedM.justified_origins _ (.inr rfl) with
       ⟨_, _, same⟩ | ⟨root, state, stored, same⟩ | ⟨root, state, pulled, stored, run, same⟩
     · rw [same]
-      rcases reachedN.checkpoints_known sound aligned positive window
-          (checkpoint := ((e.world n).state u).justifiedCheckpoint) (by simp) with
-        ⟨eq, -, -⟩ | ⟨lt, -⟩ | zero
-      · exact UInt64.le_of_eq eq.symm
-      · exact UInt64.le_of_lt lt
-      · exact (notZero zero).elim
+      exact UInt64.le_trans reachedN.anchor_le_finalized (reachedN.finalized_le_justified sound)
     · obtain ⟨-, -, -, storedN⟩ := heldAtN stored
       rw [same]
       exact reachedN.justified_le_of_blockState sound storedN
@@ -1612,12 +1607,6 @@ private theorem observedStart {Δ : ℕ} {anchor : Store preset fork} {limit : �
   exact UInt64.lt_iff_toNat_lt.mpr (by omega)
 
 /-! ## The anchor facts and the carried facts of a call -/
-
-/-- Coverage over an interval covers every subinterval. -/
-private theorem honestHeadsCover_mono {root : Root} {first first' last last' : ℕ}
-    (cover : HonestHeadsCover (e := e) root first last) (lower : first ≤ first')
-    (upper : last' ≤ last) : HonestHeadsCover (e := e) root first' last' :=
-  fun earlier low high => cover earlier (lower.trans low) (Nat.lt_of_lt_of_le high upper)
 
 /-- A block with an epoch descends from itself. -/
 private theorem isAncestor_self_of_blockEpoch {store : Store preset fork} {root : Root}
@@ -2371,8 +2360,8 @@ private theorem walk_holds [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store
   subst rootBlock
   obtain ⟨epoch, checkedSlot, rootEpoch, startEpoch, epochOk, checkedSlotOk, -, startEpochOk,
     epochLe, -⟩ := checked
-  have epochEq : computeEpochAtSlot preset slot = epoch := by
-    simpa [Store.getCurrentStoreEpoch, slotOk, bind, Except.bind, pure, Except.pure] using epochOk
+  have epochEq : computeEpochAtSlot preset slot = epoch :=
+    (Store.getCurrentStoreEpoch_eq slotOk epochOk).symm
   have startEpochEq : computeEpochAtSlot preset startBlock.slot = startEpoch := by
     simpa [Store.getBlockEpoch, startBlockOk, bind, Except.bind, pure, Except.pure] using
       startEpochOk
@@ -2695,15 +2684,7 @@ private theorem walkMembers_cover [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor 
     (fun w hw k low high => newlyActive w hw k low (high.trans hT))
   -- Each member is viable wherever the root is.
   have viableAt : ∀ T', (e.world n).time ≤ T' → T' ≤ T →
-      HonestHeadsCover (e := e) m (e.world n).time T' →
-      ∀ w ∈ J, ∀ k (nodes : List ForkChoiceNode) (hd : ForkChoiceNode), (e.world k).time = T' →
-      UpToDate config checks sources (e.world k).time ((e.world k).view w)
-        ((e.world k).state w) →
-      ((e.world k).state w).getHead config = .ok hd →
-      ((e.world k).state w).getFilteredNodeTree config = .ok nodes →
-      ((e.world k).state w).isAncestor
-          ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨m, .pending⟩ = .ok true ∨
-        (⟨m, .pending⟩ : ForkChoiceNode) ∈ nodes := by
+      HonestHeadsCover (e := e) m (e.world n).time T' → RootViableAt (e := e) m T' := by
     intro T' low high _ w hw k nodes hd atTime ready receiverHead tree
     have rootCovers : HonestHeadsCover (e := e) after.confirmedRoot (e.world n).time T' :=
       fun t lo hi => earlier after.confirmedRoot (by simp) t lo (Nat.lt_of_lt_of_le hi high)
