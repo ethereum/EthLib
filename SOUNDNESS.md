@@ -2147,7 +2147,17 @@ It holds at every fork and for every lawful meter.
 `processMessageCall_logsWeight` gives the same bound for the message of a transaction.
 It assumes that a commit of the meter raises no gas held, which both meters of the forks meet.
 `encode_makeReceipt_processTransaction` then proves that the receipt of a transaction encodes, when its gas limit and the cumulative gas it records are below `2^64`.
-No theorem yet derives those two bounds from the validity of a block.
+`stateTransition_gas_lt_of_lt` (`Execution/Proofs/Blocks/BodyGas.lean`) derives both bounds for a block that passes its transition, at every fork before Glamsterdam.
+It needs the gas limit of the parent, as the gas limit rule reads it, below `2^63`.
+The rule then keeps the gas limit of the block below `2^64` (`mul_lt_of_checkGasLimit`).
+The inclusion check keeps the gas limit of each transaction at most that of the block (`applyTransactions_txGas_le`).
+Before Glamsterdam the cumulative gas of each receipt is at most the gas of the body (`applyTransactions_receipts`).
+So it is at most the gas limit (`applyTransactions_execution_le_of_lt`), as `applyTransactions_cumulativeGasUsed_le_of_lt` states.
+The bound on the parent is a hypothesis.
+The rule lets each block raise the gas limit by less than a 1024th, with no cap.
+So no theorem bounds the gas limit along a chain from its genesis.
+From Glamsterdam a receipt counts the gas after the refund, state gas included.
+The gas limit bounds the execution gas and the state gas apart, so no theorem bounds the cumulative gas of those receipts yet.
 Both transaction theorems hold only before Hegotá: from Hegotá a transaction fails as not yet specified, so it has no receipt.
 
 ### The supply of ether
