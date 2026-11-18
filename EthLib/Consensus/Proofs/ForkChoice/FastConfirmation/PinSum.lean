@@ -472,19 +472,6 @@ This is `keyCredit` of the exiting-credit lemmas, verbatim. -/
 def keyCredit (i : ℕ) (e : BalanceEvent preset) : ℕ :=
   actualBalanceAt e.after i - actualBalanceAt e.before i
 
-/-- The credits to the key on R's branch, over the replayed events of the run from the split.
-
-It is the key's credits from every source but the deposits, from the replay of the run.
-
-A key with any credit, deposits included, then moves by one more rounding step and band.
-
-That step is `inc + downwardBand - 1`, the one that `branchR` charges for each credited key. -/
-def credR (events : List (BalanceEvent preset)) (v : ℕ) : ℕ :=
-  ((events.filter fun e =>
-      e.source ≠ .deposits ∧ e.source ≠ .sync ∧ e.source ≠ .consolidations).map (keyCredit v)).sum +
-    if (events.map (keyCredit v)).sum = 0 then 0
-    else preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1
-
 /-- The deposits applied to the key on R's branch, over the replayed events of the run from the
 split, capped at `MAX_EFFECTIVE_BALANCE_ELECTRA`.
 
@@ -553,6 +540,20 @@ def credC {x y : ForkedBeaconState preset} (tail : Run config checks x y) (high 
     (fun s => decide (s = .consolidations ∨ s = .deposits)) v high tail).1 +
     preset.upwardBand * (creditScan (fun s => decide (s = .rewards ∨ s = .consolidations))
       (fun s => decide (s = .consolidations ∨ s = .deposits)) v high tail).2
+
+/-- The block credits to the key on R's branch since the split: proposer and whistleblower credits.
+
+A slot step's credits are not here: `fall` reads the epoch rewards at its gain rate.
+
+A key with a proposer, deposit or sync credit then moves by one more rounding step and band.
+
+That step is `inc + downwardBand - 1`, the one that `branchR` charges for each of its keys. -/
+def credR {x y : ForkedBeaconState preset} (tail : Run config checks x y) (high v : ℕ) : ℕ :=
+  (creditScan (fun s => decide (s ≠ .deposits ∧ s ≠ .sync ∧ s ≠ .consolidations))
+    (fun _ => false) v high tail).1 +
+    if (creditScan (fun s => decide (s ≠ .consolidations)) (fun s => decide (s = .deposits))
+        v high tail).1 = 0 then 0
+    else preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1
 
 /-- Whistleblower credits to the key on C's branch since the split.
 
@@ -704,7 +705,7 @@ theorem stub_V (h : Setting config checks g split fin pulled anc counted V)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
     cV1 pulled counted V + cV2 pulled counted V ≤
-      ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) + (∑ v ∈ V, credR events v.toNat) +
+      ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) + (∑ v ∈ V, credR tail high v.toNat) +
         (∑ v ∈ V, (syncF events v.toNat + syncF eventsC v.toNat)) + (∑ v ∈ V, credDepR events v.toNat) +
         (∑ v ∈ V, consAmt events v.toNat) +
         (∑ v ∈ (VN counted V), exitQ tailC v.toNat) +
@@ -895,7 +896,7 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
-    3 * (∑ v ∈ V, credR events v.toNat) +
+    3 * (∑ v ∈ V, credR tail high v.toNat) +
         3 * ((pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer) ≤
       (pinTerms config pulled anc fin).branchR := sorry
 
