@@ -343,10 +343,14 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   --
   -- No lemma here proves yet that it keeps at least `newKeyFloor` from its activation, less its
   -- own sync-seat debits and pending partial payments.
+  let newKeyFloor := 2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
+    preset.MAX_EFFECTIVE_BALANCE.toNat / p.MIN_SLASHING_PENALTY_QUOTIENT.toNat -
+      preset.downwardBand - inc
+  let newKeySlack := newKeyFloor - (config.EJECTION_BALANCE.toNat - inc)
   let lowKeys := (positions.filter fun i =>
     (validator i).any (fun v => decide (finalized < v.withdrawableEpoch.toNat) &&
       decide (v.activationEpoch.toNat ≤ epoch.toNat)) ∧
-      lowEB i < config.EJECTION_BALANCE.toNat - inc).card
+      lowEB i < newKeyFloor).card
   -- Outside the tight window, keys can start to exit on the other branch.
   --
   -- The queues admit at most this many keys at the ejection balance less an increment each.
@@ -358,10 +362,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- After an exit starts, the key's proposer and due-consolidation credits are in `exitingCredits`.
   --
   -- Its whistleblower credits are in `reserveW`, `flagged` and the drift's slashed keys.
-  let newKeyFloor := 2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
-    preset.MAX_EFFECTIVE_BALANCE.toNat / p.MIN_SLASHING_PENALTY_QUOTIENT.toNat -
-      preset.downwardBand - inc
-  let newKeySlack := newKeyFloor - (config.EJECTION_BALANCE.toNat - inc)
   let newKeySeats := depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope /
     max 1 newKeySlack
   let queueKeys := (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry) /
@@ -494,6 +494,7 @@ structure Setting (config : Config) (checks : SignatureChecks) (g : ForkedBeacon
   parameters : DirectSafety.Parameters preset
   aligned : MaxEffectiveBalancesAligned preset
   twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat
+  delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat
   pulledTotal : ∃ t, getTotalActiveBalance pulled = .ok t
   room : 2 ^ 32 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat
   below : preset.downwardBand < preset.EFFECTIVE_BALANCE_INCREMENT.toNat

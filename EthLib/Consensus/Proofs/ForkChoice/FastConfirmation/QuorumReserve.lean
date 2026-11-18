@@ -482,7 +482,13 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     preset.MIN_ACTIVATION_BALANCE.toNat - drop i
   -- A key can exit on the other branch with an effective balance below the ejection balance.
   --
-  -- Such a key uses little churn, so each one whose `lowEB` falls below that bound is counted.
+  -- Such a key uses little churn, so each one whose `lowEB` falls below `newKeyFloor` is counted.
+  --
+  -- `lowEB` leaves out sync-seat debits.
+  --
+  -- A key at or above `newKeyFloor` falls below the bound only with sync debits over `newKeySlack`.
+  --
+  -- `newKeySeats` counts those keys by the same Markov step as new keys.
   --
   -- Every key not yet withdrawable after the finalized epoch counts.
   --
@@ -493,22 +499,28 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- No lemma here proves yet that it keeps at least `newKeyFloor` from its activation, less its
   -- own sync-seat debits and pending partial payments.
+  let newKeyFloor := 2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
+    preset.MAX_EFFECTIVE_BALANCE.toNat / p.MIN_SLASHING_PENALTY_QUOTIENT.toNat -
+      preset.downwardBand - inc
+  let newKeySlack := newKeyFloor - (config.EJECTION_BALANCE.toNat - inc)
   let lowKeys := (positions.filter fun i =>
     (validator i).any (fun v => decide (finalized < v.withdrawableEpoch.toNat) &&
       decide (v.activationEpoch.toNat ≤ epoch.toNat)) ∧
-      lowEB i < config.EJECTION_BALANCE.toNat - inc).card
+      lowEB i < newKeyFloor).card
   -- Outside the tight window, keys can start to exit on the other branch.
   --
   -- The queues admit at most this many keys at the ejection balance less an increment each.
   --
   -- The `+ 2` counts one key at each end of the window that the churn covers only in part.
   --
-  -- `lowKeys` adds every key whose effective balance can fall below that.
+  -- `lowKeys` adds every key whose `lowEB` is below `newKeyFloor`.
   --
   -- A key not active by this epoch here, or created there, keeps at least `newKeyFloor` from its
   -- activation, less its own sync-seat debits and pending partial payments in the window.
   --
   -- One whose effective balance ends below the bound has those debits above `newKeySlack`.
+  --
+  -- So has an existing key whose `lowEB` is at least `newKeyFloor`.
   --
   -- The seats of the window debit at most `depthFin·slots·SIZE·syncEnvelope` in all, so
   -- `newKeySeats` counts the keys that sync debits can bring below.
@@ -520,10 +532,6 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- After an exit starts, the key's proposer and due-consolidation credits are in `exitingCredits`.
   --
   -- Its whistleblower credits are in `reserveW`, `flagged` and the drift's slashed keys.
-  let newKeyFloor := 2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
-    preset.MAX_EFFECTIVE_BALANCE.toNat / p.MIN_SLASHING_PENALTY_QUOTIENT.toNat -
-      preset.downwardBand - inc
-  let newKeySlack := newKeyFloor - (config.EJECTION_BALANCE.toNat - inc)
   let newKeySeats := depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope /
     max 1 newKeySlack
   -- A carry is a balance that can let several keys exit, so it counts by the ejection balance too.
