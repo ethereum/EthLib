@@ -1425,7 +1425,7 @@ most three tenths of it.
 
 The bound `3.3 · X ≤ (33 · X + 9) / 10` is the charge of `consolidationsX` in `pinReserve`.
 
-Deeper than the withdrawal delay `consolidationsX` is 0, so `shallow` is a premise here. -/
+Deeper than the withdrawal delay `consolidationsX` is 0, so the setting's `shallow` is used here. -/
 theorem bud_consolidations (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
@@ -1436,8 +1436,6 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (highLe : highC ≤ (getCurrentEpoch pulled).toNat)
-    (shallow : (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat ≤
-      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (band : 10 * preset.upwardBand ≤ preset.MAX_EFFECTIVE_BALANCE.toNat) :
     ((∑ v ∈ (K4 pulled counted V), consAmt eventsC v.toNat) +
       (∑ v ∈ (K6 pulled counted), consAmt eventsC v.toNat) +
@@ -1448,6 +1446,7 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
         3 * dueAt fin high V) ≤
         (33 * (pinTerms config pulled anc fin).consolidationsX + 9) / 10 := by
   classical
+  have shallow := h.shallow
   have early := h.early
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   obtain ⟨shared⟩ := h.toFin
@@ -1785,7 +1784,7 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
     split <;> omega
   obtain ⟨fromFin⟩ := h.fromFin
   have b15 := bud_consolidations (config := config) h fromFin tail high endEpoch replayed highLeR
-    tailC highC endEpochC replayedC highLe h.shallow band
+    tailC highC endEpochC replayedC highLe band
   have b16 := bud_exitedR (config := config) (pulled := pulled) (anc := anc) (fin := fin)
     (counted := counted)
   -- The band of each due entry naming a V key is paid by `bud_consolidations`' V share.
