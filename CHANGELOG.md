@@ -194,7 +194,6 @@ Not yet released.
 - `Execution.receiverWindowExitsNear_of_sourceOnParentChain` proves `ReceiverWindowExitsNearWith` at `exitReserveNear` when the call's balance source is on the parent's chain (`SourceOnParentChain`), or names a block collision between honest stores.
   The checkpoint's epoch is at most two epochs before the parent's, and the preset satisfies `Preset.SeedLookaheadAtLeastThree`.
   Each near receiver's head state keeps the source's activity three epochs ahead, so each full epoch of its window is bounded by `exitReserveNear`.
-  `historical_stores_or_collision`, the split of honest stores into agreement or a collision, is now public; the proof reads it.
 
 - `Store.Reachable.blockState_slot_eq` states that a known block's state is at the block's slot, when the anchor block is at the anchor state's slot.
 

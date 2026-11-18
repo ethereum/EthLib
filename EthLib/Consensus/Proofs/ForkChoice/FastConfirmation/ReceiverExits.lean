@@ -174,17 +174,19 @@ theorem Execution.receiverWindowExitsNear_of_sourceOnParentChain
         (e.world n).time time (exitReserveNear source) ∨
       HonestCollision (e := e) time := by
   -- The honest stores by the horizon agree on their blocks, or two of them collide.
-  rcases historical_stores_or_collision anchored start time with ⟨reached, agree⟩ | collision
+  rcases e.blocksAgree_or_collision time with agree | collision
   swap
   · exact .inr collision
   left
   intro w receiver k head current finish receiverEpoch lowK highK upToDate headOk currentOk
     finishOk epochOk nearParent
+  have reached (a : ValidatorIndex) (honest : a ∈ J) (i : ℕ) :=
+    e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored) i a honest
   have forward := e.forwardReachableWith
     (fun a ha => (start a ha) ▸ Store.ForwardReachableWith.anchor anchored) k w receiver
   have same : ∀ (r : Root) left right, ((e.world n).state u).blocks[r]? = some left →
       ((e.world k).state w).blocks[r]? = some right → left = right :=
-    agree (u, n) ⟨caller, callerTime⟩ (w, k) ⟨receiver, highK⟩
+    agree u caller w receiver n k callerTime highK
   obtain ⟨parentLow, parentHigh, callerRead⟩ := onChain
   have callerParent := Store.block_ok_iff.mp parentOk
   -- The caller's checkpoint block, at or before the first slot of the checkpoint's epoch.
