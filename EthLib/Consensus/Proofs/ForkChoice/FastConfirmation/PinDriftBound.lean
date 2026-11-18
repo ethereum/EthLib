@@ -780,7 +780,7 @@ private structure PinPresetFacts (preset : Preset) : Prop where
   band : 10 * preset.upwardBand ≤ preset.MAX_EFFECTIVE_BALANCE.toNat
   /-- (preset fact) The upward band is at most the downward band and one increment. -/
   upward : preset.upwardBand ≤ preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-  /-- (preset fact) The largest initial slashing penalty and the downward band fit in an increment. -/
+  /-- (preset fact) The largest slashing penalty and the downward band fit in an increment. -/
   slashBand : preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
       preset.MIN_SLASHING_PENALTY_QUOTIENT_ELECTRA.toNat + preset.downwardBand ≤
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat
