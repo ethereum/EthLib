@@ -468,6 +468,65 @@ private theorem first_le_last_of_margin {checks : SignatureChecks}
   rw [zeroDiscount, zeroSupport] at margin
   simp at margin
 
+/-- The range of the adversary of a block starts after its parent and at or before the block.
+
+The start is in the epoch of the block or a later one.
+
+The block is above its parent, and the range ends at the slot before the current one. -/
+public theorem Store.adversaryRange_start {store : Store preset fork} {head root : Root}
+    {source : BeaconState preset fork} {slot first last : Slot}
+    {block parent : BeaconBlock preset fork} {adversary : Gwei}
+    (slotOk : store.getCurrentSlot config = .ok slot)
+    (blockOk : store.block root = .ok block)
+    (parentOk : store.block block.parentRoot = .ok parent)
+    (firstOk : addChecked parent.slot 1 = .ok first)
+    (lastOk : subChecked slot 1 = .ok last)
+    (lower : parent.slot < block.slot)
+    (adversaryOk : store.getAdversarialWeight config head source root = .ok adversary) :
+    ∃ startSlot, first ≤ startSlot ∧ startSlot ≤ block.slot ∧
+      (computeEpochAtSlot preset block.slot).toNat ≤
+        (computeEpochAtSlot preset startSlot).toNat ∧
+      store.computeAdversarialWeight config head source startSlot last = .ok adversary := by
+  have next := (addChecked_ok_iff.mp firstOk).2
+  simp only [UInt64.toNat_one] at next
+  have parentEpoch : store.getBlockEpoch block.parentRoot =
+      .ok (computeEpochAtSlot preset parent.slot) := by
+    simp [Store.getBlockEpoch, parentOk, bind, Except.bind, pure, Except.pure]
+  have blockEpoch : store.getBlockEpoch root = .ok (computeEpochAtSlot preset block.slot) := by
+    simp [Store.getBlockEpoch, blockOk, bind, Except.bind, pure, Except.pure]
+  by_cases later : computeEpochAtSlot preset parent.slot < computeEpochAtSlot preset block.slot
+  · let start := block.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH
+    have startOk := computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) block.slot
+    have startValue := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
+    change start.toNat = _ at startValue
+    have laterNat := UInt64.lt_iff_toNat_lt.mp later
+    simp only [computeEpochAtSlot, UInt64.toNat_div] at laterNat startValue
+    have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by
+      by_contra zero
+      have : preset.SLOTS_PER_EPOCH.toNat = 0 := by omega
+      simp [this] at laterNat
+    have parentBelow : parent.slot.toNat < start.toNat := by
+      rw [startValue]
+      exact (Nat.div_lt_iff_lt_mul positive).mp laterNat
+    have startBelow : start.toNat ≤ block.slot.toNat := by
+      rw [startValue]
+      exact Nat.div_mul_le_self _ _
+    refine ⟨start, ?_, UInt64.le_iff_toNat_le.mpr startBelow, ?_, ?_⟩
+    · rw [UInt64.le_iff_toNat_le]
+      omega
+    · simp only [computeEpochAtSlot, UInt64.toNat_div]
+      rw [startValue, Nat.mul_div_cancel _ positive]
+    · rw [← Store.getAdversarialWeight_of_lt slotOk blockOk blockEpoch parentEpoch later startOk
+        lastOk]
+      exact adversaryOk
+  · refine ⟨block.slot, ?_, UInt64.le_refl _, le_rfl, ?_⟩
+    · have := UInt64.lt_iff_toNat_lt.mp lower
+      rw [UInt64.le_iff_toNat_le]
+      omega
+    · rw [← Store.getAdversarialWeight_of_not_lt slotOk blockOk blockEpoch parentEpoch later
+        lastOk]
+      exact adversaryOk
+
 /-- The caller's reads in terms of sets of validators. -/
 private theorem caller_margin_sets {checks : SignatureChecks}
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
@@ -507,46 +566,8 @@ private theorem caller_margin_sets {checks : SignatureChecks}
   classical
   have lower := reached.reachable.parentsBelow anchorSlot absent root block parent
     (Store.block_ok_iff.mp blockOk) (Store.block_ok_iff.mp parentOk)
-  have next := (addChecked_ok_iff.mp firstOk).2
-  simp only [UInt64.toNat_one] at next
-  have parentEpoch : store.getBlockEpoch block.parentRoot =
-      .ok (computeEpochAtSlot preset parent.slot) := by
-    simp [Store.getBlockEpoch, parentOk, bind, Except.bind, pure, Except.pure]
-  have blockEpoch : store.getBlockEpoch root = .ok (computeEpochAtSlot preset block.slot) := by
-    simp [Store.getBlockEpoch, blockOk, bind, Except.bind, pure, Except.pure]
-  have range : ∃ startSlot, first ≤ startSlot ∧ startSlot ≤ block.slot ∧
-      store.computeAdversarialWeight config head source startSlot last = .ok adversary := by
-    by_cases later : computeEpochAtSlot preset parent.slot < computeEpochAtSlot preset block.slot
-    · let start := block.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH
-      have startOk := computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) block.slot
-      have startValue := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
-      change start.toNat = _ at startValue
-      have laterNat := UInt64.lt_iff_toNat_lt.mp later
-      simp only [computeEpochAtSlot, UInt64.toNat_div] at laterNat startValue
-      have parentBelow : parent.slot.toNat < start.toNat := by
-        rw [startValue]
-        have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by
-          by_contra zero
-          have : preset.SLOTS_PER_EPOCH.toNat = 0 := by omega
-          simp [this] at laterNat
-        exact (Nat.div_lt_iff_lt_mul positive).mp laterNat
-      have startBelow : start.toNat ≤ block.slot.toNat := by
-        rw [startValue]
-        exact Nat.div_mul_le_self _ _
-      refine ⟨start, ?_, UInt64.le_iff_toNat_le.mpr startBelow, ?_⟩
-      · rw [UInt64.le_iff_toNat_le]
-        omega
-      · rw [← Store.getAdversarialWeight_of_lt slotOk blockOk blockEpoch parentEpoch later startOk
-          lastOk]
-        exact adversaryOk
-    · refine ⟨block.slot, ?_, UInt64.le_refl _, ?_⟩
-      · have := UInt64.lt_iff_toNat_lt.mp lower
-        rw [UInt64.le_iff_toNat_le]
-        omega
-      · rw [← Store.getAdversarialWeight_of_not_lt slotOk blockOk blockEpoch parentEpoch later
-          lastOk]
-        exact adversaryOk
-  obtain ⟨start, firstLe, startLe, rangeOk⟩ := range
+  obtain ⟨start, firstLe, startLe, -, rangeOk⟩ :=
+    Store.adversaryRange_start slotOk blockOk parentOk firstOk lastOk lower adversaryOk
   obtain ⟨weight, equivocation, weightOk, equivocationOk⟩ :=
     Store.computeAdversarialWeight_eq_ok rangeOk
   obtain ⟨participants, participantsOk, equivocators⟩ :=

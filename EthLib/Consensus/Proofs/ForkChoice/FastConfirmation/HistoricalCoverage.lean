@@ -318,7 +318,7 @@ private theorem route_of_split {store : Store preset fork} {root : Root}
 /-- At a time `T`, the confirmed root of a call is viable, given its coverage before `T`.
 
 Otherwise two honest stores collide, or held-state or cross-store evidence holds. -/
-private theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
+public theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
     {anchor : Store preset fork} {Δ time : ℕ} {anchorEpoch horizon : Epoch} {margin : ℕ}
     {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
