@@ -98,16 +98,7 @@ Both are about pad10*1 (§5.1), at any positive rate, so at 136 and at 72 bytes.
 /-- Byte `i` of the padding is padding byte `i`, for each of its `rate - len mod rate` bytes. -/
 theorem padding_data (rate len : Nat) :
     (padding rate len).data =
-      Array.ofFn fun i : Fin (rate - len % rate) => paddingByte rate len i := by
-  apply Array.ext
-  · simp [padding]
-  · intro i _ h
-    simp only [Array.size_ofFn] at h
-    simp only [padding, Array.getElem_ofFn, Array.getElem_modify, Array.getElem_replicate,
-      paddingByte]
-    -- Each byte is a constant once it is known whether it is the first and whether the last.
-    repeat' split
-    all_goals first | decide | omega
+      Array.ofFn fun i : Fin (rate - len % rate) => paddingByte rate len i := rfl
 
 /-- The padding of a message of `len` bytes has `rate - len mod rate` bytes. -/
 @[simp] theorem size_padding (rate len : Nat) :

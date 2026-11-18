@@ -38,7 +38,8 @@ It is the last 20 bytes of the Keccak-256 hash of the key's 64 bytes. -/
 def address (x y : Fp) : Base.Address :=
   let digest := Hash.Keccak.keccak256 (publicKeyBytes x y)
   -- Bytes 12 to 31 of the digest are its bits 96 to 255.
-  Vector.ofFn fun i => digest[12 + i.val]'(by have := i.isLt; simp [Hash.Keccak.DIGEST_LEN]; omega)
+  Vector.ofFn fun i =>
+    digest[12 + i.val]'(by have := i.isLt; simp [Hash.Keccak.DIGEST_LEN_256]; omega)
 
 /-- `A(p_r)`, the address of the private key `d`, with the public key `d G`.
 
