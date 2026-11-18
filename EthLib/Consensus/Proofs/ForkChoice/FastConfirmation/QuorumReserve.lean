@@ -419,10 +419,15 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let whistleblowerR := (∑ i ∈ positions with slashed i = true ∧ recentSlashing i = true,
       effective i) / p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   let slashedR := (positions.filter fun i => slashed i = true ∧ recentSlashing i = true).card
+  -- The largest gain rate of one key, its gain rate at the largest effective balance.
+  let gainRateMax := capMax / inc * perIncrement *
+    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
+  -- A late key is charged three times its effective balance here, and its rise once.
   let late := if tight then 0 else
-    3 * ∑ i ∈ positions with (validator i).any (fun v =>
+    ∑ i ∈ positions with (validator i).any (fun v =>
       decide (v.activationEligibilityEpoch.toNat ≤ epoch.toNat) &&
-        decide (finalized + preset.MAX_SEED_LOOKAHEAD.toNat < v.activationEpoch.toNat)), effective i
+        decide (finalized + preset.MAX_SEED_LOOKAHEAD.toNat < v.activationEpoch.toNat)),
+      (3 * effective i + rise i)
   let period := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat
   -- Every seat of every sync committee in the window counts, at the seat's envelope.
   --
@@ -548,9 +553,6 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- A carry is a balance that can let several keys exit, so it counts by `exitFloor` too.
   let queueKeys := (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry) /
     exitFloor + 2 + lowKeys + newKeySeats
-  -- The largest gain rate of one key, its gain rate at the largest effective balance.
-  let gainRateMax := capMax / inc * perIncrement *
-    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   -- An exiting key weighs three times, so each credited one needs two more upward bands.
   --
   -- Those are the keys whose exit the call reads and those the queues let exit there.
