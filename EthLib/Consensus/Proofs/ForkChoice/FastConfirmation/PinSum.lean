@@ -68,6 +68,10 @@ structure PinTerms (preset : Preset) where
   depth : ℕ
   syncProposer : ℕ
   proposerCredit : ℕ
+  exitingBands : ℕ
+  pendingR : ℕ
+  newKeyRise : ℕ
+  pendingRB : ℕ → Bool
   credits : ℕ
   branchR : ℕ
   late : ℕ
@@ -89,8 +93,8 @@ def PinTerms.total (t : PinTerms preset) : ℕ :=
   t.quorum + (3 * t.exiting + t.queues + t.credits + t.branchR + t.late +
     t.syncSeats + (∑ i ∈ t.positions with t.current i = true, t.rise i) +
     3 * (∑ i ∈ t.positions with t.current i = true, t.fall i) +
-    3 * t.exitingRise + t.exitingCredits + t.queueRise + t.reserveW + t.flagged +
-    t.seatShortfall + (33 * t.consolidationsX + 9) / 10 + t.exitedR)
+    3 * t.exitingRise + t.exitingCredits + t.exitingBands + t.queueRise + t.reserveW + t.flagged +
+    t.seatShortfall + (33 * t.consolidationsX + 9) / 10 + t.exitedR + t.pendingR + t.newKeyRise)
 
 /-- A verbatim copy of `pinReserve`'s lets (spec rev 2.5.3), returning the named terms. -/
 def pinTerms (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
@@ -276,7 +280,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
         ((validator c.sourceIndex.toNat).map fun v =>
           v.slashed || decide (v.withdrawableEpoch ≤ epoch + 1)).getD false
     else []
-  let dueStake := (due.map fun c => effective c.sourceIndex.toNat).sum
   let depositRecipients := preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat
   let creditedKeys := depth * slots + (depth / period + 2) * preset.SYNC_COMMITTEE_SIZE.toNat +
     depth * depositRecipients + due.length
@@ -284,7 +287,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   --
   -- The band of each credited key is not scaled.
   let credits :=
-    (11 * (depth * proposerCredit + depositCarry + depthFin * depositChurn + dueStake +
+    (11 * (depth * proposerCredit + depositCarry + depthFin * depositChurn +
       whistleblowerExtra) + 9) / 10 +
       creditedKeys * preset.upwardBand
   -- Each key the call's branch credits or debits can move by a rounding step and a band.
@@ -316,8 +319,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- `credits` charges those credits once at eleven tenths and their bands once.
   --
   -- These charge them twice more, also at eleven tenths, rounded up.
-  let exitingCredits := (22 * (depth * proposerCredit + dueStake) + 9) / 10 +
-    2 * (depth * slots + due.length) * preset.upwardBand
+  let exitingCredits := (22 * (depth * proposerCredit) + 9) / 10
   -- A lower bound on a key's effective balance on another branch, up to the counting state.
   --
   -- It starts at the finalized block's state, which lies on every branch, and at most this one's.
@@ -367,6 +369,11 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- The largest gain rate of one key, its gain rate at the largest effective balance.
   let gainRateMax := capMax / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
+  let exitingCount := (positions.filter fun i => (before i || current i) = true ∧
+      (slashed i = false ∨ recentSlashing i = true) ∧
+      ((validator i).map fun v =>
+        decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true).card
+  let exitingBands := 2 * (exitingCount + queueKeys) * preset.upwardBand
   let queueRise := if tight then 0 else
     3 * queueKeys * (preset.upwardBand + depth * gainRateMax)
   -- A key slashed on another branch credits its whistleblower, the block's proposer.
@@ -415,10 +422,19 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
       decide (finalized + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ v.exitEpoch.toNat) &&
         decide (v.exitEpoch.toNat + 1 ≤ epoch.toNat)),
     (effective i + rise i)
+  let newKeyRise := if 11 * depth * gainRateMax < capMax then 0
+    else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
+  let pendingR := if tight then 0 else
+    ∑ i ∈ positions with (validator i).any (fun v =>
+      decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
+        v.activationEpoch == FAR_FUTURE_EPOCH), (effective i + rise i)
   { quorum := quorumReserve config state ancestor, exiting, queues, queueDep, queueExit, credits,
     branchR, late, syncSeats, rise, fall, positions, current, exitingRise, exitingCredits,
     queueRise, reserveW, flagged, seatShortfall, consolidationsX, exitedR, depth, syncProposer,
-    proposerCredit,
+    proposerCredit, exitingBands, pendingR, newKeyRise,
+    pendingRB := fun i => (validator i).any (fun v =>
+      decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
+        v.activationEpoch == FAR_FUTURE_EPOCH),
     joining := ∑ i ∈ positions with current i = false ∧ upcoming i = true, effective i,
     exitingB := fun i => decide ((before i || current i) = true ∧
       (slashed i = false ∨ recentSlashing i = true) ∧
@@ -866,7 +882,29 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).exitingB v.toNat = true,
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
       (∑ v ∈ (K6 pulled counted), (credC tailC highC v.toNat + whistC tailC highC v.toNat)) +
-      (∑ v ∈ (K6 pulled counted), (syncF events v.toNat + syncF eventsC v.toNat))) : ℕ) := sorry
+      (∑ v ∈ (K6 pulled counted), (syncF events v.toNat + syncF eventsC v.toNat)) +
+      (∑ v ∈ (K6 pulled counted),
+        (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC eventsC v.toNat +
+          bandR events v.toNat)) +
+      (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).pendingRB v.toNat = true,
+        (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
+      (pinTerms config pulled anc fin).newKeyRise) : ℕ) := sorry
+
+/-- K5 bands: the two bands beyond `credits`' one of each credited K5 key, weight 3.
+
+Split by `exitingB`: the keys whose exit R reads and those the queues let exit on C. -/
+theorem bud_exitingBands (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    2 * (∑ v ∈ (K5 counted V), bandC tailC highC eventsC v.toNat) ≤
+      (pinTerms config pulled anc fin).exitingBands := sorry
+
+/-- K6 keys of R's registry that are not yet eligible at R: their stake at R and their rise. -/
+theorem bud_pendingR (h : Setting config checks g split fin pulled anc counted V) :
+    (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).pendingRB v.toNat = true,
+      (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤
+        (pinTerms config pulled anc fin).pendingR := sorry
 
 /-- D-4: the keys whose exit R reads. -/
 theorem bud_exiting (h : Setting config checks g split fin pulled anc counted V) :
@@ -926,16 +964,14 @@ theorem bud_exitingCredits (h : Setting config checks g split fin pulled anc cou
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    10 * (2 * ((∑ v ∈ (K5 counted V), propC tailC highC v.toNat) +
-        (∑ v ∈ (K5 counted V), bandC tailC highC eventsC v.toNat))) +
+    10 * (2 * (∑ v ∈ (K5 counted V), propC tailC highC v.toNat)) +
         22 * ((pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer) ≤
       10 * (pinTerms config pulled anc fin).exitingCredits +
         20 * (∑ v ∈ (K5 counted V), consAmt eventsC v.toNat) := sorry
 
 /-- D-7 (credits): C's non-attestation credits to keys counted once.
 
-The consolidation amounts are not here either: `dueStake` does not bound them, and
-`bud_consolidations` charges them.
+The consolidation amounts are not here either: `bud_consolidations` charges them.
 
 The `syncProposer` part of `credits` is not here: `bud_sync` uses it.
 
@@ -950,7 +986,8 @@ theorem bud_credits (h : Setting config checks g split fin pulled anc counted V)
       (∑ v ∈ (K6 pulled counted), credC tailC highC v.toNat) +
       (∑ v ∈ (K5 counted V), propC tailC highC v.toNat) +
       (∑ v ∈ (K4 pulled counted V), bandC tailC highC eventsC v.toNat) +
-      (∑ v ∈ (K5 counted V), bandC tailC highC eventsC v.toNat)) +
+      (∑ v ∈ (K5 counted V), bandC tailC highC eventsC v.toNat) +
+      (∑ v ∈ (K6 pulled counted), bandC tailC highC eventsC v.toNat)) +
         11 * ((pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer) ≤
       10 * (pinTerms config pulled anc fin).credits +
         10 * ((∑ v ∈ (K4 pulled counted V), consAmt eventsC v.toNat) +
@@ -1029,6 +1066,8 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
         (∑ v ∈ (K4 pulled counted V),
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) +
         3 * (∑ v ∈ (K5 counted V),
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) +
+        (∑ v ∈ (K6 pulled counted),
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) ≤
       (pinTerms config pulled anc fin).branchR := sorry
 
@@ -1170,6 +1209,8 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have b11 := bud_queueRise (config := config) h tailC highC endEpochC
   have b12 := bud_exitingRise (config := config) h
   have b13 := bud_exitingCredits (config := config) h tailC highC endEpochC replayedC
+  have b17 := bud_exitingBands (config := config) h tailC highC endEpochC replayedC
+  have b18 := bud_pendingR (config := config) h
   obtain ⟨fromFin⟩ := h.fromFin
   have b15 := bud_consolidations (config := config) h fromFin tail high endEpoch replayed highLeR
     tailC highC endEpochC replayedC highLe shallow band
@@ -1192,7 +1233,7 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   rw [pinReserve_eq_total]
   unfold PinTerms.total stake
   simp only [AC, AR, Q, eC, eR] at *
-  simp only [Finset.sum_add_distrib] at sV sN sP sJ b5 b6 b16 ⊢
+  simp only [Finset.sum_add_distrib] at sV sN sP sJ b5 b6 b16 b18 ⊢
   zify at *
   have syncPos : 0 ≤ ∑ x ∈ K4 pulled counted V, (syncF events x.toNat : ℤ) :=
     Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _

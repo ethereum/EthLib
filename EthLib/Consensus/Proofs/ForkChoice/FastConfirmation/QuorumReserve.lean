@@ -191,6 +191,10 @@ Those bounds do not model the error branch of the checked churn reads.
 
 Another branch's consolidation carry is charged at its finalized value or one epoch's churn.
 
+A key not yet eligible here is charged once outside the tight window.
+
+Another branch can top it up and activate it.
+
 The deposits applied on a branch are charged from the finalized block's carry, over its depth.
 
 The sync seats count on both branches, each at an envelope of its reward.
@@ -424,7 +428,6 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
         ((validator c.sourceIndex.toNat).map fun v =>
           v.slashed || decide (v.withdrawableEpoch ≤ epoch + 1)).getD false
     else []
-  let dueStake := (due.map fun c => effective c.sourceIndex.toNat).sum
   let depositRecipients := preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat
   let creditedKeys := depth * slots + (depth / period + 2) * preset.SYNC_COMMITTEE_SIZE.toNat +
     depth * depositRecipients + due.length
@@ -432,7 +435,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- The band of each credited key is not scaled.
   let credits :=
-    (11 * (depth * proposerCredit + depositCarry + depthFin * depositChurn + dueStake +
+    (11 * (depth * proposerCredit + depositCarry + depthFin * depositChurn +
       whistleblowerExtra) + 9) / 10 +
       creditedKeys * preset.upwardBand
   -- Each key the call's branch credits or debits can move by a rounding step and a band.
@@ -459,13 +462,14 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
       (slashed i = false ∨ recentSlashing i = true) ∧
       ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true,
     rise i
-  -- An exiting key can still be credited as a proposer or as the target of a due consolidation.
+  -- An exiting key can still be credited as a proposer.
   --
   -- `credits` charges those credits once at eleven tenths and their bands once.
   --
-  -- These charge them twice more, also at eleven tenths, rounded up.
-  let exitingCredits := (22 * (depth * proposerCredit + dueStake) + 9) / 10 +
-    2 * (depth * slots + due.length) * preset.upwardBand
+  -- These charge them twice more, also at eleven tenths, rounded up; `exitingBands` has the bands.
+  --
+  -- A due consolidation's credit is charged by `consolidationsX`, to every target.
+  let exitingCredits := (22 * (depth * proposerCredit) + 9) / 10
   -- A lower bound on a key's effective balance on another branch, up to the counting state.
   --
   -- It starts at the finalized block's state, which lies on every branch, and at most this one's.
@@ -528,6 +532,14 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- The largest gain rate of one key, its gain rate at the largest effective balance.
   let gainRateMax := capMax / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
+  -- An exiting key weighs three times, so each credited one needs two more upward bands.
+  --
+  -- Those are the keys whose exit the call reads and those the queues let exit there.
+  let exitingCount := (positions.filter fun i => (before i || current i) = true ∧
+      (slashed i = false ∨ recentSlashing i = true) ∧
+      ((validator i).map fun v =>
+        decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true).card
+  let exitingBands := 2 * (exitingCount + queueKeys) * preset.upwardBand
   let queueRise := if tight then 0 else
     3 * queueKeys * (preset.upwardBand + depth * gainRateMax)
   -- A key slashed on another branch credits its whistleblower, the block's proposer.
@@ -594,11 +606,28 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
       decide (finalized + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ v.exitEpoch.toNat) &&
         decide (v.exitEpoch.toNat + 1 ≤ epoch.toNat)),
     (effective i + rise i)
+  -- A key created on the other branch compounds its gains from its deposit.
+  --
+  -- The credits' eleven tenths pay them while eleven gains over the depth stay below the cap.
+  --
+  -- Past that, each deposit the window can apply is charged up to the cap.
+  let newKeyRise := if 11 * depth * gainRateMax < capMax then 0
+    else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
+  -- A key here that is not yet eligible can be topped up on the other branch alone.
+  --
+  -- It can then become eligible there and activate deep in the window, while inactive here.
+  --
+  -- Its effective balance here and its rise are charged once; the top-up is the other branch's.
+  let pendingR := if tight then 0 else
+    ∑ i ∈ positions with (validator i).any (fun v =>
+      decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
+        v.activationEpoch == FAR_FUTURE_EPOCH), (effective i + rise i)
   quorumReserve config state ancestor + (3 * exiting + queues + credits + branchR + late +
     syncSeats + (∑ i ∈ positions with current i = true, rise i) +
     3 * (∑ i ∈ positions with current i = true, fall i) +
-    3 * exitingRise + exitingCredits + queueRise + reserveW + flagged + seatShortfall +
-    (33 * consolidationsX + 9) / 10 + exitedR)
+    3 * exitingRise + exitingCredits + exitingBands + queueRise + reserveW + flagged +
+    seatShortfall + (33 * consolidationsX + 9) / 10 + exitedR + pendingR +
+    newKeyRise)
 
 /-- The pin reserve contains the quorum reserve. -/
 theorem quorumReserve_le_pinReserve (config : Config)
