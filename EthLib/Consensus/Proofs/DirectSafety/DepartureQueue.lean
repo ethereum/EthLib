@@ -1688,108 +1688,6 @@ private theorem exit_site_bounds {fork : Fork} {s : BeaconState preset fork}
   have first := (computeActivationExitEpoch_ok_iff.mp (sites called member).2).2
   omega
 
-/-- An exit trace tags its call and covers every newly assigned validator exit. -/
-private theorem initiateExit_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {index : ValidatorIndex}
-    (ok : initiateValidatorExit config s index = .ok t) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      (∀ called ∈ calls,
-        called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
-      PartialsAppended electra s t calls ∧
-      ∀ other old next, getValidator s other = .ok old → getValidator t other = .ok next →
-        old.exitEpoch = FAR_FUTURE_EPOCH → next.exitEpoch ≠ FAR_FUTURE_EPOCH →
-        ∃ called ∈ calls, called.index = some other.toNat ∧
-          called.call.epoch = next.exitEpoch ∧ called.call.amount = old.effectiveBalance := by
-  obtain ⟨calls, trace, appended, sites, covered⟩ := initiate_exit_site electra ok
-  obtain ⟨firsts, rates⟩ := exit_site_bounds early sites
-  exact ⟨calls, firsts, trace, rates, appended, covered⟩
-
-/-- Registry ejections supply tagged calls; activation-only updates generate no charge. -/
-private theorem registryEntry_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {activation : Epoch} {index : Nat}
-    (ok : updateRegistryEntryElectra config activation s index = .ok t) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ (∀ called ∈ calls,
-        called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
-      PartialsAppended electra s t calls := by
-  obtain ⟨calls, trace, covered, appended, sites⟩ := registry_entry_exit_site electra early ok
-  obtain ⟨firsts, rates⟩ := exit_site_bounds early sites
-  exact ⟨calls, firsts, trace, covered, rates, appended⟩
-
-/-- The Electra registry fold matches ejection charges before effective balances change. -/
-private theorem registryEntries_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {activation : Epoch}
-    {indices : List Nat}
-    (ok : indices.foldlM (updateRegistryEntryElectra config activation) s = .ok t) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ (∀ called ∈ calls,
-        called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
-      PartialsAppended electra s t calls := by
-  apply DepartureCoverage.foldlM electra _
-    (fun _ _ _ stepped => registryEntry_indexedTrace electra early stepped) ?_ ?_
-    (fun _ _ _ stepped => (frame_updateRegistryEntryElectra stepped).slot) ok
-  · intro a index b stepped
-    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at stepped
-    obtain ⟨validator, found, stepped⟩ := stepped
-    split at stepped
-    · simp only [bind_ok_iff, liftAccessor_ok] at stepped
-      obtain ⟨_, _, set⟩ := stepped
-      exact .setValidatorAt found set ⟨fun _ => rfl, fun _ => rfl⟩
-    split at stepped
-    · simp only [bind_ok_iff, liftAccessor_ok] at stepped
-      obtain ⟨_, _, exited⟩ := stepped
-      exact registryLifecycle_initiateValidatorExit exited
-    split at stepped
-    · rename_i eligible
-      have far := activationEpoch_of_isEligibleForActivation eligible
-      exact .setValidatorAt found (liftAccessor_ok.mp stepped)
-        ⟨fun set => absurd far set, fun _ => rfl⟩
-    · cases stepped; exact .refl _
-  · intro a index b stepped
-    exact effectiveKept_registryElectra stepped
-
-/-- A partial withdrawal's capacity call has no departure index. -/
-private theorem partialWithdrawal_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {index : ValidatorIndex} {v : Validator} {amount owed : Gwei}
-    (ok : requestPartialWithdrawal config s electra index v amount owed = .ok t) :
-    t.validators = s.validators ∧ ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      PartialsAppended electra s t calls ∧
-      ∀ called ∈ calls, called.index = none ∧
-        called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat := by
-  obtain ⟨registry, calls, trace, appended, sites⟩ := partial_exit_site electra ok
-  obtain ⟨firsts, rates⟩ := exit_site_bounds early fun called member => (sites called member).2
-  exact ⟨registry, calls, firsts, trace, appended,
-    fun called member => ⟨(sites called member).1, rates called member⟩⟩
-
-/-- Slashing preserves the exit call's index, amount and assigned epoch. -/
-private theorem slashing_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {index : ValidatorIndex} {whistleblower : Option ValidatorIndex}
-    (ok : slashValidator config s index whistleblower = .ok t) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ (∀ called ∈ calls,
-        called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
-      PartialsAppended electra s t calls := by
-  obtain ⟨calls, trace, covered, appended, sites⟩ := slashing_exit_site electra early ok
-  obtain ⟨firsts, rates⟩ := exit_site_bounds early sites
-  exact ⟨calls, firsts, trace, covered, rates, appended⟩
-
 /-- Consecutive queue traces compose without adding capacity at their shared state. -/
 theorem DepartureQueueTrace.append {a b c : Epoch} {x y z : Gwei}
     {first second : List DepartureQueueCall}
@@ -1799,29 +1697,216 @@ theorem DepartureQueueTrace.append {a b c : Epoch} {x y z : Gwei}
   | nil => exact two
   | cons call tail ih => exact .cons call (ih two)
 
-private theorem slashableFold_indexedTrace {fork : Fork}
+private structure SitePrefix {fork : Fork} (s t : BeaconState preset fork) : Prop where
+  grows : s.validators.data.size ≤ t.validators.data.size
+  active : ActiveStep s t
+  effective : EffectiveKept s t
+
+private theorem SitePrefix.refl {fork : Fork} (s : BeaconState preset fork) : SitePrefix s s :=
+  ⟨Nat.le_refl _, .refl _, effectiveKept_refl _⟩
+
+private theorem SitePrefix.trans {fork : Fork} {s t u : BeaconState preset fork}
+    (one : SitePrefix s t) (two : SitePrefix t u) : SitePrefix s u :=
+  ⟨Nat.le_trans one.grows two.grows, one.active.trans two.active,
+    effectiveKept_trans one.effective two.effective one.grows⟩
+
+private theorem SitePrefix.fold {fork : Fork} {α : Type}
+    {action : BeaconState preset fork → α → Except TransitionError (BeaconState preset fork)}
+    (kept : ∀ s a t, action s a = .ok t → SitePrefix s t)
+    {s t : BeaconState preset fork} {items : List α}
+    (ok : items.foldlM action s = .ok t) : SitePrefix s t :=
+  foldlM_ok_invariant (SitePrefix s)
+    (fun _ _ _ previous computed => previous.trans (kept _ _ _ computed)) (.refl s) ok
+
+private theorem exit_sites_fold {fork : Fork} {α ε : Type}
+    {operation : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
+    (electra : .pectra ≤ fork)
+    (invariant : BeaconState preset fork → Prop)
+    (localTrace : ∀ s item t, operation s item = .ok t →
+      ∃ calls : List (IndexedDepartureCall preset config),
+        DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
+          (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
+        DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
+        ∀ called ∈ calls, exitChurnLimit config s = .ok called.call.rate ∧
+          computeActivationExitEpoch preset (getCurrentEpoch s) = .ok called.call.first)
+    (lifecycle : ∀ s item t, operation s item = .ok t → RegistryLifecycle s t)
+    (frame : ∀ s item t, operation s item = .ok t → invariant s →
+      SitePrefix s t ∧ t.slot = s.slot ∧ invariant t)
+    {items : List α} {s t : BeaconState preset fork}
+    (ok : items.foldlM operation s = .ok t) (initial : invariant s) :
+    ∃ calls : List (IndexedDepartureCall preset config),
+      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
+        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
+      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
+      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
+        SitePrefix s site ∧ site.slot = s.slot ∧
+        exitChurnLimit config site = .ok called.call.rate ∧
+        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
+  induction items generalizing s with
+  | nil =>
+    cases ok
+    exact ⟨[], .nil _ _, .of_data rfl, .of_kept rfl, by simp⟩
+  | cons item items ih =>
+    simp only [List.foldlM_cons, bind_ok_iff] at ok
+    obtain ⟨middle, stepped, rest⟩ := ok
+    obtain ⟨first, firstTrace, firstCoverage, firstAppended, firstSites⟩ :=
+      localTrace s item middle stepped
+    have framed := frame s item middle stepped initial
+    obtain ⟨later, laterTrace, laterCoverage, laterAppended, laterSites⟩ := ih rest framed.2.2
+    refine ⟨first ++ later, ?_, ?_, firstAppended.append laterAppended, ?_⟩
+    · simpa only [List.map_append] using firstTrace.append laterTrace
+    · exact firstCoverage.append_of_effectiveKept laterCoverage (lifecycle _ _ _ stepped)
+        (RegistryLifecycle.foldlM lifecycle rest) framed.1.effective
+    · intro called member
+      rcases List.mem_append.mp member with member | member
+      · exact ⟨s, .refl _, rfl, firstSites called member⟩
+      · obtain ⟨site, beforeSite, slot, rate, first⟩ := laterSites called member
+        exact ⟨site, framed.1.trans beforeSite, slot.trans framed.2.1, rate, first⟩
+private theorem registry_entry_site_frame {fork : Fork} {s t : BeaconState preset fork}
+    {activation : Epoch} {index : Nat}
+    (later : (getCurrentEpoch s).toNat + preset.MAX_SEED_LOOKAHEAD.toNat < activation.toNat)
+    (ok : updateRegistryEntryElectra config activation s index = .ok t) :
+    SitePrefix s t ∧ t.slot = s.slot := by
+  have framed := frame_updateRegistryEntryElectra ok
+  refine ⟨⟨framed.registryGrows, ?_, effectiveKept_registryElectra ok⟩, framed.slot⟩
+  simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨validator, found, ok⟩ := ok
+  split at ok
+  · simp only [bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, set⟩ := ok
+    exact activeStep_setValidatorAt found (fun _ _ => by simp only [isActiveValidator]) set
+  split at ok
+  · simp only [bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, exited⟩ := ok
+    exact activeStep_initiateValidatorExit exited
+  split at ok
+  · rename_i eligible
+    simp only [isEligibleForActivation, Bool.and_eq_true, beq_iff_eq] at eligible
+    exact activeStep_setValidatorAt found (fun _ le => isActiveValidator_eq_of_activation
+      (.inl eligible.2) (activityFixedEpoch_lt_of_toNat_lt later) le) (liftAccessor_ok.mp ok)
+  · cases ok
+    exact .refl _
+private theorem registry_fold_exit_sites {fork : Fork} {s t : BeaconState preset fork}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {activation : Epoch}
+    {indices : List Nat}
+    (later : (getCurrentEpoch s).toNat + preset.MAX_SEED_LOOKAHEAD.toNat < activation.toNat)
+    (ok : indices.foldlM (updateRegistryEntryElectra config activation) s = .ok t) :
+    ∃ calls : List (IndexedDepartureCall preset config),
+      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
+        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
+      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
+      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
+        SitePrefix s site ∧ site.slot = s.slot ∧
+        exitChurnLimit config site = .ok called.call.rate ∧
+        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
+  apply exit_sites_fold electra
+    (fun state => (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat <
+      activation.toNat)
+    (fun _ _ _ computed => registry_entry_exit_site electra early computed) ?_ ?_ ok later
+  · intro a index b computed
+    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨validator, found, computed⟩ := computed
+    split at computed
+    · simp only [bind_ok_iff, liftAccessor_ok] at computed
+      obtain ⟨_, _, set⟩ := computed
+      exact .setValidatorAt found set ⟨fun _ => rfl, fun _ => rfl⟩
+    split at computed
+    · simp only [bind_ok_iff, liftAccessor_ok] at computed
+      obtain ⟨_, _, exited⟩ := computed
+      exact registryLifecycle_initiateValidatorExit exited
+    split at computed
+    · rename_i eligible
+      have far := activationEpoch_of_isEligibleForActivation eligible
+      exact .setValidatorAt found (liftAccessor_ok.mp computed)
+        ⟨fun set => absurd far set, fun _ => rfl⟩
+    · cases computed
+      exact .refl _
+  · intro a index b computed bound
+    have framed := registry_entry_site_frame bound computed
+    refine ⟨framed.1, framed.2, ?_⟩
+    simpa only [getCurrentEpoch, framed.2] using bound
+
+private theorem proposer_exit_site {fork : Fork} {s t : BeaconState preset fork}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {slashing : ProposerSlashing}
+    (ok : processProposerSlashing config checks s slashing = .ok t) :
+    ∃ calls : List (IndexedDepartureCall preset config),
+      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
+        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
+      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
+      ∀ called ∈ calls, exitChurnLimit config s = .ok called.call.rate ∧
+        computeActivationExitEpoch preset (getCurrentEpoch s) = .ok called.call.first := by
+  simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := ok
+  exact slashing_exit_site electra early slashed
+private theorem voluntary_exit_site {fork : Fork} {s t : BeaconState preset fork}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {signed : SignedVoluntaryExit}
+    (ok : processVoluntaryExit config checks s signed = .ok t) :
+    ∃ calls : List (IndexedDepartureCall preset config),
+      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
+        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
+      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
+      ∀ called ∈ calls, exitChurnLimit config s = .ok called.call.rate ∧
+        computeActivationExitEpoch preset (getCurrentEpoch s) = .ok called.call.first := by
+  obtain ⟨calls, trace, appended, sites, covered⟩ :=
+    initiate_exit_site electra (processVoluntaryExit_initiates ok)
+  exact ⟨calls, trace, DepartureCoverage.of_accessor early covered, appended, sites⟩
+private theorem proposer_fold_exit_sites {fork : Fork} {s t : BeaconState preset fork}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    {slashings : List ProposerSlashing}
+    (ok : slashings.foldlM (processProposerSlashing config checks) s = .ok t) :
+    ∃ calls : List (IndexedDepartureCall preset config),
+      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
+        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
+      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
+      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
+        SitePrefix s site ∧ site.slot = s.slot ∧
+        exitChurnLimit config site = .ok called.call.rate ∧
+        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
+  apply exit_sites_fold electra (fun _ => True)
+    (fun _ _ _ computed => proposer_exit_site electra early computed)
+    (fun _ _ _ computed => registryLifecycle_processProposerSlashing computed) ?_ ok trivial
+  intro a slashing b computed _
+  have framed := frame_processProposerSlashing computed
+  exact ⟨⟨framed.registryGrows, activeStep_processProposerSlashing computed,
+    effectiveKept_proposerSlashing computed⟩, framed.slot, trivial⟩
+private theorem voluntary_fold_exit_sites {fork : Fork} {s t : BeaconState preset fork}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    {exits : List SignedVoluntaryExit}
+    (ok : exits.foldlM (processVoluntaryExit config checks) s = .ok t) :
+    ∃ calls : List (IndexedDepartureCall preset config),
+      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
+        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
+      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
+      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
+        SitePrefix s site ∧ site.slot = s.slot ∧
+        exitChurnLimit config site = .ok called.call.rate ∧
+        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
+  apply exit_sites_fold electra (fun _ => True)
+    (fun _ _ _ computed => voluntary_exit_site electra early computed)
+    (fun _ _ _ computed => registryLifecycle_processVoluntaryExit computed) ?_ ok trivial
+  intro a signed b computed _
+  have framed := frame_processVoluntaryExit computed
+  exact ⟨⟨framed.registryGrows, activeStep_processVoluntaryExit computed,
+    effectiveKept_voluntaryExit computed⟩, framed.slot, trivial⟩
+private theorem slashable_fold_exit_sites {fork : Fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     {indices : List ValidatorIndex} {s t : BeaconState preset fork} {flag nextFlag : Bool}
     (ok : indices.foldlM (slashIfSlashable config) (s, flag) = .ok (t, nextFlag)) :
     ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
       DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
         (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ (∀ called ∈ calls,
-        called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
-      PartialsAppended electra s t calls := by
+      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
+      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
+        SitePrefix s site ∧ site.slot = s.slot ∧
+        exitChurnLimit config site = .ok called.call.rate ∧
+        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
   induction indices generalizing s flag with
   | nil =>
     cases ok
-    exact ⟨[], by simp [DepartureCallsFrom], .nil _ _, DepartureCoverage.of_data rfl, by simp,
-      .of_kept rfl⟩
+    exact ⟨[], .nil _ _, .of_data rfl, .of_kept rfl, by simp⟩
   | cons index rest ih =>
     obtain ⟨⟨middle, flag'⟩, stepped, remaining⟩ := bind_ok_iff.mp ok
-    obtain ⟨later, laterFrom, tail, laterCoverage, laterRates, laterAppended⟩ := ih remaining
-    have slot : middle.slot = s.slot := (frame_slashIfSlashable stepped).slot
-    have epoch : getCurrentEpoch middle = getCurrentEpoch s := by
-      simp only [getCurrentEpoch, slot]
-    rw [epoch] at laterFrom
+    obtain ⟨later, tail, laterCoverage, laterAppended, laterSites⟩ := ih remaining
     have tailLifecycle : RegistryLifecycle middle t := by
       exact foldlM_ok_invariant (fun pair => RegistryLifecycle middle pair.1)
         (fun _ _ _ before step => before.trans (registryLifecycle_slashIfSlashable step))
@@ -1832,16 +1917,110 @@ private theorem slashableFold_indexedTrace {fork : Fork}
     · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure,
         Except.ok.injEq, Prod.mk.injEq] at stepped
       obtain ⟨_, slashed, rfl, _⟩ := stepped
-      obtain ⟨first, firstFrom, head, firstCoverage, firstRates, firstAppended⟩ :=
-        slashing_indexedTrace electra early slashed
-      refine ⟨first ++ later, firstFrom.append laterFrom, ?_, ?_, ?_,
-        firstAppended.append laterAppended⟩
+      obtain ⟨first, head, firstCoverage, firstAppended, firstSites⟩ :=
+        slashing_exit_site electra early slashed
+      have framed := frame_slashValidator slashed
+      have kept : SitePrefix s _ := ⟨framed.registryGrows,
+        activeStep_slashValidator slashed, effectiveKept_slash slashed⟩
+      refine ⟨first ++ later, ?_, ?_, firstAppended.append laterAppended, ?_⟩
       · simpa only [List.map_append] using head.append tail
       · exact firstCoverage.append_of_effectiveKept laterCoverage
           (registryLifecycle_slashValidator slashed) tailLifecycle (effectiveKept_slash slashed)
       · intro called member
-        exact (List.mem_append.mp member).elim (firstRates called) (laterRates called)
-    · cases stepped; exact ⟨later, laterFrom, tail, laterCoverage, laterRates, laterAppended⟩
+        rcases List.mem_append.mp member with member | member
+        · exact ⟨s, .refl _, rfl, firstSites called member⟩
+        · obtain ⟨site, beforeSite, slot, rate, first⟩ := laterSites called member
+          exact ⟨site, kept.trans beforeSite, slot.trans framed.slot, rate, first⟩
+    · cases stepped
+      exact ⟨later, tail, laterCoverage, laterAppended, laterSites⟩
+private theorem attester_exit_sites {fork : Fork} {s t : BeaconState preset fork}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    {slashing : AttesterSlashing preset fork}
+    (ok : processAttesterSlashing config checks s slashing = .ok t) :
+    ∃ calls : List (IndexedDepartureCall preset config),
+      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
+        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
+      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
+      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
+        SitePrefix s site ∧ site.slot = s.slot ∧
+        exitChurnLimit config site = .ok called.call.rate ∧
+        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
+  simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff] at ok
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, ⟨folded, flag⟩, foldedOk, ok⟩ := ok
+  simp only [pure, Except.pure, Except.ok.injEq] at ok
+  obtain ⟨_, _, rfl⟩ := ok
+  exact slashable_fold_exit_sites electra early foldedOk
+private theorem withdrawal_request_exit_site {fork : Fork} {s t : BeaconState preset fork}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {request : WithdrawalRequest}
+    (ok : processWithdrawalRequest config s electra request = .ok t) :
+    ∃ calls : List (IndexedDepartureCall preset config),
+      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
+        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
+      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
+      ∀ called ∈ calls, exitChurnLimit config s = .ok called.call.rate ∧
+        computeActivationExitEpoch preset (getCurrentEpoch s) = .ok called.call.first := by
+  rcases withdrawalRequest_cases ok with same | ⟨index, exited⟩ | ⟨index, v, owed, withdrawn⟩
+  · subst t
+    exact ⟨[], .nil _ _, .of_data rfl, .of_kept rfl, by simp⟩
+  · obtain ⟨calls, trace, appended, sites, covered⟩ := initiate_exit_site electra exited
+    exact ⟨calls, trace, DepartureCoverage.of_accessor early covered, appended, sites⟩
+  · obtain ⟨registry, calls, trace, appended, sites⟩ := partial_exit_site electra withdrawn
+    refine ⟨calls, trace, ?_, appended, fun called member => (sites called member).2⟩
+    intro i old next before after unset assigned
+    have equal := Option.some.inj
+      (before.symm.trans (by simpa only [registry] using after))
+    exact False.elim (assigned (equal ▸ unset))
+private theorem withdrawal_fold_exit_sites {fork : Fork} {s t : BeaconState preset fork}
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    {requests : List WithdrawalRequest}
+    (ok : requests.foldlM (processWithdrawalRequest config · electra ·) s = .ok t) :
+    ∃ calls : List (IndexedDepartureCall preset config),
+      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
+        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
+      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
+      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
+        SitePrefix s site ∧ site.slot = s.slot ∧
+        exitChurnLimit config site = .ok called.call.rate ∧
+        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
+  apply exit_sites_fold electra (fun _ => True)
+    (fun _ _ _ computed => withdrawal_request_exit_site electra early computed)
+    (fun _ _ _ computed => registryLifecycle_processWithdrawalRequest computed) ?_ ok trivial
+  intro a request b computed _
+  have framed := frame_processWithdrawalRequest computed
+  exact ⟨⟨framed.registryGrows, activeStep_processWithdrawalRequest computed,
+    effectiveKept_withdrawalRequest computed⟩, framed.slot, trivial⟩
+
+/-- Calls that read their activation epoch at a state with the slot of `s` start no earlier.
+
+They start at or after the epoch of `s`. -/
+private theorem callsFrom_of_sites {fork : Fork} {s : BeaconState preset fork}
+    {calls : List (IndexedDepartureCall preset config)}
+    (sites : ∀ called ∈ calls, ∃ site : BeaconState preset fork, site.slot = s.slot ∧
+      computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first) :
+    DepartureCallsFrom (getCurrentEpoch s).toNat calls := by
+  intro called member
+  obtain ⟨site, slot, first⟩ := sites called member
+  have bound := (computeActivationExitEpoch_ok_iff.mp first).2
+  have epoch : getCurrentEpoch site = getCurrentEpoch s := by simp only [getCurrentEpoch, slot]
+  rw [epoch] at bound
+  omega
+
+/-- Calls that read a state with the slot of `s` start no earlier than the epoch of `s`.
+
+Their rates stay within the activation-exit cap. -/
+private theorem exit_sites_bounds {fork : Fork} {s : BeaconState preset fork}
+    (early : fork < .glamsterdam) {calls : List (IndexedDepartureCall preset config)}
+    (sites : ∀ called ∈ calls, ∃ site : BeaconState preset fork,
+      SitePrefix s site ∧ site.slot = s.slot ∧
+      exitChurnLimit config site = .ok called.call.rate ∧
+      computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first) :
+    DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧ ∀ called ∈ calls,
+      called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat := by
+  refine ⟨callsFrom_of_sites fun called member => ?_, fun called member => ?_⟩
+  · obtain ⟨site, -, slot, -, first⟩ := sites called member
+    exact ⟨site, slot, first⟩
+  · obtain ⟨_, -, -, rate, -⟩ := sites called member
+    exact exitChurnLimit_le_cap early rate
 
 /-- Attester slashings retain charge coverage through their slashable-validator fold. -/
 private theorem attesterSlashing_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
@@ -1855,11 +2034,9 @@ private theorem attesterSlashing_indexedTrace {fork : Fork} {s t : BeaconState p
       DepartureCoverage s t calls ∧ (∀ called ∈ calls,
         called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
       PartialsAppended electra s t calls := by
-  simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, ⟨folded, flag⟩, foldedOk, ok⟩ := ok
-  simp only [pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
-  exact slashableFold_indexedTrace electra early foldedOk
+  obtain ⟨calls, trace, covered, appended, sites⟩ := attester_exit_sites electra early ok
+  obtain ⟨firsts, rates⟩ := exit_sites_bounds early sites
+  exact ⟨calls, firsts, trace, covered, rates, appended⟩
 
 /-- A proposer slashing retains the charged index of its exit call. -/
 private theorem proposerSlashing_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
@@ -1872,9 +2049,9 @@ private theorem proposerSlashing_indexedTrace {fork : Fork} {s t : BeaconState p
       DepartureCoverage s t calls ∧ (∀ called ∈ calls,
         called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
       PartialsAppended electra s t calls := by
-  simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := ok
-  exact slashing_indexedTrace electra early slashed
+  obtain ⟨calls, trace, covered, appended, sites⟩ := proposer_exit_site electra early ok
+  obtain ⟨firsts, rates⟩ := exit_site_bounds early sites
+  exact ⟨calls, firsts, trace, covered, rates, appended⟩
 
 /-- An Electra epoch calls the exit queue only in its registry updates.
 
@@ -1969,10 +2146,15 @@ private theorem epoch_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
         called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
       PartialsAppended electra s t calls := by
   obtain ⟨rewarded, registered, entriesOk, slot, -, cut⟩ := epoch_registry_cut electra early ok
-  simp only [processRegistryUpdates, electra, ↓reduceIte, bind_ok_iff] at entriesOk
-  obtain ⟨_, _, entries⟩ := entriesOk
-  obtain ⟨calls, firsts, queued, covered, rates, appended⟩ :=
-    registryEntries_indexedTrace electra early entries
+  simp only [processRegistryUpdates, electra, ↓reduceIte, bind_ok_iff, liftAccessor_ok] at entriesOk
+  obtain ⟨activation, computed, entries⟩ := entriesOk
+  simp only [liftArith, mapError_ok_iff] at computed
+  have exactEpoch := (computeActivationExitEpoch_ok_iff.mp computed).2
+  have later : (getCurrentEpoch rewarded).toNat + preset.MAX_SEED_LOOKAHEAD.toNat <
+      activation.toNat := by omega
+  obtain ⟨calls, queued, covered, appended, sites⟩ :=
+    registry_fold_exit_sites electra early later entries
+  obtain ⟨firsts, rates⟩ := exit_sites_bounds early sites
   obtain ⟨trace, coverage, partials⟩ := cut calls queued covered appended
   refine ⟨calls, ?_, trace, coverage, rates, partials⟩
   simpa only [getCurrentEpoch, slot] using firsts
@@ -2047,36 +2229,6 @@ theorem processUpgrades_validators_of_electra {s t : ForkedBeaconState preset}
   (upgrades_departureQueues electra early ok
     (Nat.le_trans electra (processUpgrades_fork_le ok))).2.1
 
-/-- Withdrawal requests cover full departures while retaining unmatched partial calls. -/
-private theorem withdrawalRequest_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {request : WithdrawalRequest}
-    (ok : processWithdrawalRequest config s electra request = .ok t) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      (∀ called ∈ calls,
-        called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
-      PartialsAppended electra s t calls ∧
-      ∀ other old next, getValidator s other = .ok old → getValidator t other = .ok next →
-        old.exitEpoch = FAR_FUTURE_EPOCH → next.exitEpoch ≠ FAR_FUTURE_EPOCH →
-        ∃ called ∈ calls, called.index = some other.toNat ∧
-          called.call.epoch = next.exitEpoch ∧ called.call.amount = old.effectiveBalance := by
-  rcases withdrawalRequest_cases ok with same | ⟨index, exited⟩ | ⟨index, v, owed, withdrawn⟩
-  · subst t
-    refine ⟨[], by simp [DepartureCallsFrom], .nil _ _, by simp, .of_kept rfl, ?_⟩
-    intro other old next before after unset assigned
-    have equal := Except.ok.inj (before.symm.trans after)
-    exact False.elim (assigned (equal ▸ unset))
-  · exact initiateExit_indexedTrace electra early exited
-  · obtain ⟨registry, calls, firsts, trace, appended, rates⟩ :=
-      partialWithdrawal_indexedTrace electra early withdrawn
-    refine ⟨calls, firsts, trace, fun called member => (rates called member).2, appended, ?_⟩
-    intro other old next before after unset assigned
-    have unchanged := getValidator_of_validators_eq registry other
-    have equal := Except.ok.inj (before.symm.trans (unchanged ▸ after))
-    exact False.elim (assigned (equal ▸ unset))
-
 /-- The withdrawal-request fold retains charge coverage and all capacity-consuming calls. -/
 private theorem withdrawalRequests_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
@@ -2089,15 +2241,9 @@ private theorem withdrawalRequests_indexedTrace {fork : Fork} {s t : BeaconState
       DepartureCoverage s t calls ∧ (∀ called ∈ calls,
         called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
       PartialsAppended electra s t calls := by
-  apply DepartureCoverage.foldlM electra _ ?_
-    (fun _ _ _ ok => registryLifecycle_processWithdrawalRequest ok) ?_
-    (fun _ _ _ ok => (frame_processWithdrawalRequest ok).slot) ok
-  · intro a request b stepped
-    obtain ⟨calls, firsts, trace, rates, appended, coverage⟩ :=
-      withdrawalRequest_indexedTrace electra early stepped
-    exact ⟨calls, firsts, trace, DepartureCoverage.of_accessor early coverage, rates, appended⟩
-  · intro a request b stepped
-    exact effectiveKept_withdrawalRequest stepped
+  obtain ⟨calls, trace, covered, appended, sites⟩ := withdrawal_fold_exit_sites electra early ok
+  obtain ⟨firsts, rates⟩ := exit_sites_bounds early sites
+  exact ⟨calls, firsts, trace, covered, rates, appended⟩
 
 /-- The number of validators active at the current epoch of a state. -/
 def activeCount {fork : Fork} (s : BeaconState preset fork) : Nat :=
@@ -2150,15 +2296,9 @@ private theorem voluntaryExits_indexedTrace {fork : Fork} {s t : BeaconState pre
       DepartureCoverage s t calls ∧ (∀ called ∈ calls,
         called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
       PartialsAppended electra s t calls := by
-  apply DepartureCoverage.foldlM electra _ ?_
-    (fun _ _ _ ok => registryLifecycle_processVoluntaryExit ok) ?_
-    (fun _ _ _ ok => (frame_processVoluntaryExit ok).slot) ok
-  · intro a signed b stepped
-    obtain ⟨calls, firsts, trace, rates, appended, covered⟩ :=
-      initiateExit_indexedTrace electra early (processVoluntaryExit_initiates stepped)
-    exact ⟨calls, firsts, trace, DepartureCoverage.of_accessor early covered, rates, appended⟩
-  · intro a signed b stepped
-    exact effectiveKept_voluntaryExit stepped
+  obtain ⟨calls, trace, covered, appended, sites⟩ := voluntary_fold_exit_sites electra early ok
+  obtain ⟨firsts, rates⟩ := exit_sites_bounds early sites
+  exact ⟨calls, firsts, trace, covered, rates, appended⟩
 
 /-- Successful consolidation requests record the input to their balance-queue call.
 
@@ -4503,27 +4643,6 @@ theorem total_active_congr {f h : Fork} {s : BeaconState preset f}
   change getTotalBalance t indices = getTotalBalance s indices
   simp only [getTotalBalance, sourceNone, targetNone, sumMarked_markIndices_eq_stake, sum]
 
-private structure SitePrefix {fork : Fork} (s t : BeaconState preset fork) : Prop where
-  grows : s.validators.data.size ≤ t.validators.data.size
-  active : ActiveStep s t
-  effective : EffectiveKept s t
-
-private theorem SitePrefix.refl {fork : Fork} (s : BeaconState preset fork) : SitePrefix s s :=
-  ⟨Nat.le_refl _, .refl _, effectiveKept_refl _⟩
-
-private theorem SitePrefix.trans {fork : Fork} {s t u : BeaconState preset fork}
-    (one : SitePrefix s t) (two : SitePrefix t u) : SitePrefix s u :=
-  ⟨Nat.le_trans one.grows two.grows, one.active.trans two.active,
-    effectiveKept_trans one.effective two.effective one.grows⟩
-
-private theorem SitePrefix.fold {fork : Fork} {α : Type}
-    {action : BeaconState preset fork → α → Except TransitionError (BeaconState preset fork)}
-    (kept : ∀ s a t, action s a = .ok t → SitePrefix s t)
-    {s t : BeaconState preset fork} {items : List α}
-    (ok : items.foldlM action s = .ok t) : SitePrefix s t :=
-  foldlM_ok_invariant (SitePrefix s)
-    (fun _ _ _ previous computed => previous.trans (kept _ _ _ computed)) (.refl s) ok
-
 private theorem consolidationRequestSites_input {fork : Fork} {s : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : ConsolidationRequest}
     {sites : List (ForkedBeaconState preset)}
@@ -5359,113 +5478,6 @@ theorem trace_window_envelope_from {earliest epoch : Epoch} {available left : Gw
       exact rates call member n first after before)
   have spent := Nat.le_trans (Nat.le_add_right _ _) bound
   simpa only [queueEnvelopePotential, queue_capacity_truncate] using spent
-private theorem exit_sites_fold {fork : Fork} {α ε : Type}
-    {operation : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
-    (electra : .pectra ≤ fork)
-    (invariant : BeaconState preset fork → Prop)
-    (localTrace : ∀ s item t, operation s item = .ok t →
-      ∃ calls : List (IndexedDepartureCall preset config),
-        DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-          (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-        DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
-        ∀ called ∈ calls, exitChurnLimit config s = .ok called.call.rate ∧
-          computeActivationExitEpoch preset (getCurrentEpoch s) = .ok called.call.first)
-    (lifecycle : ∀ s item t, operation s item = .ok t → RegistryLifecycle s t)
-    (frame : ∀ s item t, operation s item = .ok t → invariant s →
-      SitePrefix s t ∧ t.slot = s.slot ∧ invariant t)
-    {items : List α} {s t : BeaconState preset fork}
-    (ok : items.foldlM operation s = .ok t) (initial : invariant s) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
-      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
-        SitePrefix s site ∧ site.slot = s.slot ∧
-        exitChurnLimit config site = .ok called.call.rate ∧
-        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
-  induction items generalizing s with
-  | nil =>
-    cases ok
-    exact ⟨[], .nil _ _, .of_data rfl, .of_kept rfl, by simp⟩
-  | cons item items ih =>
-    simp only [List.foldlM_cons, bind_ok_iff] at ok
-    obtain ⟨middle, stepped, rest⟩ := ok
-    obtain ⟨first, firstTrace, firstCoverage, firstAppended, firstSites⟩ :=
-      localTrace s item middle stepped
-    have framed := frame s item middle stepped initial
-    obtain ⟨later, laterTrace, laterCoverage, laterAppended, laterSites⟩ := ih rest framed.2.2
-    refine ⟨first ++ later, ?_, ?_, firstAppended.append laterAppended, ?_⟩
-    · simpa only [List.map_append] using firstTrace.append laterTrace
-    · exact firstCoverage.append_of_effectiveKept laterCoverage (lifecycle _ _ _ stepped)
-        (RegistryLifecycle.foldlM lifecycle rest) framed.1.effective
-    · intro called member
-      rcases List.mem_append.mp member with member | member
-      · exact ⟨s, .refl _, rfl, firstSites called member⟩
-      · obtain ⟨site, beforeSite, slot, rate, first⟩ := laterSites called member
-        exact ⟨site, framed.1.trans beforeSite, slot.trans framed.2.1, rate, first⟩
-private theorem registry_entry_site_frame {fork : Fork} {s t : BeaconState preset fork}
-    {activation : Epoch} {index : Nat}
-    (later : (getCurrentEpoch s).toNat + preset.MAX_SEED_LOOKAHEAD.toNat < activation.toNat)
-    (ok : updateRegistryEntryElectra config activation s index = .ok t) :
-    SitePrefix s t ∧ t.slot = s.slot := by
-  have framed := frame_updateRegistryEntryElectra ok
-  refine ⟨⟨framed.registryGrows, ?_, effectiveKept_registryElectra ok⟩, framed.slot⟩
-  simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨validator, found, ok⟩ := ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, set⟩ := ok
-    exact activeStep_setValidatorAt found (fun _ _ => by simp only [isActiveValidator]) set
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, exited⟩ := ok
-    exact activeStep_initiateValidatorExit exited
-  split at ok
-  · rename_i eligible
-    simp only [isEligibleForActivation, Bool.and_eq_true, beq_iff_eq] at eligible
-    exact activeStep_setValidatorAt found (fun _ le => isActiveValidator_eq_of_activation
-      (.inl eligible.2) (activityFixedEpoch_lt_of_toNat_lt later) le) (liftAccessor_ok.mp ok)
-  · cases ok
-    exact .refl _
-private theorem registry_fold_exit_sites {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {activation : Epoch}
-    {indices : List Nat}
-    (later : (getCurrentEpoch s).toNat + preset.MAX_SEED_LOOKAHEAD.toNat < activation.toNat)
-    (ok : indices.foldlM (updateRegistryEntryElectra config activation) s = .ok t) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
-      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
-        SitePrefix s site ∧ site.slot = s.slot ∧
-        exitChurnLimit config site = .ok called.call.rate ∧
-        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
-  apply exit_sites_fold electra
-    (fun state => (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat <
-      activation.toNat)
-    (fun _ _ _ computed => registry_entry_exit_site electra early computed) ?_ ?_ ok later
-  · intro a index b computed
-    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨validator, found, computed⟩ := computed
-    split at computed
-    · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨_, _, set⟩ := computed
-      exact .setValidatorAt found set ⟨fun _ => rfl, fun _ => rfl⟩
-    split at computed
-    · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨_, _, exited⟩ := computed
-      exact registryLifecycle_initiateValidatorExit exited
-    split at computed
-    · rename_i eligible
-      have far := activationEpoch_of_isEligibleForActivation eligible
-      exact .setValidatorAt found (liftAccessor_ok.mp computed)
-        ⟨fun set => absurd far set, fun _ => rfl⟩
-    · cases computed
-      exact .refl _
-  · intro a index b computed bound
-    have framed := registry_entry_site_frame bound computed
-    refine ⟨framed.1, framed.2, ?_⟩
-    simpa only [getCurrentEpoch, framed.2] using bound
 private theorem exit_site_total_eq {fork : Fork} {s site : BeaconState preset fork}
     (early : fork < .glamsterdam) (kept : SitePrefix s site) :
     getTotalActiveBalance site = getTotalActiveBalance s := by
@@ -5473,169 +5485,6 @@ private theorem exit_site_total_eq {fork : Fork} {s site : BeaconState preset fo
     simp only [getCurrentEpoch, kept.active.1]
   exact total_active_congr early early
     (kept.active.2.mono (getCurrentEpoch_le_activityFixedEpoch s)) epoch kept.effective
-private theorem proposer_exit_site {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {slashing : ProposerSlashing}
-    (ok : processProposerSlashing config checks s slashing = .ok t) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
-      ∀ called ∈ calls, exitChurnLimit config s = .ok called.call.rate ∧
-        computeActivationExitEpoch preset (getCurrentEpoch s) = .ok called.call.first := by
-  simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := ok
-  exact slashing_exit_site electra early slashed
-private theorem voluntary_exit_site {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {signed : SignedVoluntaryExit}
-    (ok : processVoluntaryExit config checks s signed = .ok t) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
-      ∀ called ∈ calls, exitChurnLimit config s = .ok called.call.rate ∧
-        computeActivationExitEpoch preset (getCurrentEpoch s) = .ok called.call.first := by
-  obtain ⟨calls, trace, appended, sites, covered⟩ :=
-    initiate_exit_site electra (processVoluntaryExit_initiates ok)
-  exact ⟨calls, trace, DepartureCoverage.of_accessor early covered, appended, sites⟩
-private theorem proposer_fold_exit_sites {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {slashings : List ProposerSlashing}
-    (ok : slashings.foldlM (processProposerSlashing config checks) s = .ok t) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
-      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
-        SitePrefix s site ∧ site.slot = s.slot ∧
-        exitChurnLimit config site = .ok called.call.rate ∧
-        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
-  apply exit_sites_fold electra (fun _ => True)
-    (fun _ _ _ computed => proposer_exit_site electra early computed)
-    (fun _ _ _ computed => registryLifecycle_processProposerSlashing computed) ?_ ok trivial
-  intro a slashing b computed _
-  have framed := frame_processProposerSlashing computed
-  exact ⟨⟨framed.registryGrows, activeStep_processProposerSlashing computed,
-    effectiveKept_proposerSlashing computed⟩, framed.slot, trivial⟩
-private theorem voluntary_fold_exit_sites {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {exits : List SignedVoluntaryExit}
-    (ok : exits.foldlM (processVoluntaryExit config checks) s = .ok t) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
-      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
-        SitePrefix s site ∧ site.slot = s.slot ∧
-        exitChurnLimit config site = .ok called.call.rate ∧
-        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
-  apply exit_sites_fold electra (fun _ => True)
-    (fun _ _ _ computed => voluntary_exit_site electra early computed)
-    (fun _ _ _ computed => registryLifecycle_processVoluntaryExit computed) ?_ ok trivial
-  intro a signed b computed _
-  have framed := frame_processVoluntaryExit computed
-  exact ⟨⟨framed.registryGrows, activeStep_processVoluntaryExit computed,
-    effectiveKept_voluntaryExit computed⟩, framed.slot, trivial⟩
-private theorem slashable_fold_exit_sites {fork : Fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {indices : List ValidatorIndex} {s t : BeaconState preset fork} {flag nextFlag : Bool}
-    (ok : indices.foldlM (slashIfSlashable config) (s, flag) = .ok (t, nextFlag)) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
-      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
-        SitePrefix s site ∧ site.slot = s.slot ∧
-        exitChurnLimit config site = .ok called.call.rate ∧
-        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
-  induction indices generalizing s flag with
-  | nil =>
-    cases ok
-    exact ⟨[], .nil _ _, .of_data rfl, .of_kept rfl, by simp⟩
-  | cons index rest ih =>
-    obtain ⟨⟨middle, flag'⟩, stepped, remaining⟩ := bind_ok_iff.mp ok
-    obtain ⟨later, tail, laterCoverage, laterAppended, laterSites⟩ := ih remaining
-    have tailLifecycle : RegistryLifecycle middle t := by
-      exact foldlM_ok_invariant (fun pair => RegistryLifecycle middle pair.1)
-        (fun _ _ _ before step => before.trans (registryLifecycle_slashIfSlashable step))
-        (.refl middle) remaining
-    simp only [slashIfSlashable, bind_ok_iff] at stepped
-    obtain ⟨_, _, stepped⟩ := stepped
-    split at stepped
-    · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-        Except.ok.injEq, Prod.mk.injEq] at stepped
-      obtain ⟨_, slashed, rfl, _⟩ := stepped
-      obtain ⟨first, head, firstCoverage, firstAppended, firstSites⟩ :=
-        slashing_exit_site electra early slashed
-      have framed := frame_slashValidator slashed
-      have kept : SitePrefix s _ := ⟨framed.registryGrows,
-        activeStep_slashValidator slashed, effectiveKept_slash slashed⟩
-      refine ⟨first ++ later, ?_, ?_, firstAppended.append laterAppended, ?_⟩
-      · simpa only [List.map_append] using head.append tail
-      · exact firstCoverage.append_of_effectiveKept laterCoverage
-          (registryLifecycle_slashValidator slashed) tailLifecycle (effectiveKept_slash slashed)
-      · intro called member
-        rcases List.mem_append.mp member with member | member
-        · exact ⟨s, .refl _, rfl, firstSites called member⟩
-        · obtain ⟨site, beforeSite, slot, rate, first⟩ := laterSites called member
-          exact ⟨site, kept.trans beforeSite, slot.trans framed.slot, rate, first⟩
-    · cases stepped
-      exact ⟨later, tail, laterCoverage, laterAppended, laterSites⟩
-private theorem attester_exit_sites {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {slashing : AttesterSlashing preset fork}
-    (ok : processAttesterSlashing config checks s slashing = .ok t) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
-      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
-        SitePrefix s site ∧ site.slot = s.slot ∧
-        exitChurnLimit config site = .ok called.call.rate ∧
-        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
-  simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, ⟨folded, flag⟩, foldedOk, ok⟩ := ok
-  simp only [pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
-  exact slashable_fold_exit_sites electra early foldedOk
-private theorem withdrawal_request_exit_site {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {request : WithdrawalRequest}
-    (ok : processWithdrawalRequest config s electra request = .ok t) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
-      ∀ called ∈ calls, exitChurnLimit config s = .ok called.call.rate ∧
-        computeActivationExitEpoch preset (getCurrentEpoch s) = .ok called.call.first := by
-  rcases withdrawalRequest_cases ok with same | ⟨index, exited⟩ | ⟨index, v, owed, withdrawn⟩
-  · subst t
-    exact ⟨[], .nil _ _, .of_data rfl, .of_kept rfl, by simp⟩
-  · obtain ⟨calls, trace, appended, sites, covered⟩ := initiate_exit_site electra exited
-    exact ⟨calls, trace, DepartureCoverage.of_accessor early covered, appended, sites⟩
-  · obtain ⟨registry, calls, trace, appended, sites⟩ := partial_exit_site electra withdrawn
-    refine ⟨calls, trace, ?_, appended, fun called member => (sites called member).2⟩
-    intro i old next before after unset assigned
-    have equal := Option.some.inj
-      (before.symm.trans (by simpa only [registry] using after))
-    exact False.elim (assigned (equal ▸ unset))
-private theorem withdrawal_fold_exit_sites {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {requests : List WithdrawalRequest}
-    (ok : requests.foldlM (processWithdrawalRequest config · electra ·) s = .ok t) :
-    ∃ calls : List (IndexedDepartureCall preset config),
-      DepartureQueueTrace (s.earliestExitEpoch electra) (s.exitBalanceToConsume electra)
-        (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
-      DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
-      ∀ called ∈ calls, ∃ site : BeaconState preset fork,
-        SitePrefix s site ∧ site.slot = s.slot ∧
-        exitChurnLimit config site = .ok called.call.rate ∧
-        computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first := by
-  apply exit_sites_fold electra (fun _ => True)
-    (fun _ _ _ computed => withdrawal_request_exit_site electra early computed)
-    (fun _ _ _ computed => registryLifecycle_processWithdrawalRequest computed) ?_ ok trivial
-  intro a request b computed _
-  have framed := frame_processWithdrawalRequest computed
-  exact ⟨⟨framed.registryGrows, activeStep_processWithdrawalRequest computed,
-    effectiveKept_withdrawalRequest computed⟩, framed.slot, trivial⟩
 private theorem attester_fold_exit_sites {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     {slashings : List (AttesterSlashing preset fork)}
@@ -6818,13 +6667,9 @@ private theorem registry_fold_exit_rates
   obtain ⟨calls, trace, coverage, appended, sites⟩ :=
     registry_fold_exit_sites electra early later ok
   refine ⟨calls, trace, coverage, appended, ?_, ?_⟩
-  · intro called member
-    obtain ⟨site, _, slot, _, first⟩ := sites called member
-    have exactEpoch := (computeActivationExitEpoch_ok_iff.mp first).2
-    have epoch : getCurrentEpoch site = getCurrentEpoch s := by
-      simp only [getCurrentEpoch, slot]
-    rw [epoch] at exactEpoch
-    omega
+  · exact callsFrom_of_sites fun called member => by
+      obtain ⟨site, _, slot, _, first⟩ := sites called member
+      exact ⟨site, slot, first⟩
   intro called member
   obtain ⟨site, kept, slot, rate, first⟩ := sites called member
   obtain ⟨total, totalRead⟩ := exitChurnLimit_total early rate
@@ -6864,26 +6709,18 @@ private theorem block_exit_rates
   obtain ⟨calls, cons, covered, trace, appended, consTrace, entries, consSites, sites⟩ :=
     block_exit_sites electra early ok
   refine ⟨calls, cons, covered, trace, appended, consTrace, entries, ?_, ?_, ?_, ?_⟩
-  · intro called member
-    obtain ⟨site, _, slot, _, first⟩ := consSites called member
-    have exactEpoch := (computeActivationExitEpoch_ok_iff.mp first).2
-    have epoch : getCurrentEpoch site = getCurrentEpoch s := by
-      simp only [getCurrentEpoch, slot]
-    rw [epoch] at exactEpoch
-    omega
+  · exact callsFrom_of_sites fun called member => by
+      obtain ⟨site, _, slot, _, first⟩ := consSites called member
+      exact ⟨site, slot, first⟩
   · intro called member
     obtain ⟨site, kept, _, rate, _⟩ := consSites called member
     obtain ⟨total, totalRead⟩ := consolidationChurnLimit_total early rate
     have read : getTotalActiveBalance s = .ok total :=
       (exit_site_total_eq early kept).symm.trans totalRead
     exact consRate early totalRead rate (ceiling total read)
-  · intro called member
-    obtain ⟨site, _, slot, _, first⟩ := sites called member
-    have exactEpoch := (computeActivationExitEpoch_ok_iff.mp first).2
-    have epoch : getCurrentEpoch site = getCurrentEpoch s := by
-      simp only [getCurrentEpoch, slot]
-    rw [epoch] at exactEpoch
-    omega
+  · exact callsFrom_of_sites fun called member => by
+      obtain ⟨site, _, slot, _, first⟩ := sites called member
+      exact ⟨site, slot, first⟩
   intro called member
   obtain ⟨site, kept, slot, rate, first⟩ := sites called member
   obtain ⟨total, totalRead⟩ := exitChurnLimit_total early rate
