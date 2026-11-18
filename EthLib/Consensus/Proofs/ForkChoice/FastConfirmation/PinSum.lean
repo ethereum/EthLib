@@ -1222,18 +1222,88 @@ private theorem lateB_iff (config : Config) (pulled anc fin : BeaconState preset
   simp only [pinTerms]
   cases pulled.validators.data[i]? <;> simp
 
-/-- Outside the tight window, `late` is three times the stake of the late keys. -/
+/-- Outside the tight window, `late` is three times the stake of the late keys and their rise. -/
 private theorem late_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
     (pinTerms config pulled anc fin).late =
       if (pinTerms config pulled anc fin).tight = true then 0 else
-        3 * ∑ i ∈ (pinTerms config pulled anc fin).positions with
-          (pinTerms config pulled anc fin).lateB i = true, balanceAt pulled i := rfl
+        ∑ i ∈ (pinTerms config pulled anc fin).positions with
+          (pinTerms config pulled anc fin).lateB i = true,
+            (3 * balanceAt pulled i + (pinTerms config pulled anc fin).rise i) := rfl
 
 /-- Late activations, weight 3 for V keys and for new keys. -/
 theorem bud_late (h : Setting config checks g split fin pulled anc counted V) :
     3 * (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) +
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).lateB v.toNat = true,
-        (3 * eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤ (pinTerms config pulled anc fin).late := sorry
+        (3 * eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤ (pinTerms config pulled anc fin).late := by
+  classical
+  rw [late_eq]
+  have disjoint : Disjoint (VN counted V) (K6 pulled counted) := by
+    rw [Finset.disjoint_left]
+    intro v hv hk
+    have inV := (Finset.mem_filter.mp hv).1
+    exact (Finset.mem_filter.mp hk).2.2 (h.voting v inV).1
+  by_cases tight : (pinTerms config pulled anc fin).tight = true
+  · rw [ite_eq_left tight]
+    -- Tight: no key of VN or K6 is late.
+    have fin_le := UInt64.le_iff_toNat_le.mp h.finalized
+    have called := UInt64.le_iff_toNat_le.mp h.called
+    have bound := (tight_iff config pulled anc fin).mp tight
+    have near := h.near
+    have lowerEpoch : (getCurrentEpoch pulled).toNat + 1 ≤
+        anc.finalizedCheckpoint.epoch.toNat + preset.MAX_SEED_LOOKAHEAD.toNat := by omega
+    have none : ∀ v ∈ (VN counted V) ∪ (K6 pulled counted),
+        (pinTerms config pulled anc fin).lateB v.toNat = false := by
+      intro v hv
+      by_contra late
+      obtain ⟨w, found, -, beyond⟩ := (lateB_iff config pulled anc fin v.toNat).mp
+        (by simpa using late)
+      rcases Finset.mem_union.mp hv with hv | hv
+      · obtain ⟨w', found', active⟩ := active_of_activeVoters h.early
+          (h.voting v (Finset.mem_filter.mp hv).1).1
+        rw [found] at found'
+        cases found'
+        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
+        have := UInt64.le_iff_toNat_le.mp active.1
+        omega
+      · have le := activation_le_of_active h (by omega) (Finset.mem_filter.mp hv).1 found
+        omega
+    have zeroA : ∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true,
+        eR pulled v = 0 := by
+      apply Finset.sum_eq_zero
+      intro v hv
+      have := none v (Finset.mem_union_left _ (Finset.mem_filter.mp hv).1)
+      simp [(Finset.mem_filter.mp hv).2] at this
+    have zeroB : ∑ v ∈ (K6 pulled counted) with
+        (pinTerms config pulled anc fin).lateB v.toNat = true,
+          (3 * eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) = 0 := by
+      apply Finset.sum_eq_zero
+      intro v hv
+      have := none v (Finset.mem_union_right _ (Finset.mem_filter.mp hv).1)
+      simp [(Finset.mem_filter.mp hv).2] at this
+    rw [zeroA, zeroB]
+  · rw [ite_eq_right tight]
+    set A := (VN counted V).filter fun v => (pinTerms config pulled anc fin).lateB v.toNat = true
+      with hA
+    set B := (K6 pulled counted).filter
+      fun v => (pinTerms config pulled anc fin).lateB v.toNat = true with hB
+    have disj : Disjoint A B :=
+      Finset.disjoint_of_subset_left (Finset.filter_subset _ _)
+        (Finset.disjoint_of_subset_right (Finset.filter_subset _ _) disjoint)
+    have le : ∑ v ∈ A ∪ B, (3 * eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) ≤
+        ∑ i ∈ (pinTerms config pulled anc fin).positions.filter
+          (fun i => (pinTerms config pulled anc fin).lateB i = true),
+            (3 * balanceAt pulled i + (pinTerms config pulled anc fin).rise i) :=
+      sum_toNat_le (fun i => 3 * balanceAt pulled i + (pinTerms config pulled anc fin).rise i)
+        fun v hv => by
+        have flag : (pinTerms config pulled anc fin).lateB v.toNat = true := by
+          rcases Finset.mem_union.mp hv with hv | hv <;> exact (Finset.mem_filter.mp hv).2
+        obtain ⟨w, found, -⟩ := (lateB_iff config pulled anc fin v.toNat).mp flag
+        exact mem_positions_filter config pulled anc fin found flag
+    rw [Finset.sum_union disj] at le
+    have split : ∑ v ∈ A, (3 * eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) =
+        3 * ∑ v ∈ A, eR pulled v + ∑ v ∈ A, (pinTerms config pulled anc fin).rise v.toNat := by
+      rw [Finset.sum_add_distrib, Finset.mul_sum]
+    omega
 
 /-- D-8 (queues): exits and consolidations initiated on C's branch (none in the tight window). -/
 theorem bud_queues (h : Setting config checks g split fin pulled anc counted V)
