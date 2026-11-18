@@ -731,14 +731,12 @@ An index is read at its position, `toNat` is injective, and the terms are natura
 private theorem sum_toNat_le {S : Finset ValidatorIndex} {P : Finset ℕ} (f : ℕ → ℕ)
     (inside : ∀ v ∈ S, v.toNat ∈ P) : ∑ v ∈ S, f v.toNat ≤ ∑ i ∈ P, f i := by
   classical
-  calc ∑ v ∈ S, f v.toNat
-      = ∑ i ∈ S.image (fun v : ValidatorIndex => v.toNat), f i :=
-        (Finset.sum_image (fun a _ b _ same => UInt64.toNat_inj.mp same)).symm
-    _ ≤ ∑ i ∈ P, f i := by
-      refine Finset.sum_le_sum_of_subset ?_
-      intro i hi
-      obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
-      exact inside v hv
+  refine Finset.sum_le_sum_of_injOn (fun v : ValidatorIndex => v.toNat)
+    (fun a _ b _ same => UInt64.toNat_inj.mp same) ?_ (fun _ _ => le_rfl)
+    (fun _ _ _ => Nat.zero_le _)
+  intro i hi
+  obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
+  exact inside v hv
 
 /-- A position that holds a validator and meets a test is among the positions that meet it. -/
 private theorem mem_positions_filter (config : Config)
