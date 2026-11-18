@@ -88,6 +88,7 @@ Not yet released.
   The step reads these new or newly public lemmas:
   - `Store.parentRoot_of_getAncestorRoots` and `Store.isAncestor_terminal_of_getAncestorRoots` give the parent and ancestry of each walked root.
   - `Store.viable_of_ancestor` passes viability from a root to its ancestors before Gloas.
+  - `Store.held_of_isAncestor` now gives the held block at the root of any ancestor node, not only of a pending one.
   - `Execution.walk_covers` covers a walk of roots from its start and a step.
   - `Execution.honestHeadsCover_of_viableAt` is the induction behind the historical-anchor headlines, with the root's viability given per time.
     Its window reserve and its receivers' exits read one reserve value; the headlines pass `exitReserve`.
@@ -317,6 +318,9 @@ Not yet released.
   Every result that offers the evidence as an alternative was then true without a conflict.
   `Execution.finalized_prefix_or_accountable`, `Execution.mem_supportersOf_of_duty_epoch_or_accountable` and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` conclude the two new facts.
   A caller that takes the evidence apart has two more components after the time bound; a caller that passes it on is unchanged.
+
+- In Lean, `Store.held_of_isAncestor` now takes any ancestor node.
+  A caller that names the implicit `root` passes the node `⟨root, .pending⟩` as `ancestor`.
 
 - In Lean, `Execution.honestHeadsCover_of_byzantine_bound` moves from `HistoricalSigners.lean` to `HistoricalCoverage.lean`, with the same statement, so that the checked-call headlines can read `Execution.justifiedHonestlySigned`.
   A caller that imports `HistoricalSigners.lean` alone imports `HistoricalCoverage.lean` instead.

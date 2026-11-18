@@ -625,15 +625,6 @@ theorem filterNodeTree_parent {config : Config} (before : fork < .glamsterdam)
   rw [parentRoot, ← pPending]
   exact pMem
 
-/-- A node that descends from another node has a known block at the root of that node. -/
-private theorem known_of_isAncestor {node ancestor : ForkChoiceNode}
-    (descends : store.isAncestor node ancestor = .ok true) :
-    ∃ block, store.blocks[ancestor.root]? = some block := by
-  simp only [isAncestor, bind, Except.bind] at descends
-  cases known : store.block ancestor.root with
-  | error e => simp [known] at descends
-  | ok block => exact ⟨block, block_ok_iff.mp known⟩
-
 /-- Before Gloas, a block that descends from another root, and is not that root, has a parent.
 
 The store holds the parent at an earlier slot, and the parent descends from that root too. -/
@@ -644,7 +635,7 @@ private theorem isAncestor_parentRoot_of_ne {root ancestor : Root}
     (ne : root ≠ ancestor) :
     ∃ parent, store.blocks[block.parentRoot]? = some parent ∧ parent.slot < block.slot ∧
       store.isAncestor ⟨block.parentRoot, .pending⟩ ⟨ancestor, .pending⟩ = .ok true := by
-  obtain ⟨ancestorBlock, ancestorFound⟩ := known_of_isAncestor descends
+  obtain ⟨ancestorBlock, ancestorFound⟩ := held_of_isAncestor descends
   have walk := getAncestor_of_isAncestor_of_lt before ancestorFound descends
   by_cases le : block.slot ≤ ancestorBlock.slot
   · -- The walk stops at once, so it would reach the root itself.
@@ -681,7 +672,7 @@ theorem viable_of_ancestor {config : Config} {root member : Root}
         ⟨root, .pending⟩ = .ok true ∨ (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes) :
     store.isAncestor ⟨store.justifiedCheckpoint.root, .pending⟩ ⟨member, .pending⟩ = .ok true ∨
       (⟨member, .pending⟩ : ForkChoiceNode) ∈ nodes := by
-  obtain ⟨memberBlock, memberFound⟩ := known_of_isAncestor descends
+  obtain ⟨memberBlock, memberFound⟩ := held_of_isAncestor descends
   rcases viable with below | inTree
   · -- The justified block descends from the root, so from the member too.
     obtain ⟨rootBlock, rootFound, -⟩ := slot_le_of_isAncestor memberFound descends

@@ -643,10 +643,10 @@ theorem isAncestor_of_getCheckpointBlock_above (before : fork < .glamsterdam)
   rw [getAncestor_of_isAncestor_of_lt before rootKnown supports] at through
   exact isAncestor_of_getAncestor through.symm
 
-/-- The ancestor of a successful descent test is held. -/
-theorem held_of_isAncestor {node : ForkChoiceNode}
-    {root : Root} (descends : store.isAncestor node ⟨root, .pending⟩ = .ok true) :
-    ∃ block, store.blocks[root]? = some block := by
+/-- The root of the ancestor of a successful descent test is held. -/
+theorem held_of_isAncestor {node ancestor : ForkChoiceNode}
+    (descends : store.isAncestor node ancestor = .ok true) :
+    ∃ block, store.blocks[ancestor.root]? = some block := by
   unfold isAncestor at descends
   obtain ⟨b, ok, -⟩ := bind_ok_iff.mp descends
   exact ⟨b, block_ok_iff.mp ok⟩

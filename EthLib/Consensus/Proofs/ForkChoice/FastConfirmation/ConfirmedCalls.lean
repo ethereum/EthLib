@@ -1872,11 +1872,8 @@ private theorem anchor_cover {Δ : ℕ} {anchor : Store preset fork} {limit : �
   have reached := e.reachable
     (fun w hw => (ctx.start w hw).symm ▸ Store.Reachable.anchor ctx.anchored) i a ha
   have toJustified := Store.isAncestor_getHead headOk
-  have justified := toJustified
-  unfold Store.isAncestor at justified
-  obtain ⟨justifiedBlock, justifiedOk, -⟩ := bind_ok_iff.mp justified
-  obtain ⟨headBlock, headFound, -⟩ :=
-    Store.slot_le_of_isAncestor (Store.block_ok_iff.mp justifiedOk) toJustified
+  obtain ⟨justifiedBlock, justifiedFound⟩ := Store.held_of_isAncestor toJustified
+  obtain ⟨headBlock, headFound, -⟩ := Store.slot_le_of_isAncestor justifiedFound toJustified
   have pending := Store.getHead_pending ctx.preGloas headOk
   obtain ⟨anchorRoot, hashed, -, -, -, final, -⟩ := getForkchoiceStore_anchor ctx.anchored
   have read := reached.getCheckpointBlock_anchor ctx.anchorSlot ctx.anchorBoundary
@@ -2127,12 +2124,7 @@ private theorem finalized_invariant {Δ : ℕ} {anchor : Store preset fork}
     obtain ⟨-, finalBlock, -, finalFound, -, below⟩ :=
       Store.isAncestor_of_getCheckpointBlock ctx.preGloas read
     have headDescends := Store.isAncestor_getHead headOk
-    obtain ⟨justifiedBlock, justifiedFound⟩ :
-        ∃ b : BeaconBlock preset fork, ((e.world i).state a).blocks[
-          ((e.world i).state a).justifiedCheckpoint.root]? = some b := by
-      unfold Store.isAncestor at headDescends
-      obtain ⟨b, ok, -⟩ := bind_ok_iff.mp headDescends
-      exact ⟨b, Store.block_ok_iff.mp ok⟩
+    obtain ⟨justifiedBlock, justifiedFound⟩ := Store.held_of_isAncestor headDescends
     exact Store.isAncestor_trans_of_lt ctx.preGloas justifiedFound finalFound headDescends below
   · intro epoch rootEpoch epochOk rootOk recent
     obtain ⟨other, otherOk, low, lagged⟩ := old epoch epochOk
@@ -2321,23 +2313,13 @@ private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : S
           exact UInt64.le_iff_toNat_le.mpr (by omega)
         obtain ⟨low', high'⟩ := duty_window_of_slot_le ctx.start ctx.fits beginOk receiver
           upToDate currentOk honest duty slotLe before
-        obtain ⟨justifiedBlock, justifiedKnown⟩ : ∃ b, ((e.world k).state w).blocks[
-            ((e.world k).state w).justifiedCheckpoint.root]? = some b := by
-          have read := headAbove
-          unfold Store.isAncestor at read
-          obtain ⟨b, ok, -⟩ := bind_ok_iff.mp read
-          exact ⟨b, Store.block_ok_iff.mp ok⟩
+        obtain ⟨justifiedBlock, justifiedKnown⟩ := Store.held_of_isAncestor headAbove
         have descends := (justified_descends_of_duty ctx.anchored ctx.start ctx.anchorSlot
           ctx.anchorBoundary ctx.preGloas ctx.roots ctx.caller callerHeld nBound covers
           (by omega) receiver atTime ⟨justifiedBlock, justifiedKnown⟩
           ((UInt64.le_iff_toNat_le.mp blockLe).trans early) honest duty target (by omega)
           high').resolve_right collision
-        obtain ⟨rootBlock, rootKnown⟩ : ∃ b, ((e.world k).state w).blocks[
-            after.currentEpochObservedJustifiedCheckpoint.root]? = some b := by
-          have read := descends
-          unfold Store.isAncestor at read
-          obtain ⟨b, ok, -⟩ := bind_ok_iff.mp read
-          exact ⟨b, Store.block_ok_iff.mp ok⟩
+        obtain ⟨rootBlock, rootKnown⟩ := Store.held_of_isAncestor descends
         exact Store.isAncestor_trans_of_lt ctx.preGloas justifiedKnown rootKnown headAbove
           descends
     have coverAll := cover (limit + 1) le_rfl
