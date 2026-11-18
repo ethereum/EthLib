@@ -201,7 +201,7 @@ The sync seats count on both branches, each at an envelope of its reward.
 
 The envelope is read at three halves of the call's total active balance.
 
-A key's fall starts from the lesser of its balance and its cap.
+A key's fall starts from the lesser of its balance at the finalized block's state and its cap.
 
 Another branch can keep a lower effective balance that this branch's update raised.
 
@@ -355,7 +355,9 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- A partial requested after that state can then be paid on a branch and sit in no queue read
   -- here, so its whole balance is charged.
   --
-  -- The floor reads the finalized block's balance, since the call reads no state up to the split.
+  -- The floor reads the finalized block's balance.
+  --
+  -- The call reads no state between the finalized block and the split.
   --
   -- Both branches can share a dip there that this branch's later credits would hide.
   let actualFin (i : ℕ) := ((finalizedState.balances.data[i]?).map (·.toNat)).getD 0
@@ -627,7 +629,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- Past that bound, `rise`'s headroom pays a consolidation target's.
   --
-  -- There each deposit the window can apply to a new key there is charged up to the cap.
+  -- There each deposit the window can apply to a new key is charged up to the cap.
   --
   -- This closes a proof route at degenerate totals; no reachable run is known to need it.
   let consolidationGain := consolidationsX / inc * perIncrement *
