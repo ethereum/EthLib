@@ -766,8 +766,8 @@ private theorem sum_le_exiting (config : Config)
   calc ∑ v ∈ S, balanceAt state v.toNat
       = ∑ i ∈ S.image (fun v : ValidatorIndex => v.toNat), balanceAt state i :=
         (Finset.sum_image (fun a _ b _ same => UInt64.toNat_inj.mp same)).symm
-    _ ≤ _ := by
-      refine Finset.sum_le_sum_of_subset ?_
+    _ ≤ (pinTerms config state ancestor finalizedState).exiting := by
+      refine Finset.sum_le_sum_of_subset (f := fun i => balanceAt state i) ?_
       intro i hi
       obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
       have mark := of_decide_eq_true (member v hv)
@@ -987,8 +987,11 @@ theorem bud_rise (h : Setting config checks g split fin pulled anc counted V) :
       = ∑ i ∈ (K4 pulled counted V).image (fun v : ValidatorIndex => v.toNat),
           (pinTerms config pulled anc fin).rise i :=
         (Finset.sum_image (fun a _ b _ same => UInt64.toNat_inj.mp same)).symm
-    _ ≤ _ := by
-      refine Finset.sum_le_sum_of_subset ?_
+    _ ≤ ∑ i ∈ (pinTerms config pulled anc fin).positions with
+          (pinTerms config pulled anc fin).current i = true,
+        (pinTerms config pulled anc fin).rise i := by
+      refine Finset.sum_le_sum_of_subset
+        (f := fun i => (pinTerms config pulled anc fin).rise i) ?_
       intro i hi
       obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
       simp only [K4, Finset.mem_filter] at hv
