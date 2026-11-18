@@ -665,4 +665,52 @@ theorem exists_computeSlotAtTimeMs_of_le {config : Config} {g t later : UInt64} 
     · simp [computeSlotAtTimeMs, Uint64.subChecked, before', Uint64.divChecked, nonzero,
         bind, Except.bind]
 
+/-- A slot of an earlier epoch is before the first slot of a later epoch. -/
+theorem slot_le_of_epoch_lt (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    {slot : Slot}
+    {epoch : Epoch} (earlier : computeEpochAtSlot preset slot < epoch) :
+    slot.toNat ≤ epoch.toNat * preset.SLOTS_PER_EPOCH.toNat := by
+  have lt := UInt64.lt_iff_toNat_lt.mp earlier
+  simp only [computeEpochAtSlot, UInt64.toNat_div] at lt
+  have := (Nat.div_lt_iff_lt_mul positive).mp lt
+  omega
+
+/-- The boundary of the epoch after an epoch is before a slot two epochs on. -/
+theorem exists_nextEpochStart_lt {epoch : Epoch} {current : Slot}
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (late : epoch.toNat + 1 < (computeEpochAtSlot preset current).toNat) :
+    ∃ (next : Epoch) (boundary : Slot),
+      addChecked epoch 1 = .ok next ∧ computeStartSlotAtEpoch preset next = .ok boundary ∧
+      boundary < current := by
+  have curNat : (computeEpochAtSlot preset current).toNat =
+      current.toNat / preset.SLOTS_PER_EPOCH.toNat := by
+    simp only [computeEpochAtSlot, UInt64.toNat_div]
+  rw [curNat] at late
+  have twoBelow : (epoch.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat ≤ current.toNat :=
+    (Nat.le_div_iff_mul_le positive).mp (by omega)
+  have split : (epoch.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat =
+      (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat := by
+    simp only [Nat.add_mul]
+    omega
+  have fits : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < current.toNat := by omega
+  have currentFits := current.toNat_lt
+  have nextFits : epoch.toNat + 1 < 2 ^ 64 := by
+    have := Nat.le_mul_of_pos_right (epoch.toNat + 1) positive
+    omega
+  have nextNat : (epoch + 1).toNat = epoch.toNat + 1 := by
+    rw [UInt64.toNat_add, UInt64.toNat_one]
+    exact Nat.mod_eq_of_lt nextFits
+  have nextOk : addChecked epoch 1 = .ok (epoch + 1) :=
+    addChecked_ok_iff.mpr ⟨by rw [UInt64.toNat_one]; exact nextFits,
+      by rw [nextNat, UInt64.toNat_one]⟩
+  have boundaryNat : (UInt64.ofNat ((epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat)).toNat =
+      (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat := by
+    rw [UInt64.toNat_ofNat']
+    exact Nat.mod_eq_of_lt (by omega)
+  have boundaryOk : computeStartSlotAtEpoch preset (epoch + 1) =
+      .ok (UInt64.ofNat ((epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat)) :=
+    computeStartSlotAtEpoch_ok_iff.mpr ⟨by rw [nextNat]; omega, by rw [boundaryNat, nextNat]⟩
+  exact ⟨epoch + 1, _, nextOk, boundaryOk,
+    UInt64.lt_iff_toNat_lt.mpr (by rw [boundaryNat]; exact fits)⟩
+
 end EthLib.Consensus

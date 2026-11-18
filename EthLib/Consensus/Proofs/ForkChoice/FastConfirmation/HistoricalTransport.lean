@@ -817,9 +817,7 @@ public theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
         {v ∈ ((e.world n).state u).parentVotersOf source participants block parent | v ∈ J}))
     (scoreOk : computeProposerScore config state = .ok (score : Gwei)) :
     ((e.world n).state u).isAncestor head ⟨root, .pending⟩ = .ok true ∨
-    ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ last ∧ (e.world j).time ≤ last ∧
-      ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-        some evidence := by
+    HonestCollision (e := e) last := by
   classical
   rcases route with justifiedAbove |
     ⟨viable, descends, maximum, sourceMaximum, sourceScore, maximumOk, sourceMaximumOk,
@@ -1371,9 +1369,7 @@ public theorem receiver_fullMaximum_of_head_window {anchor : Store preset fork}
       first last = .ok maximum) :
     (∃ result, ((e.world k).state w).computeCommitteeWeightBetweenSlots head.root state
       first finish = .ok result) ∨
-    ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
-      ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-        some evidence := by
+    HonestCollision (e := e) time := by
   have forward v (honest : v ∈ J) m := e.forwardReachableWith
     (fun a ha => (anchored a ha) ▸ Store.ForwardReachableWith.anchor anchorStore) m v honest
   rcases parent_read_or_collision (forward u caller n).reachable

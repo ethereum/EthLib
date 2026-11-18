@@ -161,7 +161,7 @@ It reads the call's pulled-up head state, the target block's state and that bloc
 
 It adds to the quorum reserve what a counting state of the target's epoch or the next can change.
 
-That covers exits, the queues, credits since finality, late activations, sync seats and band changes.
+It covers exits, the queues, credits since finality, late activations, sync seats and band changes.
 
 The depth is the call's epoch plus 2, minus the finalized epoch of the target block's state.
 
@@ -307,6 +307,14 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   quorumReserve config state ancestor + (3 * exiting + queues + credits + branchR + late +
     syncSeats + syncFar + (∑ i ∈ positions with current i = true, rise i) +
     3 * (∑ i ∈ positions with current i = true, fall i))
+
+/-- The pin reserve contains the quorum reserve. -/
+theorem quorumReserve_le_pinReserve (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    quorumReserve config state ancestor ≤ pinReserve config state ancestor finalizedState := by
+  unfold pinReserve
+  dsimp only
+  exact Nat.le_add_right _ _
 
 variable {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
   genesisTimeMs) J}

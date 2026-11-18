@@ -491,4 +491,44 @@ theorem Store.Reachable.finalized_lt_justified_or_anchor {store : Store preset f
   · exact .inl (UInt64.le_iff_toNat_le.mpr atAnchor)
   · exact .inr (UInt64.lt_iff_toNat_lt.mpr below)
 
+/-- A voting source of a forward-reachable store is no later than its justified checkpoint. -/
+theorem Store.ForwardReachable.votingSource_le_justified
+    {store : Store preset fork}
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (sound : Invariant anchorState) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (slots : 0 < config.SLOT_DURATION_MS)
+    (anchorLower : getCurrentEpoch anchorState ≤ store.justifiedCheckpoint.epoch)
+    {tip : Root} {source : Checkpoint}
+    (read : store.getVotingSource config tip = .ok source) :
+    source.epoch ≤ store.justifiedCheckpoint.epoch := by
+  have reached := forward.reachable
+  unfold Store.getVotingSource at read
+  simp only [bind_ok_iff] at read
+  obtain ⟨block, blockOk, current, currentOk, read⟩ := read
+  split at read
+  · rename_i older
+    cases entry : store.unrealizedJustifications[tip]? with
+    | none => simp [entry] at read
+    | some value =>
+      simp only [entry, pure, Except.pure, Except.ok.injEq] at read
+      subst source
+      rcases (reached.unrealizedJustification_origin entry).imp And.left id with anchorEpoch |
+        ⟨state, pulled, held, run, same⟩
+      · rw [anchorEpoch]
+        exact anchorLower
+      · rw [same]
+        have epochRead := currentOk
+        unfold Store.getCurrentStoreEpoch at epochRead
+        obtain ⟨slot, slotOk, epochEq⟩ := bind_ok_iff.mp epochRead
+        simp only [pure, Except.pure, Except.ok.injEq] at epochEq
+        subst epochEq
+        exact forward.justified_le_of_pulledUp sound positive slots slotOk
+          (Store.block_ok_iff.mp blockOk) held run older
+  · cases held : store.blockStates[tip]? with
+    | none => simp [held] at read
+    | some state =>
+      simp only [held, pure, Except.pure, Except.ok.injEq] at read
+      subst source
+      exact reached.justified_le_of_blockState sound held
+
 end EthLib.Consensus

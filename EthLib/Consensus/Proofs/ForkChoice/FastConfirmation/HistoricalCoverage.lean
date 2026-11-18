@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalAnchor
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalSigners
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootHeld
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootViability
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalTransport
 import EthLib.Consensus.Proofs.HonestAggregation
@@ -265,10 +266,7 @@ private theorem justified_descends_of_signer {anchor : Store preset fork} {Δ ti
   -- The store holds its justified block, at the end of its head's walk.
   have justifiedKnown : ∃ b, ((e.world k).state w).blocks[
       ((e.world k).state w).justifiedCheckpoint.root]? = some b := by
-    have read := Store.isAncestor_getHead headOk
-    unfold Store.isAncestor at read
-    obtain ⟨b, ok, -⟩ := bind_ok_iff.mp read
-    exact ⟨b, Store.block_ok_iff.mp ok⟩
+    exact Store.held_of_isAncestor (Store.isAncestor_getHead headOk)
   -- The first slot of a later epoch is above the call slot, hence above the block.
   have boundaryLe : block.slot.toNat ≤
       ((e.world k).state w).justifiedCheckpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat := by
@@ -417,10 +415,7 @@ private theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
     have signer := signedAll w receiver k current (Nat.zero_le _) (atTime ▸ high) upToDate
       currentOk anchorLt
     obtain ⟨block, callerHeld⟩ : ∃ b, ((e.world n).state u).blocks[root]? = some b := by
-      have read := inputs.2.1
-      unfold Store.isAncestor at read
-      obtain ⟨b, ok, -⟩ := bind_ok_iff.mp read
-      exact ⟨b, Store.block_ok_iff.mp ok⟩
+      exact Store.held_of_isAncestor inputs.2.1
     obtain ⟨callerCurrent, callerCurrentOk, callerBlocks, -⟩ :=
       (forward n u caller).slots_le_current slots (UInt64.le_of_eq anchorSlot)
     rw [slotOk, Except.ok.injEq] at callerCurrentOk
@@ -530,9 +525,7 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
-      (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
-        ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-          some evidence) ∨
+      HonestCollision (e := e) time ∨
       HistoricalDirectSafetyEvidence (e := e) pre time := by
   classical
   have positive := fit.positive
@@ -556,9 +549,7 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
     simpa [Execution.world_zero, World.initial] using le
   -- The time induction; each step is the historical-anchor step or the duty-epoch step.
   have result := cover_of_steps (e := e) (root := root) (first := (e.world n).time) (last := time)
-    (P := (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
-        ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-          some evidence) ∨
+    (P := HonestCollision (e := e) time ∨
       HistoricalDirectSafetyEvidence (e := e) pre time)
     (fun T low high covers w receiver k receiverHead atTime upToDate receiverHeadOk => by
       obtain ⟨nodes, _, tree, _⟩ := Store.getHead_leaf receiverHeadOk
@@ -831,9 +822,7 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
-      (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
-        ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-          some evidence) ∨
+      HonestCollision (e := e) time ∨
       HistoricalDirectSafetyEvidence (e := e) pre time :=
   honestHeadsCover_core sync slots minLookahead maxLookahead ring preGloas
     admitted half votes fits prompt windows
@@ -962,9 +951,7 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
-      (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
-        ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-          some evidence) ∨
+      HonestCollision (e := e) time ∨
       HistoricalDirectSafetyEvidence (e := e) pre time := by
   have positive := fit.positive
   classical
@@ -1124,9 +1111,7 @@ public theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· 
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
-      (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
-        ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-          some evidence) ∨
+      HonestCollision (e := e) time ∨
       HistoricalDirectSafetyEvidence (e := e) pre time := by
   -- The anchor state is held at the caller, so the caller's epoch is not before the anchor's.
   have reached := e.forwardReachableWith
@@ -1437,9 +1422,7 @@ public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
-      (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
-        ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-          some evidence) ∨
+      HonestCollision (e := e) time ∨
       HistoricalDirectSafetyEvidence (e := e) pre time ∨
       CrossStoreJustifiedEvidence (e := e) pre time ∨
         HeldStateFinalityEvidence (e := e) pre time := by
@@ -1587,9 +1570,7 @@ public theorem Execution.rootViable_of_checked_call [DecidablePred (· ∈ J)] {
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     (∀ T, (e.world n).time ≤ T → T ≤ time → RootViableAt (e := e) root T) ∨
-      (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
-        ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-          some evidence) ∨
+      HonestCollision (e := e) time ∨
       HistoricalDirectSafetyEvidence (e := e) pre time ∨
       CrossStoreJustifiedEvidence (e := e) pre time ∨
         HeldStateFinalityEvidence (e := e) pre time := by

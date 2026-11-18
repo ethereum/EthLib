@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.Transition.ChainRoots
+import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
 
 /-!
 # Proofs: the checkpoints of each block state name ancestors of that block
@@ -1303,5 +1304,78 @@ theorem Store.ForwardReachable.finalized_add_two_le_or_anchor
   subst current
   cases Except.ok.inj epochOk
   exact h.1.symm.imp id UInt64.le_iff_toNat_le.mpr
+
+/-- A head's checkpoint read passes to another store, at each block above a block of its epoch.
+
+The block is on the head's chain, and the two stores agree on their blocks. -/
+theorem Store.getCheckpointBlock_of_shared_origin {A B : Store preset fork}
+    (reachedA : Store.Reachable config anchorState anchorBlock A)
+    (reachedB : Store.Reachable config anchorState anchorBlock B)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (same : ∀ (r : Root) b c, A.blocks[r]? = some b → B.blocks[r]? = some c → b = c)
+    (before : fork < .glamsterdam) {head origin x checkpoint : Root} {epoch : Epoch}
+    {originBlock : BeaconBlock preset fork}
+    (headRead : A.getCheckpointBlock head epoch = .ok checkpoint)
+    (originHeld : A.blocks[origin]? = some originBlock)
+    (onChain : A.isAncestor ⟨head, .pending⟩ ⟨origin, .pending⟩ = .ok true)
+    (originEpoch : computeEpochAtSlot preset originBlock.slot = epoch)
+    (above : B.isAncestor ⟨x, .pending⟩ ⟨origin, .pending⟩ = .ok true) :
+    B.getCheckpointBlock x epoch = .ok checkpoint := by
+  obtain ⟨boundary, checkpointBlock, boundaryOk, checkpointHeld, checkpointLe, -⟩ :=
+    Store.isAncestor_of_getCheckpointBlock before headRead
+  have early : boundary ≤ originBlock.slot := by
+    have boundaryNat := (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2
+    rw [UInt64.le_iff_toNat_le, boundaryNat, ← originEpoch]
+    simp only [computeEpochAtSlot, UInt64.toNat_div]
+    exact Nat.div_mul_le_self _ _
+  have walk := Store.getAncestor_of_isAncestor_of_lt before originHeld onChain
+  have through := Store.getAncestor_trans early walk
+  have originRead : A.getCheckpointBlock origin epoch = .ok checkpoint := by
+    simp only [Store.getCheckpointBlock, boundaryOk, Except.mapError, bind, Except.bind]
+      at headRead ⊢
+    rw [← through]
+    exact headRead
+  obtain ⟨received, receivedHeld⟩ : ∃ b, B.blocks[origin]? = some b := by
+    have read := above
+    unfold Store.isAncestor at read
+    obtain ⟨b, found, _⟩ := bind_ok_iff.mp read
+    exact ⟨b, Store.block_ok_iff.mp found⟩
+  have sameOrigin := same origin originBlock received originHeld receivedHeld
+  subst sameOrigin
+  have aboveAnchor : anchorBlock.slot ≤ boundary :=
+    UInt64.le_trans (reachedA.anchorSlot_le (UInt64.le_of_eq anchorSlot) checkpointHeld)
+      checkpointLe
+  have receiverRead := Store.getCheckpointBlock_of_same_blocks reachedB same boundaryOk
+    aboveAnchor ⟨originBlock, receivedHeld⟩ originRead
+  exact Store.getCheckpointBlock_of_isAncestor (node := ⟨x, .pending⟩) before receivedHeld above
+    boundaryOk early receiverRead
+
+/-- A successful pulled-up state read has the store's current epoch. -/
+theorem Store.ForwardReachable.pulledUpHeadState_epoch {store : Store preset fork}
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    {head : Root} {state : BeaconState preset fork} {epoch : Epoch}
+    (epochOk : store.getCurrentStoreEpoch config = .ok epoch)
+    (stateOk : store.getPulledUpHeadState config head = .ok state) :
+    getCurrentEpoch state = epoch := by
+  have parsed := stateOk
+  simp only [Store.getPulledUpHeadState, epochOk, bind_ok_iff] at parsed
+  obtain ⟨raw, rawOk, readEpoch, readEpochOk, parsed⟩ := parsed
+  cases Except.ok.inj readEpochOk
+  split at parsed
+  · obtain ⟨first, firstOk, processed⟩ := bind_ok_iff.mp parsed
+    rw [getCurrentEpoch, (processSlots_slot (mapError_ok_iff.mp processed)).2]
+    exact computeEpochAtSlot_computeStartSlotAtEpoch
+      (UInt64.lt_iff_toNat_lt.mpr positive) (mapError_ok_iff.mp firstOk)
+  · rename_i notOld
+    have stateEq : raw = state := Except.ok.inj parsed
+    subst state
+    have epochRead := epochOk
+    simp only [Store.getCurrentStoreEpoch, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at epochRead
+    obtain ⟨current, currentOk, epochEq⟩ := epochRead
+    have rawLe := forward.headState_epoch_le currentOk rawOk
+    rw [epochEq] at rawLe
+    exact UInt64.le_antisymm (UInt64.le_iff_toNat_le.mpr rawLe) (UInt64.not_lt.mp notOld)
 
 end EthLib.Consensus

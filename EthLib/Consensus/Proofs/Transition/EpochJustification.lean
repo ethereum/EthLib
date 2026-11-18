@@ -530,4 +530,51 @@ theorem sameSizes_processJustificationAndFinalization
     rw [← rest]
     exact SameSizes.refl _
 
+/-- A weighing whose test passes for the current or previous epoch justifies at least that epoch. -/
+theorem weighJustificationAndFinalization_justifies {state after : BeaconState preset fork}
+    {total previous current : Gwei}
+    (weighed : weighJustificationAndFinalization state total previous current = .ok after)
+    (recent : Bool)
+    (quorum : 2 * total.toNat ≤ 3 * (if recent then current else previous).toNat) :
+    (if recent then getCurrentEpoch state else getPreviousEpoch state) ≤
+      after.currentJustifiedCheckpoint.epoch := by
+  simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at weighed
+  obtain ⟨previousWeight, previousOk, threshold, thresholdOk, first, firstOk, currentWeight,
+    currentOk, second, secondOk, _, _, _, _, _, _, _, _, rfl⟩ := weighed
+  have thresholdEq := (mulChecked_ok_iff.mp thresholdOk).2
+  have previousEq := (mulChecked_ok_iff.mp previousOk).2
+  have currentEq := (mulChecked_ok_iff.mp currentOk).2
+  have epochs := getPreviousEpoch_le state
+  cases recent
+  · have passed : threshold ≤ previousWeight := by
+      simp only [UInt64.le_iff_toNat_le]
+      simp only [Bool.false_eq_true, ↓reduceIte] at quorum
+      simp only [UInt64.toNat_ofNat] at thresholdEq previousEq
+      omega
+    have firstEpoch := (justifyCheckpoint_ok firstOk).resolve_right
+      (by simp [decide_eq_true passed])
+    rcases justifyCheckpoint_ok secondOk with ⟨-, epoch, -⟩ | ⟨-, same⟩
+    · simpa [epoch] using epochs
+    · simp [same, firstEpoch.2.1]
+  · have passed : threshold ≤ currentWeight := by
+      simp only [UInt64.le_iff_toNat_le]
+      simp only [↓reduceIte] at quorum
+      simp only [UInt64.toNat_ofNat] at thresholdEq currentEq
+      omega
+    have secondEpoch := (justifyCheckpoint_ok secondOk).resolve_right
+      (by simp [decide_eq_true passed])
+    simp [secondEpoch.2.1]
+
+/-- A weighing past the first two epochs reads the total active balance. -/
+theorem processJustificationAndFinalization_totalActiveBalance {state after : BeaconState preset
+    fork}
+    (computed : processJustificationAndFinalization state = .ok after)
+    (counted : GENESIS_EPOCH + 1 < getCurrentEpoch state) :
+    ∃ total, getTotalActiveBalance state = .ok total := by
+  rcases processJustificationAndFinalization_reads computed with ⟨early, -⟩ |
+    ⟨-, _, _, total, _, _, _, _, totalOk, -⟩
+  · exact absurd early (UInt64.not_le.mpr counted)
+  · exact ⟨total, totalOk⟩
+
 end EthLib.Consensus

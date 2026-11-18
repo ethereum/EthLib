@@ -223,11 +223,13 @@ public import EthLib.Consensus.Proofs.Transition.InactivityLeakStake
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakTrace
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakVoter
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakVoterRun
+public import EthLib.Consensus.Proofs.Transition.IncludedTargetVotes
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.MixesKept
 public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Proofs.Transition.ParentPayload
 public import EthLib.Consensus.Proofs.Transition.ParticipationFlagsKept
+public import EthLib.Consensus.Proofs.Transition.ParticipationFrames
 public import EthLib.Consensus.Proofs.Transition.Payload
 public import EthLib.Consensus.Proofs.Transition.PaymentRelease
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseBlock

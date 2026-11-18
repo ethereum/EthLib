@@ -127,12 +127,6 @@ def TargetChecked (margin : ℕ) (anchorRoot : Root) (u : ValidatorIndex) (n : �
         (e.world k).time = begin.toNat) ∧
     HonestHeadsCover (e := e) origin (e.world k).time coveredUntil
 
-/-- Every up-to-date honest store holds the root at every time of the interval. -/
-def HonestHoldsFrom (root : Root) (first last : Nat) : Prop :=
-  ∀ w ∈ J, ∀ k, first ≤ (e.world k).time → (e.world k).time ≤ last →
-    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
-    ∃ block : BeaconBlock preset fork, ((e.world k).state w).blocks[root]? = some block
-
 /-- The checkpoint inputs of one call of the rule that confirmed `root` from `start`.
 
 The call accepted its checks, and the root is on the head's chain.
@@ -223,35 +217,6 @@ private theorem Execution.target_eq_or_unseen_signer (slots : 0 < config.SLOT_DU
   · exact .inr ⟨v, member, unseen, i, iLe, m, sent, data, signed, dataTarget, dataSlot⟩
 
 
-/-- Two pending ancestors of one head are comparable before Gloas. -/
-private theorem comparable_of_ancestors {store : Store preset fork}
-    (before : fork < .glamsterdam) {head : ForkChoiceNode} {a b : Root}
-    {aBlock bBlock : BeaconBlock preset fork}
-    (aKnown : store.blocks[a]? = some aBlock) (bKnown : store.blocks[b]? = some bBlock)
-    (ha : store.isAncestor head ⟨a, .pending⟩ = .ok true)
-    (hb : store.isAncestor head ⟨b, .pending⟩ = .ok true) :
-    store.isAncestor ⟨a, .pending⟩ ⟨b, .pending⟩ = .ok true ∨
-      store.isAncestor ⟨b, .pending⟩ ⟨a, .pending⟩ = .ok true := by
-  have aw := Store.getAncestor_of_isAncestor_of_lt before aKnown ha
-  have bw := Store.getAncestor_of_isAncestor_of_lt before bKnown hb
-  rcases UInt64.le_total bBlock.slot aBlock.slot with le | le
-  · left
-    have walk := (Store.getAncestor_trans le aw).symm.trans bw
-    simp [Store.isAncestor, Store.block_ok_iff.mpr bKnown, walk,
-      bind, Except.bind, pure, Except.pure]
-  · right
-    have walk := (Store.getAncestor_trans le bw).symm.trans aw
-    simp [Store.isAncestor, Store.block_ok_iff.mpr aKnown, walk,
-      bind, Except.bind, pure, Except.pure]
-
-/-- A known block of a descent test: the ancestor is held. -/
-private theorem held_of_isAncestor {store : Store preset fork} {node : ForkChoiceNode}
-    {root : Root} (descends : store.isAncestor node ⟨root, .pending⟩ = .ok true) :
-    ∃ block, store.blocks[root]? = some block := by
-  unfold Store.isAncestor at descends
-  obtain ⟨b, ok, -⟩ := bind_ok_iff.mp descends
-  exact ⟨b, Store.block_ok_iff.mp ok⟩
-
 /-- Same-block agreement carries pending descent to a receiver that holds the descendant. -/
 private theorem copy_ancestor {sender receiver : Store preset fork}
     (anchorSlot : anchorBlock.slot = anchorState.slot)
@@ -264,7 +229,7 @@ private theorem copy_ancestor {sender receiver : Store preset fork}
     (aKnown : receiver.blocks[a]? = some aBlock)
     (above : sender.isAncestor ⟨a, .pending⟩ ⟨b, .pending⟩ = .ok true) :
     receiver.isAncestor ⟨a, .pending⟩ ⟨b, .pending⟩ = .ok true := by
-  obtain ⟨block, held⟩ := held_of_isAncestor above
+  obtain ⟨block, held⟩ := Store.held_of_isAncestor above
   exact Store.isAncestor_of_same_blocks reached before same held
     (senderReached.anchorSlot_le (UInt64.le_of_eq anchorSlot) held) ⟨aBlock, aKnown⟩ above
 
@@ -287,13 +252,14 @@ private theorem comparable_of_target_read {sender receiver : Store preset fork}
     receiver.isAncestor ⟨checkpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
       receiver.isAncestor ⟨root, .pending⟩ ⟨checkpoint.root, .pending⟩ = .ok true := by
   obtain ⟨_, block, _, held, _, targetAbove⟩ := Store.isAncestor_of_getCheckpointBlock before read
-  obtain ⟨rb, rk⟩ := held_of_isAncestor supports
-  rcases comparable_of_ancestors before held rk targetAbove supports with h | h
+  obtain ⟨rb, rk⟩ := Store.held_of_isAncestor supports
+  rcases Store.comparable_of_ancestors before held rk targetAbove supports with h | h
   · exact .inl (copy_ancestor anchorSlot senderReached reached before same checkpointKnown h)
   · exact .inr (copy_ancestor anchorSlot senderReached reached before same known h)
 
 /-- The call's target block has a stored state (the anchor of the count's reserves). -/
-private theorem anc_of_target {u : ValidatorIndex} {n : ℕ} {head : Root} {target : Checkpoint}
+private theorem exists_blockState_of_currentTarget {u : ValidatorIndex} {n : ℕ} {head : Root}
+    {target : Checkpoint}
     (reachable : Store.Reachable config anchorState anchorBlock ((e.world n).state u))
     (preGloas : fork < .glamsterdam)
     (targetOk : ((e.world n).state u).getCurrentTarget config head = .ok target) :
@@ -386,7 +352,7 @@ private theorem pinned_count {u : ValidatorIndex} {n margin : ℕ} {head : Root}
       refine ⟨0, fun _ _ _ _ _ _ _ _ _ targetOk' => ?_, fun _ targetOk' => ?_⟩ <;>
         simp only [targetOk, reduceCtorEq] at targetOk'
     | ok target =>
-      obtain ⟨anc, ancOk⟩ := anc_of_target reachable preGloas targetOk
+      obtain ⟨anc, ancOk⟩ := exists_blockState_of_currentTarget reachable preGloas targetOk
       obtain ⟨fin, finRead, finAnchor⟩ :=
         Store.Reachable.finalizedState_of_blockState reachable sound anchorSlot params nonzero ancOk
       refine ⟨margin + pinReserve config pulled anc fin,
@@ -475,21 +441,6 @@ private theorem checkpoint_slot_le_of_duty {anchor : Store preset fork}
   have same := agree v honest w receiver k' k k'Bound kBound _ _ _ held checkpointKnown
   subst same
   exact ⟨boundary, boundaryOk, le⟩
-
-/-- The first slot of a vote's target epoch is at or before the vote's slot. -/
-theorem boundary_le_of_duty {v : ValidatorIndex} {time : ℕ}
-    {view : Set (Message preset fork)} {store : Store preset fork} {data : AttestationData}
-    (duty : MaySign config checks sources anchorState anchorBlock assignment genesisTimeMs v
-      time view store data)
-    {boundary : Slot}
-    (boundaryOk : computeStartSlotAtEpoch preset data.target.epoch = .ok boundary) :
-    boundary ≤ data.slot := by
-  obtain ⟨_, -, -, -, -, made, -⟩ := duty
-  obtain ⟨_, _, _, _, _, _, _, _, dataOk⟩ := made
-  have epoch := target_epoch_eq_of_getAttestationData dataOk
-  have firstNat := (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2
-  rw [UInt64.le_iff_toNat_le, firstNat, epoch]
-  exact Nat.div_mul_le_self _ _
 
 /-- The rule's test `total < 3 · support` and the reserved count give the pinned quorum. -/
 private theorem pin_quorum_of_count {support total stake margin pin : ℕ}
@@ -589,20 +540,20 @@ private theorem justified_comparable_of_pin {anchor : Store preset fork} {Δ tim
   have receiverBase := baseCovers (e.world k).time (by omega) (by omega) w receiver k hd rfl ready
     hdOk
   have receiverJ := Store.isAncestor_getHead hdOk
-  obtain ⟨sb, sk⟩ := held_of_isAncestor callerBase
-  obtain ⟨rb, rk⟩ := held_of_isAncestor rootAbove
-  obtain ⟨rsb, rsk⟩ := held_of_isAncestor receiverBase
+  obtain ⟨sb, sk⟩ := Store.held_of_isAncestor callerBase
+  obtain ⟨rb, rk⟩ := Store.held_of_isAncestor rootAbove
+  obtain ⟨rsb, rsk⟩ := Store.held_of_isAncestor receiverBase
   have seq := common _ _ _ sk rsk
   subst rsb
-  obtain ⟨jb, jk⟩ := held_of_isAncestor receiverJ
+  obtain ⟨jb, jk⟩ := Store.held_of_isAncestor receiverJ
   obtain ⟨rootBlock, known⟩ := holds w receiver k (by omega) kBound ready
   -- Compare the base with the root before comparing the receiver's justification with the base.
-  rcases comparable_of_ancestors preGloas sk rk callerBase rootAbove with below | above
+  rcases Store.comparable_of_ancestors preGloas sk rk callerBase rootAbove with below | above
   · have copied := copy_ancestor anchorSlot sr rr preGloas common rsk below
     have supported := Store.isAncestor_trans_of_lt preGloas rsk known receiverBase copied
-    exact comparable_of_ancestors preGloas jk known receiverJ supported
+    exact Store.comparable_of_ancestors preGloas jk known receiverJ supported
   have baseBelow := copy_ancestor anchorSlot sr rr preGloas common known above
-  rcases comparable_of_ancestors preGloas jk rsk receiverJ receiverBase with aboveJ | belowJ
+  rcases Store.comparable_of_ancestors preGloas jk rsk receiverJ receiverBase with aboveJ | belowJ
   swap
   · exact .inr (Store.isAncestor_trans_of_lt preGloas rsk jk baseBelow belowJ)
   by_cases reverse : ((e.world k).state w).isAncestor ⟨base, .pending⟩
@@ -746,7 +697,7 @@ private theorem justified_comparable_of_pin {anchor : Store preset fork} {Δ tim
         ((e.world k).state w).isAncestor ⟨root, .pending⟩
           ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ = .ok true := by
     have targetEpoch : target'.epoch = epoch := Except.ok.inj (targetEpochOk.symm.trans epochOk)
-    obtain ⟨anc, ancOk⟩ := anc_of_target sr preGloas targetOk
+    obtain ⟨anc, ancOk⟩ := exists_blockState_of_currentTarget sr preGloas targetOk
     obtain ⟨fin, finRead, finAnchor⟩ :=
       Store.Reachable.finalizedState_of_blockState sr sound anchorSlot params nonzero ancOk
     rw [countMargin stateOk targetOk ancOk finRead finAnchor] at bound

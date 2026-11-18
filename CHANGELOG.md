@@ -24,6 +24,7 @@ Not yet released.
   `Execution.heldFinality_or_evidence` reads a store's finalized checkpoint on a held state's justified chain, or gives `HeldStateFinalityEvidence`.
   `DelayFits.deadline_add_le`, `Store.ForwardReachable.finalized_add_two_le_or_anchor` and `Store.getCheckpointBlock_trans` are general steps.
   The new premises `CallCheckpointInputs`, `TargetChecked`, `AcceptedRealizedRecent`, `AcceptedRealizedHead`, `CallRolloverRead`, `JustifiedPinned`, `TargetIncluded` and `QuorumDriftWithin` are described in `SOUNDNESS.md`.
+  `DirectSafety.AccountableOrHashEvidence` is the direct-safety bound on two tails or hash evidence on their runs, and the statements that spelled it out now name it.
   `quorumReserve` and `pinReserve` are the reserves that `QuorumDriftWithin`, `JustifiedPinned` and the reserved count of a call read, and `RootViableAt` is the viability of a root at one time.
   `Execution.honestHeadsCover_of_byzantine_bound` moves to `HistoricalCoverage.lean`, so that the checked-call headlines can read `Execution.justifiedHonestlySigned`.
 
@@ -41,7 +42,7 @@ Not yet released.
 - `slotStart_le_of_slotAtTime` shows that each slot up to the slot at a time starts by that time.
   `nextSlotStart_le_of_slotAtTime` shows it for the slot after an earlier one.
   `slotStart_le_clock`, `DelayFits.deadline_add_le` and `duty_window_of_slot_le` read them.
-  `isAncestor_of_getCheckpointBlock_above` places a checkpoint read above a block at or before the epoch's first slot.
+  `Store.isAncestor_of_getCheckpointBlock_above` places a checkpoint read above a block at or before the epoch's first slot.
   `signerHead_of_duty` gives the head on which an honest duty's signer reads its target.
 
 - `Execution.honestTargetVotes_signed_of_checked` shows that an accepted current-target test has honest signers with two thirds of the active balance ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).

@@ -274,6 +274,12 @@ def HonestHeadsCover (root : Root) (first last : Nat) : Prop :=
     ((e.world i).state a).getHead config = .ok hd →
     ((e.world i).state a).isAncestor hd ⟨root, .pending⟩ = .ok true
 
+/-- Every up-to-date honest store holds the root at every time of the interval. -/
+def HonestHoldsFrom (root : Root) (first last : Nat) : Prop :=
+  ∀ w ∈ J, ∀ k, first ≤ (e.world k).time → (e.world k).time ≤ last →
+    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    ∃ block : BeaconBlock preset fork, ((e.world k).state w).blocks[root]? = some block
+
 /-- The root is viable at one time in every up-to-date honest store at that time.
 
 It is in the store's filtered tree, or below the store's justified block.
@@ -500,13 +506,8 @@ def HistoricalDirectSafetyEvidence {g : ForkedBeaconState preset}
       (∃ r : Root, ((e.world k).state w).blockStates[r]? = some stateB) ∧
       va.state.finalizedCheckpoint = ((e.world i).state w).finalizedCheckpoint ∧
       vb.state.currentJustifiedCheckpoint = ((e.world k).state w).justifiedCheckpoint ∧
-      (stake (DirectSafety.effectiveWeight anchorState) (DirectSafety.unslashedKeys anchorState) ≤
-        3 * stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys pre left right) +
-        2 * max (DirectSafety.derivedDrift
-          ((e.world k).state w).justifiedCheckpoint.epoch.toNat left)
-          (DirectSafety.derivedDrift ((e.world k).state w).justifiedCheckpoint.epoch.toNat right) ∨
-        DirectSafety.HashEvidence ((pre.append left).hashObjects ++ (pre.append right).hashObjects))
+      DirectSafety.AccountableOrHashEvidence pre left right
+        ((e.world k).state w).justifiedCheckpoint.epoch.toNat
 
 /-- The justified and unrealized justified checkpoints of honest stores agree at each epoch.
 
@@ -553,12 +554,7 @@ def CrossStoreJustifiedEvidence {g : ForkedBeaconState preset}
       (∃ r : Root, ((e.world j).state b).blockStates[r]? = some stateB) ∧
       va.state.currentJustifiedCheckpoint = first ∧
       vb.state.currentJustifiedCheckpoint = second ∧
-      (stake (DirectSafety.effectiveWeight anchorState) (DirectSafety.unslashedKeys anchorState) ≤
-        3 * stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys pre left right) +
-        2 * max (DirectSafety.derivedDrift first.epoch.toNat left)
-          (DirectSafety.derivedDrift first.epoch.toNat right) ∨
-        DirectSafety.HashEvidence ((pre.append left).hashObjects ++ (pre.append right).hashObjects))
+      DirectSafety.AccountableOrHashEvidence pre left right first.epoch.toNat
 
 /-- An honest store's finalized checkpoint conflicts with the justified checkpoint of a held state.
 
@@ -588,11 +584,7 @@ def HeldStateFinalityEvidence {g : ForkedBeaconState preset}
       va.state.finalizedCheckpoint = ((e.world i).state a).finalizedCheckpoint ∧
       vb.state.currentJustifiedCheckpoint = stateB.currentJustifiedCheckpoint ∧
       ((e.world i).state a).finalizedCheckpoint.epoch ≤ stateB.currentJustifiedCheckpoint.epoch ∧
-      (stake (DirectSafety.effectiveWeight anchorState) (DirectSafety.unslashedKeys anchorState) ≤
-        3 * stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys pre left right) +
-        2 * max (DirectSafety.derivedDrift stateB.currentJustifiedCheckpoint.epoch.toNat left)
-          (DirectSafety.derivedDrift stateB.currentJustifiedCheckpoint.epoch.toNat right) ∨
-        DirectSafety.HashEvidence ((pre.append left).hashObjects ++ (pre.append right).hashObjects))
+      DirectSafety.AccountableOrHashEvidence pre left right
+        stateB.currentJustifiedCheckpoint.epoch.toNat
 
 end EthLib.Consensus.Models.Network

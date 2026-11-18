@@ -82,6 +82,21 @@ noncomputable def accountableKeys {g x a b : ForkedBeaconState preset}
   classical
   exact (unslashedKeys x.state).filter (Accountable shared left right)
 
+/-- The direct-safety bound on two tails, or hash evidence on the two runs.
+
+The bound says the unslashed stake at `x` is at most three times the accountable stake.
+
+Twice the larger drift of the two tails is added, each up to one epoch past `epoch`.
+
+The hash evidence is a SHA-256 collision or a zero root among the objects of the runs. -/
+def AccountableOrHashEvidence {g x a b : ForkedBeaconState preset}
+    (shared : Run config checks g x) (left : Run config checks x a)
+    (right : Run config checks x b) (epoch : Nat) : Prop :=
+  Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
+      3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) +
+      2 * max (derivedDrift epoch left) (derivedDrift epoch right) ∨
+    HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects)
+
 open Classical in
 /-- Loss, gain and boundary drift measured against an unslashed reference subset. -/
 noncomputable def stateDriftOn (reference : Finset BLSPubkey)
@@ -463,11 +478,7 @@ theorem accountable_safety {g x a b : ForkedBeaconState preset}
     (ordered : a.state.finalizedCheckpoint.epoch ≤ b.state.finalizedCheckpoint.epoch)
     (conflict : Conflict (shared.append left) (shared.append right)
       a.state.finalizedCheckpoint b.state.finalizedCheckpoint) :
-    (Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
-      3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) +
-        2 * max (derivedDrift b.state.finalizedCheckpoint.epoch.toNat left)
-          (derivedDrift b.state.finalizedCheckpoint.epoch.toNat right)) ∨
-      HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects) := by
+    AccountableOrHashEvidence shared left right b.state.finalizedCheckpoint.epoch.toNat := by
   rcases accountable_safety_at_calls shared left right parameters genesis
     b.state.finalizedCheckpoint enoughA enoughB (.inr (.inr rfl)) ordered conflict with
     witnesses | hashes
@@ -529,10 +540,7 @@ theorem accountable_safety_justified_terminal {g x a b : ForkedBeaconState prese
     (ordered : va.state.finalizedCheckpoint.epoch ≤ j.epoch)
     (conflict : Conflict (shared.append left) (shared.append right)
       va.state.finalizedCheckpoint j) :
-    Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
-        3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) +
-        2 * max (derivedDrift j.epoch.toNat left) (derivedDrift j.epoch.toNat right) ∨
-      HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects) := by
+    AccountableOrHashEvidence shared left right j.epoch.toNat := by
   rcases view_conflicting_fields_quorums (shared.append left) (shared.append right)
       parameters genesis va vb j (field.imp_right Or.inl) ordered conflict with
     ⟨one, two, lowerOne, upperOne, lowerTwo, upperTwo, overlap⟩ | hashes
@@ -571,10 +579,7 @@ theorem accountable_safety_justified {g x a b : ForkedBeaconState preset}
     (field : j = b.state.previousJustifiedCheckpoint ∨ j = b.state.currentJustifiedCheckpoint)
     (ordered : a.state.finalizedCheckpoint.epoch ≤ j.epoch)
     (conflict : Conflict (shared.append left) (shared.append right) a.state.finalizedCheckpoint j) :
-    (Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
-      3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) +
-        2 * max (derivedDrift j.epoch.toNat left) (derivedDrift j.epoch.toNat right)) ∨
-      HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects) :=
+    AccountableOrHashEvidence shared left right j.epoch.toNat :=
   accountable_safety_justified_terminal shared left right .realized .realized parameters genesis
     j enoughA enoughB trivial trivial field ordered conflict
 
@@ -611,11 +616,7 @@ theorem accountable_justified_unique_terminal {g x a b : ForkedBeaconState prese
     (fieldB : k = vb.state.previousJustifiedCheckpoint ∨ k = vb.state.currentJustifiedCheckpoint)
     (epoch : j.epoch = k.epoch)
     (starts : x.state.slot.toNat ≤ j.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat) :
-    j = k ∨
-      Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
-        3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) +
-        2 * max (derivedDrift j.epoch.toNat left) (derivedDrift j.epoch.toNat right) ∨
-      HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects) := by
+    j = k ∨ AccountableOrHashEvidence shared left right j.epoch.toNat := by
   classical
   by_cases same : j = k
   · exact .inl same
@@ -682,11 +683,7 @@ theorem accountable_justified_unique {g x a b : ForkedBeaconState preset}
     (fieldB : k = b.state.previousJustifiedCheckpoint ∨ k = b.state.currentJustifiedCheckpoint)
     (epoch : j.epoch = k.epoch)
     (starts : x.state.slot.toNat ≤ j.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat) :
-    j = k ∨
-      Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
-        3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) +
-        2 * max (derivedDrift j.epoch.toNat left) (derivedDrift j.epoch.toNat right) ∨
-      HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects) :=
+    j = k ∨ AccountableOrHashEvidence shared left right j.epoch.toNat :=
   accountable_justified_unique_terminal shared left right .realized .realized parameters genesis
     j k enoughA enoughB trivial trivial fieldA fieldB epoch starts
 

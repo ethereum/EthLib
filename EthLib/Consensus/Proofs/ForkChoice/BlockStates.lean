@@ -739,4 +739,14 @@ theorem Store.getCheckpointBlock_of_same_blocks {store receiver : Store preset f
     rw [Store.getAncestor_of_same_blocks reachable same aboveAnchor known walk]
     simpa [walk] using read
 
+/-- A head state's epoch is at most the current epoch of a forward-reachable store. -/
+theorem Store.ForwardReachable.headState_epoch_le {store : Store preset fork}
+    (forward : Store.ForwardReachable config anchorState anchorBlock store) {head : Root}
+    {current : Slot} (currentOk : store.getCurrentSlot config = .ok current)
+    {headState : BeaconState preset fork} (headRead : store.blockState head = .ok headState) :
+    (getCurrentEpoch headState).toNat ≤ (computeEpochAtSlot preset current).toNat := by
+  have le := forward.slot_le_of_blockState_of_getCurrentSlot
+    (Store.blockState_ok_iff.mp headRead) currentOk
+  exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp le)
+
 end EthLib.Consensus

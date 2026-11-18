@@ -706,14 +706,7 @@ private theorem Store.Reachable.finalized_ancestor_or_accountable_of_view {confi
       (va : DirectSafety.TerminalView ⟨fork, stateA⟩),
       (∃ rootA : Root, earlier.blockStates[rootA]? = some stateA) ∧
       va.state.finalizedCheckpoint = earlier.finalizedCheckpoint ∧
-      (Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.unslashedKeys anchorState) ≤
-        3 * Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys pre left right) +
-        2 * max (DirectSafety.derivedDrift j.epoch.toNat left)
-          (DirectSafety.derivedDrift j.epoch.toNat right) ∨
-      DirectSafety.HashEvidence ((pre.append left).hashObjects ++
-        (pre.append right).hashObjects)) := by
+      DirectSafety.AccountableOrHashEvidence pre left right j.epoch.toNat := by
   -- The run from genesis gives the anchor its invariant, and the parameters give the window.
   have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
   have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by have := parameters.slots; omega
@@ -853,14 +846,8 @@ private theorem Store.Reachable.finalized_ancestor_or_accountable_between {confi
       (∃ rootB : Root, store.blockStates[rootB]? = some stateB) ∧
       va.state.finalizedCheckpoint = earlier.finalizedCheckpoint ∧
       vb.state.currentJustifiedCheckpoint = store.justifiedCheckpoint ∧
-      (Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.unslashedKeys anchorState) ≤
-        3 * Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys pre left right) +
-        2 * max (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat left)
-          (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat right) ∨
-      DirectSafety.HashEvidence ((pre.append left).hashObjects ++
-        (pre.append right).hashObjects)) := by
+      DirectSafety.AccountableOrHashEvidence pre left right
+        store.justifiedCheckpoint.epoch.toNat := by
   by_cases atAnchor : earlier.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState
   · exact .inl atAnchor
   have afterF : getCurrentEpoch anchorState < earlier.finalizedCheckpoint.epoch :=
@@ -950,14 +937,8 @@ theorem Store.Reachable.finalized_ancestor_or_accountable {config : Config}
       (∃ rootB : Root, store.blockStates[rootB]? = some stateB) ∧
       va.state.finalizedCheckpoint = store.finalizedCheckpoint ∧
       vb.state.currentJustifiedCheckpoint = store.justifiedCheckpoint ∧
-      (Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.unslashedKeys anchorState) ≤
-        3 * Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys pre left right) +
-        2 * max (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat left)
-          (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat right) ∨
-      DirectSafety.HashEvidence ((pre.append left).hashObjects ++
-        (pre.append right).hashObjects)) := by
+      DirectSafety.AccountableOrHashEvidence pre left right
+        store.justifiedCheckpoint.epoch.toNat := by
   exact reachable.finalized_ancestor_or_accountable_between reachable parameters genesis pre
     anchorSlot unknownParent unknownParent imported imported early early
     (Store.Reachable.ordered (DirectSafety.run_justified_separated pre genesis).1 reachable).1.1
@@ -1083,14 +1064,8 @@ private theorem Store.Reachable.held_finalized_read_or_accountable {config : Con
       va.state.finalizedCheckpoint = earlier.finalizedCheckpoint ∧
       vb.state.currentJustifiedCheckpoint = stateB.currentJustifiedCheckpoint ∧
       earlier.finalizedCheckpoint.epoch ≤ stateB.currentJustifiedCheckpoint.epoch ∧
-      (Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.unslashedKeys anchorState) ≤
-        3 * Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys pre left right) +
-        2 * max (DirectSafety.derivedDrift stateB.currentJustifiedCheckpoint.epoch.toNat left)
-          (DirectSafety.derivedDrift stateB.currentJustifiedCheckpoint.epoch.toNat right) ∨
-      DirectSafety.HashEvidence ((pre.append left).hashObjects ++
-        (pre.append right).hashObjects)) := by
+      DirectSafety.AccountableOrHashEvidence pre left right
+        stateB.currentJustifiedCheckpoint.epoch.toNat := by
   by_cases atAnchor : earlier.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState
   · -- The finalized checkpoint is the anchor's, and the justified root is a known block.
     have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
@@ -1172,14 +1147,8 @@ theorem Store.Reachable.finalized_prefix_or_accountable {config : Config}
       (∃ rootB : Root, store.blockStates[rootB]? = some stateB) ∧
       va.state.finalizedCheckpoint = earlier.finalizedCheckpoint ∧
       vb.state.currentJustifiedCheckpoint = store.justifiedCheckpoint ∧
-      (Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.unslashedKeys anchorState) ≤
-        3 * Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys pre left right) +
-        2 * max (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat left)
-          (DirectSafety.derivedDrift store.justifiedCheckpoint.epoch.toNat right) ∨
-      DirectSafety.HashEvidence ((pre.append left).hashObjects ++
-        (pre.append right).hashObjects)) := by
+      DirectSafety.AccountableOrHashEvidence pre left right
+        store.justifiedCheckpoint.epoch.toNat := by
   rcases reachable.finalized_ancestor_or_accountable_between reachableEarlier parameters genesis
       pre (UInt64.le_of_eq anchorSlot) unknownParent unknownEarlier imported importedEarlier
       early earlyEarlier ordered enough heldEnough with atAnchor | ⟨-, read⟩ | evidence
@@ -1279,14 +1248,7 @@ theorem Store.Reachable.justified_eq_or_accountable {config : Config}
       (∃ rootB : Root, other.blockStates[rootB]? = some stateB) ∧
       va.state.currentJustifiedCheckpoint = first ∧
       vb.state.currentJustifiedCheckpoint = second ∧
-      (Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.unslashedKeys anchorState) ≤
-        3 * Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys pre left right) +
-        2 * max (DirectSafety.derivedDrift first.epoch.toNat left)
-          (DirectSafety.derivedDrift first.epoch.toNat right) ∨
-      DirectSafety.HashEvidence ((pre.append left).hashObjects ++
-        (pre.append right).hashObjects)) := by
+      DirectSafety.AccountableOrHashEvidence pre left right first.epoch.toNat := by
   have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
   have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by have := parameters.slots; omega
   have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
@@ -1495,16 +1457,8 @@ theorem Execution.finalized_prefix_or_accountable {ν κ : Type*} [DecidableEq �
         (∃ rootB : Root, ((e.world k).state w).blockStates[rootB]? = some stateB) ∧
         va.state.finalizedCheckpoint = ((e.world i).state w).finalizedCheckpoint ∧
         vb.state.currentJustifiedCheckpoint = ((e.world k).state w).justifiedCheckpoint ∧
-        (Models.stake (DirectSafety.effectiveWeight anchorState)
-            (DirectSafety.unslashedKeys anchorState) ≤
-          3 * Models.stake (DirectSafety.effectiveWeight anchorState)
-            (DirectSafety.accountableKeys pre left right) +
-          2 * max
-            (DirectSafety.derivedDrift ((e.world k).state w).justifiedCheckpoint.epoch.toNat left)
-            (DirectSafety.derivedDrift
-              ((e.world k).state w).justifiedCheckpoint.epoch.toNat right) ∨
-        DirectSafety.HashEvidence
-          ((pre.append left).hashObjects ++ (pre.append right).hashObjects)) := by
+        DirectSafety.AccountableOrHashEvidence pre left right
+          ((e.world k).state w).justifiedCheckpoint.epoch.toNat := by
   classical
   by_cases family : ∀ w ∈ J, ∀ i k, i ≤ k → (e.world k).time ≤ time →
       ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
@@ -1588,14 +1542,7 @@ theorem Execution.justified_eq_or_accountable {ν κ : Type*} [DecidableEq ν]
       (∃ rootB : Root, ((e.world j).state b).blockStates[rootB]? = some stateB) ∧
       va.state.currentJustifiedCheckpoint = first ∧
       vb.state.currentJustifiedCheckpoint = second ∧
-      (Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.unslashedKeys anchorState) ≤
-        3 * Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys pre left right) +
-        2 * max (DirectSafety.derivedDrift first.epoch.toNat left)
-          (DirectSafety.derivedDrift first.epoch.toNat right) ∨
-      DirectSafety.HashEvidence
-        ((pre.append left).hashObjects ++ (pre.append right).hashObjects)) := by
+      DirectSafety.AccountableOrHashEvidence pre left right first.epoch.toNat := by
   have forward (n : ℕ) (w : ν) (honest : w ∈ J) := e.forwardReachableWith
     (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) n w honest
   obtain ⟨calls, terminal⟩ := e.held_floors enough heldEnough honestA honestB timeA timeB
@@ -1673,14 +1620,8 @@ theorem Execution.held_finalized_read_or_accountable {ν κ : Type*} [DecidableE
       va.state.finalizedCheckpoint = ((e.world i).state a).finalizedCheckpoint ∧
       vb.state.currentJustifiedCheckpoint = stateB.currentJustifiedCheckpoint ∧
       ((e.world i).state a).finalizedCheckpoint.epoch ≤ stateB.currentJustifiedCheckpoint.epoch ∧
-      (Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.unslashedKeys anchorState) ≤
-        3 * Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys pre left right) +
-        2 * max (DirectSafety.derivedDrift stateB.currentJustifiedCheckpoint.epoch.toNat left)
-          (DirectSafety.derivedDrift stateB.currentJustifiedCheckpoint.epoch.toNat right) ∨
-      DirectSafety.HashEvidence
-        ((pre.append left).hashObjects ++ (pre.append right).hashObjects)) := by
+      DirectSafety.AccountableOrHashEvidence pre left right
+        stateB.currentJustifiedCheckpoint.epoch.toNat := by
   have forward (n : ℕ) (w : ν) (honest : w ∈ J) := e.forwardReachableWith
     (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) n w honest
   obtain ⟨calls, terminal⟩ := e.held_floors enough heldEnough honestA honestB timeA timeB
