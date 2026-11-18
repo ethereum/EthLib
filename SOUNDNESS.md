@@ -3377,7 +3377,7 @@ The rule stores that block, or a later root of the walk of `getAncestorRoots` fr
 That root and each root before it in the walk then pass `isOneConfirmed`, with the votes of the state of the observed justified checkpoint.
 The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` shows that the second walk is the part of the first walk after the root where the first walk stopped.
 
-`Store.parentRoot_of_getAncestorRoots` shows that the roots of a walk are in the chain of the head.
+A private step of `ConfirmedCalls.lean` shows that the roots of a walk are in the chain of the head.
 These theorems prove no safety on their own; `Execution.confirmedRoot_covers` above does, under its premises.
 `Store.onFastConfirmation_confirmedRoot` and `Store.getLatestConfirmed_eq_or` do not record every check of the rule.
 For the start they leave out the other checks that compare the epochs and the slots of the blocks.

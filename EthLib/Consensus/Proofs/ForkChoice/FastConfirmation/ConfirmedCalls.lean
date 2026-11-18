@@ -47,6 +47,253 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
+/-! ## The walks of the calls and the current slot -/
+
+section Walks
+
+open EthLib.Consensus.Store Models.ForkChoice
+
+variable {store : Store preset fork}
+
+/-- A node that descends from a known block descends from the parent of that block.
+
+The store must hold the parent, at an earlier slot than the block.
+
+Both nodes are pending, so this holds at every fork. -/
+private theorem Store.isAncestor_parentRoot_of_isAncestor {node root : Root}
+    {block parent : BeaconBlock preset fork}
+    (descends : store.isAncestor ⟨node, .pending⟩ ⟨root, .pending⟩ = .ok true)
+    (found : store.blocks[root]? = some block)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (lower : parent.slot < block.slot) :
+    store.isAncestor ⟨node, .pending⟩ ⟨block.parentRoot, .pending⟩ = .ok true := by
+  have known : store.block root = .ok block := block_ok_iff.mpr found
+  simp only [isAncestor, known, bind, Except.bind] at descends
+  cases walk : store.getAncestor ⟨node, .pending⟩ block.slot with
+  | error e => simp [walk] at descends
+  | ok reached =>
+    rw [walk] at descends
+    -- The walk to the block's slot reaches the block, with some payload status.
+    have sameRoot : reached.root = root := by
+      by_cases gloas : .glamsterdam ≤ fork <;> simp_all [pure, Except.pure]
+    have reachedFound : store.blocks[reached.root]? = some block := sameRoot ▸ found
+    -- Going on to the parent's slot steps from the block to its parent.
+    have onward : store.getAncestor ⟨node, .pending⟩ parent.slot =
+        .ok ⟨block.parentRoot, parentPayloadStatus block parent⟩ := by
+      rw [getAncestor_trans (UInt64.le_of_lt lower) walk]
+      exact getAncestor_parent_of_slot_lt reachedFound parentFound lower
+    by_cases gloas : .glamsterdam ≤ fork
+    · simp [isAncestor_pending gloas, block_ok_iff.mpr parentFound, onward, bind, Except.bind,
+        pure, Except.pure]
+    · have pending := parentPayloadStatus_of_lt (block := block) (parent := parent)
+        (Nat.lt_of_not_le gloas)
+      simp [isAncestor, block_ok_iff.mpr parentFound, onward, pending, gloas, bind, Except.bind,
+        pure, Except.pure]
+
+/-- The walk from a root, as it goes on: each listed root has the root before it as parent.
+
+The first new root has the terminal block as parent, and the head descends from every root.
+
+The roots `acc` that the walk already holds must hang off `root` in the same way. -/
+private theorem Store.parentRoot_of_getAncestorRoots_aux {head root terminal : Root}
+    {acc roots : List Root}
+    (walked : store.getAncestorRoots root terminal acc = .ok roots)
+    (accParents : ∀ (older newer : List Root) (member : Root) (block : BeaconBlock preset fork),
+      acc = older ++ member :: newer → store.block member = .ok block →
+      block.parentRoot = older.getLast?.getD root)
+    (accBelow : ∀ m ∈ acc, store.isAncestor ⟨head, .pending⟩ ⟨m, .pending⟩ = .ok true)
+    (rootBelow : ∀ block : BeaconBlock preset fork, store.blocks[root]? = some block →
+      store.isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true) :
+    (∀ (older newer : List Root) (member : Root) (block : BeaconBlock preset fork),
+      roots = older ++ member :: newer → store.block member = .ok block →
+      block.parentRoot = older.getLast?.getD terminal) ∧
+    ∀ m ∈ roots, store.isAncestor ⟨head, .pending⟩ ⟨m, .pending⟩ = .ok true := by
+  fun_induction getAncestorRoots store root terminal acc generalizing roots with
+  | case1 => cases walked
+  | case2 root acc block found ih =>
+    -- Putting the root in front of `acc` keeps the parents, with the root's parent as base.
+    have consParents : ∀ (older newer : List Root) (member : Root)
+        (memberBlock : BeaconBlock preset fork), root :: acc = older ++ member :: newer →
+        store.block member = .ok memberBlock →
+        memberBlock.parentRoot = older.getLast?.getD block.parentRoot := by
+      intro older newer member memberBlock split memberOk
+      cases older with
+      | nil =>
+        obtain ⟨rfl, -⟩ := List.cons.inj split
+        obtain rfl : block = memberBlock :=
+          Except.ok.inj ((block_ok_iff.mpr found).symm.trans memberOk)
+        rfl
+      | cons first older =>
+        obtain ⟨rfl, rest⟩ := List.cons.inj split
+        rw [accParents older newer member memberBlock rest memberOk]
+        rw [List.getLast?_cons, Option.getD_some]
+    have consBelow : ∀ m ∈ root :: acc,
+        store.isAncestor ⟨head, .pending⟩ ⟨m, .pending⟩ = .ok true := by
+      intro m mem
+      rcases List.mem_cons.mp mem with rfl | mem
+      · exact rootBelow block found
+      · exact accBelow m mem
+    rw [bind_ok_iff] at walked
+    obtain ⟨terminalBlock, -, walked⟩ := walked
+    split at walked
+    · -- The walk is empty.
+      cases Except.ok.inj walked
+      simp
+    · dsimp only at walked
+      split at walked
+      · -- The parent is the terminal block, so the walk ends with this root.
+        rename_i atTerminal
+        cases Except.ok.inj walked
+        exact ⟨atTerminal ▸ consParents, consBelow⟩
+      · split at walked
+        · cases walked
+        · rename_i parent parentFound
+          split at walked
+          · rename_i lower
+            exact ih parent parentFound lower walked consParents consBelow fun _ _ =>
+              isAncestor_parentRoot_of_isAncestor (rootBelow block found) found parentFound
+                lower
+          · cases walked
+
+/-- The walk from a root, as it goes on: each listed root descends from the terminal block.
+
+The roots `acc` that the walk already holds must descend from `root`. -/
+private theorem Store.isAncestor_terminal_of_getAncestorRoots_aux {root terminal : Root}
+    {acc roots : List Root}
+    (walked : store.getAncestorRoots root terminal acc = .ok roots)
+    (accAbove : ∀ m ∈ acc, store.isAncestor ⟨m, .pending⟩ ⟨root, .pending⟩ = .ok true) :
+    ∀ m ∈ roots, store.isAncestor ⟨m, .pending⟩ ⟨terminal, .pending⟩ = .ok true := by
+  fun_induction getAncestorRoots store root terminal acc generalizing roots with
+  | case1 => cases walked
+  | case2 root acc block found ih =>
+    rw [bind_ok_iff] at walked
+    obtain ⟨terminalBlock, terminalOk, walked⟩ := walked
+    split at walked
+    · -- The walk is empty.
+      cases Except.ok.inj walked
+      simp
+    · rename_i higher
+      -- Each root held so far, and the root itself, descends from the root's known parent.
+      have consAbove : ∀ (parent : BeaconBlock preset fork),
+          store.blocks[block.parentRoot]? = some parent → parent.slot < block.slot →
+          ∀ m ∈ root :: acc,
+            store.isAncestor ⟨m, .pending⟩ ⟨block.parentRoot, .pending⟩ = .ok true := by
+        intro parent parentFound lower m mem
+        rcases List.mem_cons.mp mem with rfl | mem
+        · exact isAncestor_pending_parent_of_slot_lt (node := ⟨m, .pending⟩) found parentFound
+            lower
+        · exact isAncestor_parentRoot_of_isAncestor (accAbove m mem) found parentFound lower
+      dsimp only at walked
+      split at walked
+      · -- The parent is the terminal block, which sits below the root.
+        rename_i atTerminal
+        cases Except.ok.inj walked
+        have terminalFound := block_ok_iff.mp terminalOk
+        rw [← atTerminal] at terminalFound ⊢
+        exact consAbove terminalBlock terminalFound (UInt64.not_le.mp higher)
+      · split at walked
+        · cases walked
+        · rename_i parent parentFound
+          split at walked
+          · rename_i lower
+            exact ih parent parentFound lower walked (consAbove parent parentFound lower)
+          · cases walked
+
+/-- Each root of a successful walk descends from the terminal block. -/
+private theorem Store.isAncestor_terminal_of_getAncestorRoots {head terminal member : Root}
+    {roots : List Root} (walked : store.getAncestorRoots head terminal = .ok roots)
+    (mem : member ∈ roots) :
+    store.isAncestor ⟨member, .pending⟩ ⟨terminal, .pending⟩ = .ok true :=
+  isAncestor_terminal_of_getAncestorRoots_aux walked (by simp) member mem
+
+/-- Each root of a successful walk has the root before it as parent, or the terminal block.
+
+The walk lists the roots oldest first, so the root before a member is the last of `older`.
+
+The head of the walk descends from each of its roots.
+
+Each root descends from the terminal block. -/
+private theorem Store.parentRoot_of_getAncestorRoots {head terminal member : Root}
+    {older newer : List Root} {block : BeaconBlock preset fork}
+    (walked : store.getAncestorRoots head terminal = .ok (older ++ member :: newer))
+    (found : store.block member = .ok block) :
+    block.parentRoot = older.getLast?.getD terminal ∧
+      store.isAncestor ⟨head, .pending⟩ ⟨member, .pending⟩ = .ok true ∧
+      store.isAncestor ⟨member, .pending⟩ ⟨terminal, .pending⟩ = .ok true := by
+  obtain ⟨parents, below⟩ := parentRoot_of_getAncestorRoots_aux (head := head) walked
+    (by simp) (by simp) fun _ headFound => isAncestor_self headFound
+  exact ⟨parents older newer member block rfl found, below member (by simp),
+    isAncestor_terminal_of_getAncestorRoots walked (by simp)⟩
+
+/-- In a forward store, no counted vote supports a held block at the current slot.
+
+Each counted vote is a latest vote, whose attestation is for a block at its slot or before.
+
+That slot is before the current slot.
+
+A vote counts only through a descendant of the block, which is at the block's slot or later. -/
+private theorem Store.voteCountsFor_eq_false_of_slot_eq_current
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    {current : Slot} {root : Root} {block : BeaconBlock preset fork}
+    (slotOk : store.getCurrentSlot config = .ok current)
+    (found : store.blocks[root]? = some block) (atCurrent : block.slot = current)
+    (index : ValidatorIndex) :
+    store.voteCountsFor ⟨root, .pending⟩ index = false := by
+  cases counts : store.voteCountsFor ⟨root, .pending⟩ index with
+  | false => rfl
+  | true =>
+    obtain ⟨message, supported, latest, -, supportedOk, descends⟩ :=
+      store.exists_of_voteCountsFor counts
+    obtain ⟨attestation, rfl, origin⟩ := forward.votesHaveOrigins latest
+    -- The vote's block is a descendant of the block, so at the current slot or later.
+    obtain ⟨supportedBlock, supportedFound, above⟩ := slot_le_of_isAncestor found descends
+    rw [getSupportedNode_root supportedOk] at supportedFound
+    -- The vote's block is at the vote's slot or before, which is before the current slot.
+    obtain ⟨votedBlock, votedFound, votedLe⟩ := origin.voted
+    obtain ⟨current', currentOk, past⟩ := origin.past
+    rw [slotOk, Except.ok.injEq] at currentOk
+    subst current'
+    have same : supportedBlock = votedBlock :=
+      Option.some.inj (supportedFound.symm.trans votedFound)
+    subst same
+    exact absurd (UInt64.lt_of_le_of_lt above (UInt64.lt_of_le_of_lt votedLe past))
+      (atCurrent ▸ UInt64.lt_irrefl _)
+
+/-- In a forward store, a held block at the current slot is not one-confirmed.
+
+This holds under the tally of any balance source. -/
+private theorem Store.not_isOneConfirmed_of_slot_eq_current
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    {current : Slot} {root head : Root} {block : BeaconBlock preset fork}
+    {source : BeaconState preset fork}
+    (slotOk : store.getCurrentSlot config = .ok current)
+    (found : store.blocks[root]? = some block) (atCurrent : block.slot = current) :
+    store.isOneConfirmed config head source (store.tallyVotes source) root ≠ .ok true := by
+  intro confirmed
+  obtain ⟨support, threshold, supportOk, thresholdOk, -⟩ :=
+    isOneConfirmed_eq_ok_true_iff.mp confirmed
+  have above := threshold_lt_of_isOneConfirmed supportOk thresholdOk confirmed
+  -- The support is the sum of the balances whose vote counts, and none counts.
+  have zero : support.toNat = 0 := by
+    rw [store.getAttestationScore_toNat_eq_sum supportOk]
+    simp [voteCountsFor_eq_false_of_slot_eq_current forward slotOk found atCurrent]
+  omega
+
+/-- The unrealized justification read of a block is its stored entry. -/
+private theorem Store.unrealizedJustification_found {root : Root}
+    {checkpoint : Checkpoint} (read : store.unrealizedJustification root = .ok checkpoint) :
+    store.unrealizedJustifications[root]? = some checkpoint := by
+  unfold Store.unrealizedJustification at read
+  split at read
+  · rename_i stored found
+    simp only [pure, Except.pure, Except.ok.injEq] at read
+    rw [found, read]
+  · simp [throw, throwThe, MonadExceptOf.throw] at read
+
+end Walks
+
 /-! ## The finalized order of honest stores -/
 
 /-- The anchor state does not hash to the zero root, as no honest store holds a zero state root. -/

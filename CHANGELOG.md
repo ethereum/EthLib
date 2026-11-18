@@ -88,7 +88,6 @@ Not yet released.
   Its proof is a private step: one call keeps the private call invariant, given the invariant at every earlier call.
   `CallAt` names one call in a run of calls by one validator.
   The step reads these new or newly public lemmas:
-  - `Store.parentRoot_of_getAncestorRoots` and `Store.isAncestor_terminal_of_getAncestorRoots` give the parent and ancestry of each walked root.
   - `Store.viable_of_ancestor` passes viability from a root to its ancestors before Gloas.
   - `Store.held_of_isAncestor` now gives the held block at the root of any ancestor node, not only of a pending one.
   - `Store.Reachable.finalized_known` gives the block of a reachable store's finalized checkpoint; steps of `RootViability.lean` and `RootHeld.lean` read it too.
@@ -96,7 +95,6 @@ Not yet released.
   - `Execution.honestHeadsCover_of_viableAt` is the induction behind the historical-anchor headlines, with the root's viability given per time.
     Its window reserve and its receivers' exits read one reserve value; the headlines pass `exitReserve`.
   - `Execution.rootViableAt_of_checked` gives that viability for the root of a checked call.
-  - `Store.not_isOneConfirmed_of_slot_eq_current` leaves a block at the current slot unconfirmed.
   - `Execution.currentSlot_le_of_time_le` orders the current slots of honest stores at ordered times; `Execution.previousSlot_le_of_time_le` keeps its statement and reads it.
     Both are in `ForkChoice/VoteDelivery.lean`; `Execution.previousSlot_le_of_time_le` moves there from `FastConfirmation/HistoricalTransport.lean`.
   - `Store.ForwardReachable.justified_origins_epoch`, `Store.ForwardReachable.pulledUp_le_unrealized`, `Store.Reachable.justified_epoch_le_unrealized` and `Execution.unrealizedJustified_epoch_le_of_le` bound the justified checkpoints of a store.
@@ -108,7 +106,7 @@ Not yet released.
     `Execution.finalized_read_or_accountable` is its step for one pair of stores.
   - `Execution.anchor_stateRoot_nonzero` shows that an honest held copy of the anchor block has a nonzero state root.
   - `Store.getCheckpointForBlock_eq_ok_iff` reads the checkpoint of an epoch in a chain as that epoch and its checkpoint block.
-  - `computeStartSlotAtEpoch_le_of_epoch_le`, `Store.getCurrentStoreEpoch_eq`, `Store.getCheckpointBlock_of_ancestor_epoch`, `Store.getCheckpointBlock_self` and `Store.unrealizedJustification_found` read the clock, the checkpoint reads and the stored justifications of a store.
+  - `computeStartSlotAtEpoch_le_of_epoch_le`, `Store.getCurrentStoreEpoch_eq`, `Store.getCheckpointBlock_of_ancestor_epoch` and `Store.getCheckpointBlock_self` read the clock and the checkpoint reads of a store.
   - `Store.Reachable.anchor_le_finalized`, `Store.ForwardReachable.block_epoch_le_current`, `Store.ForwardReachable.justified_before_current`, `Store.ForwardReachable.unrealizedJustification_epoch_le` and `Store.ForwardReachable.votingSource_epoch_le` bound the epochs that a store holds.
   - `Execution.isAncestor_of_le` keeps an ancestor test at every later event, and `Execution.anchor_unrealized_le` bounds an honest store's unrealized justified epoch below by the anchor store's.
 

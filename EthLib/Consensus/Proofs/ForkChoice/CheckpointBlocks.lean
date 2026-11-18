@@ -703,17 +703,6 @@ private theorem Store.Reachable.tracked
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted
     exact ih.of_eq rfl rfl rfl rfl rfl rfl
 
-/-- The unrealized justification read of a block is its stored entry. -/
-theorem Store.unrealizedJustification_found {store : Store preset fork} {root : Root}
-    {checkpoint : Checkpoint} (read : store.unrealizedJustification root = .ok checkpoint) :
-    store.unrealizedJustifications[root]? = some checkpoint := by
-  unfold Store.unrealizedJustification at read
-  split at read
-  · rename_i stored found
-    simp only [pure, Except.pure, Except.ok.injEq] at read
-    rw [found, read]
-  · simp [throw, throwThe, MonadExceptOf.throw] at read
-
 /-- In a reachable store, each unrealized justification comes from the state of its own block.
 
 It is the current justified checkpoint of that state after justification.
