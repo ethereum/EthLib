@@ -4489,49 +4489,9 @@ private theorem blockConsolidationSites_prefix {fork : Fork}
       expected, expectedOk, _, count, proposed, proposedOk, attested, attestedOk,
       votedAtt, votedAttOk, deposited, depositedOk, exited, exitedOk, changed, changedOk,
       requested, requestedOk, withdrawn, withdrawnOk, ⟨last, recorded⟩, replayed, rfl⟩ := ok
-    have head : SitePrefix s headed := by
-      refine ⟨(frame_processBlockHeader headedOk).registryGrows,
-        activeStep_processBlockHeader headedOk, ?_⟩
-      obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
-      exact effectiveKept_refl _
-    have execution : SitePrefix headed executed := by
-      refine ⟨(frame_processBlockExecution executedOk).registryGrows,
-        activeStep_processBlockExecution executedOk, ?_⟩
-      exact effectiveKept_data (congrArg (·.data) (processBlockExecution_validators executedOk))
-    have randao : SitePrefix executed revealed := by
-      refine ⟨(frame_processRandao revealedOk).registryGrows,
-        activeStep_processRandao revealedOk, ?_⟩
-      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
-      exact effectiveKept_refl _
-    have vote : SitePrefix revealed voted := by
-      refine ⟨(frame_processEth1Data votedOk).registryGrows,
-        activeStep_processEth1Data votedOk, ?_⟩
-      obtain ⟨_, _, rest⟩ := processEth1Data_eq votedOk
-      exact effectiveKept_data (congrArg (·.validators.data) rest)
-    have proposers : SitePrefix voted proposed := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processProposerSlashing h).registryGrows,
-        activeStep_processProposerSlashing h, effectiveKept_proposerSlashing h⟩) proposedOk
-    have attesters : SitePrefix proposed attested := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processAttesterSlashing h).registryGrows,
-        activeStep_processAttesterSlashing h, effectiveKept_attesterSlashing h⟩) attestedOk
-    have attestations : SitePrefix attested votedAtt := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processAttestation h).registryGrows,
-        activeStep_processAttestation h,
-        effectiveKept_data (by rw [(processAttestation_registry h).1])⟩) votedAttOk
-    have deposits : SitePrefix votedAtt deposited := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processDeposit h).registryGrows,
-        activeStep_processDeposit h, effectiveKept_processDeposit h⟩) depositedOk
-    have exits : SitePrefix deposited exited := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processVoluntaryExit h).registryGrows,
-        activeStep_processVoluntaryExit h, effectiveKept_voluntaryExit h⟩) exitedOk
-    have changes : SitePrefix exited changed := by
-      unfold processBlsToExecutionChanges at changedOk
-      split at changedOk
-      · rw [← Array.foldlM_toList] at changedOk
-        exact SitePrefix.fold (fun _ _ _ h =>
-          ⟨(frame_processBlsToExecutionChange h).registryGrows,
-          activeStep_processBlsToExecutionChange h, effectiveKept_blsChange h⟩) changedOk
-      · cases changedOk; exact .refl _
+    have prior := blockHead_sitePrefix headedOk executedOk revealedOk votedOk
+    have operations := (operations_prefix_site_prefixes electra proposedOk attestedOk votedAttOk
+      depositedOk exitedOk changedOk).2.2
     have requests : SitePrefix changed requested := SitePrefix.fold
       (fun _ _ _ h => ⟨(frame_processDepositRequest h).registryGrows,
         activeStep_processDepositRequest h, effectiveKept_depositRequest h⟩) requestedOk
@@ -4539,9 +4499,7 @@ private theorem blockConsolidationSites_prefix {fork : Fork}
       (fun _ _ _ h => ⟨(frame_processWithdrawalRequest h).registryGrows,
         activeStep_processWithdrawalRequest h, effectiveKept_withdrawalRequest h⟩) withdrawnOk
     obtain ⟨u, same, kept⟩ := consolidationRequestsSites_prefix replayed site member
-    exact ⟨u, same, head.trans (execution.trans (randao.trans (vote.trans (proposers.trans
-      (attesters.trans (attestations.trans (deposits.trans (exits.trans (changes.trans
-        (requests.trans (withdrawals.trans kept)))))))))))⟩
+    exact ⟨u, same, prior.trans (operations.trans (requests.trans (withdrawals.trans kept)))⟩
   · cases ok; simp at member
 
 /-- A consolidation site of a run from Electra lies between Electra and Gloas.
@@ -5416,19 +5374,8 @@ private theorem operations_prefix_exit_sites {fork : Fork} (electra : .pectra �
     attester_fold_exit_sites electra early attestedOk
   obtain ⟨three, threeTrace, threeCoverage, threeAppended, threeSites⟩ :=
     voluntary_fold_exit_sites electra early exitedOk
-  have proposers : SitePrefix s proposed := SitePrefix.fold
-    (fun _ _ _ ok => ⟨(frame_processProposerSlashing ok).registryGrows,
-      activeStep_processProposerSlashing ok, effectiveKept_proposerSlashing ok⟩) proposedOk
-  have attesters : SitePrefix proposed attested := SitePrefix.fold
-    (fun _ _ _ ok => ⟨(frame_processAttesterSlashing ok).registryGrows,
-      activeStep_processAttesterSlashing ok, effectiveKept_attesterSlashing ok⟩) attestedOk
-  have votes : SitePrefix attested voted := SitePrefix.fold
-    (fun _ _ _ ok => ⟨(frame_processAttestation ok).registryGrows,
-      activeStep_processAttestation ok,
-      effectiveKept_data (congrArg (·.data) (processAttestation_registry ok).1)⟩) votedOk
-  have deposits : SitePrefix voted deposited := SitePrefix.fold
-    (fun _ _ _ ok => ⟨(frame_processDeposit ok).registryGrows,
-      activeStep_processDeposit ok, effectiveKept_processDeposit ok⟩) depositedOk
+  obtain ⟨proposers, toDeposited, -⟩ := operations_prefix_site_prefixes electra proposedOk
+    attestedOk votedOk depositedOk exitedOk changedOk
   have capella : .shapella ≤ fork := Nat.le_trans (by decide) electra
   have firstLife := RegistryLifecycle.foldlM
     (fun _ _ _ ok => registryLifecycle_processProposerSlashing ok) proposedOk
@@ -5451,7 +5398,7 @@ private theorem operations_prefix_exit_sites {fork : Fork} (electra : .pectra �
   have middle := (both.suffix_of_empty (.of_data (congrArg (·.data) votesData))
     (firstLife.trans secondLife) votesLife).suffix_of_empty depositsCoverage
       ((firstLife.trans secondLife).trans votesLife) depositsLife
-  have balances := (proposers.trans (attesters.trans (votes.trans deposits))).effective
+  have balances := toDeposited.effective
   have covered := middle.append_of_effectiveKept threeCoverage
     (((firstLife.trans secondLife).trans votesLife).trans depositsLife) exitsLife balances
   simp only [processBlsToExecutionChanges, capella, ↓reduceDIte,
@@ -5496,8 +5443,7 @@ private theorem operations_prefix_exit_sites {fork : Fork} (electra : .pectra �
       · obtain ⟨site, kept, slot, rate, first⟩ := twoSites called member
         exact ⟨site, proposers.trans kept, slot.trans proposers.active.1, rate, first⟩
     · obtain ⟨site, kept, slot, rate, first⟩ := threeSites called member
-      have beforeSite := proposers.trans (attesters.trans (votes.trans deposits))
-      exact ⟨site, beforeSite.trans kept, slot.trans beforeSite.active.1, rate, first⟩
+      exact ⟨site, toDeposited.trans kept, slot.trans toDeposited.active.1, rate, first⟩
 private theorem operations_prefix_site_prefix {fork : Fork} (electra : .pectra ≤ fork)
     {s proposed attested voted deposited exited changed : BeaconState preset fork}
     {body : BeaconBlockBody preset fork} {parentSlot : Slot} {before : fork < .hegota}
@@ -5699,26 +5645,7 @@ private theorem block_exit_sites {fork : Fork} (electra : .pectra ≤ fork)
   subst paidOk
   obtain ⟨calls, cons, covered, trace, appended, entries, consTrace, consSites, sites⟩ :=
     operations_covered_exit_sites electra early operatedOk
-  have head : SitePrefix s headed := by
-    refine ⟨(frame_processBlockHeader headedOk).registryGrows,
-      activeStep_processBlockHeader headedOk, ?_⟩
-    obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
-    exact effectiveKept_refl _
-  have execution : SitePrefix headed executed :=
-    ⟨(frame_processBlockExecution executedOk).registryGrows,
-      activeStep_processBlockExecution executedOk,
-      effectiveKept_data (congrArg (·.data) (processBlockExecution_validators executedOk))⟩
-  have randao : SitePrefix executed revealed := by
-    refine ⟨(frame_processRandao revealedOk).registryGrows,
-      activeStep_processRandao revealedOk, ?_⟩
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
-    exact effectiveKept_refl _
-  have vote : SitePrefix revealed voted := by
-    refine ⟨(frame_processEth1Data votedOk).registryGrows,
-      activeStep_processEth1Data votedOk, ?_⟩
-    obtain ⟨_, _, rest⟩ := processEth1Data_eq votedOk
-    exact effectiveKept_data (congrArg (·.validators.data) rest)
-  have prior := head.trans (execution.trans (randao.trans vote))
+  have prior := blockHead_sitePrefix headedOk executedOk revealedOk votedOk
   obtain ⟨planned, plannedOk, executedFrame⟩ :=
     blockExecution_departureQueues electra early executedOk
   have headFrame := blockHead_departureQueues electra headedOk executedFrame revealedOk votedOk
