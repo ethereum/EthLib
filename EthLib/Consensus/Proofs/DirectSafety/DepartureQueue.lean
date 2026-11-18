@@ -4490,7 +4490,7 @@ private theorem blockConsolidationSites_prefix {fork : Fork}
       votedAtt, votedAttOk, deposited, depositedOk, exited, exitedOk, changed, changedOk,
       requested, requestedOk, withdrawn, withdrawnOk, ⟨last, recorded⟩, replayed, rfl⟩ := ok
     have prior := blockHead_sitePrefix headedOk executedOk revealedOk votedOk
-    have operations := (operations_prefix_site_prefixes electra proposedOk attestedOk votedAttOk
+    have operations := (operations_prefix_site_prefixes electra.1 proposedOk attestedOk votedAttOk
       depositedOk exitedOk changedOk).2.2
     have requests : SitePrefix changed requested := SitePrefix.fold
       (fun _ _ _ h => ⟨(frame_processDepositRequest h).registryGrows,
