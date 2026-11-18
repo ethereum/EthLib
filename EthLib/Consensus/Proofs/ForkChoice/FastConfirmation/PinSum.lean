@@ -88,6 +88,16 @@ structure PinTerms (preset : Preset) where
   slashedR : ℕ
   slashedRB : ℕ → Bool
   tight : Bool
+  queueKeys : ℕ
+  queueWindow : ℕ
+  gainRateMax : ℕ
+  exitFloor : ℕ
+  lowKeys : ℕ
+  lowB : ℕ → Bool
+  lowEB : ℕ → ℕ
+  newKeySeats : ℕ
+  newKeySlack : ℕ
+  newKeyFloor : ℕ
 
 /-- `pinReserve` as the sum of its named terms, with the code's weights. -/
 def PinTerms.total (t : PinTerms preset) : ℕ :=
@@ -462,7 +472,13 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
         decide (v.exitEpoch.toNat + 1 ≤ epoch.toNat)),
     slashedR,
     slashedRB := fun i => decide (slashed i = true ∧ recentSlashing i = true),
-    tight }
+    tight, queueKeys,
+    queueWindow := depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry,
+    gainRateMax, exitFloor, lowKeys,
+    lowB := fun i => decide ((validator i).any (fun v =>
+      decide (finalized < v.withdrawableEpoch.toNat) &&
+        decide (v.activationEpoch.toNat ≤ epoch.toNat)) ∧ lowEB i < newKeyFloor),
+    lowEB, newKeySeats, newKeySlack, newKeyFloor }
 /-- The copy is faithful: the named terms sum to `pinReserve`. -/
 theorem pinReserve_eq_total (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
     pinReserve config state ancestor finalizedState =
@@ -489,6 +505,31 @@ theorem queues_split (config : Config) (state ancestor finalizedState : BeaconSt
     (pinTerms config state ancestor finalizedState).queues =
       (pinTerms config state ancestor finalizedState).queueDep +
         (pinTerms config state ancestor finalizedState).queueExit := rfl
+
+/-- `queueRise` charges each key the queues let exit, at a band and the largest gain rate. -/
+theorem queueRise_unfold (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    (pinTerms config state ancestor finalizedState).queueRise =
+      if (pinTerms config state ancestor finalizedState).tight then 0 else
+        3 * (pinTerms config state ancestor finalizedState).queueKeys *
+          (preset.upwardBand + (pinTerms config state ancestor finalizedState).depth *
+            (pinTerms config state ancestor finalizedState).gainRateMax) := rfl
+
+/-- `queueKeys` counts the window's churn by `exitFloor`, the ends, the low keys and new keys. -/
+theorem queueKeys_unfold (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    (pinTerms config state ancestor finalizedState).queueKeys =
+      (pinTerms config state ancestor finalizedState).queueWindow /
+          (pinTerms config state ancestor finalizedState).exitFloor + 2 +
+        (pinTerms config state ancestor finalizedState).lowKeys +
+        (pinTerms config state ancestor finalizedState).newKeySeats := rfl
+
+/-- `lowB` is the filter of `lowKeys`. -/
+theorem lowKeys_eq (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
+    (pinTerms config state ancestor finalizedState).lowKeys =
+      ((pinTerms config state ancestor finalizedState).positions.filter fun i =>
+        (pinTerms config state ancestor finalizedState).lowB i = true).card := by
+  simp [pinTerms]
 
 /-! ## D-1's setting -/
 
