@@ -841,7 +841,7 @@ private structure PinPresetFacts (preset : Preset) : Prop where
   /-- (preset fact) At every fork the whistleblower quotient is at least two. -/
   whistleblower : ∀ fork : Fork,
     2 ≤ (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat
-  /-- (preset fact) It rules out a small product of the increment and base reward factor (`2 ^ 35`). -/
+  /-- (preset fact) It rules out a small increment times base reward factor, below `2 ^ 35`. -/
   rewardScale : 2 ^ 35 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat
   /-- (preset fact) An increment is at least `10 ^ 8` gwei, which rules out a small increment. -/
   incrementSize : 10 ^ 8 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat
