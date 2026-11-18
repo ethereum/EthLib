@@ -233,11 +233,7 @@ private theorem deposit {before : fork < .hegota} {deposit : Deposit}
 private theorem depositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : processDepositRequest state electra request = .ok after) :
     QueueKept state after := by
-  obtain ⟨start, recorded⟩ :=
-    recordDepositRequestsStart_eq (state := state) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   rfl
 
 /-- A partial withdrawal writes the exit churn and the pending partial withdrawals only. -/
@@ -881,11 +877,7 @@ private theorem blockDeposit {before : fork < .hegota} {deposit : Deposit}
 private theorem depositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : processDepositRequest state electra request = .ok after) :
     WithdrawalKept state after := by
-  obtain ⟨start, recorded⟩ :=
-    recordDepositRequestsStart_eq (state := state) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   exact of_data
 
 /-- A withdrawal request starts an exit or queues a partial withdrawal. -/
@@ -1134,28 +1126,21 @@ private theorem PendingApart.consolidations {electra : .pectra ≤ fork}
   rw [queue, passPendingConsolidations_drop passed] at member
   exact holds witness c ((List.dropWhile_suffix _).subset member)
 
-/-- Two different pubkeys found in the registry convert to two different indices. -/
+/-- Two different pubkeys found in the registry are at two different indices. -/
 private theorem consolidationRequest_indices_ne {state : BeaconState preset fork}
-    {p q : Cryptography.Bls.BLSPubkey} {a b : Fin state.validators.data.size} {i j : UInt64}
-    (differ : ¬(p == q) = true)
-    (foundA : findValidatorByPubkey state p = some a)
-    (foundB : findValidatorByPubkey state q = some b)
-    (convertedA : liftAccessor (liftArith (Uint64.ofNatChecked (a : Nat))) =
-      (Except.ok i : Except TransitionError UInt64))
-    (convertedB : liftAccessor (liftArith (Uint64.ofNatChecked (b : Nat))) =
-      (Except.ok j : Except TransitionError UInt64)) :
+    {p q : Cryptography.Bls.BLSPubkey} {i j : UInt64} (differ : p ≠ q)
+    (foundA : (findValidatorByPubkey state p).map (·.val) = some i.toNat)
+    (foundB : (findValidatorByPubkey state q).map (·.val) = some j.toNat) :
     i ≠ j := by
   intro same
   subst same
-  have indexA :=
-    (Uint64.ofNatChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp convertedA))).2
-  have indexB :=
-    (Uint64.ofNatChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp convertedB))).2
-  obtain rfl : a = b := Fin.ext (indexA.symm.trans indexB)
+  obtain ⟨a, foundA, indexA⟩ := Option.map_eq_some_iff.mp foundA
+  obtain ⟨b, foundB, indexB⟩ := Option.map_eq_some_iff.mp foundB
+  obtain rfl : a = b := Fin.ext (indexA.trans indexB.symm)
   unfold findValidatorByPubkey at foundA foundB
   have keyA := (Array.findFinIdx?_eq_some_iff.mp foundA).1
   have keyB := (Array.findFinIdx?_eq_some_iff.mp foundB).1
-  simp only [beq_iff_eq] at keyA keyB differ
+  simp only [beq_iff_eq] at keyA keyB
   exact differ (keyA.symm.trans keyB)
 
 namespace PendingConsolidationsOrdered
@@ -1284,11 +1269,8 @@ private theorem queue {electra : .pectra ≤ fork} {sourceIndex targetIndex : Va
   have frame := frame_queueConsolidation found ok
   have sameEpoch : getCurrentEpoch after = getCurrentEpoch state :=
     congrArg (computeEpochAtSlot preset) frame.slot
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    pure, Except.pure] at ok
-  obtain ⟨⟨churned, epoch⟩, churnOk, withdrawal, added, written, set, pending, appended, final⟩ :=
-    ok
-  cases final
+  obtain ⟨epoch, withdrawal, _, written, pending, churnOk, added, set, appended, rfl⟩ :=
+    queueConsolidation_steps ok
   have data := appendWithinLimit_data appended
   obtain ⟨churnEarliest, churnRegistry, -⟩ :=
     computeConsolidationEpochAndUpdateChurn_earliest churnOk
@@ -1302,16 +1284,10 @@ private theorem queue {electra : .pectra ≤ fork} {sourceIndex targetIndex : Va
   obtain ⟨firstLe, earliestLe⟩ := computeConsolidationEpochAndUpdateChurn_first firstOk churnOk
   have firstNat := (computeActivationExitEpoch_ok_iff.mp firstOk).2
   have firstLeNat := UInt64.le_iff_toNat_le.mp firstLe
-  have churnQueue : churned.pendingConsolidations = state.pendingConsolidations := by
-    simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at churnOk
-    obtain ⟨_, _, _, _, _, _, final⟩ := churnOk
-    cases final; rfl
   have writtenKept := QueueKept.setValidator set
   have queueEq := writtenKept.queue
-  change written.pendingConsolidations = churned.pendingConsolidations at queueEq
+  change written.pendingConsolidations = state.pendingConsolidations at queueEq
   have sum := (Uint64.addChecked_ok_iff.mp added).2
-  simp only at sum
   have assigned : epoch ≠ FAR_FUTURE_EPOCH := by
     intro eq
     have bound := withdrawal.toNat_lt
@@ -1348,7 +1324,7 @@ private theorem queue {electra : .pectra ≤ fork} {sourceIndex targetIndex : Va
       cases read
       exact assigned far
     change (pending.data.toList.map (·.sourceIndex)).Nodup ∧ _
-    rw [data, queueEq, churnQueue, Array.toList_push]
+    rw [data, queueEq, Array.toList_push]
     refine ⟨?_, ?_⟩
     · simpa [List.map_append, List.nodup_append, unique] using absent
     · intro c mem
@@ -1372,7 +1348,7 @@ private theorem queue {electra : .pectra ≤ fork} {sourceIndex targetIndex : Va
           written.validators.data[b.sourceIndex.toNat]? = some w → v.exitEpoch ≤ w.exitEpoch) ∧
       ∀ c ∈ pending.data.toList, ∀ v, written.validators.data[c.sourceIndex.toNat]? = some v →
         v.exitEpoch ≤ written.earliestConsolidationEpoch witness ∧ _ ∧ _
-    rw [data, queueEq, churnQueue, Array.toList_push, newEarliest, List.pairwise_append]
+    rw [data, queueEq, Array.toList_push, newEarliest, List.pairwise_append]
     refine ⟨⟨sorted.imp_of_mem fun memA memB order v w readA readB =>
         order v w (by rwa [unchanged witness _ memA] at readA)
           (by rwa [unchanged witness _ memB] at readB),
@@ -1391,7 +1367,7 @@ private theorem queue {electra : .pectra ≤ fork} {sourceIndex targetIndex : Va
         refine ⟨UInt64.le_refl _, fun _ => ?_, ?_⟩ <;> simp only <;> omega
   · -- The queue gains only the new pair.
     change c ∈ pending.data.toList at member
-    rw [data, queueEq, churnQueue, Array.toList_push] at member
+    rw [data, queueEq, Array.toList_push] at member
     rcases List.mem_append.mp member with member | member
     · exact apart witness c member
     · rw [List.mem_singleton.mp member]
@@ -1404,23 +1380,19 @@ private theorem request {electra : .pectra ≤ fork} {request : ConsolidationReq
     (ok : processConsolidationRequest config state electra request = .ok after) :
     PendingConsolidationsOrdered config (getCurrentEpoch after).toNat after ∧
       PendingApart after := by
-  unfold processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact holds)
-    | exact ⟨holds.1.framed (QueueKept.compounding (liftAccessor_ok.mp ok))
-        (registryLifecycle_switchToCompoundingValidator (liftAccessor_ok.mp ok))
-        (WithdrawalKept.compounding (liftAccessor_ok.mp ok))
-        (frame_switchToCompoundingValidator (liftAccessor_ok.mp ok)).slot,
-        holds.2.kept (QueueKept.compounding (liftAccessor_ok.mp ok))⟩
-    | (have queued := holds.1.queue (getElem?_toNat_of_ofNatChecked (by assumption))
-          (by clear ok; simp_all [isActiveValidator]) (by clear ok; simp_all) delay ok
-       -- The request names two different pubkeys, so two different indices.
-       exact ⟨queued.1, queued.2 holds.2
-         (consolidationRequest_indices_ne (by assumption) (by assumption) (by assumption)
-           (by assumption) (by assumption))⟩)
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ |
+    ⟨_, _, _, _, accepted, queued⟩
+  · exact holds
+  · exact ⟨holds.1.framed (QueueKept.compounding switched)
+      (registryLifecycle_switchToCompoundingValidator switched)
+      (WithdrawalKept.compounding switched) (frame_switchToCompoundingValidator switched).slot,
+      holds.2.kept (QueueKept.compounding switched)⟩
+  · have active := accepted.sourceActive
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
+    have queued := holds.1.queue accepted.sourceAt active.1 accepted.sourceStays delay queued
+    -- The request names two different pubkeys, so two different indices.
+    exact ⟨queued.1, queued.2 holds.2 (consolidationRequest_indices_ne accepted.different
+      accepted.sourceFirst accepted.targetFirst)⟩
 
 /-- Every epoch stage keeps the order for a fixed bound. -/
 private theorem stage {stage : EpochStage} {s t : BeaconState preset fork}

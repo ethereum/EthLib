@@ -309,11 +309,7 @@ private theorem fixed_queueConsolidation {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
     Fixed s t := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, Base.Uint64.addChecked_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨churned, epoch⟩, churn, _, _, marked, set, pending, appended, ok⟩ := ok
-  simp only [Except.ok.injEq] at ok
-  subst ok
+  obtain ⟨_, _, _, _, _, churn, _, set, _, rfl⟩ := queueConsolidation_steps ok
   exact ((fixed_consolidationChurn churn).trans (fixed_setValidator set)).trans
     ⟨rfl, rfl, rfl, rfl, rfl⟩
 
@@ -436,7 +432,7 @@ private theorem rise_consolidationRequest {s t : BeaconState preset fork}
     simp only [switchToCompoundingValidator, bind_ok_iff] at switched
     obtain ⟨_, _, _, set, queued⟩ := switched
     exact (fixed_setValidator set).rise.trans (rise_queueExcess queued)
-  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
   · exact Rise.refl _
   · exact compounding switched
   · exact (fixed_queueConsolidation queued).rise
@@ -768,10 +764,7 @@ private theorem flags_decrease {s t : BeaconState preset fork} {i : ValidatorInd
 private theorem flags_depositRequest {s t : BeaconState preset fork} {electra : .pectra ≤ fork}
     {request : DepositRequest} (ok : processDepositRequest s electra request = .ok t) :
     ParticipationKept s t := by
-  obtain ⟨start, recorded⟩ := recordDepositRequestsStart_eq (state := s) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   exact ⟨rfl, rfl⟩
 
 private theorem flags_queueExcess {s t : BeaconState preset fork} {electra : .pectra ≤ fork}
@@ -798,7 +791,7 @@ private theorem flags_consolidationRequest {s t : BeaconState preset fork}
     simp only [switchToCompoundingValidator, bind_ok_iff] at switched
     obtain ⟨_, _, _, set, queued⟩ := switched
     exact (fixed_setValidator set).flags.trans (flags_queueExcess queued)
-  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
   · exact ParticipationKept.refl _
   · exact compounding switched
   · exact (fixed_queueConsolidation queued).flags

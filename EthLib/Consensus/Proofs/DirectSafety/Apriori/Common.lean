@@ -815,9 +815,8 @@ private theorem queueConsolidation_facts {fork : Fork} {s t : BeaconState preset
         ∀ k, k ≠ sourceIndex.toNat → t.validators.data[k]? = s.validators.data[k]? := by
   have balances := queueConsolidation_balances ok
   have slot := (frame_queueConsolidation found ok).slot
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff, pure,
-    Except.pure, Except.ok.injEq] at ok
-  obtain ⟨⟨churned, epoch⟩, called, withdrawable, withdrawableOk, changed, set, _, _, rfl⟩ := ok
+  obtain ⟨epoch, withdrawable, _, changed, _, called, withdrawableOk, set, _, rfl⟩ :=
+    queueConsolidation_steps ok
   -- The churn call opens no earlier than the first exit epoch, after the current one.
   obtain ⟨first, firstOk⟩ : ∃ first,
       computeActivationExitEpoch preset (getCurrentEpoch s) = .ok first := by
@@ -829,7 +828,6 @@ private theorem queueConsolidation_facts {fork : Fork} {s t : BeaconState preset
   have firstLe := (computeConsolidationEpochAndUpdateChurn_first firstOk called).1
   have firstNat := (computeActivationExitEpoch_ok_iff.mp firstOk).2
   have withdrawableNat := (Uint64.addChecked_ok_iff.mp withdrawableOk).2
-  simp only at withdrawableNat
   obtain ⟨_, validators, _⟩ := computeConsolidationEpochAndUpdateChurn_earliest called
   obtain ⟨inside, rfl⟩ := setValidator_ok set
   refine ⟨balances, slot, epoch, withdrawable, ?_, withdrawableNat, ?_, ?_⟩
@@ -1090,7 +1088,7 @@ theorem reservedReplay_consolidationRequest {fork : Fork} {s t : BeaconState pre
     unfold OwnedEvent
     simp only [notTransfer, ↓reduceIte]
     exact ⟨by trivial, by trivial, Or.inr (OwnedFrame.refl ownedFrame.1)⟩
-  rcases consolidationRequest_cases ok with same | ⟨index, switch⟩ |
+  rcases consolidationRequest_cases ok with same | ⟨index, _, _, switch⟩ |
     ⟨sourceIndex, source, targetIndex, target, accepted, queued⟩
   -- The request returned its state: the event keeps the queue and the ownership.
   · subst t
