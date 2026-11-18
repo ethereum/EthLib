@@ -1457,14 +1457,10 @@ private theorem consolidation_request_bounds {fork : Fork} {s t : BeaconState pr
         | none => 0
         | some i => actualBalanceAt ⟨fork, s⟩ i.val - preset.MIN_ACTIVATION_BALANCE.toNat) := by
     simp [balanceCredits, balanceDebits, actualBalanceAt, same]
-  have switched (i : Fin s.validators.data.size) (index : ValidatorIndex)
-      (found : findValidatorByPubkey s request.sourcePubkey = some i)
-      (indexOk : Uint64.ofNatChecked i.val = .ok index)
-      (ok : switchToCompoundingValidator s electra index = .ok t) :
-      balanceCredits s t ≤ 0 ∧ balanceDebits s t ≤
-        (match findValidatorByPubkey s request.sourcePubkey with
-        | none => 0
-        | some i => actualBalanceAt ⟨fork, s⟩ i.val - preset.MIN_ACTIVATION_BALANCE.toNat) := by
+  rcases consolidationRequest_cases ok with rfl | ⟨index, _, switch, ok⟩ |
+    ⟨_, _, _, _, _, queued⟩
+  · exact unchanged rfl
+  · obtain ⟨i, found, value⟩ := Option.map_eq_some_iff.mp switch.first
     simp only [switchToCompoundingValidator, bind_ok_iff] at ok
     obtain ⟨v, _, u, set, queued⟩ := ok
     have queuedCopy := queued
@@ -1475,33 +1471,14 @@ private theorem consolidation_request_bounds {fork : Fork} {s t : BeaconState pr
     have actual : actualBalanceAt ⟨fork, s⟩ i.val = balance.toNat := by
       have read := getBalance_eq_ok_iff.mp read
       simp only [BeaconState.putValidator] at read
-      rw [(Uint64.ofNatChecked_ok_iff.mp indexOk).2] at read
+      rw [← value] at read
       simp [actualBalanceAt, read]
     rw [found]
     dsimp only
     rw [actual]
     simpa only [balanceCredits, balanceDebits, actualBalanceAt,
       BeaconState.putValidator] using And.intro bounds.1.le bounds.2
-  unfold processConsolidationRequest at ok
-  split at ok
-  · split at ok
-    · rename_i position found
-      obtain ⟨index, indexOk, ok⟩ := bind_ok_iff.mp ok
-      split at ok
-      · exact switched position index found
-          (by cases h : Uint64.ofNatChecked position.val <;>
-                simp [liftAccessor, liftArith, Except.mapError, h] at indexOk ⊢; exact indexOk)
-          (liftAccessor_ok.mp ok)
-      · cases ok
-        exact unchanged rfl
-    · cases ok
-      exact unchanged rfl
-  · simp only [bind, Except.bind, pure, Except.pure] at ok
-    repeat' split at ok
-    all_goals first
-      | (cases ok; done)
-      | (cases ok; exact unchanged rfl)
-      | exact unchanged (queueConsolidation_balances ok)
+  · exact unchanged (queueConsolidation_balances queued)
 
 private def ReplayBounded {fork : Fork} (pre : BalanceReplay preset fork) : Prop :=
   BalancesMatch pre.1 ∧ EventsBounded pre.2

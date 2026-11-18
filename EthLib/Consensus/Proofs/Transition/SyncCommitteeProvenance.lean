@@ -211,14 +211,10 @@ private theorem requestPartialWithdrawal {electra : .pectra ≤ fork} {index : V
 private theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : Consensus.processWithdrawalRequest config state electra request = .ok after) :
     SameSyncCommittees state after := by
-  unfold Consensus.processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact .refl _)
-    | exact initiateValidatorExit (liftAccessor_ok.mp ok)
-    | exact requestPartialWithdrawal ok
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact .refl _
+  · exact initiateValidatorExit exited
+  · exact requestPartialWithdrawal withdrawn
 
 private theorem queueExcessActiveBalance {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (ok : Consensus.queueExcessActiveBalance state electra index = .ok after) :
@@ -258,14 +254,10 @@ private theorem processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (ok : Consensus.processConsolidationRequest config state electra request = .ok after) :
     SameSyncCommittees state after := by
-  unfold Consensus.processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact .refl _)
-    | exact switchToCompoundingValidator (liftAccessor_ok.mp ok)
-    | exact queueConsolidation ok
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  · exact .refl _
+  · exact switchToCompoundingValidator switched
+  · exact queueConsolidation queued
 
 private theorem processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}

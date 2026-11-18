@@ -366,14 +366,11 @@ private theorem effectiveKept_consolidate {f : Fork} {s t : BeaconState preset f
 theorem effectiveKept_consolidationRequest {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {request : ConsolidationRequest}
     (ok : processConsolidationRequest config s electra request = .ok t) : EffectiveKept s t := by
-  unfold processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact effectiveKept_refl _)
-    | exact effectiveKept_compounding (liftAccessor_ok.mp ok)
-    | exact effectiveKept_consolidate (getElem?_toNat_of_ofNatChecked (by assumption)) ok
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ |
+    ⟨_, _, _, _, accepted, queued⟩
+  · exact effectiveKept_refl _
+  · exact effectiveKept_compounding switched
+  · exact effectiveKept_consolidate accepted.sourceAt queued
 
 private theorem effectiveKept_partial {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {index : ValidatorIndex} {v : Validator} {amount owed : Gwei}
@@ -390,14 +387,10 @@ private theorem effectiveKept_partial {f : Fork} {s t : BeaconState preset f}
 theorem effectiveKept_withdrawalRequest {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) : EffectiveKept s t := by
-  unfold processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact effectiveKept_refl _)
-    | exact effectiveKept_exit (liftAccessor_ok.mp ok)
-    | exact effectiveKept_partial ok
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact effectiveKept_refl _
+  · exact effectiveKept_exit exited
+  · exact effectiveKept_partial withdrawn
 
 theorem effectiveKept_depositRequest {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {request : DepositRequest}
@@ -1487,14 +1480,10 @@ private theorem admissionFunded_withdrawalRequest {f : Fork} {s t : BeaconState 
     {n : Nat} {electra : .pectra ≤ f} {request : WithdrawalRequest}
     (holds : AdmissionFunded n s)
     (ok : processWithdrawalRequest config s electra request = .ok t) : AdmissionFunded n t := by
-  unfold processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact holds)
-    | exact admissionFunded_exit holds (liftAccessor_ok.mp ok)
-    | exact admissionFunded_partial holds ok
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact holds
+  · exact admissionFunded_exit holds exited
+  · exact admissionFunded_partial holds withdrawn
 
 private theorem admissionFunded_compounding {f : Fork} {s t : BeaconState preset f}
     {n : Nat} {electra : .pectra ≤ f} {index : ValidatorIndex}
@@ -1539,40 +1528,22 @@ private theorem admissionFunded_consolidationRequest {f : Fork} {s t : BeaconSta
     (pending : ∀ i v, n ≤ i → s.validators.data[i]? = some v →
       v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH)
     (ok : processConsolidationRequest config s electra request = .ok t) : AdmissionFunded n t := by
-  have oldIndex {position : Fin s.validators.data.size} {index : ValidatorIndex}
-      (converted : liftAccessor (liftArith (Base.Uint64.ofNatChecked position.val)) = .ok index)
-      (valid : isValidSwitchToCompoundingRequest s request s.validators.data[position] = true) :
-      index.toNat < n := by
-    by_contra large
-    have located := getElem?_toNat_of_ofNatChecked (state := s) converted
-    have epochs := pending index.toNat s.validators.data[position] (by omega) located
-    have inactive : isActiveValidator s.validators.data[position] (getCurrentEpoch s) = false := by
+  rcases consolidationRequest_cases ok with rfl | ⟨index, validator, switch, switched⟩ |
+    ⟨_, _, _, _, accepted, queued⟩
+  · exact holds
+  · -- A validator from the index `n` on is not active, so it cannot pass the switch check.
+    refine admissionFunded_compounding holds (Nat.lt_of_not_le fun large => ?_) switched
+    have epochs := pending index.toNat validator large switch.found
+    have inactive : isActiveValidator validator (getCurrentEpoch s) = false := by
       simp only [isActiveValidator, epochs.1, epochs.2, Bool.and_eq_false_iff,
         decide_eq_false_iff_not]
       by_cases h : FAR_FUTURE_EPOCH ≤ getCurrentEpoch s
       · exact Or.inr (UInt64.not_lt.mpr h)
       · exact Or.inl h
+    have valid := switch.valid
     simp only [isValidSwitchToCompoundingRequest, inactive, Bool.and_false, Bool.false_and,
       Bool.false_eq_true] at valid
-  unfold processConsolidationRequest at ok
-  split at ok
-  · split at ok
-    · rename_i position located
-      simp only [bind_ok_iff] at ok
-      obtain ⟨index, converted, ok⟩ := ok
-      split at ok
-      · rename_i valid
-        have old := oldIndex (position := position) (index := index) converted valid
-        exact admissionFunded_compounding holds old (liftAccessor_ok.mp ok)
-      · cases ok; exact holds
-    · cases ok; exact holds
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact holds)
-    | (apply admissionFunded_consolidate holds ?_ ok
-       exact getElem?_toNat_of_ofNatChecked (by assumption))
+  · exact admissionFunded_consolidate holds accepted.sourceAt queued
 
 private theorem admissionFunded_requests {f : Fork} {s t : BeaconState preset f}
     {n : Nat} {body : BeaconBlockBody preset f} {electra : .pectra ≤ f ∧ f < .glamsterdam}

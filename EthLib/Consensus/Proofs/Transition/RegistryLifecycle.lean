@@ -612,14 +612,10 @@ theorem registryLifecycle_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     RegistryLifecycle state after := by
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact .refl _)
-    | exact registryLifecycle_initiateValidatorExit (liftAccessor_ok.mp computed)
-    | exact registryLifecycle_requestPartialWithdrawal computed
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact .refl _
+  · exact registryLifecycle_initiateValidatorExit exited
+  · exact registryLifecycle_requestPartialWithdrawal withdrawn
 
 private theorem registryLifecycle_queueExcessActiveBalance {electra : .pectra ≤ fork}
     {index : ValidatorIndex}
@@ -676,16 +672,11 @@ theorem registryLifecycle_processConsolidationRequest {electra : .pectra ≤ for
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     RegistryLifecycle state after := by
-  unfold processConsolidationRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact .refl _)
-    | exact registryLifecycle_switchToCompoundingValidator (liftAccessor_ok.mp computed)
-    | exact registryLifecycle_queueConsolidation
-        (getElem?_toNat_of_ofNatChecked (by assumption))
-        (by clear computed; simp_all) computed
+  rcases consolidationRequest_cases computed with rfl | ⟨_, _, _, switched⟩ |
+    ⟨_, _, _, _, accepted, queued⟩
+  · exact .refl _
+  · exact registryLifecycle_switchToCompoundingValidator switched
+  · exact registryLifecycle_queueConsolidation accepted.sourceAt accepted.sourceStays queued
 
 theorem registryLifecycle_processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
@@ -1388,17 +1379,13 @@ private theorem processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (ok : Consensus.processConsolidationRequest config state electra request = .ok after) :
     UnassignedKept state after := by
-  unfold Consensus.processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact refl _)
-    | exact switchToCompoundingValidator (liftAccessor_ok.mp ok)
-    | (apply queueConsolidation (getElem?_toNat_of_ofNatChecked (by assumption)) ?_ ok
-       intro pending
-       have no := inactive pending (getCurrentEpoch state)
-       simp_all)
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ |
+    ⟨_, _, _, _, accepted, queued⟩
+  · exact refl _
+  · exact switchToCompoundingValidator switched
+  · exact queueConsolidation accepted.sourceAt
+      (fun pending => Bool.false_ne_true ((inactive pending _).symm.trans accepted.sourceActive))
+      queued
 
 private theorem processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : Consensus.processDepositRequest state electra request = .ok after) :

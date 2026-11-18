@@ -432,15 +432,11 @@ private theorem pendingTail_processConsolidationRequest {config : Config}
     {request : ConsolidationRequest} {count : Nat} {epoch : Epoch}
     (run : processConsolidationRequest config state electra request = .ok after)
     (tail : PendingTail count epoch state) : PendingTail count epoch after := by
-  unfold processConsolidationRequest at run
-  simp only [bind, Except.bind, pure, Except.pure] at run
-  repeat' split at run
-  all_goals first
-    | (cases run; done)
-    | (cases run; exact tail)
-    | exact pendingTail_switchToCompoundingValidator (liftAccessor_ok.mp run) tail
-    | exact pendingTail_queueConsolidation
-        (getElem?_toNat_of_ofNatChecked (by assumption)) run tail
+  rcases consolidationRequest_cases run with rfl | ⟨_, _, _, switched⟩ |
+    ⟨_, _, _, _, accepted, queued⟩
+  · exact tail
+  · exact pendingTail_switchToCompoundingValidator switched tail
+  · exact pendingTail_queueConsolidation accepted.sourceAt queued tail
 
 /-- The existing pending-deposit pass transports the suffix through all applied deposits. -/
 private theorem pendingTail_passPendingDeposits {config : Config} {checks : SignatureChecks}

@@ -124,15 +124,11 @@ private theorem funding_request_support {fork : Fork} {s t : BeaconState preset 
     rcases member with old | eq
     · exact Or.inl (by simpa only [BeaconState.putValidator, queue] using old)
     · exact Or.inr ⟨source, eq ▸ found, Or.inl active⟩
-  unfold processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact kept (SamePendingQueue.refl _))
-    | exact kept (SamePendingQueue.compounding (liftAccessor_ok.mp ok))
-    | exact queued (getElem?_toNat_of_ofNatChecked (by assumption))
-        (by clear ok; simp_all) ok
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ |
+    ⟨_, _, _, _, accepted, ok⟩
+  · exact kept (SamePendingQueue.refl _)
+  · exact kept (SamePendingQueue.compounding switched)
+  · exact queued accepted.sourceAt accepted.sourceActive ok
 
 /-- From Electra a block deposit only queues, so it keeps the funding.
 

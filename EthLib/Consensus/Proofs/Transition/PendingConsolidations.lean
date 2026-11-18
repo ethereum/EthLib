@@ -1134,28 +1134,21 @@ private theorem PendingApart.consolidations {electra : .pectra ≤ fork}
   rw [queue, passPendingConsolidations_drop passed] at member
   exact holds witness c ((List.dropWhile_suffix _).subset member)
 
-/-- Two different pubkeys found in the registry convert to two different indices. -/
+/-- Two different pubkeys found in the registry are at two different indices. -/
 private theorem consolidationRequest_indices_ne {state : BeaconState preset fork}
-    {p q : Cryptography.Bls.BLSPubkey} {a b : Fin state.validators.data.size} {i j : UInt64}
-    (differ : ¬(p == q) = true)
-    (foundA : findValidatorByPubkey state p = some a)
-    (foundB : findValidatorByPubkey state q = some b)
-    (convertedA : liftAccessor (liftArith (Uint64.ofNatChecked (a : Nat))) =
-      (Except.ok i : Except TransitionError UInt64))
-    (convertedB : liftAccessor (liftArith (Uint64.ofNatChecked (b : Nat))) =
-      (Except.ok j : Except TransitionError UInt64)) :
+    {p q : Cryptography.Bls.BLSPubkey} {i j : UInt64} (differ : p ≠ q)
+    (foundA : (findValidatorByPubkey state p).map (·.val) = some i.toNat)
+    (foundB : (findValidatorByPubkey state q).map (·.val) = some j.toNat) :
     i ≠ j := by
   intro same
   subst same
-  have indexA :=
-    (Uint64.ofNatChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp convertedA))).2
-  have indexB :=
-    (Uint64.ofNatChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp convertedB))).2
-  obtain rfl : a = b := Fin.ext (indexA.symm.trans indexB)
+  obtain ⟨a, foundA, indexA⟩ := Option.map_eq_some_iff.mp foundA
+  obtain ⟨b, foundB, indexB⟩ := Option.map_eq_some_iff.mp foundB
+  obtain rfl : a = b := Fin.ext (indexA.trans indexB.symm)
   unfold findValidatorByPubkey at foundA foundB
   have keyA := (Array.findFinIdx?_eq_some_iff.mp foundA).1
   have keyB := (Array.findFinIdx?_eq_some_iff.mp foundB).1
-  simp only [beq_iff_eq] at keyA keyB differ
+  simp only [beq_iff_eq] at keyA keyB
   exact differ (keyA.symm.trans keyB)
 
 namespace PendingConsolidationsOrdered
@@ -1404,23 +1397,19 @@ private theorem request {electra : .pectra ≤ fork} {request : ConsolidationReq
     (ok : processConsolidationRequest config state electra request = .ok after) :
     PendingConsolidationsOrdered config (getCurrentEpoch after).toNat after ∧
       PendingApart after := by
-  unfold processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact holds)
-    | exact ⟨holds.1.framed (QueueKept.compounding (liftAccessor_ok.mp ok))
-        (registryLifecycle_switchToCompoundingValidator (liftAccessor_ok.mp ok))
-        (WithdrawalKept.compounding (liftAccessor_ok.mp ok))
-        (frame_switchToCompoundingValidator (liftAccessor_ok.mp ok)).slot,
-        holds.2.kept (QueueKept.compounding (liftAccessor_ok.mp ok))⟩
-    | (have queued := holds.1.queue (getElem?_toNat_of_ofNatChecked (by assumption))
-          (by clear ok; simp_all [isActiveValidator]) (by clear ok; simp_all) delay ok
-       -- The request names two different pubkeys, so two different indices.
-       exact ⟨queued.1, queued.2 holds.2
-         (consolidationRequest_indices_ne (by assumption) (by assumption) (by assumption)
-           (by assumption) (by assumption))⟩)
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ |
+    ⟨_, _, _, _, accepted, queued⟩
+  · exact holds
+  · exact ⟨holds.1.framed (QueueKept.compounding switched)
+      (registryLifecycle_switchToCompoundingValidator switched)
+      (WithdrawalKept.compounding switched) (frame_switchToCompoundingValidator switched).slot,
+      holds.2.kept (QueueKept.compounding switched)⟩
+  · have active := accepted.sourceActive
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
+    have queued := holds.1.queue accepted.sourceAt active.1 accepted.sourceStays delay queued
+    -- The request names two different pubkeys, so two different indices.
+    exact ⟨queued.1, queued.2 holds.2 (consolidationRequest_indices_ne accepted.different
+      accepted.sourceFirst accepted.targetFirst)⟩
 
 /-- Every epoch stage keeps the order for a fixed bound. -/
 private theorem stage {stage : EpochStage} {s t : BeaconState preset fork}

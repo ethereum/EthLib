@@ -332,17 +332,12 @@ private theorem processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (ok : Consensus.processConsolidationRequest config state electra request = .ok after) :
     Kept config state after := by
-  unfold Consensus.processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals try first
-    | (cases ok; done)
-    | (cases ok; exact refl _)
-    | exact switchToCompoundingValidator (liftAccessor_ok.mp ok)
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ |
+    ⟨_, _, _, _, accepted, queued⟩
+  · exact refl _
+  · exact switchToCompoundingValidator switched
   -- The source is active, so its activation epoch is at most the current one.
-  rename_i bothActive _ _ _ _ _ _ _ _ _
-  exact queueConsolidation (getElem?_toNat_of_ofNatChecked (by assumption))
-    (active_le ((Bool.and_eq_true _ _).mp bothActive).1) ok
+  · exact queueConsolidation accepted.sourceAt (active_le accepted.sourceActive) queued
 
 private theorem processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : Consensus.processDepositRequest state electra request = .ok after) :
