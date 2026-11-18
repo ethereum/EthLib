@@ -43,63 +43,6 @@ open Base Uint64 Models
 
 variable {preset : Preset} {fork : Fork}
 
-/-- The balances of the unslashed active list sum to at most the active stake.
-
-The registry must stay within the limit of the preset, so that the positions keep their value. -/
-private theorem unslashedActiveBalances_sum_le {state : BeaconState preset fork}
-    (within : state.RegistryWithinLimit) :
-    ((unslashedActiveBalances state).map (·.2.toNat)).sum ≤
-      stake (fun v => balanceAt state v.toNat)
-        (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset := by
-  classical
-  set p : Validator × ℕ → Bool := fun x =>
-    isActiveValidator x.1 (getCurrentEpoch state) && !x.1.slashed with hp
-  set M := state.validators.data.toList.zipIdx.filter p with hM
-  have shape : unslashedActiveBalances state =
-      M.map fun x => (x.2.toUInt64, x.1.effectiveBalance) := by
-    simp only [unslashedActiveBalances, hM, hp]
-    generalize state.validators.data.toList.zipIdx = l
-    induction l with
-    | nil => rfl
-    | cons x rest ih =>
-      by_cases h : (isActiveValidator x.1 (getCurrentEpoch state) && !x.1.slashed) = true
-      · simp only [List.filterMap_cons, List.filter_cons, h, ↓reduceIte, List.map_cons, ih]
-      · simp only [Bool.not_eq_true] at h
-        simp only [List.filterMap_cons, List.filter_cons, h, Bool.false_eq_true, ↓reduceIte, ih]
-  have inM : ∀ x ∈ M, state.validators.data[x.2]? = some x.1 := fun x mem => by
-    have := (List.mem_filter.mp mem).1
-    simpa using List.mem_zipIdx_iff_getElem?.mp this
-  have ltM : ∀ x ∈ M, x.2 < state.validators.data.size := fun x mem => by
-    simpa using (Array.getElem?_eq_some_iff.mp (inM x mem)).1
-  -- Each entry's balance is the balance of its index.
-  have values : (unslashedActiveBalances state).map (·.2.toNat) =
-      ((unslashedActiveBalances state).map (·.1)).map fun v => balanceAt state v.toNat := by
-    rw [shape, List.map_map, List.map_map, List.map_map]
-    refine List.map_congr_left fun x mem => ?_
-    simp [balanceAt, toNat_toUInt64_of_lt within (ltM x mem), inM x mem]
-  have nodup : ((unslashedActiveBalances state).map (·.1)).Nodup := by
-    rw [shape, List.map_map]
-    have snd : (M.map Prod.snd).Nodup :=
-      (show (state.validators.data.toList.zipIdx.map Prod.snd).Nodup by
-        rw [List.zipIdx_map_snd]; exact List.nodup_range').sublist
-        (List.filter_sublist.map _)
-    have : (M.map fun x => x.2.toUInt64) = (M.map Prod.snd).map Nat.toUInt64 := by
-      simp [List.map_map, Function.comp_def]
-    rw [show ((fun x : ValidatorIndex × Gwei => x.1) ∘
-        fun x : Validator × ℕ => (x.2.toUInt64, x.1.effectiveBalance)) =
-      fun x => x.2.toUInt64 from rfl, this]
-    refine snd.map_on fun a ha b hb same => ?_
-    obtain ⟨x, xm, rfl⟩ := List.mem_map.mp ha
-    obtain ⟨y, ym, rfl⟩ := List.mem_map.mp hb
-    rw [← toNat_toUInt64_of_lt within (ltM x xm), ← toNat_toUInt64_of_lt within (ltM y ym), same]
-  rw [values, ← List.sum_toFinset _ nodup]
-  refine stake_mono (w := fun v : ValidatorIndex => balanceAt state v.toNat) fun v member => ?_
-  obtain ⟨validator, found, active, -⟩ :=
-    (mem_unslashedActiveBalances_iff within).mp (List.mem_toFinset.mp member)
-  exact List.mem_toFinset.mpr
-    ((mem_getActiveValidatorIndices within).mpr ⟨validator, found, active⟩)
-
-
 namespace Store
 
 variable {config : Config} {store : Store preset fork}
@@ -132,19 +75,15 @@ private theorem getAttestationScore_exists (before : fork < .glamsterdam)
       (fun _ _ f orphan => forward.reachable.orphans_le anchorSlot f orphan found)
       (start := ⟨_, .pending⟩) votedFound
     exact ⟨d, by rw [getSupportedNode_of_lt before]; exact dOk⟩
-  -- The counted balances sum to at most all the balances of the list.
-  have le : ∀ entries : List (ValidatorIndex × Gwei),
-      (entries.map fun entry =>
-        if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum ≤
-        (entries.map (·.2.toNat)).sum := by
-    intro entries
-    induction entries with
-    | nil => simp
-    | cons entry rest ih =>
-      simp only [List.map_cons, List.sum_cons]
-      split <;> omega
-  have bound := (le _).trans
-    (unslashedActiveBalances_sum_le (BeaconState.registryWithinLimit_of_lt before state))
+  -- The counted balances are the stake of the supporters, all of them active.
+  have within := BeaconState.registryWithinLimit_of_lt before state
+  have bound : ((unslashedActiveBalances state).map fun entry =>
+      if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum ≤
+      stake (fun v => balanceAt state v.toNat)
+        (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset := by
+    rw [← stake_supportersOf_eq_sum within]
+    exact stake_mono fun v member => List.mem_toFinset.mpr
+      (mem_getActiveValidatorIndices_of_isActiveAt (isActiveAt_of_mem_supportersOf within member))
   rw [store.getAttestationScore_eq_of_checked checked]
   dsimp only
   have fits : ¬ 2 ^ 64 ≤ ((unslashedActiveBalances state).map fun entry =>
@@ -286,17 +225,16 @@ private theorem onAttesterSlashing_boost {checks : SignatureChecks}
 private theorem recordBlockTimeliness_boost (before : fork < .glamsterdam) {root : Root}
     {after : Store preset fork}
     (recorded : store.recordBlockTimeliness config root = .ok after) :
-    after.proposerBoostRoot = store.proposerBoostRoot ∧ after.blocks = store.blocks := by
+    after.proposerBoostRoot = store.proposerBoostRoot := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   unfold recordBlockTimeliness at recorded
   simp only [bind_ok_iff, notGloas, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at recorded
   obtain ⟨_, _, _, _, _, _, _, _, rfl⟩ := recorded
-  exact ⟨rfl, rfl⟩
+  rfl
 
 private theorem updateProposerBoostRoot_boost {head root : Root} {after : Store preset fork}
     (updated : store.updateProposerBoostRoot config head root = .ok after) :
-    (after.proposerBoostRoot = store.proposerBoostRoot ∨ after.proposerBoostRoot = root) ∧
-      after.blocks = store.blocks := by
+    after.proposerBoostRoot = store.proposerBoostRoot ∨ after.proposerBoostRoot = root := by
   unfold updateProposerBoostRoot at updated
   split at updated
   rotate_left
@@ -383,8 +321,10 @@ private theorem Reachable.boostHeld (before : fork < .glamsterdam)
     unfold recordBlockPtcVotes at recordedOk
     simp only [notGloas, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at recordedOk
     subst recordedOk
-    obtain ⟨tBoost, tBlocks⟩ := recordBlockTimeliness_boost before timedOk
-    obtain ⟨bBoost, bBlocks⟩ := updateProposerBoostRoot_boost boostedOk
+    have tBoost := recordBlockTimeliness_boost before timedOk
+    have tBlocks := (recordBlockTimeliness_frame timedOk).2.1
+    have bBoost := updateProposerBoostRoot_boost boostedOk
+    have bBlocks := (updateProposerBoostRoot_frame boostedOk).2.1
     have pBoost := computePulledUpTip_boost pulledOk
     have pBlocks := (computePulledUpTip_frame pulledOk).2.1
     rw [pBoost, pBlocks, updateCheckpoints_boost, updateCheckpoints_blocks, bBlocks, tBlocks]

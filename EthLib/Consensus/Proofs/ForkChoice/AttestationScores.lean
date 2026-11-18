@@ -400,9 +400,9 @@ theorem getAttestationScore_checked {node : ForkChoiceNode} {state : BeaconState
     | error e => simp [supported, check, bind, Except.bind] at step
     | ok descends => exact ⟨descends, by simp [check, bind, Except.bind]⟩
 
-/-- The votes of a node, when the check of each counted vote can be computed.
+/-- When the check of each counted vote can be computed, the score of a node is a sum.
 
-The score is the sum of the balances of the validators whose vote counts, or an overflow.
+It is the sum of the balances whose vote counts, or an overflow.
 
 The validators are those active and not slashed in the given state. -/
 theorem getAttestationScore_eq_of_checked {node : ForkChoiceNode}
