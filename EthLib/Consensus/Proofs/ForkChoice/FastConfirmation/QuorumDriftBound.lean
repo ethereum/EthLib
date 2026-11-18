@@ -192,10 +192,11 @@ theorem quorumDrift_le_quorumReserve
   have invM := Run.invariant invG (history.append edge)
   -- The branch corrections from the boundary state, and from the middle state.
   obtain ⟨debitedKeys, -, -, -, debitedCard, -, gainSide, -, -, -, -, -, -, -, capsKept, -, -⟩ :=
-    branchCorrections (edge.append tailP) early fulu callEpoch invR.balancesMatch invR.exitsOrdered
+    (edge.append tailP).balanceCorrections_of_same_epoch early fulu callEpoch invR.balancesMatch
+      invR.exitsOrdered
   obtain ⟨-, creditedKeys, pc, deposit, -, creditedCard, -, lossSide, zeroOff, electraZero, budget,
-    -, -, -, -, -, -⟩ := branchCorrections tailP early fulu (callEpoch.trans middleEpoch.symm)
-      invM.balancesMatch invM.exitsOrdered
+    -, -, -, -, -, -⟩ := tailP.balanceCorrections_of_same_epoch early fulu
+      (callEpoch.trans middleEpoch.symm) invM.balancesMatch invM.exitsOrdered
   have blocksLe : (edge.append tailP).blockCount ≤
       pulled.slot.toNat - (getCurrentEpoch pulled).toNat * preset.SLOTS_PER_EPOCH.toNat + 1 := by
     rw [Run.blockCount_append]; exact counted

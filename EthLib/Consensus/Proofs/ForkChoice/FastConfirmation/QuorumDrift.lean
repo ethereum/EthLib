@@ -108,15 +108,12 @@ private theorem run_boundaryState {g : ForkedBeaconState preset}
 
 /-! ## Runs along the chains of a store -/
 
-/-- The slot is before the activation of each later fork. -/
-private abbrev BeforeFork (config : Config) (fork : Fork) (slot : Slot) : Prop :=
-  ∀ next ∈ config.nextFork fork, slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat
-
 /-- The second state is at the same slot or later, and a run reaches it before the next fork. -/
 private def RunsTo (config : Config) (checks : SignatureChecks)
     (first second : BeaconState preset fork) : Prop :=
   first.slot ≤ second.slot ∧
-    (BeforeFork (preset := preset) config fork second.slot →
+    ((∀ next ∈ config.nextFork fork,
+      second.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) →
       Nonempty (Run config checks ⟨fork, first⟩ ⟨fork, second⟩))
 
 private theorem RunsTo.refl (state : BeaconState preset fork) : RunsTo config checks state state :=
@@ -126,7 +123,8 @@ private theorem RunsTo.trans {first second third : BeaconState preset fork}
     (one : RunsTo config checks first second) (two : RunsTo config checks second third) :
     RunsTo config checks first third := by
   refine ⟨UInt64.le_trans one.1 two.1, fun before => ?_⟩
-  have middle : BeforeFork (preset := preset) config fork second.slot := fun next member =>
+  have middle : (∀ next ∈ config.nextFork fork,
+      second.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) := fun next member =>
     Nat.lt_of_le_of_lt (UInt64.le_iff_toNat_le.mp two.1) (before next member)
   obtain ⟨left⟩ := one.2 middle
   obtain ⟨right⟩ := two.2 before
@@ -177,7 +175,8 @@ private theorem beforeFork_of_epoch {horizon : Epoch}
     (window : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) {slot : Slot}
     (inside : slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ horizon.toNat) :
-    BeforeFork (preset := preset) config fork slot := fun next member =>
+    (∀ next ∈ config.nextFork fork,
+      slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) := fun next member =>
   (Nat.div_lt_iff_lt_mul positive).mp (Nat.lt_of_le_of_lt inside (window next member))
 
 /-- A store whose epoch is within the horizon holds states before the next fork.
@@ -191,10 +190,12 @@ private theorem held_beforeFork {horizon : Epoch}
     (bounded : ∀ epoch, store.getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon) :
     (∀ epoch, store.getCurrentStoreEpoch config = .ok epoch →
       ∀ slot : Slot, slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ epoch.toNat →
-        BeforeFork (preset := preset) config fork slot) ∧
+        (∀ next ∈ config.nextFork fork,
+      slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)) ∧
     ∀ (root : Root) (state : BeaconState preset fork),
       store.blockStates[root]? = some state →
-        BeforeFork (preset := preset) config fork state.slot := by
+        (∀ next ∈ config.nextFork fork,
+      state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) := by
   obtain ⟨current, currentOk, -, statesLe⟩ :=
     forward.slots_le_current slots (UInt64.le_of_eq anchorSlot)
   have epochOk : store.getCurrentStoreEpoch config = .ok (computeEpochAtSlot preset current) := by
@@ -314,7 +315,8 @@ private theorem boundary_of_lookahead {g : ForkedBeaconState preset}
     (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
     {start : Slot} {base middle : BeaconState preset fork}
     (atStart : start % preset.SLOTS_PER_EPOCH = 0)
-    (startBefore : BeforeFork (preset := preset) config fork start)
+    (startBefore : (∀ next ∈ config.nextFork fork,
+      start.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat))
     (baseRun : Run config checks ⟨fork, anchorState⟩ ⟨fork, base⟩) (baseLe : base.slot ≤ start)
     (lookOk : lookaheadState config checks base start = .ok middle) :
     middle.slot = start ∧ ∃ boundary : BeaconState preset fork,
@@ -472,9 +474,11 @@ private theorem runs_of_call
     (checkpoint := ⟨current, checkpoint⟩) boundaryOk held headStored checkpointOk pulledReach
     pulledLater
   have epochBoundaryOk : ∀ slot : Slot, slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤
-      current.toNat → BeforeFork (preset := preset) config fork slot :=
+      current.toNat → (∀ next ∈ config.nextFork fork,
+      slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) :=
     epochBefore current epochOk
-  have pulledBefore : BeforeFork (preset := preset) config fork pulled.slot :=
+  have pulledBefore : (∀ next ∈ config.nextFork fork,
+      pulled.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) :=
     epochBoundaryOk pulled.slot (by rw [← getCurrentEpoch_toNat, pulledEpoch])
   obtain ⟨tail⟩ := toPulled.2 pulledBefore
   -- The receiver holds the same target state, and its state runs on from the middle state.
@@ -487,7 +491,8 @@ private theorem runs_of_call
     rw [getCurrentEpoch_toNat] at this
     rw [UInt64.le_iff_toNat_le, boundaryNat]
     exact (Nat.le_div_iff_mul_le positive).mp this
-  have stateBefore : BeforeFork (preset := preset) config fork state.slot :=
+  have stateBefore : (∀ next ∈ config.nextFork fork,
+      state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) :=
     beforeFork_of_epoch window positive
       (by rw [← getCurrentEpoch_toNat]; exact UInt64.le_iff_toNat_le.mp inside)
   obtain ⟨middle', lookOk', toState⟩ := lookahead_runsTo anchorSlot (forward w receiver k)

@@ -50,6 +50,52 @@ def effectiveAt (s : ForkedBeaconState preset) (i : Nat) : Nat :=
 def actualBalanceAt (s : ForkedBeaconState preset) (i : Nat) : Nat :=
   ((s.state.balances.data[i]?).map (·.toNat)).getD 0
 
+/-- A balance increase adds its amount at its own index and keeps every other balance. -/
+theorem actualBalanceAt_increaseBalance {fork : Fork} {u w : BeaconState preset fork}
+    {index : ValidatorIndex} {delta : Gwei} (computed : increaseBalance u index delta = .ok w)
+    (j : Nat) : actualBalanceAt ⟨fork, w⟩ j =
+      actualBalanceAt ⟨fork, u⟩ j + if index.toNat = j then delta.toNat else 0 := by
+  cases found : u.balances.data[j]? with
+  | none =>
+    obtain ⟨inside, _, rfl⟩ := increaseBalance_eq_ok_iff.mp computed
+    have apart : index.toNat ≠ j := by
+      rintro rfl
+      rw [Array.getElem?_eq_getElem inside] at found
+      cases found
+    simp [actualBalanceAt, BeaconState.putBalance, found, apart]
+  | some balance =>
+    obtain ⟨raised, located, value⟩ := balance_increaseBalance computed found
+    simp only [actualBalanceAt, found, located, Option.map_some, Option.getD_some, value]
+
+/-- A balance decrease subtracts its amount at its own index and keeps every other balance. -/
+theorem actualBalanceAt_decreaseBalance {fork : Fork} {u w : BeaconState preset fork}
+    {index : ValidatorIndex} {delta : Gwei} (computed : decreaseBalance u index delta = .ok w)
+    (j : Nat) : actualBalanceAt ⟨fork, w⟩ j =
+      actualBalanceAt ⟨fork, u⟩ j - if index.toNat = j then delta.toNat else 0 := by
+  cases found : u.balances.data[j]? with
+  | none =>
+    obtain ⟨inside, rfl⟩ := decreaseBalance_eq_ok_iff.mp computed
+    have apart : index.toNat ≠ j := by
+      rintro rfl
+      rw [Array.getElem?_eq_getElem inside] at found
+      cases found
+    simp [actualBalanceAt, BeaconState.putBalance, found, apart]
+  | some balance =>
+    obtain ⟨lowered, located, value⟩ := balance_decreaseBalance computed found
+    simp only [actualBalanceAt, found, located, Option.map_some, Option.getD_some, value]
+    split <;> omega
+
+/-- Appending a balance keeps every balance below and reads the new one at the end. -/
+theorem actualBalanceAt_push {fork : Fork} {s t : BeaconState preset fork}
+    {balance : Gwei}
+    (pushed : t.balances.data = s.balances.data.push balance) (i : ℕ) :
+    actualBalanceAt ⟨fork, t⟩ i = if i = s.balances.data.size then balance.toNat
+      else actualBalanceAt ⟨fork, s⟩ i := by
+  simp only [actualBalanceAt, pushed, Array.getElem?_push]
+  split
+  · simp
+  · rfl
+
 /-- Include the state before fork upgrades, where the effective balance was last updated. -/
 def _root_.EthLib.Consensus.Step.balancePath {x y : ForkedBeaconState preset}
     (step : Step config checks x y) :
@@ -623,6 +669,66 @@ theorem balanceDrift_late {f : Fork} {s t : BeaconState preset f}
   all_goals
     have kept := edge.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
     exact ⟨kept.1, kept.2.1⟩
+
+/-! ## The bands of hysteresis at the start of an epoch -/
+
+section Epochs
+
+variable {fork : Fork} {state after : BeaconState preset fork}
+
+/-- Right after the epoch transition, each effective balance lies within the bands of its balance.
+
+The update of the effective balances puts them there.
+
+The later stages of the epoch keep the validators and the balances.
+
+The increment must be positive and at most the upward band. -/
+private theorem hysteresis_of_epochTransition (bands : preset.IncrementWithinUpwardBand)
+    (computed : processEpoch config checks state = .ok after) : Hysteresis after := by
+  have trace := processEpoch_trace computed
+  change EpochTrace _ ((EpochStage.prefixStages ++ [.payments]) ++
+    [.effectiveBalances, .slashingsReset, .randaoReset, .history, .participation,
+      .syncCommittees, .proposerLookahead, .ptcWindow]) _ _ at trace
+  obtain ⟨_, -, tail⟩ := EpochTrace.append_iff.mp trace
+  cases tail
+  rename_i updated tail
+  have last := balanceDrift_late tail
+  exact (processEffectiveBalanceUpdates_hysteresis bands
+    (EpochStage.action_cases.mp updated)).of_data (congrArg (·.data) last.1)
+    (congrArg (·.data) last.2) fun _ => rfl
+
+/-- A slot step that reaches the first slot of an epoch ends within the bands of hysteresis. -/
+theorem hysteresis_of_advanceSlot (bands : preset.IncrementWithinUpwardBand)
+    (computed : advanceSlot config checks state = .ok after)
+    (boundary : after.slot % preset.SLOTS_PER_EPOCH = 0) : Hysteresis after := by
+  obtain ⟨next, cached, epoched, -, -, epochOk, rfl⟩ := advanceSlot_ok computed
+  simp only [epochIfLast, show next % preset.SLOTS_PER_EPOCH = 0 from boundary, ↓reduceIte]
+    at epochOk
+  exact (hysteresis_of_epochTransition bands epochOk).of_data rfl rfl fun _ => rfl
+
+/-- The state at the first slot of an epoch, reached by slot steps, is within the bands. -/
+theorem hysteresis_of_processSlots (bands : preset.IncrementWithinUpwardBand)
+    {slot : Slot} (computed : processSlots config checks state slot = .ok after)
+    (boundary : slot % preset.SLOTS_PER_EPOCH = 0) : Hysteresis after := by
+  obtain ⟨later, reached⟩ := processSlots_slot computed
+  simp only [Consensus.processSlots, bind_ok_iff, ensure_ok_iff] at computed
+  obtain ⟨-, -, advanced⟩ := computed
+  have gap := UInt64.lt_iff_toNat_lt.mp later
+  obtain ⟨count, counted⟩ : ∃ count, slot.toNat - state.slot.toNat = count + 1 :=
+    ⟨slot.toNat - state.slot.toNat - 1, by omega⟩
+  rw [counted] at advanced
+  -- The last of the slot steps reaches the slot.
+  clear counted gap later
+  induction count generalizing state with
+  | zero =>
+    obtain ⟨_, first, rest⟩ := bind_ok_iff.mp advanced
+    cases rest
+    exact hysteresis_of_advanceSlot bands first (by rw [reached]; exact boundary)
+  | succ count ih =>
+    obtain ⟨_, first, rest⟩ := bind_ok_iff.mp advanced
+    exact ih rest
+
+end Epochs
 
 /-- An effective-balance update cannot increase the funding held at any registry position. -/
 private theorem updateEffectiveBalance_funding {fork : Fork} {s t : BeaconState preset fork}

@@ -12,7 +12,9 @@ import EthLib.Consensus.Proofs.Transition.Slot
 import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
 
 /-!
-# The rewards pass of an epoch, read at one call
+# The reads of one epoch, as natural numbers
+
+The active total, the sync reward and the seats of a validator have values as natural numbers.
 
 From Altair, the rewards pass moves the balance of one validator within an envelope.
 

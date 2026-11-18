@@ -1475,4 +1475,15 @@ theorem processOperations_new_validator_epochs_unassigned {body : BeaconBlockBod
       v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH :=
   newUnassigned_processOperations ok
 
+/-- Once the exit of a validator is set, its withdrawable epoch only rises.
+
+It moves only when the later record is slashed.
+
+The states may be of different forks. -/
+def WithdrawableKept {f g : Fork} (s : BeaconState preset f) (t : BeaconState preset g) : Prop :=
+  ∀ (i : Nat) (v w : Validator), s.validators.data[i]? = some v → t.validators.data[i]? = some w →
+    v.exitEpoch ≠ FAR_FUTURE_EPOCH →
+      v.withdrawableEpoch ≤ w.withdrawableEpoch ∧
+        (w.slashed = true ∨ w.withdrawableEpoch = v.withdrawableEpoch)
+
 end EthLib.Consensus

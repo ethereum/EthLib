@@ -21,7 +21,7 @@ Not yet released.
   No separate headline discharges `QuorumDriftWithin`: a caller with BLS checks from Fulu to before Gloas composes `Execution.quorumDriftWithin` with `Execution.rootViable_of_checked_call` or `Execution.honestHeadsCover_of_checked_call`.
   `Execution.heldStatesBeforeUpgrade_of_bounded` derives their premise `HeldStatesBeforeUpgrade` from the horizon and `HonestStoreEpochsBounded`.
   `effectiveRise_le` bounds the rise of the active effective balances over an epoch end, and `effectiveFall_le` the fall of a voter's.
-  `branchCorrections` bounds the balances along a branch inside one epoch.
+  `Run.balanceCorrections_of_same_epoch` bounds the balances along a branch inside one epoch.
 
 - The quorum drift bound adds these facts of runs.
   `Run.blockCount` counts the blocks of a run, `Run.blockCount_append` adds them over two runs, and `Run.blocks_le_slots` bounds them by one per slot.
@@ -32,7 +32,11 @@ Not yet released.
   `Run.withdrawableKept_of_same_epoch` and `withdrawableKept_processRegistryUpdates` keep `WithdrawableKept` inside an epoch and through the registry updates.
   `Genesis.invariant` gives the invariant of a genesis built from deposits, and `Run.invariant` keeps it along a run.
 
-- Its transition facts are in `Transition/BranchLedger.lean`, `Transition/EffectiveRise.lean`, `Transition/EffectiveFall.lean`, `Transition/EpochPassAtCall.lean` and their neighbours.
+- Its transition facts are in `Transition/BlockLedger.lean`, `Transition/BlockCredits.lean`, `Transition/BranchLedger.lean`, `Transition/EffectiveRise.lean`, `Transition/EffectiveFall.lean`, `Transition/EpochReads.lean` and their neighbours.
+  The ledger of a block's balances is in `BlockLedger`, its proposer and deposit credits in `BlockCredits`, and the tally of an epoch's blocks in `BranchLedger`.
+  The generic pieces sit with their kind: `getBeaconProposerIndex_congr` and `proposerSearch_congr_validators` in `Accessors`, `WithdrawableKept` in `RegistryLifecycle` and `withdrawableKept_processRegistryUpdates` in `PendingConsolidations`.
+  `payloadInputs_addValidatorToRegistry` and `payloadInputs_processDeposit` are in `PayloadInputs`, and the `actualBalanceAt_*` step lemmas and the hysteresis lemmas are in `BalanceDrift`.
+  The growth of the queue of pending consolidations inside an epoch (`QueueFrom`, `QueueGrows`, `RiseStep`, `riseStep_processBlock`) is in `PendingConsolidations`, and `Base.Array.findIdx?_of_prefix` in `Base/Proofs/List.lean`.
   `Hysteresis` puts each effective balance within the bands of its balance.
   `processEffectiveBalanceUpdates_hysteresis` establishes it, `Hysteresis.of_data` carries it to a state with the same validators and balances, and `Hysteresis.upgrade` keeps it across upgrades.
   `EpochTrace.through_effectiveBalances` splits an epoch trace after the effective-balance updates.
@@ -45,7 +49,7 @@ Not yet released.
   `processRewardsAndPenalties_balance_le_of_inactivityUpdates` bounds each balance after the rewards pass, given a bound on each base reward.
   `processOperations_floor` bounds the balance of an unslashed validator through the operations of a block before Gloas.
   The balance stays at least the smaller of its balance and its effective balance before them.
-  `actualBalanceAt_increaseBalance` and `actualBalanceAt_decreaseBalance` change the balance at one index and keep every other.
+  `actualBalanceAt_increaseBalance` and `actualBalanceAt_decreaseBalance` change the balance at one index and keep every other, and `actualBalanceAt_push` reads an appended balance.
   `passPendingConsolidations_balanceNotLowered_of_waiting` keeps the balance of a source that cannot yet leave, and `queueConsolidation_queued` records the exit epoch and the queue entry of a consolidation.
   `processBlock_currentSyncCommittee` keeps the current sync committee across a block.
   `Transition/PartialWithdrawalQueue.lean` holds the step facts of the queue of pending partial withdrawals that the departure queue and the drift bound share.

@@ -181,6 +181,8 @@ public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaisedBlock
 public import EthLib.Consensus.Proofs.Transition.Block
+public import EthLib.Consensus.Proofs.Transition.BlockCredits
+public import EthLib.Consensus.Proofs.Transition.BlockLedger
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.BranchLedger
 public import EthLib.Consensus.Proofs.Transition.BuilderDebt
@@ -201,8 +203,8 @@ public import EthLib.Consensus.Proofs.Transition.EffectiveFall
 public import EthLib.Consensus.Proofs.Transition.EffectiveRise
 public import EthLib.Consensus.Proofs.Transition.EpochJustification
 public import EthLib.Consensus.Proofs.Transition.EpochParticipation
-public import EthLib.Consensus.Proofs.Transition.EpochPassAtCall
 public import EthLib.Consensus.Proofs.Transition.EpochPending
+public import EthLib.Consensus.Proofs.Transition.EpochReads
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 public import EthLib.Consensus.Proofs.Transition.Execution
