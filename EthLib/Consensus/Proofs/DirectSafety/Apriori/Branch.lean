@@ -494,7 +494,7 @@ private theorem ScoresBelowAt.step_all {m l : ForkedBeaconState preset}
       · exact ScoresBelowAt.pass altair below cachedOk justified scored later i member score old
       · simp [zero]
     · -- Another slot keeps the epoch and the scores.
-      rw [nextSlot_epoch_of_inside sum within, Nat.sub_self, Nat.mul_zero, Nat.add_zero]
+      simp only [nextSlot_epoch_of_inside sum within, Nat.sub_self, Nat.mul_zero, Nat.add_zero]
       obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
       exact ScoresBelowAt.of_kept (fun i _ => ScoreKept.of_scores rfl i) below
 
