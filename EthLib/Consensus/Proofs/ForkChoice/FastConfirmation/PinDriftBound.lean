@@ -776,14 +776,18 @@ private structure PinPresetFacts (preset : Preset) : Prop where
       (EthLib.Consensus.parameters preset .fusaka).MIN_SLASHING_PENALTY_QUOTIENT.toNat - 1) /
         (EthLib.Consensus.parameters preset .fusaka).MIN_SLASHING_PENALTY_QUOTIENT.toNat) ≤
     1591 * (preset.MAX_EFFECTIVE_BALANCE.toNat + preset.downwardBand)
+  /-- (preset fact) Ten upward bands fit in the maximum effective balance. -/
+  band : 10 * preset.upwardBand ≤ preset.MAX_EFFECTIVE_BALANCE.toNat
 
 /-- The mainnet preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
-  ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide⟩
+  ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
+    by decide⟩
 
 /-- The minimal preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
-  ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide⟩
+  ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
+    by decide⟩
 
 /-- From Electra and before Gloas, the floor of the window at its start leaves room for the window.
 
