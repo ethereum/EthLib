@@ -3343,18 +3343,24 @@ The endpoint assumes `CallObligations` of each call.
 They apply when a call walks from its head to the start it selected.
 Then they assume the source reads of the later windows (`SourceWindowReads`) and the head read at each rollover (`CallRolloverRead`).
 They also assume `TargetCountBounds` with the call's pin reserve, and the realized guards `AcceptedRealizedRecent` and `AcceptedRealizedHead`.
+The rule checks neither the count bounds nor the realized guards; they are assumptions on the run.
+No theorem derives the source reads or the head reads yet.
 For each walked member they assume `MemberObligations`.
 That is the member's margin over its committee weight, which pays for the drift of each later window, and the reserve of each later window.
 That reserve is `exitReserveNear`, the active source stake already scheduled to exit within three epochs, not `exitReserve`.
 Under `Preset.SeedLookaheadAtLeastThree`, `Execution.receiverWindowExitsNear_of_sourceOnParentChain` bounds each near receiver's exits by it.
 An exit that starts at the source's epoch or later lands at least `MAX_SEED_LOOKAHEAD + 1` epochs after it.
 The near window reaches three epochs past the source, so the proof needs a lookahead of three to keep each such exit out of it.
-`MemberObligations` also includes `LateDutyMajority` and `NewlyActiveVotersInHeadWindow` for the member's parent.
+No theorem derives the margin's drift bound, `WindowMarginDrift`, yet.
+A planned follow-up charges it from the source state, for the receivers that the proof reads.
+With a positive excess, the member's margin asks more than the rule's one-confirmation test.
+`MemberObligations` also includes `LateDutyMajority` and `NewlyActiveVotersInHeadWindow` for the member's parent; they are assumptions on the run.
 A call that keeps its start walks no roots, and assumes nothing.
 The run also assumes `JustifiedPinned` at margin 0, `ByzantineCountedStake anchorEpoch 0 limit`, `TargetIncluded` and `StaleHeadVotersInWindow`, which are described above.
 The endpoint derives the signed justification inside, as the historical-anchor headlines do.
 It derives it from the Byzantine bound, a positive inclusion delay and the two conditions on the anchor.
-No theorem derives `JustifiedPinned`.
+The Byzantine bound and the two conditions on the anchor are assumptions on the run; the anchor store checks neither condition.
+No theorem derives `JustifiedPinned` yet.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.

@@ -3161,7 +3161,17 @@ The evidence is historical, cross-store direct-safety, cross-store justified or 
 
 Each call assumes its obligations, and the calls are at consecutive slots from the first slot.
 
-The execution verifies signatures with BLS, as the pulled-up head state of the rule does. -/
+The execution verifies signatures with BLS, as the pulled-up head state of the rule does.
+
+An assumption on the run: the Byzantine stake is below two thirds in each state that counts votes.
+
+It holds after the anchor's justified epoch, and buys the honest signer of each later justification.
+
+An assumption on the run: the anchor's latest header is the anchor block's, with a zero state root.
+
+The anchor store checks neither condition; the inclusion delay is positive on mainnet and minimal.
+
+No theorem derives the pinned justification of each call's epoch yet; its producer is planned. -/
 theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store preset fork}
     {limit : ℕ} {horizon anchorEpoch : Epoch} {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (bls : checks = .bls)
