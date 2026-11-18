@@ -197,7 +197,7 @@ The five step mappings of FIPS 202 §3.2, each written out for the 25 lanes.
 
 `A[x, y]` is lane `(x, y)` of the input, and the coordinates are taken mod 5 (§3.1.4).
 
-`Proofs/Hash/Keccak.lean` proves that each mapping is the formula of the standard. -/
+`Proofs/Hash/Keccak/Basic.lean` proves that each mapping is the formula of the standard. -/
 
 /-- Theta, FIPS 202 §3.2.1, Algorithm 1, for all `x, y < 5` and `z < w`:
 

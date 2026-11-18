@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Hash.KeccakBitsPermutation
+public import EthLib.Cryptography.Proofs.Hash.Keccak.BitsPermutation
 
 /-!
 # Proofs: the Keccak sponge on bytes and on bits

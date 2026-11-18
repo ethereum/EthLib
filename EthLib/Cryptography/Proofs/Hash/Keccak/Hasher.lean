@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.Bytes
-public import EthLib.Cryptography.Proofs.Hash.Keccak
+public import EthLib.Cryptography.Proofs.Hash.Keccak.Basic
 
 /-!
 # Proofs: incremental Keccak-256

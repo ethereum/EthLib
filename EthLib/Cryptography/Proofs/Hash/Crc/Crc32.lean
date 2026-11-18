@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Hash.Crc32
-public import EthLib.Cryptography.Proofs.Hash.Crc
+public import EthLib.Cryptography.Proofs.Hash.Crc.Basic
 
 /-!
 # Proofs: CRC-32

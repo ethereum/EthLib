@@ -2,7 +2,7 @@ module
 
 public import EthLib.Networking.Rlpx.Frame
 public import EthLib.Networking.Proofs.Rlpx.Handshake
-public import EthLib.Cryptography.Proofs.Hash.KeccakHasher
+public import EthLib.Cryptography.Proofs.Hash.Keccak.Hasher
 
 /-!
 # Proofs: RLPx frames
