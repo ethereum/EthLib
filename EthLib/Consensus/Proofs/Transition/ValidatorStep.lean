@@ -4377,7 +4377,7 @@ private theorem preKeyCharge_upgrade {s : ForkedBeaconState preset}
     (candidate : Nat → Bool) :
     ∀ i, preKeyCharge candidate t.val.state i = preKeyCharge candidate s.state i := by
   obtain ⟨fork, state⟩ := s
-  cases fork <;> try simp +decide at electra
+  cases fork <;> simp +decide at electra
   all_goals
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
       throwThe, MonadExceptOf.throw, reduceCtorEq] at ok

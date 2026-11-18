@@ -15,6 +15,8 @@ Only the logs of the call results read that choice.
 From Glamsterdam, the receipts already hold the transfer logs of EIP-7708.
 
 So a block from Glamsterdam gives the same answer with transfers traced or not.
+
+A simulation whose blocks are all from Glamsterdam, gap blocks included, gives the same answer too.
 -/
 
 @[expose] public section
@@ -111,5 +113,36 @@ theorem simulateBlock_json_trace {chain chain' : BlockChain} {base : RecentBlock
     unfold SimulatedBlock.json
     rw [same]
   · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- A simulation from Glamsterdam gives the same answer with transfers traced or not.
+
+It needs each block that the simulation gives, gap blocks included, to be from Glamsterdam.
+
+A failed simulation gives the same error both ways. -/
+theorem simulate_traceTransfers {v : ChainView} {payload : SimulatePayload} {p : BlockParam}
+    {choices : SimulateChoices}
+    (hfork : ∀ blocks, v.simulateBlocks payload p choices = .ok blocks →
+      ∀ b ∈ blocks, .glamsterdam ≤ b.record.fork) (trace : Bool) :
+    v.simulate { payload with traceTransfers := trace } p choices =
+      v.simulate payload p choices := by
+  cases h : v.simulateBlocks payload p choices with
+  | error e =>
+    simp only [ChainView.simulate, simulateBlocks_traceTransfers, h, bind, Except.bind]
+  | ok blocks =>
+    have same : ∀ b ∈ blocks, ∀ t : Bool,
+        b.json payload.returnFullTransactions payload.validation t =
+          b.json payload.returnFullTransactions payload.validation false := by
+      intro b hb t
+      obtain ⟨_, _, _, _, _, _, _, _, hBlk⟩ := simulateBlocks_mem_exists h b hb
+      cases t
+      · rfl
+      · exact simulateBlock_json_trace (hfork blocks h b hb) hBlk _ _
+    have agree := EthLib.Base.mapM_congr (xs := blocks)
+      (φ := (·.json payload.returnFullTransactions payload.validation trace))
+      (g := (·.json payload.returnFullTransactions payload.validation payload.traceTransfers))
+      fun b hb => (same b hb trace).trans (same b hb payload.traceTransfers).symm
+    simp only [ChainView.simulate, simulateBlocks_traceTransfers, h]
+    exact congrArg (fun r : Except Serialization.JsonRpc.RpcError (List Lean.Json) =>
+      r >>= fun l => pure (Lean.Json.arr l.toArray)) agree
 
 end EthLib.Execution.Rpc

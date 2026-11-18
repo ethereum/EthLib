@@ -3,7 +3,6 @@ module
 public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
 import EthLib.Base.Proofs.Toolchain.JsonBasic
-import EthLib.Base.Proofs.Toolchain.OrdString
 
 /-! A JSON document written for a value reads back as that value, at every shape. -/
 
@@ -293,7 +292,7 @@ theorem valueOf_union {selectors : List Nat} {options : List Desc} {spelling : S
       = ["data", "selector"] := by
     rw [Base.Toolchain.Json.mkObj_eq]
     simpa [objectNames] using
-      keys_ofList_pair (decimal selector) payload (by rw [Base.Toolchain.String.compare_eq]; decide)
+      keys_ofList_pair (decimal selector) payload (by decide)
   have carried : (Json.mkObj [("selector", decimal selector), ("data", payload)]).getObjVal? "data"
       = .ok payload := getObjVal?_mkObj (by simp) (by simp)
   have tagged :

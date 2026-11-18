@@ -390,62 +390,6 @@ theorem effectiveGasPrice_description {baseFee : Nat} {tx : Transaction}
     simp only [Transaction.maxFeePerGas] at h <;>
     simp only [effectiveGasPrice, effectiveGasPrice.feeMarket] <;> omega
 
-/-- The receipts of the transactions of a body have the Bloom filters of their logs.
-
-Their cumulative gas never decreases, and stays at most the cumulative gas of the output. -/
-private theorem applyTransactions_receipts {fork : Fork} {env : Evm.BlockEnvironment fork}
-    {body : BodyState} {transactions : List Transaction} {output : BodyOutput fork}
-    (h : applyTransactions env body transactions = .ok output) :
-    (∀ p ∈ output.receipts, p.2.bloom = logsBloom p.2.logs) ∧
-      (output.receipts.map (·.2.cumulativeGasUsed)).Pairwise (· ≤ ·) ∧
-      ∀ p ∈ output.receipts, p.2.cumulativeGasUsed ≤ output.cumulativeGasUsed := by
-  have step : ∀ {index : Nat} {before after : BodyOutput fork} {tx : Transaction},
-      applyTransaction env index before tx = .ok after →
-      (((∀ p ∈ before.receipts, p.2.bloom = logsBloom p.2.logs) ∧
-        (before.receipts.map (fun p : UInt8 × Receipt fork => p.2.cumulativeGasUsed)).Pairwise
-          (· ≤ ·) ∧
-        ∀ p ∈ before.receipts, p.2.cumulativeGasUsed ≤ before.cumulativeGasUsed) →
-      ((∀ p ∈ after.receipts, p.2.bloom = logsBloom p.2.logs) ∧
-        (after.receipts.map (fun p : UInt8 × Receipt fork => p.2.cumulativeGasUsed)).Pairwise
-          (· ≤ ·) ∧
-        ∀ p ∈ after.receipts, p.2.cumulativeGasUsed ≤ after.cumulativeGasUsed)) := by
-    intro index before after tx hstep hinv
-    obtain ⟨outcome, logs, hr⟩ := applyTransaction_receipts hstep
-    obtain ⟨_, _, -, -, -, hcum, -⟩ := applyTransaction_eq_ok hstep
-    obtain ⟨hb, hp, hl⟩ := hinv
-    have hle : before.cumulativeGasUsed ≤ after.cumulativeGasUsed := by omega
-    rw [hr]
-    refine ⟨?_, ?_, ?_⟩
-    · intro p hp
-      rcases List.mem_append.mp hp with hp | hp
-      · exact hb p hp
-      · cases List.mem_singleton.mp hp
-        exact bloom_makeReceipt ..
-    · simp only [List.map_append, List.pairwise_append]
-      refine ⟨hp, by simp, ?_⟩
-      intro a ha b hb'
-      obtain ⟨q, hq, rfl⟩ := List.mem_map.mp ha
-      simp only [List.map_cons, List.map_nil, List.mem_singleton] at hb'
-      subst hb'
-      exact Nat.le_trans (hl q hq) hle
-    · intro p hp
-      rcases List.mem_append.mp hp with hp | hp
-      · exact Nat.le_trans (hl p hp) hle
-      · cases List.mem_singleton.mp hp
-        exact Nat.le_refl _
-  obtain ⟨hR, -⟩ := applyTransactions_steps
-    (fun a b : BodyOutput fork =>
-      ((∀ p ∈ a.receipts, p.2.bloom = logsBloom p.2.logs) ∧
-        (a.receipts.map (fun p : UInt8 × Receipt fork => p.2.cumulativeGasUsed)).Pairwise
-          (· ≤ ·) ∧
-        ∀ p ∈ a.receipts, p.2.cumulativeGasUsed ≤ a.cumulativeGasUsed) →
-      ((∀ p ∈ b.receipts, p.2.bloom = logsBloom p.2.logs) ∧
-        (b.receipts.map (fun p : UInt8 × Receipt fork => p.2.cumulativeGasUsed)).Pairwise
-          (· ≤ ·) ∧
-        ∀ p ∈ b.receipts, p.2.cumulativeGasUsed ≤ b.cumulativeGasUsed))
-    (fun _ => id) (fun h₁ h₂ x => h₂ (h₁ x)) step h
-  exact hR (by simp)
-
 /-- A transaction that runs has its sender buy the gas first, on the block state it runs on. -/
 private theorem processTransaction_buyGas {fork : Fork} {env : Evm.BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {tx : Transaction}

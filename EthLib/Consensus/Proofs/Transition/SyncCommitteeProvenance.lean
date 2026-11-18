@@ -675,7 +675,7 @@ private theorem processPendingConsolidations {electra : .pectra ≤ fork}
   unfold Consensus.processPendingConsolidations at ok
   simp only [bind, Except.bind, pure, Except.pure] at ok
   repeat' (split at ok <;> try cases ok)
-  all_goals exact passPendingConsolidations ‹_›
+  exact passPendingConsolidations ‹_›
 
 private theorem processInactivityUpdates {altair : .altair ≤ fork}
     (ok : Consensus.processInactivityUpdates config state altair = .ok after) :

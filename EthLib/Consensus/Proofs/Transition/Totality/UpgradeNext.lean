@@ -150,18 +150,14 @@ theorem advanceSlot_pending {fork : Fork} {state after : BeaconState preset fork
   have stateEpoch := getCurrentEpoch_toNat state
   have afterEpoch := getCurrentEpoch_toNat { epoched with slot := next }
   dsimp only at afterEpoch
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    obtain ⟨rotated, emptied⟩ := processEpoch_pendingRotation before epochedOk
+  obtain ⟨boundary, epochedOk⟩ | ⟨inside, kept⟩ := epochIfLast_cases epochedOk
+  · obtain ⟨rotated, emptied⟩ := processEpoch_pendingRotation before epochedOk
     refine Or.inr ⟨?_, ?_, emptied⟩
     · rw [afterEpoch, stateEpoch]
       exact nextSlot_epoch_of_boundary sum boundary
     · show epoched.previousEpochAttestations before = _
       rw [rotated, cachedEq]
-  · rename_i inside
-    simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
+  · subst epoched
     refine Or.inl ⟨?_, ?_, ?_⟩
     · rw [afterEpoch, stateEpoch]
       exact nextSlot_epoch_of_inside sum inside

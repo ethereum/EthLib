@@ -73,7 +73,9 @@ private theorem chainEvents_head_event {config : Config} {optimistic : Root → 
     subst made
     simp only [List.mem_cons, List.mem_nil_iff, ChainEvent.head.injEq, reduceCtorEq,
       or_false] at listed
-    try (subst listed; exact ⟨_, by assumption⟩)
+  all_goals
+    subst listed
+    exact ⟨_, by assumption⟩
 
 /-- A head event reads the head block, its state, and the two dependent roots of that state. -/
 private theorem headEvent_spec {store : Store preset fork} {optimistic : Root → Bool}
@@ -211,7 +213,7 @@ theorem chainEvents_finalized_iff {config : Config} {optimistic : Root → Bool}
     rcases h2 : after.getHead config with _ | new <;>
     simp only [h1, h2, Except.mapError, bind, Except.bind, pure, Except.pure,
       reduceCtorEq] at made
-  all_goals repeat' split at made
+  repeat' split at made
   all_goals try (cases made; done)
   all_goals
     injection made with made
@@ -230,7 +232,7 @@ theorem chainEvents_finalized {config : Config} {optimistic : Root → Bool}
     rcases h2 : after.getHead config with _ | new <;>
     simp only [h1, h2, Except.mapError, bind, Except.bind, pure, Except.pure,
       reduceCtorEq] at made
-  all_goals repeat' split at made
+  repeat' split at made
   all_goals try (cases made; done)
   all_goals
     injection made with made

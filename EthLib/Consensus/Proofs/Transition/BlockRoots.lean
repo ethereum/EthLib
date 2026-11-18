@@ -59,17 +59,14 @@ theorem advanceSlot_cachedRoots
       after.slot.toNat = state.slot.toNat + 1 := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   refine ⟨cached, cachedOk, ?_⟩
-  unfold epochIfLast at epochedOk
-  split at epochedOk
+  obtain ⟨_, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
   · obtain ⟨_, justifiedOk, frame⟩ := processEpoch_frame epochedOk
     obtain ⟨genesis, roots, header, hash, bid, -⟩ :=
       processJustificationAndFinalization_keeps justifiedOk
     exact ⟨frame.genesisTime.trans genesis, frame.blockRoots.trans roots,
       frame.latestBlockHeader.trans header, frame.latestBlockHash.trans hash,
       frame.latestExecutionPayloadBid.trans bid, sum⟩
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    exact ⟨rfl, rfl, rfl, rfl, rfl, sum⟩
+  · exact ⟨rfl, rfl, rfl, rfl, rfl, sum⟩
 
 /-- A slot below another, by less than the length of the buffer of roots, has another position. -/
 private theorem slot_mod_ne {low high : Slot} (lt : low.toNat < high.toNat)

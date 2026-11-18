@@ -124,10 +124,9 @@ theorem slashedFlagAt_processSlots {config : Config} {checks : SignatureChecks}
     have first := slashFlags_of_validators (state := s) (after := cached) (by rw [cachedEq])
     have middle : ∀ i, (slashedFlagAt epoched i).getD false =
         (slashedFlagAt cached i).getD false := by
-      unfold epochIfLast at epochOk
-      split at epochOk
+      obtain ⟨_, epochOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochOk
       · exact slashFlags_processEpoch epochOk
-      · cases epochOk; exact fun _ => rfl
+      · exact fun _ => rfl
     exact fun i => (middle i).trans (first i)
   have steps {count : Nat} {s t : BeaconState preset fork}
       (ok : advanceSlots config checks count s = .ok t) :

@@ -714,7 +714,7 @@ theorem processEpoch_proposerLookahead (fulu : .fusaka ≤ fork)
       · unfold processPendingConsolidations at edge
         simp only [bind, Except.bind, pure, Except.pure] at edge
         repeat' (split at edge <;> try cases edge)
-        all_goals exact (kept_passPendingConsolidations ‹_›).trans rfl
+        exact (kept_passPendingConsolidations ‹_›).trans rfl
       · exact edge ▸ Kept.refl _
     · split at edge
       · rw [processBuilderPendingPayments_eq edge]
@@ -779,10 +779,8 @@ private theorem shifted_advanceSlot (computed : advanceSlot config checks state 
   have startAfter : currentEpochStart { epoched with slot := next } =
       (state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat := by
     rw [currentEpochStart_eq, sum]
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    have mod : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 := by
+  obtain ⟨boundary, epochedOk⟩ | ⟨inside, rfl⟩ := epochIfLast_cases epochedOk
+  · have mod : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 := by
       have := congrArg UInt64.toNat boundary
       simpa [UInt64.toNat_mod, sum] using this
     have up := Nat.succ_div_of_mod_eq_zero mod
@@ -797,10 +795,7 @@ private theorem shifted_advanceSlot (computed : advanceSlot config checks state 
       slot - (state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat +
         preset.SLOTS_PER_EPOCH.toNat) + preset.SLOTS_PER_EPOCH.toNat by omega]
     exact moved
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    rename_i inside
-    have mod : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat ≠ 0 := fun zero =>
+  · have mod : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat ≠ 0 := fun zero =>
       inside (UInt64.toNat_inj.mp (by simpa [UInt64.toNat_mod, sum] using zero))
     rw [Nat.succ_div_of_mod_ne_zero mod, ← currentEpochStart_eq] at startAfter
     exact ⟨Nat.le_of_eq startAfter.symm, fun _ _ _ _ => by rw [startAfter]⟩

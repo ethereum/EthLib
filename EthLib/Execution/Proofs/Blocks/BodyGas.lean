@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Transactions.Inclusion
 public import EthLib.Execution.Proofs.Transactions.StateGas
+import EthLib.Execution.Proofs.Fees.GasLimit
 
 /-!
 # Proofs: the gas counts of a block body
@@ -18,6 +19,14 @@ Up to BPO5, the gas of the body is at most the gas limit of the block, and it co
 From Glamsterdam, the execution gas and the state gas of the body are each at most the gas limit.
 
 So at every fork, each count of the body is within its bound.
+
+Each transaction of a body that runs has a gas limit of at most the gas limit of the block.
+
+Up to BPO5, the cumulative gas of each receipt is at most that gas limit too.
+
+Up to BPO5, a block that passes its transition then records both below `2^64`.
+
+That result needs the gas limit of the parent below `2^63`.
 
 [EIP-4844][e4844] asks for the bound on the blob gas.
 
@@ -147,5 +156,68 @@ theorem applyTransactions_gas_le {env : BlockEnvironment fork} {body : BodyState
     · exact applyTransactions_state_le_of_glamsterdam hGlam h
     · rw [applyTransactions_state_of_lt (Nat.lt_of_not_le hGlam) h]
       exact Nat.zero_le _
+
+/-! ## The gas that the receipts record -/
+
+/-- Each transaction of a body that runs has a gas limit of at most the gas limit of its block. -/
+theorem applyTransactions_txGas_le {env : BlockEnvironment fork} {body : BodyState}
+    {transactions : List Transaction} {output : BodyOutput fork}
+    (h : applyTransactions env body transactions = .ok output) :
+    ∀ tx ∈ transactions, tx.gas.toNat ≤ env.gasLimit := by
+  intro tx htx
+  obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem htx
+  obtain ⟨-, hSteps⟩ := applyTransactions_steps (fun _ _ => True) (fun _ => trivial)
+    (fun _ _ => trivial) (fun _ => trivial) h
+  obtain ⟨before, next, -, hNext, -⟩ := hSteps i hi
+  obtain ⟨included, out, hIncluded, -⟩ := applyTransaction_eq_ok hNext
+  obtain ⟨-, -, -, hFits, hState, -⟩ := checkInclusion_eq_ok_iff.mp hIncluded
+  by_cases hGlam : .glamsterdam ≤ fork
+  · have := hState hGlam
+    omega
+  · rw [executionCapacity_of_lt (Nat.lt_of_not_le hGlam)] at hFits
+    omega
+
+/-- Up to BPO5, each receipt of a body that runs records at most the gas limit of its block. -/
+theorem applyTransactions_cumulativeGasUsed_le_of_lt {env : BlockEnvironment fork}
+    {body : BodyState} {transactions : List Transaction} {output : BodyOutput fork}
+    (hlt : fork < .glamsterdam) (h : applyTransactions env body transactions = .ok output) :
+    ∀ p ∈ output.receipts, p.2.cumulativeGasUsed ≤ env.gasLimit := by
+  intro p hp
+  have hReceipt := (applyTransactions_receipts h).2.2 p hp
+  rw [← applyTransactions_execution_of_lt hlt h] at hReceipt
+  exact Nat.le_trans hReceipt (applyTransactions_execution_le_of_lt hlt h)
+
+/-- Up to BPO5, a block that passes its transition records its gas in 64 bits.
+
+Each of its transactions has a gas limit below `2^64`.
+
+Each receipt that its body gives has a cumulative gas below `2^64`.
+
+It needs the gas limit of the parent, the last recent block, below `2^63`.
+
+That gas limit is the one that the rule of the gas limit reads, doubled at the first London block.
+-/
+theorem stateTransition_gas_lt_of_lt {chain : BlockChain} {block : Block fork Transaction}
+    {checkSeal : Bool} {post : State.State} (hlt : fork < .glamsterdam)
+    (h : stateTransition chain block checkSeal = .ok post)
+    (hParent : ∀ parent, chain.recent.getLast? = some parent →
+      Fees.GasLimit.parentGasLimitForCheck parent.fork fork parent.header.gasLimit < 2 ^ 63) :
+    (∀ tx ∈ block.transactions, tx.gas.toNat < 2 ^ 64) ∧
+      ∃ hashes output, recentHashes chain.recent = .ok hashes ∧
+        applyBody chain.config (blockEnvironment chain.config hashes block.header) block
+          ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
+        ∀ p ∈ output.receipts, p.2.cumulativeGasUsed < 2 ^ 64 := by
+  obtain ⟨-, -, hCheck, hashes, output, roots, hHashes, hApply, -⟩ := stateTransition_eq_ok h
+  obtain ⟨parent, hLast, hFork, hHead⟩ := checkBlock_checkHeader hCheck
+  obtain ⟨-, -, -, -, hLimit, -⟩ := checkHeader_eq_ok_iff.mp hHead
+  have hGas : block.header.gasLimit < 2 ^ 64 := by
+    have hRule := Fees.GasLimit.mul_lt_of_checkGasLimit hLimit
+    have hBound := hParent parent hLast
+    omega
+  obtain ⟨state, body, txs, -, -, hTxs, hReceipts⟩ := applyBody_receipts hApply
+  refine ⟨fun tx htx => Nat.lt_of_le_of_lt (applyTransactions_txGas_le hTxs tx htx) hGas,
+    hashes, output, hHashes, hApply, fun p hp => ?_⟩
+  rw [hReceipts] at hp
+  exact Nat.lt_of_le_of_lt (applyTransactions_cumulativeGasUsed_le_of_lt hlt hTxs p hp) hGas
 
 end EthLib.Execution.Blocks
