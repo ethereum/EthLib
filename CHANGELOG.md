@@ -23,8 +23,19 @@ Not yet released.
   `effectiveRise_le` bounds the rise of the active effective balances over an epoch end, and `effectiveFall_le` the fall of a voter's.
   `Run.balanceCorrections_of_same_epoch` bounds the balances along a branch inside one epoch.
 
+- `FloorTrace.step_general_or_fulu` and `FloorTrace.run_of_le_cap_or_fulu` extend the per-key floor trace to a key with no activation epoch, from Fulu.
+  `FloorTrace.step_general`, `FloorTrace.run_of_le_cap_general` and `FloorTrace.run_of_le_cap` are the activated cases.
+  `processUpgrades_eq_of_window` states that the upgrades from Fulu up to before Gloas leave the state as it is.
+  The pin's drift bound reads them for keys that are not yet active.
+
 - `Run.exit_activation_gap` shows that an assigned exit in a run from genesis comes at least the seed lookahead and one epoch after the activation.
   The pin's drift bound reads it.
+
+- `Run.eligibility_le_finalized` shows that a validator with an assigned activation in a run from genesis was eligible by the finalized epoch.
+  The pin's drift bound reads it.
+
+- `preActivation_waiting` shows that each validator put back into the activation queue at an upgrade has no activation epoch.
+  The exit-order walk, `queues_preActivation_fold` in the churn bounds and `balanceDrift_preActivation_excludes` in the balance drift now read it.
 
 - The quorum drift bound adds these facts of runs.
   `Run.blockCount` counts the blocks of a run, `Run.blockCount_append` adds them over two runs, and `Run.blocks_le_slots` bounds them by one per slot.
@@ -32,6 +43,9 @@ Not yet released.
   `Run.split_next` splits a run that ends one epoch after it starts at the slot where its epoch changes.
   `Run.induction_of_same_epoch` inducts over a run inside one epoch, and `advanceSlotAcross_of_same_epoch` shows such a slot only caches the slot.
   Inside one epoch, `Run.fork_eq_of_same_epoch` keeps the fork, `Run.currentSyncCommittee_eq_of_same_epoch` the keys of the sync committee, and `Run.effectiveKept_of_same_epoch` each effective balance.
+  `Run.induction_of_same_period` inducts over a run inside one period of epochs, and `Run.induction_of_same_epoch` is its instance for one epoch.
+  `Run.currentSyncCommittee_eq_of_same_period` keeps the keys of the current sync committee inside one period of the committee rotation.
+  Their readers are the count of the keys that a branch credits, and the bound on the sync-seat holders that a branch debits, in the pin reserve bound.
   `Run.withdrawableKept_of_same_epoch` and `withdrawableKept_processRegistryUpdates` keep `WithdrawableKept` inside an epoch and through the registry updates.
   `Genesis.invariant` gives the invariant of a genesis built from deposits, and `Run.invariant` keeps it along a run.
 

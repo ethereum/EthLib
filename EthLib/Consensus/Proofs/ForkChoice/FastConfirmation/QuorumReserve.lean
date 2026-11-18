@@ -179,7 +179,7 @@ Neither do the late activations at that depth.
 
 The reserve treats every epoch of that window as fixed before the branches split.
 
-Rates are read at a quarter of the call's total active balance.
+Rates are read at a quarter of the call's total active balance, or at a fifth of an increment.
 
 A key's leak and gain are read at a computed envelope of its effective balance on any branch.
 
@@ -260,7 +260,10 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- The rates are read at a quarter of the call's total.
   --
   -- A counting state that keeps that much has a base reward per increment at most twice this one.
-  let quarter := max preset.EFFECTIVE_BALANCE_INCREMENT (totalGwei / 4)
+  --
+  -- Below eighteen increments the rates are read at a fifth of an increment, below any total.
+  let quarter := if 18 * inc ≤ total then totalGwei / 4
+    else preset.EFFECTIVE_BALANCE_INCREMENT / 5
   let perIncrement := ((getBaseRewardPerIncrement preset quarter).toOption.getD 0).toNat
   let base (i : ℕ) := effective i / inc * perIncrement
   let depositChurn := config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
@@ -337,9 +340,11 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- That is at least its effective balance here and at the finalized block's state.
   --
   -- A key can rise by its leak at the cap and its partials, then by a band, up to its cap.
+  --
+  -- The leak counts from the finalized block's state: both branches keep an update made since.
   let finEB (i : ℕ) := balanceAt finalizedState i
   let ebUp (i : ℕ) :=
-    let top := actual i + depth * leakAt (cap i) i + (partialsX i - partialsR i) +
+    let top := actual i + depthFin * leakAt (cap i) i + (partialsX i - partialsR i) +
       preset.downwardBand + inc - 1
     max (max (effective i) (finEB i)) (min (cap i) (top - top % inc))
   let leak (i : ℕ) := leakAt (ebUp i) i
@@ -376,8 +381,9 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let gainScaled (i : ℕ) := (11 * gainRate i + 9) / 10
   let capFor (i : ℕ) :=
     if depth * gainScaled i < inc ∧ 11 * depth * gainRate i < ebUp i then cap i else capMax
+  -- The rise bounds the balance from the finalized block's state on, as `ebUp` does.
   let rise (i : ℕ) :=
-    let high := actual i + depth * (gainScaled i + leak i) + (partialsX i - partialsR i)
+    let high := actual i + depthFin * (gainScaled i + leak i) + (partialsX i - partialsR i)
     -- Deeper than `partialDelay`, the call's branch can pay partials that neither queue holds.
     --
     -- So the rise is the key's whole headroom.
@@ -419,10 +425,15 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let whistleblowerR := (∑ i ∈ positions with slashed i = true ∧ recentSlashing i = true,
       effective i) / p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   let slashedR := (positions.filter fun i => slashed i = true ∧ recentSlashing i = true).card
+  -- The largest gain rate of one key, its gain rate at the largest effective balance.
+  let gainRateMax := capMax / inc * perIncrement *
+    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
+  -- A late key is charged three times its effective balance here, and its rise once.
   let late := if tight then 0 else
-    3 * ∑ i ∈ positions with (validator i).any (fun v =>
+    ∑ i ∈ positions with (validator i).any (fun v =>
       decide (v.activationEligibilityEpoch.toNat ≤ epoch.toNat) &&
-        decide (finalized + preset.MAX_SEED_LOOKAHEAD.toNat < v.activationEpoch.toNat)), effective i
+        decide (finalized + preset.MAX_SEED_LOOKAHEAD.toNat < v.activationEpoch.toNat)),
+      (3 * effective i + rise i)
   let period := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat
   -- Every seat of every sync committee in the window counts, at the seat's envelope.
   --
@@ -548,9 +559,6 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- A carry is a balance that can let several keys exit, so it counts by `exitFloor` too.
   let queueKeys := (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry) /
     exitFloor + 2 + lowKeys + newKeySeats
-  -- The largest gain rate of one key, its gain rate at the largest effective balance.
-  let gainRateMax := capMax / inc * perIncrement *
-    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   -- An exiting key weighs three times, so each credited one needs two more upward bands.
   --
   -- Those are the keys whose exit the call reads and those the queues let exit there.

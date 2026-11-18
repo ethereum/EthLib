@@ -2163,7 +2163,36 @@ private theorem FloorTrace.slot_update {fork : Fork} {s t : BeaconState preset f
     rw [balance]
     omega
 
-/-- Upgrades keep an activated key's effective balance, and the reachable cap covers its high. -/
+/-- Between the first fork of Fulu and Gloas, the upgrades leave the state as it is. -/
+theorem processUpgrades_eq_of_window {z z' : ForkedBeaconState preset}
+    (ok : processUpgrades config checks z = .ok z') (fulu : .fusaka ≤ z.fork)
+    (early : z'.fork < .glamsterdam) : z' = z := by
+  have stays : z'.fork ≤ z.fork := by
+    rw [processUpgrades] at ok
+    split at ok
+    · obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
+      have later := processUpgrades_fork_le rest
+      have reached : Fork.glamsterdam ≤ next.val.fork := by
+        obtain ⟨fork, state⟩ := z
+        cases fork <;> dsimp only at fulu <;>
+          first
+            | exact absurd fulu (by decide)
+            | (simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
+                throwThe, MonadExceptOf.throw, reduceCtorEq] at nextOk
+               -- The simp closes some cases itself, and then no goal is left.
+               first
+                 | done
+                 | (obtain ⟨_, -, rfl⟩ := nextOk; exact Nat.le_refl _)
+                 | (obtain ⟨_, -, rfl⟩ := nextOk
+                    exact Nat.le_of_lt (by decide : Fork.glamsterdam < Fork.hegota)))
+      exact absurd (Nat.lt_of_le_of_lt (Nat.le_trans reached later) early) (Nat.lt_irrefl _)
+    · cases ok
+      exact Nat.le_refl _
+  exact processUpgrades_eq_of_fork_le ok stays
+
+/-- Upgrades keep the effective balance of an activated key, or of any key from Fulu.
+
+The reachable cap covers its high. -/
 private theorem FloorTrace.slot_transport {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (ok : advanceSlotAcross config checks x = .ok y) (caps : CapOrder preset)
@@ -2172,7 +2201,7 @@ private theorem FloorTrace.slot_transport {g x y : ForkedBeaconState preset}
     (upgrades : processUpgrades config checks ⟨x.fork, advanced⟩ = .ok y)
     (i : Nat) (v w : Validator) (initial : x.state.validators.data[i]? = some v)
     (final : y.state.validators.data[i]? = some w)
-    (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH)
+    (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH ∨ .fusaka ≤ x.fork)
     {low base quotient : Nat} {a b : FloorAccount} (trace : FloorTrace low base quotient a b)
     (balance : b.balance = actualBalanceAt ⟨x.fork, advanced⟩ i)
     (high : effectiveAt x i ≤ b.high)
@@ -2183,8 +2212,11 @@ private theorem FloorTrace.slot_transport {g x y : ForkedBeaconState preset}
       max low last.high ≤ (withdrawalMaxEffectiveBalance preset y.fork w).toNat ∧
       last.high = max b.high (effectiveAt y i) := by
   obtain ⟨u, found, life⟩ := (registryLifecycle_advanceSlot advanceOk).validators i v initial
-  have kept := balanceDrift_upgrades_active upgrades early i u found
-    (by rwa [life.activationEpoch activated])
+  have kept : effectiveAt y i = effectiveAt ⟨x.fork, advanced⟩ i := by
+    rcases activated with activated | fulu
+    · exact balanceDrift_upgrades_active upgrades early i u found
+        (by rwa [life.activationEpoch activated])
+    · rw [processUpgrades_eq_of_window upgrades fulu early]
   obtain ⟨last, done, balance, debt, slashed, raised⟩ := trace.slot_update advanceOk i
     (Array.getElem?_eq_some_iff.mp initial).1 balance high
   have tail : Run config checks x y := Run.nil.snoc (.slot ok)
@@ -2216,7 +2248,7 @@ private theorem FloorTrace.slot_step {g x m y : ForkedBeaconState preset}
     (middle : m.state.validators.data[i.toNat]? = some u)
     (final : y.state.validators.data[i.toNat]? = some w)
     (assigned : v.slashed = true → v.exitEpoch ≠ FAR_FUTURE_EPOCH)
-    (activated : u.activationEpoch ≠ FAR_FUTURE_EPOCH)
+    (activated : u.activationEpoch ≠ FAR_FUTURE_EPOCH ∨ .fusaka ≤ m.fork)
     (window : (v.slashed = false ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
       preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
@@ -2301,16 +2333,8 @@ private theorem FloorTrace.slot_step {g x m y : ForkedBeaconState preset}
     flag.symm, lastDebt.trans debt, effective, cap, by simpa only [flag] using used,
     by rw [lastHigh, kept], fun h hh => marks h (flag.symm.trans hh)⟩
 
-/-- Concrete Steps preserve the carried account and cover each balance-path point.
-
-The key is unslashed at the start of the run and within the short window of a slash.
-
-Or it is slashed at the start with an assigned exit.
-
-Then its delayed penalty is not due in the epoch of the step.
-
-The high-water mark of the carried account rises at most to the effective balance after the step. -/
-theorem FloorTrace.step_general {g x m y : ForkedBeaconState preset}
+/-- One step of the per-key floor trace, for an activated key or a step from Fulu. -/
+theorem FloorTrace.step_general_or_fulu {g x m y : ForkedBeaconState preset}
     (shared : Run config checks g x) (pre : Run config checks x m)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
     (step : Step config checks m y) (early : y.fork < .glamsterdam)
@@ -2321,7 +2345,7 @@ theorem FloorTrace.step_general {g x m y : ForkedBeaconState preset}
     (middle : m.state.validators.data[i.toNat]? = some u)
     (final : y.state.validators.data[i.toNat]? = some w)
     (assigned : v.slashed = true → v.exitEpoch ≠ FAR_FUTURE_EPOCH)
-    (activated : u.activationEpoch ≠ FAR_FUTURE_EPOCH)
+    (activated : u.activationEpoch ≠ FAR_FUTURE_EPOCH ∨ .fusaka ≤ m.fork)
     (window : (v.slashed = false ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
       preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
@@ -2408,6 +2432,60 @@ theorem FloorTrace.step_general {g x m y : ForkedBeaconState preset}
     · exact ⟨b, trace, balance, by omega, by omega⟩
     · exact ⟨before, folded, atBefore, by omega, by rw [sameFlag]⟩
     · exact ⟨last, done, balance', le_rfl, le_rfl⟩
+
+/-- Concrete Steps preserve the carried account and cover each balance-path point.
+
+The key is unslashed at the start of the run and within the short window of a slash.
+
+Or it is slashed at the start with an assigned exit.
+
+Then its delayed penalty is not due in the epoch of the step.
+
+The high-water mark of the carried account rises at most to the effective balance after the step. -/
+theorem FloorTrace.step_general {g x m y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (pre : Run config checks x m)
+    (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
+    (step : Step config checks m y) (early : y.fork < .glamsterdam)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    {events : List (BalanceEvent preset)} (replayed : step.balanceEvents = .ok events)
+    (i : ValidatorIndex) (v u w : Validator)
+    (initial : x.state.validators.data[i.toNat]? = some v)
+    (middle : m.state.validators.data[i.toNat]? = some u)
+    (final : y.state.validators.data[i.toNat]? = some w)
+    (assigned : v.slashed = true → v.exitEpoch ≠ FAR_FUTURE_EPOCH)
+    (activated : u.activationEpoch ≠ FAR_FUTURE_EPOCH)
+    (window : (v.slashed = false ∧
+      (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
+      preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
+        (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat) ∨
+      (v.slashed = true ∧ (getCurrentEpoch m.state).toNat +
+        (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat < v.withdrawableEpoch.toNat))
+    (high : Nat) (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    (retained : high + 1 < w.exitEpoch.toNat)
+    (noCrossing : ∀ e ∈ events, e.source ≠ .crossing)
+    {low base quotient : Nat} {a b : FloorAccount} (trace : FloorTrace low base quotient a b)
+    (balance : b.balance = actualBalanceAt m i.toNat)
+    (consumed : (if b.slashedHigh.isSome then 1 else 0) ≤ if u.slashed then 1 else 0)
+    (capped : max low b.high ≤ (withdrawalMaxEffectiveBalance preset m.fork u).toNat)
+    (effective : effectiveAt m i.toNat ≤ b.high) (positive : 0 < quotient)
+    (quotient_le : quotient ≤
+      (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat) :
+    ∃ last, FloorTrace low base quotient a last ∧
+      last.balance = actualBalanceAt y i.toNat ∧
+      last.debt = b.debt + (events.map (floorPenaltyDebit i.toNat)).sum +
+        (events.map (floorPartialDebit i)).sum ∧
+      effectiveAt y i.toNat ≤ last.high ∧
+      max low last.high ≤ (withdrawalMaxEffectiveBalance preset y.fork w).toNat ∧
+      (if last.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0) ∧
+      (∀ p ∈ step.balancePath, ∃ c, FloorTrace low base quotient a c ∧
+        c.balance = actualBalanceAt p i.toNat ∧ c.debt ≤ last.debt ∧
+        (if c.slashedHigh.isSome then 1 else 0) ≤ (if last.slashedHigh.isSome then 1 else 0)) ∧
+      last.high ≤ max b.high (effectiveAt y i.toNat) ∧
+      (∀ h, last.slashedHigh = some h → b.slashedHigh = some h ∨ h = b.high) ∧
+      (u.slashed = true → b.slashedHigh = none → last.slashedHigh = none) :=
+  FloorTrace.step_general_or_fulu shared pre genesis caps step early delay replayed i v u w initial
+    middle final assigned (Or.inl activated) window high endEpoch retained noCrossing trace balance
+    consumed capped effective positive quotient_le
 
 /-- Concrete Steps preserve the carried account and cover each balance-path point. -/
 theorem FloorTrace.step {g x m y : ForkedBeaconState preset}

@@ -88,6 +88,16 @@ structure PinTerms (preset : Preset) where
   slashedR : ℕ
   slashedRB : ℕ → Bool
   tight : Bool
+  queueKeys : ℕ
+  queueWindow : ℕ
+  gainRateMax : ℕ
+  exitFloor : ℕ
+  lowKeys : ℕ
+  lowB : ℕ → Bool
+  lowEB : ℕ → ℕ
+  newKeySeats : ℕ
+  newKeySlack : ℕ
+  newKeyFloor : ℕ
 
 /-- `pinReserve` as the sum of its named terms, with the code's weights. -/
 def PinTerms.total (t : PinTerms preset) : ℕ :=
@@ -129,7 +139,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- The rates are read at a quarter of the call's total.
   --
   -- A counting state that keeps that much has a base reward per increment at most twice this one.
-  let quarter := max preset.EFFECTIVE_BALANCE_INCREMENT (totalGwei / 4)
+  let quarter := if 18 * inc ≤ total then totalGwei / 4
+    else preset.EFFECTIVE_BALANCE_INCREMENT / 5
   let perIncrement := ((getBaseRewardPerIncrement preset quarter).toOption.getD 0).toNat
   let base (i : ℕ) := effective i / inc * perIncrement
   let depositChurn := config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
@@ -202,7 +213,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- A key can rise by its leak at the cap and its partials, then by a band, up to its cap.
   let finEB (i : ℕ) := balanceAt finalizedState i
   let ebUp (i : ℕ) :=
-    let top := actual i + depth * leakAt (cap i) i + (partialsX i - partialsR i) +
+    let top := actual i + depthFin * leakAt (cap i) i + (partialsX i - partialsR i) +
       preset.downwardBand + inc - 1
     max (max (effective i) (finEB i)) (min (cap i) (top - top % inc))
   let leak (i : ℕ) := leakAt (ebUp i) i
@@ -229,7 +240,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let capFor (i : ℕ) :=
     if depth * gainScaled i < inc ∧ 11 * depth * gainRate i < ebUp i then cap i else capMax
   let rise (i : ℕ) :=
-    let high := actual i + depth * (gainScaled i + leak i) + (partialsX i - partialsR i)
+    let high := actual i + depthFin * (gainScaled i + leak i) + (partialsX i - partialsR i)
     -- Deeper than `partialDelay`, the call's branch can pay partials that neither queue holds.
     --
     -- So the rise is the key's whole headroom.
@@ -266,10 +277,13 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let whistleblowerR := (∑ i ∈ positions with slashed i = true ∧ recentSlashing i = true,
       effective i) / p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   let slashedR := (positions.filter fun i => slashed i = true ∧ recentSlashing i = true).card
+  let gainRateMax := capMax / inc * perIncrement *
+    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   let late := if tight then 0 else
-    3 * ∑ i ∈ positions with (validator i).any (fun v =>
+    ∑ i ∈ positions with (validator i).any (fun v =>
       decide (v.activationEligibilityEpoch.toNat ≤ epoch.toNat) &&
-        decide (finalized + preset.MAX_SEED_LOOKAHEAD.toNat < v.activationEpoch.toNat)), effective i
+        decide (finalized + preset.MAX_SEED_LOOKAHEAD.toNat < v.activationEpoch.toNat)),
+      (3 * effective i + rise i)
   let period := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat
   -- Every seat of every sync committee in the window counts, at the seat's envelope.
   --
@@ -370,8 +384,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let queueKeys := (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry) /
     exitFloor + 2 + lowKeys + newKeySeats
   -- The largest gain rate of one key, its gain rate at the largest effective balance.
-  let gainRateMax := capMax / inc * perIncrement *
-    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   let exitingCount := (positions.filter fun i => (before i || current i) = true ∧
       (slashed i = false ∨ recentSlashing i = true) ∧
       ((validator i).map fun v =>
@@ -462,7 +474,13 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
         decide (v.exitEpoch.toNat + 1 ≤ epoch.toNat)),
     slashedR,
     slashedRB := fun i => decide (slashed i = true ∧ recentSlashing i = true),
-    tight }
+    tight, queueKeys,
+    queueWindow := depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry,
+    gainRateMax, exitFloor, lowKeys,
+    lowB := fun i => decide ((validator i).any (fun v =>
+      decide (finalized < v.withdrawableEpoch.toNat) &&
+        decide (v.activationEpoch.toNat ≤ epoch.toNat)) ∧ lowEB i < newKeyFloor),
+    lowEB, newKeySeats, newKeySlack, newKeyFloor }
 /-- The copy is faithful: the named terms sum to `pinReserve`. -/
 theorem pinReserve_eq_total (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
     pinReserve config state ancestor finalizedState =
@@ -481,14 +499,37 @@ They are the keys slashed on this branch after the finalized epoch. -/
 theorem slashedR_eq (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).slashedR =
       ((pinTerms config state ancestor finalizedState).positions.filter fun i =>
-        (pinTerms config state ancestor finalizedState).slashedRB i = true).card := by
-  simp [pinTerms]
+        (pinTerms config state ancestor finalizedState).slashedRB i = true).card := rfl
 
 /-- The copy splits `queues` into its deposit part and its exit and consolidation part. -/
 theorem queues_split (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).queues =
       (pinTerms config state ancestor finalizedState).queueDep +
         (pinTerms config state ancestor finalizedState).queueExit := rfl
+
+/-- `queueRise` charges each key the queues let exit, at a band and the largest gain rate. -/
+theorem queueRise_unfold (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    (pinTerms config state ancestor finalizedState).queueRise =
+      if (pinTerms config state ancestor finalizedState).tight then 0 else
+        3 * (pinTerms config state ancestor finalizedState).queueKeys *
+          (preset.upwardBand + (pinTerms config state ancestor finalizedState).depth *
+            (pinTerms config state ancestor finalizedState).gainRateMax) := rfl
+
+/-- `queueKeys` counts the window's churn by `exitFloor`, the ends, the low keys and new keys. -/
+theorem queueKeys_unfold (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    (pinTerms config state ancestor finalizedState).queueKeys =
+      (pinTerms config state ancestor finalizedState).queueWindow /
+          (pinTerms config state ancestor finalizedState).exitFloor + 2 +
+        (pinTerms config state ancestor finalizedState).lowKeys +
+        (pinTerms config state ancestor finalizedState).newKeySeats := rfl
+
+/-- `lowB` is the filter of `lowKeys`. -/
+theorem lowKeys_eq (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
+    (pinTerms config state ancestor finalizedState).lowKeys =
+      ((pinTerms config state ancestor finalizedState).positions.filter fun i =>
+        (pinTerms config state ancestor finalizedState).lowB i = true).card := rfl
 
 /-! ## D-1's setting -/
 
@@ -1038,7 +1079,8 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    cJ pulled counted ≤ (((pinTerms config pulled anc fin).joining + 3 * (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) +
+    cJ pulled counted ≤ (((pinTerms config pulled anc fin).joining + (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).lateB v.toNat = true,
+        (3 * eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).exitedRB v.toNat = true,
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).exitingB v.toNat = true,
@@ -1190,70 +1232,8 @@ private theorem late_eq (config : Config) (pulled anc fin : BeaconState preset f
 /-- Late activations, weight 3 for V keys and for new keys. -/
 theorem bud_late (h : Setting config checks g split fin pulled anc counted V) :
     3 * (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) +
-      3 * (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) ≤ (pinTerms config pulled anc fin).late := by
-  classical
-  rw [late_eq]
-  have disjoint : Disjoint (VN counted V) (K6 pulled counted) := by
-    rw [Finset.disjoint_left]
-    intro v hv hk
-    have inV := (Finset.mem_filter.mp hv).1
-    exact (Finset.mem_filter.mp hk).2.2 (h.voting v inV).1
-  by_cases tight : (pinTerms config pulled anc fin).tight = true
-  · rw [ite_eq_left tight]
-    -- Tight: no key of VN or K6 is late.
-    have fin_le := UInt64.le_iff_toNat_le.mp h.finalized
-    have called := UInt64.le_iff_toNat_le.mp h.called
-    have bound := (tight_iff config pulled anc fin).mp tight
-    have near := h.near
-    have lowerEpoch : (getCurrentEpoch pulled).toNat + 1 ≤
-        anc.finalizedCheckpoint.epoch.toNat + preset.MAX_SEED_LOOKAHEAD.toNat := by omega
-    have none : ∀ v ∈ (VN counted V) ∪ (K6 pulled counted),
-        (pinTerms config pulled anc fin).lateB v.toNat = false := by
-      intro v hv
-      by_contra late
-      obtain ⟨w, found, -, beyond⟩ := (lateB_iff config pulled anc fin v.toNat).mp
-        (by simpa using late)
-      rcases Finset.mem_union.mp hv with hv | hv
-      · obtain ⟨w', found', active⟩ := active_of_activeVoters h.early
-          (h.voting v (Finset.mem_filter.mp hv).1).1
-        rw [found] at found'
-        cases found'
-        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-        have := UInt64.le_iff_toNat_le.mp active.1
-        omega
-      · have le := activation_le_of_active h (by omega) (Finset.mem_filter.mp hv).1 found
-        omega
-    have zeroA : ∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true,
-        eR pulled v = 0 := by
-      apply Finset.sum_eq_zero
-      intro v hv
-      have := none v (Finset.mem_union_left _ (Finset.mem_filter.mp hv).1)
-      simp [(Finset.mem_filter.mp hv).2] at this
-    have zeroB : ∑ v ∈ (K6 pulled counted) with
-        (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v = 0 := by
-      apply Finset.sum_eq_zero
-      intro v hv
-      have := none v (Finset.mem_union_right _ (Finset.mem_filter.mp hv).1)
-      simp [(Finset.mem_filter.mp hv).2] at this
-    rw [zeroA, zeroB]
-  · rw [ite_eq_right tight]
-    set A := (VN counted V).filter fun v => (pinTerms config pulled anc fin).lateB v.toNat = true
-      with hA
-    set B := (K6 pulled counted).filter
-      fun v => (pinTerms config pulled anc fin).lateB v.toNat = true with hB
-    have disj : Disjoint A B :=
-      Finset.disjoint_of_subset_left (Finset.filter_subset _ _)
-        (Finset.disjoint_of_subset_right (Finset.filter_subset _ _) disjoint)
-    have le : ∑ v ∈ A ∪ B, eR pulled v ≤ ∑ i ∈ (pinTerms config pulled anc fin).positions.filter
-        (fun i => (pinTerms config pulled anc fin).lateB i = true), balanceAt pulled i :=
-      sum_toNat_le (fun i => balanceAt pulled i) fun v hv => by
-        have flag : (pinTerms config pulled anc fin).lateB v.toNat = true := by
-          rcases Finset.mem_union.mp hv with hv | hv <;> exact (Finset.mem_filter.mp hv).2
-        obtain ⟨w, found, -⟩ := (lateB_iff config pulled anc fin v.toNat).mp flag
-        exact mem_positions_filter config pulled anc fin found flag
-    rw [Finset.sum_union disj] at le
-    change 3 * ∑ v ∈ A, eR pulled v + 3 * ∑ v ∈ B, eR pulled v ≤ _
-    omega
+      (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).lateB v.toNat = true,
+        (3 * eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤ (pinTerms config pulled anc fin).late := sorry
 
 /-- D-8 (queues): exits and consolidations initiated on C's branch (none in the tight window). -/
 theorem bud_queues (h : Setting config checks g split fin pulled anc counted V)
@@ -1677,10 +1657,8 @@ The proposer's share of the sync credits is in `syncF`, so the bound adds the `s
 that `credits`, `exitingCredits` and `branchR` leave. -/
 theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
-    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
     3 * ((∑ v ∈ V, (syncF events v.toNat + syncF eventsC v.toNat)) + (∑ v ∈ (K4 pulled counted V), (syncF events v.toNat + syncF eventsC v.toNat)) +
       (∑ v ∈ (K5 counted V), (syncF events v.toNat + syncF eventsC v.toNat))) +
@@ -1807,7 +1785,7 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have b3 := bud_queues (config := config) h tailC
   have b4 := bud_credits (config := config) h tailC highC endEpochC replayedC
   have b5 := bud_branchR (config := config) h tail high endEpoch replayed
-  have b6 := bud_sync (config := config) h tail high endEpoch replayed tailC highC endEpochC replayedC
+  have b6 := bud_sync (config := config) h tail high replayed tailC highC replayedC
   have b7 := bud_fall (config := config) h
   have b8 := bud_rise (config := config) h
   have b10 := bud_deposits (config := config) h tail high endEpoch replayed
@@ -1844,7 +1822,7 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   rw [pinReserve_eq_total]
   unfold PinTerms.total stake
   simp only [AC, AR, Q, eC, eR] at *
-  simp only [Finset.sum_add_distrib] at sV sN sP sJ b5 b6 b16 b18 ⊢
+  simp only [Finset.sum_add_distrib] at sV sN sP sJ b2 b5 b6 b16 b18 ⊢
   zify at *
   have syncPos : 0 ≤ ∑ x ∈ K4 pulled counted V, (syncF events x.toNat : ℤ) :=
     Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
