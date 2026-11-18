@@ -365,8 +365,10 @@ The key is unslashed at the start.
 
 Or it is slashed at the start, and its delayed penalty is not due along the branch.
 
-The high-water mark of the trace stays within any bound on the effective balance of the branch. -/
-theorem FloorTrace.run_of_le_cap_general
+The high-water mark of the trace stays within any bound on the effective balance of the branch.
+
+A key with no activation epoch is allowed if the branch starts from Fulu or later. -/
+theorem FloorTrace.run_of_le_cap_general_or_fulu
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
@@ -374,7 +376,7 @@ theorem FloorTrace.run_of_le_cap_general
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (i : ValidatorIndex) (v : Validator)
     (initial : x.state.validators.data[i.toNat]? = some v)
-    (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH)
+    (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH ∨ .fusaka ≤ x.fork)
     (low base quotient : Nat) (low_le : low ≤ (withdrawalMaxEffectiveBalance preset x.fork v).toNat)
     (positive : 0 < quotient)
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
@@ -466,11 +468,12 @@ theorem FloorTrace.run_of_le_cap_general
     obtain ⟨old, located, life⟩ := pre.registryLifecycle.validators i.toNat v initial
     have same := Option.some.inj (located.symm.trans middle)
     subst old
-    have assigned : u.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-      rwa [life.activationEpoch activated]
+    have assigned : u.activationEpoch ≠ FAR_FUTURE_EPOCH ∨ .fusaka ≤ m.fork :=
+      activated.imp (fun far => by rwa [life.activationEpoch far])
+        (fun fulu => Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps))
     obtain ⟨last, done, atEnd, exactDebt, highBound, capBound, used, later, stepHigh, marks,
       stepNone⟩ :=
-      FloorTrace.step_general shared pre genesis caps step early delay addedOk i v u w
+      FloorTrace.step_general_or_fulu shared pre genesis caps step early delay addedOk i v u w
         initial middle final assignedStart assigned
         (by
           cases flag : v.slashed
@@ -520,6 +523,122 @@ A sweep or a switch to compounding leaves at least that much, and the largest on
 
 Each step extends the trace, keeping the carried account.
 
+The trace is marked slashed only if the key ends the branch slashed.
+
+The key is unslashed at the start.
+
+Or it is slashed at the start, and its delayed penalty is not due along the branch.
+
+The high-water mark of the trace stays within any bound on the effective balance of the branch. -/
+theorem FloorTrace.run_of_le_cap_general
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (early : y.fork < .glamsterdam) (high : Nat)
+    (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    (i : ValidatorIndex) (v : Validator)
+    (initial : x.state.validators.data[i.toNat]? = some v)
+    (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH)
+    (low base quotient : Nat) (low_le : low ≤ (withdrawalMaxEffectiveBalance preset x.fork v).toNat)
+    (positive : 0 < quotient)
+    (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
+      (step : Step config checks m n) (post : Run config checks n y),
+      (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
+      high + 1 < w.exitEpoch.toNat ∧
+      ((v.slashed = false → (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
+        preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
+          (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat) ∧
+        (v.slashed = true → (getCurrentEpoch m.state).toNat +
+          (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat < v.withdrawableEpoch.toNat)) ∧
+      quotient ≤ (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ∧
+      ∀ events, step.balanceEvents = .ok events → ∀ e ∈ events, e.source ≠ .crossing)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
+    ∃ last, FloorTrace low base quotient
+        ⟨actualBalanceAt x i.toNat, 0, effectiveAt x i.toNat, none⟩ last ∧
+      last.balance = actualBalanceAt y i.toNat ∧
+      last.debt = (events.map (floorPenaltyDebit i.toNat)).sum +
+        (events.map (floorPartialDebit i)).sum ∧
+      effectiveAt y i.toNat ≤ last.high ∧
+      ∃ w, y.state.validators.data[i.toNat]? = some w ∧
+        max low last.high ≤ (withdrawalMaxEffectiveBalance preset y.fork w).toNat ∧
+        (if last.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0) ∧
+        (∀ p ∈ tail.balancePath, ∃ c, FloorTrace low base quotient
+            ⟨actualBalanceAt x i.toNat, 0, effectiveAt x i.toNat, none⟩ c ∧
+          c.balance = actualBalanceAt p i.toNat ∧ c.debt ≤ last.debt ∧
+          (if c.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0)) ∧
+        (∀ bound, effectiveAt x i.toNat ≤ bound →
+          (∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
+            (step : Step config checks m n) (post : Run config checks n y),
+            (pre.snoc step).append post = tail → effectiveAt m i.toNat ≤ bound) →
+          last.high ≤ max bound (effectiveAt y i.toNat) ∧
+            ∀ h, last.slashedHigh = some h → h ≤ bound) ∧
+        (v.slashed = true → last.slashedHigh = none) :=
+  FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
+    initial (Or.inl activated) low base quotient low_le positive guards replayed
+
+/-- The per-key accounting trace of a branch, from a floor.
+
+The floor is at most the key's largest effective balance at the start.
+
+A sweep or a switch to compounding leaves at least that much, and the largest only grows.
+
+Each step extends the trace, keeping the carried account.
+
+The trace is marked slashed only if the key ends the branch slashed.
+
+A key with no activation epoch is allowed if the branch starts from Fulu or later. -/
+theorem FloorTrace.run_of_le_cap_or_fulu
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (early : y.fork < .glamsterdam) (high : Nat)
+    (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    (i : ValidatorIndex) (v : Validator)
+    (initial : x.state.validators.data[i.toNat]? = some v)
+    (unslashed : v.slashed = false)
+    (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH ∨ .fusaka ≤ x.fork)
+    (low base quotient : Nat) (low_le : low ≤ (withdrawalMaxEffectiveBalance preset x.fork v).toNat)
+    (positive : 0 < quotient)
+    (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
+      (step : Step config checks m n) (post : Run config checks n y),
+      (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
+      high + 1 < w.exitEpoch.toNat ∧
+      (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
+        preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
+          (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
+      quotient ≤ (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ∧
+      ∀ events, step.balanceEvents = .ok events → ∀ e ∈ events, e.source ≠ .crossing)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
+    ∃ last, FloorTrace low base quotient
+        ⟨actualBalanceAt x i.toNat, 0, effectiveAt x i.toNat, none⟩ last ∧
+      last.balance = actualBalanceAt y i.toNat ∧
+      last.debt = (events.map (floorPenaltyDebit i.toNat)).sum +
+        (events.map (floorPartialDebit i)).sum ∧
+      effectiveAt y i.toNat ≤ last.high ∧
+      ∃ w, y.state.validators.data[i.toNat]? = some w ∧
+        max low last.high ≤ (withdrawalMaxEffectiveBalance preset y.fork w).toNat ∧
+        (if last.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0) ∧
+        ∀ p ∈ tail.balancePath, ∃ c, FloorTrace low base quotient
+            ⟨actualBalanceAt x i.toNat, 0, effectiveAt x i.toNat, none⟩ c ∧
+          c.balance = actualBalanceAt p i.toNat ∧ c.debt ≤ last.debt ∧
+          (if c.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0) := by
+  obtain ⟨last, trace, balance, debt, effective, w, final, capped, used, path, -⟩ :=
+    FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
+      initial activated low base quotient low_le positive
+      (fun pre step post split w found => by
+        obtain ⟨retained, short, quotient_le, noCrossing⟩ := guards pre step post split w found
+        exact ⟨retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩, quotient_le,
+          noCrossing⟩) replayed
+  exact ⟨last, trace, balance, debt, effective, w, final, capped, used, path⟩
+
+/-- The per-key accounting trace of a branch, from a floor.
+
+The floor is at most the key's largest effective balance at the start.
+
+A sweep or a switch to compounding leaves at least that much, and the largest only grows.
+
+Each step extends the trace, keeping the carried account.
+
 The trace is marked slashed only if the key ends the branch slashed. -/
 theorem FloorTrace.run_of_le_cap
     (shared : Run config checks g x) (tail : Run config checks x y)
@@ -554,15 +673,9 @@ theorem FloorTrace.run_of_le_cap
         ∀ p ∈ tail.balancePath, ∃ c, FloorTrace low base quotient
             ⟨actualBalanceAt x i.toNat, 0, effectiveAt x i.toNat, none⟩ c ∧
           c.balance = actualBalanceAt p i.toNat ∧ c.debt ≤ last.debt ∧
-          (if c.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0) := by
-  obtain ⟨last, trace, balance, debt, effective, w, final, capped, used, path, -⟩ :=
-    FloorTrace.run_of_le_cap_general shared tail genesis caps delay early high endEpoch i v
-      initial activated low base quotient low_le positive
-      (fun pre step post split w found => by
-        obtain ⟨retained, short, quotient_le, noCrossing⟩ := guards pre step post split w found
-        exact ⟨retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩, quotient_le,
-          noCrossing⟩) replayed
-  exact ⟨last, trace, balance, debt, effective, w, final, capped, used, path⟩
+          (if c.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0) :=
+  FloorTrace.run_of_le_cap_or_fulu shared tail genesis caps delay early high endEpoch i v initial
+    unslashed (Or.inl activated) low base quotient low_le positive guards replayed
 
 /-- The per-key accounting trace of a branch, through any slashing of the key.
 

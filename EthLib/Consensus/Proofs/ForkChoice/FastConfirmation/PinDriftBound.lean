@@ -518,6 +518,70 @@ The debits are its passes, its sync penalties and its partial withdrawals.
 
 The passes are at most its pass rates at the epochs ended.
 
+The guards are those of the per-key floor of the a priori bound, `FloorTrace.run_of_le_cap`.
+
+A key with no activation epoch is allowed if the branch starts from Fulu or later. -/
+private theorem Run.balanceFloor_rates_or_fulu {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (early : y.fork < .glamsterdam) (altair : .altair ≤ x.fork) (high : ℕ)
+    (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    (v : ValidatorIndex) (val : Validator) (initial : x.state.validators.data[v.toNat]? = some val)
+    (unslashed : val.slashed = false)
+    (activated : val.activationEpoch ≠ FAR_FUTURE_EPOCH ∨ .fusaka ≤ x.fork)
+    (quotient : ℕ) (positive : 0 < quotient)
+    (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
+      (step : Step config checks m n) (post : Run config checks n y),
+      (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[v.toNat]? = some w →
+      high + 1 < w.exitEpoch.toNat ∧
+      (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
+        preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
+          (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
+      quotient ≤ (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ∧
+      ∀ events, step.balanceEvents = .ok events → ∀ e ∈ events, e.source ≠ .crossing)
+    (stays : ∀ w, y.state.validators.data[v.toNat]? = some w → w.slashed = false)
+    (pen : ℕ → ℕ)
+    (rate : ∀ {z : ForkedBeaconState preset} (pre : Run config checks x z)
+      (post : Run config checks z y), tail = pre.append post →
+      (getCurrentEpoch z.state).toNat < (getCurrentEpoch y.state).toNat →
+      passPenaltyRate config z v.toNat ≤ pen (getCurrentEpoch z.state).toNat)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
+    min (actualBalanceAt x v.toNat) (withdrawalMaxEffectiveBalance preset x.fork val).toNat ≤
+      actualBalanceAt y v.toNat +
+        ∑ t ∈ Finset.Ico (getCurrentEpoch x.state).toNat (getCurrentEpoch y.state).toNat, pen t +
+        (events.map (syncDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum := by
+  obtain ⟨last, trace, balance, debt, -, w, final, -, used, -⟩ :=
+    FloorTrace.run_of_le_cap_or_fulu shared tail genesis caps delay early high endEpoch v val
+      initial
+      unslashed
+      activated (min (actualBalanceAt x v.toNat)
+        (withdrawalMaxEffectiveBalance preset x.fork val).toNat) 0 quotient
+      (Nat.min_le_right _ _) positive guards replayed
+  have clean : last.slashedHigh = none := by
+    cases flag : last.slashedHigh with
+    | none => rfl
+    | some _ => simp [flag, stays w final] at used
+  have floor := FloorTrace.unslashed_balance_floor trace (by simp) clean
+  have inside := (Array.getElem?_eq_some_iff.mp initial).1
+  have passes := Run.passDebit_le_rates tail early altair high endEpoch inside pen rate replayed
+  have split : (events.map (floorPenaltyDebit v.toNat)).sum =
+      (events.map (penaltyDebit v.toNat)).sum + (events.map (syncDebit v.toNat)).sum := by
+    rw [← List.sum_map_add]
+    rfl
+  rw [balance, debt, split] at floor
+  omega
+
+/-- The balance of a key that stays unslashed falls over a branch only by its debits.
+
+It starts from the smaller of its balance and its largest effective balance.
+
+A sweep of its excess and a switch to compounding leave at least that much.
+
+The debits are its passes, its sync penalties and its partial withdrawals.
+
+The passes are at most its pass rates at the epochs ended.
+
 The guards are those of the per-key floor of the a priori bound, `FloorTrace.run_of_le_cap`. -/
 private theorem Run.balanceFloor_rates {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
@@ -547,26 +611,9 @@ private theorem Run.balanceFloor_rates {g x y : ForkedBeaconState preset}
     min (actualBalanceAt x v.toNat) (withdrawalMaxEffectiveBalance preset x.fork val).toNat ≤
       actualBalanceAt y v.toNat +
         ∑ t ∈ Finset.Ico (getCurrentEpoch x.state).toNat (getCurrentEpoch y.state).toNat, pen t +
-        (events.map (syncDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum := by
-  obtain ⟨last, trace, balance, debt, -, w, final, -, used, -⟩ :=
-    FloorTrace.run_of_le_cap shared tail genesis caps delay early high endEpoch v val initial
-      unslashed
-      activated (min (actualBalanceAt x v.toNat)
-        (withdrawalMaxEffectiveBalance preset x.fork val).toNat) 0 quotient
-      (Nat.min_le_right _ _) positive guards replayed
-  have clean : last.slashedHigh = none := by
-    cases flag : last.slashedHigh with
-    | none => rfl
-    | some _ => simp [flag, stays w final] at used
-  have floor := FloorTrace.unslashed_balance_floor trace (by simp) clean
-  have inside := (Array.getElem?_eq_some_iff.mp initial).1
-  have passes := Run.passDebit_le_rates tail early altair high endEpoch inside pen rate replayed
-  have split : (events.map (floorPenaltyDebit v.toNat)).sum =
-      (events.map (penaltyDebit v.toNat)).sum + (events.map (syncDebit v.toNat)).sum := by
-    rw [← List.sum_map_add]
-    rfl
-  rw [balance, debt, split] at floor
-  omega
+        (events.map (syncDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum :=
+  Run.balanceFloor_rates_or_fulu shared tail genesis caps delay early altair high endEpoch v val
+    initial unslashed (Or.inl activated) quotient positive guards stays pen rate replayed
 
 /-- The balance of a key that stays unslashed falls over a branch only by its debits.
 
@@ -1224,35 +1271,6 @@ private theorem effective_floor_slot {f : Fork} {s t : BeaconState preset f}
   · cases advance
     exact previous
 
-/-- Between the first fork of Fulu and Gloas, the upgrades leave the state as it is.
-
-The only upgrade from a fork of that range leads to Gloas. -/
-private theorem processUpgrades_eq_of_window {z z' : ForkedBeaconState preset}
-    (ok : processUpgrades config checks z = .ok z') (fulu : .fusaka ≤ z.fork)
-    (early : z'.fork < .glamsterdam) : z' = z := by
-  have stays : z'.fork ≤ z.fork := by
-    rw [processUpgrades] at ok
-    split at ok
-    · obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
-      have later := processUpgrades_fork_le rest
-      have reached : Fork.glamsterdam ≤ next.val.fork := by
-        obtain ⟨fork, state⟩ := z
-        cases fork <;> dsimp only at fulu <;>
-          first
-            | exact absurd fulu (by decide)
-            | (simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
-                throwThe, MonadExceptOf.throw, reduceCtorEq] at nextOk
-               -- The simp closes some cases itself, and then no goal is left.
-               first
-                 | done
-                 | (obtain ⟨_, -, rfl⟩ := nextOk; exact Nat.le_refl _)
-                 | (obtain ⟨_, -, rfl⟩ := nextOk
-                    exact Nat.le_of_lt (by decide : Fork.glamsterdam < Fork.hegota)))
-      exact absurd (Nat.lt_of_le_of_lt (Nat.le_trans reached later) early) (Nat.lt_irrefl _)
-    · cases ok
-      exact Nat.le_refl _
-  exact processUpgrades_eq_of_fork_le ok stays
-
 /-- The update of the effective balances keeps an upper bound on the effective balance of a key.
 
 The balance must be at most `ceil`, and the cap at most `capHigh`.
@@ -1435,7 +1453,8 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
         simp [Step.balancePath, advanced, Except.toOption]
       have fuluMiddle : Fork.fusaka ≤ middle.fork :=
         Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps)
-      have same := processUpgrades_eq_of_window upgraded fuluMiddle early
+      have same := DirectSafety.Apriori.Internal.processUpgrades_eq_of_window upgraded
+        fuluMiddle early
       subst same
       refine ⟨fun balanceFloor capFloor => ?_, fun aligned envelope near capFloor => ?_,
         fun balanceCeil capCeil => ?_⟩
