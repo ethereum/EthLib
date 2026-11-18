@@ -322,7 +322,7 @@ theorem treeHit_hitA (hboundary : BoundaryCorrect f parameter seed labels) (pk :
   have hnode : ∀ level results, ¬SecondOrderInput pk.parameter results
       (merkleInput f pk.parameter (fun height index => .node lay tree height index) leaf.val path
         value level) := fun level results => by
-    unfold merkleInput
+    rw [merkleInput_eq]
     exact not_secondOrder _ _ _ _ (fun _ _ _ _ _ h => by cases h) (fun _ _ _ h => by cases h)
   rcases hcase with ⟨reference, hreference, level, hlevel, hparent, hne, hout⟩ |
     ⟨hlaytop, level, hlevel, ⟨hlower, hpositive, hsurrogate⟩, haddress⟩
@@ -339,7 +339,7 @@ theorem treeHit_hitA (hboundary : BoundaryCorrect f parameter seed labels) (pk :
           hreference level hlevel]
         intro heq
         apply hne
-        unfold merkleInput
+        rw [merkleInput_eq]
         rw [hparent]
         exact heq)
       (by
@@ -347,9 +347,9 @@ theorem treeHit_hitA (hboundary : BoundaryCorrect f parameter seed labels) (pk :
           hreference (level + 1) hlevel]
         change truncateHash (f (tweakableHashInput pk.parameter
           (.node lay tree (level + 1) (reference.val / 2 ^ (level + 1))) _)) = _
-        rw [← hparent]
+        rw [← hparent, ← merkleInput_eq]
         exact hout)
-    unfold merkleInput
+    rw [merkleInput_eq]
     rw [hparent]
     exact hpos
   · subst hlaytop
@@ -371,7 +371,7 @@ theorem treeHit_hitA (hboundary : BoundaryCorrect f parameter seed labels) (pk :
           (orderedPayload (leaf.val.testBit (level - 1))
             (merkleValue f pk.parameter (fun height index => .node topLayer rootTree height index)
               leaf.val path value (level - 1)) (path (level - 1))) := by
-      simp only [merkleInput, Nat.sub_add_cancel hpositive, haddress]
+      simp only [merkleInput_eq, Nat.sub_add_cancel hpositive, haddress]
     rw [hinput]
     unfold graphTable
     rw [targets_at_entry _ _ _ _ _ hentry]
@@ -405,13 +405,13 @@ theorem nodeException_hitA (index : Index) (leaves : FTree → FLeaf) (opening :
   refine ⟨_, Fors.nodeInput_mem f parameter index leaves opening κ level hlevel,
     active_hit' f parameter seed labels (forsPosition index κ (level + 1) hl1
       ⟨(leaves κ).val / 2 ^ (level + 1), (Nat.div_le_self _ _).trans_lt (leaves κ).isLt⟩)
-      trivial _ ⟨_, by simp only [merkleInput]; rw [hdom]; rfl⟩ ?_ ?_, fun results => ?_,
+      trivial _ ⟨_, by rw [merkleInput_eq, hdom]; rfl⟩ ?_ ?_, fun results => ?_,
     merkleInput_not_msg _ _ _ _ _ _ _⟩
   · rw [fors_path_input f parameter seed labels hconsistent index κ _ level hlevel]
     exact hneq
   · rw [fors_path_value f parameter seed labels hconsistent index κ _ (level + 1) hl1]
     exact hout
-  · unfold merkleInput
+  · rw [merkleInput_eq]
     rw [hdom]
     exact not_secondOrder _ _ _ _ (fun _ _ _ _ _ h => by cases h) (fun _ _ _ h => by cases h)
 

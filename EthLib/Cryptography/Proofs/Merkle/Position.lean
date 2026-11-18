@@ -178,6 +178,23 @@ theorem parent_right_of_not_isLeft {p : Position} (h : p.isLeft = false) :
     omega
   · simp [Nat.div_div_eq_div_mul, Nat.pow_add]
 
+/-- The parent of the ancestor `n` levels above leaf `j` is at index `j / 2^(n + 1)`.
+
+It reads the parent index of the step that a climb from the leaf takes on level `n`. -/
+theorem parent_ancestor_mk_zero (j n : Nat) :
+    ((⟨0, j⟩ : Position).ancestor n).parent = ⟨n + 1, j / 2 ^ (n + 1)⟩ := by
+  rw [parent_ancestor, ancestor_mk_zero]
+
+/-- The ancestor `n` levels up of a node is a left child exactly when bit `n` of its index is 0.
+
+It reads the side of the node that a climb step holds, `n` levels above where the climb starts. -/
+theorem isLeft_ancestor (p : Position) (n : Nat) :
+    (p.ancestor n).isLeft = !p.index.testBit n := by
+  -- Bit `n` of an index is the parity of the index divided by `2^n`.
+  rw [Nat.testBit_eq_decide_div_mod_eq]
+  have := Nat.mod_two_eq_zero_or_one (p.index / 2 ^ n)
+  rcases this with h | h <;> simp [isLeft, h]
+
 /-- The ancestor `k` levels up of a node among the first `2^k` of its level is the first node.
 
 For example, every leaf of a tree of height `h` has the root as its ancestor `h` levels up. -/
@@ -299,6 +316,14 @@ theorem eq_or_eq_sibling_of_parent_eq {a b : Position} (h : a.parent = b.parent)
   have := Nat.mod_two_eq_zero_or_one ia
   have := Nat.mod_two_eq_zero_or_one (ib ^^^ 1)
   omega
+
+/-- Two nodes with the same parent, on the same side of it, are the same node.
+
+So a climb step is fixed by the parent it hashes into and the side of the node it holds. -/
+theorem eq_of_parent_eq_of_isLeft_eq {p q : Position} (hparent : p.parent = q.parent)
+    (hleft : p.isLeft = q.isLeft) : p = q :=
+  -- The sibling is on the other side.
+  (eq_or_eq_sibling_of_parent_eq hparent).resolve_right fun h => by simp [h] at hleft
 
 /-- Two ancestors of one node on one level are the same node. -/
 theorem IsAncestor.unique {a b p : Position} (ha : a.IsAncestor p) (hb : b.IsAncestor p)

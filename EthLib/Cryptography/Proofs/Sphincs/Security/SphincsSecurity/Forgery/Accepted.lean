@@ -495,19 +495,12 @@ noncomputable def graphTable (f : QueryImpl HashSpec Id) (parameter : PublicPara
     (PrunedGraph.active parameter) (PrunedGraph.boundary parameter (surrogates f parameter seed))
         labels
 
-omit [Params] in
-/-- An ordered node payload holds two digests, so it has 32 bytes. -/
-theorem orderedPayload_length (bit : Bool) (current sibling : Digest) :
-    (orderedPayload bit current sibling).length = 32 := by
-  unfold orderedPayload
-  split <;> exact nodePayload_length _ _
-
 /-- A Merkle node input has a 32-byte payload, so it is no message-digest input. -/
 theorem merkleInput_not_msg (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (domain : Nat → Nat → HashDomain) (index : Nat) (path : Nat → Digest) (value : Digest)
     (level : Nat) :
     ¬ForsSigner.IsMsgInput (merkleInput f parameter domain index path value level) :=
-  ForsSigner.not_msg_tweakable _ _ _ (by rw [orderedPayload_length]; omega)
+  ForsSigner.not_msg_tweakable _ _ _ (by rw [nodePayload_length]; omega)
 
 section Hits
 
@@ -664,7 +657,7 @@ theorem forsException_hit (index : Index) (leaves : FTree → FLeaf) (opening : 
         rw [Fors.forsDomain, dite_eq_left ⟨by omega, by omega⟩]
         congr 2
         exact Nat.mod_eq_of_lt ((Nat.div_le_self _ _).trans_lt (leaves κ).isLt)
-      exact ⟨_, by simp only [merkleInput]; rw [hdom]; rfl⟩
+      exact ⟨_, by rw [merkleInput_eq, hdom]; rfl⟩
     · rw [fors_path_input f parameter seed labels hconsistent index κ _ level hlevel]
       exact hneq
     · rw [fors_path_value f parameter seed labels hconsistent index κ _ (level + 1) hl1]
@@ -712,7 +705,7 @@ theorem treeHit_hit (hboundary : BoundaryCorrect f parameter seed labels) (pk : 
           hreference level hlevel]
         intro heq
         apply hne
-        unfold merkleInput
+        rw [merkleInput_eq]
         rw [hparent]
         exact heq)
       (by
@@ -720,9 +713,9 @@ theorem treeHit_hit (hboundary : BoundaryCorrect f parameter seed labels) (pk : 
           hreference (level + 1) hlevel]
         change truncateHash (f (tweakableHashInput pk.parameter
           (.node lay tree (level + 1) (reference.val / 2 ^ (level + 1))) _)) = _
-        rw [← hparent]
+        rw [← hparent, ← merkleInput_eq]
         exact hout)
-    unfold merkleInput
+    rw [merkleInput_eq]
     rw [hparent]
     exact hpos
   · subst hlaytop
@@ -743,7 +736,7 @@ theorem treeHit_hit (hboundary : BoundaryCorrect f parameter seed labels) (pk : 
           (orderedPayload (leaf.val.testBit (level - 1))
             (merkleValue f pk.parameter (fun height index => .node topLayer rootTree height index)
               leaf.val path value (level - 1)) (path (level - 1))) := by
-      simp only [merkleInput, Nat.sub_add_cancel hpositive, haddress]
+      simp only [merkleInput_eq, Nat.sub_add_cancel hpositive, haddress]
     rw [hinput]
     unfold graphTable
     rw [targets_at_entry _ _ _ _ _ hentry]
