@@ -2285,6 +2285,23 @@ private theorem consolidationRequestsSites_indexedTrace_sites {fork : Fork}
       · intro called member
         exact (List.mem_cons.mp member).elim (fun same => same ▸ entry) (tailEntries called)
 
+/-- Deposit requests keep the registry, the activity and the effective balances. -/
+private theorem depositRequests_sitePrefix {fork : Fork} {s t : BeaconState preset fork}
+    (electra : .pectra ≤ fork) {deposits : List DepositRequest}
+    (ok : deposits.foldlM (processDepositRequest · electra ·) s = .ok t) : SitePrefix s t :=
+  SitePrefix.fold
+    (fun _ _ _ h => ⟨(frame_processDepositRequest h).registryGrows,
+      activeStep_processDepositRequest h, effectiveKept_depositRequest h⟩) ok
+
+/-- Withdrawal requests keep the registry, the activity and the effective balances. -/
+private theorem withdrawalRequests_sitePrefix {fork : Fork} {s t : BeaconState preset fork}
+    (electra : .pectra ≤ fork) {requests : List WithdrawalRequest}
+    (ok : requests.foldlM (processWithdrawalRequest config · electra ·) s = .ok t) :
+    SitePrefix s t :=
+  SitePrefix.fold
+    (fun _ _ _ h => ⟨(frame_processWithdrawalRequest h).registryGrows,
+      activeStep_processWithdrawalRequest h, effectiveKept_withdrawalRequest h⟩) ok
+
 private theorem executionRequests_coverage_sites {fork : Fork} (electra : .pectra ≤ fork)
     (early : fork < .glamsterdam) {s deposited withdrawn t : BeaconState preset fork}
     {deposits : List DepositRequest} {withdrawals : List WithdrawalRequest}
@@ -2317,9 +2334,7 @@ private theorem executionRequests_coverage_sites {fork : Fork} (electra : .pectr
     foldlM_ok_invariant (fun t => t.validators = s.validators)
       (fun _ _ _ kept ok => (processDepositRequest_ok ok).2.1.trans kept) rfl depositedOk
   have belowDeposited : ExitRateBelow config exitCap deposited :=
-    ExitRateBelow.of_prefix early (SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processDepositRequest h).registryGrows,
-        activeStep_processDepositRequest h, effectiveKept_depositRequest h⟩) depositedOk) below
+    ExitRateBelow.of_prefix early (depositRequests_sitePrefix electra depositedOk) below
   obtain ⟨exitCalls, exitFrom, exitTrace, exitCoverage, exitRates, exitAppended⟩ :=
     withdrawalRequests_indexedTrace electra early exitCap belowDeposited withdrawnOk
   obtain ⟨consolidationCalls, consolidationFrom, consolidationTrace,
@@ -4492,12 +4507,9 @@ private theorem blockConsolidationSites_prefix {fork : Fork}
     have prior := blockHead_sitePrefix headedOk executedOk revealedOk votedOk
     have operations := (operations_prefix_site_prefixes electra.1 proposedOk attestedOk votedAttOk
       depositedOk exitedOk changedOk).2.2
-    have requests : SitePrefix changed requested := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processDepositRequest h).registryGrows,
-        activeStep_processDepositRequest h, effectiveKept_depositRequest h⟩) requestedOk
-    have withdrawals : SitePrefix requested withdrawn := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processWithdrawalRequest h).registryGrows,
-        activeStep_processWithdrawalRequest h, effectiveKept_withdrawalRequest h⟩) withdrawnOk
+    have requests : SitePrefix changed requested := depositRequests_sitePrefix electra.1 requestedOk
+    have withdrawals : SitePrefix requested withdrawn :=
+      withdrawalRequests_sitePrefix electra.1 withdrawnOk
     obtain ⟨u, same, kept⟩ := consolidationRequestsSites_prefix replayed site member
     exact ⟨u, same, prior.trans (operations.trans (requests.trans (withdrawals.trans kept)))⟩
   · cases ok; simp at member
@@ -5315,9 +5327,7 @@ private theorem execution_requests_covered_exit_sites {fork : Fork} (electra : .
   have depositData : deposited.validators = s.validators :=
     foldlM_ok_invariant (fun t => t.validators = s.validators)
       (fun _ _ _ kept ok => (processDepositRequest_ok ok).2.1.trans kept) rfl depositedOk
-  have depositPrefix : SitePrefix s deposited := SitePrefix.fold
-    (fun _ _ _ ok => ⟨(frame_processDepositRequest ok).registryGrows,
-      activeStep_processDepositRequest ok, effectiveKept_depositRequest ok⟩) depositedOk
+  have depositPrefix : SitePrefix s deposited := depositRequests_sitePrefix electra depositedOk
   have coverage := exitCoverage.append_of_effectiveKept consCoverage
     (RegistryLifecycle.foldlM
       (fun _ _ _ ok => registryLifecycle_processWithdrawalRequest ok) withdrawnOk)
@@ -5595,12 +5605,10 @@ private theorem operations_covered_exit_sites {fork : Fork} (electra : .pectra �
   · intro called member
     obtain ⟨site, present, first, rate⟩ := consSites called member
     obtain ⟨u, rfl, kept⟩ := consolidationRequestsSites_prefix replayed site present
-    have depositedPrefix : SitePrefix changed requested := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processDepositRequest h).registryGrows,
-        activeStep_processDepositRequest h, effectiveKept_depositRequest h⟩) requestedOk
-    have withdrawnPrefix : SitePrefix requested withdrawn := SitePrefix.fold
-      (fun _ _ _ h => ⟨(frame_processWithdrawalRequest h).registryGrows,
-        activeStep_processWithdrawalRequest h, effectiveKept_withdrawalRequest h⟩) withdrawnOk
+    have depositedPrefix : SitePrefix changed requested :=
+      depositRequests_sitePrefix electra requestedOk
+    have withdrawnPrefix : SitePrefix requested withdrawn :=
+      withdrawalRequests_sitePrefix electra withdrawnOk
     have priorSite := prior.trans (depositedPrefix.trans (withdrawnPrefix.trans
       ⟨kept.grows, kept.active, kept.effective⟩))
     exact ⟨u, priorSite, priorSite.active.1, rate, first⟩
