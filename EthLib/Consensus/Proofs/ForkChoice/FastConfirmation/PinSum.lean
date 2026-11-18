@@ -1024,11 +1024,63 @@ theorem bud_exitingBands (h : Setting config checks g split fin pulled anc count
     2 * (∑ v ∈ (K5 counted V), bandC tailC highC v.toNat) ≤
       (pinTerms config pulled anc fin).exitingBands := sorry
 
+/-- The window is tight when its depth is at most one more than the seed lookahead. -/
+private theorem tight_iff (config : Config) (pulled anc fin : BeaconState preset fork) :
+    (pinTerms config pulled anc fin).tight = true ↔
+      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat ≤
+        1 + preset.MAX_SEED_LOOKAHEAD.toNat := by
+  simp only [pinTerms, decide_eq_true_eq]
+
+/-- The pending keys of `pinTerms` are validators of R's registry.
+
+Each is not yet eligible at R's epoch, and has no activation epoch. -/
+private theorem pendingRB_iff (config : Config) (pulled anc fin : BeaconState preset fork)
+    (i : ℕ) : (pinTerms config pulled anc fin).pendingRB i = true ↔
+      ∃ w, pulled.validators.data[i]? = some w ∧
+        (getCurrentEpoch pulled).toNat < w.activationEligibilityEpoch.toNat ∧
+        w.activationEpoch = FAR_FUTURE_EPOCH := by
+  simp only [pinTerms]
+  cases pulled.validators.data[i]? <;> simp
+
+/-- Outside the tight window, `pendingR` is the stake and rise of the pending keys. -/
+private theorem pendingR_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
+    (pinTerms config pulled anc fin).pendingR =
+      if (pinTerms config pulled anc fin).tight = true then 0 else
+        ∑ i ∈ (pinTerms config pulled anc fin).positions with
+          (pinTerms config pulled anc fin).pendingRB i = true,
+          (balanceAt pulled i + (pinTerms config pulled anc fin).rise i) := rfl
+
 /-- K6 keys of R's registry that are not yet eligible at R: their stake at R and their rise. -/
 theorem bud_pendingR (h : Setting config checks g split fin pulled anc counted V) :
     (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).pendingRB v.toNat = true,
       (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤
-        (pinTerms config pulled anc fin).pendingR := sorry
+        (pinTerms config pulled anc fin).pendingR := by
+  classical
+  rw [pendingR_eq]
+  by_cases tight : (pinTerms config pulled anc fin).tight = true
+  · -- Tight: no key of K6 is pending, since activity near the split is shared.
+    rw [ite_eq_left tight]
+    have fin_le := UInt64.le_iff_toNat_le.mp h.finalized
+    have called := UInt64.le_iff_toNat_le.mp h.called
+    have bound := (tight_iff config pulled anc fin).mp tight
+    have near : (getCurrentEpoch counted).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := h.near
+    apply Nat.le_of_eq
+    apply Finset.sum_eq_zero
+    intro v hv
+    exfalso
+    have hv' := Finset.mem_filter.mp hv
+    obtain ⟨w, found, -, far⟩ := (pendingRB_iff config pulled anc fin v.toNat).mp hv'.2
+    have le := activation_le_of_active h (by omega) (Finset.mem_filter.mp hv'.1).1 found
+    have farNat : w.activationEpoch.toNat = 2 ^ 64 - 1 := by rw [far]; rfl
+    have below := getCurrentEpoch_succ_lt_farFuture h.twoSlots counted
+    have farValue : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+    omega
+  · rw [ite_eq_right tight]
+    refine sum_toNat_le (fun i => balanceAt pulled i + (pinTerms config pulled anc fin).rise i)
+      fun v hv => ?_
+    have flag := (Finset.mem_filter.mp hv).2
+    obtain ⟨w, found, -⟩ := (pendingRB_iff config pulled anc fin v.toNat).mp flag
+    exact mem_positions_filter config pulled anc fin found flag
 
 /-- The keys that `exitingB` marks have their effective balances in `exiting`. -/
 private theorem sum_le_exiting (config : Config)
@@ -1076,10 +1128,93 @@ theorem bud_exiting :
         exact (Finset.mem_filter.mp member).2
     · exact (Finset.mem_filter.mp member).2
 
+/-- The late keys of `pinTerms` are validators of R's registry.
+
+Each has an eligibility epoch by R's epoch.
+
+Its activation epoch is beyond the seed lookahead of the finalized epoch. -/
+private theorem lateB_iff (config : Config) (pulled anc fin : BeaconState preset fork) (i : ℕ) :
+    (pinTerms config pulled anc fin).lateB i = true ↔ ∃ w, pulled.validators.data[i]? = some w ∧
+      w.activationEligibilityEpoch.toNat ≤ (getCurrentEpoch pulled).toNat ∧
+      anc.finalizedCheckpoint.epoch.toNat + preset.MAX_SEED_LOOKAHEAD.toNat <
+        w.activationEpoch.toNat := by
+  simp only [pinTerms]
+  cases pulled.validators.data[i]? <;> simp
+
+/-- Outside the tight window, `late` is three times the stake of the late keys. -/
+private theorem late_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
+    (pinTerms config pulled anc fin).late =
+      if (pinTerms config pulled anc fin).tight = true then 0 else
+        3 * ∑ i ∈ (pinTerms config pulled anc fin).positions with
+          (pinTerms config pulled anc fin).lateB i = true, balanceAt pulled i := rfl
+
 /-- Late activations, weight 3 for V keys and for new keys. -/
 theorem bud_late (h : Setting config checks g split fin pulled anc counted V) :
     3 * (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) +
-      3 * (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) ≤ (pinTerms config pulled anc fin).late := sorry
+      3 * (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) ≤ (pinTerms config pulled anc fin).late := by
+  classical
+  rw [late_eq]
+  have disjoint : Disjoint (VN counted V) (K6 pulled counted) := by
+    rw [Finset.disjoint_left]
+    intro v hv hk
+    have inV := (Finset.mem_filter.mp hv).1
+    exact (Finset.mem_filter.mp hk).2.2 (h.voting v inV).1
+  by_cases tight : (pinTerms config pulled anc fin).tight = true
+  · rw [ite_eq_left tight]
+    -- Tight: no key of VN or K6 is late.
+    have fin_le := UInt64.le_iff_toNat_le.mp h.finalized
+    have called := UInt64.le_iff_toNat_le.mp h.called
+    have bound := (tight_iff config pulled anc fin).mp tight
+    have near := h.near
+    have lowerEpoch : (getCurrentEpoch pulled).toNat + 1 ≤
+        anc.finalizedCheckpoint.epoch.toNat + preset.MAX_SEED_LOOKAHEAD.toNat := by omega
+    have none : ∀ v ∈ (VN counted V) ∪ (K6 pulled counted),
+        (pinTerms config pulled anc fin).lateB v.toNat = false := by
+      intro v hv
+      by_contra late
+      obtain ⟨w, found, -, beyond⟩ := (lateB_iff config pulled anc fin v.toNat).mp
+        (by simpa using late)
+      rcases Finset.mem_union.mp hv with hv | hv
+      · obtain ⟨w', found', active⟩ := active_of_activeVoters h.early
+          (h.voting v (Finset.mem_filter.mp hv).1).1
+        rw [found] at found'
+        cases found'
+        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
+        have := UInt64.le_iff_toNat_le.mp active.1
+        omega
+      · have le := activation_le_of_active h (by omega) (Finset.mem_filter.mp hv).1 found
+        omega
+    have zeroA : ∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true,
+        eR pulled v = 0 := by
+      apply Finset.sum_eq_zero
+      intro v hv
+      have := none v (Finset.mem_union_left _ (Finset.mem_filter.mp hv).1)
+      simp [(Finset.mem_filter.mp hv).2] at this
+    have zeroB : ∑ v ∈ (K6 pulled counted) with
+        (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v = 0 := by
+      apply Finset.sum_eq_zero
+      intro v hv
+      have := none v (Finset.mem_union_right _ (Finset.mem_filter.mp hv).1)
+      simp [(Finset.mem_filter.mp hv).2] at this
+    rw [zeroA, zeroB]
+  · rw [ite_eq_right tight]
+    set A := (VN counted V).filter fun v => (pinTerms config pulled anc fin).lateB v.toNat = true
+      with hA
+    set B := (K6 pulled counted).filter
+      fun v => (pinTerms config pulled anc fin).lateB v.toNat = true with hB
+    have disj : Disjoint A B :=
+      Finset.disjoint_of_subset_left (Finset.filter_subset _ _)
+        (Finset.disjoint_of_subset_right (Finset.filter_subset _ _) disjoint)
+    have le : ∑ v ∈ A ∪ B, eR pulled v ≤ ∑ i ∈ (pinTerms config pulled anc fin).positions.filter
+        (fun i => (pinTerms config pulled anc fin).lateB i = true), balanceAt pulled i :=
+      sum_toNat_le (fun i => balanceAt pulled i) fun v hv => by
+        have flag : (pinTerms config pulled anc fin).lateB v.toNat = true := by
+          rcases Finset.mem_union.mp hv with hv | hv <;> exact (Finset.mem_filter.mp hv).2
+        obtain ⟨w, found, -⟩ := (lateB_iff config pulled anc fin v.toNat).mp flag
+        exact mem_positions_filter config pulled anc fin found flag
+    rw [Finset.sum_union disj] at le
+    change 3 * ∑ v ∈ A, eR pulled v + 3 * ∑ v ∈ B, eR pulled v ≤ _
+    omega
 
 /-- D-8 (queues): exits and consolidations initiated on C's branch (none in the tight window). -/
 theorem bud_queues (h : Setting config checks g split fin pulled anc counted V)
@@ -1465,7 +1600,13 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
 theorem bud_exitedR :
     (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).exitedRB v.toNat = true,
       (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤
-        (pinTerms config pulled anc fin).exitedR := sorry
+        (pinTerms config pulled anc fin).exitedR := by
+  rw [exitedR_eq]
+  refine sum_toNat_le (fun i => balanceAt pulled i + (pinTerms config pulled anc fin).rise i)
+    fun v hv => ?_
+  have flag := (Finset.mem_filter.mp hv).2
+  obtain ⟨w, found⟩ := validator_of_flag (state := pulled) (i := v.toNat) (Or.inl flag)
+  exact mem_positions_filter config pulled anc fin found flag
 
 /-- R1 (branchR): R's credits to V keys since the split, weight 3.
 
