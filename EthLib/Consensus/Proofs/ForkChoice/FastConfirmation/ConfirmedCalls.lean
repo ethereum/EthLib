@@ -33,9 +33,11 @@ Along the accepted walk of a call, the call's balance source is on the chain of 
 
 That source is the observed checkpoint, and the stored root's recency carries from call to call.
 
-`Execution.callInvariant_step` shows that each call keeps the call invariant `CallInvariant`.
+Each call keeps the call invariant `CallInvariant`, given the invariant at every earlier call.
 
-It assumes the invariant at every earlier call, and the inputs `CallObligations` of the call.
+It assumes the inputs `CallObligations` of the call.
+
+`Execution.confirmedRoot_covers` reads that step at every call of a run.
 -/
 
 @[expose] public section
@@ -3103,9 +3105,10 @@ Each walked member is covered from the call to the horizon, from the coverage of
 The alternatives are a collision of two honest stores and four kinds of accountable-safety evidence.
 
 The execution verifies signatures with BLS, as the pulled-up head state of the rule does. -/
-theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store preset fork}
-    {limit : ℕ} {horizon anchorEpoch : Epoch} {g : ForkedBeaconState preset}
-    (pre : Run config checks g ⟨fork, anchorState⟩) (bls : checks = .bls)
+private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : ℕ}
+    {anchor : Store preset fork} {limit : ℕ} {horizon anchorEpoch : Epoch}
+    {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
+    (bls : checks = .bls)
     (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
