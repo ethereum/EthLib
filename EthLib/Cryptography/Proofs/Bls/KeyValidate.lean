@@ -127,7 +127,7 @@ theorem inSubgroup_iff_exists_represents {Q : G2} (hQ : Valid Q) :
     exact modulus_smul_toPoint_mul_generator b
 
 /-- A decoded point is valid. -/
-theorem valid_of_uncompress {bytes : ByteArray} {Q : G2} (h : uncompress bytes = .ok Q) :
+theorem valid_of_uncompress {bytes : Vector UInt8 96} {Q : G2} (h : uncompress bytes = .ok Q) :
     Valid Q := by
   rcases uncompress_valid h with rfl | ⟨hz, ht⟩
   · exact valid_zero

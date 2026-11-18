@@ -269,7 +269,7 @@ theorem sign_eq (sk : SecretKey) (msg : ByteArray) :
 /-- EthLib accepts exactly the signatures that decode to `sk • H(msg)`. -/
 theorem verify_iff (sk : SecretKey) (msg : ByteArray) (sig : BLSSignature) :
     verify (skToPk sk) msg sig = true ↔
-      ∃ R, G2.uncompress (packBytes sig) = .ok R ∧
+      ∃ R, G2.uncompress sig = .ok R ∧
         G2.toPoint R = (Scalar.ofFr sk.val • hashPoint msg : G2Sub) := by
   obtain ⟨P, hP, hPrep⟩ := G1.keyValidatePoint_compress_mul sk.property
   obtain ⟨hQ, hv, hs⟩ := hashRep_spec msg
@@ -289,7 +289,7 @@ theorem verify_iff (sk : SecretKey) (msg : ByteArray) (sig : BLSSignature) :
 The key is `sk • g1`, and the hash is `H(msg)`. -/
 theorem verify_iff_isDh (sk : SecretKey) (msg : ByteArray) (sig : BLSSignature) :
     verify (skToPk sk) msg sig = true ↔
-      ∃ R, G2.uncompress (packBytes sig) = .ok R ∧ ∃ hR : G2.toPoint R ∈ G2Sub,
+      ∃ R, G2.uncompress sig = .ok R ∧ ∃ hR : G2.toPoint R ∈ G2Sub,
         blsScheme.isDh (Scalar.ofFr sk.val • g1) (hashPoint msg) ⟨_, hR⟩ = true := by
   rw [verify_iff]
   refine exists_congr fun R => and_congr_right fun _ => ⟨fun h => ?_, fun ⟨hR, hd⟩ => ?_⟩
@@ -320,19 +320,22 @@ The format is Zcash's "BLS12-381 serialization", including its three flag bits.
 noncomputable def G1Sub.encode (P : G1Sub) : ByteArray := packBytes (G1.compress (G1Sub.rep P))
 
 /-- The canonical bytes of a subgroup element of `G2`, in the same Zcash format. -/
-noncomputable def G2Sub.encode (Q : G2Sub) : ByteArray := G2.compress (G2Sub.rep Q)
+noncomputable def G2Sub.encode (Q : G2Sub) : ByteArray := packBytes (G2.compress (G2Sub.rep Q))
 
 /-- Decode a signature, rejecting malformed bytes and points outside the subgroup.
 
 These are the signature checks of BLS draft-04, §2.7, steps 1 to 3.
 -/
 noncomputable def decodeSignature (sig : ByteArray) : Option G2Sub :=
-  match hu : G2.uncompress sig with
-  | .error _ => none
-  | .ok R =>
-    if hs : G2.inSubgroup R = true then
-      some ⟨G2.toPoint R, G2Sub.toPoint_mem_of_inSubgroup (G2.valid_of_uncompress hu) hs⟩
-    else none
+  match exactBytes? 96 sig with
+  | none => none
+  | some sig =>
+    match hu : G2.uncompress sig with
+    | .error _ => none
+    | .ok R =>
+      if hs : G2.inSubgroup R = true then
+        some ⟨G2.toPoint R, G2Sub.toPoint_mem_of_inSubgroup (G2.valid_of_uncompress hu) hs⟩
+      else none
 
 /-- The representative of a subgroup element has that group element. -/
 theorem G2Sub.toPoint_rep (Q : G2Sub) : G2.toPoint (G2Sub.rep Q) = Q := by
@@ -362,17 +365,20 @@ theorem G1Sub.encode_eq_compress {P : G1} {x : G1Sub} (hP : G1.Valid P)
 /-- The encoded signing answer is the compressed point that EthLib signs with. -/
 theorem encode_signature (sk : SecretKey) (msg : ByteArray) :
     G2Sub.encode (Scalar.ofFr sk.val • hashPoint msg) =
-      G2.compress (G2.mul (hashRep msg) sk.val) := by
+      packBytes (G2.compress (G2.mul (hashRep msg) sk.val)) := by
   have hp := (sign_eq sk msg).2
+  refine congrArg packBytes ?_
   exact G2.compress_congr (G2Sub.represents_rep (Scalar.ofFr sk.val • hashPoint msg)).1
     (G2.valid_mul (hashRep_spec msg).2.1 sk.val)
     ((G2Sub.toPoint_rep (Scalar.ofFr sk.val • hashPoint msg)).trans hp.symm)
 
 /-- Successful decompression and a subgroup check give the decoded group element. -/
-theorem decodeSignature_of_uncompress {sig : ByteArray} {R : G2}
+theorem decodeSignature_of_uncompress {sig : Vector UInt8 96} {R : G2}
     (hu : G2.uncompress sig = .ok R) (hs : G2.inSubgroup R = true)
-    (Q : G2Sub) (hp : G2.toPoint R = Q) : decodeSignature sig = some Q := by
+    (Q : G2Sub) (hp : G2.toPoint R = Q) : decodeSignature (packBytes sig) = some Q := by
   unfold decodeSignature
+  rw [exactBytes?_packBytes]
+  dsimp only
   split
   · rename_i he'
     rw [hu] at he'
@@ -403,10 +409,16 @@ theorem encode_eq_of_decodeSignature {sig : ByteArray} {Q : G2Sub}
   unfold decodeSignature at hd
   split at hd
   · cases hd
+  rename_i v hv
+  -- The bytes are the 96 bytes that the signature decodes from.
+  rw [← packBytes_of_exactBytes? hv]
+  split at hd
+  · cases hd
   · rename_i R hu
     split at hd
     · have hp : G2.toPoint R = Q := congrArg Subtype.val (Option.some.inj hd)
-      change G2.compress (G2Sub.rep Q) = sig
+      change packBytes (G2.compress (G2Sub.rep Q)) = packBytes v
+      apply congrArg packBytes
       apply Eq.trans _ (G2.compress_uncompress hu)
       apply G2.compress_congr (G2Sub.represents_rep Q).1 (G2.valid_of_uncompress hu)
       exact (G2Sub.toPoint_rep Q).trans hp.symm
@@ -515,6 +527,9 @@ This is BLS draft-04, §2.7: decode, check the signature subgroup, validate the 
 The hash representative is valid and lies in the subgroup by construction.
 -/
 noncomputable def byteVerify (pk sig : ByteArray) (h : G2Sub) : Bool :=
+  match exactBytes? 96 sig with
+  | none => false
+  | some sig =>
   match G2.uncompress sig with
   | .error _ => false
   | .ok R => signatureSubgroupCheck R &&
@@ -553,7 +568,11 @@ theorem byteVerify_hashPointWith (dst pk msg sig : ByteArray) :
   obtain ⟨hQ, hv, -⟩ := hashRepWith_spec dst msg
   unfold byteVerify coreVerify
   rw [hQ]
-  cases hu : G2.uncompress sig with
+  cases hw : exactBytes? 96 sig with
+  | none => rfl
+  | some w =>
+  dsimp only
+  cases hu : G2.uncompress w with
   | error e => rfl
   | ok R =>
     cases hx : exactBytes? 48 pk with
@@ -605,13 +624,13 @@ noncomputable def byteForgeAdvantage (adversary : ByteAdversary) : ℝ≥0∞ :=
   Pr{let z ← byteExperiment adversary}[z.1 = true]
 
 /-- A passing pairing check on decoded points is the scheme's test on their group elements. -/
-private theorem isDh_of_check {sig : ByteArray} {R : G2} {P : G1} {x : G1Sub} {h : G2Sub}
+private theorem isDh_of_check {sig : Vector UInt8 96} {R : G2} {P : G1} {x : G1Sub} {h : G2Sub}
     (hu : G2.uncompress sig = .ok R) (hs : G2.inSubgroup R = true) (hPv : G1.Valid P)
     (hx : G1.toPoint P = x)
     (hv : pairingCheck #[(G1.generator, R), (G1.neg P, G2Sub.rep h)] = true) :
-    blsScheme.isDh x h ((decodeSignature sig).getD 0) = true := by
+    blsScheme.isDh x h ((decodeSignature (packBytes sig)).getD 0) = true := by
   have hRv := G2.valid_of_uncompress hu
-  have hd : ((decodeSignature sig).getD 0).val = G2.toPoint R := by
+  have hd : ((decodeSignature (packBytes sig)).getD 0).val = G2.toPoint R := by
     rw [decodeSignature_of_uncompress hu hs
       ⟨G2.toPoint R, G2Sub.toPoint_mem_of_inSubgroup hRv hs⟩ rfl]
     simp only [Option.getD_some]
@@ -629,25 +648,30 @@ No pairing law is needed: both checks pair the same group elements.
 theorem exists_decodeKey_isDh_of_byteVerify {pk sig : ByteArray} {h : G2Sub}
     (hv : byteVerify pk sig h = true) :
     ∃ x, decodeKey pk = some x ∧ blsScheme.isDh x h ((decodeSignature sig).getD 0) = true := by
-  cases hu : G2.uncompress sig with
-  | error e => simp [byteVerify, hu] at hv
+  -- A signature of another length than 96 bytes fails the check.
+  cases hw : exactBytes? 96 sig with
+  | none => simp [byteVerify, hw] at hv
+  | some w =>
+  obtain rfl := packBytes_of_exactBytes? hw
+  cases hu : G2.uncompress w with
+  | error e => simp [byteVerify, hw, hu] at hv
   | ok R =>
     have hs : G2.inSubgroup R = true :=
       (Bool.and_eq_true_iff.mp
-        (by simpa only [byteVerify, hu, signatureSubgroupCheck] using hv)).1
+        (by simpa only [byteVerify, hw, hu, signatureSubgroupCheck] using hv)).1
     cases hx : exactBytes? 48 pk with
-    | none => simp [byteVerify, hu, hx] at hv
+    | none => simp [byteVerify, hw, hu, hx] at hv
     | some v =>
     obtain rfl := packBytes_of_exactBytes? hx
     cases hp : G1.keyValidatePoint v with
-    | error e => simp [byteVerify, hu, hx, hp] at hv
+    | error e => simp [byteVerify, hw, hu, hx, hp] at hv
     | ok P =>
       obtain ⟨hpu, hPv, -, hord⟩ := G1.keyValidatePoint_eq_ok_iff.mp hp
       have hsP : G1.inSubgroup P = true :=
         (G1.inSubgroup_iff_modulus_smul_eq_zero hPv).mpr hord
       obtain ⟨x, hdk, hx⟩ := exists_decodeKey_of_uncompress hpu hsP
       have hv' : pairingCheck #[(G1.generator, R), (G1.neg P, G2Sub.rep h)] = true := by
-        simpa [byteVerify, hu, hx, hp, signatureSubgroupCheck, hs] using hv
+        simpa [byteVerify, hw, hu, hx, hp, signatureSubgroupCheck, hs] using hv
       exact ⟨x, hdk, isDh_of_check hu hs hPv hx hv'⟩
 
 /-- Every accepted byte signature gives a winning group signature for the same key and hash. -/
@@ -770,12 +794,15 @@ private theorem byteVerify_of_uncompress_zero {k : Vector UInt8 48} {P' : G1}
     byteVerify (packBytes k) sig h = false := by
   by_contra hne
   have hv := Bool.eq_true_of_not_eq_false hne
-  cases hu : G2.uncompress sig with
-  | error e => simp only [byteVerify, hu] at hv; cases hv
+  cases hw : exactBytes? 96 sig with
+  | none => simp only [byteVerify, hw] at hv; cases hv
+  | some w =>
+  cases hu : G2.uncompress w with
+  | error e => simp only [byteVerify, hw, hu] at hv; cases hv
   | ok R =>
     cases hp : G1.keyValidatePoint k with
     | error e =>
-      simp only [byteVerify, hu, exactBytes?_packBytes, hp, Bool.and_false] at hv
+      simp only [byteVerify, hw, hu, exactBytes?_packBytes, hp, Bool.and_false] at hv
       cases hv
     | ok P =>
       obtain ⟨hPu, -, hne0, -⟩ := G1.keyValidatePoint_eq_ok_iff.mp hp

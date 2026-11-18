@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.PointEvaluation
+import EthLib.Base.Proofs.Bytes
 import EthLib.Cryptography.Proofs.Kzg.TrustedSetup
 
 /-!
@@ -16,7 +17,7 @@ import EthLib.Cryptography.Proofs.Kzg.TrustedSetup
 namespace EthLib.Execution.Evm.Precompiles.PointEvaluation
 
 open EthLib.Cryptography.Bls (Fr)
-open EthLib.Base (readBytes)
+open EthLib.Base (readBytes packBytes packBytes_injective)
 open EthLib.Cryptography.Kzg (kzgCommitmentToVersionedHash)
 
 /-- Call data of any other length than 192 bytes fails before the gas is charged. -/
@@ -107,7 +108,7 @@ The definition of `[tau]_2` says that it is this entry, and this fact checks tha
 It decodes one hex string of 192 characters. -/
 private theorem hexToBytes_g2MonomialHex_one :
     (TrustedSetup.hexToBytes? (TrustedSetupData.g2MonomialHex[1]'(by decide))).map ByteArray.data =
-      some KZG_SETUP_G2_MONOMIAL_1.data := by
+      some KZG_SETUP_G2_MONOMIAL_1.toArray := by
   decide +kernel
 
 open EthLib.Cryptography.Kzg in
@@ -138,8 +139,11 @@ theorem uncompress_KZG_SETUP_G2_MONOMIAL_1 {s : TrustedSetup} (h : TrustedSetup.
   obtain ⟨-, hget⟩ := TrustedSetup.hexListToBytes_getElem hc
   have hg := hexToBytes_g2MonomialHex_one
   rw [hget 1 (by decide), Option.map_some, Option.some.injEq] at hg
-  have hd : c[1]! = KZG_SETUP_G2_MONOMIAL_1 := ByteArray.ext hg
-  rw [← hd, getElem!_pos c 1 hc1]
-  exact hu
+  have hd : c[1]! = packBytes KZG_SETUP_G2_MONOMIAL_1 := ByteArray.ext hg
+  rw [getElem!_pos c 1 hc1] at hd
+  -- The setup decodes those bytes as the 96-byte constant itself.
+  obtain ⟨v, hv, hu⟩ := TrustedSetup.decodeG2_eq_ok.mp hu
+  rw [hd] at hv
+  rwa [packBytes_injective hv] at hu
 
 end EthLib.Execution.Evm.Precompiles.PointEvaluation
