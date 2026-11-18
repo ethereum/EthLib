@@ -1003,7 +1003,6 @@ theorem bud_exiting :
       (∑ v ∈ (K5 counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).exitingB v.toNat = true,
         eR pulled v) ≤ (pinTerms config pulled anc fin).exiting := by
-  clear h
   have apartVK5 : Disjoint (VN counted V) (K5 counted V) := by
     rw [Finset.disjoint_left]
     intro v inV inK5
