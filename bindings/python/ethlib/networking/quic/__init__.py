@@ -108,6 +108,19 @@ def decode_frame(packet: PacketType, data: bytes) -> tuple[Frame, bytes]:
     return _native.quic_frame_decode(packet, data)
 
 
+def packet_number_width(number: int, largest_acked: int | None) -> int:
+    """
+    Choose the shortest packet-number width, numbered 0 to 3, under RFC 9000 §17.1.
+
+    The returned value is the byte count minus one.
+    Any acknowledgement must be for this sender in the same connection and packet-number space.
+    With None, the width preserves the full number.
+    Otherwise the selected bytes cover more than twice the gap from largest_acked.
+    Raises QuicError if largest_acked >= number or more than four bytes are needed.
+    """
+    return _native.quic_packet_number_width(number, largest_acked)
+
+
 def encode_packet_number(width: int, number: int) -> bytes:
     """Keep the low width + 1 bytes of a packet number, RFC 9000 §17.1."""
     return _native.quic_packet_number_encode(width, number)
@@ -158,6 +171,7 @@ __all__ = [
     "encode_varint",
     "initial_secrets",
     "packet_keys",
+    "packet_number_width",
     "protect",
     "retry_tag",
     "tls_derive_secret",

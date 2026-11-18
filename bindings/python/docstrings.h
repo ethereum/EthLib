@@ -1292,6 +1292,9 @@
 #define DOC_quic_frame_decode \
   "Read one frame allowed in the given packet type (RFC 9000 §12.4)."
 
+#define DOC_quic_packet_number_width \
+  "Select the shortest packet-number length bits, zero through three, under RFC 9000 §17.1."
+
 #define DOC_quic_packet_number_encode \
   "Write the low packet-number bytes (RFC 9000 §17.1)."
 
