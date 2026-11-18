@@ -132,10 +132,7 @@ private theorem same_withdrawalRequest {s t : BeaconState preset fork}
 private theorem same_depositRequest {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : processDepositRequest s electra request = .ok t) : t.slashings = s.slashings := by
-  obtain ⟨start, recorded⟩ := recordDepositRequestsStart_eq (state := s) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   rfl
 
 private theorem same_excess {s t : BeaconState preset fork}
@@ -162,18 +159,14 @@ private theorem same_queueConsolidation {s t : BeaconState preset fork} {electra
     {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
     t.slashings = s.slashings := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, Base.Uint64.addChecked_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨churned, epoch⟩, churn, _, _, marked, set, pending, appended, ok⟩ := ok
-  simp only [Except.ok.injEq] at ok
-  subst ok
+  obtain ⟨_, _, _, _, _, churn, _, set, _, rfl⟩ := queueConsolidation_steps ok
   exact (same_setValidator set).trans (same_consolidationChurn churn)
 
 private theorem same_consolidationRequest {s t : BeaconState preset fork} {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (ok : processConsolidationRequest config s electra request = .ok t) :
     t.slashings = s.slashings := by
-  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
   · rfl
   · exact same_compounding switched
   · exact same_queueConsolidation queued

@@ -185,10 +185,7 @@ private theorem slashValidator {index : ValidatorIndex} {whistleblower : Option 
 private theorem processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : Consensus.processDepositRequest state electra request = .ok after) :
     SameSyncCommittees state after := by
-  obtain ⟨_, recorded⟩ := recordDepositRequestsStart_eq (state := state) (index := request.index)
-  simp only [Consensus.processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   exact ⟨rfl, rfl, rfl⟩
 
 private theorem requestPartialWithdrawal {electra : .pectra ≤ fork} {index : ValidatorIndex}
@@ -211,14 +208,10 @@ private theorem requestPartialWithdrawal {electra : .pectra ≤ fork} {index : V
 private theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : Consensus.processWithdrawalRequest config state electra request = .ok after) :
     SameSyncCommittees state after := by
-  unfold Consensus.processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact .refl _)
-    | exact initiateValidatorExit (liftAccessor_ok.mp ok)
-    | exact requestPartialWithdrawal ok
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact .refl _
+  · exact initiateValidatorExit exited
+  · exact requestPartialWithdrawal withdrawn
 
 private theorem queueExcessActiveBalance {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (ok : Consensus.queueExcessActiveBalance state electra index = .ok after) :
@@ -243,14 +236,7 @@ private theorem queueConsolidation {electra : .pectra ≤ fork}
     {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
     (ok : Consensus.queueConsolidation config state electra sourceIndex source targetIndex =
       .ok after) : SameSyncCommittees state after := by
-  simp only [Consensus.queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨_, _⟩, churned, _, _, _, set, _, _, ok⟩ := ok
-  cases ok
-  simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at churned
-  obtain ⟨_, _, _, _, _, _, churned⟩ := churned
-  cases churned
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps ok
   have kept := setValidator set
   exact kept
 
@@ -258,14 +244,10 @@ private theorem processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (ok : Consensus.processConsolidationRequest config state electra request = .ok after) :
     SameSyncCommittees state after := by
-  unfold Consensus.processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact .refl _)
-    | exact switchToCompoundingValidator (liftAccessor_ok.mp ok)
-    | exact queueConsolidation ok
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  · exact .refl _
+  · exact switchToCompoundingValidator switched
+  · exact queueConsolidation queued
 
 private theorem processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
@@ -1073,6 +1055,13 @@ theorem processBlockExecution_currentSyncCommittee {body : BeaconBlockBody prese
     (ok : processBlockExecution config checks engine state body bellatrix = .ok after) :
     after.currentSyncCommittee altair = state.currentSyncCommittee altair :=
   congrFun (SameSyncCommittees.processBlockExecution ok).1 altair
+
+/-- A block retains the current sync committee. -/
+theorem processBlock_currentSyncCommittee {block : BeaconBlock preset fork}
+    {engine : ExecutionEngine preset fork} (altair : .altair ≤ fork)
+    (ok : processBlock config checks engine state block = .ok after) :
+    after.currentSyncCommittee altair = state.currentSyncCommittee altair :=
+  congrFun (SameSyncCommittees.processBlock ok).1 altair
 
 /-- Block execution leaves the proposer lookahead unchanged. -/
 theorem processBlockExecution_proposerLookahead {body : BeaconBlockBody preset fork}

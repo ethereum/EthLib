@@ -33,9 +33,8 @@ require "leanprover-community" / "mathlib" @ git "v4.36.0"
 --
 -- The library code never imports it.
 --
--- A commit on VCVio's `main`, built against the same Mathlib.
-require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @
-  "8781becff83faa559bfd1f1abf376d6e3ecd8f2d"
+-- VCVio's release tag for this Lean version, built against the same Mathlib.
+require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @ "v4.36.0"
 
 @[default_target]
 lean_lib «EthLib» where

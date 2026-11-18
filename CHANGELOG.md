@@ -9,6 +9,73 @@ Not yet released.
 
 ### Proof additions
 
+- `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).
+  It compares the call's pulled-up state with a later state in the target's epoch or the next, before Gloas from Fulu.
+  `Execution.quorumDriftWithin` builds those runs from the stores and proves `QuorumDriftWithin` with BLS checks.
+  The anchor state is reached by a run with BLS checks from a genesis built from deposits, and an epoch has at least one slot.
+  `Execution.rootViable_of_checked_call` takes the same genesis and run for any signature checks; this theorem fixes them to BLS.
+  The other premises are the anchor store and slot, and positive slot durations.
+  The preset keeps the bands of hysteresis, its seed lookahead covers at least one epoch, and the withdrawal delay is at least one epoch.
+  The preset meets `CapOrder` and the new `ActivationWithinMaxEffective`, which together make `MAX_EFFECTIVE_BALANCE` equal `MIN_ACTIVATION_BALANCE`.
+  `ActivationWithinMaxEffective.mainnet` and `ActivationWithinMaxEffective.minimal` show that it holds on both presets.
+  No separate headline discharges `QuorumDriftWithin`: a caller with BLS checks from Fulu to before Gloas composes `Execution.quorumDriftWithin` with `Execution.rootViable_of_checked_call` or `Execution.honestHeadsCover_of_checked_call`.
+  `Execution.heldStatesBeforeUpgrade_of_bounded` derives their premise `HeldStatesBeforeUpgrade` from the horizon and `HonestStoreEpochsBounded`.
+  `effectiveRise_le` bounds the rise of the active effective balances over an epoch end, and `effectiveFall_le` the fall of a voter's.
+  `Run.balanceCorrections_of_same_epoch` bounds the balances along a branch inside one epoch.
+
+- The quorum drift bound adds these facts of runs.
+  `Run.blockCount` counts the blocks of a run, `Run.blockCount_append` adds them over two runs, and `Run.blocks_le_slots` bounds them by one per slot.
+  `run_of_stateTransition` and `run_of_processSlots` give a run for one block or for the slots before it, when the slot is before the next fork.
+  `Run.split_next` splits a run that ends one epoch after it starts at the slot where its epoch changes.
+  `Run.induction_of_same_epoch` inducts over a run inside one epoch, and `advanceSlotAcross_of_same_epoch` shows such a slot only caches the slot.
+  Inside one epoch, `Run.fork_eq_of_same_epoch` keeps the fork, `Run.currentSyncCommittee_eq_of_same_epoch` the keys of the sync committee, and `Run.effectiveKept_of_same_epoch` each effective balance.
+  `Run.withdrawableKept_of_same_epoch` and `withdrawableKept_processRegistryUpdates` keep `WithdrawableKept` inside an epoch and through the registry updates.
+  `Genesis.invariant` gives the invariant of a genesis built from deposits, and `Run.invariant` keeps it along a run.
+
+- Its transition facts are in `Transition/BlockLedger.lean`, `Transition/BlockCredits.lean`, `Transition/BranchLedger.lean`, `Transition/EffectiveRise.lean`, `Transition/EffectiveFall.lean`, `Transition/EpochReads.lean` and their neighbours.
+  The ledger of a block's balances is in `BlockLedger`, its proposer and deposit credits in `BlockCredits`, and the tally of an epoch's blocks in `BranchLedger`.
+  The helpers of the first two are public in the namespaces `BlockLedger` (such as `BlockLedger.Ledger` and `BlockLedger.Lives`) and `BlockCredits` (such as `BlockCredits.Kept` and `BlockCredits.lt_size_of_isActiveAt_recent`).
+  The generic pieces sit with their kind: `getBeaconProposerIndex_congr` and `proposerSearch_congr_validators` in `Accessors`, `WithdrawableKept` in `RegistryLifecycle`, and `withdrawableKept_processRegistryUpdates` in `PendingConsolidations` next to the registry-update lemma it reads.
+  `payloadInputs_addValidatorToRegistry` and `payloadInputs_processDeposit` are in `PayloadInputs`, and the `actualBalanceAt_*` step lemmas and the hysteresis lemmas are in `BalanceDrift`.
+  The growth of the queue of pending consolidations inside an epoch is in `PendingConsolidations`, as `ConsolidationQueueRise.QueueFrom`, `ConsolidationQueueRise.Grows`, `ConsolidationQueueRise.RiseStep` and `ConsolidationQueueRise.riseStep_processBlock`.
+  `Array.findIdx?_of_prefix` is in `Base/Proofs/List.lean`.
+  `Hysteresis` puts each effective balance within the bands of its balance.
+  `processEffectiveBalanceUpdates_hysteresis` establishes it, `Hysteresis.of_data` carries it to a state with the same validators and balances, and `Hysteresis.upgrade` keeps it across upgrades.
+  `EpochTrace.through_effectiveBalances` splits an epoch trace after the effective-balance updates.
+  `activeBalanceTotal` is the active effective balance as a natural number, and `getTotalActiveBalance_toNat` makes it the value of a successful read.
+  `syncRewardAt` is the participant reward of the sync committee as a natural number, and `syncParticipantReward_toNat` makes it the value of a successful read.
+  `syncSeats` counts the seats of a validator in the current sync committee, and `syncSeats_eq_length` equates it with the length of the beacon API's `BeaconApi.syncSeats`.
+  `activeFilter_eq` and `activeSum_eq` keep the active positions and their effective balances between two registries, and `seats_eq` keeps `syncSeats`.
+  `Store.Reachable.nonempty_run_of_blockState` gives a run from the anchor state to each held state, with the store's setting of the checks.
+  `getBaseReward_congr` reads the same base reward for two validators with the same effective balance, in one state or in two.
+  `processRewardsAndPenalties_balance_le_of_inactivityUpdates` bounds each balance after the rewards pass, given a bound on each base reward.
+  `processOperations_floor` bounds the balance of an unslashed validator through the operations of a block before Gloas.
+  The balance stays at least the smaller of its balance and its effective balance before them.
+  `actualBalanceAt_increaseBalance` and `actualBalanceAt_decreaseBalance` change the balance at one index and keep every other, and `actualBalanceAt_push` reads an appended balance.
+  `passPendingConsolidations_balanceNotLowered_of_waiting` keeps the balance of a source that cannot yet leave, and `queueConsolidation_queued` records the exit epoch and the queue entry of a consolidation.
+  `processBlock_currentSyncCommittee` keeps the current sync committee across a block.
+  `Transition/PartialWithdrawalQueue.lean` holds the step facts of the queue of pending partial withdrawals that the departure queue and the drift bound share.
+  `departureQueues` and its step lemmas move there from `DirectSafety/DepartureQueue.lean` and become public, with unchanged statements.
+  `PartialsSame` says that two states hold the same queue, and `PartialsSame.of_queues` reads it from equal departure queues.
+  `flagSumOf` states the flag sums of `SupplyBlock` for any base reward, and `recentFlagSum` adds both recent epochs; `flagRewardWeight` keeps its value.
+  `flagSumOf_le` bounds a flag sum by 54 base rewards per position, and `flagSumOf_foldlM_addAttesterFlags` raises it by at least the numerator its attesters gain.
+  `processAttestation_keepsFlag` keeps each flag an attestation finds, and `flags_exit` and `flags_processExecutionRequests` keep both lists of flags.
+  `processSlots_pendingPartialWithdrawals` keeps the queue of pending partial withdrawals across slot steps from Altair.
+  `hysteresis_of_advanceSlot` and `hysteresis_of_processSlots` put a state at the first slot of an epoch within the bands of hysteresis.
+  `Store.ForwardReachableWith.relation_of_checkpointPrefix_with` composes a relation that needs to hold only for transitions with the store's checks.
+
+- Some earlier private declarations are now public, with unchanged statements.
+  They are the flag frames `flags_operationsInput`, `flags_proposerSlashing`, `flags_attesterSlashing`, `flags_increase`, `flags_decrease`, `flagsBelow_add` and `flagsBelow_deposit`.
+  They are also `flagValue`, `flagValue_le`, `isActiveAt_of_getAttestingIndices` and `withdrawnFrom_split`.
+  They are also `StepKeeps.refl`, `StepKeeps.trans`, `StepKeeps.of_validators` and fifteen `stepKeeps_*` step lemmas, of setValidator, decreaseBalance, initiateValidatorExit, slashValidator and the block operations.
+  They are also `effectiveKept_setValidator`, `effectiveKept_decrease`, `effectiveKept_exit`, `effectiveKept_requests` and `balanceDrift_upgrades_upper`.
+  They are also `Unassigned`, `UnassignedFrom`, `unassignedFrom_size`, `UnassignedKept` and `UnassignedKept.processDeposit`.
+  `DirectSafety.total_active_congr` moves from `DirectSafety/DepartureQueue.lean` to `Transition/BalanceDrift.lean`, with its name and statement unchanged.
+
+- `queueConsolidation_steps` states the steps of queueing a consolidation once ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
+  The churn call writes only the churn left and the earliest consolidation epoch.
+  The source then gets its exit and withdrawable epochs, and the consolidation joins the queue.
+
 - `Execution.rootViable_of_checked_call` shows that the confirmed root of a call of the fast confirmation rule stays viable from the call up to `time` ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 3, for the confirmed root).
   At each up-to-date honest store whose fork choice returns a head, the root is in the filtered tree or below the justified block.
   The alternatives are a collision of two honest stores and accountable-safety evidence.
@@ -153,7 +220,11 @@ Not yet released.
 
 ### Changes that break callers
 
-- EthLib builds with Lean v4.36.0, Mathlib `v4.36.0` and VCVio `8781becf`.
+- In Lean, the switch case of `consolidationRequest_cases` records the switched validator in `SwitchAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
+  The request names one key twice, the index is the first with that key, and the validator there passes `isValidSwitchToCompoundingRequest`.
+  A caller that matched the case as `⟨index, switched⟩` writes `⟨index, validator, accepted, switched⟩`.
+
+- EthLib builds with Lean v4.36.0, Mathlib `v4.36.0` and VCVio `v4.36.0`.
   A Lean package that depends on EthLib moves to the same toolchain and Mathlib.
 
 - The JSON parser of Lean v4.36.0 rejects an object that names one member twice.

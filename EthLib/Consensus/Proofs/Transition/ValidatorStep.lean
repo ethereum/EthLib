@@ -11,6 +11,7 @@ public import Mathlib.Data.Finset.Card
 import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
 import EthLib.Consensus.Proofs.Transition.PendingConsolidations
 import EthLib.Consensus.Proofs.Transition.BlockRewards
+import EthLib.Consensus.Proofs.Transition.ChainRoots
 import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
@@ -2755,47 +2756,23 @@ theorem CapStep.consolidationRequest {f : Fork} {s t : BeaconState preset f}
     CapStep config s t ∧ (UnassignedEligibleBalance s → UnassignedEligibleBalance t) ∧
       (AssignedPartials s → AssignedPartials t) ∧
       (∀ candidate i, preKeyCharge candidate t i ≤ preKeyCharge candidate s i) := by
-  unfold processConsolidationRequest at ok
-  split at ok
-  · split at ok
-    · rename_i position located
-      simp only [bind_ok_iff] at ok
-      obtain ⟨index, checked, ok⟩ := ok
-      split at ok
-      · rename_i valid
-        have unassigned : ∀ v, s.validators.data[index.toNat]? = some v →
-            v.exitEpoch = FAR_FUTURE_EPOCH := by
-          intro v found
-          have read := getElem?_toNat_of_ofNatChecked (state := s) checked
-          have equal := Option.some.inj (read.symm.trans found)
-          subst v
-          simp only [isValidSwitchToCompoundingRequest, Bool.and_eq_true, beq_iff_eq] at valid
-          exact valid.2
-        obtain ⟨step, retained, partials, charge⟩ :=
-          CapStep.compounding order (liftAccessor_ok.mp ok) unassigned
-        have assigned : ∀ v, s.validators.data[index.toNat]? = some v →
-            v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-          intro v found
-          have read := getElem?_toNat_of_ofNatChecked (state := s) checked
-          have equal := Option.some.inj (read.symm.trans found)
-          subst v
-          apply assigned_of_active (epoch := getCurrentEpoch s)
-          simp only [isValidSwitchToCompoundingRequest, Bool.and_eq_true] at valid
-          exact valid.1.2
-        exact ⟨step, (fun held => retained held assigned), partials, charge assigned⟩
-      · cases ok; exact ⟨CapStep.refl _, id, id, fun _ _ => Nat.le_refl _⟩
-    · cases ok; exact ⟨CapStep.refl _, id, id, fun _ _ => Nat.le_refl _⟩
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact ⟨CapStep.refl _, id, id, fun _ _ => Nat.le_refl _⟩)
-    | (refine CapStep.consolidate (getElem?_toNat_of_ofNatChecked (by assumption))
-        (by clear ok; simp_all)
-        (assigned_of_active (epoch := getCurrentEpoch s) (by clear ok; simp_all)) ?_ ok
-       refine ⟨_, getElem?_toNat_of_ofNatChecked (by assumption), ?_⟩
-       apply assigned_of_active (epoch := getCurrentEpoch s)
-       clear ok; simp_all)
+  rcases consolidationRequest_cases ok with rfl | ⟨index, validator, switch, switched⟩ |
+    ⟨_, _, _, target, accepted, queued⟩
+  · exact ⟨CapStep.refl _, id, id, fun _ _ => Nat.le_refl _⟩
+  · have valid := switch.valid
+    simp only [isValidSwitchToCompoundingRequest, Bool.and_eq_true, beq_iff_eq] at valid
+    have read {v} (found : s.validators.data[index.toNat]? = some v) : v = validator :=
+      Option.some.inj (found.symm.trans switch.found)
+    obtain ⟨step, retained, partials, charge⟩ := CapStep.compounding order switched
+      fun v found => read found ▸ valid.2
+    have assigned : ∀ v, s.validators.data[index.toNat]? = some v →
+        v.activationEpoch ≠ FAR_FUTURE_EPOCH := fun v found =>
+      assigned_of_active (epoch := getCurrentEpoch s) (read found ▸ valid.1.2)
+    exact ⟨step, (fun held => retained held assigned), partials, charge assigned⟩
+  · exact CapStep.consolidate accepted.sourceAt accepted.sourceStays
+      (assigned_of_active (epoch := getCurrentEpoch s) accepted.sourceActive)
+      ⟨target, accepted.targetAt,
+        assigned_of_active (epoch := getCurrentEpoch s) accepted.targetActive⟩ queued
 
 private theorem CapStep.partialWithdrawal {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {i : ValidatorIndex} {v : Validator} {amount owed : Gwei}
@@ -2893,10 +2870,7 @@ private theorem CapStep.depositRequest {f : Fork} {s t : BeaconState preset f}
     CapStep config s t ∧ (UnassignedEligibleBalance s → UnassignedEligibleBalance t) ∧
       (AssignedPartials s → AssignedPartials t) ∧
       (∀ candidate i, preKeyCharge candidate t i ≤ preKeyCharge candidate s i) := by
-  obtain ⟨start, recorded⟩ := recordDepositRequestsStart_eq (state := s) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   exact ⟨CapStep.data rfl, fun held => held.transfer rfl
     (fun _ _ b _ _ read low => ⟨b, read, low⟩), id, fun _ _ => Nat.le_refl _⟩
 
@@ -4501,7 +4475,7 @@ private theorem CapStep.run_of {g s t : ForkedBeaconState preset}
       have genesisWitness := genesis
       obtain ⟨_, _, _, initialized⟩ := genesisWitness
       obtain ⟨initialPartials, initialTargets, _⟩ := genesis_assigned_queues genesis
-      have valid := invariant (initializeBeaconStateFromEth1_invariant initialized).2
+      have valid := invariant genesis.invariant
       have capped := first.capped genesis.effectiveBalance_capped
       have targets := first.targets (Nat.lt_of_le_of_lt last.forks early) initialTargets
       have assigned := assigned initialPartials
@@ -4565,9 +4539,7 @@ theorem run_scheduled_reserve {g x : ForkedBeaconState preset}
       intro finiteB
       have last := (CapStep.step step activation compounding before).1
       have finiteA := UInt64.lt_of_le_of_lt last.forward finiteB
-      have valid := invariant (by
-        obtain ⟨_, _, _, initialized⟩ := genesis
-        exact (initializeBeaconStateFromEth1_invariant initialized).2)
+      have valid := invariant genesis.invariant
       have capped := first.capped genesis.effectiveBalance_capped
       obtain ⟨partials, targets, _⟩ := genesis_assigned_queues genesis
       cases step with
@@ -4912,8 +4884,8 @@ theorem preKeyCharge_run {g x u : ForkedBeaconState preset}
       refine ⟨Nat.le_trans previous.1 last.forks,
         UInt64.le_trans previous.2.1 last.forward, ?_⟩
       obtain ⟨_, initialTargets, initialProposers⟩ := genesis_assigned_queues genesis
+      have valid := invariant genesis.invariant
       obtain ⟨_, _, _, initialized⟩ := genesis
-      have valid := invariant (initializeBeaconStateFromEth1_invariant initialized).2
       have earlyA := Nat.lt_of_le_of_lt last.forks early
       have reachable := shared.append pre
       have ordered := reachable.activationExitOrder ⟨_, _, _, initialized⟩

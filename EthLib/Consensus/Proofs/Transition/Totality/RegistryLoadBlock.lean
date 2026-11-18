@@ -222,11 +222,7 @@ private theorem loadKept_queueConsolidation {electra : .pectra ≤ fork}
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     LoadKept state after := by
   refine loadKept_of_sameSizes (sameSizes_queueConsolidation computed) ?_
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    Uint64.addChecked_ok_iff, pure, Except.pure] at computed
-  obtain ⟨⟨_, _⟩, churned, _, _, _, set, _, _, computed⟩ := computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
+  obtain ⟨_, _, _, _, _, churned, _, set, _, rfl⟩ := queueConsolidation_steps computed
   exact (loadKept_setValidator set).2.trans
     (loadKept_computeConsolidationEpochAndUpdateChurn churned).2
 
@@ -435,7 +431,8 @@ private theorem processConsolidationRequest_registryLoad_le {electra : .pectra �
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     registryLoad after ≤ registryLoad state + 1 := by
-  rcases consolidationRequest_cases computed with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  rcases consolidationRequest_cases computed with
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
   · omega
   · exact switchToCompoundingValidator_registryLoad_le switched
   · exact Nat.le_trans (Nat.le_of_eq (loadKept_queueConsolidation queued).registryLoad_eq)

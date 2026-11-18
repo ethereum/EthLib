@@ -58,6 +58,8 @@ From Capella, it adds one summary: the root of the block roots, then the root of
 Away from the start of a span, a successful update leaves the state unchanged.
 
 In its own forks, with a next epoch, each update fails exactly at a span start with a full list.
+
+Right after the update of the effective balances, each lies within the bands of its balance.
 -/
 
 @[expose] public section
@@ -1659,5 +1661,108 @@ theorem processHistoricalSummariesUpdate_eq_error_iff {capella : .shapella ≤ f
       omega
   · simp only [span, ↓reduceIte, pure, Except.pure, reduceCtorEq, false_iff, not_and]
     exact fun inSpan => absurd (boundary.mpr inSpan) span
+
+/-! ## Hysteresis after the update of the effective balances -/
+
+/-- The effective balances lie within the bands of hysteresis around the balances.
+
+Below its largest value, an effective balance has a balance at most the upward band above it.
+
+Every effective balance is at most the downward band above its balance.
+
+Both hold right after an epoch transition, before any block. -/
+structure Hysteresis (state : BeaconState preset fork) : Prop where
+  up : ∀ (position : Nat) (validator : Validator) (balance : Gwei),
+    state.validators.data[position]? = some validator →
+    state.balances.data[position]? = some balance →
+    validator.effectiveBalance < withdrawalMaxEffectiveBalance preset fork validator →
+    balance.toNat ≤ validator.effectiveBalance.toNat + preset.upwardBand
+  down : ∀ (position : Nat) (validator : Validator) (balance : Gwei),
+    state.validators.data[position]? = some validator →
+    state.balances.data[position]? = some balance →
+    validator.effectiveBalance.toNat ≤ balance.toNat + preset.downwardBand
+
+/-- The hysteresis carries over to a state with the same validators and the same balances.
+
+The largest effective balance of each validator must be the same at both forks. -/
+theorem Hysteresis.of_data {other : Fork} {next : BeaconState preset other}
+    (holds : Hysteresis state) (validators : next.validators.data = state.validators.data)
+    (balances : next.balances.data = state.balances.data)
+    (largest : ∀ validator, withdrawalMaxEffectiveBalance preset other validator =
+      withdrawalMaxEffectiveBalance preset fork validator) :
+    Hysteresis next where
+  up position validator balance found read below := by
+    rw [validators] at found
+    rw [balances] at read
+    rw [largest] at below
+    exact holds.up position validator balance found read below
+  down position validator balance found read := by
+    rw [validators] at found
+    rw [balances] at read
+    exact holds.down position validator balance found read
+
+/-- Both bands of hysteresis at one position. -/
+private def HysteresisAt (state : BeaconState preset fork) (position : Nat) : Prop :=
+  ∀ (validator : Validator) (balance : Gwei),
+    state.validators.data[position]? = some validator →
+    state.balances.data[position]? = some balance →
+    (validator.effectiveBalance < withdrawalMaxEffectiveBalance preset fork validator →
+      balance.toNat ≤ validator.effectiveBalance.toNat + preset.upwardBand) ∧
+    validator.effectiveBalance.toNat ≤ balance.toNat + preset.downwardBand
+
+/-- The update of one effective balance puts it within the bands of its balance.
+
+It keeps the bands at every other position, since it changes no balance and no other validator.
+-/
+private theorem updateEffectiveBalance_hysteresisAt (bands : preset.IncrementWithinUpwardBand)
+    {index : Nat} (computed : updateEffectiveBalance state index = .ok after) :
+    HysteresisAt after index ∧
+      ∀ position, HysteresisAt state position → HysteresisAt after position := by
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, found, balance, read, effectiveBalance, updated, set⟩ := computed
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
+  have read := getBalanceAt_eq_ok_iff.mp read
+  -- The updated position holds the new effective balance and the balance it was computed from.
+  have fresh : HysteresisAt (state.putValidator index inside
+      { validator with effectiveBalance := effectiveBalance }) index := by
+    intro written current seen kept
+    simp only [BeaconState.putValidator, RootedForkList.data_set, Array.getElem?_set_self,
+      Option.some.injEq] at seen kept
+    rw [read, Option.some.injEq] at kept
+    subst seen kept
+    refine ⟨fun below => ?_, updatedEffectiveBalance_le_add updated⟩
+    rcases updatedEffectiveBalance_band bands updated with within | capped
+    · exact within
+    · exact absurd capped (UInt64.not_le.mpr below)
+  refine ⟨fresh, fun position holds => ?_⟩
+  by_cases same : index = position
+  · subst same
+    exact fresh
+  · intro written current seen kept
+    simp only [BeaconState.putValidator, RootedForkList.data_set, Array.getElem?_set, same,
+      ↓reduceIte] at seen kept
+    exact holds written current seen kept
+
+/-- After the update of the effective balances, each lies within the bands of its balance. -/
+theorem processEffectiveBalanceUpdates_hysteresis (bands : preset.IncrementWithinUpwardBand)
+    (computed : processEffectiveBalanceUpdates state = .ok after) : Hysteresis after := by
+  have sizes := sameSizes_processEffectiveBalanceUpdates computed
+  unfold processEffectiveBalanceUpdates at computed
+  obtain ⟨-, steps⟩ := foldlM_ok_steps
+    (fun first second => ∀ position, HysteresisAt first position → HysteresisAt second position)
+    (fun _ _ => id) (fun one two position holds => two position (one position holds))
+    (fun _ _ _ step => (updateEffectiveBalance_hysteresisAt bands step).2) computed
+  have within (position : Nat) : HysteresisAt after position := by
+    intro validator balance found read
+    have inside : position < state.validators.data.size := by
+      rw [← sizes.1]
+      exact (Array.getElem?_eq_some_iff.mp found).1
+    obtain ⟨_, next, _, step, kept⟩ := steps position (by simpa using inside)
+    rw [List.getElem_range] at step
+    exact kept position (updateEffectiveBalance_hysteresisAt bands step).1 validator balance
+      found read
+  exact ⟨fun position validator balance found read =>
+      (within position validator balance found read).1,
+    fun position validator balance found read => (within position validator balance found read).2⟩
 
 end EthLib.Consensus

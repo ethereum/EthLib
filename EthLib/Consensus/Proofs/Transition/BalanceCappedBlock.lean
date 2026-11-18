@@ -451,6 +451,15 @@ private theorem position_ne {key : Cryptography.Bls.BLSPubkey}
   rw [(Uint64.ofNatChecked_ok_iff.mp conv).2]
   exact findValidatorByPubkey_ne located found other
 
+/-- The index of the first validator with a key is not that of a validator with another key. -/
+private theorem first_ne {key : Cryptography.Bls.BLSPubkey} {position : ValidatorIndex}
+    (located : (findValidatorByPubkey state key).map (·.val) = some position.toNat)
+    {index : Nat} {validator : Validator} (found : state.validators.data[index]? = some validator)
+    (other : key ≠ validator.pubkey) : position.toNat ≠ index := by
+  obtain ⟨first, located, value⟩ := Option.map_eq_some_iff.mp located
+  rw [← value]
+  exact findValidatorByPubkey_ne located found other
+
 /-- A write of a validator at another position keeps the balance and validator at this one. -/
 private theorem still_setValidator {position : ValidatorIndex} {validator : Validator}
     (set : state.setValidator position validator = .ok after) {index : Nat}
@@ -544,15 +553,7 @@ private theorem still_queueConsolidation {electra : .pectra ≤ fork}
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after)
     {index : Nat} (other : sourceIndex.toNat ≠ index) : Still index state after := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    pure, Except.pure] at computed
-  obtain ⟨⟨_, _⟩, churned, _, _, _, set, _, _, computed⟩ := computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
-  simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at churned
-  obtain ⟨_, _, _, _, _, _, churned⟩ := churned
-  cases churned
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps computed
   exact ((Still.of_eq rfl rfl rfl index).trans (still_setValidator set other)).trans
     (Still.of_eq rfl rfl rfl index)
 
@@ -562,16 +563,11 @@ private theorem still_processConsolidationRequest {electra : .pectra ≤ fork}
     (computed : processConsolidationRequest config state electra request = .ok after)
     {index : Nat} {validator : Validator} (found : state.validators.data[index]? = some validator)
     (other : request.sourcePubkey ≠ validator.pubkey) : Still index state after := by
-  unfold processConsolidationRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact Still.refl _ _)
-    | (with_reducible refine still_switchToCompoundingValidator (liftAccessor_ok.mp computed) ?_
-       with_reducible exact position_ne ‹_› ‹_› found other)
-    | (with_reducible refine still_queueConsolidation computed ?_
-       with_reducible exact position_ne ‹_› ‹_› found other)
+  rcases consolidationRequest_cases computed with rfl | ⟨_, _, switch, switched⟩ |
+    ⟨_, _, _, _, accepted, queued⟩
+  · exact Still.refl _ _
+  · exact still_switchToCompoundingValidator switched (first_ne switch.first found other)
+  · exact still_queueConsolidation queued (first_ne accepted.sourceFirst found other)
 
 /-- A deposit request keeps the balances, the registry and the queued partial withdrawals. -/
 private theorem still_processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}

@@ -439,6 +439,42 @@ theorem getElem?_toNat_of_ofNatChecked {position : Fin state.validators.data.siz
   rw [getElem?_toNat_eq_of_ofNatChecked checked]
   simp
 
+/-- From Electra: the steps of queueing a consolidation.
+
+The consolidation churn writes only the churn left and the earliest consolidation epoch.
+
+The source then gets that epoch as its exit, and the withdrawable epoch a fixed delay later.
+
+The consolidation is appended to the queue. -/
+theorem queueConsolidation_steps {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
+    {source : Validator} {targetIndex : ValidatorIndex}
+    (computed :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
+    ∃ (epoch withdrawal : Epoch) (rest : Gwei) (written : BeaconState preset fork), ∃ pending,
+      computeConsolidationEpochAndUpdateChurn config state electra source.effectiveBalance =
+        .ok ({ state with
+          consolidationBalanceToConsume := fun _ => rest
+          earliestConsolidationEpoch := fun _ => epoch }, epoch) ∧
+      addChecked epoch config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok withdrawal ∧
+      ({ state with
+          consolidationBalanceToConsume := fun _ => rest
+          earliestConsolidationEpoch := fun _ => epoch } : BeaconState preset fork).setValidator
+        sourceIndex { source with exitEpoch := epoch, withdrawableEpoch := withdrawal } =
+          .ok written ∧
+      appendWithinLimit (written.pendingConsolidations electra) ⟨sourceIndex, targetIndex⟩ =
+        .ok pending ∧
+      after = { written with pendingConsolidations := fun _ => pending } := by
+  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+    pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨⟨_, epoch⟩, churned, withdrawal, added, written, set, pending, appended, rfl⟩ :=
+    computed
+  have call := churned
+  simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at churned
+  obtain ⟨_, _, _, _, ⟨_, rest⟩, _, churned⟩ := churned
+  cases churned
+  exact ⟨_, withdrawal, rest, written, pending, call, added, set, appended, rfl⟩
+
 /-- Queueing a consolidation keeps the size of the registry and every balance. -/
 private theorem queueConsolidation_kept {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
     {source : Validator} {targetIndex : ValidatorIndex}
@@ -446,13 +482,10 @@ private theorem queueConsolidation_kept {electra : .pectra ≤ fork} {sourceInde
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     after.validators.data.size = state.validators.data.size ∧
       after.balances = state.balances := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨⟨_, _⟩, churned, _, _, _, set, _, _, rfl⟩ := computed
-  obtain ⟨_, validators, balances⟩ := computeConsolidationEpochAndUpdateChurn_earliest churned
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps computed
   have sizes := (sameSizes_setValidator set).1
   obtain ⟨_, rfl⟩ := setValidator_ok set
-  exact ⟨sizes.trans (congrArg (·.data.size) validators), balances⟩
+  exact ⟨sizes, rfl⟩
 
 /-- Queueing a consolidation keeps the sizes of the registry and the balances. -/
 theorem sameSizes_queueConsolidation {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
@@ -527,6 +560,20 @@ structure ConsolidationAccepted (config : Config) (state : BeaconState preset fo
   served : source.activationEpoch.toNat + config.SHARD_COMMITTEE_PERIOD.toNat ≤
     (getCurrentEpoch state).toNat
   owed : getPendingBalanceToWithdraw state electra sourceIndex = .ok 0
+
+/-- From Electra: when a request switches a validator to compounding credentials.
+
+The source and the target have one key.
+
+The validator is the first with that key, at this index.
+
+It passes the check of a switch request. -/
+structure SwitchAccepted (state : BeaconState preset fork) (request : ConsolidationRequest)
+    (index : ValidatorIndex) (validator : Validator) : Prop where
+  same : request.sourcePubkey = request.targetPubkey
+  first : (findValidatorByPubkey state request.sourcePubkey).map (·.val) = some index.toNat
+  found : state.validators.data[index.toNat]? = some validator
+  valid : isValidSwitchToCompoundingRequest state request validator = true
 
 /-- From Electra, a consolidation request that meets every condition is the queueing of its source.
 
@@ -742,7 +789,8 @@ theorem withdrawalRequest_cases {fork : Fork} {s t : BeaconState preset fork}
 theorem consolidationRequest_cases {fork : Fork} {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : ConsolidationRequest}
     (ok : processConsolidationRequest config s electra request = .ok t) :
-    t = s ∨ (∃ index, switchToCompoundingValidator s electra index = .ok t) ∨
+    t = s ∨ (∃ index validator, SwitchAccepted s request index validator ∧
+        switchToCompoundingValidator s electra index = .ok t) ∨
       ∃ sourceIndex source targetIndex target,
         ConsolidationAccepted config s electra request sourceIndex source targetIndex target ∧
           queueConsolidation config s electra sourceIndex source targetIndex = .ok t := by
@@ -750,10 +798,13 @@ theorem consolidationRequest_cases {fork : Fork} {s t : BeaconState preset fork}
   · unfold processConsolidationRequest at ok
     simp only [same, beq_self_eq_true, ↓reduceIte, bind, Except.bind, pure, Except.pure] at ok
     repeat' split at ok
-    all_goals first
+    all_goals try first
       | (cases ok; exact .inl rfl)
-      | (cases ok)
-      | exact .inr (.inl ⟨_, liftAccessor_ok.mp ok⟩)
+      | (cases ok; done)
+    rename_i _ position located _ index checked valid
+    have value := (ofNatChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp checked))).2
+    exact .inr (.inl ⟨index, _, ⟨same, by simp [same, located, value],
+      getElem?_toNat_of_ofNatChecked checked, valid⟩, liftAccessor_ok.mp ok⟩)
   · exact (eq_or_queueConsolidation_of_processConsolidationRequest same ok).imp_right .inr
 
 end EthLib.Consensus

@@ -300,16 +300,10 @@ private theorem queueConsolidation {electra : .pectra ≤ fork}
     (assigned : source.activationEpoch ≤ getCurrentEpoch state)
     (ok : Consensus.queueConsolidation config state electra sourceIndex source targetIndex =
       .ok after) : Kept config state after := by
-  simp only [Consensus.queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨churned, exitEpoch⟩, churn, withdrawable, delayed, written, set, _, _, ok⟩ := ok
-  simp only [Except.ok.injEq] at ok
-  subst ok
-  have same := (computeConsolidationEpochAndUpdateChurn_earliest churn).2.1
-  have read : getValidator churned sourceIndex = .ok source := by
-    rw [getValidator, same, found]
-  exact (of_data (by rw [same])).trans <|
-    (setValidator read set (fun _ => by
+  obtain ⟨exitEpoch, withdrawable, _, written, _, churn, delayed, set, _, rfl⟩ :=
+    queueConsolidation_steps ok
+  exact (of_data rfl).trans <|
+    (setValidator (by exact getValidator_eq_ok_iff.mpr found) set (fun _ => by
       cases first : computeActivationExitEpoch preset (getCurrentEpoch state) with
       | error =>
         simp [computeConsolidationEpochAndUpdateChurn, first, liftArith, Except.mapError,
@@ -332,17 +326,12 @@ private theorem processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (ok : Consensus.processConsolidationRequest config state electra request = .ok after) :
     Kept config state after := by
-  unfold Consensus.processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals try first
-    | (cases ok; done)
-    | (cases ok; exact refl _)
-    | exact switchToCompoundingValidator (liftAccessor_ok.mp ok)
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ |
+    ⟨_, _, _, _, accepted, queued⟩
+  · exact refl _
+  · exact switchToCompoundingValidator switched
   -- The source is active, so its activation epoch is at most the current one.
-  rename_i bothActive _ _ _ _ _ _ _ _ _
-  exact queueConsolidation (getElem?_toNat_of_ofNatChecked (by assumption))
-    (active_le ((Bool.and_eq_true _ _).mp bothActive).1) ok
+  · exact queueConsolidation accepted.sourceAt (active_le accepted.sourceActive) queued
 
 private theorem processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : Consensus.processDepositRequest state electra request = .ok after) :

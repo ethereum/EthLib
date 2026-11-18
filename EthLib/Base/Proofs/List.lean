@@ -27,6 +27,8 @@ Numbering the front of a list gives the front of the numbered list.
 
 An array holds an element that passes a test whenever a search for one finds it.
 
+A first match of a longer array that lies in a prefix is the first match there.
+
 The largest of a list of numbers bounds each of them.
 -/
 
@@ -196,5 +198,19 @@ theorem le_foldr_max : ∀ {values : List Nat} {value : Nat}, value ∈ values �
     value ≤ values.foldr max 0
   | _ :: _, _, .head _ => Nat.le_max_left _ _
   | _ :: _, _, .tail _ member => Nat.le_trans (le_foldr_max member) (Nat.le_max_right _ _)
+
+/-- A first match of a longer array that lies in a prefix is the first match there. -/
+theorem _root_.Array.findIdx?_of_prefix {α : Type} {u s : Array α} {p : α → Bool} {k : Nat}
+    (inside : k < s.size) (same : ∀ j < s.size, u[j]? = s[j]?) (found : u.findIdx? p = some k) :
+    s.findIdx? p = some k := by
+  obtain ⟨lt, hit, earlier⟩ := Array.findIdx?_eq_some_iff_getElem.mp found
+  have get : ∀ j (lj : j < s.size) (lu : j < u.size), u[j] = s[j] := by
+    intro j lj lu
+    have := same j lj
+    rw [Array.getElem?_eq_getElem lu, Array.getElem?_eq_getElem lj] at this
+    exact Option.some.inj this
+  refine Array.findIdx?_eq_some_iff_getElem.mpr ⟨inside, ?_, fun j lt' => ?_⟩
+  · rw [← get k inside lt]; exact hit
+  · rw [← get j (Nat.lt_trans lt' inside) (Nat.lt_trans lt' lt)]; exact earlier j lt'
 
 end EthLib.Base

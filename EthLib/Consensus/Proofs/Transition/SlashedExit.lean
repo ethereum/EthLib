@@ -126,11 +126,8 @@ private theorem queueConsolidation_slashed_exit_assigned {f : Fork}
     cases flag : source.slashed with
     | false => rfl
     | true => exact (held _ source (getValidator_eq_ok_iff.mp found) flag unset).elim
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨⟨churned, epoch⟩, churn, withdrawal, _, _, set, _, _, rfl⟩ := ok
-  have same := (computeConsolidationEpochAndUpdateChurn_earliest churn).2.1
-  have kept := (held.of_validators_eq (congrArg (·.data) same)).of_setValidator set rfl
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps ok
+  have kept := (held.of_validators_eq rfl).of_setValidator set rfl
     (fun (flag : source.slashed = true) => by simp [clean] at flag)
   exact kept
 
@@ -139,7 +136,7 @@ theorem processConsolidationRequest_slashed_exit_assigned {f : Fork}
     {s t : BeaconState preset f} {electra : .pectra ≤ f} {request : ConsolidationRequest}
     (ok : processConsolidationRequest config s electra request = .ok t)
     (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
-  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ |
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ |
       ⟨_, _, _, _, accepted, queued⟩
   · exact held
   · exact switchToCompoundingValidator_slashed_exit_assigned switched held

@@ -52,10 +52,10 @@ def StepKeeps (state after : BeaconState preset fork) : Prop :=
   state.validators.data.size ≤ after.validators.data.size ∧
     ActiveStep state after
 
-private theorem StepKeeps.refl (state : BeaconState preset fork) : StepKeeps state state :=
+theorem StepKeeps.refl (state : BeaconState preset fork) : StepKeeps state state :=
   ⟨Nat.le_refl _, ActiveStep.refl state⟩
 
-private theorem StepKeeps.trans {first second third : BeaconState preset fork}
+theorem StepKeeps.trans {first second third : BeaconState preset fork}
     (one : StepKeeps first second) (two : StepKeeps second third) : StepKeeps first third :=
   ⟨Nat.le_trans one.1 two.1, one.2.trans two.2⟩
 
@@ -69,7 +69,7 @@ private theorem StepKeeps.of_step (grows : state.validators.data.size ≤ after.
     (step : ActiveStep state after) : StepKeeps state after :=
   ⟨grows, step⟩
 
-private theorem StepKeeps.of_validators
+theorem StepKeeps.of_validators
     (validators : after.validators.data = state.validators.data := by rfl)
     (slot : after.slot = state.slot := by rfl) : StepKeeps state after :=
   ⟨Nat.le_of_eq (congrArg Array.size validators).symm,
@@ -85,7 +85,7 @@ private theorem stepKeeps_setValidatorAt {index : Nat} {validator old : Validato
   StepKeeps.of_step (Nat.le_of_eq (sameSizes_setValidatorAt set).1.symm)
     (activeStep_setValidatorAt found same set)
 
-private theorem stepKeeps_setValidator {index : ValidatorIndex} {validator old : Validator}
+theorem stepKeeps_setValidator {index : ValidatorIndex} {validator old : Validator}
     (found : getValidator state index = .ok old)
     (same : ∀ epoch ≤ activityFixedEpoch state,
       isActiveValidator validator epoch = isActiveValidator old epoch)
@@ -98,17 +98,17 @@ private theorem stepKeeps_increaseBalance {index : ValidatorIndex} {delta : Gwei
   StepKeeps.of_step (frame_increaseBalance computed).registryGrows
     (activeStep_increaseBalance computed)
 
-private theorem stepKeeps_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
+theorem stepKeeps_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
     (computed : decreaseBalance state index delta = .ok after) : StepKeeps state after :=
   StepKeeps.of_step (frame_decreaseBalance computed).registryGrows
     (activeStep_decreaseBalance computed)
 
-private theorem stepKeeps_initiateValidatorExit {index : ValidatorIndex}
+theorem stepKeeps_initiateValidatorExit {index : ValidatorIndex}
     (computed : initiateValidatorExit config state index = .ok after) : StepKeeps state after :=
   StepKeeps.of_step (frame_initiateValidatorExit computed).registryGrows
     (activeStep_initiateValidatorExit computed)
 
-private theorem stepKeeps_slashValidator {slashedIndex : ValidatorIndex}
+theorem stepKeeps_slashValidator {slashedIndex : ValidatorIndex}
     {whistleblowerIndex : Option ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     StepKeeps state after :=
@@ -162,7 +162,7 @@ private theorem stepKeeps_applyDepositElectra {electra : .pectra ≤ fork}
   · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
     exact StepKeeps.of_validators
 
-private theorem stepKeeps_processDeposit {before : fork < .hegota} {deposit : Deposit}
+theorem stepKeeps_processDeposit {before : fork < .hegota} {deposit : Deposit}
     (computed : processDeposit config checks before state deposit = .ok after) :
     StepKeeps state after := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
@@ -257,37 +257,24 @@ private theorem stepKeeps_queueConsolidation {electra : .pectra ≤ fork}
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     StepKeeps state after := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    addChecked_ok_iff, pure, Except.pure] at computed
-  obtain ⟨⟨churnedState, exitEpoch⟩, churned, withdrawable, ⟨_, sum⟩, _, set, _, _, computed⟩ :=
-    computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
+  obtain ⟨_, _, _, _, _, churned, _, set, _, rfl⟩ := queueConsolidation_steps computed
   have later := consolidationEpoch_lt churned
-  obtain ⟨-, validators, -⟩ := computeConsolidationEpochAndUpdateChurn_earliest churned
-  have slot := (frame_computeConsolidationEpochAndUpdateChurn churned).slot
-  have first : StepKeeps state churnedState := StepKeeps.of_validators (by rw [validators]) slot
-  have found' : getValidator churnedState sourceIndex = .ok source := by
-    rw [getValidator, validators, found]
-  refine first.trans ((stepKeeps_setValidator found' (fun _ le => ?_) set).trans
-    StepKeeps.of_validators)
-  have epochEq : getCurrentEpoch churnedState = getCurrentEpoch state := by
-    simp only [getCurrentEpoch, slot]
-  exact isActiveValidator_eq_of_exit rfl far
-    (activityFixedEpoch_lt_of_toNat_lt (by rw [epochEq]; exact later)) le
+  refine StepKeeps.trans StepKeeps.of_validators ((stepKeeps_setValidator
+    (by exact getValidator_eq_ok_iff.mpr found) (fun _ le => ?_) set).trans StepKeeps.of_validators)
+  exact isActiveValidator_eq_of_exit rfl far (activityFixedEpoch_lt_of_toNat_lt later) le
 
 private theorem stepKeeps_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     StepKeeps state after := by
   rcases consolidationRequest_cases computed with
-    rfl | ⟨_, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
   · exact StepKeeps.refl _
   · exact stepKeeps_switchToCompoundingValidator switched
   -- The source had not started to exit.
   · exact stepKeeps_queueConsolidation accepted.sourceAt accepted.sourceStays queued
 
-private theorem stepKeeps_processExecutionRequests {body : BeaconBlockBody preset fork}
+theorem stepKeeps_processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
     (computed : processExecutionRequests config state body electra = .ok after) :
     StepKeeps state after := by
@@ -334,7 +321,7 @@ private theorem stepKeeps_processWithdrawals {capella : .shapella ≤ fork}
     obtain ⟨_, _, _, _, applied⟩ := computed
     exact stepKeeps_applyExpectedWithdrawals applied
 
-private theorem stepKeeps_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
+theorem stepKeeps_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
     (computed : processBlsToExecutionChange config checks state signed = .ok after) :
     StepKeeps state after := by
   obtain ⟨_, found, _, _, _, set⟩ := processBlsToExecutionChange_ok computed
@@ -404,7 +391,7 @@ private theorem stepKeeps_processExecutionPayloadBid {gloas : .glamsterdam ≤ f
     subst recordedOk
     exact StepKeeps.of_validators
 
-private theorem stepKeeps_processBlockExecution {body : BeaconBlockBody preset fork}
+theorem stepKeeps_processBlockExecution {body : BeaconBlockBody preset fork}
     {bellatrix : .bellatrix ≤ fork}
     (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
     StepKeeps state after := by
@@ -424,7 +411,7 @@ private theorem stepKeeps_processBlockExecution {body : BeaconBlockBody preset f
     · cases computed
       exact StepKeeps.refl _
 
-private theorem stepKeeps_processSyncAggregate {altair : .altair ≤ fork}
+theorem stepKeeps_processSyncAggregate {altair : .altair ≤ fork}
     {aggregate : SyncAggregate preset}
     (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
     StepKeeps state after := by
@@ -452,21 +439,21 @@ private theorem stepKeeps_processRandao {body : BeaconBlockBody preset fork}
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq computed
   exact StepKeeps.of_validators
 
-private theorem stepKeeps_processEth1Data {before : fork < .hegota}
+theorem stepKeeps_processEth1Data {before : fork < .hegota}
     {body : BeaconBlockBody preset fork}
     (computed : processEth1Data before state body = .ok after) : StepKeeps state after := by
   obtain ⟨_, _, rest⟩ := processEth1Data_eq computed
   rw [← rest]
   exact StepKeeps.of_validators
 
-private theorem stepKeeps_processProposerSlashing {slashing : ProposerSlashing}
+theorem stepKeeps_processProposerSlashing {slashing : ProposerSlashing}
     (computed : processProposerSlashing config checks state slashing = .ok after) :
     StepKeeps state after := by
   simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := computed
   exact stepKeeps_slashValidator slashed
 
-private theorem stepKeeps_processAttesterSlashing {slashing : AttesterSlashing preset fork}
+theorem stepKeeps_processAttesterSlashing {slashing : AttesterSlashing preset fork}
     (computed : processAttesterSlashing config checks state slashing = .ok after) :
     StepKeeps state after := by
   simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff, pure, Except.pure,
@@ -485,14 +472,14 @@ private theorem stepKeeps_processAttesterSlashing {slashing : AttesterSlashing p
   · simp only [pure, Except.pure, Except.ok.injEq] at ok
     exact ok ▸ StepKeeps.refl _
 
-private theorem stepKeeps_processAttestation {attestation : Attestation preset fork}
+theorem stepKeeps_processAttestation {attestation : Attestation preset fork}
     {parentSlot : Slot}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     StepKeeps state after :=
   StepKeeps.of_validators (by rw [(processAttestation_registry computed).1])
     (frame_processAttestation computed).slot
 
-private theorem stepKeeps_processVoluntaryExit {signed : SignedVoluntaryExit}
+theorem stepKeeps_processVoluntaryExit {signed : SignedVoluntaryExit}
     (computed : processVoluntaryExit config checks state signed = .ok after) :
     StepKeeps state after := by
   unfold processVoluntaryExit at computed
@@ -545,7 +532,7 @@ private theorem stepKeeps_processOperations {body : BeaconBlockBody preset fork}
     (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processVoluntaryExit ok) exitsOk).trans <|
     changes.trans requests
 
-private theorem stepKeeps_processBlock {block : BeaconBlock preset fork}
+theorem stepKeeps_processBlock {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     StepKeeps state after := by
   unfold processBlock at computed

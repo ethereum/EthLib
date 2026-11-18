@@ -2147,4 +2147,84 @@ theorem getBlockRootAtSlot_congr {post : Fork} {state : BeaconState preset fork}
     getBlockRootAtSlot other index = getBlockRootAtSlot state index := by
   simp only [getBlockRootAtSlot, slot, roots]
 
+/-- The proposer search reads only the effective balances of the validators it draws.
+
+Each candidate is one of the indices, or index zero when the order leaves them. -/
+theorem proposerSearch_congr_validators {fork : Fork} {first second : Array Validator}
+    {indices : Array ValidatorIndex} {order : Nat → Nat} {seed : Bytes32}
+    (positive : 0 < first.size) (inside : ∀ index ∈ indices, index.toNat < first.size)
+    (agree : ∀ j < first.size, (first[j]?).map (·.effectiveBalance) =
+      (second[j]?).map (·.effectiveBalance)) :
+    ∀ {i : Nat}, proposerSearch preset fork first indices order seed i =
+      proposerSearch preset fork second indices order seed i := by
+  intro i
+  obtain ⟨left, leftEq⟩ : ∃ left, left = 2 ^ 64 - i := ⟨_, rfl⟩
+  induction left using Nat.strongRecOn generalizing i with
+  | _ left ih =>
+    unfold proposerSearch
+    have small : (indices.getD (order (i % indices.size)) 0).toNat < first.size := by
+      rw [Array.getD_eq_getD_getElem?]
+      by_cases within : order (i % indices.size) < indices.size
+      · rw [Array.getElem?_eq_getElem within, Option.getD_some]
+        exact inside _ (Array.getElem_mem within)
+      · rw [Array.getElem?_eq_none (Nat.le_of_not_lt within), Option.getD_none]
+        exact positive
+    have same := agree _ small
+    generalize indices.getD (order (i % indices.size)) 0 = candidate at same ⊢
+    cases hf : first[candidate.toNat]? <;> cases hs : second[candidate.toNat]? <;>
+      simp only [hf, hs, Option.map_none, Option.map_some, reduceCtorEq,
+        Option.some.injEq] at same
+    · simp only [hf, hs]
+    · simp only [hf, hs, same]
+      by_cases next : i + 1 < 2 ^ 64
+      · rw [ih (2 ^ 64 - (i + 1)) (by omega) rfl]
+      · have far : ¬ i + 1 < 18446744073709551616 := by omega
+        simp only [far, dite_false]
+
+/-- The proposer of a slot reads the slot, the RANDAO mixes and the proposer lookahead.
+
+It also reads the active validators of the epoch and their effective balances. -/
+theorem getBeaconProposerIndex_congr {fork : Fork} {s w : BeaconState preset fork}
+    (slot : w.slot = s.slot) (mixes : w.randaoMixes = s.randaoMixes)
+    (lookahead : ∀ fulu : .fusaka ≤ fork, w.proposerLookahead fulu = s.proposerLookahead fulu)
+    (active : getActiveValidatorIndicesChecked w (getCurrentEpoch s) =
+      getActiveValidatorIndicesChecked s (getCurrentEpoch s))
+    (effective : ∀ j < s.validators.data.size, (s.validators.data[j]?).map (·.effectiveBalance) =
+      (w.validators.data[j]?).map (·.effectiveBalance)) :
+    getBeaconProposerIndex w = getBeaconProposerIndex s := by
+  have epoch : getCurrentEpoch w = getCurrentEpoch s := by simp only [getCurrentEpoch, slot]
+  unfold getBeaconProposerIndex
+  split
+  · rename_i fulu
+    simp only [slot, lookahead fulu]
+  · have seed : getSeed w (getCurrentEpoch s) DOMAIN_BEACON_PROPOSER =
+        getSeed s (getCurrentEpoch s) DOMAIN_BEACON_PROPOSER := by
+      unfold getSeed getRandaoMix
+      rw [mixes]
+    dsimp only
+    rw [epoch, seed, active, slot]
+    cases checked : getActiveValidatorIndicesChecked s (getCurrentEpoch s) with
+    | error => simp only [bind, Except.bind]
+    | ok indices =>
+      simp only [bind, Except.bind]
+      cases getSeed s (getCurrentEpoch s) DOMAIN_BEACON_PROPOSER with
+      | error => simp only
+      | ok mix =>
+        simp only
+        unfold computeProposerIndex
+        by_cases empty : indices.toArray.size = 0
+        · simp [empty, bind, Except.bind, throw, throwThe, MonadExcept.throw,
+            MonadExceptOf.throw]
+        have inside : ∀ index ∈ indices.toArray, index.toNat < s.validators.data.size := by
+          intro index member
+          obtain ⟨v, found, _⟩ :=
+            (mem_iff_of_getActiveValidatorIndicesChecked_ok checked).mp (by simpa using member)
+          exact (Array.getElem?_eq_some_iff.mp found).1
+        have positive : 0 < s.validators.data.size := by
+          obtain ⟨index, member⟩ := List.exists_mem_of_ne_nil indices
+            (fun nil => empty (by simp [nil]))
+          exact Nat.lt_of_le_of_lt (Nat.zero_le _) (inside index (by simpa using member))
+        simp only [empty, ↓reduceIte]
+        rw [proposerSearch_congr_validators positive inside effective]
+
 end EthLib.Consensus

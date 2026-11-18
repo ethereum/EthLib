@@ -181,7 +181,10 @@ public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 public import EthLib.Consensus.Proofs.Transition.BalanceNotRaisedBlock
 public import EthLib.Consensus.Proofs.Transition.Block
+public import EthLib.Consensus.Proofs.Transition.BlockCredits
+public import EthLib.Consensus.Proofs.Transition.BlockLedger
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
+public import EthLib.Consensus.Proofs.Transition.BranchLedger
 public import EthLib.Consensus.Proofs.Transition.BuilderDebt
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtBid
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtBlock
@@ -196,9 +199,12 @@ public import EthLib.Consensus.Proofs.Transition.ChainRoots
 public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.ConsolidationWindow
 public import EthLib.Consensus.Proofs.Transition.DepositCarry
+public import EthLib.Consensus.Proofs.Transition.EffectiveFall
+public import EthLib.Consensus.Proofs.Transition.EffectiveRise
 public import EthLib.Consensus.Proofs.Transition.EpochJustification
 public import EthLib.Consensus.Proofs.Transition.EpochParticipation
 public import EthLib.Consensus.Proofs.Transition.EpochPending
+public import EthLib.Consensus.Proofs.Transition.EpochReads
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 public import EthLib.Consensus.Proofs.Transition.Execution
@@ -228,6 +234,7 @@ public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.MixesKept
 public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Proofs.Transition.ParentPayload
+public import EthLib.Consensus.Proofs.Transition.PartialWithdrawalQueue
 public import EthLib.Consensus.Proofs.Transition.ParticipationFlagsKept
 public import EthLib.Consensus.Proofs.Transition.ParticipationFrames
 public import EthLib.Consensus.Proofs.Transition.Payload

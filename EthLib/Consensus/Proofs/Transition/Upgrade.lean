@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.TargetFlags
+public import EthLib.Consensus.Transition.ForkBoundary
 public import EthLib.Consensus.Transition.Upgrade
 
 /-!
@@ -37,6 +38,10 @@ Each upgrade keeps the slot, the three checkpoints and the block roots.
 From Altair, an upgrade adds no target flag.
 
 Each upgrade keeps the invariant that each valid block keeps, and the finalized checkpoint.
+
+The upgrades of a slot keep the effective balances within the bands of hysteresis.
+
+The upgrade to Electra needs the largest effective balance before it to be the activation balance.
 -/
 
 @[expose] public section
@@ -925,5 +930,325 @@ theorem upgradeToHeze_invariant {pre : BeaconState preset .glamsterdam}
     Invariant after ∧ after.finalizedCheckpoint = pre.finalizedCheckpoint := by
   have frame := upgradeFrame_upgradeToHeze computed
   exact ⟨frame.invariant holds, frame.finalized⟩
+
+/-! ## Hysteresis across an upgrade -/
+
+/-- The bands of hysteresis together with the largest effective balances. -/
+private def Banded (forked : ForkedBeaconState preset) : Prop :=
+  Hysteresis forked.state ∧ ∀ validator ∈ forked.state.validators.data,
+    validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset forked.fork validator
+
+/-- The bands and the caps carry over an upgrade that keeps the validators and the balances.
+
+Both forks must be on the same side of Electra, so that the largest effective balances agree. -/
+private theorem banded_carry {fork other : Fork} {state : BeaconState preset fork}
+    {next : BeaconState preset other} (validators : next.validators.data = state.validators.data)
+    (balances : next.balances.data = state.balances.data)
+    (side : Fork.pectra ≤ other ↔ Fork.pectra ≤ fork) (holds : Banded ⟨fork, state⟩) :
+    Banded ⟨other, next⟩ := by
+  have largest (validator : Validator) : withdrawalMaxEffectiveBalance preset other validator =
+      withdrawalMaxEffectiveBalance preset fork validator := by
+    simp only [withdrawalMaxEffectiveBalance, side]
+  refine ⟨holds.1.of_data validators balances largest, fun validator member => ?_⟩
+  rw [largest]
+  exact holds.2 validator (validators ▸ member)
+
+/-- Before the queues of the Electra upgrade, a balance is within the bands of its validator.
+
+Below the activation balance, the balance exceeds the effective balance by at most the upward band.
+
+The effective balance exceeds the balance by at most the downward band. -/
+private def ElectraBands (state : BeaconState preset .pectra) : Prop :=
+  ∀ (position : Nat) (validator : Validator) (balance : Gwei),
+    state.validators.data[position]? = some validator →
+    state.balances.data[position]? = some balance →
+    validator.effectiveBalance.toNat ≤ balance.toNat + preset.downwardBand ∧
+      (validator.effectiveBalance < preset.MIN_ACTIVATION_BALANCE →
+        balance.toNat ≤ validator.effectiveBalance.toNat + preset.upwardBand)
+
+/-- Every effective balance is at most the activation balance. -/
+private def ElectraBelow (state : BeaconState preset .pectra) : Prop :=
+  ∀ validator ∈ state.validators.data,
+    validator.effectiveBalance ≤ preset.MIN_ACTIVATION_BALANCE
+
+/-- With compounding credentials at a position, the balance there is at most the activation balance.
+-/
+private def ExcessQueuedAt (state : BeaconState preset .pectra) (position : Nat) : Prop :=
+  ∀ (validator : Validator) (balance : Gwei),
+    state.validators.data[position]? = some validator →
+    state.balances.data[position]? = some balance →
+    hasCompoundingWithdrawalCredential validator = true →
+    balance ≤ preset.MIN_ACTIVATION_BALANCE
+
+/-- Queueing a validator that is not yet active sets its balance and effective balance to zero.
+
+That keeps the bands at its position and every effective balance at most the activation balance.
+-/
+private theorem queuePreActivation_bands {state after : BeaconState preset .pectra}
+    {electra : .pectra ≤ Fork.pectra} {index : ValidatorIndex}
+    (computed : queuePreActivation state electra index = .ok after)
+    (holds : ElectraBelow state ∧ ElectraBands state) :
+    ElectraBelow after ∧ ElectraBands after := by
+  simp only [queuePreActivation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨validator, -, _, -, _, -, _, set1, _, set2, rfl⟩ := computed
+  obtain ⟨_, rfl⟩ := setBalance_ok set1
+  obtain ⟨_, rfl⟩ := setValidator_ok set2
+  refine ⟨fun written member => ?_, fun position written current seen read => ?_⟩
+  · simp only [BeaconState.putValidator, RootedForkList.data_set] at member
+    rcases Array.mem_or_eq_of_mem_set member with old | rfl
+    · exact holds.1 written old
+    · exact UInt64.zero_le
+  · simp only [BeaconState.putValidator, BeaconState.putBalance, RootedForkList.data_set]
+      at seen read
+    by_cases same : index.toNat = position
+    · subst same
+      simp only [Array.getElem?_set_self, Option.some.injEq] at seen read
+      subst seen read
+      exact ⟨by simp, fun _ => by simp⟩
+    · simp only [Array.getElem?_set, same, ↓reduceIte] at seen read
+      exact holds.2 position written current seen read
+
+/-- Queueing the excess balance of a validator keeps the validators.
+
+It changes at most the balance at the index, which falls from above the activation balance to it.
+
+Afterwards the balance at the index is at most the activation balance. -/
+private theorem queueExcessActiveBalance_balances {state after : BeaconState preset .pectra}
+    {electra : .pectra ≤ Fork.pectra} {index : ValidatorIndex}
+    (computed : queueExcessActiveBalance state electra index = .ok after) :
+    after.validators.data = state.validators.data ∧
+      (∀ (position : Nat) (balance : Gwei), after.balances.data[position]? = some balance →
+        state.balances.data[position]? = some balance ∨
+          (balance = preset.MIN_ACTIVATION_BALANCE ∧ ∃ old : Gwei,
+            state.balances.data[position]? = some old ∧ preset.MIN_ACTIVATION_BALANCE < old)) ∧
+      ∀ balance : Gwei, after.balances.data[index.toNat]? = some balance →
+        balance ≤ preset.MIN_ACTIVATION_BALANCE := by
+  simp only [queueExcessActiveBalance, bind_ok_iff] at computed
+  obtain ⟨old, read, computed⟩ := computed
+  rw [getBalance_eq_getBalanceAt, getBalanceAt_eq_ok_iff] at read
+  split at computed
+  · rename_i above
+    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, _, set, rfl⟩ := computed
+    obtain ⟨_, rfl⟩ := setBalance_ok set
+    refine ⟨rfl, fun position balance written => ?_, fun balance written => ?_⟩
+    · simp only [BeaconState.putBalance, Array.getElem?_set] at written
+      split at written
+      · rename_i same
+        subst same
+        cases written
+        exact .inr ⟨rfl, old, read, above⟩
+      · exact .inl written
+    · simp only [BeaconState.putBalance, Array.getElem?_set_self, Option.some.injEq] at written
+      subst written
+      exact UInt64.le_refl _
+  · rename_i notAbove
+    simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    refine ⟨rfl, fun _ _ written => .inl written, fun balance written => ?_⟩
+    rw [read, Option.some.injEq] at written
+    subst written
+    exact UInt64.not_lt.mp notAbove
+
+/-- Queueing the excess of one validator with compounding credentials keeps the validators.
+
+With every effective balance at most the activation balance, it keeps the bands.
+
+It keeps the queued excess at every position, and queues the excess at its own position. -/
+private theorem queueCompoundingExcess_bands {state after : BeaconState preset .pectra}
+    {electra : .pectra ≤ Fork.pectra} {index : Nat}
+    (computed : queueCompoundingExcess state electra index = .ok after) :
+    after.validators.data = state.validators.data ∧
+      (ElectraBelow state ∧ ElectraBands state → ElectraBands after) ∧
+      (∀ position, ExcessQueuedAt state position → ExcessQueuedAt after position) ∧
+      (index.toUInt64.toNat = index → ExcessQueuedAt after index) := by
+  unfold queueCompoundingExcess at computed
+  rcases found : state.validators.data[index]? with _ | validator
+  · simp only [found, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    refine ⟨rfl, And.right, fun _ => id, fun _ written _ seen => ?_⟩
+    rw [found] at seen
+    cases seen
+  · simp only [found] at computed
+    by_cases compounding : hasCompoundingWithdrawalCredential validator = true
+    · simp only [compounding, ↓reduceIte] at computed
+      obtain ⟨validators, moved, capped⟩ := queueExcessActiveBalance_balances
+        (liftAccessor_ok.mp computed)
+      refine ⟨validators, fun holds position written current seen read => ?_,
+        fun position queued written current seen read compounds => ?_,
+        fun small written current _ read _ => ?_⟩
+      · rw [validators] at seen
+        rcases moved position current read with old | ⟨rfl, old, before, above⟩
+        · exact holds.2 position written current seen old
+        · obtain ⟨_, up⟩ := holds.2 position written old seen before
+          have below := UInt64.le_iff_toNat_le.mp (holds.1 written (Array.mem_of_getElem? seen))
+          have above := UInt64.lt_iff_toNat_lt.mp above
+          refine ⟨by omega, fun under => ?_⟩
+          have := up under
+          omega
+      · rw [validators] at seen
+        rcases moved position current read with old | ⟨rfl, _⟩
+        · exact queued written current seen old compounds
+        · exact UInt64.le_refl _
+      · rw [small] at capped
+        exact capped current read
+    · simp only [compounding, Bool.false_eq_true, ↓reduceIte, pure, Except.pure,
+        Except.ok.injEq] at computed
+      subst computed
+      refine ⟨rfl, And.right, fun _ => id, fun _ written _ seen _ compounds => ?_⟩
+      rw [found, Option.some.injEq] at seen
+      subst seen
+      exact absurd compounds compounding
+
+/-- What the queueing of compounding excess keeps from one state to a later one.
+
+It keeps the validators and the queued excess at each position.
+
+It keeps the bands when every effective balance is at most the activation balance. -/
+private def ExcessKept (first second : BeaconState preset .pectra) : Prop :=
+  second.validators.data = first.validators.data ∧
+    (ElectraBelow first ∧ ElectraBands first → ElectraBands second) ∧
+    ∀ position, ExcessQueuedAt first position → ExcessQueuedAt second position
+
+private theorem ExcessKept.trans {first second third : BeaconState preset .pectra}
+    (one : ExcessKept first second) (two : ExcessKept second third) : ExcessKept first third :=
+  ⟨two.1.trans one.1, fun holds =>
+    two.2.1 ⟨fun validator member => holds.1 validator (one.1 ▸ member), one.2.1 holds⟩,
+    fun position queued => two.2.2 position (one.2.2 position queued)⟩
+
+/-- The Electra upgrade keeps the bands of hysteresis and the largest effective balances.
+
+Before Electra, the largest effective balance must be the activation balance (`electraFloor`).
+
+The activation balance must be at most the largest Electra effective balance (`electraCap`).
+
+Each effective balance must be at most its largest value before the upgrade. -/
+private theorem upgradeToElectra_banded {pre : BeaconState preset .dencun}
+    {after : BeaconState preset .pectra}
+    (electraFloor : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
+    (electraCap : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (holds : Banded ⟨.dencun, pre⟩) (computed : upgradeToElectra config pre = .ok after) :
+    Banded ⟨.pectra, after⟩ := by
+  have early : ¬Fork.pectra ≤ Fork.dencun := by decide
+  have floor (validator : Validator) :
+      withdrawalMaxEffectiveBalance preset .dencun validator = preset.MIN_ACTIVATION_BALANCE := by
+    simp only [withdrawalMaxEffectiveBalance, early, ↓reduceIte, electraFloor]
+  simp only [upgradeToElectra, bind_ok_iff] at computed
+  obtain ⟨_, -, _, -, _, -, _, -, middle, queued, compounded⟩ := computed
+  have started := foldlM_ok_invariant (fun state => ElectraBelow state ∧ ElectraBands state)
+    (fun _ _ _ holds step => queuePreActivation_bands step holds)
+    ⟨fun validator member => floor validator ▸ holds.2 validator member,
+      fun position validator balance seen read =>
+        ⟨holds.1.down position validator balance seen read, fun below =>
+          holds.1.up position validator balance seen read (by rw [floor]; exact below)⟩⟩
+    queued
+  obtain ⟨⟨validators, bands, -⟩, steps⟩ := foldlM_ok_steps ExcessKept
+    (fun _ => ⟨rfl, And.right, fun _ => id⟩) ExcessKept.trans
+    (fun _ _ _ step => have kept := queueCompoundingExcess_bands step
+      ⟨kept.1, kept.2.1, kept.2.2.1⟩) compounded
+  have below : ElectraBelow after := fun validator member =>
+    started.1 validator (validators ▸ member)
+  have banded := bands started
+  have queuedAt (position : Nat) : ExcessQueuedAt after position := by
+    intro validator balance seen read compounds
+    have inside : position < middle.validators.data.size := by
+      rw [← validators]
+      exact (Array.getElem?_eq_some_iff.mp seen).1
+    have small := toNat_toUInt64_of_lt (middle.validators.bound (by decide)) inside
+    obtain ⟨_, next, _, step, kept⟩ := steps position (by simpa using inside)
+    rw [List.getElem_range] at step
+    exact kept.2.2 position ((queueCompoundingExcess_bands step).2.2.2 small) validator balance
+      seen read compounds
+  refine ⟨⟨fun position validator balance seen read under => ?_,
+    fun position validator balance seen read => (banded position validator balance seen read).1⟩,
+    fun validator member => ?_⟩
+  · simp only [withdrawalMaxEffectiveBalance, getMaxEffectiveBalance] at under
+    by_cases compounding : hasCompoundingWithdrawalCredential validator = true
+    · by_cases low : validator.effectiveBalance < preset.MIN_ACTIVATION_BALANCE
+      · exact (banded position validator balance seen read).2 low
+      · have := UInt64.le_iff_toNat_le.mp (UInt64.not_lt.mp low)
+        have := UInt64.le_iff_toNat_le.mp
+          (queuedAt position validator balance seen read compounding)
+        omega
+    · simp only [compounding, Bool.false_eq_true, ↓reduceIte] at under
+      exact (banded position validator balance seen read).2 under
+  · have electra : Fork.pectra ≤ Fork.pectra := Nat.le_refl _
+    simp only [withdrawalMaxEffectiveBalance, getMaxEffectiveBalance, electra, ↓reduceIte]
+    split
+    · exact UInt64.le_trans (below validator member) electraCap
+    · exact below validator member
+
+/-- One upgrade keeps the bands of hysteresis and the largest effective balances.
+
+The upgrade to Electra needs the parameter conditions of `upgradeToElectra_banded`.
+
+Every other upgrade keeps the validators and the balances, and stays on one side of Electra. -/
+private theorem banded_upgradeNext {forked : ForkedBeaconState preset}
+    {next : {post : ForkedBeaconState preset // forked.fork < post.fork}}
+    (electraFloor : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
+    (electraCap : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (holds : Banded forked) (computed : upgradeNext config checks forked = .ok next) :
+    Banded next.val := by
+  obtain ⟨fork, state⟩ := forked
+  cases fork <;>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
+      throwThe, MonadExceptOf.throw, reduceCtorEq] at computed
+  · obtain ⟨_, upgraded, rfl⟩ := computed
+    obtain ⟨validators, balances, -⟩ := upgradeToAltair_spec upgraded
+    exact banded_carry validators balances (by decide) holds
+  · subst computed
+    exact banded_carry (state := state) rfl rfl (by decide) holds
+  · subst computed
+    exact banded_carry (state := state) rfl rfl (by decide) holds
+  · subst computed
+    exact banded_carry (state := state) rfl rfl (by decide) holds
+  · obtain ⟨_, upgraded, rfl⟩ := computed
+    exact upgradeToElectra_banded electraFloor electraCap holds upgraded
+  · obtain ⟨_, upgraded, rfl⟩ := computed
+    obtain ⟨validators, balances, -⟩ := upgradeToFulu_spec upgraded
+    exact banded_carry validators balances (by decide) holds
+  · obtain ⟨_, upgraded, rfl⟩ := computed
+    obtain ⟨validators, balances, -⟩ := upgradeToGloas_spec upgraded
+    exact banded_carry validators balances (by decide) holds
+  · obtain ⟨_, upgraded, rfl⟩ := computed
+    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain ⟨validators, balances, -⟩ := upgradeHezeFields_lists (config := config) state
+    exact banded_carry validators balances (by decide) holds
+
+private theorem banded_processUpgrades {forked after : ForkedBeaconState preset}
+    (electraFloor : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
+    (electraCap : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (holds : Banded forked) (computed : processUpgrades config checks forked = .ok after) :
+    Banded after := by
+  fun_induction processUpgrades config checks forked generalizing after with
+  | case1 forked due ih =>
+    obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp computed
+    exact ih next (banded_upgradeNext electraFloor electraCap holds nextOk) rest
+  | case2 forked notDue =>
+    cases computed
+    exact holds
+
+/-- The upgrades due at a slot keep the effective balances within the bands of hysteresis.
+
+The bands hold before them with the largest effective balances of the fork before.
+
+The upgrade to Electra lowers a compounding balance above the activation balance to it.
+
+So the largest effective balance before Electra must be the activation balance (`electraFloor`).
+
+It needs the activation balance to be at most the largest Electra effective balance (`electraCap`).
+
+It also needs each effective balance at most its largest value before the upgrades (`capped`).
+
+The other upgrades keep the validators and the balances. -/
+theorem Hysteresis.upgrade {forked after : ForkedBeaconState preset}
+    (holds : Hysteresis forked.state)
+    (electraFloor : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
+    (electraCap : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (capped : ∀ validator ∈ forked.state.validators.data,
+      validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset forked.fork validator)
+    (computed : processUpgrades config checks forked = .ok after) : Hysteresis after.state :=
+  (banded_processUpgrades electraFloor electraCap ⟨holds, capped⟩ computed).1
 
 end EthLib.Consensus

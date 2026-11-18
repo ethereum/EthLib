@@ -20,6 +20,8 @@ At the mainnet depth of 17, an adversary of `q` calls gives a bound of `(q + 36)
 
 Only the forks from Deneb and before Gloas put commitments in the body, where the climbs can run.
 
+At a fork before Deneb or from Gloas no outcome wins, and a win has probability zero.
+
 With SHA-256 as the node hash, a win is two such sidecars that the inclusion check accepts.
 
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
@@ -35,7 +37,7 @@ open Base Serialization.Ssz Serialization.Ssz.RandomOracle
 open OracleComp OracleSpec ENNReal
 open Cryptography.Kzg (KZGCommitment)
 open Cryptography.Merkle.RandomOracle (Collision experimentWith experimentWith_queryBound
-  prEvent_experimentWith_le)
+  prEvent_experimentWith_le prEvent_experimentWith_eq_zero)
 
 /-- What the blob experiment reports: the two sidecars, and the climbs of their proofs.
 
@@ -135,6 +137,44 @@ theorem collision_of_extractBlobSidecars {preset : Preset} {fork : Fork}
   · simp only [simulateQ_pure] at hclimbs
     cases hclimbs
 
+/-- The generalized index of a commitment is the error of a missing field when the body has no list.
+
+It needs a fork before Deneb or from Gloas. -/
+theorem blobKzgCommitmentGindex_of_lt_dencun_or_glamsterdam_le {preset : Preset} {fork : Fork}
+    (outside : fork < .dencun ∨ .glamsterdam ≤ fork) (index : Nat) :
+    blobKzgCommitmentGindex preset fork index =
+      .error (.noSuchField (BeaconBlockBody.names fork).length) := by
+  cases fork <;> first | exact absurd outside (by decide) | rfl
+
+/-- A replayed blob extraction never wins when the body has no list of commitments.
+
+The extraction then reads no subtree index, so it climbs neither proof.
+
+It needs a fork before Deneb or from Gloas. -/
+theorem not_blobWins_of_extractBlobSidecars {preset : Preset} {fork : Fork}
+    (outside : fork < .dencun ∨ .glamsterdam ≤ fork) {cache : HashOracle.QueryCache}
+    {claim : BlobSidecar preset × BlobSidecar preset} {outcome : BlobOutcome preset}
+    (hrun : simulateQ cache.toPartialImpl (extractBlobSidecars queryHash preset fork claim) =
+      some outcome) :
+    ¬BlobWins outcome := by
+  intro hwins
+  simp only [extractBlobSidecars, simulateQ_bind] at hrun
+  obtain ⟨_, -, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+  obtain ⟨_, -, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+  obtain ⟨climbs, hclimbs, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+  simp only [simulateQ_pure] at hrun
+  cases hrun
+  obtain ⟨-, -, -, climbed, present, -⟩ := hwins
+  dsimp only at present
+  subst present
+  split at hclimbs
+  · -- The lookup of the commitment fails, so no subtree index is read.
+    rename_i _ _ _ located _ _
+    rw [blobKzgCommitmentGindex_of_lt_dencun_or_glamsterdam_le outside] at located
+    simp [bind, Except.bind] at located
+  · simp only [simulateQ_pure] at hclimbs
+    cases hclimbs
+
 /-- The extraction makes at most `2 + 2 * depth` oracle calls, with `depth` that of the proofs.
 
 It makes one call per commitment root, and climbs at most `depth` nodes of each proof. -/
@@ -222,6 +262,21 @@ theorem prEvent_blobWins_le_mainnet (fork : Fork)
       (experimentWith (extractBlobSidecars queryHash .mainnet fork) adversary)).run ∅}[
         BlobWins z.1] ≤ (q + 36 : Nat) * (((q + 36 : Nat) : ℝ≥0∞) / 2 ^ 256) :=
   prEvent_blobWins_le_of_adversary .mainnet fork adversary hq
+
+/-- An adversary that outputs two sidecars wins with probability zero when the body has no list.
+
+Every outcome of the experiment is a replay of the extraction, and no replay wins.
+
+The oracle cache starts empty, and no count of oracle calls is needed.
+
+It needs a fork before Deneb or from Gloas. -/
+theorem prEvent_blobWins_eq_zero [SampleableType Hash32] (preset : Preset) {fork : Fork}
+    (outside : fork < .dencun ∨ .glamsterdam ≤ fork)
+    (adversary : OracleComp (unifSpec + HashOracle) (BlobSidecar preset × BlobSidecar preset)) :
+    Pr{let z ← (simulateQ HashOracle.romImpl
+      (experimentWith (extractBlobSidecars queryHash preset fork) adversary)).run ∅}[
+        BlobWins z.1] = 0 :=
+  prEvent_experimentWith_eq_zero _ _ (not_blobWins_of_extractBlobSidecars outside) adversary
 
 /-- With SHA-256, the extraction roots each commitment and reads the index as the spec does. -/
 theorem extractBlobSidecars_sha256 (preset : Preset) (fork : Fork)

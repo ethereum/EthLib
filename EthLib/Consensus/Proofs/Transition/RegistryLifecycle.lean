@@ -565,11 +565,7 @@ theorem registryLifecycle_processDepositRequest {electra : .pectra ≤ fork}
     {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
     RegistryLifecycle state after := by
-  obtain ⟨start, recorded⟩ :=
-    recordDepositRequestsStart_eq (state := state) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, rfl⟩ := computed
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok computed
   exact .of_data rfl
 
 private theorem registryLifecycle_computeExitEpochAndUpdateChurn {electra : .pectra ≤ fork}
@@ -612,14 +608,10 @@ theorem registryLifecycle_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     RegistryLifecycle state after := by
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact .refl _)
-    | exact registryLifecycle_initiateValidatorExit (liftAccessor_ok.mp computed)
-    | exact registryLifecycle_requestPartialWithdrawal computed
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  · exact .refl _
+  · exact registryLifecycle_initiateValidatorExit exited
+  · exact registryLifecycle_requestPartialWithdrawal withdrawn
 
 private theorem registryLifecycle_queueExcessActiveBalance {electra : .pectra ≤ fork}
     {index : ValidatorIndex}
@@ -654,38 +646,20 @@ private theorem registryLifecycle_queueConsolidation {electra : .pectra ≤ fork
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     RegistryLifecycle state after := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    pure, Except.pure] at computed
-  obtain ⟨⟨churnedState, exitEpoch⟩, churned, withdrawable, _, _, set, _, _, computed⟩ :=
-    computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
-  have churnedKept := registryLifecycle_computeConsolidationEpochAndUpdateChurn churned
-  have same : churnedState.validators.data = state.validators.data := by
-    simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at churned
-    obtain ⟨_, _, _, _, _, _, churned⟩ := churned
-    cases churned
-    rfl
-  exact churnedKept.trans <|
-    (RegistryLifecycle.setValidator (old := source)
-      (by simp [getValidator, same, found]) set
+  obtain ⟨_, _, _, _, _, churned, _, set, _, rfl⟩ := queueConsolidation_steps computed
+  exact (registryLifecycle_computeConsolidationEpochAndUpdateChurn churned).trans <|
+    (RegistryLifecycle.setValidator (old := source) (by exact getValidator_eq_ok_iff.mpr found) set
       ⟨fun _ => rfl, fun set => absurd far set⟩).trans (.of_data rfl)
 
 theorem registryLifecycle_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     RegistryLifecycle state after := by
-  unfold processConsolidationRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact .refl _)
-    | exact registryLifecycle_switchToCompoundingValidator (liftAccessor_ok.mp computed)
-    | exact registryLifecycle_queueConsolidation
-        (getElem?_toNat_of_ofNatChecked (by assumption))
-        (by clear computed; simp_all) computed
+  rcases consolidationRequest_cases computed with rfl | ⟨_, _, _, switched⟩ |
+    ⟨_, _, _, _, accepted, queued⟩
+  · exact .refl _
+  · exact registryLifecycle_switchToCompoundingValidator switched
+  · exact registryLifecycle_queueConsolidation accepted.sourceAt accepted.sourceStays queued
 
 theorem registryLifecycle_processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
@@ -1178,20 +1152,25 @@ theorem Run.registryLifecycle {first last : ForkedBeaconState preset}
 
 /-! ## Admissions within one step -/
 
--- Keeping both epochs unassigned lets activity checks rule out a later exit request.
-private def Unassigned (v : Validator) : Prop :=
+/-- A validator with neither an activation epoch nor an exit epoch assigned.
+
+Keeping both unassigned lets activity checks exclude a later exit request. -/
+def Unassigned (v : Validator) : Prop :=
   v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH
 
-private def UnassignedFrom (n : Nat) {fork : Fork} (s : BeaconState preset fork) : Prop :=
+/-- Every validator at position `n` or later is unassigned. -/
+def UnassignedFrom (n : Nat) {fork : Fork} (s : BeaconState preset fork) : Prop :=
   ∀ i v, n ≤ i → s.validators.data[i]? = some v → Unassigned v
 
-private theorem unassignedFrom_size (s : BeaconState preset fork) :
+/-- No validator lies past the end of the registry, so the registry size is unassigned from. -/
+theorem unassignedFrom_size (s : BeaconState preset fork) :
     UnassignedFrom s.validators.data.size s := by
   intro i v large found
   have := (Array.getElem?_eq_some_iff.mp found).1
   omega
 
-private def UnassignedKept {f g : Fork} (s : BeaconState preset f)
+/-- Each position from which the earlier registry is unassigned stays so in the later one. -/
+def UnassignedKept {f g : Fork} (s : BeaconState preset f)
     (t : BeaconState preset g) : Prop :=
   ∀ n, UnassignedFrom n s → UnassignedFrom n t
 
@@ -1269,7 +1248,7 @@ private theorem applyDeposit {pubkey : BLSPubkey} {credentials : Bytes32} {amoun
       (of_data (state := middle))
   · exact applyPendingDeposit ok
 
-private theorem processDeposit {before : fork < .hegota} {deposit : Deposit}
+theorem processDeposit {before : fork < .hegota} {deposit : Deposit}
     (ok : Consensus.processDeposit config checks before state deposit = .ok after) :
     UnassignedKept state after := by
   obtain ⟨_, _, next, _, credited⟩ := processDeposit_ok ok
@@ -1373,32 +1352,21 @@ private theorem queueConsolidation {electra : .pectra ≤ fork}
     (notPending : ¬Unassigned source)
     (ok : Consensus.queueConsolidation config state electra sourceIndex source targetIndex =
       .ok after) : UnassignedKept state after := by
-  simp only [Consensus.queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨churned, _⟩, churn, _, _, _, set, _, _, ok⟩ := ok
-  simp only [Except.ok.injEq] at ok
-  subst ok
-  have same := (computeConsolidationEpochAndUpdateChurn_earliest churn).2.1
-  have read : getValidator churned sourceIndex = .ok source := by
-    rw [getValidator, same, found]
-  exact (of_data (by rw [same])).trans <|
-    (setValidator read set (fun h => False.elim (notPending h))).trans of_data
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps ok
+  exact (of_data rfl).trans <| (setValidator (by exact getValidator_eq_ok_iff.mpr found) set
+    (fun h => False.elim (notPending h))).trans of_data
 
 private theorem processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (ok : Consensus.processConsolidationRequest config state electra request = .ok after) :
     UnassignedKept state after := by
-  unfold Consensus.processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact refl _)
-    | exact switchToCompoundingValidator (liftAccessor_ok.mp ok)
-    | (apply queueConsolidation (getElem?_toNat_of_ofNatChecked (by assumption)) ?_ ok
-       intro pending
-       have no := inactive pending (getCurrentEpoch state)
-       simp_all)
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ |
+    ⟨_, _, _, _, accepted, queued⟩
+  · exact refl _
+  · exact switchToCompoundingValidator switched
+  · exact queueConsolidation accepted.sourceAt
+      (fun pending => Bool.false_ne_true ((inactive pending _).symm.trans accepted.sourceActive))
+      queued
 
 private theorem processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : Consensus.processDepositRequest state electra request = .ok after) :
@@ -1469,5 +1437,16 @@ theorem processOperations_new_validator_epochs_unassigned {body : BeaconBlockBod
     ∀ i v, state.validators.data.size ≤ i → after.validators.data[i]? = some v →
       v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH :=
   newUnassigned_processOperations ok
+
+/-- Once the exit of a validator is set, its withdrawable epoch only rises.
+
+It moves only when the later record is slashed.
+
+The states may be of different forks. -/
+def WithdrawableKept {f g : Fork} (s : BeaconState preset f) (t : BeaconState preset g) : Prop :=
+  ∀ (i : Nat) (v w : Validator), s.validators.data[i]? = some v → t.validators.data[i]? = some w →
+    v.exitEpoch ≠ FAR_FUTURE_EPOCH →
+      v.withdrawableEpoch ≤ w.withdrawableEpoch ∧
+        (w.slashed = true ∨ w.withdrawableEpoch = v.withdrawableEpoch)
 
 end EthLib.Consensus

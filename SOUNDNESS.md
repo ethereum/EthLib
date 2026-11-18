@@ -165,6 +165,7 @@ That search walks both rebuilds down from the root, and returns nothing on one r
 This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`: at most 4 for `q >= 2`, and close to 2 for large `q`.
 `prEvent_experimentWith_le` applies it to an experiment where the adversary outputs a claim and an extraction then runs on it with the oracle alone.
 It bounds a win by `q^2 / N` when every replayed win of the extraction leaves a collision in the cache.
+`prEvent_experimentWith_eq_zero` gives a win probability of zero when no replay of the extraction wins, with no count of oracle calls.
 
 `prEvent_secondPreimageGame_le` bounds a second preimage of one fixed tree of height `h` by `(Q_f + h) / N`, for a forger with `Q_f` hash calls.
 The forger sees the root and all honest paths.
@@ -275,7 +276,10 @@ The extraction roots both commitments, reads the subtree index of the first blob
 Every hash is an oracle call, and the climbs take the inclusion proof depth of the preset.
 The adversary wins when the sidecars have one index, one body root and different commitments, and both climbs reach that body root.
 Only the forks from Deneb and before Gloas put the commitments in the body.
-At the other forks the extraction reads no subtree index, so it climbs nothing and no adversary wins; no theorem states this.
+At the other forks the body has no list of commitments.
+`blobKzgCommitmentGindex_of_lt_dencun_or_glamsterdam_le` shows that the lookup of a commitment in the body is then the error of a missing field.
+So the extraction reads no subtree index and climbs neither proof, and `not_blobWins_of_extractBlobSidecars` shows that no replayed outcome wins.
+`prEvent_blobWins_eq_zero` then gives a win probability of zero through `prEvent_experimentWith_eq_zero`, at every preset and every fork before Deneb or from Gloas, for any adversary.
 
 `collision_of_extractBlobSidecars` shows that every win leaves two different cached inputs with one answer.
 By `hashTreeRootM_bytes48` (`Serialization/Proofs/Ssz/BranchRandomOracle.lean`), the root of a commitment is one hash of its 48 bytes and 16 zero bytes.
@@ -346,8 +350,10 @@ At the mainnet limit of 4096 and depth of 4, `prEvent_columnWins_le_mainnet` bou
 Beyond the adversary's own queries, `Q` grows with the limit and the depth, not with the commitments that the headers carry.
 The collision lemma, the bounds and the count of the extraction need a fork before Gloas, where the list has a limit.
 From Gloas the list is progressive, and neither a sidecar nor a partial sidecar carries the proof.
-There the body has no list of commitments, so the extraction reads no subtree index and no adversary wins.
-No theorem states this.
+There the body has no list of commitments, and neither has it before Deneb.
+`blobKzgCommitmentsGindex_of_lt_dencun_or_glamsterdam_le` shows that the lookup of the list is then the error of a missing field.
+So the extraction reads no subtree index, and `not_columnWins_of_extractColumnHeaders` shows that no replayed outcome wins.
+`prEvent_columnWins_eq_zero` then gives a win probability of zero through `prEvent_experimentWith_eq_zero`, at every preset and every fork before Deneb or from Gloas, for any adversary.
 With SHA-256 in place of the oracle, `columnWins_sha256_iff` shows that a win is two such headers that `verifyKzgCommitmentsInclusionProof` accepts.
 It holds at every preset and every fork.
 Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
@@ -2127,6 +2133,14 @@ From Hegotá a run fails as not yet specified, so there is no gas used to state.
 `prepareFirstFrame_of_applyAuthorizations_error` proves that an error of the authorizations is the error of the first frame.
 `prepareFirstFrame_of_value_eq_zero` gives the first frame of a call that moves no ether and applies no authorization.
 
+`mem_startAccessedStorageKeys` proves that from Berlin a transaction starts with a slot warm exactly when its access list lists it.
+The entry must name the address of the slot and list the slot.
+When two entries name one address, the slots of both count.
+`startAccessedStorageKeys_of_lt_berlin` proves that before Berlin a transaction starts with no slot warm.
+SLOAD and SSTORE read these keys through `accessStorageKey`.
+SLOAD pays 2100 for a cold slot and 100 for a warm one, by EIP-2929, and SSTORE also pays more for a cold slot.
+No theorem yet joins these keys with the price of the first access to a slot in a run.
+
 ### Nonces within 64 bits
 
 EIP-2681 limits every nonce to `2^64 - 1`, and a nonce in EthLib is a natural number.
@@ -3224,8 +3238,21 @@ No theorem derives that coverage, nor `startCovers`, the coverage by the start o
 Each accepted root has a realized justification at most one epoch before its own.
 An accepted root of an earlier epoch is realized as justified by the head's state.
 `CallRolloverRead` assumes the caller's head read at each rollover for the current target of its head, through `CallerHeadAt` above.
-`QuorumDriftWithin` assumes that an honest voter set of a call keeps its stake in each counting state, up to the call's quorum reserve, unless two honest stores collide.
-No theorem here derives it, and whether the reserve bounds the drift on mainnet is not established.
+`QuorumDriftWithin` assumes that an honest voter set of a call keeps its stake in each counting state, up to the call's quorum reserve.
+Its alternative is a collision of two honest stores.
+`Execution.quorumDriftWithin` proves it for an honest fork choice with BLS checks, before Gloas from Fulu.
+Its anchor store comes from a successful `getForkchoiceStore`, every honest participant starts at it, and `anchorBlock.slot = anchorState.slot`.
+`SLOT_DURATION_MS` is positive, and an epoch has at least one slot.
+A deposited `Genesis` under BLS checks reaches `anchorState` by a `Run` under BLS checks.
+`Execution.rootViable_of_checked_call` takes the same genesis and run for any signature checks, and this theorem fixes them to BLS.
+The horizon is before the next fork, and `HonestStoreEpochsBounded` holds up to the time bound.
+The seed lookahead covers at least one epoch, and the preset satisfies `IncrementWithinUpwardBand`.
+The withdrawal delay is at least one epoch, and the preset satisfies `CapOrder` and `ActivationWithinMaxEffective`.
+Together these make `MAX_EFFECTIVE_BALANCE` equal to `MIN_ACTIVATION_BALANCE`, as on both presets.
+The theorem bounds the drift by the reserve, but whether the reserve is small enough against the confirmation margin on mainnet is not established.
+`Execution.rootViable_of_checked_call` and `Execution.honestHeadsCover_of_checked_call` still take `QuorumDriftWithin` as a premise.
+A caller with BLS checks from Fulu to before Gloas discharges it with `Execution.quorumDriftWithin`.
+`Execution.heldStatesBeforeUpgrade_of_bounded` likewise discharges `HeldStatesBeforeUpgrade` from the horizon and `HonestStoreEpochsBounded`.
 The model's genesis time must be the anchor state's (`secondsToMilliseconds anchorState.genesisTime = genesisTimeMs`), a fact of the configuration that holds for every real anchor.
 
 `JustifiedPinned` is a further premise, absent from the signed-justification headline.
@@ -6517,7 +6544,7 @@ Keystore decryption does this itself with a model of the cost, against limits th
 <!-- generated: pins -->
 The specification requires no package.
 The package requires Mathlib, at `v4.36.0`, commit `fc4f59e`.
-The package requires VCVio, at `8781bec`.
+The package requires VCVio, at `v4.36.0`, commit `8781bec`.
 Only the proofs import them.
 The Lean toolchain is `leanprover/lean4:v4.36.0`.
 <!-- end generated -->

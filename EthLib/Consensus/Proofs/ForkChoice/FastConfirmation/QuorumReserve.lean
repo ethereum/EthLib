@@ -15,9 +15,13 @@ A later state that counts the same voters can hold a different total and differe
 
 The reserves are meant to bound how much that changes the quorum, from the call's states alone.
 
-The drift premises assume that they do, and no theorem derives it.
-
 One covers a later state on the call's own chain, the other a counting state on another branch.
+
+A theorem proves the bound of the first, before Gloas from Fulu.
+
+The drift premise of the checked-call headlines follows from it.
+
+No theorem derives the bound of the second yet.
 -/
 
 @[expose] public section
@@ -39,7 +43,7 @@ Every term reads the state, except the queue of partial withdrawals, which the a
 
 It takes the total, the base and sync rewards, the churn and the finality delay from their reads.
 
-It is meant to bound the drift; the drift premise assumes it, and no theorem derives it.
+It bounds the drift, before Gloas from Fulu.
 
 The reserve is twice the gain of the total plus three times the loss of the voters' stake.
 

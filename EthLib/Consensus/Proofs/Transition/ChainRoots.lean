@@ -509,8 +509,14 @@ private theorem Run.records_snoc {first middle last : ForkedBeaconState preset}
     · exact .inl ⟨middle, pre.last_mem, old⟩
     · exact .inr ⟨same, got, succ⟩
 
+/-- A genesis state built from deposits holds the invariant of the transition. -/
+theorem Genesis.invariant {g : ForkedBeaconState preset} (genesis : Genesis config checks g) :
+    Invariant g.state := by
+  obtain ⟨_, _, _, ok⟩ := genesis
+  exact (initializeBeaconStateFromEth1_invariant ok).2
+
 /-- The last state of a run keeps the invariant of the first. -/
-private theorem Run.invariant {first last : ForkedBeaconState preset}
+theorem Run.invariant {first last : ForkedBeaconState preset}
     (holds : Invariant first.state) (run : Run config checks first last) :
     Invariant last.state := by
   induction run with
@@ -524,9 +530,8 @@ private theorem Run.invariant {first last : ForkedBeaconState preset}
 /-- A state reached from genesis has one balance for each validator. -/
 theorem reachable_balancesMatch {g x : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g) :
-    BalancesMatch x.state := by
-  obtain ⟨_, _, _, ok⟩ := genesis
-  exact (run.invariant (initializeBeaconStateFromEth1_invariant ok).2).balancesMatch
+    BalancesMatch x.state :=
+  (run.invariant genesis.invariant).balancesMatch
 
 /-- The last state of a run agrees with the roots that the run records, above its first slot.
 

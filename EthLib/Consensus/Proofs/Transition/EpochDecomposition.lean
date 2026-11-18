@@ -249,6 +249,45 @@ theorem processEpoch_trace {config : Config} {checks : SignatureChecks}
     EpochTrace (action config checks) epochStages state after :=
   run_ok_iff.mp ((processEpoch_eq_run config checks state).symm.trans computed)
 
+/-- Split an epoch trace after the effective balance updates.
+
+It names the state after each of the first ten stages, with the equation of each stage.
+
+The trace of the seven later stages follows. -/
+theorem EpochTrace.through_effectiveBalances {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork}
+    (trace : EpochTrace (action config checks) epochStages state after) :
+    ∃ justified scored rewarded registered slashed reset deposited consolidated settled updated,
+      action config checks .justification state = .ok justified ∧
+      action config checks .inactivity justified = .ok scored ∧
+      action config checks .rewards scored = .ok rewarded ∧
+      action config checks .registry rewarded = .ok registered ∧
+      action config checks .slashings registered = .ok slashed ∧
+      action config checks .eth1Reset slashed = .ok reset ∧
+      action config checks .pendingDeposits reset = .ok deposited ∧
+      action config checks .pendingConsolidations deposited = .ok consolidated ∧
+      action config checks .payments consolidated = .ok settled ∧
+      action config checks .effectiveBalances settled = .ok updated ∧
+      EpochTrace (action config checks)
+        [.slashingsReset, .randaoReset, .history, .participation, .syncCommittees,
+          .proposerLookahead, .ptcWindow] updated after := by
+  change EpochTrace _ (.justification :: .inactivity :: .rewards :: .registry :: .slashings ::
+    .eth1Reset :: .pendingDeposits :: .pendingConsolidations :: .payments ::
+    .effectiveBalances :: [.slashingsReset, .randaoReset, .history, .participation,
+      .syncCommittees, .proposerLookahead, .ptcWindow]) _ _ at trace
+  obtain _ | ⟨justifiedOk, trace⟩ := trace
+  obtain _ | ⟨scoredOk, trace⟩ := trace
+  obtain _ | ⟨rewardedOk, trace⟩ := trace
+  obtain _ | ⟨registeredOk, trace⟩ := trace
+  obtain _ | ⟨slashedOk, trace⟩ := trace
+  obtain _ | ⟨resetOk, trace⟩ := trace
+  obtain _ | ⟨depositedOk, trace⟩ := trace
+  obtain _ | ⟨consolidatedOk, trace⟩ := trace
+  obtain _ | ⟨settledOk, trace⟩ := trace
+  obtain _ | ⟨updatedOk, trace⟩ := trace
+  exact ⟨_, _, _, _, _, _, _, _, _, _, justifiedOk, scoredOk, rewardedOk, registeredOk,
+    slashedOk, resetOk, depositedOk, consolidatedOk, settledOk, updatedOk, trace⟩
+
 /-- The RANDAO reset separates the balance updates from history and rotation.
 
 After the reset, the equations of history, rotation and the three committee stages follow. -/
