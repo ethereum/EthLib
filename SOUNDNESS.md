@@ -324,7 +324,11 @@ Every hash is an oracle call, and the climbs take the inclusion proof depth of t
 The adversary wins when the headers have one body root and different lists, and both climbs reach that body root.
 Only the forks from Deneb and before Gloas put the list in the body, where the climbs can run.
 A data column sidecar carries the same commitments, proof and block header, and its check reads the same function on them.
-The bound holds for two sidecars as well, but no theorem states it.
+`DataColumnSidecar.partialHeader` takes these three fields of a sidecar before Gloas as a partial header.
+`prEvent_columnWins_le_of_sidecars` states the bound of `prEvent_columnWins_le_of_adversary` below for an adversary that outputs two sidecars.
+Its experiment runs the extraction on the headers that the two sidecars carry, and taking them makes no oracle call.
+Its win reads the commitments, the proof and the body root of each sidecar, and not the index, the cells or their proofs.
+With SHA-256, `columnWins_sha256_iff_of_sidecars` shows that such a win is two sidecars that `verifyDataColumnSidecarInclusionProof` accepts.
 
 `collision_of_extractColumnHeaders` shows that every win leaves two different cached inputs with one answer.
 By `hashTreeRootM_bytes48List` (`Serialization/Proofs/Ssz/BranchRandomOracle.lean`), the root of a list is the perfect tree over the roots of its commitments, with the count mixed in.
@@ -6273,6 +6277,7 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   The blob sidecar bound fixes the preset and the fork before the run, and its adversary picks both sidecars.
   The deposit bound reads no preset or fork, and its adversary picks the index, the deposit root and both deposits.
   The data column bound fixes the preset and the fork before the run, and its adversary picks both partial headers.
+  In its bound for sidecars, the adversary picks both sidecars, and the experiment takes the header that each carries.
   The sync committee bound fixes the preset and the index before the run, and its adversary picks the state root, both committees and both branches.
   The finality bound fixes the index before the run, and its adversary picks the state root, both headers and both branches.
   An adversary that also picks the slot picks one of at most three indices, so its bound at most triples.
