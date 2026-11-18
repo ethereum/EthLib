@@ -634,4 +634,37 @@ def HeldStateFinalityEvidence {g : ForkedBeaconState preset}
       DirectSafety.AccountableOrHashEvidence pre left right
         stateB.currentJustifiedCheckpoint.epoch.toNat
 
+/-- Two honest stores have two runs from the anchor to held states that give direct-safety evidence.
+
+The stores and their events by the time are independent.
+
+A terminal view of the first state has the first store's finalized checkpoint.
+
+A terminal view of the second state has the second store's justified checkpoint.
+
+The evidence is the direct-safety stake inequality, or hash evidence on the two runs.
+
+It is relative to the anchor, and its drift counts from the anchor.
+
+With enough churn since the anchor, the stake inequality holds with no accountable key. -/
+def CrossStoreDirectSafetyEvidence {g : ForkedBeaconState preset}
+    (pre : Run config checks g ⟨fork, anchorState⟩) (time : Nat) : Prop :=
+  ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
+    ∃ (stateA stateB : BeaconState preset fork)
+      (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
+      (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
+      (va : DirectSafety.TerminalView ⟨fork, stateA⟩)
+      (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
+      (∃ r : Root, ((e.world i).state a).blockStates[r]? = some stateA) ∧
+      (∃ r : Root, ((e.world j).state b).blockStates[r]? = some stateB) ∧
+      va.state.finalizedCheckpoint = ((e.world i).state a).finalizedCheckpoint ∧
+      vb.state.currentJustifiedCheckpoint = ((e.world j).state b).justifiedCheckpoint ∧
+      (stake (DirectSafety.effectiveWeight anchorState) (DirectSafety.unslashedKeys anchorState) ≤
+        3 * stake (DirectSafety.effectiveWeight anchorState)
+          (DirectSafety.accountableKeys pre left right) +
+        2 * max (DirectSafety.derivedDrift
+          ((e.world j).state b).justifiedCheckpoint.epoch.toNat left)
+          (DirectSafety.derivedDrift ((e.world j).state b).justifiedCheckpoint.epoch.toNat right) ∨
+        DirectSafety.HashEvidence ((pre.append left).hashObjects ++ (pre.append right).hashObjects))
+
 end EthLib.Consensus.Models.Network
