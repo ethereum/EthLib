@@ -797,6 +797,38 @@ variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconSt
   {V : Finset ValidatorIndex}
 
 
+/-- A key active at C's epoch is activated by then at R, when that epoch is within the lookahead.
+
+Activity up to the seed lookahead after the split is the same on both branches. -/
+private theorem activation_le_of_active {g : ForkedBeaconState preset}
+    {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
+    (h : Setting config checks g split fin pulled anc counted V)
+    (bound : (getCurrentEpoch counted).toNat ≤
+      anc.finalizedCheckpoint.epoch.toNat + preset.MAX_SEED_LOOKAHEAD.toNat)
+    {v : ValidatorIndex} (member : v ∈ AC counted) {w : Validator}
+    (found : pulled.validators.data[v.toNat]? = some w) :
+    w.activationEpoch.toNat ≤ (getCurrentEpoch counted).toNat := by
+  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+  obtain ⟨u, foundU, activeU⟩ := active_of_activeVoters h.early member
+  obtain ⟨rp⟩ := h.toPulled
+  obtain ⟨rc⟩ := h.toCounted
+  have fixed : getCurrentEpoch counted ≤ activityFixedEpoch split := by
+    rw [UInt64.le_iff_toNat_le, activityFixedEpoch_toNat]
+    have := (getCurrentEpoch counted).toNat_lt
+    omega
+  have kc := activeKept_of_chainSteps rc.chainSteps (getCurrentEpoch counted) fixed v.toNat
+  have kp := activeKept_of_chainSteps rp.chainSteps (getCurrentEpoch counted) fixed v.toNat
+  have activeAtC : isActiveAt counted (getCurrentEpoch counted) v.toNat = true :=
+    isActiveAt_eq_true_iff.mpr ⟨u, foundU, activeU⟩
+  have activeAtR : isActiveAt pulled (getCurrentEpoch counted) v.toNat = true := by
+    rw [kp, ← kc]
+    exact activeAtC
+  obtain ⟨w', found', active⟩ := isActiveAt_eq_true_iff.mp activeAtR
+  rw [found] at found'
+  cases found'
+  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
+  exact UInt64.le_iff_toNat_le.mp active.1
+
 /-- Glue: an unslashed V key active in C counts in C's quorum. -/
 theorem glue_quorum (h : Setting config checks g split fin pulled anc counted V) :
     ∀ v ∈ V, v ∈ AC counted → v ∈ Q counted := by
