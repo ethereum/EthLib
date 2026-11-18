@@ -46,7 +46,7 @@ def run_together(work: Callable[[int], object]) -> list[object]:
 def test_import_leaves_the_gil_disabled() -> None:
     # The module is imported by now, and it declares that it needs no GIL.
     # ty reads the standard library of Python 3.12, which has no `sys._is_gil_enabled`.
-    assert not sys._is_gil_enabled()  # ty: ignore[unresolved-attribute]
+    assert not sys._is_gil_enabled()  # ty: ignore[missing-attribute]
 
 
 def test_same_results_from_every_thread() -> None:
