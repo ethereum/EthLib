@@ -226,7 +226,9 @@ The coverage at that time puts the signer's head above the root.
 
 The checkpoint is that head's block at the start of a later epoch, so it sits above the root.
 
-The store agrees with the signer on that walk, as honest stores agree on blocks. -/
+The store agrees with the signer on that walk, as honest stores agree on blocks.
+
+Otherwise two honest stores collide on a block. -/
 private theorem justified_descends_of_signer {anchor : Store preset fork} {Δ time T : ℕ}
     {root : Root} {callEpoch : Epoch} {callSlot : Slot} {callStart : UInt64}
     {u : ValidatorIndex} {n : ℕ} {block : BeaconBlock preset fork}
@@ -236,10 +238,6 @@ private theorem justified_descends_of_signer {anchor : Store preset fork} {Δ ti
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (preGloas : fork < .glamsterdam)
     (fits : DelayFits fork config genesisTimeMs Δ)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
-    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
-      ∀ (r : Root) (left right : BeaconBlock preset fork),
-      ((e.world i).state a).blocks[r]? = some left →
-      ((e.world j).state b).blocks[r]? = some right → left = right)
     (caller : u ∈ J) (callerHeld : ((e.world n).state u).blocks[root]? = some block)
     (callerTime : (e.world n).time ≤ time)
     (callStartOk : computeTimeAtSlotMs config genesisTimeMs callSlot = .ok callStart)
@@ -257,7 +255,8 @@ private theorem justified_descends_of_signer {anchor : Store preset fork} {Δ ti
       ∃ data, (v, data) ∈ statements config checks anchorState anchorBlock m ∧
         data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < current) :
     ((e.world k).state w).isAncestor
-      ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true := by
+      ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
+      HonestCollision (e := e) time := by
   obtain ⟨v, honest, i, -, m, sent, data, member, target, before⟩ := signer
   have laterData : callEpoch < data.target.epoch := target ▸ later
   obtain ⟨k', low', high', duty⟩ := signer_duty_window start fits callStartOk callEpochEq
@@ -282,7 +281,7 @@ private theorem justified_descends_of_signer {anchor : Store preset fork} {Δ ti
     have above := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat (Nat.succ_le_of_lt epochLt)
     rw [Nat.succ_mul] at above
     omega
-  exact justified_descends_of_duty anchored start anchorSlot anchorBoundary preGloas roots agree
+  exact justified_descends_of_duty anchored start anchorSlot anchorBoundary preGloas roots
     caller callerHeld callerTime covers high receiver atTime justifiedKnown boundaryLe honest duty
     target (by omega) high'
 
@@ -314,7 +313,9 @@ private theorem route_of_split {store : Store preset fork} {root : Root}
 
 At a time T, honest heads must descend from the root before T, and from the start to the horizon.
 
-The other case is a held state whose justification conflicts with a store's finality.
+One other case is two honest stores that collide.
+
+The last is a held state whose justification conflicts with a store's finality.
 
 A receiver's justified checkpoint of the call's epoch or earlier is comparable with the root.
 
@@ -339,7 +340,6 @@ private theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
     (anchorEpochOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time) (absent : AnchorParentAbsent (e := e) time)
-    (agree : HonestBlocksAgree (e := e) time)
     (selected : SelectedCheckpointsAgree (e := e) horizon time)
     (pinned : JustifiedPinned (e := e) anchorEpoch margin 0 time)
     (signedAll : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
@@ -375,9 +375,12 @@ private theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
     (holds : HonestHoldsFrom (e := e) root (e.world n).time time)
     (T : ℕ) (low : (e.world n).time ≤ T) (high : T ≤ time)
     (covers : HonestHeadsCover (e := e) root (e.world n).time T) :
-    RootViableAt (e := e) root T ∨ HeldStateFinalityEvidence (e := e) pre time := by
+    RootViableAt (e := e) root T ∨ HonestCollision (e := e) time ∨
+      HeldStateFinalityEvidence (e := e) pre time := by
   by_cases evidence : HeldStateFinalityEvidence (e := e) pre time
-  · exact .inr evidence
+  · exact .inr (.inr evidence)
+  by_cases collide : HonestCollision (e := e) time
+  · exact .inr (.inl collide)
   left
   intro w receiver k nodes hd atTime upToDate hdOk tree
   have callerEpochOk : ((e.world n).state u).getCurrentStoreEpoch config =
@@ -388,17 +391,17 @@ private theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
     have atSlot : ∃ slot begin, ((e.world n).state u).getCurrentSlot config = .ok slot ∧
         computeTimeAtSlotMs config genesisTimeMs slot = .ok begin ∧
         (e.world n).time = begin.toNat := ⟨slot, begin, slotOk, beginOk, timeEq⟩
-    have route := e.justified_comparable_of_checked anchored sound anchorSlot anchorBoundary
+    have route := (e.justified_comparable_of_checked anchored sound anchorSlot anchorBoundary
       start preGloas slots fits windows parameters incrementPositive anchorEpochOk bounded roots
-      agree selected pinned signedAll caller callerUpToDate atSlot headOk callerEpochOk inputs low
-      high startCovers covers holds receiver atTime upToDate hdOk early
+      selected pinned signedAll caller callerUpToDate atSlot headOk callerEpochOk inputs low high
+      startCovers covers holds receiver atTime upToDate hdOk early).resolve_right collide
     exact route_of_split route fun above different =>
       (e.rootInFilteredTree_of_checked pre sync slots positive preGloas admitted fits prompt votes
         windows fit ring anchored sound anchorSlot anchorBoundary start anchorEpochOk bounded roots
-        absent agree selected pinned signedAll quorumDrift unslashed terminal anchorGenesis
+        absent selected pinned signedAll quorumDrift unslashed terminal anchorGenesis
         parameters genesis heldEarly enough included family caller callerUpToDate atSlot headOk
         rollover inputs walked realized realizedHead low high startCovers covers receiver atTime
-        upToDate tree above different).resolve_right evidence
+        upToDate tree above different).resolve_right (not_or.mpr ⟨collide, evidence⟩)
   · -- A late checkpoint has an honest signer, which puts it above the root.
     have late : computeEpochAtSlot preset slot <
         ((e.world k).state w).justifiedCheckpoint.epoch := UInt64.lt_iff_toNat_lt.mpr
@@ -423,10 +426,10 @@ private theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
       (forward n u caller).slots_le_current slots (UInt64.le_of_eq anchorSlot)
     rw [slotOk, Except.ok.injEq] at callerCurrentOk
     subst callerCurrentOk
-    exact .inl (justified_descends_of_signer anchored start anchorSlot anchorBoundary positive
-      preGloas fits roots agree caller callerHeld (low.trans high) beginOk timeEq
+    exact .inl ((justified_descends_of_signer anchored start anchorSlot anchorBoundary positive
+      preGloas fits roots caller callerHeld (low.trans high) beginOk timeEq
       (callerBlocks root block callerHeld) rfl covers high receiver atTime upToDate hdOk
-      currentOk late signer)
+      currentOk late signer).resolve_right collide)
 
 /-- The induction of the historical-anchor headline, with the root's viability given per time.
 
@@ -966,13 +969,9 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
       HistoricalDirectSafetyEvidence (e := e) pre time := by
   have positive := fit.positive
   classical
-  -- Honest stores up to the horizon agree on blocks, or two of them collide.
-  rcases Store.blocks_agree_or_collision
-      (fun i : ValidatorIndex × ℕ => (e.world i.2).state i.1)
-      (fun i => i.1 ∈ J ∧ (e.world i.2).time ≤ time) with agree | collision
-  swap
-  · obtain ⟨⟨a, i⟩, ⟨ha, hi⟩, ⟨b, j⟩, ⟨hb, hj⟩, r, evidence, searched⟩ := collision
-    exact .inr (.inl ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩)
+  -- Two honest stores up to the horizon collide, or no step below meets a collision.
+  by_cases collide : HonestCollision (e := e) time
+  · exact .inr (.inl collide)
   have callerHeld : ((e.world n).state u).blocks[root]? = some block :=
     Store.block_ok_iff.mp blockOk
   have forward := e.forwardReachable
@@ -1007,13 +1006,10 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
       · -- A later justified checkpoint descends from the root, through its honest signer.
         obtain ⟨current, currentOk, _, _⟩ :=
           (forward k w receiver).slots_le_current slots (UInt64.le_of_eq anchorSlot)
-        exact .inl (justified_descends_of_signer anchored start anchorSlot anchorBoundary
-          positive preGloas fits roots
-          (fun a ha b hb i j hi hj r l rt hl hr => agree (a, i) ⟨ha, hi⟩ (b, j) ⟨hb, hj⟩
-            r l rt hl hr)
-          caller callerHeld callerTime beginOk timeEq blockLe callEpochEq covers high receiver
-          atTime upToDate headOk currentOk later
-          (signed w receiver k current lowK highK upToDate currentOk later))
+        exact .inl ((justified_descends_of_signer anchored start anchorSlot anchorBoundary
+          positive preGloas fits roots caller callerHeld callerTime beginOk timeEq blockLe
+          callEpochEq covers high receiver atTime upToDate headOk currentOk later
+          (signed w receiver k current lowK highK upToDate currentOk later)).resolve_right collide)
       · -- An early justified checkpoint: the assumed consistency and the kept leaf.
         exact route_of_split
           (consistent w receiver k lowK highK upToDate (UInt64.not_lt.mp later))
@@ -1132,14 +1128,6 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
       genesis pre heldEarly enough terminal with selected | crossJustified
   swap
   · exact .inr (.inr (.inr (.inl crossJustified)))
-  -- Honest stores agree on blocks, or two collide.
-  rcases Store.blocks_agree_or_collision (fun i : ValidatorIndex × ℕ => (e.world i.2).state i.1)
-      (fun i => i.1 ∈ J ∧ (e.world i.2).time ≤ time) with agreeAll | collision
-  swap
-  · obtain ⟨⟨a, i⟩, ⟨ha, hi⟩, ⟨b, j⟩, ⟨hb, hj⟩, r, evidence, searched⟩ := collision
-    exact .inr (.inl ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩)
-  have agree : HonestBlocksAgree (e := e) time := fun a ha b hb i j hi hj =>
-    agreeAll ⟨a, i⟩ ⟨ha, hi⟩ ⟨b, j⟩ ⟨hb, hj⟩
   -- Each store's justified checkpoint reads its earlier finality, or historical evidence holds.
   rcases e.finalizedFamily_or_historical_evidence anchored start sound anchorSlot anchorBoundary
       slots bounded roots absent parameters genesis pre heldEarly enough terminal caller callerTime
@@ -1181,16 +1169,18 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
   rotate_left
   · exact .inr (.inl collision)
   · exact .inr (.inr (.inr (.inr heldEvidence)))
-  -- The root's step at each time, split once on its evidence.
+  -- The root's step at each time, split once on a collision and on its evidence.
+  by_cases collide : HonestCollision (e := e) time
+  · exact .inr (.inl collide)
   by_cases heldEvidence : HeldStateFinalityEvidence (e := e) pre time
   · exact .inr (.inr (.inr (.inr heldEvidence)))
   exact .inl fun T low high covers =>
     (e.rootViableAt_of_checked pre sync slots positive preGloas admitted fits prompt votes windows
       fit ring incrementPositive anchored sound anchorSlot anchorBoundary start anchorEpochOk
-      bounded roots absent agree selected pinned signedAll quorumDrift unslashed terminal
+      bounded roots absent selected pinned signedAll quorumDrift unslashed terminal
       anchorGenesis parameters genesis heldEarly enough included family caller callerUpToDate slotOk
       beginOk timeEq headOk rollover inputs walked realized realizedHead startCovers holds T low
-      high covers).resolve_right heldEvidence
+      high covers).resolve_right (not_or.mpr ⟨collide, heldEvidence⟩)
 
 /-- Every up-to-date honest head descends from the confirmed root of a checked call.
 

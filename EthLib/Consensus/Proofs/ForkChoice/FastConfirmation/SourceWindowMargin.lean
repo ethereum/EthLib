@@ -1156,14 +1156,15 @@ The coverage at the duty puts the signer's head above the root.
 
 The checkpoint is that head's block at the first slot of its epoch, so it sits above the root.
 
-The store agrees with the signer on that walk, as honest stores agree on blocks. -/
+The store agrees with the signer on that walk, as honest stores agree on blocks.
+
+Otherwise two honest stores collide on a block. -/
 public theorem justified_descends_of_duty {anchor : Store preset fork} {time T : ℕ}
     {root : Root} {u : ValidatorIndex} {n : ℕ} {block : BeaconBlock preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (preGloas : fork < .glamsterdam) (roots : HeldBlockStateRootsNonzero (e := e) time)
-    (agree : HonestBlocksAgree (e := e) time)
     (caller : u ∈ J) (callerHeld : ((e.world n).state u).blocks[root]? = some block)
     (callerTime : (e.world n).time ≤ time)
     (covers : HonestHeadsCover (e := e) root (e.world n).time T) (high : T ≤ time)
@@ -1179,7 +1180,12 @@ public theorem justified_descends_of_duty {anchor : Store preset fork} {time T :
     (afterCall : (e.world n).time ≤ (e.world k').time)
     (beforeStore : (e.world k').time < (e.world k).time) :
     ((e.world k).state w).isAncestor
-      ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true := by
+      ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
+      HonestCollision (e := e) time := by
+  rcases e.blocksAgree_or_collision time with agree | collision
+  swap
+  · exact .inr collision
+  refine .inl ?_
   have k'Bound : (e.world k').time ≤ time := by omega
   have reachedV := e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored) k' v
     honest

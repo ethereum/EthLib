@@ -16,6 +16,8 @@ Not yet released.
   `Execution.honestHeadsCover_of_checked_call` keeps the root on every up-to-date honest head chain over the same interval.
   It replaces the consistency, the leaf and the call-epoch signer of `Execution.honestHeadsCover_of_signed_justification` with the rule's checks.
   `Execution.rootInFilteredTree_of_checked` and `Execution.justified_comparable_of_checked` give the root's step at one time.
+  They and `justified_descends_of_duty` may instead give `HonestCollision`, two honest stores that collide on a block.
+  `Execution.blocksAgree_or_collision` splits that collision from the agreement of honest stores on the blocks they both hold.
   `Execution.rootHeld_of_honest_vote` holds the root from the call on, from the honest vote that `Execution.honest_vote_of_caller_margin` finds behind the caller's margin.
   `Execution.heldFinality_or_evidence` reads a store's finalized checkpoint on a held state's justified chain, or gives `HeldStateFinalityEvidence`.
   `DelayFits.deadline_add_le`, `Store.ForwardReachable.finalized_add_two_le_or_anchor` and `Store.getCheckpointBlock_trans` are general steps.

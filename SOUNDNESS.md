@@ -3169,7 +3169,9 @@ An honest supporter behind the caller's margin sent a vote above the root before
 The root's viability at each time is a private step of the same file.
 A justified checkpoint of the call's epoch or before is comparable with the root (`Execution.justified_comparable_of_checked`).
 If the root strictly descends from it, `Execution.rootInFilteredTree_of_checked` keeps the root in the filtered tree.
-A later justified checkpoint has an honest signer, which puts it above the root.
+A later justified checkpoint has an honest signer, which puts it above the root (`justified_descends_of_duty`).
+Each of these three steps may instead give `HonestCollision`, two honest stores that collide on a block.
+Block agreement between honest stores is not assumed: `Execution.blocksAgree_or_collision` splits it from that collision.
 
 These theorems take the following premises beyond the headline's.
 `CallCheckpointInputs` records the checks that the call passed, with the root on the head's chain.

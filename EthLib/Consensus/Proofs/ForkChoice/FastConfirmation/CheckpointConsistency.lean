@@ -401,7 +401,11 @@ private theorem comparable_of_duty {anchor : Store preset fork}
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (preGloas : fork < .glamsterdam) {time first T : ℕ}
-    (roots : HeldBlockStateRootsNonzero (e := e) time) (agree : HonestBlocksAgree (e := e) time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
     {root : Root} (covers : HonestHeadsCover (e := e) root first T) (high : T ≤ time)
     {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J) {k k' : ℕ}
     {data : AttestationData}
@@ -433,7 +437,11 @@ private theorem checkpoint_slot_le_of_duty {anchor : Store preset fork}
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (preGloas : fork < .glamsterdam) {time : ℕ}
-    (roots : HeldBlockStateRootsNonzero (e := e) time) (agree : HonestBlocksAgree (e := e) time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
     {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J) {k k' : ℕ}
     {data : AttestationData}
     (duty : MaySign config checks sources anchorState anchorBlock assignment genesisTimeMs v
@@ -495,7 +503,11 @@ private theorem justified_comparable_of_pin {anchor : Store preset fork} {Δ tim
     (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (anchorOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
-    (roots : HeldBlockStateRootsNonzero (e := e) time) (agree : HonestBlocksAgree (e := e) time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
     (selected : SelectedCheckpointsAgree (e := e) horizon time)
     (signed : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
     {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
@@ -809,6 +821,8 @@ That quorum pins the checkpoint to the call's target.
 Otherwise one of its voters is unseen by the call and votes from the call on.
 
 A duty from the call on, before the receiver's time, makes the checkpoint comparable with the root.
+
+Otherwise two honest stores collide on a block.
 -/
 theorem Execution.justified_comparable_of_checked {anchor : Store preset fork} {Δ time T : ℕ}
     {anchorEpoch horizon : Epoch} {margin : ℕ}
@@ -823,7 +837,7 @@ theorem Execution.justified_comparable_of_checked {anchor : Store preset fork} {
     (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (anchorOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
-    (roots : HeldBlockStateRootsNonzero (e := e) time) (agree : HonestBlocksAgree (e := e) time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time)
     (selected : SelectedCheckpointsAgree (e := e) horizon time)
     (pins : JustifiedPinned (e := e) anchorEpoch margin 0 time)
     (signed : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
@@ -849,18 +863,23 @@ theorem Execution.justified_comparable_of_checked {anchor : Store preset fork} {
       ((e.world k).state w))
     (hdOk : ((e.world k).state w).getHead config = .ok hd)
     (early : ((e.world k).state w).justifiedCheckpoint.epoch ≤ callerEpoch) :
-    ((e.world k).state w).isAncestor
+    (((e.world k).state w).isAncestor
         ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
       ((e.world k).state w).isAncestor ⟨root, .pending⟩
-        ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ = .ok true :=
-  justified_comparable_of_pin anchored sound anchorSlot anchorBoundary start preGloas slots fits
-    windows params incrementPositive anchorOk bounded roots agree selected signed caller upToDate
-    atSlot headOk callerEpochOk inputs callLe high baseCovers covers holds receiver atTime ready
-    hdOk early
+        ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ = .ok true) ∨
+      HonestCollision (e := e) time := by
+  rcases e.blocksAgree_or_collision time with agree | collision
+  swap
+  · exact .inr collision
+  exact .inl (justified_comparable_of_pin anchored sound anchorSlot anchorBoundary start preGloas
+    slots fits windows params incrementPositive anchorOk bounded roots agree selected signed caller
+    upToDate atSlot headOk callerEpochOk inputs callLe high baseCovers covers holds receiver atTime
+    ready hdOk early
     (fun stateOk totalOk targetOk ancOk finRead finAnchor after targetEpoch members quorum
         currentOk cpEpoch =>
       Execution.target_eq_or_unseen_signer slots pins caller (callLe.trans high)
         ⟨head, headOk, rfl⟩ stateOk totalOk callerEpochOk targetOk ancOk finRead finAnchor after
-        targetEpoch members quorum receiver (Nat.zero_le _) (atTime ▸ high) ready currentOk cpEpoch)
+        targetEpoch members quorum receiver (Nat.zero_le _) (atTime ▸ high) ready currentOk
+        cpEpoch))
 
 end EthLib.Consensus.Models.Network

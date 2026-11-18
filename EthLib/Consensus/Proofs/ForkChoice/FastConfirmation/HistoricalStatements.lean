@@ -228,24 +228,25 @@ def WindowExitBound (store : Store preset fork) (source : BeaconState preset for
 def HeldBlockStateRootsNonzero (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last → HeldStateRootsNonzero ((e.world k).state w)
 
-/-- Honest stores up to a time agree on every block they both hold.
-
-A reachable store keeps each block at its own root (`Store.Reachable.root`).
-
-So this holds when no two different blocks held by honest stores up to that time share a root.
-
-It asks nothing of the hash on blocks that no honest store holds. -/
-def HonestBlocksAgree (time : Nat) : Prop :=
-  ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
-    ∀ (r : Root) (left right : BeaconBlock preset fork),
-    ((e.world i).state a).blocks[r]? = some left →
-    ((e.world j).state b).blocks[r]? = some right → left = right
-
 /-- Two honest stores collide on one root, by a time. -/
 def HonestCollision (time : ℕ) : Prop :=
   ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
     ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
       some evidence
+
+omit [DecidablePred (· ∈ J)] in
+/-- Honest stores up to a time agree on every block they both hold, or two of them collide. -/
+theorem Execution.blocksAgree_or_collision (time : ℕ) :
+    (∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right) ∨
+      HonestCollision (e := e) time := by
+  rcases Store.blocks_agree_or_collision (fun i : ValidatorIndex × ℕ => (e.world i.2).state i.1)
+      (fun i => i.1 ∈ J ∧ (e.world i.2).time ≤ time) with agree | collision
+  · exact .inl fun a ha b hb i j hi hj => agree (a, i) ⟨ha, hi⟩ (b, j) ⟨hb, hj⟩
+  · obtain ⟨⟨a, i⟩, ⟨ha, hi⟩, ⟨b, j⟩, ⟨hb, hj⟩, r, evidence, searched⟩ := collision
+    exact .inr ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
 
 /-- No honest validator has a true slashed flag in a counted state through the horizon. -/
 def HonestCountedStatesUnslashed (last : Nat) : Prop :=

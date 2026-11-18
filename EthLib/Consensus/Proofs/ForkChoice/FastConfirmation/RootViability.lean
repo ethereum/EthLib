@@ -1932,7 +1932,11 @@ private theorem early_receiver_source {anchor : Store preset fork} {time T : ℕ
     (preGloas : fork < .glamsterdam)
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
-    (anchored : ∀ w ∈ J, e.start w = anchor) (agree : HonestBlocksAgree (e := e) time)
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
     {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ} {root : Root} {chain : List Root}
     (realized : AcceptedRealizedRecent ((e.world n).state u) (chain ++ [root]))
     (low : (e.world n).time ≤ T) (high : T ≤ time) {w : ValidatorIndex} (receiver : w ∈ J) {k : ℕ}
@@ -2024,6 +2028,36 @@ private theorem eq_of_isAncestor_antisymm {store : Store preset fork} (before : 
   rw [Store.getAncestor_of_le aFound ge, Except.ok.injEq] at walk
   exact congrArg ForkChoiceNode.root walk
 
+/-- A collision names a root where the two stores hold different blocks. -/
+private theorem findBlockCollision_held {first second : Store preset fork} {roots : List Root}
+    {root : Root} {left right : BeaconBlock preset fork}
+    (found : Store.findBlockCollision first second roots = some (root, left, right)) :
+    first.blocks[root]? = some left ∧ second.blocks[root]? = some right ∧ left ≠ right := by
+  induction roots with
+  | nil => simp [Store.findBlockCollision] at found
+  | cons head tail ih =>
+    simp only [Store.findBlockCollision] at found
+    split at found
+    · rename_i b₁ b₂ h₁ h₂
+      split at found
+      · exact ih found
+      · rename_i ne
+        simp only [Option.some.injEq, Prod.mk.injEq] at found
+        obtain ⟨rfl, rfl, rfl⟩ := found
+        exact ⟨h₁, h₂, ne⟩
+    · exact ih found
+
+/-- Honest stores that agree on every block they both hold do not collide. -/
+private theorem not_collision_of_agree {time : ℕ}
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right) :
+    ¬HonestCollision (e := e) time := by
+  rintro ⟨a, ha, b, hb, i, j, hi, hj, _, ⟨r, left, right⟩, found⟩
+  obtain ⟨leftFound, rightFound, different⟩ := findBlockCollision_held found
+  exact different (agree a ha b hb i j hi hj r left right leftFound rightFound)
+
 /-- A late receiver's justified checkpoint is not after the root's epoch and at most the call's.
 
 Its honest signer votes in the call's epoch.
@@ -2045,7 +2079,11 @@ private theorem late_justified_not_in_call_epoch {anchor : Store preset fork} {�
     (anchored : ∀ w ∈ J, e.start w = anchor)
     (anchorOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
     (inHorizon : HonestStoreEpochsBounded (e := e) horizon time)
-    (roots : HeldBlockStateRootsNonzero (e := e) time) (agree : HonestBlocksAgree (e := e) time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
     (selected : SelectedCheckpointsAgree (e := e) horizon time)
     (pinned : JustifiedPinned (e := e) anchorEpoch margin 0 time)
     (signed : JustifiedHonestlySigned (e := e) anchorEpoch 0 time) {u : ValidatorIndex}
@@ -2159,9 +2197,10 @@ private theorem late_justified_not_in_call_epoch {anchor : Store preset fork} {�
   have viaDuty := fun {v} (honest : v ∈ J) {k' data} duty target after before =>
     let window := duty_window_of_slot_le (k' := k') (data := data) anchored fits callBeginOk
       receiver ready currentOk honest duty after before
-    justified_descends_of_duty anchorStore anchored anchorSlot anchorBoundary preGloas roots agree
+    (justified_descends_of_duty anchorStore anchored anchorSlot anchorBoundary preGloas roots
       caller callerFound callerBound covers high receiver atTime ⟨_, justifiedFound⟩
-      (slot_le_of_epoch_lt positive above) honest duty target (atCall.trans_le window.1) window.2
+      (slot_le_of_epoch_lt positive above) honest duty target (atCall.trans_le window.1)
+      window.2).resolve_right (not_collision_of_agree agree)
   -- The justification's own signer.
   obtain ⟨v, honest, i, -, m, sent, data, member, target, dataBefore⟩ :=
     signed w receiver k current (Nat.zero_le _) receiverBound ready currentOk afterAnchor
@@ -2281,7 +2320,11 @@ private theorem late_justified_le_root {anchor : Store preset fork} {Δ time T :
     (anchored : ∀ w ∈ J, e.start w = anchor)
     (anchorOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
     (inHorizon : HonestStoreEpochsBounded (e := e) horizon time)
-    (roots : HeldBlockStateRootsNonzero (e := e) time) (agree : HonestBlocksAgree (e := e) time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
     (selected : SelectedCheckpointsAgree (e := e) horizon time)
     (pinned : JustifiedPinned (e := e) anchorEpoch margin 0 time)
     (signed : JustifiedHonestlySigned (e := e) anchorEpoch 0 time) {u : ValidatorIndex}
@@ -2354,32 +2397,13 @@ private theorem late_justified_le_root {anchor : Store preset fork} {Δ time T :
   obtain ⟨justifiedBlock, justifiedFound⟩ := Store.filterNodeTree_known tree
   obtain ⟨low', high'⟩ := duty_window_of_slot_le anchored fits callBeginOk receiver ready currentOk
     honest duty after before
-  have up := justified_descends_of_duty anchorStore anchored anchorSlot anchorBoundary preGloas
-    roots agree caller callerFound callerBound covers high receiver atTime
+  have up := (justified_descends_of_duty anchorStore anchored anchorSlot anchorBoundary preGloas
+    roots caller callerFound callerBound covers high receiver atTime
     ⟨justifiedBlock, justifiedFound⟩ (slot_le_of_epoch_lt positive above) honest duty target
-    (atCall.trans_le low') high'
+    (atCall.trans_le low') high').resolve_right (not_collision_of_agree agree)
   exact strict (eq_of_isAncestor_antisymm preGloas rootFound justifiedFound descends up)
 
 /-! ## A late receiver of a root before the call's epoch -/
-
-/-- A collision names a root where the two stores hold different blocks. -/
-private theorem findBlockCollision_held {first second : Store preset fork} {roots : List Root}
-    {root : Root} {left right : BeaconBlock preset fork}
-    (found : Store.findBlockCollision first second roots = some (root, left, right)) :
-    first.blocks[root]? = some left ∧ second.blocks[root]? = some right ∧ left ≠ right := by
-  induction roots with
-  | nil => simp [Store.findBlockCollision] at found
-  | cons head tail ih =>
-    simp only [Store.findBlockCollision] at found
-    split at found
-    · rename_i b₁ b₂ h₁ h₂
-      split at found
-      · exact ih found
-      · rename_i ne
-        simp only [Option.some.injEq, Prod.mk.injEq] at found
-        obtain ⟨rfl, rfl, rfl⟩ := found
-        exact ⟨h₁, h₂, ne⟩
-    · exact ih found
 
 /-- The start of a later slot is more than one delay after the start of an earlier slot. -/
 private theorem delay_before_later_slot {Δ : ℕ} (slots : 0 < config.SLOT_DURATION_MS)
@@ -2413,7 +2437,11 @@ private theorem late_previous_receiver_source {anchor : Store preset fork} {Δ t
     (anchorOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
     (inHorizon : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
-    (anchorParent : AnchorParentAbsent (e := e) time) (agree : HonestBlocksAgree (e := e) time)
+    (anchorParent : AnchorParentAbsent (e := e) time)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
     (selected : SelectedCheckpointsAgree (e := e) horizon time)
     (pinned : JustifiedPinned (e := e) anchorEpoch margin 0 time)
     (signed : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
@@ -2599,12 +2627,9 @@ private theorem late_previous_receiver_source {anchor : Store preset fork} {Δ t
   have late : max (e.world n).time 0 + Δ ≤ (e.world k).time := by
     rw [Nat.max_zero, atCall]
     omega
-  obtain ⟨headHeld, -⟩ | ⟨a, ha, b, hb, i, j, hi, hj, r, ⟨r', left, right⟩, found⟩ :=
-    e.blocks_of_partiallySynchronous sync preGloas admitted anchorStore anchored caller receiver
-      late receiverBound ready finalizedKnown headKnown finalRead
-  swap
-  · obtain ⟨leftFound, rightFound, different⟩ := findBlockCollision_held found
-    exact absurd (agree a ha b hb i j hi hj r' left right leftFound rightFound) different
+  obtain ⟨headHeld, -⟩ := (e.blocks_of_partiallySynchronous sync preGloas admitted anchorStore
+    anchored caller receiver late receiverBound ready finalizedKnown headKnown
+    finalRead).resolve_right (not_collision_of_agree agree)
   have headAboveW := Store.isAncestor_of_same_blocks reachedW preGloas oneBlock callerFound
     (reachedU.anchorSlot_le (UInt64.le_of_eq anchorSlot) callerFound) ⟨_, headHeld⟩ headAbove
   obtain ⟨receiverHeadState, receiverHeadStored, -⟩ := reachedW.blockStatesFromParents headHeld
@@ -2739,7 +2764,11 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
     (anchored : ∀ w ∈ J, e.start w = anchor)
     (anchorOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
     (inHorizon : HonestStoreEpochsBounded (e := e) horizon time)
-    (roots : HeldBlockStateRootsNonzero (e := e) time) (agree : HonestBlocksAgree (e := e) time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
     (selected : SelectedCheckpointsAgree (e := e) horizon time)
     (pinned : JustifiedPinned (e := e) anchorEpoch margin 0 time)
     (signed : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
@@ -3021,15 +3050,11 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
   have nextOk' : addChecked target.epoch 1 = .ok next := targetEpoch ▸ nextOk
   have windowRead := rollover target next boundary begin targetN nextOk' boundaryOk beginOk beginLe
   -- The current-target step at the record's call names the honest voters of the target.
-  obtain ⟨pulled', total, voters, pulledOk', totalOk, twoThirds, members⟩ |
-      ⟨a, ha, b, hb, i, j, hi, hj, r, ⟨r', left, right⟩, found⟩ :=
-    Execution.honestTargetVotes_signed_of_checked slots (by omega) preGloas fits prompt
+  obtain ⟨pulled', total, voters, pulledOk', totalOk, twoThirds, members⟩ :=
+    (Execution.honestTargetVotes_signed_of_checked slots (by omega) preGloas fits prompt
       votes windows fit roots anchorStore anchorSlot anchorBoundary anchored caller readyQ
       atSlotQ headQOk checkQ count targetOk originEpochQ originBelow nextOk' boundaryOk beginOk
-      beginLe coverage windowRead
-  swap
-  · obtain ⟨leftFound, rightFound, different⟩ := findBlockCollision_held found
-    exact absurd (agree a ha b hb i j hi hj r' left right leftFound rightFound) different
+      beginLe coverage windowRead).resolve_right (not_collision_of_agree agree)
   cases Except.ok.inj (pulledOk'.symm.trans pulledOk)
   -- Assumption 3: a seed above the root carries the voters' target votes.
   have receiverEpochOk : ((e.world k).state w).getCurrentStoreEpoch config =
@@ -3145,7 +3170,11 @@ private theorem receiver_source_above_root {anchor : Store preset fork} {Δ time
     (anchorOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
     (inHorizon : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
-    (anchorParent : AnchorParentAbsent (e := e) time) (agree : HonestBlocksAgree (e := e) time)
+    (anchorParent : AnchorParentAbsent (e := e) time)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
     (selected : SelectedCheckpointsAgree (e := e) horizon time)
     (pinned : JustifiedPinned (e := e) anchorEpoch margin 0 time)
     (signed : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
@@ -3250,7 +3279,11 @@ private theorem finalized_read_above_root {anchor : Store preset fork} {Δ time 
     (anchorOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
     (inHorizon : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
-    (anchorParent : AnchorParentAbsent (e := e) time) (agree : HonestBlocksAgree (e := e) time)
+    (anchorParent : AnchorParentAbsent (e := e) time)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
     (selected : SelectedCheckpointsAgree (e := e) horizon time)
     (pinned : JustifiedPinned (e := e) anchorEpoch margin 0 time)
     (signed : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
@@ -3389,7 +3422,11 @@ private theorem root_mem_filtered_of_reads {anchor : Store preset fork} {Δ time
     (anchorOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
     (inHorizon : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
-    (anchorParent : AnchorParentAbsent (e := e) time) (agree : HonestBlocksAgree (e := e) time)
+    (anchorParent : AnchorParentAbsent (e := e) time)
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
     (selected : SelectedCheckpointsAgree (e := e) horizon time)
     (pinned : JustifiedPinned (e := e) anchorEpoch margin 0 time)
     (signed : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
@@ -3474,7 +3511,9 @@ This is a per-time step toward Theorem 3 of #2058.
 
 It holds at each up-to-date honest store at T whose justified block the root strictly descends from.
 
-The other case is a held state whose justification conflicts with a store's finality.
+One other case is a collision of two honest stores.
+
+The last is a held state whose justification conflicts with a store's finality.
 
 Honest heads must descend from the root up to T, and from the walk's start up to the horizon.
 
@@ -3512,7 +3551,7 @@ theorem Execution.rootInFilteredTree_of_checked [DecidablePred (· ∈ J)]
     (anchorOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
     (inHorizon : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
-    (anchorParent : AnchorParentAbsent (e := e) time) (agree : HonestBlocksAgree (e := e) time)
+    (anchorParent : AnchorParentAbsent (e := e) time)
     (selected : SelectedCheckpointsAgree (e := e) horizon time)
     (pinned : JustifiedPinned (e := e) anchorEpoch margin 0 time)
     (signed : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
@@ -3553,7 +3592,11 @@ theorem Execution.rootInFilteredTree_of_checked [DecidablePred (· ∈ J)]
     (descends : ((e.world k).state w).isAncestor ⟨root, .pending⟩
         ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ = .ok true)
     (strict : root ≠ ((e.world k).state w).justifiedCheckpoint.root) :
-    (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes ∨ HeldStateFinalityEvidence (e := e) pre time := by
+    (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes ∨ HonestCollision (e := e) time ∨
+      HeldStateFinalityEvidence (e := e) pre time := by
+  rcases e.blocksAgree_or_collision time with agree | collision
+  swap
+  · exact .inr (.inl collision)
   rcases Execution.heldFinality_or_evidence pre anchorStore anchored sound anchorSlot
       anchorBoundary slots inHorizon roots anchorParent params genesis upgrade enough floor with
     heldReads | evidence
@@ -3562,7 +3605,7 @@ theorem Execution.rootInFilteredTree_of_checked [DecidablePred (· ∈ J)]
       inHorizon roots anchorParent agree selected pinned signed drift unslashed anchorGenesis
       included family heldReads caller upToDate atSlot headOk rollover inputs walk realized
       realizedHead low high startCovers covers receiver atTime ready tree descends strict)
-  · exact .inr evidence
+  · exact .inr (.inr evidence)
 
 /-! ## The root held from the call on -/
 
