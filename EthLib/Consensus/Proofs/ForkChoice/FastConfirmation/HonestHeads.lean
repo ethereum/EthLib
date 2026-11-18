@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.HeadTotality
 import EthLib.Consensus.Proofs.ForkChoice.Network
 import EthLib.Consensus.Proofs.ForkChoice.VoteDelivery
 import EthLib.Consensus.Proofs.HonestAggregation
+import EthLib.Consensus.Proofs.ForkChoice.StoreEntries
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalReads
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.SourceWindowMargin
 
@@ -66,6 +67,209 @@ private theorem UpToDate.checkpointState_of_accepted {time : ℕ}
     rfl
   exact ⟨targetState, by simpa [Store.checkpointState, same] using found⟩
 
+
+/-! ## The viable nodes can be computed -/
+
+/-- A monadic flat map succeeds when it succeeds on each element. -/
+private theorem flatMapM_exists_ok {α β ε : Type} {f : α → Except ε (List β)} :
+    ∀ {xs : List α}, (∀ x ∈ xs, ∃ ys, f x = .ok ys) → ∃ ys, xs.flatMapM f = .ok ys
+  | [], _ => ⟨[], rfl⟩
+  | x :: xs, each => by
+    obtain ⟨first, firstOk⟩ := each x List.mem_cons_self
+    obtain ⟨rest, restOk⟩ :=
+      flatMapM_exists_ok (xs := xs) fun y member => each y (List.mem_cons_of_mem x member)
+    rw [List.flatMapM_cons]
+    simp only [firstOk, restOk, bind, Except.bind, pure, Except.pure]
+    exact ⟨_, rfl⟩
+
+section ViableNodes
+
+variable {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+  {store : Store preset fork}
+
+/-- Before Gloas, the voting source of a held block reads, at most the store's current epoch. -/
+private theorem getVotingSource_le
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (sound : Invariant anchorState) (slots : 0 < config.SLOT_DURATION_MS)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) {epoch : Epoch}
+    (epochOk : store.getCurrentStoreEpoch config = .ok epoch) {root : Root}
+    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block) :
+    ∃ source, store.getVotingSource config root = .ok source ∧ source.epoch ≤ epoch := by
+  have reachable := forward.reachable
+  have holds : store.StatesHold := (reachable.ordered sound).2
+  -- A held state's justification, pulled up or not, is no later than its epoch.
+  have pulledLe : ∀ {r : Root} {state pulled : BeaconState preset fork},
+      store.blockStates[r]? = some state → processJustificationAndFinalization state = .ok pulled →
+      pulled.currentJustifiedCheckpoint.epoch ≤ epoch := fun stateFound pulledOk =>
+    UInt64.le_trans (processJustificationAndFinalization_invariant (holds stateFound).ordered
+      (holds stateFound).settled pulledOk).2.2.1
+      (forward.blockState_epoch_le_current slots anchorSlot epochOk _ _ stateFound)
+  have blockOk : store.block root = .ok block := Store.block_ok_iff.mpr found
+  unfold Store.getVotingSource
+  simp only [blockOk, epochOk, bind, Except.bind]
+  split
+  · have known : store.blocks.contains root := by
+      rw [Std.TreeMap.contains_eq_isSome_getElem?, found]
+      rfl
+    obtain ⟨checkpoint, entry⟩ :=
+      Option.isSome_iff_exists.mp (reachable.unrealizedJustification_isSome known)
+    simp only [entry]
+    refine ⟨checkpoint, rfl, ?_⟩
+    rcases reachable.unrealizedJustification_origin entry with ⟨same, anchorHeld⟩ |
+      ⟨state, pulled, stateFound, pulledOk, rfl⟩
+    · rw [same]
+      exact forward.blockState_epoch_le_current slots anchorSlot epochOk _ _ anchorHeld
+    · exact pulledLe stateFound pulledOk
+  · obtain ⟨state, stateFound, -⟩ := reachable.blockStatesFromParents found
+    simp only [stateFound]
+    refine ⟨_, rfl, ?_⟩
+    exact UInt64.le_trans (UInt64.le_trans (holds stateFound).settled (getPreviousEpoch_le state))
+      (forward.blockState_epoch_le_current slots anchorSlot epochOk _ _ stateFound)
+
+/-- Before Gloas, the viability of a held leaf can be computed.
+
+The current epoch must leave room for the voting source's two epochs of grace.
+
+The checkpoint block of the leaf at the finalized epoch must read. -/
+private theorem isViableLeaf_exists
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (sound : Invariant anchorState) (slots : 0 < config.SLOT_DURATION_MS)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot) {epoch : Epoch}
+    (epochOk : store.getCurrentStoreEpoch config = .ok epoch)
+    (room : epoch.toNat + 2 < 2 ^ 64) {node : ForkChoiceNode}
+    {block : BeaconBlock preset fork} (found : store.blocks[node.root]? = some block)
+    (finalOk : ∃ checkpoint,
+      store.getCheckpointBlock node.root store.finalizedCheckpoint.epoch = .ok checkpoint) :
+    ∃ viable, store.isViableLeaf config node = .ok viable := by
+  obtain ⟨source, sourceOk, sourceLe⟩ :=
+    getVotingSource_le forward sound slots anchorSlot epochOk found
+  obtain ⟨checkpoint, checkpointOk⟩ := finalOk
+  have boundOk : addChecked source.epoch 2 = .ok (source.epoch + 2) := addChecked_of_lt (by
+    have := UInt64.le_iff_toNat_le.mp sourceLe
+    simp only [UInt64.reduceToNat]
+    omega)
+  unfold Store.isViableLeaf
+  simp only [epochOk, sourceOk, checkpointOk, boundOk, bind, Except.bind, Except.mapError]
+  split <;> exact ⟨_, rfl⟩
+
+/-- Before Gloas, the viable nodes of a forward-reachable store can be computed.
+
+The store must hold its justified block, and the parameters of the committee windows must fit.
+
+The history of mixes must span two epochs, the grace of a voting source. -/
+private theorem getFilteredNodeTree_exists (preGloas : fork < .glamsterdam)
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (sound : Invariant anchorState) (slots : 0 < config.SLOT_DURATION_MS)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (unknown : store.blocks[anchorBlock.parentRoot]? = none)
+    (fit : config.CommitteeWindowsFit preset)
+    (history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (justifiedHeld : ∃ block, store.blocks[store.justifiedCheckpoint.root]? = some block) :
+    ∃ nodes, store.getFilteredNodeTree config = .ok nodes := by
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
+  have reachable := forward.reachable
+  have lower := reachable.parentsBelow (UInt64.le_of_eq anchorSlot) unknown
+  obtain ⟨current, currentOk, -, -⟩ := forward.slots_le_current slots (UInt64.le_of_eq anchorSlot)
+  have epochOk : store.getCurrentStoreEpoch config = .ok (computeEpochAtSlot preset current) := by
+    simp [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
+  -- The current epoch leaves room for two more epochs, by the fit of the seeds.
+  have epochNat : (computeEpochAtSlot preset current).toNat =
+      current.toNat / preset.SLOTS_PER_EPOCH.toNat := by
+    simp [computeEpochAtSlot, UInt64.toNat_div]
+  have currentLe := computeSlotAtTimeMs_le (mapError_ok_iff.mp currentOk)
+  have epochLe : (computeEpochAtSlot preset current).toNat ≤
+      (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) := by
+    rw [epochNat, ← Nat.div_div_eq_div_mul]
+    exact Nat.div_le_div_right currentLe
+  have room : (computeEpochAtSlot preset current).toNat + 2 < 2 ^ 64 := by
+    have := fit.seeds
+    omega
+  -- The finalized epoch is between the anchor's epoch and the current one.
+  have finalLe : store.finalizedCheckpoint.epoch ≤ computeEpochAtSlot preset current :=
+    UInt64.le_trans (reachable.finalized_le_justified sound)
+      (forward.justified_epoch_le_current sound slots (UInt64.le_of_eq anchorSlot) epochOk).1
+  have anchorLe : getCurrentEpoch anchorState ≤ store.finalizedCheckpoint.epoch := by
+    rcases UInt64.le_total store.finalizedCheckpoint.epoch (getCurrentEpoch anchorState) with
+      le | le
+    · exact UInt64.le_of_eq (reachable.finalized_eq_anchor_of_epoch_le le).1.symm
+    · exact le
+  have positive := fit.positive
+  obtain ⟨boundary, boundaryOk⟩ : ∃ boundary,
+      computeStartSlotAtEpoch preset store.finalizedCheckpoint.epoch = .ok boundary := by
+    have fits : store.finalizedCheckpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by
+      have le := UInt64.le_iff_toNat_le.mp finalLe
+      have := Nat.div_mul_le_self current.toNat preset.SLOTS_PER_EPOCH.toNat
+      have := current.toNat_lt
+      calc _ ≤ (computeEpochAtSlot preset current).toNat * preset.SLOTS_PER_EPOCH.toNat :=
+            Nat.mul_le_mul_right _ le
+        _ < 2 ^ 64 := by rw [epochNat]; omega
+    unfold computeStartSlotAtEpoch
+    exact ⟨_, mulChecked_of_lt fits⟩
+  -- The anchor block, the lowest held block, sits at an epoch start at or below that boundary.
+  have aboveAnchor : anchorBlock.slot ≤ boundary := by
+    have floor := (computeStartSlotAtEpoch_ok_iff.mp
+      (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) anchorState.slot)).2
+    have rounded : anchorState.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH =
+        anchorState.slot := by
+      apply epoch_floor_eq_of_sub_eq_zero
+      simpa [isStartSlotAtEpoch, computeSlotsSinceEpochStart, anchorSlot,
+        computeStartSlotAtEpoch_computeEpochAtSlot, Except.mapError, bind, Except.bind,
+        pure, Except.pure] using anchorBoundary
+    rw [rounded] at floor
+    rw [anchorSlot, UInt64.le_iff_toNat_le, (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2, floor]
+    exact Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp anchorLe)
+  obtain ⟨anchorRoot, -, anchorFound⟩ := reachable.anchor_known
+  have orphansLe : ∀ (root : Root) (orphan : BeaconBlock preset fork),
+      store.blocks[root]? = some orphan → store.blocks[orphan.parentRoot]? = none →
+      orphan.slot ≤ boundary := fun _ _ found orphan =>
+    UInt64.le_trans (reachable.orphans_le (UInt64.le_of_eq anchorSlot) found orphan anchorFound)
+      aboveAnchor
+  -- Each held node computes its viable nodes, by descent on the rank.
+  suffices held : ∀ (node : ForkChoiceNode) (block : BeaconBlock preset fork),
+      store.blocks[node.root]? = some block →
+      ∃ nodes, store.filterNodeTree config node = .ok nodes by
+    obtain ⟨block, found⟩ := justifiedHeld
+    exact held _ block found
+  intro node
+  induction hrank : store.nodeRank node using Nat.strong_induction_on generalizing node with
+  | _ rank ih =>
+  intro block found
+  obtain ⟨children, childrenOk⟩ : ∃ children, store.getNodeChildren node = .ok children := by
+    simp [Store.getNodeChildren, notGloas, pure, Except.pure]
+  rw [Store.filterNodeTree, childrenOk]
+  simp only [bind, Except.bind]
+  split
+  · obtain ⟨ancestor, walk⟩ := Store.getAncestor_ok_of_orphans_le lower orphansLe
+      (node := ⟨node.root, .pending⟩) found
+    obtain ⟨viable, viableOk⟩ := isViableLeaf_exists forward sound slots
+      (UInt64.le_of_eq anchorSlot) epochOk room found ⟨ancestor.root, by
+        simp [Store.getCheckpointBlock, boundaryOk, walk, Except.mapError, bind, Except.bind,
+          pure, Except.pure]⟩
+    simp only [viableOk]
+    exact ⟨_, rfl⟩
+  · -- Each child is held, above its parent, so it ranks lower and recurses.
+    have each : ∀ child ∈ children, ∃ below,
+        (if _lower : store.nodeRank child < store.nodeRank node then
+          store.filterNodeTree config child
+        else throw (.parentSlotNotLower child.root)) = .ok below := by
+      intro child member
+      obtain ⟨childPending, childBlock, childFound, parentRoot⟩ :=
+        (Store.mem_getNodeChildren preGloas childrenOk).mp member
+      have below : block.slot < childBlock.slot := lower _ childBlock block childFound
+        (parentRoot ▸ found)
+      have lowerRank : store.nodeRank child < store.nodeRank node := by
+        simp only [Store.nodeRank, childFound, found, childPending, ↓reduceIte]
+        have := UInt64.lt_iff_toNat_lt.mp below
+        have := childBlock.slot.toNat_lt
+        split <;> omega
+      simp only [lowerRank, ↓reduceDIte]
+      exact ih _ (hrank ▸ lowerRank) child rfl childBlock childFound
+    obtain ⟨viable, viableOk⟩ := flatMapM_exists_ok each
+    simp only [viableOk]
+    exact ⟨_, rfl⟩
+
+end ViableNodes
 
 variable {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
   genesisTimeMs) J}
