@@ -1122,7 +1122,7 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
         (33 * (pinTerms config pulled anc fin).consolidationsX + 9) / 10 := sorry
 
 /-- L10: the keys whose exit started on R's branch after the split, in `K6`. -/
-theorem bud_exitedR (h : Setting config checks g split fin pulled anc counted V) :
+theorem bud_exitedR :
     (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).exitedRB v.toNat = true,
       (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤
         (pinTerms config pulled anc fin).exitedR := sorry
@@ -1301,7 +1301,8 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   obtain ⟨fromFin⟩ := h.fromFin
   have b15 := bud_consolidations (config := config) h fromFin tail high endEpoch replayed highLeR
     tailC highC endEpochC replayedC highLe shallow band
-  have b16 := bud_exitedR (config := config) h
+  have b16 := bud_exitedR (config := config) (pulled := pulled) (anc := anc) (fin := fin)
+    (counted := counted)
   -- The band of each due entry naming a V key is paid by `bud_consolidations`' V share.
   have bandV : 3 * (preset.upwardBand * dueAt fin high V) ≤
       preset.upwardBand * (dueAt fin highC (K4 pulled counted V) +
