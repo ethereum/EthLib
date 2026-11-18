@@ -173,11 +173,11 @@ def sha256(data: bytes) -> bytes:
     ...
 
 def keccak256(data: bytes) -> bytes:
-    """Keccak-256 of a byte string: `Keccak[512](M, 256)` of FIPS 202 §5.2."""
+    """Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2:"""
     ...
 
 def keccak512(data: bytes) -> bytes:
-    """Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2."""
+    """Keccak-512 of a byte string, `KECCAK[1024](N, 512)` of FIPS 202 §5.2:"""
     ...
 
 def ethash_cache_size(block_number: int) -> int:
