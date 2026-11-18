@@ -2390,9 +2390,9 @@ private theorem walk_inputs [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Stor
       have := ctx.exitWindow.lookahead
       omega
     exact Execution.honestTargetVotes_of_byzantineStakeAtMost ctx.anchored ctx.start
-      (UInt64.le_of_eq ctx.anchorSlot) ctx.slots ctx.preGloas ctx.minLookahead maxLookahead
-      (by have := ctx.ring; omega) ctx.stale ctx.increment ctx.caller nBound
-      ⟨head, headOk, rfl⟩ bounds
+      (UInt64.le_of_eq ctx.anchorSlot) ctx.sound ctx.maxAligned ctx.slots ctx.preGloas
+      ctx.minLookahead maxLookahead (by have := ctx.ring; omega) ctx.stale ctx.increment ctx.caller
+      nBound ⟨head, headOk, rfl⟩ bounds
   · -- The start's checked target is covered up to `limit + 1`, so up to the next instant.
     intro epoch currentOk startOk
     obtain ⟨k, before, origin, rootOk, originOk, below, checkedOrigin, cover⟩ :=
@@ -3177,21 +3177,18 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
     (pre : Run config checks g ⟨fork, anchorState⟩) (bls : checks = .bls)
     (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (exitWindow : preset.SeedLookaheadAtLeastThree)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     (preGloas : fork < .glamsterdam) (admitted : BlocksAdmitted e 0 Δ limit)
     (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
     (long : 1 < preset.SLOTS_PER_EPOCH)
-    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (maxAligned : MaxEffectiveBalancesAligned preset)
-    (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (votes : ValidatedDutyVotes (e := e) limit) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e limit) (windows : AssignmentWindowAgreement (e := e) limit)
     (fit : config.CommitteeWindowsFit preset)
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (start : ∀ w ∈ J, e.start w = anchor)
     (anchorEpochOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
@@ -3253,6 +3250,12 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
       CrossStoreDirectSafetyEvidence (e := e) pre limit ∨
       CrossStoreJustifiedEvidence (e := e) pre limit ∨
         HeldStateFinalityEvidence (e := e) pre limit := by
+  have positive := fit.positive
+  have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+    have := parameters.roots
+    omega
+  have incrementPositive := band.1
+  have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
   -- Honest validators sign each justified checkpoint after the anchor's epoch.
   have afterAnchor : getCurrentEpoch anchorState ≤ anchorEpoch := by
     obtain ⟨_, -, -, -, anchorJustified, -⟩ := getForkchoiceStore_anchor anchored

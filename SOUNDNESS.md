@@ -3202,7 +3202,6 @@ Three times their stake is at least three times the computed support plus the ma
 Then three times the voters' stake is at least twice the total active balance plus the margin of the count.
 `Execution.honestTargetVotes_of_byzantineStakeAtMost` (`Consensus/Proofs/ForkChoice/FastConfirmation/TargetCount.lean`) derives the count from `TargetCountBounds`.
 `TargetCountBounds` is stated for the pulled-up state of the head.
-It assumes aligned effective balances.
 It assumes that the Byzantine stake is at most the threshold share of the active members of the committees so far, as in Assumption 2.
 Those are the committees of the epoch so far.
 It also assumes that the honest validators of the slots still to come hold the share that the rule counts for them.

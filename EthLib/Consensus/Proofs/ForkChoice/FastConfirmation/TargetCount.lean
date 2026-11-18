@@ -214,8 +214,6 @@ def StaleHeadVotersInWindow (last : ℕ) : Prop :=
 
 The state is the pulled-up state of the head.
 
-Its balances are aligned to the increment.
-
 The Byzantine validators hold at most the threshold share of the stake of the active members.
 
 Those members are in the committees of the epoch so far.
@@ -246,7 +244,6 @@ def TargetCountBounds [DecidablePred (· ∈ J)] (margin : ℕ) (u : ValidatorIn
     ((e.world n).state u).computeCommitteeWeightBetweenSlots head state epochStart lastSlot =
       .ok soFar →
     ((e.world n).state u).getCommitteesBetweenSlots head epochStart lastSlot = .ok participants →
-    EffectiveBalancesAligned state ∧
     ByzantineStakeAtMost (fun v => balanceAt state v.toNat)
       (Store.activeMembers state participants) J
       config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat 100 ∧
@@ -498,6 +495,7 @@ theorem Execution.honestTargetVotes_of_byzantineStakeAtMost [DecidablePred (· �
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (sound : Invariant anchorState) (maxAligned : MaxEffectiveBalancesAligned preset)
     (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
@@ -518,8 +516,10 @@ theorem Execution.honestTargetVotes_of_byzantineStakeAtMost [DecidablePred (· �
     Store.computeHonestFfgSupportForCurrentTarget_eq stateOk slotOk supportOk
   obtain rfl := Except.ok.inj (startOk'.symm.trans startOk)
   obtain rfl := Except.ok.inj (lastOk'.symm.trans lastOk)
-  obtain ⟨aligned, byzantine, remaining⟩ := bounds state total soFar slot epochStart' lastSlot'
+  obtain ⟨byzantine, remaining⟩ := bounds state total soFar slot epochStart' lastSlot'
     participants stateOk totalOk slotOk startOk lastOk soFarOk participantsOk
+  have aligned := (e.reachable (fun w honest => (start w honest) ▸ Store.Reachable.anchor anchored)
+    n u caller).getPulledUpHeadState_aligned sound maxAligned stateOk
   have dishonest : ∀ v ∈ ((e.world n).state u).equivocatingIndices, v ∉ J :=
     e.equivocatingIndices_honest slots (fun w honest v member => by
       rw [start w honest, Store.getForkchoiceStore_equivocatingIndices anchored] at member

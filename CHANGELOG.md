@@ -209,7 +209,7 @@ Not yet released.
 
 - `Execution.honestTargetVotes_of_byzantineStakeAtMost` derives the honest target-vote count, `HonestTargetVotes`, from a bound on Byzantine stake ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   It assumes `TargetCountBounds`, which is stated for the pulled-up state of the head.
-  That state has aligned balances and at most the threshold share of Byzantine stake in the committees of the epoch so far.
+  That state has at most the threshold share of Byzantine stake in the committees of the epoch so far.
   The honest validators of the slots still to come hold the share that the rule counts for them.
   They hold a third of the margin on top of it.
   For a head whose block is two or more epochs before the current epoch it also assumes `StaleHeadVotersInWindow`.
