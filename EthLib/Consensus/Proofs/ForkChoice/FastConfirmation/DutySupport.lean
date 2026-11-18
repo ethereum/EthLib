@@ -1345,16 +1345,8 @@ theorem Execution.mem_supportersOf_of_duty_epoch_or_accountable {Δ : ℕ} (sync
         (∃ rootB : Root, ((e.world k).state w).blockStates[rootB]? = some stateB) ∧
         va.state.finalizedCheckpoint = ((e.world i).state w).finalizedCheckpoint ∧
         vb.state.currentJustifiedCheckpoint = ((e.world k).state w).justifiedCheckpoint ∧
-        (Models.stake (DirectSafety.effectiveWeight anchorState)
-            (DirectSafety.unslashedKeys anchorState) ≤
-          3 * Models.stake (DirectSafety.effectiveWeight anchorState)
-            (DirectSafety.accountableKeys pre left right) +
-          2 * max
-            (DirectSafety.derivedDrift ((e.world k).state w).justifiedCheckpoint.epoch.toNat left)
-            (DirectSafety.derivedDrift
-              ((e.world k).state w).justifiedCheckpoint.epoch.toNat right) ∨
-        DirectSafety.HashEvidence
-          ((pre.append left).hashObjects ++ (pre.append right).hashObjects)) := by
+        DirectSafety.AccountableOrHashEvidence pre left right
+          ((e.world k).state w).justifiedCheckpoint.epoch.toNat := by
   obtain ⟨anchorNonzero, bounded⟩ := duty_prefix_bounds anchored start sound slots anchorSlot
     inHorizon nonzero receiver atTime
   rcases e.finalized_prefix_or_accountable anchored start parameters genesis pre anchorSlot
@@ -1466,16 +1458,8 @@ theorem Execution.isAncestor_getHead_of_duty_epoch_or_accountable {Δ : ℕ} (sy
         (∃ rootB : Root, ((e.world k).state w).blockStates[rootB]? = some stateB) ∧
         va.state.finalizedCheckpoint = ((e.world i).state w).finalizedCheckpoint ∧
         vb.state.currentJustifiedCheckpoint = ((e.world k).state w).justifiedCheckpoint ∧
-        (Models.stake (DirectSafety.effectiveWeight anchorState)
-            (DirectSafety.unslashedKeys anchorState) ≤
-          3 * Models.stake (DirectSafety.effectiveWeight anchorState)
-            (DirectSafety.accountableKeys pre left right) +
-          2 * max
-            (DirectSafety.derivedDrift ((e.world k).state w).justifiedCheckpoint.epoch.toNat left)
-            (DirectSafety.derivedDrift
-              ((e.world k).state w).justifiedCheckpoint.epoch.toNat right) ∨
-        DirectSafety.HashEvidence
-          ((pre.append left).hashObjects ++ (pre.append right).hashObjects)) := by
+        DirectSafety.AccountableOrHashEvidence pre left right
+          ((e.world k).state w).justifiedCheckpoint.epoch.toNat := by
   classical
   obtain ⟨anchorNonzero, bounded⟩ := duty_prefix_bounds anchored start sound slots anchorSlot
     inHorizon nonzero receiver atTime

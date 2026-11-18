@@ -222,6 +222,35 @@ theorem DelayFits.before_boundary {Δ : ℕ}
   rw [timeEq]
   exact fits.2 slot next start due following nextOk startOk dueOk followingOk
 
+/-- The start of a later slot is more than one delay after the start of an earlier slot. -/
+theorem DelayFits.start_add_lt_of_lt {Δ : ℕ} (slots : 0 < config.SLOT_DURATION_MS)
+    (fits : DelayFits fork config genesisTimeMs Δ)
+    {slot current : Slot} {begin currentBegin : UInt64} (later : slot < current)
+    (beginOk : computeTimeAtSlotMs config genesisTimeMs slot = .ok begin)
+    (currentOk : computeTimeAtSlotMs config genesisTimeMs current = .ok currentBegin) :
+    begin.toNat + Δ < currentBegin.toNat := by
+  obtain ⟨nextOk, following, followingOk, followingLe⟩ := nextSlotStart_le_of_slotAtTime
+    (computeSlotAtTimeMs_computeTimeAtSlotMs slots currentOk) later
+  obtain ⟨due, dueOk⟩ := fits.1
+  have fit := fits.2 slot (slot + 1) begin due following nextOk beginOk dueOk followingOk
+  omega
+
+/-- A past slot's attestation deadline plus the delay is at most the current clock.
+
+The slot after the deadline's starts at or before the clock.
+
+A fitting delay puts the deadline plus the delay before the start of that slot. -/
+theorem DelayFits.deadline_add_le {Δ time : ℕ} {slot current : Slot} {clock : UInt64}
+    (fits : DelayFits fork config genesisTimeMs Δ)
+    (deadline : IsAttestationDeadline fork config genesisTimeMs slot time)
+    (currentOk : computeSlotAtTimeMs config genesisTimeMs clock = .ok current)
+    (past : slot < current) : time + Δ ≤ clock.toNat := by
+  have ⟨start, _, startOk, _, _⟩ := deadline
+  obtain ⟨nextOk, following, followingOk, followingLe⟩ :=
+    nextSlotStart_le_of_slotAtTime currentOk past
+  have before := fits.before_boundary nextOk startOk followingOk deadline
+  omega
+
 /-- A fitting delay places the attestation deadline inside each representable slot. -/
 theorem DelayFits.due_lt_slot {Δ : ℕ}
     (fits : DelayFits fork config genesisTimeMs Δ)

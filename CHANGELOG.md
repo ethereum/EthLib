@@ -9,6 +9,69 @@ Not yet released.
 
 ### Proof additions
 
+- `Execution.rootViable_of_checked_call` shows that the confirmed root of a call of the fast confirmation rule stays viable from the call up to `time` ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 3, for the confirmed root).
+  At each up-to-date honest store whose fork choice returns a head, the root is in the filtered tree or below the justified block.
+  The alternatives are a collision of two honest stores and accountable-safety evidence.
+  Stores whose `getHead` returns an error are not covered, pending [#2060](https://github.com/ethereum/EthLib/issues/2060).
+  `Execution.honestHeadsCover_of_checked_call` keeps the root on every up-to-date honest head chain over the same interval.
+  It replaces the consistency and the leaf of `Execution.honestHeadsCover_of_signed_justification` with the rule's checks.
+  It derives the honest signer from `ByzantineCountedStake anchorEpoch 0 time`, a wider bound than the call-epoch one of `Execution.honestHeadsCover_of_byzantine_bound`, and adds the premise `JustifiedPinned`.
+  `Execution.rootInFilteredTree_of_checked` and `Execution.justified_comparable_of_checked` give the root's step at one time.
+  They and `justified_descends_of_duty` may instead give `HonestCollision`, two honest stores that collide on a block, and the first two may give `CrossStoreJustifiedEvidence`.
+  `Execution.blocksAgree_or_collision` splits that collision from the agreement of honest stores on the blocks they both hold, and `Execution.not_honestCollision_of_agree` rules it out under that agreement.
+  `Store.findBlockCollision_held` places a collision's two blocks in the two stores, and `Store.findBlockCollision_valid` now reads it.
+  `Execution.rootHeld_of_honest_vote` holds the root from the call on, from the honest vote that `Execution.honest_vote_of_caller_margin` finds behind the caller's margin.
+  `Execution.heldFinality_or_evidence` reads a store's finalized checkpoint on a held state's justified chain, or gives `HeldStateFinalityEvidence`.
+  `DelayFits.deadline_add_le`, `Store.ForwardReachable.finalized_add_two_le_or_anchor` and `Store.getCheckpointBlock_trans` are general steps.
+  The new premises `CallCheckpointInputs`, `TargetChecked`, `AcceptedRealizedRecent`, `AcceptedRealizedHead`, `CallRolloverRead`, `JustifiedPinned`, `TargetIncluded` and `QuorumDriftWithin` are described in `SOUNDNESS.md`.
+  `DirectSafety.AccountableOrHashEvidence` is the direct-safety bound on two tails or hash evidence on their runs, and the statements that spelled it out now name it.
+  `quorumReserve` and `pinReserve` are the reserves that `QuorumDriftWithin`, `JustifiedPinned` and the reserved count of a call read, and `RootViableAt` is the viability of a root at one time.
+
+- The checked-call proofs add these general facts.
+  `SelectedCheckpointsAgree` says that honest justified checkpoints agree at each epoch, and `Execution.selectedCheckpointsAgree_or_evidence` derives it or returns evidence.
+  `Execution.justified_eq_or_accountable` and `Store.Reachable.justified_eq_or_accountable` give two equal justified checkpoints of one epoch, or evidence.
+  `Execution.held_finalized_read_or_accountable` reads an honest finality on a held state's justified chain, or gives evidence.
+  `HonestHoldsFrom` says that honest stores hold a root over an interval, and `ReservedTargetVotes` is a call's honest count with its pin reserve.
+  `quorumReserve_le_pinReserve` bounds the quorum reserve by the pin reserve.
+  `includedVotes_votingSource_ge` lifts the voting sources above a block that holds a target's counted votes to that target.
+  `boundary_le_of_duty` and `duty_after_call` place an honest duty in time.
+  `DirectSafety.view_justified_fields` shows that a justified field of a view is the genesis checkpoint, or a quorum targets it.
+
+- The store facts are `Store.getCheckpointBlock_walk`, the one walk of a checkpoint read, and `Store.held_of_isAncestor`.
+  `Store.comparable_of_ancestors` and `Store.eq_of_isAncestor_antisymm` order two ancestors of one head.
+  `Store.getCheckpointBlock_of_shared_origin` passes a checkpoint read to another store that agrees on its blocks.
+  `Store.exists_leaf_above_mem_filterNodeTree`, `Store.isViableLeaf_eq_true`, `Store.filterNodeTree_cases` and `Store.filterNodeTree_sub` read the filtered tree.
+  `Store.ForwardReachable.pulledUpHeadState_epoch`, `Store.ForwardReachable.votingSource_le_justified` and `Store.ForwardReachable.justified_le_of_pulledUp` bound the epochs that a store reads.
+  `Store.Reachable.blockState_induction`, `Store.Reachable.justified_le_of_blockState`, `Store.Reachable.finalizedState_of_blockState`, `Store.Reachable.finalized_lt_justified_or_anchor`, `Store.Reachable.realized_le_source` and `Store.Reachable.unrealizedJustification_origin` read the held states.
+  `DelayFits.start_add_lt_of_lt`, `slot_le_of_epoch_lt` and `exists_nextEpochStart_lt` are facts of the clock.
+
+- The transition facts are in `Transition/IncludedTargetVotes.lean`, `Transition/ParticipationFrames.lean` and their neighbours.
+  `processJustificationAndFinalization_justifies` and `advanceSlot_justifies` justify an epoch whose active, unslashed target voters (`UnslashedAt`) hold two thirds.
+  `weighJustificationAndFinalization_justifies`, `processJustificationAndFinalization_totalActiveBalance` and `advanceSlot_total_of_last` are their steps.
+  `advanceSlots_keepsVotes`, `processBlock_keepsVotes`, `keptVotes_trans` and `recentEpoch_eq` keep those votes inside an epoch.
+  `PendingAtOwnEpoch` and `pendingAtOwnEpoch_stateTransition` keep each pending attestation at its own epoch.
+  `advanceSlots_currentJustified_mono` and `stateTransition_currentJustified_mono` show that slots and blocks never lower the current justified epoch of an invariant state.
+  `TargetFlagAt.of_processBlock` keeps a target flag through a block, read from `processBlock_participationKept`.
+  `ParticipationKept`, `ParticipationKeptBelow`, `ParticipationKept.below` and `ParticipationKept.foldlM` are the participation-flag frames.
+  `RunKept.getPendingAttestingIndices_eq` and `recordPendingAttestation_lists` read pending attestations.
+
+- `advanceSlot_epochs` splits one slot into the end of an epoch or a step inside it, with the epochs on each side.
+  `recentPending_advanceSlot` adds the two lists of pending attestations, and `recentPending_pendingFrame` keeps them across a frame.
+  `TargetFlagsVoted.of_advanceSlot` and `PendingVoted.of_advanceSlot` read them, as does the proof of `Execution.rootViable_of_checked_call`.
+
+- `mem_getUnslashedParticipatingIndices_of_recent_flag` places an active, unslashed validator with a flag among the participants of the current or the previous epoch.
+  `mem_getUnslashedParticipatingIndices_of_flag` keeps its statement and is now its case of the previous epoch.
+
+- `Store.onTick_slot_induction` passes a fact of a store at its slot through a forward tick, from each tick within a slot.
+  `epoch_lt_of_offset_zero` places a slot at the start of its epoch in a later epoch than each earlier slot.
+  The proofs of the justified and finalized ages of a forward-reachable store read them.
+
+- `slotStart_le_of_slotAtTime` shows that each slot up to the slot at a time starts by that time.
+  `nextSlotStart_le_of_slotAtTime` shows it for the slot after an earlier one.
+  `slotStart_le_clock`, `DelayFits.deadline_add_le` and `duty_window_of_slot_le` read them.
+  `Store.isAncestor_of_getCheckpointBlock_above` places a checkpoint read above a block at or before the epoch's first slot.
+  `signerHead_of_duty` gives the head on which an honest duty's signer reads its target.
+
 - `Execution.honestTargetVotes_signed_of_checked` shows that an accepted current-target test has honest signers with two thirds of the active balance ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).
   Each signer votes for the target before the start of the next epoch, unless two honest stores collide on a block.
   It assumes the honest count, honest heads above a block of the target's epoch until then, and the caller's head at that time.
@@ -17,6 +80,8 @@ Not yet released.
 
 - `quorum_of_current_target` names the honest voters of `HonestTargetVotes` when the two-thirds test on the current target passes.
   Three times their stake is at least twice the total active balance plus the margin of the count.
+
+- `Store.Reachable.blockState_slot_eq` states that a known block's state is at the block's slot, when the anchor block is at the anchor state's slot.
 
 - `le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch` shows that a slot at the start of an epoch is at most the first slot of the epoch of each later slot.
   `HonestVoteData.target_read`, `Store.Reachable.getCheckpointBlock_anchor`, a step of `DutySupport.lean` and `Execution.honestTargetVotes_signed_of_checked` read it.
@@ -84,6 +149,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Execution.honestHeadsCover_of_byzantine_bound` moves from `HistoricalSigners.lean` to `HistoricalCoverage.lean`, with the same statement, so that the checked-call headlines can read `Execution.justifiedHonestlySigned`.
+  A caller that imports `HistoricalSigners.lean` alone imports `HistoricalCoverage.lean` instead.
+
+- In Lean, `headState_epoch_le` moves from the fast-confirmation proofs to `Store.ForwardReachable.headState_epoch_le` in `ForkChoice/BlockStates.lean`, with the same statement.
+  A caller writes `forward.headState_epoch_le` for a forward-reachable store `forward`.
+
 - In Lean, the compressed encoding of a point of `G2` has its 96 bytes in its type ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
   `G2.compress` and `G2.infinityBytes` are a `Vector UInt8 96`, and `G2.uncompress` takes one.
   A caller that holds bytes of another length reads them with `exactBytes? 96` and rejects `none`, as decompression did.
@@ -104,6 +175,10 @@ Not yet released.
 - In Lean, `infinitySignature` is removed, since it named the same constant as `G2_POINT_AT_INFINITY`.
   A caller writes `G2_POINT_AT_INFINITY`.
   No C export or Python function changes.
+
+- In Lean, the historical-anchor theorems read the slot count of an epoch from `fit` ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` drop `positive : 0 < preset.SLOTS_PER_EPOCH.toNat`, which `fit.positive` gives; their conclusions are unchanged.
+  A caller drops the argument.
 
 - In Lean, `processDepositRequest_ok` also gives the state after the request.
   It is the state before, with only the pending deposits and the start index of the requests changed.
@@ -248,6 +323,10 @@ Not yet released.
   `tooManyPendingAttestations` holds the count and the limit; `registryFull`, `historicalRootsFull` and `historicalSummariesFull` hold the limit.
   The codes do not change.
   `appendHistoricalRoot_eq_error_iff`, `processHistoricalRootsUpdate_eq_error_iff` and `processHistoricalSummariesUpdate_eq_error_iff` state the limit in the error.
+
+- `DirectSafety.same_epoch_histories` is removed, because nothing reads it.
+  `DirectSafety.view_same_epoch` replaces it: pass the two quorum calls as `.inl` quorums of the realized views.
+  `DirectSafety.accountable_justified_unique_terminal` covers its one use, in `accountable_justified_unique`.
 
 - The transaction, inclusion and network-form errors carry the values that their failed check compared.
   Each code keeps its meaning, and each error fires on the same inputs as before.

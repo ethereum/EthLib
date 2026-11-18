@@ -204,6 +204,42 @@ theorem Store.Reachable.blockStatesFromParents
     obtain ⟨-, blocks, states⟩ := Store.onInclusionList_frame accepted
     exact .of_maps blocks states ih
 
+/-- A property holds at each held state when it holds at the anchor state and follows the blocks.
+
+It must pass from the state of a block's parent to the state of the block.
+
+Only the transitions the store ran count, with an allowed setting of the checks. -/
+theorem Store.Reachable.blockState_induction {allowed : SignatureChecks → Prop}
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (imported : store.BlockStatesFromParents config allowed anchorState anchorBlock)
+    (P : Root → BeaconState preset fork → Prop)
+    (anchor : ∀ ⦃root : Root⦄, store.blocks[root]? = some anchorBlock → P root anchorState)
+    (step : ∀ ⦃root : Root⦄ ⦃block : BeaconBlock preset fork⦄
+      ⦃parentState state : BeaconState preset fork⦄ ⦃checks : SignatureChecks⦄
+      ⦃engine : ExecutionEngine preset fork⦄ ⦃signed : SignedBeaconBlock preset fork⦄,
+      store.blocks[root]? = some block → store.blockStates[root]? = some state →
+      block ≠ anchorBlock → allowed checks → signed.message = block →
+      store.blockStates[block.parentRoot]? = some parentState →
+      stateTransition config checks engine parentState signed true = .ok state →
+      P block.parentRoot parentState → P root state)
+    {root : Root} {state : BeaconState preset fork}
+    (held : store.blockStates[root]? = some state) : P root state := by
+  induction hslot : state.slot.toNat using Nat.strong_induction_on generalizing root state with
+  | _ n ih =>
+  obtain ⟨block, found⟩ := reachable.known_of_blockState held
+  obtain ⟨kept, keptFound, isAnchor, notAnchor⟩ := imported found
+  rw [held, Option.some.injEq] at keptFound
+  subst keptFound
+  by_cases same : block = anchorBlock
+  · rw [isAnchor same]
+    exact anchor (same ▸ found)
+  · obtain ⟨parentState, checks, engine, signed, ok, message, parentHeld, transitioned⟩ :=
+      notAnchor same
+    -- The parent state is at an earlier slot, so the property already holds there.
+    have bounds := stateTransition_slot transitioned
+    exact step found held same ok message parentHeld transitioned
+      (ih _ (hslot ▸ bounds.2 ▸ UInt64.lt_iff_toNat_lt.mp bounds.1) parentHeld rfl)
+
 /-- In a reachable store, a known block is at or before the slot of its state.
 
 The anchor block must not be after the anchor state. -/
@@ -222,6 +258,23 @@ theorem Store.Reachable.slot_le_of_blockState
   · obtain ⟨_, _, _, _, -, message, -, transition⟩ := notAnchor same
     rw [(stateTransition_slot transition).2, message]
     exact UInt64.le_refl _
+
+/-- In a reachable store, a known block's state is at the block's slot.
+
+The anchor block must be at the anchor state's slot, since its state is the anchor state. -/
+theorem Store.Reachable.blockState_slot_eq
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (anchorSlot : anchorBlock.slot = anchorState.slot) {root : Root}
+    {block : BeaconBlock preset fork} {state : BeaconState preset fork}
+    (found : store.blocks[root]? = some block)
+    (stateFound : store.blockStates[root]? = some state) : state.slot = block.slot := by
+  obtain ⟨kept, keptFound, isAnchor, notAnchor⟩ := reachable.blockStatesFromParents found
+  rw [stateFound, Option.some.injEq] at keptFound
+  subst keptFound
+  by_cases same : block = anchorBlock
+  · rw [isAnchor same, same, anchorSlot]
+  · obtain ⟨_, _, _, _, -, message, -, transition⟩ := notAnchor same
+    rw [(stateTransition_slot transition).2, message]
 
 /-- In a store built with one setting of the checks, each block state comes from its parent.
 
@@ -685,5 +738,15 @@ theorem Store.getCheckpointBlock_of_same_blocks {store receiver : Store preset f
   | ok ancestor =>
     rw [Store.getAncestor_of_same_blocks reachable same aboveAnchor known walk]
     simpa [walk] using read
+
+/-- A head state's epoch is at most the current epoch of a forward-reachable store. -/
+theorem Store.ForwardReachable.headState_epoch_le {store : Store preset fork}
+    (forward : Store.ForwardReachable config anchorState anchorBlock store) {head : Root}
+    {current : Slot} (currentOk : store.getCurrentSlot config = .ok current)
+    {headState : BeaconState preset fork} (headRead : store.blockState head = .ok headState) :
+    (getCurrentEpoch headState).toNat ≤ (computeEpochAtSlot preset current).toNat := by
+  have le := forward.slot_le_of_blockState_of_getCurrentSlot
+    (Store.blockState_ok_iff.mp headRead) currentOk
+  exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp le)
 
 end EthLib.Consensus

@@ -99,6 +99,25 @@ theorem mem_ptcPositions {committee : PayloadTimelinessCommittee preset}
     position ∈ ptcPositions committee validator ↔ committee[position] = validator := by
   simp [ptcPositions]
 
+/-- A slot at the start of its epoch is in a later epoch than any earlier slot. -/
+theorem epoch_lt_of_offset_zero {old new : Slot} (lt : old < new)
+    (zero : computeSlotsSinceEpochStart preset new = .ok 0) :
+    computeEpochAtSlot preset old < computeEpochAtSlot preset new := by
+  simp only [computeSlotsSinceEpochStart, computeStartSlotAtEpoch_computeEpochAtSlot, bind,
+    Except.bind, pure, Except.pure, Except.ok.injEq] at zero
+  have rounded := congrArg UInt64.toNat (epoch_floor_eq_of_sub_eq_zero zero)
+  rw [(computeStartSlotAtEpoch_ok_iff.mp
+    (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) new)).2, computeEpochAtSlot,
+    UInt64.toNat_div] at rounded
+  have ltNat := UInt64.lt_iff_toNat_lt.mp lt
+  -- An epoch of no slots puts every slot at slot zero, below which no slot lies.
+  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := Nat.pos_of_ne_zero fun empty => by
+    rw [empty, Nat.mul_zero] at rounded
+    omega
+  apply UInt64.lt_iff_toNat_lt.mpr
+  simp only [computeEpochAtSlot, UInt64.toNat_div]
+  exact (Nat.div_lt_iff_lt_mul positive).mpr (by omega)
+
 /-- A checkpoint stays as it was, or moves to one at a greater epoch. -/
 def CheckpointAdvances (before after : Checkpoint) : Prop :=
   after = before ∨ before.epoch < after.epoch

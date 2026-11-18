@@ -95,7 +95,7 @@ private theorem votedAttesters_of {other : BeaconState preset fork}
   exact voted attesters computed
 
 /-- Before Altair, recording a pending attestation appends it to the list of its epoch. -/
-private theorem recordPendingAttestation_lists {before : fork < .altair} {current : Bool}
+theorem recordPendingAttestation_lists {before : fork < .altair} {current : Bool}
     {pending : PendingAttestation preset}
     (computed : recordPendingAttestation state before current pending = .ok after) :
     recentPending after before current = (recentPending state before current).push pending ∧
@@ -113,6 +113,11 @@ private theorem recordPendingAttestation_lists {before : fork < .altair} {curren
     simp only [recentPending, Bool.not_true, Bool.false_eq_true, ↓reduceIte]
     rw [← rest]
 
+/-- Before Altair, a frame for pending attestations keeps both lists. -/
+theorem recentPending_pendingFrame (frame : PendingFrame state after) (before : fork < .altair)
+    (current : Bool) : recentPending after before current = recentPending state before current := by
+  cases current <;> simp [recentPending, frame.previousPending, frame.currentPending]
+
 /-- Before Altair, a step of a block other than an attestation keeps the pending votes.
 
 There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
@@ -121,9 +126,7 @@ theorem PendingVoted.of_pendingFrame {votes : Set (ValidatorIndex × Attestation
     (frame : PendingFrame state after) (holds : PendingVoted votes state) :
     PendingVoted votes after := by
   intro before current pending member
-  have lists : recentPending after before current = recentPending state before current := by
-    cases current <;> simp [recentPending, frame.previousPending, frame.currentPending]
-  rw [lists] at member
+  rw [recentPending_pendingFrame frame] at member
   obtain ⟨epoch, slot, source, voted⟩ := holds before current pending member
   have currentEq : getCurrentEpoch after = getCurrentEpoch state := by
     simp only [getCurrentEpoch, frame.slot]
@@ -258,6 +261,41 @@ theorem PendingVoted.of_processSlot {votes : Set (ValidatorIndex × AttestationD
   rw [frame.currentJustified, frame.previousJustified]
   exact source
 
+/-- Before Altair, one slot keeps the pending attestations and the epochs, or ends an epoch.
+
+Ending it makes the list of the old current epoch that of the previous one, and empties the current.
+
+Justification there makes the old current justified checkpoint the previous one.
+
+Inside an epoch the slot keeps both justified checkpoints. -/
+theorem recentPending_advanceSlot (before : fork < .altair)
+    (computed : advanceSlot config checks state = .ok after) :
+    (getPreviousEpoch after = getCurrentEpoch state ∧
+        (JustifiedEarly state →
+          after.previousJustifiedCheckpoint = state.currentJustifiedCheckpoint) ∧
+        recentPending after before false = recentPending state before true ∧
+        recentPending after before true = #[]) ∨
+      (getCurrentEpoch after = getCurrentEpoch state ∧
+        getPreviousEpoch after = getPreviousEpoch state ∧
+        after.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint ∧
+        after.previousJustifiedCheckpoint = state.previousJustifiedCheckpoint ∧
+        ∀ current, recentPending after before current = recentPending state before current) := by
+  obtain ⟨next, cached, epoched, cachedOk, rfl, split⟩ := advanceSlot_epochs computed
+  have cachedFrame := frame_processSlot cachedOk
+  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  have cachedLists : ∀ current, recentPending cached before current =
+      recentPending state before current := by
+    intro current
+    cases current <;> simp [recentPending, cachedEq]
+  rcases split with ⟨epochedOk, previousEq, justified⟩ | ⟨rfl, currentEq, previousEq⟩
+  · obtain ⟨rotated, emptied⟩ := processEpoch_pendingRotation before epochedOk
+    refine .inl ⟨previousEq, justified, ?_, ?_⟩
+    · rw [← cachedLists true]
+      simp [recentPending, rotated]
+    · simp [recentPending, emptied]
+  · exact .inr ⟨currentEq, previousEq, cachedFrame.currentJustified,
+      cachedFrame.previousJustified, cachedLists⟩
+
 /-- Before Altair, one slot keeps each pending attestation a vote of the set for its link.
 
 At the end of an epoch the votes of the current epoch become those of the previous one.
@@ -273,63 +311,27 @@ theorem PendingVoted.of_advanceSlot {votes : Set (ValidatorIndex × AttestationD
     PendingVoted votes after := by
   have committees := fun {epoch : Epoch} =>
     committeesKept_advanceSlot (epoch := epoch) apart computed
-  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  have cachedFrame := frame_processSlot cachedOk
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
-  have cachedLists : ∀ current, recentPending cached before current =
-      recentPending state before current := by
-    intro current
-    cases current <;> simp [recentPending, cachedEq]
-  have stateEpoch := getCurrentEpoch_toNat state
-  have afterEpoch := getCurrentEpoch_toNat { epoched with slot := next }
-  dsimp only at afterEpoch
   intro before' current pending member
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    have epochs := nextSlot_epoch_of_boundary sum boundary
-    have previousEq : getPreviousEpoch { epoched with slot := next } = getCurrentEpoch state := by
-      apply UInt64.toNat_inj.mp
-      rw [getPreviousEpoch_toNat, afterEpoch, stateEpoch, epochs]
-      rfl
-    obtain ⟨rotated, emptied⟩ := processEpoch_pendingRotation before epochedOk
-    obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
-    have previousJustified := (early.of_frame cachedFrame).previousJustified_of_justification
-      justifiedOk
-    cases current
+  rcases recentPending_advanceSlot before computed with
+    ⟨previousEq, justified, moved, emptied⟩ |
+    ⟨currentEq, previousEq, currentJustified, previousJustified, lists⟩
+  · cases current
     · -- The votes of the old current epoch are now those of the previous epoch.
-      have moved : recentPending { epoched with slot := next } before false =
-          recentPending state before true := by
-        rw [← cachedLists true]
-        simp [recentPending, rotated]
       rw [moved] at member
       obtain ⟨epoch, slot, source, voted⟩ := holds before true pending member
       simp only [↓reduceIte] at epoch source
       refine ⟨by simp only [Bool.false_eq_true, ↓reduceIte, previousEq]; exact epoch, slot, ?_, ?_⟩
       · simp only [Bool.false_eq_true, ↓reduceIte]
-        rw [source, frame.previousJustified, previousJustified, cachedFrame.currentJustified]
-      · have kept : CommitteesKept pending.data.target.epoch state
-            { epoched with slot := next } := by
+        rw [source, justified early]
+      · have kept : CommitteesKept pending.data.target.epoch state after := by
           rw [epoch]
           exact committees (by rw [previousEq]; exact UInt64.le_refl _) (UInt64.le_refl _)
         exact votedAttesters_of kept slot voted
-    · simp [recentPending, emptied] at member
-  · rename_i inside
-    simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    have currentEq : getCurrentEpoch { cached with slot := next } = getCurrentEpoch state := by
-      apply UInt64.toNat_inj.mp
-      rw [afterEpoch, stateEpoch]
-      exact nextSlot_epoch_of_inside sum inside
-    have previousEq : getPreviousEpoch { cached with slot := next } = getPreviousEpoch state := by
-      unfold getPreviousEpoch
-      rw [currentEq]
-    have lists : recentPending { cached with slot := next } before current =
-        recentPending state before current := cachedLists current
-    rw [lists] at member
+    · simp [emptied] at member
+  · rw [lists] at member
     obtain ⟨epoch, slot, source, voted⟩ := holds before current pending member
     obtain ⟨low, high⟩ := recent_bounds state current
-    have kept : CommitteesKept pending.data.target.epoch state { cached with slot := next } := by
+    have kept : CommitteesKept pending.data.target.epoch state after := by
       rw [epoch]
       refine committees ?_ low
       rw [previousEq]
@@ -338,9 +340,7 @@ theorem PendingVoted.of_advanceSlot {votes : Set (ValidatorIndex × AttestationD
       · exact getPreviousEpoch_le state
     refine ⟨by rw [currentEq, previousEq]; exact epoch, slot, ?_,
       votedAttesters_of kept slot voted⟩
-    show pending.data.source = if current then cached.currentJustifiedCheckpoint
-      else cached.previousJustifiedCheckpoint
-    rw [cachedFrame.currentJustified, cachedFrame.previousJustified]
+    rw [currentJustified, previousJustified]
     exact source
 
 /-- Before Altair, slots keep each pending attestation a vote of the set for its link.

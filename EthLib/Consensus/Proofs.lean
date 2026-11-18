@@ -106,6 +106,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.PayloadReveal
 public import EthLib.Consensus.Proofs.ForkChoice.PayloadVotes
 public import EthLib.Consensus.Proofs.ForkChoice.ProposerHead
 public import EthLib.Consensus.Proofs.ForkChoice.Reachable
+public import EthLib.Consensus.Proofs.ForkChoice.RealizedJustification
 public import EthLib.Consensus.Proofs.ForkChoice.SharedAncestry
 public import EthLib.Consensus.Proofs.ForkChoice.SiblingCap
 public import EthLib.Consensus.Proofs.ForkChoice.StaticValidators
@@ -222,10 +223,13 @@ public import EthLib.Consensus.Proofs.Transition.InactivityLeakStake
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakTrace
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakVoter
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakVoterRun
+public import EthLib.Consensus.Proofs.Transition.IncludedTargetVotes
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.MixesKept
 public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Proofs.Transition.ParentPayload
+public import EthLib.Consensus.Proofs.Transition.ParticipationFlagsKept
+public import EthLib.Consensus.Proofs.Transition.ParticipationFrames
 public import EthLib.Consensus.Proofs.Transition.Payload
 public import EthLib.Consensus.Proofs.Transition.PaymentRelease
 public import EthLib.Consensus.Proofs.Transition.PaymentReleaseBlock

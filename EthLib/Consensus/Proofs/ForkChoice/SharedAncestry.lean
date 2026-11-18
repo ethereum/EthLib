@@ -121,13 +121,11 @@ private theorem agree_of_findBlockCollision_none {node : ForkChoiceNode} {slot :
     exact Option.isSome_iff_exists.mp hc
   rw [h₂, h₁, eq_of_findBlockCollision_none none (cover later visited hle hw) h₁ h₂]
 
-/-- A search on two reachable stores names two different blocks with one hash tree root. -/
-theorem findBlockCollision_valid (reachable₁ : Reachable config anchorState₁ anchorBlock₁ first)
-    (reachable₂ : Reachable config anchorState₂ anchorBlock₂ second) {roots : List Root}
-    {root : Root} {block₁ block₂ : BeaconBlock preset fork}
-    (found : findBlockCollision first second roots = some (root, block₁, block₂)) :
-    block₁ ≠ block₂ ∧ SszType.hashTreeRoot block₁ = .ok root ∧
-      SszType.hashTreeRoot block₂ = .ok root := by
+/-- A collision names a root where the two stores hold different blocks. -/
+theorem findBlockCollision_held {roots : List Root} {root : Root}
+    {left right : BeaconBlock preset fork}
+    (found : findBlockCollision first second roots = some (root, left, right)) :
+    first.blocks[root]? = some left ∧ second.blocks[root]? = some right ∧ left ≠ right := by
   induction roots with
   | nil => simp [findBlockCollision] at found
   | cons head tail ih =>
@@ -139,8 +137,18 @@ theorem findBlockCollision_valid (reachable₁ : Reachable config anchorState₁
       · rename_i ne
         simp only [Option.some.injEq, Prod.mk.injEq] at found
         obtain ⟨rfl, rfl, rfl⟩ := found
-        exact ⟨ne, reachable₁.root h₁, reachable₂.root h₂⟩
+        exact ⟨h₁, h₂, ne⟩
     · exact ih found
+
+/-- A search on two reachable stores names two different blocks with one hash tree root. -/
+theorem findBlockCollision_valid (reachable₁ : Reachable config anchorState₁ anchorBlock₁ first)
+    (reachable₂ : Reachable config anchorState₂ anchorBlock₂ second) {roots : List Root}
+    {root : Root} {block₁ block₂ : BeaconBlock preset fork}
+    (found : findBlockCollision first second roots = some (root, block₁, block₂)) :
+    block₁ ≠ block₂ ∧ SszType.hashTreeRoot block₁ = .ok root ∧
+      SszType.hashTreeRoot block₂ = .ok root := by
+  obtain ⟨h₁, h₂, ne⟩ := findBlockCollision_held found
+  exact ⟨ne, reachable₁.root h₁, reachable₂.root h₂⟩
 
 /-- A search finds no collision between a store and itself. -/
 theorem findBlockCollision_self (store : Store preset fork) (roots : List Root) :
