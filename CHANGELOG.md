@@ -26,6 +26,9 @@ Not yet released.
 - `Run.exit_activation_gap` shows that an assigned exit in a run from genesis comes at least the seed lookahead and one epoch after the activation.
   The pin's drift bound reads it.
 
+- `Run.eligibility_le_finalized` shows that a validator with an assigned activation in a run from genesis was eligible by the finalized epoch.
+  The pin's drift bound reads it.
+
 - The quorum drift bound adds these facts of runs.
   `Run.blockCount` counts the blocks of a run, `Run.blockCount_append` adds them over two runs, and `Run.blocks_le_slots` bounds them by one per slot.
   `run_of_stateTransition` and `run_of_processSlots` give a run for one block or for the slots before it, when the slot is before the next fork.
