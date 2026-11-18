@@ -1479,24 +1479,22 @@ private structure Good (horizon : Epoch) (limit : ℕ) : Prop where
     ((e.world j).state b).blocks[r]? = some right → left = right
   quorum : QuorumDriftWithin (e := e) horizon limit
 
-/-- The premises of the call step that do not depend on the call, in its order. -/
+/-- The premises of the call step that do not depend on the call.
+
+They extend the premises of the run of calls. -/
 private structure StepCtx {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩)
     (Δ : ℕ) (anchor : Store preset fork) (limit : ℕ) (horizon anchorEpoch : Epoch)
-    (u : ValidatorIndex) (events : List ℕ) (firstSlot : Slot) : Prop where
+    (u : ValidatorIndex) (events : List ℕ) (firstSlot : Slot) : Prop
+    extends CallsCtx (e := e) anchor u events firstSlot limit where
   bls : checks = .bls
   anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs
   sync : e.Synchronous Δ
-  slots : 0 < config.SLOT_DURATION_MS
-  positive : 0 < preset.SLOTS_PER_EPOCH.toNat
   minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat
   exitWindow : preset.SeedLookaheadAtLeastThree
   ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
-  preGloas : fork < .glamsterdam
   admitted : BlocksAdmitted e 0 Δ limit
   half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100
-  long : 1 < preset.SLOTS_PER_EPOCH
-  window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat
   maxAligned : MaxEffectiveBalancesAligned preset
   incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   votes : ValidatedDutyVotes (e := e) limit
@@ -1504,15 +1502,9 @@ private structure StepCtx {g : ForkedBeaconState preset}
   prompt : Prompt e limit
   windows : AssignmentWindowAgreement (e := e) limit
   fit : config.CommitteeWindowsFit preset
-  anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor
-  sound : Invariant anchorState
-  anchorSlot : anchorBlock.slot = anchorState.slot
-  anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true
-  start : ∀ w ∈ J, e.start w = anchor
   anchorEpochOk : anchor.justifiedCheckpoint.epoch = anchorEpoch
   increment : preset.EFFECTIVE_BALANCE_INCREMENT.toNat % 100 = 0
   bounded : HonestStoreEpochsBounded (e := e) horizon limit
-  roots : HeldBlockStateRootsNonzero (e := e) limit
   unslashed : HonestCountedStatesUnslashed (e := e) limit
   ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) limit
   scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17)
@@ -1521,7 +1513,6 @@ private structure StepCtx {g : ForkedBeaconState preset}
   heldEarly : HeldStatesBeforeUpgrade (e := e) limit
   enough : HeldRunStakeFloor (e := e) pre horizon limit
   terminal : HeldTerminalStakeFloor (e := e) horizon limit
-  absent : AnchorParentAbsent (e := e) limit
   pinned : JustifiedPinned (e := e) anchorEpoch 0 0 limit
   signedAll : JustifiedHonestlySigned (e := e) anchorEpoch 0 limit
   fusaka : .fusaka ≤ fork
@@ -1537,16 +1528,9 @@ private structure StepCtx {g : ForkedBeaconState preset}
       ((e.world m).state x) ∧
     ((e.world m).state x).getCurrentSlot config = .ok referenceSlot ∧
     subChecked referenceSlot 1 = .ok finish
-  caller : u ∈ J
   confirmationEpoch : 2 ≤ computeEpochAtSlot preset firstSlot
-  anchorEpochBefore : getCurrentEpoch anchorState < computeEpochAtSlot preset firstSlot
   upToDate : ∀ n ∈ events, UpToDate config checks sources (e.world n).time
     ((e.world n).view u) ((e.world n).state u)
-  atSlots : ∀ i n, events[i]? = some n → ∃ slot begin,
-    ((e.world n).state u).getCurrentSlot config = .ok slot ∧
-    slot.toNat = firstSlot.toNat + i ∧
-    computeTimeAtSlotMs config genesisTimeMs slot = .ok begin ∧
-    (e.world n).time = begin.toNat
 /-- The anchor block is at or before the first slot of each epoch from the anchor state's on.
 
 The anchor block must be at its state's slot, and that slot must start an epoch. -/
@@ -1861,29 +1845,6 @@ private theorem honestHeadsCover_mono {root : Root} {first first' last last' : �
     (upper : last' ≤ last) : HonestHeadsCover (e := e) root first' last' :=
   fun earlier low high => cover earlier (lower.trans low) (Nat.lt_of_lt_of_le high upper)
 
-/-- The premises of a call step contain the premises of the run of calls. -/
-private theorem StepCtx.callsCtx {Δ : ℕ} {anchor : Store preset fork} {limit : ℕ}
-    {horizon anchorEpoch : Epoch} {g : ForkedBeaconState preset}
-    {pre : Run config checks g ⟨fork, anchorState⟩} {u : ValidatorIndex} {events : List ℕ}
-    {firstSlot : Slot}
-    (ctx : StepCtx (e := e) pre Δ anchor limit horizon anchorEpoch u events firstSlot) :
-    CallsCtx (e := e) anchor u events firstSlot limit where
-  anchored := ctx.anchored
-  sound := ctx.sound
-  anchorSlot := ctx.anchorSlot
-  anchorBoundary := ctx.anchorBoundary
-  start := ctx.start
-  slots := ctx.slots
-  positive := ctx.positive
-  long := ctx.long
-  preGloas := ctx.preGloas
-  window := ctx.window
-  roots := ctx.roots
-  absent := ctx.absent
-  caller := ctx.caller
-  anchorEpochBefore := ctx.anchorEpochBefore
-  atSlots := ctx.atSlots
-
 /-- A block with an epoch descends from itself. -/
 private theorem isAncestor_self_of_blockEpoch {store : Store preset fork} {root : Root}
     {epoch : Epoch} (read : store.getBlockEpoch root = .ok epoch) :
@@ -2005,7 +1966,7 @@ private theorem carried_facts {Δ : ℕ} {anchor : Store preset fork} {limit : �
     obtain ⟨m, before, previous⟩ := callAt_previous calls
     obtain ⟨slot, begin, slotOk, index, beginOk, atSlot⟩ := ctx.atSlots (j + 1) n calls.1
     obtain ⟨oldSlot, -, oldSlotOk, oldIndex, -, -⟩ := ctx.atSlots j m previous.1
-    obtain ⟨eventLt, -⟩ := call_order ctx.callsCtx previous.1 calls.1 (Nat.lt_succ_self j)
+    obtain ⟨eventLt, -⟩ := call_order ctx.toCallsCtx previous.1 calls.1 (Nat.lt_succ_self j)
     have nextOk : addChecked oldSlot 1 = .ok slot := addChecked_ok_iff.mpr ⟨by
       have := slot.toNat_lt
       simp only [UInt64.toNat_one]
@@ -2015,7 +1976,7 @@ private theorem carried_facts {Δ : ℕ} {anchor : Store preset fork} {limit : �
       rw [atSlot]
       exact inv.1 oldSlot slot begin oldSlotOk nextOk beginOk
     have mBound : (e.world m).time ≤ limit := (e.monotone_time eventLt.le).trans nBound
-    obtain ⟨rootEpoch, oldRootOk⟩ := root_known (ctx.callsCtx.forward m).reachable ctx.sound
+    obtain ⟨rootEpoch, oldRootOk⟩ := root_known (ctx.toCallsCtx.forward m).reachable ctx.sound
       ctx.anchorSlot ctx.positive ctx.window
       (anchorState_hash_nonzero ctx.anchored ctx.start ctx.roots ctx.caller mBound)
       previous.2.2
@@ -2043,7 +2004,7 @@ private theorem carried_facts {Δ : ℕ} {anchor : Store preset fork} {limit : �
       have old : rootEpoch ≠ computeEpochAtSlot preset slot := by
         intro same
         obtain ⟨block, found, blockEpoch⟩ := found_of_blockEpoch oldRootOk
-        have le := epoch_le_current (ctx.callsCtx.forward m) ctx.slots
+        have le := epoch_le_current (ctx.toCallsCtx.forward m) ctx.slots
           (UInt64.le_of_eq ctx.anchorSlot) oldSlotOk found
         rw [blockEpoch, same] at le
         rw [isStart_eq, Except.ok.injEq, decide_eq_true_eq] at boundary
@@ -3125,13 +3086,13 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
       CrossStoreJustifiedEvidence (e := e) pre limit ∨
         HeldStateFinalityEvidence (e := e) pre limit := by
   have ctx : StepCtx (e := e) pre Δ anchor limit horizon anchorEpoch u events firstSlot :=
-    ⟨bls, anchorGenesis, sync, slots, positive, minLookahead, exitWindow, ring, preGloas,
+    { bls, anchorGenesis, sync, slots, positive, minLookahead, exitWindow, ring, preGloas,
       admitted, half, long, window, maxAligned, incrementPositive, votes, fits, prompt,
       windows, fit, anchored, sound, anchorSlot, anchorBoundary, start,
       anchorEpochOk, increment, bounded, roots, unslashed, ceiling, scoreFits, parameters,
       genesis, heldEarly, enough, terminal, absent, pinned, signedAll, fusaka,
       band, withdrawDelay, capEq, capOrder, forkWindow, included, stale, reference, caller,
-      confirmationEpoch, anchorEpochBefore, upToDate, atSlots⟩
+      confirmationEpoch, anchorEpochBefore, upToDate, atSlots }
   suffices goal : CallInvariant (e := e) 0 limit anchor.finalizedCheckpoint.root u n
       after.confirmedRoot ∨ Bad (e := e) pre limit from goal
   -- Honest justified checkpoints agree, or the cross-store justified evidence holds.
