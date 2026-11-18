@@ -3669,15 +3669,11 @@ theorem Execution.rootHeld_of_honest_vote {Δ : ℕ} {anchor : Store preset fork
     reads | evidence
   swap
   · exact .inr (.inr evidence)
-  by_cases collide : HonestCollision (e := e) time
+  -- Honest stores up to the time agree on every shared root, or two of them collide.
+  rcases e.blocksAgree_or_collision time with agree | collide
+  swap
   · exact .inr (.inl collide)
   left
-  -- Without a collision, honest stores up to the time agree on every shared root.
-  have agree := (Store.blocks_agree_or_collision
-    (fun x : ValidatorIndex × ℕ => (e.world x.2).state x.1)
-    (fun x => x.1 ∈ J ∧ (e.world x.2).time ≤ time)).resolve_right fun found => by
-      obtain ⟨⟨a, i⟩, ⟨ha, hi⟩, ⟨b, j⟩, ⟨hb, hj⟩, r, evidence, collision⟩ := found
-      exact collide ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, collision⟩
   have forwardOf := e.forwardReachable
     (fun x hx => (anchored x hx) ▸ Store.ForwardReachable.anchor anchorStore)
   have reached (w : ValidatorIndex) (hw : w ∈ J) (k : ℕ) := (forwardOf k w hw).reachable
@@ -3690,7 +3686,7 @@ theorem Execution.rootHeld_of_honest_vote {Δ : ℕ} {anchor : Store preset fork
   have dataRoot := (getAttestationData_eq_ok_iff.mp made).2.2.2.1
   have kTime : (e.world k).time ≤ (e.world n).time :=
     (e.monotone_time before.le).trans voteTime
-  have same := agree (u, n) ⟨caller, within⟩ (v, k) ⟨honest, kTime.trans within⟩
+  have same := agree u caller v honest n k within (kTime.trans within)
   -- So the signer held the root then.
   have signerDescends := Store.isAncestor_of_same_blocks (reached v honest k) preGloas same known
     ((reached u caller n).anchorSlot_le anchorLe known) ⟨headBlock, dataRoot ▸ headHeld⟩ descends
@@ -3796,11 +3792,10 @@ theorem Execution.rootHeld_of_honest_vote {Δ : ℕ} {anchor : Store preset fork
       exact Store.getCheckpointBlock_of_same_blocks (reached v honest k) same boundaryOk
         (UInt64.le_trans ((reached u caller n).anchorSlot_le anchorLe reachedFound) reachedLe)
         ⟨signerBlock, signerKnown⟩ callerRead
-    rcases e.blocks_of_partiallySynchronous sync preGloas admitted anchorStore anchored honest
-        receiver (by simp only [Nat.max_zero]; omega) rBound current finalizedKnown signerKnown
-        signerFinal with ⟨found, -⟩ | found
-    · exact ⟨signerBlock, found⟩
-    · exact absurd found collide
+    obtain ⟨found, -⟩ := (e.blocks_of_partiallySynchronous sync preGloas admitted anchorStore
+      anchored honest receiver (by simp only [Nat.max_zero]; omega) rBound current finalizedKnown
+      signerKnown signerFinal).resolve_right (not_collision_of_agree agree)
+    exact ⟨signerBlock, found⟩
   intro w receiver j atLeast atMost current
   by_cases sameTime : (e.world j).time = begin.toNat
   · exact receipt w receiver j sameTime current
