@@ -986,7 +986,10 @@ theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
     rw [← Finset.sum_filter]
     congr 1
     ext v
-    simp [K4, U, AC, AR, Q] <;> tauto
+    simp only [K4]
+    rw [Finset.mem_filter, Finset.mem_filter]
+    simp only [U, AC, AR, Q, Finset.mem_union]
+    tauto
   rw [eq]
   refine le_trans (Finset.sum_le_sum term) (le_of_eq ?_)
   exact (Nat.cast_sum _ _).symm
