@@ -3158,8 +3158,8 @@ Such a store has no head for the confirmation to be unsafe about.
 Each evidence alternative is relative to the anchor, and its drift counts from the anchor.
 So with enough churn since the anchor it holds with no accountable key.
 `HeldStateFinalityEvidence` is evidence from runs to two held states, one with an honest store's finality and one justified at that epoch or later.
-`Execution.heldFinality_or_evidence` returns it when the justified checkpoint does not read that finality.
-The predicate itself does not record that failed read.
+It records that the held justified root does not read that finality, so it is false whenever the read succeeds.
+`Execution.heldFinality_or_evidence` returns it when that read fails.
 
 `Execution.honestHeadsCover_of_checked_call` in the same file gives the coverage that the viability reads.
 Every up-to-date honest head descends from the confirmed root from the call up to `time`, with the same alternatives.
@@ -3186,8 +3186,8 @@ The derivation adds the inclusion delay and the two conditions on the anchor of 
 These theorems take the following premises beyond those of the signed-justification headline.
 `CallCheckpointInputs` records the checks that the call passed, with the root on the head's chain.
 Off the epoch's first slot the call's count is reserved.
-It also restricts the runs in scope in two ways that the rule does not check.
 At the epoch's first slot, the root is of an earlier epoch, and the call's epoch is at least two and after the anchor's.
+The rule does not check the reserved count, the first-slot condition or the epoch bounds; they are assumptions on the run.
 Its record of an earlier call's target check, `TargetChecked`, includes coverage of honest heads by that call's origin.
 No theorem derives that coverage, nor `startCovers`, the coverage by the start of the call's walk up to `time`.
 `AcceptedRealizedRecent` and `AcceptedRealizedHead` restrict the runs in scope; the rule does not check them.

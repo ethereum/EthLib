@@ -774,7 +774,7 @@ private theorem Store.Reachable.finalized_ancestor_or_accountable_of_view {confi
 Otherwise runs to held states of the two stores bound accountable stake, or show hash evidence.
 
 The bound's drift counts from the anchor, up to one epoch past the justified epoch. -/
-theorem Store.Reachable.finalized_ancestor_or_accountable_between {config : Config}
+private theorem Store.Reachable.finalized_ancestor_or_accountable_between {config : Config}
     {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {store earlier : Store preset fork} {g : ForkedBeaconState preset}
@@ -1038,8 +1038,13 @@ private theorem Store.Reachable.held_finalized_read_or_accountable {config : Con
       va.state.finalizedCheckpoint = earlier.finalizedCheckpoint ∧
       vb.state.currentJustifiedCheckpoint = stateB.currentJustifiedCheckpoint ∧
       earlier.finalizedCheckpoint.epoch ≤ stateB.currentJustifiedCheckpoint.epoch ∧
+      store.getCheckpointBlock stateB.currentJustifiedCheckpoint.root
+        earlier.finalizedCheckpoint.epoch ≠ .ok earlier.finalizedCheckpoint.root ∧
       DirectSafety.AccountableOrHashEvidence pre left right
         stateB.currentJustifiedCheckpoint.epoch.toNat := by
+  by_cases readOk : store.getCheckpointBlock st.currentJustifiedCheckpoint.root
+      earlier.finalizedCheckpoint.epoch = .ok earlier.finalizedCheckpoint.root
+  · exact .inl readOk
   by_cases atAnchor : earlier.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState
   · -- The finalized checkpoint is the anchor's, and the justified root is a known block.
     have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
@@ -1069,7 +1074,7 @@ private theorem Store.Reachable.held_finalized_read_or_accountable {config : Con
       ⟨-, read⟩ | ⟨stateA, left, va, heldA, fieldA, bound⟩
     · exact .inl read
     · exact .inr ⟨stateA, st, left, tail, va, .realized, heldA, ⟨root, held⟩, fieldA, rfl,
-        ordered, bound⟩
+        ordered, readOk, bound⟩
 
 /-- An ordered earlier finality is on the justified chain, or the two stores give safety evidence.
 
@@ -1574,6 +1579,9 @@ theorem Execution.held_finalized_read_or_accountable {ν κ : Type*} [DecidableE
       va.state.finalizedCheckpoint = ((e.world i).state a).finalizedCheckpoint ∧
       vb.state.currentJustifiedCheckpoint = stateB.currentJustifiedCheckpoint ∧
       ((e.world i).state a).finalizedCheckpoint.epoch ≤ stateB.currentJustifiedCheckpoint.epoch ∧
+      ((e.world j).state b).getCheckpointBlock stateB.currentJustifiedCheckpoint.root
+        ((e.world i).state a).finalizedCheckpoint.epoch ≠
+          .ok ((e.world i).state a).finalizedCheckpoint.root ∧
       DirectSafety.AccountableOrHashEvidence pre left right
         stateB.currentJustifiedCheckpoint.epoch.toNat := by
   have forward (n : ℕ) (w : ν) (honest : w ∈ J) := e.forwardReachableWith

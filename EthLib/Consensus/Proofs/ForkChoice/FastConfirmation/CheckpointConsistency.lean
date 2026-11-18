@@ -139,7 +139,9 @@ At the epoch's first slot, the root is of an earlier epoch.
 
 The call's epoch is at least two and after the anchor's epoch.
 
-The rule checks neither of the last two, and no theorem derives them. -/
+The rule does not check the reserved count, the first-slot condition or the epoch bounds.
+
+They are assumptions on the run. -/
 def CallCheckpointInputs (margin : ℕ) (anchorRoot : Root) (u : ValidatorIndex) (n : ℕ)
     (fcr : FastConfirmationStore) (head : ForkChoiceNode) (start root : Root) : Prop :=
   ((e.world n).state u).FastConfirmationChecked config fcr head.root start root ∧

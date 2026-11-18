@@ -26,7 +26,6 @@ Not yet released.
   The new premises `CallCheckpointInputs`, `TargetChecked`, `AcceptedRealizedRecent`, `AcceptedRealizedHead`, `CallRolloverRead`, `JustifiedPinned`, `TargetIncluded` and `QuorumDriftWithin` are described in `SOUNDNESS.md`.
   `DirectSafety.AccountableOrHashEvidence` is the direct-safety bound on two tails or hash evidence on their runs, and the statements that spelled it out now name it.
   `quorumReserve` and `pinReserve` are the reserves that `QuorumDriftWithin`, `JustifiedPinned` and the reserved count of a call read, and `RootViableAt` is the viability of a root at one time.
-  `Execution.honestHeadsCover_of_byzantine_bound` moves to `HistoricalCoverage.lean`, so that the checked-call headlines can read `Execution.justifiedHonestlySigned`.
 
 - The checked-call proofs add these general facts.
   `SelectedCheckpointsAgree` says that honest justified checkpoints agree at each epoch, and `Execution.selectedCheckpointsAgree_or_evidence` derives it or returns evidence.
@@ -149,6 +148,9 @@ Not yet released.
   `ReceiverWindowExitsNear` asks the receivers' exit bound only of receivers within two epochs of the parent.
 
 ### Changes that break callers
+
+- In Lean, `Execution.honestHeadsCover_of_byzantine_bound` moves from `HistoricalSigners.lean` to `HistoricalCoverage.lean`, with the same statement, so that the checked-call headlines can read `Execution.justifiedHonestlySigned`.
+  A caller that imports `HistoricalSigners.lean` alone imports `HistoricalCoverage.lean` instead.
 
 - In Lean, `headState_epoch_le` moves from the fast-confirmation proofs to `Store.ForwardReachable.headState_epoch_le` in `ForkChoice/BlockStates.lean`, with the same statement.
   A caller writes `forward.headState_epoch_le` for a forward-reachable store `forward`.

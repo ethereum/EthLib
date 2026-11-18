@@ -556,7 +556,7 @@ def CrossStoreJustifiedEvidence {g : ForkedBeaconState preset}
       vb.state.currentJustifiedCheckpoint = second ∧
       DirectSafety.AccountableOrHashEvidence pre left right first.epoch.toNat
 
-/-- Runs to two held states give evidence on an honest finality and a held justification.
+/-- An honest finality conflicts with a held state's justification, with evidence from two runs.
 
 The finalized checkpoint is that of an honest store, at an event by the time.
 
@@ -566,7 +566,7 @@ Its realized justified checkpoint is at the finalized epoch or later.
 
 A terminal view of the first state has the finalized checkpoint, and the second state is the view.
 
-The definition does not record that the justification fails to read the finality.
+The second state's justified root does not read the finalized root at the finalized epoch.
 
 The evidence is the direct-safety stake inequality on those runs, or hash evidence on them.
 
@@ -584,6 +584,9 @@ def HeldStateFinalityEvidence {g : ForkedBeaconState preset}
       va.state.finalizedCheckpoint = ((e.world i).state a).finalizedCheckpoint ∧
       vb.state.currentJustifiedCheckpoint = stateB.currentJustifiedCheckpoint ∧
       ((e.world i).state a).finalizedCheckpoint.epoch ≤ stateB.currentJustifiedCheckpoint.epoch ∧
+      ((e.world j).state b).getCheckpointBlock stateB.currentJustifiedCheckpoint.root
+        ((e.world i).state a).finalizedCheckpoint.epoch ≠
+          .ok ((e.world i).state a).finalizedCheckpoint.root ∧
       DirectSafety.AccountableOrHashEvidence pre left right
         stateB.currentJustifiedCheckpoint.epoch.toNat
 

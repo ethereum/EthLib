@@ -13,7 +13,9 @@ A call of the fast confirmation rule counts the stake of honest voters in its pu
 
 A later state that counts the same voters can hold a different total and different balances.
 
-The reserves bound by how much that changes the quorum, from the fields of the call's states alone.
+The reserves are meant to bound how much that changes the quorum, from the call's states alone.
+
+The drift premises assume that they do, and no theorem derives it.
 
 One covers a later state on the call's own chain, the other a counting state on another branch.
 -/
@@ -36,6 +38,8 @@ The state is the call's pulled-up head state, and the ancestor is the state of i
 Every term reads the state, except the queue of partial withdrawals, which the ancestor holds.
 
 It takes the total, the base and sync rewards, the churn and the finality delay from their reads.
+
+It is meant to bound the drift; the drift premise assumes it, and no theorem derives it.
 
 The reserve is twice the gain of the total plus three times the loss of the voters' stake.
 
@@ -165,7 +169,9 @@ It covers exits, the queues, credits since finality, late activations, sync seat
 
 The depth is the call's epoch plus 2, minus the finalized epoch of the target block's state.
 
-Up to the seed lookahead plus one, the exit queues and the late activations add nothing.
+Up to the seed lookahead plus one, the exit and consolidation queues add nothing.
+
+Neither do the late activations at that depth.
 
 Every epoch of that window was fixed before the branches split.
 
