@@ -708,10 +708,42 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
       (∑ v ∈ (K6 pulled counted), (credC tailC highC v.toNat + whistC tailC highC v.toNat))) : ℕ) := sorry
 
+/-- The keys that `exitingB` marks have their effective balances in `exiting`. -/
+private theorem sum_le_exiting (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) (S : Finset ValidatorIndex)
+    (member : ∀ v ∈ S, (pinTerms config state ancestor finalizedState).exitingB v.toNat = true) :
+    ∑ v ∈ S, balanceAt state v.toNat ≤ (pinTerms config state ancestor finalizedState).exiting := by
+  classical
+  calc ∑ v ∈ S, balanceAt state v.toNat
+      = ∑ i ∈ S.image (fun v : ValidatorIndex => v.toNat), balanceAt state i :=
+        (Finset.sum_image (fun a _ b _ same => UInt64.toNat_inj.mp same)).symm
+    _ ≤ _ := by
+      refine Finset.sum_le_sum_of_subset ?_
+      intro i hi
+      obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
+      have mark := of_decide_eq_true (member v hv)
+      have inside : v.toNat < state.validators.data.size := by
+        by_contra outside
+        have gone : state.validators.data[v.toNat]? = none :=
+          Array.getElem?_eq_none (by omega)
+        have read := mark.2.2
+        simp [gone] at read
+      exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr inside, mark⟩
+
 /-- D-4: the keys whose exit R reads. -/
 theorem bud_exiting (h : Setting config checks g split fin pulled anc counted V) :
     (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
-      (∑ v ∈ (K5 counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) ≤ (pinTerms config pulled anc fin).exiting := sorry
+      (∑ v ∈ (K5 counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) ≤ (pinTerms config pulled anc fin).exiting := by
+  clear h
+  have apart : Disjoint (VN counted V) (K5 counted V) := by
+    rw [Finset.disjoint_left]
+    intro v inV inK5
+    simp only [VN, K5, Finset.mem_filter] at inV inK5
+    exact inK5.2.2 inV.1
+  rw [← Finset.sum_union (Finset.disjoint_filter_filter apart)]
+  exact sum_le_exiting config pulled anc fin _ fun v member => by
+    rcases Finset.mem_union.mp member with member | member <;>
+      exact (Finset.mem_filter.mp member).2
 
 /-- Late activations, weight 3 for V keys and 1 for new keys. -/
 theorem bud_late (h : Setting config checks g split fin pulled anc counted V) :
@@ -868,11 +900,32 @@ theorem bud_fall (h : Setting config checks g split fin pulled anc counted V) :
 
 /-- Glue: (K4 pulled counted V) keys are current at R. -/
 theorem bud_rise (h : Setting config checks g split fin pulled anc counted V) :
-    (∑ v ∈ (K4 pulled counted V), (pinTerms config pulled anc fin).rise v.toNat) ≤ ∑ i ∈ (pinTerms config pulled anc fin).positions with (pinTerms config pulled anc fin).current i = true, (pinTerms config pulled anc fin).rise i :=
-  sorry
+    (∑ v ∈ (K4 pulled counted V), (pinTerms config pulled anc fin).rise v.toNat) ≤ ∑ i ∈ (pinTerms config pulled anc fin).positions with (pinTerms config pulled anc fin).current i = true, (pinTerms config pulled anc fin).rise i := by
+  classical
+  have within : pulled.RegistryWithinLimit := pulled.validators.bound h.early
+  calc ∑ v ∈ (K4 pulled counted V), (pinTerms config pulled anc fin).rise v.toNat
+      = ∑ i ∈ (K4 pulled counted V).image (fun v : ValidatorIndex => v.toNat),
+          (pinTerms config pulled anc fin).rise i :=
+        (Finset.sum_image (fun a _ b _ same => UInt64.toNat_inj.mp same)).symm
+    _ ≤ _ := by
+      refine Finset.sum_le_sum_of_subset ?_
+      intro i hi
+      obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
+      simp only [K4, Finset.mem_filter] at hv
+      have listed : v ∈ getActiveValidatorIndices pulled (getCurrentEpoch pulled) := by
+        simpa [AR, activeVoters] using hv.2.1
+      obtain ⟨validator, found, active⟩ := (mem_getActiveValidatorIndices within).mp listed
+      refine Finset.mem_filter.mpr ⟨?_, ?_⟩
+      · exact Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1
+      · exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
+
+/-- The gain of a reserve counts the stake that joins once, before its multiple. -/
+private theorem joining_le_double (a b c : ℕ) : a ≤ 2 * (a + b) + 3 * c := by omega
 
 /-- `quorumReserve` holds `joining` (its gain term). -/
-theorem bud_joining : (pinTerms config pulled anc fin).joining ≤ (pinTerms config pulled anc fin).quorum := sorry
+theorem bud_joining : (pinTerms config pulled anc fin).joining ≤ (pinTerms config pulled anc fin).quorum := by
+  dsimp only [pinTerms, quorumReserve]
+  exact joining_le_double _ _ _
 
 end Stubs
 
