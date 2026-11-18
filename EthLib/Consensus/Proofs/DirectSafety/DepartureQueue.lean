@@ -138,8 +138,8 @@ private theorem departureCharges_step_indices {x y : ForkedBeaconState preset}
       exact List.nodup_range' _
     exact List.pairwise_map.mp unique
 
-/-- Once assigned, an exit cannot generate a second charge later in the run. -/
-private theorem departureCharges_run_indices {x y : ForkedBeaconState preset}
+/-- A run charges each registry index at most once. -/
+theorem departureCharges_run_indices {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) : (tail.departureCharges.map (·.index)).Nodup := by
   induction tail with
   | nil => simp [Run.departureCharges]
