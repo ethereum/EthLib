@@ -1174,7 +1174,8 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
   have boundR := PinSplit.Run.consolidation_credits_le_X_targets (config := config)
     (checks := checks) shared h.genesis h.caps (fromFin.append tail) electra early high wholeR
     endEpoch withinR delay (V.image UInt64.toNat)
-  simp only [UInt64.toNat_injective.mem_finset_image] at boundC boundR
+  have injective : Function.Injective UInt64.toNat := fun _ _ same => UInt64.toNat_inj.mp same
+  simp only [injective.mem_finset_image] at boundC boundR
   have amountC : (∑ v ∈ Kall, consAmt eventsC v.toNat) ≤
       ((dueList fin electra highC Kall).map fun v =>
         (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
