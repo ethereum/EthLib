@@ -9,6 +9,60 @@ Not yet released.
 
 ### Proof additions
 
+- `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).
+  It compares the call's pulled-up state with a later state in the target's epoch or the next, before Gloas from Fulu.
+  `Execution.quorumDriftWithin` builds those runs from the stores and proves `QuorumDriftWithin` with BLS checks.
+  The anchor state is reached by a run with BLS checks from a genesis built from deposits, and the preset meets `DirectSafety.Parameters`.
+  `Execution.rootViable_of_checked_call` takes the same genesis and run for any signature checks; this theorem fixes them to BLS.
+  The other premises are the anchor store and slot, and positive slot durations.
+  The preset keeps the bands of hysteresis and `Preset.ExitWindowFixed`, and the withdrawal delay is at least one epoch.
+  `MAX_EFFECTIVE_BALANCE` must equal `MIN_ACTIVATION_BALANCE`, which is at most `MAX_EFFECTIVE_BALANCE_ELECTRA`.
+  `Preset.exitWindowFixed_mainnet` and `Preset.exitWindowFixed_minimal` show that premise holds on both presets, as `Config.committeeWindowsFit_mainnet` does for its bundle.
+  `Execution.rootViable_of_checked_call_of_drift_bound` and `Execution.honestHeadsCover_of_checked_call_of_drift_bound` are the two checked-call headlines with `QuorumDriftWithin` discharged, with BLS checks from Fulu to before Gloas.
+  Seven premises replace it.
+  They are Fulu or later, a horizon before the next fork, `Preset.ExitWindowFixed` and `IncrementWithinUpwardBand`.
+  The others are a withdrawal delay of at least one epoch and the two Electra balance conditions.
+  `maxLookahead` is dropped, since `Preset.ExitWindowFixed` implies it.
+  `effectiveRise_le` bounds the rise of the active effective balances over an epoch end, and `effectiveFall_le` the fall of a voter's.
+  `branchCorrections` bounds the balances along a branch inside one epoch.
+
+- The quorum drift bound adds these facts of runs.
+  `Run.blockCount` counts the blocks of a run, `Run.blockCount_append` adds them over two runs, and `Run.blocks_le_slots` bounds them by one per slot.
+  `run_of_stateTransition` and `run_of_processSlots` give a run for one block or for the slots before it, when the slot is before the next fork.
+  `Run.split_next` splits a run that ends one epoch after it starts at the slot where its epoch changes.
+  `Run.induction_of_same_epoch` inducts over a run inside one epoch, and `advanceSlotAcross_of_same_epoch` shows such a slot only caches the slot.
+  Inside one epoch, `Run.fork_eq_of_same_epoch` keeps the fork, `Run.currentSyncCommittee_eq_of_same_epoch` the keys of the sync committee, and `Run.effectiveKept_of_same_epoch` each effective balance.
+  `Run.withdrawableKept_of_same_epoch` and `withdrawableKept_processRegistryUpdates` keep `WithdrawableKept` inside an epoch and through the registry updates.
+  `Genesis.invariant` gives the invariant of a genesis built from deposits, and `Run.invariant` keeps it along a run.
+
+- Its transition facts are in `Transition/BranchLedger.lean`, `Transition/EffectiveRise.lean`, `Transition/EffectiveFall.lean`, `Transition/EpochPassAtCall.lean` and their neighbours.
+  `Hysteresis` puts each effective balance within the bands of its balance.
+  `processEffectiveBalanceUpdates_hysteresis` establishes it, `Hysteresis.of_data` carries it to a state with the same validators and balances, and `Hysteresis.upgrade` keeps it across upgrades.
+  `Preset.ExitWindowFixed` asks the seed lookahead to fix activity three epochs ahead.
+  `EpochTrace.through_effectiveBalances` splits an epoch trace after the effective-balance updates.
+  `getTotalActiveBalance_toNat` gives the value of a successful active-balance read, and `depositChurnLimit_toNat_of_lt` the value of a deposit churn read before Gloas.
+  `activeFilter_eq` and `activeSum_eq` keep the active positions and their effective balances between two registries, and `seats_eq` the seats of a validator in the sync committee.
+  `getBaseReward_congr` reads the same base reward for two validators with the same effective balance, in one state or in two.
+  `processRewardsAndPenalties_balance_le_of_inactivityUpdates` bounds each balance after the rewards pass, given a bound on each base reward.
+  `processOperations_floor` bounds the balance of an unslashed validator through the operations of a block before Gloas.
+  The balance stays at least the smaller of its balance and its effective balance before them.
+  `actualBalanceAt_increaseBalance` and `actualBalanceAt_decreaseBalance` change the balance at one index and keep every other.
+  `passPendingConsolidations_balanceNotLowered_of_waiting` keeps the balance of a source that cannot yet leave, and `queueConsolidation_queued` records the exit epoch and the queue entry of a consolidation.
+  `processBlock_currentSyncCommittee` keeps the current sync committee across a block.
+  `PartialsSame` holds the queue of pending partial withdrawals, and its `refl`, `trans` and `partialsSame_*` lemmas keep it through the steps that do not touch it.
+  `flagSumOf` states the flag sums of `SupplyBlock` for any base reward, and `recentFlagSum` adds both recent epochs; `flagRewardWeight` keeps its value.
+  `flagSumOf_le` bounds a flag sum by 54 base rewards per position, and `flagSumOf_foldlM_addAttesterFlags` raises it by at least the numerator its attesters gain.
+  `processAttestation_keepsFlag` keeps each flag an attestation finds, and `flags_exit` and `flags_processExecutionRequests` keep both lists of flags.
+  `Store.ForwardReachableWith.relation_of_checkpointPrefix_with` composes a relation that needs to hold only for transitions with the store's checks.
+
+- Some earlier private declarations are now public, with unchanged statements.
+  They are the flag frames `flags_operationsInput`, `flags_proposerSlashing`, `flags_attesterSlashing`, `flags_increase`, `flags_decrease`, `flagsBelow_add` and `flagsBelow_deposit`.
+  They are also `flagValue`, `flagValue_le`, `isActiveAt_of_getAttestingIndices` and `withdrawnFrom_split`.
+  They are also `StepKeeps.refl`, `StepKeeps.trans`, `StepKeeps.of_validators` and the `stepKeeps_*` step lemmas.
+  They are also `effectiveKept_setValidator`, `effectiveKept_decrease`, `effectiveKept_exit`, `effectiveKept_requests` and `balanceDrift_upgrades_upper`.
+  They are also `Unassigned`, `UnassignedFrom`, `unassignedFrom_size`, `UnassignedKept` and `UnassignedKept.processDeposit`.
+  `DirectSafety.total_active_congr` moves from `DirectSafety/DepartureQueue.lean` to `Transition/BalanceDrift.lean`, with its name and statement unchanged.
+
 - `Execution.rootViable_of_checked_call` shows that the confirmed root of a call of the fast confirmation rule stays viable from the call up to `time` ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 3, for the confirmed root).
   At each up-to-date honest store whose fork choice returns a head, the root is in the filtered tree or below the justified block.
   The alternatives are a collision of two honest stores and accountable-safety evidence.
