@@ -11,6 +11,10 @@ For every choice of peers, standing and message ID that a client passes:
 - With a lawful choice, that mesh has at most the target number of peers, each one graftable.
 - Leaving a topic sends a PRUNE to each peer of its mesh, with the backoff of an unsubscribe.
   The mesh is gone, and this node waits that backoff before it grafts the peer again.
+- If no mesh holds a peer twice before a leave, none does after it, and a publish keeps every mesh.
+- The same holds for a join with a lawful choice.
+  That result also needs the fanout of the topic to list each peer once.
+  It needs the same of the peers that announced the topic.
 - A published message goes only to explicit peers and to peers not below the publish threshold.
 - With flood publishing, a new message goes to every peer of the topic not below that threshold.
 - Once this node publishes a new message, no later RPC forwards or delivers its ID.
@@ -100,6 +104,27 @@ theorem join_graftable (hsel : sel.Lawful) (h : topic ∉ s.topics) {q : PeerId}
     have := (List.mem_filter.mp this).2
     simpa using (Bool.and_eq_true_iff.mp this).1
 
+/-- Joining a topic keeps each mesh free of a repeated peer.
+
+It needs a lawful choice, and no mesh holding a peer twice before.
+
+It also needs the fanout of the topic, and the peers that announced it, to list each peer once. -/
+theorem join_mesh_nodup (hsel : sel.Lawful) (hf : (peersOf s.fanout topic).Nodup)
+    (ht : (topicPeers s topic).Nodup) (h : ∀ t, (peersOf s.mesh t).Nodup) (t : String) :
+    (peersOf (join p sel standing now topic s).1.mesh t).Nodup := by
+  by_cases hj : topic ∈ s.topics
+  · simpa [join, hj] using h t
+  · simp only [join, hj, ↓reduceIte, Router.peersOf_setPeers]
+    split
+    · rw [List.nodup_append]
+      refine ⟨(hsel _ _).1.nodup (hf.filter _), (hsel _ _).1.nodup (ht.filter _),
+        fun a ha b hb hab => ?_⟩
+      subst hab
+      have := (List.mem_filter.mp ((hsel _ _).1.subset hb)).2
+      simp only [Bool.and_eq_true, decide_eq_true_eq] at this
+      exact this.2 ha
+    · exact h t
+
 /-- Leaving a joined topic sends a PRUNE with the unsubscribe backoff to each of its mesh peers.
 
 It sends nothing else. -/
@@ -127,6 +152,33 @@ theorem leave_backoff (h : topic ∈ s.topics) {q : PeerId} (hq : q ∈ peersOf 
       backoffEnd (leave c now topic s).1.backoff topic q := by
   simp only [leave, h, not_true_eq_false, ↓reduceIte]
   exact Router.backoffEnd_fold_mem _ _ _ _ hq _
+
+/-- Leaving a topic keeps each mesh free of a repeated peer.
+
+It needs no mesh to hold a peer twice before. -/
+theorem leave_mesh_nodup (h : ∀ t, (peersOf s.mesh t).Nodup) (t : String) :
+    (peersOf (leave c now topic s).1.mesh t).Nodup := by
+  by_cases hj : topic ∈ s.topics
+  · by_cases e : t = topic
+    · subst e
+      rw [leave_mesh _ _ _ _ hj]
+      exact List.nodup_nil
+    · simp only [leave, hj, not_true_eq_false, ↓reduceIte]
+      rw [Router.peersOf_filter_ne _ e]
+      exact h t
+  · simpa [leave, hj] using h t
+
+/-- A publish keeps every mesh. -/
+theorem publish_mesh {m : Message} :
+    (publish p c sel standing msgId now m s).1.mesh = s.mesh := by
+  unfold publish publishPeers
+  by_cases hn : s.seen.contains now (p.seen_ttl * 1000) (msgId m) = true
+  · simp [hn]
+  · by_cases h1 : c.floodPublish = true
+    · simp [hn, h1]
+    · by_cases h2 : m.topic ∈ s.topics
+      · simp [hn, h1, h2]
+      · simp [hn, h1, h2]
 
 /-- A publish forwards only the message it publishes. -/
 theorem publish_forward_message {m m' : Message} {q : PeerId}

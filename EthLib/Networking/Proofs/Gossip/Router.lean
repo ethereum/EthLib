@@ -29,6 +29,10 @@ For every standing, message ID and validation that a client passes:
 - An RPC forwards each message it delivers to the mesh of its topic and to the explicit peers.
   The mesh is the one before the RPC, and nothing else is forwarded.
 - With a positive lifetime of the seen cache, an RPC delivers at most one message of each ID.
+- If no mesh holds a peer twice before the RPC, none does after it.
+- So an RPC sends each message it forwards at most once to each peer.
+  This needs a positive lifetime of the seen cache, and no mesh holding a peer twice before the RPC.
+  It also needs each explicit peer to be listed once and to be outside every mesh.
 -/
 
 @[expose] public section
@@ -45,31 +49,35 @@ theorem foldl_inv {α β : Type} (l : List α) (P : β → Prop) (f : β → α 
   | cons x l ih =>
     exact ih (fun b a ha => h b a (List.mem_cons_of_mem _ ha)) (h b x List.mem_cons_self hb)
 
+/-- Looking a topic up after another topic is filtered out of a map. -/
+theorem peersOf_filter_ne (m : List (String × List PeerId)) {t t' : String} (hne : t' ≠ t) :
+    peersOf (m.filter (·.1 != t)) t' = peersOf m t' := by
+  unfold peersOf
+  congr 1
+  induction m with
+  | nil => rfl
+  | cons x m ih =>
+    obtain ⟨a, b⟩ := x
+    by_cases ha : a = t
+    · subst ha
+      have : (t' == a) = false := by simpa using hne
+      simp [List.lookup, List.filter, ih, this]
+    · have : (a != t) = true := by simpa using ha
+      by_cases hta : t' = a
+      · subst hta; simp [List.lookup, List.filter, this]
+      · have : (t' == a) = false := by simpa using hta
+        simp [List.lookup, List.filter, *]
+
 /-- Looking a topic up after its peers are replaced. -/
 theorem peersOf_setPeers (m : List (String × List PeerId)) (t t' : String)
     (ps : List PeerId) :
     peersOf (setPeers m t ps) t' = if t' = t then ps else peersOf m t' := by
-  have key : ∀ m : List (String × List PeerId), t' ≠ t →
-      (m.filter (·.1 != t)).lookup t' = m.lookup t' := by
-    intro m hne
-    induction m with
-    | nil => rfl
-    | cons x m ih =>
-      obtain ⟨a, b⟩ := x
-      by_cases ha : a = t
-      · subst ha
-        have : (t' == a) = false := by simpa using hne
-        simp [List.lookup, List.filter, ih, this]
-      · have : (a != t) = true := by simpa using ha
-        by_cases hta : t' = a
-        · subst hta; simp [List.lookup, List.filter, this]
-        · have : (t' == a) = false := by simpa using hta
-          simp [List.lookup, List.filter, *]
-  unfold peersOf setPeers
   by_cases h : t' = t
-  · subst h; simp [List.lookup]
-  · have : (t' == t) = false := by simpa using h
-    simp [List.lookup, h, key m h, this]
+  · subst h; simp [peersOf, setPeers]
+  · simp only [h, ↓reduceIte]
+    rw [← peersOf_filter_ne m h]
+    have : (t' == t) = false := by simpa using h
+    simp [peersOf, setPeers, List.lookup, this]
 
 /-- Looking a backoff up after one end is replaced. -/
 theorem backoffEnd_setBackoff (b : List ((String × PeerId) × Nat)) (t t' : String)
@@ -288,6 +296,28 @@ private theorem graft_step_mesh (t : String) :
       · exact Or.inr ⟨rfl, rfl, h2, h1, by omega, h5⟩
     · left; simpa [ht] using hx
 
+/-- A GRAFT keeps each mesh free of a repeated peer.
+
+It needs no mesh to hold a peer twice before the GRAFT. -/
+private theorem graft_step_nodup (h : ∀ t, (peersOf s.mesh t).Nodup) (t : String) :
+    (peersOf (receiveGraft p backoffMs now src (s, out) g).1.mesh t).Nodup := by
+  rcases graft_cases p backoffMs now src s out g with
+    ⟨_, e⟩ | ⟨_, _, _, e⟩ | ⟨_, _, e⟩ | ⟨_, _, _, h4, _, e⟩
+  · simpa [e] using h t
+  · simp only [e, peersOf_setPeers]
+    split
+    · exact (h _).filter _
+    · exact h t
+  · simpa [e] using h t
+  · simp only [e, peersOf_setPeers]
+    split
+    · rw [List.nodup_append]
+      refine ⟨h _, by simp, fun a ha b hb hab => ?_⟩
+      rw [List.mem_singleton] at hb
+      subst hab hb
+      exact h4 ha
+    · exact h t
+
 /-- A GRAFT from an explicit peer, or in a backoff for a joined topic, is answered with a PRUNE. -/
 private theorem graft_prune
     (h : src ∈ s.explicit ∨ (g.topicId ∈ s.topics ∧ now < backoffEnd s.backoff g.topicId src)) :
@@ -439,6 +469,19 @@ private theorem prune_step (pruneBackoffMs now : Nat) (src : PeerId) (s : Router
   · have e : receivePrune pruneBackoffMs now src s q = s := by simp [receivePrune, ht]
     rw [e]
     exact ⟨rfl, rfl, rfl, rfl, fun t x hx => hx⟩
+
+/-- A PRUNE keeps each mesh free of a repeated peer.
+
+It needs no mesh to hold a peer twice before the PRUNE. -/
+private theorem prune_step_nodup (pruneBackoffMs now : Nat) (src : PeerId) (s : RouterState)
+    (q : Prune) (h : ∀ t, (peersOf s.mesh t).Nodup) (t : String) :
+    (peersOf (receivePrune pruneBackoffMs now src s q).mesh t).Nodup := by
+  by_cases ht : q.topicId ∈ s.topics
+  · simp only [receivePrune, ht, not_true_eq_false, ↓reduceIte, peersOf_setPeers]
+    split
+    · exact (h _).filter _
+    · exact h t
+  · simpa [receivePrune, ht] using h t
 
 end Prune
 
@@ -1280,5 +1323,66 @@ theorem receiveRpc_delivered_nodup (hp : 0 < p.seen_ttl) :
     exact List.nodup_nil
   · exact (receiveRpc_seen_facts p backoffMs pruneBackoffMs standing msgId validate now src rpc s
       hn _ rfl).2.2.2.2 hp
+
+/-- An RPC keeps each mesh free of a repeated peer.
+
+It needs no mesh to hold a peer twice before the RPC. -/
+theorem receiveRpc_mesh_nodup (h : ∀ t, (peersOf s.mesh t).Nodup) (t : String) :
+    (peersOf
+      (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).1.mesh t).Nodup
+    := by
+  by_cases hn : (standing src).belowGraylist = true ∧ src ∉ s.explicit
+  · rw [receiveRpc_graylist p backoffMs pruneBackoffMs standing msgId validate now src rpc s hn.1
+      hn.2]
+    exact h t
+  · obtain ⟨pt, s1, a1, a2, s3, -, hs1, ha1, ha2, hs3, hr1, -⟩ :=
+      receiveRpc_eq p backoffMs pruneBackoffMs standing msgId validate now src rpc s hn
+    subst hs1
+    obtain ⟨⟨se, mc, e1, -⟩, -⟩ := message_fold p now msgId validate { s with peerTopics := pt }
+      rpc.publish
+    rw [← ha1] at e1
+    have h1 : ∀ t, (peersOf a1.1.mesh t).Nodup := by rw [e1]; exact h
+    have h2 : ∀ t, (peersOf a2.1.mesh t).Nodup := by
+      rw [ha2]
+      refine foldl_inv _ (fun a : RouterState × Out => ∀ t, (peersOf a.1.mesh t).Nodup) _ ?_ h1
+      rintro ⟨s', o⟩ g - hs'
+      exact graft_step_nodup p backoffMs now src s' o g hs'
+    rw [hr1, hs3]
+    exact foldl_inv _ (fun r : RouterState => ∀ t, (peersOf r.mesh t).Nodup) _
+      (fun r q _ hr => prune_step_nodup pruneBackoffMs now src r q hr) h2 t
+
+/-- Distinct messages, each sent to a list of peers that repeats none, give distinct pairs. -/
+private theorem pairs_nodup (ts : Message → List PeerId) (l : List Message) (hl : l.Nodup)
+    (ht : ∀ m ∈ l, (ts m).Nodup) : (l.flatMap fun m => (ts m).map (·, m)).Nodup := by
+  induction l with
+  | nil => exact List.nodup_nil
+  | cons a l ih =>
+    obtain ⟨ha, hl⟩ := List.nodup_cons.1 hl
+    rw [List.flatMap_cons, List.nodup_append]
+    refine ⟨List.Pairwise.map _ (fun x y hxy e => hxy (Prod.mk.inj e).1) (ht a List.mem_cons_self),
+      ih hl fun m hm => ht m (List.mem_cons_of_mem _ hm), fun x hx y hy hxy => ?_⟩
+    subst hxy
+    simp only [List.mem_map, List.mem_flatMap] at hx hy
+    obtain ⟨q, -, rfl⟩ := hx
+    obtain ⟨m, hm, q', -, e⟩ := hy
+    exact ha ((Prod.mk.inj e).2 ▸ hm)
+
+/-- An RPC sends each message it forwards at most once to each peer.
+
+It needs a positive lifetime of the seen cache, and no mesh holding a peer twice before the RPC.
+
+It also needs each explicit peer to be listed once and to be outside every mesh. -/
+theorem receiveRpc_forward_nodup (hp : 0 < p.seen_ttl) (hm : ∀ t, (peersOf s.mesh t).Nodup)
+    (hx : s.explicit.Nodup) (hd : ∀ t, ∀ q ∈ peersOf s.mesh t, q ∉ s.explicit) :
+    (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).2.forward.Nodup
+    := by
+  rw [receiveRpc_forward_delivered]
+  refine pairs_nodup _ _ (List.Pairwise.of_map msgId (fun a b h e => h (congrArg msgId e))
+    (receiveRpc_delivered_nodup p backoffMs pruneBackoffMs standing msgId validate now src rpc s
+      hp)) fun m _ => ?_
+  rw [List.nodup_append]
+  refine ⟨hm _, hx, fun a ha b hb hab => ?_⟩
+  subst hab
+  exact hd _ a ha hb
 
 end EthLib.Networking.Proofs.Gossip.Router
