@@ -264,38 +264,6 @@ theorem Execution.anchor_stateRoot_nonzero {anchor : Store preset fork}
       honest).reachable.anchor_known
   exact roots u honest n inTime root anchorBlock anchorFound
 
-/-- Two honest stores collide on one root, by a time. -/
-def HonestCollision (time : ℕ) : Prop :=
-  ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
-    ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-      some evidence
-
-omit [DecidablePred (· ∈ J)] in
-/-- Honest stores up to a time agree on every block they both hold, or two of them collide. -/
-theorem Execution.blocksAgree_or_collision (time : ℕ) :
-    (∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
-      ∀ (r : Root) (left right : BeaconBlock preset fork),
-      ((e.world i).state a).blocks[r]? = some left →
-      ((e.world j).state b).blocks[r]? = some right → left = right) ∨
-      HonestCollision (e := e) time := by
-  rcases Store.blocks_agree_or_collision (fun i : ValidatorIndex × ℕ => (e.world i.2).state i.1)
-      (fun i => i.1 ∈ J ∧ (e.world i.2).time ≤ time) with agree | collision
-  · exact .inl fun a ha b hb i j hi hj => agree (a, i) ⟨ha, hi⟩ (b, j) ⟨hb, hj⟩
-  · obtain ⟨⟨a, i⟩, ⟨ha, hi⟩, ⟨b, j⟩, ⟨hb, hj⟩, r, evidence, searched⟩ := collision
-    exact .inr ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
-
-omit [DecidablePred (· ∈ J)] in
-/-- Honest stores that agree on every block they both hold do not collide. -/
-theorem Execution.not_honestCollision_of_agree {time : ℕ}
-    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
-      ∀ (r : Root) (left right : BeaconBlock preset fork),
-      ((e.world i).state a).blocks[r]? = some left →
-      ((e.world j).state b).blocks[r]? = some right → left = right) :
-    ¬HonestCollision (e := e) time := by
-  rintro ⟨a, ha, b, hb, i, j, hi, hj, _, ⟨r, left, right⟩, found⟩
-  obtain ⟨leftFound, rightFound, different⟩ := Store.findBlockCollision_held found
-  exact different (agree a ha b hb i j hi hj r left right leftFound rightFound)
-
 /-- No honest validator has a true slashed flag in a counted state through the horizon. -/
 def HonestCountedStatesUnslashed (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k state, (e.world k).time ≤ last →
