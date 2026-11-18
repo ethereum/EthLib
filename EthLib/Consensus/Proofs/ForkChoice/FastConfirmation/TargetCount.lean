@@ -333,15 +333,12 @@ private theorem Execution.mem_window_of_target {anchor : Store preset fork}
   have reached := e.forwardReachableWith
     (fun u member => (start u member) ▸ Store.ForwardReachableWith.anchor anchored) k w honest
   -- The target is the current one, so its epoch is the epoch of the slot.
-  obtain ⟨epoch, targetRoot, epochOk, headTarget, targetEq⟩ :=
+  obtain ⟨epoch, targetRoot, -, headTarget, targetEq⟩ :=
     Store.getCurrentTarget_eq_ok_iff.mp targetOk
   have epochRead : ((e.world k).state w).getCurrentStoreEpoch config =
       .ok (computeEpochAtSlot preset slot) := by
     simp [Store.getCurrentStoreEpoch, slotOk, bind, Except.bind, pure, Except.pure]
-  have epochEq : epoch = computeEpochAtSlot preset slot :=
-    Except.ok.inj (epochOk.symm.trans epochRead)
-  have targetEpoch : attestation.data.target.epoch = computeEpochAtSlot preset slot :=
-    (congrArg Checkpoint.epoch targetEq).trans epochEq
+  have targetEpoch := Store.epoch_eq_of_getCurrentTarget epochRead targetOk
   have rootEq : attestation.data.target.root = targetRoot := congrArg Checkpoint.root targetEq
   obtain ⟨_, rootBlock, _, rootFound, _, headDescends⟩ :=
     Store.isAncestor_of_getCheckpointBlock preGloas headTarget
@@ -356,8 +353,7 @@ private theorem Execution.mem_window_of_target {anchor : Store preset fork}
   have headCurrent :
       (getCurrentEpoch headState).toNat ≤ (computeEpochAtSlot preset slot).toNat := by
     rw [getCurrentEpoch_toNat]
-    simp only [computeEpochAtSlot, UInt64.toNat_div]
-    exact Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp headLe)
+    exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp headLe)
   have voteEpoch :
       computeEpochAtSlot preset attestation.data.slot = computeEpochAtSlot preset slot :=
     origin.targetEpoch.symm.trans targetEpoch
