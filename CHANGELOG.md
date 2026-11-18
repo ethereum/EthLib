@@ -16,6 +16,12 @@ Not yet released.
   Key generation makes exactly `264193`, signing at most `12885841387`, and verification at most `491`, exactly `491` when it accepts.
   `HashSig.length_queriesWith_node` and `HashSig.length_queriesWith_ofFnInOrder_const` count the calls of shared loops.
 
+- `Xmss.Unforgeability.forgeAdvantage_le_adversaryBudget` bounds an XMSS forgery by the adversary's own calls ([#3335](https://github.com/ethereum/EthLib/issues/3335)).
+  An adversary with at most `qH` calls of `H` and `r` signing requests (`HasAdversaryBudget`) forges with probability at most `gameQueries qH r / 2^127`.
+  `gameQueries qH r` adds the worst cases of key generation, of `r` requests and of the verification.
+  `forgeAdvantage_le_lifetime` takes `r <= 2^32`, and its constant `lifetimeQueries` is `2^65 + 615 * 2^48 + 205 * 2^16 + 385`.
+  `unforgeable` is unchanged.
+
 - `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).
   It compares the call's pulled-up state with a later state in the target's epoch or the next, before Gloas from Fulu.
   `Execution.quorumDriftWithin` builds those runs from the stores and proves `QuorumDriftWithin` with BLS checks.
