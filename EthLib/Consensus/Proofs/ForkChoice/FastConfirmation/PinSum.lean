@@ -1415,7 +1415,7 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   rw [pinReserve_eq_total]
   unfold PinTerms.total stake
   simp only [AC, AR, Q, eC, eR] at *
-  simp only [Finset.sum_add_distrib] at sV sN sP sJ b5 b6 b16 b18 ⊢
+  simp only [Finset.sum_add_distrib] at sV sN sP sJ b2 b5 b6 b16 b18 ⊢
   zify at *
   have syncPos : 0 ≤ ∑ x ∈ K4 pulled counted V, (syncF events x.toNat : ℤ) :=
     Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
