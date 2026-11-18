@@ -418,22 +418,6 @@ private theorem churnQueue_bound {earliest first churn left₀ amount epoch left
       (amount := amount.toNat) positive least (by omega) below
     constructor <;> omega
 
-/-- The total active balance is at most one increment plus the sum of the effective balances. -/
-private theorem getTotalActiveBalance_le {s : BeaconState preset fork} {total : Gwei}
-    (computed : getTotalActiveBalance s = .ok total) :
-    total.toNat ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat + effectiveBalanceSum s := by
-  obtain ⟨-, fits, rfl⟩ := getTotalBalance_ok_iff.mp (getTotalActiveBalance_ok computed)
-  have marked : sumMarked s.validators.data (markIndices s.validators.data.size
-      (getActiveValidatorIndices s (getCurrentEpoch s))) ≤ effectiveBalanceSum s := by
-    rw [sumMarked_eq_sum, effectiveBalanceSum_eq_sum_range]
-    refine sum_map_le_sum_map fun j _ => ?_
-    split <;> omega
-  rw [UInt64.max_def]
-  split
-  · rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt fits]
-    omega
-  · omega
-
 /-- A share of a total, at least the least churn and rounded down to an increment, is bounded.
 
 It is at least one increment, and at most the least churn plus the total. -/
@@ -478,7 +462,7 @@ private theorem exitChurnLimit_bounds (rates : Rates preset config) {s : BeaconS
   split at computed
   · simp only [getExitChurnLimit, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨total, totalOk, rfl⟩ := computed
-    have totalLe := getTotalActiveBalance_le totalOk
+    have totalLe := (getTotalActiveBalance_bounds totalOk).2
     obtain ⟨lower, upper⟩ := roundToIncrement_share_bounds (config := config) total
       config.CHURN_LIMIT_QUOTIENT_GLOAS rates.increment rates.minimum
     unfold exitChurnCeiling
@@ -486,7 +470,7 @@ private theorem exitChurnLimit_bounds (rates : Rates preset config) {s : BeaconS
   · simp only [getActivationExitChurnLimit, getBalanceChurnLimit, bind_ok_iff, pure,
       Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, ⟨total, totalOk, rfl⟩, rfl⟩ := computed
-    have totalLe := getTotalActiveBalance_le totalOk
+    have totalLe := (getTotalActiveBalance_bounds totalOk).2
     obtain ⟨lower, upper⟩ := roundToIncrement_share_bounds (config := config) total
       config.CHURN_LIMIT_QUOTIENT rates.increment rates.minimum
     have maximum := UInt64.le_iff_toNat_le.mp rates.maximum

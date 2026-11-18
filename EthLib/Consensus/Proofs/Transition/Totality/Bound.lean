@@ -233,11 +233,9 @@ theorem getTotalActiveBalance_bounds {state : BeaconState preset fork} {total : 
   have ok := getTotalActiveBalance_ok computed
   refine ⟨UInt64.le_iff_toNat_le.mp (le_getTotalBalance ok), ?_⟩
   obtain ⟨-, fits, rfl⟩ := getTotalBalance_ok_iff.mp ok
-  have marked : sumMarked state.validators.data (markIndices state.validators.data.size
-      (getActiveValidatorIndices state (getCurrentEpoch state))) ≤ effectiveBalanceSum state := by
-    rw [sumMarked_eq_sum, effectiveBalanceSum_eq_sum_range]
-    refine sum_map_le_sum_map fun j _ => ?_
-    split <;> omega
+  have marked := sumMarked_le_effectiveBalanceSum (state := state)
+    (markIndices state.validators.data.size
+      (getActiveValidatorIndices state (getCurrentEpoch state)))
   rw [UInt64.max_def]
   split
   · rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt fits]
