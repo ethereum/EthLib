@@ -67,6 +67,7 @@ structure PinTerms (preset : Preset) where
   exitedR : ℕ
   depth : ℕ
   syncProposer : ℕ
+  proposerCredit : ℕ
   credits : ℕ
   branchR : ℕ
   late : ℕ
@@ -417,6 +418,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   { quorum := quorumReserve config state ancestor, exiting, queues, queueDep, queueExit, credits,
     branchR, late, syncSeats, rise, fall, positions, current, exitingRise, exitingCredits,
     queueRise, reserveW, flagged, seatShortfall, consolidationsX, exitedR, depth, syncProposer,
+    proposerCredit,
     joining := ∑ i ∈ positions with current i = false ∧ upcoming i = true, effective i,
     exitingB := fun i => decide ((before i || current i) = true ∧
       (slashed i = false ∨ recentSlashing i = true) ∧
