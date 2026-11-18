@@ -611,6 +611,8 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- The credits' eleven tenths pay them while eleven gains over the depth stay below the cap.
   --
   -- Past that, each deposit the window can apply is charged up to the cap.
+  --
+  -- This closes a proof route at degenerate totals; no reachable run is known to need it.
   let newKeyRise := if 11 * depth * gainRateMax < capMax then 0
     else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
   -- A key here that is not yet eligible can be topped up on the other branch alone.
