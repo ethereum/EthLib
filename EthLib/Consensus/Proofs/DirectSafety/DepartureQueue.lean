@@ -2010,16 +2010,15 @@ private theorem callsFrom_of_sites {fork : Fork} {s : BeaconState preset fork}
 Their rates stay within the activation-exit cap. -/
 private theorem exit_sites_bounds {fork : Fork} {s : BeaconState preset fork}
     (early : fork < .glamsterdam) {calls : List (IndexedDepartureCall preset config)}
-    (sites : ∀ called ∈ calls, ∃ site : BeaconState preset fork,
-      SitePrefix s site ∧ site.slot = s.slot ∧
+    (sites : ∀ called ∈ calls, ∃ site : BeaconState preset fork, site.slot = s.slot ∧
       exitChurnLimit config site = .ok called.call.rate ∧
       computeActivationExitEpoch preset (getCurrentEpoch site) = .ok called.call.first) :
     DepartureCallsFrom (getCurrentEpoch s).toNat calls ∧ ∀ called ∈ calls,
       called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat := by
   refine ⟨callsFrom_of_sites fun called member => ?_, fun called member => ?_⟩
-  · obtain ⟨site, -, slot, -, first⟩ := sites called member
+  · obtain ⟨site, slot, -, first⟩ := sites called member
     exact ⟨site, slot, first⟩
-  · obtain ⟨_, -, -, rate, -⟩ := sites called member
+  · obtain ⟨_, -, rate, -⟩ := sites called member
     exact exitChurnLimit_le_cap early rate
 
 /-- Attester slashings retain charge coverage through their slashable-validator fold. -/
@@ -2035,7 +2034,8 @@ private theorem attesterSlashing_indexedTrace {fork : Fork} {s t : BeaconState p
         called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
       PartialsAppended electra s t calls := by
   obtain ⟨calls, trace, covered, appended, sites⟩ := attester_exit_sites electra early ok
-  obtain ⟨firsts, rates⟩ := exit_sites_bounds early sites
+  obtain ⟨firsts, rates⟩ :=
+    exit_sites_bounds early fun called member => (sites called member).imp fun _ => And.right
   exact ⟨calls, firsts, trace, covered, rates, appended⟩
 
 /-- A proposer slashing retains the charged index of its exit call. -/
@@ -2154,7 +2154,8 @@ private theorem epoch_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
       activation.toNat := by omega
   obtain ⟨calls, queued, covered, appended, sites⟩ :=
     registry_fold_exit_sites electra early later entries
-  obtain ⟨firsts, rates⟩ := exit_sites_bounds early sites
+  obtain ⟨firsts, rates⟩ :=
+    exit_sites_bounds early fun called member => (sites called member).imp fun _ => And.right
   obtain ⟨trace, coverage, partials⟩ := cut calls queued covered appended
   refine ⟨calls, ?_, trace, coverage, rates, partials⟩
   simpa only [getCurrentEpoch, slot] using firsts
@@ -2242,7 +2243,8 @@ private theorem withdrawalRequests_indexedTrace {fork : Fork} {s t : BeaconState
         called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
       PartialsAppended electra s t calls := by
   obtain ⟨calls, trace, covered, appended, sites⟩ := withdrawal_fold_exit_sites electra early ok
-  obtain ⟨firsts, rates⟩ := exit_sites_bounds early sites
+  obtain ⟨firsts, rates⟩ :=
+    exit_sites_bounds early fun called member => (sites called member).imp fun _ => And.right
   exact ⟨calls, firsts, trace, covered, rates, appended⟩
 
 /-- The number of validators active at the current epoch of a state. -/
@@ -2297,7 +2299,8 @@ private theorem voluntaryExits_indexedTrace {fork : Fork} {s t : BeaconState pre
         called.call.rate.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat) ∧
       PartialsAppended electra s t calls := by
   obtain ⟨calls, trace, covered, appended, sites⟩ := voluntary_fold_exit_sites electra early ok
-  obtain ⟨firsts, rates⟩ := exit_sites_bounds early sites
+  obtain ⟨firsts, rates⟩ :=
+    exit_sites_bounds early fun called member => (sites called member).imp fun _ => And.right
   exact ⟨calls, firsts, trace, covered, rates, appended⟩
 
 /-- Successful consolidation requests record the input to their balance-queue call.
