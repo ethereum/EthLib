@@ -785,16 +785,27 @@ private structure PinPresetFacts (preset : Preset) : Prop where
   slashBand : preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
       preset.MIN_SLASHING_PENALTY_QUOTIENT_ELECTRA.toNat + preset.downwardBand ≤
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+  /-- (preset fact) At every fork the floor of a new key is at least an increment. -/
+  newKey : ∀ fork : Fork, preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+    2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
+      preset.MAX_EFFECTIVE_BALANCE.toNat /
+        (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat -
+      preset.downwardBand - preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+  /-- (preset fact) At every fork the whistleblower quotient is at least two. -/
+  whistleblower : ∀ fork : Fork,
+    2 ≤ (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat
 
 /-- The mainnet preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
-    by decide, by decide, by decide⟩
+    by decide, by decide, by decide, fun fork => by cases fork <;> decide,
+    fun fork => by cases fork <;> decide⟩
 
 /-- The minimal preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
-    by decide, by decide, by decide⟩
+    by decide, by decide, by decide, fun fork => by cases fork <;> decide,
+    fun fork => by cases fork <;> decide⟩
 
 /-- From Electra and before Gloas, the floor of the window at its start leaves room for the window.
 
