@@ -414,7 +414,7 @@ structure Setting (config : Config) (checks : SignatureChecks) (g : ForkedBeacon
   fulu : .fusaka ≤ fork
   bands : preset.IncrementWithinUpwardBand
   caps : CapOrder preset
-  window : preset.ExitWindowFixed
+  window : preset.SeedLookaheadAtLeastThree
   room : 2 ^ 32 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat
   below : preset.downwardBand < preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   guard : DirectSafety.Apriori.aprioriGuardAt config ⟨fork, fin⟩ (getCurrentEpoch pulled).toNat
