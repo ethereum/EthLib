@@ -1309,8 +1309,6 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (highLe : highC ≤ (getCurrentEpoch pulled).toNat)
     (highLeR : high ≤ (getCurrentEpoch pulled).toNat)
-    (shallow : (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat ≤
-      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (band : 10 * preset.upwardBand ≤ preset.MAX_EFFECTIVE_BALANCE.toNat)
     {total pulledTotal : Gwei} (totalOk : getTotalActiveBalance counted = .ok total)
     (pulledOk : getTotalActiveBalance pulled = .ok pulledTotal) :
@@ -1347,7 +1345,7 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
     split <;> omega
   obtain ⟨fromFin⟩ := h.fromFin
   have b15 := bud_consolidations (config := config) h fromFin tail high endEpoch replayed highLeR
-    tailC highC endEpochC replayedC highLe shallow band
+    tailC highC endEpochC replayedC highLe h.shallow band
   have b16 := bud_exitedR (config := config) (pulled := pulled) (anc := anc) (fin := fin)
     (counted := counted)
   -- The band of each due entry naming a V key is paid by `bud_consolidations`' V share.
