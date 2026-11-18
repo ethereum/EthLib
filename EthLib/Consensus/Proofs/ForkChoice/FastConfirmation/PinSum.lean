@@ -139,7 +139,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- The rates are read at a quarter of the call's total.
   --
   -- A counting state that keeps that much has a base reward per increment at most twice this one.
-  let quarter := max preset.EFFECTIVE_BALANCE_INCREMENT (totalGwei / 4)
+  let quarter := if 18 * inc ≤ total then totalGwei / 4
+    else preset.EFFECTIVE_BALANCE_INCREMENT / 5
   let perIncrement := ((getBaseRewardPerIncrement preset quarter).toOption.getD 0).toNat
   let base (i : ℕ) := effective i / inc * perIncrement
   let depositChurn := config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
@@ -212,7 +213,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- A key can rise by its leak at the cap and its partials, then by a band, up to its cap.
   let finEB (i : ℕ) := balanceAt finalizedState i
   let ebUp (i : ℕ) :=
-    let top := actual i + depth * leakAt (cap i) i + (partialsX i - partialsR i) +
+    let top := actual i + depthFin * leakAt (cap i) i + (partialsX i - partialsR i) +
       preset.downwardBand + inc - 1
     max (max (effective i) (finEB i)) (min (cap i) (top - top % inc))
   let leak (i : ℕ) := leakAt (ebUp i) i
@@ -239,7 +240,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let capFor (i : ℕ) :=
     if depth * gainScaled i < inc ∧ 11 * depth * gainRate i < ebUp i then cap i else capMax
   let rise (i : ℕ) :=
-    let high := actual i + depth * (gainScaled i + leak i) + (partialsX i - partialsR i)
+    let high := actual i + depthFin * (gainScaled i + leak i) + (partialsX i - partialsR i)
     -- Deeper than `partialDelay`, the call's branch can pay partials that neither queue holds.
     --
     -- So the rise is the key's whole headroom.
@@ -276,6 +277,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let whistleblowerR := (∑ i ∈ positions with slashed i = true ∧ recentSlashing i = true,
       effective i) / p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   let slashedR := (positions.filter fun i => slashed i = true ∧ recentSlashing i = true).card
+  let gainRateMax := capMax / inc * perIncrement *
+    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   let late := if tight then 0 else
     ∑ i ∈ positions with (validator i).any (fun v =>
       decide (v.activationEligibilityEpoch.toNat ≤ epoch.toNat) &&
@@ -381,8 +384,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let queueKeys := (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry) /
     exitFloor + 2 + lowKeys + newKeySeats
   -- The largest gain rate of one key, its gain rate at the largest effective balance.
-  let gainRateMax := capMax / inc * perIncrement *
-    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   let exitingCount := (positions.filter fun i => (before i || current i) = true ∧
       (slashed i = false ∨ recentSlashing i = true) ∧
       ((validator i).map fun v =>
