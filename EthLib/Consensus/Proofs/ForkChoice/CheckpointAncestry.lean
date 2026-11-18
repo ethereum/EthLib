@@ -1339,13 +1339,13 @@ The second node's justified checkpoint is at the epoch of the first node's final
 
 Both nodes are at events by the time, and every honest justified epoch is at most the horizon.
 
+Otherwise the second justified root does not read the first finalized root at that epoch.
+
 The evidence gives runs from the anchor to held states of the two stores, and terminal views.
 
 A view of the first holds the finalized checkpoint, and a view of the second the justified one.
 
-Three times the accountable stake plus twice the drift covers the unslashed reference stake.
-
-The drift counts from the anchor, up to one epoch past the justified epoch. -/
+It is the direct-safety evidence on those runs, whose drift counts from the anchor. -/
 theorem Execution.finalized_read_or_accountable {ν κ : Type*} [DecidableEq ν]
     {config : Config} {checks : SignatureChecks} {sources : BlockSources preset fork}
     {signed : Message preset fork → Set (ν × κ)}
@@ -1387,34 +1387,40 @@ theorem Execution.finalized_read_or_accountable {ν κ : Type*} [DecidableEq ν]
     ((e.world j).state b).getCheckpointBlock ((e.world j).state b).justifiedCheckpoint.root
         ((e.world i).state a).finalizedCheckpoint.epoch =
       .ok ((e.world i).state a).finalizedCheckpoint.root ∨
-    ∃ (stateA stateB : BeaconState preset fork)
-      (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
-      (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
-      (va : DirectSafety.TerminalView ⟨fork, stateA⟩)
-      (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
-      (∃ rootA : Root, ((e.world i).state a).blockStates[rootA]? = some stateA) ∧
-      (∃ rootB : Root, ((e.world j).state b).blockStates[rootB]? = some stateB) ∧
-      va.state.finalizedCheckpoint = ((e.world i).state a).finalizedCheckpoint ∧
-      vb.state.currentJustifiedCheckpoint = ((e.world j).state b).justifiedCheckpoint ∧
-      (Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.unslashedKeys anchorState) ≤
-        3 * Models.stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys pre left right) +
-        2 * max
-          (DirectSafety.derivedDrift ((e.world j).state b).justifiedCheckpoint.epoch.toNat left)
-          (DirectSafety.derivedDrift
-            ((e.world j).state b).justifiedCheckpoint.epoch.toNat right) ∨
-      DirectSafety.HashEvidence
-        ((pre.append left).hashObjects ++ (pre.append right).hashObjects)) := by
+    ((e.world i).state a).finalizedCheckpoint.epoch ≤
+        ((e.world j).state b).justifiedCheckpoint.epoch ∧
+      ((e.world j).state b).getCheckpointBlock ((e.world j).state b).justifiedCheckpoint.root
+        ((e.world i).state a).finalizedCheckpoint.epoch ≠
+          .ok ((e.world i).state a).finalizedCheckpoint.root ∧
+      ∃ (stateA stateB : BeaconState preset fork)
+        (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
+        (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
+        (va : DirectSafety.TerminalView ⟨fork, stateA⟩)
+        (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
+        (∃ rootA : Root, ((e.world i).state a).blockStates[rootA]? = some stateA) ∧
+        (∃ rootB : Root, ((e.world j).state b).blockStates[rootB]? = some stateB) ∧
+        va.state.finalizedCheckpoint = ((e.world i).state a).finalizedCheckpoint ∧
+        vb.state.currentJustifiedCheckpoint = ((e.world j).state b).justifiedCheckpoint ∧
+        DirectSafety.AccountableOrHashEvidence pre left right
+          ((e.world j).state b).justifiedCheckpoint.epoch.toNat := by
+  by_cases readOk : ((e.world j).state b).getCheckpointBlock
+      ((e.world j).state b).justifiedCheckpoint.root
+      ((e.world i).state a).finalizedCheckpoint.epoch =
+        .ok ((e.world i).state a).finalizedCheckpoint.root
+  · exact .inl readOk
   have forward (n : ℕ) (w : ν) (honest : w ∈ J) := e.forwardReachableWith
     (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) n w honest
   obtain ⟨calls, terminal⟩ := e.held_floors enough heldEnough honestA honestB timeA timeB
     (bounded b honestB j timeB)
-  exact (forward j b honestB).reachable.finalized_prefix_or_accountable
-    (forward i a honestA).reachable parameters genesis pre anchorSlot boundary nonzero
-    (unknown b honestB j timeB) (unknown a honestA i timeA)
-    (forward j b honestB).blockStatesFromParents (forward i a honestA).blockStatesFromParents
-    (early b honestB j timeB) (early a honestA i timeA) ordered calls terminal
+  rcases (forward j b honestB).reachable.finalized_prefix_or_accountable
+      (forward i a honestA).reachable parameters genesis pre anchorSlot boundary nonzero
+      (unknown b honestB j timeB) (unknown a honestA i timeA)
+      (forward j b honestB).blockStatesFromParents (forward i a honestA).blockStatesFromParents
+      (early b honestB j timeB) (early a honestA i timeA) ordered calls terminal with
+    read | ⟨stateA, stateB, left, right, va, vb, heldA, heldB, fieldA, fieldB, evidence⟩
+  · exact absurd read readOk
+  · exact .inr ⟨ordered, readOk, stateA, stateB, left, right, va, vb, heldA, heldB, fieldA, fieldB,
+      evidence⟩
 
 /-- The earlier finalized checkpoint is on the later justified chain at every honest node.
 

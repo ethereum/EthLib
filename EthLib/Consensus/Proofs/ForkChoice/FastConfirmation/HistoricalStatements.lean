@@ -655,6 +655,10 @@ A terminal view of the first state has the first store's finalized checkpoint.
 
 A terminal view of the second state has the second store's justified checkpoint.
 
+The first store's finalized epoch is at most the second store's justified epoch.
+
+The second store's justified root does not read the first store's finalized root at that epoch.
+
 The evidence is the direct-safety stake inequality, or hash evidence on the two runs.
 
 It is relative to the anchor, and its drift counts from the anchor.
@@ -663,6 +667,11 @@ With enough churn since the anchor, the stake inequality holds with no accountab
 def CrossStoreDirectSafetyEvidence {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (time : Nat) : Prop :=
   ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
+    ((e.world i).state a).finalizedCheckpoint.epoch ≤
+      ((e.world j).state b).justifiedCheckpoint.epoch ∧
+    ((e.world j).state b).getCheckpointBlock ((e.world j).state b).justifiedCheckpoint.root
+      ((e.world i).state a).finalizedCheckpoint.epoch ≠
+        .ok ((e.world i).state a).finalizedCheckpoint.root ∧
     ∃ (stateA stateB : BeaconState preset fork)
       (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
       (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
@@ -672,12 +681,7 @@ def CrossStoreDirectSafetyEvidence {g : ForkedBeaconState preset}
       (∃ r : Root, ((e.world j).state b).blockStates[r]? = some stateB) ∧
       va.state.finalizedCheckpoint = ((e.world i).state a).finalizedCheckpoint ∧
       vb.state.currentJustifiedCheckpoint = ((e.world j).state b).justifiedCheckpoint ∧
-      (stake (DirectSafety.effectiveWeight anchorState) (DirectSafety.unslashedKeys anchorState) ≤
-        3 * stake (DirectSafety.effectiveWeight anchorState)
-          (DirectSafety.accountableKeys pre left right) +
-        2 * max (DirectSafety.derivedDrift
-          ((e.world j).state b).justifiedCheckpoint.epoch.toNat left)
-          (DirectSafety.derivedDrift ((e.world j).state b).justifiedCheckpoint.epoch.toNat right) ∨
-        DirectSafety.HashEvidence ((pre.append left).hashObjects ++ (pre.append right).hashObjects))
+      DirectSafety.AccountableOrHashEvidence pre left right
+        ((e.world j).state b).justifiedCheckpoint.epoch.toNat
 
 end EthLib.Consensus.Models.Network
