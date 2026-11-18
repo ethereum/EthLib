@@ -573,6 +573,21 @@ theorem updateCheckpoints_justifiedCheckpoint (s : Store preset fork) (j f : Che
   split <;> dsimp only <;> split
   all_goals first | exact .inl rfl | exact .inr rfl
 
+/-- A tick within a slot keeps the unrealized justified checkpoint.
+
+It keeps the justified checkpoint, or adopts the unrealized one. -/
+private theorem onTickPerSlot_unrealized {a b : Store preset fork} {time : UInt64}
+    (step : a.onTickPerSlot config time = .ok b) :
+    b.unrealizedJustifiedCheckpoint = a.unrealizedJustifiedCheckpoint ∧
+      (b.justifiedCheckpoint = a.justifiedCheckpoint ∨
+        b.justifiedCheckpoint = a.unrealizedJustifiedCheckpoint) := by
+  obtain ⟨-, -, -, -, -, moved, which, same, -⟩ := Store.onTickPerSlot_frame step
+  rw [same.unrealizedJustified, same.justified]
+  rcases which with rfl | rfl
+  · exact ⟨rfl, .inl rfl⟩
+  · exact ⟨updateCheckpoints_unrealizedJustifiedCheckpoint _ _,
+      updateCheckpoints_justifiedCheckpoint _ _ _⟩
+
 /-- Any tick keeps the unrealized justified checkpoint.
 
 It keeps the justified checkpoint, or adopts the unrealized one.
@@ -583,17 +598,6 @@ theorem onTick_unrealizedJustifiedCheckpoint {s t : Store preset fork} {time : U
     t.unrealizedJustifiedCheckpoint = s.unrealizedJustifiedCheckpoint ∧
       (t.justifiedCheckpoint = s.justifiedCheckpoint ∨
         t.justifiedCheckpoint = s.unrealizedJustifiedCheckpoint) := by
-  have perSlot {a b : Store preset fork} {time : UInt64}
-      (step : a.onTickPerSlot config time = .ok b) :
-      b.unrealizedJustifiedCheckpoint = a.unrealizedJustifiedCheckpoint ∧
-        (b.justifiedCheckpoint = a.justifiedCheckpoint ∨
-          b.justifiedCheckpoint = a.unrealizedJustifiedCheckpoint) := by
-    obtain ⟨-, -, -, -, -, moved, which, same, -⟩ := Store.onTickPerSlot_frame step
-    rw [same.unrealizedJustified, same.justified]
-    rcases which with rfl | rfl
-    · exact ⟨rfl, .inl rfl⟩
-    · exact ⟨updateCheckpoints_unrealizedJustifiedCheckpoint _ _,
-        updateCheckpoints_justifiedCheckpoint _ _ _⟩
   have chain {a b c : Store preset fork}
       (first : b.unrealizedJustifiedCheckpoint = a.unrealizedJustifiedCheckpoint ∧
         (b.justifiedCheckpoint = a.justifiedCheckpoint ∨
@@ -613,8 +617,8 @@ theorem onTick_unrealizedJustifiedCheckpoint {s t : Store preset fork} {time : U
       c.unrealizedJustifiedCheckpoint = s.unrealizedJustifiedCheckpoint ∧
         (c.justifiedCheckpoint = s.justifiedCheckpoint ∨
           c.justifiedCheckpoint = s.unrealizedJustifiedCheckpoint))
-    (fun held step => chain held (perSlot step)) ⟨rfl, .inl rfl⟩ caughtUp
-  exact chain caught (perSlot ticked)
+    (fun held step => chain held (onTickPerSlot_unrealized step)) ⟨rfl, .inl rfl⟩ caughtUp
+  exact chain caught (onTickPerSlot_unrealized ticked)
 
 /-! ### What a forward tick does to the two justified checkpoints -/
 
