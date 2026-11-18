@@ -1159,54 +1159,6 @@ private theorem exitChurnLimit_le_cap {fork : Fork} {s : BeaconState preset fork
   obtain ⟨whole, _, rfl⟩ := ok
   exact UInt64.le_iff_toNat_le.mp Std.min_le_left
 
-/-- Two states with the same active validators and effective balances have the same total.
-
-The second state is in the same epoch and keeps the activity of that epoch.
-
-It also keeps the effective balance of every validator of the first state. -/
-theorem total_active_congr {f h : Fork} {s : BeaconState preset f}
-    {t : BeaconState preset h} (before : f < .glamsterdam) (after : h < .glamsterdam)
-    (active : ActiveKept (getCurrentEpoch s) s t) (epoch : getCurrentEpoch t = getCurrentEpoch s)
-    (effective : ∀ i, i < s.validators.data.size →
-      effectiveAt ⟨h, t⟩ i = effectiveAt ⟨f, s⟩ i) :
-    getTotalActiveBalance t = getTotalActiveBalance s := by
-  classical
-  let indices := getActiveValidatorIndices s (getCurrentEpoch s)
-  have checked := active.getActiveValidatorIndicesChecked_eq (UInt64.le_refl _)
-  have inside (i : ValidatorIndex) (member : i ∈ indices) : i.toNat < s.validators.data.size := by
-    obtain ⟨v, found, _⟩ := (mem_getActiveValidatorIndices (s.validators.bound before)).mp member
-    exact (Array.getElem?_eq_some_iff.mp found).1
-  have targetIndices := active.getActiveValidatorIndices_eq (UInt64.le_refl _)
-  have targetInside (i : ValidatorIndex) (member : i ∈ indices) :
-      i.toNat < t.validators.data.size := by
-    change i ∈ getActiveValidatorIndices s (getCurrentEpoch s) at member
-    rw [← targetIndices] at member
-    obtain ⟨v, found, _⟩ := (mem_getActiveValidatorIndices (t.validators.bound after)).mp member
-    exact (Array.getElem?_eq_some_iff.mp found).1
-  have sum : Models.stake (fun i => balanceAt t i.toNat) indices.toFinset =
-      Models.stake (fun i => balanceAt s i.toNat) indices.toFinset := by
-    apply Finset.sum_congr rfl
-    intro i member
-    exact effective i.toNat (inside i (List.mem_toFinset.mp member))
-  have sourceNone : indices.find? (s.validators.data.size ≤ ·.toNat) = none := by
-    apply List.find?_eq_none.mpr
-    intro i member
-    have bound := inside i member
-    simp only [decide_eq_true_eq]
-    omega
-  have targetNone : indices.find? (t.validators.data.size ≤ ·.toNat) = none := by
-    apply List.find?_eq_none.mpr
-    intro i member
-    have bound := targetInside i member
-    simp only [decide_eq_true_eq]
-    omega
-  unfold getTotalActiveBalance
-  rw [epoch, checked, getActiveValidatorIndicesChecked_of_within
-    (state := s) (s.validators.bound before)]
-  simp only [bind, Except.bind]
-  change getTotalBalance t indices = getTotalBalance s indices
-  simp only [getTotalBalance, sourceNone, targetNone, sumMarked_markIndices_eq_stake, sum]
-
 private structure SitePrefix {fork : Fork} (s t : BeaconState preset fork) : Prop where
   grows : s.validators.data.size ≤ t.validators.data.size
   active : ActiveStep s t
