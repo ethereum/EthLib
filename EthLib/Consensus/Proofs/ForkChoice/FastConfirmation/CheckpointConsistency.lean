@@ -52,7 +52,9 @@ Take an up-to-date honest store in the interval whose justified checkpoint is of
 
 If that epoch is after the anchor's, a member of the set signed the checkpoint.
 
-It signed before the store's slot. -/
+It signed before the store's slot.
+
+The reserve reads the call's blocks, so two honest stores may collide instead. -/
 def JustifiedPinned (anchorEpoch : Epoch) (margin first last : ℕ) : Prop :=
   ∀ u ∈ J, ∀ n (head : Root) state total epoch (voters : Finset ValidatorIndex),
     (e.world n).time ≤ last →
@@ -74,9 +76,10 @@ def JustifiedPinned (anchorEpoch : Epoch) (margin first last : ℕ) : Prop :=
         ((e.world k).state w) →
       ((e.world k).state w).getCurrentSlot config = .ok slot →
       ((e.world k).state w).justifiedCheckpoint.epoch = epoch → anchorEpoch < epoch →
-      ∃ v ∈ voters, ∃ i, (e.world i).time ≤ (e.world k).time ∧ ∃ m ∈ (e.world i).sent, ∃ data,
-        (v, data) ∈ statements config checks anchorState anchorBlock m ∧
-        data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < slot
+      (∃ v ∈ voters, ∃ i, (e.world i).time ≤ (e.world k).time ∧ ∃ m ∈ (e.world i).sent,
+        ∃ data, (v, data) ∈ statements config checks anchorState anchorBlock m ∧
+          data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < slot) ∨
+        HonestCollision (e := e) last
 
 /-- The honest count of a call, with the call's pin reserve on top of `margin`.
 
@@ -103,7 +106,9 @@ That call was up to date at a slot start of the epoch, with the reserved count.
 
 It accepted the current-target test.
 
-Honest heads descend from the origin from that call up to `coveredUntil`. -/
+Honest heads descend from the origin from that call up to `coveredUntil`.
+
+No theorem derives that coverage: a caller supplies it. -/
 def TargetChecked (margin : ℕ) (anchorRoot : Root) (u : ValidatorIndex) (n : ℕ)
     (epoch : Epoch) (root : Root) (coveredUntil : ℕ) : Prop :=
   ∃ k ≤ n, ∃ origin,
@@ -136,9 +141,11 @@ Off the epoch's first slot, the call's count is reserved.
 
 The start's epoch, if it is the call's, was checked by an earlier call.
 
-At the epoch's first slot, a root of the call's epoch is the finalized root.
+At the epoch's first slot, the root is of an earlier epoch.
 
-The call's epoch is at least two and after the anchor's epoch. -/
+The call's epoch is at least two and after the anchor's epoch.
+
+The rule checks neither of the last two, and no theorem derives them. -/
 def CallCheckpointInputs (margin : ℕ) (anchorRoot : Root) (u : ValidatorIndex) (n : ℕ)
     (fcr : FastConfirmationStore) (head : ForkChoiceNode) (start root : Root) : Prop :=
   ((e.world n).state u).FastConfirmationChecked config fcr head.root start root ∧
@@ -149,17 +156,18 @@ def CallCheckpointInputs (margin : ℕ) (anchorRoot : Root) (u : ValidatorIndex)
   (∀ epoch, ((e.world n).state u).getCurrentStoreEpoch config = .ok epoch →
     ((e.world n).state u).getBlockEpoch start = .ok epoch →
     TargetChecked (e := e) margin anchorRoot u n epoch start ((e.world n).time + 1)) ∧
-  (∀ slot rootEpoch epoch, ((e.world n).state u).getCurrentSlot config = .ok slot →
+  (∀ slot epoch rootEpoch, ((e.world n).state u).getCurrentSlot config = .ok slot →
     isStartSlotAtEpoch preset slot = .ok true →
     ((e.world n).state u).getCurrentStoreEpoch config = .ok epoch →
-    ((e.world n).state u).getBlockEpoch root = .ok rootEpoch → rootEpoch = epoch →
-    root = ((e.world n).state u).finalizedCheckpoint.root) ∧
+    ((e.world n).state u).getBlockEpoch root = .ok rootEpoch → rootEpoch ≠ epoch) ∧
   (∀ epoch, ((e.world n).state u).getCurrentStoreEpoch config = .ok epoch →
     GENESIS_EPOCH + 1 < epoch ∧ getCurrentEpoch anchorState < epoch)
 
 /-- A pinned justified checkpoint of the target's epoch is the call's target, or a voter signed it.
 
 That voter is outside the committees seen so far, and it signed before the receiver's slot.
+
+Otherwise two honest stores collide.
 
 The pin gives a voter that signed the justified checkpoint.
 
@@ -193,15 +201,19 @@ private theorem Execution.target_eq_or_unseen_signer (slots : 0 < config.SLOT_DU
       ((e.world k).state w))
     (slotOk : ((e.world k).state w).getCurrentSlot config = .ok slot)
     (justifiedEpoch : ((e.world k).state w).justifiedCheckpoint.epoch = epoch) :
-    ((e.world k).state w).justifiedCheckpoint = target ∨
+    (((e.world k).state w).justifiedCheckpoint = target ∨
       ∃ v ∈ voters, v ∉ participants ∧ ∃ i, (e.world i).time ≤ (e.world k).time ∧
         ∃ m ∈ (e.world i).sent, ∃ data,
           (v, data) ∈ statements config checks anchorState anchorBlock m ∧
-          data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < slot := by
-  obtain ⟨v, member, i, iLe, m, sent, data, signed, dataTarget, dataSlot⟩ :=
-    pins u caller n head state total epoch voters nBound headOk stateOk totalOk epochOk target anc
-      fin targetOk ancOk finRead finAnchor (fun v hv => ⟨(members v hv).1, (members v hv).2.1⟩)
-      quorum w receiver k slot kFirst kLast upToDate slotOk justifiedEpoch afterAnchor
+          data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < slot) ∨
+      HonestCollision (e := e) last := by
+  rcases pins u caller n head state total epoch voters nBound headOk stateOk totalOk epochOk target
+      anc fin targetOk ancOk finRead finAnchor (fun v hv => ⟨(members v hv).1, (members v hv).2.1⟩)
+      quorum w receiver k slot kFirst kLast upToDate slotOk justifiedEpoch afterAnchor with
+    ⟨v, member, i, iLe, m, sent, data, signed, dataTarget, dataSlot⟩ | collision
+  swap
+  · exact .inr collision
+  refine .inl ?_
   rcases (members v member).2.2 with ⟨_, _, other, otherSent, otherData, otherSigned, otherTarget⟩ |
     unseen
   · have same := Execution.data_eq_of_signed_of_target_epoch slots sent otherSent signed
@@ -822,10 +834,10 @@ Otherwise one of its voters is unseen by the call and votes from the call on.
 
 A duty from the call on, before the receiver's time, makes the checkpoint comparable with the root.
 
-Otherwise two honest stores collide on a block.
+Otherwise two honest stores collide on a block, or hold conflicting justified checkpoints.
 -/
 theorem Execution.justified_comparable_of_checked {anchor : Store preset fork} {Δ time T : ℕ}
-    {anchorEpoch horizon : Epoch} {margin : ℕ}
+    {anchorEpoch horizon : Epoch} {margin : ℕ} {g : ForkedBeaconState preset}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
@@ -838,7 +850,11 @@ theorem Execution.justified_comparable_of_checked {anchor : Store preset fork} {
     (anchorOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
-    (selected : SelectedCheckpointsAgree (e := e) horizon time)
+    (absent : AnchorParentAbsent (e := e) time) (genesis : Genesis config checks g)
+    (pre : Run config checks g ⟨fork, anchorState⟩)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) time)
+    (enough : HeldRunStakeFloor (e := e) pre horizon time)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon time)
     (pins : JustifiedPinned (e := e) anchorEpoch margin 0 time)
     (signed : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
     {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
@@ -867,19 +883,23 @@ theorem Execution.justified_comparable_of_checked {anchor : Store preset fork} {
         ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
       ((e.world k).state w).isAncestor ⟨root, .pending⟩
         ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ = .ok true) ∨
-      HonestCollision (e := e) time := by
+      HonestCollision (e := e) time ∨ CrossStoreJustifiedEvidence (e := e) pre time := by
   rcases e.blocksAgree_or_collision time with agree | collision
   swap
-  · exact .inr collision
+  · exact .inr (.inl collision)
+  rcases e.selectedCheckpointsAgree_or_evidence anchored start anchorSlot roots absent params
+      genesis pre heldEarly enough terminal with selected | evidence
+  swap
+  · exact .inr (.inr evidence)
   exact .inl (justified_comparable_of_pin anchored sound anchorSlot anchorBoundary start preGloas
     slots fits windows params incrementPositive anchorOk bounded roots agree selected signed caller
     upToDate atSlot headOk callerEpochOk inputs callLe high baseCovers covers holds receiver atTime
     ready hdOk early
     (fun stateOk totalOk targetOk ancOk finRead finAnchor after targetEpoch members quorum
         currentOk cpEpoch =>
-      Execution.target_eq_or_unseen_signer slots pins caller (callLe.trans high)
+      (Execution.target_eq_or_unseen_signer slots pins caller (callLe.trans high)
         ⟨head, headOk, rfl⟩ stateOk totalOk callerEpochOk targetOk ancOk finRead finAnchor after
         targetEpoch members quorum receiver (Nat.zero_le _) (atTime ▸ high) ready currentOk
-        cpEpoch))
+        cpEpoch).resolve_right (e.not_honestCollision_of_agree agree)))
 
 end EthLib.Consensus.Models.Network

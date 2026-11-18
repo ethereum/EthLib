@@ -376,7 +376,9 @@ The counting state belongs to an honest store whose chain reads that target.
 
 It is the state of that chain's block or a later slot of it, in the target's epoch or the next.
 
-Then the stake of unslashed active voters of the call drifts by at most the call's reserve. -/
+Then the stake of unslashed active voters of the call drifts by at most the call's reserve.
+
+The reserve reads the call's block at the target root, so two honest stores may collide instead. -/
 def QuorumDriftWithin (horizon : Epoch) (last : ℕ) : Prop :=
   ∀ u ∈ J, ∀ n (head : Root) (pulled anc : BeaconState preset fork) (target : Checkpoint),
     (e.world n).time ≤ last →
@@ -393,7 +395,8 @@ def QuorumDriftWithin (horizon : Epoch) (last : ℕ) : Prop :=
     (∀ v ∈ voters, v ∈ activeVoters pulled ∧ (slashedFlagAt state v.toNat).getD false = false) →
     getTotalActiveBalance state = .ok total → getTotalActiveBalance pulled = .ok pulledTotal →
     2 * total.toNat + 3 * stake (fun v => balanceAt pulled v.toNat) voters ≤
-      2 * pulledTotal.toNat + 3 * stake (fun v => balanceAt state v.toNat) voters +
-        quorumReserve config pulled anc
+        2 * pulledTotal.toNat + 3 * stake (fun v => balanceAt state v.toNat) voters +
+          quorumReserve config pulled anc ∨
+      HonestCollision (e := e) last
 
 end EthLib.Consensus.Models.Network

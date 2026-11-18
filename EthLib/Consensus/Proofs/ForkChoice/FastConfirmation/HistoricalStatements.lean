@@ -248,6 +248,18 @@ theorem Execution.blocksAgree_or_collision (time : ℕ) :
   · obtain ⟨⟨a, i⟩, ⟨ha, hi⟩, ⟨b, j⟩, ⟨hb, hj⟩, r, evidence, searched⟩ := collision
     exact .inr ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
 
+omit [DecidablePred (· ∈ J)] in
+/-- Honest stores that agree on every block they both hold do not collide. -/
+theorem Execution.not_honestCollision_of_agree {time : ℕ}
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right) :
+    ¬HonestCollision (e := e) time := by
+  rintro ⟨a, ha, b, hb, i, j, hi, hj, _, ⟨r, left, right⟩, found⟩
+  obtain ⟨leftFound, rightFound, different⟩ := Store.findBlockCollision_held found
+  exact different (agree a ha b hb i j hi hj r left right leftFound rightFound)
+
 /-- No honest validator has a true slashed flag in a counted state through the horizon. -/
 def HonestCountedStatesUnslashed (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k state, (e.world k).time ≤ last →

@@ -1291,8 +1291,7 @@ The store takes that checkpoint from a block of an epoch before its own, or at a
 The anchor state must keep the invariant of the state transition. -/
 theorem Store.ForwardReachable.finalized_add_two_le_or_anchor
     (forward : Store.ForwardReachable config anchorState anchorBlock store)
-    (sound : Invariant anchorState) (slots : 0 < config.SLOT_DURATION_MS)
-    (_anchorSlot : anchorBlock.slot ≤ anchorState.slot) {epoch : Epoch}
+    (sound : Invariant anchorState) (slots : 0 < config.SLOT_DURATION_MS) {epoch : Epoch}
     (epochOk : store.getCurrentStoreEpoch config = .ok epoch) :
     store.finalizedCheckpoint.epoch.toNat + 2 ≤ epoch.toNat ∨
       store.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState := by

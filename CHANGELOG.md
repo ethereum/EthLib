@@ -9,20 +9,23 @@ Not yet released.
 
 ### Proof additions
 
-- `Execution.rootViable_of_checked_call` shows that the confirmed root of a call of the fast confirmation rule stays viable from the call to a horizon ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 3, for the confirmed root).
+- `Execution.rootViable_of_checked_call` shows that the confirmed root of a call of the fast confirmation rule stays viable from the call up to `time` ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 3, for the confirmed root).
   At each up-to-date honest store whose fork choice returns a head, the root is in the filtered tree or below the justified block.
   The alternatives are a collision of two honest stores and accountable-safety evidence.
   Stores whose `getHead` returns an error are not covered, pending [#2060](https://github.com/ethereum/EthLib/issues/2060).
   `Execution.honestHeadsCover_of_checked_call` keeps the root on every up-to-date honest head chain over the same interval.
-  It replaces the consistency, the leaf and the call-epoch signer of `Execution.honestHeadsCover_of_signed_justification` with the rule's checks.
+  It replaces the consistency and the leaf of `Execution.honestHeadsCover_of_signed_justification` with the rule's checks.
+  It derives the honest signer from `ByzantineCountedStake anchorEpoch 0 time`, a wider bound than the call-epoch one of `Execution.honestHeadsCover_of_byzantine_bound`, and adds the premise `JustifiedPinned`.
   `Execution.rootInFilteredTree_of_checked` and `Execution.justified_comparable_of_checked` give the root's step at one time.
-  They and `justified_descends_of_duty` may instead give `HonestCollision`, two honest stores that collide on a block.
-  `Execution.blocksAgree_or_collision` splits that collision from the agreement of honest stores on the blocks they both hold.
+  They and `justified_descends_of_duty` may instead give `HonestCollision`, two honest stores that collide on a block, and the first two may give `CrossStoreJustifiedEvidence`.
+  `Execution.blocksAgree_or_collision` splits that collision from the agreement of honest stores on the blocks they both hold, and `Execution.not_honestCollision_of_agree` rules it out under that agreement.
   `Store.findBlockCollision_held` places a collision's two blocks in the two stores, and `Store.findBlockCollision_valid` now reads it.
   `Execution.rootHeld_of_honest_vote` holds the root from the call on, from the honest vote that `Execution.honest_vote_of_caller_margin` finds behind the caller's margin.
   `Execution.heldFinality_or_evidence` reads a store's finalized checkpoint on a held state's justified chain, or gives `HeldStateFinalityEvidence`.
   `DelayFits.deadline_add_le`, `Store.ForwardReachable.finalized_add_two_le_or_anchor` and `Store.getCheckpointBlock_trans` are general steps.
-  The new premises `CallCheckpointInputs`, `AcceptedRealizedRecent`, `AcceptedRealizedHead`, `CallRolloverRead`, `JustifiedPinned`, `TargetIncluded` and `QuorumDriftWithin` are described in `SOUNDNESS.md`.
+  The new premises `CallCheckpointInputs`, `TargetChecked`, `AcceptedRealizedRecent`, `AcceptedRealizedHead`, `CallRolloverRead`, `JustifiedPinned`, `TargetIncluded` and `QuorumDriftWithin` are described in `SOUNDNESS.md`.
+  `quorumReserve` and `pinReserve` are the reserves that `QuorumDriftWithin`, `JustifiedPinned` and the reserved count of a call read, and `RootViableAt` is the viability of a root at one time.
+  `Execution.honestHeadsCover_of_byzantine_bound` moves to `HistoricalCoverage.lean`, so that the checked-call headlines can read `Execution.justifiedHonestlySigned`.
 
 - `advanceSlot_epochs` splits one slot into the end of an epoch or a step inside it, with the epochs on each side.
   `recentPending_advanceSlot` adds the two lists of pending attestations, and `recentPending_pendingFrame` keeps them across a frame.
