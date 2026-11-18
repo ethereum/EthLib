@@ -2510,6 +2510,14 @@ The theorems state these properties.
   Each message of the RPC that passed this check left its ID there, with the time of the RPC.
   An entry of that time counts in the check of a later message only with a positive lifetime.
   A lifetime of zero lets both messages through.
+- If no mesh holds a peer twice before an RPC, none does after it (`receiveRpc_mesh_nodup`).
+  The proof reads the check of `receiveGraft` that leaves a peer already in the mesh there.
+  It also reads the filters that take the sender out, in a PRUNE and in a GRAFT within the backoff.
+- So an RPC sends each message it forwards at most once to each peer (`receiveRpc_forward_nodup`).
+  That theorem needs a positive lifetime of the seen cache, and no mesh holding a peer twice before the RPC.
+  It also needs each explicit peer to be listed once and to be outside every mesh, which `receiveRpc_explicit` keeps.
+  `receiveRpc_delivered_nodup` gives the delivered messages distinct IDs, and `receiveRpc_forward_delivered` gives the peers of each.
+  A lifetime of zero lets a message repeated in the RPC go twice to each peer.
 
 The sources leave these points open, and the router takes one reading of each.
 
@@ -2532,7 +2540,9 @@ The sources leave these points open, and the router takes one reading of each.
 - The PRUNE that answers an early GRAFT carries the whole seconds that remain of the backoff, rounded up, and the PRUNE to an explicit peer carries none; neither offers peers.
 - v1.1 ignores "gossip" from a peer below the gossip threshold; here that is both IHAVE and IWANT, and never from an explicit peer.
 - IDONTWANT, from gossipsub v1.2, is ignored.
-- A message goes to the mesh, then to the explicit peers; `receiveRpc_explicit` keeps the two lists from overlapping, and no theorem rules out a repeated peer within one list.
+- A message goes to the mesh, then to the explicit peers.
+  `receiveRpc_explicit` keeps the two lists from overlapping, and `receiveRpc_mesh_nodup` keeps a mesh from repeating a peer.
+  The explicit peers come with the state, and `receiveRpc_forward_nodup` asks that they repeat no peer.
 - The v1.1 limits on IWANT answers and on IHAVE messages per heartbeat fix no count, so none is modelled.
 - The `peers.floodsub` set of v1.0 is left out: the consensus layer fixes `/meshsub/1.1.0` and names no floodsub peer.
 - A message ID that is not 20 bytes is never requested and never answered, since no consensus message has one.
@@ -2579,6 +2589,11 @@ The theorems in `Networking/Proofs/Gossip/Membership.lean` cover joining, leavin
 Joining a topic not yet joined sends one GRAFT per peer of the new mesh.
 With a lawful choice, that mesh has at most `D` peers, each one that the node could GRAFT before.
 Leaving sends a PRUNE with the unsubscribe backoff to each mesh peer, and sets that backoff on this node.
+If no mesh holds a peer twice before a leave, none does after it (`leave_mesh_nodup`), and a publish keeps every mesh (`publish_mesh`).
+`join_mesh_nodup` proves the same for a join with a lawful choice.
+It also needs the fanout of the topic, and the peers that announced it, to list each peer once.
+With `receiveRpc_mesh_nodup` and `heartbeat_mesh_nodup`, every step of the router thus keeps the meshes free of a repeated peer, under the needs of each theorem.
+No theorem states that those two lists of a join repeat no peer in the states that the router reaches.
 A published message goes only to explicit peers and to peers not below the publish threshold.
 With flood publishing, a message not in the seen cache goes to every such peer of the mesh and of the topic.
 `publish_receiveRpc` proves that a message this node published is not forwarded or delivered again within the lifetime of the seen cache.
