@@ -349,6 +349,29 @@ theorem Execution.exists_voteAt_of_duty_interval {Δ : ℕ} {first time : ℕ}
     nextOk, startOk, followingOk, deadline, firstLe,
     fits.before_boundary nextOk startOk followingOk deadline, by omega, vote, committees⟩
 
+/-- An accepted attestation stores its target state and records the votes of its indexed form.
+
+The store that holds the target state is the one that the reads of the attestation name. -/
+theorem Store.onAttestation_eq_of_reads {store after : Store preset fork}
+    {attestation : Attestation preset fork} {isFromBlock : Bool}
+    {indexed : IndexedAttestation preset fork}
+    (accepted : store.onAttestation config checks attestation isFromBlock = .ok after)
+    (reads : ReadsAttestation config checks store attestation indexed) :
+    ∃ withTarget, store.storeTargetCheckpointState config checks attestation.data.target =
+        .ok withTarget ∧
+      after = withTarget.updateLatestMessages indexed.attestingIndices.data.toList attestation := by
+  obtain ⟨withTarget, targetState, stored, found, indexedOk, signed⟩ := reads
+  refine ⟨withTarget, stored, ?_⟩
+  unfold Store.onAttestation at accepted
+  cases valid : store.validateOnAttestation config attestation isFromBlock with
+  | error err => simp [valid, bind, Except.bind] at accepted
+  | ok value =>
+    cases value
+    simp only [valid, stored, found, indexedOk, signed, bind, Except.bind, Except.mapError,
+      ↓reduceIte] at accepted
+    cases committees : checkAttestationCommittees targetState attestation <;>
+      simp_all [pure, Except.pure]
+
 /-- An up-to-date store holds a vote for each non-equivocating signer of an accepted attestation.
 
 The attestation is in its view, and the latest vote has at least the attestation's rank. -/
@@ -363,18 +386,7 @@ theorem UpToDate.recorded {time : ℕ} {view : Set (Message preset fork)}
     ∃ m, store.latestMessages[v]? = some m ∧
       (LatestMessage.ofAttestation attestation).rank ≤ m.rank := by
   have fixed : after = store := upToDate.2 after (.attestation seen accepted)
-  obtain ⟨withTarget, targetState, stored, found, indexedOk, signed⟩ := reads
-  have result : after =
-      withTarget.updateLatestMessages indexed.attestingIndices.data.toList attestation := by
-    unfold Store.onAttestation at accepted
-    cases valid : store.validateOnAttestation config attestation false with
-    | error err => simp [valid, bind, Except.bind] at accepted
-    | ok value =>
-      cases value
-      simp only [valid, stored, found, indexedOk, signed, bind, Except.bind, Except.mapError,
-        ↓reduceIte] at accepted
-      cases committees : checkAttestationCommittees targetState attestation <;>
-        simp_all [pure, Except.pure]
+  obtain ⟨withTarget, -, result⟩ := Store.onAttestation_eq_of_reads accepted reads
   have counted' : v ∉ withTarget.equivocatingIndices := by
     simpa [← fixed, result, Store.updateLatestMessages] using counted
   have voted := Store.foldl_recordVote indexed.attestingIndices.data.toList
