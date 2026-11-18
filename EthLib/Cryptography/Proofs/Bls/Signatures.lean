@@ -70,7 +70,8 @@ theorem coreAggregateVerify_size_ne {pks msgs : Array ByteArray} (h : pks.size �
   rw [ite_eq_left_of_eq_true _ _ (by simp [h])]
 
 /-- The core verification rejects a signature that is not 96 bytes. -/
-theorem coreVerify_badSignatureSize {sig : ByteArray} (h : sig.size ≠ 96) (pk msg dst : ByteArray) :
+theorem coreVerify_badSignatureSize {sig : ByteArray} (h : sig.size ≠ 96)
+    (pk msg dst : ByteArray) :
     coreVerify pk msg sig dst = false := by
   simp [coreVerify, exactBytes?, h]
 
