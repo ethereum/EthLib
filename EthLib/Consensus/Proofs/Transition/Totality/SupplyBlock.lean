@@ -316,7 +316,7 @@ private theorem fixed_partialWithdrawal {s t : BeaconState preset fork}
 private theorem fixed_withdrawalRequest {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) : Fixed s t := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact Fixed.refl _
   · exact fixed_exit exited
   · exact fixed_partialWithdrawal withdrawn

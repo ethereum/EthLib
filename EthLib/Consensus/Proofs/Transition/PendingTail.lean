@@ -387,7 +387,7 @@ private theorem pendingTail_processWithdrawalRequest {config : Config}
     {request : WithdrawalRequest} {count : Nat} {epoch : Epoch}
     (run : processWithdrawalRequest config state electra request = .ok after)
     (tail : PendingTail count epoch state) : PendingTail count epoch after := by
-  rcases withdrawalRequest_cases run with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases run with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact tail
   · exact pendingTail_initiateValidatorExit exited tail
   · exact pendingTail_of_validators

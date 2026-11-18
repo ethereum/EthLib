@@ -1083,7 +1083,7 @@ theorem requestPartialWithdrawal {electra : .pectra ≤ fork} {index : Validator
 theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (computed : Consensus.processWithdrawalRequest config state electra request = .ok after) :
     R state after := by
-  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact laws.refl _
   · exact laws.initiateValidatorExit exited
   · exact laws.requestPartialWithdrawal keep withdrawn

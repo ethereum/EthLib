@@ -719,7 +719,7 @@ private theorem moves_withdrawalRequest (rates : Rates preset config)
     (computed : processWithdrawalRequest config a electra request = .ok b) :
     Moves config start ceiling
       (min request.amount.toNat cap / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1) a b := by
-  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact (Moves.refl _).mono (Nat.zero_le _)
   · exact (moves_exit rates exited).mono (Nat.zero_le _)
   · exact moves_partialWithdrawal rates capped withdrawn

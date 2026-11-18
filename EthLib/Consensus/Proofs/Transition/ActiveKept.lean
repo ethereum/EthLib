@@ -202,7 +202,7 @@ private theorem stepKeeps_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     StepKeeps state after := by
-  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact StepKeeps.refl _
   · exact stepKeeps_initiateValidatorExit exited
   · exact stepKeeps_requestPartialWithdrawal withdrawn

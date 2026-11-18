@@ -769,22 +769,62 @@ theorem requestPartialWithdrawal_kept {fork : Fork} {s t : BeaconState preset fo
   · cases ok
     exact ⟨rfl, rfl, rfl, rfl⟩
 
-/-- Withdrawal requests either do nothing, initiate an exit, or spend partial-withdrawal churn. -/
+/-- From Electra: when a withdrawal request is accepted for a validator.
+
+The validator is the first with the key of the request, at this index.
+
+It has execution credentials, from the address of the request.
+
+It may make a request: it is active, does not exit, and has been active for long enough. -/
+structure WithdrawalAccepted (config : Config) (state : BeaconState preset fork)
+    (request : WithdrawalRequest) (index : ValidatorIndex) (validator : Validator) : Prop where
+  first : (findValidatorByPubkey state request.validatorPubkey).map (·.val) = some index.toNat
+  found : state.validators.data[index.toNat]? = some validator
+  execution : hasExecutionWithdrawalCredential validator = true
+  address : credentialAddress validator.withdrawalCredentials = request.sourceAddress
+  allowed : canRequest config state validator = .ok true
+
+/-- A validator that may make a request is active. -/
+theorem isActiveValidator_of_canRequest {validator : Validator}
+    (allowed : canRequest config state validator = .ok true) :
+    isActiveValidator validator (getCurrentEpoch state) = true := by
+  unfold canRequest at allowed
+  dsimp only at allowed
+  split at allowed
+  · cases allowed
+  · rename_i active
+    have both := (not_or.mp (by simpa only [Bool.or_eq_true] using active)).1
+    simpa using both
+
+/-- Withdrawal requests do nothing, exit an accepted validator, or run its partial withdrawal. -/
 theorem withdrawalRequest_cases {fork : Fork} {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) :
-    t = s ∨ (∃ index, initiateValidatorExit config s index = .ok t) ∨
-      ∃ index v owed,
-        requestPartialWithdrawal config s electra index v request.amount owed = .ok t := by
+    t = s ∨ (∃ index validator, WithdrawalAccepted config s request index validator ∧
+        initiateValidatorExit config s index = .ok t) ∨
+      ∃ index validator owed, WithdrawalAccepted config s request index validator ∧
+        requestPartialWithdrawal config s electra index validator request.amount owed = .ok t := by
+  have accepted {position : Fin s.validators.data.size} {index : ValidatorIndex}
+      (located : findValidatorByPubkey s request.validatorPubkey = some position)
+      (checked : liftAccessor (liftArith (ofNatChecked position.val)) = .ok index)
+      (credentials : (hasExecutionWithdrawalCredential s.validators.data[position] &&
+        credentialAddress s.validators.data[position].withdrawalCredentials ==
+          request.sourceAddress) = true)
+      (allowed : canRequest config s s.validators.data[position] = .ok true) :
+      WithdrawalAccepted config s request index s.validators.data[position] := by
+    have value := (ofNatChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp checked))).2
+    simp only [Bool.and_eq_true, beq_iff_eq] at credentials
+    exact ⟨by simp [located, value], getElem?_toNat_of_ofNatChecked checked, credentials.1,
+      credentials.2, allowed⟩
   unfold processWithdrawalRequest at ok
   simp only [bind, Except.bind, pure, Except.pure] at ok
   repeat' split at ok
-  all_goals first
+  all_goals try first
     | (cases ok; exact .inl rfl)
-    | (cases ok)
-    | exact .inr (.inl ⟨_, liftAccessor_ok.mp ok⟩)
-    | exact .inr (.inr ⟨_, _, _, ok⟩)
-
+    | (cases ok; done)
+  all_goals subst_vars
+  · exact .inr (.inl ⟨_, _, accepted ‹_› ‹_› ‹_› ‹_›, liftAccessor_ok.mp ok⟩)
+  · exact .inr (.inr ⟨_, _, _, accepted ‹_› ‹_› ‹_› ‹_›, ok⟩)
 /-- Consolidation requests either do nothing, switch to compounding, or queue an accepted source. -/
 theorem consolidationRequest_cases {fork : Fork} {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : ConsolidationRequest}

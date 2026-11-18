@@ -210,7 +210,7 @@ private theorem loadKept_processWithdrawalRequest {electra : .pectra ≤ fork}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     LoadKept state after := by
   refine loadKept_of_sameSizes (sameSizes_processWithdrawalRequest computed) ?_
-  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · rfl
   · exact (loadKeptLaws.initiateValidatorExit exited).2
   · exact (loadKept_requestPartialWithdrawal withdrawn).2

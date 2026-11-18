@@ -497,7 +497,7 @@ theorem lives_processVoluntaryExit {signed : SignedVoluntaryExit}
 private theorem lives_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config s electra request = .ok t) : Lives s t := by
-  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, requested⟩
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, requested⟩
   · exact Lives.refl _
   · exact lives_initiateValidatorExit exited
   · exact Lives.of_data (congrArg (·.data) (requestPartialWithdrawal_kept requested).1)
@@ -1411,7 +1411,7 @@ theorem ledger_processExecutionRequests {body : BeaconBlockBody preset fork}
       (by rw [(processDepositRequest_ok ok).2.1])) deposits
   have two : Ledger deposited withdrawn ∅ ∅ 0 0 0 := by
     refine Ledger.foldlM (fun _ _ _ ok => ?_) withdrawals
-    rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, requested⟩
+    rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, requested⟩
     · exact Ledger.refl _
     · exact Ledger.exit exited
     -- A partial withdrawal keeps the registry and the balances.
