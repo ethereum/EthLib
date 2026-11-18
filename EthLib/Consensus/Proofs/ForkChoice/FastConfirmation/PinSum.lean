@@ -1272,6 +1272,7 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
         3 * dueAt fin high V) ≤
         (33 * (pinTerms config pulled anc fin).consolidationsX + 9) / 10 := by
   classical
+  have shallow := h.shallow
   have early := h.early
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   obtain ⟨shared⟩ := h.toFin
@@ -1381,7 +1382,7 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
               fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)).sum := by
       unfold pinTerms
       dsimp only
-      simp only [h.shallow, electra, ↓reduceIte, ↓reduceDIte]
+      simp only [shallow, electra, ↓reduceIte, ↓reduceDIte]
     have laterC := dueList_sum_mono fin electra highLe Kall
       (fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
     have laterR := dueList_sum_mono fin electra highLeR V
