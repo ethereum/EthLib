@@ -4285,59 +4285,13 @@ private theorem crossing_charges_le_window {g x middle y : ForkedBeaconState pre
     exact ⟨(UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)).trans
       bounds.1, bounds.2⟩
 
-private theorem slot_same_epoch_registry {fork : Fork} {s t : BeaconState preset fork}
-    (ok : advanceSlot config checks s = .ok t) (epoch : getCurrentEpoch t = getCurrentEpoch s) :
-    t.validators.data = s.validators.data := by
-  obtain ⟨next, cached, epoched, sum, cachedOk, advanced, rfl⟩ := advanceSlot_ok ok
-  have cachedData : cached.validators.data = s.validators.data := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-    rfl
-  have quotient : next.toNat / preset.SLOTS_PER_EPOCH.toNat =
-      s.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
-    simpa only [getCurrentEpoch_toNat] using congrArg UInt64.toNat epoch
-  have notLast : next % preset.SLOTS_PER_EPOCH ≠ 0 := by
-    intro last
-    have remainder : next.toNat % preset.SLOTS_PER_EPOCH.toNat = 0 := by
-      simpa only [UInt64.toNat_mod, UInt64.reduceToNat] using congrArg UInt64.toNat last
-    have before := Nat.mod_add_div s.slot.toNat preset.SLOTS_PER_EPOCH.toNat
-    have after := Nat.mod_add_div next.toNat preset.SLOTS_PER_EPOCH.toNat
-    rw [quotient, remainder] at after
-    omega
-  simp only [epochIfLast, notLast, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at advanced
-  subst epoched
-  exact cachedData
-
 /-- A step within one pre-Gloas epoch keeps every existing effective balance. -/
 theorem step_same_epoch_effective {x y : ForkedBeaconState preset}
     (step : Step config checks x y)
     (early : y.fork < .glamsterdam)
     (epoch : getCurrentEpoch y.state = getCurrentEpoch x.state) :
-    ∀ i, i < x.state.validators.data.size → effectiveAt y i = effectiveAt x i := by
-  cases step with
-  | block engine signed due ok =>
-    exact effectiveKept_block early (applySignedBlock_ok ok).2.1
-  | slot ok =>
-    obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
-    have slot := processUpgrades_slot upgraded
-    have intermediateEpoch : getCurrentEpoch advanced = getCurrentEpoch x.state := by
-      simpa only [getCurrentEpoch, slot] using epoch
-    obtain ⟨next, cached, epoched, sum, cachedOk, epochOk, advancedEq⟩ :=
-      advanceSlot_ok advancedOk
-    have notLast : next % preset.SLOTS_PER_EPOCH ≠ 0 := by
-      intro last
-      have epochs := nextSlot_epoch_of_boundary sum last
-      have equal := congrArg UInt64.toNat intermediateEpoch
-      rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, advancedEq] at equal
-      change next.toNat / preset.SLOTS_PER_EPOCH.toNat =
-        x.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat at equal
-      omega
-    have kept := Except.ok.inj ((processUpgrades_of_not_due
-      (upgradeDue_of_not_first (by rw [advancedEq]; exact notLast))).symm.trans upgraded)
-    have kept := kept.symm
-    subst kept
-    have data := slot_same_epoch_registry advancedOk intermediateEpoch
-    intro i _
-    simp only [effectiveAt, data]
+    ∀ i, i < x.state.validators.data.size → effectiveAt y i = effectiveAt x i :=
+  Run.effectiveKept_of_same_epoch (Run.nil.snoc step) early epoch
 
 /-- Before Gloas, a run inside one epoch keeps every existing effective balance.
 
@@ -4347,68 +4301,8 @@ The slot is not an epoch boundary, so it runs no upgrade. -/
 theorem run_same_epoch_effective {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam)
     (epoch : getCurrentEpoch y.state = getCurrentEpoch x.state) :
-    ∀ i, i < x.state.validators.data.size → effectiveAt y i = effectiveAt x i := by
-  induction tail with
-  | nil => intro _ _; rfl
-  | snoc pre step ih =>
-    have middleEpoch : getCurrentEpoch _ = getCurrentEpoch x.state :=
-      UInt64.le_antisymm
-        (by simpa only [epoch] using step.chainStep.currentEpoch_le)
-        (currentEpoch_le_of_chainSteps pre.chainSteps)
-    have one := ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) middleEpoch
-    have two := step_same_epoch_effective step
-      early (epoch.trans middleEpoch.symm)
-    intro i inside
-    exact (two i (Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps pre.chainSteps))).trans
-      (one i inside)
-
-/-- Two states with the same active validators and effective balances have the same total.
-
-The second state is in the same epoch and keeps the activity of that epoch.
-
-It also keeps the effective balance of every validator of the first state. -/
-theorem total_active_congr {f h : Fork} {s : BeaconState preset f}
-    {t : BeaconState preset h} (before : f < .glamsterdam) (after : h < .glamsterdam)
-    (active : ActiveKept (getCurrentEpoch s) s t) (epoch : getCurrentEpoch t = getCurrentEpoch s)
-    (effective : ∀ i, i < s.validators.data.size →
-      effectiveAt ⟨h, t⟩ i = effectiveAt ⟨f, s⟩ i) :
-    getTotalActiveBalance t = getTotalActiveBalance s := by
-  classical
-  let indices := getActiveValidatorIndices s (getCurrentEpoch s)
-  have checked := active.getActiveValidatorIndicesChecked_eq (UInt64.le_refl _)
-  have inside (i : ValidatorIndex) (member : i ∈ indices) : i.toNat < s.validators.data.size := by
-    obtain ⟨v, found, _⟩ := (mem_getActiveValidatorIndices (s.validators.bound before)).mp member
-    exact (Array.getElem?_eq_some_iff.mp found).1
-  have targetIndices := active.getActiveValidatorIndices_eq (UInt64.le_refl _)
-  have targetInside (i : ValidatorIndex) (member : i ∈ indices) :
-      i.toNat < t.validators.data.size := by
-    change i ∈ getActiveValidatorIndices s (getCurrentEpoch s) at member
-    rw [← targetIndices] at member
-    obtain ⟨v, found, _⟩ := (mem_getActiveValidatorIndices (t.validators.bound after)).mp member
-    exact (Array.getElem?_eq_some_iff.mp found).1
-  have sum : Models.stake (fun i => balanceAt t i.toNat) indices.toFinset =
-      Models.stake (fun i => balanceAt s i.toNat) indices.toFinset := by
-    apply Finset.sum_congr rfl
-    intro i member
-    exact effective i.toNat (inside i (List.mem_toFinset.mp member))
-  have sourceNone : indices.find? (s.validators.data.size ≤ ·.toNat) = none := by
-    apply List.find?_eq_none.mpr
-    intro i member
-    have bound := inside i member
-    simp only [decide_eq_true_eq]
-    omega
-  have targetNone : indices.find? (t.validators.data.size ≤ ·.toNat) = none := by
-    apply List.find?_eq_none.mpr
-    intro i member
-    have bound := targetInside i member
-    simp only [decide_eq_true_eq]
-    omega
-  unfold getTotalActiveBalance
-  rw [epoch, checked, getActiveValidatorIndicesChecked_of_within
-    (state := s) (s.validators.bound before)]
-  simp only [bind, Except.bind]
-  change getTotalBalance t indices = getTotalBalance s indices
-  simp only [getTotalBalance, sourceNone, targetNone, sumMarked_markIndices_eq_stake, sum]
+    ∀ i, i < x.state.validators.data.size → effectiveAt y i = effectiveAt x i :=
+  Run.effectiveKept_of_same_epoch tail early epoch
 
 private structure SitePrefix {fork : Fork} (s t : BeaconState preset fork) : Prop where
   grows : s.validators.data.size ≤ t.validators.data.size

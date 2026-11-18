@@ -905,6 +905,65 @@ private theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix :
 
 end WithdrawalKept
 
+/-- A queued consolidation assigns its source an exit epoch and pushes one entry on the queue.
+
+That exit epoch is after the current epoch.
+
+The exit epoch comes from the consolidation churn.
+
+It is assigned when the withdrawal delay is positive.
+
+The reason is that the withdrawal epoch is the exit epoch plus that delay, and fits in 64 bits.
+
+The source is written over the state the churn returns, and the new state keeps its validators. -/
+theorem queueConsolidation_queued {electra : .pectra ≤ fork}
+    {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (ok : queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
+    ∃ (churned written : BeaconState preset fork) (epoch withdrawal : Epoch),
+      computeConsolidationEpochAndUpdateChurn config state electra source.effectiveBalance =
+        .ok (churned, epoch) ∧
+      epoch ≠ FAR_FUTURE_EPOCH ∧ getCurrentEpoch state < epoch ∧
+      withdrawal.toNat = epoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ∧
+      churned.setValidator sourceIndex
+        { source with exitEpoch := epoch, withdrawableEpoch := withdrawal } = .ok written ∧
+      after.validators = written.validators ∧
+      (after.pendingConsolidations electra).data.toList =
+        (state.pendingConsolidations electra).data.toList ++ [⟨sourceIndex, targetIndex⟩] := by
+  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+    pure, Except.pure] at ok
+  obtain ⟨⟨churned, epoch⟩, churnOk, withdrawal, added, written, set, pending, appended, final⟩ :=
+    ok
+  cases final
+  have churnQueue : churned.pendingConsolidations = state.pendingConsolidations := by
+    simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at churnOk
+    obtain ⟨_, _, _, _, _, _, final⟩ := churnOk
+    cases final; rfl
+  have queueEq := (QueueKept.setValidator set).queue
+  change written.pendingConsolidations = churned.pendingConsolidations at queueEq
+  have sum := (Uint64.addChecked_ok_iff.mp added).2
+  -- The churn places the exit no earlier than the first epoch an exit may take.
+  have later : getCurrentEpoch state < epoch := by
+    apply UInt64.lt_iff_toNat_lt.mpr
+    cases first : computeActivationExitEpoch preset (getCurrentEpoch state) with
+    | error =>
+      simp [computeConsolidationEpochAndUpdateChurn, first, liftArith, Except.mapError, bind,
+        Except.bind] at churnOk
+    | ok firstEpoch =>
+      have early := UInt64.le_iff_toNat_le.mp
+        (computeConsolidationEpochAndUpdateChurn_first first churnOk).1
+      have firstEq := (computeActivationExitEpoch_ok_iff.mp first).2
+      omega
+  refine ⟨churned, written, epoch, withdrawal, churnOk, fun eq => ?_, later, sum, set, rfl, ?_⟩
+  · have bound := withdrawal.toNat_lt
+    rw [eq] at sum
+    have farNat : FAR_FUTURE_EPOCH.toNat = 18446744073709551615 := rfl
+    rw [farNat] at sum
+    omega
+  · show pending.data.toList = _
+    rw [appendWithinLimit_data appended, queueEq, churnQueue, Array.toList_push]
+
 /-- The steps of an epoch keep the earliest consolidation epoch.
 
 Only a consolidation request writes it, and no epoch stage makes one. -/

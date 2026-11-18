@@ -11,6 +11,7 @@ public import Mathlib.Data.Finset.Card
 import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
 import EthLib.Consensus.Proofs.Transition.PendingConsolidations
 import EthLib.Consensus.Proofs.Transition.BlockRewards
+import EthLib.Consensus.Proofs.Transition.ChainRoots
 import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
@@ -4501,7 +4502,7 @@ private theorem CapStep.run_of {g s t : ForkedBeaconState preset}
       have genesisWitness := genesis
       obtain ⟨_, _, _, initialized⟩ := genesisWitness
       obtain ⟨initialPartials, initialTargets, _⟩ := genesis_assigned_queues genesis
-      have valid := invariant (initializeBeaconStateFromEth1_invariant initialized).2
+      have valid := invariant genesis.invariant
       have capped := first.capped genesis.effectiveBalance_capped
       have targets := first.targets (Nat.lt_of_le_of_lt last.forks early) initialTargets
       have assigned := assigned initialPartials
@@ -4565,9 +4566,7 @@ theorem run_scheduled_reserve {g x : ForkedBeaconState preset}
       intro finiteB
       have last := (CapStep.step step activation compounding before).1
       have finiteA := UInt64.lt_of_le_of_lt last.forward finiteB
-      have valid := invariant (by
-        obtain ⟨_, _, _, initialized⟩ := genesis
-        exact (initializeBeaconStateFromEth1_invariant initialized).2)
+      have valid := invariant genesis.invariant
       have capped := first.capped genesis.effectiveBalance_capped
       obtain ⟨partials, targets, _⟩ := genesis_assigned_queues genesis
       cases step with
@@ -4912,8 +4911,8 @@ theorem preKeyCharge_run {g x u : ForkedBeaconState preset}
       refine ⟨Nat.le_trans previous.1 last.forks,
         UInt64.le_trans previous.2.1 last.forward, ?_⟩
       obtain ⟨_, initialTargets, initialProposers⟩ := genesis_assigned_queues genesis
+      have valid := invariant genesis.invariant
       obtain ⟨_, _, _, initialized⟩ := genesis
-      have valid := invariant (initializeBeaconStateFromEth1_invariant initialized).2
       have earlyA := Nat.lt_of_le_of_lt last.forks early
       have reachable := shared.append pre
       have ordered := reachable.activationExitOrder ⟨_, _, _, initialized⟩

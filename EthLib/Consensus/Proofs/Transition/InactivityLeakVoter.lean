@@ -238,32 +238,39 @@ theorem processPendingDeposits_balanceNotLowered {electra : .pectra ≤ fork}
   repeat' (split at computed <;> try cases computed)
   all_goals exact passPendingDeposits_balanceNotLowered altair ‹_› inside
 
-/-- A pass over pending consolidations lowers no balance of a validator that is no source. -/
-theorem passPendingConsolidations_balanceNotLowered {nextEpoch : Epoch} {index : Nat} :
+/-- A pass over pending consolidations lowers no balance of a validator that cannot yet leave.
+
+Each consolidation from that validator finds it not yet withdrawable, so the pass stops there. -/
+theorem passPendingConsolidations_balanceNotLowered_of_waiting {nextEpoch : Epoch} {index : Nat} :
     ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork} {result},
       passPendingConsolidations nextEpoch state consolidations = .ok result →
-      (∀ consolidation ∈ consolidations, consolidation.sourceIndex.toNat ≠ index) →
+      (∀ c ∈ consolidations, c.sourceIndex.toNat = index → ∀ w,
+        state.validators.data[index]? = some w → nextEpoch < w.withdrawableEpoch) →
       BalanceNotLowered index state result.1
   | [], _, _, computed, _ => by
     simp only [passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
     exact BalanceNotLowered.refl index _
-  | consolidation :: rest, state, result, computed, unsourced => by
-    have others : ∀ c ∈ rest, c.sourceIndex.toNat ≠ index :=
-      fun c member => unsourced c (List.mem_cons_of_mem _ member)
+  | consolidation :: rest, state, result, computed, apart => by
+    have others : ∀ c ∈ rest, c.sourceIndex.toNat = index → ∀ w,
+        state.validators.data[index]? = some w → nextEpoch < w.withdrawableEpoch :=
+      fun c member => apart c (List.mem_cons_of_mem _ member)
     unfold passPendingConsolidations at computed
     simp only [bind, Except.bind, pure, Except.pure] at computed
     split at computed
     · cases computed
+    rename_i source sourceOk
+    have sourceRead := getValidator_eq_ok_iff.mp (liftAccessor_ok.mp sourceOk)
     split at computed
     · split at computed
       · cases computed
       rename_i recur
       cases computed
-      exact (passPendingConsolidations_balanceNotLowered recur others :)
+      exact (passPendingConsolidations_balanceNotLowered_of_waiting recur others :)
     split at computed
     · cases computed
       exact BalanceNotLowered.refl index _
+    rename_i notWithdrawable
     split at computed
     · cases computed
     split at computed
@@ -276,18 +283,34 @@ theorem passPendingConsolidations_balanceNotLowered {nextEpoch : Epoch} {index :
     · cases computed
     rename_i recur
     cases computed
-    -- The source differs from the position, and the target only gains.
+    have lowerOk := liftAccessor_ok.mp loweredOk
+    have raiseOk := liftAccessor_ok.mp raisedOk
+    -- The source is not the validator, which is not yet withdrawable.
+    have other : consolidation.sourceIndex.toNat ≠ index := by
+      intro same
+      rw [same] at sourceRead
+      exact notWithdrawable (apart consolidation List.mem_cons_self same source sourceRead)
     have step : BalanceNotLowered index state raised := by
       intro earlier found
-      obtain ⟨kept, keptAt, keptEq⟩ := balance_decreaseBalance (liftAccessor_ok.mp loweredOk) found
-      rw [ite_eq_right_of_eq_false _ _
-        (eq_false (unsourced consolidation List.mem_cons_self))] at keptEq
-      obtain ⟨grown, grownAt, grownEq⟩ :=
-        balance_increaseBalance (liftAccessor_ok.mp raisedOk) keptAt
+      obtain ⟨kept, keptAt, keptEq⟩ := balance_decreaseBalance lowerOk found
+      rw [ite_eq_right_iff.mpr (fun h => absurd h other)] at keptEq
+      obtain ⟨grown, grownAt, grownEq⟩ := balance_increaseBalance raiseOk keptAt
       refine ⟨grown, grownAt, UInt64.le_iff_toNat_le.mpr ?_⟩
       rw [grownEq, keptEq]
       exact Nat.le_add_right _ _
-    exact step.trans (passPendingConsolidations_balanceNotLowered recur others :)
+    have validators : raised.validators = state.validators :=
+      (increaseBalance_validators raiseOk).trans (decreaseBalance_validators lowerOk)
+    exact step.trans (passPendingConsolidations_balanceNotLowered_of_waiting recur
+      fun c member same w read => others c member same w (by rw [← validators]; exact read) :)
+
+/-- A pass over pending consolidations lowers no balance of a validator that is no source. -/
+theorem passPendingConsolidations_balanceNotLowered {nextEpoch : Epoch} {index : Nat} :
+    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork} {result},
+      passPendingConsolidations nextEpoch state consolidations = .ok result →
+      (∀ consolidation ∈ consolidations, consolidation.sourceIndex.toNat ≠ index) →
+      BalanceNotLowered index state result.1 :=
+  fun computed unsourced => passPendingConsolidations_balanceNotLowered_of_waiting computed
+    fun c member same => absurd same (unsourced c member)
 
 /-- From Electra, the pending consolidations lower no balance of a validator that is no source.
 
@@ -347,23 +370,10 @@ theorem voterEpoch_processEpoch (altair : .altair ≤ fork)
     unfold processEpoch at computed
     simpa only [altair, ↓reduceDIte] using computed
   rw [processEpochAltair_eq_run] at altairRun
-  have trace := EpochTrace.run_ok_iff.mp altairRun
-  change EpochTrace _ (.justification :: .inactivity :: .rewards :: .registry :: .slashings ::
-    .eth1Reset :: .pendingDeposits :: .pendingConsolidations :: .payments ::
-    .effectiveBalances :: [.slashingsReset, .randaoReset, .history, .participation,
-      .syncCommittees, .proposerLookahead, .ptcWindow]) _ _ at trace
-  obtain _ | ⟨justifiedOk, trace⟩ := trace
-  obtain _ | ⟨scoredOk, trace⟩ := trace
-  obtain _ | ⟨rewardedOk, trace⟩ := trace
-  obtain _ | ⟨registeredOk, trace⟩ := trace
-  obtain _ | ⟨slashedOk, trace⟩ := trace
-  obtain _ | ⟨resetOk, trace⟩ := trace
-  obtain _ | ⟨depositedOk, trace⟩ := trace
-  obtain _ | ⟨consolidatedOk, trace⟩ := trace
-  obtain _ | ⟨settledOk, trace⟩ := trace
-  obtain _ | ⟨updatedOk, trace⟩ := trace
-  rename_i justified scored rewarded registered slashed reset deposited consolidated settled
-    updated
+  obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, consolidated, settled,
+    updated, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk, depositedOk,
+    consolidatedOk, settledOk, updatedOk, trace⟩ :=
+    (EpochTrace.run_ok_iff.mp altairRun).through_effectiveBalances
   have justifiedEq : processJustificationAndFinalization state = .ok justified :=
     EpochStage.action_cases.mp justifiedOk
   have scoredEq := EpochStage.action_cases.mp scoredOk

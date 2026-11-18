@@ -3040,11 +3040,12 @@ private theorem depositChurnLimit_le_max {fork : Fork} {s : BeaconState preset f
     (early : fork < .glamsterdam) {churn : Gwei}
     (churnOk : depositChurnLimit config s = .ok churn) :
     churn.toNat ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat := by
-  rw [depositChurnLimit_of_lt early] at churnOk
-  simp only [getActivationExitChurnLimit, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at churnOk
-  obtain ⟨whole, _, rfl⟩ := churnOk
-  simp only [Uint64.toNat_min]
+  -- A churn read that succeeds has read the total active balance.
+  have read := churnOk
+  rw [depositChurnLimit_of_lt early] at read
+  simp only [getActivationExitChurnLimit, getBalanceChurnLimit, bind_ok_iff] at read
+  obtain ⟨_, ⟨total, totalOk, -⟩, -⟩ := read
+  rw [depositChurnLimit_toNat_of_lt early totalOk churnOk]
   exact Nat.min_le_left _ _
 
 /-- The pending deposits spend at most the carry plus the churn that they read. -/

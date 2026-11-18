@@ -179,4 +179,27 @@ theorem getBaseReward_eq_mul_of_altair {state : BeaconState preset fork}
     exact read
   · cases found
 
+/-- The base reward reads only the effective balance of its validator, the total and the fork.
+
+Two validators with the same effective balance read the same base reward.
+
+They may sit in one state, or in two states whose forks agree on Altair.
+
+The first validator's index must be in the registry.
+
+A missing validator's error names its index, so two missing validators differ. -/
+theorem getBaseReward_congr {f h : Base.Fork} {a : BeaconState preset f}
+    {b : BeaconState preset h} {total : Gwei} {first second : ValidatorIndex}
+    (inside : first.toNat < a.validators.data.size)
+    (same : (a.validators.data[first.toNat]?).map (·.effectiveBalance) =
+      (b.validators.data[second.toNat]?).map (·.effectiveBalance))
+    (altair : Base.Fork.altair ≤ f ↔ Base.Fork.altair ≤ h := by rfl) :
+    getBaseReward a total first = getBaseReward b total second := by
+  unfold getBaseReward getValidator
+  rw [Array.getElem?_eq_getElem inside] at same ⊢
+  -- The second index is in its registry too, with the same effective balance.
+  cases found : b.validators.data[second.toNat]? <;>
+    simp only [found, Option.map_some, Option.map_none, reduceCtorEq, Option.some.injEq] at same
+  simp only [bind, Except.bind, same, altair]
+
 end EthLib.Consensus

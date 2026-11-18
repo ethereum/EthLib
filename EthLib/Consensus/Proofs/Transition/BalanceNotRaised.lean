@@ -806,23 +806,10 @@ private theorem processEpochAltair_walk {altair : .altair ≤ fork}
       after.balances = updated.balances ∧ after.validators = updated.validators ∧
       ScoreKept index rewarded after := by
   rw [processEpochAltair_eq_run] at computed
-  have trace := EpochTrace.run_ok_iff.mp computed
-  change EpochTrace _ (.justification :: .inactivity :: .rewards :: .registry :: .slashings ::
-    .eth1Reset :: .pendingDeposits :: .pendingConsolidations :: .payments ::
-    .effectiveBalances :: [.slashingsReset, .randaoReset, .history, .participation,
-      .syncCommittees, .proposerLookahead, .ptcWindow]) _ _ at trace
-  obtain _ | ⟨justifiedOk, trace⟩ := trace
-  obtain _ | ⟨scoredOk, trace⟩ := trace
-  obtain _ | ⟨rewardedOk, trace⟩ := trace
-  obtain _ | ⟨registeredOk, trace⟩ := trace
-  obtain _ | ⟨slashedOk, trace⟩ := trace
-  obtain _ | ⟨resetOk, trace⟩ := trace
-  obtain _ | ⟨depositedOk, trace⟩ := trace
-  obtain _ | ⟨consolidatedOk, trace⟩ := trace
-  obtain _ | ⟨settledOk, trace⟩ := trace
-  obtain _ | ⟨updatedOk, trace⟩ := trace
-  rename_i justified scored rewarded registered slashed reset deposited consolidated settled
-    updated
+  obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, consolidated, settled,
+    updated, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk, depositedOk,
+    consolidatedOk, settledOk, updatedOk, trace⟩ :=
+    (EpochTrace.run_ok_iff.mp computed).through_effectiveBalances
   have justifiedEq : processJustificationAndFinalization state = .ok justified :=
     EpochStage.action_cases.mp justifiedOk
   have scoredEq := EpochStage.action_cases.mp scoredOk
