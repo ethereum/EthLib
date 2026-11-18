@@ -683,6 +683,39 @@ def K6 : Finset ValidatorIndex := (AC counted).filter fun v => v ∈ Q counted �
 
 end Costs
 
+/-! ## Sums over validator indices, read at positions -/
+
+/-- A sum over validator indices is at most the sum over a set of positions that holds them all.
+
+An index is read at its position, `toNat` is injective, and the terms are natural numbers. -/
+private theorem sum_toNat_le {S : Finset ValidatorIndex} {P : Finset ℕ} (f : ℕ → ℕ)
+    (inside : ∀ v ∈ S, v.toNat ∈ P) : ∑ v ∈ S, f v.toNat ≤ ∑ i ∈ P, f i := by
+  classical
+  calc ∑ v ∈ S, f v.toNat
+      = ∑ i ∈ S.image (fun v : ValidatorIndex => v.toNat), f i :=
+        (Finset.sum_image (fun a _ b _ same => UInt64.toNat_inj.mp same)).symm
+    _ ≤ ∑ i ∈ P, f i := by
+      refine Finset.sum_le_sum_of_subset ?_
+      intro i hi
+      obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
+      exact inside v hv
+
+/-- A position that holds a validator and meets a test is among the positions that meet it. -/
+private theorem mem_positions_filter (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) {i : ℕ} {w : Validator}
+    (found : state.validators.data[i]? = some w) {p : ℕ → Prop} [DecidablePred p] (test : p i) :
+    i ∈ (pinTerms config state ancestor finalizedState).positions.filter p :=
+  Finset.mem_filter.mpr ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1, test⟩
+
+/-- A voter active at the epoch of a state holds a validator there that is active at that epoch. -/
+private theorem active_of_activeVoters (early : fork < .glamsterdam)
+    {s : BeaconState preset fork} {v : ValidatorIndex} (member : v ∈ activeVoters s) :
+    ∃ w, s.validators.data[v.toNat]? = some w ∧
+      isActiveValidator w (getCurrentEpoch s) = true := by
+  have listed : v ∈ getActiveValidatorIndices s (getCurrentEpoch s) := by
+    simpa [activeVoters] using member
+  exact (mem_getActiveValidatorIndices (s.validators.bound early)).mp listed
+
 /-! ## Per-term stubs -/
 
 section Stubs
