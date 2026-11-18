@@ -809,23 +809,16 @@ private theorem sum_le_exiting (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) (S : Finset ValidatorIndex)
     (member : ∀ v ∈ S, (pinTerms config state ancestor finalizedState).exitingB v.toNat = true) :
     ∑ v ∈ S, balanceAt state v.toNat ≤ (pinTerms config state ancestor finalizedState).exiting := by
-  classical
-  calc ∑ v ∈ S, balanceAt state v.toNat
-      = ∑ i ∈ S.image (fun v : ValidatorIndex => v.toNat), balanceAt state i :=
-        (Finset.sum_image (fun a _ b _ same => UInt64.toNat_inj.mp same)).symm
-    _ ≤ (pinTerms config state ancestor finalizedState).exiting := by
-      dsimp only [pinTerms]
-      refine Finset.sum_le_sum_of_subset (f := fun i => balanceAt state i) ?_
-      intro i hi
-      obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
-      have mark := of_decide_eq_true (member v hv)
-      have inside : v.toNat < state.validators.data.size := by
-        by_contra outside
-        have gone : state.validators.data[v.toNat]? = none :=
-          Array.getElem?_eq_none (by omega)
-        have read := mark.2.2
-        simp [gone] at read
-      exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr inside, mark⟩
+  dsimp only [pinTerms]
+  refine sum_toNat_le (fun i => balanceAt state i) fun v hv => ?_
+  have mark := of_decide_eq_true (member v hv)
+  obtain ⟨w, found⟩ : ∃ w, state.validators.data[v.toNat]? = some w := by
+    cases gone : state.validators.data[v.toNat]? with
+    | none =>
+      have read := mark.2.2
+      simp [gone] at read
+    | some w => exact ⟨w, rfl⟩
+  exact mem_positions_filter config state ancestor finalizedState found mark
 
 /-- D-4: the keys whose exit R reads. -/
 theorem bud_exiting (h : Setting config checks g split fin pulled anc counted V) :
@@ -1030,34 +1023,16 @@ theorem bud_fall (h : Setting config checks g split fin pulled anc counted V) :
 /-- Glue: (K4 pulled counted V) keys are current at R. -/
 theorem bud_rise (h : Setting config checks g split fin pulled anc counted V) :
     (∑ v ∈ (K4 pulled counted V), (pinTerms config pulled anc fin).rise v.toNat) ≤ ∑ i ∈ (pinTerms config pulled anc fin).positions with (pinTerms config pulled anc fin).current i = true, (pinTerms config pulled anc fin).rise i := by
-  classical
-  have within : pulled.RegistryWithinLimit := pulled.validators.bound h.early
-  calc ∑ v ∈ (K4 pulled counted V), (pinTerms config pulled anc fin).rise v.toNat
-      = ∑ i ∈ (K4 pulled counted V).image (fun v : ValidatorIndex => v.toNat),
-          (pinTerms config pulled anc fin).rise i :=
-        (Finset.sum_image (fun a _ b _ same => UInt64.toNat_inj.mp same)).symm
-    _ ≤ ∑ i ∈ (pinTerms config pulled anc fin).positions with
-          (pinTerms config pulled anc fin).current i = true,
-        (pinTerms config pulled anc fin).rise i := by
-      refine Finset.sum_le_sum_of_subset
-        (f := fun i => (pinTerms config pulled anc fin).rise i) ?_
-      intro i hi
-      obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
-      simp only [K4, Finset.mem_filter] at hv
-      have listed : v ∈ getActiveValidatorIndices pulled (getCurrentEpoch pulled) := by
-        simpa [AR, activeVoters] using hv.2.1
-      obtain ⟨validator, found, active⟩ := (mem_getActiveValidatorIndices within).mp listed
-      refine Finset.mem_filter.mpr ⟨?_, ?_⟩
-      · exact Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1
-      · exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
-
-/-- The gain of a reserve counts the stake that joins once, before its multiple. -/
-private theorem joining_le_double (a b c : ℕ) : a ≤ 2 * (a + b) + 3 * c := by omega
+  refine sum_toNat_le (fun i => (pinTerms config pulled anc fin).rise i) fun v hv => ?_
+  simp only [K4, Finset.mem_filter] at hv
+  obtain ⟨w, found, active⟩ := active_of_activeVoters h.early (s := pulled) hv.2.1
+  exact mem_positions_filter config pulled anc fin found
+    (isActiveAt_eq_true_iff.mpr ⟨w, found, active⟩)
 
 /-- `quorumReserve` holds `joining` (its gain term). -/
 theorem bud_joining : (pinTerms config pulled anc fin).joining ≤ (pinTerms config pulled anc fin).quorum := by
   dsimp only [pinTerms, quorumReserve]
-  exact joining_le_double _ _ _
+  exact (show ∀ a b c : ℕ, a ≤ 2 * (a + b) + 3 * c by intros; omega) _ _ _
 
 end Stubs
 
