@@ -999,8 +999,10 @@ private theorem key_floorR (h : Setting config checks g split fin pulled anc cou
       high + 1 < w.exitEpoch.toNat) :
     min (actualBalanceAt ⟨fork, split⟩ i.toNat)
         (withdrawalMaxEffectiveBalance preset fork val).toNat ≤
-      actualBalanceAt ⟨fork, pulled⟩ i.toNat + (events.map (penaltyDebit i.toNat)).sum +
-        (events.map (syncDebit i.toNat)).sum + (events.map (floorPartialDebit i)).sum := by
+      actualBalanceAt ⟨fork, pulled⟩ i.toNat +
+        (events.map (DirectSafety.Apriori.Internal.penaltyDebit i.toNat)).sum +
+        (events.map (syncDebit i.toNat)).sum +
+        (events.map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum := by
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
