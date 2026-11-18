@@ -82,6 +82,7 @@ structure PinTerms (preset : Preset) where
   positions : Finset ℕ
   current : ℕ → Bool
   joining : ℕ
+  joinRise : ℕ
   exitingB : ℕ → Bool
   lateB : ℕ → Bool
   exitedRB : ℕ → Bool
@@ -102,7 +103,7 @@ structure PinTerms (preset : Preset) where
 /-- `pinReserve` as the sum of its named terms, with the code's weights. -/
 def PinTerms.total (t : PinTerms preset) : ℕ :=
   t.quorum + (3 * t.exiting + t.queues + t.credits + t.branchR + t.late +
-    t.syncSeats + (∑ i ∈ t.positions with t.current i = true, t.rise i) +
+    t.syncSeats + (∑ i ∈ t.positions with t.current i = true, t.rise i) + t.joinRise +
     3 * (∑ i ∈ t.positions with t.current i = true, t.fall i) +
     3 * t.exitingRise + t.exitingCredits + t.exitingBands + t.queueRise + t.reserveW + t.flagged +
     t.seatShortfall + (33 * t.consolidationsX + 9) / 10 + t.exitedR + t.pendingR + t.creditGain)
@@ -463,6 +464,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
       decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
         v.activationEpoch == FAR_FUTURE_EPOCH),
     joining := ∑ i ∈ positions with current i = false ∧ upcoming i = true, effective i,
+    joinRise := ∑ i ∈ positions with current i = false ∧ upcoming i = true, rise i,
     exitingB := fun i => decide ((before i || current i) = true ∧
       (slashed i = false ∨ recentSlashing i = true) ∧
       ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true),
@@ -1049,7 +1051,8 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    cJ pulled counted ≤ (((pinTerms config pulled anc fin).joining + (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).lateB v.toNat = true,
+    cJ pulled counted ≤ (((pinTerms config pulled anc fin).joining +
+      (pinTerms config pulled anc fin).joinRise + (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).lateB v.toNat = true,
         (3 * eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).exitedRB v.toNat = true,
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
