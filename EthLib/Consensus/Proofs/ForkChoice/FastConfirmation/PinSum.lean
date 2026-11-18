@@ -979,6 +979,66 @@ theorem stub_V (h : Setting config checks g split fin pulled anc counted V)
         (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
         (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) : ℕ) := sorry
 
+/-- R's balance of a key that does not exit in the window falls only by its debit events.
+
+The floor starts from the smaller of the key's balance at the split and its largest balance.
+
+The guards of the floor trace come from the setting's guard at the finalized block.
+
+The window of the slashing vector and the slashing quotient are the guard's.
+
+No upgrade runs from Fulu, so no step records a crossing. -/
+private theorem key_floorR (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (i : ValidatorIndex) (val : Validator)
+    (initial : split.validators.data[i.toNat]? = some val) (unslashed : val.slashed = false)
+    (stays : ∀ w, pulled.validators.data[i.toNat]? = some w → w.slashed = false)
+    (retained : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ m)
+      (step : Step config checks m n) (post : Run config checks n ⟨fork, pulled⟩),
+      (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
+      high + 1 < w.exitEpoch.toNat) :
+    min (actualBalanceAt ⟨fork, split⟩ i.toNat)
+        (withdrawalMaxEffectiveBalance preset fork val).toNat ≤
+      actualBalanceAt ⟨fork, pulled⟩ i.toNat +
+        (events.map (DirectSafety.Apriori.Internal.penaltyDebit i.toNat)).sum +
+        (events.map (syncDebit i.toNat)).sum +
+        (events.map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  -- The slashing quotient at the split is the guard's, which is positive.
+  have atFin := DirectSafety.Apriori.Internal.slashing_quotient_of_electra (config := config)
+    (checks := checks) (high := (getCurrentEpoch pulled).toNat)
+    (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) electra
+  have atSplit := DirectSafety.Apriori.Internal.slashing_quotient_of_electra (config := config)
+    (checks := checks) (high := (getCurrentEpoch pulled).toNat)
+    (Run.nil : Run config checks ⟨fork, split⟩ ⟨fork, split⟩) electra
+  have positive : 0 < DirectSafety.Apriori.minSlashingPenaltyQuotient preset
+      (DirectSafety.Apriori.preElectraEpochs config ⟨fork, split⟩
+        (getCurrentEpoch pulled).toNat) := by
+    obtain ⟨_, _, _, _, _, _, _, quotient, _⟩ := h.guard
+    rw [atSplit, ← atFin]
+    exact quotient
+  refine Run.balanceFloor_events_or_fulu (toFin.append fromFin) tail h.genesis h.caps h.delay
+    h.early high endEpoch i val initial unslashed (Or.inr h.fulu) _ positive ?_ stays replayed
+  intro m n pre step post cut w found
+  refine ⟨retained pre step post cut w found, ?_, ?_, ?_⟩
+  · have window := DirectSafety.Apriori.Internal.short_window_of_guard h.guard
+      (show (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch pulled).toNat + 1 by omega)
+      ((Run.nil.snoc step).append post)
+    simp only at window ⊢
+    omega
+  · exact (DirectSafety.Apriori.Internal.slashing_quotient_of_electra pre electra).le
+  · intro added addedOk
+    exact DirectSafety.Apriori.Internal.no_crossing_of_regime (toFin.append fromFin) pre
+      h.genesis h.caps step
+      (Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early)
+      (.inl (Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps))) addedOk
+
 /-- The per-key core of the rise.
 
 A key of R's registry rises from R to C by at most its rise term.
