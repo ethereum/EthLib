@@ -351,8 +351,9 @@ theorem effectiveAt_le_withdrawalMax (shared : Run config checks g x)
     (Array.mem_of_getElem? initial)
   simpa [effectiveAt, initial] using UInt64.le_iff_toNat_le.mp cap
 
-/-- The per-key accounting trace of a branch, from a floor up to the key's largest effective
-balance at the start.
+/-- The per-key accounting trace of a branch, from a floor.
+
+The floor is at most the key's largest effective balance at the start.
 
 A sweep or a switch to compounding leaves at least that much, and the largest only grows.
 
@@ -511,8 +512,9 @@ theorem FloorTrace.run_of_le_cap_general
       subst z
       exact stepNone marked (priorNone slashed)
 
-/-- The per-key accounting trace of a branch, from a floor up to the key's largest effective
-balance at the start.
+/-- The per-key accounting trace of a branch, from a floor.
+
+The floor is at most the key's largest effective balance at the start.
 
 A sweep or a switch to compounding leaves at least that much, and the largest only grows.
 

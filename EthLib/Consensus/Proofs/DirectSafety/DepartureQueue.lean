@@ -6412,8 +6412,11 @@ private theorem expected_partial_pass {fork : Fork} {state : BeaconState preset 
   exact ⟨partials, index2, partialsOk⟩
 /-- A cost of balance events that only payload withdrawals pay.
 
-A withdrawals event costs at most the amounts of the queued partial withdrawals it reads that
-`keep` selects. Every other event, and every slot, costs nothing.
+A withdrawals event reads queued partial withdrawals.
+
+It costs at most the amounts of those that `keep` selects.
+
+Every other event, and every slot, costs nothing.
 
 The debits of all keys select every entry; the debit of one key selects its entries. -/
 structure PartialCost (cost : BalanceEvent preset → Nat)
@@ -6720,11 +6723,13 @@ private theorem run_partial_sum (charged : PartialCost (config := config) (check
       rcases List.mem_append.mp member with old | new
       · exact UInt64.le_trans (first.2 entry old) later
       · exact lastDue entry new
-/-- The cost of the events of a branch is at most the selected entries of the queue at its start,
-and of the entries appended along it, that are due by a cutoff at or after its end.
+/-- The cost of the events of a branch is at most its selected entries due by a cutoff.
 
-The queue at the end, after the entries the branch removed, is the queue at the start followed by
-the appended entries. -/
+The entries are those of the queue at its start and those appended along it.
+
+The cutoff is at or after its end.
+
+The removed entries, then the queue at the end, are the start queue, then the appended ones. -/
 private theorem run_partial_queue_due_of
     (charged : PartialCost (config := config) (checks := checks) cost keep)
     {x y : ForkedBeaconState preset}
@@ -7389,9 +7394,15 @@ theorem run_partial_queue_trace
 
 /-- A cost of the partial payments of a branch fits the queued entries that it selects.
 
-They are the entries of the queue at the start, and those appended along the branch, due by the
-cutoff. Each appended entry is due no earlier than the withdrawal delay after the start: it waits
-for an exit epoch at or after the first exit epoch of its request, which is after the start. -/
+They are the entries of the queue at the start, and those appended along the branch.
+
+Each is due by the cutoff.
+
+Each appended entry is due no earlier than the withdrawal delay after the start.
+
+It waits for an exit epoch at or after the first exit epoch of its request.
+
+That epoch is after the start. -/
 theorem run_partial_queue_kept {cost : BalanceEvent preset → Nat}
     {keep : PendingPartialWithdrawal → Bool}
     (charged : PartialCost (config := config) (checks := checks) cost keep) (high cutoff : Nat)

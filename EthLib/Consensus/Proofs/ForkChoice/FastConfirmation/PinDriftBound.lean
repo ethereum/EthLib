@@ -68,8 +68,9 @@ So a bound on that rate at each such state bounds the key's penalties over the b
 
 The reserve reads its rates at the call's total, so it needs every total on both branches nearby.
 
-`aprioriGuardAt` at the finalized state bounds each total of a branch from it by a floor and a
-ceiling.
+`aprioriGuardAt` at the finalized state bounds each total of a branch from it.
+
+It bounds each such total by a floor and a ceiling.
 
 Before Gloas, twice the last ceiling of the window is at most three times its last floor.
 
@@ -334,8 +335,9 @@ private theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
   · apply Nat.div_le_div_right
     exact Nat.mul_le_mul_right _ weight
 
-/-- The penalties of one key in one segment of a branch fit its pass rate, if the segment ends an
-epoch, and are zero otherwise.
+/-- The penalties of one key in one segment of a branch fit its pass rate.
+
+They are zero if the segment does not end an epoch.
 
 Every step of the segment starts at the epoch of its start `m`.
 
@@ -622,8 +624,11 @@ private theorem partialCost_key (v : ValidatorIndex) :
     obtain ⟨e, present, rfl⟩ := List.mem_map.mp member
     simp [floorPartialDebit, slot_events_no_withdrawals ok early replayed e present]
 
-/-- The partial payments to one key over a branch from Electra are its entries of the queue at
-the start that are due by the cutoff, while the cutoff is within the withdrawal delay of the start.
+/-- The partial payments to one key over a branch from Electra fit its entries due by the cutoff.
+
+These are its entries of the queue at the start.
+
+The cutoff is within the withdrawal delay of the start.
 
 An entry appended along the branch is due no earlier than the delay after the start. -/
 private theorem Run.partialDebit_le {x y : ForkedBeaconState preset}
@@ -678,8 +683,9 @@ private theorem stakeFloorAt_anti {x : ForkedBeaconState preset} {high : ℕ} {s
     simp only [stakeFloorAt, stakeFloor, stakeFloorPath]
     omega
 
-/-- From Electra and before Gloas, a state reached from a guarded state within its window has its
-total between the window's last floor and last ceiling.
+/-- From Electra and before Gloas, take a state reached from a guarded state within its window.
+
+Its total is between the window's last floor and last ceiling.
 
 The window's last index is the epoch after `high`, counted from the guarded state's epoch. -/
 private theorem total_within_guard {g x z : ForkedBeaconState preset} {high : ℕ}
@@ -707,11 +713,13 @@ private theorem total_within_guard {g x z : ForkedBeaconState preset} {high : �
   rw [value]
   exact max_le unit (Nat.le_trans ceiling (stakeCeilingAt_mono electra index))
 
-/-- From Electra and before Gloas, two states reached from a guarded state within its window have
-totals within three halves of each other.
+/-- From Electra and before Gloas, take two states reached from a guarded state in its window.
 
-Both lie between the window's last floor and ceiling, and the guard asks that twice that ceiling
-be at most three times that floor. -/
+Their totals are within three halves of each other.
+
+Both lie between the window's last floor and ceiling.
+
+The guard asks that twice that ceiling be at most three times that floor. -/
 private theorem total_band_of_guard {g x y z : ForkedBeaconState preset} {high : ℕ}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (parameters : DirectSafety.Parameters preset) (caps : CapOrder preset)
@@ -6173,7 +6181,8 @@ private theorem Run.new_key_effective_floor {g x y : ForkedBeaconState preset}
     (electra : .pectra ≤ x.fork) (fulu : .fusaka ≤ x.fork) (high : ℕ)
     (guard : DirectSafety.Apriori.aprioriGuardAt config x high)
     (tail : Run config checks x y) (early : y.fork < .glamsterdam)
-    (within : (getCurrentEpoch y.state).toNat ≤ high + 1) (window : preset.SeedLookaheadAtLeastThree)
+    (within : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    (window : preset.SeedLookaheadAtLeastThree)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (bands : preset.IncrementWithinUpwardBand) (facts : PinPresetFacts preset)
     (i : ℕ)
