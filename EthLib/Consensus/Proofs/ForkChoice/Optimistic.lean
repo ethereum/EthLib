@@ -314,7 +314,8 @@ private theorem getAncestor_status_of_gt {root : Root} {slot : Slot}
   conv => lhs; rw [getAncestor]
   conv => rhs; rw [getAncestor]
   repeat' split
-  all_goals (simp_all [UInt64.lt_iff_toNat_lt, UInt64.le_iff_toNat_le]; try omega)
+  all_goals simp_all [UInt64.lt_iff_toNat_lt, UInt64.le_iff_toNat_le]
+  all_goals omega
 
 /-- From Gloas, a known block does not descend from its own node with the payload. -/
 private theorem isAncestor_full_self {root : Root} {block : BeaconBlock preset fork}

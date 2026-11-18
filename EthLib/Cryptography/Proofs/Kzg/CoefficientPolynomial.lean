@@ -60,8 +60,8 @@ noncomputable def polynomialCoefficients (n : Nat) (p : _root_.Polynomial Fr) : 
 theorem coefficientPolynomial_polynomialCoefficients (n : Nat) (p : _root_.Polynomial Fr)
     (hp : p.natDegree < n) :
     coefficientPolynomial (polynomialCoefficients n p) = p := by
-  apply Polynomial.ext
-  intro i
+  apply AddMonoidAlgebra.ext
+  ext1 i
   by_cases hi : i < n
   · rw [coefficientPolynomial, Polynomial.ofFn_coeff_eq_val_of_lt _ (by
       change i < (Array.ofFn (fun j : Fin n => p.coeff j.val)).size

@@ -149,7 +149,7 @@ theorem marked_hit_le {S Ω γ : Type} (secret : ProbComp S) (Bad : S → HashIn
       simpa only [bind_pure_comp] using h
     _ ≤ ∑' result, Pr{let x ← program}[x = result] * (q * ε) := by
       rw [OracleComp.prEvent_bind_eq_tsum]
-      refine ENNReal.tsum_le_tsum fun result => ?_
+      refine tsum_le_tsum fun result => ?_
       by_cases hr : result ∈ support program
       · refine mul_le_mul' le_rfl ?_
         rw [prEvent_map]

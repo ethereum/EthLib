@@ -47,8 +47,9 @@ theorem domainTypes_nodup : protocolDomainTypes.Nodup := by
 
 /-- No domain type of a fork has a bit of the application mask set. -/
 theorem domainTypes_not_application :
-    ∀ domain ∈ protocolDomainTypes, ∀ i : Fin 4, domain[i] &&& DOMAIN_APPLICATION_MASK[i] = 0 := by
-  decide
+    ∀ domain ∈ protocolDomainTypes, ∀ i : Fin 4, domain[i] &&& DOMAIN_APPLICATION_MASK[i] = 0 :=
+  -- Instance search would decide the bound by checking every vector of four bytes, not the list.
+  @of_decide_eq_true _ (List.decidableBAll _ _) rfl
 
 /-- A domain type that sets a bit of the application mask is no domain type of a fork. -/
 theorem not_mem_protocolDomainTypes_of_masked {domainType : DomainType} (i : Fin 4)

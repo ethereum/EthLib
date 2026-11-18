@@ -381,8 +381,8 @@ private theorem coeff_toeplitzQuotient_mul_binomial (f : PolynomialCoeff) {n : N
     have hbin_poly :
         coefficientPolynomial (binomialVanishing n c) =
           Polynomial.X ^ n - Polynomial.C c := by
-      apply Polynomial.ext
-      intro k
+      apply AddMonoidAlgebra.ext
+      ext1 k
       rw [coeff_coefficientPolynomial, Polynomial.coeff_sub,
         Polynomial.coeff_X_pow, Polynomial.coeff_C]
       by_cases hk : k < n + 1
@@ -400,8 +400,8 @@ private theorem coeff_toeplitzQuotient_mul_binomial (f : PolynomialCoeff) {n : N
         exact (fr_sub_zero 0).symm
     rw [hbin_poly]
     -- Check coefficient by coefficient for every degree `j`.
-    apply Polynomial.ext
-    intro j
+    apply AddMonoidAlgebra.ext
+    ext1 j
     set q := toeplitzQuotient f n c
     rw [Polynomial.coeff_add, coeff_coefficientPolynomial f, coeff_coefficientPolynomial remArr,
       mul_sub, Polynomial.coeff_sub, Polynomial.coeff_mul_X_pow',

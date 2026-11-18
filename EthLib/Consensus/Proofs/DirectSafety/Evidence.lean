@@ -247,10 +247,9 @@ private theorem advanceSlot (ok : Consensus.advanceSlot config checks state = .o
   obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
   have first : SlashedKept state cached := of_validators (by rw [cachedEq])
   have second : SlashedKept cached epoched := by
-    unfold epochIfLast at epochedOk
-    split at epochedOk
+    obtain ⟨_, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
     · exact processEpoch epochedOk
-    · cases epochedOk; exact refl _
+    · exact refl _
   exact (first.trans second).trans of_validators
 
 private theorem upgradeNext {pre : ForkedBeaconState preset}

@@ -128,6 +128,18 @@ theorem advanceSlot_ok (computed : advanceSlot config checks state = .ok after) 
   simp only [UInt64.toNat_one] at sum
   exact ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩
 
+/-- The epoch step of a slot runs the epoch transition when the next slot starts an epoch.
+
+At any other slot it keeps the state. -/
+theorem epochIfLast_cases {next : Slot}
+    (computed : epochIfLast config checks next state = .ok after) :
+    next % preset.SLOTS_PER_EPOCH = 0 ∧ processEpoch config checks state = .ok after ∨
+      next % preset.SLOTS_PER_EPOCH ≠ 0 ∧ after = state := by
+  unfold epochIfLast at computed
+  split at computed
+  · exact .inl ⟨‹_›, computed⟩
+  · exact .inr ⟨‹_›, (Except.ok.inj computed).symm⟩
+
 /-- One slot step moves the slot on by exactly one. -/
 theorem advanceSlot_slot (computed : advanceSlot config checks state = .ok after) :
     after.slot.toNat = state.slot.toNat + 1 := by

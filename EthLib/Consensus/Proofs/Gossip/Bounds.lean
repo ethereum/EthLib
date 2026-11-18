@@ -40,7 +40,7 @@ variable {preset : Preset} {config : Config} {fork : Base.Fork} {topic : GossipT
 theorem sizeLimit_of_lt_gloas (early : ¬ .glamsterdam ≤ fork) :
     topic.sizeLimit preset config fork = none := by
   have notHeze : ¬ .hegota ≤ fork := fun heze => early (Nat.le_trans (by decide) heze)
-  cases topic <;> simp [GossipTopic.sizeLimit, early, notHeze]
+  cases topic <;> simp [GossipTopic.sizeLimit.eq_def, early, notHeze]
 
 /-- Only the topics of five kinds of message have a size limit.
 
@@ -53,14 +53,14 @@ theorem sizeLimit_ne_none_iff :
         (∃ subnet, topic = .dataColumnSidecar subnet) ∨ topic = .executionPayloadBid) ∨
         .hegota ≤ fork ∧ topic = .inclusionList := by
   cases topic <;> by_cases gloas : .glamsterdam ≤ fork <;> by_cases heze : .hegota ≤ fork <;>
-    simp [GossipTopic.sizeLimit, gloas, heze]
+    simp [GossipTopic.sizeLimit.eq_def, gloas, heze]
 
 /-- From Gloas, the size limit of a data column sidecar topic is the largest size of a sidecar. -/
 theorem sizeLimit_dataColumnSidecar {subnet : Networking.Gossip.SubnetID}
     (gloas : .glamsterdam ≤ fork) :
     (GossipTopic.dataColumnSidecar subnet).sizeLimit preset config fork =
       some (computeMaxDataColumnSidecarSize preset config) := by
-  simp [GossipTopic.sizeLimit, gloas]
+  simp [GossipTopic.sizeLimit.eq_def, gloas]
 
 /-- The bound of a topic without a size limit is the bound of its type.
 

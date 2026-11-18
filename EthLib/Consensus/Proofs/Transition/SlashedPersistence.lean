@@ -72,13 +72,12 @@ theorem Step.slashedPersistence {x y : ForkedBeaconState preset}
     obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
     obtain ⟨_, cached, epoched, _, cachedOk, epochedOk, afterEq⟩ := advanceSlot_ok slotOk
     have epoch : SlashedPersistence cached epoched := by
-      unfold epochIfLast at epochedOk
-      split at epochedOk
+      obtain ⟨_, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
       · obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
         exact (SlashedPersistence.of_data (congrArg (·.data)
           (processJustificationAndFinalization_keeps justifiedOk).2.2.2.2.2.1)).trans
           (.of_frame frame.toFrame)
-      · cases epochedOk; exact .refl _
+      · exact .refl _
     have advancedKept : SlashedPersistence x.state advanced :=
       (SlashedPersistence.of_frame (frame_processSlot cachedOk)).trans
         (epoch.trans (.of_data (by rw [afterEq])))

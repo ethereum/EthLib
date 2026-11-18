@@ -242,10 +242,8 @@ theorem advanceSlot_getBlockRoot_currentJustified_of_ne
   have previousEq : getPreviousEpoch cached = getPreviousEpoch state := by
     unfold getPreviousEpoch
     rw [currentEq]
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
+  obtain ⟨boundary, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
+  · obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
     rw [frame.currentJustified] at changed ⊢
     rcases processJustificationAndFinalization_currentJustified justifiedOk with same |
       ⟨recent, rootOk⟩
@@ -260,9 +258,7 @@ theorem advanceSlot_getBlockRoot_currentJustified_of_ne
       rw [UInt64.toNat_add, UInt64.toNat_one, ← sum, Nat.mod_eq_of_lt next.toNat_lt]
     rw [← nextEq]
     exact ⟨recent, rootOk, boundary⟩
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    exact absurd cachedFrame.currentJustified changed
+  · exact absurd cachedFrame.currentJustified changed
 
 /-- One slot keeps the two justified checkpoints slack-justified in the model.
 
@@ -313,10 +309,8 @@ theorem advanceSlot_slackJustifiedCheckpoints
   have previousEq : getPreviousEpoch cached = getPreviousEpoch state := by
     unfold getPreviousEpoch
     rw [currentEq]
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    have positive := slotsPerEpoch_pos_of_mod sum boundary
+  obtain ⟨boundary, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
+  · have positive := slotsPerEpoch_pos_of_mod sum boundary
     -- The caching keeps the roots of both recent epochs.
     have roots : ∀ current : Bool,
         getBlockRoot cached (if current then getCurrentEpoch state else getPreviousEpoch state) =
@@ -383,9 +377,7 @@ theorem advanceSlot_slackJustifiedCheckpoints
     · unfold SlackJustifiedCheckpoints
       rw [cachedFrame.previousJustified, cachedFrame.currentJustified]
       exact holds
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    unfold SlackJustifiedCheckpoints
+  · unfold SlackJustifiedCheckpoints
     rw [cachedFrame.previousJustified, cachedFrame.currentJustified]
     exact holds
 

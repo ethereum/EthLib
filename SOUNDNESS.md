@@ -324,7 +324,11 @@ Every hash is an oracle call, and the climbs take the inclusion proof depth of t
 The adversary wins when the headers have one body root and different lists, and both climbs reach that body root.
 Only the forks from Deneb and before Gloas put the list in the body, where the climbs can run.
 A data column sidecar carries the same commitments, proof and block header, and its check reads the same function on them.
-The bound holds for two sidecars as well, but no theorem states it.
+`DataColumnSidecar.partialHeader` takes these three fields of a sidecar before Gloas as a partial header.
+`prEvent_columnWins_le_of_sidecars` states the bound of `prEvent_columnWins_le_of_adversary` below for an adversary that outputs two sidecars.
+Its experiment runs the extraction on the headers that the two sidecars carry, and taking them makes no oracle call.
+Its win reads the commitments, the proof and the body root of each sidecar, and not the index, the cells or their proofs.
+With SHA-256, `columnWins_sha256_iff_of_sidecars` shows that such a win is two sidecars that `verifyDataColumnSidecarInclusionProof` accepts.
 
 `collision_of_extractColumnHeaders` shows that every win leaves two different cached inputs with one answer.
 By `hashTreeRootM_bytes48List` (`Serialization/Proofs/Ssz/BranchRandomOracle.lean`), the root of a list is the perfect tree over the roots of its commitments, with the count mixed in.
@@ -2155,7 +2159,17 @@ It holds at every fork and for every lawful meter.
 `processMessageCall_logsWeight` gives the same bound for the message of a transaction.
 It assumes that a commit of the meter raises no gas held, which both meters of the forks meet.
 `encode_makeReceipt_processTransaction` then proves that the receipt of a transaction encodes, when its gas limit and the cumulative gas it records are below `2^64`.
-No theorem yet derives those two bounds from the validity of a block.
+`stateTransition_gas_lt_of_lt` (`Execution/Proofs/Blocks/BodyGas.lean`) derives both bounds for a block that passes its transition, at every fork before Glamsterdam.
+It needs the gas limit of the parent, as the gas limit rule reads it, below `2^63`.
+The rule then keeps the gas limit of the block below `2^64` (`mul_lt_of_checkGasLimit`).
+The inclusion check keeps the gas limit of each transaction at most that of the block (`applyTransactions_txGas_le`).
+Before Glamsterdam the cumulative gas of each receipt is at most the gas of the body (`applyTransactions_receipts`).
+So it is at most the gas limit (`applyTransactions_execution_le_of_lt`), as `applyTransactions_cumulativeGasUsed_le_of_lt` states.
+The bound on the parent is a hypothesis.
+The rule lets each block raise the gas limit by less than a 1024th, with no cap.
+So no theorem bounds the gas limit along a chain from its genesis.
+From Glamsterdam a receipt counts the gas after the refund, state gas included.
+The gas limit bounds the execution gas and the state gas apart, so no theorem bounds the cumulative gas of those receipts yet.
 Both transaction theorems hold only before Hegotá: from Hegotá a transaction fails as not yet specified, so it has no receipt.
 
 ### The supply of ether
@@ -2518,6 +2532,14 @@ The theorems state these properties.
   Each message of the RPC that passed this check left its ID there, with the time of the RPC.
   An entry of that time counts in the check of a later message only with a positive lifetime.
   A lifetime of zero lets both messages through.
+- If no mesh holds a peer twice before an RPC, none does after it (`receiveRpc_mesh_nodup`).
+  The proof reads the check of `receiveGraft` that leaves a peer already in the mesh there.
+  It also reads the filters that take the sender out, in a PRUNE and in a GRAFT within the backoff.
+- So an RPC sends each message it forwards at most once to each peer (`receiveRpc_forward_nodup`).
+  That theorem needs a positive lifetime of the seen cache, and no mesh holding a peer twice before the RPC.
+  It also needs each explicit peer to be listed once and to be outside every mesh, which `receiveRpc_explicit` keeps.
+  `receiveRpc_delivered_nodup` gives the delivered messages distinct IDs, and `receiveRpc_forward_delivered` gives the peers of each.
+  A lifetime of zero lets a message repeated in the RPC go twice to each peer.
 
 The sources leave these points open, and the router takes one reading of each.
 
@@ -2540,7 +2562,9 @@ The sources leave these points open, and the router takes one reading of each.
 - The PRUNE that answers an early GRAFT carries the whole seconds that remain of the backoff, rounded up, and the PRUNE to an explicit peer carries none; neither offers peers.
 - v1.1 ignores "gossip" from a peer below the gossip threshold; here that is both IHAVE and IWANT, and never from an explicit peer.
 - IDONTWANT, from gossipsub v1.2, is ignored.
-- A message goes to the mesh, then to the explicit peers; `receiveRpc_explicit` keeps the two lists from overlapping, and no theorem rules out a repeated peer within one list.
+- A message goes to the mesh, then to the explicit peers.
+  `receiveRpc_explicit` keeps the two lists from overlapping, and `receiveRpc_mesh_nodup` keeps a mesh from repeating a peer.
+  The explicit peers come with the state, and `receiveRpc_forward_nodup` asks that they repeat no peer.
 - The v1.1 limits on IWANT answers and on IHAVE messages per heartbeat fix no count, so none is modelled.
 - The `peers.floodsub` set of v1.0 is left out: the consensus layer fixes `/meshsub/1.1.0` and names no floodsub peer.
 - A message ID that is not 20 bytes is never requested and never answered, since no consensus message has one.
@@ -2587,6 +2611,11 @@ The theorems in `Networking/Proofs/Gossip/Membership.lean` cover joining, leavin
 Joining a topic not yet joined sends one GRAFT per peer of the new mesh.
 With a lawful choice, that mesh has at most `D` peers, each one that the node could GRAFT before.
 Leaving sends a PRUNE with the unsubscribe backoff to each mesh peer, and sets that backoff on this node.
+If no mesh holds a peer twice before a leave, none does after it (`leave_mesh_nodup`), and a publish keeps every mesh (`publish_mesh`).
+`join_mesh_nodup` proves the same for a join with a lawful choice.
+It also needs the fanout of the topic, and the peers that announced it, to list each peer once.
+With `receiveRpc_mesh_nodup` and `heartbeat_mesh_nodup`, every step of the router thus keeps the meshes free of a repeated peer, under the needs of each theorem.
+No theorem states that those two lists of a join repeat no peer in the states that the router reaches.
 A published message goes only to explicit peers and to peers not below the publish threshold.
 With flood publishing, a message not in the seen cache goes to every such peer of the mesh and of the topic.
 `publish_receiveRpc` proves that a message this node published is not forwarded or delivered again within the lifetime of the seen cache.
@@ -4814,7 +4843,13 @@ The code of the receipts, their root and the bloom reads only the logs; no theor
 Without the flag, a call reports the log objects of its receipt, with the same `logIndex` (`callLogInfos_false`).
 From Glamsterdam, a message that starts with equal lists of logs ends with equal lists (`simulatedLogs_processMessage`, `Proofs/Evm/Call/SimulatedLogs.lean`).
 So each result reports the logs of its receipt (`runBody_simulatedLogs`, `Proofs/Blocks/SimulatedLogs.lean`).
-A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`); no theorem yet lifts this to the whole answer.
+A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`).
+Each block of a simulation, gap blocks included, is a simulated block at its own fork (`simulateBlocks_mem_exists`, `Proofs/Rpc/SimulateBlocks.lean`).
+So when every block of a simulation is from Glamsterdam, the whole answer is the same with the flag or without (`simulate_traceTransfers`).
+A failed simulation gives the same error either way, since its blocks do not read the flag (`simulateBlocks_traceTransfers`).
+Two cases have no theorem yet:
+- a block before Glamsterdam without calls, such as a gap block, is the same either way, but no theorem states this.
+- no theorem derives the hypothesis on the blocks from the configuration and the base block.
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
@@ -6260,6 +6295,7 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   The blob sidecar bound fixes the preset and the fork before the run, and its adversary picks both sidecars.
   The deposit bound reads no preset or fork, and its adversary picks the index, the deposit root and both deposits.
   The data column bound fixes the preset and the fork before the run, and its adversary picks both partial headers.
+  In its bound for sidecars, the adversary picks both sidecars, and the experiment takes the header that each carries.
   The sync committee bound fixes the preset and the index before the run, and its adversary picks the state root, both committees and both branches.
   The finality bound fixes the index before the run, and its adversary picks the state root, both headers and both branches.
   An adversary that also picks the slot picks one of at most three indices, so its bound at most triples.
@@ -6488,10 +6524,10 @@ Keystore decryption does this itself with a model of the cost, against limits th
 
 <!-- generated: pins -->
 The specification requires no package.
-The package requires Mathlib, at `v4.35.0`, commit `56a0058`.
-The package requires VCVio, at `bbf05ee`.
+The package requires Mathlib, at `v4.36.0`, commit `fc4f59e`.
+The package requires VCVio, at `8781bec`.
 Only the proofs import them.
-The Lean toolchain is `leanprover/lean4:v4.35.0`.
+The Lean toolchain is `leanprover/lean4:v4.36.0`.
 <!-- end generated -->
 
 VCVio defines the oracle computations and probabilities in which the security games are stated.
