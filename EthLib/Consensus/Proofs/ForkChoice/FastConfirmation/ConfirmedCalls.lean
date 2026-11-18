@@ -111,19 +111,8 @@ private theorem carrier_delivered {Δ : ℕ} {anchor : Store preset fork} {last 
   have reachedW := e.reachable (fun x hx => (start x hx).symm ▸ Store.Reachable.anchor anchored)
     k w receiver
   -- The receiver holds its finalized block, as the anchor state's root is not zero.
-  have finalizedKnown : ∃ finalizedBlock,
-      ((e.world k).state w).blocks[((e.world k).state w).finalizedCheckpoint.root]? =
-        some finalizedBlock := by
-    have contains : ((e.world k).state w).blocks.contains
-        ((e.world k).state w).finalizedCheckpoint.root := by
-      rcases reachedW.checkpoints_known sound (UInt64.le_of_eq anchorSlot) positive window
-          (checkpoint := ((e.world k).state w).finalizedCheckpoint) (by simp) with
-        ⟨-, -, held⟩ | ⟨-, held⟩ | zero
-      · exact held
-      · exact held
-      · exact absurd zero (anchorState_hash_nonzero anchored start nonzero receiver bounded)
-    rw [Std.TreeMap.contains_eq_isSome_getElem?] at contains
-    exact Option.isSome_iff_exists.mp contains
+  have finalizedKnown := reachedW.finalized_known sound (UInt64.le_of_eq anchorSlot) positive
+    window (e.anchor_stateRoot_nonzero anchored start nonzero receiver bounded)
   rcases e.blocks_of_partiallySynchronous sync preGloas admitted anchored start sender receiver
       (by simpa using late) bounded upToDate finalizedKnown known final with
     ⟨held, -⟩ | ⟨a, ha, b, hb, i, j, hi, hj, _, ⟨r, left, right⟩, found⟩
@@ -724,11 +713,6 @@ private theorem root_known {store : Store preset fork}
     {fcr after : FastConfirmationStore}
     (called : store.onFastConfirmation config fcr = .ok after) :
     ∃ epoch, store.getBlockEpoch after.confirmedRoot = .ok epoch := by
-  have held (r : Root) (contains : store.blocks.contains r) :
-      ∃ epoch, store.getBlockEpoch r = .ok epoch := by
-    rw [Std.TreeMap.contains_eq_isSome_getElem?] at contains
-    obtain ⟨b, found⟩ := Option.isSome_iff_exists.mp contains
-    exact blockEpoch_of_found found
   obtain ⟨head, slot, start, -, -, selected, result⟩ := Store.onFastConfirmation_checked called
   rcases result with same | ⟨-, checked, -⟩
   · rw [same]
@@ -736,12 +720,9 @@ private theorem root_known {store : Store preset fork}
     rcases startCase with ⟨rfl, _⟩ | ⟨rfl, _, ⟨block, _, found, _⟩, _⟩
     · rcases baseCase with ⟨rfl, ⟨_, blockEpoch, _, known, _⟩, _⟩ | ⟨rfl, _⟩
       · exact ⟨blockEpoch, known⟩
-      · rcases reached.checkpoints_known sound (UInt64.le_of_eq anchorSlot) positive window
-            (checkpoint := store.finalizedCheckpoint) (by simp) with
-          ⟨-, -, contains⟩ | ⟨-, contains⟩ | zero
-        · exact held _ contains
-        · exact held _ contains
-        · exact absurd zero nonzero
+      · obtain ⟨block, found⟩ := reached.finalized_known sound (UInt64.le_of_eq anchorSlot)
+          positive window fun zero => nonzero (by rw [reached.anchorState_root, zero])
+        exact blockEpoch_of_found found
     · exact blockEpoch_of_found (Store.block_ok_iff.mp found)
   · obtain ⟨_, _, rootEpoch, _, _, _, known, _⟩ := checked
     exact ⟨rootEpoch, known⟩

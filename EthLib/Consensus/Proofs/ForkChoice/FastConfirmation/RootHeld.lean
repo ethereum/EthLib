@@ -120,19 +120,7 @@ theorem Execution.rootHeld_of_honest_vote {Δ : ℕ} {anchor : Store preset fork
     -- The receiver's finality is held, as the anchor state's root is not zero.
     obtain ⟨anchorKey, -, anchorFound⟩ := reachedW.anchor_known
     have nonzero := roots w receiver r rBound anchorKey anchorBlock anchorFound
-    have held (r' : Root) (contains : ((e.world r).state w).blocks.contains r') :
-        ∃ b, ((e.world r).state w).blocks[r']? = some b := by
-      rw [Std.TreeMap.contains_eq_isSome_getElem?] at contains
-      exact Option.isSome_iff_exists.mp contains
-    have finalizedKnown : ∃ finalizedBlock, ((e.world r).state w).blocks[
-        ((e.world r).state w).finalizedCheckpoint.root]? = some finalizedBlock := by
-      rcases reachedW.checkpoints_known sound anchorLe positive window
-          (checkpoint := ((e.world r).state w).finalizedCheckpoint) (by simp) with
-        ⟨-, -, contains⟩ | ⟨-, contains⟩ | zero
-      · exact held _ contains
-      · exact held _ contains
-      · rw [reachedW.anchorState_root, Except.ok.injEq] at zero
-        exact absurd zero nonzero
+    have finalizedKnown := reachedW.finalized_known sound anchorLe positive window nonzero
     -- The caller reads the receiver's finality on the root's chain.
     have callerRead : ((e.world n).state u).getCheckpointBlock root
         ((e.world r).state w).finalizedCheckpoint.epoch =

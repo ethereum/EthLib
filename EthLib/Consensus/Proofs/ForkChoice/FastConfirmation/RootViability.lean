@@ -1144,19 +1144,8 @@ private theorem late_previous_receiver_source {anchor : Store preset fork} {Δ t
   -- The receiver's finality is held, as the anchor state's root is not zero.
   obtain ⟨anchorKey, -, anchorFound⟩ := reachedW.anchor_known
   have nonzero := roots w receiver k receiverBound anchorKey anchorBlock anchorFound
-  have held (r : Root) (contains : ((e.world k).state w).blocks.contains r) :
-      ∃ b, ((e.world k).state w).blocks[r]? = some b := by
-    rw [Std.TreeMap.contains_eq_isSome_getElem?] at contains
-    exact Option.isSome_iff_exists.mp contains
-  have finalizedKnown : ∃ finalizedBlock, ((e.world k).state w).blocks[
-      ((e.world k).state w).finalizedCheckpoint.root]? = some finalizedBlock := by
-    rcases reachedW.checkpoints_known sound (UInt64.le_of_eq anchorSlot) positive window
-        (checkpoint := ((e.world k).state w).finalizedCheckpoint) (by simp) with
-      ⟨-, -, contains⟩ | ⟨-, contains⟩ | zero
-    · exact held _ contains
-    · exact held _ contains
-    · rw [reachedW.anchorState_root, Except.ok.injEq] at zero
-      exact absurd zero nonzero
+  have finalizedKnown := reachedW.finalized_known sound (UInt64.le_of_eq anchorSlot) positive
+    window nonzero
   -- The caller's head reads the receiver's finality.
   have finalRead : ((e.world n).state u).getCheckpointBlock head.root
       ((e.world k).state w).finalizedCheckpoint.epoch =

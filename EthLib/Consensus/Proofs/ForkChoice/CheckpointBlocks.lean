@@ -816,6 +816,28 @@ theorem Store.Reachable.checkpoints_known (anchor : Invariant anchorState)
 
 /-! ## The field that gives each checkpoint of a store -/
 
+/-- A reachable store holds the block of its finalized checkpoint.
+
+The anchor block must have a nonzero state root, so that the anchor state's root is not zero. -/
+theorem Store.Reachable.finalized_known (anchor : Invariant anchorState)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (nonzero : anchorBlock.stateRoot ≠ Vector.replicate 32 0) :
+    ∃ finalizedBlock, store.blocks[store.finalizedCheckpoint.root]? = some finalizedBlock := by
+  have held (contains : store.blocks.contains store.finalizedCheckpoint.root) :
+      ∃ block, store.blocks[store.finalizedCheckpoint.root]? = some block := by
+    rw [Std.TreeMap.contains_eq_isSome_getElem?] at contains
+    exact Option.isSome_iff_exists.mp contains
+  rcases reachable.checkpoints_known anchor anchorSlot positive window
+      (checkpoint := store.finalizedCheckpoint) (by simp) with
+    ⟨-, -, contains⟩ | ⟨-, contains⟩ | zero
+  · exact held contains
+  · exact held contains
+  · rw [reachable.anchorState_root, Except.ok.injEq] at zero
+    exact absurd zero nonzero
+
 /-- A traced checkpoint is the anchor checkpoint, or the field of a block state or of its pull-up.
 
 The anchor checkpoint has the epoch of the anchor state and the root of the anchor block. -/
