@@ -444,11 +444,8 @@ private theorem Execution.mem_window_of_target_or_stale {anchor : Store preset f
     exact ⟨headBlock, found, UInt64.not_le.mp not_le⟩
   obtain ⟨epoch, targetRoot, epochOk, headTarget, targetEq⟩ :=
     Store.getCurrentTarget_eq_ok_iff.mp targetOk
-  have epochRead : ((e.world k).state w).getCurrentStoreEpoch config =
-      .ok (computeEpochAtSlot preset slot) := by
-    simp [Store.getCurrentStoreEpoch, slotOk, bind, Except.bind, pure, Except.pure]
   have epochEq : epoch = computeEpochAtSlot preset slot :=
-    Except.ok.inj (epochOk.symm.trans epochRead)
+    Store.getCurrentStoreEpoch_eq slotOk epochOk
   have rootIsHead : attestation.data.target.root = head.root := by
     rw [targetEq]
     simp only [Store.getCheckpointBlock, bind_ok_iff, mapError_ok_iff, pure, Except.pure,

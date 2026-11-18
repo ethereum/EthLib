@@ -192,14 +192,11 @@ theorem Execution.receiverWindowExitsNear_of_sourceOnParentChain
   -- The caller's checkpoint block, at or before the first slot of the checkpoint's epoch.
   obtain ⟨boundary, checkpointBlock, boundaryOk, checkpointFound, checkpointLe, -⟩ :=
     Store.isAncestor_of_getCheckpointBlock preGloas callerRead
-  have boundaryNat := (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2
   have parentEpochNat : (computeEpochAtSlot preset parent.slot).toNat =
       parent.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
     simp only [computeEpochAtSlot, UInt64.toNat_div]
-  have boundaryLe : boundary ≤ parent.slot := by
-    rw [UInt64.le_iff_toNat_le, boundaryNat]
-    exact Nat.le_trans (Nat.mul_le_mul_right _ (parentEpochNat ▸ parentLow))
-      (Nat.div_mul_le_self _ _)
+  have boundaryLe : boundary ≤ parent.slot :=
+    computeStartSlotAtEpoch_le_of_epoch_le boundaryOk parentLow
   -- The receiver's head descends from the parent, which the receiver holds as the caller does.
   have descends : ((e.world k).state w).isAncestor head ⟨block.parentRoot, .pending⟩ = .ok true :=
     parentCovers _ lowK (by omega) w receiver k head rfl upToDate headOk
