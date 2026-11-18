@@ -34,6 +34,14 @@ import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.Bound
 import EthLib.Consensus.Proofs.Transition.Totality.Supply
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.Ceiling
+import EthLib.Consensus.Proofs.DirectSafety.Apriori.Issuance
+import EthLib.Consensus.Proofs.DirectSafety.Apriori.Branch
+import EthLib.Consensus.Proofs.Transition.EpochRewards
+import EthLib.Consensus.Proofs.Transition.RewardDeltas
+import EthLib.Consensus.Proofs.Transition.ForkBoundary
+import EthLib.Consensus.Proofs.Transition.FfgStake
+import EthLib.Consensus.Proofs.Time
+import EthLib.Consensus.Proofs.Participation
 
 /-!
 SCRATCH BASE for D-1 (not for merge): the summation of `pinReserve` at spec rev 2.5.3.
@@ -977,6 +985,618 @@ theorem stub_V (h : Setting config checks g split fin pulled anc counted V)
         (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
         (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) : ℕ) := sorry
 
+/-! ### One key's reward in an epoch pass -/
+
+/-- The reward credits of a list of events are those of the events, read at one position. -/
+private theorem sum_filter_rewards (events : List (BalanceEvent preset)) (v : ℕ) :
+    ((events.filter (·.source = .rewards)).map (keyCredit v)).sum =
+      (events.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum := by
+  induction events with
+  | nil => rfl
+  | cons e rest ih =>
+    by_cases rewards : e.source = .rewards
+    · simp [rewards, keyCredit, DirectSafety.Apriori.Internal.rewardCredit, ih]
+    · simp [rewards, DirectSafety.Apriori.Internal.rewardCredit, ih]
+
+/-- A flag pays a key at most its base reward times the weight of the flag, over the active stake.
+
+The increments that set the flag in the previous epoch are at most those active then.
+
+The rate read there is at most `P` times the active increments. -/
+private theorem flagReward_le {f : Fork} (altair : .altair ≤ f) {state : BeaconState preset f}
+    (within : state.RegistryWithinLimit) {flag : Fin PARTICIPATION_FLAG_WEIGHTS.length}
+    {rewards penalties : Array Gwei}
+    (computed : getFlagIndexDeltas state altair flag = .ok (rewards, penalties))
+    {total : Gwei} (active : getTotalActiveBalance state = .ok total) (P v : ℕ)
+    (inside : v < state.validators.data.size)
+    (rate : ∀ perIncrement : Gwei, getBaseRewardPerIncrement preset total = .ok perIncrement →
+      perIncrement.toNat *
+          ((∑ i ∈ (getActiveValidatorIndices state (getPreviousEpoch state)).toFinset,
+            balanceAt state i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+        P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :
+    (rewards.getD v 0).toNat *
+        (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat) ≤
+      balanceAt state v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        PARTICIPATION_FLAG_WEIGHTS[flag].toNat *
+        (P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ∧
+    (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
+      (rewards.getD v 0).toNat = 0) := by
+  obtain ⟨participating, participatingBalance, total', flaggedOk, weighed, totalOk, perKey⟩ :=
+    getFlagIndexDeltas_getD within computed
+  obtain rfl : total = total' := Except.ok.inj (active.symm.trans totalOk)
+  obtain ⟨eligible, -, notEligible, eligibleCase⟩ := perKey v inside
+  have zero (h : (rewards.getD v 0).toNat = 0) :
+      (rewards.getD v 0).toNat *
+        (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat) ≤
+      balanceAt state v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        PARTICIPATION_FLAG_WEIGHTS[flag].toNat *
+        (P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ∧
+      (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
+        (rewards.getD v 0).toNat = 0) :=
+    ⟨by rw [h, Nat.zero_mul]; exact Nat.zero_le _, fun _ => h⟩
+  by_cases isEligible : eligible = true
+  swap
+  · exact zero (by simp [(notEligible (by simpa using isEligible)).1])
+  obtain ⟨base, baseOk, member⟩ := eligibleCase isEligible
+  by_cases present : v.toUInt64 ∈ participating
+  swap
+  · exact zero (by simp [(member.2 present).1])
+  obtain ⟨leak, leakOk, formula, -⟩ := member.1 present
+  cases leak
+  swap
+  · simp only [↓reduceIte] at formula
+    exact zero formula
+  simp only [Bool.false_eq_true, ↓reduceIte] at formula
+  have index : v.toUInt64.toNat = v := toNat_toUInt64_of_lt within inside
+  obtain ⟨per, perOk⟩ : ∃ per, getBaseRewardPerIncrement preset total = .ok per := by
+    simp only [getBaseReward, altair, ↓reduceIte, bind_ok_iff] at baseOk
+    obtain ⟨_, -, per, perOk, -⟩ := baseOk
+    exact ⟨per, perOk⟩
+  obtain ⟨validator, found, baseEq⟩ := getBaseReward_eq_mul_of_altair altair perOk baseOk
+  rw [index] at found
+  have stakeV : balanceAt state v = validator.effectiveBalance.toNat := by
+    simp [balanceAt, found]
+  have increments : (rewards.getD v 0).toNat *
+      (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat) ≤
+      base.toNat * PARTICIPATION_FLAG_WEIGHTS[flag].toNat *
+        (participatingBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+    rw [formula]
+    exact Nat.div_mul_le_self _ _
+  refine ⟨?_, fun none => by rw [formula, none, Nat.zero_mul, Nat.div_zero]⟩
+  -- A key with less than one increment has no base reward.
+  by_cases small : balanceAt state v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0
+  · have noBase : base.toNat = 0 := by rw [baseEq, ← stakeV, small, Nat.zero_mul]
+    rw [noBase, Nat.zero_mul, Nat.zero_mul] at increments
+    rw [small, Nat.zero_mul, Nat.zero_mul]
+    exact increments
+  -- The key sets the flag and is active in the previous epoch, so both stakes hold its balance.
+  have stakeParticipating : balanceAt state v ≤
+      ∑ i ∈ participating.toFinset, balanceAt state i.toNat := by
+    have := Finset.single_le_sum (f := fun i : ValidatorIndex => balanceAt state i.toNat)
+      (fun _ _ => Nat.zero_le _) (List.mem_toFinset.mpr present)
+    simpa only [index] using this
+  have subset : ∑ i ∈ participating.toFinset, balanceAt state i.toNat ≤
+      ∑ i ∈ (getActiveValidatorIndices state (getPreviousEpoch state)).toFinset,
+        balanceAt state i.toNat :=
+    Finset.sum_le_sum_of_subset fun i member =>
+      List.mem_toFinset.mpr (mem_getUnslashedParticipatingIndices flaggedOk i
+        (List.mem_toFinset.mp member)).1
+  obtain ⟨-, -, balanceEq⟩ := getTotalBalance_ok_iff_stake.mp weighed
+  have positive : 0 < balanceAt state v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+    Nat.pos_of_ne_zero small
+  have incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+    refine Nat.pos_of_ne_zero fun zero => ?_
+    rw [zero, Nat.div_zero] at positive
+    exact Nat.lt_irrefl _ positive
+  have one : 1 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ balanceAt state v :=
+    (Nat.le_div_iff_mul_le incPos).mp positive
+  rw [Nat.one_mul] at one
+  have participatingLe : participatingBalance.toNat ≤
+      ∑ i ∈ (getActiveValidatorIndices state (getPreviousEpoch state)).toFinset,
+        balanceAt state i.toNat := by
+    rw [balanceEq]
+    exact max_le (Nat.le_trans (Nat.le_trans one stakeParticipating) subset) subset
+  have share : participatingBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+      (∑ i ∈ (getActiveValidatorIndices state (getPreviousEpoch state)).toFinset,
+        balanceAt state i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+    Nat.div_le_div_right participatingLe
+  have bound := rate per perOk
+  calc (rewards.getD v 0).toNat *
+        (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat)
+      ≤ base.toNat * PARTICIPATION_FLAG_WEIGHTS[flag].toNat *
+        (participatingBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := increments
+    _ ≤ base.toNat * PARTICIPATION_FLAG_WEIGHTS[flag].toNat *
+        ((∑ i ∈ (getActiveValidatorIndices state (getPreviousEpoch state)).toFinset,
+          balanceAt state i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) :=
+        Nat.mul_le_mul_left _ share
+    _ = balanceAt state v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        PARTICIPATION_FLAG_WEIGHTS[flag].toNat *
+        (per.toNat * ((∑ i ∈ (getActiveValidatorIndices state (getPreviousEpoch state)).toFinset,
+          balanceAt state i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) := by
+        rw [baseEq, stakeV]
+        ring
+    _ ≤ balanceAt state v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        PARTICIPATION_FLAG_WEIGHTS[flag].toNat *
+        (P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :=
+        Nat.mul_le_mul_left _ bound
+
+/-- The three flags pay a key, in a rewards replay of a state, at most its stake times `P`.
+
+The credit is scaled by `64` and by the active increments.
+
+It is at most the key's increments times `54`, `P` and the active increments.
+
+A state with no active increment pays nothing. -/
+private theorem replayRewards_credit_le {f : Fork} (altair : .altair ≤ f)
+    {pass : BeaconState preset f} (within : pass.RegistryWithinLimit)
+    {rewarded : BalanceReplay preset f}
+    (replayed : replayRewards (config := config) (pass, []) = .ok rewarded) (P v : ℕ)
+    (inside : v < pass.validators.data.size)
+    (rate : ∀ total perIncrement : Gwei, getTotalActiveBalance pass = .ok total →
+      getBaseRewardPerIncrement preset total = .ok perIncrement →
+      perIncrement.toNat *
+          ((∑ i ∈ (getActiveValidatorIndices pass (getPreviousEpoch pass)).toFinset,
+            balanceAt pass i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+        P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :
+    (rewarded.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum = 0 ∨
+      ∃ total : Gwei, getTotalActiveBalance pass = .ok total ∧
+        (rewarded.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum *
+            (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * 64) ≤
+          balanceAt pass v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * 54 *
+            (P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ∧
+        (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
+          (rewarded.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum = 0) := by
+  by_cases genesis : getCurrentEpoch pass = GENESIS_EPOCH
+  · simp only [replayRewards, genesis, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at replayed
+    subst replayed
+    exact .inl rfl
+  obtain ⟨source, target, head, inactivity, first, second, third, sourceOk, targetOk, headOk,
+    inactivityOk, firstOk, secondOk, thirdOk, last⟩ :=
+    DirectSafety.Apriori.Internal.replayRewards_passes altair genesis replayed
+  obtain ⟨-, -, total, -, -, active, -⟩ := getFlagIndexDeltas_getD within sourceOk
+  have wd : WEIGHT_DENOMINATOR.toNat = 64 := by decide
+  have flagBound (flag : Fin PARTICIPATION_FLAG_WEIGHTS.length) {deltas : Array Gwei × Array Gwei}
+      (computed : getFlagIndexDeltas pass altair flag = .ok deltas) :=
+    flagReward_le altair within (flag := flag) (rewards := deltas.1) (penalties := deltas.2)
+      computed active P v inside (fun per perOk => rate total per active perOk)
+  have one := flagBound ⟨0, by decide⟩ sourceOk
+  have two := flagBound ⟨1, by decide⟩ targetOk
+  have three := flagBound ⟨2, by decide⟩ headOk
+  have flows (deltas : Array Gwei × Array Gwei) {pre post : BalanceReplay preset f}
+      (src : BalanceSource) (ok : replayDeltas src deltas pre = .ok post) :=
+    (DirectSafety.Apriori.Internal.replayDeltas_flows src deltas ok v).2
+  have s1 := flows source .penalties firstOk
+  have s2 := flows target .penalties secondOk
+  have s3 := flows head .penalties thirdOk
+  have s4 := flows inactivity .inactivity last
+  have noReward : (inactivity.1.getD v 0).toNat = 0 := by
+    simp [getInactivityPenaltyDeltas_rewards inactivityOk]
+  simp only [List.map_nil, List.sum_nil, Nat.zero_add] at s1
+  have weights : PARTICIPATION_FLAG_WEIGHTS[(⟨0, by decide⟩ : Fin 3)].toNat +
+      PARTICIPATION_FLAG_WEIGHTS[(⟨1, by decide⟩ : Fin 3)].toNat +
+      PARTICIPATION_FLAG_WEIGHTS[(⟨2, by decide⟩ : Fin 3)].toNat = 54 := rfl
+  have sum : (rewarded.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum ≤
+      (source.1.getD v 0).toNat + (target.1.getD v 0).toNat + (head.1.getD v 0).toNat := by
+    omega
+  rw [wd] at one two three
+  obtain ⟨b1, z1⟩ := one
+  obtain ⟨b2, z2⟩ := two
+  obtain ⟨b3, z3⟩ := three
+  refine .inr ⟨total, active, ?_, fun none => ?_⟩
+  · have scaled := Nat.mul_le_mul_right
+      (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * 64) sum
+    simp only [Nat.add_mul] at scaled
+    rw [← weights]
+    simp only [Nat.mul_add, Nat.add_mul]
+    omega
+  · have := z1 none
+    have := z2 none
+    have := z3 none
+    omega
+
+/-- Quotients of the reward bound: the rewards of a pass are at most a rate for each increment. -/
+private theorem reward_sum_le (S A K Ke P : ℕ)
+    (bound : S * (A * 64) ≤ K * 54 * (P * A)) (none : A = 0 → S = 0) (small : K ≤ Ke) :
+    S ≤ Ke * P * 54 / 64 := by
+  by_cases zero : A = 0
+  · rw [none zero]
+    exact Nat.zero_le _
+  have positive : 0 < A := Nat.pos_of_ne_zero zero
+  have times : S * 64 * A ≤ K * 54 * P * A := by
+    calc S * 64 * A = S * (A * 64) := by ring
+      _ ≤ K * 54 * (P * A) := bound
+      _ = K * 54 * P * A := by ring
+  have cancelled : S * 64 ≤ K * 54 * P := Nat.le_of_mul_le_mul_right times positive
+  rw [Nat.le_div_iff_mul_le (by decide : 0 < 64)]
+  calc S * 64 ≤ K * 54 * P := cancelled
+    _ ≤ Ke * 54 * P := Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ small)
+    _ = Ke * P * 54 := by ring
+
+open DirectSafety.Apriori.Internal in
+/-- One key's rewards credit in a step is at most a rate for each epoch that the step ends.
+
+The step is a slot, and it ends an epoch exactly when it runs the epoch's pass.
+
+The key's stake at the start is at most `E`.
+
+`P` bounds the rate read at the active stake, scaled by the previous epoch's share of it. -/
+private theorem epochRewards_le {m n : ForkedBeaconState preset}
+    (step : Step config checks m n) (altair : .altair ≤ m.fork) (early : n.fork < .glamsterdam)
+    (v : ℕ) (inside : v < m.state.validators.data.size) (E P : ℕ)
+    (envelope : effectiveAt m v ≤ E)
+    (rate : ∀ total perIncrement : Gwei, getTotalActiveBalance m.state = .ok total →
+      getBaseRewardPerIncrement preset total = .ok perIncrement →
+      perIncrement.toNat *
+          ((∑ i ∈ (getActiveValidatorIndices m.state (getPreviousEpoch m.state)).toFinset,
+            effectiveAt m i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+        P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :
+    epochRewards v step ≤ ((getCurrentEpoch n.state).toNat - (getCurrentEpoch m.state).toNat) *
+      (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
+        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) := by
+  cases step with
+  | block engine signed due ok => simp [epochRewards]
+  | slot ok =>
+    have mEarly : m.fork < .glamsterdam :=
+      Nat.lt_of_le_of_lt (Step.slot ok).chainStep.fork_le early
+    simp only [epochRewards]
+    cases hev : (Step.slot (config := config) (checks := checks) ok).balanceEvents with
+    | error err => simp [Except.toOption]
+    | ok events =>
+      simp only [Except.toOption, Option.getD_some]
+      rw [sum_filter_rewards]
+      obtain ⟨advanced, cached, crossings, -, upgrades, cachedOk, crossingOk, kind⟩ :=
+        Step.balanceEvents_slot ok early hev
+      have crossed := upgradeBalanceReplay_crossing crossingOk
+      have crossingsQuiet : (crossings.map (rewardCredit v)).sum = 0 :=
+        List.sum_eq_zero fun x member => by
+          obtain ⟨e, mem, rfl⟩ := List.mem_map.mp member
+          simp [rewardCredit, crossed e mem]
+      rcases kind with ⟨-, eventsEq⟩ |
+        ⟨middle, updated, recorded, recordOk, -, -, -, eventsEq, next, nextEq, advSlot, last, -⟩
+      · subst eventsEq
+        rw [crossingsQuiet]
+        exact Nat.zero_le _
+      subst eventsEq
+      obtain ⟨just, pass, rewarded, later, justified, scored, rewardedOk, recordedEq,
+        laterSources, -⟩ := epochReplay_events altair (epochBalanceReplay_trace recordOk)
+      simp only at recordedEq
+      subst recordedEq
+      have laterQuiet : (later.map (rewardCredit v)).sum = 0 :=
+        List.sum_eq_zero fun x member => by
+          obtain ⟨e, mem, rfl⟩ := List.mem_map.mp member
+          rcases laterSources e mem with s | s | s <;> simp [rewardCredit, s]
+      simp only [List.map_append, List.sum_append, laterQuiet, crossingsQuiet, Nat.add_zero]
+      -- The slot ends one epoch.
+      have nSlot : n.state.slot = next := (processUpgrades_slot upgrades).trans advSlot
+      have epochs : (getCurrentEpoch n.state).toNat - (getCurrentEpoch m.state).toNat = 1 := by
+        have boundary := nextSlot_epoch_of_boundary nextEq last
+        rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, nSlot, boundary]
+        exact Nat.add_sub_cancel_left _ _
+      rw [epochs, Nat.one_mul]
+      -- The pass reads the registry and the epoch of the start.
+      obtain ⟨-, effectiveEq, -, validatorsEq, slotEq⟩ :=
+        pass_kept_of_effective (config := config) (checks := checks)
+          (inner := (Run.nil : Run config checks m m)) (effectiveKept_refl m.state) rfl
+          cachedOk justified scored
+      have within : pass.RegistryWithinLimit := pass.validators.bound mEarly
+      have insidePass : v < pass.validators.data.size := by
+        rw [validatorsEq]
+        exact inside
+      have balanceAtEq (i : ℕ) : balanceAt pass i = effectiveAt m i := by
+        simp [balanceAt, effectiveAt, validatorsEq]
+      have totalEq : getTotalActiveBalance pass = getTotalActiveBalance m.state := by
+        simp only [getTotalActiveBalance, getActiveValidatorIndicesChecked, getCurrentEpoch,
+          slotEq, validatorsEq, getTotalBalance]
+        rfl
+      have prevEpoch : getPreviousEpoch pass = getPreviousEpoch m.state := by
+        simp only [getPreviousEpoch, getCurrentEpoch, slotEq]
+      have prevEq : getActiveValidatorIndices pass (getPreviousEpoch pass) =
+          getActiveValidatorIndices m.state (getPreviousEpoch m.state) := by
+        rw [prevEpoch]
+        simp only [getActiveValidatorIndices, validatorsEq]
+      have ratePass : ∀ total perIncrement : Gwei, getTotalActiveBalance pass = .ok total →
+          getBaseRewardPerIncrement preset total = .ok perIncrement →
+          perIncrement.toNat *
+              ((∑ i ∈ (getActiveValidatorIndices pass (getPreviousEpoch pass)).toFinset,
+                balanceAt pass i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+            P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+        intro total perIncrement totalOk perOk
+        have sums : (∑ i ∈ (getActiveValidatorIndices m.state (getPreviousEpoch m.state)).toFinset,
+            balanceAt pass i.toNat) =
+            ∑ i ∈ (getActiveValidatorIndices m.state (getPreviousEpoch m.state)).toFinset,
+              effectiveAt m i.toNat :=
+          Finset.sum_congr rfl fun i _ => balanceAtEq i.toNat
+        rw [prevEq, sums]
+        exact rate total perIncrement (totalEq.symm.trans totalOk) perOk
+      have bound := replayRewards_credit_le altair within rewardedOk P v insidePass ratePass
+      have small : balanceAt pass v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+          E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+        Nat.div_le_div_right (by rw [balanceAtEq]; exact envelope)
+      have flagSum : (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum = 54 := rfl
+      have wd : WEIGHT_DENOMINATOR.toNat = 64 := by decide
+      rw [flagSum, wd]
+      rcases bound with zero | ⟨total, -, scaled, none⟩
+      · rw [zero]
+        exact Nat.zero_le _
+      · exact reward_sum_le _ _ _ _ P scaled none small
+
+/-- If `X * S * b + K * a * b ≤ K * a * X`, then the floors `q` and `P` of `X` over `a` and `b`
+satisfy `q * S ≤ P * K`. -/
+private theorem rate_final {X a b q P K S : ℕ} (hq : q * a ≤ X) (hP : X < (P + 1) * b)
+    (ha : 0 < a) (hK : 0 < K)
+    (key : X * S * b + K * a * b ≤ K * a * X) : q * S ≤ P * K := by
+  have hb : 0 < b := by
+    rcases Nat.eq_zero_or_pos b with h | h
+    · simp [h] at hP
+    · exact h
+  have h1 : q * S * (a * b) ≤ X * S * b := by
+    calc q * S * (a * b) = (q * a) * (S * b) := by ring
+      _ ≤ X * (S * b) := Nat.mul_le_mul_right _ hq
+      _ = X * S * b := by ring
+  have h2 : K * a * X < K * a * ((P + 1) * b) := by
+    rw [Nat.mul_lt_mul_left (Nat.mul_pos hK ha)]
+    exact hP
+  have h3 : q * S * (a * b) < P * K * (a * b) := by nlinarith [h1, h2, key]
+  exact Nat.le_of_lt (Nat.lt_of_mul_lt_mul_right h3)
+
+/-- Below eighteen increments of the pulled total, a fifth of an increment gives the pin's rate. -/
+private theorem rate_small_key {X I a b K S M : ℕ} (hI : 10 ^ 8 ≤ I) (hIX : I ≤ X)
+    (hM1 : K * I ≤ M) (hM : I ≤ M) (ha' : M < (a + 1) * (a + 1))
+    (hb : b * b ≤ I / 5) (hb' : I / 5 < (b + 1) * (b + 1)) (hK : 1 ≤ K)
+    (hS : 2 * S ≤ 3 * K + 2) :
+    X * S * b + K * a * b ≤ K * a * X := by
+  have hS2 : S ≤ 2 * K := by omega
+  have hb5 : 5 * (b * b) ≤ I := by omega
+  have hb4472 : 4472 ≤ b := by
+    by_contra h
+    have : b + 1 ≤ 4472 := by omega
+    have : (b + 1) * (b + 1) ≤ 4472 * 4472 := Nat.mul_le_mul this this
+    omega
+  have ha1e4 : 10 ^ 4 ≤ a := by
+    by_contra h
+    have : a + 1 ≤ 10 ^ 4 := by omega
+    have : (a + 1) * (a + 1) ≤ 10 ^ 4 * 10 ^ 4 := Nat.mul_le_mul this this
+    omega
+  -- `a² > 4.999 K b²`
+  have shift : 10 ^ 4 * (a + 1) ≤ 10001 * a := by omega
+  have sq : 10 ^ 4 * (a + 1) * (10 ^ 4 * (a + 1)) ≤ 10001 * a * (10001 * a) :=
+    Nat.mul_le_mul shift shift
+  have kb : 5 * K * (b * b) ≤ M := by
+    have : K * (5 * (b * b)) ≤ K * I := Nat.mul_le_mul_left K hb5
+    nlinarith
+  have big : 500000000 * K * (b * b) < 100020001 * (a * a) := by nlinarith
+  have kb1 : b * b ≤ K * (b * b) := by nlinarith
+  have h40 : 40 * b ≤ 19 * a := by
+    by_contra h
+    have h' : 19 * a < 40 * b := by omega
+    have := Nat.mul_self_lt_mul_self h'
+    nlinarith
+  have h20 : 20 * S * b ≤ 19 * K * a := by
+    calc 20 * S * b ≤ 20 * (2 * K) * b := by
+          have := Nat.mul_le_mul_right b (Nat.mul_le_mul_left 20 hS2)
+          exact this
+      _ = K * (40 * b) := by ring
+      _ ≤ K * (19 * a) := Nat.mul_le_mul_left K h40
+      _ = 19 * K * a := by ring
+  have h20b : 20 * b ≤ X := by
+    have : 20 * b ≤ b * b := Nat.mul_le_mul_right b (by omega)
+    omega
+  have e1 : X * (20 * S * b) ≤ X * (19 * K * a) := Nat.mul_le_mul_left X h20
+  have e2 : K * a * (20 * b) ≤ K * a * X := Nat.mul_le_mul_left (K * a) h20b
+  nlinarith [e1, e2]
+
+/-- Three of the terms that the floors leave are small against `K * a * X`, for a large total. -/
+private theorem rate_big_common {X K a : ℕ} (hK : 12 ≤ K) (s2 : 1000 ≤ a) (hX : 2 ^ 35 ≤ X) :
+    1000 * (144 * K * X) ≤ 144 * (K * a * X) ∧ 12000 * (96 * X) ≤ 96 * (K * a * X) ∧
+      2 ^ 28 * (96 * K * a) ≤ K * a * X := by
+  have Ka : 12000 ≤ K * a := by nlinarith
+  refine ⟨?_, ?_, ?_⟩
+  · have := Nat.mul_le_mul_left (144 * K * X) s2
+    linarith
+  · have := Nat.mul_le_mul_left (96 * X) Ka
+    linarith
+  · have h96 : 2 ^ 28 * 96 ≤ X := by omega
+    have := Nat.mul_le_mul_left (K * a) h96
+    linarith
+
+/-- With at least `2 ^ 20` increments, the terms that the floors leave fit in `13 * K * a * X`. -/
+private theorem rate_big_large {X K a : ℕ} (hK : 2 ^ 20 ≤ K) (s2 : 1000 ≤ a) (hX : 2 ^ 35 ≤ X)
+    (s3' : 8 * a ≤ X) :
+    144 * K * X + 98 * a * X + 96 * X + 98 * K * a * a + 96 * K * a ≤ 13 * K * a * X := by
+  obtain ⟨f1, f2, f3⟩ := rate_big_common (K := K) (by omega) s2 hX
+  have f4 : 2 ^ 20 * (98 * a * X) ≤ 98 * (K * a * X) := by
+    have := Nat.mul_le_mul_right (98 * a * X) hK
+    linarith
+  have f5 : 8 * (98 * K * a * a) ≤ 98 * K * a * X := by
+    have := Nat.mul_le_mul_left (98 * K * a) s3'
+    linarith
+  have hu : 0 ≤ K * a * X := Nat.zero_le _
+  linarith
+
+/-- With fewer than `2 ^ 20` increments, the terms that the floors leave fit in `13 * K * a * X`. -/
+private theorem rate_big_small {X K a : ℕ} (hK : 12 ≤ K) (small : K + 1 ≤ 2 ^ 20) (s2 : 1000 ≤ a)
+    (hX : 2 ^ 35 ≤ X) (s4 : a * a < (K + 1) * X) :
+    144 * K * X + 98 * a * X + 96 * X + 98 * K * a * a + 96 * K * a ≤ 13 * K * a * X := by
+  obtain ⟨f1, f2, f3⟩ := rate_big_common hK s2 hX
+  have g4 : 12 * (98 * a * X) ≤ 98 * (K * a * X) := by
+    have := Nat.mul_le_mul_right (98 * a * X) hK
+    linarith
+  have g5 : 490 * a ≤ 3 * X := by
+    by_contra h
+    have h' : 3 * X < 490 * a := by omega
+    have h2 := Nat.mul_self_lt_mul_self h'
+    have h3 : a * a < 2 ^ 20 * X := by
+      have := Nat.mul_le_mul_right X small
+      nlinarith
+    have h4 : 9 * X * X < 240100 * 2 ^ 20 * X := by nlinarith
+    have h5 : 9 * X < 240100 * 2 ^ 20 := by
+      exact Nat.lt_of_mul_lt_mul_right h4
+    omega
+  have g6 : 490 * K * a * a ≤ 3 * K * a * X := by
+    have := Nat.mul_le_mul_left (K * a) g5
+    linarith
+  have hu : 0 ≤ K * a * X := Nat.zero_le _
+  linarith
+
+/-- From eighteen increments of the pulled total, a quarter of it gives the pin's rate. -/
+private theorem rate_big_key {X I a b K S M T : ℕ} (hX : 2 ^ 35 ≤ X) (hIX : I ≤ X) (hI : 10 ^ 8 ≤ I)
+    (hK : 12 ≤ K) (hM1 : K * I ≤ M) (hM2 : M < (K + 1) * I) (ha : a * a ≤ M)
+    (ha' : M < (a + 1) * (a + 1)) (hMhi : M < 2 ^ 64) (hb : 4 * (b * b) ≤ T)
+    (hT : 2 * T ≤ 3 * M) (hS : 2 * S ≤ 3 * K + 2) :
+    X * S * b + K * a * b ≤ K * a * X := by
+  have s1 : 80 * b ≤ 49 * a + 48 := by
+    by_contra h
+    have h1 : 49 * (a + 1) ≤ 80 * b := by omega
+    have h2 := Nat.mul_le_mul h1 h1
+    nlinarith
+  have s2 : 1000 ≤ a := by
+    by_contra h
+    have h1 : a + 1 ≤ 1000 := by omega
+    have h2 := Nat.mul_le_mul h1 h1
+    nlinarith
+  have s3 : a < 2 ^ 32 := by
+    by_contra h
+    have h1 : 2 ^ 32 ≤ a := by omega
+    have h2 := Nat.mul_le_mul h1 h1
+    nlinarith
+  have s3' : 8 * a ≤ X := by omega
+  have s4 : a * a < (K + 1) * X := by
+    have := Nat.mul_le_mul_left (K + 1) hIX
+    omega
+  have T2 : 144 * K * X + 98 * a * X + 96 * X + 98 * K * a * a + 96 * K * a ≤
+      13 * K * a * X := by
+    by_cases large : 2 ^ 20 ≤ K
+    · exact rate_big_large large s2 hX s3'
+    · exact rate_big_small hK (by omega) s2 hX s4
+  have e1 : (3 * K + 2) * X * (80 * b) ≤ (3 * K + 2) * X * (49 * a + 48) :=
+    Nat.mul_le_mul_left _ s1
+  have e2 : 2 * K * a * (80 * b) ≤ 2 * K * a * (49 * a + 48) := Nat.mul_le_mul_left _ s1
+  have e3 : 2 * S * (X * b) ≤ (3 * K + 2) * (X * b) := Nat.mul_le_mul_right _ hS
+  nlinarith [e1, e2, e3, T2]
+
+/-- The reward per increment at the total, times the previous stake's increments, is at most the
+pin's rate times the total's increments. -/
+private theorem rate_arith {I c M T S : ℕ} (scale : 2 ^ 35 ≤ I * c) (size : 10 ^ 8 ≤ I)
+    (factor : 1 ≤ c)
+    (clamp : I ≤ M) (high : M < 2 ^ 64) (band : 2 * T ≤ 3 * M) (stake : 2 * S ≤ 3 * M) :
+    I * c / Nat.sqrt M * (S / I) ≤
+      I * c / Nat.sqrt (if 18 * I ≤ T then T / 4 else I / 5) * (M / I) := by
+  have hI : 0 < I := by omega
+  have hIX : I ≤ I * c := Nat.le_mul_of_pos_right I factor
+  have hK1 : M / I * I ≤ M := Nat.div_mul_le_self M I
+  have hK2 : M < (M / I + 1) * I := by
+    have := Nat.lt_mul_div_succ M hI
+    rw [Nat.mul_comm] at this
+    exact this
+  have hK0 : 1 ≤ M / I := (Nat.le_div_iff_mul_le hI).mpr (by omega)
+  have hS : 2 * (S / I) ≤ 3 * (M / I) + 2 := by
+    have h1 : S / I * I ≤ S := Nat.div_mul_le_self S I
+    have h2 : 2 * (S / I) * I < 3 * (M / I + 1) * I := by nlinarith
+    have := Nat.lt_of_mul_lt_mul_right h2
+    omega
+  have ha := Nat.sqrt_le M
+  have ha' := Nat.lt_succ_sqrt M
+  have apos : 0 < Nat.sqrt M := Nat.sqrt_pos.mpr (by omega)
+  by_cases big : 18 * I ≤ T
+  · simp only [big, ↓reduceIte]
+    have bpos : 0 < Nat.sqrt (T / 4) := Nat.sqrt_pos.mpr (by omega)
+    have hb := Nat.sqrt_le (T / 4)
+    have hK12 : 12 ≤ M / I := (Nat.le_div_iff_mul_le hI).mpr (by omega)
+    refine rate_final (Nat.div_mul_le_self _ _) ?_ apos (by omega)
+      (rate_big_key (a := Nat.sqrt M) (b := Nat.sqrt (T / 4)) scale hIX size hK12 hK1 hK2 ha
+        ha' high (by omega) band hS)
+    exact (Nat.lt_mul_div_succ (I * c) bpos).trans_eq (Nat.mul_comm _ _)
+  · simp only [big, ↓reduceIte]
+    have bpos : 0 < Nat.sqrt (I / 5) := Nat.sqrt_pos.mpr (by omega)
+    have hb := Nat.sqrt_le (I / 5)
+    have hb' := Nat.lt_succ_sqrt (I / 5)
+    refine rate_final (Nat.div_mul_le_self _ _) ?_ apos (by omega)
+      (rate_small_key (a := Nat.sqrt M) (b := Nat.sqrt (I / 5)) size hIX hK1 clamp ha' hb hb'
+        hK0 hS)
+    exact (Nat.lt_mul_div_succ (I * c) bpos).trans_eq (Nat.mul_comm _ _)
+
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- From Electra and before Gloas, the previous epoch's active stake of a state reached from a
+guarded state in its window is within three halves of the total of another such state. -/
+private theorem prevStake_band_of_guard {g x y z : ForkedBeaconState preset} {high : ℕ}
+    (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : DirectSafety.Parameters preset) (caps : CapOrder preset)
+    (aligned : MaxEffectiveBalancesAligned preset) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
+    (electra : .pectra ≤ x.fork) (guard : aprioriGuardAt config x high)
+    (toY : Run config checks x y) (yEarly : y.fork < .glamsterdam)
+    (yWithin : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    (toZ : Run config checks x z) (zEarly : z.fork < .glamsterdam)
+    (zWithin : (getCurrentEpoch z.state).toNat ≤ high + 1) {yTotal : Gwei}
+    (yOk : getTotalActiveBalance y.state = .ok yTotal) :
+    2 * ∑ i ∈ (getActiveValidatorIndices z.state (getPreviousEpoch z.state)).toFinset,
+        effectiveAt z i.toNat ≤ 3 * yTotal.toNat := by
+  have notBefore : ¬ x.fork < .pectra := Nat.not_lt_of_ge electra
+  have zero : preElectraEpochs config x high = 0 := by
+    simp [preElectraEpochs, notBefore]
+  obtain ⟨-, -, -, -, -, -, -, -, -, -, -, -, ratioGuard, -⟩ := id guard
+  rw [zero] at ratioGuard
+  have ratio := ratioGuard (high + 1 - (getCurrentEpoch x.state).toNat) (Nat.zero_le _)
+    (by unfold driftHorizon; omega)
+  obtain ⟨yLow, -⟩ := total_within_guard shared genesis parameters caps aligned twoSlots electra
+    guard toY yEarly yWithin yOk
+  obtain ⟨-, previous, -⟩ := ceilingFloor_electra shared toZ high
+    ⟨genesis, parameters, caps, aligned, zEarly, zWithin, guard⟩ twoSlots electra
+  have index : ix x z ≤ high + 1 - (getCurrentEpoch x.state).toNat := by
+    simp only [ix]
+    omega
+  have mono := stakeCeilingAt_mono (config := config) (x := x) (high := high) electra index
+  simp only [stakeCeilingAt, stakeFloorAt, zero]
+    at yLow previous mono ⊢
+  omega
+
+/-- The reward per increment at a state of a run from the finalized state, times the previous
+epoch's active increments, is at most the pin's rate times the active increments. -/
+private theorem rate_of_guard (facts : PinPresetFacts preset)
+    (h : Setting config checks g split fin pulled anc counted V)
+    {m : BeaconState preset fork} (toM : Run config checks ⟨fork, fin⟩ ⟨fork, m⟩)
+    (inside : (getCurrentEpoch m).toNat ≤ (getCurrentEpoch pulled).toNat)
+    {pq : Gwei} (pqOk : getBaseRewardPerIncrement preset
+      (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+          ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
+        (getTotalActiveBalance pulled).toOption.getD 0 / 4
+      else preset.EFFECTIVE_BALANCE_INCREMENT / 5) = .ok pq) :
+    ∀ total perIncrement : Gwei, getTotalActiveBalance m = .ok total →
+      getBaseRewardPerIncrement preset total = .ok perIncrement →
+      perIncrement.toNat *
+          ((∑ i ∈ (getActiveValidatorIndices m (getPreviousEpoch m)).toFinset,
+            effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) i.toNat) /
+              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+        pq.toNat * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+  intro total perIncrement totalOk perOk
+  obtain ⟨T, pulledOk⟩ := h.pulledTotal
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have toP := fromFin.append toPulled
+  have band := total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
+    electra h.guard toM h.early (Nat.le_succ_of_le inside) toP h.early (Nat.le_succ _)
+    totalOk pulledOk
+  have stake := prevStake_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
+    electra h.guard toM h.early (Nat.le_succ_of_le inside) toM h.early (Nat.le_succ_of_le inside)
+    totalOk
+  have clamp : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ total.toNat := by
+    obtain ⟨-, -, value⟩ := getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok totalOk)
+    rw [value]
+    exact le_max_left _ _
+  have high : total.toNat < 2 ^ 64 := total.toNat_lt
+  rw [toNat_getBaseRewardPerIncrement perOk]
+  simp only [pulledOk, Except.toOption, Option.getD_some] at pqOk
+  rw [toNat_getBaseRewardPerIncrement pqOk]
+  have quarter : ((if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T / 4
+      else preset.EFFECTIVE_BALANCE_INCREMENT / 5 : Gwei)).toNat =
+      if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T.toNat / 4
+      else preset.EFFECTIVE_BALANCE_INCREMENT.toNat / 5 := by
+    split <;> simp [UInt64.toNat_div]
+  rw [quarter]
+  exact rate_arith facts.rewardScale facts.incrementSize facts.reward clamp high band stake
+
 /-- The per-key core of the rise.
 
 A key of R's registry rises from R to C by at most its rise term.
@@ -1081,12 +1701,46 @@ theorem bud_pendingR (h : Setting config checks g split fin pulled anc counted V
       (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤
         (pinTerms config pulled anc fin).pendingR := sorry
 
+/-- The keys that `exitingB` marks have their effective balances in `exiting`. -/
+private theorem sum_le_exiting (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) (S : Finset ValidatorIndex)
+    (member : ∀ v ∈ S, (pinTerms config state ancestor finalizedState).exitingB v.toNat = true) :
+    ∑ v ∈ S, balanceAt state v.toNat ≤ (pinTerms config state ancestor finalizedState).exiting := by
+  dsimp only [pinTerms]
+  refine sum_toNat_le (fun i => balanceAt state i) fun v hv => ?_
+  have mark := of_decide_eq_true (member v hv)
+  obtain ⟨w, found⟩ := validator_of_flag (state := state) (Or.inr mark.2.2)
+  exact mem_positions_filter config state ancestor finalizedState found mark
+
 /-- D-4: the keys whose exit R reads. -/
 theorem bud_exiting :
     (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
       (∑ v ∈ (K5 counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).exitingB v.toNat = true,
-        eR pulled v) ≤ (pinTerms config pulled anc fin).exiting := sorry
+        eR pulled v) ≤ (pinTerms config pulled anc fin).exiting := by
+  have apartVK5 : Disjoint (VN counted V) (K5 counted V) := by
+    rw [Finset.disjoint_left]
+    intro v inV inK5
+    simp only [VN, K5, Finset.mem_filter] at inV inK5
+    exact inK5.2.2 inV.1
+  have apartVK6 : Disjoint (VN counted V) (K6 pulled counted) := by
+    rw [Finset.disjoint_left]
+    intro v inV inK6
+    simp only [VN, K6, Finset.mem_filter] at inV inK6
+    exact inV.2 inK6.1
+  have apartK5K6 : Disjoint (K5 counted V) (K6 pulled counted) := by
+    rw [Finset.disjoint_left]
+    intro v inK5 inK6
+    simp only [K5, K6, Finset.mem_filter] at inK5 inK6
+    exact inK5.2.1 inK6.1
+  rw [← Finset.sum_union (Finset.disjoint_filter_filter apartVK5),
+    ← Finset.sum_union (Finset.disjoint_union_left.mpr
+      ⟨Finset.disjoint_filter_filter apartVK6, Finset.disjoint_filter_filter apartK5K6⟩)]
+  exact sum_le_exiting config pulled anc fin _ fun v member => by
+    rcases Finset.mem_union.mp member with member | member
+    · rcases Finset.mem_union.mp member with member | member <;>
+        exact (Finset.mem_filter.mp member).2
+    · exact (Finset.mem_filter.mp member).2
 
 /-- Late activations, weight 3 for V keys and for new keys. -/
 theorem bud_late (h : Setting config checks g split fin pulled anc counted V) :
@@ -1285,11 +1939,17 @@ theorem bud_fall (h : Setting config checks g split fin pulled anc counted V) :
 
 /-- Glue: (K4 pulled counted V) keys are current at R. -/
 theorem bud_rise (h : Setting config checks g split fin pulled anc counted V) :
-    (∑ v ∈ (K4 pulled counted V), (pinTerms config pulled anc fin).rise v.toNat) ≤ ∑ i ∈ (pinTerms config pulled anc fin).positions with (pinTerms config pulled anc fin).current i = true, (pinTerms config pulled anc fin).rise i :=
-  sorry
+    (∑ v ∈ (K4 pulled counted V), (pinTerms config pulled anc fin).rise v.toNat) ≤ ∑ i ∈ (pinTerms config pulled anc fin).positions with (pinTerms config pulled anc fin).current i = true, (pinTerms config pulled anc fin).rise i := by
+  refine sum_toNat_le (fun i => (pinTerms config pulled anc fin).rise i) fun v hv => ?_
+  simp only [K4, Finset.mem_filter] at hv
+  obtain ⟨w, found, active⟩ := active_of_activeVoters h.early (s := pulled) hv.2.1
+  exact mem_positions_filter config pulled anc fin found
+    (isActiveAt_eq_true_iff.mpr ⟨w, found, active⟩)
 
 /-- `quorumReserve` holds `joining` (its gain term). -/
-theorem bud_joining : (pinTerms config pulled anc fin).joining ≤ (pinTerms config pulled anc fin).quorum := sorry
+theorem bud_joining : (pinTerms config pulled anc fin).joining ≤ (pinTerms config pulled anc fin).quorum := by
+  dsimp only [pinTerms, quorumReserve]
+  exact (show ∀ a b c : ℕ, a ≤ 2 * (a + b) + 3 * c by intros; omega) _ _ _
 
 end Stubs
 

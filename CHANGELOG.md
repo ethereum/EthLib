@@ -90,6 +90,10 @@ Not yet released.
   The bound is the epoch of the start, plus one epoch and the seed lookahead.
   `DirectSafety.departureCharges_run_indices` shows that the departure charges of a run name each registry index at most once.
   The pin's drift bound reads it for its exit-queue terms.
+  `DirectSafety.Apriori.Internal.replayRewards_passes` gives the four passes of deltas that the rewards replay runs from Altair, after the first epoch.
+  `DirectSafety.Apriori.Internal.replayDeltas_flows` bounds what one pass of deltas debits and credits at one position.
+  `DirectSafety.Apriori.Internal.rewardCredit` is the credit of one reward event at a position, the sibling of `penaltyDebit`.
+  The pin's per-key epoch reward bound reads all three.
 
 - `queueConsolidation_steps` states the steps of queueing a consolidation once ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
   The churn call writes only the churn left and the earliest consolidation epoch.
