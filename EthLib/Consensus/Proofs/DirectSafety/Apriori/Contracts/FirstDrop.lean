@@ -351,24 +351,8 @@ private theorem effectiveAt_le_withdrawalMax (shared : Run config checks g x)
     (Array.mem_of_getElem? initial)
   simpa [effectiveAt, initial] using UInt64.le_iff_toNat_le.mp cap
 
-/-- The per-key accounting trace of a branch, from a floor.
-
-The floor is at most the key's largest effective balance at the start.
-
-A sweep or a switch to compounding leaves at least that much, and the largest only grows.
-
-Each step extends the trace, keeping the carried account.
-
-The trace is marked slashed only if the key ends the branch slashed.
-
-The key is unslashed at the start.
-
-Or it is slashed at the start, and its delayed penalty is not due along the branch.
-
-The high-water mark of the trace stays within any bound on the effective balance of the branch.
-
-A key with no activation epoch is allowed if the branch starts from Fulu or later. -/
-theorem FloorTrace.run_of_le_cap_general_or_fulu
+/-- The per-key floor trace of a branch, for an activated key or a branch from Fulu. -/
+private theorem FloorTrace.run_of_le_cap_general_or_fulu
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
@@ -576,17 +560,7 @@ theorem FloorTrace.run_of_le_cap_general
   FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
     initial (Or.inl activated) low base quotient low_le positive guards replayed
 
-/-- The per-key accounting trace of a branch, from a floor.
-
-The floor is at most the key's largest effective balance at the start.
-
-A sweep or a switch to compounding leaves at least that much, and the largest only grows.
-
-Each step extends the trace, keeping the carried account.
-
-The trace is marked slashed only if the key ends the branch slashed.
-
-A key with no activation epoch is allowed if the branch starts from Fulu or later. -/
+/-- The per-key floor trace of a branch from a floor, for an activated key or a branch from Fulu. -/
 theorem FloorTrace.run_of_le_cap_or_fulu
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)

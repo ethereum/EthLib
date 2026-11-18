@@ -23,9 +23,8 @@ Not yet released.
   `effectiveRise_le` bounds the rise of the active effective balances over an epoch end, and `effectiveFall_le` the fall of a voter's.
   `Run.balanceCorrections_of_same_epoch` bounds the balances along a branch inside one epoch.
 
-- `FloorTrace.step_general_or_fulu`, `FloorTrace.run_of_le_cap_general_or_fulu` and `FloorTrace.run_of_le_cap_or_fulu` extend the per-key floor trace to a key with no activation epoch.
-  They need the branch to start from Fulu or later, where the upgrades leave the state as it is.
-  Their old forms stay as the cases of an activated key.
+- `FloorTrace.step_general_or_fulu` and `FloorTrace.run_of_le_cap_or_fulu` extend the per-key floor trace to a key with no activation epoch, from Fulu.
+  `FloorTrace.step_general`, `FloorTrace.run_of_le_cap_general` and `FloorTrace.run_of_le_cap` are the activated cases.
   `processUpgrades_eq_of_window` states that the upgrades from Fulu up to before Gloas leave the state as it is.
   The pin's drift bound reads them for keys that are not yet active.
 
