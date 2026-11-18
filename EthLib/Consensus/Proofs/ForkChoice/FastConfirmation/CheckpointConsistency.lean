@@ -108,7 +108,7 @@ It accepted the current-target test.
 
 Honest heads descend from the origin from that call up to `coveredUntil`.
 
-No theorem derives that coverage: a caller supplies it. -/
+The checked-call headlines take that coverage from the caller; a run of calls derives it. -/
 def TargetChecked (margin : ℕ) (anchorRoot : Root) (u : ValidatorIndex) (n : ℕ)
     (epoch : Epoch) (root : Root) (coveredUntil : ℕ) : Prop :=
   ∃ k ≤ n, ∃ origin,

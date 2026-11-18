@@ -3207,9 +3207,10 @@ Those are the committees of the epoch so far.
 It also assumes that the honest validators of the slots still to come hold the share that the rule counts for them.
 They hold a third of the margin on top of it.
 The rule checks none of these; they are assumptions on the run.
-The theorem takes an anchored store, a positive slot duration and a fork before Gloas.
+The theorem takes an anchored store from an anchor state with `Invariant`, a positive slot duration and a fork before Gloas.
 It takes two seed lookaheads of at least one epoch, and a ring of mixes longer than the minimum lookahead plus one.
-It takes an increment that is a whole number of 100 Gwei.
+It takes an increment that is a whole number of 100 Gwei, and `MaxEffectiveBalancesAligned`.
+From the second it derives the aligned balances of the head's pulled-up state.
 Take a head whose block is before the start of the current epoch and at least two epochs before it.
 The rule reads the committees of the current epoch from a state that has not processed the epochs in between.
 For such a head the theorem assumes `StaleHeadVotersInWindow`: a voter for the head's own current target is among those committees.
@@ -3279,7 +3280,8 @@ Off the epoch's first slot the call's count is reserved.
 At the epoch's first slot, the root is of an earlier epoch, and the call's epoch is at least two and after the anchor's.
 The rule does not check the reserved count, the first-slot condition or the epoch bounds; they are assumptions on the run.
 Its record of an earlier call's target check, `TargetChecked`, includes coverage of honest heads by that call's origin.
-No theorem derives that coverage, nor `startCovers`, the coverage by the start of the call's walk up to `time`.
+These theorems take that coverage and `startCovers`, the coverage by the start of the call's walk up to `time`, as premises.
+`Execution.confirmedRoot_covers` derives both for each call of a run, through its private call invariant.
 `AcceptedRealizedRecent` and `AcceptedRealizedHead` restrict the runs in scope; the rule does not check them.
 Each accepted root has a realized justification at most one epoch before its own.
 An accepted root of an earlier epoch is realized as justified by the head's state.
