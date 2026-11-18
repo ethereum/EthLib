@@ -584,21 +584,10 @@ private theorem fixed_applyDeposit {pubkey : Cryptography.Bls.BLSPubkey}
     (computed : applyDeposit config checks state pubkey withdrawalCredentials amount signature =
       .ok after) :
     BlockFixed state after := by
-  unfold applyDeposit at computed
-  split at computed
-  · unfold applyDepositElectra at computed
-    split at computed
-    · simp only [bind_ok_iff] at computed
-      obtain ⟨_, _, computed⟩ := computed
-      split at computed
-      · simp only [bind_ok_iff, liftAccessor_ok] at computed
-        obtain ⟨_, added, pushed⟩ := computed
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-        exact (fixed_addValidatorToRegistry added).trans BlockFixed.of_eq
-      · cases computed
-        exact BlockFixed.refl _
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
-      exact BlockFixed.of_eq
+  rcases applyDeposit_cases computed with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, computed⟩
+  · exact BlockFixed.refl _
+  · exact BlockFixed.of_eq
+  · exact (fixed_addValidatorToRegistry added).trans BlockFixed.of_eq
   · rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨_, added⟩
     · exact BlockFixed.refl _
     · exact fixed_increaseBalance raised
@@ -908,21 +897,10 @@ theorem down_processDeposit {before : fork < .hegota} {deposit : Deposit} {index
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
   refine (BalanceDown.of_balances
     (after := { state with eth1DepositIndex := fun _ => next }) rfl).trans ?_
-  unfold applyDeposit at applied
-  split at applied
-  · unfold applyDepositElectra at applied
-    split at applied
-    · simp only [bind_ok_iff] at applied
-      obtain ⟨_, _, applied⟩ := applied
-      split at applied
-      · simp only [bind_ok_iff, liftAccessor_ok] at applied
-        obtain ⟨_, added, pushed⟩ := applied
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-        exact (down_addValidatorToRegistry added inside).trans (BalanceDown.of_balances rfl)
-      · cases applied
-        exact BalanceDown.refl _ _
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp applied)
-      exact BalanceDown.of_balances rfl
+  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, applied⟩
+  · exact BalanceDown.refl _ _
+  · exact BalanceDown.of_balances rfl
+  · exact (down_addValidatorToRegistry added inside).trans (BalanceDown.of_balances rfl)
   · exact down_applyPendingDeposit applied found other
 
 /-- A deposit of a block to another key keeps a balance from rising. -/

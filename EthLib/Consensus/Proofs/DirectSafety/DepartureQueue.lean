@@ -939,19 +939,11 @@ private theorem applyDeposit_departureQueues {fork : Fork} {s t : BeaconState pr
     {credentials : Bytes32} {amount : Gwei} {signature : Cryptography.Bls.BLSSignature}
     (ok : applyDeposit config checks s key credentials amount signature = .ok t) :
     departureQueues electra t = departureQueues electra s := by
-  simp only [applyDeposit, electra, ↓reduceDIte] at ok
-  unfold applyDepositElectra at ok
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨middle, added, queued⟩ := ok
-      obtain ⟨_, rfl⟩ := addPendingDeposit_eq queued
-      exact (addValidator_departureQueues electra added :)
-    · cases ok; rfl
-  · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
-    rfl
+  rcases applyDeposit_cases ok with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨early, _⟩
+  · rfl
+  · rfl
+  · exact (addValidator_departureQueues electra added :)
+  · exact absurd electra (Nat.not_le_of_lt early)
 
 /-- Block deposits preserve departure capacity even when they append a validator. -/
 private theorem deposit_departureQueues {fork : Fork} {s t : BeaconState preset fork}
@@ -970,20 +962,12 @@ private theorem deposit_coverage {fork : Fork} {s t : BeaconState preset fork}
   have applyCoverage {a b : BeaconState preset fork} {key credentials amount signature}
       (applied : applyDeposit config checks a key credentials amount signature = .ok b) :
       DepartureCoverage (config := config) a b [] := by
-    simp only [applyDeposit, electra, ↓reduceDIte] at applied
-    unfold applyDepositElectra at applied
-    split at applied
-    · simp only [bind_ok_iff] at applied
-      obtain ⟨_, _, applied⟩ := applied
-      split at applied
-      · simp only [bind_ok_iff, liftAccessor_ok] at applied
-        obtain ⟨added, admitted, queued⟩ := applied
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq queued
-        apply DepartureCoverage.of_append
-        simpa only [Array.push_eq_append] using addValidatorToRegistry_validators_eq_push admitted
-      · cases applied; exact DepartureCoverage.of_data rfl
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp applied)
-      exact DepartureCoverage.of_data rfl
+    rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | admitted, rfl⟩ | ⟨early, _⟩
+    · exact DepartureCoverage.of_data rfl
+    · exact DepartureCoverage.of_data rfl
+    · apply DepartureCoverage.of_append
+      simpa only [Array.push_eq_append] using addValidatorToRegistry_validators_eq_push admitted
+    · exact absurd electra (Nat.not_le_of_lt early)
   exact (applyCoverage credited :)
 
 /-- Execution deposit requests append pending deposits without changing departure capacity. -/
@@ -1047,41 +1031,11 @@ private theorem passPendingDeposits_departureQueues {fork : Fork}
     ∀ {deposits : List PendingDeposit} {s : BeaconState preset fork} {processed : Gwei}
       {count : Nat} {postponed : Array PendingDeposit} {pass},
       passPendingDeposits config checks stop nextEpoch available s processed count postponed
-        deposits = .ok pass → departureQueues electra pass.1.state = departureQueues electra s
-  | [], _, _, _, _, _, ok => by cases ok; rfl
-  | deposit :: rest, s, processed, count, postponed, pass, ok => by
-    unfold passPendingDeposits at ok
-    simp only [bind, Except.bind, pure, Except.pure] at ok
-    split at ok
-    · cases ok; rfl
-    split at ok
-    · cases ok
-    split at ok
-    · split at ok
-      · cases ok
-      rename_i credited
-      split at ok
-      · cases ok
-      cases ok
-      exact (passPendingDeposits_departureQueues electra (deposits := rest) ‹_›).trans
-        (pendingDeposit_departureQueues electra credited)
-    split at ok
-    · split at ok
-      · cases ok
-      cases ok
-      exact passPendingDeposits_departureQueues electra (deposits := rest) ‹_›
-    split at ok
-    · cases ok
-    split at ok
-    · cases ok; rfl
-    split at ok
-    · cases ok
-    rename_i credited
-    split at ok
-    · cases ok
-    cases ok
-    exact (passPendingDeposits_departureQueues electra (deposits := rest) ‹_›).trans
-      (pendingDeposit_departureQueues electra credited)
+        deposits = .ok pass → departureQueues electra pass.1.state = departureQueues electra s :=
+  fun ok =>
+    passPendingDeposits_of (fun s t => departureQueues electra t = departureQueues electra s)
+      (fun _ => rfl) (fun one two => two.trans one)
+      (fun credited => pendingDeposit_departureQueues electra credited) ok
 
 /-- Crediting pending deposits preserves both departure queues. -/
 private theorem pendingDeposits_departureQueues {fork : Fork} {s t : BeaconState preset fork}
@@ -1318,46 +1272,14 @@ private theorem pendingDeposits_coverage {fork : Fork} {s t : BeaconState preset
         {count : Nat} {postponed : Array PendingDeposit} {result},
         passPendingDeposits config checks stop nextEpoch available state processed count
           postponed deposits = .ok result →
-            DepartureCoverage (config := config) state result.1.state [] := by
-    intro deposits
-    induction deposits with
-    | nil => intro state processed count postponed result ok; cases ok; exact .of_data rfl
-    | cons deposit rest ih =>
-      intro state processed count postponed result ok
-      unfold passPendingDeposits at ok
-      simp only [bind, Except.bind, pure, Except.pure] at ok
-      split at ok
-      · cases ok; exact .of_data rfl
-      split at ok
-      · cases ok
-      split at ok
-      · split at ok
-        · cases ok
-        rename_i credited
-        split at ok
-        · cases ok
-        cases ok
-        exact (pendingDeposit_coverage credited).suffix_of_empty (ih ‹_›)
-          (registryLifecycle_applyPendingDeposit credited)
-          (registryLifecycle_passPendingDeposits (deposits := rest) ‹_›)
-      split at ok
-      · split at ok
-        · cases ok
-        cases ok
-        exact ih ‹_›
-      split at ok
-      · cases ok
-      split at ok
-      · cases ok; exact .of_data rfl
-      split at ok
-      · cases ok
-      rename_i credited
-      split at ok
-      · cases ok
-      cases ok
-      exact (pendingDeposit_coverage credited).suffix_of_empty (ih ‹_›)
-        (registryLifecycle_applyPendingDeposit credited)
-        (registryLifecycle_passPendingDeposits (deposits := rest) ‹_›)
+            DepartureCoverage (config := config) state result.1.state [] := fun ok =>
+    -- The lifecycle of the registry carries the empty coverage across each deposit.
+    (passPendingDeposits_of
+      (fun s t => DepartureCoverage (config := config) s t [] ∧ RegistryLifecycle s t)
+      (fun _ => ⟨.of_data rfl, .refl _⟩)
+      (fun one two => ⟨one.1.suffix_of_empty two.1 one.2 two.2, one.2.trans two.2⟩)
+      (fun credited => ⟨pendingDeposit_coverage credited,
+        registryLifecycle_applyPendingDeposit credited⟩) ok).1
   unfold processPendingDeposits at ok
   simp only [bind, Except.bind, pure, Except.pure] at ok
   repeat' (split at ok <;> try cases ok)

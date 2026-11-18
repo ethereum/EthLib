@@ -103,22 +103,12 @@ private theorem stays_processDeposit_of_electra (electra : .pectra ≤ fork)
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
   refine (BalanceStays.of_balances
     (after := { state with eth1DepositIndex := fun _ => next }) rfl).trans ?_
-  unfold applyDeposit at applied
-  simp only [electra, ↓reduceDIte] at applied
-  unfold applyDepositElectra at applied
-  split at applied
-  · simp only [bind_ok_iff] at applied
-    obtain ⟨_, _, applied⟩ := applied
-    split at applied
-    · simp only [bind_ok_iff, liftAccessor_ok] at applied
-      obtain ⟨_, added, pushed⟩ := applied
-      obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-      exact BalanceStays.trans (fun _ found => addValidatorToRegistry_balance added inside found)
-        (BalanceStays.of_balances rfl)
-    · cases applied
-      exact BalanceStays.refl _ _
-  · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp applied)
-    exact BalanceStays.of_balances rfl
+  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨early, _⟩
+  · exact BalanceStays.refl _ _
+  · exact BalanceStays.of_balances rfl
+  · exact BalanceStays.trans (fun _ found => addValidatorToRegistry_balance added inside found)
+      (BalanceStays.of_balances rfl)
+  · exact absurd electra (Nat.not_le_of_lt early)
 
 /-- A partial withdrawal request keeps the balances. -/
 private theorem stays_requestPartialWithdrawal {electra : .pectra ≤ fork}

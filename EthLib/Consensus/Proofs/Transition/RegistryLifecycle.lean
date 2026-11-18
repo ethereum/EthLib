@@ -531,21 +531,10 @@ private theorem registryLifecycle_applyDeposit {pubkey : BLSPubkey}
     (computed :
       applyDeposit config checks state pubkey withdrawalCredentials amount signature = .ok after) :
     RegistryLifecycle state after := by
-  unfold applyDeposit at computed
-  split at computed
-  · unfold applyDepositElectra at computed
-    split at computed
-    · simp only [bind_ok_iff] at computed
-      obtain ⟨_, _, computed⟩ := computed
-      split at computed
-      · simp only [bind_ok_iff, liftAccessor_ok] at computed
-        obtain ⟨_, added, pushed⟩ := computed
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-        exact (registryLifecycle_addValidatorToRegistry added).trans (.of_data rfl)
-      · cases computed
-        exact .refl _
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
-      exact .of_data rfl
+  rcases applyDeposit_cases computed with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, computed⟩
+  · exact .refl _
+  · exact .of_data rfl
+  · exact (registryLifecycle_addValidatorToRegistry added).trans (.of_data rfl)
   · exact registryLifecycle_applyPendingDeposit computed
 
 theorem registryLifecycle_processDeposit {before : fork < .hegota} {deposit : Deposit}

@@ -286,21 +286,11 @@ private theorem effectiveKept_applyDeposit {f : Fork} {s t : BeaconState preset 
     {signature : Cryptography.Bls.BLSSignature}
     (ok : applyDeposit config checks s key credentials amount signature = .ok t) :
     EffectiveKept s t := by
-  unfold applyDeposit at ok
-  split at ok
-  · unfold applyDepositElectra at ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨middle, added, queued⟩ := ok
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq queued
-        exact effectiveKept_trans (effectiveKept_add added) (effectiveKept_data rfl)
-          (by rw [addValidatorToRegistry_validators_eq_push added]; simp)
-      · cases ok; exact effectiveKept_refl _
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
-      exact effectiveKept_refl _
+  rcases applyDeposit_cases ok with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, ok⟩
+  · exact effectiveKept_refl _
+  · exact effectiveKept_refl _
+  · exact effectiveKept_trans (effectiveKept_add added) (effectiveKept_data rfl)
+      (by rw [addValidatorToRegistry_validators_eq_push added]; simp)
   · exact effectiveKept_deposit ok
 
 theorem effectiveKept_processDeposit {f : Fork} {s t : BeaconState preset f}
@@ -609,44 +599,14 @@ private theorem effectiveKept_pendingDeposits {f : Fork} {s t : BeaconState pres
       ∀ {deposits : List PendingDeposit} {state : BeaconState preset f} {processed : Gwei}
         {count : Nat} {postponed : Array PendingDeposit} {result},
         passPendingDeposits config checks stop nextEpoch available state processed count
-          postponed deposits = .ok result → EffectiveKept state result.1.state := by
-    intro deposits
-    induction deposits with
-    | nil => intro state processed count postponed result ok; cases ok; exact effectiveKept_refl _
-    | cons deposit rest ih =>
-      intro state processed count postponed result ok
-      unfold passPendingDeposits at ok
-      simp only [bind, Except.bind, pure, Except.pure] at ok
-      split at ok
-      · cases ok; exact effectiveKept_refl _
-      split at ok
-      · cases ok
-      split at ok
-      · split at ok
-        · cases ok
-        rename_i credited
-        split at ok
-        · cases ok
-        cases ok
-        exact effectiveKept_trans (effectiveKept_deposit credited) (ih ‹_›)
-          (registryLifecycle_applyPendingDeposit credited).size_le
-      split at ok
-      · split at ok
-        · cases ok
-        cases ok
-        exact ih ‹_›
-      split at ok
-      · cases ok
-      split at ok
-      · cases ok; exact effectiveKept_refl _
-      split at ok
-      · cases ok
-      rename_i credited
-      split at ok
-      · cases ok
-      cases ok
-      exact effectiveKept_trans (effectiveKept_deposit credited) (ih ‹_›)
-        (registryLifecycle_applyPendingDeposit credited).size_le
+          postponed deposits = .ok result → EffectiveKept state result.1.state := fun ok =>
+    -- The registry only grows, which the transitivity of `EffectiveKept` needs.
+    (passPendingDeposits_of
+      (fun s t => EffectiveKept s t ∧ s.validators.data.size ≤ t.validators.data.size)
+      (fun _ => ⟨effectiveKept_refl _, Nat.le_refl _⟩)
+      (fun one two => ⟨effectiveKept_trans one.1 two.1 one.2, Nat.le_trans one.2 two.2⟩)
+      (fun credited => ⟨effectiveKept_deposit credited,
+        (registryLifecycle_applyPendingDeposit credited).size_le⟩) ok).1
   unfold processPendingDeposits at ok
   simp only [bind, Except.bind, pure, Except.pure] at ok
   repeat' (split at ok <;> try cases ok)
@@ -1758,44 +1718,16 @@ private theorem admissionFunded_pendingDeposits {f : Fork} {s t : BeaconState pr
         {count : Nat} {postponed : Array PendingDeposit} {result},
         passPendingDeposits config checks stop nextEpoch available state processed count
           postponed deposits = .ok result → AdmissionFunded n state → BalancesMatch state →
-          AdmissionFunded n result.1.state := by
-    intro deposits
-    induction deposits with
-    | nil => intro state processed count postponed result ok holds matched; cases ok; exact holds
-    | cons deposit rest ih =>
-      intro state processed count postponed result ok holds matched
-      unfold passPendingDeposits at ok
-      simp only [bind, Except.bind, pure, Except.pure] at ok
-      split at ok
-      · cases ok; exact holds
-      split at ok
-      · cases ok
-      split at ok
-      · split at ok
-        · cases ok
-        rename_i credited
-        split at ok
-        · cases ok
-        cases ok
-        exact ih ‹_› (admissionFunded_deposit holds matched credited)
-          ((frame_applyPendingDeposit credited).balancesMatch matched)
-      split at ok
-      · split at ok
-        · cases ok
-        cases ok
-        exact ih ‹_› holds matched
-      split at ok
-      · cases ok
-      split at ok
-      · cases ok; exact holds
-      split at ok
-      · cases ok
-      rename_i credited
-      split at ok
-      · cases ok
-      cases ok
-      exact ih ‹_› (admissionFunded_deposit holds matched credited)
-        ((frame_applyPendingDeposit credited).balancesMatch matched)
+          AdmissionFunded n result.1.state := fun ok =>
+    -- Each deposit keeps the balances matched, which the next deposit needs.
+    (passPendingDeposits_of
+      (fun s t => (AdmissionFunded n s → BalancesMatch s → AdmissionFunded n t) ∧
+        (BalancesMatch s → BalancesMatch t))
+      (fun _ => ⟨fun holds _ => holds, id⟩)
+      (fun one two => ⟨fun holds matched => two.1 (one.1 holds matched) (one.2 matched),
+        two.2 ∘ one.2⟩)
+      (fun credited => ⟨fun holds matched => admissionFunded_deposit holds matched credited,
+        (frame_applyPendingDeposit credited).balancesMatch⟩) ok).1
   unfold processPendingDeposits at ok
   simp only [bind, Except.bind, pure, Except.pure] at ok
   repeat' (split at ok <;> try cases ok)
