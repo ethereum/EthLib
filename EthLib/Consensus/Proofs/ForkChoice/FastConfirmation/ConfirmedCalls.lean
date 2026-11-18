@@ -1987,13 +1987,16 @@ private theorem carried_facts {Δ : ℕ} {anchor : Store preset fork} {limit : �
         obtain ⟨block, found, blockEpoch⟩ := found_of_blockEpoch oldRootOk
         have le := epoch_le_current (ctx.toCallsCtx.forward m) ctx.slots
           (UInt64.le_of_eq ctx.anchorSlot) oldSlotOk found
+        have zero : computeSlotsSinceEpochStart preset slot = .ok 0 := by
+          unfold isStartSlotAtEpoch at boundary
+          cases offset : computeSlotsSinceEpochStart preset slot with
+          | error fault => simp [offset, Except.mapError, bind, Except.bind] at boundary
+          | ok offset' =>
+            simp [offset, Except.mapError, bind, Except.bind, pure, Except.pure] at boundary
+            rw [boundary]
+        have lt := UInt64.lt_iff_toNat_lt.mp
+          (epoch_lt_of_offset_zero (old := oldSlot) (UInt64.lt_iff_toNat_lt.mpr (by omega)) zero)
         rw [blockEpoch, same] at le
-        rw [isStart_eq, Except.ok.injEq, decide_eq_true_eq] at boundary
-        simp only [computeEpochAtSlot, UInt64.toNat_div] at le
-        have lower := Nat.div_mul_le_self oldSlot.toNat preset.SLOTS_PER_EPOCH.toNat
-        have whole := Nat.mod_add_div slot.toNat preset.SLOTS_PER_EPOCH.toNat
-        have mono := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat le
-        rw [Nat.mul_comm preset.SLOTS_PER_EPOCH.toNat] at whole
         omega
       constructor
       · intro epoch rootEpoch' epochOk rootOk recent
