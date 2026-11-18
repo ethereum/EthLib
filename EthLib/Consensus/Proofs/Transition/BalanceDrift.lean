@@ -174,6 +174,28 @@ theorem CapOrder.mainnet : CapOrder Preset.mainnet := ⟨by decide, by decide⟩
 /-- The minimal preset orders its effective-balance caps. -/
 theorem CapOrder.minimal : CapOrder Preset.minimal := ⟨by decide, by decide⟩
 
+/-- The activation balance is at most the largest effective balance before Electra.
+
+With the cap order, the two are equal, as the upgrade to Electra needs. -/
+def ActivationWithinMaxEffective (preset : Preset) : Prop :=
+  preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE
+
+/-- The mainnet preset activates within the largest effective balance before Electra. -/
+theorem ActivationWithinMaxEffective.mainnet : ActivationWithinMaxEffective Preset.mainnet := by
+  unfold ActivationWithinMaxEffective
+  decide
+
+/-- The minimal preset activates within the largest effective balance before Electra. -/
+theorem ActivationWithinMaxEffective.minimal : ActivationWithinMaxEffective Preset.minimal := by
+  unfold ActivationWithinMaxEffective
+  decide
+
+/-- The cap order and an activation within the largest balance make the two balances equal. -/
+theorem CapOrder.maxEffective_eq (caps : CapOrder preset)
+    (activation : ActivationWithinMaxEffective preset) :
+    preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE :=
+  UInt64.le_antisymm caps.activation activation
+
 /-- Each validator of the first state keeps its effective balance in the second. -/
 def EffectiveKept {f h : Fork} (s : BeaconState preset f)
     (t : BeaconState preset h) : Prop :=

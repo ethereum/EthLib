@@ -12,17 +12,15 @@ Not yet released.
 - `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).
   It compares the call's pulled-up state with a later state in the target's epoch or the next, before Gloas from Fulu.
   `Execution.quorumDriftWithin` builds those runs from the stores and proves `QuorumDriftWithin` with BLS checks.
-  The anchor state is reached by a run with BLS checks from a genesis built from deposits, and the preset meets `DirectSafety.Parameters`.
+  The anchor state is reached by a run with BLS checks from a genesis built from deposits, and an epoch has at least one slot.
   `Execution.rootViable_of_checked_call` takes the same genesis and run for any signature checks; this theorem fixes them to BLS.
   The other premises are the anchor store and slot, and positive slot durations.
-  The preset keeps the bands of hysteresis and `Preset.ExitWindowFixed`, and the withdrawal delay is at least one epoch.
-  `MAX_EFFECTIVE_BALANCE` must equal `MIN_ACTIVATION_BALANCE`, which is at most `MAX_EFFECTIVE_BALANCE_ELECTRA`.
-  `Preset.exitWindowFixed_mainnet` and `Preset.exitWindowFixed_minimal` show that premise holds on both presets, as `Config.committeeWindowsFit_mainnet` does for its bundle.
+  The preset keeps the bands of hysteresis, its seed lookahead covers at least one epoch, and the withdrawal delay is at least one epoch.
+  The preset meets `CapOrder` and the new `ActivationWithinMaxEffective`, which together make `MAX_EFFECTIVE_BALANCE` equal `MIN_ACTIVATION_BALANCE`.
+  `ActivationWithinMaxEffective.mainnet` and `ActivationWithinMaxEffective.minimal` show that it holds on both presets.
   `Execution.rootViable_of_checked_call_of_drift_bound` and `Execution.honestHeadsCover_of_checked_call_of_drift_bound` are the two checked-call headlines with `QuorumDriftWithin` discharged, with BLS checks from Fulu to before Gloas.
-  Seven premises replace it.
-  They are Fulu or later, a horizon before the next fork, `Preset.ExitWindowFixed` and `IncrementWithinUpwardBand`.
-  The others are a withdrawal delay of at least one epoch and the two Electra balance conditions.
-  `maxLookahead` is dropped, since `Preset.ExitWindowFixed` implies it.
+  Six premises replace it: Fulu or later, a horizon before the next fork, `IncrementWithinUpwardBand`, a withdrawal delay of at least one epoch, `CapOrder` and `ActivationWithinMaxEffective`.
+  `Execution.heldStatesBeforeUpgrade_of_bounded` derives `HeldStatesBeforeUpgrade` from the horizon, so the two headlines drop that premise.
   `effectiveRise_le` bounds the rise of the active effective balances over an epoch end, and `effectiveFall_le` the fall of a voter's.
   `branchCorrections` bounds the balances along a branch inside one epoch.
 
@@ -38,7 +36,6 @@ Not yet released.
 - Its transition facts are in `Transition/BranchLedger.lean`, `Transition/EffectiveRise.lean`, `Transition/EffectiveFall.lean`, `Transition/EpochPassAtCall.lean` and their neighbours.
   `Hysteresis` puts each effective balance within the bands of its balance.
   `processEffectiveBalanceUpdates_hysteresis` establishes it, `Hysteresis.of_data` carries it to a state with the same validators and balances, and `Hysteresis.upgrade` keeps it across upgrades.
-  `Preset.ExitWindowFixed` asks the seed lookahead to fix activity three epochs ahead.
   `EpochTrace.through_effectiveBalances` splits an epoch trace after the effective-balance updates.
   `getTotalActiveBalance_toNat` gives the value of a successful active-balance read.
   `activeFilter_eq` and `activeSum_eq` keep the active positions and their effective balances between two registries, and `seats_eq` the seats of a validator in the sync committee.

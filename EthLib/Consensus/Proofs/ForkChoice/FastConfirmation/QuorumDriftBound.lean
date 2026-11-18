@@ -103,7 +103,7 @@ Twice the later total and three times their stake at the call add up to at most 
 
 That bound is twice the total at the call, three times their later stake, and the reserve.
 
-The seed lookahead of `window` fixes activity in the next epoch inside the current one.
+The seed lookahead covers at least one epoch, so activity in the next epoch is fixed in the current.
 -/
 theorem quorumDrift_le_quorumReserve
     {g : ForkedBeaconState preset}
@@ -115,7 +115,7 @@ theorem quorumDrift_le_quorumReserve
     (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork)
     (bands : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (caps : CapOrder preset) (window : preset.ExitWindowFixed)
+    (caps : CapOrder preset) (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (hysteresis : Hysteresis boundary) (single : edge.blockCount ≤ 1)
     (counted : edge.blockCount + tailP.blockCount ≤
       pulled.slot.toNat - (getCurrentEpoch pulled).toNat * preset.SLOTS_PER_EPOCH.toNat + 1)
@@ -133,8 +133,6 @@ theorem quorumDrift_le_quorumReserve
     2 * total.toNat + 3 * stake (fun v => balanceAt pulled v.toNat) voters ≤
       2 * pulledTotal.toNat + 3 * stake (fun v => balanceAt state v.toNat) voters +
         quorumReserve config pulled anc := by
-  -- The seed lookahead fixes activity in the next epoch from inside the current one.
-  have lookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := Nat.le_trans (by decide) window.lookahead
   have notGloas : ¬Fork.glamsterdam ≤ fork := fun late =>
     Nat.lt_irrefl _ (Nat.lt_of_lt_of_le early late)
   -- The reserve reads the queue of the ancestor, which the middle state holds.
@@ -241,7 +239,7 @@ theorem quorumDrift_le_quorumReserve
       min headroom (crossing + (recipients + debited) * preset.upwardBand + debited * creditMax +
         transfers + depositGain) :=
     effectiveRise_le genesis history (edge.append tailP) (edge.append tailS) caps withdrawDelay
-      bands window hysteresis early fulu callEpoch next
+      bands maxLookahead hysteresis early fulu callEpoch next
       (n := nP) debitedKeys
       (debitedCard.trans (Nat.mul_le_mul_left _ blocksLe))
       (fun v off => (gainSide v off).trans

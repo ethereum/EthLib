@@ -1363,7 +1363,7 @@ Another leads from `R` to `y` in the next epoch.
 
 Every read is at `P`.
 
-The branch of `P` has at most `n` blocks.
+The premises read a block count `n` through the debited set and the sync amounts.
 
 Take a set of debited validators, at most the payload limits per block.
 
@@ -1386,7 +1386,7 @@ theorem effectiveRise_le
     (tailP : Run config checks R P) (tailS : Run config checks R y) (caps : CapOrder preset)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (bands : preset.IncrementWithinUpwardBand)
-    (window : preset.ExitWindowFixed)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (hysteresis : Hysteresis R.state) (early : y.fork < .glamsterdam)
     (fulu : .fusaka ≤ P.fork)
     (callEpoch : getCurrentEpoch P.state = getCurrentEpoch R.state)
@@ -1472,7 +1472,6 @@ theorem effectiveRise_le
       min headroom (crossing + (recipients + debited) * preset.upwardBand +
         debited * creditMax + transfers + depositGain)
   := by
-  have lookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := Nat.le_trans (by decide) window.lookahead
   have hPR : P.fork = R.fork := Run.fork_eq_of_same_epoch tailP callEpoch
   obtain ⟨fR, r⟩ := R
   obtain ⟨F, q⟩ := P

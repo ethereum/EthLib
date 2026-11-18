@@ -77,22 +77,6 @@ theorem getCurrentEpoch_le_activityFixedEpoch (state : BeaconState preset fork) 
   have := (getCurrentEpoch state).toNat_lt
   omega
 
-/-- The seed lookahead covers three epochs, so activity three epochs ahead of a state is fixed.
-
-The fixed epoch of a state is then at least three epochs after its current epoch, when it fits.
-
-Mainnet and minimal both use a lookahead of four epochs. -/
-structure Preset.ExitWindowFixed (preset : Preset) : Prop where
-  lookahead : 3 ≤ preset.MAX_SEED_LOOKAHEAD.toNat
-
-/-- The mainnet preset fixes activity three epochs ahead. -/
-theorem Preset.exitWindowFixed_mainnet : Preset.mainnet.ExitWindowFixed := by
-  constructor; decide
-
-/-- The minimal preset fixes activity three epochs ahead. -/
-theorem Preset.exitWindowFixed_minimal : Preset.minimal.ExitWindowFixed := by
-  constructor; decide
-
 /-- A current epoch at least as late gives a fixed epoch at least as late. -/
 theorem activityFixedEpoch_mono {post : Base.Fork} {other : BeaconState preset post}
     (le : getCurrentEpoch state ≤ getCurrentEpoch other) :

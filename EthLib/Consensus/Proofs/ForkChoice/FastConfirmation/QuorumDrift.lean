@@ -67,8 +67,7 @@ The epoch transition of that step sets the bands.
 An upgrade keeps them, since every effective balance is at most its cap. -/
 private theorem run_boundaryState {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) (bands : preset.IncrementWithinUpwardBand)
-    (electraFloor : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
-    (electraCap : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA) :
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset) :
     ∀ {x : ForkedBeaconState preset}, Run config checks g x → x.fork < .glamsterdam →
       .fusaka ≤ x.fork → x.state.slot % preset.SLOTS_PER_EPOCH = 0 →
       ∃ boundary : BeaconState preset x.fork, boundary.slot = x.state.slot ∧
@@ -93,10 +92,11 @@ private theorem run_boundaryState {g : ForkedBeaconState preset}
       have banded := hysteresis_of_advanceSlot bands advancedOk (kept ▸ atStart)
       -- The step before the upgrades keeps each effective balance at most its cap.
       have capped := advanceSlot_capped advancedOk
-        (pre.effectiveBalance_capped genesis (UInt64.le_of_eq electraFloor) electraCap
+        (pre.effectiveBalance_capped genesis caps.activation caps.compounding
           middleEarly)
       exact ⟨last.state, rfl,
-        Hysteresis.upgrade (forked := ⟨middle.fork, advanced⟩) banded electraFloor electraCap
+        Hysteresis.upgrade (forked := ⟨middle.fork, advanced⟩) banded
+          (caps.maxEffective_eq activation) caps.compounding
           capped upgraded,
         ⟨pre.snoc (.slot ok)⟩, ⟨.nil⟩⟩
     | block engine signed due ok =>
@@ -227,6 +227,23 @@ private theorem held_beforeFork {horizon : Epoch}
     exact beforeFork_of_epoch window positive
       (Nat.le_trans (Nat.div_le_div_right low) (currentNat ▸ within))
 
+/-- Honest stores whose epochs stay within a horizon before the next fork hold states before it.
+
+It discharges the premise that every held honest state is before the next fork. -/
+theorem Execution.heldStatesBeforeUpgrade_of_bounded {anchor : Store preset fork}
+    {horizon : Epoch} {limit : ℕ}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (slots : 0 < config.SLOT_DURATION_MS) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon limit) :
+    HeldStatesBeforeUpgrade (e := e) limit := by
+  intro w honest k time next member root state stored
+  have forward := e.forwardReachableWith (anchorState := anchorState) (anchorBlock := anchorBlock)
+    (fun a member => (start a member) ▸ Store.ForwardReachableWith.anchor anchored) k w honest
+  exact (held_beforeFork forkWindow positive slots anchorSlot forward.forwardReachable
+    (fun epoch ok => bounded w honest k epoch time ok)).2 root state stored next member
+
 /-- A slot step run is a run, when the last slot is before the next fork. -/
 private theorem RunsTo.ofProcessSlots {first second : BeaconState preset fork} {slot : Slot}
     (processed : processSlots config checks first slot = .ok second) :
@@ -311,8 +328,7 @@ private theorem boundary_of_lookahead {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) (history : Run config checks g ⟨fork, anchorState⟩)
     (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork)
     (bands : preset.IncrementWithinUpwardBand)
-    (electraFloor : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
-    (electraCap : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
     {start : Slot} {base middle : BeaconState preset fork}
     (atStart : start % preset.SLOTS_PER_EPOCH = 0)
     (startBefore : BeforeFork (preset := preset) config fork start)
@@ -339,7 +355,7 @@ private theorem boundary_of_lookahead {g : ForkedBeaconState preset}
     obtain rfl : base = middle := by
       simpa [lookaheadState, same, UInt64.lt_irrefl, pure, Except.pure] using lookOk
     obtain ⟨boundary, atSlot, banded, first, ⟨edge⟩⟩ :=
-      run_boundaryState genesis bands electraFloor electraCap (history.append baseRun) early fulu
+      run_boundaryState genesis bands caps activation (history.append baseRun) early fulu
         (show base.slot % preset.SLOTS_PER_EPOCH = 0 from same ▸ atStart)
     have counted := edge.blocks_le_slots (a := start.toNat) (b := start.toNat)
       (by rw [atSlot, same]) (by rw [same])
@@ -382,8 +398,7 @@ private theorem runs_of_call
       ((e.world i).state a).blocks[r]? = some left →
       ((e.world j).state b).blocks[r]? = some right → left = right)
     (bands : preset.IncrementWithinUpwardBand)
-    (electraFloor : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
-    (electraCap : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
     {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ} (callTime : (e.world n).time ≤ limit)
     {head : Root} {pulled anc : BeaconState preset fork} {target : Checkpoint}
     (pulledOk : ((e.world n).state u).getPulledUpHeadState config head = .ok pulled)
@@ -501,7 +516,7 @@ private theorem runs_of_call
   have boundaryBefore :=
     epochBoundaryOk boundary (by rw [boundaryNat, Nat.mul_div_cancel _ positive])
   obtain ⟨middleBoundary, start, startSlot, banded, first, edge, single, queue⟩ :=
-    boundary_of_lookahead genesis history early fulu bands electraFloor electraCap atStart
+    boundary_of_lookahead genesis history early fulu bands caps activation atStart
       boundaryBefore ancRun ancLe lookOk
   have counted := (edge.append tail).blocks_le_slots (a := boundary.toNat)
     (b := pulled.slot.toNat) (by rw [startSlot]) (Nat.le_refl _)
@@ -527,15 +542,13 @@ The anchor block is at the anchor state's slot, and slots last a positive time.
 
 The anchor state is reached by a run with BLS checks from a genesis built from deposits.
 
-The preset meets `DirectSafety.Parameters`, and the bands of hysteresis.
+An epoch has at least one slot, and the preset keeps the bands of hysteresis.
 
 The withdrawal delay is at least one epoch.
 
-`MAX_EFFECTIVE_BALANCE` equals `MIN_ACTIVATION_BALANCE`.
+The effective-balance caps are ordered, and the activation balance is the largest before Electra.
 
-`MIN_ACTIVATION_BALANCE` is at most `MAX_EFFECTIVE_BALANCE_ELECTRA`.
-
-The seed lookahead must fix activity three epochs ahead, as the drift bound needs.
+The seed lookahead covers at least one epoch, so activity in the next epoch is fixed in the current.
 
 An assumption on the run: the stores stay before the next fork through the horizon.
 
@@ -550,16 +563,15 @@ theorem Execution.quorumDriftWithin
     {anchor : Store preset fork} {g : ForkedBeaconState preset} {horizon : Epoch} {limit : ℕ}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
-    (slots : 0 < config.SLOT_DURATION_MS) (parameters : DirectSafety.Parameters preset)
+    (slots : 0 < config.SLOT_DURATION_MS) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (genesis : Genesis config .bls g) (history : Run config .bls g ⟨fork, anchorState⟩)
     (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork)
     (forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
     (bounded : HonestStoreEpochsBounded (e := e) horizon limit)
-    (window : preset.ExitWindowFixed)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (bands : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (electraFloor : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
-    (electraCap : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA) :
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset) :
     QuorumDriftWithin (e := e) horizon limit := by
   intro u caller n head pulled anc target callTime pulledOk targetOk held w receiver k root
     rootState state receiveTime stored read reach later near inside voters total pulledTotal
@@ -570,12 +582,12 @@ theorem Execution.quorumDriftWithin
   left
   obtain ⟨pulledEpoch, boundary, middle, boundaryEpoch, middleEpoch, banded, ⟨toBoundary⟩,
     queue, edge, tail, single, counted, ⟨toState⟩⟩ :=
-    runs_of_call anchored start anchorSlot slots parameters.slots genesis history early fulu
-      forkWindow bounded agree bands electraFloor electraCap caller callTime pulledOk targetOk held
+    runs_of_call anchored start anchorSlot slots positive genesis history early fulu
+      forkWindow bounded agree bands caps activation caller callTime pulledOk targetOk held
       receiver receiveTime stored read reach later inside
   rw [← pulledEpoch] at counted later near
   exact quorumDrift_le_quorumReserve genesis toBoundary edge tail toState early fulu bands
-    withdrawDelay ⟨UInt64.le_of_eq electraFloor, electraCap⟩ window banded single counted queue
+    withdrawDelay caps maxLookahead banded single counted queue
     (middleEpoch.trans boundaryEpoch.symm) (pulledEpoch.trans boundaryEpoch.symm) later near
     voting totalOk pulledTotalOk
 
@@ -587,17 +599,16 @@ So `genesis` uses BLS checks, and `pre` is a run with BLS checks.
 
 `Execution.quorumDriftWithin` proves the premise, whose instances allow a collision of two stores.
 
-Seven premises replace `QuorumDriftWithin`:
+Six premises replace `QuorumDriftWithin` and the held states before the next fork:
 
 - `fulu`, an assumption on the run: the fork is Fulu or later.
   Earlier forks are not covered.
 - `forkWindow`, an assumption on the run: the horizon is before the next fork.
   It keeps every run inside one fork, and says nothing about a run that crosses a fork.
-- `window`: the seed lookahead fixes activity three epochs ahead.
 - `bands`: an increment lies within the upward band of hysteresis.
 - `withdrawDelay`: the withdrawal delay is at least one epoch.
-- `electraFloor`: `MAX_EFFECTIVE_BALANCE` equals `MIN_ACTIVATION_BALANCE`.
-- `electraCap`: `MIN_ACTIVATION_BALANCE` is at most `MAX_EFFECTIVE_BALANCE_ELECTRA`. -/
+- `caps`: the effective-balance caps are ordered.
+- `activation`: the activation balance is at most the largest effective balance before Electra. -/
 theorem Execution.honestHeadsCover_of_checked_call_of_drift_bound [DecidablePred (· ∈ J)] {Δ : ℕ}
     {e : Execution (honestForkChoice config .bls sources anchorState anchorBlock assignment
       genesisTimeMs) J}
@@ -664,7 +675,6 @@ theorem Execution.honestHeadsCover_of_checked_call_of_drift_bound [DecidablePred
     (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
     (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
     (genesis : Genesis config .bls g) (pre : Run config .bls g ⟨fork, anchorState⟩)
-    (heldEarly : HeldStatesBeforeUpgrade (e := e) time)
     (enough : HeldRunStakeFloor (e := e) pre horizon time)
     (terminal : HeldTerminalStakeFloor (e := e) horizon time)
     (headDescends : ((e.world n).state u).isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
@@ -694,11 +704,10 @@ theorem Execution.honestHeadsCover_of_checked_call_of_drift_bound [DecidablePred
     (included : TargetIncluded (e := e) time)
     (fulu : .fusaka ≤ fork)
     (forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
-    (window : preset.ExitWindowFixed)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (bands : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (electraFloor : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
-    (electraCap : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
     (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
     (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     {fcr : FastConfirmationStore} {headOfCall : ForkChoiceNode} {startRoot : Root}
@@ -721,11 +730,13 @@ theorem Execution.honestHeadsCover_of_checked_call_of_drift_bound [DecidablePred
       HistoricalDirectSafetyEvidence (e := e) pre time ∨
       CrossStoreJustifiedEvidence (e := e) pre time ∨
         HeldStateFinalityEvidence (e := e) pre time := by
+  have heldEarly := e.heldStatesBeforeUpgrade_of_bounded anchored start anchorSlot slots
+    parameters.slots forkWindow bounded
   have quorumDrift := Execution.quorumDriftWithin (e := e) anchored start anchorSlot slots
-    parameters genesis pre preGloas fulu forkWindow bounded window bands withdrawDelay
-    electraFloor electraCap
+    parameters.slots genesis pre preGloas fulu forkWindow bounded maxLookahead bands withdrawDelay
+    caps activation
   exact e.honestHeadsCover_of_checked_call sync slots minLookahead
-      (Nat.le_trans (by decide) window.lookahead) ring preGloas
+      maxLookahead ring preGloas
       admitted half votes fits prompt windows newVoters anchored sound anchorSlot anchorBoundary
       start caller callerUpToDate slotOk beginOk timeEq blockOk parentOk sourceOk boostOk
       firstOk lastOk beforeOk maximumOk parentParticipantsOk registry aligned increment supportOk
@@ -745,17 +756,16 @@ So `genesis` uses BLS checks, and `pre` is a run with BLS checks.
 
 `Execution.quorumDriftWithin` proves the premise, whose instances allow a collision of two stores.
 
-Seven premises replace `QuorumDriftWithin`:
+Six premises replace `QuorumDriftWithin` and the held states before the next fork:
 
 - `fulu`, an assumption on the run: the fork is Fulu or later.
   Earlier forks are not covered.
 - `forkWindow`, an assumption on the run: the horizon is before the next fork.
   It keeps every run inside one fork, and says nothing about a run that crosses a fork.
-- `window`: the seed lookahead fixes activity three epochs ahead.
 - `bands`: an increment lies within the upward band of hysteresis.
 - `withdrawDelay`: the withdrawal delay is at least one epoch.
-- `electraFloor`: `MAX_EFFECTIVE_BALANCE` equals `MIN_ACTIVATION_BALANCE`.
-- `electraCap`: `MIN_ACTIVATION_BALANCE` is at most `MAX_EFFECTIVE_BALANCE_ELECTRA`. -/
+- `caps`: the effective-balance caps are ordered.
+- `activation`: the activation balance is at most the largest effective balance before Electra. -/
 theorem Execution.rootViable_of_checked_call_of_drift_bound [DecidablePred (· ∈ J)] {Δ : ℕ}
     {e : Execution (honestForkChoice config .bls sources anchorState anchorBlock assignment
       genesisTimeMs) J}
@@ -822,7 +832,6 @@ theorem Execution.rootViable_of_checked_call_of_drift_bound [DecidablePred (· �
     (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
     (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
     (genesis : Genesis config .bls g) (pre : Run config .bls g ⟨fork, anchorState⟩)
-    (heldEarly : HeldStatesBeforeUpgrade (e := e) time)
     (enough : HeldRunStakeFloor (e := e) pre horizon time)
     (terminal : HeldTerminalStakeFloor (e := e) horizon time)
     (headDescends : ((e.world n).state u).isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
@@ -852,11 +861,10 @@ theorem Execution.rootViable_of_checked_call_of_drift_bound [DecidablePred (· �
     (included : TargetIncluded (e := e) time)
     (fulu : .fusaka ≤ fork)
     (forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
-    (window : preset.ExitWindowFixed)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (bands : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (electraFloor : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
-    (electraCap : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
     (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
     (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     {fcr : FastConfirmationStore} {headOfCall : ForkChoiceNode} {startRoot : Root}
@@ -879,11 +887,13 @@ theorem Execution.rootViable_of_checked_call_of_drift_bound [DecidablePred (· �
       HistoricalDirectSafetyEvidence (e := e) pre time ∨
       CrossStoreJustifiedEvidence (e := e) pre time ∨
         HeldStateFinalityEvidence (e := e) pre time := by
+  have heldEarly := e.heldStatesBeforeUpgrade_of_bounded anchored start anchorSlot slots
+    parameters.slots forkWindow bounded
   have quorumDrift := Execution.quorumDriftWithin (e := e) anchored start anchorSlot slots
-    parameters genesis pre preGloas fulu forkWindow bounded window bands withdrawDelay
-    electraFloor electraCap
+    parameters.slots genesis pre preGloas fulu forkWindow bounded maxLookahead bands withdrawDelay
+    caps activation
   exact e.rootViable_of_checked_call sync slots minLookahead
-      (Nat.le_trans (by decide) window.lookahead) ring preGloas admitted
+      maxLookahead ring preGloas admitted
       half votes fits prompt windows newVoters anchored sound anchorSlot anchorBoundary start
       caller callerUpToDate slotOk beginOk timeEq blockOk parentOk sourceOk boostOk
       firstOk lastOk beforeOk maximumOk parentParticipantsOk registry aligned increment supportOk

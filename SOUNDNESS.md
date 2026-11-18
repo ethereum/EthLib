@@ -3228,19 +3228,18 @@ An accepted root of an earlier epoch is realized as justified by the head's stat
 Its alternative is a collision of two honest stores.
 `Execution.quorumDriftWithin` proves it for an honest fork choice with BLS checks, before Gloas from Fulu.
 Its anchor store comes from a successful `getForkchoiceStore`, every honest participant starts at it, and `anchorBlock.slot = anchorState.slot`.
-`SLOT_DURATION_MS` is positive, and the preset satisfies `DirectSafety.Parameters`.
+`SLOT_DURATION_MS` is positive, and an epoch has at least one slot.
 A deposited `Genesis` under BLS checks reaches `anchorState` by a `Run` under BLS checks.
 `Execution.rootViable_of_checked_call` takes the same genesis and run for any signature checks, and this theorem fixes them to BLS.
 The horizon is before the next fork, and `HonestStoreEpochsBounded` holds up to the time bound.
-The preset satisfies `Preset.ExitWindowFixed` and `IncrementWithinUpwardBand`.
-The withdrawal delay is at least one epoch, and `MAX_EFFECTIVE_BALANCE` equals `MIN_ACTIVATION_BALANCE`.
-`MIN_ACTIVATION_BALANCE` is at most `MAX_EFFECTIVE_BALANCE_ELECTRA`.
+The seed lookahead covers at least one epoch, and the preset satisfies `IncrementWithinUpwardBand`.
+The withdrawal delay is at least one epoch, and the preset satisfies `CapOrder` and `ActivationWithinMaxEffective`.
+Together these make `MAX_EFFECTIVE_BALANCE` equal to `MIN_ACTIVATION_BALANCE`, as on both presets.
+The theorem bounds the drift by the reserve, but whether the reserve is small enough against the confirmation margin on mainnet is not established.
 `Execution.rootViable_of_checked_call` and `Execution.honestHeadsCover_of_checked_call` still take `QuorumDriftWithin` as a premise.
 `Execution.rootViable_of_checked_call_of_drift_bound` and `Execution.honestHeadsCover_of_checked_call_of_drift_bound` discharge it, with BLS checks from Fulu to before Gloas.
-Seven premises replace it.
-They are Fulu or later, a horizon before the next fork, `Preset.ExitWindowFixed` and `IncrementWithinUpwardBand`.
-The others are a withdrawal delay of at least one epoch and the two Electra balance conditions.
-`maxLookahead` is dropped, since `Preset.ExitWindowFixed` implies it.
+Six premises replace it: Fulu or later, a horizon before the next fork, `IncrementWithinUpwardBand`, a withdrawal delay of at least one epoch, `CapOrder` and `ActivationWithinMaxEffective`.
+They also drop `HeldStatesBeforeUpgrade`, which `Execution.heldStatesBeforeUpgrade_of_bounded` derives from the horizon and `HonestStoreEpochsBounded`.
 They read `Execution.quorumDriftWithin`.
 The model's genesis time must be the anchor state's (`secondsToMilliseconds anchorState.genesisTime = genesisTimeMs`), a fact of the configuration that holds for every real anchor.
 
