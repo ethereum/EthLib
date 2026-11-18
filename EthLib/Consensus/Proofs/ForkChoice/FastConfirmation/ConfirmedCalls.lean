@@ -1613,18 +1613,11 @@ Unless two honest stores collide or cross-store evidence holds, the call has jus
 Each up-to-date honest store from the call to the limit has then justified its epoch. -/
 private theorem observedStart {Δ : ℕ} {anchor : Store preset fork} {limit : ℕ}
     {horizon : Epoch} {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
-    (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
-    (preGloas : fork < .glamsterdam) (admitted : BlocksAdmitted e 0 Δ limit)
-    (long : 1 < preset.SLOTS_PER_EPOCH)
-    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    {u : ValidatorIndex} {events : List ℕ} {firstSlot : Slot}
+    (ctx : CallsCtx (e := e) anchor u events firstSlot limit)
+    (sync : e.Synchronous Δ) (admitted : BlocksAdmitted e 0 Δ limit)
     (fits : DelayFits fork config genesisTimeMs Δ)
-    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
-    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (start : ∀ w ∈ J, e.start w = anchor)
     (bounded : HonestStoreEpochsBounded (e := e) horizon limit)
-    (nonzero : HeldBlockStateRootsNonzero (e := e) limit)
     (agreement : SelectedCheckpointsAgree (e := e) horizon limit ∨
       CrossStoreJustifiedEvidence (e := e) pre limit)
     (finality : (∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ limit → (e.world j).time ≤ limit →
@@ -1634,13 +1627,6 @@ private theorem observedStart {Δ : ℕ} {anchor : Store preset fork} {limit : �
         ((e.world i).state a).finalizedCheckpoint.epoch =
           .ok ((e.world i).state a).finalizedCheckpoint.root) ∨
       CrossStoreDirectSafetyEvidence (e := e) pre limit)
-    {u : ValidatorIndex} (caller : u ∈ J) {events : List ℕ} {firstSlot : Slot}
-    (anchorBefore : getCurrentEpoch anchorState < computeEpochAtSlot preset firstSlot)
-    (atSlots : ∀ i n, events[i]? = some n → ∃ slot begin,
-      ((e.world n).state u).getCurrentSlot config = .ok slot ∧
-      slot.toNat = firstSlot.toNat + i ∧
-      computeTimeAtSlotMs config genesisTimeMs slot = .ok begin ∧
-      (e.world n).time = begin.toNat)
     {j n : ℕ} {fcr after : FastConfirmationStore}
     (calls : CallAt (e := e) u events (getFastConfirmationStore anchor) (j + 1) n fcr after)
     (callBound : (e.world n).time ≤ limit)
@@ -1662,16 +1648,21 @@ private theorem observedStart {Δ : ℕ} {anchor : Store preset fork} {limit : �
             ((e.world k).state w).justifiedCheckpoint.epoch) ∨
         HonestCollision (e := e) limit ∨ CrossStoreJustifiedEvidence (e := e) pre limit ∨
         CrossStoreDirectSafetyEvidence (e := e) pre limit) := by
+  obtain ⟨anchored, sound, anchorSlot, anchorBoundary, start, slots, positive, long, preGloas,
+    window, nonzero, -, caller, anchorBefore, atSlots⟩ := id ctx
   have forward (v : ValidatorIndex) (honest : v ∈ J) (i : ℕ) :=
     e.forwardReachable (fun x hx => (start x hx).symm ▸ Store.ForwardReachable.anchor anchored)
       i v honest
   have aligned : anchorBlock.slot ≤ anchorState.slot := UInt64.le_of_eq anchorSlot
-  obtain ⟨m, fcrM, previous⟩ := callAt_previous calls
+  obtain ⟨m, fcrM, previous, before, -, slotN', slotNOk', -, observed⟩ := call_succ ctx calls
+  have order : m ≤ n := Nat.le_of_lt before
   have mMem : m ∈ events := List.mem_of_getElem? previous.1
-  have nMem : n ∈ events := List.mem_of_getElem? calls.1
   obtain ⟨slotM, beginM, slotMOk, indexM, beginMOk, atM⟩ := atSlots j m previous.1
   obtain ⟨slotN, beginN, slotNOk, indexN, beginNOk, atN⟩ := atSlots (j + 1) n calls.1
-  obtain rfl : slotN = slot := Except.ok.inj (slotNOk.symm.trans slotOk)
+  have slotEq : slotN = slot := Except.ok.inj (slotNOk.symm.trans slotOk)
+  subst slotEq
+  have slotEq' : slotN = slotN' := Except.ok.inj (slotNOk.symm.trans slotNOk')
+  subst slotEq'
   -- Consecutive calls are a delay apart.
   have sumN : slotN.toNat = slotM.toNat + 1 := by omega
   have nextOk : addChecked slotM 1 = .ok slotN := addChecked_ok_iff.mpr
@@ -1680,11 +1671,6 @@ private theorem observedStart {Δ : ℕ} {anchor : Store preset fork} {limit : �
   obtain ⟨due, dueOk⟩ := fits.1
   have fitsStep := fits.2 slotM slotN beginM due beginN nextOk beginMOk dueOk beginNOk
   have late : (e.world m).time + Δ < (e.world n).time := by omega
-  have order : m ≤ n := by
-    by_contra after
-    have time := e.monotone_time (Nat.le_of_lt (Nat.lt_of_not_le after))
-    change (e.world n).time ≤ (e.world m).time at time
-    omega
   have mBound : (e.world m).time ≤ limit := by omega
   -- The call's slot starts its epoch, so the previous call is in the epoch before.
   have modN : slotN.toNat % preset.SLOTS_PER_EPOCH.toNat = 0 := by
@@ -1702,18 +1688,13 @@ private theorem observedStart {Δ : ℕ} {anchor : Store preset fork} {limit : �
   have epochNOk : ((e.world n).state u).getCurrentStoreEpoch config =
       .ok (computeEpochAtSlot preset slotN) := by
     simp [Store.getCurrentStoreEpoch, slotNOk, bind, Except.bind, pure, Except.pure]
-  -- The previous call recorded the unrealized checkpoint, and this call observes it.
-  obtain ⟨sN, sNOk, -, keepPrevious, atStart, -⟩ :=
-    Store.onFastConfirmation_checkpoints calls.2.2
-  obtain rfl : slotN = sN := Except.ok.inj (slotNOk.symm.trans sNOk)
-  obtain ⟨sM, sMOk, recorded, -, -, -⟩ := Store.onFastConfirmation_checkpoints previous.2.2
-  obtain rfl : slotM = sM := Except.ok.inj (slotMOk.symm.trans sMOk)
-  obtain ⟨next, nextNOk⟩ := next_exists calls.2.2 slotNOk
+  -- This call observes the previous call's unrealized justified checkpoint.
   have observedEq : after.currentEpochObservedJustifiedCheckpoint =
       ((e.world m).state u).unrealizedJustifiedCheckpoint := by
-    rw [(atStart replaces.1).1,
-      keepPrevious next nextNOk (next_not_start long nextNOk replaces.1),
-      recorded slotN nextOk replaces.1]
+    rcases observed with ⟨-, eq⟩ | ⟨notStart, -⟩
+    · exact eq
+    · rw [replaces.1] at notStart
+      cases notStart
   have reachedM := (forward u caller m).reachable
   have reachedN := (forward u caller n).reachable
   have notZero := anchorState_hash_nonzero anchored start nonzero caller mBound
@@ -2224,12 +2205,9 @@ private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : S
     rw [(call_zero ctx.long calls).2]
     exact anchorFacts n (List.mem_of_getElem? calls.1) nBound
   | succ j =>
-    obtain ⟨m, -, mBefore, observed, epochSucc, horizonLe, rest⟩ := observedStart pre ctx.sync
-      ctx.slots
-      ctx.positive ctx.preGloas ctx.admitted ctx.long ctx.window ctx.fits ctx.anchored ctx.sound
-      ctx.anchorSlot ctx.anchorBoundary ctx.start ctx.bounded ctx.roots (.inl good.agree)
-      (.inl good.finality) ctx.caller ctx.anchorEpochBefore ctx.atSlots calls nBound
-      slotOk replaces
+    obtain ⟨m, -, mBefore, observed, epochSucc, horizonLe, rest⟩ := observedStart pre
+      ctx.toCallsCtx ctx.sync ctx.admitted ctx.fits ctx.bounded (.inl good.agree)
+      (.inl good.finality) calls nBound slotOk replaces
     rcases rest with ⟨-, later⟩ | collision | justified | direct
     rotate_left
     · exact .inr (.inl collision)
