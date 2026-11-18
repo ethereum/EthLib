@@ -1,6 +1,10 @@
 module
 
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalStatements
+public import EthLib.Consensus.Churn
+public import EthLib.Consensus.Participation
+public import EthLib.Consensus.Transition.EpochRewards
+public import EthLib.Consensus.Transition.SyncAggregate
 
 /-!
 # The reserves of the quorum of a fast-confirmation call
@@ -9,13 +13,9 @@ A call of the fast confirmation rule counts the stake of honest voters in its pu
 
 A later state that counts the same voters can hold a different total and different balances.
 
-The reserves bound by how much that changes the quorum, from the fields of the call's state alone.
+The reserves bound by how much that changes the quorum, from the fields of the call's states alone.
 
-`quorumReserve` covers a later state on the call's own chain.
-
-`pinReserve` adds what a counting state on another branch can change since the finalized epoch.
-
-This file holds only the definitions, so that the bounds and their consumers read one copy.
+One covers a later state on the call's own chain, the other a counting state on another branch.
 -/
 
 @[expose] public section
@@ -29,38 +29,21 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {anchorBlock : BeaconBlock preset fork} {assignment : Assignment preset}
   {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
 
-/-- The stake by which the quorum of the call can drift from the reference state to a later state.
+/-- The stake by which the quorum of a call can drift from its state to a later state of its chain.
 
-The state is the pulled-up head state of the call, and the ancestor is the state of its target root.
+The state is the call's pulled-up head state, and the ancestor is the state of its target block.
 
 Every term reads the state, except the queue of partial withdrawals, which the ancestor holds.
 
-Every read is a function on natural numbers of the fields of the state.
+It takes the total, the base and sync rewards, the churn and the finality delay from their reads.
 
-Each equals the executable read whenever that read succeeds, as the lemmas on the reads show.
+The reserve is twice the gain of the total plus three times the loss of the voters' stake.
 
-The reserve is twice the gain plus three times the loss.
+The gain counts validators that join the active set, and the band-crossing rises of the others.
 
-```text
-gain  = joining + min headroom (crossing + (recipients + debited) * upwardBand
-          + debited * creditMax + transfers + depositGain)
-loss  = sum of fall + creditedP * (increment + 2 * downwardBand + syncPMax) + maskBudget
-```
+The loss counts each active validator's penalties and due partial withdrawals, rounded to bands.
 
-- The gain is the rise of the total active balance over the next epoch.
-  Validators that join the active set count in full.
-  A validator that stays active gains at most the credit that crosses the upward band.
-  Validators that receive a transfer, or that a block of the epoch debits, gain one band more.
-- The loss is the fall of the stake of the active validators.
-  A validator falls by its penalties and the partial withdrawals that the ancestor queue pays.
-  Validators credited on the branch of the state, other than by sync rewards, add a band.
-  The partial withdrawals that those credits hide add the mask budget.
-- The credits and penalties of an epoch are bounds on the rewards of its end.
-  Altair pays a share of the base reward for each flag, scaled by the previous-to-current ratio.
-  Before Altair the three components of the attestation rewards and the inclusion reward count.
-- From Electra the deposit churn and the pending consolidations that come due add transfers.
-  Before Electra the deposits of a block add a gain at the largest effective balance.
--/
+The rewards and penalties of an epoch enter as upper bounds on those of its end. -/
 def quorumReserve (config : Config) (state ancestor : BeaconState preset fork) : ℕ :=
   let epoch := getCurrentEpoch state
   let inc := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -79,35 +62,23 @@ def quorumReserve (config : Config) (state ancestor : BeaconState preset fork) :
   let before (i : ℕ) := isActiveAt state (getPreviousEpoch state) i
   let recent (i : ℕ) := before i || current i
   let slashed (i : ℕ) := ((validator i).map (·.slashed)).getD false
-  let total := max inc (∑ i ∈ positions with current i, effective i)
-  let root := (integerSquareroot (UInt64.ofNat total)).toNat
-  let perIncrement := inc * preset.BASE_REWARD_FACTOR.toNat / root
-  let base (i : ℕ) := if .altair ≤ fork then effective i / inc * perIncrement
-    else effective i * preset.BASE_REWARD_FACTOR.toNat / root / BASE_REWARDS_PER_EPOCH.toNat
+  let totalGwei := (getTotalActiveBalance state).toOption.getD 0
+  let total := totalGwei.toNat
+  let base (i : ℕ) := ((getBaseReward state totalGwei (UInt64.ofNat i)).toOption.getD 0).toNat
   let num := max 1 ((∑ i ∈ positions with before i, effective i) / inc)
   let den := max 1 (total / inc)
   let flagWeight := (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum
-  let seatReward := if .altair ≤ fork then
-      total / inc * perIncrement * SYNC_REWARD_WEIGHT.toNat / WEIGHT_DENOMINATOR.toNat /
-        slots / preset.SYNC_COMMITTEE_SIZE.toNat
+  let seatReward := if .altair ≤ fork then ((syncParticipantReward state).toOption.getD 0).toNat
     else 0
   let seats (i : ℕ) := if altair : .altair ≤ fork then
       ((state.currentSyncCommittee altair).value.pubkeys.toList.filter fun key =>
         (validator i).any (·.pubkey == key)).length
     else 0
   let sync (i : ℕ) := seats i * seatReward
-  let depositChurn :=
-    if .glamsterdam ≤ fork then
-      let limit := max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
-        (total / config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat)
-      min config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS.toNat (limit - limit % inc)
-    else
-      let limit := max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
-        (total / config.CHURN_LIMIT_QUOTIENT.toNat)
-      min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat (limit - limit % inc)
+  let depositChurn := ((depositChurnLimit config state).toOption.getD 0).toNat
   let score (i : ℕ) := if altair : .altair ≤ fork then
       (((state.inactivityScores altair).data[i]?).map (·.toNat)).getD 0 else 0
-  let delay := (getPreviousEpoch state).toNat - state.finalizedCheckpoint.epoch.toNat
+  let delay := ((getFinalityDelay state).toOption.getD 0).toNat
   let inactivity (i : ℕ) := if .altair ≤ fork then
       effective i * (score i + config.INACTIVITY_SCORE_BIAS.toNat) /
         (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat)
@@ -122,7 +93,7 @@ def quorumReserve (config : Config) (state ancestor : BeaconState preset fork) :
   -- The proposer share of the sync rewards of a full epoch, paid per seat as in the sync step.
   let syncProposer := if .altair ≤ fork then
       slots * preset.SYNC_COMMITTEE_SIZE.toNat *
-        (seatReward * PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat))
+        ((syncProposerReward (UInt64.ofNat seatReward)).toOption.getD 0).toNat
     else 0
   let proposerCredit := (∑ i ∈ positions with recent i, base i) + syncProposer
   let whistleblower := (∑ i ∈ positions with (validator i).any (fun v =>
@@ -186,50 +157,21 @@ def quorumReserve (config : Config) (state ancestor : BeaconState preset fork) :
 
 /-- The reserve of a call for a counting state that may be on another branch.
 
-It reads the call's pulled-up head state, the target block's state and the finalized block's state.
+It reads the call's pulled-up head state, the target block's state and that block's finalized state.
 
-The finalized block's state is the state of the block of the target state's finalized checkpoint.
+It adds to the quorum reserve what a counting state of the target's epoch or the next can change.
 
-It starts with `quorumReserve`, which covers the call's own branch.
+That covers exits, the queues, credits since finality, late activations, sync seats and band changes.
 
-The other terms bound what a counting state of the target's epoch or the next can change.
+The depth is the call's epoch plus 2, minus the finalized epoch of the target block's state.
 
-```text
-pinReserve = quorumReserve                         the call's branch
-           + 3 * exiting                           keys active only in the previous epoch
-           + queues                                deposit, exit and consolidation queues
-           + credits + branchR                     credits on either branch since finality
-           + late                                  activations not fixed before finality
-           + syncSeats + syncFar                   sync-committee seats of the window
-           + rise + 3 * fall                       band changes of each key on another branch
-```
+Up to the seed lookahead plus one, the exit queues and the late activations add nothing.
 
-- The depth is the call's epoch plus 2, minus the finalized epoch of the target block's state.
-- The exit and consolidation queues and the late activations add nothing at a small depth.
-  That depth is at most the seed lookahead plus one.
-  Every such epoch in that window was fixed before the branches split.
-- Rates are read at a quarter of the call's total active balance.
-- Inactivity scores and the queue of partial withdrawals are read at the finalized block's state.
-- From Fulu, every Electra and Altair field it reads exists.
+Every epoch of that window was fixed before the branches split.
 
-On mainnet the depth is typically 4.
+Rates are read at a quarter of the call's total active balance.
 
-There it costs about 1.06 to 1.42 points of the Byzantine threshold at an epoch's last slot.
-
-It costs about 0.07 to 0.09 points at the middle of an epoch.
-
-These figures come from three mainnet states.
-
-Over 60 days of mainnet epochs, the most it costs is about 1.42 points.
-
-At depth 5 it costs at most about 1.45 points.
-
-From depth 6 the exit and consolidation queues and the late activations take it past 1.5 points.
-
-It is about 1.75 to 2.1 points at depth 6, and about 2.4 points at depth 10.
-
-So the reserve grows with the number of epochs since finality.
--/
+Inactivity scores and the queue of partial withdrawals are read at the finalized block's state. -/
 def pinReserve (config : Config) (state ancestor finalizedState : BeaconState preset fork) : ℕ :=
   let epoch := getCurrentEpoch state
   let inc := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -254,12 +196,13 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
       (slashed i = false ∨ recentSlashing i = true) ∧
       ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true,
     effective i
-  let total := max inc (∑ i ∈ positions with current i = true, effective i)
+  let totalGwei := (getTotalActiveBalance state).toOption.getD 0
+  let total := totalGwei.toNat
   -- The rates are read at a quarter of the call's total.
   --
   -- A counting state that keeps that much has a base reward per increment at most twice this one.
-  let root := (integerSquareroot (UInt64.ofNat (max inc (total / 4)))).toNat
-  let perIncrement := inc * preset.BASE_REWARD_FACTOR.toNat / root
+  let quarter := max preset.EFFECTIVE_BALANCE_INCREMENT (totalGwei / 4)
+  let perIncrement := ((getBaseRewardPerIncrement preset quarter).toOption.getD 0).toNat
   let base (i : ℕ) := effective i / inc * perIncrement
   let depositChurn := config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
   let exitChurn := ((exitChurnLimit config state).toOption.getD 0).toNat
@@ -315,7 +258,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
       else min (capFor i) (high - high % inc) - effective i
     else capFor i - effective i
   let syncProposer := slots * preset.SYNC_COMMITTEE_SIZE.toNat *
-    (seatReward * PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat))
+    ((syncProposerReward (UInt64.ofNat seatReward)).toOption.getD 0).toNat
   let proposerCredit := (∑ i ∈ positions with (before i || current i) = true, base i) +
     syncProposer
   -- The slashable keys of the window that the whistleblower term of `quorumReserve` leaves out.
