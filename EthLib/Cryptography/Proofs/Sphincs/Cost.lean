@@ -14,7 +14,7 @@ The calls are counted under a fixed answer function, as in the signing cost of t
 
 The counter search of a layer tries at most `2^32` counters, one call each.
 
-The three searches take `3 * 2^32` of the signing calls, and the rest is at most `939499`.
+The three searches take at most `3 * 2^32` of the signing calls, and the rest at most `939499`.
 -/
 
 @[expose] public section
@@ -41,7 +41,7 @@ theorem hashCalls_eq_length_queriesWith {α : Type} (oa : OracleComp HashSpec α
     rw [SphincsSecurity.Security.queriedInputs_query_bind, List.length_cons]
     exact congrArg (· + 1) (ih (f input))
 
-/-- Signing makes at most `939499 + 3 * 2^32 = 12885841387` calls. -/
+/-- The bound `939499 + 3 * 2^32` of signing is `12885841387`. -/
 theorem signCalls_eq : 939499 + 3 * MAX_COUNTER_TRIALS = 12885841387 := by
   decide
 
@@ -51,7 +51,7 @@ variable (H : ByteArray → OracleComp HashSpec (Vector UInt8 32))
 include hH
 
 /-- Key generation makes exactly `264193` calls. -/
-theorem hashCalls_keyGenWith (seed : Seed) : hashCalls f (keyGenWith H seed) = 264193 :=
+theorem hashCalls_keyGenWith_eq (seed : Seed) : hashCalls f (keyGenWith H seed) = 264193 :=
   (Bridge.hashCalls_keyGenWith f H hH seed).trans keyGenCalls_eq
 
 /-- The counter search of a one-time signature makes at most `2^32` calls. -/
@@ -63,7 +63,7 @@ theorem hashCalls_findCounter_le (pkSeed : PkSeed) (key : OtsKey) (msg : Digest)
 
 /-- Signing makes at most `939499 + 3 * 2^32` calls, whatever the answers.
 
-It bounds the calls of one signing request in the security game. -/
+It bounds the calls of one signing request, with a hash of one oracle call as in the game. -/
 theorem hashCalls_signWith_le (sk : SecretKey) (msg : Message) :
     hashCalls f (signWith H sk msg) ≤ 939499 + 3 * MAX_COUNTER_TRIALS := by
   let key := evalWithAnswerFn f (expandKey H sk.seed)
@@ -98,11 +98,14 @@ theorem hashCalls_signWith_le (sk : SecretKey) (msg : Message) :
   omega
 
 omit hH in
-/-- Verification makes at most `491` calls, when each call of `H` makes at most one query. -/
-theorem hashCalls_verifyWith_le (hH : ∀ input, IsTotalQueryBound (H input) 1) (pk : PublicKey)
-    (msg : Message) (sig : Signature) : hashCalls f (verifyWith H pk msg sig) ≤ 491 := by
+/-- Verification makes at most `491` calls, when each call of `H` makes at most one query.
+
+The hypothesis bounds every path of `H`, so it holds under every answer function. -/
+theorem hashCalls_verifyWith_le (hHbound : ∀ input, IsTotalQueryBound (H input) 1)
+    (pk : PublicKey) (msg : Message) (sig : Signature) :
+    hashCalls f (verifyWith H pk msg sig) ≤ 491 := by
   rw [hashCalls_eq_length_queriesWith, ← verifyCalls_eq]
-  exact length_queriesWith_le f (verifyWith_isTotalQueryBound H hH pk msg sig)
+  exact length_queriesWith_le f (verifyWith_isTotalQueryBound H hHbound pk msg sig)
 
 /-- A signature that verifies is checked with exactly `491` calls. -/
 theorem hashCalls_verifyWith_of_verify (pk : PublicKey) (msg : Message) (sig : Signature)
