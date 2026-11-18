@@ -175,6 +175,15 @@ Not yet released.
   It takes the premises of `source_safety`.
   When its guard fails, `drift` is the unslashed active stake at `x`, and the bound says nothing.
 
+- `Execution.honestTargetVotes_of_byzantineStakeAtMost` derives the honest target-vote count, `HonestTargetVotes`, from a bound on Byzantine stake ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  It assumes `TargetCountBounds`, which is stated for the pulled-up state of the head.
+  That state has aligned balances and at most the threshold share of Byzantine stake in the committees of the epoch so far.
+  The honest validators of the slots still to come hold the share that the rule counts for them.
+  They hold a third of the margin on top of it.
+  For a head whose block is two or more epochs before the current epoch it also assumes `StaleHeadVotersInWindow`.
+  `HonestTargetVotes` and `quorum_of_no_conflicting_checkpoint` keep their statements.
+  `le_activityFixedEpoch` is now public, for `TargetCount.lean`.
+
 - `Execution.honestHeadsCover_of_historical_anchor` keeps a confirmed block on every honest head chain from the call to a horizon, by induction on time ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   It no longer assumes the root's own earlier coverage.
   It assumes the parent's coverage, the root's viability, the receivers' exits, and a late duty majority.

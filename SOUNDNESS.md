@@ -3191,12 +3191,33 @@ Their additional conclusion supplies held states and runs for which reference un
 This alternative is outside the store-collision witnesses and provides no a priori drift bound or unconditional one-third slashing guarantee.
 The drift counts from the anchor, so on a long execution with enough churn since the anchor the alternative holds with no accountable key.
 
-`Consensus/Proofs/ForkChoice/FastConfirmation/TargetVotes.lean` states the assumed honest target-vote count, `HonestTargetVotes`.
-`SignsTarget`, in the network file above, describes a signing witness by a bounded time inside that count; it is not an additional hypothesis on its own.
-The count gives active honest voters, each of whom signs the target or lies outside the committees of the epoch so far, and three times their stake is at least three times the computed support plus the margin.
-`quorum_of_no_conflicting_checkpoint` takes that count as a hypothesis and, when the one-third test passes, applies it; no theorem derives the count from a bound on Byzantine stake, or shows that the target is justified.
+`Consensus/Proofs/ForkChoice/FastConfirmation/TargetVotes.lean` states the honest target-vote count, `HonestTargetVotes`.
+`SignsTarget`, in the network file above, describes a signing witness by a bounded time inside that count.
+It is not an additional hypothesis on its own.
+The count gives active honest voters.
+Each of them signs the target or lies outside the committees of the epoch so far.
+Three times their stake is at least three times the computed support plus the margin.
+`quorum_of_no_conflicting_checkpoint` takes that count as a hypothesis and, when the one-third test passes, applies it; it does not show that the target is justified.
 `quorum_of_current_target` applies the count in the same way when the two-thirds test passes.
 Then three times the voters' stake is at least twice the total active balance plus the margin of the count.
+`Execution.honestTargetVotes_of_byzantineStakeAtMost` (`Consensus/Proofs/ForkChoice/FastConfirmation/TargetCount.lean`) derives the count from `TargetCountBounds`.
+`TargetCountBounds` is stated for the pulled-up state of the head.
+It assumes aligned effective balances.
+It assumes that the Byzantine stake is at most the threshold share of the active members of the committees so far, as in Assumption 2.
+Those are the committees of the epoch so far.
+It also assumes that the honest validators of the slots still to come hold the share that the rule counts for them.
+They hold a third of the margin on top of it.
+The rule checks none of these; they are assumptions on the run.
+The theorem takes an anchored store, a positive slot duration and a fork before Gloas.
+It takes two seed lookaheads of at least one epoch, and a ring of mixes longer than the minimum lookahead plus one.
+It takes an increment that is a whole number of 100 Gwei.
+Take a head whose block is before the start of the current epoch and at least two epochs before it.
+The rule reads the committees of the current epoch from a state that has not processed the epochs in between.
+For such a head the theorem assumes `StaleHeadVotersInWindow`: a voter for the head's own current target is among those committees.
+For every other head it proves the membership.
+It is an assumption on the run: runs where those committees miss a voter for the head's target are not covered.
+Shuffling these committees from the pulled-up state of the head would remove the premise.
+That is a change of the rule, which this theorem does not make.
 
 `Execution.honestTargetVotes_signed_of_checked` in `Consensus/Proofs/ForkChoice/FastConfirmation/RootViability.lean` turns that count into signatures, for the current target ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).
 The caller's store is up to date at a slot start of the target's epoch, and its head passes the two-thirds test.

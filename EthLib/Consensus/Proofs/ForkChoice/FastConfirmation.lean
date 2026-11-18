@@ -22,6 +22,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootHeld
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootViability
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Supporters
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.TargetCount
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.TargetVotes
 
 /-!
@@ -34,6 +35,10 @@ They cover the arithmetic of the rule, how it chooses the confirmed block and th
 Other proofs tie the stake tests of the rule to the supporters and the committees it reads.
 
 One module turns an assumed honest vote count into concrete voters when the one-third test passes.
+
+Another derives that count from a bound on the Byzantine stake.
+
+The bound is on the committees of the epoch so far and on the slots to come.
 
 Another shows that honest votes over a whole epoch keep the block on the head chain.
 
