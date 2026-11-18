@@ -509,14 +509,18 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let newKeyFloor := 2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
     preset.MAX_EFFECTIVE_BALANCE.toNat / p.MIN_SLASHING_PENALTY_QUOTIENT.toNat -
       preset.downwardBand - inc
-  let newKeySlack := newKeyFloor - (config.EJECTION_BALANCE.toNat - inc)
+  -- An exit outside these counts consumes at least `exitFloor` of churn.
+  --
+  -- It is the ejection balance less an increment, kept positive and at most `newKeyFloor`.
+  let exitFloor := max 1 (min (config.EJECTION_BALANCE.toNat - inc) newKeyFloor)
+  let newKeySlack := newKeyFloor - exitFloor
   let lowKeys := (positions.filter fun i =>
     (validator i).any (fun v => decide (finalized < v.withdrawableEpoch.toNat) &&
       decide (v.activationEpoch.toNat ≤ epoch.toNat)) ∧
       lowEB i < newKeyFloor).card
   -- Outside the tight window, keys can start to exit on the other branch.
   --
-  -- The queues admit at most this many keys at the ejection balance less an increment each.
+  -- The queues admit at most this many keys at `exitFloor` each.
   --
   -- The `+ 2` counts one key at each end of the window that the churn covers only in part.
   --
@@ -525,7 +529,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- A key not active by this epoch here, or created there, keeps at least `newKeyFloor` from its
   -- activation, less its own sync-seat debits and pending partial payments in the window.
   --
-  -- One whose effective balance ends below the bound has those debits above `newKeySlack`.
+  -- One whose effective balance ends below `exitFloor` has those debits above `newKeySlack`.
   --
   -- So has an existing key whose `lowEB` is at least `newKeyFloor`.
   --
@@ -541,9 +545,9 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- Its whistleblower credits are in `reserveW`, `flagged` and the drift's slashed keys.
   let newKeySeats := depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope /
     max 1 newKeySlack
-  -- A carry is a balance that can let several keys exit, so it counts by the ejection balance too.
+  -- A carry is a balance that can let several keys exit, so it counts by `exitFloor` too.
   let queueKeys := (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry) /
-    (config.EJECTION_BALANCE.toNat - inc) + 2 + lowKeys + newKeySeats
+    exitFloor + 2 + lowKeys + newKeySeats
   -- The largest gain rate of one key, its gain rate at the largest effective balance.
   let gainRateMax := capMax / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
@@ -627,6 +631,10 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- There a K5 key whose exit the call reads has its consolidation credit's gains charged thrice.
   --
+  -- Every key's whistleblower and sync credits on the other branch are charged their gains too.
+  --
+  -- They are read at every key slashable there, its credits, and the seats.
+  --
   -- Past that bound, `rise`'s headroom pays a consolidation target's.
   --
   -- There each deposit the window can apply to a new key is charged up to the cap.
@@ -634,8 +642,16 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- This closes a proof route at degenerate totals; no reachable run is known to need it.
   let consolidationGain := consolidationsX / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
+  let otherCredits := 3 * (2 * ((∑ i ∈ positions, ebUp i) +
+        depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
+        consolidationsX + depth * proposerCredit +
+        depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) /
+          p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+      depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope + depth * syncProposer)
+  let otherGain := otherCredits / inc * perIncrement *
+    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   let creditGain := if 11 * depth * gainRateMax < capMax
-    then (33 * depth * consolidationGain + 9) / 10
+    then (33 * depth * consolidationGain + 11 * depth * otherGain + 9) / 10
     else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
   -- A key here that is not yet eligible can be topped up on the other branch alone.
   --
