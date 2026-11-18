@@ -24,7 +24,7 @@ Not yet released.
   `Run.balanceCorrections_of_same_epoch` bounds the balances along a branch inside one epoch.
 
 - `Run.exit_activation_gap` shows that an assigned exit in a run from genesis comes at least the seed lookahead and one epoch after the activation.
-  `stub_J` of the pin's drift sum reads it.
+  The pin's drift bound reads it.
 
 - The quorum drift bound adds these facts of runs.
   `Run.blockCount` counts the blocks of a run, `Run.blockCount_append` adds them over two runs, and `Run.blocks_le_slots` bounds them by one per slot.
@@ -78,7 +78,7 @@ Not yet released.
   `DirectSafety.Run.departureCharges_epoch_ge_start` bounds the exit epoch of each departure charge of a run from Electra from below.
   The bound is the epoch of the start, plus one epoch and the seed lookahead.
   `DirectSafety.departureCharges_run_indices` shows that the departure charges of a run name each registry index at most once.
-  The pin drift bound reads it for its exit-queue terms (`bud_queues`, `bud_queueRise`).
+  The pin's drift bound reads it for its exit-queue terms.
 
 - `queueConsolidation_steps` states the steps of queueing a consolidation once ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
   The churn call writes only the churn left and the earliest consolidation epoch.

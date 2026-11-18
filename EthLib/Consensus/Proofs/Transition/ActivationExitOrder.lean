@@ -763,7 +763,7 @@ theorem Run.activationExitOrder {first last : ForkedBeaconState preset}
     ActivationExitOrder last.state :=
   (run.activationExitDelay genesis).2.1
 
-/-- An assigned exit in a run from genesis comes after the activation by the seed lookahead. -/
+/-- From genesis, an assigned exit comes one epoch and the seed lookahead after the activation. -/
 theorem Run.exit_activation_gap {first last : ForkedBeaconState preset}
     (run : Run config checks first last)
     (genesis : Genesis (config := config) (checks := checks) first) :
