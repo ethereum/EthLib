@@ -337,9 +337,7 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
         ((e.world k).state w) →
       ∃ state, ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint =
         .ok state) ∨
-    (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ last ∧ (e.world j).time ≤ last ∧
-      ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-        some evidence) ∨
+    HonestCollision (e := e) last ∨
     HistoricalDirectSafetyEvidence (e := e) pre last := by
   classical
   -- With no honest event in time, every store claim is vacuous.
@@ -354,24 +352,14 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
       n₀Time with chain | evidence
   swap
   · exact .inr (.inr evidence)
-  rcases Store.blocks_agree_or_collision
-      (fun i : ValidatorIndex × ℕ => (e.world i.2).state i.1)
-      (fun i => i.1 ∈ J ∧ (e.world i.2).time ≤ last) with agree | collision
+  rcases e.blocksAgree_or_collision last with agree | collision
   swap
-  · obtain ⟨⟨a, i⟩, ⟨ha, hi⟩, ⟨b, j⟩, ⟨hb, hj⟩, r, collision, found⟩ := collision
-    exact .inr (.inl ⟨a, ha, b, hb, i, j, hi, hj, r, collision, found⟩)
-  have oneBlock (v : ValidatorIndex) (hv : v ∈ J) (w : ValidatorIndex) (hw : w ∈ J)
-      (n k : ℕ) (hn : (e.world n).time ≤ last) (hk : (e.world k).time ≤ last) :=
-    agree (v, n) ⟨hv, hn⟩ (w, k) ⟨hw, hk⟩
+  · exact .inr (.inl collision)
+  have noCollision := e.not_honestCollision_of_agree agree
   have forward := fun w (hw : w ∈ J) j => e.forwardReachable
     (fun u hu => (start u hu) ▸ Store.ForwardReachable.anchor anchored) j w hw
   have startLe : ∀ j, e.startTime ≤ (e.world j).time := fun j => by
     simpa [e.world_zero, World.initial] using e.monotone_time (Nat.zero_le j)
-  by_cases noCollision : ¬ ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ last ∧
-      (e.world j).time ≤ last ∧ ∃ r evidence,
-        Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] = some evidence
-  swap
-  · exact .inr (.inl (not_not.mp noCollision))
   left
   intro w hw k hk upToDate
   by_cases early :
@@ -449,7 +437,7 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have aboveAnchor : anchorBlock.slot ≤ finalBoundary := UInt64.le_trans
     ((forward w hw k).reachable.anchorSlot_le (UInt64.le_of_eq anchorSlot) finalKnown) finalLe
   have voterRead := Store.getCheckpointBlock_of_same_blocks (forward v hv n).reachable
-    (oneBlock w hw v hv k n hk nBound) finalBoundaryOk aboveAnchor ⟨targetBlock, targetKnown⟩
+    (agree w hw v hv k n hk nBound) finalBoundaryOk aboveAnchor ⟨targetBlock, targetKnown⟩
     chainRead
   have finalLeTarget : ((e.world arrival).state w).finalizedCheckpoint.epoch ≤
       attestation.data.target.epoch := by
@@ -490,15 +478,13 @@ def HonestHeadsExist (first last : Nat) : Prop :=
     ((e.world k).state w).getFilteredNodeTree config = .ok nodes →
     ∃ hd, ((e.world k).state w).getHead config = .ok hd
 
-/-- Before Gloas, every up-to-date honest store whose viable nodes can be computed has a head.
+/-- Before Gloas, an up-to-date honest store up to `last` with a readable filtered tree has a head.
 
-Otherwise bounded honest stores collide, or a store's finalized checkpoints give evidence.
+Otherwise two honest stores collide by `last`, or direct-safety evidence holds.
 
-The evidence is that of direct safety, relative to the anchor.
+The evidence is relative to the anchor.
 
-The store holds the state of its justified checkpoint, through an honest vote for it.
-
-The stake ceiling and the fit of the proposer boost keep every weight below `2^64`. -/
+The claim holds from every start time. -/
 theorem Execution.honestHeadsExist_or_evidence {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
@@ -519,29 +505,27 @@ theorem Execution.honestHeadsExist_or_evidence {Δ : ℕ} (sync : e.Synchronous 
     (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) last)
     (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17)) (first : ℕ) :
     HonestHeadsExist (e := e) first last ∨
-    (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ last ∧ (e.world j).time ≤ last ∧
-      ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-        some evidence) ∨
+    HonestCollision (e := e) last ∨
     HistoricalDirectSafetyEvidence (e := e) pre last := by
+  -- The store holds the state of its justified checkpoint, through an honest vote for it.
   rcases e.justifiedState_or_evidence sync slots preGloas admitted fits prompt votes anchored start
       anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre heldEarly
       enough terminal with states | alternative
   · left
     intro w hw k nodes _ inTime upToDate tree
     obtain ⟨state, stateOk⟩ := states w hw k inTime upToDate
+    -- The stake ceiling and the fit of the proposer boost keep every weight below `2^64`.
     exact Store.getHead_exists preGloas
       (e.forwardReachable (fun u hu => (start u hu) ▸ Store.ForwardReachable.anchor anchored) k w
         hw) (UInt64.le_of_eq anchorSlot) (absent w hw k inTime) positive scoreFits tree stateOk
       (ceiling w hw k _ state inTime stateOk)
   · exact .inr alternative
 
-/-- Before Gloas, every rollover read of a call holds, from the premises of the call headlines.
+/-- Before Gloas, the caller of a checked call reads its head at each rollover up to `last`.
 
-Otherwise bounded honest stores collide, or a store's finalized checkpoints give evidence.
+Otherwise two honest stores collide by `last`, or direct-safety evidence holds.
 
-At each rollover event the caller is up to date, so it holds its justified state and block.
-
-Its viable nodes can then be computed, and it has a head. -/
+The evidence is relative to the anchor. -/
 theorem Execution.callRolloverRead_or_evidence {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
     (history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -564,9 +548,7 @@ theorem Execution.callRolloverRead_or_evidence {Δ : ℕ} (sync : e.Synchronous 
     (fit : config.CommitteeWindowsFit preset)
     {u : ValidatorIndex} (caller : u ∈ J) (n : ℕ) (head : Root) :
     CallRolloverRead (e := e) u n head last ∨
-    (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ last ∧ (e.world j).time ≤ last ∧
-      ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
-        some evidence) ∨
+    HonestCollision (e := e) last ∨
     HistoricalDirectSafetyEvidence (e := e) pre last := by
   rcases e.justifiedState_or_evidence sync slots preGloas admitted fits prompt votes anchored start
       anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre heldEarly
@@ -578,6 +560,7 @@ theorem Execution.callRolloverRead_or_evidence {Δ : ℕ} (sync : e.Synchronous 
       heldEarly enough terminal ceiling scoreFits 0 with heads | alternative
   swap
   · exact .inr alternative
+  -- At each rollover the caller is up to date, so it holds its justified state and has a head.
   left
   have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
   intro _ _ _ begin _ _ _ _ beginLe k atTime upToDate
