@@ -478,6 +478,10 @@ They hold a third of the margin on top of it.
 
 The stake is read in the pulled-up state of the head.
 
+The anchor's invariant and the preset's aligned maximum balances give that state aligned balances.
+
+The second is a preset fact, proved for mainnet and minimal.
+
 Heads with a block at least two epochs before the current epoch have the premise on stale heads. -/
 theorem Execution.honestTargetVotes_of_byzantineStakeAtMost [DecidablePred (· ∈ J)]
     {anchor : Store preset fork}
