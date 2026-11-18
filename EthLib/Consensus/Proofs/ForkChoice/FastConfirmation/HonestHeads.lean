@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalStatements
 public import EthLib.Consensus.Proofs.ForkChoice.HeadTotality
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootViability
 import EthLib.Consensus.Proofs.ForkChoice.Network
 import EthLib.Consensus.Proofs.ForkChoice.VoteDelivery
 import EthLib.Consensus.Proofs.HonestAggregation
@@ -533,5 +534,65 @@ theorem Execution.honestHeadsExist_or_evidence {Δ : ℕ} (sync : e.Synchronous 
         hw) (UInt64.le_of_eq anchorSlot) (absent w hw k inTime) positive scoreFits tree stateOk
       (ceiling w hw k _ state inTime stateOk)
   · exact .inr alternative
+
+/-- Before Gloas, every rollover read of a call holds, from the premises of the call headlines.
+
+Otherwise bounded honest stores collide, or a store's finalized checkpoints give evidence.
+
+At each rollover event the caller is up to date, so it holds its justified state and block.
+
+Its viable nodes can then be computed, and it has a head. -/
+theorem Execution.callRolloverRead_or_evidence {Δ : ℕ} (sync : e.Synchronous Δ)
+    (slots : 0 < config.SLOT_DURATION_MS)
+    (history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (preGloas : fork < .glamsterdam) {last : ℕ} (admitted : BlocksAdmitted e 0 Δ last)
+    (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e last)
+    (votes : ValidatedDutyVotes (e := e) last) {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 last)
+    (roots : HeldBlockStateRootsNonzero (e := e) last) (absent : AnchorParentAbsent (e := e) last)
+    {horizon : Epoch} (bounded : HonestStoreEpochsBounded (e := e) horizon last)
+    (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) last)
+    (enough : HeldRunStakeFloor (e := e) pre horizon last)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon last)
+    (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) last)
+    (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
+    (fit : config.CommitteeWindowsFit preset)
+    {u : ValidatorIndex} (caller : u ∈ J) (n : ℕ) (head : Root) :
+    CallRolloverRead (e := e) u n head last ∨
+    (∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ last ∧ (e.world j).time ≤ last ∧
+      ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
+        some evidence) ∨
+    HistoricalDirectSafetyEvidence (e := e) pre last := by
+  rcases e.justifiedState_or_evidence sync slots preGloas admitted fits prompt votes anchored start
+      anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre heldEarly
+      enough terminal with states | alternative
+  swap
+  · exact .inr alternative
+  rcases e.honestHeadsExist_or_evidence sync slots fit.positive preGloas admitted fits prompt votes
+      anchored start anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre
+      heldEarly enough terminal ceiling scoreFits 0 with heads | alternative
+  swap
+  · exact .inr alternative
+  left
+  have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
+  intro _ _ _ begin _ _ _ _ beginLe k atTime upToDate
+  have inTime : (e.world k).time ≤ last := atTime ▸ beginLe
+  have forward := e.forwardReachable
+    (fun w hw => (start w hw) ▸ Store.ForwardReachable.anchor anchored) k u caller
+  have reached := e.forwardReachableWith
+    (fun w hw => (start w hw) ▸ Store.ForwardReachableWith.anchor anchored) k u caller
+  -- The justified block is held, as the store holds the justified state.
+  obtain ⟨state, stateOk⟩ := states u caller k inTime upToDate
+  obtain ⟨base, -, baseFound, -⟩ :=
+    reached.checkpointStatesFromBlocks (Store.checkpointState_ok_iff.mp stateOk)
+  obtain ⟨nodes, tree⟩ := getFilteredNodeTree_exists preGloas forward sound slots anchorSlot
+    anchorBoundary (absent u caller k inTime) fit history
+    (forward.reachable.known_of_blockState baseFound)
+  exact heads u caller k nodes (Nat.zero_le _) inTime upToDate tree
 
 end EthLib.Consensus.Models.Network
