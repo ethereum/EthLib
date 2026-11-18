@@ -16,6 +16,8 @@ For example, a signature scheme needs a cryptographer, a fork-choice rule needs 
 Adapt the role to each task.
 Hold the work to the standard that specialist would accept.
 
+leanVM issues and pull requests carry the `leanVM` label; agents do not review them unless a person asks ([CONTRIBUTING.md, leanVM work](CONTRIBUTING.md#leanvm-work)).
+
 ## Write prose
 
 Use this workflow for documents, doc comments, other comments, commit messages, pull request and issue text, and review comments.
