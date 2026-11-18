@@ -768,6 +768,19 @@ private theorem mem_positions_filter (config : Config)
     i ∈ (pinTerms config state ancestor finalizedState).positions.filter p :=
   Finset.mem_filter.mpr ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1, test⟩
 
+/-- A flag read from the validator at a position can hold only where the position holds one.
+
+The flag is the `any` of the validator, or its `map` read with a default of `false`. -/
+private theorem validator_of_flag {state : BeaconState preset fork} {i : ℕ} {f : Validator → Bool}
+    (flag : (state.validators.data[i]?).any f = true ∨
+      ((state.validators.data[i]?).map f).getD false = true) :
+    ∃ w, state.validators.data[i]? = some w := by
+  cases found : state.validators.data[i]? with
+  | none =>
+    rw [found] at flag
+    simp at flag
+  | some w => exact ⟨w, rfl⟩
+
 /-- A voter active at the epoch of a state holds a validator there that is active at that epoch. -/
 private theorem active_of_activeVoters (early : fork < .glamsterdam)
     {s : BeaconState preset fork} {v : ValidatorIndex} (member : v ∈ activeVoters s) :
