@@ -79,10 +79,6 @@ theorem getCurrentEpoch_le_activityFixedEpoch (state : BeaconState preset fork) 
 
 /-- (preset fact) Activity is fixed at least three epochs ahead.
 
-It restores the content of `ExitWindowFixed`, which #2863 removed.
-
-The quorum drift bound needs only one epoch of lookahead.
-
 The floor of a new key's effective balance in the pin drift bound reads it.
 
 Its proof starts a key's balance floor two epochs before the key's activation epoch.
