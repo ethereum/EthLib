@@ -102,7 +102,7 @@ def getSelfBuiltExecutionPayloadBid (state : BeaconState preset fork)
     Except Err (SignedExecutionPayloadBid preset fork) := do
   let bid ← getExecutionPayloadBid state payload requests blobKzgCommitments state.slot
     feeRecipient BUILDER_INDEX_SELF_BUILD 0 inclusionListBits
-  return ⟨bid, Signatures.infinitySignature⟩
+  return ⟨bid, Signatures.G2_POINT_AT_INFINITY⟩
 
 /-- From Gloas: the envelope that reveals a payload and its requests, after the block of its bid.
 

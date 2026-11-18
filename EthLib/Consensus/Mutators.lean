@@ -199,7 +199,7 @@ def queueExcessActiveBalance (state : BeaconState preset fork) (electra : .pectr
     let validator ← getValidator state index
     let deposit : PendingDeposit := ⟨validator.pubkey, validator.withdrawalCredentials,
       balance - preset.MIN_ACTIVATION_BALANCE,
-      Cryptography.Bls.Signatures.infinitySignature, GENESIS_SLOT⟩
+      Cryptography.Bls.Signatures.G2_POINT_AT_INFINITY, GENESIS_SLOT⟩
     let pending ← appendWithinLimit (state.pendingDeposits electra) deposit
     let state ← state.setBalance index preset.MIN_ACTIVATION_BALANCE
     return { state with pendingDeposits := fun _ => pending }
