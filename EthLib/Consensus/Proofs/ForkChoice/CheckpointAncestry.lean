@@ -1361,6 +1361,8 @@ private theorem Execution.held_floors {ν κ : Type*} [DecidableEq ν]
 
 Otherwise a bounded pair of events gives accountable stake or hash evidence from held states.
 
+At those events the later justified root does not read the earlier finalized root.
+
 The evidence is relative to the anchor.
 
 Three times the accountable stake plus twice the drift covers the unslashed reference stake.
@@ -1407,6 +1409,11 @@ theorem Execution.finalized_prefix_or_accountable {ν κ : Type*} [DecidableEq �
         ((e.world i).state w).finalizedCheckpoint.epoch =
           .ok ((e.world i).state w).finalizedCheckpoint.root) ∨
     ∃ w ∈ J, ∃ i k, i ≤ k ∧ (e.world k).time ≤ time ∧
+      ((e.world i).state w).finalizedCheckpoint.epoch ≤
+        ((e.world k).state w).justifiedCheckpoint.epoch ∧
+      ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
+        ((e.world i).state w).finalizedCheckpoint.epoch ≠
+          .ok ((e.world i).state w).finalizedCheckpoint.root ∧
       ∃ (stateA stateB : BeaconState preset fork)
         (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
         (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
@@ -1439,7 +1446,7 @@ theorem Execution.finalized_prefix_or_accountable {ν κ : Type*} [DecidableEq �
     (unknown w honest i earlyTime) (forward k).blockStatesFromParents
     (forward i).blockStatesFromParents (early w honest k inTime)
     (early w honest i earlyTime) ordered calls terminal
-  exact .inr ⟨w, honest, i, k, later, inTime, result.resolve_left failed⟩
+  exact .inr ⟨w, honest, i, k, later, inTime, ordered, failed, result.resolve_left failed⟩
 
 /-- Justified checkpoints of one epoch agree across honest nodes, or two held states give evidence.
 

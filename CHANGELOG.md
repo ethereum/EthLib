@@ -96,7 +96,8 @@ Not yet released.
   It no longer assumes the root's own earlier coverage.
   It assumes the parent's coverage, the root's viability, the receivers' exits, and a late duty majority.
   The root's viability rules out honest justified checkpoints that conflict with the root, so it assumes the checkpoint-consistency half of safety.
-  The alternatives are a block collision between honest stores and `HistoricalDirectSafetyEvidence`, which holds with no accountable key once the churn since the anchor is large enough.
+  The alternatives are a block collision between honest stores and `HistoricalDirectSafetyEvidence`.
+  The latter holds with no accountable key once the churn since the anchor is large enough and a justified root fails to read an earlier finalized root.
   `Config.ProposerScoreFits` bounds the proposer boost so that the score fits in 64 bits; mainnet and minimal satisfy it.
 
 - New lemmas derive the reads of the fast confirmation rule from a held head state ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
@@ -148,6 +149,15 @@ Not yet released.
   `ReceiverWindowExitsNear` asks the receivers' exit bound only of receivers within two epochs of the parent.
 
 ### Changes that break callers
+
+- In Lean, `HistoricalDirectSafetyEvidence` now records a conflict.
+  It requires that the earlier finalized epoch is at most the later justified epoch.
+  It also requires that the later justified root does not read the earlier finalized root at that epoch.
+  Before, one held state paired with itself satisfied it whenever the stake inequality or hash evidence on its run held.
+  With enough churn since the anchor, the inequality holds with no accountable key.
+  Every result that offers the evidence as an alternative was then true without a conflict.
+  `Execution.finalized_prefix_or_accountable`, `Execution.mem_supportersOf_of_duty_epoch_or_accountable` and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` conclude the two new facts.
+  A caller that takes the evidence apart has two more components after the time bound; a caller that passes it on is unchanged.
 
 - In Lean, `Execution.honestHeadsCover_of_byzantine_bound` moves from `HistoricalSigners.lean` to `HistoricalCoverage.lean`, with the same statement, so that the checked-call headlines can read `Execution.justifiedHonestlySigned`.
   A caller that imports `HistoricalSigners.lean` alone imports `HistoricalCoverage.lean` instead.
