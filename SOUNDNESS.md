@@ -3284,7 +3284,8 @@ No theorem derives that coverage, nor `startCovers`, the coverage by the start o
 Each accepted root has a realized justification at most one epoch before its own.
 An accepted root of an earlier epoch is realized as justified by the head's state.
 `CallRolloverRead` is the caller's head read at each rollover for the current target of its head, through `CallerHeadAt` above.
-`Execution.rootInFilteredTree_of_checked` assumes it, and the headlines derive it through `Execution.callRolloverRead_or_evidence`, so they do not take it.
+`Execution.rootInFilteredTree_of_checked` and `Execution.rootViableAt_of_checked` assume it.
+The headlines and `Execution.confirmedRoot_covers` derive it through `Execution.callRolloverRead_or_evidence`, so they do not take it.
 `QuorumDriftWithin` assumes that an honest voter set of a call keeps its stake in each counting state, up to the call's quorum reserve.
 Its alternative is a collision of two honest stores.
 `Execution.quorumDriftWithin` proves it for an honest fork choice with BLS checks, before Gloas from Fulu.
@@ -3340,10 +3341,12 @@ The drift bound needs a lookahead of one epoch, and the near exit bound below ne
 
 The endpoint assumes `CallObligations` of each call.
 They apply when a call walks from its head to the start it selected.
-Then they assume the source reads of the later windows (`SourceWindowReads`) and the head read at each rollover (`CallRolloverRead`).
+Then they assume the source reads of the later windows (`SourceWindowReads`).
 They also assume `TargetCountBounds` with the call's pin reserve, and the realized guards `AcceptedRealizedRecent` and `AcceptedRealizedHead`.
 The rule checks neither the count bounds nor the realized guards; they are assumptions on the run.
-No theorem derives the source reads or the head reads yet.
+No theorem derives the source reads yet.
+They do not include the head read at each rollover (`CallRolloverRead`).
+The step derives it through `Execution.callRolloverRead_or_evidence`, up to a collision of two honest stores or `HistoricalDirectSafetyEvidence`.
 For each walked member they assume `MemberObligations`.
 That is the member's margin over its committee weight, which pays for the drift of each later window, and the reserve of each later window.
 That reserve is `exitReserveNear`, the active source stake already scheduled to exit within three epochs, not `exitReserve`.

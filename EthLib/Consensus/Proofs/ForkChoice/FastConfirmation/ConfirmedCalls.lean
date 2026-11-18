@@ -9,6 +9,7 @@ import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Committees
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedWalk
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalCoverage
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalTransport
+import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HonestHeads
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumDrift
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.SourceWindowMargin
 import EthLib.Consensus.Proofs.ForkChoice.HonestEquivocators
@@ -1257,7 +1258,7 @@ def MemberObligations [DecidablePred (· ∈ J)] (u : ValidatorIndex) (n : ℕ) 
 
 They apply only when the call walks from its head to the start it selected, through the stored root.
 
-They are the source reads of the later windows, the caller's head at each rollover, and the count.
+They are the source reads of the later windows and the count.
 
 The count bounds carry the call's pin reserve on top of the margin.
 
@@ -1267,9 +1268,7 @@ An assumption on the run: the count bounds and the realized guards, which the ru
 
 They buy the call's honest target count and the realized justification of each walked root.
 
-No theorem derives the source reads or the head reads yet.
-
-The planned producer of the head reads shows that an honest store's head read succeeds.
+No theorem derives the source reads yet.
 
 The source reads fail for a window member deposited after the source state, and on overflow.
 
@@ -1286,7 +1285,6 @@ def CallObligations [DecidablePred (· ∈ J)] (margin limit : ℕ) (u : Validat
     ((e.world n).state u).getAncestorRoots head.root start =
       .ok (chain ++ after.confirmedRoot :: later) →
     SourceWindowReads (e := e) n limit source ∧
-    CallRolloverRead (e := e) u n head.root limit ∧
     (∀ slot (pulled anc fin : BeaconState preset fork) (target : Checkpoint),
       ((e.world n).state u).getCurrentSlot config = .ok slot →
       isStartSlotAtEpoch preset slot = .ok false →
@@ -2180,7 +2178,7 @@ private theorem walk_inputs [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Stor
   · -- The count bounds give the honest count.
     intro slot' slotOk' inside pulled anc fin target pulledOk targetOk ancOk finOk finAnchor
     have bounds := (obligations head slot start source chain later headOk slotOk selects
-      sourceOk walked).2.2.1 slot' pulled anc fin target slotOk' inside pulledOk targetOk ancOk
+      sourceOk walked).2.1 slot' pulled anc fin target slotOk' inside pulledOk targetOk ancOk
       finOk finAnchor
     have maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := by
       have := ctx.exitWindow.lookahead
@@ -2352,7 +2350,7 @@ private theorem walk_holds [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store
   have rootWalked : after.confirmedRoot ∈ chain ++ after.confirmedRoot :: later := by simp
   have current := ctx.upToDate n (List.mem_of_getElem? calls.1)
   -- The root's realized post-state, from the call's realized guard.
-  obtain ⟨-, -, -, realized, -, members⟩ :=
+  obtain ⟨-, -, realized, -, members⟩ :=
     obligations head slot start source chain later headOk slotOk selects sourceOk walked
   obtain ⟨block, rootState, blockFound, stateFound, recent⟩ := realized _ rootMem
   have blockOk := Store.block_ok_iff.mpr blockFound
@@ -2595,13 +2593,27 @@ private theorem walkMembers_cover [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor 
   have upToDate := ctx.upToDate n (List.mem_of_getElem? calls.1)
   obtain ⟨slot', begin, slotOk', -, beginOk, timeEq⟩ := ctx.atSlots i n calls.1
   obtain rfl : slot = slot' := Except.ok.inj (slotOk.symm.trans slotOk')
-  obtain ⟨sourceReads, rollover, -, recent, realizedHead, memberObligations⟩ :=
+  obtain ⟨sourceReads, -, recent, realizedHead, memberObligations⟩ :=
     obligations head slot start source chain later headOk slotOk selects sourceOk walked
   have reach := fun k w (hw : w ∈ J) =>
     e.reachable (fun a ha => (ctx.start a ha) ▸ Store.Reachable.anchor ctx.anchored) k w hw
   have maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := by
     have := ctx.exitWindow.lookahead
     omega
+  -- The caller reads its head at each rollover, unless stores collide or historical evidence holds.
+  have signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 limit :=
+    ctx.anchorEpochOk ▸ ctx.signedAll
+  have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
+    have := ctx.ring
+    omega
+  rcases e.callRolloverRead_or_evidence ctx.sync ctx.slots history ctx.preGloas ctx.admitted
+      ctx.fits ctx.prompt ctx.votes ctx.anchored ctx.start ctx.anchorSlot ctx.anchorBoundary signed
+      ctx.roots ctx.absent ctx.bounded ctx.parameters ctx.genesis pre ctx.heldEarly ctx.enough
+      ctx.terminal ctx.ceiling ctx.scoreFits ctx.fit ctx.caller n head.root with
+    rollover | collision | evidence
+  rotate_left
+  · exact .inr (.inl collision)
+  · exact .inr (.inr (.inl evidence))
   -- The root is viable at each covered time, unless stores collide or held-state evidence holds.
   by_cases collision : HonestCollision (e := e) limit
   · exact .inr (.inl collision)

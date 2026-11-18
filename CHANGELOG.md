@@ -81,6 +81,7 @@ Not yet released.
   The alternatives are a collision of two honest stores and four kinds of accountable-safety evidence: historical, cross-store direct-safety, cross-store justified and held-state finality.
   It covers executions whose honest stores verify signatures with BLS (`checks = .bls`), because the specification's pulled-up head state processes slots with BLS checks.
   Each call assumes `CallObligations`, with `MemberObligations` for each member of its walk.
+  `CallObligations` does not include the caller's head read at each rollover: `Execution.callRolloverRead_or_evidence` derives `CallRolloverRead` from the theorem's other premises.
   `MemberObligations` states each window reserve at `exitReserveNear`, the reserve that the exit bound of the walk's receivers gives.
   The run assumes `JustifiedPinned`, `ByzantineCountedStake`, `TargetIncluded` and `StaleHeadVotersInWindow`; `SOUNDNESS.md` describes them.
   With `Preset.InclusionDelayPositive` and two conditions on the anchor, the theorem derives the signed justification inside, through `Execution.justifiedHonestlySigned`.
