@@ -122,6 +122,16 @@ theorem epoch_le_of_slot_le (a b : Slot) (le : a.toNat ≤ b.toNat) :
   simp only [computeEpochAtSlot, UInt64.toNat_div]
   exact Nat.div_le_div_right le
 
+/-- The first slot of an epoch no later than a slot's epoch is no later than the slot. -/
+theorem computeStartSlotAtEpoch_le_of_epoch_le {epoch : Epoch} {boundary slot : Slot}
+    (startOk : computeStartSlotAtEpoch preset epoch = .ok boundary)
+    (le : epoch.toNat ≤ (computeEpochAtSlot preset slot).toNat) : boundary ≤ slot := by
+  have value := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
+  rw [computeEpochAtSlot, UInt64.toNat_div] at le
+  have := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat le
+  have := Nat.div_mul_le_self slot.toNat preset.SLOTS_PER_EPOCH.toNat
+  exact UInt64.le_iff_toNat_le.mpr (by omega)
+
 /-- A time before the next slot maps to the slot whose start time it follows. -/
 theorem computeSlotAtTimeMs_inside {genesisTimeMs startTime timeMs due : UInt64} {slot : Slot}
     (start : computeTimeAtSlotMs config genesisTimeMs slot = .ok startTime)

@@ -703,6 +703,17 @@ private theorem Store.Reachable.tracked
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted
     exact ih.of_eq rfl rfl rfl rfl rfl rfl
 
+/-- The unrealized justification read of a block is its stored entry. -/
+theorem Store.unrealizedJustification_found {store : Store preset fork} {root : Root}
+    {checkpoint : Checkpoint} (read : store.unrealizedJustification root = .ok checkpoint) :
+    store.unrealizedJustifications[root]? = some checkpoint := by
+  unfold Store.unrealizedJustification at read
+  split at read
+  · rename_i stored found
+    simp only [pure, Except.pure, Except.ok.injEq] at read
+    rw [found, read]
+  · simp [throw, throwThe, MonadExceptOf.throw] at read
+
 /-- In a reachable store, each unrealized justification comes from the state of its own block.
 
 It is the current justified checkpoint of that state after justification.
@@ -727,6 +738,15 @@ theorem Store.Reachable.finalized_eq_anchor_of_epoch_le
   rcases reachable.tracked.finalized with anchored | ⟨later, _⟩
   · exact anchored
   · exact False.elim (UInt64.not_lt.mpr atAnchor later)
+
+/-- The finalized epoch of a reachable store is at least the epoch of the anchor state. -/
+theorem Store.Reachable.anchor_le_finalized
+    (reachable : Store.Reachable config anchorState anchorBlock store) :
+    getCurrentEpoch anchorState ≤ store.finalizedCheckpoint.epoch := by
+  by_cases low : store.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState
+  · rw [(reachable.finalized_eq_anchor_of_epoch_le low).1]
+    exact UInt64.le_refl _
+  · exact UInt64.le_of_lt (UInt64.not_le.mp low)
 
 /-- In a reachable store, the unrealized justification of a block names an ancestor of it.
 
@@ -1628,5 +1648,51 @@ theorem Store.ForwardReachable.justified_origins_epoch
   obtain ⟨now, nowOk, origins, _⟩ := origins_forward positive slots forward
   cases Except.ok.inj (currentOk.symm.trans nowOk)
   exact origins
+
+/-- The justified epoch of a forward store is the anchor state's, or before the current epoch.
+
+The current epoch must not be the first one. -/
+theorem Store.ForwardReachable.justified_before_current {current : Slot}
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (sound : Invariant anchorState) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (slots : 0 < config.SLOT_DURATION_MS) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (currentOk : store.getCurrentSlot config = .ok current)
+    (later : 0 < (computeEpochAtSlot preset current).toNat) :
+    store.justifiedCheckpoint.epoch = getCurrentEpoch anchorState ∨
+      store.justifiedCheckpoint.epoch < computeEpochAtSlot preset current := by
+  have reached := forward.reachable
+  have states : Store.StatesHold store := (reached.ordered sound).2
+  rcases forward.justified_origins_epoch positive slots currentOk with
+    ⟨_, _, same⟩ | ⟨root, state, stored, same⟩ |
+      ⟨root, block, state, pulled, known, stored, run, same, earlier⟩
+  · exact .inl (by rw [same])
+  · right
+    have le : (getCurrentEpoch state).toNat ≤ (computeEpochAtSlot preset current).toNat :=
+      epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp
+        (forward.slot_le_of_blockState_of_getCurrentSlot stored currentOk))
+    have settled := UInt64.le_iff_toNat_le.mp (states stored).settled
+    rw [getPreviousEpoch_toNat] at settled
+    rw [same]
+    apply UInt64.lt_iff_toNat_lt.mpr
+    omega
+  · right
+    have inv := states stored
+    have bound := UInt64.le_iff_toNat_le.mp
+      (processJustificationAndFinalization_invariant inv.ordered inv.settled run).2.2.1
+    -- The held state is at its block's slot.
+    have stateSlot : state.slot = block.slot := by
+      by_cases anchorCase : block = anchorBlock
+      · obtain ⟨post, postFound, isAnchor, -⟩ := reached.blockStatesFromParents known
+        rw [stored, Option.some.injEq] at postFound
+        subst post
+        rw [isAnchor anchorCase, anchorCase, anchorSlot]
+      · exact (reached.blockState_header known stored anchorCase).1
+    have stateEpoch : getCurrentEpoch state = computeEpochAtSlot preset block.slot := by
+      simp only [getCurrentEpoch, stateSlot]
+    rw [same]
+    apply UInt64.lt_iff_toNat_lt.mpr
+    have := UInt64.lt_iff_toNat_lt.mp earlier
+    rw [← stateEpoch] at this
+    omega
 
 end EthLib.Consensus

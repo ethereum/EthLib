@@ -219,6 +219,26 @@ theorem Execution.blocks_of_le {ν κ : Type*} [DecidableEq ν] {checks : Signat
       | envelope _ step => exact (Store.onExecutionPayloadEnvelope_frame step).2.1 ▸ ih
       | inclusionList _ step => exact (Store.onInclusionList_frame step).2.1 ▸ ih
 
+/-- An ancestor test of a store holds at every later event. -/
+theorem Execution.isAncestor_of_le {ν κ : Type*} [DecidableEq ν] {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    {u : ν} {n k : ℕ} (later : n ≤ k) {node ancestor : ForkChoiceNode}
+    (descends : ((e.world n).state u).isAncestor node ancestor = .ok true) :
+    ((e.world k).state u).isAncestor node ancestor = .ok true := by
+  have blocks {root : Root} {block : BeaconBlock preset fork}
+      (found : ((e.world n).state u).blocks[root]? = some block) :
+      ((e.world k).state u).blocks[root]? = some block :=
+    e.blocks_of_le later found
+  unfold Store.isAncestor at descends ⊢
+  simp only [bind_ok_iff] at descends
+  obtain ⟨block, found, reached, walk, rest⟩ := descends
+  have held := blocks (Store.block_ok_iff.mp found)
+  simp only [Store.block_ok_iff.mpr held, Store.getAncestor_of_blocks blocks walk, bind,
+    Except.bind]
+  exact rest
+
 /-- A move of the store keeps each checkpoint, or moves it to one at a greater epoch. -/
 theorem Handles.checkpointsAdvance {checks : SignatureChecks}
     {sources : BlockSources preset fork} {time : ℕ} {view : Set (Message preset fork)}
@@ -298,6 +318,19 @@ theorem Execution.unrealizedJustified_epoch_le_of_le {ν κ : Type*} [DecidableE
     rcases e.state_succ k u with same | ⟨_, moved⟩
     · exact same ▸ ih
     · exact UInt64.le_trans ih moved.unrealizedJustified_epoch_le
+
+/-- An honest store's unrealized justified epoch is at least the anchor store's. -/
+theorem Execution.anchor_unrealized_le {ν κ : Type*} [DecidableEq ν]
+    {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    {anchor : Store preset fork} (start : ∀ w ∈ J, e.start w = anchor) {u : ν} (honest : u ∈ J)
+    (k : ℕ) :
+    anchor.unrealizedJustifiedCheckpoint.epoch ≤
+      ((e.world k).state u).unrealizedJustifiedCheckpoint.epoch := by
+  have later := e.unrealizedJustified_epoch_le_of_le u (Nat.zero_le k)
+  simpa [Execution.world_zero, World.initial, start u honest] using later
 
 /-- Store clocks stay between the initial clock and the maximum of it and network time.
 

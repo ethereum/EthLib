@@ -402,6 +402,17 @@ theorem Store.ForwardReachable.slots_le_current
     (forward.reachable.slot_le_of_blockState anchorSlot found stateFound)
     (states root state stateFound)
 
+/-- A held block of a forward store is in the epoch of the store's slot or before. -/
+theorem Store.ForwardReachable.block_epoch_le_current
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (slots : 0 < config.SLOT_DURATION_MS) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    {slot : Slot} (slotOk : store.getCurrentSlot config = .ok slot) {root : Root}
+    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block) :
+    (computeEpochAtSlot preset block.slot).toNat ≤ (computeEpochAtSlot preset slot).toNat := by
+  obtain ⟨current, currentOk, blocksLe, -⟩ := forward.slots_le_current slots anchorSlot
+  obtain rfl : current = slot := Except.ok.inj (currentOk.symm.trans slotOk)
+  exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp (blocksLe root block found))
+
 /-- The anchor state hashes to the state root of its anchor block. -/
 theorem Store.Reachable.anchorState_root
     (reachable : Store.Reachable config anchorState anchorBlock store) :

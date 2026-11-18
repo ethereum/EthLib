@@ -624,6 +624,46 @@ theorem getCheckpointBlock_trans {root through : Root} {high low : Epoch}
   unfold getCheckpointBlock
   simp only [lowOk, Except.mapError, bind, Except.bind, through']
 
+/-- Before Gloas, a checkpoint read at an ancestor holds at each descendant.
+
+The ancestor is in the checkpoint's epoch or a later one. -/
+theorem getCheckpointBlock_of_ancestor_epoch (before : fork < .glamsterdam)
+    {root above checkpoint : Root} {aboveBlock : BeaconBlock preset fork}
+    (aboveFound : store.blocks[above]? = some aboveBlock)
+    (descends : store.isAncestor ⟨root, .pending⟩ ⟨above, .pending⟩ = .ok true) {epoch : Epoch}
+    (le : epoch.toNat ≤ (computeEpochAtSlot preset aboveBlock.slot).toNat)
+    (read : store.getCheckpointBlock above epoch = .ok checkpoint) :
+    store.getCheckpointBlock root epoch = .ok checkpoint := by
+  obtain ⟨boundary, -, boundaryOk, -, -, -⟩ := isAncestor_of_getCheckpointBlock before read
+  exact getCheckpointBlock_of_isAncestor before aboveFound descends boundaryOk
+    (computeStartSlotAtEpoch_le_of_epoch_le boundaryOk le) read
+
+/-- Before Gloas, a checkpoint read names a held block in the checkpoint's epoch or before.
+
+That block reads itself as the checkpoint block of the epoch. -/
+theorem getCheckpointBlock_self (before : fork < .glamsterdam)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) {root checkpoint : Root} {epoch : Epoch}
+    (read : store.getCheckpointBlock root epoch = .ok checkpoint) :
+    ∃ block : BeaconBlock preset fork, store.blocks[checkpoint]? = some block ∧
+      (computeEpochAtSlot preset block.slot).toNat ≤ epoch.toNat ∧
+      store.getCheckpointBlock checkpoint epoch = .ok checkpoint := by
+  obtain ⟨boundary, block, boundaryOk, found, le, -⟩ := isAncestor_of_getCheckpointBlock before read
+  have epochEq := computeEpochAtSlot_computeStartSlotAtEpoch
+    (UInt64.lt_iff_toNat_lt.mpr positive) boundaryOk
+  refine ⟨block, found, ?_, ?_⟩
+  · rw [← epochEq]
+    exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp le)
+  · rw [← getCheckpointBlock_trans before read (UInt64.le_refl _)]
+    exact read
+
+/-- The store's epoch is the epoch of its slot. -/
+theorem getCurrentStoreEpoch_eq {config : Config} {slot : Slot} {epoch : Epoch}
+    (slotOk : store.getCurrentSlot config = .ok slot)
+    (epochOk : store.getCurrentStoreEpoch config = .ok epoch) :
+    epoch = computeEpochAtSlot preset slot := by
+  simpa [getCurrentStoreEpoch, slotOk, bind, Except.bind, pure, Except.pure]
+    using epochOk.symm
+
 /-- A checkpoint read on a head above a block is above the block.
 
 The block must be at or before the first slot of the checkpoint's epoch. -/

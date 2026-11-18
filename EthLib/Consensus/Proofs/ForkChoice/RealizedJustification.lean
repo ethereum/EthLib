@@ -575,4 +575,49 @@ theorem Store.Reachable.justified_epoch_le_unrealized {store : Store preset fork
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted
     exact ih
 
+/-- A stored unrealized justification is at most the store's unrealized justified checkpoint.
+
+The anchor state must keep the invariant of the state transition. -/
+theorem Store.ForwardReachable.unrealizedJustification_epoch_le {store : Store preset fork}
+    (sound : Invariant anchorState)
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (slots : 0 < config.SLOT_DURATION_MS)
+    {root : Root} {checkpoint : Checkpoint}
+    (found : store.unrealizedJustifications[root]? = some checkpoint) :
+    checkpoint.epoch ≤ store.unrealizedJustifiedCheckpoint.epoch := by
+  have reachable := forward.reachable
+  rcases reachable.unrealizedJustification_origin found with
+    ⟨epochEq, -⟩ | ⟨state, pulled, held, run, rfl⟩
+  · rw [epochEq]
+    exact UInt64.le_trans reachable.anchor_le_finalized (UInt64.le_trans
+      (reachable.finalized_le_justified sound)
+      (Store.Reachable.justified_epoch_le_unrealized sound reachable))
+  · obtain ⟨_, known⟩ := reachable.known_of_blockState held
+    exact forward.pulledUp_le_unrealized sound positive slots known held run
+
+/-- A voting source of a store is at most its unrealized justified checkpoint.
+
+The anchor state must keep the invariant of the state transition. -/
+theorem Store.ForwardReachable.votingSource_epoch_le {store : Store preset fork}
+    (sound : Invariant anchorState)
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (slots : 0 < config.SLOT_DURATION_MS)
+    {root : Root} {source : Checkpoint} (voted : store.getVotingSource config root = .ok source) :
+    source.epoch ≤ store.unrealizedJustifiedCheckpoint.epoch := by
+  unfold Store.getVotingSource at voted
+  simp only [bind_ok_iff] at voted
+  obtain ⟨_, -, _, -, voted⟩ := voted
+  split at voted
+  · split at voted
+    · rename_i checkpoint found
+      cases voted
+      exact forward.unrealizedJustification_epoch_le sound positive slots found
+    · cases voted
+  · split at voted
+    · rename_i state held
+      cases voted
+      exact UInt64.le_trans (forward.reachable.justified_le_of_blockState sound held)
+        (Store.Reachable.justified_epoch_le_unrealized sound forward.reachable)
+    · cases voted
+
 end EthLib.Consensus
