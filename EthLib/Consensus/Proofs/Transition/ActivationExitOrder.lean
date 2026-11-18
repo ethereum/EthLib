@@ -666,26 +666,6 @@ private theorem queuePreActivation_activation {electra : .pectra ≤ fork}
     exact ⟨v, readV, by rw [← Except.ok.inj written]⟩
   · exact ⟨w, (getValidator_setValidator_of_ne set₂ same).symm.trans found, rfl⟩
 
-/-- The validators put back into the queue are those with no activation epoch yet. -/
-private theorem preActivation_waiting {s : BeaconState preset .pectra} {index : ValidatorIndex}
-    (member : index ∈ preActivationIndices s) {v : Validator}
-    (found : getValidator s index = .ok v) : v.activationEpoch = FAR_FUTURE_EPOCH := by
-  obtain ⟨⟨w, i⟩, sorted, rfl⟩ := List.mem_map.mp member
-  rw [List.mem_mergeSort] at sorted
-  obtain ⟨member, waiting⟩ := List.mem_filter.mp sorted
-  have at_i : s.validators.data[i]? = some w := by
-    simpa using List.mem_zipIdx_iff_getElem?.mp member
-  have inside := (Array.getElem?_eq_some_iff.mp at_i).1
-  have small : s.validators.data.size < 2 ^ 64 :=
-    Nat.lt_of_le_of_lt (s.validators.bound (by decide)) (UInt64.toNat_lt _)
-  have exact : i.toUInt64.toNat = i := by
-    have bound : i < UInt64.size := by change i < 2 ^ 64; omega
-    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' bound]
-  have read : getValidator s i.toUInt64 = .ok w := by simp [getValidator, exact, at_i]
-  have same := Except.ok.inj (read.symm.trans found)
-  subst same
-  simpa using waiting
-
 private theorem foldQueuePreActivation {electra : .pectra ≤ fork} :
     ∀ {indices : List ValidatorIndex} {state after : BeaconState preset fork},
       (∀ index ∈ indices, ∀ v, getValidator state index = .ok v →
@@ -726,7 +706,11 @@ private theorem upgradeNext {pre : ForkedBeaconState preset}
         · cases ok; exact refl _
       · cases ok; exact refl _) compounded
     have head := foldQueuePreActivation (config := config) (electra := by decide)
-      (fun _ member _ found => preActivation_waiting member found) queued
+      (fun _ member _ found => by
+        obtain ⟨w, read, far⟩ := preActivation_waiting (by decide) member
+        simp only [getValidator, read, Except.ok.injEq] at found
+        subst found
+        exact far) queued
     exact (of_data (state := state)).trans (head.trans tail)
   · obtain ⟨_, upgraded, rfl⟩ := ok
     exact of_data (upgradeToFulu_spec upgraded).1 (upgradeFrame_upgradeToFulu upgraded).finalized

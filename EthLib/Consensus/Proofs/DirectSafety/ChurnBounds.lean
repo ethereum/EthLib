@@ -424,17 +424,8 @@ private theorem queues_preActivation_fold (a b : BeaconState preset .pectra)
       (fun s i => queuePreActivation s (by decide) i) a = .ok b) :
     ElectraQueuesKept a b := by
   have pending : ∀ index ∈ preActivationIndices a, ∃ v,
-      a.validators.data[index.toNat]? = some v ∧ v.activationEpoch = FAR_FUTURE_EPOCH := by
-    -- Sorting changes the order, but every selected position still has an unset activation.
-    intro index member
-    obtain ⟨⟨v, i⟩, sorted, rfl⟩ := List.mem_map.mp member
-    rw [List.mem_mergeSort] at sorted
-    obtain ⟨member, waiting⟩ := List.mem_filter.mp sorted
-    have found : a.validators.data[i]? = some v := by
-      simpa using List.mem_zipIdx_iff_getElem?.mp member
-    have small := toNat_toUInt64_of_lt (state := a) (a.validators.bound (by decide))
-      (Array.getElem?_eq_some_iff.mp found).1
-    exact ⟨v, by simpa [small] using found, by simpa using waiting⟩
+      a.validators.data[index.toNat]? = some v ∧ v.activationEpoch = FAR_FUTURE_EPOCH :=
+    fun _ member => preActivation_waiting (by decide) member
   generalize hs : preActivationIndices a = xs at ok
   rw [hs] at pending
   have run : ∀ (xs : List ValidatorIndex) (s t : BeaconState preset .pectra),
