@@ -986,7 +986,10 @@ It also checks three longer forms of 37 and every proper prefix of one encoding 
 Retry and Version Negotiation consume the rest of the datagram, since neither has a Length field (RFC 9000 §12.2).
 `Packet.decodePacketNumber_mod` and `Packet.decodePacketNumber_lt` prove that a reconstructed packet number keeps the received low bytes and stays below `2^62`.
 `Packet.decodePacketNumber_closest` proves that no other such value is closer to the expected number, as RFC 9000 Appendix A.3 intends.
-The sender's choice of width from its unacknowledged range (§17.1, Appendix A.2) is left to the caller.
+`Packet.packetNumberWidth_sufficient` proves that a selected width holds the full number before any acknowledgement, or covers strictly more than twice the gap from the largest acknowledged number afterwards (RFC 9000 §17.1).
+The caller supplies acknowledgements for this sender in the same connection and packet-number space.
+`Packet.packetNumberWidth_minimal` proves that no sufficient width uses fewer bytes, and `Packet.packetNumberWidth_error_iff` proves that selection fails exactly when no width is sufficient.
+`Packet.decodePacketNumber_encodePacketNumber_of_packetNumberWidth` proves reconstruction from the selected bytes when the expected number is zero before any acknowledgement, or one greater than the acknowledged number afterwards.
 
 `Frame.decode_encode` (`Networking/Proofs/Quic/Frame.lean`) proves the round trip for an encoded frame permitted in its packet type.
 A STREAM frame without LEN consumes the remaining packet, so its round trip has no trailing bytes.
@@ -999,7 +1002,8 @@ An ACK frame passes it exactly when none of those ranges reaches below packet nu
 Each additional range lowers the packet number by at least two, so that also keeps their count a QUIC integer.
 `Frame.ackedRanges_nonneg_of_decode` applies it to a decoded ACK frame.
 
-The Python cases include the RFC 9000 Appendix A.3 packet number and the header bytes of RFC 9001 Appendices A.2, A.4 and A.5, alongside hand-derived layouts of every frame type.
+The Python cases include both packet-number width examples of RFC 9000 Appendix A.2, the Appendix A.3 reconstruction example and the header bytes of RFC 9001 Appendices A.2, A.4 and A.5, alongside hand-derived layouts of every frame type.
+They also check full-number byte boundaries before any acknowledgement, strict half-window boundaries after an acknowledgement, invalid acknowledgement order and ranges that need more than four bytes.
 The header decoder expects its caller to remove header protection and authenticate the payload first, so a reserved-bit error comes only after authentication (RFC 9000 §17.2).
 The caller also checks a long header's Length against the bytes that follow it.
 These codecs do not implement transport state, flow-control credit, sender-role checks or packet protection.
@@ -6420,12 +6424,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 525 operations and 51 size constants.
-The Python extension calls 525 of the operations and 51 of the constants.
+Lean exports 526 operations and 51 size constants.
+The Python extension calls 526 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11839 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1588), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (261), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (823), `x25519.c` (21), `xmss.c` (134).
+11851 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1589), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (824), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

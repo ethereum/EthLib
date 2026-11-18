@@ -110,6 +110,16 @@ py_quic_frame_decode(
   return call_pyvalue_export(eth_quic_frame_decode, args, 2, QUIC_ERROR);
 }
 
+extern lean_object* eth_quic_packet_number_width(lean_object* args);
+
+PyObject*
+py_quic_packet_number_width(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_quic_packet_number_width, args, 2, QUIC_ERROR);
+}
+
 extern lean_object* eth_quic_packet_number_encode(lean_object* args);
 
 PyObject*

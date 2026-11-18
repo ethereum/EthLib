@@ -1732,6 +1732,10 @@ def quic_frame_decode(packet: QuicPacketType, data: bytes) -> tuple[QuicFrame, b
     """Read one frame allowed in the given packet type (RFC 9000 §12.4)."""
     ...
 
+def quic_packet_number_width(number: int, largest_acked: int | None) -> int:
+    """Select packet-number length bits, zero through three, under RFC 9000 §17.1."""
+    ...
+
 def quic_packet_number_encode(width: int, number: int) -> bytes:
     """Write the low packet-number bytes (RFC 9000 §17.1)."""
     ...

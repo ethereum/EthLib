@@ -28,6 +28,82 @@ theorem length_encodePacketNumberList (width : PacketNumberLength) (number : Var
     (encodePacketNumberList width number).length = numberLength width :=
   Base.natToBytes_length _ _
 
+/-- A width holds the full initial number or more than twice its gap from an earlier ACK. -/
+def WidthSufficient (number : Varint) (largestAcked : Option Varint)
+    (width : PacketNumberLength) : Prop :=
+  match largestAcked with
+  | none => number.val < 256 ^ numberLength width
+  | some ack => ack.val < number.val ∧
+      2 * (number.val - ack.val) < 256 ^ numberLength width
+
+/-- Every width returned by the selector meets its packet-number bound. -/
+theorem packetNumberWidth_sufficient (number : Varint) (largestAcked : Option Varint)
+    (width : PacketNumberLength) (selected : packetNumberWidth number largestAcked = .ok width) :
+    WidthSufficient number largestAcked width := by
+  rcases width with ⟨w, hw⟩
+  have casesWidth : w = 0 ∨ w = 1 ∨ w = 2 ∨ w = 3 := by omega
+  rcases casesWidth with rfl | rfl | rfl | rfl
+  all_goals
+    cases largestAcked <;>
+      simp [packetNumberWidth, WidthSufficient, numberLength, pure, Except.pure,
+        bind, Except.bind, throw, throwThe] at selected ⊢
+    all_goals split_ifs at selected <;> simp_all
+
+/-- The selector returns no more bytes than any sufficient width. -/
+theorem packetNumberWidth_minimal (number : Varint) (largestAcked : Option Varint)
+    (width other : PacketNumberLength)
+    (selected : packetNumberWidth number largestAcked = .ok width)
+    (sufficient : WidthSufficient number largestAcked other) : width.val ≤ other.val := by
+  rcases width with ⟨w, hw⟩
+  rcases other with ⟨o, ho⟩
+  have casesWidth : w = 0 ∨ w = 1 ∨ w = 2 ∨ w = 3 := by omega
+  have casesOther : o = 0 ∨ o = 1 ∨ o = 2 ∨ o = 3 := by omega
+  rcases casesWidth with rfl | rfl | rfl | rfl
+  all_goals rcases casesOther with rfl | rfl | rfl | rfl
+  all_goals
+    cases largestAcked <;>
+      simp [packetNumberWidth, WidthSufficient, numberLength, pure, Except.pure,
+        bind, Except.bind, throw, throwThe] at selected sufficient ⊢
+    all_goals split_ifs at selected <;> simp_all
+
+/-- Selection fails exactly when none of the four widths meets its packet-number bound. -/
+theorem packetNumberWidth_error_iff (number : Varint) (largestAcked : Option Varint) :
+    packetNumberWidth number largestAcked =
+      .error (WidthError.invalid number.val (largestAcked.map (·.val))) ↔
+      ∀ width, ¬WidthSufficient number largestAcked width := by
+  constructor
+  · intro rejected width sufficient
+    rcases width with ⟨w, hw⟩
+    have casesWidth : w = 0 ∨ w = 1 ∨ w = 2 ∨ w = 3 := by omega
+    rcases casesWidth with rfl | rfl | rfl | rfl
+    all_goals
+      cases largestAcked <;>
+        simp [packetNumberWidth, WidthSufficient, numberLength, pure, Except.pure,
+        bind, Except.bind, throw, throwThe] at rejected sufficient
+      all_goals split_ifs at rejected <;> solve | simp_all | omega
+  · intro impossible
+    cases selected : packetNumberWidth number largestAcked with
+    | ok width => exact False.elim (impossible width
+        (packetNumberWidth_sufficient number largestAcked width selected))
+    | error error =>
+      cases largestAcked <;> simp [packetNumberWidth, pure, Except.pure, bind,
+        Except.bind, throw, throwThe] at selected
+      all_goals split_ifs at selected <;> simp_all <;> cases selected <;> rfl
+
+/-- An ACK at or above the packet being sent makes every width invalid. -/
+theorem packetNumberWidth_error_of_le (number ack : Varint) (order : number.val ≤ ack.val) :
+    packetNumberWidth number (some ack) =
+      .error (WidthError.invalid number.val (some ack.val)) := by
+  simp only [packetNumberWidth, Option.any_some, order, decide_true, ↓reduceIte]
+  rfl
+
+/-- Before any ACK, the selected bytes retain the whole packet number. -/
+theorem bytesToNat_encodePacketNumberList_of_packetNumberWidth_none (number : Varint)
+    (width : PacketNumberLength) (selected : packetNumberWidth number none = .ok width) :
+    Base.bytesToNat (encodePacketNumberList width number) = number.val := by
+  rw [bytesToNat_encodePacketNumberList,
+    Nat.mod_eq_of_lt (packetNumberWidth_sufficient number none width selected)]
+
 /-- Unsigned distance between packet numbers. -/
 def distance (a b : Nat) : Nat := a - b + (b - a)
 
@@ -408,5 +484,60 @@ theorem decodePacketNumber_lt (w : PacketNumberLength) (truncated expected resul
     (decoded : decodePacketNumber w truncated expected = .ok result) : result < 2 ^ 62 := by
   simp only [decodePacketNumber, bind, pure, Except.bind, Except.pure] at decoded
   repeat' (split_ifs at decoded <;> simp_all)
+
+/-- Every sufficient width recovers the number at the expectation supplied by its ACK. -/
+theorem decodePacketNumber_encodePacketNumberList_of_sufficient (number : Varint)
+    (largestAcked : Option Varint) (width : PacketNumberLength)
+    (sufficient : WidthSufficient number largestAcked width) :
+    decodePacketNumber width (Base.bytesToNat (encodePacketNumberList width number))
+      (largestAcked.elim 0 fun ack => ack.val + 1) = .ok number.val := by
+  rw [bytesToNat_encodePacketNumberList]
+  have bounded := number.isLt
+  cases largestAcked with
+  | none =>
+    change number.val < 256 ^ numberLength width at sufficient
+    rw [Nat.mod_eq_of_lt sufficient]
+    have halfPositive : 0 < 256 ^ numberLength width / 2 := by
+      rcases width with ⟨w, hw⟩
+      have casesWidth : w = 0 ∨ w = 1 ∨ w = 2 ∨ w = 3 := by omega
+      rcases casesWidth with rfl | rfl | rfl | rfl <;>
+        simp only [numberLength] <;> decide
+    have first : ¬(number.val ≥ 256 ^ numberLength width ∨ 0 > 2 ^ 62) := by omega
+    have increase : ¬(number.val + 256 ^ numberLength width / 2 ≤ 0 ∧
+        number.val < 2 ^ 62 - 256 ^ numberLength width) := by omega
+    have decrease : ¬(number.val > 256 ^ numberLength width / 2 ∧
+        number.val ≥ 256 ^ numberLength width) := by omega
+    simp only [Option.elim, decodePacketNumber, Nat.zero_div, Nat.zero_mul, Nat.zero_add,
+      first, increase, decrease, bounded, ↓reduceIte, pure, Except.pure]
+  | some ack =>
+    have ackBounded := ack.isLt
+    rcases width with ⟨w, hw⟩
+    have casesWidth : w = 0 ∨ w = 1 ∨ w = 2 ∨ w = 3 := by omega
+    rcases casesWidth with rfl | rfl | rfl | rfl
+    all_goals
+      simp only [WidthSufficient, numberLength, Nat.reduceAdd, Nat.reducePow] at sufficient
+      simp only [Option.elim, decodePacketNumber, numberLength, Nat.reduceAdd, Nat.reducePow,
+        pure, Except.pure, bind, Except.bind]
+      repeat' (split_ifs <;> simp_all [throw, throwThe])
+      all_goals omega
+
+/-- The selected width round trips at zero before any ACK or at one past the acknowledged number. -/
+theorem decodePacketNumber_encodePacketNumberList_of_packetNumberWidth (number : Varint)
+    (largestAcked : Option Varint) (width : PacketNumberLength)
+    (selected : packetNumberWidth number largestAcked = .ok width) :
+    decodePacketNumber width (Base.bytesToNat (encodePacketNumberList width number))
+      (largestAcked.elim 0 fun ack => ack.val + 1) = .ok number.val :=
+  decodePacketNumber_encodePacketNumberList_of_sufficient number largestAcked width
+    (packetNumberWidth_sufficient number largestAcked width selected)
+
+/-- Packed packet-number bytes round trip at the expectation supplied by the selector's ACK. -/
+theorem decodePacketNumber_encodePacketNumber_of_packetNumberWidth (number : Varint)
+    (largestAcked : Option Varint) (width : PacketNumberLength)
+    (selected : packetNumberWidth number largestAcked = .ok width) :
+    decodePacketNumber width (Base.bytesToNat (encodePacketNumber width number).data.toList)
+      (largestAcked.elim 0 fun ack => ack.val + 1) = .ok number.val := by
+  simpa [encodePacketNumber] using
+    decodePacketNumber_encodePacketNumberList_of_packetNumberWidth number largestAcked width
+      selected
 
 end EthLib.Networking.Quic.Packet

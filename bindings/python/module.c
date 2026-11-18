@@ -1238,6 +1238,7 @@ static PyMethodDef methods[] = {
   {"quic_header_decode", py_quic_header_decode, METH_VARARGS, DOC_quic_header_decode},
   {"quic_frame_encode", py_quic_frame_encode, METH_VARARGS, DOC_quic_frame_encode},
   {"quic_frame_decode", py_quic_frame_decode, METH_VARARGS, DOC_quic_frame_decode},
+  {"quic_packet_number_width", py_quic_packet_number_width, METH_VARARGS, DOC_quic_packet_number_width},
   {"quic_packet_number_encode", py_quic_packet_number_encode, METH_VARARGS, DOC_quic_packet_number_encode},
   {"quic_packet_number_decode", py_quic_packet_number_decode, METH_VARARGS, DOC_quic_packet_number_decode},
   {"multistream_encode", py_multistream_encode, METH_VARARGS, DOC_multistream_encode},
