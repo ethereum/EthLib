@@ -47,7 +47,7 @@ The step may fail with an alternative `P` instead; the result then holds `P`. -/
 theorem Execution.walk_covers {first last : ℕ} {P : Prop} {start : Root} (members : List Root)
     (parentOf : Root → Root)
     (parents : ∀ i (h : i < members.length), parentOf members[i] =
-      if i = 0 then start else members[i - 1]!)
+      if _ : i = 0 then start else members[i - 1]'(by omega))
     (startCovers : HonestHeadsCover (e := e) start first (last + 1))
     (step : ∀ T, T ≤ last → (∀ m ∈ members, HonestHeadsCover (e := e) m first T) →
       ∀ m ∈ members, HonestHeadsCover (e := e) (parentOf m) first (T + 1) →
@@ -82,10 +82,7 @@ theorem Execution.walk_covers {first last : ℕ} {P : Prop} {start : Root} (memb
           rw [parents i h]
           split
           · exact shorten within startCovers
-          · rename_i nonzero
-            have lt : i - 1 < members.length := by omega
-            rw [getElem!_pos members (i - 1) lt]
-            exact ihIndex (i - 1) (by omega) lt
+          · exact ihIndex (i - 1) (by omega) (by omega)
         exact (step T (by omega) before members[i] (List.getElem_mem h) parentCovers).resolve_right
           alternative
       intro m mem

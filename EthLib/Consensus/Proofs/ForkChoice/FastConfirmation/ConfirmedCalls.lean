@@ -2862,7 +2862,7 @@ private theorem parentOrSelf_of_walk {store : Store preset fork} {head start : R
     {members later : List Root}
     (walked : store.getAncestorRoots head start = .ok (members ++ later)) :
     ∀ i (h : i < members.length), parentOrSelf store members[i] =
-      if i = 0 then start else members[i - 1]! := by
+      if _ : i = 0 then start else members[i - 1]'(by omega) := by
   intro i h
   have inAll : i < (members ++ later).length := by simp; omega
   have get : (members ++ later)[i] = members[i] := List.getElem_append_left h
@@ -2877,8 +2877,7 @@ private theorem parentOrSelf_of_walk {store : Store preset fork} {head start : R
   rcases i with _ | j
   · simp
   · have hj : j < members.length := by omega
-    simp [List.getLast?_take, List.getElem?_append_left hj, getElem!_pos members j hj,
-      List.getElem?_eq_getElem hj]
+    simp [List.getLast?_take, List.getElem?_append_left hj, List.getElem?_eq_getElem hj]
 
 /-- The last root of a walk's prefix descends from every member of that prefix. -/
 private theorem root_descends_of_walk {store : Store preset fork} {head start root m : Root}
