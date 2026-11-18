@@ -476,9 +476,9 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
       discount.toNat + 2 * support.toNat)
     (callerTime : (e.world n).time ≤ time) (sourceReads : SourceWindowReads (e := e) n time source)
     (drift : WindowMarginDrift (e := e) n time source shift)
-    {finish : Slot}
-    (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) head source
-      first finish)
+    {finish : Slot} {exitAllowance : ℕ}
+    (reserve : SourceWindowReserveWith (J := J) (config := config) ((e.world n).state u) head
+      source first finish exitAllowance)
     {x : ValidatorIndex} (reference : x ∈ J) {m : ℕ} (referenceTime : time ≤ (e.world m).time)
     (referenceUpToDate : UpToDate config checks sources (e.world m).time ((e.world m).view x)
       ((e.world m).state x))
@@ -519,8 +519,8 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
       ((e.world k).state w).isAncestor
           ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
         (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes)
-    (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
-      (e.world n).time time)
+    (exits : ReceiverWindowExitsNearWith (e := e) (computeEpochAtSlot preset parent.slot) source
+      first (e.world n).time time exitAllowance)
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
@@ -625,7 +625,7 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
             referenceUpToDate currentOk referenceSlotOk receiverLastOk finishOk
         have finality := receiverFinality_of_viable anchored start anchorSlot preGloas absent
           family receiver highK known tree route
-        have step := e.isAncestor_getHead_of_historical_anchor sync slots positive minLookahead
+        have step := e.isAncestor_getHead_of_historical_anchor_with sync slots positive minLookahead
           maxLookahead ring preGloas (time := T)
           (fun v hv w hw i j hj => admitted v hv w hw i j (by omega))
           half (fun v hv s c d a dt b dl => votes v hv s c d a dt b (by omega)) fits

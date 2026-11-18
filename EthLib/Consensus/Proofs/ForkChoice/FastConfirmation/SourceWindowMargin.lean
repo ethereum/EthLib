@@ -631,12 +631,12 @@ private theorem mem_window_split {store : Store preset fork} {head : Root}
 
 private theorem window_weight_le {store : Store preset fork} {head : Root}
     {source : BeaconState preset fork} {parentSlot first last : Slot} {weight : Gwei}
-    {window : Std.TreeSet ValidatorIndex}
+    {window : Std.TreeSet ValidatorIndex} {exitAllowance : ℕ}
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (firstOk : addChecked parentSlot 1 = .ok first)
     (windowOk : store.getCommitteesBetweenSlots head first last = .ok window)
     (weightOk : store.computeCommitteeWeightBetweenSlots head source first last = .ok weight)
-    (exit : Models.Network.WindowExitBound (config := config) store source head first last) :
+    (exit : Models.Network.WindowExitBoundWith store source head first last exitAllowance) :
     ∃ finish members, finish ≤ last ∧
       (computeEpochAtSlot preset finish).toNat ≤ (computeEpochAtSlot preset parentSlot).toNat + 1 ∧
       store.getCommitteesBetweenSlots head first finish = .ok members ∧
@@ -645,7 +645,7 @@ private theorem window_weight_le {store : Store preset fork} {head : Root}
         isFullValidatorSetCovered preset first finish = .ok true ∧
         weight.toNat ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
           (stake (fun v => balanceAt source v.toNat) (Store.activeMembers source members)) +
-        Models.Network.exitReserve config source) := by
+        exitAllowance) := by
   have firstNat := (addChecked_ok_iff.mp firstOk).2
   simp only [UInt64.toNat_one] at firstNat
   have epochBound (x : Slot) (le : x.toNat ≤ parentSlot.toNat + preset.SLOTS_PER_EPOCH.toNat) :
@@ -786,7 +786,7 @@ private theorem window_weight_le {store : Store preset fork} {head : Root}
     have stakeBound :
         stake (fun v => balanceAt source v.toNat) (Models.Network.activeVoters source) ≤
         stake (fun v => balanceAt source v.toNat) (Store.activeMembers source members) +
-          Models.Network.exitReserve config source := by
+          exitAllowance := by
       calc
         _ = stake (fun v => balanceAt source v.toNat)
             (kept ∪ {v ∈ Models.Network.activeVoters source | v ∉ epochMembers}) :=
@@ -1391,7 +1391,10 @@ private theorem receiver_origins_fresh {Δ : ℕ} (sync : e.Synchronous Δ)
   · exact (unfit (.inl (fitsHistorical k' le))).elim
   · exact .inr ⟨a, ha, b, hb, i, j, hi.trans upToTime, hj.trans upToTime, r, ev, s⟩
 
-private theorem historical_stores_or_collision {anchor : Store preset fork}
+/-- The honest stores by a time are reachable and agree on their blocks, or two of them collide.
+
+It is public so that a proof in another module splits on it instead of repeating the split. -/
+public theorem historical_stores_or_collision {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ u ∈ J, e.start u = anchor) (time : ℕ) :
     ((∀ a ∈ J, ∀ i, Store.Reachable config anchorState anchorBlock ((e.world i).state a)) ∧
@@ -2201,9 +2204,9 @@ Then the receiver's weight is at most the caller's. -/
 private theorem window_reserves_and_weight [DecidablePred (· ∈ J)] {n : ℕ}
     {source : BeaconState preset fork} {u : ValidatorIndex} {callerHead : Root}
     {receiverStore : Store preset fork} {receiverHead : Root}
-    {first last slot startSlot finish receiverLast current : Slot}
-    (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) callerHead
-      source first receiverLast)
+    {first last slot startSlot finish receiverLast current : Slot} {exitAllowance : ℕ}
+    (reserve : SourceWindowReserveWith (J := J) (config := config) ((e.world n).state u)
+      callerHead source first receiverLast exitAllowance)
     {maximum sourceMaximum : Gwei}
     {advParticipants wcParticipants xParticipants members : Std.TreeSet ValidatorIndex}
     (slotNext : addChecked last 1 = .ok slot)
@@ -2234,7 +2237,7 @@ private theorem window_reserves_and_weight [DecidablePred (· ∈ J)] {n : ℕ}
       isFullValidatorSetCovered preset first finish = .ok true ∧
       sourceMaximum.toNat ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
         (stake (fun v => balanceAt source v.toNat) (Store.activeMembers source members)) +
-      exitReserve config source) :
+      exitAllowance) :
     ∃ X,
       (stake (fun v => balanceAt source v.toNat) (Store.activeMembers source advParticipants) = 0 ∨
         100 * stake (fun v => balanceAt source v.toNat)
@@ -2270,7 +2273,7 @@ private theorem window_reserves_and_weight [DecidablePred (· ∈ J)] {n : ℕ}
   · -- The reserve set runs from the adversary range through the new members.
     have reserveV : 100 * stake (fun v => balanceAt source v.toNat)
           {v ∈ Store.activeMembers source advParticipants ∪
-            Store.activeMembers source xParticipants | v ∉ J} + 50 * exitReserve config source ≤
+            Store.activeMembers source xParticipants | v ∉ J} + 50 * exitAllowance ≤
         config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat *
           stake (fun v => balanceAt source v.toNat)
             (Store.activeMembers source advParticipants ∪
@@ -2305,9 +2308,9 @@ private theorem window_reserves_and_weight [DecidablePred (· ∈ J)] {n : ℕ}
     have membersLe := stake_mono (w := fun v => balanceAt source v.toNat) membersIn
     have weightLe : sourceMaximum.toNat ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
         (stake (fun v => balanceAt source v.toNat) (Store.activeMembers source members)) +
-        exitReserve config source := by
+        exitAllowance := by
       rcases weightCases with bound | ⟨-, bound⟩ <;> omega
-    refine ⟨exitReserve config source, ?_, reserveV, ?_⟩
+    refine ⟨exitAllowance, ?_, reserveV, ?_⟩
     · rcases startCases with ordered | empty
       · exact .inr (reserve startSlot last advParticipants firstStart ordered lastLe advOk)
       · left
@@ -2360,22 +2363,13 @@ private theorem window_reserves_and_weight [DecidablePred (· ∈ J)] {n : ℕ}
       subst same
       omega
 
-/-- A caller's guarded margin for a block gives a receiver its own source surplus.
+/-- A caller's guarded margin gives a receiver its own source surplus, at any one reserve value.
 
-The receiver's justified block may instead descend from the block.
+The caller's window reserve and the receiver's exit bound read one reserve value.
 
-Bounded honest stores may instead collide.
-
-Two runs from the anchor may instead give direct-safety evidence.
-
-That evidence is relative to the anchor, and its drift counts from the anchor.
-
-With enough churn since the anchor, it holds with no accountable key.
-
-The stake ceiling of `2 * 10^17` Gwei is `2 * 10^8` ETH, above mainnet's active stake.
-
-The proof needs only a ceiling below `2^64` Gwei, so that the checked total cannot overflow. -/
-public theorem Execution.source_surplus_or_historical_evidence [DecidablePred (· ∈ J)] {Δ : ℕ}
+The alternatives are those of `Execution.source_surplus_or_historical_evidence`. -/
+public theorem Execution.source_surplus_or_historical_evidence_with [DecidablePred (· ∈ J)]
+    {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
@@ -2422,9 +2416,9 @@ public theorem Execution.source_surplus_or_historical_evidence [DecidablePred (�
     (margin : maximum.toNat + boost.toNat + 2 * adversary.toNat + shift <
       discount.toNat + 2 * support.toNat)
     (callerTime : (e.world n).time ≤ time) (sourceReads : SourceWindowReads (e := e) n time source)
-    {receiverLast : Slot}
-    (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) head source
-      first receiverLast) {horizon : Epoch}
+    {receiverLast : Slot} {exitAllowance : ℕ}
+    (reserve : SourceWindowReserveWith (J := J) (config := config) ((e.world n).state u) head
+      source first receiverLast exitAllowance) {horizon : Epoch}
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (unslashed : HonestCountedStatesUnslashed (e := e) time)
@@ -2467,8 +2461,8 @@ public theorem Execution.source_surplus_or_historical_evidence [DecidablePred (�
       receiverLast = .ok window)
     (participantsOk : ((e.world k).state w).getCommitteesBetweenSlots receiverHead.root first
       beforeBlock = .ok participants)
-    (exit : WindowExitBound (config := config) ((e.world k).state w) source receiverHead.root
-      first receiverLast)
+    (exit : WindowExitBoundWith ((e.world k).state w) source receiverHead.root first receiverLast
+      exitAllowance)
     (absent : AnchorParentAbsent (e := e) time) :
     ((e.world k).state w).isAncestor
         ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
@@ -2789,6 +2783,145 @@ public theorem Execution.source_surplus_or_historical_evidence [DecidablePred (�
       exact List.mem_toFinset.mpr
         (mem_unslashedActiveBalances_of_found validatorFound activeV unslashedV)]
   exact surplus
+
+/-- A caller's guarded margin for a block gives a receiver its own source surplus.
+
+The receiver's justified block may instead descend from the block.
+
+Bounded honest stores may instead collide.
+
+Two runs from the anchor may instead give direct-safety evidence.
+
+That evidence is relative to the anchor, and its drift counts from the anchor.
+
+With enough churn since the anchor, it holds with no accountable key.
+
+The stake ceiling of `2 * 10^17` Gwei is `2 * 10^8` ETH, above mainnet's active stake.
+
+The ceiling serves only to keep the checked total below `2^64` Gwei. -/
+public theorem Execution.source_surplus_or_historical_evidence [DecidablePred (· ∈ J)] {Δ : ℕ}
+    (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (preGloas : fork < .glamsterdam) {time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
+    (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
+    (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
+    (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
+    {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (start : ∀ w ∈ J, e.start w = anchor) {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
+      ((e.world n).state u))
+    {head root : Root} {source : BeaconState preset fork}
+    {slot first last beforeBlock : Slot} {block parent : BeaconBlock preset fork}
+    {parentParticipants : Std.TreeSet ValidatorIndex} {boost maximum : Gwei}
+    (headNode : ∃ node, ((e.world n).state u).getHead config = .ok node ∧ node.root = head)
+    (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot) {begin : UInt64}
+    (beginOk : computeTimeAtSlotMs config genesisTimeMs slot = .ok begin)
+    (timeEq : (e.world n).time = begin.toNat)
+    (blockOk : ((e.world n).state u).block root = .ok block)
+    (parentOk : ((e.world n).state u).block block.parentRoot = .ok parent)
+    {checkpoint : Checkpoint}
+    (sourceOk : ((e.world n).state u).checkpointState checkpoint = .ok source)
+    (boostOk : computeProposerScore config source = .ok boost)
+    (firstOk : addChecked parent.slot 1 = .ok first) (lastOk : subChecked slot 1 = .ok last)
+    (beforeOk : subChecked block.slot 1 = .ok beforeBlock)
+    (maximumOk : ((e.world n).state u).computeCommitteeWeightBetweenSlots head source first last =
+      .ok maximum)
+    (parentParticipantsOk : ((e.world n).state u).getCommitteesBetweenSlots head first
+      beforeBlock = .ok parentParticipants)
+    {shift : ℕ} {support discount adversary : Gwei} (registry : source.RegistryWithinLimit)
+    (aligned : EffectiveBalancesAligned source)
+    (increment : preset.EFFECTIVE_BALANCE_INCREMENT.toNat % 100 = 0)
+    (supportOk : ((e.world n).state u).scoreFromTally (((e.world n).state u).tallyVotes source)
+      ⟨root, .pending⟩ = .ok support)
+    (discountOk : ((e.world n).state u).computeEmptySlotSupportDiscount config head source root =
+      .ok discount)
+    (adversaryOk : ((e.world n).state u).getAdversarialWeight config head source root =
+      .ok adversary)
+    (margin : maximum.toNat + boost.toNat + 2 * adversary.toNat + shift <
+      discount.toNat + 2 * support.toNat)
+    (callerTime : (e.world n).time ≤ time) (sourceReads : SourceWindowReads (e := e) n time source)
+    {receiverLast : Slot}
+    (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) head source
+      first receiverLast) {horizon : Epoch}
+    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time)
+    (unslashed : HonestCountedStatesUnslashed (e := e) time)
+    (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) time)
+    (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) time)
+    (enough : HeldRunStakeFloor (e := e) pre horizon time)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon time)
+    (rootCovers : HonestHeadsCover (e := e) root (e.world n).time time)
+    (headDescends : ((e.world n).state u).isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
+    {historical : Root} {callerEpoch historicalEpoch : Epoch} {epochStart : Slot}
+    {epochStartTime : UInt64}
+    (historicalBelow : ((e.world n).state u).isAncestor ⟨block.parentRoot, .pending⟩
+      ⟨historical, .pending⟩ = .ok true)
+    (callerEpochOk : ((e.world n).state u).getCurrentStoreEpoch config = .ok callerEpoch)
+    (historicalEpochOk : ((e.world n).state u).getBlockEpoch historical = .ok historicalEpoch)
+    (near : callerEpoch.toNat ≤ historicalEpoch.toNat + 1)
+    (epochStartOk : computeStartSlotAtEpoch preset callerEpoch = .ok epochStart)
+    (epochStartTimeOk : computeTimeAtSlotMs config genesisTimeMs epochStart = .ok epochStartTime)
+    (historyCovers : HonestHeadsCover (e := e) historical epochStartTime.toNat (e.world n).time)
+    {w : ValidatorIndex} (receiver : w ∈ J) {k : ℕ} (atTime : (e.world k).time = time)
+    (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view w)
+      ((e.world k).state w))
+    (known : ((e.world k).state w).blocks[root]? = some block)
+    (finality : ReceiverFinalityCovers (e := e) w k root block)
+    {receiverHead : ForkChoiceNode} {state : BeaconState preset fork}
+    {current : Slot} {receiverEpoch : Epoch}
+    {window participants : Std.TreeSet ValidatorIndex}
+    (receiverHeadOk : ((e.world k).state w).getHead config = .ok receiverHead)
+    (receiverParent : ((e.world k).state w).isAncestor receiverHead
+      ⟨block.parentRoot, .pending⟩ = .ok true)
+    (stateOk : ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint =
+      .ok state)
+    (currentOk : ((e.world k).state w).getCurrentSlot config = .ok current)
+    (receiverEpochOk : ((e.world k).state w).getCurrentStoreEpoch config = .ok receiverEpoch)
+    (receiverNear : receiverEpoch.toNat ≤ (computeEpochAtSlot preset parent.slot).toNat + 2)
+    (receiverLastOk : subChecked current 1 = .ok receiverLast)
+    (windowOk : ((e.world k).state w).getCommitteesBetweenSlots receiverHead.root first
+      receiverLast = .ok window)
+    (participantsOk : ((e.world k).state w).getCommitteesBetweenSlots receiverHead.root first
+      beforeBlock = .ok participants)
+    (exit : WindowExitBound (config := config) ((e.world k).state w) source receiverHead.root
+      first receiverLast)
+    (absent : AnchorParentAbsent (e := e) time) :
+    ((e.world k).state w).isAncestor
+        ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
+      (∃ receiverMaximum sourceMaximum sourceScore,
+        ((e.world k).state w).computeCommitteeWeightBetweenSlots receiverHead.root state
+          first receiverLast = .ok receiverMaximum ∧
+        ((e.world k).state w).computeCommitteeWeightBetweenSlots receiverHead.root source
+          first receiverLast = .ok sourceMaximum ∧
+        computeProposerScore config source = .ok sourceScore ∧
+        sourceMaximum.toNat + sourceScore.toNat + shift <
+          2 * Models.stake (fun v =>
+            if v ∈ ((unslashedActiveBalances source).map (·.1)).toFinset
+            then balanceAt source v.toNat else 0)
+            {v ∈ ((e.world k).state w).supportersOf source ⟨root, .pending⟩ | v ∈ J} +
+          Models.stake (fun v =>
+            if v ∈ ((unslashedActiveBalances source).map (·.1)).toFinset
+            then balanceAt source v.toNat else 0)
+            {v ∈ ((e.world k).state w).parentVotersOf source participants block parent |
+              v ∈ J}) ∨
+      HonestCollision (e := e) time ∨ HistoricalDirectSafetyEvidence (e := e) pre time := by
+  exact e.source_surplus_or_historical_evidence_with sync slots positive minLookahead maxLookahead
+    ring preGloas admitted half votes fits prompt windows anchored sound anchorSlot anchorBoundary
+    start caller callerUpToDate headNode slotOk beginOk timeEq blockOk parentOk sourceOk boostOk
+    firstOk lastOk beforeOk maximumOk parentParticipantsOk registry aligned increment supportOk
+    discountOk adversaryOk margin callerTime sourceReads reserve bounded roots unslashed ceiling
+    parameters genesis pre heldEarly enough terminal rootCovers headDescends historicalBelow
+    callerEpochOk historicalEpochOk near epochStartOk epochStartTimeOk historyCovers receiver
+    atTime upToDate known finality receiverHeadOk receiverParent stateOk currentOk receiverEpochOk
+    receiverNear receiverLastOk windowOk participantsOk exit absent
 
 /-- A caller margin with the window reserve has an honest supporter of the root.
 

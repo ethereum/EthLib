@@ -17,6 +17,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Indicators
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumDrift
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumDriftBound
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumReserve
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ReceiverExits
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootHeld
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootViability
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets

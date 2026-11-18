@@ -201,28 +201,51 @@ variable [DecidablePred (· ∈ J)]
 
 /-- Each nonempty window of the head between the two slots has little Byzantine stake.
 
+Its Byzantine stake plus half the reserve is within the threshold share of its active stake.
+
+Stakes are the source state's balances of the window's members active at the source.
+
+An assumption on the run: the rule does not check the Byzantine stake of later windows.
+
+It buys each later window's margin over its adversary, with the reserve as the charge for exits.
+
+At `exitReserveNear` a theorem bounds those exits, so they are not assumed.
+
+On minimal at `exitReserveNear`, it fails when exits run at full churn, even with no adversary. -/
+def SourceWindowReserveWith (store : Store preset fork) (head : Root)
+    (source : BeaconState preset fork) (first last : Slot) (reserve : ℕ) : Prop :=
+  ∀ low high participants, first ≤ low → low ≤ high → high ≤ last →
+    store.getCommitteesBetweenSlots head low high = .ok participants →
+    100 * stake (fun v => balanceAt source v.toNat)
+        {v ∈ Store.activeMembers source participants | v ∉ J} +
+      50 * reserve ≤ config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat *
+        stake (fun v => balanceAt source v.toNat) (Store.activeMembers source participants)
+
+/-- Each nonempty window of the head between the two slots has little Byzantine stake.
+
 Its Byzantine stake plus half the exit reserve is within the threshold share of its active stake.
 
 Stakes are the source state's balances of the window's members active at the source. -/
 def SourceWindowReserve (store : Store preset fork) (head : Root)
     (source : BeaconState preset fork) (first last : Slot) : Prop :=
-  ∀ low high participants, first ≤ low → low ≤ high → high ≤ last →
-    store.getCommitteesBetweenSlots head low high = .ok participants →
-    100 * stake (fun v => balanceAt source v.toNat)
-        {v ∈ Store.activeMembers source participants | v ∉ J} +
-      50 * exitReserve config source ≤ config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat *
-        stake (fun v => balanceAt source v.toNat) (Store.activeMembers source participants)
+  SourceWindowReserveWith (J := J) (config := config) store head source first last
+    (exitReserve config source)
 
-/-- Each full epoch in the window omits at most the exit reserve of active source stake. -/
-def WindowExitBound (store : Store preset fork) (source : BeaconState preset fork)
-    (head : Root) (first last : Slot) : Prop :=
+/-- Each full epoch in the window omits at most the reserve of active source stake. -/
+def WindowExitBoundWith (store : Store preset fork) (source : BeaconState preset fork)
+    (head : Root) (first last : Slot) (reserve : ℕ) : Prop :=
   ∀ epoch epochStart next epochEnd epochMembers,
     computeStartSlotAtEpoch preset epoch = .ok epochStart →
     addChecked epochStart preset.SLOTS_PER_EPOCH = .ok next →
     subChecked next 1 = .ok epochEnd → first ≤ epochStart → epochEnd ≤ last →
     store.getCommitteesBetweenSlots head epochStart epochEnd = .ok epochMembers →
     stake (fun v => balanceAt source v.toNat)
-      {v ∈ activeVoters source | v ∉ epochMembers} ≤ exitReserve config source
+      {v ∈ activeVoters source | v ∉ epochMembers} ≤ reserve
+
+/-- Each full epoch in the window omits at most the exit reserve of active source stake. -/
+def WindowExitBound (store : Store preset fork) (source : BeaconState preset fork)
+    (head : Root) (first last : Slot) : Prop :=
+  WindowExitBoundWith store source head first last (exitReserve config source)
 
 /-- All honest stores hold only blocks with nonzero state roots through the horizon. -/
 def HeldBlockStateRootsNonzero (last : Nat) : Prop :=
@@ -390,6 +413,24 @@ def ByzantineCountedStake (epoch : Epoch) (first last : Nat) : Prop :=
     3 * stake (fun v => balanceAt state v.toNat) {v ∈ quorumVoters state | v ∉ J} <
       2 * total.toNat
 
+/-- Each near honest head of the interval omits at most the reserve per full window epoch.
+
+A receiver is near when its store epoch is at most two epochs after `parentEpoch`.
+
+The window starts at the given slot and ends at the slot before the store's current slot.
+
+Later receivers are covered by the duty-epoch step, which does not read it. -/
+def ReceiverWindowExitsNearWith (parentEpoch : Epoch) (source : BeaconState preset fork)
+    (firstSlot : Slot) (first last : Nat) (reserve : ℕ) : Prop :=
+  ∀ w ∈ J, ∀ k (head : ForkChoiceNode) (current finish : Slot) (receiverEpoch : Epoch),
+    first ≤ (e.world k).time → (e.world k).time ≤ last →
+    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    ((e.world k).state w).getHead config = .ok head →
+    ((e.world k).state w).getCurrentSlot config = .ok current → subChecked current 1 = .ok finish →
+    ((e.world k).state w).getCurrentStoreEpoch config = .ok receiverEpoch →
+    receiverEpoch.toNat ≤ parentEpoch.toNat + 2 →
+    WindowExitBoundWith ((e.world k).state w) source head.root firstSlot finish reserve
+
 /-- Each near honest head of the interval omits at most the exit reserve per full window epoch.
 
 A receiver is near when its store epoch is at most two epochs after `parentEpoch`.
@@ -399,14 +440,8 @@ The window starts at the given slot and ends at the slot before the store's curr
 Later receivers are covered by the duty-epoch step, which does not read it. -/
 def ReceiverWindowExitsNear (parentEpoch : Epoch) (source : BeaconState preset fork)
     (firstSlot : Slot) (first last : Nat) : Prop :=
-  ∀ w ∈ J, ∀ k (head : ForkChoiceNode) (current finish : Slot) (receiverEpoch : Epoch),
-    first ≤ (e.world k).time → (e.world k).time ≤ last →
-    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
-    ((e.world k).state w).getHead config = .ok head →
-    ((e.world k).state w).getCurrentSlot config = .ok current → subChecked current 1 = .ok finish →
-    ((e.world k).state w).getCurrentStoreEpoch config = .ok receiverEpoch →
-    receiverEpoch.toNat ≤ parentEpoch.toNat + 2 →
-    WindowExitBound (config := config) ((e.world k).state w) source head.root firstSlot finish
+  ReceiverWindowExitsNearWith (e := e) parentEpoch source firstSlot first last
+    (exitReserve config source)
 
 omit [DecidablePred (· ∈ J)] in
 open Classical in

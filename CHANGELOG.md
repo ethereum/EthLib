@@ -148,6 +148,22 @@ Not yet released.
 - `quorum_of_current_target` names the honest voters of `HonestTargetVotes` when the two-thirds test on the current target passes.
   Three times their stake is at least twice the total active balance plus the margin of the count.
 
+- `exitReserveNear` is the active source stake already scheduled to exit within three epochs of the source, the reach of a confirmation's near window.
+  `Preset.SeedLookaheadAtLeastThree` asks for a seed lookahead of at least three epochs, so that activity is fixed three epochs ahead.
+  `Execution.receiverWindowExitsNear_of_sourceOnParentChain` in `FastConfirmation/ReceiverExits.lean` reads it, since the near window reaches three epochs past the source.
+  `Preset.SeedLookaheadAtLeastThree.mainnet` and `Preset.SeedLookaheadAtLeastThree.minimal` show that both presets satisfy it.
+  Under it, `exitStake_le_exitReserveNear` shows that no other source stake leaves by then, in any later state that keeps the source's fixed activity.
+  `exitReserve` keeps its value, and no theorem orders the two values.
+  `SourceWindowReserveWith`, `WindowExitBoundWith` and `ReceiverWindowExitsNearWith` take the reserve as an argument.
+  `SourceWindowReserve`, `WindowExitBound` and `ReceiverWindowExitsNear` are their instances at `exitReserve`, with their statements unchanged.
+  `Execution.isAncestor_getHead_of_historical_anchor_with` and `Execution.source_surplus_or_historical_evidence_with` take one reserve value for the window reserve and the exit bound.
+  The theorems without `_with` keep their statements and read them.
+
+- `Execution.receiverWindowExitsNear_of_sourceOnParentChain` proves `ReceiverWindowExitsNearWith` at `exitReserveNear` when the call's balance source is on the parent's chain (`SourceOnParentChain`), or names a block collision between honest stores.
+  The checkpoint's epoch is at most two epochs before the parent's, and the preset satisfies `Preset.SeedLookaheadAtLeastThree`.
+  Each near receiver's head state keeps the source's activity three epochs ahead, so `windowExitBoundWith_of_activeKept` bounds each full epoch of its window by `exitReserveNear`.
+  `historical_stores_or_collision`, the split of honest stores into agreement or a collision, is now public; the proof reads it.
+
 - `Store.Reachable.blockState_slot_eq` states that a known block's state is at the block's slot, when the anchor block is at the anchor state's slot.
 
 - `le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch` shows that a slot at the start of an epoch is at most the first slot of the epoch of each later slot.
