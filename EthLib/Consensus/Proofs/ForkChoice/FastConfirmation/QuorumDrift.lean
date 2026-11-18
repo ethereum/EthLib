@@ -47,6 +47,85 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
+/-- A run from genesis passes a boundary state at the start of the epoch of its last state.
+
+The boundary state is after the epoch transition and the upgrades of the first slot of that epoch.
+
+Only blocks at that slot lead from the boundary state to the last state.
+
+The bands of hysteresis hold at the boundary state.
+
+Genesis is before Altair and the last state is at Fulu or later, so the run has a slot step.
+
+The epoch transition of that step sets the bands.
+
+An upgrade keeps them, since every effective balance is at most its cap.
+
+A last state at the first slot of an epoch has the boundary state at its own slot.
+
+Any other state is in the epoch of the state before its last step, at the same fork. -/
+private theorem run_boundaryEpoch {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (bands : preset.IncrementWithinUpwardBand)
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset) :
+    ∀ {x : ForkedBeaconState preset}, Run config checks g x → x.fork < .glamsterdam →
+      .fusaka ≤ x.fork →
+      ∃ boundary : BeaconState preset x.fork,
+        (x.state.slot % preset.SLOTS_PER_EPOCH = 0 → boundary.slot = x.state.slot) ∧
+        getCurrentEpoch boundary = getCurrentEpoch x.state ∧ Hysteresis boundary ∧
+        Nonempty (Run config checks g ⟨x.fork, boundary⟩) ∧
+        Nonempty (Run config checks ⟨x.fork, boundary⟩ x) := by
+  intro x run
+  induction run with
+  | nil =>
+    intro _ fulu
+    obtain ⟨_, _, _, initialized⟩ := genesis
+    obtain ⟨phase0, -⟩ := initializeBeaconStateFromEth1_ok initialized
+    exact absurd (Nat.lt_of_le_of_lt fulu phase0) (by decide)
+  | @snoc middle last pre step ih =>
+    intro early fulu
+    cases step with
+    | slot ok =>
+      by_cases first : last.state.slot % preset.SLOTS_PER_EPOCH = 0
+      · obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
+        have middleEarly : middle.fork < .glamsterdam :=
+          Nat.lt_of_le_of_lt (processUpgrades_fork_le (forked := ⟨middle.fork, advanced⟩) upgraded)
+            early
+        have kept : last.state.slot = advanced.slot := processUpgrades_slot upgraded
+        have banded := hysteresis_of_advanceSlot bands advancedOk (kept ▸ first)
+        -- The step before the upgrades keeps each effective balance at most its cap.
+        have capped := advanceSlot_capped advancedOk
+          (pre.effectiveBalance_capped genesis caps.activation caps.compounding
+            middleEarly)
+        exact ⟨last.state, fun _ => rfl, rfl,
+          Hysteresis.upgrade (forked := ⟨middle.fork, advanced⟩) banded
+            (caps.maxEffective_eq activation) caps.compounding
+            capped upgraded,
+          ⟨pre.snoc (.slot ok)⟩, ⟨.nil⟩⟩
+      · have next := (advanceSlotAcross_cases ok).1
+        have notFirst : ¬ preset.SLOTS_PER_EPOCH.toNat ∣ middle.state.slot.toNat + 1 := by
+          rw [Nat.dvd_iff_mod_eq_zero, ← next]
+          intro zero
+          exact first (UInt64.toNat_inj.mp (by rw [UInt64.toNat_mod, zero, UInt64.toNat_zero]))
+        have same : getCurrentEpoch last.state = getCurrentEpoch middle.state := by
+          apply UInt64.toNat_inj.mp
+          rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, next, Nat.succ_div]
+          simp [notFirst]
+        obtain ⟨_, _, -, kept⟩ := advanceSlotAcross_of_same_epoch ok same
+        have keptFork : last.fork = middle.fork := by rw [kept]
+        obtain ⟨boundary, -, epoch, banded, toBoundary, ⟨rest⟩⟩ :=
+          ih (keptFork ▸ early) (keptFork ▸ fulu)
+        have extended := rest.snoc (.slot ok)
+        have epochLast := epoch.trans same.symm
+        subst kept
+        exact ⟨boundary, fun atStart => absurd atStart first, epochLast, banded, toBoundary,
+          ⟨extended⟩⟩
+    | block engine signed due ok =>
+      have kept := processBlock_slot (applySignedBlock_ok ok).2.1
+      obtain ⟨boundary, atSlot, epoch, banded, first, ⟨rest⟩⟩ := ih early fulu
+      exact ⟨boundary, fun atStart => (atSlot (kept ▸ atStart)).trans kept.symm,
+        epoch.trans (by simp only [getCurrentEpoch, kept]), banded, first,
+        ⟨rest.snoc (.block engine signed due ok)⟩⟩
+
 /-- A run from genesis to a state at the first slot of an epoch passes the boundary state.
 
 The boundary state is at the same slot, after the epoch transition and the upgrades of the slot.
@@ -68,37 +147,10 @@ private theorem run_boundaryState {g : ForkedBeaconState preset}
       ∃ boundary : BeaconState preset x.fork, boundary.slot = x.state.slot ∧
         Hysteresis boundary ∧ Nonempty (Run config checks g ⟨x.fork, boundary⟩) ∧
         Nonempty (Run config checks ⟨x.fork, boundary⟩ x) := by
-  intro x run
-  induction run with
-  | nil =>
-    intro _ fulu _
-    obtain ⟨_, _, _, initialized⟩ := genesis
-    obtain ⟨phase0, -⟩ := initializeBeaconStateFromEth1_ok initialized
-    exact absurd (Nat.lt_of_le_of_lt fulu phase0) (by decide)
-  | @snoc middle last pre step ih =>
-    intro early fulu atStart
-    cases step with
-    | slot ok =>
-      obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
-      have middleEarly : middle.fork < .glamsterdam :=
-        Nat.lt_of_le_of_lt (processUpgrades_fork_le (forked := ⟨middle.fork, advanced⟩) upgraded)
-          early
-      have kept : last.state.slot = advanced.slot := processUpgrades_slot upgraded
-      have banded := hysteresis_of_advanceSlot bands advancedOk (kept ▸ atStart)
-      -- The step before the upgrades keeps each effective balance at most its cap.
-      have capped := advanceSlot_capped advancedOk
-        (pre.effectiveBalance_capped genesis caps.activation caps.compounding
-          middleEarly)
-      exact ⟨last.state, rfl,
-        Hysteresis.upgrade (forked := ⟨middle.fork, advanced⟩) banded
-          (caps.maxEffective_eq activation) caps.compounding
-          capped upgraded,
-        ⟨pre.snoc (.slot ok)⟩, ⟨.nil⟩⟩
-    | block engine signed due ok =>
-      have kept := processBlock_slot (applySignedBlock_ok ok).2.1
-      obtain ⟨boundary, atSlot, banded, first, ⟨rest⟩⟩ := ih early fulu (kept ▸ atStart)
-      exact ⟨boundary, atSlot.trans kept.symm, banded, first,
-        ⟨rest.snoc (.block engine signed due ok)⟩⟩
+  intro x run early fulu atStart
+  obtain ⟨boundary, atSlot, -, banded, toBoundary, fromBoundary⟩ :=
+    run_boundaryEpoch genesis bands caps activation run early fulu
+  exact ⟨boundary, atSlot atStart, banded, toBoundary, fromBoundary⟩
 
 /-! ## Runs along the chains of a store -/
 
@@ -285,10 +337,7 @@ private theorem lookahead_runsTo (anchorSlot : anchorBlock.slot = anchorState.sl
     ∃ middle, lookaheadState config checks base start = .ok middle ∧
       RunsTo config checks middle state := by
   obtain ⟨rootBlock, rootFound⟩ := forward.reachable.known_of_blockState stored
-  have fromRoot : RunsTo config checks rootState state := by
-    rcases reach with rfl | ⟨_, processed⟩
-    · exact RunsTo.refl _
-    · exact RunsTo.ofProcessSlots processed
+  have fromRoot : RunsTo config checks rootState state := RunsTo.ofReach reach
   by_cases far : start ≤ rootBlock.slot
   · obtain ⟨middle, lookOk, toRoot⟩ :=
       forward.relation_of_checkpointPrefix_with (RunsTo config checks) RunsTo.refl
@@ -582,60 +631,6 @@ private theorem runs_of_call
 
 /-! ## Runs of the pin's window -/
 
-/-- A run from genesis passes a boundary state at the start of the epoch of its last state.
-
-The bands of hysteresis hold at that boundary state.
-
-A last state at the first slot of an epoch is `run_boundaryState`.
-
-Any other state is in the epoch of the state before its last step, at the same fork. -/
-private theorem run_epochBoundary {g : ForkedBeaconState preset}
-    (genesis : Genesis config checks g) (bands : preset.IncrementWithinUpwardBand)
-    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset) :
-    ∀ {x : ForkedBeaconState preset}, Run config checks g x → x.fork < .glamsterdam →
-      .fusaka ≤ x.fork →
-      ∃ boundary : BeaconState preset x.fork,
-        getCurrentEpoch boundary = getCurrentEpoch x.state ∧ Hysteresis boundary ∧
-        Nonempty (Run config checks g ⟨x.fork, boundary⟩) ∧
-        Nonempty (Run config checks ⟨x.fork, boundary⟩ x) := by
-  intro x run
-  induction run with
-  | nil =>
-    intro _ fulu
-    obtain ⟨_, _, _, initialized⟩ := genesis
-    obtain ⟨phase0, -⟩ := initializeBeaconStateFromEth1_ok initialized
-    exact absurd (Nat.lt_of_le_of_lt fulu phase0) (by decide)
-  | @snoc middle last pre step ih =>
-    intro early fulu
-    by_cases first : last.state.slot % preset.SLOTS_PER_EPOCH = 0
-    · obtain ⟨boundary, atSlot, banded, toBoundary, fromBoundary⟩ :=
-        run_boundaryState genesis bands caps activation (pre.snoc step) early fulu first
-      exact ⟨boundary, by simp only [getCurrentEpoch, atSlot], banded, toBoundary, fromBoundary⟩
-    · cases step with
-      | slot ok =>
-        have next := (advanceSlotAcross_cases ok).1
-        have notFirst : ¬ preset.SLOTS_PER_EPOCH.toNat ∣ middle.state.slot.toNat + 1 := by
-          rw [Nat.dvd_iff_mod_eq_zero, ← next]
-          intro zero
-          exact first (UInt64.toNat_inj.mp (by rw [UInt64.toNat_mod, zero, UInt64.toNat_zero]))
-        have same : getCurrentEpoch last.state = getCurrentEpoch middle.state := by
-          apply UInt64.toNat_inj.mp
-          rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, next, Nat.succ_div]
-          simp [notFirst]
-        obtain ⟨_, _, -, kept⟩ := advanceSlotAcross_of_same_epoch ok same
-        have keptFork : last.fork = middle.fork := by rw [kept]
-        obtain ⟨boundary, epoch, banded, toBoundary, ⟨rest⟩⟩ :=
-          ih (keptFork ▸ early) (keptFork ▸ fulu)
-        have extended := rest.snoc (.slot ok)
-        have epochLast := epoch.trans same.symm
-        subst kept
-        exact ⟨boundary, epochLast, banded, toBoundary, ⟨extended⟩⟩
-      | block engine signed due ok =>
-        have kept := processBlock_slot (applySignedBlock_ok ok).2.1
-        obtain ⟨boundary, epoch, banded, toBoundary, ⟨rest⟩⟩ := ih early fulu
-        exact ⟨boundary, epoch.trans (by simp only [getCurrentEpoch, kept]), banded, toBoundary,
-          ⟨rest.snoc (.block engine signed due ok)⟩⟩
-
 /-- The runs of the pin's window, from a split state at the start of the finalized epoch.
 
 The call is the pulled-up head state and the current target of an honest store.
@@ -806,7 +801,7 @@ private theorem runs_of_finalized
   · -- Before finality passes the anchor: the split is the anchor state itself.
     obtain rfl := finAnchor (UInt64.not_lt.mp guard)
     obtain ⟨common, commonEpoch, banded, toCommon, edge⟩ :=
-      run_epochBoundary genesis bands caps activation history early fulu
+      run_boundaryEpoch genesis bands caps activation history early fulu
     obtain ⟨ancRun⟩ := run_of_held (forward u caller n) heldBefore held
     obtain ⟨ancToMiddle⟩ := (RunsTo.ofReach (checks := .bls) ancReach).2 middleBefore
     obtain ⟨rootRun⟩ := run_of_held (forward w receiver k) heldBeforeW stored
