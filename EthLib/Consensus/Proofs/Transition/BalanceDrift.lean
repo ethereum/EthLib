@@ -1258,22 +1258,11 @@ private theorem balanceDrift_preActivation_excludes {f : Fork} {s : BeaconState 
     (found : s.validators.data[i]? = some v)
     (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH) :
     ∀ index ∈ preActivationIndices s, index.toNat ≠ i := by
-  intro index member
-  simp only [preActivationIndices, List.mem_map, List.mem_mergeSort, List.mem_filter] at member
-  obtain ⟨⟨w, j⟩, ⟨located, waiting⟩, rfl⟩ := member
-  have read : s.validators.data[j]? = some w := by
-    simpa using List.mem_zipIdx_iff_getElem?.mp located
-  have inside := (Array.getElem?_eq_some_iff.mp read).1
-  have small : j < 2 ^ 64 := Nat.lt_of_lt_of_le inside
-    ((s.validators.bound early).trans (Nat.le_of_lt preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt))
-  have converted : j.toUInt64.toNat = j := by
-    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
-  rw [converted]
-  intro eq
-  subst j
-  rw [found, Option.some.injEq] at read
+  intro index member equal
+  obtain ⟨w, read, waiting⟩ := preActivation_waiting early member
+  rw [equal, found, Option.some.injEq] at read
   subst w
-  exact activated (by simpa using waiting)
+  exact activated waiting
 
 private theorem balanceDrift_upgrade_active {s : ForkedBeaconState preset}
     {t : {t : ForkedBeaconState preset // s.fork < t.fork}}

@@ -856,6 +856,22 @@ theorem mem_activationQueue {index : ValidatorIndex}
     simpa only [Array.getElem?_toList] using (List.mem_zipIdx_iff_getElem?.mp positionOk)
   · cases selected
 
+/-- Each index put back into the queue is that of a validator with no activation epoch. -/
+theorem preActivation_waiting {f : Fork} {s : BeaconState preset f} (early : f < .glamsterdam)
+    {index : ValidatorIndex} (member : index ∈ preActivationIndices s) :
+    ∃ validator, s.validators.data[index.toNat]? = some validator ∧
+      validator.activationEpoch = FAR_FUTURE_EPOCH := by
+  simp only [preActivationIndices, List.mem_map, List.mem_mergeSort, List.mem_filter] at member
+  obtain ⟨⟨validator, position⟩, ⟨located, waiting⟩, rfl⟩ := member
+  have read : s.validators.data[position]? = some validator := by
+    simpa using List.mem_zipIdx_iff_getElem?.mp located
+  have small : position < 2 ^ 64 := Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp read).1
+    (Nat.le_trans (s.validators.bound early)
+      (Nat.le_of_lt preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt))
+  refine ⟨validator, ?_, by simpa using waiting⟩
+  rw [toNat_toUInt64_of_lt_pow small]
+  exact read
+
 /-- The activation queue holds each index at most once, while the registry is below `2^64`. -/
 theorem activationQueue_nodup (small : state.validators.data.size < 2 ^ 64) :
     (activationQueue state).Nodup := by
