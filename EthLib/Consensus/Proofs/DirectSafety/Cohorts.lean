@@ -597,10 +597,8 @@ private theorem activationCohortBound_advanceSlot (early : fork < .pectra)
     · simpa only [validatorCohort, cachedData] using bounded.count
     · simpa only [scheduledActivationEpoch, getCurrentEpoch, cachedData, cachedSlot]
         using bounded.scheduled
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    have result := activationCohortBound_processEpoch early epochedOk atCached
+  obtain ⟨boundary, epochedOk⟩ | ⟨inside, rfl⟩ := epochIfLast_cases epochedOk
+  · have result := activationCohortBound_processEpoch early epochedOk atCached
     constructor
     · exact result.1
     · intro v member finite
@@ -609,9 +607,7 @@ private theorem activationCohortBound_advanceSlot (early : fork < .pectra)
       simp only [scheduledActivationEpoch, getCurrentEpoch, computeEpochAtSlot,
         UInt64.toNat_div, cachedSlot] at h ⊢
       omega
-  · rename_i inside
-    cases epochedOk
-    constructor
+  · constructor
     · exact atCached.count
     · intro v member finite
       have h := atCached.scheduled v member finite
@@ -844,10 +840,8 @@ private theorem assigned_advanceSlot (early : fork < .pectra)
         assignedCount after ≤ assignedCount state + cap) := by
   obtain ⟨next, cached, epoched, nextOk, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    right
+  obtain ⟨boundary, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
+  · right
     obtain ⟨before, registered, head, registeredOk, tail, beforeSlot, -, -, beforeValidators⟩ :=
       cohorts_epoch early epochedOk
     have registry := assigned_processRegistryUpdates early registeredOk cap fun updated pass => by
@@ -864,7 +858,6 @@ private theorem assigned_advanceSlot (early : fork < .pectra)
     · rw [← tail.assigned] at registry
       exact registry.trans (Nat.le_of_eq (congrArg (· + cap) head.assigned))
   · left
-    cases epochedOk
     rfl
 
 /-- Validators assigned an activation epoch at `s`, without those already exited at `x`. -/

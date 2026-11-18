@@ -129,12 +129,9 @@ private theorem advanceSlot_records (computed : advanceSlot config checks state 
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
   refine ⟨cached, by subst cachedEq; exact ⟨rfl, rfl, rfl, rfl⟩, ?_⟩
-  unfold epochIfLast at epochedOk
-  split at epochedOk
+  obtain ⟨_, epochedOk⟩ | ⟨inside, rfl⟩ := epochIfLast_cases epochedOk
   · exact .inr ⟨epoched, epochedOk, rfl, rfl, rfl, rfl⟩
-  · rename_i inside
-    simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk cachedEq
+  · subst cachedEq
     refine .inl ⟨?_, rfl, rfl, rfl, rfl⟩
     rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat]
     exact nextSlot_epoch_of_inside sum inside

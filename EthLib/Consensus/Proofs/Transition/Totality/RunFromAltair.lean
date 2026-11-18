@@ -292,10 +292,8 @@ private theorem Tracked.of_advanceSlot {fork : Fork} {state advanced : BeaconSta
       (epoched.inactivityScores altair).data := by
     subst advancedEq
     exact fun _ => rfl
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i last
-    -- The slot ends its epoch, so the epoch transition runs and the epoch moves on by one.
+  obtain ⟨last, epochedOk⟩ | ⟨inside, rfl⟩ := epochIfLast_cases epochedOk
+  · -- The slot ends its epoch, so the epoch transition runs and the epoch moves on by one.
     have lastNat : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 := by
       have := congrArg UInt64.toNat last
       simpa [UInt64.toNat_mod, sum] using this
@@ -326,10 +324,7 @@ private theorem Tracked.of_advanceSlot {fork : Fork} {state advanced : BeaconSta
       have bound := processEpoch_scoreBound altair (by exact scored) epochedOk
       rw [scores altair] at member
       exact bound score member
-  · rename_i inside
-    -- The slot stays inside its epoch, so the state keeps its epoch.
-    simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
+  · -- The slot stays inside its epoch, so the state keeps its epoch.
     have kept := nextSlot_epoch_of_inside sum inside
     rw [sum] at kept
     have same : getCurrentEpoch advanced = getCurrentEpoch state :=
