@@ -1036,21 +1036,16 @@ theorem Run.induction_of_same_epoch {x : ForkedBeaconState preset}
     {y : ForkedBeaconState preset} (tail : Run config checks x y)
     (early : y.fork < .glamsterdam) (same : getCurrentEpoch y.state = getCurrentEpoch x.state) :
     motive y tail := by
-  induction tail with
-  | nil => exact start
-  | @snoc middle last pre step ih =>
-    have middleEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
-    have midEpoch : getCurrentEpoch middle.state = getCurrentEpoch x.state :=
-      UInt64.le_antisymm (same ▸ step.chainStep.currentEpoch_le)
-        (currentEpoch_le_of_chainSteps pre.chainSteps)
-    have prior := ih middleEarly midEpoch
-    cases step with
-    | block engine signed due ok => exact blockStep engine signed due ok pre early prior
-    | slot ok =>
-      have kept := same.trans midEpoch.symm
-      obtain ⟨cached, next, cachedOk, lastEq⟩ := advanceSlotAcross_of_same_epoch ok kept
-      rw [lastEq] at kept
-      exact slotStep pre ok lastEq cachedOk kept prior
+  refine Run.induction_of_same_period 1 motive start blockStep ?_ tail early
+    (by simp only [same])
+  intro middle last pre ok lastEarly inside prior
+  have kept : getCurrentEpoch last.state = getCurrentEpoch middle.state := by
+    rcases inside with equal | inside
+    · exact equal
+    · exact (inside (UInt64.toNat_inj.mp (by simp))).elim
+  obtain ⟨cached, next, cachedOk, lastEq⟩ := advanceSlotAcross_of_same_epoch ok kept
+  rw [lastEq] at kept
+  exact slotStep pre ok lastEq cachedOk kept prior
 
 /-- Within one epoch before Gloas, each existing index keeps its effective balance. -/
 theorem Run.effectiveKept_of_same_epoch {x y : ForkedBeaconState preset}

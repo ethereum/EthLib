@@ -563,19 +563,7 @@ theorem Run.currentSyncCommittee_eq_of_same_epoch {x y : ForkedBeaconState prese
     (altair : .altair ≤ y.fork) (altair' : .altair ≤ x.fork) :
     (y.state.currentSyncCommittee altair).value.pubkeys.toList =
       (x.state.currentSyncCommittee altair').value.pubkeys.toList :=
-  Run.induction_of_same_epoch
-    (fun w _ => ∀ (altair : .altair ≤ w.fork) (altair' : .altair ≤ x.fork),
-      (w.state.currentSyncCommittee altair).value.pubkeys.toList =
-        (x.state.currentSyncCommittee altair').value.pubkeys.toList)
-    (fun _ _ => rfl)
-    (fun _ _ _ ok _ _ prior altair altair' => by
-      rw [processBlock_currentSyncCommittee altair (applySignedBlock_ok ok).2.1]
-      exact prior altair altair')
-    (fun _ _ eq cachedOk _ prior => by
-      subst eq
-      obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-      exact prior)
-    tail early same altair altair'
+  tail.currentSyncCommittee_eq_of_same_period early (by rw [same]) altair altair'
 
 /-- The positions active in an epoch are the same in two registries when activity stays.
 

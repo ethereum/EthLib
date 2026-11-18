@@ -2163,9 +2163,7 @@ private theorem FloorTrace.slot_update {fork : Fork} {s t : BeaconState preset f
     rw [balance]
     omega
 
-/-- Between the first fork of Fulu and Gloas, the upgrades leave the state as it is.
-
-The only upgrade from a fork of that range leads to Gloas. -/
+/-- Between the first fork of Fulu and Gloas, the upgrades leave the state as it is. -/
 theorem processUpgrades_eq_of_window {z z' : ForkedBeaconState preset}
     (ok : processUpgrades config checks z = .ok z') (fulu : .fusaka ≤ z.fork)
     (early : z'.fork < .glamsterdam) : z' = z := by
@@ -2335,17 +2333,7 @@ private theorem FloorTrace.slot_step {g x m y : ForkedBeaconState preset}
     flag.symm, lastDebt.trans debt, effective, cap, by simpa only [flag] using used,
     by rw [lastHigh, kept], fun h hh => marks h (flag.symm.trans hh)⟩
 
-/-- Concrete Steps preserve the carried account and cover each balance-path point.
-
-The key is unslashed at the start of the run and within the short window of a slash.
-
-Or it is slashed at the start with an assigned exit.
-
-Then its delayed penalty is not due in the epoch of the step.
-
-The high-water mark of the carried account rises at most to the effective balance after the step.
-
-A key with no activation epoch is allowed if the step starts from Fulu or later. -/
+/-- One step of the per-key floor trace, for an activated key or a step from Fulu. -/
 theorem FloorTrace.step_general_or_fulu {g x m y : ForkedBeaconState preset}
     (shared : Run config checks g x) (pre : Run config checks x m)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)

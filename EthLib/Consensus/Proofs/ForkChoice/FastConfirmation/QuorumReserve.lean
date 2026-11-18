@@ -179,7 +179,7 @@ Neither do the late activations at that depth.
 
 The reserve treats every epoch of that window as fixed before the branches split.
 
-Rates are read at a quarter of the call's total active balance.
+Rates are read at a quarter of the call's total active balance, or at a fifth of an increment.
 
 A key's leak and gain are read at a computed envelope of its effective balance on any branch.
 
@@ -260,7 +260,10 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- The rates are read at a quarter of the call's total.
   --
   -- A counting state that keeps that much has a base reward per increment at most twice this one.
-  let quarter := max preset.EFFECTIVE_BALANCE_INCREMENT (totalGwei / 4)
+  --
+  -- Below eighteen increments the rates are read at a fifth of an increment, below any total.
+  let quarter := if 18 * inc ≤ total then totalGwei / 4
+    else preset.EFFECTIVE_BALANCE_INCREMENT / 5
   let perIncrement := ((getBaseRewardPerIncrement preset quarter).toOption.getD 0).toNat
   let base (i : ℕ) := effective i / inc * perIncrement
   let depositChurn := config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
@@ -337,9 +340,11 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- That is at least its effective balance here and at the finalized block's state.
   --
   -- A key can rise by its leak at the cap and its partials, then by a band, up to its cap.
+  --
+  -- The leak counts from the finalized block's state: both branches keep an update made since.
   let finEB (i : ℕ) := balanceAt finalizedState i
   let ebUp (i : ℕ) :=
-    let top := actual i + depth * leakAt (cap i) i + (partialsX i - partialsR i) +
+    let top := actual i + depthFin * leakAt (cap i) i + (partialsX i - partialsR i) +
       preset.downwardBand + inc - 1
     max (max (effective i) (finEB i)) (min (cap i) (top - top % inc))
   let leak (i : ℕ) := leakAt (ebUp i) i
@@ -376,8 +381,9 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let gainScaled (i : ℕ) := (11 * gainRate i + 9) / 10
   let capFor (i : ℕ) :=
     if depth * gainScaled i < inc ∧ 11 * depth * gainRate i < ebUp i then cap i else capMax
+  -- The rise bounds the balance from the finalized block's state on, as `ebUp` does.
   let rise (i : ℕ) :=
-    let high := actual i + depth * (gainScaled i + leak i) + (partialsX i - partialsR i)
+    let high := actual i + depthFin * (gainScaled i + leak i) + (partialsX i - partialsR i)
     -- Deeper than `partialDelay`, the call's branch can pay partials that neither queue holds.
     --
     -- So the rise is the key's whole headroom.
