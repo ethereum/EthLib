@@ -2028,25 +2028,6 @@ private theorem eq_of_isAncestor_antisymm {store : Store preset fork} (before : 
   rw [Store.getAncestor_of_le aFound ge, Except.ok.injEq] at walk
   exact congrArg ForkChoiceNode.root walk
 
-/-- A collision names a root where the two stores hold different blocks. -/
-private theorem findBlockCollision_held {first second : Store preset fork} {roots : List Root}
-    {root : Root} {left right : BeaconBlock preset fork}
-    (found : Store.findBlockCollision first second roots = some (root, left, right)) :
-    first.blocks[root]? = some left ∧ second.blocks[root]? = some right ∧ left ≠ right := by
-  induction roots with
-  | nil => simp [Store.findBlockCollision] at found
-  | cons head tail ih =>
-    simp only [Store.findBlockCollision] at found
-    split at found
-    · rename_i b₁ b₂ h₁ h₂
-      split at found
-      · exact ih found
-      · rename_i ne
-        simp only [Option.some.injEq, Prod.mk.injEq] at found
-        obtain ⟨rfl, rfl, rfl⟩ := found
-        exact ⟨h₁, h₂, ne⟩
-    · exact ih found
-
 /-- Honest stores that agree on every block they both hold do not collide. -/
 private theorem not_collision_of_agree {time : ℕ}
     (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
@@ -2055,7 +2036,7 @@ private theorem not_collision_of_agree {time : ℕ}
       ((e.world j).state b).blocks[r]? = some right → left = right) :
     ¬HonestCollision (e := e) time := by
   rintro ⟨a, ha, b, hb, i, j, hi, hj, _, ⟨r, left, right⟩, found⟩
-  obtain ⟨leftFound, rightFound, different⟩ := findBlockCollision_held found
+  obtain ⟨leftFound, rightFound, different⟩ := Store.findBlockCollision_held found
   exact different (agree a ha b hb i j hi hj r left right leftFound rightFound)
 
 /-- A late receiver's justified checkpoint is not after the root's epoch and at most the call's.
