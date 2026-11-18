@@ -47,16 +47,29 @@ namespace Store
 
 variable {config : Config} {store : Store preset fork}
 
-/-- Before Gloas, the votes for a held node can be read from any state of small enough stake.
+/-- A vote for a held block supports a node. -/
+private theorem getSupportedNode_exists {message : LatestMessage fork}
+    {block : BeaconBlock preset fork} (found : store.blocks[message.root]? = some block) :
+    ∃ node, store.getSupportedNode message = .ok node := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · by_cases lt : block.slot < message.slot gloas
+    · exact ⟨_, getSupportedNode_of_lt_slot gloas found lt⟩
+    · exact ⟨_, getSupportedNode_of_same_slot gloas found (UInt64.not_lt.mp lt)⟩
+  · exact ⟨_, getSupportedNode_of_lt (Nat.lt_of_not_le gloas)⟩
+
+/-- The votes for a held node can be read from any state of small enough stake.
+
+The registry of that state must be within its limit.
 
 The score is at most the active stake of that state. -/
-private theorem getAttestationScore_exists (before : fork < .glamsterdam)
+private theorem getAttestationScore_exists
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     (forward : ForwardReachable config anchorState anchorBlock store)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (unknown : store.blocks[anchorBlock.parentRoot]? = none)
     {node : ForkChoiceNode} {block : BeaconBlock preset fork}
     (found : store.blocks[node.root]? = some block) {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit)
     (small : stake (fun v => balanceAt state v.toNat)
       (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset < 2 ^ 64) :
     ∃ score, store.getAttestationScore node state = .ok score ∧
@@ -70,13 +83,14 @@ private theorem getAttestationScore_exists (before : fork < .glamsterdam)
     intro entry _ message latest _
     obtain ⟨attestation, rfl, origin⟩ := forward.votesHaveOrigins latest
     obtain ⟨voted, votedFound, -⟩ := origin.voted
+    obtain ⟨supported, supportedOk⟩ := getSupportedNode_exists (store := store)
+      (message := LatestMessage.ofAttestation attestation) votedFound
     obtain ⟨d, dOk⟩ := isAncestor_ok_of_orphans_le
       (forward.reachable.parentsBelow anchorSlot unknown) found
       (fun _ _ f orphan => forward.reachable.orphans_le anchorSlot f orphan found)
-      (start := ⟨_, .pending⟩) votedFound
-    exact ⟨d, by rw [getSupportedNode_of_lt before]; exact dOk⟩
+      (start := supported) (by rw [getSupportedNode_root supportedOk]; exact votedFound)
+    exact ⟨d, by rw [supportedOk]; exact dOk⟩
   -- The counted balances are the stake of the supporters, all of them active.
-  have within := BeaconState.registryWithinLimit_of_lt before state
   have bound : ((unslashedActiveBalances state).map fun entry =>
       if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum ≤
       stake (fun v => balanceAt state v.toNat)
@@ -91,36 +105,80 @@ private theorem getAttestationScore_exists (before : fork < .glamsterdam)
   simp only [fits, ↓reduceIte]
   exact ⟨_, rfl, by rw [UInt64.toNat_ofNat_of_lt' (by simp only [UInt64.size]; omega)]; exact bound⟩
 
-/-- Before Gloas, the walk from a pending held node can be computed when every held node weighs.
+/-- The children of a held node can be computed.
 
-The given nodes must be pending held blocks. -/
-private theorem getHeadFrom_exists (before : fork < .glamsterdam) (lower : store.ParentsBelow)
+Each child is a held node, of lower rank when parents sit below their children. -/
+private theorem getNodeChildren_held (lower : store.ParentsBelow) {node : ForkChoiceNode}
+    {block : BeaconBlock preset fork} (found : store.blocks[node.root]? = some block) :
+    ∃ children, store.getNodeChildren node = .ok children ∧ ∀ child ∈ children,
+      ∃ childBlock, store.blocks[child.root]? = some childBlock ∧
+        store.nodeRank child < store.nodeRank node := by
+  -- A child block sits at a later slot than its parent, so its rank is lower.
+  have climbs : ∀ (child : ForkChoiceNode) (childBlock : BeaconBlock preset fork),
+      child.payloadStatus = .pending → store.blocks[child.root]? = some childBlock →
+      childBlock.parentRoot = node.root → store.nodeRank child < store.nodeRank node := by
+    intro child childBlock pending childFound parent
+    have below : childBlock.slot.toNat > block.slot.toNat :=
+      UInt64.lt_iff_toNat_lt.mp (lower _ childBlock block childFound (parent ▸ found))
+    have := childBlock.slot.toNat_lt
+    simp only [nodeRank, childFound, found, pending, ↓reduceIte]
+    split <;> omega
+  by_cases gloas : .glamsterdam ≤ fork
+  · by_cases pending : node.payloadStatus = .pending
+    · -- A pending node has the empty node and maybe the full node of its block.
+      refine ⟨_, getNodeChildren_of_pending gloas pending, fun child member => ⟨block, ?_, ?_⟩⟩ <;>
+        · simp only [List.mem_cons] at member
+          rcases member with rfl | member
+          · simp [nodeRank, found, pending]
+          · split at member
+            · rw [List.mem_singleton.mp member]
+              simp [nodeRank, found, pending]
+            · cases member
+    · obtain ⟨children, childrenOk⟩ : ∃ children, store.getNodeChildren node = .ok children := by
+        simp only [getNodeChildren, gloas, pending, and_false, ↓reduceDIte, true_and]
+        split
+        · simp [Store.block, found, bind, Except.bind, pure, Except.pure]
+        · exact ⟨_, rfl⟩
+      refine ⟨children, childrenOk, fun child member => ?_⟩
+      obtain ⟨childPending, childBlock, -, childFound, parent, -⟩ :=
+        (mem_getNodeChildren_of_gloas gloas pending childrenOk).mp member
+      exact ⟨childBlock, childFound, climbs child childBlock childPending childFound parent⟩
+  · have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
+    obtain ⟨children, childrenOk⟩ : ∃ children, store.getNodeChildren node = .ok children := by
+      simp [getNodeChildren, gloas, pure, Except.pure]
+    refine ⟨children, childrenOk, fun child member => ?_⟩
+    obtain ⟨childPending, childBlock, childFound, parent⟩ :=
+      (mem_getNodeChildren before childrenOk).mp member
+    exact ⟨childBlock, childFound, climbs child childBlock childPending childFound parent⟩
+
+/-- The walk from a held node can be computed when every held node weighs and has a tiebreaker.
+
+The given nodes must be held. -/
+private theorem getHeadFrom_exists (lower : store.ParentsBelow)
     {tally : Except ForkChoiceError VoteTally} {nodes : List ForkChoiceNode}
-    (heldNodes : ∀ n ∈ nodes, n.payloadStatus = .pending ∧
-      ∃ block, store.blocks[n.root]? = some block)
+    (heldNodes : ∀ n ∈ nodes, ∃ block, store.blocks[n.root]? = some block)
     (weighs : ∀ (n : ForkChoiceNode) (block : BeaconBlock preset fork),
-      store.blocks[n.root]? = some block → ∃ w, store.getWeight config tally n = .ok w) :
+      store.blocks[n.root]? = some block → ∃ w, store.getWeight config tally n = .ok w)
+    (breaks : ∀ (n : ForkChoiceNode) (block : BeaconBlock preset fork),
+      store.blocks[n.root]? = some block → ∃ t, store.tiebreaker config n = .ok t) :
     ∀ (head : ForkChoiceNode) (block : BeaconBlock preset fork),
-      head.payloadStatus = .pending → store.blocks[head.root]? = some block →
+      store.blocks[head.root]? = some block →
       ∃ result, store.getHeadFrom config tally nodes head = .ok result := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   intro head
   induction head using getHeadFrom.induct store with
   | _ head ih =>
-  intro block pending found
-  -- The children are pure before Gloas.
-  obtain ⟨children, childrenOk⟩ : ∃ children, store.getNodeChildren head = .ok children := by
-    simp [getNodeChildren, notGloas, pure, Except.pure]
+  intro block found
+  obtain ⟨children, childrenOk, held⟩ := getNodeChildren_held lower found
   -- Every child among the nodes weighs.
   obtain ⟨weighted, weightedOk⟩ :
       ∃ weighted, (children.filter (· ∈ nodes)).mapM (store.weighNode config tally) =
         .ok weighted := by
     refine mapM_exists_ok fun c mem => ?_
     obtain ⟨-, cIn⟩ := List.mem_filter.mp mem
-    obtain ⟨-, cBlock, cFound⟩ := heldNodes c (of_decide_eq_true cIn)
+    obtain ⟨cBlock, cFound⟩ := heldNodes c (of_decide_eq_true cIn)
     obtain ⟨w, wOk⟩ := weighs c cBlock cFound
-    refine ⟨(c, w, 0), ?_⟩
-    simp [weighNode, wOk, tiebreaker, notGloas, bind, Except.bind, pure, Except.pure]
+    obtain ⟨t, tOk⟩ := breaks c cBlock cFound
+    exact ⟨(c, w, t), weighNode_ok_iff.mpr ⟨rfl, wOk, tOk⟩⟩
   have heaviest : store.heaviestChild config tally nodes head =
       .ok (chooseHeaviest weighted) := by
     simp [heaviestChild, childrenOk, weightedOk, bind, Except.bind, pure, Except.pure]
@@ -131,19 +189,9 @@ private theorem getHeadFrom_exists (before : fork < .glamsterdam) (lower : store
     obtain ⟨key, mem, -⟩ := chooseHeaviest_some choice
     obtain ⟨c, cMem, cWeighed⟩ := mapM_ok_mem weightedOk _ mem
     obtain ⟨rfl, -, -⟩ := weighNode_ok_iff.mp cWeighed
-    obtain ⟨cChild, cIn⟩ := List.mem_filter.mp cMem
-    obtain ⟨cPending, cBlock, cFound, cParent⟩ := (mem_getNodeChildren before childrenOk).mp cChild
-    -- The child sits above its parent, so its rank is lower.
-    have below : cBlock.slot.toNat > block.slot.toNat :=
-      UInt64.lt_iff_toNat_lt.mp (lower _ cBlock block cFound (cParent ▸ found))
-    have lowerRank : store.nodeRank child < store.nodeRank head := by
-      simp only [nodeRank, cFound, found, pending, ↓reduceIte]
-      rw [cPending]; simp only [↓reduceIte]
-      have := cBlock.slot.toNat_lt
-      have := block.slot.toNat_lt
-      omega
+    obtain ⟨cBlock, cFound, lowerRank⟩ := held _ (List.mem_filter.mp cMem).1
     simp only [bind, Except.bind, lowerRank, ↓reduceDIte]
-    exact ih child lowerRank cBlock cPending cFound
+    exact ih _ lowerRank cBlock cFound
 
 /-- Every proposer score is at most `(2^64 - 1) / 100`.
 
@@ -222,15 +270,18 @@ private theorem onAttesterSlashing_boost {checks : SignatureChecks}
   subst slashed
   rfl
 
-private theorem recordBlockTimeliness_boost (before : fork < .glamsterdam) {root : Root}
-    {after : Store preset fork}
+private theorem recordBlockTimeliness_boost {root : Root} {after : Store preset fork}
     (recorded : store.recordBlockTimeliness config root = .ok after) :
     after.proposerBoostRoot = store.proposerBoostRoot := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   unfold recordBlockTimeliness at recorded
-  simp only [bind_ok_iff, notGloas, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at recorded
-  obtain ⟨_, _, _, _, _, _, _, _, rfl⟩ := recorded
-  rfl
+  simp only [bind_ok_iff, pure, Except.pure] at recorded
+  obtain ⟨_, _, _, _, _, _, _, _, recorded⟩ := recorded
+  split at recorded
+  · simp only [bind_ok_iff, Except.ok.injEq] at recorded
+    obtain ⟨_, _, rfl⟩ := recorded
+    rfl
+  · cases recorded
+    rfl
 
 private theorem updateProposerBoostRoot_boost {head root : Root} {after : Store preset fork}
     (updated : store.updateProposerBoostRoot config head root = .ok after) :
@@ -253,25 +304,27 @@ private theorem computePulledUpTip_boost {root : Root} {after : Store preset for
   split at pulled <;> simp only [pure, Except.pure, Except.ok.injEq] at pulled <;> subst pulled <;>
     simp [updateCheckpoints_boost, updateUnrealizedCheckpoints_boost]
 
-/-- Before Gloas, the boosted root of a reachable store is zero or a held block.
+/-- The boosted root of a reachable store is zero, or a held block whose parent is held.
 
 The anchor store has none, a new slot drops it, and a block can only boost itself.
 
+A new block's parent is held, since the store holds its state.
+
 The other handlers keep the boost and the blocks. -/
-private theorem Reachable.boostHeld (before : fork < .glamsterdam)
-    {anchorState : BeaconState preset fork}
+private theorem Reachable.boostHeld {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork}
     (reachable : Reachable config anchorState anchorBlock store) :
     store.proposerBoostRoot = Vector.replicate 32 0 ∨
-      ∃ block, store.blocks[store.proposerBoostRoot]? = some block := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+      ∃ block parent, store.blocks[store.proposerBoostRoot]? = some block ∧
+        store.blocks[block.parentRoot]? = some parent := by
   -- Same boost and same blocks keep the property.
   have keep : ∀ {s s' : Store preset fork}, s'.proposerBoostRoot = s.proposerBoostRoot →
       s'.blocks = s.blocks →
-      (s.proposerBoostRoot = Vector.replicate 32 0 ∨
-        ∃ block, s.blocks[s.proposerBoostRoot]? = some block) →
-      (s'.proposerBoostRoot = Vector.replicate 32 0 ∨
-        ∃ block, s'.blocks[s'.proposerBoostRoot]? = some block) := by
+      (s.proposerBoostRoot = Vector.replicate 32 0 ∨ ∃ block parent,
+        s.blocks[s.proposerBoostRoot]? = some block ∧ s.blocks[block.parentRoot]? = some parent) →
+      (s'.proposerBoostRoot = Vector.replicate 32 0 ∨ ∃ block parent,
+        s'.blocks[s'.proposerBoostRoot]? = some block ∧
+          s'.blocks[block.parentRoot]? = some parent) := by
     intro s s' boost blocks holds
     rw [boost, blocks]; exact holds
   induction reachable with
@@ -298,8 +351,8 @@ private theorem Reachable.boostHeld (before : fork < .glamsterdam)
   | tick _ ticked ih =>
     obtain ⟨tickSlot, caught, -, caughtUp, last⟩ := onTick_ok ticked
     have caughtHolds := catchUp_preserves (P := fun s : Store preset fork =>
-        s.proposerBoostRoot = Vector.replicate 32 0 ∨
-          ∃ block, s.blocks[s.proposerBoostRoot]? = some block)
+        s.proposerBoostRoot = Vector.replicate 32 0 ∨ ∃ block parent,
+          s.blocks[s.proposerBoostRoot]? = some block ∧ s.blocks[block.parentRoot]? = some parent)
       (fun holds tick => by
         rcases onTickPerSlot_boost tick with same | zero
         · exact keep same (onTickPerSlot_frame tick).2.2.2.1 holds
@@ -307,45 +360,64 @@ private theorem Reachable.boostHeld (before : fork < .glamsterdam)
     rcases onTickPerSlot_boost last with same | zero
     · exact keep same (onTickPerSlot_frame last).2.2.2.1 caughtHolds
     · exact .inl zero
-  | @block s a c src sg _ added ih =>
-    unfold onBlock at added
-    simp only [bind_ok_iff] at added
-    obtain ⟨blockRoot, -, added⟩ := added
-    split at added
-    · simp only [pure, Except.pure, Except.ok.injEq] at added
-      subst added; exact ih
+  | @block s a c src sg prior added ih =>
+    cases rootOk : Serialization.Ssz.SszType.hashTreeRoot sg.message with
+    | error e => simp [onBlock, rootOk, bind, Except.bind, Except.mapError] at added
+    | ok blockRoot =>
+    by_cases known : s.blocks.contains blockRoot
+    · rw [onBlock_known rootOk known, Except.ok.injEq] at added
+      subst added
+      exact ih
+    obtain ⟨-, pre, -, preFound, -⟩ := onBlock_insert rootOk known added
+    obtain ⟨parent, parentFound⟩ := prior.known_of_blockState preFound
+    simp only [onBlock, rootOk, known, bind, Except.bind, Except.mapError, ↓reduceIte,
+      Bool.false_eq_true] at added
     unfold addBlock at added
     simp only [bind_ok_iff] at added
     obtain ⟨state, -, head, -, recorded, recordedOk, timed, timedOk, boosted, boostedOk,
       pulledOk⟩ := added
-    unfold recordBlockPtcVotes at recordedOk
-    simp only [notGloas, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at recordedOk
-    subst recordedOk
-    have tBoost := recordBlockTimeliness_boost before timedOk
+    obtain ⟨_, _, rfl⟩ := recordBlockPtcVotes_onlyPtcVotes recordedOk
+    have tBoost := recordBlockTimeliness_boost timedOk
     have tBlocks := (recordBlockTimeliness_frame timedOk).2.1
     have bBoost := updateProposerBoostRoot_boost boostedOk
     have bBlocks := (updateProposerBoostRoot_frame boostedOk).2.1
     have pBoost := computePulledUpTip_boost pulledOk
     have pBlocks := (computePulledUpTip_frame pulledOk).2.1
     rw [pBoost, pBlocks, updateCheckpoints_boost, updateCheckpoints_blocks, bBlocks, tBlocks]
+    -- Every block held before stays held, and the new block's parent is held.
+    have kept : ∀ {r : Root} {b : BeaconBlock preset fork}, s.blocks[r]? = some b →
+        ∃ b', (s.blocks.insert blockRoot sg.message)[r]? = some b' := by
+      intro r b found
+      by_cases eq : blockRoot = r
+      · exact ⟨sg.message, by simp [eq]⟩
+      · exact ⟨b, by simp [Std.TreeMap.getElem?_insert, eq, found]⟩
     rcases bBoost with same | inserted
     · rw [same, tBoost]
-      rcases ih with zero | ⟨b, held⟩
+      rcases ih with zero | ⟨b, p, held, parentHeld⟩
       · exact .inl zero
       · right
-        by_cases eq : blockRoot = s.proposerBoostRoot
-        · exact ⟨sg.message, by simp [eq]⟩
-        · exact ⟨b, by simp [Std.TreeMap.getElem?_insert, eq, held]⟩
+        have fresh : blockRoot ≠ s.proposerBoostRoot := fun eq =>
+          known (Std.TreeMap.contains_iff_mem.mpr
+            (Std.TreeMap.mem_iff_isSome_getElem?.mpr (by rw [eq, held]; rfl)))
+        obtain ⟨p', parentHeld'⟩ := kept parentHeld
+        exact ⟨b, p', by simp [Std.TreeMap.getElem?_insert, fresh, held], parentHeld'⟩
     · right
-      exact ⟨sg.message, by simp [inserted]⟩
+      obtain ⟨p', parentHeld'⟩ := kept parentFound
+      exact ⟨sg.message, p', by simp [inserted], parentHeld'⟩
   | attestation _ attested ih =>
     exact keep (onAttestation_boost attested) (onAttestation_frame attested).2.1 ih
   | attesterSlashing _ slashed ih =>
     exact keep (onAttesterSlashing_boost slashed) (onAttesterSlashing_frame slashed).2.1 ih
-  | payloadAttestation => exact absurd ‹.glamsterdam ≤ fork› notGloas
-  | envelope => exact absurd ‹.glamsterdam ≤ fork› notGloas
-  | inclusionList =>
-    exact absurd (Nat.le_trans (by decide) ‹.hegota ≤ fork›) notGloas
+  | payloadAttestation _ voted ih =>
+    obtain ⟨_, _, rfl⟩ := onPayloadAttestationMessage_onlyPtcVotes voted
+    exact ih
+  | envelope _ accepted ih =>
+    obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
+    obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+    exact ih
+  | @inclusionList _ _ _ heze _ _ accepted ih =>
+    obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
+    exact ih
 
 /-- Before Gloas, the weight of a held node can be computed from the tally of the justified state.
 
@@ -358,7 +430,8 @@ private theorem getWeight_exists (before : fork < .glamsterdam)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (unknown : store.blocks[anchorBlock.parentRoot]? = none)
     (boostHeld : store.proposerBoostRoot = Vector.replicate 32 0 ∨
-      ∃ block, store.blocks[store.proposerBoostRoot]? = some block)
+      ∃ block parent, store.blocks[store.proposerBoostRoot]? = some block ∧
+        store.blocks[block.parentRoot]? = some parent)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (fits : config.ProposerScoreFits preset (2 * 10 ^ 17)) {state : BeaconState preset fork}
     (stateOk : store.checkpointState store.justifiedCheckpoint = .ok state)
@@ -368,14 +441,14 @@ private theorem getWeight_exists (before : fork < .glamsterdam)
     (found : store.blocks[node.root]? = some block) :
     ∃ weight, store.getWeight config store.justifiedTally node = .ok weight := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  obtain ⟨votes, votesOk, votesLe⟩ := getAttestationScore_exists (config := config) before forward
-    anchorSlot unknown found (state := state) (by omega)
+  obtain ⟨votes, votesOk, votesLe⟩ := getAttestationScore_exists (config := config) forward
+    anchorSlot unknown found (BeaconState.registryWithinLimit_of_lt before state) (by omega)
   have scoreOk : store.scoreFromTally (store.tallyVotes state) node = .ok votes := votesOk
   rw [justifiedTally_of_state stateOk]
   by_cases zero : store.proposerBoostRoot = Vector.replicate 32 0
   · exact ⟨votes, by simp [getWeight, notGloas, zero, scoreOk, bind, Except.bind, pure,
       Except.pure]⟩
-  obtain ⟨boostBlock, boostFound⟩ := boostHeld.resolve_left zero
+  obtain ⟨boostBlock, -, boostFound, -⟩ := boostHeld.resolve_left zero
   obtain ⟨d, dOk⟩ := isAncestor_ok_of_orphans_le
     (forward.reachable.parentsBelow anchorSlot unknown) found
     (fun _ _ f orphan => forward.reachable.orphans_le anchorSlot f orphan found)
@@ -401,7 +474,8 @@ private theorem getHead_exists_of_boostHeld (before : fork < .glamsterdam)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (unknown : store.blocks[anchorBlock.parentRoot]? = none)
     (boostHeld : store.proposerBoostRoot = Vector.replicate 32 0 ∨
-      ∃ block, store.blocks[store.proposerBoostRoot]? = some block)
+      ∃ block parent, store.blocks[store.proposerBoostRoot]? = some block ∧
+        store.blocks[block.parentRoot]? = some parent)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (fits : config.ProposerScoreFits preset (2 * 10 ^ 17)) {nodes : List ForkChoiceNode}
     (tree : store.getFilteredNodeTree config = .ok nodes) {state : BeaconState preset fork}
@@ -411,16 +485,13 @@ private theorem getHead_exists_of_boostHeld (before : fork < .glamsterdam)
     ∃ head, store.getHead config = .ok head := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   obtain ⟨justified, justifiedFound⟩ := filterNodeTree_known tree
-  have heldNodes : ∀ n ∈ nodes, n.payloadStatus = .pending ∧
-      ∃ block, store.blocks[n.root]? = some block := fun n mem => by
-    obtain ⟨-, held, -⟩ := filterNodeTree_mem tree n mem
-    rcases filterNodeTree_parent before rfl tree n mem with ⟨-, rfl | ⟨pending, -⟩⟩
-    · exact ⟨rfl, held⟩
-    · exact ⟨pending, held⟩
-  obtain ⟨head, headOk⟩ := getHeadFrom_exists (config := config) before
-    (forward.reachable.parentsBelow anchorSlot unknown) heldNodes
+  obtain ⟨head, headOk⟩ := getHeadFrom_exists (config := config)
+    (forward.reachable.parentsBelow anchorSlot unknown)
+    (fun n mem => (filterNodeTree_mem tree n mem).2.1)
     (fun n b f => getWeight_exists before forward anchorSlot unknown boostHeld positive fits
-      stateOk bounded f) _ justified rfl justifiedFound
+      stateOk bounded f)
+    (fun n _ _ => ⟨0, by simp [tiebreaker, notGloas, pure, Except.pure]⟩) _ justified
+    justifiedFound
   exact ⟨head, by simp [getHead, tree, notGloas, headOk, bind, Except.bind]⟩
 
 /-- Before Gloas, the head of a store that the handlers build can be computed.
@@ -447,7 +518,7 @@ theorem getHead_exists (before : fork < .glamsterdam) {anchorState : BeaconState
       (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ≤ 2 * 10 ^ 17) :
     ∃ head, store.getHead config = .ok head :=
   getHead_exists_of_boostHeld before forward anchorSlot unknown
-    (forward.reachable.boostHeld before) positive fits tree stateOk bounded
+    forward.reachable.boostHeld positive fits tree stateOk bounded
 
 end Store
 
