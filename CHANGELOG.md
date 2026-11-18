@@ -35,7 +35,7 @@ Not yet released.
   The pin's drift bound reads it.
 
 - `preActivation_waiting` shows that each validator put back into the activation queue at an upgrade has no activation epoch.
-  The exit-order walk, `queues_preActivation_fold` in the churn bounds and `balanceDrift_preActivation_excludes` in the balance drift now read it.
+  The exit-order walk, `queues_preActivation_fold` in the churn bounds and `balanceDrift_preActivation_excludes` in the balance drift read it.
 
 - The quorum drift bound adds these facts of runs.
   `Run.blockCount` counts the blocks of a run, `Run.blockCount_append` adds them over two runs, and `Run.blocks_le_slots` bounds them by one per slot.

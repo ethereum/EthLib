@@ -670,8 +670,12 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     ∑ i ∈ positions with (validator i).any (fun v =>
       decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
         v.activationEpoch == FAR_FUTURE_EPOCH), (effective i + rise i)
+  -- A key that joins at the next epoch here can activate earlier on another branch.
+  --
+  -- There it gains across its band, so its rise is charged once.
+  let joinRise := ∑ i ∈ positions with current i = false ∧ upcoming i = true, rise i
   quorumReserve config state ancestor + (3 * exiting + queues + credits + branchR + late +
-    syncSeats + (∑ i ∈ positions with current i = true, rise i) +
+    syncSeats + (∑ i ∈ positions with current i = true, rise i) + joinRise +
     3 * (∑ i ∈ positions with current i = true, fall i) +
     3 * exitingRise + exitingCredits + exitingBands + queueRise + reserveW + flagged +
     seatShortfall + (33 * consolidationsX + 9) / 10 + exitedR + pendingR +
