@@ -170,8 +170,8 @@ theorem quorumDrift_le_quorumReserve
     have keptS : EffectiveKept boundary state :=
       (edge.append tailS).effectiveKept_of_same_epoch early sameEpoch
     have totals : total.toNat = pulledTotal.toNat := by
-      rw [getTotalActiveBalance_toNat totalOk, getTotalActiveBalance_toNat pulledOk, sameEpoch,
-        callEpoch]
+      rw [getTotalActiveBalance_toNat totalOk, getTotalActiveBalance_toNat pulledOk,
+        activeBalanceTotal, activeBalanceTotal, sameEpoch, callEpoch]
       -- Both totals sum the effective balances that the boundary state holds.
       congr 1
       exact (activeSum_eq activeS keptS (edge.append tailS).registryLifecycle.size_le).trans
@@ -228,7 +228,7 @@ theorem quorumDrift_le_quorumReserve
     activeKept_of_chainSteps (edge.append tailP).chainSteps _ fixedNext
   have totalS : total.toNat = max inc
       (∑ i ∈ positions with upcoming i = true, effectiveAt ⟨fork, state⟩ i) := by
-    rw [getTotalActiveBalance_toNat totalOk, nextEpoch]
+    rw [getTotalActiveBalance_toNat totalOk, activeBalanceTotal, nextEpoch]
     -- Both states take their active set in the next epoch from the boundary state.
     rw [activeFilter_eq nextS (edge.append tailS).registryLifecycle.size_le,
       activeFilter_eq nextP (edge.append tailP).registryLifecycle.size_le]
@@ -252,7 +252,7 @@ theorem quorumDrift_le_quorumReserve
     exact Finset.sum_le_sum fun i _ => by omega
   have joined := sum_upcoming_le positions current upcoming effective
   have totalEq : total' = max inc (∑ i ∈ positions with current i = true, effective i) := by
-    rw [← totalP, getTotalActiveBalance_toNat pulledOk]
+    rw [← totalP, getTotalActiveBalance_toNat pulledOk, activeBalanceTotal]
     rfl
   have riseBound : total.toNat ≤ pulledTotal.toNat + gain := by
     rw [totalS, totalP, totalEq, gainEq]

@@ -242,6 +242,29 @@ private theorem exists_run_of_stateTransition {config : Config} {checks : Signat
   · obtain ⟨stepped, across, member⟩ := walk k below reached
     exact ⟨stepped, across, .earlier ((Run.contains_append tailP slots _).mpr (.inr member)) _⟩
 
+/-- A held state follows from the anchor state by a run, with the store's setting of the checks.
+
+No upgrade is due at any held slot, so the in-fork transition of the store is a run of steps. -/
+theorem Store.Reachable.nonempty_run_of_blockState {config : Config}
+    {checks : SignatureChecks} {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (imported : store.BlockStatesFromParents config (· = checks) anchorState anchorBlock)
+    (early : ∀ next ∈ config.nextFork fork, ∀ ⦃root : Root⦄ ⦃state : BeaconState preset fork⦄,
+      store.blockStates[root]? = some state →
+      state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    {root : Root} {state : BeaconState preset fork}
+    (held : store.blockStates[root]? = some state) :
+    Nonempty (Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩) := by
+  refine reachable.blockState_induction imported
+    (fun _ state => Nonempty (Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩))
+    (fun _ _ => ⟨.nil⟩) (fun _ _ _ _ _ _ _ _ held _ ok _ _ transitioned previous => ?_) held
+  subst ok
+  obtain ⟨tailP⟩ := previous
+  obtain ⟨tail, -⟩ := exists_run_of_stateTransition .nil tailP transitioned
+    fun next scheduled => early next scheduled held
+  exact ⟨tail⟩
+
 /-- A held state follows from the anchor state by a run whose blocks are those of its chain.
 
 Every block of the store was imported with the signature checks of the run.

@@ -232,6 +232,7 @@ public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.MixesKept
 public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Proofs.Transition.ParentPayload
+public import EthLib.Consensus.Proofs.Transition.PartialWithdrawalQueue
 public import EthLib.Consensus.Proofs.Transition.ParticipationFlagsKept
 public import EthLib.Consensus.Proofs.Transition.ParticipationFrames
 public import EthLib.Consensus.Proofs.Transition.Payload

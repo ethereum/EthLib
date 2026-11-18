@@ -271,58 +271,24 @@ private theorem Ledger.zero_right {fork : Fork} {s u t : BeaconState preset fork
     Ledger s t paid conv sync other slash := by
   simpa using one.trans two
 
-/-- The seats of a validator in the current sync committee: the members that hold its key. -/
-private def seatsOf {fork : Fork} (s : BeaconState preset fork) (altair : .altair ≤ fork)
-    (v : ValidatorIndex) : ℕ :=
-  ((s.currentSyncCommittee altair).value.pubkeys.toList.filter fun key =>
-    (s.validators.data[v.toNat]?).any (·.pubkey == key)).length
-
-/-- The active effective balances, at least one increment.
-
-It is the value of each successful read of `getTotalActiveBalance`.
-
-It equals the executable read only when that read succeeds, and says nothing about success. -/
-private def activeTotal {fork : Fork} (s : BeaconState preset fork) : ℕ :=
-  max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-    (∑ i ∈ (Finset.range s.validators.data.size).filter
-        (fun i => isActiveAt s (getCurrentEpoch s) i = true),
-      ((s.validators.data[i]?).map (·.effectiveBalance.toNat)).getD 0)
-
 /-- Two states agree on the total when they agree on activity and the effective balances. -/
-private theorem activeTotal_eq {fork : Fork} {a s : BeaconState preset fork}
+private theorem activeBalanceTotal_eq {fork : Fork} {a s : BeaconState preset fork}
     (epoch : getCurrentEpoch s = getCurrentEpoch a)
     (active : ActiveKept (activityFixedEpoch a) a s) (kept : EffectiveKept a s)
-    (size : a.validators.data.size ≤ s.validators.data.size) : activeTotal s = activeTotal a := by
-  unfold activeTotal
+    (size : a.validators.data.size ≤ s.validators.data.size) :
+    activeBalanceTotal s = activeBalanceTotal a := by
+  unfold activeBalanceTotal
   rw [epoch, activeSum_eq (fun i => active _ (getCurrentEpoch_le_activityFixedEpoch a) i) kept size]
-
-/-- The participant reward of the sync committee, computed from `activeTotal`.
-
-It is the value of each successful read of `syncParticipantReward`.
-
-It equals the executable read only when that read succeeds.
-
-`SyncRewardRead` records the success separately. -/
-private def rewardRead {fork : Fork} (a : BeaconState preset fork) : ℕ :=
-  preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat /
-      (activeTotal a).sqrt * (activeTotal a / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
-    SYNC_REWARD_WEIGHT.toNat / WEIGHT_DENOMINATOR.toNat / preset.SLOTS_PER_EPOCH.toNat /
-      preset.SYNC_COMMITTEE_SIZE.toNat
 
 /-- A successful read of the participant reward of the sync committee at a state. -/
 private def SyncRewardRead {fork : Fork} (a : BeaconState preset fork) : Prop :=
   ∃ reward : Gwei, syncParticipantReward a = .ok reward
 
-/-- A successful read of the participant reward is `rewardRead`. -/
-private theorem rewardRead_of_ok {fork : Fork} {a : BeaconState preset fork} {reward : Gwei}
+/-- A successful read of the participant reward is its natural value, and a read. -/
+private theorem syncRewardRead_of_ok {fork : Fork} {a : BeaconState preset fork} {reward : Gwei}
     (computed : syncParticipantReward a = .ok reward) :
-    reward.toNat = rewardRead a ∧ SyncRewardRead a := by
-  obtain ⟨total, perIncrement, totalOk, perOk, perValue, rewardValue⟩ :=
-    syncParticipantReward_ok computed
-  have totalValue : total.toNat = activeTotal a := getTotalActiveBalance_toNat totalOk
-  refine ⟨?_, reward, computed⟩
-  rw [rewardValue, perValue, totalValue]
-  rfl
+    reward.toNat = syncRewardAt a ∧ SyncRewardRead a :=
+  ⟨syncParticipantReward_toNat computed, reward, computed⟩
 
 /-- The participant reward reads only the total active balance. -/
 private theorem syncParticipantReward_congr {fork : Fork} {a s : BeaconState preset fork}
@@ -1722,7 +1688,7 @@ private theorem ledger_processSyncAggregate {altair : .altair ≤ fork}
       share ≤ preset.SYNC_COMMITTEE_SIZE.toNat *
         (reward.toNat * PROPOSER_WEIGHT.toNat /
           (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)) ∧
-      (∀ v, sync v ≤ seatsOf t altair v * reward.toNat) ∧
+      (∀ v, sync v ≤ syncSeats t altair v.toNat * reward.toNat) ∧
       Ledger s t ∅ ∅ sync (fun v => if v = proposer then share else 0) 0 := by
   obtain ⟨reward, proposerReward, members, chosen, rewardOk, proposerValue, membersOk, signed,
     balances⟩ := processSyncAggregate_balance computed
@@ -1748,7 +1714,7 @@ private theorem ledger_processSyncAggregate {altair : .altair ≤ fork}
     exact Nat.mul_le_mul_right _ ((List.countP_le_length).trans pairsLength)
   · intro v
     dsimp only
-    rw [Nat.mul_comm (seatsOf t altair v)]
+    rw [Nat.mul_comm (syncSeats t altair v.toNat)]
     apply Nat.mul_le_mul_left
     rw [Array.mapM_eq_mapM_toList] at membersOk
     cases listed : (s.currentSyncCommittee altair).value.pubkeys.toArray.toList.mapM
@@ -1770,7 +1736,7 @@ private theorem ledger_processSyncAggregate {altair : .altair ≤ fork}
           (p := fun m : ValidatorIndex => decide (m.toNat = v.toNat))
       have seats := countP_validatorIndexOfPubkey_le v listed
       rw [pairsDef, Array.toList_zip]
-      simp only [seatsOf, kept.1, kept.2]
+      simp only [syncSeats, kept.1, kept.2]
       exact zipped.trans seats
   · have bounds := fun v : ValidatorIndex =>
       foldl_syncReward_bounds reward.toNat proposerReward.toNat chosen v.toNat pairs
@@ -1957,7 +1923,7 @@ private theorem attestation_credit {attestation : Attestation preset fork}
         (∀ (index : ValidatorIndex) (total reward : Gwei),
           (isActiveAt s (getPreviousEpoch s) index.toNat = true ∨
             isActiveAt s (getCurrentEpoch s) index.toNat = true) →
-          total.toNat = activeTotal s → getBaseReward s total index = .ok reward →
+          total.toNat = activeBalanceTotal s → getBaseReward s total index = .ok reward →
           reward.toNat = base index.toNat) →
         credit * ((WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) * WEIGHT_DENOMINATOR.toNat /
             PROPOSER_WEIGHT.toNat) + recentFlagSum s altair base count ≤
@@ -2082,8 +2048,9 @@ private theorem Steady.epoch (kept : Steady s t) : getCurrentEpoch t = getCurren
   simp only [getCurrentEpoch, kept.keeps.2.1]
 
 /-- A steady step keeps the total active balance. -/
-private theorem Steady.activeTotal (kept : Steady s t) : activeTotal t = activeTotal s :=
-  activeTotal_eq kept.epoch kept.keeps.2.2 kept.effective kept.keeps.1
+private theorem Steady.activeBalanceTotal (kept : Steady s t) :
+    activeBalanceTotal t = activeBalanceTotal s :=
+  activeBalanceTotal_eq kept.epoch kept.keeps.2.2 kept.effective kept.keeps.1
 
 /-- A steady step keeps the read of the total active balance, with its errors. -/
 private theorem Steady.total (kept : Steady s t) (early : fork < .glamsterdam) :
@@ -2098,7 +2065,7 @@ private def Reads (s : BeaconState preset fork) (base : ℕ → ℕ) : Prop :=
   ∀ (index : ValidatorIndex) (total reward : Gwei),
     (isActiveAt s (getPreviousEpoch s) index.toNat = true ∨
       isActiveAt s (getCurrentEpoch s) index.toNat = true) →
-    total.toNat = activeTotal s → getBaseReward s total index = .ok reward →
+    total.toNat = activeBalanceTotal s → getBaseReward s total index = .ok reward →
     reward.toNat = base index.toNat
 
 /-- A recent validator is in the registry. -/
@@ -2121,7 +2088,7 @@ private theorem Steady.reads (kept : Steady s t) {base : ℕ → ℕ} (reads : R
     exact UInt64.le_trans (getPreviousEpoch_le s) fixed
   rw [previous, kept.epoch, kept.keeps.2.2 _ previousLe, kept.keeps.2.2 _ fixed] at recent
   have inside := inside_of_recent recent
-  rw [kept.activeTotal] at totalOk
+  rw [kept.activeBalanceTotal] at totalOk
   rw [← getBaseReward_congr inside (kept.effective_map _ inside)] at rewardOk
   exact reads index total reward recent totalOk rewardOk
 
@@ -2741,8 +2708,8 @@ private theorem block_balances {engine : ExecutionEngine preset fork}
       (∀ v ∈ slashed, (∀ validator, s.validators.data[v.toNat]? = some validator →
           validator.slashed = false) ∧
         ∃ later, t.validators.data[v.toNat]? = some later ∧ later.slashed = true) ∧
-      (∀ altair : .altair ≤ fork, (∀ v, sync v ≤ seatsOf t altair v * rewardRead s) ∧
-        share ≤ preset.SYNC_COMMITTEE_SIZE.toNat * (rewardRead s * PROPOSER_WEIGHT.toNat /
+      (∀ altair : .altair ≤ fork, (∀ v, sync v ≤ syncSeats t altair v.toNat * syncRewardAt s) ∧
+        share ≤ preset.SYNC_COMMITTEE_SIZE.toNat * (syncRewardAt s * PROPOSER_WEIGHT.toNat /
           (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat))) ∧
       SyncRewardRead s ∧
       (∀ (altair : .altair ≤ fork) (base : ℕ → ℕ) (count : ℕ), 2 ^ 64 ≤ count → Reads s base →
@@ -2803,10 +2770,10 @@ private theorem block_balances {engine : ExecutionEngine preset fork}
     ledger_processSyncAggregate synced
   have syncKept := kept_processSyncAggregate synced
   have syncGrow := growsLaws.processSyncAggregate synced
-  have totalSame : activeTotal operated = activeTotal s :=
-    (steadyVoted.trans ops.kept.steady).activeTotal
-  obtain ⟨rewardValue, syncRead⟩ := rewardRead_of_ok rewardOk
-  rw [rewardRead, totalSame, ← rewardRead] at rewardValue
+  have totalSame : activeBalanceTotal operated = activeBalanceTotal s :=
+    (steadyVoted.trans ops.kept.steady).activeBalanceTotal
+  obtain ⟨rewardValue, syncRead⟩ := syncRewardRead_of_ok rewardOk
+  rw [syncRewardAt, totalSame, ← syncRewardAt] at rewardValue
   -- One proposer earns all the other credits.
   have same : 0 < credit ∨ slashed.Nonempty → 0 < share → proposer' = proposer := by
     intro first second
@@ -2942,9 +2909,9 @@ private theorem Within.effective_map {a s : BeaconState preset fork} (w : Within
   exact congrArg some (UInt64.toNat_inj.mp same.symm)
 
 /-- A state within the epoch has the total active balance of the start. -/
-private theorem Within.activeTotal {a s : BeaconState preset fork} (w : Within a s) :
-    activeTotal s = activeTotal a :=
-  activeTotal_eq w.epoch w.active w.effective w.size
+private theorem Within.activeBalanceTotal {a s : BeaconState preset fork} (w : Within a s) :
+    activeBalanceTotal s = activeBalanceTotal a :=
+  activeBalanceTotal_eq w.epoch w.active w.effective w.size
 
 /-- A state within the epoch reads the total of the start, with its errors. -/
 private theorem Within.total {a s : BeaconState preset fork} (w : Within a s)
@@ -2975,7 +2942,7 @@ private theorem Within.reads {a s : BeaconState preset fork} (w : Within a s) {b
   intro index total reward recent totalOk rewardOk
   rw [w.recent] at recent
   have inside := inside_of_recent recent
-  rw [w.activeTotal] at totalOk
+  rw [w.activeBalanceTotal] at totalOk
   rw [← getBaseReward_congr inside (w.effective_map _ inside)] at rewardOk
   exact reads index total reward recent totalOk rewardOk
 
@@ -2985,7 +2952,7 @@ private theorem Within.reads_back {a s : BeaconState preset fork} (w : Within a 
   intro index total reward recent totalOk rewardOk
   have inside := inside_of_recent recent
   refine reads index total reward ((w.recent _).mpr recent)
-    (by rw [w.activeTotal]; exact totalOk) ?_
+    (by rw [w.activeBalanceTotal]; exact totalOk) ?_
   rw [← getBaseReward_congr inside (w.effective_map _ inside)]
   exact rewardOk
 
@@ -3000,7 +2967,7 @@ private def slashBackAt (s : BeaconState preset fork) (v : ValidatorIndex) : ℕ
 
 /-- The sync amount of a validator for one block, its seats times a participant reward. -/
 private def syncAt (s : BeaconState preset fork) (reward : ℕ) (v : ValidatorIndex) : ℕ :=
-  if altair : .altair ≤ fork then seatsOf s altair v * reward else 0
+  if altair : .altair ≤ fork then syncSeats s altair v.toNat * reward else 0
 
 /-- A slashed validator stays slashed along a frame. -/
 private theorem slashedAt_of_frame {s t : BeaconState preset fork} (frame : Frame s t)
@@ -3071,11 +3038,11 @@ private theorem committee_processBlock {s t : BeaconState preset fork}
   · exact absurd altair (by assumption)
 
 /-- A frame that keeps the committee keeps the seats of every old validator. -/
-private theorem seatsOf_le {s t : BeaconState preset fork} (frame : Frame s t)
+private theorem syncSeats_le {s t : BeaconState preset fork} (frame : Frame s t)
     (altair : .altair ≤ fork)
     (committee : t.currentSyncCommittee altair = s.currentSyncCommittee altair)
-    (v : ValidatorIndex) : seatsOf s altair v ≤ seatsOf t altair v := by
-  unfold seatsOf
+    (v : ValidatorIndex) : syncSeats s altair v.toNat ≤ syncSeats t altair v.toNat := by
+  unfold syncSeats
   rw [committee]
   cases found : s.validators.data[v.toNat]? with
   | none => simp
@@ -3102,7 +3069,7 @@ private theorem syncAt_le {s t : BeaconState preset fork} (frame : Frame s t)
   unfold syncAt
   by_cases altair : .altair ≤ fork
   · rw [dite_eq_left altair, dite_eq_left altair]
-    exact Nat.mul_le_mul_right _ (seatsOf_le frame altair (committee altair) v)
+    exact Nat.mul_le_mul_right _ (syncSeats_le frame altair (committee altair) v)
   · rw [dite_eq_right altair, dite_eq_right altair]
 
 /-- What the blocks of one epoch so far did to the balances, from Fulu.
@@ -3121,11 +3088,11 @@ private structure Tally (a s : BeaconState preset fork) (n : ℕ)
       n
   convSub : conv ⊆ deb
   down : ∀ v, v ∉ deb → actualBalanceAt ⟨fork, a⟩ v.toNat ≤
-    actualBalanceAt ⟨fork, s⟩ v.toNat + slashBackAt s v + n * syncAt s (rewardRead a) v
+    actualBalanceAt ⟨fork, s⟩ v.toNat + slashBackAt s v + n * syncAt s (syncRewardAt a) v
   up : ∀ v, actualBalanceAt ⟨fork, s⟩ v.toNat ≤
-    actualBalanceAt ⟨fork, a⟩ v.toNat + n * syncAt s (rewardRead a) v + pc v
+    actualBalanceAt ⟨fork, a⟩ v.toNat + n * syncAt s (syncRewardAt a) v + pc v
   converted : ∀ v ∈ conv, actualBalanceAt ⟨fork, s⟩ v.toNat ≤
-    preset.MIN_ACTIVATION_BALANCE.toNat + n * syncAt s (rewardRead a) v + pc v
+    preset.MIN_ACTIVATION_BALANCE.toNat + n * syncAt s (syncRewardAt a) v + pc v
   kept : ∀ (v : ValidatorIndex) validator, v ∉ conv →
     a.validators.data[v.toNat]? = some validator →
     ∃ later, s.validators.data[v.toNat]? = some later ∧
@@ -3138,7 +3105,7 @@ private structure Tally (a s : BeaconState preset fork) (n : ℕ)
     credits * proposerDenominator + recentFlagSum a altair base count ≤
       recentFlagSum s altair base count
   share : shares ≤ n * (preset.SYNC_COMMITTEE_SIZE.toNat *
-    (rewardRead a * PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)))
+    (syncRewardAt a * PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)))
   newly : ∀ v ∈ sl, (∀ validator, a.validators.data[v.toNat]? = some validator →
     validator.slashed = false) ∧ slashedAt s v = true
   propsCard : props.card ≤ n
@@ -3212,16 +3179,16 @@ private theorem Tally.block {a s t : BeaconState preset fork} {engine : Executio
   have committee : ∀ altair : .altair ≤ fork,
       t.currentSyncCommittee altair = s.currentSyncCommittee altair :=
     fun altair => committee_processBlock early altair computed
-  have syncMono : ∀ v, syncAt s (rewardRead a) v ≤ syncAt t (rewardRead a) v :=
+  have syncMono : ∀ v, syncAt s (syncRewardAt a) v ≤ syncAt t (syncRewardAt a) v :=
     syncAt_le frame committee _
   have backMono : ∀ v, slashBackAt s v ≤ slashBackAt t v := slashBackAt_le frame steady.effective
   -- The participant reward of the block is the one read at the start.
-  have rewardEq : rewardRead s = rewardRead a := by
-    unfold rewardRead
-    rw [tally.within.activeTotal]
+  have rewardEq : syncRewardAt s = syncRewardAt a := by
+    unfold syncRewardAt
+    rw [tally.within.activeBalanceTotal]
   obtain ⟨seats, shareBound⟩ := rewards altair
   rw [rewardEq] at seats shareBound
-  have syncLe : ∀ v, sync v ≤ syncAt t (rewardRead a) v := by
+  have syncLe : ∀ v, sync v ≤ syncAt t (syncRewardAt a) v := by
     intro v
     unfold syncAt
     rw [dite_eq_left altair]
@@ -3599,8 +3566,8 @@ theorem branchCorrections {x y : ForkedBeaconState preset} (tail : Run config ch
   --
   -- So the last state reads them too.
   have read : 0 < blocks → ∃ (reward total share : Gwei),
-      syncParticipantReward b = .ok reward ∧ reward.toNat = rewardRead a ∧
-      getTotalActiveBalance b = .ok total ∧ total.toNat = activeTotal b ∧
+      syncParticipantReward b = .ok reward ∧ reward.toNat = syncRewardAt a ∧
+      getTotalActiveBalance b = .ok total ∧ total.toNat = activeBalanceTotal b ∧
       syncProposerReward reward = .ok share ∧ share.toNat = reward.toNat *
         PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) := by
     intro positive
@@ -3609,16 +3576,16 @@ theorem branchCorrections {x y : ForkedBeaconState preset} (tail : Run config ch
     obtain ⟨share, shareOk, shareValue⟩ := syncProposerReward_of_participant rewardOk
     refine ⟨reward, total, share, rewardOk, ?_, totalOk, getTotalActiveBalance_toNat totalOk,
       shareOk, shareValue⟩
-    rw [(rewardRead_of_ok rewardOk).1]
-    unfold rewardRead
-    rw [tally.within.activeTotal]
+    rw [(syncRewardRead_of_ok rewardOk).1]
+    unfold syncRewardAt
+    rw [tally.within.activeBalanceTotal]
   -- The participant reward read at the start is the reward read at the end.
-  have rewardEq : 0 < blocks → rewardRead a = seatReward := by
+  have rewardEq : 0 < blocks → syncRewardAt a = seatReward := by
     intro positive
     obtain ⟨reward, -, -, rewardOk, rewardValue, -⟩ := read positive
     simp only [seatReward, state, ite_eq_left altair, rewardOk, Except.toOption, Option.getD_some,
       rewardValue]
-  have syncEq : ∀ v, blocks * syncAt b (rewardRead a) v = blocks * sync v.toNat := by
+  have syncEq : ∀ v, blocks * syncAt b (syncRewardAt a) v = blocks * sync v.toNat := by
     intro v
     rcases Nat.eq_zero_or_pos blocks with zero | positive
     · rw [zero, Nat.zero_mul, Nat.zero_mul]
@@ -3702,8 +3669,8 @@ theorem branchCorrections {x y : ForkedBeaconState preset} (tail : Run config ch
         Option.getD_some, UInt64.ofNat_toNat, shareOk]
     rw [proposerEq, shareValue, rewardValue]
     rcases Nat.eq_zero_or_pos slots with none | some
-    · have : rewardRead a = 0 := by
-        simp only [rewardRead, show preset.SLOTS_PER_EPOCH.toNat = 0 from none, Nat.div_zero,
+    · have : syncRewardAt a = 0 := by
+        simp only [syncRewardAt, show preset.SLOTS_PER_EPOCH.toNat = 0 from none, Nat.div_zero,
           Nat.zero_div]
       rw [this, Nat.zero_mul, Nat.zero_div, Nat.mul_zero, Nat.mul_zero] at bound
       omega

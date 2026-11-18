@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.EpochPassAtCall
 public import EthLib.Consensus.Proofs.Transition.EpochUpdates
+public import EthLib.Consensus.Proofs.Transition.PartialWithdrawalQueue
 public import EthLib.Consensus.Proofs.Transition.PendingConsolidations
 public import EthLib.Consensus.Proofs.Transition.FfgStake
 import EthLib.Consensus.Proofs.Transition.ActiveKept
@@ -696,11 +697,6 @@ private theorem syncAggregate_floor {f : Fork} {s t : BeaconState preset f}
 
 /-! ## The floor of a balance under a block -/
 
-/-- The seats of the validator at a position in the current sync committee of a state. -/
-private def seatsAt {f : Fork} (s : BeaconState preset f) (altair : .altair ≤ f) (i : ℕ) : ℕ :=
-  ((s.currentSyncCommittee altair).value.pubkeys.toList.filter fun key =>
-    (s.validators.data[i]?).any (·.pubkey == key)).length
-
 /-- What the queued partial withdrawals of a block pay a validator, from Electra and before Gloas.
 
 They are read from the state after the header, as the execution part reads them. -/
@@ -735,7 +731,7 @@ private theorem block_floor {f : Fork}
     (unslashed : ∀ w, t.validators.data[v.toNat]? = some w → w.slashed = false) :
     min (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat ≤
       actualBalanceAt ⟨f, t⟩ v.toNat +
-        seatsAt t (Nat.le_trans (by decide) fulu) v.toNat *
+        syncSeats t (Nat.le_trans (by decide) fulu) v.toNat *
           ((syncParticipantReward t).toOption.getD 0).toNat +
         min (blockQueuePaid s block v)
           (val.effectiveBalance.toNat - preset.MIN_ACTIVATION_BALANCE.toNat) := by
@@ -791,11 +787,11 @@ private theorem block_floor {f : Fork}
     (frame_processOperations operatedOk).pubkeysPrefix inputFound
   obtain ⟨reward, rewardOk, syncFloor⟩ := syncAggregate_floor synced lastFound
   obtain ⟨_, syncedEq⟩ := processSyncAggregate_eq synced
-  have seats : seatsAt t altair v.toNat =
+  have seats : syncSeats t altair v.toNat =
       ((last.currentSyncCommittee altair).value.pubkeys.toList.filter fun key =>
         w.pubkey == key).length := by
     subst syncedEq
-    simp only [seatsAt, lastFound, Option.any_some]
+    simp only [syncSeats, lastFound, Option.any_some]
   have rewardValue : reward.toNat = ((syncParticipantReward t).toOption.getD 0).toNat := by
     have same : syncParticipantReward t = syncParticipantReward last := by
       rw [syncedEq]
@@ -826,61 +822,13 @@ Of those, only the entries due by then count.
 Ported from the donor's PendingPartialsKept.lean and DirectSafety/PartialWithdrawalLedger.lean.
 -/
 
-/-- Two states hold the same queue of pending partial withdrawals, from Electra. -/
-def PartialsSame (state after : BeaconState preset fork) : Prop :=
-  ∀ electra : .pectra ≤ fork,
-    after.pendingPartialWithdrawals electra = state.pendingPartialWithdrawals electra
-
-private theorem PartialsSame.refl (state : BeaconState preset fork) : PartialsSame state state :=
-  fun _ => rfl
-
-private theorem PartialsSame.trans {first second third : BeaconState preset fork}
-    (one : PartialsSame first second) (two : PartialsSame second third) :
-    PartialsSame first third :=
-  fun electra => (two electra).trans (one electra)
-
-private theorem PartialsSame.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
-    (frame : ∀ s x s', step s x = .ok s' → PartialsSame s s') {items : List α}
-    (computed : items.foldlM step state = .ok after) : PartialsSame state after :=
-  foldlM_ok_invariant (PartialsSame state)
-    (fun _ _ _ before ok => before.trans (frame _ _ _ ok)) (PartialsSame.refl state) computed
-
-/-- Setting a validator at a plain position keeps the queue. -/
-private theorem partialsSame_setValidatorAt {position : Nat} {validator : Validator}
-    (set : state.setValidatorAt position validator = .ok after) : PartialsSame state after := by
-  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
-  exact fun _ => rfl
-
-/-- Setting a validator keeps the queue. -/
-private theorem partialsSame_setValidator {index : ValidatorIndex} {validator : Validator}
-    (set : state.setValidator index validator = .ok after) : PartialsSame state after :=
-  partialsSame_setValidatorAt (by rwa [← setValidator_eq_setValidatorAt])
-
-/-- Setting a balance keeps the queue. -/
-private theorem partialsSame_setBalance {index : ValidatorIndex} {balance : Gwei}
-    (set : state.setBalance index balance = .ok after) : PartialsSame state after := by
-  obtain ⟨_, rfl⟩ := setBalance_ok set
-  exact fun _ => rfl
-
-/-- Raising a balance keeps the queue. -/
-private theorem partialsSame_increaseBalance {index : ValidatorIndex} {delta : Gwei}
-    (computed : increaseBalance state index delta = .ok after) : PartialsSame state after :=
-  let ⟨_, set⟩ := increaseBalance_ok computed
-  partialsSame_setBalance set
-
-/-- Lowering a balance keeps the queue. -/
-private theorem partialsSame_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
-    (computed : decreaseBalance state index delta = .ok after) : PartialsSame state after :=
-  let ⟨_, set⟩ := decreaseBalance_ok computed
-  partialsSame_setBalance set
-
 /-- Starting the exit of a validator keeps the queue. -/
 private theorem partialsSame_initiateValidatorExit {index : ValidatorIndex}
     (computed : initiateValidatorExit config state index = .ok after) :
     PartialsSame state after := by
   obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok computed
   · exact PartialsSame.refl _
-  refine PartialsSame.trans ?_ (partialsSame_setValidator set)
+  refine PartialsSame.trans ?_ (.of_frame fun e => departureQueues_setValidator e set)
   unfold exitQueue at queue
   split at queue
   · simp only [computeExitEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
@@ -890,21 +838,6 @@ private theorem partialsSame_initiateValidatorExit {index : ValidatorIndex}
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at queue
     obtain ⟨_, _, rfl, _⟩ := queue
     exact PartialsSame.refl _
-
-/-- Adding a validator keeps the queue. -/
-private theorem partialsSame_addValidatorToRegistry {pubkey withdrawalCredentials amount}
-    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
-    PartialsSame state after := by
-  unfold addValidatorToRegistry at computed
-  split at computed
-  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
-    exact fun _ => rfl
-  split at computed
-  · cases computed
-    exact fun _ => rfl
-  · cases computed
 
 /-! ### Slots keep the queue of pending partial withdrawals
 
@@ -925,11 +858,12 @@ variable {fork : Fork} {state after : BeaconState preset fork}
 private theorem partialsEpochFrameLaws : EpochFrameLaws (@PartialsSame preset fork) where
   refl := PartialsSame.refl
   trans := PartialsSame.trans
-  setValidatorAt := fun set _ _ _ _ _ => partialsSame_setValidatorAt set
-  increaseBalance := partialsSame_increaseBalance
-  decreaseBalance := partialsSame_decreaseBalance
+  setValidatorAt := fun set _ _ _ _ _ => .of_frame fun e => departureQueues_setValidatorAt e set
+  increaseBalance := fun computed => .of_frame fun e => departureQueues_increase e computed
+  decreaseBalance := fun computed => .of_frame fun e => departureQueues_decrease e computed
   initiateValidatorExit := partialsSame_initiateValidatorExit
-  addValidatorToRegistry := fun computed _ => partialsSame_addValidatorToRegistry computed
+  addValidatorToRegistry := fun computed _ =>
+    .of_frame fun e => addValidator_departureQueues e computed
   eth1DataVotes _ _ := fun _ => rfl
   inactivityScores _ _ := fun _ => rfl
   slashings _ _ := fun _ => rfl
@@ -943,14 +877,6 @@ private theorem partialsEpochFrameLaws : EpochFrameLaws (@PartialsSame preset fo
   proposerLookahead _ _ := fun _ => rfl
   ptcWindow _ _ := fun _ => rfl
 
-private theorem partialsSame_processJustificationAndFinalization
-    (computed : processJustificationAndFinalization state = .ok after) :
-    PartialsSame state after := by
-  obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
-  · exact PartialsSame.refl _
-  · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
-    exact fun _ => by rw [← rest]
-
 /-- From Altair, the epoch transition keeps the queue. -/
 private theorem partialsSame_processEpoch (altair : .altair ≤ fork)
     (computed : processEpoch config checks state = .ok after) : PartialsSame state after := by
@@ -959,7 +885,8 @@ private theorem partialsSame_processEpoch (altair : .altair ≤ fork)
   obtain ⟨justified, rooted, justifiedOk, head, tail⟩ :=
     partialsEpochFrameLaws.processEpochAltair_rotationSplit
       (fun _ ok => by rw [processBuilderPendingPayments_eq ok]; exact fun _ => rfl) computed
-  exact (partialsSame_processJustificationAndFinalization justifiedOk).trans <| head.trans <|
+  exact (PartialsSame.of_frame fun e => justification_departureQueues e justifiedOk).trans <|
+    head.trans <|
     (show PartialsSame rooted (processParticipationFlagUpdates rooted altair) from
       fun _ => rfl).trans tail
 
@@ -1099,44 +1026,11 @@ private theorem withdrawals_pendingPartials {fork : Fork} {s t : BeaconState pre
         .ok (partials, next, count) ∧
       (t.pendingPartialWithdrawals electra).data.toList =
         (s.pendingPartialWithdrawals electra).data.toList.drop count := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
-  simp only [processWithdrawals, notGloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,
-    liftAccessor_ok] at ok
-  obtain ⟨expected, expectedOk, _, _, applied⟩ := ok
-  unfold getExpectedWithdrawals at expectedOk
-  simp only [notGloas, electra, ↓reduceDIte, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at expectedOk
-  obtain ⟨_, rfl, ⟨partials, next, count⟩, partialsOk, _, rfl, _, _, rfl⟩ := expectedOk
-  refine ⟨partials, next, count, partialsOk, ?_⟩
-  simp only [applyExpectedWithdrawals, notGloas, electra, ↓reduceDIte, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq, exists_eq_left'] at applied
-  obtain ⟨withdrawn, paid, indexed, moved, swept⟩ := applied
-  have paidQueue :
-      withdrawn.pendingPartialWithdrawals electra = s.pendingPartialWithdrawals electra := by
-    unfold applyWithdrawals at paid
-    rw [← Array.foldlM_toList] at paid
-    refine foldlM_ok_invariant
-      (fun t => t.pendingPartialWithdrawals electra = s.pendingPartialWithdrawals electra)
-      ?_ rfl paid
-    intro a withdrawal b kept stepped
-    simp only [applyWithdrawal, notGloas, false_and, ↓reduceDIte] at stepped
-    exact (partialsSame_decreaseBalance stepped electra).trans kept
-  have movedQueue :
-      indexed.pendingPartialWithdrawals electra = withdrawn.pendingPartialWithdrawals electra := by
-    unfold updateNextWithdrawalIndex at moved
-    split at moved
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at moved
-      obtain ⟨_, _, rfl⟩ := moved
-      rfl
-    · cases moved; rfl
-  simp only [updateNextWithdrawalValidatorIndex, bind_ok_iff] at swept
-  obtain ⟨_, _, swept⟩ := swept
-  split at swept
-  · cases swept
-  · cases swept
-    simp only [updatePendingPartialWithdrawals, Array.toList_extract, List.extract_eq_take_drop,
-      movedQueue, paidQueue]
-    exact List.take_of_length_le (by simp)
+  obtain ⟨expected, expectedOk, frame⟩ := withdrawals_departureQueues electra early ok
+  obtain ⟨partials, next, partialsOk⟩ := getExpectedWithdrawals_partials electra early expectedOk
+  refine ⟨partials, next, _, partialsOk, ?_⟩
+  rw [← updatePendingPartialWithdrawals_toList s electra]
+  exact congrArg (·.2.2.2.2.toList) frame
 
 private def QueueAppend {fork : Fork} (s t : BeaconState preset fork) : Prop :=
   ∀ electra : .pectra ≤ fork, ∃ added : List PendingPartialWithdrawal,
@@ -1226,16 +1120,10 @@ private theorem withdrawalRequest_queueAppend {fork : Fork} {s t : BeaconState p
 private theorem slashValidator_partialsSame {fork : Fork} {s t : BeaconState preset fork}
     (early : fork < .glamsterdam) {index : ValidatorIndex} {whistleblower : Option ValidatorIndex}
     (ok : slashValidator config s index whistleblower = .ok t) : PartialsSame s t := by
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, exitedOk, _, _, markedOk, _, _, _,
-    lowered, _, _, raised, final, done⟩ := slashValidator_ok ok
-  simp only [show ¬ .glamsterdam ≤ fork from Nat.not_le_of_lt early, ↓reduceDIte] at done
-  subst done
   intro electra
-  rw [partialsSame_increaseBalance final electra, partialsSame_increaseBalance raised electra,
-    partialsSame_decreaseBalance lowered electra,
-    ← partialsSame_initiateValidatorExit exitedOk electra]
-  obtain ⟨_, rfl⟩ := setValidator_ok markedOk
-  rfl
+  obtain ⟨exited, exitedOk, frame⟩ := slashValidator_departureQueues electra early ok
+  exact (pendingPartialWithdrawals_eq_of_queues (congrArg (·.2.2.2.2) frame)).trans
+    (partialsSame_initiateValidatorExit exitedOk electra)
 
 private theorem proposerSlashing_partialsSame {fork : Fork} {s t : BeaconState preset fork}
     (early : fork < .glamsterdam) {slashing : ProposerSlashing}
@@ -1262,54 +1150,12 @@ private theorem attesterSlashing_partialsSame {fork : Fork} {s t : BeaconState p
     exact kept.trans (slashValidator_partialsSame early slashed)
   · cases stepped; exact kept
 
-private theorem attestation_partialsSame {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {parentSlot : Slot} {attestation : Attestation preset fork}
-    (ok : processAttestation config checks s parentSlot attestation = .ok t) :
-    PartialsSame s t := by
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
-  simp only [processAttestation, altair, ↓reduceDIte] at ok
-  unfold processAttestationAltair at ok
-  simp only [bind_ok_iff, liftAccessor_ok, notGloas, ↓reduceDIte,
-    pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, raised, rfl⟩ := ok
-  intro electra
-  rw [partialsSame_increaseBalance raised electra]
-  unfold setEpochParticipation
-  split <;> rfl
-
-private theorem deposit_partialsSame {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) {before : fork < .hegota} {deposit : Deposit}
-    (ok : processDeposit config checks before s deposit = .ok t) : PartialsSame s t := by
-  obtain ⟨_, _, _, _, credited⟩ := processDeposit_ok ok
-  rcases applyDeposit_cases credited with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨early, _⟩
-  · exact PartialsSame.refl _
-  · exact PartialsSame.refl _
-  · exact fun e => partialsSame_addValidatorToRegistry added e
-  · exact absurd electra (Nat.not_le_of_lt early)
-
-private theorem credentials_partialsSame {fork : Fork} {s t : BeaconState preset fork}
-    {signed : SignedBLSToExecutionChange}
-    (ok : processBlsToExecutionChange config checks s signed = .ok t) : PartialsSame s t := by
-  obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
-  exact partialsSame_setValidator set
-
 private theorem consolidationRequest_partialsSame {fork : Fork} {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : ConsolidationRequest}
     (ok : processConsolidationRequest config s electra request = .ok t) : PartialsSame s t := by
   rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, -, queued⟩
   · exact PartialsSame.refl _
-  · intro e
-    simp only [switchToCompoundingValidator, queueExcessActiveBalance, bind_ok_iff] at switched
-    obtain ⟨_, _, _, set, _, _, queued⟩ := switched
-    obtain ⟨_, rfl⟩ := setValidator_ok set
-    split at queued
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at queued
-      obtain ⟨_, _, _, _, _, set, rfl⟩ := queued
-      exact partialsSame_setBalance set e
-    · cases queued; rfl
+  · exact .of_frame fun e => switchToCompounding_departureQueues e switched
   · intro e
     simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
       Except.ok.injEq] at queued
@@ -1326,11 +1172,8 @@ private theorem executionRequests_queueAppend {fork : Fork} {s t : BeaconState p
   simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at ok
   obtain ⟨deposited, deposits, withdrawn, withdrawals, consolidations⟩ := ok
   have first : PartialsSame s deposited := by
-    refine PartialsSame.foldlM (fun a request b called => ?_) deposits
-    obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp called)
-    intro e
-    unfold recordDepositRequestsStart
-    split <;> (try split) <;> rfl
+    exact PartialsSame.foldlM (fun _ _ _ called =>
+      .of_frame fun e => depositRequest_departureQueues e called) deposits
   have second := QueueAppend.foldlM
     (fun _ _ _ called => withdrawalRequest_queueAppend called)
     (fun _ _ _ called => (frame_processWithdrawalRequest called).slot) withdrawals
@@ -1346,7 +1189,7 @@ private theorem executionRequests_queueAppend {fork : Fork} {s t : BeaconState p
       simp only [getCurrentEpoch, withdrawnSlot, slot]; exact UInt64.le_refl _)
 
 private theorem operations_queueAppend {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (early : fork < .glamsterdam)
     {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (ok : processOperations config checks s body parentSlot = .ok t) : QueueAppend s t := by
   let step := fun a b : BeaconState preset fork => QueueAppend a b ∧ b.slot = a.slot
@@ -1357,10 +1200,11 @@ private theorem operations_queueAppend {fork : Fork} {s t : BeaconState preset f
         simp only [getCurrentEpoch, one.2]; exact UInt64.le_refl _), two.2.trans one.2⟩
   obtain ⟨proposed, slashed, attested, proposers, slashings, attestations, rest⟩ :=
     processOperations_folds_of step (fun a => same (.refl a) rfl) chain
-      (fun called => same (deposit_partialsSame electra called) (frame_processDeposit called).slot)
+      (fun called => same (.of_frame fun e => deposit_departureQueues e called)
+        (frame_processDeposit called).slot)
       (fun called => same (partialsSame_initiateValidatorExit
         (processVoluntaryExit_initiates called)) (frame_processVoluntaryExit called).slot)
-      (fun called => same (credentials_partialsSame called)
+      (fun called => same (.of_frame fun e => credentials_departureQueues e called)
         (frame_processBlsToExecutionChange called).slot)
       (fun called => ⟨executionRequests_queueAppend called,
         (frame_processExecutionRequests called).slot⟩)
@@ -1370,7 +1214,8 @@ private theorem operations_queueAppend {fork : Fork} {s t : BeaconState preset f
   have second := PartialsSame.foldlM
     (fun _ _ _ called => attesterSlashing_partialsSame early called) slashings
   have third := PartialsSame.foldlM
-    (fun _ _ _ called => attestation_partialsSame electra early called) attestations
+    (fun _ _ _ called => .of_frame fun e => attestation_departureQueues e early called)
+    attestations
   exact (chain (same (first.trans (second.trans third))
     (((Frame.foldlM (fun _ _ _ called => frame_processAttestation called) attestations).slot).trans
       (((BlockFrame.foldlM (fun _ _ _ called => frame_processAttesterSlashing called)
@@ -1403,27 +1248,19 @@ private theorem block_partialLedger {fork : Fork} {s t : BeaconState preset fork
   simp only [notGloas, bellatrix, before, altair, ↓reduceDIte, pure, Except.pure,
     Except.ok.injEq] at paid executedOk votedOk synced
   subst paid
-  obtain ⟨partials, next, count, partialsOk, executedQueue⟩ :
-      ∃ (partials : Array Withdrawal) (next : WithdrawalIndex) (count : ℕ),
-        getPendingPartialWithdrawals headed electra (headed.nextWithdrawalIndex capella) #[] =
-          .ok (partials, next, count) ∧
-        (executed.pendingPartialWithdrawals electra).data.toList =
-          (headed.pendingPartialWithdrawals electra).data.toList.drop count := by
-    simp only [processBlockExecution, notGloas, capella, ↓reduceDIte, bind_ok_iff] at executedOk
-    obtain ⟨withdrawn, withdrawnOk, payload⟩ := executedOk
-    obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok payload
-    simpa only using withdrawals_pendingPartials electra early withdrawnOk
-  have voteQueue := congrArg (fun state => state.pendingPartialWithdrawals electra)
-    (processEth1Data_eq votedOk).2.2
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
+  obtain ⟨expected, expectedOk, executedFrame⟩ :=
+    blockExecution_departureQueues electra early executedOk
+  obtain ⟨partials, next, partialsOk⟩ := getExpectedWithdrawals_partials electra early expectedOk
+  have headFrame := blockHead_departureQueues electra headedOk executedFrame revealedOk votedOk
   have headQueue : (voted.pendingPartialWithdrawals electra).data.toList =
-      (s.pendingPartialWithdrawals electra).data.toList.drop count := by
-    rw [voteQueue]
-    obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
-    exact executedQueue
-  obtain ⟨new, queue, late⟩ := operations_queueAppend electra early operatedOk electra
+      (s.pendingPartialWithdrawals electra).data.toList.drop
+        expected.processedPartialWithdrawalsCount := by
+    rw [← updatePendingPartialWithdrawals_toList s electra]
+    exact congrArg (·.2.2.2.2.toList) headFrame
+  obtain ⟨new, queue, late⟩ := operations_queueAppend early operatedOk electra
   obtain ⟨_, syncedEq⟩ := processSyncAggregate_eq synced
-  refine ⟨headed, partials, next, count, new, headedOk, partialsOk, ?_, ?_⟩
+  refine ⟨headed, partials, next, expected.processedPartialWithdrawalsCount, new, headedOk,
+    partialsOk, ?_, ?_⟩
   · rw [syncedEq]
     exact queue.trans (congrArg (· ++ new) headQueue)
   · simpa only [getCurrentEpoch, slot] using late
@@ -2115,13 +1952,13 @@ theorem effectiveFall_le
         (wEarly : w.fork < .glamsterdam)
         (wEpoch : getCurrentEpoch w.state = getCurrentEpoch R.state)
         (altairW : .altair ≤ w.fork),
-        seatsAt w.state altairW v.toNat *
+        syncSeats w.state altairW v.toNat *
           ((syncParticipantReward w.state).toOption.getD 0).toNat = sync v.toNat := by
       intro w toW wEarly wEpoch altairW
       obtain ⟨⟨fEq, keysW, committeeW⟩, keptW, growsW, activeW⟩ := readsAt toW wEarly wEpoch
       have altairR : .altair ≤ R.fork := fEq ▸ altairW
-      have seatsSame : seatsAt w.state altairW v.toNat = seats v.toNat := by
-        simp only [seats, altairP, dite_true, seatsAt]
+      have seatsSame : syncSeats w.state altairW v.toNat = seats v.toNat := by
+        simp only [seats, altairP, dite_true, syncSeats]
         refine seats_eq altairW altairP ?_ ?_
         · rw [committeeW altairW altairR, committeeP altairP altairR]
         · obtain ⟨u, readW, keyW⟩ := validators_getElem?_of_validatorKeys_prefix keysW foundR

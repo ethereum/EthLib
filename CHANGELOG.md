@@ -18,9 +18,8 @@ Not yet released.
   The preset keeps the bands of hysteresis, its seed lookahead covers at least one epoch, and the withdrawal delay is at least one epoch.
   The preset meets `CapOrder` and the new `ActivationWithinMaxEffective`, which together make `MAX_EFFECTIVE_BALANCE` equal `MIN_ACTIVATION_BALANCE`.
   `ActivationWithinMaxEffective.mainnet` and `ActivationWithinMaxEffective.minimal` show that it holds on both presets.
-  `Execution.rootViable_of_checked_call_of_drift_bound` and `Execution.honestHeadsCover_of_checked_call_of_drift_bound` are the two checked-call headlines with `QuorumDriftWithin` discharged, with BLS checks from Fulu to before Gloas.
-  Six premises replace it: Fulu or later, a horizon before the next fork, `IncrementWithinUpwardBand`, a withdrawal delay of at least one epoch, `CapOrder` and `ActivationWithinMaxEffective`.
-  `Execution.heldStatesBeforeUpgrade_of_bounded` derives `HeldStatesBeforeUpgrade` from the horizon, so the two headlines drop that premise.
+  No separate headline discharges `QuorumDriftWithin`: a caller with BLS checks from Fulu to before Gloas composes `Execution.quorumDriftWithin` with `Execution.rootViable_of_checked_call` or `Execution.honestHeadsCover_of_checked_call`.
+  `Execution.heldStatesBeforeUpgrade_of_bounded` derives their premise `HeldStatesBeforeUpgrade` from the horizon and `HonestStoreEpochsBounded`.
   `effectiveRise_le` bounds the rise of the active effective balances over an epoch end, and `effectiveFall_le` the fall of a voter's.
   `branchCorrections` bounds the balances along a branch inside one epoch.
 
@@ -37,8 +36,11 @@ Not yet released.
   `Hysteresis` puts each effective balance within the bands of its balance.
   `processEffectiveBalanceUpdates_hysteresis` establishes it, `Hysteresis.of_data` carries it to a state with the same validators and balances, and `Hysteresis.upgrade` keeps it across upgrades.
   `EpochTrace.through_effectiveBalances` splits an epoch trace after the effective-balance updates.
-  `getTotalActiveBalance_toNat` gives the value of a successful active-balance read.
-  `activeFilter_eq` and `activeSum_eq` keep the active positions and their effective balances between two registries, and `seats_eq` the seats of a validator in the sync committee.
+  `activeBalanceTotal` is the active effective balance as a natural number, and `getTotalActiveBalance_toNat` makes it the value of a successful read.
+  `syncRewardAt` is the participant reward of the sync committee as a natural number, and `syncParticipantReward_toNat` makes it the value of a successful read.
+  `syncSeats` counts the seats of a validator in the current sync committee.
+  `activeFilter_eq` and `activeSum_eq` keep the active positions and their effective balances between two registries, and `seats_eq` keeps `syncSeats`.
+  `Store.Reachable.nonempty_run_of_blockState` gives a run from the anchor state to each held state, with the store's setting of the checks.
   `getBaseReward_congr` reads the same base reward for two validators with the same effective balance, in one state or in two.
   `processRewardsAndPenalties_balance_le_of_inactivityUpdates` bounds each balance after the rewards pass, given a bound on each base reward.
   `processOperations_floor` bounds the balance of an unslashed validator through the operations of a block before Gloas.
@@ -46,7 +48,9 @@ Not yet released.
   `actualBalanceAt_increaseBalance` and `actualBalanceAt_decreaseBalance` change the balance at one index and keep every other.
   `passPendingConsolidations_balanceNotLowered_of_waiting` keeps the balance of a source that cannot yet leave, and `queueConsolidation_queued` records the exit epoch and the queue entry of a consolidation.
   `processBlock_currentSyncCommittee` keeps the current sync committee across a block.
-  `PartialsSame` says that two states hold the same queue of pending partial withdrawals.
+  `Transition/PartialWithdrawalQueue.lean` holds the step facts of the queue of pending partial withdrawals that the departure queue and the drift bound share.
+  `departureQueues` and its step lemmas move there from `DirectSafety/DepartureQueue.lean` and become public, with unchanged statements.
+  `PartialsSame` says that two states hold the same queue, and `PartialsSame.of_queues` reads it from equal departure queues.
   `flagSumOf` states the flag sums of `SupplyBlock` for any base reward, and `recentFlagSum` adds both recent epochs; `flagRewardWeight` keeps its value.
   `flagSumOf_le` bounds a flag sum by 54 base rewards per position, and `flagSumOf_foldlM_addAttesterFlags` raises it by at least the numerator its attesters gain.
   `processAttestation_keepsFlag` keeps each flag an attestation finds, and `flags_exit` and `flags_processExecutionRequests` keep both lists of flags.

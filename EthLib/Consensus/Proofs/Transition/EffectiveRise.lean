@@ -719,74 +719,15 @@ private theorem passConsolidations_gain {f : Fork} {next : Epoch} :
     split at up <;> split <;> omega
 
 /-- The slashings of an epoch never raise a balance. -/
-private theorem slashings_lower {f : Fork} {s t : BeaconState preset f} (early : f < .glamsterdam)
+private theorem slashings_lower {f : Fork} {s t : BeaconState preset f}
     (ok : processSlashings s = .ok t) (i : ℕ) :
     actualBalanceAt ⟨f, t⟩ i ≤ actualBalanceAt ⟨f, s⟩ i := by
-  have key {penalty : Validator → ℕ}
-      (facts : ∀ i, (i < s.validators.data.size → ∃ validator,
-        s.validators.data[i]? = some validator ∧
-        t.balances.data[i]?.map UInt64.toNat =
-          s.balances.data[i]?.map fun balance => balance.toNat - penalty validator) ∧
-        (s.validators.data.size ≤ i → t.balances.data[i]? = s.balances.data[i]?)) :
-      actualBalanceAt ⟨f, t⟩ i ≤ actualBalanceAt ⟨f, s⟩ i := by
-    by_cases inside : i < s.validators.data.size
-    · obtain ⟨v, _, eq⟩ := (facts i).1 inside
-      simp only [actualBalanceAt]
-      cases h : s.balances.data[i]? <;> cases h' : t.balances.data[i]? <;> simp_all
-    · simp [actualBalanceAt, (facts i).2 (by omega)]
-  by_cases electra : .pectra ≤ f
-  · obtain ⟨_, _, _, _, _, rest⟩ :=
-      processSlashings_balances_toNat_of_electra electra (s.validators.bound early) ok
-    exact key rest
-  · obtain ⟨_, _, _, _, _, rest⟩ :=
-      processSlashings_balances_toNat_of_lt_electra (Nat.lt_of_not_le electra) ok
-    exact key rest
+  rcases later : t.balances.data[i]? with _ | balance
+  · simp [actualBalanceAt, later]
+  · obtain ⟨earlier, found, le⟩ := balanceNotRaised_processSlashings ok i balance later
+    simpa [actualBalanceAt, later, found] using UInt64.le_iff_toNat_le.mp le
 
 /-! ### The end of an epoch -/
-
-/-- The registry updates keep every balance. -/
-private theorem registryUpdates_balances {f : Fork} {s t : BeaconState preset f}
-    (ok : processRegistryUpdates config s = .ok t) : t.balances = s.balances := by
-  have fold {α : Type} {step : BeaconState preset f → α → Except TransitionError _}
-      {xs : List α} {u w : BeaconState preset f}
-      (kept : ∀ a item b, step a item = .ok b → b.balances = a.balances)
-      (ok : xs.foldlM step u = .ok w) : w.balances = u.balances :=
-    foldlM_ok_invariant (fun b => b.balances = u.balances)
-      (fun _ _ _ prior computed => (kept _ _ _ computed).trans prior) rfl ok
-  have set {a b : BeaconState preset f} {i : ℕ} {v : Validator}
-      (ok : a.setValidatorAt i v = .ok b) : b.balances = a.balances := by
-    obtain ⟨_, rfl⟩ := setValidatorAt_ok ok
-    rfl
-  have exit {a b : BeaconState preset f} {i : ValidatorIndex}
-      (ok : initiateValidatorExit config a i = .ok b) : b.balances = a.balances :=
-    (initiateValidatorExit_balances_eq_and_pendingConsolidations_eq ok).1
-  unfold processRegistryUpdates at ok
-  split at ok
-  · obtain ⟨epoch, _, folded⟩ := bind_ok_iff.mp ok
-    refine fold (fun u i w ok => ?_) folded
-    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · obtain ⟨_, _, written⟩ := bind_ok_iff.mp ok
-      exact set (liftAccessor_ok.mp written)
-    split at ok
-    · obtain ⟨_, _, exited⟩ := bind_ok_iff.mp ok
-      exact exit (liftAccessor_ok.mp exited)
-    split at ok
-    · exact set (liftAccessor_ok.mp ok)
-    · cases ok; rfl
-  · obtain ⟨u, first, last⟩ := bind_ok_iff.mp ok
-    refine (fold (fun a i b ok => ?_) last).trans (fold (fun a i b ok => ?_) first)
-    · simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, _, _, written⟩ := ok
-      obtain ⟨_, rfl⟩ := setValidator_ok written
-      rfl
-    · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, _, _, marked, markedOk, ok⟩ := ok
-      split at ok
-      · obtain ⟨_, _, exited⟩ := bind_ok_iff.mp ok
-        exact (exit (liftAccessor_ok.mp exited)).trans (set markedOk)
-      · cases ok; exact set markedOk
 
 /-- The update of one effective balance changes only the validator at its position.
 
@@ -1114,9 +1055,9 @@ private theorem rise_epoch {f : Fork} {c t : BeaconState preset f} (altair : .al
     fun h => ?_, fun h => ?_, ?_, ?_⟩
   · have one : actualBalanceAt ⟨f, reset⟩ i = actualBalanceAt ⟨f, slashed⟩ i := by
       simp only [actualBalanceAt, eRec.2.1]
-    have two := slashings_lower early lOk i
+    have two := slashings_lower lOk i
     have three : actualBalanceAt ⟨f, registered⟩ i = actualBalanceAt ⟨f, rewarded⟩ i := by
-      simp only [actualBalanceAt, registryUpdates_balances gOk]
+      simp only [actualBalanceAt, processRegistryUpdates_balances gOk]
     omega
   · rw [frame.slot, jRec.2.2.2.2]
   · apply frame.exitsOrdered
@@ -1601,7 +1542,7 @@ theorem effectiveRise_le
       (∑ i ∈ (Finset.range r.validators.data.size).filter (fun i => isActiveAt r e i = true),
         ((r.validators.data[i]?).map (·.effectiveBalance.toNat)).getD 0) := by
     rw [← sumPR e fixedNow, show total = T.toNat by simp only [total, totalGweiEq],
-      getTotalActiveBalance_toNat totalOk, epochP]
+      getTotalActiveBalance_toNat totalOk, activeBalanceTotal, epochP]
   have numR : num = max 1
       ((∑ i ∈ (Finset.range r.validators.data.size).filter
         (fun i => isActiveAt r (getPreviousEpoch r) i = true),

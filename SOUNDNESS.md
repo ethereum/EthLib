@@ -3237,10 +3237,8 @@ The withdrawal delay is at least one epoch, and the preset satisfies `CapOrder` 
 Together these make `MAX_EFFECTIVE_BALANCE` equal to `MIN_ACTIVATION_BALANCE`, as on both presets.
 The theorem bounds the drift by the reserve, but whether the reserve is small enough against the confirmation margin on mainnet is not established.
 `Execution.rootViable_of_checked_call` and `Execution.honestHeadsCover_of_checked_call` still take `QuorumDriftWithin` as a premise.
-`Execution.rootViable_of_checked_call_of_drift_bound` and `Execution.honestHeadsCover_of_checked_call_of_drift_bound` discharge it, with BLS checks from Fulu to before Gloas.
-Six premises replace it: Fulu or later, a horizon before the next fork, `IncrementWithinUpwardBand`, a withdrawal delay of at least one epoch, `CapOrder` and `ActivationWithinMaxEffective`.
-They also drop `HeldStatesBeforeUpgrade`, which `Execution.heldStatesBeforeUpgrade_of_bounded` derives from the horizon and `HonestStoreEpochsBounded`.
-They read `Execution.quorumDriftWithin`.
+A caller with BLS checks from Fulu to before Gloas discharges it with `Execution.quorumDriftWithin`.
+`Execution.heldStatesBeforeUpgrade_of_bounded` likewise discharges `HeldStatesBeforeUpgrade` from the horizon and `HonestStoreEpochsBounded`.
 The model's genesis time must be the anchor state's (`secondsToMilliseconds anchorState.genesisTime = genesisTimeMs`), a fact of the configuration that holds for every real anchor.
 
 `JustifiedPinned` is a further premise, absent from the signed-justification headline.

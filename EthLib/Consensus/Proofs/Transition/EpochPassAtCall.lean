@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Participation
 public import Mathlib.Algebra.BigOperators.Group.Finset.Basic
 import EthLib.Consensus.Proofs.Transition.ActiveKept
+import EthLib.Consensus.Proofs.Transition.BlockRewards
 import EthLib.Consensus.Proofs.Transition.EpochParticipation
 import EthLib.Consensus.Proofs.Transition.ForkBoundary
 import EthLib.Consensus.Proofs.Transition.Slot
@@ -32,17 +33,24 @@ open Base Uint64
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
+/-- The active effective balances of a state as a natural number, at least one increment.
+
+It sums over the positions of the registry that are active in the current epoch.
+
+It is the value of each successful active-balance read, and says nothing about success. -/
+def activeBalanceTotal {fork : Fork} (state : BeaconState preset fork) : ℕ :=
+  max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    (∑ i ∈ (Finset.range state.validators.data.size).filter
+        (fun i => isActiveAt state (getCurrentEpoch state) i = true),
+      ((state.validators.data[i]?).map (·.effectiveBalance.toNat)).getD 0)
+
 /-- A successful active-balance read is the sum of the effective balances of the active validators.
 
-A total below one increment is read as one increment.
-
-The sum runs over the positions of the registry that are active in the current epoch. -/
+A total below one increment is read as one increment. -/
 theorem getTotalActiveBalance_toNat {fork : Fork} {state : BeaconState preset fork}
     {total : Gwei} (computed : getTotalActiveBalance state = .ok total) :
-    total.toNat = max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-      (∑ i ∈ (Finset.range state.validators.data.size).filter
-          (fun i => isActiveAt state (getCurrentEpoch state) i = true),
-        ((state.validators.data[i]?).map (·.effectiveBalance.toNat)).getD 0) := by
+    total.toNat = activeBalanceTotal state := by
+  unfold activeBalanceTotal
   obtain ⟨indices, checked, computed⟩ := bind_ok_iff.mp computed
   obtain ⟨-, lt, rfl⟩ := getTotalBalance_ok_iff.mp computed
   have sum : sumMarked state.validators.data (markIndices state.validators.data.size indices) =
@@ -72,6 +80,31 @@ theorem getTotalActiveBalance_toNat {fork : Fork} {state : BeaconState preset fo
     rw [getElem?_markIndices]
     simp only [inside, ↓reduceIte, Option.getD_some, marked]
   rw [← sum, toNat_max, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' lt]
+
+/-- The participant reward of the sync committee as a natural number, from the active total.
+
+It is the value of each successful read of that reward, and says nothing about success. -/
+def syncRewardAt {fork : Fork} (state : BeaconState preset fork) : ℕ :=
+  preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat /
+      (activeBalanceTotal state).sqrt *
+      (activeBalanceTotal state / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
+    SYNC_REWARD_WEIGHT.toNat / WEIGHT_DENOMINATOR.toNat / preset.SLOTS_PER_EPOCH.toNat /
+      preset.SYNC_COMMITTEE_SIZE.toNat
+
+/-- A successful read of the participant reward of the sync committee is its natural value. -/
+theorem syncParticipantReward_toNat {fork : Fork} {state : BeaconState preset fork}
+    {reward : Gwei} (computed : syncParticipantReward state = .ok reward) :
+    reward.toNat = syncRewardAt state := by
+  obtain ⟨total, perIncrement, totalOk, perOk, perValue, rewardValue⟩ :=
+    syncParticipantReward_ok computed
+  rw [rewardValue, perValue, getTotalActiveBalance_toNat totalOk]
+  rfl
+
+/-- The seats of a validator in the current sync committee: the members that hold its key. -/
+def syncSeats {fork : Fork} (state : BeaconState preset fork) (altair : .altair ≤ fork)
+    (i : ℕ) : ℕ :=
+  ((state.currentSyncCommittee altair).value.pubkeys.toList.filter fun key =>
+    (state.validators.data[i]?).any (·.pubkey == key)).length
 
 /-- Deltas applied in turn to one balance move it up by at most their rewards.
 
@@ -561,10 +594,8 @@ theorem seats_eq {f h : Fork} {a : BeaconState preset f} {b : BeaconState preset
     (keys : (a.currentSyncCommittee altairA).value.pubkeys.toList =
       (b.currentSyncCommittee altairB).value.pubkeys.toList)
     (pub : (a.validators.data[i]?).map (·.pubkey) = (b.validators.data[i]?).map (·.pubkey)) :
-    ((a.currentSyncCommittee altairA).value.pubkeys.toList.filter fun key =>
-        (a.validators.data[i]?).any (·.pubkey == key)).length =
-      ((b.currentSyncCommittee altairB).value.pubkeys.toList.filter fun key =>
-        (b.validators.data[i]?).any (·.pubkey == key)).length := by
+    syncSeats a altairA i = syncSeats b altairB i := by
+  unfold syncSeats
   have any : ∀ (o : Option Validator) (key : Cryptography.Bls.BLSPubkey),
       o.any (·.pubkey == key) = (o.map (·.pubkey)).any (· == key) := by
     intro o key
