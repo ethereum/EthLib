@@ -75,7 +75,7 @@ leanVM ships them under MIT or Apache-2.0, and their copyright holder, leanEther
 ## What changed here
 
 leanVM builds the proof with Lean v4.31.0, Mathlib `fabf563a` and VCVio `cbd4144b`.
-EthLib builds with Lean v4.36.0, VCVio `8781becf` and the Mathlib that this VCVio uses.
+EthLib builds with Lean v4.36.0, VCVio `v4.36.0` and the Mathlib that this VCVio uses.
 The changes that follow from this are:
 
 - VCVio now gives the distribution of a computation as a Mathlib measure, not as a sub-probability mass function.
