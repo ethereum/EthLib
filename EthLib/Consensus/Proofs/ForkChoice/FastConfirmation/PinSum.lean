@@ -927,12 +927,52 @@ theorem bud_pendingR (h : Setting config checks g split fin pulled anc counted V
       (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤
         (pinTerms config pulled anc fin).pendingR := sorry
 
+/-- The keys that `exitingB` marks have their effective balances in `exiting`. -/
+private theorem sum_le_exiting (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) (S : Finset ValidatorIndex)
+    (member : ∀ v ∈ S, (pinTerms config state ancestor finalizedState).exitingB v.toNat = true) :
+    ∑ v ∈ S, balanceAt state v.toNat ≤ (pinTerms config state ancestor finalizedState).exiting := by
+  dsimp only [pinTerms]
+  refine sum_toNat_le (fun i => balanceAt state i) fun v hv => ?_
+  have mark := of_decide_eq_true (member v hv)
+  obtain ⟨w, found⟩ : ∃ w, state.validators.data[v.toNat]? = some w := by
+    cases gone : state.validators.data[v.toNat]? with
+    | none =>
+      have read := mark.2.2
+      simp [gone] at read
+    | some w => exact ⟨w, rfl⟩
+  exact mem_positions_filter config state ancestor finalizedState found mark
+
 /-- D-4: the keys whose exit R reads. -/
 theorem bud_exiting (h : Setting config checks g split fin pulled anc counted V) :
     (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
       (∑ v ∈ (K5 counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).exitingB v.toNat = true,
-        eR pulled v) ≤ (pinTerms config pulled anc fin).exiting := sorry
+        eR pulled v) ≤ (pinTerms config pulled anc fin).exiting := by
+  clear h
+  have apartVK5 : Disjoint (VN counted V) (K5 counted V) := by
+    rw [Finset.disjoint_left]
+    intro v inV inK5
+    simp only [VN, K5, Finset.mem_filter] at inV inK5
+    exact inK5.2.2 inV.1
+  have apartVK6 : Disjoint (VN counted V) (K6 pulled counted) := by
+    rw [Finset.disjoint_left]
+    intro v inV inK6
+    simp only [VN, K6, Finset.mem_filter] at inV inK6
+    exact inV.2 inK6.1
+  have apartK5K6 : Disjoint (K5 counted V) (K6 pulled counted) := by
+    rw [Finset.disjoint_left]
+    intro v inK5 inK6
+    simp only [K5, K6, Finset.mem_filter] at inK5 inK6
+    exact inK5.2.1 inK6.1
+  rw [← Finset.sum_union (Finset.disjoint_filter_filter apartVK5),
+    ← Finset.sum_union (Finset.disjoint_union_left.mpr
+      ⟨Finset.disjoint_filter_filter apartVK6, Finset.disjoint_filter_filter apartK5K6⟩)]
+  exact sum_le_exiting config pulled anc fin _ fun v member => by
+    rcases Finset.mem_union.mp member with member | member
+    · rcases Finset.mem_union.mp member with member | member <;>
+        exact (Finset.mem_filter.mp member).2
+    · exact (Finset.mem_filter.mp member).2
 
 /-- Late activations, weight 3 for V keys and 1 for new keys. -/
 theorem bud_late (h : Setting config checks g split fin pulled anc counted V) :
@@ -1124,11 +1164,17 @@ theorem bud_fall (h : Setting config checks g split fin pulled anc counted V) :
 
 /-- Glue: (K4 pulled counted V) keys are current at R. -/
 theorem bud_rise (h : Setting config checks g split fin pulled anc counted V) :
-    (∑ v ∈ (K4 pulled counted V), (pinTerms config pulled anc fin).rise v.toNat) ≤ ∑ i ∈ (pinTerms config pulled anc fin).positions with (pinTerms config pulled anc fin).current i = true, (pinTerms config pulled anc fin).rise i :=
-  sorry
+    (∑ v ∈ (K4 pulled counted V), (pinTerms config pulled anc fin).rise v.toNat) ≤ ∑ i ∈ (pinTerms config pulled anc fin).positions with (pinTerms config pulled anc fin).current i = true, (pinTerms config pulled anc fin).rise i := by
+  refine sum_toNat_le (fun i => (pinTerms config pulled anc fin).rise i) fun v hv => ?_
+  simp only [K4, Finset.mem_filter] at hv
+  obtain ⟨w, found, active⟩ := active_of_activeVoters h.early (s := pulled) hv.2.1
+  exact mem_positions_filter config pulled anc fin found
+    (isActiveAt_eq_true_iff.mpr ⟨w, found, active⟩)
 
 /-- `quorumReserve` holds `joining` (its gain term). -/
-theorem bud_joining : (pinTerms config pulled anc fin).joining ≤ (pinTerms config pulled anc fin).quorum := sorry
+theorem bud_joining : (pinTerms config pulled anc fin).joining ≤ (pinTerms config pulled anc fin).quorum := by
+  dsimp only [pinTerms, quorumReserve]
+  exact (show ∀ a b c : ℕ, a ≤ 2 * (a + b) + 3 * c by intros; omega) _ _ _
 
 end Stubs
 
