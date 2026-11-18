@@ -1611,9 +1611,7 @@ The second is the current justified checkpoint of a held state.
 
 The third is that checkpoint after justification and finalization on the state of a held block.
 
-That block is of an epoch before the current epoch of the store.
-
-Without that epoch bound, the origin is `Store.Reachable.justified_origins`. -/
+That block is of an epoch before the current epoch of the store. -/
 theorem Store.ForwardReachable.justified_origins_epoch
     (forward : Store.ForwardReachable config anchorState anchorBlock store)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (slots : 0 < config.SLOT_DURATION_MS)

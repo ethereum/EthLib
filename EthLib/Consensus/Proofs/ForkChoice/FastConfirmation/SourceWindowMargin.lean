@@ -2385,7 +2385,9 @@ private theorem window_reserves_and_weight [DecidablePred (· ∈ J)] {n : ℕ}
 
 The caller's window reserve and the receiver's exit bound read one reserve value.
 
-The alternatives are those of `Execution.source_surplus_or_historical_evidence`. -/
+The receiver's justified block may instead descend from the block.
+
+Bounded honest stores may instead collide, or `HistoricalDirectSafetyEvidence` holds. -/
 public theorem Execution.source_surplus_or_historical_evidence_with [DecidablePred (· ∈ J)]
     {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)

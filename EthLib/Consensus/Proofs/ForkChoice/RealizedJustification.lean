@@ -533,14 +533,6 @@ theorem Store.ForwardReachable.votingSource_le_justified
 
 /-- The justified epoch of a reachable store is at most its unrealized justified epoch.
 
-A tick keeps the justified checkpoint, or adopts the unrealized one.
-
-A block passes the store the justified checkpoint of its state, or of the pull-up of that state.
-
-The pull-up is at least the state's own.
-
-The new unrealized justified checkpoint is at least the pull-up.
-
 The anchor state must keep the invariant of the state transition. -/
 theorem Store.Reachable.justified_epoch_le_unrealized {store : Store preset fork}
     (anchor : Invariant anchorState)

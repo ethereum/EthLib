@@ -473,13 +473,7 @@ private theorem Execution.mem_window_of_target_or_stale {anchor : Store preset f
 
 /-- Honest validators hold the count that the rule makes for the target, with a margin.
 
-The caller is an honest validator, and each honest store starts from the store of the anchor.
-
-Each latest vote of an honest validator in the store of the caller is a vote that it signed.
-
 The Byzantine validators hold at most the threshold share of the committees of the epoch so far.
-
-So the votes for the target, less the weight of the adversary, are honest votes.
 
 The honest validators of the slots still to come hold the share that the rule counts for them.
 
@@ -487,10 +481,7 @@ They hold a third of the margin on top of it.
 
 The stake is read in the pulled-up state of the head.
 
-Heads with a block at least two epochs before the current epoch have the premise on stale heads.
-
-The RANDAO buffer is longer than the minimum seed lookahead plus one epoch.
--/
+Heads with a block at least two epochs before the current epoch have the premise on stale heads. -/
 theorem Execution.honestTargetVotes_of_byzantineStakeAtMost [DecidablePred (· ∈ J)]
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)

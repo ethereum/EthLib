@@ -1268,10 +1268,6 @@ theorem Store.ForwardReachable.justified_le_of_pulledUp (anchor : Invariant anch
 
 /-- The pull-up of each held block is at most the unrealized justified checkpoint of the store.
 
-A block raises the unrealized justified checkpoint to its pull-up when it arrives.
-
-Later steps never lower that checkpoint.
-
 The anchor state must keep the invariant of the state transition. -/
 theorem Store.ForwardReachable.pulledUp_le_unrealized (anchor : Invariant anchorState)
     (forward : Store.ForwardReachable config anchorState anchorBlock store)

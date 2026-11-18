@@ -102,7 +102,7 @@ Not yet released.
     `Store.onBlock_pulledUp` gives the pull-up of a block that the store adds, which their block steps read.
   - `Store.adversaryRange_start` and `Store.ForwardReachableWith.supportersOf_mem_committees_of_near` read the adversary's range of a block and its committees; `Store.ForwardReachableWith.supportersOf_mem_committees` now reads the second.
   - `Store.updateCheckpoints_justifiedCheckpoint`, `Store.onTick_unrealizedJustifiedCheckpoint` and `Store.onBlock_unrealized_epoch_le` are the store steps of the justified bounds above.
-    `Store.updateCheckpoints_unrealizedJustifiedCheckpoint` and `Store.onTick_justifiedCheckpoint_of_unrealized` are public again, with their statements unchanged.
+    `Store.updateCheckpoints_unrealizedJustifiedCheckpoint` and `Store.onTick_justifiedCheckpoint_of_unrealized` are now public, with their statements unchanged.
   - `Execution.crossStoreFinality_or_evidence` puts one honest store's finalized checkpoint on another's justified chain at that epoch or later, or gives `CrossStoreDirectSafetyEvidence`.
     `Execution.finalized_read_or_accountable` is its step for one pair of stores.
   - `Execution.anchor_stateRoot_nonzero` shows that an honest held copy of the anchor block has a nonzero state root.

@@ -424,9 +424,13 @@ public theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
       (callerBlocks root block callerHeld) rfl covers high receiver atTime upToDate hdOk
       currentOk late signer).resolve_right collide)
 
-/-- The induction of the historical-anchor headline, with the root's viability given per time.
+/-- The root is on every up-to-date honest head chain from the call up to the time.
 
-The viability at a time may read the coverage at every earlier time. -/
+The viability of the root at a time may read its coverage at every earlier time.
+
+The window reserve and the receivers' exits read one reserve value.
+
+The alternatives are a block collision of honest stores and `HistoricalDirectSafetyEvidence`. -/
 public theorem Execution.honestHeadsCover_of_viableAt [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
