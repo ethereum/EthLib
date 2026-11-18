@@ -5078,6 +5078,22 @@ private theorem ChainStep.epoch_le_succ {a b : ForkedBeaconState preset}
     simp only [getCurrentEpoch, same]
     exact Nat.le_succ _
 
+/-- A run from a state without a property to a state with it splits at a step that gains it. -/
+private theorem Run.split_at_flip {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (P : ForkedBeaconState preset → Prop) (missing : ¬P x) (held : P y) :
+    ∃ (m n : ForkedBeaconState preset) (pre : Run config checks x m)
+      (step : Step config checks m n) (post : Run config checks n y),
+      tail = (pre.snoc step).append post ∧ ¬P m ∧ P n := by
+  induction tail with
+  | nil => exact absurd held missing
+  | @snoc middle last pre step ih =>
+    by_cases inside : P middle
+    · obtain ⟨m, n, a, one, rest, split, hm, hn⟩ := ih inside
+      refine ⟨m, n, a, one, rest.snoc step, ?_, hm, hn⟩
+      rw [split]
+      rfl
+    · exact ⟨middle, last, pre, step, .nil, rfl, inside, held⟩
+
 /-- A run from an epoch to a later one has a slot step that leaves a given epoch between them. -/
 private theorem Run.cross_split {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (k : ℕ) (low : (getCurrentEpoch x.state).toNat ≤ k)
@@ -5086,23 +5102,19 @@ private theorem Run.cross_split {x y : ForkedBeaconState preset} (tail : Run con
       (ok : advanceSlotAcross config checks z = .ok n) (rest : Run config checks n y),
       tail = (pre.snoc (Step.slot ok)).append rest ∧ (getCurrentEpoch z.state).toNat = k ∧
         (getCurrentEpoch n.state).toNat = k + 1 := by
-  induction tail with
-  | nil => omega
-  | @snoc middle last pre step ih =>
-    by_cases inside : k < (getCurrentEpoch middle.state).toNat
-    · obtain ⟨z, n, a, ok, rest, split, hz, hn⟩ := ih inside
-      refine ⟨z, n, a, ok, rest.snoc step, ?_, hz, hn⟩
-      rw [split]
-      rfl
-    · have bound := ChainStep.epoch_le_succ step.chainStep
-      cases step with
-      | slot ok => exact ⟨middle, last, pre, ok, .nil, rfl, by omega, by omega⟩
-      | @block fork before after engine signed due ok =>
-        have same := processBlock_slot (applySignedBlock_ok ok).2.1
-        have e : (getCurrentEpoch after).toNat = (getCurrentEpoch before).toNat := by
-          simp only [getCurrentEpoch, same]
-        simp only at high inside
-        omega
+  obtain ⟨m, n, pre, step, post, split, hm, hn⟩ :=
+    Run.split_at_flip tail (fun z => k < (getCurrentEpoch z.state).toNat) (by omega) high
+  have missing : ¬k < (getCurrentEpoch m.state).toNat := hm
+  have gained : k < (getCurrentEpoch n.state).toNat := hn
+  have bound := ChainStep.epoch_le_succ step.chainStep
+  cases step with
+  | slot ok => exact ⟨m, n, pre, ok, post, split, by omega, by omega⟩
+  | @block fork before after engine signed due ok =>
+    have same := processBlock_slot (applySignedBlock_ok ok).2.1
+    have e : (getCurrentEpoch after).toNat = (getCurrentEpoch before).toNat := by
+      simp only [getCurrentEpoch, same]
+    simp only at missing gained
+    omega
 
 /-- A run that starts at or before an epoch and ends at or after it passes a state of that epoch. -/
 private theorem Run.exists_epoch_split {x y : ForkedBeaconState preset}
