@@ -784,6 +784,23 @@ private theorem SyncCommitteeKeys.transfer (holds : SyncCommitteeKeys state)
         keys life key (next key member)
     exact ⟨i, v, found, keyed, assigned, by omega⟩
 
+/-- A step keeps the provenance of the committees and the slot.
+
+It keeps the current sync committee unless the epoch ahead starts a period. -/
+private def CommitteeStep (state after : BeaconState preset fork) : Prop :=
+  (SyncCommitteeKeys state → SyncCommitteeKeys after) ∧ after.slot = state.slot ∧
+    ((getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD ≠ 0 →
+      after.currentSyncCommittee = state.currentSyncCommittee)
+
+private theorem CommitteeStep.refl (state : BeaconState preset fork) : CommitteeStep state state :=
+  ⟨id, rfl, fun _ => rfl⟩
+
+private theorem CommitteeStep.trans {a b c : BeaconState preset fork}
+    (ab : CommitteeStep a b) (bc : CommitteeStep b c) : CommitteeStep a c := by
+  refine ⟨bc.1 ∘ ab.1, bc.2.1.trans ab.2.1, fun inside => ?_⟩
+  have epoch : getCurrentEpoch b = getCurrentEpoch a := by simp only [getCurrentEpoch, ab.2.1]
+  exact (bc.2.2 (by rw [epoch]; exact inside)).trans (ab.2.2 inside)
+
 namespace SyncCommitteeKeys
 
 /-- Genesis initialization returns only a pre-Altair state, which has no sync committees. -/
@@ -819,17 +836,39 @@ private theorem processSyncCommitteeUpdates {altair : .altair ≤ fork}
   · cases ok
     exact holds
 
-/-- An epoch keeps committee provenance through registry changes, rotation and the new draw.
+/-- Rotation keeps the current committee unless the epoch ahead starts a period. -/
+private theorem processSyncCommitteeUpdates_current_eq {altair : .altair ≤ fork}
+    (inside : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD ≠ 0)
+    (ok : Consensus.processSyncCommitteeUpdates state altair = .ok after) :
+    after.currentSyncCommittee = state.currentSyncCommittee := by
+  unfold Consensus.processSyncCommitteeUpdates at ok
+  simp only [bind_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨epoch, epochOk, ok⟩ := ok
+  rw [liftArith, mapError_ok_iff, addChecked_ok_iff] at epochOk
+  have sum : epoch = getCurrentEpoch state + 1 :=
+    UInt64.toNat_inj.mp (epochOk.2.trans (toNat_add_of_lt epochOk.1).symm)
+  subst sum
+  simp only [inside, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at ok
+  subst ok
+  rfl
+
+/-- An epoch keeps committee provenance and the slot.
+
+It keeps the current committee unless the epoch ahead starts a period.
 
 Every stage but the committee update keeps both committees and the key prefix of the registry. -/
-private theorem processEpoch (holds : SyncCommitteeKeys state)
-    (ok : Consensus.processEpoch config checks state = .ok after) : SyncCommitteeKeys after := by
+private theorem processEpochStep
+    (ok : Consensus.processEpoch config checks state = .ok after) : CommitteeStep state after := by
   -- Before Altair there are no sync committees, so the provenance holds.
   by_cases altair : Fork.altair ≤ fork
-  case neg => exact fun altair' => absurd altair' altair
-  refine (processEpoch_trace ok).transport (fun s t => SyncCommitteeKeys s → SyncCommitteeKeys t)
-    (fun _ => id) (fun one two => two ∘ one) ?_ holds
-  intro k _ a b computed held
+  case neg =>
+    obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame ok
+    exact ⟨fun _ altair' => absurd altair' altair,
+      frame.slot.trans (processJustificationAndFinalization_slot justifiedOk),
+      fun _ => funext fun altair' => absurd altair' altair⟩
+  refine (processEpoch_trace ok).transport (fun s t => CommitteeStep s t) CommitteeStep.refl
+    (fun one two => one.trans two) ?_
+  intro k _ a b computed
   have edge := EpochStage.action_cases.mp computed
   have life := edge.registryLifecycle
   have slot := edge.slot_eq
@@ -837,102 +876,186 @@ private theorem processEpoch (holds : SyncCommitteeKeys state)
     simp only [getCurrentEpoch, slot, Nat.le_refl]
   cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
   case justification =>
+    refine ⟨fun held => ?_, slot,
+      fun _ => (SameSyncCommittees.processJustificationAndFinalization edge).1⟩
     exact held.transfer (And.imp_right And.left
       (SameSyncCommittees.processJustificationAndFinalization edge))
       (by
         simp only [validatorKeys, (processJustificationAndFinalization_keeps edge).2.2.2.2.2.1]
         exact List.prefix_refl _) life
   case inactivity =>
+    refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processInactivityUpdates edge).1⟩
     exact held.transfer (And.imp_right And.left (SameSyncCommittees.processInactivityUpdates edge))
       (frame_processInactivityUpdates edge).pubkeysPrefix life
   case rewards =>
+    refine ⟨fun held => ?_, slot,
+      fun _ => (SameSyncCommittees.processRewardsAndPenalties edge).1⟩
     exact held.transfer (And.imp_right And.left
       (SameSyncCommittees.processRewardsAndPenalties edge))
       (frame_processRewardsAndPenalties edge).pubkeysPrefix life
   case registry =>
+    refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processRegistryUpdates edge).1⟩
     exact held.transfer (And.imp_right And.left (SameSyncCommittees.processRegistryUpdates edge))
       (frame_processRegistryUpdates edge).pubkeysPrefix life
   case slashings =>
+    refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processSlashings edge).1⟩
     exact held.transfer (And.imp_right And.left (SameSyncCommittees.processSlashings edge))
       (frame_processSlashings edge).pubkeysPrefix life
   case eth1Reset =>
     split at edge
-    · exact held.transfer (And.imp_right And.left (SameSyncCommittees.processEth1DataReset edge))
+    · refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processEth1DataReset edge).1⟩
+      exact held.transfer (And.imp_right And.left (SameSyncCommittees.processEth1DataReset edge))
         (frame_processEth1DataReset edge).pubkeysPrefix life
-    · exact edge ▸ held
+    · subst edge
+      exact CommitteeStep.refl _
   case pendingDeposits =>
     split at edge
-    · exact held.transfer (And.imp_right And.left (SameSyncCommittees.processPendingDeposits edge))
+    · refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processPendingDeposits edge).1⟩
+      exact held.transfer (And.imp_right And.left (SameSyncCommittees.processPendingDeposits edge))
         (frame_processPendingDeposits edge).pubkeysPrefix life
-    · exact edge ▸ held
+    · subst edge
+      exact CommitteeStep.refl _
   case pendingConsolidations =>
     split at edge
-    · exact held.transfer (And.imp_right And.left
+    · refine ⟨fun held => ?_, slot,
+        fun _ => (SameSyncCommittees.processPendingConsolidations edge).1⟩
+      exact held.transfer (And.imp_right And.left
         (SameSyncCommittees.processPendingConsolidations edge))
         (frame_processPendingConsolidations edge).pubkeysPrefix life
-    · exact edge ▸ held
+    · subst edge
+      exact CommitteeStep.refl _
   case payments =>
     split at edge
     · rw [processBuilderPendingPayments_eq edge]
-      exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) (.of_data rfl)
-    · exact edge ▸ held
+      exact ⟨fun held => held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) (.of_data rfl), rfl,
+        fun _ => rfl⟩
+    · subst edge
+      exact CommitteeStep.refl _
   case effectiveBalances =>
+    refine ⟨fun held => ?_, slot,
+      fun _ => (SameSyncCommittees.processEffectiveBalanceUpdates edge).1⟩
     exact held.transfer (And.imp_right And.left
       (SameSyncCommittees.processEffectiveBalanceUpdates edge))
       (frame_processEffectiveBalanceUpdates edge).pubkeysPrefix life
   case slashingsReset =>
+    refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processSlashingsReset edge).1⟩
     exact held.transfer (And.imp_right And.left (SameSyncCommittees.processSlashingsReset edge))
       (frame_processSlashingsReset edge).pubkeysPrefix life
   case randaoReset =>
+    refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processRandaoMixesReset edge).1⟩
     exact held.transfer (And.imp_right And.left (SameSyncCommittees.processRandaoMixesReset edge))
       (frame_processRandaoMixesReset edge).pubkeysPrefix life
   case history =>
     split at edge
-    · exact held.transfer (And.imp_right And.left
+    · refine ⟨fun held => ?_, slot,
+        fun _ => (SameSyncCommittees.processHistoricalSummariesUpdate edge).1⟩
+      exact held.transfer (And.imp_right And.left
         (SameSyncCommittees.processHistoricalSummariesUpdate edge))
         (frame_processHistoricalSummariesUpdate edge).pubkeysPrefix life
-    · exact held.transfer (And.imp_right And.left
+    · refine ⟨fun held => ?_, slot,
+        fun _ => (SameSyncCommittees.processHistoricalRootsUpdate edge).1⟩
+      exact held.transfer (And.imp_right And.left
         (SameSyncCommittees.processHistoricalRootsUpdate edge))
         (frame_processHistoricalRootsUpdate edge).pubkeysPrefix life
   case participation =>
     subst edge
-    exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life
-  case syncCommittees => exact processSyncCommitteeUpdates held edge
+    exact ⟨fun held => held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life, slot, fun _ => rfl⟩
+  case syncCommittees =>
+    exact ⟨fun held => processSyncCommitteeUpdates held edge, slot,
+      fun inside => processSyncCommitteeUpdates_current_eq inside edge⟩
   case proposerLookahead =>
     split at edge
     · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
         Except.ok.injEq] at edge
       obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life
-    · exact edge ▸ held
+      exact ⟨fun held => held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life, slot, fun _ => rfl⟩
+    · subst edge
+      exact CommitteeStep.refl _
   case ptcWindow =>
     split at edge
     · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
       obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life
-    · exact edge ▸ held
+      exact ⟨fun held => held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life, slot, fun _ => rfl⟩
+    · subst edge
+      exact CommitteeStep.refl _
+
+/-- An epoch keeps committee provenance through registry changes, rotation and the new draw.
+
+Every stage but the committee update keeps both committees and the key prefix of the registry. -/
+private theorem processEpoch (holds : SyncCommitteeKeys state)
+    (ok : Consensus.processEpoch config checks state = .ok after) : SyncCommitteeKeys after :=
+  (processEpochStep ok).1 holds
+
+/-- A slot updates committees only through the epoch transition.
+
+It keeps the current committee unless the slot reaches the first epoch of a period.
+
+The condition on the epoch says so: the epoch stays, or it is not a multiple of the period. -/
+private theorem advanceSlotStep (ok : Consensus.advanceSlot config checks state = .ok after) :
+    (SyncCommitteeKeys state → SyncCommitteeKeys after) ∧
+      (getCurrentEpoch after = getCurrentEpoch state ∨
+        getCurrentEpoch after % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD ≠ 0 →
+          after.currentSyncCommittee = state.currentSyncCommittee) := by
+  have later := (runKept_advanceSlot ok).later
+  obtain ⟨next, cached, epoched, nextVal, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
+  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  have cachedEpoch : getCurrentEpoch cached = getCurrentEpoch state := by
+    rw [cachedEq]
+    rfl
+  refine ⟨fun holds => ?_, fun period => ?_⟩
+  · have cachedKeys : SyncCommitteeKeys cached := by rw [cachedEq]; exact holds
+    have epochKeys : SyncCommitteeKeys epoched := by
+      unfold epochIfLast at epochedOk
+      split at epochedOk
+      · exact processEpoch cachedKeys epochedOk
+      · cases epochedOk; exact cachedKeys
+    apply epochKeys.transfer (after := { epoched with slot := next })
+      ⟨rfl, rfl⟩ (List.prefix_refl _) (.of_data rfl) ?_
+    have epochedSlot : epoched.slot = state.slot := by
+      unfold epochIfLast at epochedOk
+      split at epochedOk
+      · obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
+        rw [frame.slot, processJustificationAndFinalization_slot justifiedOk, cachedEq]
+      · cases epochedOk; rw [cachedEq]
+    simpa only [getCurrentEpoch, epochedSlot, UInt64.le_iff_toNat_le] using later
+  · show epoched.currentSyncCommittee = state.currentSyncCommittee
+    have cachedCurrent : cached.currentSyncCommittee = state.currentSyncCommittee := by
+      rw [cachedEq]
+    unfold epochIfLast at epochedOk
+    split at epochedOk
+    · rename_i last
+      have remainder : next.toNat % preset.SLOTS_PER_EPOCH.toNat = 0 := by
+        simpa only [UInt64.toNat_mod, UInt64.toNat_zero] using congrArg UInt64.toNat last
+      have divides := Nat.dvd_of_mod_eq_zero remainder
+      have stateEpoch := getCurrentEpoch_toNat state
+      have nextEpoch : (getCurrentEpoch
+          ({ epoched with slot := next } : BeaconState preset fork)).toNat =
+            (getCurrentEpoch state).toNat + 1 := by
+        rw [getCurrentEpoch_toNat, stateEpoch]
+        show next.toNat / _ = _
+        rw [nextVal]
+        rw [nextVal] at divides
+        exact Nat.succ_div_of_dvd divides
+      have bound := (getCurrentEpoch
+        ({ epoched with slot := next } : BeaconState preset fork)).toNat_lt
+      have plus : getCurrentEpoch cached + 1 =
+          getCurrentEpoch ({ epoched with slot := next } : BeaconState preset fork) := by
+        apply UInt64.toNat_inj.mp
+        have cachedNat := congrArg UInt64.toNat cachedEpoch
+        rw [toNat_add_of_lt (by simp only [UInt64.toNat_one]; omega), UInt64.toNat_one]
+        omega
+      rcases period with same | inside
+      · have := congrArg UInt64.toNat same
+        omega
+      · rw [← plus] at inside
+        exact ((processEpochStep epochedOk).2.2 inside).trans cachedCurrent
+    · cases epochedOk
+      exact cachedCurrent
 
 /-- A slot updates committees only through the epoch transition. -/
 private theorem advanceSlot (holds : SyncCommitteeKeys state)
-    (ok : Consensus.advanceSlot config checks state = .ok after) : SyncCommitteeKeys after := by
-  have later := (runKept_advanceSlot ok).later
-  obtain ⟨next, cached, epoched, _, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
-  have cachedKeys : SyncCommitteeKeys cached := by rw [cachedEq]; exact holds
-  have epochKeys : SyncCommitteeKeys epoched := by
-    unfold epochIfLast at epochedOk
-    split at epochedOk
-    · exact processEpoch cachedKeys epochedOk
-    · cases epochedOk; exact cachedKeys
-  apply epochKeys.transfer (after := { epoched with slot := next })
-    ⟨rfl, rfl⟩ (List.prefix_refl _) (.of_data rfl) ?_
-  have epochedSlot : epoched.slot = state.slot := by
-    unfold epochIfLast at epochedOk
-    split at epochedOk
-    · obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
-      rw [frame.slot, processJustificationAndFinalization_slot justifiedOk, cachedEq]
-    · cases epochedOk; rw [cachedEq]
-  simpa only [getCurrentEpoch, epochedSlot, UInt64.le_iff_toNat_le] using later
+    (ok : Consensus.advanceSlot config checks state = .ok after) : SyncCommitteeKeys after :=
+  (advanceSlotStep ok).1 holds
 
 /-- Blocks preserve the committees and retain all existing validator keys. -/
 private theorem processBlock {block : BeaconBlock preset fork}
@@ -952,9 +1075,20 @@ private theorem carryFields {post : Fork} (upgrade : fork < post)
   simpa [Consensus.carryFields, altair, validatorKeys, carryRooted, getCurrentEpoch]
     using holds altair
 
+private theorem carryFields_current {post : Fork} (upgrade : fork < post)
+    (before : post < .glamsterdam) (altair : .altair ≤ fork) (a : .altair ≤ post) :
+    ((Consensus.carryFields config post state upgrade before).currentSyncCommittee
+      a).value.pubkeys.toList =
+      (state.currentSyncCommittee altair).value.pubkeys.toList := by
+  simp [Consensus.carryFields, altair]
+
 private theorem upgradeToElectra {checks : SignatureChecks} {pre : BeaconState preset .dencun}
-    {post : BeaconState preset .pectra} (holds : SyncCommitteeKeys pre)
-    (ok : Consensus.upgradeToElectra config pre = .ok post) : SyncCommitteeKeys post := by
+    {post : BeaconState preset .pectra}
+    (ok : Consensus.upgradeToElectra config pre = .ok post) :
+    (SyncCommitteeKeys pre → SyncCommitteeKeys post) ∧
+      ∀ (a : .altair ≤ Fork.pectra) (a' : .altair ≤ Fork.dencun),
+      (post.currentSyncCommittee a).value.pubkeys.toList =
+        (pre.currentSyncCommittee a').value.pubkeys.toList := by
   have life := registryLifecycle_upgradeNext (pre := ⟨.dencun, pre⟩)
     (config := config) (checks := checks)
     (post := ⟨⟨.pectra, post⟩, by change Fork.dencun < Fork.pectra; decide⟩)
@@ -968,57 +1102,77 @@ private theorem upgradeToElectra {checks : SignatureChecks} {pre : BeaconState p
   have keys := ((BlockFrame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued).trans
     (BlockFrame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok)
       compounded)).pubkeysPrefix
-  apply transfer ?_ (same.imp_right And.left) keys ?_ ?_
-  · exact carryFields (config := config) (post := .pectra)
-      (by decide) (by decide) (by decide) holds
-  · exact ⟨life.size_le, life.validators⟩
-  · have frame := (BlockFrame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued).trans
-      (BlockFrame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok) compounded)
-    simp only [getCurrentEpoch, frame.slot, Nat.le_refl]
+  refine ⟨fun holds => ?_, fun a a' => ?_⟩
+  · apply transfer ?_ (same.imp_right And.left) keys ?_ ?_
+    · exact carryFields (config := config) (post := .pectra)
+        (by decide) (by decide) (by decide) holds
+    · exact ⟨life.size_le, life.validators⟩
+    · have frame := (BlockFrame.foldlM (fun _ _ _ ok => frame_queuePreActivation ok) queued).trans
+        (BlockFrame.foldlM (fun _ _ _ ok => frame_queueCompoundingExcess ok) compounded)
+      simp only [getCurrentEpoch, frame.slot, Nat.le_refl]
+  · rw [congrFun same.1 a]
+    exact carryFields_current (config := config) (post := .pectra) (by decide) (by decide) a' a
 
-/-- Each upgrade either samples the first committees or carries their keys into the new registry. -/
-private theorem upgradeNext {pre : ForkedBeaconState preset}
+/-- Each upgrade either samples the first committees or carries their keys into the new registry.
+
+It also keeps the keys of the current committee, up to Fulu. -/
+private theorem upgradeNextStep {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
-    (holds : SyncCommitteeKeys pre.state)
     (ok : Consensus.upgradeNext config checks pre = .ok post) :
-    SyncCommitteeKeys post.val.state := by
+    (SyncCommitteeKeys pre.state → SyncCommitteeKeys post.val.state) ∧
+      (post.val.fork < .glamsterdam →
+      ∀ (a : .altair ≤ post.val.fork) (a' : .altair ≤ pre.fork),
+        (post.val.state.currentSyncCommittee a).value.pubkeys.toList =
+          (pre.state.currentSyncCommittee a').value.pubkeys.toList) := by
   obtain ⟨fork, state⟩ := pre
   cases fork
   case phase0 =>
     simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, upgraded, rfl⟩ := ok
-    exact upgradeToAltair upgraded
+    exact ⟨fun _ => upgradeToAltair upgraded,
+      fun _ _ a' => absurd a' (by change ¬ Fork.altair ≤ Fork.phase0; decide)⟩
   case altair | bellatrix | shapella =>
     simp only [Consensus.upgradeNext, pure, Except.pure, Except.ok.injEq] at ok
     subst ok
-    exact carryFields (by dsimp; decide) (by dsimp; decide) (by decide) holds
+    exact ⟨fun holds => carryFields (by dsimp; decide) (by dsimp; decide) (by decide) holds,
+      fun _ a a' => carryFields_current (by dsimp; decide) (by dsimp; decide) a' a⟩
   case dencun =>
     simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, upgraded, rfl⟩ := ok
-    exact upgradeToElectra (checks := checks) holds upgraded
+    have electra := upgradeToElectra (checks := checks) upgraded
+    exact ⟨electra.1, fun _ => electra.2⟩
   case pectra =>
     simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, upgraded, rfl⟩ := ok
     simp only [Consensus.upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at upgraded
     obtain ⟨_, _, rfl⟩ := upgraded
-    have carried := carryFields (config := config) (post := .fusaka)
-      (by dsimp; decide) (by decide) (by dsimp; decide) holds
-    exact carried
+    exact ⟨fun holds => carryFields (config := config) (post := .fusaka)
+      (by decide) (by decide) (by decide) holds,
+      fun _ a a' => carryFields_current (config := config) (post := .fusaka)
+        (by change Fork.pectra < Fork.fusaka; decide) (by decide) a' a⟩
   case fusaka =>
     simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, upgraded, rfl⟩ := ok
     simp only [Consensus.upgradeToGloas, bind_ok_iff] at upgraded
     obtain ⟨_, _, _, _, onboarded⟩ := upgraded
     obtain ⟨⟨_, _, rfl⟩, _⟩ := onboardBuildersFromPendingDeposits_spec onboarded
-    intro _
-    exact holds (by dsimp; decide)
+    exact ⟨fun holds _ => holds (by dsimp; decide),
+      fun early => absurd early (by change ¬ Fork.glamsterdam < Fork.glamsterdam; decide)⟩
   case glamsterdam =>
     simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, upgraded, rfl⟩ := ok
     obtain ⟨_, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
-    intro _
-    exact holds (by dsimp; decide)
+    exact ⟨fun holds _ => holds (by dsimp; decide),
+      fun early => absurd early (by change ¬ Fork.hegota < Fork.glamsterdam; decide)⟩
   all_goals simp only [Consensus.upgradeNext] at ok; cases ok
+
+/-- Each upgrade either samples the first committees or carries their keys into the new registry. -/
+private theorem upgradeNext {pre : ForkedBeaconState preset}
+    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
+    (holds : SyncCommitteeKeys pre.state)
+    (ok : Consensus.upgradeNext config checks pre = .ok post) :
+    SyncCommitteeKeys post.val.state :=
+  (upgradeNextStep ok).1 holds
 
 end SyncCommitteeKeys
 
@@ -1139,5 +1293,56 @@ theorem Run.syncCommittee_keys {g x : ForkedBeaconState preset} (run : Run confi
   obtain ⟨current, next⟩ := run.syncCommittee_activation_assigned genesis altair
   exact ⟨fun key member => project key (current key member),
     fun key member => project key (next key member)⟩
+
+/-- A slot with its upgrades keeps the keys of the current sync committee unless it starts a period.
+-/
+private theorem advanceSlotAcross_currentSyncCommittee {forked after : ForkedBeaconState preset}
+    (ok : advanceSlotAcross config checks forked = .ok after) (early : after.fork < .glamsterdam)
+    (period : getCurrentEpoch after.state = getCurrentEpoch forked.state ∨
+      getCurrentEpoch after.state % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD ≠ 0)
+    (altair : .altair ≤ after.fork) (altair' : .altair ≤ forked.fork) :
+    (after.state.currentSyncCommittee altair).value.pubkeys.toList =
+      (forked.state.currentSyncCommittee altair').value.pubkeys.toList := by
+  obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
+  have epoch : getCurrentEpoch after.state = getCurrentEpoch advanced := by
+    simp only [getCurrentEpoch, processUpgrades_slot upgrades]
+  rw [epoch] at period
+  have step := (SyncCommitteeKeys.advanceSlotStep slotOk).2 period
+  have kept := processUpgrades_induction (config := config) (checks := checks)
+    (property := fun post => forked.fork ≤ post.fork ∧ (post.fork < .glamsterdam →
+      ∀ a : .altair ≤ post.fork, (post.state.currentSyncCommittee a).value.pubkeys.toList =
+        (forked.state.currentSyncCommittee altair').value.pubkeys.toList))
+    (fun {pre post} holds next => by
+      have later : forked.fork ≤ post.val.fork := Nat.le_trans holds.1 (Nat.le_of_lt post.property)
+      refine ⟨later, fun beforeGloas a => ?_⟩
+      have preEarly : pre.fork < .glamsterdam := Nat.lt_trans post.property beforeGloas
+      have moved := (SyncCommitteeKeys.upgradeNextStep next).2 beforeGloas a
+        (Nat.le_trans altair' holds.1)
+      exact moved.trans (holds.2 preEarly (Nat.le_trans altair' holds.1)))
+    (forked := ⟨forked.fork, advanced⟩) ⟨Nat.le_refl _, fun _ a => congrArg
+      (fun committee => (committee a).value.pubkeys.toList) step⟩ upgrades
+  exact kept.2 early altair
+
+/-- Inside one period of sync committees before Gloas, the keys of the current committee stay. -/
+theorem Run.currentSyncCommittee_eq_of_same_period {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
+    (same : (getCurrentEpoch y.state).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat =
+      (getCurrentEpoch x.state).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
+    (altair : .altair ≤ y.fork) (altair' : .altair ≤ x.fork) :
+    (y.state.currentSyncCommittee altair).value.pubkeys.toList =
+      (x.state.currentSyncCommittee altair').value.pubkeys.toList :=
+  Run.induction_of_same_period preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD
+    (fun w _ => ∀ (altair : .altair ≤ w.fork) (altair' : .altair ≤ x.fork),
+      (w.state.currentSyncCommittee altair).value.pubkeys.toList =
+        (x.state.currentSyncCommittee altair').value.pubkeys.toList)
+    (fun _ _ => rfl)
+    (fun _ _ _ ok _ _ prior altair altair' => by
+      rw [processBlock_currentSyncCommittee altair (applySignedBlock_ok ok).2.1]
+      exact prior altair altair')
+    (fun pre ok lastEarly period prior altair altair' =>
+      (advanceSlotAcross_currentSyncCommittee ok lastEarly period altair
+        (Nat.le_trans altair' (fork_le_of_chainSteps pre.chainSteps))).trans
+          (prior _ altair'))
+    tail early same altair altair'
 
 end EthLib.Consensus
