@@ -1686,7 +1686,7 @@ private theorem honest_unslashedActive_of_checkpointState {time : ℕ}
   exact List.mem_toFinset.mpr (mem_unslashedActiveBalances_of_found found active flag)
 
 /-- A head state's epoch is at most the current epoch of a forward-reachable store. -/
-private theorem headState_epoch_le {store : Store preset fork}
+public theorem headState_epoch_le {store : Store preset fork}
     (forward : Store.ForwardReachable config anchorState anchorBlock store) {head : Root}
     {current : Slot} (currentOk : store.getCurrentSlot config = .ok current)
     {headState : BeaconState preset fork} (headRead : store.blockState head = .ok headState) :

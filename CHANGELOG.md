@@ -9,6 +9,18 @@ Not yet released.
 
 ### Proof additions
 
+- `Execution.honestTargetVotes_signed_of_checked` shows that an accepted current-target test has honest signers with two thirds of the active balance ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).
+  Each signer votes for the target before the start of the next epoch, unless two honest stores collide on a block.
+  It assumes the honest count, honest heads above a block of the target's epoch until then, and the caller's head at that time.
+
+- `genesis_offset_of_slot_start` and `slot_at_start_of_genesis_offset` show that a genesis offset below one slot duration keeps the slot read at every slot start.
+
+- `quorum_of_current_target` names the honest voters of `HonestTargetVotes` when the two-thirds test on the current target passes.
+  Three times their stake is at least twice the total active balance plus the margin of the count.
+
+- `le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch` shows that a slot at the start of an epoch is at most the first slot of the epoch of each later slot.
+  `HonestVoteData.target_read`, `Store.Reachable.getCheckpointBlock_anchor`, a step of `DutySupport.lean` and `Execution.honestTargetVotes_signed_of_checked` read it.
+
 - `DirectSafety.accountable_safety_apriori` bounds the drift of accountable safety from the reference state alone.
   For two runs that finalize conflicting checkpoints, the unslashed stake at the shared state `x` is at most three times the accountable stake plus `2 * drift x high`, or the runs show `HashEvidence`.
   `drift x high` reads only numbers at `x` and the window to the later finalized epoch, so it needs no replay of the tails.

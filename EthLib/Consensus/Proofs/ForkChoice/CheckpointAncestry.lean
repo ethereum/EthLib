@@ -908,17 +908,15 @@ theorem Store.Reachable.getCheckpointBlock_anchor {config : Config}
     have roots := reachable.root held
     rw [eq, hashed, Except.ok.injEq] at roots
     exact roots.symm
-  have rounded : anchorState.slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH =
-      anchorState.slot := by
-    apply epoch_floor_eq_of_sub_eq_zero
-    simpa [isStartSlotAtEpoch, computeSlotsSinceEpochStart, anchorSlot,
-      computeStartSlotAtEpoch_computeEpochAtSlot, Except.mapError, bind, Except.bind,
-      pure, Except.pure] using boundary
-  have start : computeStartSlotAtEpoch preset (getCurrentEpoch anchorState) =
-      .ok anchorBlock.slot := by
-    simpa [getCurrentEpoch, rounded, anchorSlot] using
-      computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) anchorState.slot
-  exact Store.getCheckpointBlock_ok_iff.mpr ⟨anchorBlock.slot, start, node, walk, rooted⟩
+  have floor := computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) anchorState.slot
+  have value := (computeStartSlotAtEpoch_ok_iff.mp floor).2
+  simp only [computeEpochAtSlot, UInt64.toNat_div] at value
+  have rounded := UInt64.le_antisymm
+    (UInt64.le_iff_toNat_le.mpr (by rw [value, anchorSlot]; exact Nat.div_mul_le_self _ _))
+    (le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch boundary
+      (UInt64.le_of_eq anchorSlot) floor)
+  rw [rounded] at floor
+  exact Store.getCheckpointBlock_ok_iff.mpr ⟨anchorBlock.slot, floor, node, walk, rooted⟩
 
 /-- An ordered earlier finality is on the justified chain, or the two stores give safety evidence.
 

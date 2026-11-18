@@ -3127,6 +3127,27 @@ The drift counts from the anchor, so on a long execution with enough churn since
 `SignsTarget`, in the network file above, describes a signing witness by a bounded time inside that count; it is not an additional hypothesis on its own.
 The count gives active honest voters, each of whom signs the target or lies outside the committees of the epoch so far, and three times their stake is at least three times the computed support plus the margin.
 `quorum_of_no_conflicting_checkpoint` takes that count as a hypothesis and, when the one-third test passes, applies it; no theorem derives the count from a bound on Byzantine stake, or shows that the target is justified.
+`quorum_of_current_target` applies the count in the same way when the two-thirds test passes.
+Then three times the voters' stake is at least twice the total active balance plus the margin of the count.
+
+`Execution.honestTargetVotes_signed_of_checked` in `Consensus/Proofs/ForkChoice/FastConfirmation/RootViability.lean` turns that count into signatures, for the current target ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).
+The caller's store is up to date at a slot start of the target's epoch, and its head passes the two-thirds test.
+The theorem concludes that honest validators with two thirds of the pulled-up head state's active balance each sent a `SignsTarget` statement before the start of the next epoch.
+Three times their stake is at least twice that balance plus the margin of the count.
+Each of them lies in `activeVoters` of that state, the validators active in its current epoch.
+Otherwise the theorem names two honest stores, up to the horizon, whose blocks collide at one root.
+It does not show that a later state counts these votes, or that the target is justified.
+`HonestTargetVotes` stands in for a bound on Byzantine stake and remains a hypothesis.
+`HonestHeadsCover` assumes that every up-to-date honest head descends from a block of the target's epoch, from the call through the start of the next epoch.
+`HeldBlockStateRootsNonzero` assumes that their blocks have nonzero state roots.
+Block agreement between honest stores is not assumed: `Store.blocks_agree_or_collision` splits it from the collision disjunct.
+`CallerHeadAt` assumes that at the start of the next epoch the caller's up-to-date store has a head.
+No theorem yet shows that the head read of an honest store succeeds, so this read is assumed.
+Head totality would discharge it, and it is an outstanding obligation of the endpoint safety issue [#2060](https://github.com/ethereum/EthLib/issues/2060).
+The window of that head over the target's epoch is derived: the theorem takes `Config.CommitteeWindowsFit` and reads it through `Store.getCommitteesBetweenSlots_exists`.
+The head's state is held, and the window ends before the current slot.
+The theorem also assumes `AssignmentWindowAgreement`, `ValidatedDutyVotes`, `Prompt` and `DelayFits`.
+It also requires an anchor block at an epoch start, and a historical vector longer than the seed lookahead by more than two epochs.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
