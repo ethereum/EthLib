@@ -104,28 +104,6 @@ namespace Store
 
 variable {config : Config} {store : Store preset fork}
 
-/-- Before Gloas, in a reachable store, the descent check from a held block can be computed.
-
-Its target must be a held block too. -/
-private theorem isAncestor_ok_of_held (before : fork < .glamsterdam)
-    {anchorState : BeaconState preset fork}
-    {anchorBlock : BeaconBlock preset fork}
-    (reachable : Reachable config anchorState anchorBlock store)
-    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (unknown : store.blocks[anchorBlock.parentRoot]? = none)
-    {root : Root} {rootBlock : BeaconBlock preset fork}
-    (rootFound : store.blocks[root]? = some rootBlock)
-    {node : ForkChoiceNode} {block : BeaconBlock preset fork}
-    (found : store.blocks[node.root]? = some block) :
-    ∃ d, store.isAncestor ⟨root, .pending⟩ node = .ok d := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  obtain ⟨ancestor, walk⟩ :=
-    getAncestor_ok_of_orphans_le (reachable.parentsBelow anchorSlot unknown)
-    (fun r b f orphan => reachable.orphans_le anchorSlot f orphan found)
-    (node := ⟨root, .pending⟩) rootFound
-  exact ⟨ancestor == node, by simp [isAncestor, Store.block, found, walk, notGloas, bind,
-    Except.bind, pure, Except.pure]⟩
-
 /-- Before Gloas, the votes for a held node can be read from any state of small enough stake.
 
 The score is at most the active stake of that state. -/
@@ -149,9 +127,10 @@ private theorem getAttestationScore_exists (before : fork < .glamsterdam)
     intro entry _ message latest _
     obtain ⟨attestation, rfl, origin⟩ := forward.votesHaveOrigins latest
     obtain ⟨voted, votedFound, -⟩ := origin.voted
-    obtain ⟨d, dOk⟩ :=
-      isAncestor_ok_of_held (config := config) before forward.reachable anchorSlot unknown
-        votedFound found
+    obtain ⟨d, dOk⟩ := isAncestor_ok_of_orphans_le
+      (forward.reachable.parentsBelow anchorSlot unknown) found
+      (fun _ _ f orphan => forward.reachable.orphans_le anchorSlot f orphan found)
+      (start := ⟨_, .pending⟩) votedFound
     exact ⟨d, by rw [getSupportedNode_of_lt before]; exact dOk⟩
   -- The counted balances sum to at most all the balances of the list.
   have le : ∀ entries : List (ValidatorIndex × Gwei),
@@ -457,8 +436,10 @@ private theorem getWeight_exists (before : fork < .glamsterdam)
   · exact ⟨votes, by simp [getWeight, notGloas, zero, scoreOk, bind, Except.bind, pure,
       Except.pure]⟩
   obtain ⟨boostBlock, boostFound⟩ := boostHeld.resolve_left zero
-  obtain ⟨d, dOk⟩ := isAncestor_ok_of_held (config := config) before forward.reachable anchorSlot
-    unknown boostFound found
+  obtain ⟨d, dOk⟩ := isAncestor_ok_of_orphans_le
+    (forward.reachable.parentsBelow anchorSlot unknown) found
+    (fun _ _ f orphan => forward.reachable.orphans_le anchorSlot f orphan found)
+    (start := ⟨_, .pending⟩) boostFound
   obtain ⟨proposer, proposerOk⟩ := computeProposerScore_exists fits positive
     (BeaconState.registryWithinLimit_of_lt before state) bounded
   have proposerLe := computeProposerScore_le proposerOk
