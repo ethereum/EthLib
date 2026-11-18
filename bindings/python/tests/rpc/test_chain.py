@@ -782,12 +782,18 @@ def test_account_at_each_block() -> None:
 
 
 def test_storage_values_member_twice() -> None:
-    """A member name written twice in the text is one member, the last, as JSON is read."""
+    """A member name written twice in one object is a parse error, with the identifier null."""
     text = (
         '{"jsonrpc":"2.0","id":1,"method":"eth_getStorageValues","params":'
         f'[{{"{CONTRACT}":["0x1"],"{CONTRACT}":["{KEY}"]}},"latest"]}}'
     )
-    assert _answer(text)["result"] == {CONTRACT: ["0x" + "00" * 31 + "33"]}
+    answer = _error(text)
+    assert answer["id"] is None
+    assert answer["error"] == {
+        "code": -32700,
+        "message": "Parse error",
+        "data": f'offset 164: duplicate object key "{CONTRACT}"',
+    }
 
 
 def test_pending_header() -> None:

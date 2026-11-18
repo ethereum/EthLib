@@ -801,7 +801,7 @@ theorem final_le_one (prog : OracleComp CostSpec HiddenBridge.Outcome) (budget :
     ∑' out, Pr{let x ← interp tg initial model prog budget s}[x = out] *
         finalValue parameter data tg initial R out ≤ 1 := by
   calc _ ≤ ∑' out, Pr{let x ← interp tg initial model prog budget s}[x = out] * 1 := by
-        refine ENNReal.tsum_le_tsum fun out => mul_le_mul_right ?_ _
+        refine tsum_le_tsum fun out => mul_le_mul_right ?_ _
         unfold finalValue
         cases out.1.1 with
         | none => exact zero_le_one
@@ -823,9 +823,9 @@ theorem goodO_draw (L : QueryLog SigningSpec) (draw : ℕ)
   calc _ ≤ ∑' v, Pr{let x ← (liftM (unifSpec.query draw) : ProbComp (Fin (draw + 1)))}[x = v] *
         (potO parameter data w b0 Fail tg initial Lmax s P Ms L d budget +
           b0 * expectedFlagged tg initial model (next v) budget s) :=
-        ENNReal.tsum_le_tsum fun v => mul_le_mul_right (h v budget s P Ms d R hprep hP hM hD hC) _
+        tsum_le_tsum fun v => mul_le_mul_right (h v budget s P Ms d R hprep hP hM hD hC) _
     _ ≤ _ := by
-        simp only [mul_add, ENNReal.tsum_add, ENNReal.tsum_mul_right]
+        simp only [mul_add, tsum_add, ENNReal.tsum_mul_right]
         refine add_le_add (mul_le_of_le_one_left' (OracleComp.tsum_prEvent_le_one _)) (le_of_eq ?_)
         unfold expectedFlagged
         simp only [mul_left_comm _ b0, ENNReal.tsum_mul_left]
@@ -920,7 +920,7 @@ theorem new_pair_boundO {Cmax : ℕ} (hfair : FairS w Cmax Lmax) (hQ : Qtot ≤ 
   by_cases hcap : 1 ≤ lam Lmax ℓ budget
   · -- more landed pairs than the cap: the cap term pays everything
     calc _ ≤ ∑' v, Pr{let x ← ($ᵗ HashOutput : ProbComp HashOutput)}[x = v] * 1 :=
-          ENNReal.tsum_le_tsum fun v => mul_le_mul_right
+          tsum_le_tsum fun v => mul_le_mul_right
             (final_le_one parameter data tg initial model (next v) (budget - 1) _ R) _
       _ ≤ 1 := by simp only [mul_one]; exact (OracleComp.tsum_prEvent_le_one _)
       _ ≤ lam Lmax ℓ budget := hcap
@@ -983,7 +983,7 @@ theorem new_pair_boundO {Cmax : ℕ} (hfair : FairS w Cmax Lmax) (hQ : Qtot ≤ 
   by_cases hr : Realized tg initial s ∨ signatureLimit < L.length
   · refine le_of_eq_of_le (b := 0) ?_ bot_le
     unfold pairE
-    refine ENNReal.tsum_eq_zero.2 fun u => ?_
+    refine tsum_eq_zero_iff.2 fun u => ?_
     have hr' : Realized tg initial (withPair parameter data s p u) ∨ signatureLimit < L.length :=
       hr.imp (realized_of_extends tg initial (extends_withPair hP hp0 u)) id
     simp only [ite_eq_left hr', mul_zero]
@@ -1034,7 +1034,7 @@ theorem goodO_ordinary (hparse : ∀ p call, model.parse (pblk parameter data p 
   · calc _ ≤ ∑' r, Pr{let y ← ordinaryStep model x s.known s}[y = r] *
           (potO parameter data w b0 Fail tg initial Lmax s P Ms L d budget +
             b0 * expectedFlagged tg initial model (next r.1) (budget - 1) r.2) := by
-          refine ENNReal.tsum_le_tsum fun r => ?_
+          refine tsum_le_tsum fun r => ?_
           by_cases hr : r ∈ support (ordinaryStep model x s.known s)
           · refine mul_le_mul_right ?_ _
             have hext := ordinaryStep_extends model x s r hr
@@ -1060,7 +1060,7 @@ theorem goodO_ordinary (hparse : ∀ p call, model.parse (pblk parameter data p 
               (fun q hq => (hP.mem q).1 hq) Ms L d (Nat.sub_le _ _)
           · rw [(prEvent_eq_zero_of_not_mem_support _) hr, zero_mul, zero_mul]
       _ ≤ _ := by
-          simp only [mul_add, ENNReal.tsum_add, ENNReal.tsum_mul_right]
+          simp only [mul_add, tsum_add, ENNReal.tsum_mul_right]
           refine add_le_add (mul_le_of_le_one_left' (OracleComp.tsum_prEvent_le_one _)) ?_
           refine le_add_left (le_of_eq ?_)
           simp only [mul_left_comm _ b0, ENNReal.tsum_mul_left]
@@ -1470,13 +1470,13 @@ theorem fresh_expectO (hparse : ∀ ρ call, model.parse (GraphView.pblk paramet
     have h := scan_bound_comb tg initial model parameter data m hparse hkind s hinv gf
         (fun _ _ => 0)
       digestAttemptLimit (by unfold digestAttemptLimit; norm_num) budget start
-    refine le_trans (ENNReal.tsum_le_tsum fun out => mul_le_mul_right le_self_add _) (le_trans h ?_)
+    refine le_trans (tsum_le_tsum fun out => mul_le_mul_right le_self_add _) (le_trans h ?_)
     refine walk_le landing_le_one _ (fun ρ => ?_) le_rfl bot_le _ start
     unfold poolValue
     cases pcache parameter data m s ρ <;> simp
   calc _ ≤ ∑' start, Pr{let x ← ($ᵗ Randomness : ProbComp Randomness)}[x = start] *
          freshAvg Finset.univ gf :=
-        ENNReal.tsum_le_tsum fun start => mul_le_mul_right (hstart start) _
+        tsum_le_tsum fun start => mul_le_mul_right (hstart start) _
     _ ≤ _ := by rw [ENNReal.tsum_mul_right]; exact mul_le_of_le_one_left'
                   (OracleComp.tsum_prEvent_le_one _)
 
@@ -1721,7 +1721,7 @@ theorem sign_expectO (hparse : ∀ p call, model.parse (pblk parameter data p ca
     rw [termO_eq_cons hm hM]
     exact term_expectO tg initial model hparse' hkind' hinv (excess_props b0) _ _ budget budget
   unfold canonO coreO
-  simp only [mul_add, ENNReal.tsum_add]
+  simp only [mul_add, tsum_add]
   rw [tsum_list_sum]
   calc _ ≤ failMass Fail + (P.map (candO parameter data w Fail s Ms L d (n + 1) budget)).sum +
         (budget * hValueO parameter data w b0 s Ms L d (n + 1) budget + budget * failMass Fail) +
@@ -1807,27 +1807,27 @@ theorem goodO_sign (Lmax : ℕ) (hparse : ∀ p call, model.parse (pblk paramete
       expectedFlagged tg initial model (sign >>= next) budget s := by
     unfold expectedFlagged
     rw [interp_bind, OracleComp.tsum_prEvent_bind_mul]
-    refine ENNReal.tsum_le_tsum fun o1 => mul_le_mul_right ?_ _
+    refine tsum_le_tsum fun o1 => mul_le_mul_right ?_ _
     cases hres : o1.1.1 with
     | none => simp only [hcont, hres, Option.elim]; exact bot_le
     | some r =>
         simp only [hcont, hres, Option.elim]
         rw [interpThen_some tg initial model next budget o1 r hres, OracleComp.tsum_prEvent_map_mul]
         unfold expectedFlagged
-        refine ENNReal.tsum_le_tsum fun o2 => mul_le_mul_right ?_ _
+        refine tsum_le_tsum fun o2 => mul_le_mul_right ?_ _
         simp only [flaggedCount_append, Nat.cast_add]
         exact le_add_self
   rw [interp_bind, OracleComp.tsum_prEvent_bind_mul]
   calc _ ≤ ∑' o1, Pr{let x ← interp tg initial model sign budget s}[x = o1] *
          (canonR o1 + lam Lmax ℓ budget + b0 * cont o1) := by
-        refine ENNReal.tsum_le_tsum fun o1 => ?_
+        refine tsum_le_tsum fun o1 => ?_
         by_cases ho1 : o1 ∈ support (interp tg initial model sign budget s)
         · exact mul_le_mul_right (hpoint o1 ho1) _
         · rw [(prEvent_eq_zero_of_not_mem_support _) ho1, zero_mul, zero_mul]
     _ = ∑' o1, Pr{let x ← interp tg initial model sign budget s}[x = o1] * canonR o1 +
           (∑' o1, Pr{let x ← interp tg initial model sign budget s}[x = o1]) * lam Lmax ℓ budget +
           b0 * ∑' o1, Pr{let x ← interp tg initial model sign budget s}[x = o1] * cont o1 := by
-        simp only [mul_add, ENNReal.tsum_add, mul_left_comm _ b0, ENNReal.tsum_mul_left,
+        simp only [mul_add, tsum_add, mul_left_comm _ b0, ENNReal.tsum_mul_left,
             ENNReal.tsum_mul_right]
     _ ≤ _ := by
         unfold potO

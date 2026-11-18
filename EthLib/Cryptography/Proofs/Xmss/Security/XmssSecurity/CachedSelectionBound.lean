@@ -174,7 +174,7 @@ theorem capped_cachedSelection_probability_le_expectedDigest
   rw [hproj, cappedDetailedGameWithSigningTrace, OracleComp.prEvent_bind_eq_tsum,
     CappedEncodingMonitor.expectedPostKeygenEncodingQueries, div_eq_mul_inv,
     ← ENNReal.tsum_mul_right]
-  refine ENNReal.tsum_le_tsum fun keyResult => ?_
+  refine tsum_le_tsum fun keyResult => ?_
   by_cases hkey : keyResult ∈ support ((simulateQ romImpl Concrete.scheme.keygen).run ∅)
   · rw [mul_assoc]
     refine mul_le_mul' le_rfl ?_

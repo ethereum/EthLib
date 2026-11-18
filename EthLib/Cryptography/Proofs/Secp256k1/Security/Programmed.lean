@@ -161,8 +161,8 @@ theorem noCollisionAdvantage_le_programmed (scheme : Scheme F G A M) (fuel : ℕ
       Pr{let z ← programmedExperiment scheme fuel adversary}[z.2.2.1.Conflict] := by
   rw [noCollisionAdvantage_eq_lazy, StateT.run'_eq, prEvent_map,
     simulateQ_lazyPermImpl_experimentViewQ_run, jointExperiment, programmedExperiment,
-    prEvent_bind_eq_tsum, prEvent_bind_eq_tsum, prEvent_bind_eq_tsum, ← ENNReal.tsum_add]
-  refine ENNReal.tsum_le_tsum fun x => ?_
+    prEvent_bind_eq_tsum, prEvent_bind_eq_tsum, prEvent_bind_eq_tsum, ← tsum_add]
+  refine tsum_le_tsum fun x => ?_
   rw [← mul_add]
   gcongr
   rw [prEvent_jointRun_eq_runWithCheck scheme adversary _ lazyPermOracle [] _

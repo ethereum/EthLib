@@ -170,7 +170,7 @@ theorem expectedSimulatedHashQueryCount_le {α : Type} (computation : OracleComp
             expectedSimulatedQueryCount romImpl IsHashQuery (next result.1) result.2) ≤
           (∑' result, Pr{let x ← (romImpl input).run cache}[x = result]) * (q - cost : Nat) := by
         rw [← ENNReal.tsum_mul_right]
-        apply ENNReal.tsum_le_tsum
+        apply tsum_le_tsum
         intro result
         by_cases hr : result ∈ support ((romImpl input).run cache)
         · exact mul_le_mul' le_rfl (ih result.1 result.2 (q - cost) (hstep result hr).2)
@@ -194,14 +194,15 @@ theorem postKeygenEncoding_add_structural_expected_le
       q := by
   unfold CappedEncodingMonitor.expectedPostKeygenEncodingQueries
     expectedPostKeygenStructuralQueries
-  rw [← ENNReal.tsum_add]
+  rw [← tsum_add]
   simp_rw [← mul_add]
   calc
     _ ≤ ∑' keyResult,
         Pr{let x ← (simulateQ romImpl Concrete.scheme.keygen).run ∅}[x = keyResult] *
           q := by
-      apply ENNReal.tsum_le_tsum
+      apply tsum_le_tsum
       intro keyResult
+      dsimp only
       by_cases hkeyResult : keyResult ∈ support
           ((simulateQ romImpl Concrete.scheme.keygen).run ∅)
       · apply mul_le_mul_right

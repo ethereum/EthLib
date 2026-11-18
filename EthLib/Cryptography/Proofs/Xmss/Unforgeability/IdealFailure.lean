@@ -174,9 +174,11 @@ theorem enncard_le_of_mem_support_prfGame (adversary : ReasonAdversary) {qH r : 
     (hz : z ∈ support ((simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput)
       (prfGame adversary)).run (∅, ∅))) :
     z.2.1.enncard ≤ gameQueries qH r := by
+  -- Compare the sets: the kernel reduces a membership in `support` by running the computation.
   have h := (isQueryBoundP_prfGame adversary hh hr).resource_le_add_of_mem_support_run_simulateQ
     (fun s : IdealState => s.1.toSet.encard)
-    (fun _ _ _ hw => encard_le_of_mem_support_idealImpl hw) hz
+    (fun _ _ _ hw => encard_le_of_mem_support_idealImpl hw)
+    (Set.mem_of_subset_of_mem (by exact subset_rfl) hz)
   simpa [QueryCache.enncard] using h
 
 /-! ## The whole game -/

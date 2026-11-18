@@ -269,7 +269,7 @@ theorem trial_boundS
                    (finishCostSource parameter data message ρ) b s'}[x = out] *
           W out.1.1 out.2 ≤ pairWeight parameter data message reference gf gp ρ u := by
     intro s' u b hrel' hs'
-    refine le_trans (ENNReal.tsum_le_tsum fun out => ?_)
+    refine le_trans (tsum_le_tsum fun out => ?_)
         (finish_boundAll tg initial model parameter data message ρ
       (hparse ρ) s' u hs' _ b)
     by_cases hout : out ∈ support (interp tg initial model
@@ -452,7 +452,7 @@ theorem scan_boundW
               bound * ∑' u, Pr{let x ← ($ᵗ (DigestCall → HashOutput) : ProbComp
                   (DigestCall → HashOutput))}[x = u] *
                 (if Landed parameter (blockIndex (u firstCall)) then 0 else 1) := by
-            rw [← ENNReal.tsum_mul_left, ← ENNReal.tsum_add]
+            rw [← ENNReal.tsum_mul_left, ← tsum_add]
             refine tsum_congr fun u => ?_
             split_ifs
             · simp
@@ -585,8 +585,9 @@ theorem source_post (hparse : ∀ ρ call, model.parse (pblk parameter data mess
       ∀ r, out.1.1 = some r → SignPost parameter data message Fail s out.2 out.1.2.1 r := by
   intro out hout r hr
   unfold signCostSource at hout
-  rw [interp_liftProb_bind, support_bind] at hout
-  obtain ⟨ρ, _, hout⟩ := Set.mem_iUnion₂.1 hout
+  -- Rewrite the set: the kernel reduces a membership in `support` by running the computation.
+  obtain ⟨ρ, _, hout⟩ := Set.mem_iUnion₂.1
+    (Set.mem_of_subset_of_mem (by rw [interp_liftProb_bind, support_bind]) hout)
   exact scan_post tg initial model parameter data message hparse Fail hfail _ budget s ρ hprep out
       hout r hr
 
@@ -765,8 +766,9 @@ theorem source_pairFresh (hparse : ∀ ρ call, model.parse (pblk parameter data
       PairFresh parameter data message out.2 := by
   intro out hout
   unfold signCostSource at hout
-  rw [interp_liftProb_bind, support_bind] at hout
-  obtain ⟨ρ, _, hout⟩ := Set.mem_iUnion₂.1 hout
+  -- Rewrite the set: the kernel reduces a membership in `support` by running the computation.
+  obtain ⟨ρ, _, hout⟩ := Set.mem_iUnion₂.1
+    (Set.mem_of_subset_of_mem (by rw [interp_liftProb_bind, support_bind]) hout)
   exact scan_pairFresh tg initial model parameter data message hparse _ budget s ρ hfresh out hout
 
 /-- The scan signer keeps the pair invariant when it completes. -/
@@ -777,8 +779,9 @@ theorem source_pairInv (hparse : ∀ ρ call, model.parse (pblk parameter data m
       ∀ r, out.1.1 = some r → PairInv parameter data message out.2 := by
   intro out hout r hr
   unfold signCostSource at hout
-  rw [interp_liftProb_bind, support_bind] at hout
-  obtain ⟨ρ, _, hout⟩ := Set.mem_iUnion₂.1 hout
+  -- Rewrite the set: the kernel reduces a membership in `support` by running the computation.
+  obtain ⟨ρ, _, hout⟩ := Set.mem_iUnion₂.1
+    (Set.mem_of_subset_of_mem (by rw [interp_liftProb_bind, support_bind]) hout)
   exact scan_pairInv tg initial model parameter data message hparse _ budget s ρ hinv out hout r hr
 
 /-- The scan queries no message-digest input outside the blocks of the signed message. -/

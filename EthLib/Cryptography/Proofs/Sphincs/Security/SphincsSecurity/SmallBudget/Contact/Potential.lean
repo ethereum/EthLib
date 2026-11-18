@@ -57,9 +57,9 @@ attribute [local instance] Classical.propDecidable
 
 theorem tsum_min_leF {α : Type} (mx : ProbComp α) (X : α → ℝ≥0∞) :
     ∑' a, Pr{let x ← mx}[x = a] * min 1 (X a) ≤ min 1 (∑' a, Pr{let x ← mx}[x = a] * X a) := by
-  refine le_min ?_ (ENNReal.tsum_le_tsum fun a => mul_le_mul_right (min_le_right _ _) _)
+  refine le_min ?_ (tsum_le_tsum fun a => mul_le_mul_right (min_le_right _ _) _)
   calc ∑' a, Pr{let x ← mx}[x = a] * min 1 (X a) ≤ ∑' a, Pr{let x ← mx}[x = a] * 1 :=
-        ENNReal.tsum_le_tsum fun a => mul_le_mul_right (min_le_left _ _) _
+        tsum_le_tsum fun a => mul_le_mul_right (min_le_left _ _) _
     _ = ∑' a, Pr{let x ← mx}[x = a] := by simp only [mul_one]
     _ ≤ 1 := (OracleComp.tsum_prEvent_le_one _)
 
@@ -82,7 +82,7 @@ theorem pairE_sum_range (n : ℕ) (F : (DigestCall → HashOutput) → ℕ → �
     pairE (fun a => ∑ j ∈ Finset.range n, F a j) = ∑ j ∈ Finset.range n, pairE fun a => F a j := by
   unfold pairE
   simp only [Finset.mul_sum]
-  rw [Summable.tsum_finsetSum (fun _ _ => ENNReal.summable)]
+  rw [Summable.tsum_finsetSum (fun _ _ => CompleteLattice.summable)]
 
 /-! ### The potential -/
 
@@ -549,7 +549,7 @@ theorem psiF_ordinary (hMp : model.parse = HiddenGraph.parse K.p (candidateActiv
   simp only [Nat.add_sub_cancel]
   have hmass : ∑' r, Pr{let y ← ordinaryStep model x s.known s}[y = r] = 1 := by simp
   unfold psiF psiCoreF
-  simp only [mul_add, ENNReal.tsum_add, ENNReal.tsum_mul_right, hmass, one_mul]
+  simp only [mul_add, tsum_add, ENNReal.tsum_mul_right, hmass, one_mul]
   rw [add_right_comm]
   refine add_le_add ?_ (lam_mono le_rfl (Nat.le_succ y))
   by_cases hL : signatureLimit < L.length
@@ -613,13 +613,13 @@ theorem psiF_ordinary (hMp : model.parse = HiddenGraph.parse K.p (candidateActiv
       _ ≤ _ := add_le_add le_rfl (mul_le_of_le_one_right' hf1le)
   calc _ ≤ ∑' r, Pr{let y ← ordinaryStep model x s.known s}[y = r] *
         (K.wsum (gA R C0) r.2 + coinPotF K data s Ms L y + κ * ν * S) := by
-        refine ENNReal.tsum_le_tsum fun r => ?_
+        refine tsum_le_tsum fun r => ?_
         by_cases hr : r ∈ support (ordinaryStep model x s.known s)
         · exact mul_le_mul_right (hpt r hr) _
         · rw [(prEvent_eq_zero_of_not_mem_support _) hr, zero_mul, zero_mul]
     _ = ∑' r, Pr{let y ← ordinaryStep model x s.known s}[y = r] * K.wsum (gA R C0) r.2 +
           (coinPotF K data s Ms L y + κ * ν * S) := by
-        simp only [mul_add, ENNReal.tsum_add, ENNReal.tsum_mul_right, hmass, one_mul]
+        simp only [mul_add, tsum_add, ENNReal.tsum_mul_right, hmass, one_mul]
         ring
     _ ≤ (K.wsum (gA R C0) s + ν * C0 * f1) + (coinPotF K data s Ms L y + κ * ν * S) :=
         add_le_add hmean le_rfl

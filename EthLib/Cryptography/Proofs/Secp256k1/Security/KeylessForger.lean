@@ -162,7 +162,7 @@ private theorem mem_keyCandidates [DecidableEq F] [DecidableEq M] {scheme : Sche
       first
       | exact Or.inl (by linear_combination -he)
       | exact Or.inr (by linear_combination he)
-  have hdiv : scheme.hash m / t ≠ scheme.hash m' / t := fun h => hh ((div_left_inj' ht).1 h)
+  have hdiv : scheme.hash m / t ≠ scheme.hash m' / t := fun h => hh ((div_left_inj₀ ht).1 h)
   simp only [List.mem_cons, List.not_mem_nil, or_false]
   rcases key with k | k
   · exact Or.inr (Or.inl (forwardKey_eq_of (scheme := scheme) (z := (m, t, s))
@@ -508,8 +508,8 @@ theorem prEvent_keylessExperiment_win_le {scheme : Scheme F G A M} (hg : scheme.
     bind_map_left]
   simp only [map_bind]
   rw [prEvent_bind_eq_tsum_prEvent, prEvent_bind_eq_tsum_prEvent, prEvent_bind_eq_tsum_prEvent,
-    ← ENNReal.tsum_add]
-  refine ENNReal.tsum_le_tsum fun x => ?_
+    ← tsum_add]
+  refine tsum_le_tsum fun x => ?_
   rw [← mul_add]
   refine mul_le_mul_right ((prEvent_win_le_of_key hg hsemi hnorm fuel adversary x).trans
     (add_le_add (le_of_eq ?_) (le_of_eq ?_))) _

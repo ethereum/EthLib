@@ -16,7 +16,7 @@ from typing import Any
 SCHEMA_VERSION = 1
 MODULE_PREFIXES = ("EthLib",)
 
-# Lean v4.35.0, Lake/Build/Run.lean, `formatTime`.
+# Lean v4.36.0, Lake/Build/Run.lean, `formatTime`.
 # It prints milliseconds up to 1s, one decimal up to 10s, and whole seconds above 10s.
 TARGET_PATTERN = re.compile(r"Built\s+(.+?)\s+\((\d+(?:\.\d+)?)(ms|s)\)")
 
