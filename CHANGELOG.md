@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- `Xmss.Cost` and `Sphincs.Cost` state the hash calls of key generation, signing and verification ([#3334](https://github.com/ethereum/EthLib/issues/3334)).
+  XMSS bounds them on every path: at most `13434881`, `8630239231` and `384` calls.
+  leanSPHINCS counts them under a fixed answer function: exactly `264193`, at most `12885841387`, and at most `491`, exactly `491` when verification accepts.
+
 - `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).
   It compares the call's pulled-up state with a later state in the target's epoch or the next, before Gloas from Fulu.
   `Execution.quorumDriftWithin` builds those runs from the stores and proves `QuorumDriftWithin` with BLS checks.
