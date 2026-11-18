@@ -455,6 +455,7 @@ structure Setting (config : Config) (checks : SignatureChecks) (g : ForkedBeacon
   parameters : DirectSafety.Parameters preset
   aligned : MaxEffectiveBalancesAligned preset
   twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat
+  pulledTotal : ∃ t, getTotalActiveBalance pulled = .ok t
   room : 2 ^ 32 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat
   below : preset.downwardBand < preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   guard : DirectSafety.Apriori.aprioriGuardAt config ⟨fork, fin⟩ (getCurrentEpoch pulled).toNat
