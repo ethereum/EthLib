@@ -1047,41 +1047,11 @@ private theorem passPendingDeposits_departureQueues {fork : Fork}
     ∀ {deposits : List PendingDeposit} {s : BeaconState preset fork} {processed : Gwei}
       {count : Nat} {postponed : Array PendingDeposit} {pass},
       passPendingDeposits config checks stop nextEpoch available s processed count postponed
-        deposits = .ok pass → departureQueues electra pass.1.state = departureQueues electra s
-  | [], _, _, _, _, _, ok => by cases ok; rfl
-  | deposit :: rest, s, processed, count, postponed, pass, ok => by
-    unfold passPendingDeposits at ok
-    simp only [bind, Except.bind, pure, Except.pure] at ok
-    split at ok
-    · cases ok; rfl
-    split at ok
-    · cases ok
-    split at ok
-    · split at ok
-      · cases ok
-      rename_i credited
-      split at ok
-      · cases ok
-      cases ok
-      exact (passPendingDeposits_departureQueues electra (deposits := rest) ‹_›).trans
-        (pendingDeposit_departureQueues electra credited)
-    split at ok
-    · split at ok
-      · cases ok
-      cases ok
-      exact passPendingDeposits_departureQueues electra (deposits := rest) ‹_›
-    split at ok
-    · cases ok
-    split at ok
-    · cases ok; rfl
-    split at ok
-    · cases ok
-    rename_i credited
-    split at ok
-    · cases ok
-    cases ok
-    exact (passPendingDeposits_departureQueues electra (deposits := rest) ‹_›).trans
-      (pendingDeposit_departureQueues electra credited)
+        deposits = .ok pass → departureQueues electra pass.1.state = departureQueues electra s :=
+  fun ok =>
+    passPendingDeposits_of (fun s t => departureQueues electra t = departureQueues electra s)
+      (fun _ => rfl) (fun one two => two.trans one)
+      (fun credited => pendingDeposit_departureQueues electra credited) ok
 
 /-- Crediting pending deposits preserves both departure queues. -/
 private theorem pendingDeposits_departureQueues {fork : Fork} {s t : BeaconState preset fork}
@@ -1318,46 +1288,14 @@ private theorem pendingDeposits_coverage {fork : Fork} {s t : BeaconState preset
         {count : Nat} {postponed : Array PendingDeposit} {result},
         passPendingDeposits config checks stop nextEpoch available state processed count
           postponed deposits = .ok result →
-            DepartureCoverage (config := config) state result.1.state [] := by
-    intro deposits
-    induction deposits with
-    | nil => intro state processed count postponed result ok; cases ok; exact .of_data rfl
-    | cons deposit rest ih =>
-      intro state processed count postponed result ok
-      unfold passPendingDeposits at ok
-      simp only [bind, Except.bind, pure, Except.pure] at ok
-      split at ok
-      · cases ok; exact .of_data rfl
-      split at ok
-      · cases ok
-      split at ok
-      · split at ok
-        · cases ok
-        rename_i credited
-        split at ok
-        · cases ok
-        cases ok
-        exact (pendingDeposit_coverage credited).suffix_of_empty (ih ‹_›)
-          (registryLifecycle_applyPendingDeposit credited)
-          (registryLifecycle_passPendingDeposits (deposits := rest) ‹_›)
-      split at ok
-      · split at ok
-        · cases ok
-        cases ok
-        exact ih ‹_›
-      split at ok
-      · cases ok
-      split at ok
-      · cases ok; exact .of_data rfl
-      split at ok
-      · cases ok
-      rename_i credited
-      split at ok
-      · cases ok
-      cases ok
-      exact (pendingDeposit_coverage credited).suffix_of_empty (ih ‹_›)
-        (registryLifecycle_applyPendingDeposit credited)
-        (registryLifecycle_passPendingDeposits (deposits := rest) ‹_›)
+            DepartureCoverage (config := config) state result.1.state [] := fun ok =>
+    -- The lifecycle of the registry carries the empty coverage across each deposit.
+    (passPendingDeposits_of
+      (fun s t => DepartureCoverage (config := config) s t [] ∧ RegistryLifecycle s t)
+      (fun _ => ⟨.of_data rfl, .refl _⟩)
+      (fun one two => ⟨one.1.suffix_of_empty two.1 one.2 two.2, one.2.trans two.2⟩)
+      (fun credited => ⟨pendingDeposit_coverage credited,
+        registryLifecycle_applyPendingDeposit credited⟩) ok).1
   unfold processPendingDeposits at ok
   simp only [bind, Except.bind, pure, Except.pure] at ok
   repeat' (split at ok <;> try cases ok)
