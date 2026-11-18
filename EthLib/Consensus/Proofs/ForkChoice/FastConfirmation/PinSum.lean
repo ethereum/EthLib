@@ -778,6 +778,7 @@ private theorem sum_le_exiting (config : Config)
       = ∑ i ∈ S.image (fun v : ValidatorIndex => v.toNat), balanceAt state i :=
         (Finset.sum_image (fun a _ b _ same => UInt64.toNat_inj.mp same)).symm
     _ ≤ (pinTerms config state ancestor finalizedState).exiting := by
+      dsimp only [pinTerms]
       refine Finset.sum_le_sum_of_subset (f := fun i => balanceAt state i) ?_
       intro i hi
       obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
