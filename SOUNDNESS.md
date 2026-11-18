@@ -3301,6 +3301,7 @@ The theorem bounds the drift by the reserve, but whether the reserve is small en
 `Execution.rootViable_of_checked_call` and `Execution.honestHeadsCover_of_checked_call` still take `QuorumDriftWithin` as a premise.
 A caller with BLS checks from Fulu to before Gloas discharges it with `Execution.quorumDriftWithin`.
 `Execution.heldStatesBeforeUpgrade_of_bounded` likewise discharges `HeldStatesBeforeUpgrade` from the horizon and `HonestStoreEpochsBounded`.
+`Execution.confirmedRoot_covers` below discharges it the same way, so it does not take `QuorumDriftWithin` as a premise.
 The model's genesis time must be the anchor state's (`secondsToMilliseconds anchorState.genesisTime = genesisTimeMs`), a fact of the configuration that holds for every real anchor.
 
 `JustifiedPinned` is a further premise, absent from the signed-justification headline.
@@ -3322,6 +3323,36 @@ The paper's conclusion is a seed whose unrealized justification is the target or
 The premise also allows two honest stores that collide, since the seed reads the call's block at the target root.
 Votes for the target of epoch E count until start(E+1) − 1, and the conclusion applies once a receiver's epoch is E + 2 or later.
 
+`Execution.confirmedRoot_covers` in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean` addresses Theorem 1 of [#1458](https://github.com/ethereum/EthLib/issues/1458).
+It takes consecutive calls of the rule by one honest validator, one per slot from `firstSlot`, run from the anchor store.
+After the last call, the confirmed root is on every up-to-date honest head from the next slot to the horizon.
+The alternatives are a collision between blocks held by honest stores, or accountable-safety evidence.
+That evidence is `HistoricalDirectSafetyEvidence`, `CrossStoreDirectSafetyEvidence`, `CrossStoreJustifiedEvidence` or `HeldStateFinalityEvidence`.
+Each evidence alternative is relative to the anchor, so with enough churn since the anchor it holds with no accountable key.
+The theorem covers executions whose honest stores verify signatures with BLS (`checks = .bls`).
+The specification's pulled-up head state processes slots with BLS checks, and a run under other checks can differ from it.
+The fork is Fulu or later and before Gloas.
+`Execution.callInvariant_step` proves the step: each call keeps `CallInvariant`, given the invariant at every earlier call.
+The step derives `QuorumDriftWithin` with `Execution.quorumDriftWithin`, and the honest target count with `Execution.honestTargetVotes_of_byzantineStakeAtMost`.
+So the endpoint takes neither as a premise.
+In their place it takes the parameter facts that the drift bound reads, except for the seed lookahead.
+For it the endpoint takes `Preset.SeedLookaheadAtLeastThree`, a lookahead of at least three epochs.
+The drift bound needs a lookahead of one epoch, and the near exit bound below needs three.
+
+The endpoint assumes `CallObligations` of each call.
+They apply when a call walks from its head to the start it selected.
+Then they assume the source reads of the later windows (`SourceWindowReads`) and the head read at each rollover (`CallRolloverRead`).
+They also assume `TargetCountBounds` with the call's pin reserve, and the realized guards `AcceptedRealizedRecent` and `AcceptedRealizedHead`.
+For each walked member they assume `MemberObligations`.
+That is the member's margin over its committee weight, which pays for the drift of each later window, and the reserve of each later window.
+That reserve is `exitReserveNear`, the active source stake already scheduled to exit within three epochs, not `exitReserve`.
+Under `Preset.SeedLookaheadAtLeastThree`, `Execution.receiverWindowExitsNear_of_sourceOnParentChain` bounds each near receiver's exits by it.
+An exit that starts at the source's epoch or later lands at least `MAX_SEED_LOOKAHEAD + 1` epochs after it.
+The near window reaches three epochs past the source, so the proof needs a lookahead of three to keep each such exit out of it.
+`MemberObligations` also includes `LateDutyMajority` and `NewlyActiveVotersInHeadWindow` for the member's parent.
+A call that keeps its start walks no roots, and assumes nothing.
+The run also assumes `JustifiedPinned` at margin 0, `JustifiedHonestlySigned`, `TargetIncluded` and `StaleHeadVotersInWindow`, which are described above.
+
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
 It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.
@@ -3330,9 +3361,9 @@ That block must then be in the epoch before the current one, and its checkpoint 
 The rule stores that block, or a later root of the walk of `getAncestorRoots` from that block to the head.
 That root and each root before it in the walk then pass `isOneConfirmed`, with the votes of the state of the observed justified checkpoint.
 The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` shows that the second walk is the part of the first walk after the root where the first walk stopped.
-No theorem yet shows that the roots of a walk are in the chain of the head.
 
-These theorems prove no safety: no theorem yet shows that a start is safe, or that a one-confirmed walk keeps a block in the chain of every honest head.
+`Store.parentRoot_of_getAncestorRoots` shows that the roots of a walk are in the chain of the head.
+These theorems prove no safety on their own; `Execution.confirmedRoot_covers` above does, under its premises.
 `Store.onFastConfirmation_confirmedRoot` and `Store.getLatestConfirmed_eq_or` do not record every check of the rule.
 For the start they leave out the other checks that compare the epochs and the slots of the blocks.
 For the walks they leave out the checks on the epochs of the start and of the walked blocks.

@@ -3266,4 +3266,159 @@ theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : ℕ} {anch
   exact .inl (walk_invariant ctx calls headOk slotOk checked walked confirmedAll startInv inputs
     (covers after.confirmedRoot (by simp)))
 
+/-- Every event of a run of calls starts no later than the slot after the last event. -/
+private theorem time_le_following {u : ValidatorIndex} {events : List ℕ} {firstSlot : Slot}
+    (atSlots : ∀ i n, events[i]? = some n → ∃ slot begin,
+      ((e.world n).state u).getCurrentSlot config = .ok slot ∧
+      slot.toNat = firstSlot.toNat + i ∧
+      computeTimeAtSlotMs config genesisTimeMs slot = .ok begin ∧
+      (e.world n).time = begin.toNat)
+    {n : ℕ} {slot next : Slot} {following : UInt64}
+    (lastEvent : events.getLast? = some n)
+    (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot)
+    (nextOk : addChecked slot 1 = .ok next)
+    (followingOk : computeTimeAtSlotMs config genesisTimeMs next = .ok following)
+    {i m : ℕ} (event : events[i]? = some m) :
+    (e.world m).time ≤ following.toNat := by
+  have lastAt : events[events.length - 1]? = some n := by
+    rw [← List.getLast?_eq_getElem?]; exact lastEvent
+  obtain ⟨slotL, -, slotOkL, slotEqL, -, -⟩ := atSlots _ _ lastAt
+  rw [slotOk] at slotOkL
+  cases slotOkL
+  obtain ⟨slotI, beginI, -, slotEqI, beginOkI, timeEqI⟩ := atSlots _ _ event
+  have iLt : i < events.length := (List.getElem?_eq_some_iff.mp event).1
+  have nextEq := (addChecked_ok_iff.mp nextOk).2
+  have le : slotI ≤ next := UInt64.le_iff_toNat_le.mpr (by simp at nextEq; omega)
+  obtain ⟨start, startOk, -, startLe⟩ := exists_timeAtSlotMs_of_le le followingOk
+  rw [beginOkI] at startOk
+  cases startOk
+  rw [timeEqI]
+  exact UInt64.le_iff_toNat_le.mp startLe
+
+/-- The confirmed root of the last of consecutive calls of one honest validator covers honest heads.
+
+Every up-to-date honest head descends from it, from the slot after the last call to the horizon.
+
+The alternatives are a collision of two honest stores and four kinds of accountable-safety evidence.
+
+The evidence is historical, cross-store direct-safety, cross-store justified or held-state finality.
+
+Each call assumes its obligations, and the calls are at consecutive slots from the first slot.
+
+The execution verifies signatures with BLS, as the pulled-up head state of the rule does. -/
+theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store preset fork}
+    {limit : ℕ} {horizon anchorEpoch : Epoch} {g : ForkedBeaconState preset}
+    (pre : Run config checks g ⟨fork, anchorState⟩) (bls : checks = .bls)
+    (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
+    (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
+    (exitWindow : preset.SeedLookaheadAtLeastThree)
+    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (preGloas : fork < .glamsterdam) (admitted : BlocksAdmitted e 0 Δ limit)
+    (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
+    (long : 1 < preset.SLOTS_PER_EPOCH)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (maxAligned : MaxEffectiveBalancesAligned preset)
+    (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (votes : ValidatedDutyVotes (e := e) limit) (fits : DelayFits fork config genesisTimeMs Δ)
+    (prompt : Prompt e limit) (windows : AssignmentWindowAgreement (e := e) limit)
+    (fit : config.CommitteeWindowsFit preset)
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (start : ∀ w ∈ J, e.start w = anchor)
+    (anchorEpochOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
+    (increment : preset.EFFECTIVE_BALANCE_INCREMENT.toNat % 100 = 0)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon limit)
+    (roots : HeldBlockStateRootsNonzero (e := e) limit)
+    (unslashed : HonestCountedStatesUnslashed (e := e) limit)
+    (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) limit)
+    (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
+    (parameters : DirectSafety.Parameters preset) (genesis : Genesis config checks g)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) limit)
+    (enough : HeldRunStakeFloor (e := e) pre horizon limit)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon limit)
+    (absent : AnchorParentAbsent (e := e) limit)
+    (pinned : JustifiedPinned (e := e) anchorEpoch 0 0 limit)
+    (signedAll : JustifiedHonestlySigned (e := e) anchorEpoch 0 limit)
+    (fusaka : .fusaka ≤ fork) (band : preset.IncrementWithinUpwardBand)
+    (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (capEq : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
+    (capOrder : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
+    (included : TargetIncluded (e := e) limit) (stale : StaleHeadVotersInWindow (e := e) limit)
+    (reference : ∃ x ∈ J, ∃ m, ∃ referenceSlot finish : Slot, limit ≤ (e.world m).time ∧
+      UpToDate config checks sources (e.world m).time ((e.world m).view x)
+        ((e.world m).state x) ∧
+      ((e.world m).state x).getCurrentSlot config = .ok referenceSlot ∧
+      subChecked referenceSlot 1 = .ok finish)
+    {u : ValidatorIndex} (caller : u ∈ J) {events : List ℕ} {firstSlot : Slot}
+    (confirmationEpoch : 2 ≤ computeEpochAtSlot preset firstSlot)
+    (anchorEpochBefore : getCurrentEpoch anchorState < computeEpochAtSlot preset firstSlot)
+    (upToDate : ∀ n ∈ events, UpToDate config checks sources (e.world n).time
+      ((e.world n).view u) ((e.world n).state u))
+    (atSlots : ∀ i n, events[i]? = some n → ∃ slot begin,
+      ((e.world n).state u).getCurrentSlot config = .ok slot ∧
+      slot.toNat = firstSlot.toNat + i ∧
+      computeTimeAtSlotMs config genesisTimeMs slot = .ok begin ∧
+      (e.world n).time = begin.toNat)
+    {last : FastConfirmationStore}
+    (folded : (events.map fun n => (e.world n).state u).foldlM
+      (fun fcr store => store.onFastConfirmation config fcr) (getFastConfirmationStore anchor) =
+        .ok last)
+    (obligations : ∀ i n fcr after,
+      CallAt (e := e) u events (getFastConfirmationStore anchor) i n fcr after →
+      CallObligations (e := e) 0 limit u n fcr after)
+    {n : ℕ} {slot next : Slot} {following : UInt64}
+    (lastEvent : events.getLast? = some n)
+    (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot)
+    (nextOk : addChecked slot 1 = .ok next)
+    (followingOk : computeTimeAtSlotMs config genesisTimeMs next = .ok following)
+    (followingLe : following.toNat ≤ limit) :
+    HonestHeadsCover (e := e) last.confirmedRoot following.toNat (limit + 1) ∨
+      HonestCollision (e := e) limit ∨ HistoricalDirectSafetyEvidence (e := e) pre limit ∨
+      CrossStoreDirectSafetyEvidence (e := e) pre limit ∨
+      CrossStoreJustifiedEvidence (e := e) pre limit ∨
+        HeldStateFinalityEvidence (e := e) pre limit := by
+  by_cases bad : Bad (e := e) pre limit
+  · exact .inr bad
+  have timeLe : ∀ i m, events[i]? = some m → (e.world m).time ≤ limit := fun i m event =>
+    Nat.le_trans (time_le_following atSlots lastEvent slotOk nextOk followingOk event)
+      followingLe
+  -- The call invariant holds at every call, by strong induction on the call's index.
+  have invariant : ∀ i n fcr after,
+      CallAt (e := e) u events (getFastConfirmationStore anchor) i n fcr after →
+      CallInvariant (e := e) 0 limit anchor.finalizedCheckpoint.root u n after.confirmedRoot := by
+    intro i
+    induction i using Nat.strong_induction_on with
+    | _ i earlier =>
+      intro n fcr after calls
+      rcases e.callInvariant_step pre bls anchorGenesis sync slots positive minLookahead exitWindow
+        ring preGloas admitted half long window maxAligned incrementPositive votes fits prompt
+        windows fit anchored sound anchorSlot anchorBoundary start anchorEpochOk increment bounded
+        roots unslashed ceiling scoreFits parameters genesis heldEarly enough terminal absent
+        pinned signedAll fusaka band withdrawDelay capEq capOrder forkWindow included stale
+        reference caller confirmationEpoch anchorEpochBefore upToDate atSlots calls
+        (timeLe i n calls.1) (obligations i n fcr after calls) (fun i' lt => earlier i' lt) with
+        holds | evidence
+      · exact holds
+      · exact absurd evidence bad
+  -- The last call is the last step of the run of calls.
+  obtain ⟨ys, rfl⟩ := List.getLast?_eq_some_iff.mp lastEvent
+  rw [List.map_append, List.foldlM_append] at folded
+  cases prefixOk : (ys.map fun n => (e.world n).state u).foldlM
+      (fun fcr store => store.onFastConfirmation config fcr) (getFastConfirmationStore anchor) with
+  | error fault => simp [prefixOk, bind, Except.bind] at folded
+  | ok fcr =>
+    simp only [prefixOk, bind, Except.bind, List.map_cons, List.map_nil, List.foldlM_cons,
+      List.foldlM_nil] at folded
+    have callOk : ((e.world n).state u).onFastConfirmation config fcr = .ok last := by
+      cases called : ((e.world n).state u).onFastConfirmation config fcr with
+      | error fault => simp [called] at folded
+      | ok after => simpa [called, pure, Except.pure] using folded
+    have calls : CallAt (e := e) u (ys ++ [n]) (getFastConfirmationStore anchor) ys.length n
+        fcr last := ⟨by simp, by simpa using prefixOk, callOk⟩
+    exact .inl ((invariant _ _ _ _ calls).1 slot next following slotOk nextOk followingOk)
+
 end EthLib.Consensus.Models.Network

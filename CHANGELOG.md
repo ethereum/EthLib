@@ -76,6 +76,32 @@ Not yet released.
   The churn call writes only the churn left and the earliest consolidation epoch.
   The source then gets its exit and withdrawable epochs, and the consolidation joins the queue.
 
+- `Execution.confirmedRoot_covers` covers the last confirmed root of consecutive calls of the fast confirmation rule by one honest validator ([#1458](https://github.com/ethereum/EthLib/issues/1458), Theorem 1).
+  That root is on every up-to-date honest head from the next slot to a horizon.
+  The alternatives are a collision of two honest stores and four kinds of accountable-safety evidence: historical, cross-store direct-safety, cross-store justified and held-state finality.
+  It covers executions whose honest stores verify signatures with BLS (`checks = .bls`), because the specification's pulled-up head state processes slots with BLS checks.
+  Each call assumes `CallObligations`, with `MemberObligations` for each member of its walk.
+  `MemberObligations` states each window reserve at `exitReserveNear`, the reserve that the exit bound of the walk's receivers gives.
+  The run assumes `JustifiedPinned`, `JustifiedHonestlySigned`, `TargetIncluded` and `StaleHeadVotersInWindow`; `SOUNDNESS.md` describes them.
+  `Execution.callInvariant_step` is the step: one call keeps `CallInvariant`, given the invariant at every earlier call.
+  `CallAt` names one call in a run of calls by one validator.
+  The step reads these new or newly public lemmas:
+  - `Store.parentRoot_of_getAncestorRoots` and `Store.isAncestor_terminal_of_getAncestorRoots` give the parent and ancestry of each walked root.
+  - `Store.viable_of_ancestor` passes viability from a root to its ancestors before Gloas.
+  - `Execution.walk_covers` covers a walk of roots from its start and a step.
+  - `Execution.honestHeadsCover_of_viableAt` is the induction behind the historical-anchor headlines, with the root's viability given per time.
+    Its window reserve and its receivers' exits read one reserve value; the headlines pass `exitReserve`.
+  - `Execution.rootViableAt_of_checked` gives that viability for the root of a checked call.
+  - `Store.not_isOneConfirmed_of_slot_eq_current` leaves a block at the current slot unconfirmed.
+  - `Store.ForwardReachable.justified_origins_epoch`, `Store.ForwardReachable.pulledUp_le_unrealized`, `Store.Reachable.justified_epoch_le_unrealized` and `Execution.unrealizedJustified_epoch_le_of_le` bound the justified checkpoints of a store.
+  - `Store.adversaryRange_start` and `Store.ForwardReachableWith.supportersOf_mem_committees_of_near` read the adversary's range of a block and its committees; `Store.ForwardReachableWith.supportersOf_mem_committees` now reads the second.
+  - `Store.updateCheckpoints_justifiedCheckpoint`, `Store.onTick_unrealizedJustifiedCheckpoint` and `Store.onBlock_unrealized_epoch_le` are the store steps of the justified bounds above.
+    `Store.updateCheckpoints_unrealizedJustifiedCheckpoint` and `Store.onTick_justifiedCheckpoint_of_unrealized` are public again, with their statements unchanged.
+  - `Execution.crossStoreFinality_or_evidence` puts one honest store's finalized checkpoint on another's justified chain at that epoch or later, or gives `CrossStoreDirectSafetyEvidence`.
+    `Execution.finalized_read_or_accountable` is its step for one pair of stores.
+  - `Execution.anchor_stateRoot_nonzero` shows that an honest held copy of the anchor block has a nonzero state root.
+  - `Store.getCheckpointForBlock_eq_ok_iff` reads the checkpoint of an epoch in a chain as that epoch and its checkpoint block.
+
 - `Execution.rootViable_of_checked_call` shows that the confirmed root of a call of the fast confirmation rule stays viable from the call up to `time` ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 3, for the confirmed root).
   At each up-to-date honest store, the root is in the filtered tree or below the justified block.
   The alternatives are a collision of two honest stores and accountable-safety evidence.
