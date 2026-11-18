@@ -268,8 +268,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   --
   -- Both branches can credit and debit those seats, so they count twice.
   let syncSeats := 3 * (2 * depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope)
-  let depositCredit := if electra : .pectra ≤ fork then
-      (state.depositBalanceToConsume electra).toNat + depositChurn else 0
   let due := if electra : .pectra ≤ fork then
       (state.pendingConsolidations electra).data.toList.filter fun c =>
         ((validator c.sourceIndex.toNat).map fun v =>
@@ -283,7 +281,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   --
   -- The band of each credited key is not scaled.
   let credits :=
-    (11 * (depth * (proposerCredit + depositCredit) + dueStake + whistleblowerExtra) + 9) / 10 +
+    (11 * (depth * proposerCredit + depositCarry + depthFin * depositChurn + dueStake +
+      whistleblowerExtra) + 9) / 10 +
       creditedKeys * preset.upwardBand
   -- Each key the call's branch credits or debits can move by a rounding step and a band.
   --
@@ -684,6 +683,39 @@ def K6 : Finset ValidatorIndex := (AC counted).filter fun v => v ∈ Q counted �
 
 end Costs
 
+/-! ## Sums over validator indices, read at positions -/
+
+/-- A sum over validator indices is at most the sum over a set of positions that holds them all.
+
+An index is read at its position, `toNat` is injective, and the terms are natural numbers. -/
+private theorem sum_toNat_le {S : Finset ValidatorIndex} {P : Finset ℕ} (f : ℕ → ℕ)
+    (inside : ∀ v ∈ S, v.toNat ∈ P) : ∑ v ∈ S, f v.toNat ≤ ∑ i ∈ P, f i := by
+  classical
+  calc ∑ v ∈ S, f v.toNat
+      = ∑ i ∈ S.image (fun v : ValidatorIndex => v.toNat), f i :=
+        (Finset.sum_image (fun a _ b _ same => UInt64.toNat_inj.mp same)).symm
+    _ ≤ ∑ i ∈ P, f i := by
+      refine Finset.sum_le_sum_of_subset ?_
+      intro i hi
+      obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
+      exact inside v hv
+
+/-- A position that holds a validator and meets a test is among the positions that meet it. -/
+private theorem mem_positions_filter (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) {i : ℕ} {w : Validator}
+    (found : state.validators.data[i]? = some w) {p : ℕ → Prop} [DecidablePred p] (test : p i) :
+    i ∈ (pinTerms config state ancestor finalizedState).positions.filter p :=
+  Finset.mem_filter.mpr ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1, test⟩
+
+/-- A voter active at the epoch of a state holds a validator there that is active at that epoch. -/
+private theorem active_of_activeVoters (early : fork < .glamsterdam)
+    {s : BeaconState preset fork} {v : ValidatorIndex} (member : v ∈ activeVoters s) :
+    ∃ w, s.validators.data[v.toNat]? = some w ∧
+      isActiveValidator w (getCurrentEpoch s) = true := by
+  have listed : v ∈ getActiveValidatorIndices s (getCurrentEpoch s) := by
+    simpa [activeVoters] using member
+  exact (mem_getActiveValidatorIndices (s.validators.bound early)).mp listed
+
 /-! ## Per-term stubs -/
 
 section Stubs
@@ -717,7 +749,7 @@ theorem stub_V (h : Setting config checks g split fin pulled anc counted V)
     cV1 pulled counted V + cV2 pulled counted V ≤
       ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) + (∑ v ∈ V, credR tail high v.toNat) +
         (∑ v ∈ V, (syncF events v.toNat + syncF eventsC v.toNat)) + (∑ v ∈ V, credDepR events v.toNat) +
-        (∑ v ∈ V, consAmt events v.toNat) +
+        (∑ v ∈ V, consAmt events v.toNat) + preset.upwardBand * dueAt fin high V +
         (∑ v ∈ (VN counted V), exitQ tailC v.toNat) +
         (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
         (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) : ℕ) := sorry
@@ -758,6 +790,9 @@ Its stake in C is at most its stake at R and its rise.
 
 So is the stake of a key whose exit R reads, which `exiting` and `exitingRise` charge. -/
 theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
@@ -766,7 +801,8 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).exitingB v.toNat = true,
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
-      (∑ v ∈ (K6 pulled counted), (credC tailC highC v.toNat + whistC tailC highC v.toNat))) : ℕ) := sorry
+      (∑ v ∈ (K6 pulled counted), (credC tailC highC v.toNat + whistC tailC highC v.toNat)) +
+      (∑ v ∈ (K6 pulled counted), (syncF events v.toNat + syncF eventsC v.toNat))) : ℕ) := sorry
 
 /-- The keys that `exitingB` marks have their effective balances in `exiting`. -/
 private theorem sum_le_exiting (config : Config)
@@ -957,7 +993,7 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
         3 * ((pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer) ≤
       (pinTerms config pulled anc fin).branchR := sorry
 
-/-- S1 (syncSeats): every seat, weight 3.
+/-- S1 (syncSeats): every seat, weight 3 for V, K4 and K5 and 1 for K6.
 
 The proposer's share of the sync credits is in `syncF`, so the bound adds the `syncProposer` part
 that `credits`, `exitingCredits` and `branchR` leave. -/
@@ -969,7 +1005,8 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
     3 * ((∑ v ∈ V, (syncF events v.toNat + syncF eventsC v.toNat)) + (∑ v ∈ (K4 pulled counted V), (syncF events v.toNat + syncF eventsC v.toNat)) +
-      (∑ v ∈ (K5 counted V), (syncF events v.toNat + syncF eventsC v.toNat))) ≤
+      (∑ v ∈ (K5 counted V), (syncF events v.toNat + syncF eventsC v.toNat))) +
+      (∑ v ∈ (K6 pulled counted), (syncF events v.toNat + syncF eventsC v.toNat)) ≤
         (pinTerms config pulled anc fin).syncSeats +
           6 * ((pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer) := sorry
 
@@ -1105,7 +1142,7 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have sV := two_le_three (stub_V (config := config) h tail high endEpoch replayed tailC highC endEpochC replayedC)
   have sN := stub_N (config := config) h tail high endEpoch replayed tailC highC endEpochC replayedC
   have sP := stub_P (config := config) h tail high endEpoch replayed tailC highC endEpochC replayedC
-  have sJ := stub_J (config := config) h tailC highC endEpochC replayedC
+  have sJ := stub_J (config := config) h tail high endEpoch replayed tailC highC endEpochC replayedC
   have b1 := bud_exiting (config := config) h
   have b2 := bud_late (config := config) h
   have b3 := bud_queues (config := config) h tailC
@@ -1122,7 +1159,14 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have b15 := bud_consolidations (config := config) h fromFin tail high endEpoch replayed highLeR
     tailC highC endEpochC replayedC highLe shallow band
   have b16 := bud_exitedR (config := config) h
-  have b15' := Nat.le_trans (Nat.le_add_right _ _) b15
+  -- The band of each due entry naming a V key is paid by `bud_consolidations`' V share.
+  have bandV : 3 * (preset.upwardBand * dueAt fin high V) ≤
+      preset.upwardBand * (dueAt fin highC (K4 pulled counted V) +
+        dueAt fin highC (K6 pulled counted) + 3 * dueAt fin highC (K5 counted V) +
+        3 * dueAt fin high V) := by
+    rw [Nat.mul_left_comm]
+    exact Nat.mul_le_mul_left _ (by omega)
+  have b15' := Nat.le_trans (Nat.add_le_add_left bandV _) b15
   have qs := queues_split config pulled anc fin
   have b14 := bud_whistle (config := config) h tailC highC endEpochC replayedC
   have w4 : 0 ≤ ∑ v ∈ (K4 pulled counted V), (whistC tailC highC v.toNat : ℤ) :=
