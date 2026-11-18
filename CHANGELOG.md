@@ -34,15 +34,17 @@ Not yet released.
 
 - Its transition facts are in `Transition/BlockLedger.lean`, `Transition/BlockCredits.lean`, `Transition/BranchLedger.lean`, `Transition/EffectiveRise.lean`, `Transition/EffectiveFall.lean`, `Transition/EpochReads.lean` and their neighbours.
   The ledger of a block's balances is in `BlockLedger`, its proposer and deposit credits in `BlockCredits`, and the tally of an epoch's blocks in `BranchLedger`.
-  The generic pieces sit with their kind: `getBeaconProposerIndex_congr` and `proposerSearch_congr_validators` in `Accessors`, `WithdrawableKept` in `RegistryLifecycle` and `withdrawableKept_processRegistryUpdates` in `PendingConsolidations`.
+  The helpers of the first two are public in the namespaces `BlockLedger` (such as `BlockLedger.Ledger` and `BlockLedger.Lives`) and `BlockCredits` (such as `BlockCredits.Kept` and `BlockCredits.lt_size_of_isActiveAt_recent`).
+  The generic pieces sit with their kind: `getBeaconProposerIndex_congr` and `proposerSearch_congr_validators` in `Accessors`, `WithdrawableKept` in `RegistryLifecycle`, and `withdrawableKept_processRegistryUpdates` in `PendingConsolidations` next to the registry-update lemma it reads.
   `payloadInputs_addValidatorToRegistry` and `payloadInputs_processDeposit` are in `PayloadInputs`, and the `actualBalanceAt_*` step lemmas and the hysteresis lemmas are in `BalanceDrift`.
-  The growth of the queue of pending consolidations inside an epoch (`QueueFrom`, `QueueGrows`, `RiseStep`, `riseStep_processBlock`) is in `PendingConsolidations`, and `Base.Array.findIdx?_of_prefix` in `Base/Proofs/List.lean`.
+  The growth of the queue of pending consolidations inside an epoch is in `PendingConsolidations`, as `ConsolidationQueueRise.QueueFrom`, `ConsolidationQueueRise.Grows`, `ConsolidationQueueRise.RiseStep` and `ConsolidationQueueRise.riseStep_processBlock`.
+  `Array.findIdx?_of_prefix` is in `Base/Proofs/List.lean`.
   `Hysteresis` puts each effective balance within the bands of its balance.
   `processEffectiveBalanceUpdates_hysteresis` establishes it, `Hysteresis.of_data` carries it to a state with the same validators and balances, and `Hysteresis.upgrade` keeps it across upgrades.
   `EpochTrace.through_effectiveBalances` splits an epoch trace after the effective-balance updates.
   `activeBalanceTotal` is the active effective balance as a natural number, and `getTotalActiveBalance_toNat` makes it the value of a successful read.
   `syncRewardAt` is the participant reward of the sync committee as a natural number, and `syncParticipantReward_toNat` makes it the value of a successful read.
-  `syncSeats` counts the seats of a validator in the current sync committee.
+  `syncSeats` counts the seats of a validator in the current sync committee, and `syncSeats_eq_length` equates it with the length of the beacon API's `BeaconApi.syncSeats`.
   `activeFilter_eq` and `activeSum_eq` keep the active positions and their effective balances between two registries, and `seats_eq` keeps `syncSeats`.
   `Store.Reachable.nonempty_run_of_blockState` gives a run from the anchor state to each held state, with the store's setting of the checks.
   `getBaseReward_congr` reads the same base reward for two validators with the same effective balance, in one state or in two.

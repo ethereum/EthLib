@@ -56,6 +56,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 /-! ## The rise of an effective balance over the end of an epoch -/
 
+open ConsolidationQueueRise in
 /-- Inside one epoch from Altair and before Gloas, the queue keeps its property. -/
 private theorem run_queueFrom {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (early : y.fork < .glamsterdam) (altair : .altair ≤ y.fork)

@@ -274,7 +274,7 @@ theorem quorumDrift_le_quorumReserve
     effectiveFall_le genesis history edge tailP tailS caps bands withdrawDelay hysteresis early
       fulu
       middleEpoch callEpoch next single counted (fun v => pc v + deposit v)
-      (fun v => (lossSide v).trans (by rw [Nat.add_assoc]))
+      (fun v => (lossSide v).trans (by rw [Nat.add_assoc]; exact Nat.le_refl _))
   -- Each voter loses at most its computed fall, and a band and its share if it was credited.
   have each : ∀ v ∈ voters, balanceAt pulled v.toNat ≤ balanceAt state v.toNat + fall v.toNat +
       ((if v ∈ creditedKeys then inc + 2 * preset.downwardBand + syncPMax else 0) +

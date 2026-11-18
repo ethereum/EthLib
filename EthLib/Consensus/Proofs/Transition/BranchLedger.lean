@@ -48,6 +48,8 @@ open Base Cryptography.Bls Uint64
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
+open BlockLedger BlockCredits
+
 /-! ### The blocks of one epoch -/
 
 section Epoch
@@ -124,7 +126,7 @@ private theorem Within.reads {a s : BeaconState preset fork} (w : Within a s) {b
     (reads : Reads a base) : Reads s base := by
   intro index total reward recent totalOk rewardOk
   rw [w.recent] at recent
-  have inside := inside_of_recent recent
+  have inside := lt_size_of_isActiveAt_recent recent
   rw [w.activeBalanceTotal] at totalOk
   rw [← getBaseReward_congr inside (w.effective_map _ inside)] at rewardOk
   exact reads index total reward recent totalOk rewardOk
@@ -133,7 +135,7 @@ private theorem Within.reads {a s : BeaconState preset fork} (w : Within a s) {b
 private theorem Within.reads_back {a s : BeaconState preset fork} (w : Within a s)
     {base : ℕ → ℕ} (reads : Reads s base) : Reads a base := by
   intro index total reward recent totalOk rewardOk
-  have inside := inside_of_recent recent
+  have inside := lt_size_of_isActiveAt_recent recent
   refine reads index total reward ((w.recent _).mpr recent)
     (by rw [w.activeBalanceTotal]; exact totalOk) ?_
   rw [← getBaseReward_congr inside (w.effective_map _ inside)]
@@ -652,10 +654,7 @@ theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
     let base (i : ℕ) := ((getBaseReward state totalGwei (UInt64.ofNat i)).toOption.getD 0).toNat
     let seatReward := if .altair ≤ y.fork then ((syncParticipantReward state).toOption.getD 0).toNat
       else 0
-    let seats (i : ℕ) := if altair : .altair ≤ y.fork then
-        ((state.currentSyncCommittee altair).value.pubkeys.toList.filter fun key =>
-          (validator i).any (·.pubkey == key)).length
-      else 0
+    let seats (i : ℕ) := if altair : .altair ≤ y.fork then syncSeats state altair i else 0
     let sync (i : ℕ) := seats i * seatReward
     let syncProposer := if .altair ≤ y.fork then
         slots * preset.SYNC_COMMITTEE_SIZE.toNat *
@@ -772,7 +771,7 @@ theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
       · have recentB : isActiveAt b (getPreviousEpoch b) i = true ∨
             isActiveAt b (getCurrentEpoch b) i = true := by
           simpa [recent, before, current] using isRecent
-        have := inside_of_recent ((tally.within.recent i).mp recentB)
+        have := lt_size_of_isActiveAt_recent ((tally.within.recent i).mp recentB)
         omega
       · exact ite_eq_right isRecent
     have bound := tally.potential altair weight (2 ^ 64) (Nat.le_refl _)
@@ -795,7 +794,7 @@ theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
         have recentB : isActiveAt b (getPreviousEpoch b) i = true ∨
             isActiveAt b (getCurrentEpoch b) i = true := by
           simpa [recent, before, current] using member.2
-        exact notIn (inside_of_recent recentB) member.2
+        exact notIn (lt_size_of_isActiveAt_recent recentB) member.2
     have denominator : proposerDenominator = 448 := by decide
     rw [denominator] at bound
     rw [sumEq] at upper

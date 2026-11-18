@@ -6,6 +6,7 @@ public import EthLib.Consensus.Proofs.Participation
 public import Mathlib.Algebra.BigOperators.Group.Finset.Basic
 import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.BlockRewards
+public import EthLib.Consensus.BeaconApi.Duties
 import EthLib.Consensus.Proofs.Transition.EpochParticipation
 import EthLib.Consensus.Proofs.Transition.ForkBoundary
 import EthLib.Consensus.Proofs.Transition.Slot
@@ -107,6 +108,29 @@ def syncSeats {fork : Fork} (state : BeaconState preset fork) (altair : .altair 
     (i : ℕ) : ℕ :=
   ((state.currentSyncCommittee altair).value.pubkeys.toList.filter fun key =>
     (state.validators.data[i]?).any (·.pubkey == key)).length
+
+/-- The entries of a numbered list that hold a value are as many as the matches in the list. -/
+private theorem length_filter_zipIdx {α : Type} [BEq α] [LawfulBEq α] (l : List α) (x : α) :
+    ((l.zipIdx).filter (·.1 == x)).length = (l.filter (fun k => x == k)).length := by
+  have numbered : (l.zipIdx.filter (·.1 == x)).map Prod.fst =
+      (l.zipIdx.map Prod.fst).filter (· == x) := by
+    rw [List.filter_map]
+    rfl
+  rw [← List.length_map (f := Prod.fst), numbered, List.zipIdx_map_fst]
+  congr 1
+  exact List.filter_congr fun k _ => by
+    rw [Bool.eq_iff_iff, beq_iff_eq, beq_iff_eq]
+    exact ⟨Eq.symm, Eq.symm⟩
+
+/-- The seats of a validator are as many as the seats that the duties of the beacon API list. -/
+theorem syncSeats_eq_length {fork : Fork} (state : BeaconState preset fork)
+    (altair : .altair ≤ fork) {i : ℕ} {validator : Validator}
+    (found : state.validators.data[i]? = some validator) :
+    syncSeats state altair i =
+      (BeaconApi.syncSeats (state.currentSyncCommittee altair).value validator.pubkey).length := by
+  unfold syncSeats BeaconApi.syncSeats
+  rw [found, List.length_map, length_filter_zipIdx]
+  rfl
 
 /-- Deltas applied in turn to one balance move it up by at most their rewards.
 

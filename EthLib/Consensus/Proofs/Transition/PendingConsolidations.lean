@@ -1849,6 +1849,17 @@ theorem processRegistryUpdates_withdrawableEpoch_of_assigned
       w.withdrawableEpoch = v.withdrawableEpoch :=
   (WithdrawalKept.registry_exact electra ok).2 i v found assigned
 
+/-- From Electra, the registry updates keep the withdrawable epochs of assigned exits. -/
+theorem withdrawableKept_processRegistryUpdates {f : Fork} {s t : BeaconState preset f}
+    (electra : .pectra ≤ f) (ok : processRegistryUpdates config s = .ok t) :
+    WithdrawableKept s t := by
+  intro i v w old new assigned
+  obtain ⟨kept, found, same⟩ :=
+    processRegistryUpdates_withdrawableEpoch_of_assigned electra ok i v old assigned
+  rw [new, Option.some.injEq] at found
+  subst found
+  exact ⟨UInt64.le_of_eq same.symm, .inr same⟩
+
 /-- From Electra, registry updates keep the withdrawable epoch of an unassigned exit.
 
 Otherwise they give it one after the current epoch. -/
@@ -1863,18 +1874,9 @@ theorem processRegistryUpdates_withdrawableEpoch_of_unassigned
       (w.withdrawableEpoch = v.withdrawableEpoch ∨ getCurrentEpoch state < w.withdrawableEpoch) :=
   (WithdrawalKept.registry_unassigned electra ok).2.2 i v found unassigned
 
-/-- From Electra, the registry updates keep the withdrawable epochs of assigned exits. -/
-theorem withdrawableKept_processRegistryUpdates {f : Fork} {s t : BeaconState preset f}
-    (electra : .pectra ≤ f) (ok : processRegistryUpdates config s = .ok t) :
-    WithdrawableKept s t := by
-  intro i v w old new assigned
-  obtain ⟨kept, found, same⟩ :=
-    processRegistryUpdates_withdrawableEpoch_of_assigned electra ok i v old assigned
-  rw [new, Option.some.injEq] at found
-  subst found
-  exact ⟨UInt64.le_of_eq same.symm, .inr same⟩
-
 /-! ## The pending consolidations inside one epoch -/
+
+namespace ConsolidationQueueRise
 
 /-- The queue keeps a list, and each other entry has a source that exits after an epoch.
 
@@ -1892,7 +1894,7 @@ Each new entry has a source whose exit is assigned after the current epoch.
 The exit is assigned when the entry is queued, so it is part of the step.
 
 It is not read from the invariant, which holds only at the states of a run. -/
-def QueueGrows {f : Fork} (s t : BeaconState preset f) : Prop :=
+def Grows {f : Fork} (s t : BeaconState preset f) : Prop :=
   ∀ electra : .pectra ≤ f,
     (∀ c ∈ (s.pendingConsolidations electra).data.toList,
       c ∈ (t.pendingConsolidations electra).data.toList) ∧
@@ -1902,17 +1904,17 @@ def QueueGrows {f : Fork} (s t : BeaconState preset f) : Prop :=
           getCurrentEpoch s < w.exitEpoch ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH
 
 /-- A step that keeps the queue grows it by nothing. -/
-private theorem QueueGrows.of_same {f : Fork} {s t : BeaconState preset f}
-    (queue : .pectra ≤ f → SamePendingQueue s t) : QueueGrows s t := by
+private theorem Grows.of_same {f : Fork} {s t : BeaconState preset f}
+    (queue : .pectra ≤ f → SamePendingQueue s t) : Grows s t := by
   intro electra
   rw [show t.pendingConsolidations electra = s.pendingConsolidations electra from
     congrFun (queue electra) electra]
   exact ⟨fun _ h => h, fun _ h => .inl h⟩
 
 /-- Growths compose: the registry lifecycle keeps each exit that is assigned. -/
-private theorem QueueGrows.trans {f : Fork} {s u t : BeaconState preset f}
-    (one : QueueGrows s u) (two : QueueGrows u t) (life : RegistryLifecycle u t)
-    (slot : u.slot = s.slot) : QueueGrows s t := by
+private theorem Grows.trans {f : Fork} {s u t : BeaconState preset f}
+    (one : Grows s u) (two : Grows u t) (life : RegistryLifecycle u t)
+    (slot : u.slot = s.slot) : Grows s t := by
   intro electra
   obtain ⟨old, new⟩ := one electra
   obtain ⟨old', new'⟩ := two electra
@@ -1928,13 +1930,13 @@ private theorem QueueGrows.trans {f : Fork} {s u t : BeaconState preset f}
 
 /-- A block step: the frame, the registry lifecycle and the growth of the queue. -/
 def RiseStep {f : Fork} (s t : BeaconState preset f) : Prop :=
-  Frame s t ∧ RegistryLifecycle s t ∧ QueueGrows s t
+  Frame s t ∧ RegistryLifecycle s t ∧ Grows s t
 
 /-- A step that keeps the queue. -/
 private theorem RiseStep.of_same {f : Fork} {s t : BeaconState preset f} (frame : Frame s t)
     (life : RegistryLifecycle s t) (queue : .pectra ≤ f → SamePendingQueue s t) :
     RiseStep s t :=
-  ⟨frame, life, QueueGrows.of_same queue⟩
+  ⟨frame, life, Grows.of_same queue⟩
 
 /-- A step that keeps the registry and the queue. -/
 private theorem RiseStep.of_data {f : Fork} {s t : BeaconState preset f} (frame : Frame s t)
@@ -2022,7 +2024,7 @@ private theorem queueStep_queueConsolidation {electra : .pectra ≤ f}
     {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
     (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
-    QueueGrows s t := by
+    Grows s t := by
   obtain ⟨churned, written, epoch, withdrawal, -, assigned, later, -, set, validators, pushed⟩ :=
     queueConsolidation_queued delay ok
   intro electra'
@@ -2042,11 +2044,11 @@ private theorem riseStep_processConsolidationRequest {electra : .pectra ≤ f}
     (ok : processConsolidationRequest config s electra request = .ok t) : RiseStep s t := by
   have frame := (frame_processConsolidationRequest ok).toFrame
   have life := registryLifecycle_processConsolidationRequest ok
-  suffices new : QueueGrows s t from ⟨frame, life, new⟩
+  suffices new : Grows s t from ⟨frame, life, new⟩
   clear frame life
   rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, -, queued⟩
-  · exact QueueGrows.of_same fun _ => rfl
-  · exact QueueGrows.of_same fun _ => SamePendingQueue.compounding switched
+  · exact Grows.of_same fun _ => rfl
+  · exact Grows.of_same fun _ => SamePendingQueue.compounding switched
   · exact queueStep_queueConsolidation delay queued
 
 /-- The requests of the execution layer keep the frame, the lifecycle and the queue. -/
@@ -2133,5 +2135,7 @@ theorem riseStep_processBlock {engine : ExecutionEngine preset f}
     (riseStep_processOperations early delay operatedOk).trans sync
 
 end RiseBlock
+
+end ConsolidationQueueRise
 
 end EthLib.Consensus

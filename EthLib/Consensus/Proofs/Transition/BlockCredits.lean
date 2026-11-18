@@ -42,6 +42,10 @@ open Base Cryptography.Bls Uint64
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
+open BlockLedger
+
+namespace BlockCredits
+
 /-! ### The participation flags behind the proposer rewards of attestations -/
 
 /-- The registry does not shrink, and each flag at a position of it before is kept.
@@ -333,7 +337,7 @@ def Reads (s : BeaconState preset fork) (base : ℕ → ℕ) : Prop :=
     reward.toNat = base index.toNat
 
 /-- A recent validator is in the registry. -/
-theorem inside_of_recent {a : BeaconState preset fork} {i : ℕ}
+theorem lt_size_of_isActiveAt_recent {a : BeaconState preset fork} {i : ℕ}
     (recent : isActiveAt a (getPreviousEpoch a) i = true ∨
       isActiveAt a (getCurrentEpoch a) i = true) : i < a.validators.data.size := by
   rcases recent with active | active <;>
@@ -351,7 +355,7 @@ private theorem Steady.reads (kept : Steady s t) {base : ℕ → ℕ} (reads : R
   have previousLe : getPreviousEpoch s ≤ activityFixedEpoch s := by
     exact UInt64.le_trans (getPreviousEpoch_le s) fixed
   rw [previous, kept.epoch, kept.keeps.2.2 _ previousLe, kept.keeps.2.2 _ fixed] at recent
-  have inside := inside_of_recent recent
+  have inside := lt_size_of_isActiveAt_recent recent
   rw [kept.activeBalanceTotal] at totalOk
   rw [← getBaseReward_congr inside (kept.effective_map _ inside)] at rewardOk
   exact reads index total reward recent totalOk rewardOk
@@ -831,7 +835,8 @@ They are its balance and its effective balance before the operations.
 A conversion to compounding credentials only lowers a balance to the activation balance.
 
 That is the largest effective balance before the conversion. -/
-theorem processOperations_floor {fork : Fork} {s t : BeaconState preset fork}
+theorem _root_.EthLib.Consensus.processOperations_floor {fork : Fork}
+    {s t : BeaconState preset fork}
     {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork) (matched : BalancesMatch s)
     (computed : processOperations config checks s body parentSlot = .ok t)
@@ -1099,5 +1104,7 @@ theorem block_balances {engine : ExecutionEngine preset fork}
     exact ⟨old, found, eligible⟩
 
 end Block
+
+end BlockCredits
 
 end EthLib.Consensus

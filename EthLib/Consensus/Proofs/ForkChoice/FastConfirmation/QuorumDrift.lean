@@ -530,7 +530,7 @@ An epoch has at least one slot, and the preset keeps the bands of hysteresis.
 
 The withdrawal delay is at least one epoch.
 
-The effective-balance caps are ordered, and the activation balance is the largest before Electra.
+The caps are ordered, and the activation balance is at most the largest before Electra.
 
 The seed lookahead covers at least one epoch, so activity in the next epoch is fixed in the current.
 

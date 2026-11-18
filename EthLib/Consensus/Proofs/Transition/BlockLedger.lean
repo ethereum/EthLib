@@ -41,6 +41,8 @@ open Base Cryptography.Bls Uint64
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
+namespace BlockLedger
+
 /-! ## The balance ledger of a block -/
 
 /-- How the balances move from one state to another, read at each validator.
@@ -556,7 +558,7 @@ theorem lives_processExecutionRequests {body : BeaconBlockBody preset fork}
     (.of_frame (Frame.foldlM (fun _ _ _ ok => (frame_processConsolidationRequest ok).toFrame)
       consolidationsOk))
 
-/-- A validator that a slashing could still slash at an epoch, or whose exit is unset. -/
+/-- An unslashed validator, active by an epoch, whose exit is unset or not yet withdrawable. -/
 def Eligible (E : Epoch) (w : Validator) : Prop :=
   w.slashed = false ∧ w.activationEpoch ≤ E ∧ E < FAR_FUTURE_EPOCH ∧
     (w.exitEpoch = FAR_FUTURE_EPOCH ∨ E < w.withdrawableEpoch)
@@ -1635,5 +1637,7 @@ theorem ledger_processSyncAggregate {altair : .altair ≤ fork}
       switched := fun v member => absurd member (Finset.notMem_empty v) }
 
 end Steps
+
+end BlockLedger
 
 end EthLib.Consensus

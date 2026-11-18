@@ -200,7 +200,7 @@ theorem le_foldr_max : ∀ {values : List Nat} {value : Nat}, value ∈ values �
   | _ :: _, _, .tail _ member => Nat.le_trans (le_foldr_max member) (Nat.le_max_right _ _)
 
 /-- A first match of a longer array that lies in a prefix is the first match there. -/
-theorem Array.findIdx?_of_prefix {α : Type} {u s : Array α} {p : α → Bool} {k : Nat}
+theorem _root_.Array.findIdx?_of_prefix {α : Type} {u s : Array α} {p : α → Bool} {k : Nat}
     (inside : k < s.size) (same : ∀ j < s.size, u[j]? = s[j]?) (found : u.findIdx? p = some k) :
     s.findIdx? p = some k := by
   obtain ⟨lt, hit, earlier⟩ := Array.findIdx?_eq_some_iff_getElem.mp found
