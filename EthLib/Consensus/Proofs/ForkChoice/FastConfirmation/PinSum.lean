@@ -33,6 +33,7 @@ import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.Bound
 import EthLib.Consensus.Proofs.Transition.Totality.Supply
+import EthLib.Consensus.Proofs.DirectSafety.Apriori.Ceiling
 
 /-!
 SCRATCH BASE for D-1 (not for merge): the summation of `pinReserve` at spec rev 2.5.2.
