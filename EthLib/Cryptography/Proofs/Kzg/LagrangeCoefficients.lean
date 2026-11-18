@@ -83,14 +83,23 @@ theorem basis_eq_basisSum (i : Fin FIELD_ELEMENTS_PER_BLOB) :
       rw [ite_eq_left rfl, Lagrange.eval_basis_self evalDomain_injective.injOn (Finset.mem_univ i)]
     · rw [ite_eq_right him, Lagrange.eval_basis_of_ne him (Finset.mem_univ m)]
 
+/-- Coefficient `j < n` of a sum of the monomials `a k * X^k` over `k < n` is `a j`.
+
+The sum is a hypothesis, so the kernel never reads coefficients of the concrete sum. -/
+private theorem coeff_eq_of_eq_sum {p : _root_.Polynomial Fr} (n : ℕ) (a : ℕ → Fr)
+    (hp : p = ∑ k ∈ Finset.range n, C (a k) * X ^ k) {j : ℕ} (hj : j < n) : p.coeff j = a j := by
+  rw [hp, finsetSum_coeff]
+  simp only [coeff_C_mul, coeff_X_pow]
+  rw [Finset.sum_eq_single j (fun b _ hb => by rw [ite_eq_right (Ne.symm hb), mul_zero])
+    (fun h => absurd (Finset.mem_range.mpr hj) h), ite_eq_left rfl, mul_one]
+
 /-- Coefficient `j < n` of the basis polynomial of the domain point `d` is `n⁻¹ * d⁻¹ ^ j`. -/
 theorem coeff_basis (i : Fin FIELD_ELEMENTS_PER_BLOB) {j : Nat} (hj : j < FIELD_ELEMENTS_PER_BLOB) :
     (Lagrange.basis Finset.univ evalDomain i).coeff j =
       (FIELD_ELEMENTS_PER_BLOB : Fr)⁻¹ * (evalDomain i)⁻¹ ^ j := by
-  rw [basis_eq_basisSum, basisSum, finsetSum_coeff]
-  simp only [coeff_C_mul, coeff_X_pow]
-  rw [Finset.sum_eq_single j (fun b _ hb => by rw [ite_eq_right (Ne.symm hb), mul_zero])
-    (fun h => absurd (Finset.mem_range.mpr hj) h), ite_eq_left rfl, mul_one]
+  rw [basis_eq_basisSum]
+  exact coeff_eq_of_eq_sum FIELD_ELEMENTS_PER_BLOB
+    (fun k => (FIELD_ELEMENTS_PER_BLOB : Fr)⁻¹ * (evalDomain i)⁻¹ ^ k) (by rw [basisSum]) hj
 
 /-- The value of a basis polynomial at `τ` is the sum of its coefficients times powers of `τ`. -/
 theorem eval_basis_eq_sum (i : Fin FIELD_ELEMENTS_PER_BLOB) (τ : Fr) :

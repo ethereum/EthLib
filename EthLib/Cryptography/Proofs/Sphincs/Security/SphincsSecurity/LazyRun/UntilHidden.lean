@@ -105,7 +105,7 @@ theorem costRun_le_stopped {α : Type} (model : HiddenRows.Model HashInput HashO
               known)}[(HiddenReveal.StopOr event) x]
         rw [HiddenRows.stopped_private]
         simp only [OracleComp.prEvent_bind_eq_tsum]
-        refine ENNReal.tsum_le_tsum fun value => mul_le_mul' le_rfl ?_
+        refine tsum_le_tsum fun value => mul_le_mul' le_rfl ?_
         rw [stopped_map, probEvent_stopOr_map, prEvent_map]
         exact ih value known hknown _
       · change _ ≤ Pr{let x ← (HiddenRows.stopped model table outside

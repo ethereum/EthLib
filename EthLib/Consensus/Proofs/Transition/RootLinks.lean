@@ -96,7 +96,7 @@ private theorem latestBlockHeader_upgradeNext {pre : ForkedBeaconState preset}
   obtain ⟨fork, before⟩ := pre
   cases fork <;> simp only [upgradeNext] at computed
   all_goals try solve | cases computed; rfl | cases computed
-  all_goals try simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  all_goals simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   case phase0 =>
     obtain ⟨after, upgraded, rfl⟩ := computed
     obtain ⟨middle, folded, committee, rfl⟩ := upgradeToAltair_ok upgraded

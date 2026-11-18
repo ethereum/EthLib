@@ -201,12 +201,13 @@ theorem prepared_of_mem (seed : MasterSeed) (d : Derivations)
     have h : (result.1, cache) ∈ support ((simulateQ randomOracle (honestRun d)).run (progCache seed d)) := by
       rw [← withQueryLog_run_forget, support_map]
       exact ⟨(result, cache), hmem, rfl⟩
-    exact resolves_of_run _ _ _ h
+    -- Compare the sets: the kernel reduces a membership in `support` by running the computation.
+    exact resolves_of_run _ _ _ (Set.mem_of_subset_of_mem (by rfl) h)
   prog_le := by
     have h : (result.1, cache) ∈ support ((simulateQ randomOracle (honestRun d)).run (progCache seed d)) := by
       rw [← withQueryLog_run_forget, support_map]
       exact ⟨(result, cache), hmem, rfl⟩
-    exact cache_le_of_run _ _ _ h
+    exact cache_le_of_run _ _ _ (Set.mem_of_subset_of_mem (by rfl) h)
   log_agree := by
     intro x hx
     have hfinal := withQueryLog_finalCache _ _ _ hmem

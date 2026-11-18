@@ -168,7 +168,7 @@ What an entry point does with a wrong input is part of the protocol, so its sour
   `lake exe check-decls` fails on any use.
 - Do not use `vcgen` or `mvcgen` in library proofs while `vcgen` is marked experimental.
   The reason is stability across toolchains, not soundness: the kernel checks a proof that `vcgen` builds like any other proof.
-  In Lean v4.35.0, `mvcgen` is deprecated in favour of `vcgen`, and `vcgen` warns that it is experimental unless the option `experimental.vcgen` is set.
+  In Lean v4.36.0, `mvcgen` is deprecated in favour of `vcgen`, and `vcgen` warns that it is experimental unless the option `experimental.vcgen` is set.
   Check this rule again at each update of the toolchain.
 - After a proof change, check its axioms with `lake exe check-decls`.
   The goal is `propext`, `Classical.choice` and `Quot.sound`, nothing else.

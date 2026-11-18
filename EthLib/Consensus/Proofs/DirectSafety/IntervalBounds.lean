@@ -3543,7 +3543,7 @@ private theorem intervalGain_excess_sum (x : ForkedBeaconState preset)
     rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
   dsimp only [Function.comp_def]
   split <;> simp_all
-  all_goals simp only [Nat.mod_eq_of_lt small]
+  simp only [Nat.mod_eq_of_lt small]
 
 private theorem intervalGain_initial_sum (x : ForkedBeaconState preset)
     (early : x.fork < .glamsterdam) :

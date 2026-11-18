@@ -135,8 +135,7 @@ theorem keys_advanceSlot {state after : BeaconState preset fork}
   -- The epoch step is justification, which keeps the registry, then an epoch frame.
   have second : validatorKeys cached <+: validatorKeys epoched ∧
       (PubkeysDistinct cached → PubkeysDistinct epoched) := by
-    unfold epochIfLast at epochedOk
-    split at epochedOk
+    obtain ⟨_, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
     · obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
       have same : validatorKeys justified = validatorKeys cached := by
         unfold validatorKeys
@@ -147,9 +146,7 @@ theorem keys_advanceSlot {state after : BeaconState preset fork}
       unfold PubkeysDistinct at distinct
       rw [same] at distinct
       exact ⟨kept, distinct⟩
-    · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-      subst epochedOk
-      exact ⟨List.prefix_refl _, id⟩
+    · exact ⟨List.prefix_refl _, id⟩
   exact ⟨first.pubkeysPrefix.trans second.1, second.2 ∘ first.pubkeysDistinct⟩
 
 /-- One step of a chain keeps the public keys as a prefix, and keeps distinct keys distinct. -/

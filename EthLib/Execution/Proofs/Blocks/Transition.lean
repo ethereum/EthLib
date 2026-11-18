@@ -21,6 +21,8 @@ Its fork is the active fork of its chain at its number and its time.
 
 A transaction that cannot enter the block makes the block invalid, with its own error.
 
+The receipts of a body have the Bloom filters of their logs, and their cumulative gas never falls.
+
 The DAO transfer runs only before Paris, at the block that the chain configuration names.
 
 Before Glamsterdam a body gives no block access list.
@@ -528,6 +530,62 @@ theorem applyTransactions_steps {env : BlockEnvironment fork} {body : BodyState}
   unfold applyTransactions
   rw [zipIdx_take]
   exact hBefore
+
+/-- The receipts of the transactions of a body have the Bloom filters of their logs.
+
+Their cumulative gas never decreases, and stays at most the cumulative gas of the output. -/
+theorem applyTransactions_receipts {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {body : BodyState} {transactions : List Transaction} {output : BodyOutput fork}
+    (h : applyTransactions env body transactions = .ok output) :
+    (∀ p ∈ output.receipts, p.2.bloom = logsBloom p.2.logs) ∧
+      (output.receipts.map (·.2.cumulativeGasUsed)).Pairwise (· ≤ ·) ∧
+      ∀ p ∈ output.receipts, p.2.cumulativeGasUsed ≤ output.cumulativeGasUsed := by
+  have step : ∀ {index : Nat} {before after : BodyOutput fork} {tx : Transaction},
+      applyTransaction env index before tx = .ok after →
+      (((∀ p ∈ before.receipts, p.2.bloom = logsBloom p.2.logs) ∧
+        (before.receipts.map (fun p : UInt8 × Receipt fork => p.2.cumulativeGasUsed)).Pairwise
+          (· ≤ ·) ∧
+        ∀ p ∈ before.receipts, p.2.cumulativeGasUsed ≤ before.cumulativeGasUsed) →
+      ((∀ p ∈ after.receipts, p.2.bloom = logsBloom p.2.logs) ∧
+        (after.receipts.map (fun p : UInt8 × Receipt fork => p.2.cumulativeGasUsed)).Pairwise
+          (· ≤ ·) ∧
+        ∀ p ∈ after.receipts, p.2.cumulativeGasUsed ≤ after.cumulativeGasUsed)) := by
+    intro index before after tx hstep hinv
+    obtain ⟨outcome, logs, hr⟩ := applyTransaction_receipts hstep
+    obtain ⟨_, _, -, -, -, hcum, -⟩ := applyTransaction_eq_ok hstep
+    obtain ⟨hb, hp, hl⟩ := hinv
+    have hle : before.cumulativeGasUsed ≤ after.cumulativeGasUsed := by omega
+    rw [hr]
+    refine ⟨?_, ?_, ?_⟩
+    · intro p hp
+      rcases List.mem_append.mp hp with hp | hp
+      · exact hb p hp
+      · cases List.mem_singleton.mp hp
+        exact bloom_makeReceipt ..
+    · simp only [List.map_append, List.pairwise_append]
+      refine ⟨hp, by simp, ?_⟩
+      intro a ha b hb'
+      obtain ⟨q, hq, rfl⟩ := List.mem_map.mp ha
+      simp only [List.map_cons, List.map_nil, List.mem_singleton] at hb'
+      subst hb'
+      exact Nat.le_trans (hl q hq) hle
+    · intro p hp
+      rcases List.mem_append.mp hp with hp | hp
+      · exact Nat.le_trans (hl p hp) hle
+      · cases List.mem_singleton.mp hp
+        exact Nat.le_refl _
+  obtain ⟨hR, -⟩ := applyTransactions_steps
+    (fun a b : BodyOutput fork =>
+      ((∀ p ∈ a.receipts, p.2.bloom = logsBloom p.2.logs) ∧
+        (a.receipts.map (fun p : UInt8 × Receipt fork => p.2.cumulativeGasUsed)).Pairwise
+          (· ≤ ·) ∧
+        ∀ p ∈ a.receipts, p.2.cumulativeGasUsed ≤ a.cumulativeGasUsed) →
+      ((∀ p ∈ b.receipts, p.2.bloom = logsBloom p.2.logs) ∧
+        (b.receipts.map (fun p : UInt8 × Receipt fork => p.2.cumulativeGasUsed)).Pairwise
+          (· ≤ ·) ∧
+        ∀ p ∈ b.receipts, p.2.cumulativeGasUsed ≤ b.cumulativeGasUsed))
+    (fun _ => id) (fun h₁ h₂ x => h₂ (h₁ x)) step h
+  exact hR (by simp)
 
 /-! ## The body -/
 

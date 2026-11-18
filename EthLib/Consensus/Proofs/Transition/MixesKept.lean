@@ -260,7 +260,7 @@ private theorem processEpochAltair_mixesKeptBut {altair : .altair ≤ fork}
       · unfold processPendingConsolidations at edge
         simp only [bind, Except.bind, pure, Except.pure] at edge
         repeat' (split at edge <;> try cases edge)
-        all_goals exact (kept_passPendingConsolidations ‹_›).trans ⟨rfl, rfl⟩
+        exact (kept_passPendingConsolidations ‹_›).trans ⟨rfl, rfl⟩
       · exact edge ▸ Kept.refl _
     · split at edge
       · rw [processBuilderPendingPayments_eq edge]

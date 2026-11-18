@@ -176,8 +176,7 @@ So it is a generator of the multiplicative group.
 
 Reuses the two halves of the Lucas certificate. -/
 theorem orderOf_seven : orderOf ((7 : ℕ) : ZMod modulus) = modulus - 1 :=
-  orderOf_eq_of_pow_and_pow_div_prime (by decide)
-    seven_pow_card_sub_one seven_pow_div_prime_ne_one
+  orderOf_eq_of_pow_and_pow_div_prime seven_pow_card_sub_one seven_pow_div_prime_ne_one
 
 /-- `7` is a primitive `(r-1)`-th root of unity in `ZMod r`. -/
 theorem isPrimitiveRoot_seven :

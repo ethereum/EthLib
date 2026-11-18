@@ -4815,7 +4815,7 @@ private theorem upgrades_electra_epoch {s t : ForkedBeaconState preset}
       all_goals simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
         throw] at nextOk
       all_goals try contradiction
-      all_goals try (obtain ⟨_, _, rfl⟩ := nextOk)
+      all_goals (obtain ⟨_, _, rfl⟩ := nextOk)
       all_goals try (exact False.elim (of_decide_eq_false rfl electra))
       simp only [upgradeDue, Config.nextFork, Option.any_some, Bool.and_eq_true,
         beq_iff_eq] at due

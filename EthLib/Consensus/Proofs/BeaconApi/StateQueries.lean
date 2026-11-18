@@ -181,14 +181,11 @@ private theorem GenesisCheckpointsZero.of_advanceSlot {state after : BeaconState
   obtain ⟨_, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   have frame := frame_processSlot cachedOk
   have cachedHolds := holds.of_eq frame.previousJustified frame.currentJustified frame.finalized
-  unfold epochIfLast at epochedOk
-  split at epochedOk
+  obtain ⟨_, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
   · obtain ⟨justified, justifiedOk, epochFrame⟩ := processEpoch_frame epochedOk
     exact (cachedHolds.of_processJustificationAndFinalization justifiedOk).of_eq
       epochFrame.previousJustified epochFrame.currentJustified epochFrame.finalized
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    exact cachedHolds
+  · exact cachedHolds
 
 /-- One step of a chain keeps the zero root at epoch 0.
 

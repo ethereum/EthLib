@@ -225,12 +225,10 @@ theorem advanceSlot_registryLoad_le (computed : advanceSlot config checks state 
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
   have slotKept : LoadKept epoched { epoched with slot := next } := ⟨rfl, rfl⟩
   rw [LoadKept.registryLoad_eq slotKept]
-  unfold epochIfLast at epochedOk
-  split at epochedOk
+  obtain ⟨_, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
   · refine Nat.le_trans (processEpoch_registryLoad_le epochedOk) (Nat.le_of_eq ?_)
     exact LoadKept.registryLoad_eq ⟨rfl, rfl⟩
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    exact epochedOk ▸ Nat.le_of_eq (LoadKept.registryLoad_eq ⟨rfl, rfl⟩)
+  · exact Nat.le_of_eq (LoadKept.registryLoad_eq ⟨rfl, rfl⟩)
 
 /-- A run of slots never raises the validators plus the pending deposits, at every fork. -/
 theorem advanceSlots_registryLoad_le {count : Nat}

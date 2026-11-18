@@ -204,7 +204,7 @@ theorem pair_mean (parameter : PublicParameter) (F : View → ℝ≥0∞) (C : �
         (if Landed parameter (blockIndex (u firstCall)) then 0 else 1)) := by
     intro u
     split_ifs <;> ring
-  simp only [hsplit, ENNReal.tsum_add, ENNReal.tsum_mul_left]
+  simp only [hsplit, tsum_add, ENNReal.tsum_mul_left]
   rw [fresh_view_mean parameter F, unlanded_mass parameter, mul_comm C]
 
 omit [Params] in
@@ -214,7 +214,7 @@ theorem tsum_list_sum {β γ : Type} (w : β → ℝ≥0∞) (l : List γ) (f : 
   induction l with
   | nil => simp
   | cons c l ih =>
-      simp only [List.map_cons, List.sum_cons, mul_add, ENNReal.tsum_add, ih]
+      simp only [List.map_cons, List.sum_cons, mul_add, tsum_add, ih]
 
 end Mean
 
@@ -228,11 +228,11 @@ noncomputable def pairE (F : (DigestCall → HashOutput) → ℝ≥0∞) : ℝ�
 
 theorem pairE_add (F G : (DigestCall → HashOutput) → ℝ≥0∞) :
     pairE (fun a => F a + G a) = pairE F + pairE G := by
-  simp only [pairE, mul_add, ENNReal.tsum_add]
+  simp only [pairE, mul_add, tsum_add]
 
 theorem pairE_mono {F G : (DigestCall → HashOutput) → ℝ≥0∞} (h : ∀ a, F a ≤ G a) : pairE F ≤
     pairE G :=
-  ENNReal.tsum_le_tsum fun a => mul_le_mul_right (h a) _
+  tsum_le_tsum fun a => mul_le_mul_right (h a) _
 
 theorem pairE_const (c : ℝ≥0∞) : pairE (fun _ => c) = c := by
   simp only [pairE, ENNReal.tsum_mul_right, OracleComp.tsum_prEvent_eq_one, one_mul]
@@ -529,7 +529,7 @@ theorem flagged_ordinary (x : HashInput)
   rw [interp_ordinary, ite_eq_left hb, OracleComp.tsum_prEvent_bind_mul]
   simp only [OracleComp.tsum_prEvent_map_mul, flaggedCount_append, flaggedCount_touch, Nat.cast_add,
       mul_add,
-    ENNReal.tsum_add, ENNReal.tsum_mul_right, interp_mass]
+    tsum_add, ENNReal.tsum_mul_right, interp_mass]
   rw [one_mul, OracleComp.tsum_prEvent_eq_one, one_mul]
 
 /-- An ordinary query that starts no new pair keeps the items and their views.
