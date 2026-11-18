@@ -586,8 +586,9 @@ private theorem runs_of_call
 
 The bands of hysteresis hold at that boundary state.
 
-A last state at the first slot of an epoch is `run_boundaryState`; any other state is in the epoch
-of the state before its last step, at the same fork. -/
+A last state at the first slot of an epoch is `run_boundaryState`.
+
+Any other state is in the epoch of the state before its last step, at the same fork. -/
 private theorem run_epochBoundary {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) (bands : preset.IncrementWithinUpwardBand)
     (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset) :
@@ -639,8 +640,11 @@ private theorem run_epochBoundary {g : ForkedBeaconState preset}
 
 The call is the pulled-up head state and the current target of an honest store.
 
-The counting state is on the chain of a block of another honest store, whose chain reads the
-finalized checkpoint of the target block's state once finality has passed the anchor.
+The counting state is on the chain of a block of another honest store.
+
+Once finality has passed the anchor, that chain reads the finalized checkpoint.
+
+It is the one that the target block's state holds.
 
 The split state is the lookahead of the finalized block's state to the start of its epoch.
 
@@ -650,8 +654,13 @@ A boundary state of the split's epoch, with the bands of hysteresis, runs to the
 
 From the split state, runs reach the call's middle state and the counting state.
 
-The call's own branch is as `runs_of_call` gives it: a boundary state with the bands at the start
-of the target's epoch, at most one block to the middle state, and a tail to the pulled-up state. -/
+The call's own branch is as `runs_of_call` gives it.
+
+It has a boundary state with the bands at the start of the target's epoch.
+
+At most one block lies between that state and the middle state.
+
+A tail runs from the middle state to the pulled-up state. -/
 private theorem runs_of_finalized
     {e : Execution (honestForkChoice config .bls sources anchorState anchorBlock assignment
       genesisTimeMs) J}
