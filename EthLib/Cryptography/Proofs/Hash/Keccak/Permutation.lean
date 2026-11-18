@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Hash.Keccak
+public import EthLib.Cryptography.Proofs.Hash.Keccak.Basic
 public import Mathlib.Tactic
 
 /-!

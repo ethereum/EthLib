@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Models.KeccakBits
-public import EthLib.Cryptography.Proofs.Hash.KeccakPermutation
+public import EthLib.Cryptography.Proofs.Hash.Keccak.Permutation
 
 /-!
 # Proofs: Keccak-f[1600] on lanes and on bits
