@@ -67,10 +67,9 @@ theorem JustifiedEarly.previousJustified_of_justification (early : JustifiedEarl
     simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, weighed⟩ := computed
     exact (weighJustificationAndFinalization_checkpoints weighed).1
-  all_goals first
-    | simp only [bind_ok_iff] at computed
-      obtain ⟨_, _, _, _, _, _, _, _, _, _, weighed⟩ := computed
-      exact (weighJustificationAndFinalization_checkpoints weighed).1
+  simp only [bind_ok_iff] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, weighed⟩ := computed
+  exact (weighJustificationAndFinalization_checkpoints weighed).1
 
 /-! ## One slot -/
 

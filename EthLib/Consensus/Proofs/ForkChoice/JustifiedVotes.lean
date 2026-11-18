@@ -240,10 +240,8 @@ private theorem advanceSlots_last_justification {base : BeaconState preset fork}
     by_cases same : epoched.currentJustifiedCheckpoint = start.currentJustifiedCheckpoint
     · exact .inl (kept.trans same)
     right
-    unfold epochIfLast at epochedOk
-    split at epochedOk
-    · rename_i last
-      -- The epoch step is justification, then steps that keep the checkpoint.
+    obtain ⟨last, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
+    · -- The epoch step is justification, then steps that keep the checkpoint.
       obtain ⟨pulled, pulledOk, frame⟩ := processEpoch_frame epochedOk
       have lastNat := congrArg UInt64.toNat last
       rw [UInt64.toNat_mod, slotNat] at lastNat
@@ -254,8 +252,6 @@ private theorem advanceSlots_last_justification {base : BeaconState preset fork}
       · rw [kept, cachedKeeps]
         exact Ne.symm same
     · -- Without the epoch step, the cached slot keeps the checkpoint.
-      simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-      subst epochedOk
       exact absurd cachedKeeps same
 
 /-- A held state's current justified checkpoint after the anchor's epoch was set by one step.

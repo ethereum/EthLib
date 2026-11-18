@@ -35,6 +35,14 @@ With SHA-256 as the node hash, a win is two such headers that the inclusion chec
 
 That result holds at every preset and fork.
 
+Before Gloas a data column sidecar carries the three fields of a partial header.
+
+They are the commitments, the block header and the proof.
+
+An adversary that outputs two sidecars gets the same bound, through the headers they carry.
+
+With SHA-256, its win is two sidecars that the inclusion check of a sidecar accepts.
+
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
 
 <https://cseweb.ucsd.edu/~mihir/papers/ro.pdf>
@@ -407,5 +415,59 @@ theorem columnWins_sha256_iff {preset : Preset} {fork : Fork}
       cases secondRoot : SszType.hashTreeRoot claim.2.kzgCommitments <;>
       simp [bind, Except.bind, subtree, extractBranches_sha256, whole,
         isValidMerkleBranch_eq_true_iff, toChunk_ok_iff]
+
+/-- The header that a sidecar carries: its commitments, its signed block header and their proof.
+
+It needs a fork before Gloas, where a sidecar carries all three. -/
+def DataColumnSidecar.partialHeader {preset : Preset} {fork : Fork}
+    (beforeGloas : fork < .glamsterdam) (sidecar : DataColumnSidecar preset fork) :
+    PartialDataColumnHeader preset fork :=
+  ⟨sidecar.kzgCommitments beforeGloas, sidecar.signedBlockHeader beforeGloas,
+    sidecar.kzgCommitmentsInclusionProof beforeGloas⟩
+
+/-- An adversary that outputs two sidecars wins with probability at most `Q^2 / 2^256`.
+
+The experiment takes the header that each sidecar carries, and runs the extraction on the two.
+
+So a win reads the commitments, the proof and the body root of each sidecar, and no other field.
+
+Here `Q = q + 2 * (limit + width) + 2 * depth`, as in the bound for two headers.
+
+It needs a fork before Gloas, and the adversary to make at most `q` oracle calls. -/
+theorem prEvent_columnWins_le_of_sidecars (preset : Preset) {fork : Fork}
+    (beforeGloas : fork < .glamsterdam)
+    (adversary : OracleComp (unifSpec + HashOracle)
+      (DataColumnSidecar preset fork × DataColumnSidecar preset fork))
+    {q : Nat} (hq : IsQueryBoundP adversary (fun t => t.isRight = true) q) :
+    Pr{let z ← (simulateQ HashOracle.romImpl
+      (experimentWith (extractColumnHeaders queryHash preset fork)
+        (Prod.map (·.partialHeader beforeGloas) (·.partialHeader beforeGloas) <$>
+          adversary))).run ∅}[
+        ColumnWins z.1] ≤
+      (q + 2 * (preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat +
+        2 ^ depthFor preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat) +
+        2 * preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat : Nat) *
+        (((q + 2 * (preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat +
+          2 ^ depthFor preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat) +
+          2 * preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat : Nat) : ℝ≥0∞) / 2 ^ 256) :=
+  -- Taking the headers makes no oracle call, so the adversary keeps its count.
+  prEvent_columnWins_le_of_adversary preset beforeGloas _ (by rw [isQueryBoundP_map_iff]; exact hq)
+
+/-- With SHA-256 as the node hash, a win of two sidecars is two that the inclusion check accepts.
+
+The two sidecars have one body root, and different lists of commitments.
+
+It needs a fork before Gloas, where a sidecar carries the proof. -/
+theorem columnWins_sha256_iff_of_sidecars {preset : Preset} {fork : Fork}
+    (beforeGloas : fork < .glamsterdam)
+    {claim : DataColumnSidecar preset fork × DataColumnSidecar preset fork} :
+    ColumnWins (extractColumnHeaders (m := Id) Cryptography.Hash.Sha256.hash preset fork
+        (claim.1.partialHeader beforeGloas, claim.2.partialHeader beforeGloas)).run ↔
+      (claim.1.signedBlockHeader beforeGloas).message.bodyRoot =
+          (claim.2.signedBlockHeader beforeGloas).message.bodyRoot ∧
+        claim.1.kzgCommitments beforeGloas ≠ claim.2.kzgCommitments beforeGloas ∧
+        verifyDataColumnSidecarInclusionProof preset beforeGloas claim.1 = true ∧
+        verifyDataColumnSidecarInclusionProof preset beforeGloas claim.2 = true :=
+  columnWins_sha256_iff
 
 end EthLib.Consensus

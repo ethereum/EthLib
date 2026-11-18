@@ -6,12 +6,12 @@ Two commands build everything.
 
 ## Module boundaries
 
-EthLib uses the module system of Lean v4.35.0.
+EthLib uses the module system of Lean v4.36.0.
 A module decides which of its declarations other files can see, and how much of each one they see.
 That matters for two reasons.
 Clients need the definitions of the specification, and sometimes their bodies, to state and prove things about them.
 A proof, on the other hand, is nobody else's business, so when only a proof changes, the files that import it should not have to rebuild.
-The language rules are in [Source Files and Modules, sections 5.4 and 5.6.1](https://lean-lang.org/doc/reference/4.35.0/Source-Files-and-Modules/).
+The language rules are in [Source Files and Modules, sections 5.4 and 5.6.1](https://lean-lang.org/doc/reference/4.36.0/Source-Files-and-Modules/).
 
 A definition file has this shape:
 
@@ -60,7 +60,7 @@ Other proofs import that module with a plain `import` and cite its theorems.
 A new version then breaks one file per module outside EthLib, apart from the exceptions below.
 `scripts/check_layers.py` checks this rule, and `scripts/check_layers_baseline.txt` lists the exceptions under the label `import-all`, each with its reason.
 EthLib does not set Lake's option `allowImportAll`, so a package that depends on EthLib cites the laws of a hidden module instead.
-Lake v4.35.0 does not enforce that option, so the build allows such an import, and this is a rule of the repository.
+Lake v4.36.0 does not enforce that option, so the build allows such an import, and this is a rule of the repository.
 Give a public definition an explicit result type when a delayed proof cannot infer it.
 Keep compatibility options such as `backward.proofsInPublic` disabled.
 

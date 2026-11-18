@@ -139,7 +139,8 @@ private theorem checkpointPath_zero {g a : ForkedBeaconState preset}
         omega
       simp only [Step.headers, blockHeader]
       cases root : (Serialization.Ssz.SszType.hashTreeRoot signed.message.body).toOption <;>
-        (simp [Option.toList]; try omega)
+        simp [Option.toList]
+      omega
 
 /-- A finalized field of the left view conflicts with a right field at its epoch or later.
 

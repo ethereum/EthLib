@@ -97,7 +97,7 @@ theorem costStep_value_le (input : (SourceCostSpec D R ι).Domain) (s : DebtStat
       (∀ r ∈ support step, r.2.known c = s.known c) →
       ∑' r, Pr{let x ← step}[x = r] * (if r.2.known c = some t0 then (1 : ℝ≥0∞) else 0) = 0 := by
     intro step hstep
-    refine ENNReal.tsum_eq_zero.2 fun r => ?_
+    refine tsum_eq_zero_iff.2 fun r => ?_
     by_cases hr : r ∈ support step
     · rw [hstep r hr, hc]; simp
     · rw [(prEvent_eq_zero_of_not_mem_support _) hr, zero_mul]
@@ -183,7 +183,7 @@ theorem interp_value_le {α : Type} (computation : OracleComp (SourceCostSpec D 
             calc E r ≤ ∑' out, Pr{let x ← interp tg initial model (next r.1)
                                     (budget - sourceCost input) r.2}[x = out] *
                   (if some v = some t0 then (1 : ℝ≥0∞) else 0) := by
-                  refine ENNReal.tsum_le_tsum fun out => ?_
+                  refine tsum_le_tsum fun out => ?_
                   by_cases hout : out ∈ support
                       (interp tg initial model (next r.1) (budget - sourceCost input) r.2)
                   · rw [hstay out hout]
@@ -212,7 +212,7 @@ theorem interp_value_le {α : Type} (computation : OracleComp (SourceCostSpec D 
           ≤ ∑' r, Pr{let x ← costStep model input s}[x = r] *
               ((if r.2.known c = some t0 then 1 else 0) + shareν *
                   (if r.2.known c = none then F r else 0)) := by
-            refine ENNReal.tsum_le_tsum fun r => ?_
+            refine tsum_le_tsum fun r => ?_
             by_cases hr : r ∈ support (costStep model input s)
             · exact mul_le_mul_right (hpt r hr) _
             · rw [(prEvent_eq_zero_of_not_mem_support _) hr, zero_mul, zero_mul]
@@ -220,7 +220,7 @@ theorem interp_value_le {α : Type} (computation : OracleComp (SourceCostSpec D 
             (if r.2.known c = some t0 then 1 else 0) +
             shareν * ∑' r, Pr{let x ← costStep model input s}[x = r] *
                 (if r.2.known c = none then F r else 0) := by
-            simp only [mul_add, ENNReal.tsum_add]
+            simp only [mul_add, tsum_add]
             congr 1
             rw [← ENNReal.tsum_mul_left]
             exact tsum_congr fun r => by ring
@@ -230,7 +230,7 @@ theorem interp_value_le {α : Type} (computation : OracleComp (SourceCostSpec D 
                 (if r.2.known c = none then F r else 0) :=
             add_le_add (costStep_value_le model input s c hc t0) le_rfl
         _ = shareν * ∑' r, Pr{let x ← costStep model input s}[x = r] * F r := by
-            rw [← mul_add, ← ENNReal.tsum_add]
+            rw [← mul_add, ← tsum_add]
             congr 1
             refine tsum_congr fun r => ?_
             by_cases hr : r ∈ support (costStep model input s)

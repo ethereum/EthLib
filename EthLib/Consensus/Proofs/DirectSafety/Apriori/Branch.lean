@@ -241,10 +241,8 @@ private theorem stepBalanceEvents_withdrawnConsolidationCredit {checks : Signatu
     have crossed : ∀ e ∈ crossings, e.source = .deposits →
         withdrawnConsolidationCredit e = 0 := fun e mem deposit =>
       absurd ((upgradeBalanceReplay_crossing crossingOk e mem).symm.trans deposit) (by decide)
-    unfold epochIfLast at epochedOk
-    split at epochedOk
-    · rename_i last
-      obtain ⟨_, _, epochEvents, replayOk, -⟩ :=
+    obtain ⟨last, epochedOk⟩ | ⟨last, rfl⟩ := epochIfLast_cases epochedOk
+    · obtain ⟨_, _, epochEvents, replayOk, -⟩ :=
         epochBalanceReplay_result cached epoched sourceEarly epochedOk
       rw [Step.balanceEvents_epoch_slot across cachedOk nextOk last replayOk advanceOk
         crossingOk] at ok
@@ -257,8 +255,7 @@ private theorem stepBalanceEvents_withdrawnConsolidationCredit {checks : Signatu
           exact shared.pendingConsolidationsOrdered genesis sourceEarly delay
         exact epochBalanceReplay_withdrawnConsolidationCredit ordered replayOk e mem
       · exact crossed e mem
-    · rename_i last
-      have replayed : (Step.slot across).balanceEvents = .ok ([] ++ crossings) := by
+    · have replayed : (Step.slot across).balanceEvents = .ok ([] ++ crossings) := by
         simp only [Step.balanceEvents, cachedOk, nextOk, last, ↓reduceIte, advanceOk,
           crossingOk, bind, Except.bind, pure, Except.pure]
       rw [replayed] at ok
@@ -476,10 +473,8 @@ theorem ScoresBelow.step {m l : ForkedBeaconState preset} (step : Step config ch
       rw [getCurrentEpoch_toNat, lSlot]
     refine ScoresBelow.upgrades upgrades altair early era ?_
     rw [lEpoch, getCurrentEpoch_toNat]
-    unfold epochIfLast at epochedOk
-    split at epochedOk
+    obtain ⟨last, epochedOk⟩ | ⟨within, rfl⟩ := epochIfLast_cases epochedOk
     · -- The last slot of an epoch updates the scores once, and moves the epoch on by one.
-      rename_i last
       rw [nextSlot_epoch_of_boundary sum last, Nat.add_sub_cancel_left, Nat.mul_one]
       have epochRun : processEpochAltair config checks cached altair = .ok epoched := by
         unfold processEpoch at epochedOk
@@ -493,8 +488,6 @@ theorem ScoresBelow.step {m l : ForkedBeaconState preset} (step : Step config ch
       exact ScoresBelow.pass altair below cachedOk justified scored later i member score
         (by rw [← kept later]; exact found)
     · -- Another slot keeps the epoch and the scores.
-      rename_i within
-      cases epochedOk
       rw [nextSlot_epoch_of_inside sum within, Nat.sub_self, Nat.mul_zero, Nat.add_zero]
       obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
       exact ScoresBelow.of_kept (fun i _ => ScoreKept.of_scores rfl i) below

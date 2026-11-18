@@ -180,7 +180,7 @@ theorem interp_potential2 {α : Type} (IsFleaf : D → Prop) (Inv : DebtState D 
                     fleafCount IsFleaf out.1.2.2.1)
             ≤ ∑' result, Pr{let x ← costStep model input state}[x = result] *
                 (Φ (budget - sourceCost input) result.2 + c) := by
-              refine ENNReal.tsum_le_tsum fun result => ?_
+              refine tsum_le_tsum fun result => ?_
               by_cases hr : result ∈ support (costStep model input state)
               · refine mul_le_mul_right ?_ _
                 rw [OracleComp.tsum_prEvent_map_mul]
@@ -199,7 +199,7 @@ theorem interp_potential2 {α : Type} (IsFleaf : D → Prop) (Inv : DebtState D 
                           pay2 * fleafCount IsFleaf out.1.2.2.1) +
                       (∑' out, Pr{let x ← (interp tg initial model (next result.1)
                         (budget - sourceCost input) result.2)}[x = out]) * c := by
-                      rw [← ENNReal.tsum_mul_right, ← ENNReal.tsum_add]
+                      rw [← ENNReal.tsum_mul_right, ← tsum_add]
                       refine tsum_congr fun out => ?_
                       rw [hc]
                       ring
@@ -211,7 +211,7 @@ theorem interp_potential2 {α : Type} (IsFleaf : D → Prop) (Inv : DebtState D 
           _ = ∑' result, Pr{let x ← costStep model input state}[x = result] * Φ
               (budget - sourceCost input) result.2 +
                 (∑' result, Pr{let x ← costStep model input state}[x = result]) * c := by
-              rw [← ENNReal.tsum_mul_right, ← ENNReal.tsum_add]
+              rw [← ENNReal.tsum_mul_right, ← tsum_add]
               refine tsum_congr fun result => ?_
               ring
           _ ≤ ∑' result, Pr{let x ← costStep model input state}[x = result] * Φ

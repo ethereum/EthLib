@@ -219,7 +219,7 @@ theorem Execution.blockStates_eq (e : Execution (forkChoice config checks source
         exact maps ih (Store.onInclusionList_frame a).2.1 (Store.onInclusionList_frame a).2.2
   generalize bound : left.slot.toNat = height
   induction height using Nat.strong_induction_on generalizing root left right with
-  | h height ih =>
+  | ind height ih =>
     obtain ⟨lb, lbFound⟩ := (reachable first startFirst n).known_of_blockState leftFound
     obtain ⟨rb, rbFound⟩ := (reachable second startSecond k).known_of_blockState rightFound
     have message := sameBlocks root lb rb lbFound rbFound

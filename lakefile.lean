@@ -23,7 +23,7 @@ package «EthLib» where
   version := v!"0.3.0"
   moreLeancArgs := #["-fPIC", "-ffunction-sections", "-fdata-sections"]
 
-require "leanprover-community" / "mathlib" @ git "v4.35.0"
+require "leanprover-community" / "mathlib" @ git "v4.36.0"
 
 -- Probability and oracle computations, for the security proofs.
 --
@@ -35,11 +35,12 @@ require "leanprover-community" / "mathlib" @ git "v4.35.0"
 --
 -- A commit on VCVio's `main`, built against the same Mathlib.
 require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @
-  "bbf05eeeedf84c5f98baaf5ab846f2d2479cc8ab"
+  "8781becff83faa559bfd1f1abf376d6e3ecd8f2d"
 
 @[default_target]
 lean_lib «EthLib» where
-  -- Lean v4.35.0, Source Files and Modules, section 5.4.
+  -- Lean v4.36.0, Source Files and Modules, section 5.4.
+  --
   -- Ordinary importers load public definitions without private proof bodies.
   requiresModuleSystem := true
   precompileModules := true
@@ -64,6 +65,16 @@ lean_lib «Proofs» where
     `EthLib.Execution.Proofs, `EthLib.Consensus.Proofs, `EthLib.Base.Proofs, `EthLib.Engine.Proofs]
   precompileModules := false
   platformIndependent := true
+  -- Mathlib's concrete-instances linter flags an instance assumption without variables.
+  --
+  -- It asks for a global instance in its place, or for its removal when one exists.
+  --
+  -- The SPHINCS+ proofs quantify over every parameter class, and a global instance fixes one.
+  --
+  -- The random-oracle bounds hold for every sampler of digests, and a removal keeps one.
+  --
+  -- So either fix narrows a statement.
+  leanOptions := #[⟨`weak.linter.concreteInstances, false⟩]
 
 /-- The C exports the Python extension calls, and nothing else.
 

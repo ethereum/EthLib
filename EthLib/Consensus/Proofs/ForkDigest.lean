@@ -98,7 +98,7 @@ private theorem foldl_latest (epoch : Epoch) : ∀ (epochs : List Epoch) (seed :
         simp only [UInt64.max_def, started, grows, ↓reduceIte, true_or, or_true, true_and,
           and_true, UInt64.le_refl, imp_self]
       all_goals simp_all [UInt64.le_iff_toNat_le]
-      all_goals omega
+      omega
     obtain ⟨mem, le, ge, latest⟩ := foldl_latest epoch rest
       (if next ≤ epoch then max seed next else seed)
     simp only [List.foldl_cons, List.mem_cons]

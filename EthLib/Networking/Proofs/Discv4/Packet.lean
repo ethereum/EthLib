@@ -157,7 +157,7 @@ private theorem Packet.readEnrSeq_eq_ok_iff {rest : List Item} {s : Option UInt6
   | nil => cases s <;> simp [Packet.readEnrSeq, Packet.enrSeqItems]
   | cons x rest =>
     cases s with
-    | none => simp [Packet.readEnrSeq, Packet.enrSeqItems, EthLib.Base.map_ok_iff]
+    | none => simp [Packet.readEnrSeq, Packet.enrSeqItems]
     | some n =>
       rw [Packet.readEnrSeq, EthLib.Base.map_ok_iff]
       simp [Packet.enrSeqItems, Codec.ofItem_eq_ok_iff]

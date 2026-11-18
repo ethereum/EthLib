@@ -21,6 +21,12 @@ Such a definition cannot be unfolded either.
 Proofs are exempt, because nothing unfolds them.
 The C exports are exempt, because IO belongs there.
 
+Lean v4.36.0 compiles the constructor index `T.ctorIdx` of a type through `T.ctorIdx._impl`.
+
+That unsafe constant reads the runtime tag, and the kernel still checks `T.ctorIdx` itself.
+
+This pair is exempt, and only when `T` is an inductive type.
+
 A finding is reported once, at the declaration in scope that first brings it in.
 A theorem proved by `native_decide` is reported, and the theorems that use it are not.
 
@@ -50,7 +56,9 @@ def nativeOwner? (env : Environment) (a : Name) : Option Name := do
   let owner := (cs.takeWhile (· != `_native)).foldl (· ++ ·) .anonymous
   guard (cs.length > owner.components.length + 1 && owner != a)
   -- Module proof bodies give generated axioms a private prefix even for public theorems.
-  -- Lean v4.35.0, `Lean.Meta.nativeEqTrue` in Lean/Meta/Native.lean.
+  --
+  -- Lean v4.36.0, `Lean.Meta.nativeEqTrue` in Lean/Meta/Native.lean.
+  --
   -- Prefer an existing private owner before resolving the corresponding public name.
   let owner := if env.contains owner then owner else privateToUserName owner
   guard (env.contains owner)
@@ -65,7 +73,7 @@ def isNativeAxiom (env : Environment) (n : Name) : Bool :=
 /-- The module that defines `n`. -/
 def moduleOf? (env : Environment) (n : Name) : Option Name := do
   let idx ← env.getModuleIdxFor? n
-  -- Lean v4.35.0 `EnvironmentHeader.moduleNames` maps this array on every call.
+  -- Lean v4.36.0 `EnvironmentHeader.moduleNames` maps this array on every call.
   return (← env.header.modules[idx.toNat]?).module
 
 /-- Whether `n` is defined in a module under `scope`. -/
@@ -85,6 +93,24 @@ The name is only a claim, so the parent must exist and be the opaque constant a 
 def isUnsafeRec (env : Environment) (n : Name) : Bool :=
   match n with
   | .str p "_unsafe_rec" => env.find? p |>.any (· matches .opaqueInfo _)
+  | _ => false
+
+/-- The constructor index that Lean generates for an inductive type, compiled through `_impl`.
+
+The name is only a claim, so the parent must be an inductive type.
+
+The index must be implemented by exactly the generated constant. -/
+def isGeneratedCtorIdx (env : Environment) (n : Name) : Bool :=
+  match n with
+  | .str p "ctorIdx" =>
+    (env.find? p).any (· matches .inductInfo _) &&
+      Compiler.getImplementedBy? env n == some (.str n "_impl")
+  | _ => false
+
+/-- The unsafe constant that a generated constructor index is compiled through. -/
+def isCtorIdxImpl (env : Environment) (n : Name) : Bool :=
+  match n with
+  | .str p "_impl" => isGeneratedCtorIdx env p
   | _ => false
 
 /-! ## Axioms, followed through every dependency -/
@@ -122,7 +148,7 @@ def inductiveGroup (env : Environment) (c : ConstantInfo) : Array Name :=
 
 /-- Every axiom that `n` depends on, memoized.
 
-`Lean.collectAxioms` of Lean v4.35.0 is not used.
+`Lean.collectAxioms` of Lean v4.36.0 is not used.
 
 It can reach an inductive type from a constructor.
 
@@ -244,7 +270,7 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
     if let .axiomInfo _ := c then
       unless isNativeAxiom env n do
         out := out.push ⟨"axiom", n, "an axiom declaration"⟩
-    if c.isUnsafe && !isUnsafeRec env n then
+    if c.isUnsafe && !isUnsafeRec env n && !isCtorIdxImpl env n then
       out := out.push ⟨"unsafe", n, "an unsafe declaration"⟩
     if let .opaqueInfo _ := c then
       unless isExtern env n do
@@ -253,7 +279,8 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
     if isExtern env n then
       out := out.push ⟨"extern", n, "an @[extern] declaration"⟩
     if let some impl := Compiler.getImplementedBy? env n then
-      out := out.push ⟨"implemented_by", n, s!"compiled as {impl}"⟩
+      unless isGeneratedCtorIdx env n do
+        out := out.push ⟨"implemented_by", n, s!"compiled as {impl}"⟩
   -- Axioms are reported where they enter the scope, not at every declaration that inherits them.
   -- An unsafe declaration is a finding already, and the kernel never relies on what it depends on.
   let decls := decls.filter fun (_, c) => !c.isUnsafe
@@ -348,7 +375,9 @@ unsafe def run (args : List String) : IO UInt32 := do
   let mods := if mods.isEmpty then [`EthLib, `EthLib.Proofs, `EthLib.Exports] else mods
   initSearchPath (← findSysroot)
   -- `loadExts := true` is essential: without it the `@[csimp]` table, among others, stays empty.
-  -- Lean v4.35.0 `Lean.importModules`: `.private` loads every private proof body.
+  --
+  -- Lean v4.36.0 `Lean.importModules`: `.private` loads every private proof body.
+  --
   -- Exported artifacts alone cannot reveal a theorem's full dependencies.
   enableInitializersExecution
   let env ← importModules (mods.toArray.map fun m => { module := m }) {} (trustLevel := 1024)
