@@ -1696,8 +1696,7 @@ private theorem rise_arith {inc band capFor high finEB eR eC Bc capHigh S U : Na
       omega
     omega
 
-/-- A key's effective balance at the end of a run from the finalized state stays that of R, or is at
-most the ceiling that the balance's ceiling allows. -/
+/-- On C's branch a key keeps R's effective balance, or stays within the ceiling of its balance. -/
 private theorem key_stay {fin pulled counted : BeaconState preset fork}
     (rC : Run config checks ⟨fork, fin⟩ ⟨fork, counted⟩)
     (rR : Run config checks ⟨fork, fin⟩ ⟨fork, pulled⟩)
@@ -1738,8 +1737,49 @@ private theorem effective_aligned {g x : ForkedBeaconState preset}
     have := congrArg UInt64.toNat (whole v (Array.mem_of_getElem? found))
     simpa [effectiveAt, found, UInt64.toNat_mod] using this
 
-/-- A key's effective balance on C's branch is at most its balance on R's, plus the main regime of
-the rise, plus the slacks. -/
+/-- At any state, a key's cap is at most the largest cap of the preset. -/
+private theorem capAt_le_capMax (caps : CapOrder preset) (z : ForkedBeaconState preset) (i : ℕ) :
+    PinSplit2.capAt z i ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
+  have order := UInt64.le_iff_toNat_le.mp caps.compounding
+  have first := UInt64.le_iff_toNat_le.mp caps.activation
+  simp only [PinSplit2.capAt]
+  cases found : z.state.validators.data[i]? with
+  | none => simp
+  | some v =>
+    simp only [Option.map_some, Option.getD_some, withdrawalMaxEffectiveBalance]
+    split
+    · simp only [getMaxEffectiveBalance]
+      split
+      · exact le_rfl
+      · exact order
+    · omega
+
+/-- A key's effective balance on C's branch is at most the cap that `capFor` reads. -/
+private theorem key_capped {g : ForkedBeaconState preset}
+    {counted : BeaconState preset fork} (run : Run config checks g ⟨fork, counted⟩)
+    (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
+    (early : fork < .glamsterdam) (electra : .pectra ≤ fork) (i : ℕ) {vC vR : Validator}
+    (foundC : counted.validators.data[i]? = some vC) {capFor : ℕ}
+    (cases : capFor = preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat ∨
+      (capFor = (withdrawalMaxEffectiveBalance preset fork vR).toNat ∧
+        (hasCompoundingWithdrawalCredential vC = true →
+          hasCompoundingWithdrawalCredential vR = true))) :
+    effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ capFor := by
+  have capped := UInt64.le_iff_toNat_le.mp
+    (run.effectiveBalance_capped genesis caps.activation caps.compounding early vC
+      (Array.mem_of_getElem? foundC))
+  simp only [effectiveAt, foundC, Option.map_some, Option.getD_some]
+  refine le_trans capped ?_
+  rcases cases with high | ⟨low, frozen⟩
+  · rw [high]
+    simp only [withdrawalMaxEffectiveBalance, electra, ↓reduceIte, getMaxEffectiveBalance]
+    split
+    · exact le_rfl
+    · exact UInt64.le_iff_toNat_le.mp caps.compounding
+  · rw [low]
+    exact UInt64.le_iff_toNat_le.mp (PinSplit.withdrawalMax_le electra electra caps frozen)
+
+/-- A key's effective balance on C's branch is at most R's plus the main rise and the slacks. -/
 private theorem key_rise_main {g : ForkedBeaconState preset}
     {fin pulled counted : BeaconState preset fork} (shared : Run config checks g ⟨fork, fin⟩)
     (genesis : Genesis (config := config) (checks := checks) g)
