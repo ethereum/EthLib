@@ -1090,7 +1090,7 @@ theorem reservedReplay_consolidationRequest {fork : Fork} {s t : BeaconState pre
     unfold OwnedEvent
     simp only [notTransfer, ↓reduceIte]
     exact ⟨by trivial, by trivial, Or.inr (OwnedFrame.refl ownedFrame.1)⟩
-  rcases consolidationRequest_cases ok with same | ⟨index, switch⟩ |
+  rcases consolidationRequest_cases ok with same | ⟨index, _, _, switch⟩ |
     ⟨sourceIndex, source, targetIndex, target, accepted, queued⟩
   -- The request returned its state: the event keeps the queue and the ownership.
   · subst t

@@ -237,7 +237,8 @@ theorem payloadInputs_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     PayloadInputs state after := by
-  rcases consolidationRequest_cases computed with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  rcases consolidationRequest_cases computed with
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
   · exact PayloadInputs.refl _
   · exact payloadInputs_switchToCompoundingValidator switched
   · exact payloadInputs_queueConsolidation queued

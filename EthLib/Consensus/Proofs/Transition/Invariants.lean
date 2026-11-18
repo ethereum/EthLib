@@ -1142,7 +1142,7 @@ theorem processConsolidationRequest {electra : .pectra ≤ fork} {request : Cons
     (computed : Consensus.processConsolidationRequest config state electra request = .ok after) :
     R state after := by
   rcases consolidationRequest_cases computed with
-    rfl | ⟨_, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
   · exact laws.refl _
   · exact laws.switchToCompoundingValidator keep switched
   · exact laws.queueConsolidation keep accepted.sourceAt queued

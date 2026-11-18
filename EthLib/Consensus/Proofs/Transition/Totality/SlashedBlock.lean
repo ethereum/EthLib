@@ -173,7 +173,7 @@ private theorem same_consolidationRequest {s t : BeaconState preset fork} {elect
     {request : ConsolidationRequest}
     (ok : processConsolidationRequest config s electra request = .ok t) :
     t.slashings = s.slashings := by
-  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
   · rfl
   · exact same_compounding switched
   · exact same_queueConsolidation queued

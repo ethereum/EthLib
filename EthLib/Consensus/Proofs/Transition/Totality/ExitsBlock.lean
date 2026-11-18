@@ -823,7 +823,7 @@ private theorem moves_consolidationRequest (rates : Rates preset config)
     (computed : processConsolidationRequest config a electra request = .ok b) :
     Moves config start ceiling 0 a b := by
   rcases consolidationRequest_cases computed with
-    rfl | ⟨_, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
   · exact Moves.refl _
   · exact (Plain.compounding switched).moves
   · obtain ⟨churn, churnOk, above⟩ := accepted.churn

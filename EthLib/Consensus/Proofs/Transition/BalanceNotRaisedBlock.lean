@@ -223,7 +223,8 @@ private theorem down_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after)
     (index : Nat) : BalanceDown index state after := by
-  rcases consolidationRequest_cases computed with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  rcases consolidationRequest_cases computed with
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
   · exact BalanceDown.refl _ _
   · exact down_switchToCompoundingValidator switched index
   · exact down_queueConsolidation queued index
@@ -502,7 +503,8 @@ private theorem fixed_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     BlockFixed state after := by
-  rcases consolidationRequest_cases computed with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  rcases consolidationRequest_cases computed with
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
   · exact BlockFixed.refl _
   · exact fixed_switchToCompoundingValidator switched
   · exact fixed_queueConsolidation queued

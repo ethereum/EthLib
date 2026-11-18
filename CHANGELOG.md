@@ -150,6 +150,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the switch case of `consolidationRequest_cases` records the switched validator in `SwitchAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
+  The request names one key twice, the index is the first with that key, and the validator there passes `isValidSwitchToCompoundingRequest`.
+  A caller that matched the case as `⟨index, switched⟩` writes `⟨index, validator, accepted, switched⟩`.
+
 - In Lean, `HistoricalDirectSafetyEvidence` now records a conflict.
   It requires that the earlier finalized epoch is at most the later justified epoch.
   It also requires that the later justified root does not read the earlier finalized root at that epoch.

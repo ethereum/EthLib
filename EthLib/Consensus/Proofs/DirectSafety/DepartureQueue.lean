@@ -2114,7 +2114,7 @@ private theorem consolidationRequest_exitFrame {fork : Fork} {s t : BeaconState 
     t.earliestExitEpoch electra = s.earliestExitEpoch electra ∧
       t.exitBalanceToConsume electra = s.exitBalanceToConsume electra ∧
       (t.pendingPartialWithdrawals electra).data = (s.pendingPartialWithdrawals electra).data := by
-  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨i, v, j, _, _, called⟩
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ | ⟨i, v, j, _, _, called⟩
   · exact ⟨rfl, rfl, rfl⟩
   · have frame := switchToCompounding_departureQueues electra switched
     exact ⟨congrArg Prod.fst frame, congrArg (fun q => q.2.1) frame,
@@ -3106,10 +3106,10 @@ theorem consolidationQueue_dispatch {fork : Fork} (electra : .pectra ≤ fork)
     exact ⟨congrArg Prod.fst frame, congrArg Prod.snd frame⟩
   · obtain ⟨_, rfl⟩ := processSyncAggregate_eq ok
     exact ⟨rfl, rfl⟩
-  · rcases consolidationRequest_cases ok with same | switched |
+  · rcases consolidationRequest_cases ok with same | ⟨index, _, _, switched⟩ |
       ⟨sourceIndex, source, targetIndex, _, accepted, queued⟩
     · exact .inl same
-    · exact .inr (.inl switched)
+    · exact .inr (.inl ⟨index, switched⟩)
     · exact .inr (.inr ⟨sourceIndex, targetIndex, source,
         getValidator_eq_ok_iff.mpr accepted.sourceAt, queued⟩)
 

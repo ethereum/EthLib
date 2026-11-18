@@ -139,7 +139,7 @@ theorem processConsolidationRequest_slashed_exit_assigned {f : Fork}
     {s t : BeaconState preset f} {electra : .pectra ≤ f} {request : ConsolidationRequest}
     (ok : processConsolidationRequest config s electra request = .ok t)
     (held : SlashedExitAssigned s) : SlashedExitAssigned t := by
-  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ |
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ |
       ⟨_, _, _, _, accepted, queued⟩
   · exact held
   · exact switchToCompoundingValidator_slashed_exit_assigned switched held

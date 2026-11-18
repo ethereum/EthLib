@@ -2884,7 +2884,7 @@ private theorem TagEvent.queueProvenance_appended {x : ForkedBeaconState preset}
     have sourceAt := getValidator_eq_ok_iff.mp found
     -- The request queued an accepted source, which is this source, with an unset exit.
     have unset : source.exitEpoch = FAR_FUTURE_EPOCH := by
-      rcases consolidationRequest_cases processed with rfl | ⟨_, switched⟩ |
+      rcases consolidationRequest_cases processed with rfl | ⟨_, _, _, switched⟩ |
         ⟨index, accepted, _, _, valid, again⟩
       · have sizes := congrArg List.length grown
         simp at sizes
@@ -4381,7 +4381,7 @@ theorem endpointCover_processConsolidationRequest {x : ForkedBeaconState preset}
     (cover : EndpointCoverAll x ⟨fork, u⟩ o) :
     EndpointCoverAll x ⟨fork, v⟩ o := by
   have cases := consolidationRequest_cases ok
-  rcases cases with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
+  rcases cases with rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
   · exact cover
   · exact endpointCover_switch compounding switched cover
   -- The source had not started to exit.

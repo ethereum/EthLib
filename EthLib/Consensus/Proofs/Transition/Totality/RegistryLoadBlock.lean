@@ -435,7 +435,8 @@ private theorem processConsolidationRequest_registryLoad_le {electra : .pectra �
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     registryLoad after ≤ registryLoad state + 1 := by
-  rcases consolidationRequest_cases computed with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  rcases consolidationRequest_cases computed with
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
   · omega
   · exact switchToCompoundingValidator_registryLoad_le switched
   · exact Nat.le_trans (Nat.le_of_eq (loadKept_queueConsolidation queued).registryLoad_eq)

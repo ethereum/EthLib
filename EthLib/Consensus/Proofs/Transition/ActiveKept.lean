@@ -281,7 +281,7 @@ private theorem stepKeeps_processConsolidationRequest {electra : .pectra ≤ for
     (computed : processConsolidationRequest config state electra request = .ok after) :
     StepKeeps state after := by
   rcases consolidationRequest_cases computed with
-    rfl | ⟨_, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
   · exact StepKeeps.refl _
   · exact stepKeeps_switchToCompoundingValidator switched
   -- The source had not started to exit.

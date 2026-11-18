@@ -528,6 +528,20 @@ structure ConsolidationAccepted (config : Config) (state : BeaconState preset fo
     (getCurrentEpoch state).toNat
   owed : getPendingBalanceToWithdraw state electra sourceIndex = .ok 0
 
+/-- From Electra: when a request switches a validator to compounding credentials.
+
+The source and the target have one key.
+
+The validator is the first with that key, at this index.
+
+It passes the check of a switch request. -/
+structure SwitchAccepted (state : BeaconState preset fork) (request : ConsolidationRequest)
+    (index : ValidatorIndex) (validator : Validator) : Prop where
+  same : request.sourcePubkey = request.targetPubkey
+  first : (findValidatorByPubkey state request.sourcePubkey).map (·.val) = some index.toNat
+  found : state.validators.data[index.toNat]? = some validator
+  valid : isValidSwitchToCompoundingRequest state request validator = true
+
 /-- From Electra, a consolidation request that meets every condition is the queueing of its source.
 
 The queueing step may still fail on its own. -/
@@ -742,7 +756,8 @@ theorem withdrawalRequest_cases {fork : Fork} {s t : BeaconState preset fork}
 theorem consolidationRequest_cases {fork : Fork} {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : ConsolidationRequest}
     (ok : processConsolidationRequest config s electra request = .ok t) :
-    t = s ∨ (∃ index, switchToCompoundingValidator s electra index = .ok t) ∨
+    t = s ∨ (∃ index validator, SwitchAccepted s request index validator ∧
+        switchToCompoundingValidator s electra index = .ok t) ∨
       ∃ sourceIndex source targetIndex target,
         ConsolidationAccepted config s electra request sourceIndex source targetIndex target ∧
           queueConsolidation config s electra sourceIndex source targetIndex = .ok t := by
@@ -750,10 +765,13 @@ theorem consolidationRequest_cases {fork : Fork} {s t : BeaconState preset fork}
   · unfold processConsolidationRequest at ok
     simp only [same, beq_self_eq_true, ↓reduceIte, bind, Except.bind, pure, Except.pure] at ok
     repeat' split at ok
-    all_goals first
+    all_goals try first
       | (cases ok; exact .inl rfl)
-      | (cases ok)
-      | exact .inr (.inl ⟨_, liftAccessor_ok.mp ok⟩)
+      | (cases ok; done)
+    rename_i _ position located _ index checked valid
+    have value := (ofNatChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp checked))).2
+    exact .inr (.inl ⟨index, _, ⟨same, by simp [same, located, value],
+      getElem?_toNat_of_ofNatChecked checked, valid⟩, liftAccessor_ok.mp ok⟩)
   · exact (eq_or_queueConsolidation_of_processConsolidationRequest same ok).imp_right .inr
 
 end EthLib.Consensus

@@ -388,7 +388,8 @@ private theorem listed_consolidationRequest {electra : .pectra ≤ fork}
   have inside {i : ValidatorIndex} {v : Validator} (found : s.validators.data[i.toNat]? = some v) :
       i.toNat < s.validators.data.size :=
     (Array.getElem?_eq_some_iff.mp found).1
-  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
+  rcases consolidationRequest_cases ok with
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
   · exact listed
   · exact (Kept.compounding switched).listed listed
   · exact listed_queueConsolidation (inside accepted.sourceAt) (inside accepted.targetAt) queued
@@ -517,7 +518,7 @@ private theorem kept_queueConsolidation {electra : .pectra ≤ fork}
 private theorem kept_consolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (ok : processConsolidationRequest config s electra request = .ok t) : BlockKept s t := by
-  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
   · exact BlockKept.refl _
   · exact (Kept.compounding switched).kept
   · exact kept_queueConsolidation queued

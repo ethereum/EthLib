@@ -258,7 +258,8 @@ theorem builderFrame_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     BuilderFrame state after := by
-  rcases consolidationRequest_cases computed with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  rcases consolidationRequest_cases computed with
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
   · exact BuilderFrame.refl _
   · exact builderFrame_switchToCompoundingValidator switched
   · exact builderFrame_queueConsolidation queued
