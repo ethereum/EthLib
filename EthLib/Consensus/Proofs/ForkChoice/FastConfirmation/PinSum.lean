@@ -501,6 +501,8 @@ structure Setting (config : Config) (checks : SignatureChecks) (g : ForkedBeacon
   aligned : MaxEffectiveBalancesAligned preset
   twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat
   delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat
+  shallow : (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat ≤
+    config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat
   pulledTotal : ∃ t, getTotalActiveBalance pulled = .ok t
   room : 2 ^ 32 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat
   below : preset.downwardBand < preset.EFFECTIVE_BALANCE_INCREMENT.toNat
