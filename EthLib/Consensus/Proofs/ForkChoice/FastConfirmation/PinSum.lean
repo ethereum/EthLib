@@ -217,8 +217,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   --
   -- A partial requested after that state can then be paid on a branch and sit in no queue read
   -- here, so its whole balance is charged.
+  let actualFin (i : ℕ) := ((finalizedState.balances.data[i]?).map (·.toNat)).getD 0
   let fall (i : ℕ) := if depthFin ≤ partialDelay then
-      let low := min (actual i) (cap i) - (depthFin * (leak i + gainRate i) + partialsDue i)
+      let low := min (actualFin i) (cap i) - (depthFin * (leak i + gainRate i) + partialsDue i)
       let floorC := if ebUp i ≤ low + preset.downwardBand then finEB i
         else min (finEB i) (low - low % inc)
       effective i - floorC

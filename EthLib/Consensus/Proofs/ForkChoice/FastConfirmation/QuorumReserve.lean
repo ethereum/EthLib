@@ -354,8 +354,13 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- A partial requested after that state can then be paid on a branch and sit in no queue read
   -- here, so its whole balance is charged.
+  --
+  -- The floor reads the finalized block's balance, since the call reads no state up to the split.
+  --
+  -- Both branches can share a dip there that this branch's later credits would hide.
+  let actualFin (i : ℕ) := ((finalizedState.balances.data[i]?).map (·.toNat)).getD 0
   let fall (i : ℕ) := if depthFin ≤ partialDelay then
-      let low := min (actual i) (cap i) - (depthFin * (leak i + gainRate i) + partialsDue i)
+      let low := min (actualFin i) (cap i) - (depthFin * (leak i + gainRate i) + partialsDue i)
       -- On another branch the key can keep an effective balance that this branch's update raised.
       --
       -- Away from the downward band of the envelope, it keeps its finalized effective balance.
