@@ -415,16 +415,12 @@ private theorem pendingTail_queueConsolidation {config : Config}
     (found : state.validators.data[index.toNat]? = some source)
     (run : queueConsolidation config state electra index source target = .ok after)
     (tail : PendingTail count epoch state) : PendingTail count epoch after := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    pure, Except.pure, Except.ok.injEq] at run
-  obtain ⟨⟨churned, exitEpoch⟩, churn, _, _, written, set, _, _, rfl⟩ := run
-  have same := (computeConsolidationEpochAndUpdateChurn_earliest churn).2.1
-  have read : getValidatorAt churned index.toNat = .ok source := by
-    rw [← getValidator_eq_getValidatorAt, getValidator, same, found]
+  obtain ⟨_, _, _, written, _, _, _, set, _, rfl⟩ := queueConsolidation_steps run
   rw [setValidator_eq_setValidatorAt] at set
   exact pendingTail_of_validators (state := written) rfl
-    (pendingTail_setValidatorAt read set rfl rfl
-      (pendingTail_of_validators (congrArg (·.data) same) tail))
+    (pendingTail_setValidatorAt (old := source)
+      (by rw [← getValidator_eq_getValidatorAt]; exact getValidator_eq_ok_iff.mpr found) set rfl
+      rfl (pendingTail_of_validators rfl tail))
 
 /-- Every successful consolidation request preserves the pending activation suffix. -/
 private theorem pendingTail_processConsolidationRequest {config : Config}

@@ -236,14 +236,7 @@ private theorem queueConsolidation {electra : .pectra ≤ fork}
     {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
     (ok : Consensus.queueConsolidation config state electra sourceIndex source targetIndex =
       .ok after) : SameSyncCommittees state after := by
-  simp only [Consensus.queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨_, _⟩, churned, _, _, _, set, _, _, ok⟩ := ok
-  cases ok
-  simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at churned
-  obtain ⟨_, _, _, _, _, _, churned⟩ := churned
-  cases churned
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps ok
   have kept := setValidator set
   exact kept
 

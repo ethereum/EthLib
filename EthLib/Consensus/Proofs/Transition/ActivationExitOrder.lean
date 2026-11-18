@@ -300,16 +300,10 @@ private theorem queueConsolidation {electra : .pectra ≤ fork}
     (assigned : source.activationEpoch ≤ getCurrentEpoch state)
     (ok : Consensus.queueConsolidation config state electra sourceIndex source targetIndex =
       .ok after) : Kept config state after := by
-  simp only [Consensus.queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨churned, exitEpoch⟩, churn, withdrawable, delayed, written, set, _, _, ok⟩ := ok
-  simp only [Except.ok.injEq] at ok
-  subst ok
-  have same := (computeConsolidationEpochAndUpdateChurn_earliest churn).2.1
-  have read : getValidator churned sourceIndex = .ok source := by
-    rw [getValidator, same, found]
-  exact (of_data (by rw [same])).trans <|
-    (setValidator read set (fun _ => by
+  obtain ⟨exitEpoch, withdrawable, _, written, _, churn, delayed, set, _, rfl⟩ :=
+    queueConsolidation_steps ok
+  exact (of_data rfl).trans <|
+    (setValidator (by exact getValidator_eq_ok_iff.mpr found) set (fun _ => by
       cases first : computeActivationExitEpoch preset (getCurrentEpoch state) with
       | error =>
         simp [computeConsolidationEpochAndUpdateChurn, first, liftArith, Except.mapError,

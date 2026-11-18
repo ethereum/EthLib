@@ -1116,22 +1116,18 @@ theorem queueConsolidation {electra : .pectra ≤ fork} {sourceIndex : Validator
     (computed : Consensus.queueConsolidation config state electra sourceIndex source targetIndex =
       .ok after) :
     R state after := by
-  simp only [Consensus.queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, addChecked_ok_iff, pure, Except.pure] at computed
-  obtain ⟨⟨churnedState, exitEpoch⟩, churned, withdrawable, ⟨_, sum⟩, _, set, _, _, computed⟩ :=
-    computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
+  obtain ⟨exitEpoch, withdrawable, _, _, _, churned, added, set, _, rfl⟩ :=
+    queueConsolidation_steps computed
+  have sum := (addChecked_ok_iff.mp added).2
   obtain ⟨inside, rfl⟩ := Array.getElem?_eq_some_iff.mp found
   have le : exitEpoch ≤ withdrawable :=
-    UInt64.le_iff_toNat_le.mpr (by simp only at sum ⊢; omega)
-  have validators : churnedState.validators = state.validators :=
-    (computeConsolidationEpochAndUpdateChurn_earliest churned).2.1
+    UInt64.le_iff_toNat_le.mpr (by omega)
+  have validators := (computeConsolidationEpochAndUpdateChurn_earliest churned).2.1
   refine laws.trans (keep (frame_computeConsolidationEpochAndUpdateChurn churned) validators) <|
     laws.trans (laws.setValidator (old := state.validators.data[sourceIndex.toNat]) set
-      (by simp [getValidator_eq_getValidatorAt, getValidatorAt, validators, inside]) rfl rfl
-      (fun _ => le) fun _ holds => holds state.validators.data[sourceIndex.toNat] (by
-        rw [validators]; exact Array.getElem_mem inside))
+      (by simp [getValidator_eq_getValidatorAt, getValidatorAt, inside]) rfl rfl
+      (fun _ => le) fun _ holds => holds state.validators.data[sourceIndex.toNat]
+        (Array.getElem_mem inside))
       (keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl)
 
 theorem processConsolidationRequest {electra : .pectra ≤ fork} {request : ConsolidationRequest}

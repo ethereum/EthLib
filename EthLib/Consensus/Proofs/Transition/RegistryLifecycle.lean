@@ -646,22 +646,9 @@ private theorem registryLifecycle_queueConsolidation {electra : .pectra ≤ fork
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     RegistryLifecycle state after := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    pure, Except.pure] at computed
-  obtain ⟨⟨churnedState, exitEpoch⟩, churned, withdrawable, _, _, set, _, _, computed⟩ :=
-    computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
-  have churnedKept := registryLifecycle_computeConsolidationEpochAndUpdateChurn churned
-  have same : churnedState.validators.data = state.validators.data := by
-    simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at churned
-    obtain ⟨_, _, _, _, _, _, churned⟩ := churned
-    cases churned
-    rfl
-  exact churnedKept.trans <|
-    (RegistryLifecycle.setValidator (old := source)
-      (by simp [getValidator, same, found]) set
+  obtain ⟨_, _, _, _, _, churned, _, set, _, rfl⟩ := queueConsolidation_steps computed
+  exact (registryLifecycle_computeConsolidationEpochAndUpdateChurn churned).trans <|
+    (RegistryLifecycle.setValidator (old := source) (by exact getValidator_eq_ok_iff.mpr found) set
       ⟨fun _ => rfl, fun set => absurd far set⟩).trans (.of_data rfl)
 
 theorem registryLifecycle_processConsolidationRequest {electra : .pectra ≤ fork}
@@ -1360,16 +1347,9 @@ private theorem queueConsolidation {electra : .pectra ≤ fork}
     (notPending : ¬Unassigned source)
     (ok : Consensus.queueConsolidation config state electra sourceIndex source targetIndex =
       .ok after) : UnassignedKept state after := by
-  simp only [Consensus.queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨churned, _⟩, churn, _, _, _, set, _, _, ok⟩ := ok
-  simp only [Except.ok.injEq] at ok
-  subst ok
-  have same := (computeConsolidationEpochAndUpdateChurn_earliest churn).2.1
-  have read : getValidator churned sourceIndex = .ok source := by
-    rw [getValidator, same, found]
-  exact (of_data (by rw [same])).trans <|
-    (setValidator read set (fun h => False.elim (notPending h))).trans of_data
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps ok
+  exact (of_data rfl).trans <| (setValidator (by exact getValidator_eq_ok_iff.mpr found) set
+    (fun h => False.elim (notPending h))).trans of_data
 
 private theorem processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}

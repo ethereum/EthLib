@@ -107,14 +107,7 @@ private theorem funding_request_support {fork : Fork} {s t : BeaconState preset 
       ∃ v, s.validators.data[i]? = some v ∧
         (isActiveValidator v (getCurrentEpoch s) = true ∨
           getCurrentEpoch s < v.activationEpoch) := by
-    simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-      Except.ok.injEq] at ok
-    obtain ⟨⟨churned, epoch⟩, churnOk, _, _, written, set, pending, appended, rfl⟩ := ok
-    have queue : churned.pendingConsolidations = s.pendingConsolidations := by
-      simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at churnOk
-      obtain ⟨_, _, _, _, _, _, final⟩ := churnOk
-      cases final; rfl
+    obtain ⟨_, _, _, _, _, _, _, set, appended, rfl⟩ := queueConsolidation_steps ok
     obtain ⟨_, rfl⟩ := setValidator_ok set
     have push := appendWithinLimit_data appended
     intro i member
@@ -122,7 +115,7 @@ private theorem funding_request_support {fork : Fork} {s t : BeaconState preset 
     simp only [Array.toList_push, List.any_append, List.any_cons, List.any_nil,
       Bool.or_false, Bool.or_eq_true, beq_iff_eq] at member
     rcases member with old | eq
-    · exact Or.inl (by simpa only [BeaconState.putValidator, queue] using old)
+    · exact Or.inl (by simpa only [BeaconState.putValidator] using old)
     · exact Or.inr ⟨source, eq ▸ found, Or.inl active⟩
   rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ |
     ⟨_, _, _, _, accepted, ok⟩

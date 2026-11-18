@@ -257,24 +257,11 @@ private theorem stepKeeps_queueConsolidation {electra : .pectra ≤ fork}
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     StepKeeps state after := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    addChecked_ok_iff, pure, Except.pure] at computed
-  obtain ⟨⟨churnedState, exitEpoch⟩, churned, withdrawable, ⟨_, sum⟩, _, set, _, _, computed⟩ :=
-    computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
+  obtain ⟨_, _, _, _, _, churned, _, set, _, rfl⟩ := queueConsolidation_steps computed
   have later := consolidationEpoch_lt churned
-  obtain ⟨-, validators, -⟩ := computeConsolidationEpochAndUpdateChurn_earliest churned
-  have slot := (frame_computeConsolidationEpochAndUpdateChurn churned).slot
-  have first : StepKeeps state churnedState := StepKeeps.of_validators (by rw [validators]) slot
-  have found' : getValidator churnedState sourceIndex = .ok source := by
-    rw [getValidator, validators, found]
-  refine first.trans ((stepKeeps_setValidator found' (fun _ le => ?_) set).trans
-    StepKeeps.of_validators)
-  have epochEq : getCurrentEpoch churnedState = getCurrentEpoch state := by
-    simp only [getCurrentEpoch, slot]
-  exact isActiveValidator_eq_of_exit rfl far
-    (activityFixedEpoch_lt_of_toNat_lt (by rw [epochEq]; exact later)) le
+  refine StepKeeps.trans StepKeeps.of_validators ((stepKeeps_setValidator
+    (by exact getValidator_eq_ok_iff.mpr found) (fun _ le => ?_) set).trans StepKeeps.of_validators)
+  exact isActiveValidator_eq_of_exit rfl far (activityFixedEpoch_lt_of_toNat_lt later) le
 
 private theorem stepKeeps_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}

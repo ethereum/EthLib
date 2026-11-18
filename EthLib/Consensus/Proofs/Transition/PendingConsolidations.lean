@@ -1269,11 +1269,8 @@ private theorem queue {electra : .pectra ≤ fork} {sourceIndex targetIndex : Va
   have frame := frame_queueConsolidation found ok
   have sameEpoch : getCurrentEpoch after = getCurrentEpoch state :=
     congrArg (computeEpochAtSlot preset) frame.slot
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    pure, Except.pure] at ok
-  obtain ⟨⟨churned, epoch⟩, churnOk, withdrawal, added, written, set, pending, appended, final⟩ :=
-    ok
-  cases final
+  obtain ⟨epoch, withdrawal, _, written, pending, churnOk, added, set, appended, rfl⟩ :=
+    queueConsolidation_steps ok
   have data := appendWithinLimit_data appended
   obtain ⟨churnEarliest, churnRegistry, -⟩ :=
     computeConsolidationEpochAndUpdateChurn_earliest churnOk
@@ -1287,16 +1284,10 @@ private theorem queue {electra : .pectra ≤ fork} {sourceIndex targetIndex : Va
   obtain ⟨firstLe, earliestLe⟩ := computeConsolidationEpochAndUpdateChurn_first firstOk churnOk
   have firstNat := (computeActivationExitEpoch_ok_iff.mp firstOk).2
   have firstLeNat := UInt64.le_iff_toNat_le.mp firstLe
-  have churnQueue : churned.pendingConsolidations = state.pendingConsolidations := by
-    simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at churnOk
-    obtain ⟨_, _, _, _, _, _, final⟩ := churnOk
-    cases final; rfl
   have writtenKept := QueueKept.setValidator set
   have queueEq := writtenKept.queue
-  change written.pendingConsolidations = churned.pendingConsolidations at queueEq
+  change written.pendingConsolidations = state.pendingConsolidations at queueEq
   have sum := (Uint64.addChecked_ok_iff.mp added).2
-  simp only at sum
   have assigned : epoch ≠ FAR_FUTURE_EPOCH := by
     intro eq
     have bound := withdrawal.toNat_lt
@@ -1333,7 +1324,7 @@ private theorem queue {electra : .pectra ≤ fork} {sourceIndex targetIndex : Va
       cases read
       exact assigned far
     change (pending.data.toList.map (·.sourceIndex)).Nodup ∧ _
-    rw [data, queueEq, churnQueue, Array.toList_push]
+    rw [data, queueEq, Array.toList_push]
     refine ⟨?_, ?_⟩
     · simpa [List.map_append, List.nodup_append, unique] using absent
     · intro c mem
@@ -1357,7 +1348,7 @@ private theorem queue {electra : .pectra ≤ fork} {sourceIndex targetIndex : Va
           written.validators.data[b.sourceIndex.toNat]? = some w → v.exitEpoch ≤ w.exitEpoch) ∧
       ∀ c ∈ pending.data.toList, ∀ v, written.validators.data[c.sourceIndex.toNat]? = some v →
         v.exitEpoch ≤ written.earliestConsolidationEpoch witness ∧ _ ∧ _
-    rw [data, queueEq, churnQueue, Array.toList_push, newEarliest, List.pairwise_append]
+    rw [data, queueEq, Array.toList_push, newEarliest, List.pairwise_append]
     refine ⟨⟨sorted.imp_of_mem fun memA memB order v w readA readB =>
         order v w (by rwa [unchanged witness _ memA] at readA)
           (by rwa [unchanged witness _ memB] at readB),
@@ -1376,7 +1367,7 @@ private theorem queue {electra : .pectra ≤ fork} {sourceIndex targetIndex : Va
         refine ⟨UInt64.le_refl _, fun _ => ?_, ?_⟩ <;> simp only <;> omega
   · -- The queue gains only the new pair.
     change c ∈ pending.data.toList at member
-    rw [data, queueEq, churnQueue, Array.toList_push] at member
+    rw [data, queueEq, Array.toList_push] at member
     rcases List.mem_append.mp member with member | member
     · exact apart witness c member
     · rw [List.mem_singleton.mp member]

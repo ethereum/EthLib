@@ -237,15 +237,7 @@ private theorem builderFrame_queueConsolidation {electra : .pectra ≤ fork}
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     BuilderFrame state after := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    pure, Except.pure] at computed
-  obtain ⟨⟨_, _⟩, churned, _, _, _, set, _, _, computed⟩ := computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
-  simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at churned
-  obtain ⟨_, _, _, _, _, _, churned⟩ := churned
-  cases churned
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps computed
   refine (BuilderFrame.trans ?_ (builderFrame_setValidator set)).trans ?_ <;>
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 

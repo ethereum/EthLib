@@ -360,11 +360,7 @@ private theorem listed_queueConsolidation {electra : .pectra ≤ fork}
     (targetInside : targetIndex.toNat < s.validators.data.size)
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t)
     (listed : Listed s) : Listed t := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, Base.Uint64.addChecked_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨churned, epoch⟩, churn, _, _, marked, set, pending, appended, ok⟩ := ok
-  simp only [Except.ok.injEq] at ok
-  subst ok
+  obtain ⟨_, _, _, _, _, churn, _, set, appended, rfl⟩ := queueConsolidation_steps ok
   have kept := (Kept.consolidationChurn churn).trans (Kept.setValidator set)
   obtain ⟨flags, scored, -⟩ := kept.listed listed
   refine ⟨flags, scored, fun electra' c member => ?_⟩
@@ -504,11 +500,7 @@ private theorem kept_queueConsolidation {electra : .pectra ≤ fork}
     {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
     BlockKept s t := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, Base.Uint64.addChecked_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨churned, epoch⟩, churn, _, _, marked, set, pending, appended, ok⟩ := ok
-  simp only [Except.ok.injEq] at ok
-  subst ok
+  obtain ⟨_, _, _, _, _, churn, _, set, _, rfl⟩ := queueConsolidation_steps ok
   exact ((Kept.consolidationChurn churn).trans (Kept.setValidator set)).kept.trans
     BlockKept.of_eq
 

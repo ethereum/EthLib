@@ -351,17 +351,11 @@ private theorem effectiveKept_consolidate {f : Fork} {s t : BeaconState preset f
     (found : s.validators.data[sourceIndex.toNat]? = some source)
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
     EffectiveKept s t := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, Base.Uint64.addChecked_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨churnedState, exitEpoch⟩, churned, withdrawal, _, marked, set, _, _, ok⟩ := ok
-  simp only [Except.ok.injEq] at ok
-  subst ok
-  have validators := (computeConsolidationEpochAndUpdateChurn_earliest churned).2.1
-  have read : getValidator churnedState sourceIndex = .ok source := by
-    rw [getValidator, validators, found]
-  exact effectiveKept_trans (effectiveKept_data (by rw [validators]))
-    (effectiveKept_trans (effectiveKept_setValidator read set rfl) (effectiveKept_data rfl)
-      (Nat.le_of_eq (sameSizes_setValidator set).1.symm)) (Nat.le_of_eq (by rw [validators]))
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps ok
+  have kept := effectiveKept_trans (effectiveKept_setValidator (old := source)
+    (by exact getValidator_eq_ok_iff.mpr found) set rfl) (effectiveKept_data rfl)
+    (Nat.le_of_eq (sameSizes_setValidator set).1.symm)
+  exact kept
 
 theorem effectiveKept_consolidationRequest {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {request : ConsolidationRequest}

@@ -553,15 +553,7 @@ private theorem still_queueConsolidation {electra : .pectra ≤ fork}
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after)
     {index : Nat} (other : sourceIndex.toNat ≠ index) : Still index state after := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    pure, Except.pure] at computed
-  obtain ⟨⟨_, _⟩, churned, _, _, _, set, _, _, computed⟩ := computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
-  simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at churned
-  obtain ⟨_, _, _, _, _, _, churned⟩ := churned
-  cases churned
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps computed
   exact ((Still.of_eq rfl rfl rfl index).trans (still_setValidator set other)).trans
     (Still.of_eq rfl rfl rfl index)
 

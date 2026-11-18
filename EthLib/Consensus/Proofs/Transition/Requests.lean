@@ -439,6 +439,42 @@ theorem getElem?_toNat_of_ofNatChecked {position : Fin state.validators.data.siz
   rw [getElem?_toNat_eq_of_ofNatChecked checked]
   simp
 
+/-- From Electra: the steps of queueing a consolidation.
+
+The consolidation churn writes only the churn left and the earliest consolidation epoch.
+
+The source then gets that epoch as its exit, and the withdrawable epoch a fixed delay later.
+
+The consolidation is appended to the queue. -/
+theorem queueConsolidation_steps {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
+    {source : Validator} {targetIndex : ValidatorIndex}
+    (computed :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
+    ∃ (epoch withdrawal : Epoch) (rest : Gwei) (written : BeaconState preset fork), ∃ pending,
+      computeConsolidationEpochAndUpdateChurn config state electra source.effectiveBalance =
+        .ok ({ state with
+          consolidationBalanceToConsume := fun _ => rest
+          earliestConsolidationEpoch := fun _ => epoch }, epoch) ∧
+      addChecked epoch config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok withdrawal ∧
+      ({ state with
+          consolidationBalanceToConsume := fun _ => rest
+          earliestConsolidationEpoch := fun _ => epoch } : BeaconState preset fork).setValidator
+        sourceIndex { source with exitEpoch := epoch, withdrawableEpoch := withdrawal } =
+          .ok written ∧
+      appendWithinLimit (written.pendingConsolidations electra) ⟨sourceIndex, targetIndex⟩ =
+        .ok pending ∧
+      after = { written with pendingConsolidations := fun _ => pending } := by
+  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+    pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨⟨_, epoch⟩, churned, withdrawal, added, written, set, pending, appended, rfl⟩ :=
+    computed
+  have call := churned
+  simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at churned
+  obtain ⟨_, _, _, _, ⟨_, rest⟩, _, churned⟩ := churned
+  cases churned
+  exact ⟨_, withdrawal, rest, written, pending, call, added, set, appended, rfl⟩
+
 /-- Queueing a consolidation keeps the size of the registry and every balance. -/
 private theorem queueConsolidation_kept {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
     {source : Validator} {targetIndex : ValidatorIndex}
@@ -446,13 +482,10 @@ private theorem queueConsolidation_kept {electra : .pectra ≤ fork} {sourceInde
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     after.validators.data.size = state.validators.data.size ∧
       after.balances = state.balances := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨⟨_, _⟩, churned, _, _, _, set, _, _, rfl⟩ := computed
-  obtain ⟨_, validators, balances⟩ := computeConsolidationEpochAndUpdateChurn_earliest churned
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps computed
   have sizes := (sameSizes_setValidator set).1
   obtain ⟨_, rfl⟩ := setValidator_ok set
-  exact ⟨sizes.trans (congrArg (·.data.size) validators), balances⟩
+  exact ⟨sizes, rfl⟩
 
 /-- Queueing a consolidation keeps the sizes of the registry and the balances. -/
 theorem sameSizes_queueConsolidation {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}

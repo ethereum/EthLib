@@ -792,13 +792,10 @@ private theorem moves_queueConsolidation (rates : Rates preset config)
     (stays : source.exitEpoch = FAR_FUTURE_EPOCH)
     (computed : queueConsolidation config a electra sourceIndex source targetIndex = .ok b) :
     Moves config start ceiling 0 a b := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    Uint64.addChecked_ok_iff, pure, Except.pure] at computed
-  obtain ⟨⟨churned, epoch⟩, churnStep, _, ⟨fits, -⟩, marked, set, _, _, final⟩ := computed
-  simp only [Except.ok.injEq] at final
-  subst final
+  obtain ⟨epoch, _, _, _, _, churnStep, added, set, _, rfl⟩ := queueConsolidation_steps computed
+  have fits := (Uint64.addChecked_ok_iff.mp added).1
   intro r u holds
-  obtain ⟨left, rfl, epochLe⟩ := consolidationChurn_bound rates holds churnOk above churnStep
+  obtain ⟨-, -, epochLe⟩ := consolidationChurn_bound rates holds churnOk above churnStep
   rw [setValidator_eq_setValidatorAt] at set
   obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
   -- The withdrawal delay keeps the exit below the far future.

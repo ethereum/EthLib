@@ -309,11 +309,7 @@ private theorem fixed_queueConsolidation {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
     Fixed s t := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, Base.Uint64.addChecked_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨churned, epoch⟩, churn, _, _, marked, set, pending, appended, ok⟩ := ok
-  simp only [Except.ok.injEq] at ok
-  subst ok
+  obtain ⟨_, _, _, _, _, churn, _, set, _, rfl⟩ := queueConsolidation_steps ok
   exact ((fixed_consolidationChurn churn).trans (fixed_setValidator set)).trans
     ⟨rfl, rfl, rfl, rfl, rfl⟩
 

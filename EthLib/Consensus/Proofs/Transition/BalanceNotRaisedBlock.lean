@@ -209,14 +209,8 @@ private theorem down_queueConsolidation {electra : .pectra ≤ fork}
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after)
     (index : Nat) : BalanceDown index state after := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    pure, Except.pure] at computed
-  obtain ⟨⟨_, _⟩, churned, _, _, _, set, _, _, computed⟩ := computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
-  exact (BalanceDown.of_balances
-    (computeConsolidationEpochAndUpdateChurn_earliest churned).2.2).trans
-    ((down_setValidator set index).trans (BalanceDown.of_balances rfl))
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps computed
+  exact (down_setValidator set index).trans (BalanceDown.of_balances rfl)
 
 /-- A consolidation request keeps every balance from rising. -/
 private theorem down_processConsolidationRequest {electra : .pectra ≤ fork}
@@ -487,15 +481,7 @@ private theorem fixed_queueConsolidation {electra : .pectra ≤ fork}
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     BlockFixed state after := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    pure, Except.pure] at computed
-  obtain ⟨⟨_, _⟩, churned, _, _, _, set, _, _, computed⟩ := computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
-  simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at churned
-  obtain ⟨_, _, _, _, _, _, churned⟩ := churned
-  cases churned
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps computed
   refine (BlockFixed.trans ?_ (fixed_setValidator set)).trans ?_ <;> exact BlockFixed.of_eq
 
 /-- A consolidation request keeps the fields. -/

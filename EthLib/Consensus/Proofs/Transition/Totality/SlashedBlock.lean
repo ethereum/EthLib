@@ -159,11 +159,7 @@ private theorem same_queueConsolidation {s t : BeaconState preset fork} {electra
     {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
     t.slashings = s.slashings := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, Base.Uint64.addChecked_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨churned, epoch⟩, churn, _, _, marked, set, pending, appended, ok⟩ := ok
-  simp only [Except.ok.injEq] at ok
-  subst ok
+  obtain ⟨_, _, _, _, _, churn, _, set, _, rfl⟩ := queueConsolidation_steps ok
   exact (same_setValidator set).trans (same_consolidationChurn churn)
 
 private theorem same_consolidationRequest {s t : BeaconState preset fork} {electra : .pectra ≤ fork}
