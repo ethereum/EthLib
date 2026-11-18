@@ -977,25 +977,6 @@ theorem stub_V (h : Setting config checks g split fin pulled anc counted V)
         (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
         (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) : ℕ) := sorry
 
-/-- A run to a state that holds a position of the registry splits at the step that first holds it.
-
-The state at the start does not hold the position. -/
-private theorem Run.first_holding {x y : ForkedBeaconState preset} (tail : Run config checks x y)
-    (i : ℕ) (missing : ¬i < x.state.validators.data.size)
-    (held : i < y.state.validators.data.size) :
-    ∃ (m n : ForkedBeaconState preset) (pre : Run config checks x m) (step : Step config checks m n)
-      (post : Run config checks n y), tail = (pre.snoc step).append post ∧
-        ¬i < m.state.validators.data.size ∧ i < n.state.validators.data.size := by
-  induction tail with
-  | nil => exact absurd held missing
-  | @snoc middle last pre step ih =>
-    by_cases inside : i < middle.state.validators.data.size
-    · obtain ⟨m, n, a, one, rest, split, hm, hn⟩ := ih missing inside
-      refine ⟨m, n, a, one, rest.snoc step, ?_, hm, hn⟩
-      rw [split]
-      rfl
-    · exact ⟨middle, last, pre, step, .nil, rfl, inside, held⟩
-
 /-- The per-key core of the rise.
 
 A key of R's registry rises from R to C by at most its rise term.
