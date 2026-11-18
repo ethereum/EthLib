@@ -1149,7 +1149,7 @@ private theorem attesterSlashing_partialsSame {fork : Fork} {s t : BeaconState p
 private theorem consolidationRequest_partialsSame {fork : Fork} {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : ConsolidationRequest}
     (ok : processConsolidationRequest config s electra request = .ok t) : PartialsSame s t := by
-  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, -, queued⟩
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, -, switched⟩ | ⟨_, _, _, _, -, queued⟩
   · exact PartialsSame.refl _
   · exact .of_frame fun e => switchToCompounding_departureQueues e switched
   · intro e

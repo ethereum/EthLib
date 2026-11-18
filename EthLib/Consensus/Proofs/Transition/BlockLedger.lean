@@ -530,7 +530,7 @@ private theorem lives_queueConsolidation {electra : .pectra ≤ fork} {sourceInd
 private theorem lives_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config s electra request = .ok t) : Lives s t := by
-  rcases consolidationRequest_cases computed with rfl | ⟨_, switched⟩ |
+  rcases consolidationRequest_cases computed with rfl | ⟨_, _, -, switched⟩ |
     ⟨_, _, _, _, accepted, queued⟩
   · exact Lives.refl _
   · exact lives_switchToCompoundingValidator switched

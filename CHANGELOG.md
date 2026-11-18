@@ -72,6 +72,10 @@ Not yet released.
   They are also `Unassigned`, `UnassignedFrom`, `unassignedFrom_size`, `UnassignedKept` and `UnassignedKept.processDeposit`.
   `DirectSafety.total_active_congr` moves from `DirectSafety/DepartureQueue.lean` to `Transition/BalanceDrift.lean`, with its name and statement unchanged.
 
+- `queueConsolidation_steps` states the steps of queueing a consolidation once ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
+  The churn call writes only the churn left and the earliest consolidation epoch.
+  The source then gets its exit and withdrawable epochs, and the consolidation joins the queue.
+
 - `Execution.rootViable_of_checked_call` shows that the confirmed root of a call of the fast confirmation rule stays viable from the call up to `time` ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 3, for the confirmed root).
   At each up-to-date honest store whose fork choice returns a head, the root is in the filtered tree or below the justified block.
   The alternatives are a collision of two honest stores and accountable-safety evidence.
@@ -215,6 +219,10 @@ Not yet released.
   `ReceiverWindowExitsNear` asks the receivers' exit bound only of receivers within two epochs of the parent.
 
 ### Changes that break callers
+
+- In Lean, the switch case of `consolidationRequest_cases` records the switched validator in `SwitchAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
+  The request names one key twice, the index is the first with that key, and the validator there passes `isValidSwitchToCompoundingRequest`.
+  A caller that matched the case as `⟨index, switched⟩` writes `⟨index, validator, accepted, switched⟩`.
 
 - EthLib builds with Lean v4.36.0, Mathlib `v4.36.0` and VCVio `8781becf`.
   A Lean package that depends on EthLib moves to the same toolchain and Mathlib.

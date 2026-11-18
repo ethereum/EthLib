@@ -2579,19 +2579,11 @@ private theorem intervalLoss_consolidationRequest_balance {fork : Fork}
         simp [actualBalanceAt, BeaconState.putBalance, BeaconState.putValidator, same]
       · cases queued
         simp [actualBalanceAt, BeaconState.putValidator]
-  by_cases same : request.sourcePubkey = request.targetPubkey
-  · unfold processConsolidationRequest at ok
-    simp only [same, beq_self_eq_true, ↓reduceIte, bind, Except.bind, pure, Except.pure] at ok
-    repeat' split at ok
-    all_goals try first
-      | (cases ok; done)
-      | (cases ok; exact .inl rfl)
-    rename_i index checked valid
-    exact switch (getElem?_toNat_of_ofNatChecked checked) valid (liftAccessor_ok.mp ok)
-  · rcases eq_or_queueConsolidation_of_processConsolidationRequest same ok with
-      rfl | ⟨_, _, _, _, _, queued⟩
-    · exact .inl rfl
-    · simp [actualBalanceAt, queueConsolidation_balances queued]
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, accepted, switched⟩ |
+    ⟨_, _, _, _, _, queued⟩
+  · exact .inl rfl
+  · exact switch accepted.found accepted.valid switched
+  · simp [actualBalanceAt, queueConsolidation_balances queued]
 
 /-- Only reward, sync, slashing, deposit and consolidation events can have positive credit. -/
 theorem _root_.EthLib.Consensus.Step.balanceEvents_credit_sources

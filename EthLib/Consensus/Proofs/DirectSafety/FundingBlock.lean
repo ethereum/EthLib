@@ -107,14 +107,7 @@ private theorem funding_request_support {fork : Fork} {s t : BeaconState preset 
       ∃ v, s.validators.data[i]? = some v ∧
         (isActiveValidator v (getCurrentEpoch s) = true ∨
           getCurrentEpoch s < v.activationEpoch) := by
-    simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-      Except.ok.injEq] at ok
-    obtain ⟨⟨churned, epoch⟩, churnOk, _, _, written, set, pending, appended, rfl⟩ := ok
-    have queue : churned.pendingConsolidations = s.pendingConsolidations := by
-      simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at churnOk
-      obtain ⟨_, _, _, _, _, _, final⟩ := churnOk
-      cases final; rfl
+    obtain ⟨_, _, _, _, _, _, _, set, appended, rfl⟩ := queueConsolidation_steps ok
     obtain ⟨_, rfl⟩ := setValidator_ok set
     have push := appendWithinLimit_data appended
     intro i member
@@ -122,17 +115,13 @@ private theorem funding_request_support {fork : Fork} {s t : BeaconState preset 
     simp only [Array.toList_push, List.any_append, List.any_cons, List.any_nil,
       Bool.or_false, Bool.or_eq_true, beq_iff_eq] at member
     rcases member with old | eq
-    · exact Or.inl (by simpa only [BeaconState.putValidator, queue] using old)
+    · exact Or.inl (by simpa only [BeaconState.putValidator] using old)
     · exact Or.inr ⟨source, eq ▸ found, Or.inl active⟩
-  unfold processConsolidationRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact kept (SamePendingQueue.refl _))
-    | exact kept (SamePendingQueue.compounding (liftAccessor_ok.mp ok))
-    | exact queued (getElem?_toNat_of_ofNatChecked (by assumption))
-        (by clear ok; simp_all) ok
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ |
+    ⟨_, _, _, _, accepted, ok⟩
+  · exact kept (SamePendingQueue.refl _)
+  · exact kept (SamePendingQueue.compounding switched)
+  · exact queued accepted.sourceAt accepted.sourceActive ok
 
 /-- From Electra a block deposit only queues, so it keeps the funding.
 
@@ -463,12 +452,8 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
       ok⟩ := ok
     have requestOne {a b : BeaconState preset fork} {request : DepositRequest}
         (ok : processDepositRequest a electra request = .ok b) :
-        b.validators = a.validators ∧ b.balances = a.balances := by
-      obtain ⟨_, recorded⟩ := recordDepositRequestsStart_eq (state := a) (index := request.index)
-      simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-        bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-      obtain ⟨_, _, rfl⟩ := ok
-      exact ⟨rfl, rfl⟩
+        b.validators = a.validators ∧ b.balances = a.balances :=
+      ⟨(processDepositRequest_ok ok).2.1, (processDepositRequest_ok ok).2.2.1⟩
     have depositsBound : FundingReplay extra s deposits := by
       apply funding_block_carry _ changedBound depositRequestOk
       intro a b h ok

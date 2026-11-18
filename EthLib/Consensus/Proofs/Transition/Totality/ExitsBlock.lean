@@ -792,13 +792,10 @@ private theorem moves_queueConsolidation (rates : Rates preset config)
     (stays : source.exitEpoch = FAR_FUTURE_EPOCH)
     (computed : queueConsolidation config a electra sourceIndex source targetIndex = .ok b) :
     Moves config start ceiling 0 a b := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    Uint64.addChecked_ok_iff, pure, Except.pure] at computed
-  obtain ⟨⟨churned, epoch⟩, churnStep, _, ⟨fits, -⟩, marked, set, _, _, final⟩ := computed
-  simp only [Except.ok.injEq] at final
-  subst final
+  obtain ⟨epoch, _, _, _, _, churnStep, added, set, _, rfl⟩ := queueConsolidation_steps computed
+  have fits := (Uint64.addChecked_ok_iff.mp added).1
   intro r u holds
-  obtain ⟨left, rfl, epochLe⟩ := consolidationChurn_bound rates holds churnOk above churnStep
+  obtain ⟨-, -, epochLe⟩ := consolidationChurn_bound rates holds churnOk above churnStep
   rw [setValidator_eq_setValidatorAt] at set
   obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
   -- The withdrawal delay keeps the exit below the far future.
@@ -823,7 +820,7 @@ private theorem moves_consolidationRequest (rates : Rates preset config)
     (computed : processConsolidationRequest config a electra request = .ok b) :
     Moves config start ceiling 0 a b := by
   rcases consolidationRequest_cases computed with
-    rfl | ⟨_, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
   · exact Moves.refl _
   · exact (Plain.compounding switched).moves
   · obtain ⟨churn, churnOk, above⟩ := accepted.churn
@@ -872,11 +869,7 @@ private theorem Plain.deposit {a b : BeaconState preset fork} {before : fork < .
 private theorem Plain.depositRequest {a b : BeaconState preset fork} {electra : .pectra ≤ fork}
     {request : DepositRequest} (ok : processDepositRequest a electra request = .ok b) :
     Plain a b := by
-  obtain ⟨recordedStart, recorded⟩ :=
-    recordDepositRequestsStart_eq (state := a) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit,
-    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨_, _, rfl⟩ := ok
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   exact Plain.of_validators
 
 private theorem Plain.withdrawals {a b : BeaconState preset fork} {capella : .shapella ≤ fork}

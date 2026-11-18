@@ -2803,20 +2803,10 @@ theorem queueConsolidation_pendingConsolidations {fork : Fork}
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
     (t.pendingConsolidations electra).data.toList =
       (s.pendingConsolidations electra).data.toList ++ [⟨sourceIndex, targetIndex⟩] := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at ok
-  obtain ⟨⟨churned, epoch⟩, called, _, _, changed, set, pending, appended, rfl⟩ := ok
+  obtain ⟨_, _, _, _, _, _, _, set, appended, rfl⟩ := queueConsolidation_steps ok
   -- The churn update and the registry write keep the queue.
-  have churnQueue : churned.pendingConsolidations = s.pendingConsolidations := by
-    simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at called
-    obtain ⟨_, _, _, _, _, _, final⟩ := called
-    cases final
-    rfl
   obtain ⟨_, rfl⟩ := setValidator_ok set
-  simp only [appendWithinLimit_data appended, Array.toList_push]
-  rw [show churned.putValidator _ _ = _ from rfl]
-  simp [BeaconState.putValidator, churnQueue]
+  simp [appendWithinLimit_data appended, BeaconState.putValidator]
 
 /-- Switching to compounding credentials keeps the pending consolidations.
 
@@ -2884,7 +2874,7 @@ private theorem TagEvent.queueProvenance_appended {x : ForkedBeaconState preset}
     have sourceAt := getValidator_eq_ok_iff.mp found
     -- The request queued an accepted source, which is this source, with an unset exit.
     have unset : source.exitEpoch = FAR_FUTURE_EPOCH := by
-      rcases consolidationRequest_cases processed with rfl | ⟨_, switched⟩ |
+      rcases consolidationRequest_cases processed with rfl | ⟨_, _, _, switched⟩ |
         ⟨index, accepted, _, _, valid, again⟩
       · have sizes := congrArg List.length grown
         simp at sizes
@@ -4332,18 +4322,13 @@ private theorem endpointCover_queueConsolidation {x : ForkedBeaconState preset} 
     EndpointCoverAll x ⟨fork, v⟩ o := by
   have slot := (frame_queueConsolidation found ok).slot
   have epoch : getCurrentEpoch v = getCurrentEpoch u := by simp only [getCurrentEpoch, slot]
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    Uint64.addChecked_ok_iff, pure, Except.pure] at ok
-  obtain ⟨⟨churnedState, exitEpoch⟩, churned, _, _, _, set, _, _, ok⟩ := ok
-  simp only [Except.ok.injEq] at ok
-  subst ok
-  obtain ⟨-, validators, balances⟩ := computeConsolidationEpochAndUpdateChurn_earliest churned
+  obtain ⟨exitEpoch, _, _, _, _, churned, _, set, _, rfl⟩ := queueConsolidation_steps ok
+  obtain ⟨-, -, balances⟩ := computeConsolidationEpochAndUpdateChurn_earliest churned
   obtain ⟨inside, rfl⟩ := setValidator_ok set
   have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
   apply endpointCover_mono (u := ⟨fork, u⟩) ?_ (fun _ => Nat.le_refl _) cover
   intro i w foundV clean notExited current
-  simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
-    validators] at foundV
+  simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set] at foundV
   have currentU : getCurrentEpoch u ≤ w.exitEpoch := epoch ▸ current
   by_cases same : sourceIndex.toNat = i
   · subst same
@@ -4381,7 +4366,7 @@ theorem endpointCover_processConsolidationRequest {x : ForkedBeaconState preset}
     (cover : EndpointCoverAll x ⟨fork, u⟩ o) :
     EndpointCoverAll x ⟨fork, v⟩ o := by
   have cases := consolidationRequest_cases ok
-  rcases cases with rfl | ⟨_, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
+  rcases cases with rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
   · exact cover
   · exact endpointCover_switch compounding switched cover
   -- The source had not started to exit.

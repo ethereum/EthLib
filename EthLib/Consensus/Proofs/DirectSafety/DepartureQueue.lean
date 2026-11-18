@@ -761,9 +761,7 @@ private theorem queueConsolidation_call {fork : Fork} {s t : BeaconState preset 
       getConsolidationChurnLimit config s = .ok call.rate ∧
       computeActivationExitEpoch preset (getCurrentEpoch s) = .ok call.first ∧
       ∃ next, getValidator t sourceIndex = .ok next ∧ next.exitEpoch = call.epoch := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at ok
-  obtain ⟨⟨queued, epoch⟩, called, withdrawable, _, changed, set, pending, _, rfl⟩ := ok
+  obtain ⟨_, _, _, _, _, called, _, set, _, rfl⟩ := queueConsolidation_steps ok
   obtain ⟨call, earliest, available, amount, placed, left, rate, firstOk⟩ :=
     consolidationQueueCall_of_computed electra called
   have queuedEpoch := (computeConsolidationEpochAndUpdateChurn_earliest called).1
@@ -778,13 +776,9 @@ private theorem queueConsolidation_other {fork : Fork} {s t : BeaconState preset
     {source : Validator}
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t)
     (different : other ≠ sourceIndex) : getValidator t other = getValidator s other := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at ok
-  obtain ⟨⟨queued, epoch⟩, called, withdrawable, _, changed, set, pending, _, rfl⟩ := ok
-  change getValidator changed other = getValidator s other
-  rw [getValidator_setValidator_of_ne set different]
-  exact getValidator_of_validators_eq
-    (computeConsolidationEpochAndUpdateChurn_earliest called).2.1 _
+  obtain ⟨_, _, _, changed, _, _, _, set, _, rfl⟩ := queueConsolidation_steps ok
+  have kept := getValidator_setValidator_of_ne set different
+  exact kept
 
 /-- A consolidation charge comes from its unique source and uses that source's old balance. -/
 private theorem queueConsolidation_charge {fork : Fork} {s t : BeaconState preset fork}
@@ -1744,18 +1738,13 @@ private theorem consolidationRequest_exitFrame {fork : Fork} {s t : BeaconState 
     t.earliestExitEpoch electra = s.earliestExitEpoch electra ∧
       t.exitBalanceToConsume electra = s.exitBalanceToConsume electra ∧
       (t.pendingPartialWithdrawals electra).data = (s.pendingPartialWithdrawals electra).data := by
-  rcases consolidationRequest_cases ok with rfl | ⟨_, switched⟩ | ⟨i, v, j, _, _, called⟩
+  rcases consolidationRequest_cases ok with rfl | ⟨_, _, _, switched⟩ | ⟨i, v, j, _, _, called⟩
   · exact ⟨rfl, rfl, rfl⟩
   · have frame := switchToCompounding_departureQueues electra switched
     exact ⟨congrArg Prod.fst frame, congrArg (fun q => q.2.1) frame,
       congrArg (fun q => q.2.2.2.2) frame⟩
-  · simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-      Except.ok.injEq] at called
-    obtain ⟨⟨queued, epoch⟩, scheduled, _, _, changed, set, _, _, rfl⟩ := called
+  · obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps called
     obtain ⟨_, rfl⟩ := setValidator_ok set
-    simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff,
-      pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at scheduled
-    obtain ⟨_, _, _, _, ⟨_, _⟩, _, rfl, _⟩ := scheduled
     exact ⟨rfl, rfl, rfl⟩
 
 private theorem queueExcess_registry {fork : Fork} {s t : BeaconState preset fork}
@@ -2736,10 +2725,10 @@ theorem consolidationQueue_dispatch {fork : Fork} (electra : .pectra ≤ fork)
     exact ⟨congrArg Prod.fst frame, congrArg Prod.snd frame⟩
   · obtain ⟨_, rfl⟩ := processSyncAggregate_eq ok
     exact ⟨rfl, rfl⟩
-  · rcases consolidationRequest_cases ok with same | switched |
+  · rcases consolidationRequest_cases ok with same | ⟨index, _, _, switched⟩ |
       ⟨sourceIndex, source, targetIndex, _, accepted, queued⟩
     · exact .inl same
-    · exact .inr (.inl switched)
+    · exact .inr (.inl ⟨index, switched⟩)
     · exact .inr (.inr ⟨sourceIndex, targetIndex, source,
         getValidator_eq_ok_iff.mpr accepted.sourceAt, queued⟩)
 
