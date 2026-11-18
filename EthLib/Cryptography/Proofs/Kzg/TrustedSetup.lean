@@ -36,7 +36,7 @@ structure TrustedSetup.Valid (s : TrustedSetup) : Prop where
   g1Monomial : ∀ i : Fin FIELD_ELEMENTS_PER_BLOB, G1.Valid s.g1Monomial[i]
   g2Monomial : ∀ i : Fin KZG_SETUP_G2_LENGTH, G2.Valid s.g2Monomial[i]
 
-/-- A string decodes to a point of `G1` of the setup when it is a compressed point of 48 bytes. -/
+/-- A setup string decodes to a `G1` point exactly when it is a compressed point of 48 bytes. -/
 theorem TrustedSetup.decodeG1_eq_ok {b : ByteArray} {p : G1} :
     TrustedSetup.decodeG1 b = .ok p ↔ ∃ v, packBytes v = b ∧ G1.uncompress v = .ok p := by
   unfold TrustedSetup.decodeG1 exactBytes?
@@ -58,18 +58,29 @@ private theorem valid_of_toG1 {b : ByteArray} {p : G1} (h : TrustedSetup.decodeG
   obtain ⟨v, -, hu⟩ := TrustedSetup.decodeG1_eq_ok.mp h
   exact G1.uncompress_valid hu
 
+/-- A setup string decodes to a `G2` point exactly when it is a compressed point of 96 bytes. -/
+theorem TrustedSetup.decodeG2_eq_ok {b : ByteArray} {p : G2} :
+    TrustedSetup.decodeG2 b = .ok p ↔ ∃ v, packBytes v = b ∧ G2.uncompress v = .ok p := by
+  unfold TrustedSetup.decodeG2 exactBytes?
+  by_cases hsz : b.size = 96
+  · rw [dite_eq_left hsz]
+    dsimp only
+    rw [Base.mapError_ok_iff]
+    refine ⟨fun h => ⟨_, rfl, h⟩, fun ⟨v, hv, h⟩ => ?_⟩
+    -- The vector with the bytes of `b` is `v`, since their bytes agree.
+    rwa [show (⟨b.data, hsz⟩ : Vector UInt8 96) = v from packBytes_injective hv.symm]
+  · rw [dite_eq_right hsz]
+    dsimp only
+    refine ⟨fun h => (by cases h), fun ⟨v, hv, _⟩ => absurd ?_ hsz⟩
+    rw [← hv, size_packBytes]
+
 /-- A point that decodes to a G2 point of the setup is valid. -/
 private theorem valid_of_toG2 {b : ByteArray} {p : G2} (h : TrustedSetup.decodeG2 b = .ok p) :
     G2.Valid p := by
-  unfold TrustedSetup.decodeG2 at h
-  cases hu : Bls.G2.uncompress b with
-  | error e => rw [hu] at h; cases h
-  | ok q =>
-    rw [hu] at h
-    cases h
-    rcases G2.uncompress_valid hu with rfl | ⟨hz, htwist⟩
-    · exact G2.valid_zero
-    · exact G2.valid_of_isOnTwist_of_z_one hz htwist
+  obtain ⟨v, -, hu⟩ := TrustedSetup.decodeG2_eq_ok.mp h
+  rcases G2.uncompress_valid hu with rfl | ⟨hz, htwist⟩
+  · exact G2.valid_zero
+  · exact G2.valid_of_isOnTwist_of_z_one hz htwist
 
 /-- Every setup that the decoder returns is valid. -/
 theorem TrustedSetup.ofBytes_valid {g1LagrangeBytes g1MonomialBytes g2MonomialBytes : Array ByteArray}
@@ -167,13 +178,13 @@ theorem TrustedSetup.hexListToBytes_getElem {hex : Array String} {bytes : Array 
     rw [hb, Except.ok.inj he]
   · cases he
 
-/-- Each `G2` point of a decoded setup is the decompression of the encoding at its position. -/
+/-- Each `G2` point of a decoded setup is the decoding of the string at its position. -/
 theorem TrustedSetup.ofBytes_g2Monomial
     {g1LagrangeBytes g1MonomialBytes g2MonomialBytes : Array ByteArray} {s : TrustedSetup}
     (h : TrustedSetup.ofBytes g1LagrangeBytes g1MonomialBytes g2MonomialBytes = .ok s)
     (i : Nat) (hi : i < KZG_SETUP_G2_LENGTH) :
     ∃ hb : i < g2MonomialBytes.size,
-      G2.uncompress g2MonomialBytes[i] = .ok (s.g2Monomial[i]'hi) := by
+      TrustedSetup.decodeG2 g2MonomialBytes[i] = .ok (s.g2Monomial[i]'hi) := by
   unfold TrustedSetup.ofBytes at h
   simp only [bind, Except.bind] at h
   split at h
@@ -191,12 +202,7 @@ theorem TrustedSetup.ofBytes_g2Monomial
         obtain ⟨hcsz, hc⟩ := array_mapM_ok h₃
         have hm : i < monomial2.size := by rw [hsz]; exact hi
         have hb : i < g2MonomialBytes.size := by rw [← hcsz]; exact hm
-        refine ⟨hb, ?_⟩
-        -- The decoder wraps each error, so a decoded point is the decompression itself.
-        have hd := hc i hb hm
-        cases hu : G2.uncompress g2MonomialBytes[i] with
-        | error e => simp [TrustedSetup.decodeG2, hu, Except.mapError] at hd
-        | ok q => simp [TrustedSetup.decodeG2, hu, Except.mapError] at hd; simp [hd]
+        exact ⟨hb, hc i hb hm⟩
       · cases h
     · cases h
   · cases h

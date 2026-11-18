@@ -47,6 +47,7 @@ theorem popProve_eq (sk : SecretKey) :
     coreSign_eq hQ sk
   refine ⟨_, hs, ?_⟩
   rw [pointToSignature_bytes]
+  refine congrArg packBytes ?_
   refine G2.compress_congr (G2.valid_mul hv sk.val) (G2Sub.represents_rep _).1 ?_
   rw [G2.toPoint_mul hv, G2Sub.toPoint_rep, G2Sub.coe_smul, Scalar.val_ofFr]
   rfl

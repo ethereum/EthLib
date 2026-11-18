@@ -53,11 +53,6 @@ namespace Signatures
 
 open EthLib.Base
 
-/-- The bytes of a vector built from a byte array are that byte array. -/
-private theorem bytes_of_vector {n : Nat} (b : ByteArray) (h : b.data.size = n) :
-    (⟨(⟨b.data, h⟩ : Vector UInt8 n).toArray⟩ : ByteArray) = b :=
-  rfl
-
 /-- The scalar identity of a verification. -/
 private theorem one_mul_add_neg_mul (a b : Fr) : 1 * (a * b) + -a * b = 0 := by
   ring
@@ -71,9 +66,8 @@ theorem pointToPubkey_bytes (p : G1) :
 
 /-- The bytes of the signature of a point are its compression. -/
 theorem pointToSignature_bytes (p : G2) :
-    (⟨(pointToSignature p).toArray⟩ : ByteArray) = G2.compress p := by
-  unfold pointToSignature
-  exact bytes_of_vector _ _
+    (⟨(pointToSignature p).toArray⟩ : ByteArray) = packBytes (G2.compress p) :=
+  rfl
 
 /-- The bytes of the public key of a secret key are the compressed multiple of the generator. -/
 theorem skToPk_bytes (sk : SecretKey) :
@@ -85,9 +79,9 @@ theorem skToPk_bytes (sk : SecretKey) :
 theorem pointToPubkey_eq (p : G1) : pointToPubkey p = G1.compress p :=
   rfl
 
-/-- The bytes of the signature of a point are its compression. -/
-theorem packBytes_pointToSignature (p : G2) : packBytes (pointToSignature p) = G2.compress p :=
-  pointToSignature_bytes p
+/-- The signature of a point is its compression. -/
+theorem pointToSignature_eq (p : G2) : pointToSignature p = G2.compress p :=
+  rfl
 
 /-- The public key of a secret key is the compressed multiple of the generator. -/
 theorem skToPk_eq (sk : SecretKey) : skToPk sk = G1.compress (G1.mul G1.generator sk.val) :=
@@ -114,13 +108,15 @@ theorem coreVerify_of_represents {P : G1} {S Q : G2} {a b : Fr}
     {msg dst : ByteArray} (hP : G1.Represents P a) (ha : a ≠ 0)
     (hQ : HashToCurve.hashToG2 msg dst = .ok Q) (hb : G2.Represents Q b)
     (hS : G2.Represents S (a * b)) :
-    coreVerify (packBytes (G1.compress P)) msg (G2.compress S) dst = true := by
+    coreVerify (packBytes (G1.compress P)) msg (packBytes (G2.compress S)) dst = true := by
   obtain ⟨r, hr, hsub, hrep⟩ := G2.uncompress_compress_of_represents hS
   obtain ⟨P', hP', hP'rep⟩ := G1.keyValidatePoint_compress_of_represents hP ha
   have hcheck := (pairingLaws.two_pairs G1.represents_generator hrep hP'rep.neg hb).mpr
     (one_mul_add_neg_mul a b)
   unfold coreVerify
   -- Rewrite every discriminant first, or the kernel evaluates the hash on a variable message.
+  rw [exactBytes?_packBytes (G2.compress S)]
+  dsimp only
   rw [hr, exactBytes?_packBytes]
   dsimp only
   rw [hP', hQ]
@@ -187,7 +183,7 @@ private theorem foldlM_aggregate {α : Type} (pt : α → G2) (sc : α → Fr)
     (hacc : G2.Represents acc a) :
     ∃ R, (l.map fun x => pointToSignature (pt x)).foldlM
         (fun agg sig => do
-          let p ← G2.uncompress (packBytes sig)
+          let p ← G2.uncompress sig
           pure (agg.add p)) acc = .ok R ∧
       G2.Represents R (a + (l.map sc).sum) := by
   induction l generalizing acc a with
@@ -198,7 +194,7 @@ private theorem foldlM_aggregate {α : Type} (pt : α → G2) (sc : α → Fr)
     refine ⟨R, ?_, ?_⟩
     · -- Rewrite the decoding first, so the kernel never evaluates it.
       simp only [List.map_cons, List.foldlM_cons]
-      rw [packBytes_pointToSignature, hr]
+      rw [pointToSignature_eq, hr]
       exact hR
     · rw [List.map_cons]
       exact (add_sum_cons a (sc x) _) ▸ hRrep
@@ -266,7 +262,7 @@ theorem fastAggregateVerify_of_represents {sks : List SecretKey}
   unfold fastAggregateVerify verify
   rw [hP]
   dsimp only
-  rw [packBytes_pointToSignature]
+  rw [pointToSignature_eq]
   exact coreVerify_of_represents hPrep hsum hQ hb hS
 
 /-- A point that represents a scalar has the public key of that multiple of `g1`. -/
@@ -452,7 +448,9 @@ theorem aggregateVerify_aggregate (l : List (SecretKey × ByteArray))
     rw [ite_eq_right (by cases l with
       | nil => exact absurd rfl hne
       | cons _ _ => simp)]
-    rw [packBytes_pointToSignature S, hr]
+    rw [pointToSignature_eq S, exactBytes?_packBytes]
+    dsimp only
+    rw [hr]
     dsimp only
     -- Name the keys, so the kernel never evaluates one to check its length.
     have hkey : ∀ p : SecretKey × ByteArray,

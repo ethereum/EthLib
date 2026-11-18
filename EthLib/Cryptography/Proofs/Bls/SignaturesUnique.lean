@@ -44,12 +44,14 @@ private theorem verify_scalars (a b : Fr) : 1 * (a * b) + -a * b = 0 := by
 /-- The core verification accepts exactly the signatures that decode to `(a * b) • g2`.
 
 Here the key validates to a representative of `a • g1`, and the message hashes to `b • g2`. -/
-theorem coreVerify_iff {pk : Vector UInt8 48} {msg sig dst : ByteArray} {P : G1} {Q : G2}
-    {a b : Fr} (hP : G1.keyValidatePoint pk = .ok P) (hPa : G1.Represents P a)
+theorem coreVerify_iff {pk : Vector UInt8 48} {sig : Vector UInt8 96} {msg dst : ByteArray}
+    {P : G1} {Q : G2} {a b : Fr} (hP : G1.keyValidatePoint pk = .ok P) (hPa : G1.Represents P a)
     (hQ : HashToCurve.hashToG2 msg dst = .ok Q) (hb : G2.Represents Q b) :
-    coreVerify (packBytes pk) msg sig dst = true ↔
+    coreVerify (packBytes pk) msg (packBytes sig) dst = true ↔
       ∃ R, G2.uncompress sig = .ok R ∧ G2.Represents R (a * b) := by
   unfold coreVerify
+  rw [exactBytes?_packBytes sig]
+  dsimp only
   cases hu : G2.uncompress sig with
   | error e => exact iff_of_false (fun h => by cases h) (fun ⟨R, hR, _⟩ => by cases hR)
   | ok R =>
@@ -71,11 +73,22 @@ theorem coreVerify_iff {pk : Vector UInt8 48} {msg sig dst : ByteArray} {P : G1}
         Bool.true_and]
       exact (pairingLaws.two_pairs G1.represents_generator hrep hPa.neg hb).mpr (verify_scalars a b)
 
+/-- A signature that passes the core verification has 96 bytes. -/
+private theorem signature_of_coreVerify {pk msg sig dst : ByteArray}
+    (h : coreVerify pk msg sig dst = true) : ∃ w : Vector UInt8 96, packBytes w = sig := by
+  unfold coreVerify at h
+  cases hw : exactBytes? 96 sig with
+  | none => rw [hw] at h; cases h
+  | some w => exact ⟨w, packBytes_of_exactBytes? hw⟩
+
 /-- A key that passes the core verification passes key validation. -/
 private theorem keyValidatePoint_of_coreVerify {pk msg sig dst : ByteArray}
     (h : coreVerify pk msg sig dst = true) :
     ∃ v, packBytes v = pk ∧ ∃ P, G1.keyValidatePoint v = .ok P := by
   unfold coreVerify at h
+  -- A signature of another length than 96 bytes fails the verification.
+  split at h
+  · cases h
   split at h
   · cases h
   -- A key of another length than 48 bytes fails the verification.
@@ -96,6 +109,8 @@ theorem coreVerify_unique {pk msg sig sig' dst : ByteArray}
     (h : coreVerify pk msg sig dst = true) (h' : coreVerify pk msg sig' dst = true) :
     sig = sig' := by
   obtain ⟨v, rfl, P, hP⟩ := keyValidatePoint_of_coreVerify h
+  obtain ⟨w, rfl⟩ := signature_of_coreVerify h
+  obtain ⟨w', rfl⟩ := signature_of_coreVerify h'
   obtain ⟨-, hPv, -, hPr⟩ := G1.keyValidatePoint_eq_ok_iff.mp hP
   obtain ⟨a, ha⟩ := (G1.inSubgroup_iff_exists_represents hPv).mp
     ((G1.inSubgroup_iff_modulus_smul_eq_zero hPv).mpr hPr)
@@ -104,7 +119,7 @@ theorem coreVerify_unique {pk msg sig sig' dst : ByteArray}
   obtain ⟨R, hR, hRrep⟩ := (coreVerify_iff hP ha hQ hb).mp h
   obtain ⟨R', hR', hR'rep⟩ := (coreVerify_iff hP ha hQ hb).mp h'
   rw [← G2.compress_uncompress hR, ← G2.compress_uncompress hR']
-  exact G2.compress_congr hRrep.1 hR'rep.1 (hRrep.2.trans hR'rep.2.symm)
+  exact congrArg packBytes (G2.compress_congr hRrep.1 hR'rep.1 (hRrep.2.trans hR'rep.2.symm))
 
 /-- A key and a message have at most one signature that verifies, byte for byte. -/
 theorem verify_unique {pk : BLSPubkey} {msg : ByteArray} {sig sig' : BLSSignature}

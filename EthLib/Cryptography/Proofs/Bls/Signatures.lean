@@ -74,7 +74,10 @@ theorem coreVerify_badPubkeySize {pk : ByteArray} (h : pk.size ≠ 48) (msg sig 
     coreVerify pk msg sig dst = false := by
   unfold coreVerify
   rw [show exactBytes? 48 pk = none by simp [exactBytes?, h]]
-  split <;> simp
+  -- Every branch of the signature checks ends on the rejected key.
+  split
+  · simp
+  · split <;> simp
 
 /-- The secret key decoder gives a key exactly when the decoder of scalars gives its scalar. -/
 theorem SecretKey.fromBytes_eq_ok_iff {bytes : ByteArray} {sk : SecretKey} :

@@ -45,14 +45,15 @@ It differs from the message tag, as §3.3.1 requires. -/
 def POP_DST : ByteArray :=
   String.toUTF8 "BLS_POP_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_"
 
-/-- The compressed encoding of the `G2` point at infinity. -/
-def G2_POINT_AT_INFINITY : ByteArray := G2.infinityBytes
+/-- The compressed encoding of the `G2` point at infinity.
 
-/-- The same encoding, as a signature.
+`consensus-specs`, Altair `bls.md`, defines it as a `BLSSignature`. -/
+def G2_POINT_AT_INFINITY : BLSSignature := G2.infinityBytes
+
+/-- The same signature.
 
 The beacon chain uses it where a message carries no signature. -/
-def infinitySignature : BLSSignature :=
-  ⟨G2_POINT_AT_INFINITY.data, by simp [G2_POINT_AT_INFINITY, G2.infinityBytes]⟩
+def infinitySignature : BLSSignature := G2_POINT_AT_INFINITY
 
 /-! ## Keys and encodings -/
 
@@ -71,7 +72,7 @@ def SecretKey.fromBytes (bytes : ByteArray) : Except BlsError SecretKey :=
 def pointToPubkey (p : G1) : BLSPubkey := G1.compress p
 
 /-- The signature of a point, in the minimal-pubkey-size variant (§2.2). -/
-def pointToSignature (p : G2) : BLSSignature := ⟨(G2.compress p).data, G2.size_compress p⟩
+def pointToSignature (p : G2) : BLSSignature := G2.compress p
 
 /-- The public key `SK * P` of a secret key (§2.4).
 
@@ -96,6 +97,10 @@ def coreSign (sk : SecretKey) (msg dst : ByteArray) : Except BlsError BLSSignatu
 
 It returns `false` on any invalid input. -/
 def coreVerify (pk msg sig dst : ByteArray) : Bool :=
+  -- A signature has 96 bytes, and decompression returns it as a point.
+  match exactBytes? 96 sig with
+  | none => false
+  | some sig =>
   match G2.uncompress sig with
   | .error _ => false
   | .ok r =>
@@ -120,7 +125,7 @@ def aggregate (sigs : Array BLSSignature) : Except BlsError BLSSignature := do
   if sigs.isEmpty then throw .emptySignatureList
   -- Adding a point to the point at infinity returns that point exactly.
   let agg ← sigs.foldlM
-    (fun agg sig => return G2.add agg (← G2.uncompress (packBytes sig))) G2.zero
+    (fun agg sig => return G2.add agg (← G2.uncompress sig)) G2.zero
   return pointToSignature agg
 
 /-- The pair `(-PK, H(message))` of one key and its message in the aggregate verification (§2.9).
@@ -138,6 +143,9 @@ def keyMessagePair (dst : ByteArray) (entry : ByteArray × ByteArray) :
 It returns `false` on an empty list, on lists of two sizes and on any invalid input. -/
 def coreAggregateVerify (pks msgs : Array ByteArray) (sig dst : ByteArray) : Bool :=
   if pks.isEmpty || pks.size != msgs.size then false else
+  match exactBytes? 96 sig with
+  | none => false
+  | some sig =>
   match G2.uncompress sig with
   | .error _ => false
   | .ok r =>
