@@ -60,7 +60,7 @@ Not yet released.
 - Some earlier private declarations are now public, with unchanged statements.
   They are the flag frames `flags_operationsInput`, `flags_proposerSlashing`, `flags_attesterSlashing`, `flags_increase`, `flags_decrease`, `flagsBelow_add` and `flagsBelow_deposit`.
   They are also `flagValue`, `flagValue_le`, `isActiveAt_of_getAttestingIndices` and `withdrawnFrom_split`.
-  They are also `StepKeeps.refl`, `StepKeeps.trans`, `StepKeeps.of_validators` and the `stepKeeps_*` step lemmas.
+  They are also `StepKeeps.refl`, `StepKeeps.trans`, `StepKeeps.of_validators` and fifteen `stepKeeps_*` step lemmas, of setValidator, decreaseBalance, initiateValidatorExit, slashValidator and the block operations.
   They are also `effectiveKept_setValidator`, `effectiveKept_decrease`, `effectiveKept_exit`, `effectiveKept_requests` and `balanceDrift_upgrades_upper`.
   They are also `Unassigned`, `UnassignedFrom`, `unassignedFrom_size`, `UnassignedKept` and `UnassignedKept.processDeposit`.
   `DirectSafety.total_active_congr` moves from `DirectSafety/DepartureQueue.lean` to `Transition/BalanceDrift.lean`, with its name and statement unchanged.

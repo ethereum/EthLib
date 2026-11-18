@@ -515,9 +515,9 @@ For each call, the bound holds or two honest stores collide on a root by the tim
 
 The bound needs BLS checks, because the spec pulls the head state up with them.
 
-An assumption on the run: its fork is Fulu or later, where fast confirmation was implemented.
+An assumption on the run: its fork is Fulu or later, and before Gloas.
 
-Earlier forks are not covered.
+The bounds read the epoch transition of Fulu; earlier and later forks are not covered.
 
 The anchor store comes from a successful `getForkchoiceStore`.
 
