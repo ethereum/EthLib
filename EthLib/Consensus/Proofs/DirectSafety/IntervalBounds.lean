@@ -2586,9 +2586,8 @@ private theorem intervalLoss_consolidationRequest_balance {fork : Fork}
     all_goals try first
       | (cases ok; done)
       | (cases ok; exact .inl rfl)
-    all_goals
-      rename_i index checked valid
-      exact switch (getElem?_toNat_of_ofNatChecked checked) valid (liftAccessor_ok.mp ok)
+    rename_i index checked valid
+    exact switch (getElem?_toNat_of_ofNatChecked checked) valid (liftAccessor_ok.mp ok)
   · rcases eq_or_queueConsolidation_of_processConsolidationRequest same ok with
       rfl | ⟨_, _, _, _, _, queued⟩
     · exact .inl rfl
@@ -3552,7 +3551,7 @@ private theorem intervalGain_excess_sum (x : ForkedBeaconState preset)
     rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
   dsimp only [Function.comp_def]
   split <;> simp_all
-  all_goals simp only [Nat.mod_eq_of_lt small]
+  simp only [Nat.mod_eq_of_lt small]
 
 private theorem intervalGain_initial_sum (x : ForkedBeaconState preset)
     (early : x.fork < .glamsterdam) :

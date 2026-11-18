@@ -150,6 +150,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- EthLib builds with Lean v4.36.0, Mathlib `v4.36.0` and VCVio `8781becf`.
+  A Lean package that depends on EthLib moves to the same toolchain and Mathlib.
+
+- The JSON parser of Lean v4.36.0 rejects an object that names one member twice.
+  A JSON-RPC request with such an object now answers with the parse error `-32700`, where it read the last member before.
+  The same holds for a keystore read from JSON text.
+
 - In Lean, `HistoricalDirectSafetyEvidence` now records a conflict.
   It requires that the earlier finalized epoch is at most the later justified epoch.
   It also requires that the later justified root does not read the earlier finalized root at that epoch.

@@ -58,7 +58,7 @@ def _collect_lean_objects() -> list[str]:
         if not obj.is_file():
             raise RuntimeError(f"runtime Lean object is missing: {obj}")
         objects.append(str(obj))
-        # Lean v4.35.0, Lean/Data/Lsp/Internal.lean, `ImportInfo.toJson`.
+        # Lean v4.36.0, Lean/Data/Lsp/Internal.lean, `ImportInfo.toJson`.
         for imported, _private, _all, meta in metadata["directImports"]:
             if not meta and (imported == "EthLib" or imported.startswith("EthLib.")):
                 pending.append(imported)

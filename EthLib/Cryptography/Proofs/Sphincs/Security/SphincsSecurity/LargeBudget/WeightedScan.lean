@@ -270,7 +270,7 @@ theorem wflag_presample_eq (x : D) (hk : tg.kind x = .none) {α : Type}
                   (∑' s, Pr{let y ← presample x r.2}[y = s] * wpays tg initial state input) +
                     ∑' s, Pr{let y ← presample x r.2}[y = s] *
                       wflag tg initial model (next r.1) (budget - sourceCost input) s := by
-                rw [← ENNReal.tsum_add]
+                rw [← tsum_add]
                 exact tsum_congr fun s => mul_add _ _ _
               rw [hsplit, ENNReal.tsum_mul_right, presample_mass, one_mul,
                 ih r.1 (budget - sourceCost input) r.2]
@@ -468,7 +468,7 @@ theorem trials_sum_le (gf : Lifetime.KeptDigestView → ℝ≥0∞) (bound : ℝ
       bound * ∑' u, Pr{let x ← ($ᵗ (DigestCall → HashOutput) : ProbComp
           (DigestCall → HashOutput))}[x = u] *
         (if Landed parameter (blockIndex (u firstCall)) then 0 else 1) := by
-    rw [← ENNReal.tsum_mul_left, ← ENNReal.tsum_add]
+    rw [← ENNReal.tsum_mul_left, ← tsum_add]
     refine tsum_congr fun u => ?_
     split_ifs
     · simp
@@ -525,7 +525,7 @@ theorem trial_boundSW
           (weight tg initial out.2 * V out.1.1 out.2) ≤
         weight tg initial s' * pairWeight parameter data message reference gf gp ρ u := by
     intro s' u b hrel' hs'
-    refine le_trans (ENNReal.tsum_le_tsum fun out => ?_)
+    refine le_trans (tsum_le_tsum fun out => ?_)
       (finish_boundAllW tg initial model parameter data message ρ s' u hs' _ b)
     by_cases hout : out ∈ support (interp tg initial model
         (finishCostSource parameter data message ρ) b s')

@@ -153,7 +153,7 @@ theorem all_read_bound {β : Type} : ∀ {n : Nat} (x : Fin n → D), Function.I
       rw [Concrete.sequenceFin, pure_bind]
       calc _ ≤ ∑' out, Pr{let x ← interp tg initial model (rest Fin.elim0) budget state}[x = out] *
              g u := by
-            refine ENNReal.tsum_le_tsum fun out => mul_le_mul_right ?_ _
+            refine tsum_le_tsum fun out => mul_le_mul_right ?_ _
             split_ifs
             · rw [hvalue]
             · exact bot_le
@@ -197,7 +197,7 @@ theorem all_read_bound {β : Type} : ∀ {n : Nat} (x : Fin n → D), Function.I
           refine avoids_mono (fun y hy => ?_) (havoid (Fin.cases (u 0) values))
           obtain ⟨index, hy⟩ := hy
           exact ⟨index.succ, hy⟩
-        refine le_trans (ENNReal.tsum_le_tsum fun out => ?_) (le_of_le_of_eq
+        refine le_trans (tsum_le_tsum fun out => ?_) (le_of_le_of_eq
           (all_read_bound (fun index : Fin n => x index.succ)
             (fun a b heq => Fin.succ_injective n (hx heq)) (fun index => hp index.succ) state
             (fun index => u index.succ) (fun index => hc index.succ) tail hsub
@@ -435,7 +435,7 @@ theorem fresh_view_mean (parameter : PublicParameter) (gf : Lifetime.KeptDigestV
       · simp
     · simp [hl]
   simp only [hview, Finset.mul_sum]
-  rw [Summable.tsum_finsetSum (fun _ _ => ENNReal.summable)]
+  rw [Summable.tsum_finsetSum (fun _ _ => CompleteLattice.summable)]
   have hterm : ∀ view : Lifetime.KeptDigestView,
       (∑' digest, Pr{let x ← ($ᵗ MessageDigest : ProbComp MessageDigest)}[x = digest] *
         (gf view * if Landed parameter (digestIndex digest) ∧ Lifetime.localDigestView digest =
@@ -582,7 +582,7 @@ theorem unlanded_mass (parameter : PublicParameter) :
       (if Landed parameter (blockIndex (u firstCall)) then (1 : ℝ≥0∞) else 0)) +
     ∑' u, Pr{let x ← ($ᵗ (DigestCall → HashOutput) : ProbComp (DigestCall → HashOutput))}[x = u] *
       (if Landed parameter (blockIndex (u firstCall)) then (0 : ℝ≥0∞) else 1) = 1 := by
-    rw [← ENNReal.tsum_add]
+    rw [← tsum_add]
     calc _ = ∑' u, Pr{let x ← ($ᵗ (DigestCall → HashOutput) : ProbComp
         (DigestCall → HashOutput))}[x = u] := by
           refine tsum_congr fun u => ?_

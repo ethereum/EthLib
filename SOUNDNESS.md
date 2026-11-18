@@ -6501,10 +6501,10 @@ Keystore decryption does this itself with a model of the cost, against limits th
 
 <!-- generated: pins -->
 The specification requires no package.
-The package requires Mathlib, at `v4.35.0`, commit `56a0058`.
-The package requires VCVio, at `bbf05ee`.
+The package requires Mathlib, at `v4.36.0`, commit `fc4f59e`.
+The package requires VCVio, at `8781bec`.
 Only the proofs import them.
-The Lean toolchain is `leanprover/lean4:v4.35.0`.
+The Lean toolchain is `leanprover/lean4:v4.36.0`.
 <!-- end generated -->
 
 VCVio defines the oracle computations and probabilities in which the security games are stated.

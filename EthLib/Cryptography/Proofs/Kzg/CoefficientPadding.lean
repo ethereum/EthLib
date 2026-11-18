@@ -38,8 +38,8 @@ theorem getElem!_padCoefficients (n : Nat) (p : PolynomialCoeff) (hp : p.size â‰
 /-- Padding represents exactly the same polynomial. -/
 theorem coefficientPolynomial_padCoefficients (n : Nat) (p : PolynomialCoeff) (hp : p.size â‰¤ n) :
     coefficientPolynomial (padCoefficients n p) = coefficientPolynomial p := by
-  apply Polynomial.ext
-  intro i
+  apply AddMonoidAlgebra.ext
+  ext1 i
   rw [coeff_coefficientPolynomial, coeff_coefficientPolynomial, getElem!_padCoefficients n p hp i]
 
 /-- Padding does not change evaluation. -/
