@@ -82,7 +82,8 @@ Not yet released.
   It covers executions whose honest stores verify signatures with BLS (`checks = .bls`), because the specification's pulled-up head state processes slots with BLS checks.
   Each call assumes `CallObligations`, with `MemberObligations` for each member of its walk.
   `MemberObligations` states each window reserve at `exitReserveNear`, the reserve that the exit bound of the walk's receivers gives.
-  The run assumes `JustifiedPinned`, `JustifiedHonestlySigned`, `TargetIncluded` and `StaleHeadVotersInWindow`; `SOUNDNESS.md` describes them.
+  The run assumes `JustifiedPinned`, `ByzantineCountedStake`, `TargetIncluded` and `StaleHeadVotersInWindow`; `SOUNDNESS.md` describes them.
+  With `Preset.InclusionDelayPositive` and two conditions on the anchor, the theorem derives the signed justification inside, through `Execution.justifiedHonestlySigned`.
   Its proof is a private step: one call keeps the private call invariant, given the invariant at every earlier call.
   `CallAt` names one call in a run of calls by one validator.
   The step reads these new or newly public lemmas:

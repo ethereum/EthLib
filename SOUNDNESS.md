@@ -3351,7 +3351,9 @@ An exit that starts at the source's epoch or later lands at least `MAX_SEED_LOOK
 The near window reaches three epochs past the source, so the proof needs a lookahead of three to keep each such exit out of it.
 `MemberObligations` also includes `LateDutyMajority` and `NewlyActiveVotersInHeadWindow` for the member's parent.
 A call that keeps its start walks no roots, and assumes nothing.
-The run also assumes `JustifiedPinned` at margin 0, `JustifiedHonestlySigned`, `TargetIncluded` and `StaleHeadVotersInWindow`, which are described above.
+The run also assumes `JustifiedPinned` at margin 0, `ByzantineCountedStake anchorEpoch 0 limit`, `TargetIncluded` and `StaleHeadVotersInWindow`, which are described above.
+The endpoint derives the signed justification inside, as the historical-anchor headlines do.
+It derives it from the Byzantine bound, a positive inclusion delay and the two conditions on the anchor.
 No theorem derives `JustifiedPinned`.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.

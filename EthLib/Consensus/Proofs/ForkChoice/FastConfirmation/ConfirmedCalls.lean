@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalRead
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ReceiverExits
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootViability
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.TargetCount
+public import EthLib.Consensus.Proofs.ForkChoice.JustifiedVotes
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Committees
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedWalk
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalCoverage
@@ -3196,7 +3197,13 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
     (terminal : HeldTerminalStakeFloor (e := e) horizon limit)
     (absent : AnchorParentAbsent (e := e) limit)
     (pinned : JustifiedPinned (e := e) anchorEpoch 0 0 limit)
-    (signedAll : JustifiedHonestlySigned (e := e) anchorEpoch 0 limit)
+    (anchorHeader : anchorState.latestBlockHeader.slot = anchorBlock.slot ∧
+      anchorState.latestBlockHeader.proposerIndex = anchorBlock.proposerIndex ∧
+      anchorState.latestBlockHeader.parentRoot = anchorBlock.parentRoot ∧
+      SszType.hashTreeRoot anchorBlock.body = .ok anchorState.latestBlockHeader.bodyRoot)
+    (anchorZero : anchorState.latestBlockHeader.stateRoot = Vector.replicate 32 0)
+    (delay : preset.InclusionDelayPositive)
+    (byzantine : ByzantineCountedStake (e := e) anchorEpoch 0 limit)
     (fusaka : .fusaka ≤ fork) (band : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (capEq : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
@@ -3236,6 +3243,14 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
       CrossStoreDirectSafetyEvidence (e := e) pre limit ∨
       CrossStoreJustifiedEvidence (e := e) pre limit ∨
         HeldStateFinalityEvidence (e := e) pre limit := by
+  -- Honest validators sign each justified checkpoint after the anchor's epoch.
+  have afterAnchor : getCurrentEpoch anchorState ≤ anchorEpoch := by
+    obtain ⟨_, -, -, -, anchorJustified, -⟩ := getForkchoiceStore_anchor anchored
+    rw [← anchorEpochOk, anchorJustified]
+    exact UInt64.le_refl _
+  have signedAll := Execution.justifiedHonestlySigned anchored start anchorSlot anchorHeader
+    anchorZero slots parameters delay genesis pre roots absent heldEarly bounded enough terminal
+    afterAnchor byzantine
   by_cases bad : Bad (e := e) pre limit
   · exact .inr bad
   have timeLe : ∀ i m, events[i]? = some m → (e.world m).time ≤ limit := fun i m event =>
