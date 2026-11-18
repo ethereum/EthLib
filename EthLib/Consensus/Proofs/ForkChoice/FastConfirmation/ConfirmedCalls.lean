@@ -2773,21 +2773,18 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
     (bls : checks = .bls)
     (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (exitWindow : preset.SeedLookaheadAtLeastThree)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     (preGloas : fork < .glamsterdam) (admitted : BlocksAdmitted e 0 Δ limit)
     (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
     (long : 1 < preset.SLOTS_PER_EPOCH)
-    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (maxAligned : MaxEffectiveBalancesAligned preset)
-    (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (votes : ValidatedDutyVotes (e := e) limit) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e limit) (windows : AssignmentWindowAgreement (e := e) limit)
     (fit : config.CommitteeWindowsFit preset)
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (start : ∀ w ∈ J, e.start w = anchor)
     (anchorEpochOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
@@ -2838,6 +2835,12 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
       CrossStoreDirectSafetyEvidence (e := e) pre limit ∨
       CrossStoreJustifiedEvidence (e := e) pre limit ∨
         HeldStateFinalityEvidence (e := e) pre limit := by
+  have positive := fit.positive
+  have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+    have := parameters.roots
+    omega
+  have incrementPositive := band.1
+  have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
   have ctx : StepCtx (e := e) pre Δ anchor limit horizon anchorEpoch u events firstSlot :=
     { bls, anchorGenesis, sync, slots, positive, minLookahead, exitWindow, ring, preGloas,
       admitted, half, long, window, maxAligned, incrementPositive, votes, fits, prompt,
@@ -3058,12 +3061,6 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
       CrossStoreDirectSafetyEvidence (e := e) pre limit ∨
       CrossStoreJustifiedEvidence (e := e) pre limit ∨
         HeldStateFinalityEvidence (e := e) pre limit := by
-  have positive := fit.positive
-  have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
-    have := parameters.roots
-    omega
-  have incrementPositive := band.1
-  have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
   -- Honest validators sign each justified checkpoint after the anchor's epoch.
   have afterAnchor : getCurrentEpoch anchorState ≤ anchorEpoch := by
     obtain ⟨_, -, -, -, anchorJustified, -⟩ := getForkchoiceStore_anchor anchored
@@ -3085,12 +3082,12 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
     induction i using Nat.strong_induction_on with
     | _ i earlier =>
       intro n fcr after calls
-      rcases e.callInvariant_step pre bls anchorGenesis sync slots positive minLookahead exitWindow
-        ring preGloas admitted half long window maxAligned incrementPositive votes fits prompt
-        windows fit anchored sound anchorSlot anchorBoundary start anchorEpochOk increment bounded
-        roots unslashed ceiling scoreFits parameters genesis heldEarly enough terminal absent
-        pinned signedAll fusaka band withdrawDelay capEq capOrder forkWindow included stale
-        reference caller confirmationEpoch anchorEpochBefore upToDate atSlots calls
+      rcases e.callInvariant_step pre bls anchorGenesis sync slots minLookahead exitWindow ring
+        preGloas admitted half long maxAligned votes fits prompt windows fit anchored anchorSlot
+        anchorBoundary start anchorEpochOk increment bounded roots unslashed ceiling scoreFits
+        parameters genesis heldEarly enough terminal absent pinned signedAll fusaka band
+        withdrawDelay capEq capOrder forkWindow included stale reference caller confirmationEpoch
+        anchorEpochBefore upToDate atSlots calls
         (timeLe i n calls.1) (obligations i n fcr after calls) (fun i' lt => earlier i' lt) with
         holds | evidence
       · exact holds
