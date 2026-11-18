@@ -335,21 +335,10 @@ private theorem kept_processDeposit {before : fork < .hegota} {deposit : Deposit
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
   have indexed : Kept state { state with eth1DepositIndex := fun _ => next } := ⟨rfl, rfl⟩
   refine indexed.trans ?_
-  unfold applyDeposit at applied
-  split at applied
-  · unfold applyDepositElectra at applied
-    split at applied
-    · simp only [bind_ok_iff] at applied
-      obtain ⟨_, _, applied⟩ := applied
-      split at applied
-      · simp only [bind_ok_iff, liftAccessor_ok] at applied
-        obtain ⟨_, added, pushed⟩ := applied
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-        exact (kept_addValidatorToRegistry added).trans ⟨rfl, rfl⟩
-      · cases applied
-        exact Kept.refl _
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp applied)
-      exact ⟨rfl, rfl⟩
+  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, applied⟩
+  · exact Kept.refl _
+  · exact ⟨rfl, rfl⟩
+  · exact (kept_addValidatorToRegistry added).trans ⟨rfl, rfl⟩
   · exact kept_applyPendingDeposit applied
 
 /-- The operations of a block keep the mixes and the slot, at every fork. -/

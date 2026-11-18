@@ -335,21 +335,10 @@ private theorem rise_applyDeposit {pubkey : Cryptography.Bls.BLSPubkey}
     (computed : applyDeposit config checks state pubkey withdrawalCredentials amount signature =
       .ok after)
     {index : Nat} (inside : index < state.validators.data.size) : Rise index state after := by
-  unfold applyDeposit at computed
-  split at computed
-  · unfold applyDepositElectra at computed
-    split at computed
-    · simp only [bind_ok_iff] at computed
-      obtain ⟨_, _, computed⟩ := computed
-      split at computed
-      · simp only [bind_ok_iff, liftAccessor_ok] at computed
-        obtain ⟨_, added, pushed⟩ := computed
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-        exact (rise_addValidatorToRegistry added inside).trans (Rise.of_eq rfl rfl index)
-      · cases computed
-        exact Rise.refl _ _
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
-      exact Rise.of_eq rfl rfl index
+  rcases applyDeposit_cases computed with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, computed⟩
+  · exact Rise.refl _ _
+  · exact Rise.of_eq rfl rfl index
+  · exact (rise_addValidatorToRegistry added inside).trans (Rise.of_eq rfl rfl index)
   · rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨_, added⟩
     · exact Rise.refl _ _
     · exact rise_increaseBalance raised index

@@ -939,19 +939,11 @@ private theorem applyDeposit_departureQueues {fork : Fork} {s t : BeaconState pr
     {credentials : Bytes32} {amount : Gwei} {signature : Cryptography.Bls.BLSSignature}
     (ok : applyDeposit config checks s key credentials amount signature = .ok t) :
     departureQueues electra t = departureQueues electra s := by
-  simp only [applyDeposit, electra, ↓reduceDIte] at ok
-  unfold applyDepositElectra at ok
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨middle, added, queued⟩ := ok
-      obtain ⟨_, rfl⟩ := addPendingDeposit_eq queued
-      exact (addValidator_departureQueues electra added :)
-    · cases ok; rfl
-  · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
-    rfl
+  rcases applyDeposit_cases ok with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨early, _⟩
+  · rfl
+  · rfl
+  · exact (addValidator_departureQueues electra added :)
+  · exact absurd electra (Nat.not_le_of_lt early)
 
 /-- Block deposits preserve departure capacity even when they append a validator. -/
 private theorem deposit_departureQueues {fork : Fork} {s t : BeaconState preset fork}
@@ -970,20 +962,12 @@ private theorem deposit_coverage {fork : Fork} {s t : BeaconState preset fork}
   have applyCoverage {a b : BeaconState preset fork} {key credentials amount signature}
       (applied : applyDeposit config checks a key credentials amount signature = .ok b) :
       DepartureCoverage (config := config) a b [] := by
-    simp only [applyDeposit, electra, ↓reduceDIte] at applied
-    unfold applyDepositElectra at applied
-    split at applied
-    · simp only [bind_ok_iff] at applied
-      obtain ⟨_, _, applied⟩ := applied
-      split at applied
-      · simp only [bind_ok_iff, liftAccessor_ok] at applied
-        obtain ⟨added, admitted, queued⟩ := applied
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq queued
-        apply DepartureCoverage.of_append
-        simpa only [Array.push_eq_append] using addValidatorToRegistry_validators_eq_push admitted
-      · cases applied; exact DepartureCoverage.of_data rfl
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp applied)
-      exact DepartureCoverage.of_data rfl
+    rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | admitted, rfl⟩ | ⟨early, _⟩
+    · exact DepartureCoverage.of_data rfl
+    · exact DepartureCoverage.of_data rfl
+    · apply DepartureCoverage.of_append
+      simpa only [Array.push_eq_append] using addValidatorToRegistry_validators_eq_push admitted
+    · exact absurd electra (Nat.not_le_of_lt early)
   exact (applyCoverage credited :)
 
 /-- Execution deposit requests append pending deposits without changing departure capacity. -/

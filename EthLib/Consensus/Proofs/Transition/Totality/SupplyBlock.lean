@@ -988,26 +988,10 @@ private theorem flagsBelow_deposit {s t : BeaconState preset fork} {before : for
     have below' : i < u.validators.data.size := by rw [validators]; exact below
     have step := flagsBelow_add addedOk altair i below'
     exact ⟨by rw [later.1, step.1, flags.1], by rw [later.2, step.2, flags.2]⟩
-  have queue : ∀ {v : BeaconState preset fork} (electra : .pectra ≤ fork)
-      {pending : PendingDeposit}, addPendingDeposit v electra pending = .ok t →
-        ParticipationKept v t := by
-    intro v electra pending queued
-    obtain ⟨_, rfl⟩ := addPendingDeposit_eq queued
-    exact ⟨rfl, rfl⟩
-  unfold applyDeposit at applied
-  split at applied
-  · rename_i electra
-    unfold applyDepositElectra at applied
-    split at applied
-    · simp only [bind_ok_iff] at applied
-      obtain ⟨_, _, applied⟩ := applied
-      split at applied
-      · simp only [bind_ok_iff, liftAccessor_ok] at applied
-        obtain ⟨middle, addedOk, queued⟩ := applied
-        exact added addedOk (queue electra queued) altair j inside
-      · cases applied
-        exact kept (ParticipationKept.refl _) altair j inside
-    · exact kept (queue electra (liftAccessor_ok.mp applied)) altair j inside
+  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | addedOk, rfl⟩ | ⟨_, applied⟩
+  · exact kept (ParticipationKept.refl _) altair j inside
+  · exact kept ⟨rfl, rfl⟩ altair j inside
+  · exact added addedOk ⟨rfl, rfl⟩ altair j inside
   · rcases applyPendingDeposit_cases applied with rfl | ⟨_, raised⟩ | ⟨_, addedOk⟩
     · exact kept (ParticipationKept.refl _) altair j inside
     · exact kept (flags_increase raised) altair j inside

@@ -648,27 +648,6 @@ private theorem size_addPendingDeposit {electra : .pectra ≤ fork}
   obtain ⟨_, _, rfl⟩ := computed
   rfl
 
-/-- From Electra a deposit adds at most one validator. -/
-private theorem applyDepositElectra_size_le {electra : .pectra ≤ fork}
-    {pubkey : Cryptography.Bls.BLSPubkey} {withdrawalCredentials : Bytes32} {amount : Gwei}
-    {signature : Cryptography.Bls.BLSSignature}
-    (computed : applyDepositElectra config checks state electra pubkey withdrawalCredentials
-      amount signature = .ok after) :
-    after.validators.data.size ≤ state.validators.data.size + 1 := by
-  unfold applyDepositElectra at computed
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    split at computed
-    · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨_, added, pushed⟩ := computed
-      rw [size_addPendingDeposit pushed, addValidatorToRegistry_validators_eq_push added,
-        Array.size_push]
-    · cases computed
-      omega
-  · have one := size_addPendingDeposit (liftAccessor_ok.mp computed)
-    omega
-
 /-- A fold raises the registry size by at most one for each item. -/
 private theorem foldlM_size_le {α ε : Type}
     {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
@@ -693,10 +672,10 @@ private theorem processDeposit_size_le {before : fork < .hegota} {deposit : Depo
     (computed : processDeposit config checks before state deposit = .ok after) :
     after.validators.data.size ≤ state.validators.data.size + 1 := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
-  unfold applyDeposit at applied
-  split at applied
-  · exact applyDepositElectra_size_le (state := { state with eth1DepositIndex := fun _ => next })
-      applied
+  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, applied⟩
+  · exact Nat.le_succ _
+  · exact Nat.le_succ _
+  · simp [addValidatorToRegistry_validators_eq_push added]
   · exact (applyPendingDeposit_validators_size_le_and_mem applied).1
 
 /-- A deposit request keeps the registry size. -/

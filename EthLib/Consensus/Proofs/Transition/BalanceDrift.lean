@@ -286,21 +286,11 @@ private theorem effectiveKept_applyDeposit {f : Fork} {s t : BeaconState preset 
     {signature : Cryptography.Bls.BLSSignature}
     (ok : applyDeposit config checks s key credentials amount signature = .ok t) :
     EffectiveKept s t := by
-  unfold applyDeposit at ok
-  split at ok
-  · unfold applyDepositElectra at ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨middle, added, queued⟩ := ok
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq queued
-        exact effectiveKept_trans (effectiveKept_add added) (effectiveKept_data rfl)
-          (by rw [addValidatorToRegistry_validators_eq_push added]; simp)
-      · cases ok; exact effectiveKept_refl _
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
-      exact effectiveKept_refl _
+  rcases applyDeposit_cases ok with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, ok⟩
+  · exact effectiveKept_refl _
+  · exact effectiveKept_refl _
+  · exact effectiveKept_trans (effectiveKept_add added) (effectiveKept_data rfl)
+      (by rw [addValidatorToRegistry_validators_eq_push added]; simp)
   · exact effectiveKept_deposit ok
 
 theorem effectiveKept_processDeposit {f : Fork} {s t : BeaconState preset f}

@@ -2182,32 +2182,22 @@ private theorem CapStep.applyDeposit {f : Fork} {s t : BeaconState preset f}
       (.pectra ≤ f → BalancesMatch s → ∀ candidate i,
         preKeyCharge candidate t i ≤ preKeyCharge candidate s i) ∧
       (BalancesMatch s → ScheduledEligibleBalance s → ScheduledEligibleBalance t) := by
-  unfold Consensus.applyDeposit at ok
-  split at ok
-  · unfold applyDepositElectra at ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨middle, added, queued⟩ := ok
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq queued
-        exact ⟨(CapStep.add added).1.trans (CapStep.data rfl), (fun matched held =>
-          ((CapStep.add (config := config) added).2.1 matched held).transfer rfl
-            (fun _ _ b _ _ read low => ⟨b, read, low⟩)),
-          (CapStep.add (config := config) added).2.2, (fun _ matched candidate i => by
-            have growth := preKeyCharge_add candidate matched added i
-            simpa only [preKeyCharge, UInt64.toNat_zero, ite_self, Nat.add_zero] using growth),
-          fun matched held => (held.add matched added).reframe (Nat.le_refl _)
-            (Nat.le_refl _) (Nat.le_refl _) rfl rfl⟩
-      · cases ok
-        exact ⟨CapStep.refl _, fun _ => id, id, (fun _ _ _ _ => Nat.le_refl _), fun _ => id⟩
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp ok)
-      exact ⟨CapStep.data rfl, (fun _ held => held.transfer rfl
-        (fun _ _ b _ _ read low => ⟨b, read, low⟩)), id, (fun _ _ _ _ => Nat.le_refl _),
-        fun _ held => held.reframe (Nat.le_refl _) (Nat.le_refl _) (Nat.le_refl _) rfl rfl⟩
+  rcases applyDeposit_cases ok with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨early, ok⟩
+  · exact ⟨CapStep.refl _, fun _ => id, id, (fun _ _ _ _ => Nat.le_refl _), fun _ => id⟩
+  · exact ⟨CapStep.data rfl, (fun _ held => held.transfer rfl
+      (fun _ _ b _ _ read low => ⟨b, read, low⟩)), id, (fun _ _ _ _ => Nat.le_refl _),
+      fun _ held => held.reframe (Nat.le_refl _) (Nat.le_refl _) (Nat.le_refl _) rfl rfl⟩
+  · exact ⟨(CapStep.add added).1.trans (CapStep.data rfl), (fun matched held =>
+      ((CapStep.add (config := config) added).2.1 matched held).transfer rfl
+        (fun _ _ b _ _ read low => ⟨b, read, low⟩)),
+      (CapStep.add (config := config) added).2.2, (fun _ matched candidate i => by
+        have growth := preKeyCharge_add candidate matched added i
+        simpa only [preKeyCharge, UInt64.toNat_zero, ite_self, Nat.add_zero] using growth),
+      fun matched held => (held.add matched added).reframe (Nat.le_refl _)
+        (Nat.le_refl _) (Nat.le_refl _) rfl rfl⟩
   · obtain ⟨step, funded, partials, scheduled⟩ := CapStep.deposit ok
-    exact ⟨step, funded, partials, (fun electra => (by contradiction)), scheduled⟩
+    exact ⟨step, funded, partials, (fun electra => absurd electra (Nat.not_le_of_lt early)),
+      scheduled⟩
 
 theorem CapStep.processDeposit {f : Fork} {s t : BeaconState preset f}
     {before : f < .hegota} {deposit : Deposit}
