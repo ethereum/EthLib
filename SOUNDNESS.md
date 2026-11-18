@@ -3259,7 +3259,7 @@ Its other premises are those of that headline, with the root fixed to the root t
 The root is held by every up-to-date honest store from the call on.
 An honest supporter behind the caller's margin sent a vote above the root before the call's slot (`Execution.honest_vote_of_caller_margin`).
 `Execution.rootHeld_of_honest_vote` then delivers the root.
-The root's viability at each time is a private step of the same file.
+`Execution.rootViableAt_of_checked` in the same file gives the root's viability at each time.
 A justified checkpoint of the call's epoch or before is comparable with the root (`Execution.justified_comparable_of_checked`).
 If the root strictly descends from it, `Execution.rootInFilteredTree_of_checked` keeps the root in the filtered tree.
 A later justified checkpoint has an honest signer, which puts it above the root (`justified_descends_of_duty`).
@@ -3352,6 +3352,7 @@ The near window reaches three epochs past the source, so the proof needs a looka
 `MemberObligations` also includes `LateDutyMajority` and `NewlyActiveVotersInHeadWindow` for the member's parent.
 A call that keeps its start walks no roots, and assumes nothing.
 The run also assumes `JustifiedPinned` at margin 0, `JustifiedHonestlySigned`, `TargetIncluded` and `StaleHeadVotersInWindow`, which are described above.
+No theorem derives `JustifiedPinned`.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
