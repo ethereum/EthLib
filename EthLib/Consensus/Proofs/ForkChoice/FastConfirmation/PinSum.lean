@@ -7956,26 +7956,26 @@ private theorem floorC_stay (h : Setting config checks g split fin pulled anc co
     simp only [PinSplit2.capAt, found, Option.map_some, Option.getD_some]
     exact cappedFin.trans this
 
-/-- A key whose exit comes late keeps each state of C's run out of its withdrawal.
+/-- A key whose exit comes late stays out of its withdrawal along a run from the finalized block.
 
 Its exit epoch is constant from the state where it is set.
 
-The withdrawable epoch is the delay after it, so it is after the epoch of the call's cutoff.
+The withdrawable epoch is the delay after it, so it is after the horizon `high` of the call.
 
 A key with no exit has the withdrawable epoch that no epoch reaches, since it exits no later. -/
 private theorem retained_of_exit (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (i : ValidatorIndex)
-    {wC : Validator} (foundC : counted.validators.data[i.toNat]? = some wC)
-    (late : (getCurrentEpoch pulled).toNat + 1 <
-      wC.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
+    {e : BeaconState preset fork} (tail : Run config checks ⟨fork, split⟩ ⟨fork, e⟩)
+    (high : ℕ) (highLe : high ≤ (getCurrentEpoch pulled).toNat) (i : ValidatorIndex)
+    {wE : Validator} (foundE : e.validators.data[i.toNat]? = some wE)
+    (late : high + 1 < wE.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
     ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
-      (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
-      (before.snoc step).append after = fromFin.append tailC → ∀ w,
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, e⟩),
+      (before.snoc step).append after = fromFin.append tail → ∀ w,
       n.state.validators.data[i.toNat]? = some w →
-      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+      (high + 1 < w.exitEpoch.toNat ∨
         ∀ u, m.state.validators.data[i.toNat]? = some u →
-          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat) := by
+          high + 1 < u.withdrawableEpoch.toNat) := by
   obtain ⟨toFin⟩ := h.toFin
   intro m n before step after cut w found
   refine .inr fun u foundU => ?_
@@ -7989,7 +7989,7 @@ private theorem retained_of_exit (h : Setting config checks g split fin pulled a
     have := getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled
     omega
   · have same := congrArg UInt64.toNat (kept.exitEpoch unset)
-    have lastEq : last = wC := Option.some.inj (located.symm.trans foundC)
+    have lastEq : last = wE := Option.some.inj (located.symm.trans foundE)
     have delayed := (toFin.append before).exit_withdrawable_delay h.genesis i.toNat u foundU unset
     subst lastEq
     omega
@@ -8161,7 +8161,8 @@ private theorem V_active (h : Setting config checks g split fin pulled anc count
     | some val =>
       have floor := V_floor h fromFin tailC
         (V_events h fromFin tailC high highC endEpoch endEpochC replayedF replayedC) v val initial
-        clean (retained_of_exit h fromFin tailC v foundC (by omega)) (fromFin.append tailC)
+        clean (retained_of_exit h fromFin tailC _ (Nat.le_refl _) v foundC (by omega))
+          (fromFin.append tailC)
         Run.nil rfl
       exact .inr (by
         have : effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat =
@@ -8274,7 +8275,8 @@ private theorem V_left (h : Setting config checks g split fin pulled anc counted
         | some val =>
           have floor := V_floor h fromFin tailC
             (V_events h fromFin tailC high highC endEpoch endEpochC replayedF replayedC) v val
-            initial clean (retained_of_exit h fromFin tailC v foundU (by omega)) pre post cut
+            initial clean
+            (retained_of_exit h fromFin tailC _ (Nat.le_refl _) v foundU (by omega)) pre post cut
           exact .inr (by omega))
       omega
   · -- R activated the key after finalizing the split, so it reads the key as late
