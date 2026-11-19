@@ -8292,8 +8292,7 @@ private theorem V_left (h : Setting config checks g split fin pulled anc counted
     omega
 
 /-- D-5/D-6 (fall, V): the fall of V keys, and the stake of V keys that left C's active set. -/
-theorem stub_V (h : Setting config checks g split fin pulled anc counted V)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+theorem stub_V (h : Setting config checks g split fin pulled anc counted V) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1) (events : List (BalanceEvent preset))
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
@@ -10633,8 +10632,8 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have tR := stake_le_total pulledOk
   obtain ⟨fromFin⟩ := h.fromFin
   obtain ⟨eventsF, replayedF⟩ := fromFin.balanceEvents_ok h.early high
-  have sV := two_le_three (stub_V (config := config) h tail high endEpoch events fromFin
-    replayedF tailC highC endEpochC replayedC)
+  have sV := two_le_three (stub_V (config := config) h high endEpoch events fromFin replayedF
+    tailC highC endEpochC replayedC)
   have sN := stub_N (config := config) h tail high endEpoch replayed fromFin replayedF tailC highC
     endEpochC replayedC
   have sP := stub_P (config := config) h tail high endEpoch replayed fromFin replayedF tailC highC
@@ -10694,6 +10693,9 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have syncPos : 0 ≤ ∑ x ∈ K4 pulled counted V, (syncF events x.toNat : ℤ) :=
     Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
   have syncPosC : 0 ≤ ∑ x ∈ K4 pulled counted V, (syncF eventsC x.toNat : ℤ) :=
+    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+  -- `bud_sync` weighs the shared segment's debits of `K4` three times, and `stub_N` once.
+  have syncPosF : 0 ≤ ∑ x ∈ K4 pulled counted V, (syncD eventsF x.toNat : ℤ) :=
     Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
   have xPos : 0 ≤ (33 * ((pinTerms config pulled anc fin).consolidationsX : ℤ) + 9) / 10 := by
     positivity
