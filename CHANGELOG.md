@@ -65,6 +65,9 @@ Not yet released.
   The pin's bound on the penalties and partials of a key on R's branch reads it.
   `run_partial_queue_kept` follows from it.
 
+- `Run.deposit_credit_le_funding` bounds what a deposit event of a run credits the keys recent at the run's end by the event's funding credit.
+  The pin's deposit-queue bound for the keys that vote on R's branch reads it.
+
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
   The existing `processRegistryUpdates_withdrawableEpoch_of_unassigned` is its weaker case.

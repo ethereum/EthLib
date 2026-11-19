@@ -31,6 +31,7 @@ import EthLib.Consensus.Proofs.Transition.StateTransition
 import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 import EthLib.Consensus.Proofs.Transition.BranchLedger
 import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
+import EthLib.Consensus.Proofs.DirectSafety.IntervalBounds
 import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.Assembly
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
@@ -5007,12 +5008,101 @@ theorem bud_queues (h : Setting config checks g split fin pulled anc counted V)
         ((K5 counted V).filter fun v => (pinTerms config pulled anc fin).exitingB v.toNat = false))
     omega
 
+/-- The deposit credits of V keys, as events, fit any per-event bound on them. -/
+private theorem credDepR_sum_le (V : Finset ValidatorIndex) (events : List (BalanceEvent preset))
+    (T : BalanceEvent preset → ℕ)
+    (each : ∀ e ∈ events, e.source = .deposits → ∑ v ∈ V, keyCredit v.toNat e ≤ T e) :
+    ∑ v ∈ V, credDepR events v.toNat ≤ (events.map T).sum := by
+  induction events with
+  | nil => simp [credDepR]
+  | cons e rest ih =>
+    have tail := ih fun e' member => each e' (List.mem_cons_of_mem _ member)
+    by_cases dep : e.source = .deposits
+    · have head := each e List.mem_cons_self dep
+      have split : ∑ v ∈ V, credDepR (e :: rest) v.toNat =
+          ∑ v ∈ V, keyCredit v.toNat e + ∑ v ∈ V, credDepR rest v.toNat := by
+        rw [← Finset.sum_add_distrib]
+        exact Finset.sum_congr rfl fun v _ => by simp [credDepR, dep]
+      simp only [List.map_cons, List.sum_cons]
+      omega
+    · have same : ∑ v ∈ V, credDepR (e :: rest) v.toNat = ∑ v ∈ V, credDepR rest v.toNat :=
+        Finset.sum_congr rfl fun v _ => by simp [credDepR, dep]
+      simp only [List.map_cons, List.sum_cons]
+      omega
+
+/-- `queueDep` is three times the deposit churn of each epoch of the window, and the carry. -/
+private theorem queueDep_eq (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    (pinTerms config state ancestor finalizedState).queueDep =
+      3 * (((getCurrentEpoch state).toNat + 2 - (getCurrentEpoch finalizedState).toNat) *
+          config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
+        (if electra : .pectra ≤ fork then
+          (finalizedState.depositBalanceToConsume electra).toNat else 0)) := rfl
+
+/-- D-8 (deposit queue) from the per-event bound of V's deposit credits.
+
+The credits that a deposit event gives to V keys are at most its deposit credit.
+
+That credit leaves out the keys that are withdrawn, which V keys never are.
+
+The deposit credits of the run from the finalized block fit its carry and a churn for each epoch. -/
+private theorem bud_deposits_of (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (each : ∀ e ∈ events, e.source = .deposits →
+      ∑ v ∈ V, keyCredit v.toNat e ≤ DirectSafety.funding_deposit_credit e) :
+    3 * (∑ v ∈ V, credDepR events v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  -- Every step of the run starts within the epochs of `pulled`, so `high` can be that epoch.
+  have same := DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le tail endEpoch
+    (Nat.le_succ _)
+  have tailOk : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
+    rw [← same]
+    exact replayed
+  obtain ⟨ef, efOk⟩ := fromFin.balanceEvents_ok h.early (getCurrentEpoch pulled).toNat
+  have fullOk := DirectSafety.Apriori.Internal.balanceEvents_append fromFin tail
+    (getCurrentEpoch pulled).toNat efOk tailOk
+  have capacity := DirectSafety.funding_deposit_capacity toFin (fromFin.append tail) h.genesis
+    h.early (getCurrentEpoch pulled).toNat (Nat.le_succ _) (ef ++ events) fullOk
+  have bound : ((ef ++ events).map DirectSafety.funding_deposit_credit).sum ≤
+      (if electra : .pectra ≤ fork then (fin.depositBalanceToConsume electra).toNat else 0) +
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+          config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat := capacity
+  rw [List.map_append, List.sum_append] at bound
+  have sum := credDepR_sum_le V events DirectSafety.funding_deposit_credit each
+  rw [queueDep_eq]
+  omega
+
 /-- D-8 (deposit queue): deposits applied on R's branch to V keys, weight 3. -/
 theorem bud_deposits (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
-    3 * (∑ v ∈ V, credDepR events v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := sorry
+    3 * (∑ v ∈ V, credDepR events v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have within := BeaconState.registryWithinLimit_of_lt h.early pulled
+  -- The keys of `V` are active at R's epoch, so no deposit event credits a withdrawable one.
+  have recent : ∀ i ∈ V.image UInt64.toNat, ∃ w, pulled.validators.data[i]? = some w ∧
+      (isActiveValidator w (getCurrentEpoch pulled) = true ∨
+        isActiveValidator w (getPreviousEpoch pulled) = true) := by
+    intro i hi
+    obtain ⟨v, member, rfl⟩ := Finset.mem_image.mp hi
+    have listed : v ∈ getActiveValidatorIndices pulled (getCurrentEpoch pulled) := by
+      simpa [activeVoters] using (h.voting v member).1
+    obtain ⟨u, found, active⟩ := (mem_getActiveValidatorIndices within).mp listed
+    exact ⟨u, found, .inl active⟩
+  refine bud_deposits_of h tail high endEpoch replayed fun e member deposit => ?_
+  have forkLe := ((toFin.append fromFin).withdrawnConsolidationCredit_eq_zero tail h.genesis h.early
+    h.delay replayed e member).2.2
+  have credited := Run.deposit_credit_le_funding (toFin.append fromFin) tail h.genesis h.early
+    h.twoSlots high endEpoch replayed (V.image UInt64.toNat) recent e member deposit
+    (Nat.le_trans electra forkLe)
+  rw [Finset.sum_image fun _ _ _ _ same => UInt64.toNat_inj.mp same] at credited
+  exact credited
 
 /-- Two charges of a run at one position are the same charge. -/
 private theorem charge_unique {x y : ForkedBeaconState preset} (tail : Run config checks x y)
