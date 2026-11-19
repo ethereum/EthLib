@@ -16092,6 +16092,29 @@ private theorem voter_not_withdrawn (h : Setting config checks g split fin pulle
   rw [foundP]
   simpa using beyond
 
+/-- The credit stake of a key on a low rate, rounded down to increments, is paid by the slack.
+
+The stake is its credits, the gain on them and the gain of its base stake.
+
+On a low rate, the base gain is below an increment, so it rounds away.
+
+With bands, an increment of slack pays what is left of the gain over the flows.
+
+With none, there are no credits.
+
+Then a slashing's penalty is below an increment, and the stake is below two.
+
+A stake below two increments rounds to one at most, which the slashing's increment pays. -/
+private theorem y_floor_le (I WD F P D Df q Cr Ds DsF W gc S U Fl : ℕ)
+    (key : 11 * D * (P * F) < WD * I) (hDf : D ≤ Df)
+    (lowG : Df * ((11 * q + 9) / 10 + 3) < I)
+    (hform : gc = D * (11 * ((Cr + Ds + DsF) + W + D * q + D) / (10 * I) * P * F / WD))
+    (cases : (I ≤ U + 1 ∧ Cr + Fl ≤ S ∧
+        gc + (D * q + D) ≤ Fl + Df * ((11 * q + 9) / 10 + 3)) ∨
+      (Cr = 0 ∧ Ds = 0 ∧ DsF = 0 ∧ W < I ∧ (0 < W → I ≤ S + U))) :
+    Cr + (gc + (D * q + D)) - (Cr + (gc + (D * q + D))) % I ≤ S + U :=
+  sorry
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The closing of the per-key core of the rise, for a key on its kept arm with any cap.
 
@@ -16107,11 +16130,15 @@ A key with no band has no credits, and its flows are at most its initial penalty
 
 The cap enters only through `stay` and `cappedC`, which the cap arms prove.
 
-`cappedC` is the premise `capped` of `rise_close`.
+`cappedY` is the premise `capped` of `rise_close`, for a key on a low rate.
 
-It says the effective balance at C is at most the cap that `capFor` reads.
+It says the effective balance at C is at most the cap that `capFor` reads, and the rounded stake.
 
-An arm with a frozen cap proves it as a constant. -/
+The slack pays that stake, by `y_floor_le`.
+
+A key off the low rate reads the largest cap.
+
+An arm with a frozen cap proves the cap alone, which is stronger. -/
 private theorem key_close (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -16154,8 +16181,10 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
       (balanceAt counted v.toNat ≤ Bc + preset.downwardBand ∧
         balanceAt counted v.toNat ≤ max (balanceAt fin v.toNat)
           (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)))
-    (cappedC : balanceAt counted v.toNat ≤
-      capForOf (pinTerms config pulled anc fin) pulled v.toNat)
+    (cappedY : Df * ((11 * q + 9) / 10 + 3) < preset.EFFECTIVE_BALANCE_INCREMENT.toNat →
+      balanceAt counted v.toNat ≤ capForOf (pinTerms config pulled anc fin) pulled v.toNat +
+        (Cr + (gc + (D * q + D)) - (Cr + (gc + (D * q + D))) %
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (creditsLe : Cr ≤ credC tailC highC v.toNat + whistC tailC highC v.toNat +
       (eventsC.map (syncCredit v.toNat)).sum)
     (noCredit : bandC tailC highC v.toNat = 0 → bandX fin highC v.toNat = 0 → Cr = 0) :
@@ -16209,6 +16238,10 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
     split_ifs
     · exact Nat.mul_le_mul_right _ (min_le_left _ _)
     · exact Nat.le_refl _
+  obtain ⟨Fl, hFl⟩ : ∃ Fl, Fl =
+      flowGain (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat +
+        unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat :=
+    ⟨_, rfl⟩
   -- R's rise closes the balance ceiling of C's run, up to the flows and their slack
   obtain ⟨H, hH⟩ : ∃ H, H = riseTop (pinTerms config pulled anc fin) pulled fin v.toNat :=
     ⟨_, rfl⟩
@@ -16240,13 +16273,45 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
   -- the closing: R's rise, the flows, and the bands that pay the rounding
   have alignedC : balanceAt counted v.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 :=
     FloorTrace.effective_aligned (toFin.append (fromFin.append tailC)) h.genesis h.aligned v.toNat
+  have atMax : balanceAt counted v.toNat ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat :=
+    PinSplit5.effectiveAt_le_capMax (toFin.append (fromFin.append tailC)) h.genesis h.caps h.early
+      v.toNat
+  -- the cap that `capFor` reads is the largest one off the low rate, and otherwise `cappedY`'s
+  have capped : ∀ S U : ℕ, ((preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1 ∧ Cr + Fl ≤ S ∧
+        gc + (D * q + D) ≤ Fl + Df * ((11 * q + 9) / 10 + 3)) ∨
+      (Cr = 0 ∧ (events.map (syncDebit v.toNat)).sum = 0 ∧
+        (eventsF.map (syncDebit v.toNat)).sum = 0 ∧
+        slashW (pinTerms config pulled anc fin) v.toNat <
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
+        (0 < slashW (pinTerms config pulled anc fin) v.toNat →
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ S + U))) →
+      balanceAt counted v.toNat ≤
+        capForOf (pinTerms config pulled anc fin) pulled v.toNat + S + U := by
+    intro S U cases
+    by_cases lowG : Df * ((11 * q + 9) / 10 + 3) < preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    · have y := y_floor_le preset.EFFECTIVE_BALANCE_INCREMENT.toNat WEIGHT_DENOMINATOR.toNat
+        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum P D Df q Cr
+        (events.map (syncDebit v.toNat)).sum (eventsF.map (syncDebit v.toNat)).sum
+        (slashW (pinTerms config pulled anc fin) v.toNat) gc S U Fl key hDF lowG hform cases
+      have := cappedY lowG
+      omega
+    · have notLow : capForOf (pinTerms config pulled anc fin) pulled v.toNat =
+          preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
+        unfold capForOf
+        refine ite_eq_right_iff.mpr fun low => ?_
+        simp only [Bool.and_eq_true, decide_eq_true_eq] at low
+        have lt := low.1
+        rw [hdf, ← hq] at lt
+        exact absurd lt lowG
+      omega
   have close : ∀ S U : ℕ, Bc ≤ H + S → (S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1 ∨
       (S < preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
-        preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ S + U)) →
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ S + U)) → balanceAt counted v.toNat ≤
+          capForOf (pinTerms config pulled anc fin) pulled v.toNat + S + U →
       balanceAt counted v.toNat ≤
         balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat + S + U :=
-    fun S U ceiling slack => rise_close config pulled anc fin v.toNat hH h.bands.1 kept alignedC
-      (Nat.le_max_left _ _) stay (Nat.le_trans cappedC (by omega)) ceiling slack
+    fun S U ceiling slack cap => rise_close config pulled anc fin v.toNat hH h.bands.1 kept
+      alignedC (Nat.le_max_left _ _) stay cap ceiling slack
   have fSyncE : syncD events v.toNat ≤ syncF events v.toNat := by
     rw [syncF_eq]; unfold syncD; omega
   have fSyncC : (eventsC.map (syncCredit v.toNat)).sum ≤ syncF eventsC v.toNat := by
@@ -16292,6 +16357,7 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
         slashW (pinTerms config pulled anc fin) v.toNat))
       gap
       (Or.inr (Or.inl (by have := bandsOne bands; omega)))
+      (capped _ _ (Or.inl ⟨by have := bandsOne bands; omega, by omega, by omega⟩))
     omega
   · simp only [not_or, not_lt, Nat.le_zero] at bands
     obtain ⟨hbC, hbR, hbX⟩ := bands
@@ -16355,6 +16421,12 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
         (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ (Nat.div_le_div_right
           (Nat.mul_le_mul_left 11 hWle)))))) ?_
       split_ifs <;> first | exact Nat.zero_le _ | exact Nat.mul_le_mul_right _ hDle | omega
+    have hsl : 0 < slashW (pinTerms config pulled anc fin) v.toNat →
+        slashR (pinTerms config pulled anc fin) v.toNat =
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat := fun pos => by
+      unfold slashW at pos
+      unfold slashR
+      split_ifs at pos ⊢ <;> omega
     have slack : slashW (pinTerms config pulled anc fin) v.toNat + εn = 0 ∨
         preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
           (slashR (pinTerms config pulled anc fin) v.toNat -
@@ -16371,13 +16443,10 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
         simp
       · right
         right
-        have sl : slashR (pinTerms config pulled anc fin) v.toNat =
-            preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-          unfold slashW at w0
-          unfold slashR
-          split_ifs at w0 ⊢ <;> omega
+        have sl := hsl (Nat.pos_of_ne_zero w0)
         exact ⟨small, by omega⟩
     have := close _ _ ceilII slack
+      (capped _ _ (Or.inr ⟨Cr0, by omega, by omega, hW, fun pos => by have := hsl pos; omega⟩))
     omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
@@ -16628,7 +16697,8 @@ private theorem key_core_frozen (h : Setting config checks g split fin pulled an
   exact key_close h tail fromFin tailC highC v kept
     (voter_not_withdrawn h fromFin tail v voter inFin) P hP Df D q gc Cr M Bc _ hDf hD hq hM
     hform hBc
-    rateLow maxLe stay cappedC creditsLe noCredit
+    rateLow maxLe stay (fun _ => Nat.le_trans cappedC (Nat.le_add_right _ _)) creditsLe
+    noCredit
 
 /-- The per-key core of the rise for a counted voter of R's finalized registry whose cap moves.
 
