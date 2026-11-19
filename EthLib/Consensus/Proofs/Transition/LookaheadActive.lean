@@ -228,7 +228,8 @@ The run must end before Gloas.
 
 The preset must have `MAX_SEED_LOOKAHEAD` above `MIN_SEED_LOOKAHEAD`. -/
 theorem Run.lookaheadActive {g x : ForkedBeaconState preset}
-    (window : preset.SeedLookaheadAtLeastThree) (genesis : Genesis config checks g)
+    (covers : preset.MIN_SEED_LOOKAHEAD.toNat + 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    (genesis : Genesis config checks g)
     (run : Run config checks g x) (early : x.fork < .glamsterdam) :
     LookaheadActive x.state := by
   induction run with
@@ -237,7 +238,7 @@ theorem Run.lookaheadActive {g x : ForkedBeaconState preset}
     have before := (initializeBeaconStateFromEth1_ok initialized).1
     exact fun fulu => (Nat.not_le_of_lt before (Nat.le_trans (by decide) fulu)).elim
   | snoc pre step ih =>
-    exact LookaheadActive.chainStep window.covers step.chainStep early
+    exact LookaheadActive.chainStep covers step.chainStep early
       (ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early))
 
 /-- A proposer read from the lookahead of a state is active in the epoch of the state. -/
@@ -260,14 +261,15 @@ theorem LookaheadActive.proposer_active {state : BeaconState preset fork}
 
 The sync aggregate changes only the balances. -/
 theorem LookaheadActive.last_of_processBlock
-    (window : preset.SeedLookaheadAtLeastThree) {engine : ExecutionEngine preset fork}
+    (covers : preset.MIN_SEED_LOOKAHEAD.toNat + 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    {engine : ExecutionEngine preset fork}
     {state last after : BeaconState preset fork} {block : BeaconBlock preset fork}
     (h : LookaheadActive state)
     (ok : processBlock config checks engine state block = .ok after)
     (synced : (if altair : .altair ≤ fork then
         processSyncAggregate config checks last altair (block.body.syncAggregate altair)
       else pure last) = .ok after) : LookaheadActive last := by
-  have kept := h.processBlock window.covers ok
+  have kept := h.processBlock covers ok
   split at synced
   · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
     exact kept

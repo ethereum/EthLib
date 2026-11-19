@@ -77,7 +77,7 @@ theorem getCurrentEpoch_le_activityFixedEpoch (state : BeaconState preset fork) 
   have := (getCurrentEpoch state).toNat_lt
   omega
 
-/-- (preset fact) Activity is fixed at least three epochs ahead, and covers the proposer lookahead.
+/-- (preset fact) Activity is fixed at least three epochs ahead.
 
 The floor of a new key's effective balance in the pin drift bound reads it.
 
@@ -86,15 +86,14 @@ Its proof starts a key's balance floor two epochs before the key's activation ep
 It needs the key's activation, and the activity of the epoch after, fixed at that state. -/
 structure Preset.SeedLookaheadAtLeastThree (preset : Preset) : Prop where
   lookahead : 3 ≤ preset.MAX_SEED_LOOKAHEAD.toNat
-  covers : preset.MIN_SEED_LOOKAHEAD.toNat + 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat
 
 /-- The mainnet preset fixes activity at least three epochs ahead. -/
 theorem Preset.SeedLookaheadAtLeastThree.mainnet : Preset.mainnet.SeedLookaheadAtLeastThree :=
-  ⟨by decide, by decide⟩
+  ⟨by decide⟩
 
 /-- The minimal preset fixes activity at least three epochs ahead. -/
 theorem Preset.SeedLookaheadAtLeastThree.minimal : Preset.minimal.SeedLookaheadAtLeastThree :=
-  ⟨by decide, by decide⟩
+  ⟨by decide⟩
 
 /-- A current epoch at least as late gives a fixed epoch at least as late. -/
 theorem activityFixedEpoch_mono {post : Base.Fork} {other : BeaconState preset post}
