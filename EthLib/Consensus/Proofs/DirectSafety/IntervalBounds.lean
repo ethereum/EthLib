@@ -3815,31 +3815,23 @@ private theorem intervalGain_replay_bound {g x y : ForkedBeaconState preset}
   rw [exchange] at covered
   omega
 
-private theorem intervalGain_selected_deposit (y : ForkedBeaconState preset)
-    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) (e : BalanceEvent preset)
-    (kept : RegistryLifecycle e.before.state y.state)
-    (ordered : ExitsOrdered e.before.state)
-    (later : (getCurrentEpoch e.before.state).toNat < (getCurrentEpoch y.state).toNat)
-    (matched : BalancesMatch e.after.state) :
-    (∑ i ∈ intervalGain_indices y, (actualBalanceAt e.after i - actualBalanceAt e.before i)) ≤
+/-- A deposit event credits a set of keys at most its funding credit.
+
+Each key of the set must be absent from `e.before`'s registry or not yet withdrawable there.
+
+The funding credit is the sum of the gains of the keys that are not withdrawable. -/
+theorem selected_deposit_le (S : Finset Nat) (e : BalanceEvent preset)
+    (matched : BalancesMatch e.after.state)
+    (selected : ∀ i ∈ S, (e.before.state.validators.data[i]?.map (fun v =>
+        decide (v.withdrawableEpoch.toNat ≤ (getCurrentEpoch e.before.state).toNat))).getD
+          false = false) :
+    (∑ i ∈ S, (actualBalanceAt e.after i - actualBalanceAt e.before i)) ≤
       ∑ i ∈ Finset.range e.after.state.validators.data.size,
         if (e.before.state.validators.data[i]?.map (fun v =>
             decide (v.withdrawableEpoch.toNat ≤ (getCurrentEpoch e.before.state).toNat))).getD
             false then 0 else actualBalanceAt e.after i - actualBalanceAt e.before i := by
-  have selected (i) (member : i ∈ intervalGain_indices y) :
-      (e.before.state.validators.data[i]?.map (fun v =>
-        decide (v.withdrawableEpoch.toNat ≤ (getCurrentEpoch e.before.state).toNat))).getD
-          false = false := by
-    cases found : e.before.state.validators.data[i]? with
-    | none => rfl
-    | some v =>
-      obtain ⟨w, after, recent⟩ := (Finset.mem_filter.mp member).2
-      have notWithdrawn := intervalGain_recent_not_withdrawn kept twoSlots ordered i v w
-        found after later recent
-      simp only [Option.map_some, Option.getD_some, decide_eq_false_iff_not]
-      omega
   calc
-    _ = ∑ i ∈ intervalGain_indices y,
+    _ = ∑ i ∈ S,
         if (e.before.state.validators.data[i]?.map (fun v =>
             decide (v.withdrawableEpoch.toNat ≤ (getCurrentEpoch e.before.state).toNat))).getD
             false then 0 else actualBalanceAt e.after i - actualBalanceAt e.before i := by
@@ -3856,6 +3848,27 @@ private theorem intervalGain_selected_deposit (y : ForkedBeaconState preset)
       simp only [actualBalanceAt, absent, Option.map_none, Option.getD_none, Nat.zero_sub,
         ite_self] at nonzero
       exact nonzero rfl
+
+private theorem intervalGain_selected_deposit (y : ForkedBeaconState preset)
+    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) (e : BalanceEvent preset)
+    (kept : RegistryLifecycle e.before.state y.state)
+    (ordered : ExitsOrdered e.before.state)
+    (later : (getCurrentEpoch e.before.state).toNat < (getCurrentEpoch y.state).toNat)
+    (matched : BalancesMatch e.after.state) :
+    (∑ i ∈ intervalGain_indices y, (actualBalanceAt e.after i - actualBalanceAt e.before i)) ≤
+      ∑ i ∈ Finset.range e.after.state.validators.data.size,
+        if (e.before.state.validators.data[i]?.map (fun v =>
+            decide (v.withdrawableEpoch.toNat ≤ (getCurrentEpoch e.before.state).toNat))).getD
+            false then 0 else actualBalanceAt e.after i - actualBalanceAt e.before i :=
+  selected_deposit_le _ e matched fun i member => by
+    cases found : e.before.state.validators.data[i]? with
+    | none => rfl
+    | some v =>
+      obtain ⟨w, after, recent⟩ := (Finset.mem_filter.mp member).2
+      have notWithdrawn := intervalGain_recent_not_withdrawn kept twoSlots ordered i v w
+        found after later recent
+      simp only [Option.map_some, Option.getD_some, decide_eq_false_iff_not]
+      omega
 
 private theorem intervalGain_event_credit (y : ForkedBeaconState preset)
     (e : BalanceEvent preset) (bounded : e.credits ≤ e.creditLimit) :
