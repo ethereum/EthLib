@@ -5366,39 +5366,6 @@ private theorem exitFloor_add_slack (h : Setting config checks g split fin pulle
         (pinTerms config pulled anc fin).exitFloor := rfl
   omega
 
-/-- The first element that a predicate picks, in a list where it picks only one, is that one. -/
-private theorem find?_eq_some_of_unique {α : Type} (p : α → Bool) (c : α) :
-    ∀ L : List α, c ∈ L → p c = true → (∀ d ∈ L, p d = true → d = c) → L.find? p = some c
-  | [], member, _, _ => absurd member (by simp)
-  | d :: rest, member, pc, only => by
-    by_cases pd : p d = true
-    · have same : d = c := only d (by simp) pd
-      subst same
-      simp [pd]
-    · have pdFalse : p d = false := by simpa using pd
-      have inRest : c ∈ rest := by
-        rcases List.mem_cons.mp member with same | inRest
-        · rw [same] at pc
-          exact absurd pc pd
-        · exact inRest
-      rw [List.find?_cons, pdFalse]
-      exact find?_eq_some_of_unique p c rest inRest pc
-        (fun e he => only e (List.mem_cons_of_mem _ he))
-
-/-- Elements of a list with the same image are equal, if the images of the list are distinct. -/
-private theorem eq_of_nodup_map {α β : Type} (f : α → β) :
-    ∀ L : List α, (L.map f).Nodup → ∀ x ∈ L, ∀ y ∈ L, f x = f y → x = y
-  | [], _, x, hx, _, _, _ => absurd hx (by simp)
-  | d :: rest, nd, x, hx, y, hy, e => by
-    rw [List.map_cons, List.nodup_cons] at nd
-    rcases List.mem_cons.mp hx with rfl | hx'
-    · rcases List.mem_cons.mp hy with rfl | hy'
-      · rfl
-      · exact absurd (List.mem_map.mpr ⟨y, hy', e.symm⟩) nd.1
-    · rcases List.mem_cons.mp hy with rfl | hy'
-      · exact absurd (List.mem_map.mpr ⟨x, hx', e⟩) nd.1
-      · exact eq_of_nodup_map f rest nd.2 x hx' y hy' e
-
 /-- From Fusaka and before Gloas, the parameters are those of Fusaka. -/
 private theorem parameters_of_fusaka {fork : Fork} (fusaka : .fusaka ≤ fork)
     (early : fork < .glamsterdam) :
@@ -5478,29 +5445,14 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
     have low := UInt64.le_iff_toNat_le.mp activeBefore.1
     have previous := getPreviousEpoch_toNat counted
     exact ⟨UInt64.le_iff_toNat_le.mpr (by omega), UInt64.lt_iff_toNat_lt.mpr (by omega)⟩
-  -- the charge is the first charge of the key that counts, so `exitQ` is its amount
+  -- the charge counts, so `exitQ` is its amount
   have exitQEq : exitQ tailC v.toNat = c.amount := by
-    have exitNat := congrArg UInt64.toNat exitSame
-    have picked : (c.index == v.toNat && decide (c.epoch ≤ (getCurrentEpoch counted).toNat)) =
-        true := by
-      simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq]
-      exact ⟨cIndex, by omega⟩
-    have only : ∀ d ∈ tailC.departureCharges,
-        (d.index == v.toNat && decide (d.epoch ≤ (getCurrentEpoch counted).toNat)) = true →
-          d = c := by
-      intro d member picked
-      simp only [Bool.and_eq_true, beq_iff_eq] at picked
-      exact eq_of_nodup_map (·.index) _ (departureCharges_run_indices tailC) d member c cMember
-        (picked.1.trans cIndex.symm)
-    have unique := find?_eq_some_of_unique
-      (fun d => d.index == v.toNat && decide (d.epoch ≤ (getCurrentEpoch counted).toNat)) c _
-      cMember picked only
-    unfold exitQ
-    change ((tailC.departureCharges.find? fun d =>
-      d.index == v.toNat && decide (d.epoch ≤ (getCurrentEpoch counted).toNat)).map
-        (·.amount)).getD 0 = c.amount
-    rw [unique]
-    rfl
+    have counts : c.epoch ≤ (getCurrentEpoch counted).toNat := by
+      have exitNat := congrArg UInt64.toNat exitSame
+      omega
+    rcases exitQ_cases tailC v.toNat with ⟨none, -⟩ | ⟨d, dMember, dIndex, -, dQ⟩
+    · exact absurd counts (none c cMember cIndex)
+    · rw [dQ, charge_unique tailC dMember cMember (dIndex.trans cIndex.symm)]
   -- the run from the finalized state to the exit step, and its events, a prefix of the replay
   have shape : fromFin.append ((pre.snoc step).append post) =
       (fromFin.append pre).append ((Run.nil.snoc step).append post) := by
