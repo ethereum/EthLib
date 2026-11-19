@@ -2834,7 +2834,13 @@ It ends within one epoch after the call.
 
 The floor starts from the smaller of the key's balance at `zs` and its largest balance.
 
-The key is unslashed at `zs`, and its effective balance stays at most `top` along the run.
+Its effective balance stays at most `top` along the run.
+
+The key is unslashed at `zs`.
+
+Or it is slashed there, with its withdrawal at least the slashings vector past the finalized epoch.
+
+Then its delayed penalty is not due along the run, since the window is shorter than half the vector.
 
 The slashing penalty is then at most `top` over the slashing quotient, whenever the run slashes it.
 
@@ -2853,7 +2859,9 @@ private theorem slashed_floor (h : Setting config checks g split fin pulled anc 
     (endEpoch : (getCurrentEpoch e).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (i : ValidatorIndex) (val : Validator)
-    (initial : zs.validators.data[i.toNat]? = some val) (unslashed : val.slashed = false)
+    (initial : zs.validators.data[i.toNat]? = some val)
+    (slashedLate : val.slashed = true → (getCurrentEpoch fin).toNat +
+      preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤ val.withdrawableEpoch.toNat)
     (top : ℕ)
     (envelope : ∀ z ∈ tail.balancePath, effectiveAt z i.toNat ≤ top)
     (retained : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks ⟨fork, zs⟩ m)
@@ -2891,7 +2899,12 @@ private theorem slashed_floor (h : Setting config checks g split fin pulled anc 
       (Nat.min_le_right _ _) positive
       (fun pre step post cut w found =>
         ⟨retained pre step post cut w found,
-          ⟨fun _ => (guards pre step post).1, fun s => absurd s (by simp [unslashed])⟩,
+          ⟨fun _ => (guards pre step post).1, fun s => by
+            have window := DirectSafety.Apriori.Internal.short_window_of_guard h.guard near
+              ((Run.nil.snoc step).append post)
+            have late := slashedLate s
+            simp only [UInt64.toNat_div, UInt64.reduceToNat] at window ⊢
+            omega⟩,
           (guards pre step post).2⟩)
       replayed
   obtain ⟨-, below⟩ := ceiling top start fun pre step post cut =>
