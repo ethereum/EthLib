@@ -6899,6 +6899,20 @@ private theorem capAt_le_capMax {z : ForkedBeaconState preset} (caps : CapOrder 
     rw [capAt_of_found electra found]
     split <;> omega
 
+/-- A key with an assigned exit epoch is inactive at every epoch from the exit on, along a run.
+
+The run keeps an assigned exit epoch. -/
+private theorem inactive_from_exit {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    {i : ℕ} {v : Validator} (found : x.state.validators.data[i]? = some v)
+    (assigned : v.exitEpoch ≠ FAR_FUTURE_EPOCH) {e : Epoch} (reached : v.exitEpoch ≤ e) :
+    isActiveAt y.state e i = false := by
+  obtain ⟨later, foundLater, kept⟩ := tail.registryLifecycle.validators i v found
+  have inactive : isActiveValidator later e = false := by
+    unfold isActiveValidator
+    simp
+    exact fun _ => by rw [kept.exitEpoch assigned]; exact reached
+  simp [isActiveAt, foundLater, inactive]
+
 /-- A key that exited before the finalized epoch stays within its finalized balance and credits.
 
 The key is idle from the finalized block on.
@@ -6950,20 +6964,18 @@ private theorem exited_ceiling (h : Setting config checks g split fin pulled anc
     obtain ⟨zf, zs⟩ := z
     have within := BeaconState.registryWithinLimit_of_lt
       (Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early) zs
-    obtain ⟨u, located, kept⟩ := r1.registryLifecycle.validators i w found
-    have index : i.toUInt64.toNat = i :=
-      toNat_toUInt64_of_lt within (Array.getElem?_eq_some_iff.mp located).1
-    obtain ⟨v, foundV, isActive⟩ := (mem_getActiveValidatorIndices within).mp active
-    rw [index, located] at foundV
-    have same : u = v := Option.some.inj foundV
-    rw [← same] at isActive
-    have kept := congrArg UInt64.toNat (kept.exitEpoch notFar)
-    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at isActive
-    have before := UInt64.lt_iff_toNat_lt.mp isActive.2
+    have index : i.toUInt64.toNat = i := toNat_toUInt64_of_lt within
+      (Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp found).1 r1.registryLifecycle.size_le)
     have previous := getPreviousEpoch_toNat zs
     have epochs := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r1.chainSteps)
     simp only at epochs
-    omega
+    have inactive := inactive_from_exit r1 found notFar (e := getPreviousEpoch zs)
+      (UInt64.le_iff_toNat_le.mpr (by omega))
+    obtain ⟨v, foundV, isActive⟩ := (mem_getActiveValidatorIndices within).mp active
+    rw [index] at foundV
+    have := isActiveAt_eq_true_iff.mpr ⟨v, foundV, isActive⟩
+    rw [inactive] at this
+    exact Bool.false_ne_true this
   obtain ⟨cb, hcb⟩ : ∃ cb, cb = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i)
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat + (netScan i high run +
         (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high run).1) := ⟨_, rfl⟩
@@ -10480,16 +10492,9 @@ private theorem inactive_of_exited (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNa
     have bound := (getCurrentEpoch x.state).toNat_lt_size
     simp only [UInt64.size] at bound
     exact getCurrentEpoch_ne_farFuture twoSlots x.state (UInt64.toNat_inj.mp (by omega))
-  obtain ⟨later, foundLater, kept⟩ := tail.registryLifecycle.validators i v found
-  have exitLater := kept.exitEpoch assigned
   have forward := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
-  have reached : later.exitEpoch ≤ getCurrentEpoch y.state :=
-    UInt64.le_iff_toNat_le.mpr (by rw [exitLater]; exact Nat.le_trans exited forward)
-  have inactive : isActiveValidator later (getCurrentEpoch y.state) = false := by
-    unfold isActiveValidator
-    simp
-    exact fun _ => reached
-  simp [isActiveAt, foundLater, inactive]
+  exact inactive_from_exit tail found assigned
+    (UInt64.le_iff_toNat_le.mpr (Nat.le_trans exited forward))
 
 /-- S1 (syncSeats), in the third window: the base bound with the shared segment's K debits.
 
