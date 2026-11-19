@@ -13936,6 +13936,21 @@ private theorem earlier_charge (h : Setting config checks g split fin pulled anc
     rw [chargeEq]
     omega
 
+/-- The whistleblower credits of a set of keys over a run fit the limits of its slashing events. -/
+private theorem whistC_sum_le_limits {g m y : ForkedBeaconState preset}
+    (shared : Run config checks g m) (genesis : Genesis config checks g)
+    (tail : Run config checks m y) (early : y.fork < .glamsterdam) (high : ℕ)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (S : Finset ValidatorIndex) :
+    ∑ v ∈ S, whistC tail high v.toNat ≤
+      (events.map fun e => if e.source = .slashings then e.creditLimit else 0).sum := by
+  obtain ⟨found, foundOk, bounded⟩ := Run.balanceEvents_bounded shared tail genesis early high
+  rw [replayed] at foundOk
+  cases foundOk
+  simpa [whistC] using creditScan_sum_le S (fun s => decide (s = .slashings)) (fun _ => false)
+    high (fun e => e.creditLimit) tail replayed fun e member _ =>
+      sum_keyCredit_le_creditLimit S e (bounded e member).1
+
 /-- W (`reserveW`, `flagged`, `seatShortfall`, K7, cS): whistleblower rewards on C's branch,
 weight 3, are paid by the slashed key's own slack, or charged. -/
 theorem bud_whistle (h : Setting config checks g split fin pulled anc counted V)
