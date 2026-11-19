@@ -2140,16 +2140,10 @@ private theorem K5_charged (h : Setting config checks g split fin pulled anc cou
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤ w.withdrawableEpoch.toNat := by
       cases slashed : w.slashed
       · exact .inl rfl
-      · refine .inr ?_
-        cases oldSlashed : old.slashed
-        · have delayed := (toPulled.newly_slashed_withdrawableEpoch h.caps.activation
-            h.caps.compounding h.early h.delay v.toNat old w oldFound foundW oldSlashed
-            slashed).2
-          have := UInt64.le_iff_toNat_le.mp h.finalized
-          exact Nat.le_trans (Nat.add_le_add_right this _) delayed
-        · obtain ⟨now, nowFound, nowSlashed⟩ :=
-            tailC.slashedPersistence v.toNat old oldFound oldSlashed
-          simp [nowFound, nowSlashed] at unslashedC
+      · have delayed := slashed_waits toPulled tailC h.early h.caps h.delay
+          (Array.getElem?_eq_some_iff.mp oldFound).1 foundW slashed unslashedC
+        have := UInt64.le_iff_toNat_le.mp h.finalized
+        exact .inr (Nat.le_trans (Nat.add_le_add_right this _) delayed)
     have marked : (pinTerms config pulled anc fin).exitingB v.toNat = true := by
       simp only [pinTerms, decide_eq_true_eq]
       refine ⟨?_, ?_, ?_⟩
