@@ -444,11 +444,11 @@ private theorem potential_old (ρn ρd k d s g P : ℕ)
     (h : (ρd - ρn * k) * (g + d) ≤ ρd * (P + d) + if k = 0 then 0 else ρn * s) :
     (ρd - ρn * k) * (g + (d + s)) ≤ ρd * (P + (d + s)) := by
   rcases Nat.eq_zero_or_pos k with rfl | kpos
-  · simp only [Nat.mul_zero, Nat.sub_zero, if_pos rfl, Nat.add_zero] at h ⊢
+  · simp only [Nat.mul_zero, Nat.sub_zero] at h ⊢
     calc ρd * (g + (d + s)) = ρd * (g + d) + ρd * s := by ring
       _ ≤ ρd * (P + d) + ρd * s := Nat.add_le_add_right h _
       _ = ρd * (P + (d + s)) := by ring
-  · rw [if_neg (by omega)] at h
+  · rw [ite_eq_right (by omega)] at h
     by_cases big : ρd ≤ ρn * k
     · rw [Nat.sub_eq_zero_of_le big]
       simp
@@ -899,8 +899,8 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
         have epochEq := congrArg UInt64.toNat eq
         rw [epochEq, ebEq]
         by_cases first : (getCurrentEpoch m.state).toNat - (getCurrentEpoch x.state).toNat = 0
-        · rw [if_pos first] at ebPre closedPre
-          rw [if_pos first, if_pos first]
+        · rw [ite_eq_left first] at ebPre closedPre
+          rw [ite_eq_left first, ite_eq_left first]
           obtain ⟨stayClosed, stayEB⟩ := potential_stay ρn ρd
             ((getCurrentEpoch m.state).toNat - (getCurrentEpoch x.state).toNat)
             preset.downwardBand slack 0
@@ -910,8 +910,8 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
             (actualBalanceAt n i.toNat + nonPassDebt i events)
             (Nat.le_trans (Nat.min_le_right _ _) capMono) ebCap (by omega) closedPre (by omega)
           exact ⟨by omega, stayClosed⟩
-        · rw [if_neg first] at ebPre closedPre
-          rw [if_neg first, if_neg first]
+        · rw [ite_eq_right first] at ebPre closedPre
+          rw [ite_eq_right first, ite_eq_right first]
           obtain ⟨stayClosed, stayEB⟩ := potential_stay ρn ρd
             ((getCurrentEpoch m.state).toNat - (getCurrentEpoch x.state).toNat)
             preset.downwardBand 0 (ρn * slack)
@@ -942,10 +942,10 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
           · exact le_trans (Nat.mul_le_mul_left _ p) (Nat.mul_div_le _ _)
         have steps : (getCurrentEpoch n.state).toNat - (getCurrentEpoch x.state).toNat =
             (getCurrentEpoch m.state).toNat - (getCurrentEpoch x.state).toNat + 1 := by omega
-        rw [steps, if_neg (Nat.succ_ne_zero _), if_neg (Nat.succ_ne_zero _)]
+        rw [steps, ite_eq_right (Nat.succ_ne_zero _), ite_eq_right (Nat.succ_ne_zero _)]
         refine ⟨by omega, ?_⟩
         by_cases first : (getCurrentEpoch m.state).toNat - (getCurrentEpoch x.state).toNat = 0
-        · rw [if_pos first] at ebPre closedPre
+        · rw [ite_eq_left first] at ebPre closedPre
           exact potential_cross ρn ρd
             ((getCurrentEpoch m.state).toNat - (getCurrentEpoch x.state).toNat)
             preset.downwardBand slack 0 (ρn * slack)
@@ -956,7 +956,7 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
             ((added.map (penaltyDebit i.toNat)).sum)
             (Nat.le_trans (Nat.min_le_right _ _) capMono) ebCap (by omega) closedPre (by omega)
             rate (by simp)
-        · rw [if_neg first] at ebPre closedPre
+        · rw [ite_eq_right first] at ebPre closedPre
           exact potential_cross ρn ρd
             ((getCurrentEpoch m.state).toNat - (getCurrentEpoch x.state).toNat)
             preset.downwardBand 0 (ρn * slack) (ρn * slack)
