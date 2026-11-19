@@ -490,7 +490,7 @@ private theorem processUpgrades_eq_of_early {forked after : ForkedBeaconState pr
     exact computed.symm
 
 /-- A slot step that crosses an epoch leaves the state within the bands of hysteresis. -/
-private theorem hysteresis_of_crossing_slot {m n : ForkedBeaconState preset}
+theorem hysteresis_of_crossing_slot {m n : ForkedBeaconState preset}
     (ok : advanceSlotAcross config checks m = .ok n) (bands : preset.IncrementWithinUpwardBand)
     (fulu : .fusaka ≤ m.fork) (early : n.fork < .glamsterdam)
     (crossing : (getCurrentEpoch m.state).toNat < (getCurrentEpoch n.state).toNat) :
@@ -520,7 +520,7 @@ private theorem epoch_succ_of_slot {m n : ForkedBeaconState preset}
   split <;> omega
 
 /-- A step that crosses an epoch is a slot step. -/
-private theorem slot_of_crossing {m n : ForkedBeaconState preset} (step : Step config checks m n)
+theorem slot_of_crossing {m n : ForkedBeaconState preset} (step : Step config checks m n)
     (crossing : (getCurrentEpoch m.state).toNat < (getCurrentEpoch n.state).toNat) :
     advanceSlotAcross config checks m = .ok n := by
   cases step with

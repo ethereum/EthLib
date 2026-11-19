@@ -43,6 +43,10 @@ Not yet released.
 - `FloorTrace.effective_aligned` says that a key's effective balance at a state of a run from genesis is a whole number of increments.
   The pin's drift bound reads it.
 
+- `hysteresis_of_crossing_slot` says that a slot step to a later epoch, from Fusaka before Gloas, leaves the state within the bands of hysteresis.
+  `slot_of_crossing` says that a step that ends in a later epoch is a slot step.
+  The pin's claim about the keys that are pending at the start of an epoch reads them.
+
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
   The existing `processRegistryUpdates_withdrawableEpoch_of_unassigned` is its weaker case.
@@ -74,6 +78,8 @@ Not yet released.
   `Run.induction_of_same_period` inducts over a run inside one period of epochs, and `Run.induction_of_same_epoch` is its instance for one epoch.
   `Run.currentSyncCommittee_eq_of_same_period` keeps the keys of the current sync committee inside one period of the committee rotation.
   Their readers are the count of the keys that a branch credits, and the bound on the sync-seat holders that a branch debits, in the pin reserve bound.
+  `Run.currentSyncCommittee_eq_nextSyncCommittee_of_next_period` makes the keys of the current committee, one period later, the keys of the next committee at the start.
+  The pin's seat count reads it to bound the debited sync-committee seats of the two branches.
   `pending_deposit_rises` bounds the positions whose balance the pending-deposit pass raises by the deposits that it may read, and `pending_deposit_bound` is its projection.
   `Step.slot_deposit_site` says that a deposit event of a slot step is the pending-deposit pass at some state with matching sizes.
   The slot ends an epoch, and it records at most one deposit event.
