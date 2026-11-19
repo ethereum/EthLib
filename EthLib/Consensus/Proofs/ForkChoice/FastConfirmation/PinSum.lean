@@ -3576,7 +3576,7 @@ private theorem gain_split (I WD F P e0 C k depth : ℕ) (hI : 0 < I) (hk : k �
 
 The run starts at a state where the key's effective balance is within the largest one.
 
-K2 bounds the balance at every state by `creditBound`, given the right `E`.
+`Run.effective_floor_pair` bounds the balance at every state by `creditBound`, given the right `E`.
 
 `E` is at least the effective balances that the bound allows.
 
@@ -6386,7 +6386,8 @@ The passes and partials cost at most the leak at the cap and the net partials, b
 
 The sync debits and `W` are the rest, and `floorAt` supplies the floor from each state.
 
-K2 turns the balance ceiling into one on the effective balance, which `ebUp` reads at the top. -/
+A ceiling on the balance along the run gives one on the effective balance, which `ebUp` reads at
+the top. -/
 private theorem prefix_envelope (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
