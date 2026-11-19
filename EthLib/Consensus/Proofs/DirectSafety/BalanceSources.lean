@@ -412,18 +412,23 @@ def consumedDeposits {fork : Fork} (s t : BeaconState preset fork) (electra : .p
   ((s.pendingDeposits electra).data.toList.map fun d => d.amount.toNat).sum -
     ((t.pendingDeposits electra).data.toList.map fun d => d.amount.toNat).sum
 
-/-- This covers top-ups and withdrawn-key exceptions without charging an unprocessed queue. -/
-theorem pending_deposit_bound {fork : Fork} (s t : BeaconState preset fork)
+/-- The pending-deposit pass raises the balances at no more positions than it may read. -/
+theorem pending_deposit_rises {fork : Fork} (s t : BeaconState preset fork)
     («matches» : BalancesMatch s)
     (electra : .pectra ≤ fork)
     (ok : processPendingDeposits config checks s electra = .ok t) :
-    balanceDebits s t = 0 ∧ balanceCredits s t ≤ consumedDeposits s t electra := by
+    balanceDebits s t = 0 ∧ balanceCredits s t ≤ consumedDeposits s t electra ∧
+      ((Finset.range t.balances.data.size).filter fun i =>
+        actualBalanceAt ⟨fork, s⟩ i < actualBalanceAt ⟨fork, t⟩ i).card ≤
+          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
   have fold (ds : List PendingDeposit) (s t : BeaconState preset fork)
       (hm : BalancesMatch s)
       (ok : ds.foldlM (applyPendingDeposit config checks) s = .ok t) :
       balanceDebits s t = 0 ∧
         balanceCredits s t ≤ (ds.map fun d => d.amount.toNat).sum ∧
-        s.balances.data.size ≤ t.balances.data.size := by
+        s.balances.data.size ≤ t.balances.data.size ∧
+        ((Finset.range t.balances.data.size).filter fun i =>
+          actualBalanceAt ⟨fork, s⟩ i < actualBalanceAt ⟨fork, t⟩ i).card ≤ ds.length := by
     induction ds generalizing s with
     | nil =>
       cases ok
@@ -438,14 +443,41 @@ theorem pending_deposit_bound {fork : Fork} (s t : BeaconState preset fork)
         · exact (sameSizes_increaseBalance first).2.ge
         · rw [(addValidatorToRegistry_push first hm).2, Array.size_push]
           omega
+      -- One deposit leaves every balance but one where it was or lowers it.
+      have single : ∃ j, ∀ i, i ≠ j →
+          actualBalanceAt ⟨fork, u⟩ i ≤ actualBalanceAt ⟨fork, s⟩ i := by
+        rcases applyPendingDeposit_cases first with rfl | ⟨index, raised⟩ | ⟨_, added⟩
+        · exact ⟨0, fun _ _ => Nat.le_refl _⟩
+        · refine ⟨index.toNat, fun i apart => ?_⟩
+          have kept := actualBalanceAt_increaseBalance raised i
+          simp only [apart.symm, ↓reduceIte] at kept
+          omega
+        · refine ⟨s.balances.data.size, fun i apart => ?_⟩
+          have balances := (addValidatorToRegistry_push added hm).2
+          simp [actualBalanceAt, balances, Array.getElem?_push, apart]
       have a := deposit_credit_bound s u hm d first
       have b := ih u hu last
-      have credits := credits_triangle_growing s u t b.2.2
+      have credits := credits_triangle_growing s u t b.2.2.1
       have debits := debits_triangle_growing s u t sizes
-      simp only [List.map_cons, List.sum_cons]
-      exact ⟨by omega, by omega, sizes.trans b.2.2⟩
-  obtain ⟨read, rest, applied, postponed, next, pending, carried, queue, kept, _, _, _,
-    perm, steps, rfl⟩ := processPendingDeposits_applied ok
+      obtain ⟨j, kept⟩ := single
+      have subset : ((Finset.range t.balances.data.size).filter fun i =>
+          actualBalanceAt ⟨fork, s⟩ i < actualBalanceAt ⟨fork, t⟩ i) ⊆
+          insert j ((Finset.range t.balances.data.size).filter fun i =>
+            actualBalanceAt ⟨fork, u⟩ i < actualBalanceAt ⟨fork, t⟩ i) := by
+        intro i member
+        rw [Finset.mem_filter] at member
+        rw [Finset.mem_insert, Finset.mem_filter]
+        by_cases rise : actualBalanceAt ⟨fork, u⟩ i < actualBalanceAt ⟨fork, t⟩ i
+        · exact .inr ⟨member.1, rise⟩
+        · left
+          by_contra apart
+          have := kept i apart
+          omega
+      have count := (Finset.card_le_card subset).trans (Finset.card_insert_le _ _)
+      simp only [List.map_cons, List.sum_cons, List.length_cons]
+      exact ⟨by omega, by omega, sizes.trans b.2.2.1, by omega⟩
+  obtain ⟨read, rest, applied, postponed, next, pending, carried, queue, kept, readLe, appliedSub,
+    _, perm, steps, rfl⟩ := processPendingDeposits_applied ok
   have bounds := fold applied s next «matches» steps
   have amounts := (perm.map (fun d => d.amount.toNat)).sum_eq
   -- Postponed deposits return to the queue, so only applied amounts are consumed.
@@ -461,7 +493,16 @@ theorem pending_deposit_bound {fork : Fork} (s t : BeaconState preset fork)
     simp only [List.map_append, List.sum_append] at amounts ⊢
     omega
   rw [consumed]
-  exact ⟨bounds.1, bounds.2.1⟩
+  exact ⟨bounds.1, bounds.2.1, bounds.2.2.2.trans (appliedSub.length_le.trans readLe)⟩
+
+/-- This covers top-ups and withdrawn-key exceptions without charging an unprocessed queue. -/
+theorem pending_deposit_bound {fork : Fork} (s t : BeaconState preset fork)
+    («matches» : BalancesMatch s)
+    (electra : .pectra ≤ fork)
+    (ok : processPendingDeposits config checks s electra = .ok t) :
+    balanceDebits s t = 0 ∧ balanceCredits s t ≤ consumedDeposits s t electra :=
+  ⟨(pending_deposit_rises s t «matches» electra ok).1,
+    (pending_deposit_rises s t «matches» electra ok).2.1⟩
 
 /-- The real pass removes a prefix; slashed entries are dropped without a transfer. -/
 def consumedConsolidations {fork : Fork} (s t : BeaconState preset fork)
