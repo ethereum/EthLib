@@ -41,6 +41,7 @@ public import EthLib.Cryptography.Proofs.Ethash
 public import EthLib.Cryptography.Proofs.Montgomery
 public import EthLib.Cryptography.Proofs.Montgomery.Fin
 public import EthLib.Cryptography.Proofs.BaseField
+public import EthLib.Cryptography.Proofs.Multilinear
 public import EthLib.Cryptography.Proofs.X25519
 public import EthLib.Cryptography.Proofs.MontgomeryCurve
 public import EthLib.Cryptography.Proofs.X25519.Field
