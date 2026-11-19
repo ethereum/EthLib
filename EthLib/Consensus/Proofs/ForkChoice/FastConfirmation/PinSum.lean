@@ -241,7 +241,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let base0 (i : ℕ) := min (actualFin i) (capFin i)
   let carry (i : ℕ) := leakAt (finEB i - actualFin i + inc) i + 1
   let fall (i : ℕ) := if depthFin ≤ partialDelay then
-      let low := base0 i - (carry i + depthFin * (leakAt (base0 i + inc) i + gainRate i + 1) +
+      let low := base0 i - (carry i +
+        depthFin * (leakAt (base0 i + preset.downwardBand + inc) i + gainRate i + 1) +
         partialsDue i)
       let floorC := if max (finEB i) (base0 i) ≤ low + preset.downwardBand then finEB i
         else min (finEB i) (low - low % inc)

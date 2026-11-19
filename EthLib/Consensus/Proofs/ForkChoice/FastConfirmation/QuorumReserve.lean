@@ -378,10 +378,11 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- That can exceed the state's balance, and later debits are charged against the floor's start.
   let carry (i : ℕ) := leakAt (finEB i - actualFin i + inc) i + 1
   let fall (i : ℕ) := if depthFin ≤ partialDelay then
-      -- The leak is read one increment above the floor's start.
+      -- The leak is read at the floor's start plus the band and one increment.
       --
       -- Each epoch also loses at most one unit to the rounding of the rates.
-      let low := base0 i - (carry i + depthFin * (leakAt (base0 i + inc) i + gainRate i + 1) +
+      let low := base0 i - (carry i +
+        depthFin * (leakAt (base0 i + preset.downwardBand + inc) i + gainRate i + 1) +
         partialsDue i)
       -- On another branch the key can keep an effective balance that this branch's update raised.
       --
