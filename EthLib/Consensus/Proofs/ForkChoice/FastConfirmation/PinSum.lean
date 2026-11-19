@@ -4700,14 +4700,15 @@ private theorem charge_activated {x y : ForkedBeaconState preset} (electra : .pe
           charge.amount = v.effectiveBalance.toNat ∧ charge.epoch = w.exitEpoch.toNat) :
     ∃ a b, ∃ pre : Run config checks x a, ∃ step : Step config checks a b,
       ∃ post : Run config checks b y, (pre.snoc step).append post = tail ∧
-        ∃ v, a.state.validators.data[charge.index]? = some v ∧ v.exitEpoch = FAR_FUTURE_EPOCH ∧
-          v.activationEpoch ≤ getCurrentEpoch a.state ∧
-          charge.amount = v.effectiveBalance.toNat := by
-  obtain ⟨a, b, pre, step, post, split, v, w, found, later, unset, set, amount, -⟩ := site
-  exact ⟨a, b, pre, step, post, split, v, found, unset,
+        ∃ v w, a.state.validators.data[charge.index]? = some v ∧
+          b.state.validators.data[charge.index]? = some w ∧ v.exitEpoch = FAR_FUTURE_EPOCH ∧
+          w.exitEpoch ≠ FAR_FUTURE_EPOCH ∧ v.activationEpoch ≤ getCurrentEpoch a.state ∧
+          charge.amount = v.effectiveBalance.toNat ∧ charge.epoch = w.exitEpoch.toNat := by
+  obtain ⟨a, b, pre, step, post, split, v, w, found, later, unset, set, amount, epoch⟩ := site
+  exact ⟨a, b, pre, step, post, split, v, w, found, later, unset, set,
     step.chainStep.exit_assigned_activated
       (Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps))
-      found later unset set, amount⟩
+      found later unset set, amount, epoch⟩
 
 /-- A key that is not yet activated at the finalized state and has a small charge loses seats.
 
@@ -4827,6 +4828,196 @@ private theorem exitFloor_add_slack (h : Setting config checks g split fin pulle
   have slack : (pinTerms config pulled anc fin).newKeySlack =
       (pinTerms config pulled anc fin).newKeyFloor -
         (pinTerms config pulled anc fin).exitFloor := rfl
+  omega
+
+/-- The first element that a predicate picks, in a list where it picks only one, is that one. -/
+private theorem find?_eq_some_of_unique {α : Type} (p : α → Bool) (c : α) :
+    ∀ L : List α, c ∈ L → p c = true → (∀ d ∈ L, p d = true → d = c) → L.find? p = some c
+  | [], member, _, _ => absurd member (by simp)
+  | d :: rest, member, pc, only => by
+    by_cases pd : p d = true
+    · have same : d = c := only d (by simp) pd
+      subst same
+      simp [pd]
+    · have pdFalse : p d = false := by simpa using pd
+      have inRest : c ∈ rest := by
+        rcases List.mem_cons.mp member with same | inRest
+        · rw [same] at pc
+          exact absurd pc pd
+        · exact inRest
+      rw [List.find?_cons, pdFalse]
+      exact find?_eq_some_of_unique p c rest inRest pc
+        (fun e he => only e (List.mem_cons_of_mem _ he))
+
+/-- Two elements of a list that have the same image, in a list whose images are distinct, are equal. -/
+private theorem eq_of_nodup_map {α β : Type} (f : α → β) :
+    ∀ L : List α, (L.map f).Nodup → ∀ x ∈ L, ∀ y ∈ L, f x = f y → x = y
+  | [], _, x, hx, _, _, _ => absurd hx (by simp)
+  | d :: rest, nd, x, hx, y, hy, e => by
+    rw [List.map_cons, List.nodup_cons] at nd
+    rcases List.mem_cons.mp hx with rfl | hx'
+    · rcases List.mem_cons.mp hy with rfl | hy'
+      · rfl
+      · exact absurd (List.mem_map.mpr ⟨y, hy', e.symm⟩) nd.1
+    · rcases List.mem_cons.mp hy with rfl | hy'
+      · exact absurd (List.mem_map.mpr ⟨x, hx', e⟩) nd.1
+      · exact eq_of_nodup_map f rest nd.2 x hx' y hy' e
+
+/-- From Fusaka and before Gloas, the parameters are those of Fusaka. -/
+private theorem parameters_of_fusaka {fork : Fork} (fusaka : .fusaka ≤ fork)
+    (early : fork < .glamsterdam) :
+    EthLib.Consensus.parameters preset fork = EthLib.Consensus.parameters preset .fusaka := by
+  cases fork <;> first
+    | rfl
+    | exact absurd fusaka (by decide)
+    | exact absurd early (by decide)
+
+/-- A key of `K5` that is not activated at the finalized state loses seats, from the floor of a new
+key.
+
+Its charge splits C's run at the step that exits it, and the key is activated there, by (I1).
+
+It is active at that state.
+
+So the floor of a new key from the finalized state reads its effective balance, which is the charge.
+
+The floor adds the key's sync debits and its partial payments.
+
+The partial payments are none, by `noPartials`.
+
+The charge is below `exitFloor`, so the debits exceed the slack.
+
+The hypothesis `site` is the split of the run at the departure charge.
+
+The hypothesis `hysteresis` is the bands of hysteresis after an epoch step. -/
+private theorem pending_key_claim_of (h : Setting config checks g split fin pulled anc counted V)
+    (hysteresis : PinSplit.EpochStartHysteresis preset config checks)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (v : ValidatorIndex) (member : v ∈ K5 counted V)
+    (charged : ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
+    (small : exitQ tailC v.toNat < (pinTerms config pulled anc fin).exitFloor)
+    (fresh : fin.validators.data[v.toNat]? = none ∨
+      ∃ w, fin.validators.data[v.toNat]? = some w ∧ w.activationEpoch = FAR_FUTURE_EPOCH)
+    (site : ∀ c ∈ tailC.departureCharges,
+      ∃ a b, ∃ pre : Run config checks ⟨fork, split⟩ a, ∃ step : Step config checks a b,
+        ∃ post : Run config checks b ⟨fork, counted⟩, (pre.snoc step).append post = tailC ∧
+          ∃ v w, a.state.validators.data[c.index]? = some v ∧
+            b.state.validators.data[c.index]? = some w ∧
+            v.exitEpoch = FAR_FUTURE_EPOCH ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH ∧
+            c.amount = v.effectiveBalance.toNat ∧ c.epoch = w.exitEpoch.toNat)
+    (noPartials : ∀ (a : ForkedBeaconState preset) (r : Run config checks ⟨fork, fin⟩ a)
+      {evs : List (BalanceEvent preset)},
+      (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 →
+      r.balanceEvents (getCurrentEpoch pulled).toNat = .ok evs →
+      (evs.map (DirectSafety.Apriori.Internal.floorPartialDebit v.toNat.toUInt64)).sum = 0) :
+    (pinTerms config pulled anc fin).newKeySlack < (events.map (syncDebit v.toNat)).sum := by
+  classical
+  obtain ⟨toFin⟩ := h.toFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  obtain ⟨c, cMember, cIndex⟩ := charged
+  obtain ⟨a, b, pre, step, post, split', vv, w, found, foundB, unset, set, activated, amount,
+    epoch⟩ := charge_activated (x := ⟨fork, split⟩) electra tailC c (site c cMember)
+  subst split'
+  rw [cIndex] at found foundB amount epoch
+  -- the exit epoch of the charge is at most C's epoch, since the key is not active there
+  obtain ⟨wc, foundC, life⟩ := post.registryLifecycle.validators v.toNat w foundB
+  have exitSame : wc.exitEpoch = w.exitEpoch := life.exitEpoch set
+  have inK5 := Finset.mem_filter.mp member
+  simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inK5
+  obtain ⟨⟨listed, -⟩, notActive, -⟩ := inK5
+  have notCurrent : v ∉ getActiveValidatorIndices counted (getCurrentEpoch counted) := fun now =>
+    notActive (by simpa [AC, activeVoters] using now)
+  rcases listed with now | before
+  · exact absurd now notCurrent
+  have within := BeaconState.registryWithinLimit_of_lt h.early counted
+  obtain ⟨c', foundC', activeBefore⟩ := (mem_getActiveValidatorIndices within).mp before
+  have same : c' = wc := Option.some.inj (foundC'.symm.trans foundC)
+  subst same
+  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeBefore
+  have exitLe : c'.exitEpoch.toNat ≤ (getCurrentEpoch counted).toNat := by
+    by_contra late
+    refine notCurrent ((mem_getActiveValidatorIndices within).mpr ⟨c', foundC', ?_⟩)
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq]
+    have low := UInt64.le_iff_toNat_le.mp activeBefore.1
+    have previous := getPreviousEpoch_toNat counted
+    exact ⟨UInt64.le_iff_toNat_le.mpr (by omega), UInt64.lt_iff_toNat_lt.mpr (by omega)⟩
+  -- the charge is the first charge of the key that counts, so `exitQ` is its amount
+  have exitQEq : exitQ tailC v.toNat = c.amount := by
+    unfold exitQ
+    have picked : (c.index == v.toNat && decide (c.epoch ≤ (getCurrentEpoch counted).toNat)) =
+        true := by
+      simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq]
+      exact ⟨cIndex, by omega⟩
+    have only : ∀ d ∈ tailC.departureCharges,
+        (d.index == v.toNat && decide (d.epoch ≤ (getCurrentEpoch counted).toNat)) = true →
+          d = c := by
+      intro d member picked
+      simp only [Bool.and_eq_true, beq_iff_eq] at picked
+      exact eq_of_nodup_map (·.index) _ (departureCharges_run_indices tailC) d member c cMember
+        (picked.1.trans cIndex.symm)
+    rw [find?_eq_some_of_unique _ c _ cMember picked only]
+    rfl
+  -- the run from the finalized state to the exit step, and its events, a prefix of the replay
+  have shape : fromFin.append ((pre.snoc step).append post) =
+      (fromFin.append pre).append ((Run.nil.snoc step).append post) := by
+    have snoc : pre.snoc step = pre.append (Run.nil.snoc step) := rfl
+    rw [snoc, ← Run.append_assoc pre (Run.nil.snoc step) post, Run.append_assoc]
+  rw [shape] at replayed
+  obtain ⟨prior, priorOk, isPrefix⟩ := Run.balanceEvents_prefix (fromFin.append pre)
+    ((Run.nil.snoc step).append post) (getCurrentEpoch pulled).toNat events replayed
+  have aEpoch := UInt64.le_iff_toNat_le.mp
+    (currentEpoch_le_of_chainSteps ((Run.nil.snoc step).append post).chainSteps)
+  have aInside : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
+    have := h.near
+    simp only at aEpoch
+    omega
+  have aEarly : a.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps ((Run.nil.snoc step).append post).chainSteps)
+      h.early
+  have finite : (getCurrentEpoch a.state).toNat < FAR_FUTURE_EPOCH.toNat := by
+    have ne := getCurrentEpoch_ne_farFuture h.twoSlots a.state
+    have := (getCurrentEpoch a.state).toNat_lt
+    have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+    have : (getCurrentEpoch a.state).toNat ≠ FAR_FUTURE_EPOCH.toNat := fun eq =>
+      ne (UInt64.toNat_inj.mp eq)
+    omega
+  have active : isActiveAt a.state (getCurrentEpoch a.state) v.toNat = true := by
+    refine isActiveAt_eq_true_iff.mpr ⟨vv, found, ?_⟩
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq]
+    exact ⟨activated, by rw [unset]; exact UInt64.lt_iff_toNat_lt.mpr finite⟩
+  have pending : ∀ u, fin.validators.data[v.toNat]? = some u →
+      (getCurrentEpoch (⟨fork, fin⟩ : ForkedBeaconState preset).state).toNat + 1 <
+        u.activationEpoch.toNat := by
+    intro u foundFin
+    rcases fresh with none | ⟨u', foundFin', far⟩
+    · rw [none] at foundFin
+      cases foundFin
+    · obtain rfl := Option.some.inj (foundFin.symm.trans foundFin')
+      rw [far]
+      exact getCurrentEpoch_succ_lt_farFuture h.twoSlots fin
+  have floor := PinSplit.Run.new_key_effective_floor toFin (fromFin.append pre) h.genesis
+    h.parameters h.caps h.aligned h.twoSlots electra h.fulu (getCurrentEpoch pulled).toNat h.guard
+    aEarly aInside h.window h.delay h.bands h.facts v.toNat pending active hysteresis priorOk
+  have partials := noPartials a (fromFin.append pre) aInside priorOk
+  have order := exitFloor_add_slack h
+  have floorEq : (pinTerms config pulled anc fin).newKeyFloor =
+      2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
+        preset.MAX_EFFECTIVE_BALANCE.toNat /
+          (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat -
+        preset.downwardBand - preset.EFFECTIVE_BALANCE_INCREMENT.toNat := rfl
+  rw [parameters_of_fusaka h.fulu h.early] at floorEq
+  have effective : effectiveAt a v.toNat = c.amount := by
+    simp only [effectiveAt, found, Option.map_some, Option.getD_some]
+    exact amount.symm
+  have prefixSum : (prior.map (syncDebit v.toNat)).sum ≤ (events.map (syncDebit v.toNat)).sum := by
+    obtain ⟨rest, rfl⟩ := isPrefix
+    simp only [List.map_append, List.sum_append]
+    omega
+  rw [partials] at floor
+  rw [effective] at floor
   omega
 
 /-- A key of `K5` that is not exiting at the call and has a small charge is low or loses seats.
