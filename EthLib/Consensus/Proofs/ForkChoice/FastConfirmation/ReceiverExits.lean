@@ -237,7 +237,7 @@ theorem Execution.receiverWindowExitsNear_of_sourceOnParentChain
   rw [boundaryOk, Except.ok.injEq] at slotOk
   subst slot
   have sameBase : callerBase = base :=
-    e.blockStates_eq anchored caller receiver (start u caller) (start w receiver) same
+    e.blockStates_eq anchored (start u caller) (start w receiver) same
       callerBaseFound baseFound
   subst sameBase
   have sameSource : boundaryState = source :=

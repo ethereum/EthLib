@@ -72,15 +72,13 @@ A root of another length than 32 bytes, or a proof that does not verify, is an e
 @[export eth_trie_verify_proof]
 def verifyProofExport (root : ByteArray) (secured : UInt8) (key proof : ByteArray) :
     Result ByteArray := do
-  if h : root.size = 32 then
-    let .ok nodes := (← readList proof "proof").mapM Item.toBytes
-      | throw (0, "a node of the proof is not a byte string")
-    match verifyProof Cryptography.Hash.Keccak.keccak256 ⟨root.data, h⟩ (secured != 0) key nodes with
-    | .ok (some value) => return value
-    | .ok none => return .empty
-    | .error e => throw (e.code, s!"proof does not verify: {(repr e).pretty 1000000}")
-  else
-    throw (0, s!"bad root size: {root.size}, expected 32")
+  let root ← Base.exactBytes 32 root fun size => (0, s!"bad root size: {size}, expected 32")
+  let .ok nodes := (← readList proof "proof").mapM Item.toBytes
+    | throw (0, "a node of the proof is not a byte string")
+  match verifyProof Cryptography.Hash.Keccak.keccak256 root (secured != 0) key nodes with
+  | .ok (some value) => return value
+  | .ok none => return .empty
+  | .error e => throw (e.code, s!"proof does not verify: {(repr e).pretty 1000000}")
 
 /-- Check a range of the trie of a 32-byte root from a 32-byte start, with Keccak-256.
 

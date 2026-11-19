@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.PyValue
+public import EthLib.Cryptography.Exports.Secp256k1
 public import EthLib.Networking.Rlpx.Frame
 
 /-!
@@ -43,11 +44,9 @@ def runEcies {α : Type} (act : Except Ecies.EciesError α) : Result α :=
 
 /-- A private key of 32 big-endian bytes, or an error unless it is below `n`. -/
 def readPrivateKey (bytes : ByteArray) : Result Fn :=
-  if bytes.size = 32 then
-    let k := Base.bytesToNat bytes.data.toList
-    if h : k < Fn.modulus then pure ⟨k, h⟩
-    else throw (0, "private key is not below n")
-  else throw (0, s!"bad private key size: {bytes.size}, expected 32")
+  Cryptography.Secp256k1.Exports.readPrivateKey bytes
+    (fun size => (0, s!"bad private key size: {size}, expected 32"))
+    (0, "private key is not below n")
 
 /-- An encoded public key, or an error. -/
 def readPublicKey (bytes : ByteArray) : Result Point :=
@@ -57,8 +56,7 @@ def readPublicKey (bytes : ByteArray) : Result Point :=
 
 /-- A 16-byte initialization vector, or an error for any other length. -/
 def readIv (bytes : ByteArray) : Result (Vector UInt8 16) :=
-  if h : bytes.size = 16 then pure ⟨bytes.data, h⟩
-  else throw (0, s!"bad iv size: {bytes.size}, expected 16")
+  Base.exactBytes 16 bytes fun size => (0, s!"bad iv size: {size}, expected 16")
 
 /-! ## ECIES -/
 
@@ -94,8 +92,7 @@ def runHandshake {α : Type} (act : Except HandshakeError α) : Result α :=
 
 /-- A 32-byte nonce, or an error for any other length. -/
 def readNonce (bytes : ByteArray) : Result (Vector UInt8 32) :=
-  if h : bytes.size = 32 then pure ⟨bytes.data, h⟩
-  else throw (0, s!"bad nonce size: {bytes.size}, expected 32")
+  Base.exactBytes 32 bytes fun size => (0, s!"bad nonce size: {size}, expected 32")
 
 /-- The keys of one side: a static key, an ephemeral key and a nonce. -/
 def readKeys (staticKey ephemeralKey nonce : ByteArray) : Result Keys := do
@@ -174,8 +171,7 @@ def runFrame {α : Type} (act : Except FrameError α) : Result α :=
 
 /-- A 32-byte secret as an AES-256 key, or an error for any other length. -/
 def readSecret (bytes : ByteArray) : Result (Cryptography.Aes.Key .aes256) :=
-  if h : bytes.size = 32 then pure ⟨bytes.data, by simp [h, Cryptography.Aes.KeySize.Nk]⟩
-  else throw (0, s!"bad secret size: {bytes.size}, expected 32")
+  Base.exactBytes 32 bytes fun size => (0, s!"bad secret size: {size}, expected 32")
 
 /-- The state of one direction at its start: the zero counter, and the MAC after `macInit`. -/
 def readFrameState (aesSecret macSecret macInit : ByteArray) : Result FrameState := do

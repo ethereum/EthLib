@@ -1,12 +1,13 @@
 module
 
+public import EthLib.Base.BigEndian
 public import EthLib.Base.Exports.Result
 public import EthLib.Base.Fork
 
 /-!
 # `EthLib.Base.Exports`
 
-The result type that every fallible C export returns.
+The result type that every fallible C export returns, and the readers that several exports share.
 
 The C layer of the bindings reads this type, so its layout is part of the binary interface.
 
@@ -41,5 +42,13 @@ def forkUpTo (last : Base.Fork) (name : ByteArray) : Result Base.Fork := do
   let fork ← forkOfName name
   if fork ≤ last then pure fork
   else throw (0, s!"fork {fork.name} not yet specified")
+
+/-- The integers `r` and `s` of a 64-byte ECDSA signature, or the error built from another length.
+
+Each is 32 big-endian bytes, `r` first. -/
+def readSignature {ε : Type} (bytes : ByteArray) (bad : Nat → ε) : Except ε (Nat × Nat) :=
+  if bytes.size = 64 then
+    .ok (Base.bytesToNat (bytes.data.toList.take 32), Base.bytesToNat (bytes.data.toList.drop 32))
+  else .error (bad bytes.size)
 
 end EthLib.Exports

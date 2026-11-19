@@ -72,12 +72,6 @@ theorem map_finalExponentiation (f : Hom F G) (g : Fp12 F) :
   simp only [finalExponentiation, Fp12.map_mul, Fp12.map_conjugate, Fp12.map_inverse,
     Fp12.map_frobenius, Fp12.map_cyclotomicPow]
 
-theorem map_pairing (f : Hom F G) (P : G1 F) (Q : G2 F) :
-    (pairing P Q).map f = pairing (P.map f) (Q.map f) := by
-  simp only [pairing, G1.map_isInfinity, G2.map_isInfinity, apply_ite (Fp12.map f),
-    Fp12.map_one, map_finalExponentiation, Fp12.map_conjugate, map_millerLoop,
-    G1.map_toAffine, G2.map_toAffine]
-
 /-- The factor of a pair commutes with the map. -/
 private theorem map_pairFactor (f : Hom F G) (pq : G1 F × G2 F) :
     (pairFactor pq).map (Fp12.map f) = pairFactor (Prod.map (G1.map f) (G2.map f) pq) := by
@@ -88,6 +82,15 @@ private theorem map_pairFactor (f : Hom F G) (pq : G1 F × G2 F) :
   · rfl
   · rw [Option.map_some, ← G1.map_toAffine, ← G2.map_toAffine, ← map_millerLoop,
       ← Fp12.map_conjugate]
+
+theorem map_pairing (f : Hom F G) (P : G1 F) (Q : G2 F) :
+    (pairing P Q).map f = pairing (P.map f) (Q.map f) := by
+  unfold pairing
+  rw [show (P.map f, Q.map f) = Prod.map (G1.map f) (G2.map f) (P, Q) from rfl,
+    ← map_pairFactor]
+  cases pairFactor (P, Q) with
+  | none => exact Fp12.map_one f
+  | some x => exact map_finalExponentiation f x
 
 /-- The product of the factors commutes with the map. -/
 private theorem map_foldl_pairFactor (f : Hom F G) (l : List (G1 F × G2 F)) (acc : Fp12 F) :

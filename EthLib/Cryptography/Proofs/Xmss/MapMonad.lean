@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Xmss.Sign
 public import EthLib.Cryptography.Proofs.HashSig
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Merkle.Build
+public import EthLib.Cryptography.Proofs.Xmss.Ots
 
 /-!
 # Proofs: the leanXMSS algorithms commute with maps of monads
@@ -142,7 +143,7 @@ theorem findCodeword_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32)
     (msg : ByteArray) (base : Randomizer) (c fuel : Nat) :
     φ (Internal.findCodeword H pp layer e msg base c fuel) =
       Internal.findCodeword (fun x => φ (H x)) pp layer e msg base c fuel := by
-  simp only [Internal.findCodeword, Wots.findFirst_map_monad φ map_pure map_bind,
+  simp only [Internal.findCodeword_eq, Wots.findFirst_map_monad φ map_pure map_bind,
     HashSig.map_monad_map φ map_pure map_bind, messageDigest, th_map_monad φ map_pure map_bind]
 
 /-- A one-time signature, over the images of `H` and of the seed function. -/

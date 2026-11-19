@@ -117,12 +117,18 @@ namespace Internal
 
 /-- Try the trials from `c` onward, at most `fuel` of them.
 
-Returns the first trial's randomizer whose digest is a codeword, with the codeword. -/
+Returns the first trial's randomizer whose digest is a codeword, with the codeword.
+
+Each trial hashes `P | A_msg(l, e) | M | rho_c` to get the digest of its randomizer.
+
+Only `rho_c` changes between trials, so the bytes before it are built once. -/
 def findCodeword (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : ByteArray)
     (base : Randomizer) (c fuel : Nat) :
     m (Option (Randomizer × Vector (Fin CHAIN_LENGTH) V)) :=
+  -- The input of every trial starts with `P | A_msg(l, e) | M`.
+  let before := thInput pp (addrMsg layer e) msg
   Wots.findFirst (trialRandomizer base)
-    (fun rho => codeword? <$> messageDigest H pp layer e msg rho) c fuel
+    (fun rho => codeword? <$> (do return halfOf 0 (← H (before ++ packBytes rho)))) c fuel
 
 end Internal
 

@@ -169,7 +169,7 @@ private theorem active_eq_of_common_origin {anchor : Store preset fork}
   subst otherOrigin
   obtain ⟨common, commonHeld, anchorCommon, _⟩ := reached.blockStatesFromParents originKnown
   obtain ⟨commonOther, commonOtherHeld, _, _⟩ := reachedOther.blockStatesFromParents otherKnown
-  have sameState := e.blockStates_eq anchored caller receiver (start u caller)
+  have sameState := e.blockStates_eq anchored (start u caller)
     (start w receiver) same commonHeld commonOtherHeld
   subst commonOther
   have originSlot : common.slot = originBlock.slot := by
@@ -632,7 +632,7 @@ private theorem early_receiver_source {anchor : Store preset fork} {time T : ℕ
     callerFound rootFound
   subst same
   obtain ⟨state, stored, -⟩ := reached.blockStatesFromParents rootFound
-  have stateEq := e.blockStates_eq anchorStore caller receiver (anchored u caller)
+  have stateEq := e.blockStates_eq anchorStore (anchored u caller)
     (anchored w receiver) (agree u caller w receiver n k callerBound receiverBound) callerStored
     stored
   subst stateEq
@@ -1159,7 +1159,7 @@ private theorem late_previous_receiver_source {anchor : Store preset fork} {Δ t
     have finalBelow := (reachedW.finalized_lt_justified_or_anchor sound).resolve_left atAnchor
     -- The root's realized justification is a selected checkpoint at or after the finality.
     obtain ⟨rootState, rootStored, -⟩ := reachedW.blockStatesFromParents rootFound
-    have stateEq := e.blockStates_eq anchorStore caller receiver (anchored u caller)
+    have stateEq := e.blockStates_eq anchorStore (anchored u caller)
       (anchored w receiver) oneBlock callerStored rootStored
     subst stateEq
     have finalNat := UInt64.lt_iff_toNat_lt.mp finalBelow
@@ -1219,7 +1219,7 @@ private theorem late_previous_receiver_source {anchor : Store preset fork} {Δ t
   have headAboveW := Store.isAncestor_of_same_blocks reachedW preGloas oneBlock callerFound
     (reachedU.anchorSlot_le (UInt64.le_of_eq anchorSlot) callerFound) ⟨_, headHeld⟩ headAbove
   obtain ⟨receiverHeadState, receiverHeadStored, -⟩ := reachedW.blockStatesFromParents headHeld
-  have stateEq := e.blockStates_eq anchorStore caller receiver (anchored u caller)
+  have stateEq := e.blockStates_eq anchorStore (anchored u caller)
     (anchored w receiver) oneBlock headStored receiverHeadStored
   subst stateEq
   -- Every tip above the head reads the receiver's justified epoch as its source.
@@ -1826,7 +1826,7 @@ private theorem finalized_read_above_root {anchor : Store preset fork} {Δ time 
     rootBlock callerFound rootFound
   subst same
   obtain ⟨state, stored, -⟩ := reached.blockStatesFromParents rootFound
-  have stateEq := e.blockStates_eq anchorStore caller receiver (anchored u caller)
+  have stateEq := e.blockStates_eq anchorStore (anchored u caller)
     (anchored w receiver) (agree u caller w receiver n k callerBound receiverBound)
     callerStored stored
   subst stateEq

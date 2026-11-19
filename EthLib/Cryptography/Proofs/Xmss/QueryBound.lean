@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Xmss.Sign
 public import EthLib.Cryptography.Xmss.Verify
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
+public import EthLib.Cryptography.Proofs.Xmss.Ots
 public import VCVio.OracleComp.QueryTracking.QueryBound.Basic
 
 /-!
@@ -231,8 +232,9 @@ theorem isQueryBoundP_randomizerBase
 /-- The codeword search is one digest per trial. -/
 theorem isQueryBoundP_findCodeword (hH : ∀ x, IsQueryBoundP (H x) p 1) (pp : PublicParam)
     (layer : Layer) (e : UInt32) (msg : ByteArray) (base : Randomizer) (c fuel : Nat) :
-    IsQueryBoundP (Internal.findCodeword H pp layer e msg base c fuel) p fuel :=
-  isQueryBoundP_findFirst _ _ (fun _ => (isQueryBoundP_map_iff _ _ _).2
+    IsQueryBoundP (Internal.findCodeword H pp layer e msg base c fuel) p fuel := by
+  rw [Internal.findCodeword_eq]
+  exact isQueryBoundP_findFirst _ _ (fun _ => (isQueryBoundP_map_iff _ _ _).2
     (isQueryBoundP_th hH _ _ _)) c fuel
 
 /-- A one-time signature is the base, at most `2^32` trials, the starts and `174` steps. -/

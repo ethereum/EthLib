@@ -176,9 +176,7 @@ def bytes (what : String) (value : Json) : Except KeystoreError ByteArray := do
 /-- A byte string of the size its cryptographic step requires. -/
 def fixed (what : String) (size : Nat) (value : Json) :
     Except KeystoreError (Vector UInt8 size) := do
-  let data ← bytes what value
-  if h : data.data.size = size then return ⟨data.data, h⟩
-  else throw (.invalidField what s!"expected {size} bytes")
+  Base.exactBytes size (← bytes what value) fun _ => .invalidField what s!"expected {size} bytes"
 
 /-- The function, parameters and message that every ERC-2335 module requires ("Modules"). -/
 def moduleFields (what : String) (value : Json) :

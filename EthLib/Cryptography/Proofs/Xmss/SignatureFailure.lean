@@ -150,6 +150,15 @@ theorem path_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (e : Nat)
     (fun _ => otsPublicLeaf_isQueryBoundP_otherLayer hl e' k _ _ _)
     (fun _ _ _ => nodeHash_isQueryBoundP_otherLayer hl e' k _ _ _ _) _ _
 
+/-- The codeword search of a key on the layer queries no trial input of the other layer. -/
+theorem findCodeword_isQueryBoundP_otherLayer (pp : PublicParam) (e : UInt32) (msg : ByteArray)
+    (base : Randomizer) (c fuel : Nat) :
+    IsQueryBoundP (Internal.findCodeword Hq pp layer e msg base c fuel)
+      (IsTrialQuery (addrMsg layer' e') k) 0 := by
+  rw [Internal.findCodeword_eq]
+  exact findFirst_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_map_iff _ _ _ |>.2
+    (th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _)) _ _
+
 /-- A one-time signature on the layer queries no trial input of the other layer. -/
 theorem otsSign_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (e : UInt32)
     (msg : ByteArray) :
@@ -157,8 +166,7 @@ theorem otsSign_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (e : U
       (IsTrialQuery (addrMsg layer' e') k) 0 := by
   refine isQueryBoundP_bind_zero _ _ (th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _)
     fun base => isQueryBoundP_bind_zero _ _
-      (findFirst_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_map_iff _ _ _ |>.2
-        (th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _)) _ _) fun r => ?_
+      (findCodeword_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _) fun r => ?_
   rcases r with _ | ⟨rho, x⟩
   · exact isQueryBoundP_pure _ _ _
   · exact isQueryBoundP_bind_zero _ _ (chainStarts_isQueryBoundP_otherLayer hl e' k _ _ _)

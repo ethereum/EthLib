@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Bls.FinalExponentiation
 public import EthLib.Cryptography.Proofs.Bls.FrZMod
 public import EthLib.Cryptography.Proofs.Bls.PairingCongr
+public import EthLib.Cryptography.Proofs.Bls.PairingFactor
 public import EthLib.Cryptography.Proofs.Bls.PairingMap
 public import EthLib.Cryptography.Proofs.Bls.FpModel
 
@@ -62,8 +63,7 @@ theorem orderOf_pairing_generators :
     orderOf (pairing (G1.generator : G1) G2.generator) = Fr.modulus := by
   apply orderOf_eq_prime
   · have h := pairing_generators_ne_zero
-    unfold pairing at h ⊢
-    simp only [generators_isInfinity, Bool.false_eq_true, ↓reduceIte] at h ⊢
+    rw [pairing_eq_of_pairFactor (pairFactor_eq_some generators_isInfinity)] at h ⊢
     exact finalExponentiation_pow_modulus h
   · exact pairing_generators_ne_one
 
@@ -74,7 +74,7 @@ theorem pairingCheck_generators : pairingCheck #[((G1.generator : G1), G2.genera
   intro h1
   apply h
   rw [Fp12.isOne_iff] at h1
-  unfold pairing
+  rw [pairing_eq_of_pairFactor (pairFactor_eq_some generators_isInfinity)]
   simpa [pairFactor, generators_isInfinity] using h1
 
 end EthLib.Cryptography.Bls

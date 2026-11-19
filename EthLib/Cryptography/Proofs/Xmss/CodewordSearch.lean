@@ -126,7 +126,7 @@ theorem prEvent_findCodeword_none (pp : PublicParam) (layer : Layer) (e : UInt32
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl (Internal.findCodeword
         Unforgeability.queryH pp layer e msg base 0 MAX_RANDOMIZER_TRIALS)).run' cache}[z = none]
       = (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ MAX_RANDOMIZER_TRIALS := by
-  rw [← prEvent_not_codeword]
+  rw [← prEvent_not_codeword, Internal.findCodeword_eq]
   refine Wots.prEvent_findFirst_romImpl_none (trialRandomizer base)
     (fun rho => (thInput pp (addrMsg layer e) (msg ++ packBytes rho)).data.toList)
     (fun u => codeword? (halfOf 0 (Unforgeability.ofOutput u))) _ (fun rho => ?_) _ 0 cache

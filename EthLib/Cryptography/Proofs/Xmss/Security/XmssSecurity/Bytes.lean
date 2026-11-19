@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Xmss
 public import EthLib.Cryptography.Proofs.Xmss.Types
+public import EthLib.Cryptography.Proofs.Xmss.TweakableHash
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Types
 public import EthLib.Cryptography.Proofs.HashSig.Bytes
 
@@ -80,7 +81,7 @@ theorem halfOf_zero_ofOutput (x : XmssSecurity.HashOutput) :
   apply Vector.ext
   intro i hi
   simp only [DIGEST_LEN] at hi
-  simp only [halfOf, Vector.getElem_ofFn]
+  simp only [halfOf_eq_ofFn, Vector.getElem_ofFn]
   simp only [Fin.isValue, Fin.val_zero, Nat.mul_zero, Nat.zero_add]
   exact HashSig.getElem_ofOutput_of_lt x i hi
 
@@ -90,7 +91,7 @@ theorem halfOf_one_ofOutput (x : XmssSecurity.HashOutput) :
   apply Vector.ext
   intro i hi
   simp only [DIGEST_LEN] at hi
-  simp only [halfOf, Vector.getElem_ofFn, getElem_ofBV, XmssSecurity.upperHash,
+  simp only [halfOf_eq_ofFn, Vector.getElem_ofFn, getElem_ofBV, XmssSecurity.upperHash,
     XmssSecurity.digestBits]
   rw [HashSig.extractLsb'_byte_low x 128 128 i (by omega)]
   congr 2
