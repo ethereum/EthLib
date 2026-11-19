@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Aes.GaloisField
+public import EthLib.Cryptography.Proofs.BinaryField.Irreducible
 public import Mathlib.FieldTheory.Finite.Extension
 
 /-!
@@ -14,22 +15,12 @@ It is a field because this modulus is irreducible over GF(2).
 
 ## A test of irreducibility
 
-Let `f` be monic over GF(2), of degree `2^(k+1)`.
+The binary field proofs hold a test for a monic polynomial over GF(2) of degree `2^(k+1)`.
 
-Then `f` is irreducible when two conditions hold.
+The modulus has degree `2^7`, so the test needs two conditions.
 
-- `f` divides `u^(2^(2^(k+1))) - u`.
-- `f` is coprime to `u^(2^(2^k)) - u`.
-
-If `f` is reducible, it has an irreducible factor of degree `d` at most `2^k`.
-
-That factor divides `u^(2^d) - u`.
-
-The first condition makes `d` divide `2^(k+1)`, so `d` divides `2^k`.
-
-The factor then divides `u^(2^(2^k)) - u`, against the second condition.
-
-A degree with one prime factor, here 2, needs only these two conditions.
+- The modulus divides `u^(2^128) - u`.
+- The modulus is coprime to `u^(2^64) - u`.
 
 ## The certificate
 
@@ -47,41 +38,6 @@ The module before this one proves that this multiplication is the product of res
 namespace EthLib.Cryptography.Aes.Gcm
 
 open Polynomial
-
-/-! ## A test of irreducibility -/
-
-/-- A monic polynomial of degree `2^(k+1)` over GF(2) is irreducible under two conditions.
-
-It divides `u^(2^(2^(k+1))) - u`, and it is coprime to `u^(2^(2^k)) - u`. -/
-theorem irreducible_of_dvd_of_isCoprime {f : (ZMod 2)[X]} {k : ℕ} (hmonic : f.Monic)
-    (hdeg : f.natDegree = 2 ^ (k + 1)) (hdvd : f ∣ X ^ 2 ^ 2 ^ (k + 1) - X)
-    (hcop : IsCoprime f (X ^ 2 ^ 2 ^ k - X)) : Irreducible f := by
-  have hcard : Nat.card (ZMod 2) = 2 := Nat.card_zmod 2
-  rw [hmonic.irreducible_iff_natDegree']
-  refine ⟨fun h1 => ?_, fun a g _ hg hag hmem => ?_⟩
-  · rw [h1, natDegree_one] at hdeg
-    exact absurd hdeg.symm (by positivity)
-  · rw [Finset.mem_Ioc, hdeg, pow_succ, Nat.mul_div_cancel _ two_pos] at hmem
-    -- A factor `g` of degree at most `2^k` has an irreducible factor `q`.
-    have hg0 : g ≠ 0 := hg.ne_zero
-    have hgu : ¬ IsUnit g := fun hu => by
-      rw [natDegree_eq_zero_of_isUnit hu] at hmem
-      omega
-    obtain ⟨q, hq, hqg⟩ := WfDvdMonoid.exists_irreducible_factor hgu hg0
-    have hqf : q ∣ f := hqg.trans (Dvd.intro_left a hag)
-    -- The first condition makes the degree of `q` divide `2^(k+1)`.
-    have hqd : q.natDegree ∣ 2 ^ (k + 1) :=
-      hq.natDegree_dvd_of_dvd_X_pow_card_pow_sub_X (by rw [hcard]; exact hqf.trans hdvd)
-    have hqle : q.natDegree ≤ 2 ^ k := (natDegree_le_of_dvd hqg hg0).trans hmem.2
-    -- A power of two at most `2^k` divides `2^k`.
-    have hqk : q.natDegree ∣ 2 ^ k := by
-      obtain ⟨i, -, he⟩ := (Nat.dvd_prime_pow Nat.prime_two).1 hqd
-      rw [he] at hqle ⊢
-      exact pow_dvd_pow 2 ((Nat.pow_le_pow_iff_right (by norm_num)).mp hqle)
-    -- So `q` divides `u^(2^(2^k)) - u` and `f`, against the second condition.
-    have hqx := hq.natDegree_dvd_iff_dvd_X_pow_card_pow_sub_X.mp hqk
-    rw [hcard] at hqx
-    exact hq.not_isUnit (hcop.isUnit_of_dvd' hqf hqx)
 
 /-! ## The certificate -/
 
@@ -181,7 +137,7 @@ theorem isCoprime_modulus : IsCoprime modulus (X ^ 2 ^ 2 ^ 6 - X) :=
 /-- The modulus `1 + u + u^2 + u^7 + u^128` is irreducible over GF(2). -/
 theorem irreducible_modulus : Irreducible modulus :=
   -- The exponent `6 + 1` becomes `7` by a rewrite, not by unfolding the power.
-  irreducible_of_dvd_of_isCoprime (k := 6) monic_modulus natDegree_modulus
+  BinaryField.irreducible_of_dvd_of_isCoprime (k := 6) monic_modulus natDegree_modulus
     (by rw [show (6 : ℕ) + 1 = 7 from rfl]; exact modulus_dvd) isCoprime_modulus
 
 /-- The modulus is irreducible, so the ring of residues is a field, as SP 800-38D §6.3 states. -/
