@@ -87,19 +87,11 @@ theorem exists_acceptsFork_iff (fork : Fork) :
 theorem acceptsFork_five_iff (fork : Fork) : acceptsFork 5 fork = true ↔ fork = .glamsterdam := by
   simp [acceptsFork]
 
-/-- A version takes a fork exactly when the parameters of the version are those of the fork.
+/-- A version takes a fork exactly when its parameters are those of the fork.
 
-The versions are 1 to 5, and the forks are those from Paris to Glamsterdam.
+Versions 3 to 5 start at the forks that add their parameters: Dencun, Pectra and Glamsterdam.
 
-Version 3 adds the blob hashes and the beacon root of Dencun.
-
-Version 4 adds the requests of Pectra.
-
-Version 5 adds the access list of Glamsterdam.
-
-So a version from 3 takes a fork exactly from the fork that added its last parameter.
-
-It takes no fork from the fork that adds the next one.
+Each ends where the next one starts, and version 5 ends after Glamsterdam.
 
 Version 2 takes Paris and Shapella, and version 1 Paris alone. -/
 theorem acceptsFork_eq_true_iff (version : Nat) (fork : Fork) :

@@ -10,7 +10,7 @@ import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 A version returns exactly the forks whose fields are its own.
 
-So some version returns each fork from Paris to Glamsterdam.
+So each fork from Paris to Glamsterdam has a version, and no other fork has one.
 
 An unknown payload ID returns the Engine API's unknown-payload error.
 
@@ -45,19 +45,9 @@ open EthLib.Execution.Transactions
 
 /-- A version returns a payload of a fork exactly when its fields are those of the fork.
 
-The versions are 1 to 6, and the forks are those from Paris to Glamsterdam.
+Versions 3 to 6 start at the forks that add their fields: Dencun, Pectra, Fusaka and Glamsterdam.
 
-Version 3 adds the blobs bundle of Dencun.
-
-Version 4 adds the requests of Pectra.
-
-Version 5 adds the cell proofs of Fusaka to the bundle.
-
-Version 6 adds the access list and the slot of Glamsterdam.
-
-So a version from 3 returns a fork exactly from the fork that added its last field.
-
-It returns no fork from the fork that adds the next one.
+Each ends where the next one starts, and version 6 ends after Glamsterdam.
 
 Version 2 returns Paris and Shapella, and version 1 Paris alone. -/
 theorem acceptsGetPayloadFork_eq_true_iff (version : Nat) (fork : Fork) :
