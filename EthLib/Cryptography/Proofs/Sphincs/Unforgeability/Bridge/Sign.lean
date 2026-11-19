@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Signature
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Landing
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.Correctness
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.HonestQueries
 
 /-!
 # Proofs: under fixed answers, EthLib's signer is the model's
@@ -12,10 +13,14 @@ Both signers compute the randomizer, the digest, the FORS openings and one signa
 Both sign the layers from the bottom up, and they make different calls.
 
 - EthLib derives `PK.seed` and `SK.prf` again and rebuilds the top tree on each request.
-- EthLib computes each layer's message from scratch, and the model takes it from the layer below.
+- EthLib builds each tree once, and the model computes each path, then the root from the path.
 - The model makes one more digest call, for its randomizer search.
 
 Under a fixed answer function each call is a value, whatever its order or repetition.
+
+So EthLib's signer gives what a signer that computes each path and each root apart gives.
+
+That signer computes each layer's message from scratch, and the model takes it from the layer below.
 
 So under every answer function EthLib's signature is the model's, and both fail together.
 
@@ -46,11 +51,12 @@ The model's layer reads only the seed and `PK.seed` of its key. -/
 theorem signLayer_answers (sk : SphincsSecurity.Seeded.SecretKey) (index : SphincsSecurity.Index)
     (lay : SphincsSecurity.Layer) (msg : Digest)
     (hmsg : msg.toList = layerMessageValue f sk index lay) :
-    evalWithAnswerFn f (signLayer (queryH (m := OracleComp HashSig.HashSpec)) (ofParam sk.parameter)
+    evalWithAnswerFn f (Recompute.signLayer (queryH (m := OracleComp HashSig.HashSpec))
+        (ofParam sk.parameter)
         (secretsOf sk.seed sk.parameter) (layerOf lay) index.val msg)
       = toLayerResult lay (evalWithAnswerFn f
           (SphincsSecurity.Seeded.signLayer sk index lay : OracleComp HashSig.HashSpec _)) := by
-  unfold signLayer
+  unfold Recompute.signLayer
   rw [ofIndex_eq]
   simp only [SphincsSecurity.Seeded.signLayer, SphincsSecurity.Seeded.signLayerWith,
     evalWithAnswerFn_bind]
@@ -75,7 +81,7 @@ theorem signLayer_answers (sk : SphincsSecurity.Seeded.SecretKey) (index : Sphin
 That is the FORS public key at the bottom, and the root of the tree below on higher layers. -/
 theorem layerMessage_answers (sk : SphincsSecurity.Seeded.SecretKey)
     (index : SphincsSecurity.Index) (lay : SphincsSecurity.Layer) :
-    evalWithAnswerFn f (layerMessage (queryH (m := OracleComp HashSig.HashSpec))
+    evalWithAnswerFn f (Recompute.layerMessage (queryH (m := OracleComp HashSig.HashSpec))
         (ofParam sk.parameter) (secretsOf sk.seed sk.parameter) (layerOf lay) index.val)
       = ofDigest (belowValue f sk index lay) := by
   obtain ⟨v, hv⟩ := lay
@@ -92,7 +98,7 @@ theorem layerMessage_answers (sk : SphincsSecurity.Seeded.SecretKey)
             (SphincsSecurity.Concrete.treeIndexAt index middleLayer) sk.seed :=
       treeRoot_queryH sk.seed sk.parameter middleLayer _
     rw [belowValue, dite_eq_left (show 0 + 1 < SphincsSecurity.numLayers by decide)]
-    simp only [layerMessage, layerOf, hkey, hroot, evalWithAnswerFn_map]
+    simp only [Recompute.layerMessage, layerOf, hkey, hroot, evalWithAnswerFn_map]
   · -- The middle key signs the root of the bottom tree of the index.
     have hkey : (OtsKey.ofIndex .bottom index.val).tree
         = (SphincsSecurity.Concrete.treeIndexAt index bottomLayer).val :=
@@ -104,7 +110,7 @@ theorem layerMessage_answers (sk : SphincsSecurity.Seeded.SecretKey)
             (SphincsSecurity.Concrete.treeIndexAt index bottomLayer) sk.seed :=
       treeRoot_queryH sk.seed sk.parameter bottomLayer _
     rw [belowValue, dite_eq_left (show 1 + 1 < SphincsSecurity.numLayers by decide)]
-    simp only [layerMessage, layerOf, hkey, hroot, evalWithAnswerFn_map]
+    simp only [Recompute.layerMessage, layerOf, hkey, hroot, evalWithAnswerFn_map]
   · -- The bottom key signs the FORS public key of the index.
     rw [belowValue, dite_eq_right (show ¬(2 + 1 < SphincsSecurity.numLayers) by decide)]
     exact forsKey_answers f sk.seed sk.parameter index
@@ -119,7 +125,7 @@ theorem toList_belowValue (sk : SphincsSecurity.Seeded.SecretKey) (index : Sphin
 attribute [local irreducible] SphincsSecurity.Seeded.signLayer SphincsSecurity.Seeded.forsOpen
   SphincsSecurity.Seeded.treePath SphincsSecurity.Seeded.treeNode sequenceFin
   SphincsSecurity.Seeded.forsKey SphincsSecurity.Seeded.treeRoot SphincsSecurity.Seeded.spineNode
-  forsSign signLayer layerMessage
+  Recompute.forsSign Recompute.signLayer Recompute.layerMessage
 
 /-- One absent value makes the whole family absent. -/
 theorem allSome_eq_none {n : Nat} {α : Fin n → Type} (values : (i : Fin n) → Option (α i))
@@ -177,7 +183,8 @@ theorem eval_sign (sk : SphincsSecurity.Seeded.SecretKey) (msg : SphincsSecurity
 The randomizer is the model's, and the public key is the model's `PK.seed` and `PK.root`. -/
 theorem signDerived_answers (sk : SphincsSecurity.Seeded.SecretKey)
     (msg : SphincsSecurity.Message) :
-    Except.toOption (evalWithAnswerFn f (signDerived (queryH (m := OracleComp HashSig.HashSpec))
+    Except.toOption (evalWithAnswerFn f
+        (Recompute.signDerived (queryH (m := OracleComp HashSig.HashSpec))
         (secretsOf sk.seed sk.parameter) (ofPublicKey ⟨sk.root, sk.parameter⟩)
         (ofRandomizer (evalWithAnswerFn f (SphincsSecurity.deriveRandomizer sk.prf sk.parameter
           msg : OracleComp HashSig.HashSpec _)).1) (ofMessage msg)))
@@ -186,7 +193,7 @@ theorem signDerived_answers (sk : SphincsSecurity.Seeded.SecretKey)
   generalize hrho : (evalWithAnswerFn f (SphincsSecurity.deriveRandomizer sk.prf sk.parameter msg
     : OracleComp HashSig.HashSpec _)).1 = rho
   conv_rhs => rw [eval_sign f sk msg rho hrho]
-  unfold signDerived
+  unfold Recompute.signDerived
   simp only [ofPublicKey]
   rw [evalWithAnswerFn_bind, messageDigest_queryH (root := sk.root), evalWithAnswerFn_map,
     eval_sequenceFin]
@@ -209,9 +216,9 @@ theorem signDerived_answers (sk : SphincsSecurity.Seeded.SecretKey)
       : OracleComp HashSig.HashSpec _) = opening
   -- Each layer signs the model's message, so it signs as the model's layer does.
   have hlayer : ∀ lay : SphincsSecurity.Layer,
-      evalWithAnswerFn f (signLayer (queryH (m := OracleComp HashSig.HashSpec))
+      evalWithAnswerFn f (Recompute.signLayer (queryH (m := OracleComp HashSig.HashSpec))
         (ofParam sk.parameter) (secretsOf sk.seed sk.parameter) (layerOf lay) index.val
-        (evalWithAnswerFn f (layerMessage (queryH (m := OracleComp HashSig.HashSpec))
+        (evalWithAnswerFn f (Recompute.layerMessage (queryH (m := OracleComp HashSig.HashSpec))
           (ofParam sk.parameter) (secretsOf sk.seed sk.parameter) (layerOf lay) index.val)))
       = toLayerResult lay (evalWithAnswerFn f
           (SphincsSecurity.Seeded.signLayer sk index lay : OracleComp HashSig.HashSpec _)) :=
@@ -256,6 +263,13 @@ theorem signDerived_answers (sk : SphincsSecurity.Seeded.SecretKey)
         rfl
 
 /-! ## The signer from the seed -/
+
+/-- Under fixed answers, the signer signs as the signer that computes each path and root apart. -/
+theorem eval_signWith_eq_recompute (H : ByteArray → OracleComp HashSig.HashSpec (Vector UInt8 32))
+    (sk : SecretKey) (msg : Message) :
+    evalWithAnswerFn f (signWith H sk msg) = evalWithAnswerFn f (Recompute.signWith H sk msg) :=
+  signWith_map_eq_recompute (m := OracleComp HashSig.HashSpec) (evalWithAnswerFn f)
+    (fun b => evalWithAnswerFn_pure f b) (fun x g => evalWithAnswerFn_bind f x g) H sk msg
 
 /-- The model's public key of `PK.seed` and a root, which EthLib's key computes. -/
 theorem publicKeyOf_queryH (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter) :
@@ -302,7 +316,8 @@ theorem signWith_answers (S0 : SphincsSecurity.MasterSeed) (msg : SphincsSecurit
             (evalWithAnswerFn f (SphincsSecurity.Seeded.keygen S0)).2 msg
               : OracleComp HashSig.HashSpec _)) := by
   rw [eval_keygen, ← signDerived_answers]
-  rw [evalWithAnswerFn_map, signWith, expandKey_queryH, bind_assoc, evalWithAnswerFn_bind,
+  rw [evalWithAnswerFn_map, eval_signWith_eq_recompute, Recompute.signWith, expandKey_queryH,
+    bind_assoc, evalWithAnswerFn_bind,
     bind_assoc, evalWithAnswerFn_bind, pure_bind]
   simp only [ofExpanded]
   rw [evalWithAnswerFn_bind, publicKeyOf_queryH, evalWithAnswerFn_map, evalWithAnswerFn_bind,
