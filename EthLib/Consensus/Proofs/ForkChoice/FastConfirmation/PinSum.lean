@@ -413,8 +413,14 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     (11 * (depth * proposerCredit + depositCarry + depthFin * depositChurn +
       whistleblowerExtra) + 9) / 10 +
       creditedKeys * preset.upwardBand
+  -- A key slashed on this branch drops by at most one increment of effective balance.
+  --
+  -- Its leak over the window is then read at the dropped balance, so the drop's leak is charged.
+  let slashCharge := inc + depthFin * (2 * (2 * perIncrement) +
+    2 * inc * (scoreMaxFin + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
+      (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat) + 1)
   -- The rounding is weighted 3 exactly once, by the `3 *` of this branch term.
-  let branchR := 3 * (whistleblowerR + inc * slashedR + depth * proposerCredit +
+  let branchR := 3 * (whistleblowerR + slashCharge * slashedR + depth * proposerCredit +
     (inc + preset.downwardBand - 1) * roundedKeys)
   -- A key previous-epoch-only in a counting state weighs three times there, at its balance there.
   --
