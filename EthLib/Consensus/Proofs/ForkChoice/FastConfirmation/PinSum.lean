@@ -2007,6 +2007,83 @@ private theorem sum_le_exiting (config : Config)
   obtain ⟨w, found⟩ := validator_of_flag (state := state) (Or.inr mark.2.2)
   exact mem_positions_filter config state ancestor finalizedState found mark
 
+/-- `exitingBands` is two bands for each key that `exitingB` marks and for each queue key. -/
+private theorem exitingBands_eq (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    (pinTerms config state ancestor finalizedState).exitingBands =
+      2 * ((((pinTerms config state ancestor finalizedState).positions.filter fun i =>
+        (pinTerms config state ancestor finalizedState).exitingB i = true).card +
+        (pinTerms config state ancestor finalizedState).queueKeys)) * preset.upwardBand := by
+  dsimp only [pinTerms]
+  simp only [decide_eq_true_eq]
+
+/-- At most as many keys as the positions that `exitingB` marks are marked. -/
+private theorem card_exitingB_le (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) (S : Finset ValidatorIndex)
+    (member : ∀ v ∈ S, (pinTerms config state ancestor finalizedState).exitingB v.toNat = true) :
+    S.card ≤ ((pinTerms config state ancestor finalizedState).positions.filter fun i =>
+      (pinTerms config state ancestor finalizedState).exitingB i = true).card := by
+  refine Finset.card_le_card_of_injOn (fun v : ValidatorIndex => v.toNat) (fun v hv => ?_)
+    (fun a _ b _ same => UInt64.toNat_inj.mp same)
+  have mark := of_decide_eq_true (member v hv)
+  obtain ⟨w, found⟩ := validator_of_flag (state := state) (Or.inr mark.2.2)
+  exact mem_positions_filter config state ancestor finalizedState found
+    (p := fun i => (pinTerms config state ancestor finalizedState).exitingB i = true) (member v hv)
+
+/-- The two further bands of the keys of `K5` are paid by `exitingBands`.
+
+A key whose exit R reads is among the marked positions, and the others have a charge, so they are
+among the keys that `queueKeys` counts. -/
+private theorem two_bands_le_exitingBands (config : Config)
+    (pulled anc fin counted : BeaconState preset fork) (V : Finset ValidatorIndex)
+    {x : ForkedBeaconState preset} (tailC : Run config checks x ⟨fork, counted⟩) (highC : ℕ)
+    (charged : ∀ v ∈ K5 counted V, (pinTerms config pulled anc fin).exitingB v.toNat = false →
+      0 < bandC tailC highC v.toNat → ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
+    (count : (((K5 counted V).filter fun v =>
+      (pinTerms config pulled anc fin).exitingB v.toNat = false).filter
+        fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat).card ≤
+      (pinTerms config pulled anc fin).queueKeys) :
+    2 * (∑ v ∈ K5 counted V, bandC tailC highC v.toNat) ≤
+      (pinTerms config pulled anc fin).exitingBands := by
+  have bounded (v : ℕ) : bandC tailC highC v ≤ preset.upwardBand := by
+    unfold bandC
+    split <;> omega
+  rw [exitingBands_eq]
+  set A := (K5 counted V).filter fun v => (pinTerms config pulled anc fin).exitingB v.toNat = true
+  set B := (K5 counted V).filter fun v => (pinTerms config pulled anc fin).exitingB v.toNat = false
+  have parts : ∑ v ∈ K5 counted V, bandC tailC highC v.toNat =
+      ∑ v ∈ A, bandC tailC highC v.toNat + ∑ v ∈ B, bandC tailC highC v.toNat := by
+    rw [← Finset.sum_filter_add_sum_filter_not (K5 counted V)
+      (fun v => (pinTerms config pulled anc fin).exitingB v.toNat = true)]
+    simp [A, B]
+  have first : ∑ v ∈ A, bandC tailC highC v.toNat ≤ A.card * preset.upwardBand := by
+    rw [← smul_eq_mul, ← Finset.sum_const]
+    exact Finset.sum_le_sum fun v _ => bounded _
+  have second : ∑ v ∈ B, bandC tailC highC v.toNat ≤
+      (B.filter fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat).card *
+        preset.upwardBand := by
+    have pointwise : ∀ v ∈ B, bandC tailC highC v.toNat ≤
+        (if ∃ c ∈ tailC.departureCharges, c.index = v.toNat then preset.upwardBand else 0) := by
+      intro v hv
+      by_cases hc : ∃ c ∈ tailC.departureCharges, c.index = v.toNat
+      · rw [if_pos hc]
+        exact bounded _
+      · rw [if_neg hc]
+        have notBand : ¬ 0 < bandC tailC highC v.toNat := fun pos =>
+          hc (charged v (Finset.mem_filter.mp hv).1 (Finset.mem_filter.mp hv).2 pos)
+        omega
+    calc ∑ v ∈ B, bandC tailC highC v.toNat
+        ≤ ∑ v ∈ B, (if ∃ c ∈ tailC.departureCharges, c.index = v.toNat
+          then preset.upwardBand else 0) := Finset.sum_le_sum pointwise
+      _ = (B.filter fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat).card *
+          preset.upwardBand := by
+        rw [← Finset.sum_filter, Finset.sum_const, smul_eq_mul]
+  have inA := card_exitingB_le config pulled anc fin A fun v hv => (Finset.mem_filter.mp hv).2
+  have times := Nat.mul_le_mul_right preset.upwardBand inA
+  have timesB := Nat.mul_le_mul_right preset.upwardBand count
+  rw [parts]
+  nlinarith
+
 /-- D-4: the keys whose exit R reads. -/
 theorem bud_exiting :
     (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
