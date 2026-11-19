@@ -5290,7 +5290,7 @@ private theorem pin_rate_exists (h : Setting config checks g split fin pulled an
               ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
             (getTotalActiveBalance pulled).toOption.getD 0 / 4
           else preset.EFFECTIVE_BALANCE_INCREMENT / 5) with
-      | error e => simp
+      | error e => rfl
       | ok p => exact absurd ⟨_, p, hr⟩ anyOk
     · simp
 
@@ -5371,7 +5371,7 @@ private theorem div_round_mul (I u : ℕ) (hI : 0 < I) : (I * u + I - 1) / I = u
 /-- The gain on a positive number of increments is below an eleventh of them.
 
 The rate for each increment is the one that `rate_per_increment` bounds. -/
-private theorem gain_lt (I WD F P D k : ℕ) (hWD : 0 < WD) (hk : 0 < k)
+private theorem gain_lt (I WD F P D k : ℕ) (hk : 0 < k)
     (key : 11 * D * (P * F) < WD * I) : 11 * (D * (k * P * F / WD)) < I * k := by
   have fl : WD * (k * P * F / WD) ≤ k * P * F := Nat.mul_div_le _ _
   have h1 : WD * (11 * (D * (k * P * F / WD))) < WD * (I * k) :=
@@ -5394,7 +5394,7 @@ private theorem gain_credit_le (I WD F P D C : ℕ) (hI : 0 < I) (hWD : 0 < WD)
   rcases Nat.eq_zero_or_pos u with zero | pos
   · subst zero
     simp
-  · exact (gain_lt I WD F P D u hWD pos key).le
+  · exact (gain_lt I WD F P D u pos key).le
 
 /-- The closure test of the credit ceiling is arithmetic in the rate, the credits and the stake.
 
@@ -5428,7 +5428,7 @@ private theorem ceiling_closed (I WD F P e0 D Df Cr Cr' S W C q r : ℕ) (hDf : 
         Df * ((11 * (e0 / I * P * F / WD) + 9) / 10) := Nat.mul_le_mul_right _ hDf
     omega
   have unit : 11 * (D * (P * F / WD)) < I := by
-    have := gain_lt I WD F P D 1 hWD Nat.one_pos key
+    have := gain_lt I WD F P D 1 Nat.one_pos key
     simpa using this
   have split : D * (P * F / WD + 2) = D * (P * F / WD) + 2 * D := by ring
   rw [split]
