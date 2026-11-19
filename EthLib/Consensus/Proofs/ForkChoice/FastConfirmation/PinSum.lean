@@ -6418,7 +6418,9 @@ private theorem effective_le_cap_pulled (h : Setting config checks g split fin p
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The debits of a key on R's branch that the pin charges at the top: its passes and its partials.
 
-The passes cost at most the leak at R's cap for each epoch from the finalized state's.
+The passes cost at most the leak at `M` for each epoch from the finalized state's.
+
+The bound `M` is at least the key's effective balance at each state of R's branch after the split.
 
 The partials paid are at most those queued at the finalized state less those still queued at R. -/
 private theorem debits_le_top (h : Setting config checks g split fin pulled anc counted V)
@@ -6427,11 +6429,13 @@ private theorem debits_le_top (h : Setting config checks g split fin pulled anc 
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
-    (v : ValidatorIndex) (inside : v.toNat < s.validators.data.size) :
+    (v : ValidatorIndex) (inside : v.toNat < s.validators.data.size) (M : ℕ)
+    (below : ∀ {zs : BeaconState preset fork} (pre : Run config checks ⟨fork, s⟩ ⟨fork, zs⟩)
+      (post : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩), tail = pre.append post →
+      effectiveAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat ≤ M) :
     (events.map (penaltyDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum ≤
       ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
-          (pinTerms config pulled anc fin).leakAt
-            (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) v.toNat +
+          (pinTerms config pulled anc fin).leakAt M v.toNat +
         (dueAmount fin (Nat.le_trans (by decide) h.fulu) v.toNat
             ((getCurrentEpoch pulled).toNat + 1) -
           dueAmount pulled (Nat.le_trans (by decide) h.fulu) v.toNat
@@ -6441,11 +6445,9 @@ private theorem debits_le_top (h : Setting config checks g split fin pulled anc 
   obtain ⟨shared⟩ := h.toFin
   have passes : (events.map (penaltyDebit v.toNat)).sum ≤
       ((getCurrentEpoch pulled).toNat - (getCurrentEpoch s).toNat) *
-        (pinTerms config pulled anc fin).leakAt
-          (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) v.toNat :=
+        (pinTerms config pulled anc fin).leakAt M v.toNat :=
     Run.passDebit_le tail h.early altair high endEpoch inside
-    ((pinTerms config pulled anc fin).leakAt
-      (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) v.toNat)
+    ((pinTerms config pulled anc fin).leakAt M v.toNat)
     (fun {z} pre post cut before totals => by
       obtain ⟨T, perIncrement, totalOk, perOk⟩ := totals
       obtain ⟨zf, zs⟩ := z
@@ -6457,8 +6459,7 @@ private theorem debits_le_top (h : Setting config checks g split fin pulled anc 
       obtain ⟨pq, pqOk⟩ :=
         quarter_base_ok h.facts perOk ((getTotalActiveBalance pulled).toOption.getD 0)
       exact (passRate_le_leakAt h (fromFin.append pre) startE totalOk pqOk v.toNat).trans
-        (leakAt_mono config pulled anc fin v.toNat
-          (effective_le_cap_pulled h (fromFin.append pre) post v.toNat)))
+        (leakAt_mono config pulled anc fin v.toNat (below pre post cut)))
     replayed
   have epochs : (getCurrentEpoch pulled).toNat - (getCurrentEpoch s).toNat ≤
       (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat := by
@@ -6474,8 +6475,7 @@ private theorem debits_le_top (h : Setting config checks g split fin pulled anc 
         dueAmount fin electra v.toNat ((getCurrentEpoch pulled).toNat + 1) := by
     rw [dueAmount_eq, dueAmount_eq]
     omega
-  have := Nat.mul_le_mul_right ((pinTerms config pulled anc fin).leakAt
-    (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) v.toNat) epochs
+  have := Nat.mul_le_mul_right ((pinTerms config pulled anc fin).leakAt M v.toNat) epochs
   omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
@@ -6557,6 +6557,8 @@ private theorem prefix_envelope (h : Setting config checks g split fin pulled an
     have floor := floorAt r1 r2 cut ok2
     have debit := debits_le_top h r1 r2 high endEpoch ok1 ok2 v
       (Nat.lt_of_lt_of_le inFin (registryGrows_of_chainSteps r1.chainSteps))
+      (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
+      (fun pre post _ => effective_le_cap_pulled h (r1.append pre) post v.toNat)
     have sums : (e2.map (syncDebit v.toNat)).sum ≤
         (eventsF.map (syncDebit v.toNat)).sum + (events.map (syncDebit v.toNat)).sum := by
       have := congrArg (fun L => (L.map (syncDebit v.toNat)).sum) eq
