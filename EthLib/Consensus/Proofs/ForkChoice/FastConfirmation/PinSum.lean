@@ -234,11 +234,14 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- A partial requested after that state can then be paid on a branch and sit in no queue read
   -- here, so its whole balance is charged.
   let actualFin (i : ℕ) := ((finalizedState.balances.data[i]?).map (·.toNat)).getD 0
+  let capFin (i : ℕ) := ((finalizedState.validators.data[i]?).map fun v =>
+    (withdrawalMaxEffectiveBalance preset fork v).toNat).getD 0
+  let base0 (i : ℕ) := min (actualFin i) (capFin i)
+  let carry (i : ℕ) := leakAt (finEB i - actualFin i + inc) i + 1
   let fall (i : ℕ) := if depthFin ≤ partialDelay then
-      let base0 := min (actualFin i) (cap i)
-      let low := base0 - (depthFin * (leakAt (max (ebUp i) base0 + inc) i + gainRate i + 1) +
+      let low := base0 i - (carry i + depthFin * (leakAt (base0 i + inc) i + gainRate i + 1) +
         partialsDue i)
-      let floorC := if max (ebUp i) base0 ≤ low + preset.downwardBand then finEB i
+      let floorC := if max (finEB i) (base0 i) ≤ low + preset.downwardBand then finEB i
         else min (finEB i) (low - low % inc)
       effective i - floorC
     else effective i
@@ -359,7 +362,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- Each period crossing adds one more set of seats.
   let roundedKeys := depth * slots + depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
     preset.SYNC_COMMITTEE_SIZE.toNat *
-      (((epoch.toNat + 1) / period - finalized / period + 1) + depth / period)
+      (((epoch.toNat + 1) / period - (getCurrentEpoch finalizedState).toNat / period + 1) +
+        depth / period)
   -- The rounding is weighted 3 exactly once, by the `3 *` of this branch term.
   let branchR := 3 * (whistleblowerR + inc * slashedR + depth * proposerCredit +
     (inc + preset.downwardBand - 1) * roundedKeys)
@@ -387,8 +391,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- Leak over the depth from there, partials, the band and one increment of rounding are drops.
   --
   -- A partial in that state's own epoch can be paid before it, but leaves the activation balance.
-  let drop (i : ℕ) := depthFin * leak i + preset.downwardBand + inc
-  let lowEB (i : ℕ) := min (min (effective i) (finEB i) - partialsDue i)
+  let drop (i : ℕ) := carry i + depthFin * (leakAt (base0 i + inc) i + 1) +
+    preset.downwardBand + inc
+  let lowEB (i : ℕ) := min (min (min (effective i) (finEB i)) (actualFin i) - partialsDue i)
     preset.MIN_ACTIVATION_BALANCE.toNat - drop i
   -- A key can exit on the other branch with an effective balance below the ejection balance.
   --
@@ -562,11 +567,12 @@ theorem queueKeys_unfold (config : Config)
         (pinTerms config state ancestor finalizedState).lowKeys +
         (pinTerms config state ancestor finalizedState).newKeySeats := rfl
 
-/-- `lowEB` takes the drops from the smaller of the two effective balances, capped at activation. -/
+/-- `lowEB` takes the drops from the least of its starting balances, capped at activation. -/
 theorem lowEB_unfold (config : Config) (state ancestor finalizedState : BeaconState preset fork)
     (i : ℕ) :
     (pinTerms config state ancestor finalizedState).lowEB i =
-      min (min (balanceAt state i) (balanceAt finalizedState i) -
+      min (min (min (balanceAt state i) (balanceAt finalizedState i))
+            (((finalizedState.balances.data[i]?).map (·.toNat)).getD 0) -
           (pinTerms config state ancestor finalizedState).partialsDue i)
         preset.MIN_ACTIVATION_BALANCE.toNat -
         (pinTerms config state ancestor finalizedState).drop i := rfl
