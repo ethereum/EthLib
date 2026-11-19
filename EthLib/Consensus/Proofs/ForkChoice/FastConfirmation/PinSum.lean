@@ -600,7 +600,8 @@ theorem queueKeys_unfold (config : Config)
         (pinTerms config state ancestor finalizedState).newKeySeats := rfl
 
 /-- A key's fall is its effective balance less `floorC` within the delay, and all of it beyond. -/
-theorem fall_eq (config : Config) (state ancestor finalizedState : BeaconState preset fork) (i : ℕ) :
+theorem fall_eq (config : Config) (state ancestor finalizedState : BeaconState preset fork)
+    (i : ℕ) :
     (pinTerms config state ancestor finalizedState).fall i =
       if max ((getCurrentEpoch state).toNat + 2 - ancestor.finalizedCheckpoint.epoch.toNat)
           ((getCurrentEpoch state).toNat + 2 - (getCurrentEpoch finalizedState).toNat) ≤
@@ -1836,11 +1837,11 @@ theorem glue_quorum (h : Setting config checks g split fin pulled anc counted V)
 
 /-- D-5/D-6 (fall, V): the fall of V keys, and the stake of V keys that left C's active set. -/
 theorem stub_V (h : Setting config checks g split fin pulled anc counted V)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (highF : ℕ)
-    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents highF = .ok eventsF)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
@@ -6012,9 +6013,11 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
         (∑ v ∈ (K5 counted V), (syncF events v.toNat + syncF eventsC v.toNat))) +
       (∑ v ∈ (K6 pulled counted), (syncF events v.toNat + syncF eventsC v.toNat)) +
       wShare preset fork (∑ v ∈ SC pulled counted split, syncCr eventsC v.toNat) +
-      wShare preset fork (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) ≤
+      wShare preset fork
+        (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) ≤
         (pinTerms config pulled anc fin).syncSeats +
-          6 * ((pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer) := sorry
+          6 * ((pinTerms config pulled anc fin).depth *
+            (pinTerms config pulled anc fin).syncProposer) := sorry
 
 /-- W (`reserveW`, `flagged`, `seatShortfall`, K7, cS): whistleblower rewards on C's branch,
 weight 3, are paid by the slashed key's own slack, or charged. -/
@@ -6035,7 +6038,8 @@ theorem bud_whistle (h : Setting config checks g split fin pulled anc counted V)
         ((wShare preset fork (∑ v ∈ SC pulled counted split, credN tailC highC v.toNat) +
           wShare preset fork (∑ v ∈ SC pulled counted split, syncCr eventsC v.toNat) +
           wShare preset fork (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat) +
-          wShare preset fork (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) +
+          wShare preset fork
+            (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) +
           (∑ v ∈ SC pulled counted split, bandC tailC highC v.toNat) +
           (∑ v ∈ SC pulled counted split, bandX fin highC v.toNat) : ℕ) : ℤ) :=
   sorry
@@ -6145,8 +6149,8 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have tR := stake_le_total pulledOk
   obtain ⟨fromFin⟩ := h.fromFin
   obtain ⟨eventsF, replayedF⟩ := fromFin.balanceEvents_ok h.early high
-  have sV := two_le_three (stub_V (config := config) h fromFin high replayedF tail high endEpoch
-    replayed tailC highC endEpochC replayedC)
+  have sV := two_le_three (stub_V (config := config) h tail high endEpoch replayed fromFin
+    replayedF tailC highC endEpochC replayedC)
   have sN := stub_N (config := config) h tail high endEpoch replayed tailC highC endEpochC replayedC
   have sP := stub_P (config := config) h tail high endEpoch replayed tailC highC endEpochC replayedC
   have sJ := stub_J (config := config) h tail high endEpoch replayed tailC highC endEpochC replayedC
