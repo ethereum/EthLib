@@ -1686,7 +1686,7 @@ private def intervalLoss_EventBetween {config : Config} {checks : SignatureCheck
       (getCurrentEpoch e.before.state).toNat < (getCurrentEpoch y.state).toNat) ∧
     (e.source = .crossing → x.fork < .pectra ∧ .pectra ≤ y.fork) ∧
     x.fork ≤ e.before.fork ∧
-    (e.source = .consolidations → .pectra ≤ x.fork ∧
+    (e.source = .consolidations →
       intervalLoss_Late ((getCurrentEpoch e.before.state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
         config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) x.state e.before.state)
 
@@ -1815,13 +1815,13 @@ private theorem intervalLoss_step_sites {x y : ForkedBeaconState preset}
       · intro cons
         obtain ⟨_, _, _, electra, atFork, _⟩ := (sites.2.1 e member).2.2.2.1.2.2.1 cons
         have atLeast : .pectra ≤ e.before.fork := by rw [atFork]; exact electra
-        refine ⟨Nat.le_trans atLeast (Nat.le_trans during.fork_le last.fork_le), ?_⟩
+        have electra : .pectra ≤ x.fork :=
+          Nat.le_trans atLeast (Nat.le_trans during.fork_le last.fork_le)
         have cachedLate : intervalLoss_Late ((getCurrentEpoch cached).toNat +
             preset.MAX_SEED_LOOKAHEAD.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
             x.state cached := .of_data (by rw [cachedEq])
         rw [← first.epoch]
-        exact cachedLate.trans
-          ((sites.2.2 (Nat.le_trans atLeast (Nat.le_trans during.fork_le last.fork_le))).2 e member)
+        exact cachedLate.trans ((sites.2.2 electra).2 e member)
     · exact crossingBound e member
 
 /-- A replay event inherits registry, exit-order, balance and epoch bounds from its run. -/
@@ -3002,7 +3002,7 @@ theorem _root_.EthLib.Consensus.Step.consolidation_withdrawable {x y : ForkedBea
         (getCurrentEpoch e.before.state).toNat + 1 < u.withdrawableEpoch.toNat) := by
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, late⟩ :=
     (intervalLoss_step_sites step early holds replayed).1 e member
-  obtain ⟨u, read, same | after⟩ := (late source).2 i v found
+  obtain ⟨u, read, same | after⟩ := late source i v found
   · exact ⟨u, read, .inl same⟩
   · exact ⟨u, read, .inr (by omega)⟩
 

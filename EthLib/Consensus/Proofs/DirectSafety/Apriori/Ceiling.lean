@@ -2354,9 +2354,7 @@ private theorem FloorTrace.slot_step {g x m y : ForkedBeaconState preset}
     flag.symm, lastDebt.trans debt, effective, cap, by simpa only [flag] using used,
     by rw [lastHigh, kept], fun h hh => marks h (flag.symm.trans hh)⟩
 
-/-- One step of the per-key floor trace, for an activated key or a step from Fulu.
-
-The guard is the final key's exit, or the withdrawable epoch of the key at the start of the step. -/
+/-- One step of the floor trace, guarded by the final key's exit or its start withdrawable epoch. -/
 theorem FloorTrace.step_general_or_fulu {g x m y : ForkedBeaconState preset}
     (shared : Run config checks g x) (pre : Run config checks x m)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
