@@ -1509,7 +1509,7 @@ A slash charges `1 / M` of the potential.
 The stale pass after it is charged with one more pass than the unslashed closed form.
 
 The guard keeps the exit or withdrawable epoch of the key after the call's cutoff at each state. -/
-private theorem FloorTrace.run_potential_floor_slash
+theorem FloorTrace.run_potential_floor_slash
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)

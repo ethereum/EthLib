@@ -50,6 +50,9 @@ Not yet released.
   It composes the epoch transition with the upgrades of the slot, which keep the bands because every effective balance is at most its cap.
   `run_boundaryEpoch` and the pin's charge lemmas read it.
 
+- `DirectSafety.Apriori.Internal.FloorTrace.run_potential_floor_slash` is public: a key unslashed at the start of a run keeps its balance within the closed form of a slash, over one more epoch.
+  The pin's `segment_potential_slash` reads it for the floor of a key that C's run slashes.
+
 - `DirectSafety.Apriori.Internal.perIncrement_exists` is public: the base reward per increment exists at a positive total when the scaled factor fits.
   The pin reads it to show that its base reward per increment is at least four.
   The pin's preset facts gain `fits`, that the scaled base reward factor fits in a `Gwei`, which both presets meet.
