@@ -1696,18 +1696,7 @@ private theorem epoch_registry_cut {fork : Fork} {s t : BeaconState preset fork}
           (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
         DepartureCoverage s t calls ∧ PartialsAppended electra s t calls := by
   -- Cut the schedule at registry updates, the only stage that calls the exit queue.
-  have trace := processEpoch_trace ok
-  change EpochTrace _ ([.justification, .inactivity, .rewards] ++ .registry ::
-    ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
-      EpochStage.middleStages ++ EpochStage.tailStages)) _ _ at trace
-  obtain ⟨rewarded, head, rest⟩ := EpochTrace.append_iff.mp trace
-  obtain ⟨registered, registeredOk, tail⟩ : ∃ registered,
-      EpochStage.action config checks .registry rewarded = .ok registered ∧
-      EpochTrace (EpochStage.action config checks)
-        ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
-          EpochStage.middleStages ++ EpochStage.tailStages) registered t := by
-    cases rest with
-    | cons first rest => exact ⟨_, first, rest⟩
+  obtain ⟨rewarded, registered, head, entriesOk, tail⟩ := processEpoch_registryCut ok
   -- The stages before registry updates keep the slot, the registry and both queues.
   have headKept : rewarded.slot = s.slot ∧ rewarded.validators = s.validators ∧
       departureQueues electra rewarded = departureQueues electra s := by
@@ -1737,8 +1726,6 @@ private theorem epoch_registry_cut {fork : Fork} {s t : BeaconState preset fork}
       rintro rfl
       simp [EpochStage.middleStages, EpochStage.tailStages] at member
     exact ⟨epochStage_departureQueues electra early edge other, epochStage_coverage edge other⟩
-  have entriesOk : processRegistryUpdates config rewarded = .ok registered :=
-    EpochStage.action_cases.mp registeredOk
   have registryLife := registryLifecycle_processRegistryUpdates entriesOk
   refine ⟨rewarded, registered, entriesOk, headKept.1, headKept.2.1, ?_⟩
   intro calls queued covered appended

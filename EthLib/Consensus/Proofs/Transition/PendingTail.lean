@@ -578,25 +578,6 @@ private theorem pendingTail_epochTrace {config : Config} {checks : SignatureChec
     (fun stage member _ _ run holds =>
       pendingTail_epochStage run (other stage member) finite holds) tail
 
-/-- A successful epoch supplies its prefix, registry equation and complete suffix. -/
-private theorem processEpoch_registryCut {config : Config} {checks : SignatureChecks}
-    {source after : BeaconState preset fork}
-    (run : processEpoch config checks source = .ok after) :
-    ∃ ready registered,
-      EpochTrace (EpochStage.action config checks)
-        [.justification, .inactivity, .rewards] source ready ∧
-      processRegistryUpdates config ready = .ok registered ∧
-      EpochTrace (EpochStage.action config checks)
-        ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
-          EpochStage.middleStages ++ EpochStage.tailStages) registered after := by
-  have trace := processEpoch_trace run
-  change EpochTrace _ ([.justification, .inactivity, .rewards] ++
-    (.registry :: ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
-      EpochStage.middleStages ++ EpochStage.tailStages))) source after at trace
-  obtain ⟨ready, before, rest⟩ := EpochTrace.append_iff.mp trace
-  cases rest with
-  | cons registry suffix => exact ⟨ready, _, before, EpochStage.action_cases.mp registry, suffix⟩
-
 /-- The actual epoch prefix keeps the registry and slot, including the rewards stage. -/
 private theorem epochPrefix_kept {config : Config} {checks : SignatureChecks}
     {source ready : BeaconState preset fork}
