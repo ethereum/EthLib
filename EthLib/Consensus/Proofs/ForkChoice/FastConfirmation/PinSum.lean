@@ -9571,6 +9571,45 @@ private theorem existing_low_explicit
   simp only [potentialFloor] at potential
   exact le_trans arith (Nat.add_le_add_right potential _)
 
+/-- The relaxed closed form, read at `a + X / M`, is the unslashed one with one more pass.
+
+`Y` stands for `max finEB base0`.
+
+`X` is the argument of `flagged`'s slashing loss. -/
+private theorem bridge (ρn ρd M k B0 DOWN slack a D X Y inc : Nat) (hM : 2 ≤ M)
+    (closed : (M - 1) * ((ρd - ρn * (k + 1)) * (B0 + DOWN)) ≤
+      M * (ρd * (a + D + DOWN) + ρn * slack) + ρd * (DOWN + slack))
+    (hB : B0 + slack ≤ Y) (hX : Y + inc ≤ X) (hinc : M + 2 * DOWN ≤ inc + 1) :
+    (ρd - ρn * (k + 1)) * (B0 + DOWN) ≤ ρd * (a + X / M + D + DOWN) + ρn * slack := by
+  have hMpos : 0 < M := by omega
+  have hq : X < M * (X / M + 1) := by
+    have := Nat.lt_mul_div_succ X hMpos
+    simpa [Nat.mul_comm] using this
+  have hV : ρd - ρn * (k + 1) ≤ ρd := Nat.sub_le _ _
+  have hP : (ρd - ρn * (k + 1)) * (B0 + DOWN) ≤ ρd * (B0 + DOWN) :=
+    Nat.mul_le_mul_right _ hV
+  have hsplit : M * ((ρd - ρn * (k + 1)) * (B0 + DOWN)) =
+      (M - 1) * ((ρd - ρn * (k + 1)) * (B0 + DOWN)) +
+        (ρd - ρn * (k + 1)) * (B0 + DOWN) := by
+    obtain ⟨m, rfl⟩ : ∃ m, M = m + 1 := ⟨M - 1, by omega⟩
+    simp [Nat.add_mul]
+  have hfit : B0 + 2 * DOWN + slack ≤ M * (X / M) := by
+    have : M * (X / M + 1) = M * (X / M) + M := by rw [Nat.mul_add, Nat.mul_one]
+    omega
+  have hρ : ρd * (B0 + 2 * DOWN + slack) ≤ ρd * (M * (X / M)) := Nat.mul_le_mul_left _ hfit
+  have hlhs : M * ((ρd - ρn * (k + 1)) * (B0 + DOWN)) ≤
+      M * (ρd * (a + D + DOWN) + ρn * slack) + ρd * (M * (X / M)) := by
+    have e1 : ρd * (B0 + 2 * DOWN + slack) = ρd * (B0 + DOWN) + ρd * (DOWN + slack) := by
+      rw [← Nat.mul_add]; congr 1; omega
+    omega
+  have hrhs : M * (ρd * (a + X / M + D + DOWN) + ρn * slack) =
+      M * (ρd * (a + D + DOWN) + ρn * slack) + ρd * (M * (X / M)) := by
+    have e2 : ρd * (a + X / M + D + DOWN) = ρd * (a + D + DOWN) + ρd * (X / M) := by
+      rw [← Nat.mul_add]; congr 1; omega
+    rw [e2, Nat.add_right_comm (ρd * (a + D + DOWN)), Nat.mul_add, Nat.mul_add,
+      Nat.mul_left_comm M ρd (X / M)]
+  exact Nat.le_of_mul_le_mul_left (by omega) hMpos
+
 /-- The arithmetic of the margin of the floor of a key on C's run.
 
 The closed form of the potential floor, less the sync debits, is at least the base less the fall.
@@ -9730,6 +9769,8 @@ private theorem floorC_margin (h : Setting config checks g split fin pulled anc 
 
 It is `floorC_margin` for the closed form after a slash with the fork's quotient.
 
+The fall reads the leak at the base, and the band is a term of `X`, as `lowEB`'s drop reads them.
+
 `Xs` is the effective balance that the slash is read at.
 
 It is at least the finalized one and an increment.
@@ -9759,8 +9800,8 @@ private theorem floorC_margin_slash (h : Setting config checks g split fin pulle
               preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
         ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
           ((pinTerms config pulled anc fin).leakAt
-            (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
-        (pinTerms config pulled anc fin).partialsDue i.toNat ≤ X) :
+            (base0 + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
+        preset.downwardBand + (pinTerms config pulled anc fin).partialsDue i.toNat ≤ X) :
     ∃ slack : ℕ,
       effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
         actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
@@ -9780,8 +9821,62 @@ private theorem floorC_margin_slash (h : Setting config checks g split fin pulle
             (ρd * (a + D + preset.downwardBand) + ρn * slack) +
             ρd * (preset.downwardBand + slack) →
         low - (events.map (syncDebit i.toNat)).sum ≤ a + Xs /
-          (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat :=
-  sorry
+          (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat := by
+  have nearC := h.near
+  have partialLe := run_partials_le_due h (fromFin.append tailC) nearC i replayed
+  have fusaka := parameters_of_fusaka (preset := preset) h.fulu h.early
+  have two := h.facts.quotient
+  have slashFact := h.facts.slash
+  have quarter := h.facts.quarterBand
+  rw [← fusaka] at two slashFact
+  refine ⟨effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
+    actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat, by omega,
+    pass_of_leak h (fromFin.append tailC) nearC i ⟨val, initial⟩ ρn ρd leaky,
+    fun a D k hk hD closed => ?_⟩
+  rw [← hbase0] at closed
+  have finEq : balanceAt fin i.toNat =
+      effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat := rfl
+  have bridged := bridge ρn ρd
+    (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat k base0
+    preset.downwardBand
+    (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
+      actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+    a D Xs (max (balanceAt fin i.toNat) base0) preset.EFFECTIVE_BALANCE_INCREMENT.toNat two
+    closed (by rw [hbase0, finEq]; omega) hXs (by omega)
+  have finSplit := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  have splitPulled := UInt64.le_iff_toNat_le.mp h.called
+  simp only at finSplit
+  have epochs : k + 1 ≤ (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat := by
+    omega
+  have mono : (ρd - ρn * (k + 1)) * (base0 + 0) ≤
+      (ρd - ρn * (k + 1)) * (base0 + preset.downwardBand) :=
+    Nat.mul_le_mul_left _ (by omega)
+  have closed0 : (ρd - ρn * (k + 1)) * (base0 + 0) ≤ ρd * ((a + Xs /
+      (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat +
+        preset.downwardBand) + D + 0) + ρn * (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset)
+        i.toNat - actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat) := by
+    refine mono.trans (bridged.trans (le_of_eq ?_))
+    congr 2
+    omega
+  have bound := margin_arith ρn ρd (k + 1)
+    ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) base0 0
+    (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
+      actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+    ((pinTerms config pulled anc fin).leakAt
+      (base0 + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat)
+    ((pinTerms config pulled anc fin).leakAt
+      (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
+        actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat)
+    ((pinTerms config pulled anc fin).partialsDue i.toNat)
+    (events.map (syncDebit i.toNat)).sum D
+    (a + Xs / (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat +
+      preset.downwardBand) (X - preset.downwardBand)
+    positive (by simpa using above base0) (above _) epochs (by omega) (by omega) closed0
+  have downLe : preset.downwardBand ≤ X := by omega
+  rw [hlow]
+  exact (fun (B X S q a dn : ℕ) (le : dn ≤ X) (b : B - (X - dn) - S ≤ a + q + dn) =>
+    show B - X - S ≤ a + q by omega) _ _ _ _ _ _ downLe bound
 
 /-- The effective balance of a key at C is above its `lowEB`, less the slash's share.
 
