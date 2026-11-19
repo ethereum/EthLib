@@ -8553,8 +8553,26 @@ private theorem branchR_split (config : Config)
                 (getCurrentEpoch finalizedState).toNat /
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
                 (pinTerms config state ancestor finalizedState).depth /
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) := by
+  -- The slashed charge is an increment and the leak of the dropped balance; the leak joins `W`.
+  obtain ⟨W, D, split⟩ : ∃ W D : ℕ, (pinTerms config state ancestor finalizedState).branchR =
+      3 * (W + (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + D) *
+          (pinTerms config state ancestor finalizedState).slashedR +
+        (pinTerms config state ancestor finalizedState).depth *
+          (pinTerms config state ancestor finalizedState).proposerCredit +
+        (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1) *
+          ((pinTerms config state ancestor finalizedState).depth * preset.SLOTS_PER_EPOCH.toNat +
+            (pinTerms config state ancestor finalizedState).depth *
+              preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
+            preset.SYNC_COMMITTEE_SIZE.toNat *
+              (((getCurrentEpoch state).toNat + 1) /
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+                (getCurrentEpoch finalizedState).toNat /
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
+                (pinTerms config state ancestor finalizedState).depth /
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) :=
-  ⟨_, rfl⟩
+    ⟨_, _, rfl⟩
+  exact ⟨W + D * (pinTerms config state ancestor finalizedState).slashedR, by rw [split]; ring⟩
 
 /-- The sync part of the proposer credit is at most the proposer credit. -/
 private theorem syncProposer_le_credit (config : Config)
