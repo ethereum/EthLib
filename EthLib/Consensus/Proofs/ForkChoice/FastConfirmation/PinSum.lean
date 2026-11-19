@@ -16666,6 +16666,56 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
       (capped _ _ (Or.inr ⟨Cr0, by omega, by omega, hW, fun pos => by have := hsl pos; omega⟩))
     omega
 
+/-- A start is within the finalized balance or the rounded top.
+
+It is within the finalized effective balance, or within the floor of the balance at it.
+
+The floor start is within the balance ceiling.
+
+It is aligned, so it is within the rounding of the ceiling. -/
+private theorem start_le_round {inc fin e a cap ebUp H S : ℕ}
+    (aligned : e % inc = 0) (capped : e ≤ cap) (ceiling : min a cap ≤ H + S)
+    (start : (e ≤ ebUp ∧ e ≤ fin) ∨ e ≤ a - a % inc) :
+    e ≤ max fin ((H + S) - (H + S) % inc) := by
+  rcases start with ⟨-, atFin⟩ | floorA
+  · exact Nat.le_trans atFin (Nat.le_max_left _ _)
+  · refine Nat.le_trans ?_ (Nat.le_max_right _ _)
+    have within : e ≤ H + S := by
+      have : e ≤ a := Nat.le_trans floorA (Nat.sub_le _ _)
+      have := Nat.le_min.mpr ⟨this, capped⟩
+      omega
+    have rounded := rounded_mono inc within
+    rw [aligned] at rounded
+    simpa using rounded
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A bound along R's run from the first state of a key holds on the whole run.
+
+Before the first state `c` the key is absent, so its effective balance is zero there. -/
+private theorem path_le_of_start
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) {c : BeaconState preset fork}
+    (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
+    (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) (cutC : toC.append fromC = fromFin)
+    (i X : ℕ)
+    (before : ∀ p ∈ toC.balancePath, p = ⟨fork, c⟩ ∨ effectiveAt p i = 0)
+    (after : ∀ z ∈ (fromC.append tail).balancePath, effectiveAt z i ≤ X) :
+    ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z i ≤ X := by
+  intro z member
+  have path := Run.balancePath_append toC (fromC.append tail)
+  have cut : toC.append (fromC.append tail) = fromFin.append tail := by
+    rw [← cutC, Run.append_assoc]
+  rw [cut] at path
+  rw [path] at member
+  rcases List.mem_append.mp member with front | later
+  · rcases before z front with atC | zero
+    · obtain ⟨rest, head⟩ := Run.balancePath_head (fromC.append tail)
+      rw [atC]
+      exact after _ (by rw [head]; exact List.mem_cons_self)
+    · rw [zero]
+      exact Nat.zero_le _
+  · exact after z (List.mem_of_mem_tail later)
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The per-key core of the rise for a counted voter of R's finalized registry with a frozen cap.
 
