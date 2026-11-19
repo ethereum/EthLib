@@ -2118,7 +2118,8 @@ private theorem K5_charged (h : Setting config checks g split fin pulled anc cou
   · exfalso
     obtain ⟨old, oldFound, oldAssigned⟩ := inherited
     obtain ⟨uC, foundUC, keptC⟩ := tailC.registryLifecycle.validators v.toNat old oldFound
-    obtain rfl : uC = u := Option.some.inj (foundUC.symm.trans foundU)
+    have sameU : uC = u := Option.some.inj (foundUC.symm.trans foundU)
+    rw [sameU] at keptC
     obtain ⟨w, foundW, keptP⟩ := toPulled.registryLifecycle.validators v.toNat old oldFound
     have gap := (shared.append fromFin).exit_activation_gap h.genesis v.toNat old oldFound
       oldAssigned
