@@ -4218,39 +4218,6 @@ private theorem rise_arith {inc band capFor high finEB start eR eC Bc capHigh S 
       omega
     omega
 
-/-- On C's branch a key keeps R's effective balance, or stays within the ceiling of its balance. -/
-private theorem key_stay {fin pulled counted : BeaconState preset fork}
-    (rC : Run config checks ⟨fork, fin⟩ ⟨fork, counted⟩)
-    (rR : Run config checks ⟨fork, fin⟩ ⟨fork, pulled⟩)
-    (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork)
-    (later : (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch counted).toNat)
-    (i : ℕ) (inside : i < fin.validators.data.size) (Bc capHigh Bp capP : ℕ)
-    (alignedC : capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
-    (startC : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i ≤ capHigh)
-    (alignedR : capP % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
-    (startR : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i ≤ capP)
-    (balanceC : ∀ z ∈ rC.balancePath, min (actualBalanceAt z i) capHigh ≤ Bc)
-    (capC : ∀ z ∈ rC.balancePath, PinSplit2.capAt z i ≤ capHigh)
-    (balanceR : ∀ z ∈ rR.balancePath, min (actualBalanceAt z i) capP ≤ Bp)
-    (capR : ∀ z ∈ rR.balancePath, PinSplit2.capAt z i ≤ capP) :
-    effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i =
-        effectiveAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i ∨
-      (effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ Bc + preset.downwardBand ∧
-        effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤
-          max (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i)
-            (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)) := by
-  obtain ⟨ceilC, sameC, afterC, -⟩ :=
-    PinSplit2.Run.effective_ceiling_of_balance_ceiling rC early fulu i inside Bc capHigh alignedC
-      startC balanceC capC
-  by_cases flat : (getCurrentEpoch counted).toNat ≤ (getCurrentEpoch fin).toNat
-  · obtain ⟨-, sameR, -, -⟩ :=
-      PinSplit2.Run.effective_ceiling_of_balance_ceiling rR early fulu i inside Bp capP alignedR
-        startR balanceR capR
-    have atFin : (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch fin).toNat := by omega
-    exact .inl ((sameC flat).trans (sameR atFin).symm)
-  · have after : (getCurrentEpoch fin).toNat < (getCurrentEpoch counted).toNat := by omega
-    exact .inr ⟨afterC after, ceilC⟩
-
 /-- A key's effective balance on C's branch is at most the cap that `capFor` reads. -/
 private theorem key_capped {g : ForkedBeaconState preset}
     {counted : BeaconState preset fork} (run : Run config checks g ⟨fork, counted⟩)
@@ -4714,44 +4681,6 @@ private theorem Run.flip_split {x y : ForkedBeaconState preset} (tail : Run conf
     step_flip_balance step earlyN fuluM (Run.invariant invariant pre) i before after,
     fun inside => step_flip_epoch step earlyN fuluM i
       (Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps pre.chainSteps)) before after⟩
-
-/-- A key's effective balance on C's branch is at most R's plus the main rise and the slacks. -/
-private theorem key_rise_main {g : ForkedBeaconState preset}
-    {fin pulled counted : BeaconState preset fork} (shared : Run config checks g ⟨fork, fin⟩)
-    (genesis : Genesis (config := config) (checks := checks) g)
-    (maxAligned : MaxEffectiveBalancesAligned preset)
-    (rC : Run config checks ⟨fork, fin⟩ ⟨fork, counted⟩)
-    (rR : Run config checks ⟨fork, fin⟩ ⟨fork, pulled⟩)
-    (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork)
-    (later : (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch counted).toNat)
-    (i : ℕ) (inside : i < fin.validators.data.size) (Bc capHigh Bp capP : ℕ)
-    (alignedC : capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
-    (startC : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i ≤ capHigh)
-    (alignedR : capP % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
-    (startR : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i ≤ capP)
-    (balanceC : ∀ z ∈ rC.balancePath, min (actualBalanceAt z i) capHigh ≤ Bc)
-    (capC : ∀ z ∈ rC.balancePath, PinSplit2.capAt z i ≤ capHigh)
-    (balanceR : ∀ z ∈ rR.balancePath, min (actualBalanceAt z i) capP ≤ Bp)
-    (capR : ∀ z ∈ rR.balancePath, PinSplit2.capAt z i ≤ capP)
-    (capFor high S U : ℕ)
-    (capped : effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ capFor + S + U)
-    (ceiling : Bc ≤ high + S)
-    (slack : S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1)
-    (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat) :
-    effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤
-      effectiveAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i +
-        (min capFor (min (high + preset.downwardBand -
-              (high + preset.downwardBand) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
-            (max (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i)
-              (high - high % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))) -
-          effectiveAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i) + S + U :=
-  rise_arith incPos
-    (key_stay rC rR early fulu later i inside Bc capHigh Bp capP alignedC startC alignedR startR
-      balanceC capC balanceR capR)
-    (Nat.le_max_left _ _)
-    (DirectSafety.Apriori.Internal.FloorTrace.effective_aligned (shared.append rC) genesis
-      maxAligned i)
-    capped ceiling (Or.imp_right Or.inl slack)
 
 /-- The penalty rate of a rewards pass at a state of a run from the finalized state is at most the
 pin's leak rate at the key's effective balance there. -/
@@ -7689,6 +7618,52 @@ private theorem capCeil_path {c e : ForkedBeaconState preset} (tail : Run config
   intro z member
   obtain ⟨-, r2, -⟩ := balancePath_endpoint tail (Run.nil : Run config checks e e) back member
   exact cap_le_cap_of_run caps r2 early i
+
+/-- On C's branch a key keeps R's effective balance, or stays within the ceiling of its balance.
+
+The runs of C and of R start at a state `c` of the shared segment, which holds the key.
+
+The cap of the key may rise once on either run, and the balance counts up to its cap at each state.
+
+The cap at C bounds the cap along C's run, and the cap at R bounds it along R's.
+
+The effective balance of the key is at most its cap at each state of a run from the finalized state.
+
+The effective balance at C is that at R if C is no later than `c`. -/
+private theorem key_stay (h : Setting config checks g split fin pulled anc counted V)
+    {c : BeaconState preset fork} (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
+    (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (i : ℕ)
+    (inside : i < c.validators.data.size) (Bc Bp : ℕ)
+    (balanceC : ∀ z ∈ (fromC.append tailC).balancePath,
+      min (actualBalanceAt z i) (PinSplit2.capAt z i) ≤ Bc)
+    (balanceR : ∀ z ∈ (fromC.append tail).balancePath,
+      min (actualBalanceAt z i) (PinSplit2.capAt z i) ≤ Bp) :
+    effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i =
+        effectiveAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i ∨
+      (effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ Bc + preset.downwardBand ∧
+        effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤
+          max (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) i)
+            (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+              (PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) i))) := by
+  obtain ⟨shared⟩ := h.toFin
+  have invariant : Invariant c := Run.invariant h.genesis.invariant (shared.append toC)
+  have later := UInt64.le_iff_toNat_le.mp h.later
+  have capped : ∀ {y : BeaconState preset fork} (r : Run config checks ⟨fork, split⟩ ⟨fork, y⟩),
+      ∀ z ∈ (fromC.append r).balancePath, effectiveAt z i ≤ PinSplit2.capAt z i :=
+    fun r z member => by
+      obtain ⟨zs, rfl, ⟨r1⟩, -⟩ := balancePath_state (fromC.append r) member
+      exact effective_le_cap_at h (toC.append r1) i
+  obtain ⟨c1, c2, c3, -⟩ := effective_ceiling_flip h (fromC.append tailC) invariant i inside Bc
+    (PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) i) (capped tailC)
+    (capCeil_path (fromC.append tailC) h.caps h.early (Nat.le_refl _) i) balanceC
+  obtain ⟨-, r2, -, -⟩ := effective_ceiling_flip h (fromC.append tail) invariant i inside Bp
+    (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i) (capped tail)
+    (capCeil_path (fromC.append tail) h.caps h.early (Nat.le_refl _) i) balanceR
+  by_cases flat : (getCurrentEpoch counted).toNat ≤ (getCurrentEpoch c).toNat
+  · exact .inl ((c2 flat).trans (r2 (by omega)).symm)
+  · exact .inr ⟨c3 (by omega), c1⟩
 
 open DirectSafety.Apriori.Internal in
 /-- A key's balance on C's branch is at most R's balance, its debits, its credits and the gains.
@@ -14666,12 +14641,6 @@ private theorem key_core_frozen (h : Setting config checks g split fin pulled an
   obtain ⟨toPulled⟩ := h.toPulled
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have sizeFin := registryGrows_of_chainSteps fromFin.chainSteps
-  have sizeSplit := registryGrows_of_chainSteps toPulled.chainSteps
-  obtain ⟨wP, foundP⟩ : ∃ wP, pulled.validators.data[v.toNat]? = some wP :=
-    ⟨_, Array.getElem?_eq_getElem
-      (Nat.lt_of_lt_of_le (Nat.lt_of_lt_of_le inFin sizeFin) sizeSplit)⟩
-  have alignedCap := capAt_aligned h.aligned (z := (⟨fork, pulled⟩ : ForkedBeaconState preset))
-    electra foundP
   have capC : PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat ≤
       PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat := by omega
   -- the floor of each state of R's run, and the largest effective balance on it
@@ -14822,18 +14791,15 @@ private theorem key_core_frozen (h : Setting config checks g split fin pulled an
       omega
     · have := bound z (List.mem_of_mem_tail later)
       omega
-  have startFin : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat ≤
-      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat := by
-    have := effective_le_cap_at h (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) v.toNat
-    omega
-  have stay := key_stay (fromFin.append tailC) (fromFin.append tail) h.early h.fulu
-    (UInt64.le_iff_toNat_le.mp h.later) v.toNat inFin Bc
-    (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) _
-    (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) alignedCap startFin
-    alignedCap startFin onC
-    (fun z member => Nat.le_trans
-      (capCeil_path (fromFin.append tailC) h.caps h.early (Nat.le_refl _) v.toNat z member) capC)
-    onR (capCeil_path (fromFin.append tail) h.caps h.early (Nat.le_refl _) v.toNat)
+  have stay := key_stay h (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) fromFin tail
+    tailC v.toNat inFin Bc _
+    (fun z member => by
+      have := capCeil_path (fromFin.append tailC) h.caps h.early (Nat.le_refl _) v.toNat z member
+      have := onC z member
+      omega)
+    (fun z member => Nat.le_trans (by
+      have := capCeil_path (fromFin.append tail) h.caps h.early (Nat.le_refl _) v.toNat z member
+      omega) (onR z member))
   have cappedC : balanceAt counted v.toNat ≤
       capForOf (pinTerms config pulled anc fin) pulled v.toNat :=
     Nat.le_trans (effective_le_cap_at h (fromFin.append tailC) v.toNat) (Nat.le_trans capC
