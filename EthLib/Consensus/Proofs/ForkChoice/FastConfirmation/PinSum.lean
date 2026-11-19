@@ -9288,15 +9288,18 @@ private theorem creditUnits_eq (config : Config) (pulled anc fin : BeaconState p
   simp only [decide_eq_true_eq]
   exact ⟨_, _, rfl, Nat.le_add_right_of_le (Nat.le_add_right _ _)⟩
 
-/-- The credited keys of `K4`, `K5`, `K6` and `SC` fit the credited-key slots of the window.
+/-- The credited keys of `K4`, `K5`, `K6`, `SC` and `CS` fit the credited-key slots of the window.
 
-The slots are the proposers, the seats and the deposit recipients of the window. -/
+The slots are the proposers, the seats and the deposit recipients of the window.
+
+A credited key of `CS` is a credited key of C's run, in C's registry, as the others are. -/
 private theorem credited_classes_le (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) :
     ((K4 pulled counted V).filter fun v => creditedKey tailC highC v = true).card +
       ((K5 counted V).filter fun v => creditedKey tailC highC v = true).card +
       ((K6 pulled counted).filter fun v => creditedKey tailC highC v = true).card +
-      ((SC pulled counted split).filter fun v => creditedKey tailC highC v = true).card ≤
+      ((SC pulled counted split).filter fun v => creditedKey tailC highC v = true).card +
+      ((CS pulled counted).filter fun v => creditedKey tailC highC v = true).card ≤
     (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
       ((pinTerms config pulled anc fin).depth /
         max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
@@ -9305,25 +9308,37 @@ private theorem credited_classes_le (h : Setting config checks g split fin pulle
   classical
   obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
   obtain ⟨dSC, -⟩ := sc_disjoint h
+  obtain ⟨dCS, -⟩ := cs_disjoint h
   have depthEq : (pinTerms config pulled anc fin).depth =
       (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
   set C4 := (K4 pulled counted V).filter fun v => creditedKey tailC highC v = true
   set C5 := (K5 counted V).filter fun v => creditedKey tailC highC v = true
   set C6 := (K6 pulled counted).filter fun v => creditedKey tailC highC v = true
-  set CS := (SC pulled counted split).filter fun v => creditedKey tailC highC v = true
-  -- The four classes are apart, and each key of them is in C's registry.
+  set Csc := (SC pulled counted split).filter fun v => creditedKey tailC highC v = true
+  set Ccs := (CS pulled counted).filter fun v => creditedKey tailC highC v = true
+  -- The five classes are apart, and each key of them is in C's registry.
   have apart : Disjoint (C4 ∪ C6) C5 :=
     Finset.disjoint_union_left.mpr ⟨Finset.disjoint_filter_filter d45,
       (Finset.disjoint_filter_filter d56).symm⟩
-  have apartSC : Disjoint (C4 ∪ C6 ∪ C5) CS :=
+  have apartSC : Disjoint (C4 ∪ C6 ∪ C5) Csc :=
     Finset.disjoint_of_subset_left (u := K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted)
       (fun v hv => by
         simp only [C4, C5, C6, Finset.mem_union, Finset.mem_filter] at hv
         simp only [Finset.mem_union]
         tauto)
       (Finset.disjoint_of_subset_right (Finset.filter_subset _ _) dSC)
-  have card4 : (C4 ∪ C6 ∪ C5 ∪ CS).card = C4.card + C6.card + C5.card + CS.card := by
-    rw [Finset.card_union_of_disjoint apartSC, Finset.card_union_of_disjoint apart,
+  have apartCS : Disjoint (C4 ∪ C6 ∪ C5 ∪ Csc) Ccs :=
+    Finset.disjoint_of_subset_left (u := K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪
+      SC pulled counted split)
+      (fun v hv => by
+        simp only [C4, C5, C6, Csc, Finset.mem_union, Finset.mem_filter] at hv
+        simp only [Finset.mem_union]
+        tauto)
+      (Finset.disjoint_of_subset_right (Finset.filter_subset _ _) dCS)
+  have card5 : (C4 ∪ C6 ∪ C5 ∪ Csc ∪ Ccs).card =
+      C4.card + C6.card + C5.card + Csc.card + Ccs.card := by
+    rw [Finset.card_union_of_disjoint apartCS, Finset.card_union_of_disjoint apartSC,
+      Finset.card_union_of_disjoint apart,
       Finset.card_union_of_disjoint (Finset.disjoint_filter_filter d46)]
   have inCounted : ∀ v ∈ K4 pulled counted V ∪ K6 pulled counted ∪ K5 counted V,
       v.toNat < counted.validators.data.size := by
@@ -9339,31 +9354,38 @@ private theorem credited_classes_le (h : Setting config checks g split fin pulle
       rcases listed.1 with now | before
       · exact lt_size_of_mem_getActiveValidatorIndices now
       · exact lt_size_of_mem_getActiveValidatorIndices before
-  have inSC : ∀ v ∈ SC pulled counted split, v.toNat < counted.validators.data.size := by
-    intro v hv
-    have flag := (Finset.mem_filter.mp hv).2.1
+  have flagIn : ∀ v : ValidatorIndex, slashedFlagAt counted v.toNat = some true →
+      v.toNat < counted.validators.data.size := by
+    intro v flag
     simp only [slashedFlagAt, Option.map_eq_some_iff] at flag
     obtain ⟨w, found, -⟩ := flag
     exact (Array.getElem?_eq_some_iff.mp found).1
+  have inSC : ∀ v ∈ SC pulled counted split, v.toNat < counted.validators.data.size :=
+    fun v hv => flagIn v (Finset.mem_filter.mp hv).2.1
+  have inCS : ∀ v ∈ CS pulled counted, v.toNat < counted.validators.data.size :=
+    fun v hv => flagIn v (Finset.mem_filter.mp hv).2.2
   -- Those keys are credited keys of the run, which `credited_keys_le` counts by slots.
   have credited := credited_keys_le h tailC highC
-  have fit : (C4 ∪ C6 ∪ C5 ∪ CS).card ≤
+  have fit : (C4 ∪ C6 ∪ C5 ∪ Csc ∪ Ccs).card ≤
       ((Finset.range counted.validators.data.size).filter fun i =>
         0 < netScan i highC tailC +
           (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC tailC).1).card :=
     by
     refine Finset.card_le_card_of_injOn (fun v : ValidatorIndex => v.toNat) (fun v hv => ?_)
       (fun a _ b _ same => UInt64.toNat_inj.mp same)
-    have member : v ∈ C4 ∪ C6 ∪ C5 ∪ CS := hv
+    have member : v ∈ C4 ∪ C6 ∪ C5 ∪ Csc ∪ Ccs := hv
     have classed : v ∈ K4 pulled counted V ∪ K6 pulled counted ∪ K5 counted V ∨
-        v ∈ SC pulled counted split := by
-      simp only [C4, C5, C6, CS, Finset.mem_union, Finset.mem_filter] at member ⊢
+        v ∈ SC pulled counted split ∨ v ∈ CS pulled counted := by
+      simp only [C4, C5, C6, Csc, Ccs, Finset.mem_union, Finset.mem_filter] at member ⊢
       tauto
     have flag : creditedKey tailC highC v = true := by
-      simp only [C4, C5, C6, CS, Finset.mem_union, Finset.mem_filter] at member
+      simp only [C4, C5, C6, Csc, Ccs, Finset.mem_union, Finset.mem_filter] at member
       tauto
-    exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr
-      (classed.elim (inCounted v) (inSC v)), of_decide_eq_true flag⟩
+    refine Finset.mem_filter.mpr ⟨Finset.mem_range.mpr ?_, of_decide_eq_true flag⟩
+    rcases classed with held | held | held
+    · exact inCounted v held
+    · exact inSC v held
+    · exact inCS v held
   -- The slots of the run's epochs are at most those of the window.
   have near := h.near
   have finalized := UInt64.le_iff_toNat_le.mp h.finalized
