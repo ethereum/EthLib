@@ -6,6 +6,7 @@ public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHex
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
 public import Std.Data.TreeMap.Lemmas
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: slashing protection

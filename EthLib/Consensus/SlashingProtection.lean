@@ -170,7 +170,7 @@ def readBytes (path : String) (size : Nat) (document : Json) :
     Except SlashingProtectionError (Vector UInt8 size) := do
   let text ← readString path document
   match Serialization.Ssz.ofHex text with
-  | .ok bytes => if sized : bytes.size = size then .ok ⟨bytes, sized⟩ else .error (.field path)
+  | .ok bytes => exactBytes size ⟨bytes⟩ fun _ => .field path
   | .error _ => .error (.field path)
 
 /-- An array, each element read in turn. -/

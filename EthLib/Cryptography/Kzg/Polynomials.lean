@@ -46,7 +46,7 @@ abbrev Bytes48 := Vector UInt8 48
 Bytes of any other length are rejected with the error that `err` builds from that length. -/
 def parseBytes (n : Nat) (err : Nat → KzgError) (b : ByteArray) :
     Except KzgError (Vector UInt8 n) :=
-  if h : b.size = n then .ok ⟨b.data, h⟩ else .error (err b.size)
+  Base.exactBytes n b err
 
 /-! ## Bytes <-> field element helpers -/
 
