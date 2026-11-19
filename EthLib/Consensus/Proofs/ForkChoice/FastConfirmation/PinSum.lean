@@ -3938,7 +3938,7 @@ private theorem riseScan_snd_le (v high R : ℕ) {x : ForkedBeaconState preset}
     {y : ForkedBeaconState preset} (tail : Run config checks x y)
     (bound : ∀ {m n : ForkedBeaconState preset} (step : Step config checks m n),
       tail.Contains step → v < m.state.validators.data.size →
-        epochRewards v step ≤
+        PinSplit2.epochRewards v step ≤
           ((getCurrentEpoch n.state).toNat - (getCurrentEpoch m.state).toNat) * R) :
     (riseScan (config := config) (checks := checks) v high tail).2 ≤
       ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) * R := by
@@ -4031,7 +4031,7 @@ private theorem riseQ_le (h : Setting config checks g split fin pulled anc count
       subst same
       have nEarly : n.fork < .glamsterdam :=
         Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
-      exact epochRewards_le step altair nEarly v inside
+      exact PinSplit2.epochRewards_le step altair nEarly v inside
         preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat P
         (PinSplit5.effectiveAt_le_capMax (shared.append (fromFin.append pre)) h.genesis h.caps
           mEarly v)
