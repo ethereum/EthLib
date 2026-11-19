@@ -89,7 +89,7 @@ Each full epoch of the window must lie between the source's epoch and three epoc
 
 The committees of a full epoch hold every validator active in it at the head state.
 
-So each omitted source validator is inactive there, and the near reserve bounds its exit. -/
+So each omitted source validator is inactive there, and the near reserve bounds their stake. -/
 private theorem windowExitBoundWith_of_activeKept (store : Store preset fork)
     (source : BeaconState preset fork) (head : Root) (first last : Slot)
     {headState : BeaconState preset fork} (preGloas : fork < .glamsterdam)
@@ -152,7 +152,9 @@ variable {config : Config} {checks : SignatureChecks} {sources : BlockSources pr
 
 /-- The near exit bound of a call, from the call's source on the parent's chain.
 
-Each full epoch of a near receiver's window omits active source stake up to the near exit reserve.
+Each full epoch of a near receiver's window omits some active source stake.
+
+That omitted stake is at most the near exit reserve.
 
 It needs a seed lookahead of at least three, and a checkpoint at most two epochs before the parent.
 

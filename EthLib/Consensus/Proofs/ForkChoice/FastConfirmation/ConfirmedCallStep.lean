@@ -1286,7 +1286,9 @@ An assumption on the run: the anchor's latest header is the anchor block's, with
 
 The anchor store checks neither condition; the inclusion delay is positive on mainnet and minimal.
 
-The maximum effective balances of the preset are aligned, as they are on mainnet and minimal. -/
+The maximum effective balances of the preset are aligned, as they are on mainnet and minimal.
+
+An assumption on the run: the justification of each call's epoch is pinned. -/
 theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store preset fork}
     {limit : ℕ} {horizon anchorEpoch : Epoch} {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (bls : checks = .bls)

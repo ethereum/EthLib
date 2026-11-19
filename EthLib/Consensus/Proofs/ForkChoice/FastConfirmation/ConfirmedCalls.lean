@@ -75,6 +75,8 @@ So do the newly active voters of the parent's window.
 
 With a positive `shift`, the margin asks more than the rule's one-confirmation test.
 
+An assumption on the run: the drift bound of the excess and the reserve of each later window.
+
 An assumption on the run: the late duty majority and the newly active voters of the window.
 
 The majority buys the receivers more than two epochs after the parent's epoch.
@@ -124,7 +126,9 @@ The count bounds carry the call's pin reserve on top of the margin.
 
 They include the realized justification guards of the accepted roots, and each member's inputs.
 
-An assumption on the run: the count bounds and the realized guards, which the rule does not check.
+An assumption on the run: the source reads, the count bounds and the realized guards.
+
+The rule checks none of them.
 
 They buy the call's honest target count and the realized justification of each walked root.
 
@@ -976,7 +980,11 @@ def Bad {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, ancho
     CrossStoreDirectSafetyEvidence (e := e) pre limit ∨
     CrossStoreJustifiedEvidence (e := e) pre limit ∨ HeldStateFinalityEvidence (e := e) pre limit
 
-/-- The facts that hold up to the horizon once the evidence alternatives are split off. -/
+/-- The facts that the walk reads up to the horizon.
+
+Three hold once the evidence alternatives are split off.
+
+The quorum drift follows from the parameters. -/
 structure Good (horizon : Epoch) (limit : ℕ) : Prop where
   agree : SelectedCheckpointsAgree (e := e) horizon limit
   finality : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ limit → (e.world j).time ≤ limit →
