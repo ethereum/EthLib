@@ -1154,13 +1154,8 @@ private theorem consolidationRequest_partialsSame {fork : Fork} {s t : BeaconSta
   · exact PartialsSame.refl _
   · exact .of_frame fun e => switchToCompounding_departureQueues e switched
   · intro e
-    simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
-      Except.ok.injEq] at queued
-    obtain ⟨⟨_, _⟩, scheduled, _, _, _, set, _, _, rfl⟩ := queued
+    obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps queued
     obtain ⟨_, rfl⟩ := setValidator_ok set
-    simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq, Prod.mk.injEq] at scheduled
-    obtain ⟨_, _, _, _, ⟨_, _⟩, _, rfl, _⟩ := scheduled
     rfl
 
 private theorem executionRequests_queueAppend {fork : Fork} {s t : BeaconState preset fork}
