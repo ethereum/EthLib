@@ -395,8 +395,13 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     else effective i
   -- Gains compound across the window, so the rise reads the gain at eleven tenths, rounded up.
   let gainScaled (i : ℕ) := (11 * gainRate i + 9) / 10
+  -- A key's rate is low when its gain over the depth stays below one increment.
+  --
+  -- Eleven times its gain plus one over the depth must also stay within its bound.
+  let lowRate (i : ℕ) : Bool :=
+    decide (depth * gainScaled i < inc) && decide (11 * depth * (gainRate i + 1) ≤ ebUp i)
   let capFor (i : ℕ) :=
-    if depth * gainScaled i < inc ∧ 11 * depth * gainRate i < ebUp i then cap i else capMax
+    if lowRate i then cap i else capMax
   -- The rise bounds the balance from the finalized block's state on, as `ebUp` does.
   let rise (i : ℕ) :=
     let high := actual i + depthFin * (gainScaled i + leak i) + (partialsX i - partialsR i)
@@ -404,9 +409,9 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     --
     -- So the rise is the key's whole headroom.
     --
-    -- It is too once eleven times the gain over the depth reaches that bound on the key's balance.
+    -- It is too once eleven times the gain plus one over the depth exceeds that bound.
     if depthFin ≤ partialDelay then
-      if 11 * depth * gainRate i ≥ ebUp i then capFor i - effective i
+      if ¬ (11 * depth * (gainRate i + 1) ≤ ebUp i) then capFor i - effective i
       -- On another branch the key can keep an effective balance that this branch's update lowered.
       --
       -- It is at most the balance at that update plus the downward band, rounded down.
@@ -704,12 +709,12 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let otherCredits := 3 * (2 * ((∑ i ∈ positions, max (ebUp i) (effective i + rise i)) +
         depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
         consolidationsX + depth * proposerCredit +
-        depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) /
+        depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope + creditedKeys * inc) /
           p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
       depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope + depth * syncProposer)
   let otherGain := otherCredits / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
-  let creditGain := if 11 * depth * gainRateMax < capMax
+  let creditGain := if 11 * depth * (gainRateMax + 1) ≤ capMax
     then (33 * depth * consolidationGain + 11 * depth * otherGain + 9) / 10
     else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
   -- A credit can raise a key's effective balance by one more increment than its amount rounds to.
