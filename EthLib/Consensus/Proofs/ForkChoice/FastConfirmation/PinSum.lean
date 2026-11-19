@@ -2012,7 +2012,6 @@ section Stubs
 variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconState preset fork}
   {V : Finset ValidatorIndex}
 
-
 /-- A key active at C's epoch is activated by then at R, when that epoch is within the lookahead.
 
 Activity up to the seed lookahead after the split is the same on both branches. -/
@@ -2995,7 +2994,6 @@ private theorem rate_arith {I c M T S : ℕ} (scale : 2 ^ 35 ≤ I * c) (size : 
         hK0 hS)
     exact (Nat.lt_mul_div_succ (I * c) bpos).trans_eq (Nat.mul_comm _ _)
 
-
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- From Electra and before Gloas, the previous epoch's active stake of a state reached from a
 guarded state in its window is within three halves of its total. -/
@@ -3808,7 +3806,6 @@ theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
   refine le_trans (Finset.sum_le_sum term) (le_of_eq ?_)
   exact (Nat.cast_sum _ _).symm
 
-
 /-- D-4 (+ D-8 exits): other keys previous-epoch-only in C. A key whose exit R reads is at its
 balance at R plus its rise; any other one is at its balance when its exit starts on C's branch,
 plus its rise after that. Both add C's proposer credits and sync seats. -/
@@ -4344,7 +4341,6 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
         bandC tailC highC v.toNat + bandR events v.toNat) := by
     simp only [Finset.sum_add_distrib]
   omega
-
 
 /-- The window is tight when its depth is at most one more than the seed lookahead. -/
 private theorem tight_iff (config : Config) (pulled anc fin : BeaconState preset fork) :
@@ -5249,9 +5245,16 @@ private theorem quarter_base_ok (facts : PinPresetFacts preset) {total perIncrem
 
 /-- The pin has a rate `P` that bounds the reward rate at every state of a run from `fin`.
 
+The rate is the base reward per increment that `pinTerms` reads, or zero if there is none.
+
 The rate also bounds the largest gain rate, which `gainRateMax` is. -/
 private theorem pin_rate_exists (h : Setting config checks g split fin pulled anc counted V) :
     ∃ P : ℕ,
+      P = ((getBaseRewardPerIncrement preset
+        (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+            ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
+          (getTotalActiveBalance pulled).toOption.getD 0 / 4
+        else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat ∧
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
         (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat ≤
           (pinTerms config pulled anc fin).gainRateMax ∧
@@ -5277,12 +5280,19 @@ private theorem pin_rate_exists (h : Setting config checks g split fin pulled an
   · obtain ⟨total, perIncrement, perOk⟩ := anyOk
     obtain ⟨pq, pqOk⟩ :=
       quarter_base_ok h.facts perOk ((getTotalActiveBalance pulled).toOption.getD 0)
-    refine ⟨pq.toNat, ?_, fun toM inside => rate_of_guard h toM inside pqOk⟩
+    refine ⟨pq.toNat, by rw [pqOk]; rfl, ?_, fun toM inside => rate_of_guard h toM inside pqOk⟩
     rw [gainMax, pqOk]
     simp only [Except.toOption, Option.getD_some, le_refl]
-  · refine ⟨0, ?_, fun _ _ total perIncrement _ perOk =>
+  · refine ⟨0, ?_, ?_, fun _ _ total perIncrement _ perOk =>
       absurd ⟨total, perIncrement, perOk⟩ anyOk⟩
-    simp
+    · cases hr : getBaseRewardPerIncrement preset
+          (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+              ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
+            (getTotalActiveBalance pulled).toOption.getD 0 / 4
+          else preset.EFFECTIVE_BALANCE_INCREMENT / 5) with
+      | error e => simp
+      | ok p => exact absurd ⟨_, p, hr⟩ anyOk
+    · simp
 
 /-- The pin's rate bounds the reward rate at every state of a prefix of C's tail.
 
@@ -5294,15 +5304,21 @@ So the guard applies. -/
 private theorem key_rate_pre (h : Setting config checks g split fin pulled anc counted V)
     {a : BeaconState preset fork} (pre : Run config checks ⟨fork, split⟩ ⟨fork, a⟩)
     (near : (getCurrentEpoch a).toNat ≤ (getCurrentEpoch pulled).toNat + 1) :
-    ∃ P : ℕ, ∀ z ∈ pre.balancePath, ∀ total perIncrement : Gwei,
+    ∃ P : ℕ,
+      P = ((getBaseRewardPerIncrement preset
+        (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+            ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
+          (getTotalActiveBalance pulled).toOption.getD 0 / 4
+        else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat ∧
+      ∀ z ∈ pre.balancePath, ∀ total perIncrement : Gwei,
       getTotalActiveBalance z.state = .ok total →
       getBaseRewardPerIncrement preset total = .ok perIncrement →
       perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
         (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
         P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
-  obtain ⟨P, -, rateAll⟩ := pin_rate_exists h
-  refine ⟨P, fun z member total perIncrement totalOk perOk => ?_⟩
+  obtain ⟨P, hP, -, rateAll⟩ := pin_rate_exists h
+  refine ⟨P, hP, fun z member total perIncrement totalOk perOk => ?_⟩
   obtain ⟨fromFin⟩ := h.fromFin
   obtain ⟨r1, r2, -⟩ := balancePath_endpoint pre Run.nil
     (show (⟨fork, a⟩ : ForkedBeaconState preset).fork ≤
@@ -5315,7 +5331,6 @@ private theorem key_rate_pre (h : Setting config checks g split fin pulled anc c
   have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
   simp only at order totalOk perOk ⊢
   exact rateAll (fromFin.append r1) (by omega) total perIncrement totalOk perOk
-
 
 /-- The depth times the reward rate for each increment stays below an eleventh of an increment.
 
@@ -5330,16 +5345,15 @@ private theorem rate_per_increment (I WD F P e0 D : ℕ) (hI : 0 < I) (hWD : 0 <
     simpa using Nat.mul_pos hWD hI
   · obtain ⟨m, hm⟩ := Nat.dvd_of_mod_eq_zero alignedE
     have e : e0 / I = m := by rw [hm, Nat.mul_div_cancel_left _ hI]
-    have rate' := rateLow
-    rw [e] at rate'
+    rw [e] at rateLow
     have big : 11 ≤ e0 := Nat.le_trans (by
       have := Nat.mul_le_mul (show 11 ≤ 11 * D by omega)
         (Nat.le_add_left 1 (m * P * F / WD))
-      simpa using this) rate'
+      simpa using this) rateLow
     have mPos : 0 < m := Nat.pos_of_ne_zero (fun z => by rw [z] at hm; omega)
     have a : m * P * F < WD * (m * P * F / WD + 1) := Nat.lt_mul_div_succ _ hWD
     have b := Nat.mul_lt_mul_of_pos_left a (show 0 < 11 * D by omega)
-    have d := Nat.mul_le_mul_left WD rate'
+    have d := Nat.mul_le_mul_left WD rateLow
     have f : (11 * D * (P * F)) * m < (WD * I) * m := by
       calc (11 * D * (P * F)) * m = 11 * D * (m * P * F) := by ring
         _ < 11 * D * (WD * (m * P * F / WD + 1)) := b
@@ -5348,33 +5362,39 @@ private theorem rate_per_increment (I WD F P e0 D : ℕ) (hI : 0 < I) (hWD : 0 <
         _ = (WD * I) * m := by rw [hm]; ring
     exact Nat.lt_of_mul_lt_mul_right f
 
-/-- The gain on a credit rounded up to an increment is at most an eleventh of the credit.
+/-- Rounding up a whole number of increments gives it back. -/
+private theorem div_round_mul (I u : ℕ) (hI : 0 < I) : (I * u + I - 1) / I = u := by
+  rw [show I * u + I - 1 = I * u + (I - 1) by omega, Nat.mul_add_div hI,
+    Nat.div_eq_of_lt (show I - 1 < I by omega)]
+  simp
 
-The credit is a whole number of increments, so its rounding up is itself.
+/-- The gain on a positive number of increments is below an eleventh of them.
 
 The rate for each increment is the one that `rate_per_increment` bounds. -/
+private theorem gain_lt (I WD F P D k : ℕ) (hWD : 0 < WD) (hk : 0 < k)
+    (key : 11 * D * (P * F) < WD * I) : 11 * (D * (k * P * F / WD)) < I * k := by
+  have fl : WD * (k * P * F / WD) ≤ k * P * F := Nat.mul_div_le _ _
+  have h1 : WD * (11 * (D * (k * P * F / WD))) < WD * (I * k) :=
+    calc WD * (11 * (D * (k * P * F / WD))) = 11 * D * (WD * (k * P * F / WD)) := by ring
+      _ ≤ 11 * D * (k * P * F) := Nat.mul_le_mul_left _ fl
+      _ = k * (11 * D * (P * F)) := by ring
+      _ < k * (WD * I) := Nat.mul_lt_mul_of_pos_left key hk
+      _ = WD * (I * k) := by ring
+  exact Nat.lt_of_mul_lt_mul_left h1
+
+/-- The gain on a credit rounded up to an increment is at most an eleventh of the credit.
+
+The credit is a whole number of increments, so its rounding up is itself. -/
 private theorem gain_credit_le (I WD F P D C : ℕ) (hI : 0 < I) (hWD : 0 < WD)
     (alignedC : C % I = 0) (key : 11 * D * (P * F) < WD * I) :
     11 * (D * ((C + I - 1) / I * P * F / WD)) ≤ C := by
-  have gain : ∀ k, 11 * (D * (k * P * F / WD)) ≤ I * k := fun k => by
-    have fl : WD * (k * P * F / WD) ≤ k * P * F := Nat.mul_div_le _ _
-    have h1 : WD * (11 * (D * (k * P * F / WD))) ≤ WD * (I * k) := by
-      calc WD * (11 * (D * (k * P * F / WD))) = 11 * D * (WD * (k * P * F / WD)) := by ring
-        _ ≤ 11 * D * (k * P * F) := Nat.mul_le_mul_left _ fl
-        _ = k * (11 * D * (P * F)) := by ring
-        _ ≤ k * (WD * I) := Nat.mul_le_mul_left _ key.le
-        _ = WD * (I * k) := by ring
-    exact Nat.le_of_mul_le_mul_left h1 hWD
-  have cdiv : (C + I - 1) / I = C / I := by
-    obtain ⟨u, hu⟩ := Nat.dvd_of_mod_eq_zero alignedC
-    rw [hu, Nat.mul_div_cancel_left _ hI,
-      show I * u + I - 1 = I * u + (I - 1) by omega, Nat.mul_add_div hI,
-      Nat.div_eq_of_lt (by omega)]
+  obtain ⟨u, hu⟩ := Nat.dvd_of_mod_eq_zero alignedC
+  subst hu
+  rw [div_round_mul I u hI]
+  rcases Nat.eq_zero_or_pos u with zero | pos
+  · subst zero
     simp
-  rw [cdiv]
-  have := gain (C / I)
-  have e : I * (C / I) = C := Nat.mul_div_cancel' (Nat.dvd_of_mod_eq_zero alignedC)
-  omega
+  · exact (gain_lt I WD F P D u hWD pos key).le
 
 /-- The closure test of the credit ceiling is arithmetic in the rate, the credits and the stake.
 
@@ -5408,21 +5428,11 @@ private theorem ceiling_closed (I WD F P e0 D Df Cr Cr' S W C q r : ℕ) (hDf : 
         Df * ((11 * (e0 / I * P * F / WD) + 9) / 10) := Nat.mul_le_mul_right _ hDf
     omega
   have unit : 11 * (D * (P * F / WD)) < I := by
-    have fl : WD * (P * F / WD) ≤ P * F := Nat.mul_div_le _ _
-    have h1 : WD * (11 * (D * (P * F / WD))) < WD * I := by
-      calc WD * (11 * (D * (P * F / WD))) = 11 * D * (WD * (P * F / WD)) := by ring
-        _ ≤ 11 * D * (P * F) := Nat.mul_le_mul_left _ fl
-        _ < WD * I := key
-    exact Nat.lt_of_mul_lt_mul_left h1
+    have := gain_lt I WD F P D 1 hWD Nat.one_pos key
+    simpa using this
   have split : D * (P * F / WD + 2) = D * (P * F / WD) + 2 * D := by ring
   rw [split]
   omega
-
-/-- The balance bound of a run adds its start, its gain and its credits.
-
-It follows from a bound on each of the three. -/
-private theorem credit_sum_le {a k g N Cs S Cr G : ℕ} (start : a ≤ S) (credits : N + Cs ≤ Cr)
-    (gain : k * g ≤ G) : a + k * g + N + Cs ≤ S + Cr + G := by omega
 
 /-- A number below an aligned bound by less than an increment rounds down to at most the bound.
 
@@ -5443,7 +5453,7 @@ The bound `e0` on the effective balance, with the rounded credits and an increme
 
 The rate premises are those of the low regime, at the finalized depth and at the depth of the call.
 
-The gain is read at `e0` with three units for each epoch. -/
+The gain is read at `e0`, with one increment's gain and two units for each epoch. -/
 private theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
     (post : Run config checks n y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ n.fork)
     (i : ℕ) (inside : i < n.state.validators.data.size) (high P capHigh : ℕ)
@@ -5492,7 +5502,7 @@ private theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
   have bound : PinSplit2.creditBound post i high (e0 + C + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
       P capHigh ≤ S + Cr + (gainOn preset depth P C + (depth * q + depth * (r + 2))) := by
     unfold PinSplit2.creditBound
-    exact credit_sum_le startBal credits split
+    exact le_trans (le_of_eq (by ring)) (Nat.add_le_add (Nat.add_le_add startBal credits) split)
   have fixpoint : max (effectiveAt n i) (min capHigh
       (PinSplit2.creditBound post i high (e0 + C + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) P
           capHigh -
@@ -5508,7 +5518,6 @@ private theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
   intro z member
   exact Nat.le_trans (balances z member) bound
 
-
 /-- Rounding a credit up to an increment leaves its gain unchanged. -/
 private theorem gainOn_round (depth P C : ℕ)
     (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat) :
@@ -5517,12 +5526,7 @@ private theorem gainOn_round (depth P C : ℕ)
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) = gainOn preset depth P C := by
   unfold gainOn
   generalize preset.EFFECTIVE_BALANCE_INCREMENT.toNat = I at *
-  have : (I * ((C + I - 1) / I) + I - 1) / I = (C + I - 1) / I := by
-    rw [show I * ((C + I - 1) / I) + I - 1 = I * ((C + I - 1) / I) + (I - 1) by omega,
-      Nat.mul_add_div incPos, Nat.div_eq_of_lt (show I - 1 < I by omega)]
-    simp
-  rw [this]
-
+  rw [div_round_mul I _ incPos]
 
 open DirectSafety.Apriori.Internal in
 /-- The amounts of the queued partial withdrawals of a key that are due by a cutoff.
@@ -5641,11 +5645,16 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
       omega
     rw [ebUp_eq config pulled anc fin electra v.toNat _ rfl]
     exact le_trans (min_le_min le_rfl (key _)) (le_max_right _ _)
+  have eb : ∃ t, (pinTerms config pulled anc fin).ebUp v.toNat =
+      max (max (balanceAt pulled v.toNat) (balanceAt fin v.toNat))
+        (min (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
+          (t - t % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :=
+    ⟨_, ebUp_eq config pulled anc fin electra v.toNat _ rfl⟩
   obtain ⟨i, hi⟩ : ∃ i, i = v.toNat := ⟨_, rfl⟩
-  rw [← hi] at inside alignedCap startCap capCeil startEff floorR debits small rateLow top ⊢
+  rw [← hi] at inside alignedCap startCap capCeil startEff floorR debits small rateLow top eb ⊢
   obtain ⟨capI, hcap0⟩ : ∃ capI, capI =
       PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i := ⟨_, rfl⟩
-  rw [← hcap0] at alignedCap startCap capCeil floorR debits top ⊢
+  rw [← hcap0] at alignedCap startCap capCeil floorR debits top eb ⊢
   obtain ⟨pd, hpd⟩ : ∃ pd, pd = dueAmount fin electra i ((getCurrentEpoch pulled).toNat + 1) -
       dueAmount pulled electra i ((getCurrentEpoch pulled).toNat + 1) := ⟨_, rfl⟩
   rw [← hpd] at debits top
@@ -5656,8 +5665,6 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
   rw [← hDp] at floorR debits ⊢
   rw [← hDs] at floorR ⊢
   rw [← hDsF] at startEff ⊢
-  have hcap : capI = ((pulled.validators.data[i]?).map fun v =>
-      (withdrawalMaxEffectiveBalance preset fork v).toNat).getD 0 := hcap0
   classical
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨toPulled⟩ := h.toPulled
@@ -5697,71 +5704,31 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
     rw [hC]
     omega
   have alignedE0 : e0 % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
-    obtain ⟨t, ht⟩ : ∃ t, (pinTerms config pulled anc fin).ebUp i =
-        max (max (balanceAt pulled i) (balanceAt fin i))
-          (min capI (t - t % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) := by
-      subst hcap
-      exact ⟨_, rfl⟩
+    obtain ⟨t, ht⟩ := eb
     have a1 : balanceAt pulled i % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 :=
       FloorTrace.effective_aligned (shared.append (fromFin.append toPulled)) h.genesis h.aligned i
     have a2 : balanceAt fin i % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 :=
       FloorTrace.effective_aligned shared h.genesis h.aligned i
     have a3 : (t - t % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) %
-        preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
-      have := Nat.div_add_mod t preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-      rw [show t - t % preset.EFFECTIVE_BALANCE_INCREMENT.toNat =
-        preset.EFFECTIVE_BALANCE_INCREMENT.toNat * (t / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
-        by omega]
-      exact Nat.mul_mod_right _ _
-    have pair : ∀ a b : ℕ, a % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 :=
+      Nat.sub_mod_eq_zero_of_mod_eq (Nat.mod_mod _ _).symm
+    have maxAligned : ∀ a b : ℕ, a % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
         b % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
-        max a b % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 ∧
-          min a b % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := fun a b ha hb => by
-      rcases le_total a b with l | l
-      · rw [max_eq_right l, min_eq_left l]
-        exact ⟨hb, ha⟩
-      · rw [max_eq_left l, min_eq_right l]
-        exact ⟨ha, hb⟩
+        max a b % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := fun a b ha hb => by
+      rcases max_choice a b with e | e <;> rw [e] <;> assumption
+    have minAligned : ∀ a b : ℕ, a % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
+        b % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
+        min a b % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := fun a b ha hb => by
+      rcases min_choice a b with e | e <;> rw [e] <;> assumption
     rw [he0, ht]
-    exact (pair _ _ (pair _ _ a1 a2).1 ((pair _ _ alignedCap a3).2)).1
-  have rateAll : ∀ z ∈ tailC.balancePath, ∀ total perIncrement : Gwei,
-      getTotalActiveBalance z.state = .ok total →
-      getBaseRewardPerIncrement preset total = .ok perIncrement →
-      perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
-        (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
-          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
-        P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
-    intro z member total perIncrement totalOk perOk
-    by_cases anyOk : ∃ total perIncrement : Gwei,
-        getBaseRewardPerIncrement preset total = .ok perIncrement
-    swap
-    · exact absurd ⟨total, perIncrement, perOk⟩ anyOk
-    obtain ⟨t0, p0, p0ok⟩ := anyOk
-    obtain ⟨pq, pqOk⟩ := quarter_base_ok h.facts p0ok
-      ((getTotalActiveBalance pulled).toOption.getD 0)
-    have Pq : P = pq.toNat := by
-      rw [hP, pqOk]
-      rfl
-    obtain ⟨r1, r2, -⟩ := balancePath_endpoint tailC
-      (Run.nil : Run config checks ⟨fork, counted⟩ ⟨fork, counted⟩) (Nat.le_refl _) member
-    obtain ⟨mf, ms⟩ := z
-    have above : fork ≤ mf := fork_le_of_chainSteps r1.chainSteps
-    have below : mf ≤ fork := fork_le_of_chainSteps r2.chainSteps
-    have same : mf = fork := Fork.ctorIdx_injective (Nat.le_antisymm below above)
-    subst same
-    have zEpoch : (getCurrentEpoch ms).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
-      have : (getCurrentEpoch ms).toNat ≤ (getCurrentEpoch counted).toNat :=
-        epoch_le_of_slot_le ms.slot counted.slot (Run.slot_le r2)
-      omega
-    rw [Pq]
-    exact rate_of_guard h (fromFin.append r1) zEpoch pqOk total perIncrement totalOk perOk
+    exact maxAligned _ _ (maxAligned _ _ a1 a2) (minAligned _ _ alignedCap a3)
+  obtain ⟨P', hP', rateAll⟩ := key_rate_pre h tailC h.near
+  rw [hP'.trans hP.symm] at rateAll
   have hDle : D ≤ (pinTerms config pulled anc fin).depth := hD ▸ min_le_left _ _
   have hDDf : D ≤ Df := hD ▸ min_le_right _ _
   have epochs : (getCurrentEpoch counted).toNat - (getCurrentEpoch split).toNat ≤ D := by
     rw [hD]
-    refine Nat.le_min.mpr ⟨?_, ?_⟩
-    · omega
-    · omega
+    exact Nat.le_min.mpr ⟨by omega, by omega⟩
   have core := c_ceiling_abstract tailC h.early h.fulu i inside highC P capI alignedCap startCap
     capCeil rateAll endEpochC incPos D Df Cr (Cr + Ds + DsF) e0 C
     (min (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W) capI) W
@@ -5780,7 +5747,6 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
   have := min_le_left (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W)
     capI
   omega
-
 
 /-- The epoch rewards of a key over a run are at most the rate for each epoch of the run.
 
@@ -5838,7 +5804,7 @@ private theorem riseQ_le (h : Setting config checks g split fin pulled anc count
   split
   swap
   · exact Nat.zero_le _
-  obtain ⟨P, gainLe, rateAll⟩ := pin_rate_exists h
+  obtain ⟨P, -, gainLe, rateAll⟩ := pin_rate_exists h
   have scan := riseScan_snd_le (config := config) (checks := checks) v highC
     (preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
       (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) tailC
@@ -8322,7 +8288,6 @@ end Stubs
 section Closure
 variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconState preset fork}
   {V : Finset ValidatorIndex}
-
 
 private theorem sum_eq_U {S W : Finset ValidatorIndex} (sub : S ⊆ W) (f : ValidatorIndex → ℤ) :
     ∑ v ∈ S, f v = ∑ v ∈ W, if v ∈ S then f v else 0 := by
