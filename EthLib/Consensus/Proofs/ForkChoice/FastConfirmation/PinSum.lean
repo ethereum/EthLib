@@ -577,6 +577,13 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     (effective i + rise i)
   let consolidationGain := consolidationsX / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
+  -- A key whose only flows are seat debits pays a unit too.
+  --
+  -- Its seats are those of the call's branch beyond the two shared at the split.
+  --
+  -- They are also those of the shared segment.
+  let seatUnits := (depth / period + (depthFin / period + 2)) * preset.SYNC_COMMITTEE_SIZE.toNat
+  let creditUnits := (creditedKeys + seatUnits + 2 * (exitingCount + queueKeys)) * unitGain
   let otherCredits := 3 * (2 * ((∑ i ∈ positions,
           max (max (ebUp i) (effective i + rise i)) (bF i)) +
         (11 * (depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
@@ -592,7 +599,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
         creditedKeys * inc +
         -- The bands of the keys that hold a seat on the shared segment or on R's run.
         (depthFin / period + 2) * preset.SYNC_COMMITTEE_SIZE.toNat *
-          (inc + preset.downwardBand)) /
+          (inc + preset.downwardBand) +
+        -- The units of the keys whose only flows are seat debits, and the leak that those induce.
+        creditUnits + syncLeak) /
           -- The credits include the keys' own whistleblower credits, so two quotient steps go.
           (p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 2) +
       -- C's seat flows, and R's and the shared segment's seat debits.
@@ -606,13 +615,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
         WEIGHT_DENOMINATOR.toNat + 1) + 9) / 10 +
       (if 11 * depth * (gainRateMax + 1) ≤ capMax then 0
         else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax)
-  -- A key whose only flows are seat debits pays a unit too.
-  --
-  -- Its seats are those of the call's branch beyond the two shared at the split.
-  --
-  -- They are also those of the shared segment.
-  let seatUnits := (depth / period + (depthFin / period + 2)) * preset.SYNC_COMMITTEE_SIZE.toNat
-  let creditUnits := (creditedKeys + seatUnits + 2 * (exitingCount + queueKeys)) * unitGain
   let pendingR := if tight then 0 else
     ∑ i ∈ positions with (validator i).any (fun v =>
       decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
