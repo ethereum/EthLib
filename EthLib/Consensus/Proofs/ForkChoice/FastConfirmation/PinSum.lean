@@ -1818,7 +1818,7 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
           ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
         (getTotalActiveBalance pulled).toOption.getD 0 / 4
       else preset.EFFECTIVE_BALANCE_INCREMENT / 5) = .ok pq) (v : ℕ) :
-    PinSplit2.passPenaltyRate config (⟨fork, m⟩ : ForkedBeaconState preset) v ≤
+    passPenaltyRate config (⟨fork, m⟩ : ForkedBeaconState preset) v ≤
       (pinTerms config pulled anc fin).leakAt (effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) v)
         v := by
   obtain ⟨T, pulledOk⟩ := h.pulledTotal
@@ -1856,7 +1856,7 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
       rw [Nat.add_mul, Nat.one_mul] at times
       omega
     | some score =>
-      have grown := runScore_le_start toM altair h.early (.inl electra) altair (i := v) read
+      have grown := DirectSafety.Apriori.Internal.runScore_le_start toM altair h.early (.inl electra) altair (i := v) read
       simp only [Option.map_some, Option.getD_some]
       rw [Nat.add_mul, Nat.one_mul] at times
       simp only at grown
