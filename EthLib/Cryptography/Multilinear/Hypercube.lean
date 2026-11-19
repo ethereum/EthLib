@@ -5,7 +5,7 @@ module
 
 The order of the points of the hypercube `{0, 1}^k`, as indices into an array of length `2^k`.
 
-No paper fixes this order, so this file states the rule itself.
+No external standard fixes this order, so this file states the rule itself.
 
 A point `u = (u_0, ..., u_(k-1))` is the integer `u_0 * 2^0 + u_1 * 2^1 + ... + u_(k-1) * 2^(k-1)`.
 
