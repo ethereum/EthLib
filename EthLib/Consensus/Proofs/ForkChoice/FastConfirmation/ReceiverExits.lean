@@ -11,15 +11,15 @@ A fast confirmation reads its stake from a checkpoint state, the source.
 
 A receiver near the call reads the committees of an epoch at most three epochs after the source.
 
-The stake that leaves the active set by then must fit `exitReserveNear` of the source.
+The stake that leaves the active set by then must fit the near exit reserve of the source.
 
 Every exit is placed at `current + 1 + MAX_SEED_LOOKAHEAD` or later, from the epoch where it starts.
 
-So each state fixes activity up to `current + MAX_SEED_LOOKAHEAD` (`activeKept_of_chainSteps`).
+So each state fixes activity up to `current + MAX_SEED_LOOKAHEAD`.
 
 With a lookahead of at least three epochs, every such exit was already scheduled at the source.
 
-`Preset.SeedLookaheadAtLeastThree` (Transition/Committees.lean) names that condition.
+A condition on the preset names that lookahead.
 -/
 
 @[expose] public section
@@ -50,7 +50,7 @@ The epoch is from the source's epoch to three epochs after it.
 
 A validator active at the source and inactive at that epoch was inactive there in the source too.
 
-So its exit epoch in the source is at most that epoch, which `exitReserveNear` counts. -/
+So its exit epoch in the source is at most that epoch, which the near exit reserve counts. -/
 private theorem exitStake_le_exitReserveNear {post : Fork}
     {source : BeaconState preset fork} {later : BeaconState preset post}
     (preGloas : fork < .glamsterdam) (fixedWindow : preset.SeedLookaheadAtLeastThree)
@@ -69,7 +69,7 @@ private theorem exitStake_le_exitReserveNear {post : Fork}
   have fixed : epoch ≤ activityFixedEpoch source := by
     rw [UInt64.le_iff_toNat_le, activityFixedEpoch_toNat]
     have := epoch.toNat_lt
-    have := fixedWindow.lookahead
+    have : 3 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := fixedWindow
     omega
   rw [kept epoch fixed] at absent
   unfold activeVoters at active
@@ -89,7 +89,7 @@ Each full epoch of the window must lie between the source's epoch and three epoc
 
 The committees of a full epoch hold every validator active in it at the head state.
 
-So each omitted source validator is inactive there, and `exitStake_le_exitReserveNear` applies. -/
+So each omitted source validator is inactive there, and the near reserve bounds its exit. -/
 private theorem windowExitBoundWith_of_activeKept (store : Store preset fork)
     (source : BeaconState preset fork) (head : Root) (first last : Slot)
     {headState : BeaconState preset fork} (preGloas : fork < .glamsterdam)
@@ -152,7 +152,7 @@ variable {config : Config} {checks : SignatureChecks} {sources : BlockSources pr
 
 /-- The near exit bound of a call, from the call's source on the parent's chain.
 
-Each full epoch of a near receiver's window omits at most `exitReserveNear` of active source stake.
+Each full epoch of a near receiver's window omits active source stake up to the near exit reserve.
 
 It needs a seed lookahead of at least three, and a checkpoint at most two epochs before the parent.
 

@@ -534,6 +534,17 @@ theorem getProposerHead_boosted {headNode chosen : ForkChoiceNode} {slot : Slot}
     store.getProposerHead config headNode slot ≠ .ok chosen :=
   fun found => (getProposerHead_ok_iff.mp found).1 boosted
 
+/-- The unrealized justification read of a block is its stored entry. -/
+theorem unrealizedJustification_found {root : Root}
+    {checkpoint : Checkpoint} (read : store.unrealizedJustification root = .ok checkpoint) :
+    store.unrealizedJustifications[root]? = some checkpoint := by
+  unfold Store.unrealizedJustification at read
+  split at read
+  · rename_i stored found
+    simp only [pure, Except.pure, Except.ok.injEq] at read
+    rw [found, read]
+  · simp [throw, throwThe, MonadExceptOf.throw] at read
+
 end Store
 
 end EthLib.Consensus

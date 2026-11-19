@@ -81,6 +81,58 @@ theorem le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch {start slot first : Slo
     (Nat.div_le_div_right (c := preset.SLOTS_PER_EPOCH.toNat) (UInt64.le_iff_toNat_le.mp le))
   exact UInt64.le_iff_toNat_le.mpr (by omega)
 
+/-- The start test of a slot is its remainder by the epoch length. -/
+theorem isStartSlotAtEpoch_eq (slot : Slot) :
+    isStartSlotAtEpoch preset slot =
+      .ok (decide (slot.toNat % preset.SLOTS_PER_EPOCH.toNat = 0)) := by
+  have rounded := (computeStartSlotAtEpoch_ok_iff.mp
+    (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) slot)).2
+  rw [computeEpochAtSlot, UInt64.toNat_div] at rounded
+  have below := Nat.div_mul_le_self slot.toNat preset.SLOTS_PER_EPOCH.toNat
+  have le : slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH ≤ slot :=
+    UInt64.le_iff_toNat_le.mpr (by omega)
+  have sub := UInt64.toNat_sub_of_le _ _ le
+  have modNat := Nat.mod_add_div slot.toNat preset.SLOTS_PER_EPOCH.toNat
+  simp only [isStartSlotAtEpoch, computeSlotsSinceEpochStart,
+    computeStartSlotAtEpoch_computeEpochAtSlot, Except.mapError, bind, Except.bind, pure,
+    Except.pure, Except.ok.injEq]
+  apply Bool.eq_iff_iff.mpr
+  simp only [decide_eq_true_eq]
+  rw [Nat.mul_comm] at rounded
+  constructor
+  · intro zero
+    have := congrArg UInt64.toNat zero
+    rw [sub, UInt64.toNat_zero] at this
+    omega
+  · intro zero
+    apply UInt64.toNat_inj.mp
+    rw [sub, UInt64.toNat_zero]
+    omega
+
+/-- The slot after an epoch's first slot does not start an epoch. -/
+theorem isStartSlotAtEpoch_next_eq_false (long : 1 < preset.SLOTS_PER_EPOCH) {slot next : Slot}
+    (nextOk : addChecked slot 1 = .ok next)
+    (atStart : isStartSlotAtEpoch preset slot = .ok true) :
+    isStartSlotAtEpoch preset next = .ok false := by
+  rw [isStartSlotAtEpoch_eq, Except.ok.injEq, decide_eq_true_eq] at atStart
+  have value := (addChecked_ok_iff.mp nextOk).2
+  have P := UInt64.lt_iff_toNat_lt.mp long
+  simp only [UInt64.toNat_one] at value P
+  have one : (slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 1 := by
+    rw [Nat.add_mod, atStart, Nat.zero_add, Nat.mod_mod, Nat.mod_eq_of_lt P]
+  rw [isStartSlotAtEpoch_eq, Except.ok.injEq, decide_eq_false_iff_not, value, one]
+  omega
+
+/-- A slot that starts an epoch is the first slot of its epoch. -/
+theorem computeStartSlotAtEpoch_of_isStartSlotAtEpoch (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    {slot : Slot} (atStart : isStartSlotAtEpoch preset slot = .ok true) :
+    computeStartSlotAtEpoch preset (computeEpochAtSlot preset slot) = .ok slot := by
+  have rounded := computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) slot
+  have up := le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch atStart (UInt64.le_refl slot)
+    rounded
+  have down := (computeStartSlotAtEpoch_le_lt (UInt64.lt_iff_toNat_lt.mpr positive) rounded).1
+  rw [rounded, UInt64.le_antisymm (UInt64.le_iff_toNat_le.mpr down) up]
+
 namespace Store
 
 /-- The finalized epoch is at most the justified epoch, for both pairs of checkpoints. -/

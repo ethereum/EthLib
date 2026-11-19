@@ -430,7 +430,7 @@ The viability of the root at a time may read its coverage at every earlier time.
 
 The window reserve and the receivers' exits read one reserve value.
 
-The alternatives are a block collision of honest stores and `HistoricalDirectSafetyEvidence`. -/
+The alternatives are a block collision of honest stores and historical direct-safety evidence. -/
 public theorem Execution.honestHeadsCover_of_viableAt [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)

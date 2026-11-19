@@ -21,7 +21,9 @@ The last fact splits a walk at one of its roots.
 
 A second walk from the same block, back to a root of the first walk, lists the roots after it.
 
-No theorem here states that the roots of a walk are ancestors of the block.
+Each root of a walk has the root before it as parent, or the terminal block for the first root.
+
+The block descends from each root of a walk, and each root descends from the terminal block.
 -/
 
 @[expose] public section
@@ -219,6 +221,176 @@ theorem getAncestorRoots_of_append {head terminal mid : Root} {older newer : Lis
       simp [block_ok_iff.mpr sameFound, bind, Except.bind, pure, Except.pure]
   · simpa using getAncestorRoots_of_append_aux (otherAcc := [])
       (by simpa using walked) (by simp : init.concat final ≠ [])
+
+/-- A node that descends from a known block descends from the parent of that block.
+
+The store must hold the parent, at an earlier slot than the block.
+
+Both nodes are pending, so this holds at every fork. -/
+theorem isAncestor_parentRoot_of_isAncestor {node root : Root}
+    {block parent : BeaconBlock preset fork}
+    (descends : store.isAncestor ⟨node, .pending⟩ ⟨root, .pending⟩ = .ok true)
+    (found : store.blocks[root]? = some block)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (lower : parent.slot < block.slot) :
+    store.isAncestor ⟨node, .pending⟩ ⟨block.parentRoot, .pending⟩ = .ok true := by
+  have known : store.block root = .ok block := block_ok_iff.mpr found
+  simp only [isAncestor, known, bind, Except.bind] at descends
+  cases walk : store.getAncestor ⟨node, .pending⟩ block.slot with
+  | error e => simp [walk] at descends
+  | ok reached =>
+    rw [walk] at descends
+    -- The walk to the block's slot reaches the block, with some payload status.
+    have sameRoot : reached.root = root := by
+      by_cases gloas : .glamsterdam ≤ fork <;> simp_all [pure, Except.pure]
+    have reachedFound : store.blocks[reached.root]? = some block := sameRoot ▸ found
+    -- Going on to the parent's slot steps from the block to its parent.
+    have onward : store.getAncestor ⟨node, .pending⟩ parent.slot =
+        .ok ⟨block.parentRoot, parentPayloadStatus block parent⟩ := by
+      rw [getAncestor_trans (UInt64.le_of_lt lower) walk]
+      exact getAncestor_parent_of_slot_lt reachedFound parentFound lower
+    by_cases gloas : .glamsterdam ≤ fork
+    · simp [isAncestor_pending gloas, block_ok_iff.mpr parentFound, onward, bind, Except.bind,
+        pure, Except.pure]
+    · have pending := parentPayloadStatus_of_lt (block := block) (parent := parent)
+        (Nat.lt_of_not_le gloas)
+      simp [isAncestor, block_ok_iff.mpr parentFound, onward, pending, gloas, bind, Except.bind,
+        pure, Except.pure]
+
+/-- The walk from a root, as it goes on: each listed root has the root before it as parent.
+
+The first new root has the terminal block as parent, and the head descends from every root.
+
+The roots `acc` that the walk already holds must hang off `root` in the same way. -/
+private theorem parentRoot_of_getAncestorRoots_aux {head root terminal : Root}
+    {acc roots : List Root}
+    (walked : store.getAncestorRoots root terminal acc = .ok roots)
+    (accParents : ∀ (older newer : List Root) (member : Root) (block : BeaconBlock preset fork),
+      acc = older ++ member :: newer → store.block member = .ok block →
+      block.parentRoot = older.getLast?.getD root)
+    (accBelow : ∀ m ∈ acc, store.isAncestor ⟨head, .pending⟩ ⟨m, .pending⟩ = .ok true)
+    (rootBelow : ∀ block : BeaconBlock preset fork, store.blocks[root]? = some block →
+      store.isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true) :
+    (∀ (older newer : List Root) (member : Root) (block : BeaconBlock preset fork),
+      roots = older ++ member :: newer → store.block member = .ok block →
+      block.parentRoot = older.getLast?.getD terminal) ∧
+    ∀ m ∈ roots, store.isAncestor ⟨head, .pending⟩ ⟨m, .pending⟩ = .ok true := by
+  fun_induction getAncestorRoots store root terminal acc generalizing roots with
+  | case1 => cases walked
+  | case2 root acc block found ih =>
+    -- Putting the root in front of `acc` keeps the parents, with the root's parent as base.
+    have consParents : ∀ (older newer : List Root) (member : Root)
+        (memberBlock : BeaconBlock preset fork), root :: acc = older ++ member :: newer →
+        store.block member = .ok memberBlock →
+        memberBlock.parentRoot = older.getLast?.getD block.parentRoot := by
+      intro older newer member memberBlock split memberOk
+      cases older with
+      | nil =>
+        obtain ⟨rfl, -⟩ := List.cons.inj split
+        obtain rfl : block = memberBlock :=
+          Except.ok.inj ((block_ok_iff.mpr found).symm.trans memberOk)
+        rfl
+      | cons first older =>
+        obtain ⟨rfl, rest⟩ := List.cons.inj split
+        rw [accParents older newer member memberBlock rest memberOk]
+        rw [List.getLast?_cons, Option.getD_some]
+    have consBelow : ∀ m ∈ root :: acc,
+        store.isAncestor ⟨head, .pending⟩ ⟨m, .pending⟩ = .ok true := by
+      intro m mem
+      rcases List.mem_cons.mp mem with rfl | mem
+      · exact rootBelow block found
+      · exact accBelow m mem
+    rw [bind_ok_iff] at walked
+    obtain ⟨terminalBlock, -, walked⟩ := walked
+    split at walked
+    · -- The walk is empty.
+      cases Except.ok.inj walked
+      simp
+    · dsimp only at walked
+      split at walked
+      · -- The parent is the terminal block, so the walk ends with this root.
+        rename_i atTerminal
+        cases Except.ok.inj walked
+        exact ⟨atTerminal ▸ consParents, consBelow⟩
+      · split at walked
+        · cases walked
+        · rename_i parent parentFound
+          split at walked
+          · rename_i lower
+            exact ih parent parentFound lower walked consParents consBelow fun _ _ =>
+              isAncestor_parentRoot_of_isAncestor (rootBelow block found) found parentFound
+                lower
+          · cases walked
+
+/-- The walk from a root, as it goes on: each listed root descends from the terminal block.
+
+The roots `acc` that the walk already holds must descend from `root`. -/
+private theorem isAncestor_terminal_of_getAncestorRoots_aux {root terminal : Root}
+    {acc roots : List Root}
+    (walked : store.getAncestorRoots root terminal acc = .ok roots)
+    (accAbove : ∀ m ∈ acc, store.isAncestor ⟨m, .pending⟩ ⟨root, .pending⟩ = .ok true) :
+    ∀ m ∈ roots, store.isAncestor ⟨m, .pending⟩ ⟨terminal, .pending⟩ = .ok true := by
+  fun_induction getAncestorRoots store root terminal acc generalizing roots with
+  | case1 => cases walked
+  | case2 root acc block found ih =>
+    rw [bind_ok_iff] at walked
+    obtain ⟨terminalBlock, terminalOk, walked⟩ := walked
+    split at walked
+    · -- The walk is empty.
+      cases Except.ok.inj walked
+      simp
+    · rename_i higher
+      -- Each root held so far, and the root itself, descends from the root's known parent.
+      have consAbove : ∀ (parent : BeaconBlock preset fork),
+          store.blocks[block.parentRoot]? = some parent → parent.slot < block.slot →
+          ∀ m ∈ root :: acc,
+            store.isAncestor ⟨m, .pending⟩ ⟨block.parentRoot, .pending⟩ = .ok true := by
+        intro parent parentFound lower m mem
+        rcases List.mem_cons.mp mem with rfl | mem
+        · exact isAncestor_pending_parent_of_slot_lt (node := ⟨m, .pending⟩) found parentFound
+            lower
+        · exact isAncestor_parentRoot_of_isAncestor (accAbove m mem) found parentFound lower
+      dsimp only at walked
+      split at walked
+      · -- The parent is the terminal block, which sits below the root.
+        rename_i atTerminal
+        cases Except.ok.inj walked
+        have terminalFound := block_ok_iff.mp terminalOk
+        rw [← atTerminal] at terminalFound ⊢
+        exact consAbove terminalBlock terminalFound (UInt64.not_le.mp higher)
+      · split at walked
+        · cases walked
+        · rename_i parent parentFound
+          split at walked
+          · rename_i lower
+            exact ih parent parentFound lower walked (consAbove parent parentFound lower)
+          · cases walked
+
+/-- Each root of a successful walk descends from the terminal block. -/
+theorem isAncestor_terminal_of_getAncestorRoots {head terminal member : Root}
+    {roots : List Root} (walked : store.getAncestorRoots head terminal = .ok roots)
+    (mem : member ∈ roots) :
+    store.isAncestor ⟨member, .pending⟩ ⟨terminal, .pending⟩ = .ok true :=
+  isAncestor_terminal_of_getAncestorRoots_aux walked (by simp) member mem
+
+/-- Each root of a successful walk has the root before it as parent, or the terminal block.
+
+The walk lists the roots oldest first, so the root before a member is the last of `older`.
+
+The head of the walk descends from each of its roots.
+
+Each root descends from the terminal block. -/
+theorem parentRoot_of_getAncestorRoots {head terminal member : Root}
+    {older newer : List Root} {block : BeaconBlock preset fork}
+    (walked : store.getAncestorRoots head terminal = .ok (older ++ member :: newer))
+    (found : store.block member = .ok block) :
+    block.parentRoot = older.getLast?.getD terminal ∧
+      store.isAncestor ⟨head, .pending⟩ ⟨member, .pending⟩ = .ok true ∧
+      store.isAncestor ⟨member, .pending⟩ ⟨terminal, .pending⟩ = .ok true := by
+  obtain ⟨parents, below⟩ := parentRoot_of_getAncestorRoots_aux (head := head) walked
+    (by simp) (by simp) fun _ headFound => isAncestor_self headFound
+  exact ⟨parents older newer member block rfl found, below member (by simp),
+    isAncestor_terminal_of_getAncestorRoots walked (by simp)⟩
 
 end Store
 

@@ -219,6 +219,21 @@ theorem Execution.blocks_of_le {ν κ : Type*} [DecidableEq ν] {checks : Signat
       | envelope _ step => exact (Store.onExecutionPayloadEnvelope_frame step).2.1 ▸ ih
       | inclusionList _ step => exact (Store.onInclusionList_frame step).2.1 ▸ ih
 
+/-- A held block's epoch is the same at a later event. -/
+theorem Execution.getBlockEpoch_of_le {ν κ : Type*} [DecidableEq ν] {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    {u : ν} {n k : ℕ} (later : n ≤ k)
+    {root : Root} {epoch : Epoch}
+    (read : ((e.world n).state u).getBlockEpoch root = .ok epoch) :
+    ((e.world k).state u).getBlockEpoch root = .ok epoch := by
+  unfold Store.getBlockEpoch at read ⊢
+  simp only [bind_ok_iff] at read
+  obtain ⟨block, found, rest⟩ := read
+  rw [Store.block_ok_iff.mpr (e.blocks_of_le later (Store.block_ok_iff.mp found))]
+  exact rest
+
 /-- An ancestor test of a store holds at every later event. -/
 theorem Execution.isAncestor_of_le {ν κ : Type*} [DecidableEq ν] {checks : SignatureChecks}
     {sources : BlockSources preset fork} {signed : Message preset fork → Set (ν × κ)}

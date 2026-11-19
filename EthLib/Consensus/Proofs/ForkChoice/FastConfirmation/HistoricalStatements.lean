@@ -209,9 +209,9 @@ An assumption on the run: the rule does not check the Byzantine stake of later w
 
 It buys each later window's margin over its adversary, with the reserve as the charge for exits.
 
-At `exitReserveNear` a theorem bounds those exits, so they are not assumed.
+At the near exit reserve a theorem bounds those exits, so they are not assumed.
 
-On minimal at `exitReserveNear`, it fails when exits run at full churn, even with no adversary. -/
+On minimal at the near exit reserve, it fails at full churn of exits, even with no adversary. -/
 def SourceWindowReserveWith (store : Store preset fork) (head : Root)
     (source : BeaconState preset fork) (first last : Slot) (reserve : ℕ) : Prop :=
   ∀ low high participants, first ≤ low → low ≤ high → high ≤ last →

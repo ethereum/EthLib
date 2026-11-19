@@ -226,7 +226,7 @@ They hold a third of the margin on top of it.
 
 An assumption on the run: the rule checks neither bound.
 
-It buys the honest target count of a call, `HonestTargetVotes`.
+It buys the honest target count of a call.
 
 Limitation: runs whose adversary holds more than the threshold share so far are not covered.
 

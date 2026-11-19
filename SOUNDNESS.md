@@ -3339,7 +3339,7 @@ At the epoch's first slot, the root is of an earlier epoch, and the call's epoch
 The rule does not check the reserved count, the first-slot condition or the epoch bounds; they are assumptions on the run.
 Its record of an earlier call's target check, `TargetChecked`, includes coverage of honest heads by that call's origin.
 These theorems take that coverage and `startCovers`, the coverage by the start of the call's walk up to `time`, as premises.
-`Execution.confirmedRoot_covers` derives both for each call of a run, through its private call invariant.
+`Execution.confirmedRoot_covers` derives both for each call of a run, through its call invariant.
 `AcceptedRealizedRecent` and `AcceptedRealizedHead` restrict the runs in scope; the rule does not check them.
 Each accepted root has a realized justification at most one epoch before its own.
 An accepted root of an earlier epoch is realized as justified by the head's state.
@@ -3383,7 +3383,7 @@ The paper's conclusion is a seed whose unrealized justification is the target or
 The premise also allows two honest stores that collide, since the seed reads the call's block at the target root.
 Votes for the target of epoch E count until start(E+1) − 1, and the conclusion applies once a receiver's epoch is E + 2 or later.
 
-`Execution.confirmedRoot_covers` in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean` addresses Theorem 1 of [#1458](https://github.com/ethereum/EthLib/issues/1458).
+`Execution.confirmedRoot_covers` in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean` addresses Theorem 1 of [#1458](https://github.com/ethereum/EthLib/issues/1458).
 It takes consecutive calls of the rule by one honest validator, one per slot from `firstSlot`, run from the anchor store.
 The first slot's epoch is at least two and after the anchor state's epoch.
 The rule does not check this; it is an assumption on the run, and runs whose first call is earlier are not covered.
@@ -3394,7 +3394,8 @@ Each evidence alternative is relative to the anchor, so with enough churn since 
 The theorem covers executions whose honest stores verify signatures with BLS (`checks = .bls`).
 The specification's pulled-up head state processes slots with BLS checks, and a run under other checks can differ from it.
 The fork is Fulu or later and before Gloas.
-A private step of the same file shows that each call keeps a private call invariant, given the invariant at every earlier call.
+A private step of the same file shows that each call keeps the call invariant, given the invariant at every earlier call.
+The call invariant and the walk of a call are in `ConfirmedCalls.lean`.
 The step derives `QuorumDriftWithin` with `Execution.quorumDriftWithin`, and the honest target count with `Execution.honestTargetVotes_of_byzantineStakeAtMost`.
 So the endpoint takes neither as a premise.
 In their place it takes the parameter facts that the drift bound reads, among them `CapOrder` and `ActivationWithinMaxEffective`.
@@ -3436,7 +3437,7 @@ The rule stores that block, or a later root of the walk of `getAncestorRoots` fr
 That root and each root before it in the walk then pass `isOneConfirmed`, with the votes of the state of the observed justified checkpoint.
 The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` shows that the second walk is the part of the first walk after the root where the first walk stopped.
 
-A private step of `ConfirmedCalls.lean` shows that the roots of a walk are in the chain of the head.
+`Store.parentRoot_of_getAncestorRoots` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` shows that the roots of a walk are in the chain of the head.
 These theorems prove no safety on their own; `Execution.confirmedRoot_covers` above does, under its premises.
 `Store.onFastConfirmation_confirmedRoot` and `Store.getLatestConfirmed_eq_or` do not record every check of the rule.
 For the start they leave out the other checks that compare the epochs and the slots of the blocks.

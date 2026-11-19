@@ -105,8 +105,10 @@ Not yet released.
   With `Preset.InclusionDelayPositive` and two conditions on the anchor, the theorem derives the signed justification inside, through `Execution.justifiedHonestlySigned`.
   It derives `HeldStatesBeforeUpgrade` through `Execution.heldStatesBeforeUpgrade_of_bounded`, from its horizon and `HonestStoreEpochsBounded`, so it does not take it.
   It takes `CapOrder` and `ActivationWithinMaxEffective`, which it passes to `Execution.quorumDriftWithin`.
-  Its proof is a private step: one call keeps the private call invariant, given the invariant at every earlier call.
+  Its proof is a private step: one call keeps the call invariant, given the invariant at every earlier call.
   `CallAt` names one call in a run of calls by one validator.
+  `FastConfirmation/ConfirmedCalls.lean` holds the walk of a call and the call invariant; the helpers that the step reads are public in its `ConfirmedCalls` namespace.
+  `FastConfirmation/ConfirmedCallStep.lean` holds the step and the theorem.
   The step reads these new or newly public lemmas:
   - `Store.viable_of_ancestor` passes viability from a root to its ancestors before Gloas.
   - `Store.held_of_isAncestor` now gives the held block at the root of any ancestor node, not only of a pending one.
@@ -129,6 +131,13 @@ Not yet released.
   - `computeStartSlotAtEpoch_le_of_epoch_le`, `Store.getCurrentStoreEpoch_eq`, `Store.getCheckpointBlock_of_ancestor_epoch` and `Store.getCheckpointBlock_self` read the clock and the checkpoint reads of a store.
   - `Store.Reachable.anchor_le_finalized`, `Store.ForwardReachable.block_epoch_le_current`, `Store.ForwardReachable.justified_before_current`, `Store.ForwardReachable.unrealizedJustification_epoch_le` and `Store.ForwardReachable.votingSource_epoch_le` bound the epochs that a store holds.
   - `Execution.isAncestor_of_le` keeps an ancestor test at every later event, and `Execution.anchor_unrealized_le` bounds an honest store's unrealized justified epoch below by the anchor store's.
+    `Execution.getBlockEpoch_of_le` keeps the epoch read of a held block at every later event.
+  - `Store.parentRoot_of_getAncestorRoots` and `Store.isAncestor_terminal_of_getAncestorRoots` in `ForkChoice/AncestorRoots.lean` read a walk of roots.
+    Each root has the root before it as parent, or the terminal block; the head descends from it, and it descends from the terminal block.
+    `Store.isAncestor_parentRoot_of_isAncestor` passes descent from a known block to its parent.
+  - `Store.voteCountsFor_eq_false_of_slot_eq_current` and `Store.not_isOneConfirmed_of_slot_eq_current` show that, in a forward store, no vote counts for a block at the current slot, so it is not one-confirmed.
+  - `Store.unrealizedJustification_found` reads an unrealized justification as its stored entry.
+  - `isStartSlotAtEpoch_eq`, `isStartSlotAtEpoch_next_eq_false` and `computeStartSlotAtEpoch_of_isStartSlotAtEpoch` read the start test of a slot as its remainder by the epoch length.
 
 - `Execution.rootViable_of_checked_call` shows that the confirmed root of a call of the fast confirmation rule stays viable from the call up to `time` ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 3, for the confirmed root).
   At each up-to-date honest store, the root is in the filtered tree or below the justified block.
@@ -205,7 +214,7 @@ Not yet released.
 - `exitReserveNear` is the active source stake already scheduled to exit within three epochs of the source, the reach of a confirmation's near window.
   `Preset.SeedLookaheadAtLeastThree` asks for a seed lookahead of at least three epochs, so that activity is fixed three epochs ahead.
   `Execution.receiverWindowExitsNear_of_sourceOnParentChain` in `FastConfirmation/ReceiverExits.lean` reads it, since the near window reaches three epochs past the source.
-  `Preset.SeedLookaheadAtLeastThree.mainnet` and `Preset.SeedLookaheadAtLeastThree.minimal` show that both presets satisfy it.
+  `Preset.seedLookaheadAtLeastThree_mainnet` and `Preset.seedLookaheadAtLeastThree_minimal` show that both presets satisfy it.
   Under it, no other source stake leaves by then, in any later state that keeps the source's fixed activity.
   `exitReserve` keeps its value, and no theorem orders the two values.
   `SourceWindowReserveWith`, `WindowExitBoundWith` and `ReceiverWindowExitsNearWith` take the reserve as an argument.
