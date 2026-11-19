@@ -2056,6 +2056,112 @@ theorem glue_quorum (h : Setting config checks g split fin pulled anc counted V)
   simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append]
   exact ⟨.inl listed, flag⟩
 
+/-- The two costs of V keys are the fall of those active in C and the stake of the others. -/
+private theorem cV_split (h : Setting config checks g split fin pulled anc counted V) :
+    cV1 pulled counted V + cV2 pulled counted V =
+      ∑ v ∈ V.filter (· ∈ AC counted), ((eR pulled v : ℤ) - eC counted v) +
+        ∑ v ∈ VN counted V, (eR pulled v : ℤ) := by
+  classical
+  have sub : V ⊆ U pulled counted := fun v hv =>
+    Finset.mem_union_right _ (h.voting v hv).1
+  unfold cV1 cV2 VN
+  congr 1
+  · rw [← Finset.sum_filter]
+    refine Finset.sum_congr ?_ fun _ _ => rfl
+    ext v
+    simp only [Finset.mem_filter]
+    exact ⟨fun ⟨_, a, b⟩ => ⟨a, b⟩, fun ⟨a, b⟩ => ⟨sub a, a, b⟩⟩
+  · rw [← Finset.sum_filter]
+    refine Finset.sum_congr ?_ fun _ _ => rfl
+    ext v
+    simp only [Finset.mem_filter]
+    exact ⟨fun ⟨_, a, b⟩ => ⟨a, b⟩, fun ⟨a, b⟩ => ⟨sub a, a, b⟩⟩
+
+/-- D-5/D-6 (fall, V) from its per-key facts.
+
+The first fact is for a V key that is active in C: its fall and what C's floor leaves out.
+
+The floor leaves out the key's sync debits from the finalized block, and their rounding band.
+
+The second is for a V key that is not active in C: the same, and the charges that the sum names.
+
+The shared run from the finalized block adds the key's sync debits to the sum.
+
+C's tail adds its sync movement.
+-/
+private theorem stub_V_of (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {eventsF eventsC : List (BalanceEvent preset)}
+    (active : ∀ v ∈ V, v ∈ AC counted → (eR pulled v : ℤ) - eC counted v ≤
+      ((pinTerms config pulled anc fin).fall v.toNat : ℤ) +
+        ((eventsF.map (syncDebit v.toNat)).sum + syncF eventsC v.toNat) +
+          bandR (eventsF ++ eventsC) v.toNat)
+    (left : ∀ v ∈ VN counted V, (eR pulled v : ℤ) ≤
+      ((pinTerms config pulled anc fin).fall v.toNat +
+        ((eventsF.map (syncDebit v.toNat)).sum + syncF eventsC v.toNat) +
+        bandR (eventsF ++ eventsC) v.toNat + exitQ tailC v.toNat +
+        (if (pinTerms config pulled anc fin).exitingB v.toNat = true then eR pulled v else 0) +
+        (if (pinTerms config pulled anc fin).lateB v.toNat = true then eR pulled v else 0) : ℕ)) :
+    cV1 pulled counted V + cV2 pulled counted V ≤
+      ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) +
+        (∑ v ∈ V, ((eventsF.map (syncDebit v.toNat)).sum + syncF eventsC v.toNat)) +
+        (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
+        (∑ v ∈ (VN counted V), exitQ tailC v.toNat) +
+        (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true,
+          eR pulled v) +
+        (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true,
+          eR pulled v) : ℕ) := by
+  classical
+  rw [cV_split h]
+  -- the bound of each key that does not depend on how it left
+  let P : ValidatorIndex → ℕ := fun v =>
+    (pinTerms config pulled anc fin).fall v.toNat +
+      ((eventsF.map (syncDebit v.toNat)).sum + syncF eventsC v.toNat) +
+        bandR (eventsF ++ eventsC) v.toNat
+  let X : ValidatorIndex → ℕ := fun v =>
+    exitQ tailC v.toNat +
+      (if (pinTerms config pulled anc fin).exitingB v.toNat = true then eR pulled v else 0) +
+      (if (pinTerms config pulled anc fin).lateB v.toNat = true then eR pulled v else 0)
+  have first : ∑ v ∈ V.filter (· ∈ AC counted), ((eR pulled v : ℤ) - eC counted v) ≤
+      ∑ v ∈ V.filter (· ∈ AC counted), (P v : ℤ) := by
+    refine Finset.sum_le_sum fun v hv => ?_
+    obtain ⟨member, act⟩ := Finset.mem_filter.mp hv
+    have := active v member act
+    simp only [P]
+    push_cast at this ⊢
+    omega
+  have second : ∑ v ∈ VN counted V, (eR pulled v : ℤ) ≤
+      ∑ v ∈ VN counted V, ((P v : ℤ) + X v) := by
+    refine Finset.sum_le_sum fun v hv => ?_
+    have := left v hv
+    simp only [P, X]
+    push_cast at this ⊢
+    omega
+  have partition : ∑ v ∈ V, (P v : ℤ) =
+      ∑ v ∈ V.filter (· ∈ AC counted), (P v : ℤ) + ∑ v ∈ VN counted V, (P v : ℤ) := by
+    unfold VN
+    exact (Finset.sum_filter_add_sum_filter_not V (· ∈ AC counted) _).symm
+  have total : ∑ v ∈ V, (P v : ℤ) =
+      ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) +
+        (∑ v ∈ V, ((eventsF.map (syncDebit v.toNat)).sum + syncF eventsC v.toNat)) +
+        (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) : ℕ) := by
+    simp only [P]
+    push_cast
+    simp only [Finset.sum_add_distrib]
+  have exits : ∑ v ∈ VN counted V, (X v : ℤ) =
+      ((∑ v ∈ (VN counted V), exitQ tailC v.toNat) +
+        (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true,
+          eR pulled v) +
+        (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true,
+          eR pulled v) : ℕ) := by
+    simp only [X, Finset.sum_filter]
+    push_cast
+    simp only [Finset.sum_add_distrib]
+  have split : ∑ v ∈ VN counted V, ((P v : ℤ) + X v) =
+      ∑ v ∈ VN counted V, (P v : ℤ) + ∑ v ∈ VN counted V, (X v : ℤ) := Finset.sum_add_distrib
+  push_cast at total exits ⊢
+  omega
+
 /-- D-5/D-6 (fall, V): the fall of V keys, and the stake of V keys that left C's active set. -/
 theorem stub_V (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
