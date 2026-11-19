@@ -781,6 +781,24 @@ def bandR (events : List (BalanceEvent preset)) (v : ℕ) : ℕ :=
   if 0 < ((events.filter (·.source = .sync)).map (keyDebit v)).sum then
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1 else 0
 
+/-- A quantity of the sync events, summed over all events with the others at zero. -/
+private theorem sum_map_sync (events : List (BalanceEvent preset))
+    (k : BalanceEvent preset → ℕ) :
+    (events.map fun e => if e.source = .sync then k e else 0).sum =
+      ((events.filter (·.source = .sync)).map k).sum := by
+  induction events with
+  | nil => rfl
+  | cons e rest ih =>
+    by_cases sync : e.source = .sync
+    · simp [sync, ih]
+    · simp [sync, ih]
+
+/-- The sync debits of a key over a list of events are the debits of its sync events. -/
+private theorem sum_syncDebit_eq (events : List (BalanceEvent preset)) (v : ℕ) :
+    (events.map (syncDebit v)).sum =
+      ((events.filter (·.source = .sync)).map (keyDebit v)).sum :=
+  sum_map_sync events (keyDebit v)
+
 /-- The key's effective balance when its exit starts on a run, or 0.
 
 It is the amount of the key's departure charge, which reads the effective balance at the exit call.
@@ -1913,6 +1931,253 @@ private theorem slashed_floorC (h : Setting config checks g split fin pulled anc
       (Run.nil : Run config checks ⟨fork, split⟩ ⟨fork, split⟩) electra
   rw [← same]
   omega
+
+/-- A state of the balance path of a run is the end of a prefix of the run.
+
+The state inside a slot step comes after the epoch transition and before the upgrades.
+
+It is the end of the step, since no fork upgrade runs when the fork does not rise. -/
+private theorem balancePath_endpoint {x m y : ForkedBeaconState preset}
+    (rp : Run config checks x m) (rest : Run config checks m y) (back : y.fork ≤ x.fork)
+    {p : ForkedBeaconState preset} (member : p ∈ rp.balancePath) :
+    ∃ (r1 : Run config checks x p) (r2 : Run config checks p y),
+      r1.append r2 = rp.append rest := by
+  rcases PinSplit.Run.mem_balancePath_split rp member with
+    ⟨rq, rest', eq⟩ | ⟨q, n, rq, ok, rest', adv, eq, -, hp, up⟩
+  · subst eq
+    exact ⟨rq, rest'.append rest, Run.append_assoc _ _ _⟩
+  · subst eq
+    have order : n.fork ≤ q.fork :=
+      Nat.le_trans (fork_le_of_chainSteps rest'.chainSteps)
+        (Nat.le_trans (fork_le_of_chainSteps rest.chainSteps)
+          (Nat.le_trans back (fork_le_of_chainSteps rq.chainSteps)))
+    have same := processUpgrades_eq_of_fork_le up order
+    have pn : p = n := hp.trans same.symm
+    subst pn
+    exact ⟨rq.snoc (Step.slot ok), rest'.append rest, Run.append_assoc _ _ _⟩
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The balance of a key at every prefix end of C's run is above `floor`.
+
+The run is C's from the finalized block, and `floor` is below what the potential floor gives.
+
+The potential floor is `FloorTrace.run_potential_floor`, read at the end of each prefix.
+
+The guards are `floor_guards`, with the exit guard `retained` and the pass rate `pass`.
+
+The step `arith` is the arithmetic that fits the closed form of the potential floor to `floor`.
+
+It holds for each epoch count up to C's.
+
+It also holds for each debit that is at most the key's sync and partial debits over the run.
+
+The effective balance of the key at the end of a prefix is then at least a least value.
+
+That value is the least of its effective balance and its cap at the finalized block.
+
+And of `floor` rounded down to an increment. -/
+private theorem cfloor_endpoint (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    (clean : ∀ w, counted.validators.data[i.toNat]? = some w → w.slashed = false)
+    (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
+      (before.snoc step).append after = fromFin.append tailC → ∀ w,
+      n.state.validators.data[i.toNat]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat)
+    (slack ρn ρd floor : ℕ)
+    (start : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
+      actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat + slack)
+    (pass : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
+      (before.snoc step).append after = fromFin.append tailC → ∀ evs,
+      step.balanceEvents = .ok evs →
+      (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd)
+    (arith : ∀ a D k : ℕ,
+      k ≤ (getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat →
+      D ≤ (events.map (syncDebit i.toNat)).sum + (events.map (floorPartialDebit i)).sum →
+      (ρd - ρn * k) * (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+          (withdrawalMaxEffectiveBalance preset fork val).toNat +
+        (preset.downwardBand + slack)) ≤ ρd * (a + D + (preset.downwardBand + slack)) →
+      floor ≤ a)
+    {z : ForkedBeaconState preset} (rp : Run config checks ⟨fork, fin⟩ z)
+    (rest : Run config checks z ⟨fork, counted⟩) (cut : rp.append rest = fromFin.append tailC) :
+    min (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+        (min (withdrawalMaxEffectiveBalance preset fork val).toNat
+          (floor - floor % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
+      effectiveAt z i.toNat := by
+  obtain ⟨toFin⟩ := h.toFin
+  have forkEnd : ∀ {p : ForkedBeaconState preset} (r2 : Run config checks p ⟨fork, counted⟩),
+      p.fork < .glamsterdam := fun r2 =>
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
+  -- the balance at the end of each prefix of the run is above `floor`
+  have endpointFloor : ∀ {p : ForkedBeaconState preset} (r1 : Run config checks ⟨fork, fin⟩ p)
+      (r2 : Run config checks p ⟨fork, counted⟩), r1.append r2 = fromFin.append tailC →
+      floor ≤ actualBalanceAt p i.toNat := by
+    intro p r1 r2 whole
+    have early := forkEnd r2
+    obtain ⟨pFork, pState⟩ := p
+    have sameFork : pFork = fork := Fork.ctorIdx_injective
+      (Nat.le_antisymm (fork_le_of_chainSteps r2.chainSteps)
+        (fork_le_of_chainSteps r1.chainSteps))
+    obtain rfl : fork = pFork := sameFork.symm
+    have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
+    simp only at order
+    have endEpoch : (getCurrentEpoch pState).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
+      have := h.near
+      omega
+    have nonDecreasing := UInt64.le_iff_toNat_le.mp
+      (currentEpoch_le_of_chainSteps r1.chainSteps)
+    simp only at nonDecreasing
+    obtain ⟨before, beforeOk, isPrefix⟩ := Run.balanceEvents_prefix r1 r2
+      (getCurrentEpoch pulled).toNat events (by rw [whole]; exact replayed)
+    obtain ⟨positive, guards⟩ := floor_guards h (zs := fin) (y := pState) Run.nil endEpoch
+    have cleanP : ∀ w, pState.validators.data[i.toNat]? = some w → w.slashed = false := by
+      intro w found
+      cases flag : w.slashed
+      · rfl
+      · obtain ⟨u, foundU, marked⟩ := r2.slashedPersistence i.toNat w found flag
+        have := clean u foundU
+        simp [marked] at this
+    obtain ⟨D, split, closed⟩ := FloorTrace.run_potential_floor toFin r1 h.genesis h.caps
+      h.delay early h.fulu h.bands (getCurrentEpoch pulled).toNat endEpoch i val initial cleanP
+      _ positive
+      (fun before' step after cut' w found => by
+        have whole' : (before'.snoc step).append (after.append r2) = fromFin.append tailC := by
+          rw [Run.append_assoc, cut', whole]
+        exact ⟨retained before' step (after.append r2) whole' w found,
+          guards before' step after⟩)
+      beforeOk slack ρn ρd start
+      (fun before' step after cut' evs ok => by
+        have whole' : (before'.snoc step).append (after.append r2) = fromFin.append tailC := by
+          rw [Run.append_assoc, cut', whole]
+        exact pass before' step (after.append r2) whole' evs ok)
+    have splitDebit : (before.map (floorPenaltyDebit i.toNat)).sum =
+        (before.map (penaltyDebit i.toNat)).sum + (before.map (syncDebit i.toNat)).sum := by
+      rw [← List.sum_map_add]
+      rfl
+    obtain ⟨rest', rfl⟩ := isPrefix
+    have syncSum : ((before ++ rest').map (syncDebit i.toNat)).sum =
+        (before.map (syncDebit i.toNat)).sum + (rest'.map (syncDebit i.toNat)).sum := by
+      simp only [List.map_append, List.sum_append]
+    have partialSum : ((before ++ rest').map (floorPartialDebit i)).sum =
+        (before.map (floorPartialDebit i)).sum + (rest'.map (floorPartialDebit i)).sum := by
+      simp only [List.map_append, List.sum_append]
+    have window : (getCurrentEpoch pState).toNat - (getCurrentEpoch fin).toNat ≤
+        (getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat :=
+      Nat.sub_le_sub_right order _
+    exact arith _ D _ window (by omega) closed
+  have pathEndpoint : ∀ {p : ForkedBeaconState preset}, p ∈ rp.balancePath →
+      ∃ (r1 : Run config checks ⟨fork, fin⟩ p) (r2 : Run config checks p ⟨fork, counted⟩),
+        r1.append r2 = fromFin.append tailC := fun member => by
+    obtain ⟨r1, r2, whole⟩ := balancePath_endpoint rp rest (Nat.le_refl _) member
+    exact ⟨r1, r2, whole.trans cut⟩
+  have inside : i.toNat < fin.validators.data.size := (Array.getElem?_eq_some_iff.mp initial).1
+  refine PinSplit2.Run.effective_floor_rounded rp (forkEnd rest) h.fulu i.toNat inside floor
+    (withdrawalMaxEffectiveBalance preset fork val).toNat ?_ ?_
+  · intro p member
+    obtain ⟨r1, r2, whole⟩ := pathEndpoint member
+    exact endpointFloor r1 r2 whole
+  · intro p member
+    obtain ⟨r1, r2, -⟩ := pathEndpoint member
+    obtain ⟨w, found, mono⟩ := r1.validatorCap_mono h.caps.activation h.caps.compounding
+      (forkEnd r2) i.toNat val initial
+    simpa [PinSplit2.capAt, found] using UInt64.le_iff_toNat_le.mp mono
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key's effective balance on C's run is above the floor of its fall.
+
+The run starts at the finalized block, and the bound holds at each state of it.
+
+It is above that floor less the key's sync debits and their band.
+
+The floor starts from the smaller of the key's balance and its cap at the finalized block.
+
+It falls by what `fall` charges, in `X`: the leak and the gain over the depth, and the partials.
+
+If the test of `fall` holds, the balance stays within a band of the envelope.
+
+Then the effective balance stays at its finalized value, by `stay`.
+
+Otherwise the floor is rounded down to an increment, by `cfloor_endpoint`.
+
+The hypothesis `margin` fits the closed form of the potential floor to the floor of the fall.
+
+The hypothesis `stay` keeps the effective balance at its finalized value if the test holds. -/
+private theorem floorC_at (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    (clean : ∀ w, counted.validators.data[i.toNat]? = some w → w.slashed = false)
+    (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
+      (before.snoc step).append after = fromFin.append tailC → ∀ w,
+      n.state.validators.data[i.toNat]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat)
+    (base0 X low ebUp finEB floorC : ℕ)
+    (hbase0 : base0 = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+      (withdrawalMaxEffectiveBalance preset fork val).toNat)
+    (hlow : low = base0 - X)
+    (hfin : finEB = effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+    (hfloorC : floorC = if max ebUp base0 ≤ low + preset.downwardBand then finEB
+      else min finEB (low - low % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
+    {z : ForkedBeaconState preset} (rp : Run config checks ⟨fork, fin⟩ z)
+    (rest : Run config checks z ⟨fork, counted⟩) (cut : rp.append rest = fromFin.append tailC)
+    (margin : ∃ slack ρn ρd : ℕ,
+      effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
+        actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat + slack ∧
+      (∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+        (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
+        (before.snoc step).append after = fromFin.append tailC → ∀ evs,
+        step.balanceEvents = .ok evs →
+        (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd) ∧
+      ∀ a D k : ℕ, k ≤ (getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat →
+        D ≤ (events.map (syncDebit i.toNat)).sum + (events.map (floorPartialDebit i)).sum →
+        (ρd - ρn * k) * (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+            (withdrawalMaxEffectiveBalance preset fork val).toNat +
+          (preset.downwardBand + slack)) ≤ ρd * (a + D + (preset.downwardBand + slack)) →
+        low - (events.map (syncDebit i.toNat)).sum ≤ a)
+    (stay : max ebUp base0 ≤ low + preset.downwardBand →
+      finEB ≤ effectiveAt z i.toNat + (events.map (syncDebit i.toNat)).sum +
+        bandR events i.toNat) :
+    floorC ≤ effectiveAt z i.toNat + (events.map (syncDebit i.toNat)).sum +
+      bandR events i.toNat := by
+  obtain ⟨slack, ρn, ρd, start, pass, arith⟩ := margin
+  have eff := cfloor_endpoint h fromFin tailC replayed i val initial clean retained slack ρn ρd
+    (low - (events.map (syncDebit i.toNat)).sum) start pass arith rp rest cut
+  have incPos := h.bands.1
+  have bandEq : bandR events i.toNat = if 0 < (events.map (syncDebit i.toNat)).sum then
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1 else 0 := by
+    unfold bandR
+    rw [← sum_syncDebit_eq]
+  have lowLe : low ≤ (withdrawalMaxEffectiveBalance preset fork val).toNat := by
+    have := Nat.min_le_right (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+      (withdrawalMaxEffectiveBalance preset fork val).toNat
+    omega
+  rw [hfloorC]
+  split
+  · next test => exact stay test
+  · rw [← hfin] at eff
+    have lowMod := Nat.mod_lt low incPos
+    have lowModLe := Nat.mod_le low preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    rcases Nat.eq_zero_or_pos (events.map (syncDebit i.toNat)).sum with zero | positive
+    · have same : low - (events.map (syncDebit i.toNat)).sum = low := by omega
+      rw [same] at eff
+      have noBand : bandR events i.toNat = 0 := by
+        rw [bandEq]
+        simp [zero]
+      omega
+    · have mod := Nat.mod_lt (low - (events.map (syncDebit i.toNat)).sum) incPos
+      have band : bandR events i.toNat =
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1 := by
+        rw [bandEq]
+        simp [positive]
+      omega
 
 /-- If `X * S * b + K * a * b ≤ K * a * X`, then the floors `q` and `P` of `X` over `a` and `b`
 satisfy `q * S ≤ P * K`. -/
@@ -4832,17 +5097,9 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
 private theorem syncF_eq (events : List (BalanceEvent preset)) (v : ℕ) :
     syncF events v = (events.map (syncCredit v)).sum +
       (events.map (syncDebit v)).sum := by
-  induction events with
-  | nil => simp [syncF]
-  | cons e rest ih =>
-    unfold syncF at ih ⊢
-    by_cases sync : e.source = .sync
-    · simp only [List.filter_cons, sync, decide_true, ↓reduceIte, List.map_cons, List.sum_cons,
-        syncCredit, syncDebit, keyCredit, keyDebit] at ih ⊢
-      omega
-    · simp only [List.filter_cons, sync, decide_false, Bool.false_eq_true, ↓reduceIte,
-        List.map_cons, List.sum_cons, syncCredit, syncDebit] at ih ⊢
-      omega
+  unfold syncF
+  rw [← sum_syncDebit_eq events v]
+  exact congrArg (· + ((events.map (syncDebit v)).sum)) (sum_map_sync events (keyCredit v)).symm
 
 /-- S1 (syncSeats): every seat, weight 3 for V, K4 and K5 and 1 for K6.
 
