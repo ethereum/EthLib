@@ -303,14 +303,78 @@ private theorem Execution.justifiedState_of_anchor {anchor : Store preset fork}
   rw [same]
   simp [Store.checkpointState, kept, pure, Except.pure]
 
-/-- Before Gloas, an up-to-date honest store holds the state of its justified checkpoint.
+/-- From Gloas, a walk that reaches a full node passes only full nodes whose payload is verified.
+-/
+private theorem getHeadFrom_full_verified {store : Store preset fork} (gloas : .glamsterdam ≤ fork)
+    {tally : Except ForkChoiceError VoteTally} {nodes : List ForkChoiceNode} :
+    ∀ {start head : ForkChoiceNode},
+      (start.payloadStatus = .full → store.isPayloadVerified gloas start.root = true) →
+      store.getHeadFrom config tally nodes start = .ok head →
+      head.payloadStatus = .full → store.isPayloadVerified gloas head.root = true := by
+  intro start
+  induction start using Store.getHeadFrom.induct store with
+  | _ start ih =>
+  intro head startVerified walk full
+  rw [Store.getHeadFrom] at walk
+  cases found : store.heaviestChild config tally nodes start with
+  | error e => simp [found, bind, Except.bind] at walk
+  | ok result =>
+  cases result with
+  | none =>
+    simp [found, bind, Except.bind, pure, Except.pure] at walk
+    exact walk ▸ startVerified (walk ▸ full)
+  | some child =>
+  simp only [found, bind, Except.bind] at walk
+  split at walk
+  swap
+  · cases walk
+  refine ih child ‹_› (fun childFull => ?_) walk full
+  -- A full child is the full node of a pending start, which the store has only once verified.
+  obtain ⟨children, weighted, childrenOk, weightedOk, choice⟩ := Store.heaviestChild_eq found
+  obtain ⟨key, mem, -⟩ := chooseHeaviest_some choice
+  obtain ⟨source, member, pair⟩ := mapM_ok_mem weightedOk _ mem
+  obtain ⟨rfl, -⟩ := Store.weighNode_ok_iff.mp pair
+  have inChildren := (List.mem_filter.mp member).1
+  by_cases pending : start.payloadStatus = .pending
+  · rw [Store.getNodeChildren_of_pending gloas pending, Except.ok.injEq] at childrenOk
+    subst childrenOk
+    simp only [List.mem_cons] at inChildren
+    rcases inChildren with same | rest
+    · rw [same] at childFull
+      cases childFull
+    · split at rest
+      · rename_i verified
+        rw [List.mem_singleton.mp rest]
+        exact verified
+      · cases rest
+  · have := ((Store.mem_getNodeChildren_of_gloas gloas pending childrenOk).mp inChildren).1
+    rw [childFull] at this
+    cases this
+
+/-- From Gloas, a full head of a store is a node whose payload the store has verified. -/
+private theorem isPayloadVerified_of_getHead {store : Store preset fork}
+    (gloas : .glamsterdam ≤ fork) {head : ForkChoiceNode}
+    (found : store.getHead config = .ok head) (full : head.payloadStatus = .full) :
+    store.isPayloadVerified gloas head.root = true := by
+  unfold Store.getHead at found
+  cases tree : store.getFilteredNodeTree config with
+  | error e => simp [tree, bind, Except.bind] at found
+  | ok nodes =>
+  simp only [tree, bind, Except.bind] at found
+  split at found
+  · simp only [pure, Except.pure, Except.ok.injEq] at found
+    subst found
+    cases full
+  · exact getHeadFrom_full_verified gloas (fun pending => by cases pending) found full
+
+/-- An up-to-date honest store holds the state of its justified checkpoint.
 
 Otherwise bounded honest stores collide, or a store's finalized checkpoints give evidence.
 
 The evidence is that of direct safety, relative to the anchor. -/
 private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
-    (preGloas : fork < .glamsterdam) {last : ℕ} (admitted : BlocksAdmitted e 0 Δ last)
+    {last : ℕ} (admitted : BlocksAdmitted e 0 Δ last)
     (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e last)
     (votes : ValidatedDutyVotes (e := e) last) {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -444,14 +508,46 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   -- So the head reaches the receiver by arrival, with its checkpoint blocks.
   obtain ⟨_, finalized, _, finalizedKnown, _, _⟩ := Store.isAncestor_of_getCheckpointBlock
     (chain w hw arrival arrival (le_refl _) arrivalBound)
-  rcases e.blocks_of_partiallySynchronous sync preGloas admitted anchored start hv hw
+  rcases e.blocks_of_partiallySynchronous_of_anchorSlot sync (UInt64.le_of_eq anchorSlot) admitted
+      anchored start hv hw
       (by simpa using late) arrivalBound arrivalCurrent ⟨finalized, finalizedKnown⟩
       (dataRoot ▸ headKnown) headCheckpoint with ⟨votedKnown, transport⟩ | collision
   swap
   · exact absurd collision noCollision
   have receiverRead := transport _ _ finalLeTarget targetRead
-  rcases vote.accepted_at_next_slot preGloas anchored start hv hw committees dataSlot dataEpoch
-      nextOk arrivalSlot arrivalBound nBound votedKnown notFuture receiverRead with
+  -- From Gloas the vote's index names the payload of its head, which then reaches the receiver.
+  have payload : ∀ gloas : .glamsterdam ≤ fork,
+      ((e.world arrival).state w).validatePayloadVote gloas attestation headBlock = .ok () := by
+    intro gloas
+    obtain ⟨hd, hb, -, state, hdOk, hbKnown, -, -, made⟩ := vote.honestData
+    rw [headOk, Except.ok.injEq] at hdOk
+    subst hdOk
+    rw [headKnown, Option.some.injEq] at hbKnown
+    subst hbKnown
+    obtain ⟨indexOk, -, slotEq, rootEq, -, -⟩ := getAttestationData_eq_ok_iff.mp made
+    by_cases same : headBlock.slot = state.slot
+    · rw [attestationDataIndex_of_glamsterdam_of_eq gloas same, Except.ok.injEq] at indexOk
+      simp [Store.validatePayloadVote, ← indexOk, pure, Except.pure]
+    rw [attestationDataIndex_of_glamsterdam_of_ne gloas same] at indexOk
+    cases status : head.payloadStatus <;> rw [status] at indexOk <;>
+      simp only [Except.ok.injEq, reduceCtorEq] at indexOk
+    · simp [Store.validatePayloadVote, ← indexOk, pure, Except.pure]
+    · -- A full head has its payload verified at the voter, and so at the receiver.
+      have verified := isPayloadVerified_of_getHead gloas headOk status
+      rw [← rootEq] at verified
+      obtain ⟨st, stFound, -⟩ :=
+        (forward w hw arrival).reachable.blockStatesFromParents votedKnown
+      rcases e.payloadVerified_of_partiallySynchronous sync gloas (UInt64.le_of_eq anchorSlot)
+          anchored hv hw (start v hv) (start w hw) (by simpa using late) arrivalBound
+          (fun _ _ mem accepted => arrivalCurrent.2 _ (.envelope mem accepted)) verified
+          ⟨st, stFound⟩ with delivered | collision
+      swap
+      · exact absurd collision noCollision
+      have slotNe : headBlock.slot ≠ attestation.data.slot := slotEq ▸ same
+      simp [Store.validatePayloadVote, ← indexOk, slotNe, delivered, pure, Except.pure]
+  rcases vote.accepted_at_next_slot_of_payloadVote anchored start hv hw committees dataSlot
+      dataEpoch nextOk arrivalSlot arrivalBound nBound votedKnown notFuture payload
+      receiverRead with
     ⟨⟨after, accepted⟩, reads⟩ | collision
   swap
   · exact absurd collision noCollision
@@ -502,7 +598,7 @@ theorem Execution.honestHeadsExist_or_evidence {Δ : ℕ} (sync : e.Synchronous 
     HonestCollision (e := e) last ∨
     HistoricalDirectSafetyEvidence (e := e) pre last := by
   -- The store holds the state of its justified checkpoint, through an honest vote for it.
-  rcases e.justifiedState_or_evidence sync slots preGloas admitted fits prompt votes anchored start
+  rcases e.justifiedState_or_evidence sync slots admitted fits prompt votes anchored start
       anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre heldEarly
       enough terminal with states | alternative
   · left
