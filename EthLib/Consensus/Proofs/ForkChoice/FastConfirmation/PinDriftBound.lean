@@ -1146,6 +1146,46 @@ private theorem creditScan_append (blockP slotP : BalanceSource → Bool) (v hig
     · omega
     · exact ih
 
+/-- The net rise of a key in one step.
+
+A block step counts the rise of the key's balance across it, and a slot step counts nothing. -/
+private def stepNet (v : ℕ) {x y : ForkedBeaconState preset} (step : Step config checks x y) : ℕ :=
+  match step with
+  | .block .. => actualBalanceAt y v - actualBalanceAt x v
+  | .slot _ => 0
+
+/-- The net credits to the key in the block steps of a run.
+
+A block step counts the rise of the key's balance across the whole step.
+
+A credit that the same step takes back counts for nothing.
+
+The steps count from the one whose start epoch is at most `high + 1`, as in `Run.balanceEvents`. -/
+private def netScan (v high : ℕ) {x : ForkedBeaconState preset} :
+    {y : ForkedBeaconState preset} → Run config checks x y → ℕ
+  | _, .nil => 0
+  | _, .snoc (middle := m) pre step =>
+    if (getCurrentEpoch m.state).toNat ≤ high + 1 then
+      netScan v high pre + stepNet v step
+    else netScan v high pre
+
+/-- The net credits to a key in the block steps of a run, after one more step. -/
+private theorem netScan_snoc (v high : ℕ) {x m y : ForkedBeaconState preset}
+    (pre : Run config checks x m) (step : Step config checks m y) :
+    netScan v high (pre.snoc step) =
+      if (getCurrentEpoch m.state).toNat ≤ high + 1 then
+        netScan v high pre + stepNet v step
+      else netScan v high pre := rfl
+
+/-- A run with no step has no net credits. -/
+private theorem netScan_nil (v high : ℕ) {x : ForkedBeaconState preset} :
+    netScan v high (Run.nil : Run config checks x x) = 0 := rfl
+
+/-- A run with no step has no credits to scan. -/
+private theorem creditScan_nil_fst (blockP slotP : BalanceSource → Bool) (v high : ℕ)
+    {x : ForkedBeaconState preset} :
+    (creditScan blockP slotP v high (Run.nil : Run config checks x x)).1 = 0 := rfl
+
 /-- One slashing credits at most the slashed key's effective balance over the quotient.
 
 The credits go to the proposer and the whistleblower together. -/
@@ -1881,31 +1921,35 @@ private theorem balance_le_pathCredits (i : ℕ) :
       simp only [pathCredits]
       omega
 
-/-- A step raises the balance of a key by at most its epoch rewards and its other credits. -/
+/-- A step raises the balance of a key by at most its epoch rewards and its other credits.
+
+A block step counts the rise of the key's balance across the whole step.
+
+A slot step counts the credits of its events from the sources other than the epoch rewards. -/
 private theorem step_balance_le {m n : ForkedBeaconState preset} (step : Step config checks m n)
     (early : n.fork < .glamsterdam) (i : ℕ) :
     actualBalanceAt n i ≤ actualBalanceAt m i + epochRewards i step +
-      stepCredit (fun _ => true) (fun s => decide (s ≠ .rewards)) i step := by
-  obtain ⟨events, ok⟩ := step.balanceEvents_ok early
-  have epochs : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch n.state).toNat :=
-    UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
-  have run : (Run.nil.snoc step).balanceEvents (getCurrentEpoch n.state).toNat = .ok events := by
-    simp [Run.balanceEvents, show (getCurrentEpoch m.state).toNat ≤
-      (getCurrentEpoch n.state).toNat + 1 by omega, ok]
-  have cover := coverage_run (Run.nil.snoc step) early (getCurrentEpoch n.state).toNat
-    (Nat.le_succ _) run false i
-  have ends := Run.balancePath_ends (Run.nil.snoc step)
-  have rise := balance_le_pathCredits i _ m n ends.1 ends.2
-  simp only [coveragePath, Bool.false_eq_true, ↓reduceIte, coverageDelta] at cover
-  have base : actualBalanceAt n i ≤ actualBalanceAt m i + (events.map (keyCredit i)).sum :=
-    le_trans rise (Nat.add_le_add_left cover _)
+      stepNet i step + stepCredit (fun _ => false) (fun s => decide (s ≠ .rewards)) i step := by
   cases step with
   | block engine signed due okb =>
-    simp only [epochRewards, stepCredit, ok, Except.toOption, Option.getD_some,
-      List.filter_true] at base ⊢
+    simp only [epochRewards, stepNet]
     omega
   | slot oks =>
-    simp only [epochRewards, stepCredit, ok, Except.toOption, Option.getD_some] at base ⊢
+    obtain ⟨events, ok⟩ := (Step.slot oks : Step config checks m n).balanceEvents_ok early
+    have epochs : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch n.state).toNat :=
+      UInt64.le_iff_toNat_le.mp (Step.slot oks : Step config checks m n).chainStep.currentEpoch_le
+    have run : (Run.nil.snoc (Step.slot oks : Step config checks m n)).balanceEvents
+        (getCurrentEpoch n.state).toNat = .ok events := by
+      simp [Run.balanceEvents, show (getCurrentEpoch m.state).toNat ≤
+        (getCurrentEpoch n.state).toNat + 1 by omega, ok]
+    have cover := coverage_run (Run.nil.snoc (Step.slot oks : Step config checks m n)) early
+      (getCurrentEpoch n.state).toNat (Nat.le_succ _) run false i
+    have ends := Run.balancePath_ends (Run.nil.snoc (Step.slot oks : Step config checks m n))
+    have rise := balance_le_pathCredits i _ m n ends.1 ends.2
+    simp only [coveragePath, Bool.false_eq_true, ↓reduceIte, coverageDelta] at cover
+    have base : actualBalanceAt n i ≤ actualBalanceAt m i + (events.map (keyCredit i)).sum :=
+      le_trans rise (Nat.add_le_add_left cover _)
+    simp only [epochRewards, stepNet, stepCredit, ok, Except.toOption, Option.getD_some] at base ⊢
     have split := List.sum_map_filter_add_sum_map_filter_not
       (fun e : BalanceEvent preset => e.source = .rewards) (keyCredit i) events
     simp only [ne_eq] at split ⊢
@@ -1913,14 +1957,19 @@ private theorem step_balance_le {m n : ForkedBeaconState preset} (step : Step co
 
 /-- The bound on a key's balance along a run: its start, the epoch rewards, and its other credits.
 
-The epoch rewards are those of the epochs that the run ends, at the rate given by `E` and `P`. -/
+The epoch rewards are those of the epochs that the run ends, at the rate given by `E` and `P`.
+
+The other credits are the net rises of its block steps and the credits of its slot steps.
+
+The slot-step credits leave out the epoch rewards. -/
 private def creditBound {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (i high E P : ℕ) : ℕ :=
   actualBalanceAt x i +
     ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
       (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
         (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) +
-    (creditScan (fun _ => true) (fun s => decide (s ≠ .rewards)) i high tail).1
+    netScan i high tail +
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high tail).1
 
 end Rewards
 
@@ -2026,7 +2075,7 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       fun _ _ _ _ _ _ z hz => by
         rw [Run.balancePath, List.mem_singleton] at hz
         subst hz
-        simp [creditBound]⟩
+        simp [creditBound, PinSplit.netScan_nil, PinSplit.creditScan_nil_fst]⟩
   | @snoc middle last pre step ih =>
     have middleEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
     obtain ⟨ihFloor, ihEnvelope, ihCeiling, ihCredit⟩ := ih middleEarly
@@ -2057,17 +2106,19 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       have ml : (getCurrentEpoch middle.state).toNat ≤ (getCurrentEpoch last.state).toNat :=
         UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
       have within : (getCurrentEpoch middle.state).toNat ≤ high + 1 := by omega
-      have scan := PinSplit.creditScan_snoc_fst (fun _ => true) (fun s => decide (s ≠ .rewards))
+      have scan := PinSplit.creditScan_snoc_fst (fun _ => false) (fun s => decide (s ≠ .rewards))
         i high pre step
-      simp only [within, ↓reduceIte] at scan
+      have net := PinSplit.netScan_snoc i high pre step
+      simp only [within, ↓reduceIte] at scan net
       have tailEq : creditBound (pre.snoc step) i high E P =
           creditBound pre i high E P +
             ((getCurrentEpoch last.state).toNat - (getCurrentEpoch middle.state).toNat) *
               (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
                 (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) +
-            PinSplit.stepCredit (fun _ => true) (fun s => decide (s ≠ .rewards)) i step := by
+            (PinSplit.stepNet i step +
+              PinSplit.stepCredit (fun _ => false) (fun s => decide (s ≠ .rewards)) i step) := by
         unfold creditBound
-        rw [scan]
+        rw [scan, net]
         generalize E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
           (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat = G
         have split : ((getCurrentEpoch last.state).toNat - (getCurrentEpoch x.state).toNat) * G =
