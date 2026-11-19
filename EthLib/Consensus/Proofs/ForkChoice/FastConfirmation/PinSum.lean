@@ -9185,6 +9185,120 @@ private theorem propN_segment_le (h : Setting config checks g split fin pulled a
     rw [creditScan_snoc_fst]
     split <;> simp [stepCredit]
 
+/-- The whole increments of aligned stakes are at most those of larger stakes on a larger set. -/
+private theorem stake_le_base {α : Type} {inc pq : ℕ} {P : Finset ℕ} {f : ℕ → ℕ} {A : Finset α}
+    {g : α → ℕ} (e : ℕ → ℕ) (incPos : 0 < inc) (inj : Set.InjOn g A)
+    (inside : ∀ a ∈ A, g a ∈ P) (le : ∀ a ∈ A, e (g a) ≤ f (g a)) (dvd : ∀ j, inc ∣ e j) :
+    pq * ((∑ a ∈ A, e (g a)) / inc) ≤ ∑ j ∈ P, f j / inc * pq := by
+  rw [← Finset.sum_image (f := e) inj]
+  have exact : ∑ j ∈ A.image g, e j = inc * ∑ j ∈ A.image g, e j / inc := by
+    rw [Finset.mul_sum]
+    exact Finset.sum_congr rfl fun j _ => (Nat.mul_div_cancel' (dvd j)).symm
+  rw [exact, Nat.mul_div_cancel_left _ incPos, Finset.mul_sum]
+  refine Nat.le_trans (Finset.sum_le_sum fun j member => ?_)
+    (Finset.sum_le_sum_of_subset (f := fun j => f j / inc * pq) fun j member => ?_)
+  · obtain ⟨a, inA, rfl⟩ := Finset.mem_image.mp member
+    rw [Nat.mul_comm]
+    exact Nat.mul_le_mul_right _ (Nat.div_le_div_right (le a inA))
+  · obtain ⟨a, inA, rfl⟩ := Finset.mem_image.mp member
+    exact inside a inA
+
+/-- The epoch bound of the pin's rate on the pulled total is at most the proposer credit.
+
+The proposer base pays the bound, and `attesterExcess` pays one more increment's rate. -/
+private theorem credit_arith {inc pi E T P A : ℕ} (incPos : 0 < inc) (hT : T = max inc E)
+    (hP : pi * (E / inc) ≤ P) (hA : 1 ≤ A) :
+    (324 * (pi * (T / inc)) + 216 * pi) / 896 ≤ P + A * pi := by
+  have one : T / inc ≤ E / inc + 1 := by
+    rw [hT]
+    rcases le_total inc E with h | h
+    · rw [max_eq_right h]; omega
+    · rw [max_eq_left h, Nat.div_self incPos]; exact Nat.le_add_left _ _
+  have mul : pi * (T / inc) ≤ pi * (E / inc) + pi := by
+    calc pi * (T / inc) ≤ pi * (E / inc + 1) := Nat.mul_le_mul_left _ one
+      _ = _ := by ring
+  have A1 : pi ≤ A * pi := Nat.le_mul_of_pos_left _ hA
+  refine Nat.div_le_of_le_mul ?_
+  nlinarith
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- C's proposer credits to any set of keys, with the sync part of the bound, are bounded.
+
+The bound is the proposer credit of each epoch of the window.
+
+The credits of each epoch are cut over the blocks.
+
+So the flag rewards of its epoch pass are not read. -/
+private theorem proposer_rewards_le (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (S : Finset ValidatorIndex) :
+    (∑ v ∈ S, propN tailC highC v.toNat) +
+        (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer ≤
+      (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).proposerCredit := by
+  obtain ⟨T, pulledOk⟩ := h.pulledTotal
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  have incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+    have := h.facts.incrementSize
+    omega
+  obtain ⟨B, hB⟩ : ∃ B, B = (324 * ((pinTerms config pulled anc fin).perIncrement *
+      (T.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) +
+        216 * (pinTerms config pulled anc fin).perIncrement) / 896 := ⟨_, rfl⟩
+  have cut := run_cuts_of_additive tailC h.early (fun _ => True)
+    (fun r => ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat highC
+      r).1) (fun _ => B)
+    (fun pre post _ => by simp only [creditScan_append, Finset.sum_add_distrib])
+    (fun _ _ _ _ => trivial)
+    (fun toM mid rest starts _ => by
+      rw [hB]
+      exact (Nat.le_div_iff_mul_le (by norm_num)).mpr
+        (propN_segment_le h highC S pulledOk toM mid rest starts))
+    (ix ⟨fork, split⟩ ⟨fork, counted⟩ + 1) (fun step member => steps_before_end tailC step member)
+  rw [List.map_const', List.sum_replicate, List.length_range, smul_eq_mul] at cut
+  have depth : ix ⟨fork, split⟩ ⟨fork, counted⟩ + 1 ≤ (pinTerms config pulled anc fin).depth := by
+    have fin' := UInt64.le_iff_toNat_le.mp h.finalized
+    have called := UInt64.le_iff_toNat_le.mp h.called
+    have near := h.near
+    show _ ≤ (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat
+    simp only [ix]
+    omega
+  have credit : B + (pinTerms config pulled anc fin).syncProposer ≤
+      (pinTerms config pulled anc fin).proposerCredit := by
+    obtain ⟨-, -, value⟩ := getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok pulledOk)
+    rw [hB]
+    simp only [pinTerms]
+    refine Nat.add_le_add_right (credit_arith incPos value ?_ ?_) _
+    · refine stake_le_base (g := UInt64.toNat) (fun j => balanceAt pulled j) incPos
+        (fun a _ b _ same => UInt64.toNat_inj.mp same) (fun a member => ?_)
+        (fun a _ => Nat.le_trans (Nat.le_add_right _ _) (le_max_left _ _)) fun j =>
+          Nat.dvd_of_mod_eq_zero (FloorTrace.effective_aligned
+            (toFin.append (fromFin.append toPulled)) h.genesis h.aligned j)
+      obtain ⟨w, found, active⟩ := (mem_getActiveValidatorIndices
+        (pulled.validators.bound h.early)).mp (List.mem_toFinset.mp member)
+      simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
+      have exit := UInt64.lt_iff_toNat_lt.mp active.2
+      have fin' := UInt64.le_iff_toNat_le.mp h.finalized
+      have called := UInt64.le_iff_toNat_le.mp h.called
+      exact mem_positions_filter config pulled anc fin found (by simp [found]; omega)
+    · have slots := h.twoSlots
+      have two : 2 ≤ (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := by
+        have := UInt64.le_iff_toNat_le.mp h.finalized
+        have := UInt64.le_iff_toNat_le.mp h.called
+        omega
+      -- The first of the credited keys' slots is one of the terms of `attesterExcess`.
+      iterate 4 refine Nat.le_trans ?_ (Nat.le_add_right _ _)
+      refine Nat.le_trans ?_ (Nat.le_add_left _ _)
+      iterate 3 refine Nat.le_trans ?_ (Nat.le_add_right _ _)
+      exact Nat.le_trans (by decide) (Nat.mul_le_mul two slots)
+  calc _ ≤ (ix ⟨fork, split⟩ ⟨fork, counted⟩ + 1) * B +
+        (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer :=
+      Nat.add_le_add_right cut _
+    _ ≤ (pinTerms config pulled anc fin).depth * B +
+        (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer :=
+      Nat.add_le_add_right (Nat.mul_le_mul_right _ depth) _
+    _ ≤ _ := by rw [← Nat.mul_add]; exact Nat.mul_le_mul_left _ credit
+
 /-- K5 (`exitingCredits` with `credits`): C's proposer credits to K5 keys, weight 3.
 
 The consolidation amounts are not here: `bud_consolidations` charges them, so they are added to the
