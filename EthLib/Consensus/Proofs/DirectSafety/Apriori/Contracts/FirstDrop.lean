@@ -518,6 +518,92 @@ private theorem penaltyDebit_le_floor (i : ℕ) (events : List (BalanceEvent pre
     (events.map (penaltyDebit i)).sum ≤ (events.map (floorPenaltyDebit i)).sum :=
   List.sum_le_sum fun e _ => by unfold floorPenaltyDebit; omega
 
+/-- At a state of a run from genesis, a key's effective balance is a whole number of increments. -/
+private theorem effective_aligned_at (run : Run config checks g x)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (aligned : MaxEffectiveBalancesAligned preset) (i : ℕ) :
+    effectiveAt x i % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
+  have whole := (run.invariant genesis.invariant).aligned aligned
+  cases found : x.state.validators.data[i]? with
+  | none => simp [effectiveAt, found]
+  | some v =>
+    have := congrArg UInt64.toNat (whole v (Array.mem_of_getElem? found))
+    simpa [effectiveAt, found, UInt64.toNat_mod] using this
+
+/-- A slot step keeps the effective balance of a key, or sets it at most to its balance.
+
+The update of the effective balances at an epoch's end is the only place that changes it. -/
+private theorem effective_origin_slot {f : Fork} {s t : BeaconState preset f}
+    (ok : advanceSlot config checks s = .ok t) (i : ℕ) (inside : i < s.validators.data.size)
+    (matched : t.balances.data.size = t.validators.data.size) :
+    effectiveAt ⟨f, t⟩ i = effectiveAt ⟨f, s⟩ i ∨
+      effectiveAt ⟨f, t⟩ i ≤ actualBalanceAt ⟨f, t⟩ i := by
+  have life := (registryLifecycle_advanceSlot ok).size_le
+  obtain ⟨next, cached, epoched, sum, cache, edge, rfl⟩ := advanceSlot_ok ok
+  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cache
+  have cases : ∀ c : BeaconState preset f, epochIfLast config checks next c = .ok epoched →
+      processEpoch config checks c = .ok epoched ∨ epoched = c := by
+    intro c edge
+    unfold epochIfLast at edge
+    split at edge
+    · exact .inl edge
+    · exact .inr (Except.ok.inj edge).symm
+  rcases cases _ edge with epoch | rfl
+  · obtain ⟨before, after, kept, updated, validators, balances⟩ := balanceDrift_epoch epoch
+    have sizes := (sameSizes_processEffectiveBalanceUpdates updated).1
+    have insideTail : i < epoched.validators.data.size := by
+      simpa using Nat.lt_of_lt_of_le inside life
+    have insideBefore : i < before.validators.data.size := by
+      rw [validators] at insideTail
+      omega
+    have found : before.validators.data[i]? = some before.validators.data[i] :=
+      Array.getElem?_eq_getElem insideBefore
+    have owned : before.balances.data[i]? = some before.balances.data[i] := by
+      have m : epoched.balances.data.size = epoched.validators.data.size := matched
+      rw [balances, validators] at m
+      exact Array.getElem?_eq_getElem (by omega)
+    obtain ⟨new, read, updatedOk⟩ :=
+      processEffectiveBalanceUpdates_effectiveBalance_eq updated found owned
+    have eNew : effectiveAt ⟨f, { epoched with slot := next }⟩ i = new.toNat := by
+      simp only [effectiveAt, validators, read, Option.map_some, Option.getD_some]
+    have bNew : actualBalanceAt ⟨f, { epoched with slot := next }⟩ i =
+        before.balances.data[i].toNat := by
+      simp only [actualBalanceAt, balances, owned, Option.map_some, Option.getD_some]
+    have keptS : effectiveAt ⟨f, before⟩ i = effectiveAt ⟨f, s⟩ i := kept i inside
+    rcases updatedEffectiveBalance_cases updatedOk with same | rounded
+    · left
+      rw [eNew, ← keptS, same]
+      simp [effectiveAt, found]
+    · right
+      rw [eNew, bNew, rounded, Base.Uint64.toNat_min, toNat_rounded]
+      exact Nat.le_trans (Nat.min_le_left _ _) (Nat.sub_le _ _)
+  · exact .inl rfl
+
+/-- A step keeps the effective balance of a key, or sets it at most to its balance. -/
+private theorem effective_origin_step {m n : ForkedBeaconState preset}
+    (step : Step config checks m n) (i : ℕ) (inside : i < m.state.validators.data.size)
+    (matched : n.state.balances.data.size = n.state.validators.data.size)
+    (fulu : .fusaka ≤ m.fork) (early : n.fork < .glamsterdam) :
+    effectiveAt n i = effectiveAt m i ∨ effectiveAt n i ≤ actualBalanceAt n i := by
+  cases step with
+  | block engine signed due ok =>
+    exact .inl (effectiveKept_processBlock (applySignedBlock_ok ok).2.1 i inside)
+  | slot ok =>
+    obtain ⟨next, advanced, upgraded⟩ := bind_ok_iff.mp ok
+    obtain rfl := processUpgrades_eq_of_early (forked := ⟨m.fork, next⟩) fulu early upgraded
+    exact effective_origin_slot advanced i inside matched
+
+/-- The effective balance at the end of a run is the one at its start, or was set by an update.
+
+The update is at the last state where it changed, which splits the run in two. -/
+private def EffectiveOrigin {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (i : ℕ) : Prop :=
+  effectiveAt y i = effectiveAt x i ∨
+    ∃ (m : ForkedBeaconState preset) (pre : Run config checks x m) (post : Run config checks m y),
+      pre.append post = tail ∧ effectiveAt y i = effectiveAt m i ∧
+        effectiveAt m i ≤ actualBalanceAt m i ∧
+        effectiveAt m i % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0
+
 /-- The floor of a branch from its start: its effective balance stays within the potential.
 
 The potential is the balance plus the debits that are no pass penalties.
@@ -587,7 +673,9 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
           last.high ≤ max bound (effectiveAt y i.toNat) ∧
             ∀ h, last.slashedHigh = some h → h ≤ bound) ∧
         (v.slashed = true → last.slashedHigh = none) ∧
-        PotentialFloor tail i v events := by
+        PotentialFloor tail i v events ∧
+        (MaxEffectiveBalancesAligned preset → .fusaka ≤ x.fork →
+          EffectiveOrigin tail i.toNat) := by
   have assignedStart : v.slashed = true → v.exitEpoch ≠ FAR_FUTURE_EPOCH := fun slashed =>
     run_slashed_exit_assigned shared genesis caps.activation caps.compounding
       (Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early) delay i.toNat v initial
@@ -606,7 +694,8 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
       omega
     refine ⟨⟨actualBalanceAt x i.toNat, 0, effectiveAt x i.toNat, none⟩,
       .nil, rfl, by simp, le_rfl, v, initial, capped, by simp, ?_,
-      fun bound atStart _ => ⟨atStart.trans (Nat.le_max_left _ _), nofun⟩, fun _ => rfl, ?_⟩
+      fun bound atStart _ => ⟨atStart.trans (Nat.le_max_left _ _), nofun⟩, fun _ => rfl, ?_,
+      fun _ _ => .inl rfl⟩
     · intro p member
       have same : p = x := List.mem_singleton.mp member
       subst p
@@ -644,7 +733,7 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
       · simp only [Run.append, split]
       · exact found
     obtain ⟨before, trace, balance, debt, effective, u, middle, capped, flagged, earlier,
-      priorHigh, priorNone, priorPot⟩ := ih middleEarly middleEpoch priorGuards priorOk
+      priorHigh, priorNone, priorPot, priorOrigin⟩ := ih middleEarly middleEpoch priorGuards priorOk
     obtain ⟨w, final, _⟩ := (Run.nil.snoc step).registryLifecycle.validators i.toNat u middle
     obtain ⟨retained, window, quotient_le, noCrossing⟩ := guards pre step .nil rfl w final
     obtain ⟨old, located, life⟩ := pre.registryLifecycle.validators i.toNat v initial
@@ -673,7 +762,7 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
         have equal := Option.some.inj (located.symm.trans final)
         subst z
         simp [marked]
-    refine ⟨last, done, atEnd, ?_, highBound, w, final, capBound, used, ?_, ?_, ?_, ?_⟩
+    refine ⟨last, done, atEnd, ?_, highBound, w, final, capBound, used, ?_, ?_, ?_, ?_, ?_⟩
     · simp only [exactEvents, List.map_append, List.sum_append]
       omega
     · intro p member
@@ -813,6 +902,19 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
             (getCurrentEpoch m.state).toNat - (getCurrentEpoch x.state).toNat + 1 := by omega
         rw [steps]
         exact crossClosed
+    · intro aligned fulu
+      have forkM : .fusaka ≤ m.fork := Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps)
+      have room : i.toNat < m.state.validators.data.size :=
+        Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp initial).1 pre.registryLifecycle.size_le
+      have matchedN : n.state.balances.data.size = n.state.validators.data.size :=
+        reachable_balancesMatch (shared.append (pre.snoc step)) genesis
+      rcases effective_origin_step step i.toNat room matchedN forkM early with kept | set
+      · rcases priorOrigin aligned fulu with prior | ⟨k, head, rest, split, eq, below, whole⟩
+        · exact .inl (kept.trans prior)
+        · exact .inr ⟨k, head, rest.snoc step, by simp only [Run.append, split], kept.trans eq,
+            below, whole⟩
+      · exact .inr ⟨n, pre.snoc step, .nil, rfl, rfl, set,
+          effective_aligned_at (shared.append (pre.snoc step)) genesis aligned i.toNat⟩
 
 /-- The per-key accounting trace of a branch, from a floor.
 
@@ -961,7 +1063,7 @@ theorem FloorTrace.run_potential_floor
     · obtain ⟨z, found, marked⟩ := tail.slashedPersistence i.toNat v initial flag
       have := clean z found
       simp [marked] at this
-  obtain ⟨last, -, -, -, -, w, -, -, -, -, -, -, potential⟩ :=
+  obtain ⟨last, -, -, -, -, w, -, -, -, -, -, -, potential, -⟩ :=
     FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
       initial (Or.inr fulu) 0 0 quotient (Nat.zero_le _) positive
       (fun pre step post split w found => by
