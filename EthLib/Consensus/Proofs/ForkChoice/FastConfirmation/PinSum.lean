@@ -867,7 +867,7 @@ private theorem epochReplayAction_slashing_credit {fork : Fork} (k : EpochStage)
     simp only [epochReplayAction, recordBalance, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at ok
     obtain ⟨⟨credit, debit⟩, limited, after, computed, rfl⟩ := ok
-    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at limited
+    simp only [Prod.mk.injEq] at limited
     obtain ⟨_, _, zero, _⟩ := limited
     intro e member source
     rcases List.mem_append.mp member with old | new
@@ -948,22 +948,23 @@ private theorem block_event_credit {g : ForkedBeaconState preset} {fork : Fork}
     replayed e member
   have limit := keyCredit_le_creditLimit i e (bounded e member)
   by_cases rc : e.source = .rewards ∨ e.source = .consolidations
-  · simp [rc]
+  · simp only [rc, ↓reduceIte]
+    omega
   by_cases sl : e.source = .slashings
-  · simp [rc, sl]
+  · simp [sl]
   by_cases sy : e.source = .sync
-  · simp [rc, sl, sy, syncCredit, keyCredit]
+  · simp [sy, syncCredit, keyCredit]
   have zero : e.creditLimit = 0 := by
     by_contra pos
     rcases positive (Nat.pos_of_ne_zero pos) with h | h | h | h | h
     · exact rc (.inl h)
     · exact sy h
     · exact sl h
-    · exact pos (funding_block_events (config := config) (checks := checks) early engine s
+    · exact pos (funding_block_events (config := config) (checks := checks) early engine
         signed.message (Step.balanceEvents_block early replayed) e member h
         (Nat.le_trans electra fk))
     · exact rc (.inr h)
-  rw [if_neg rc, if_neg sl]
+  simp only [rc, sl, ↓reduceIte]
   omega
 
 /-- An event of a slot step, but for the epoch rewards, credits a key only from `credC` and sync. -/
@@ -983,7 +984,7 @@ private theorem slot_event_credit {g m n : ForkedBeaconState preset}
   by_cases cd : e.source = .consolidations ∨ e.source = .deposits
   · simp [cd]
   by_cases sy : e.source = .sync
-  · simp [cd, sy, syncCredit, keyCredit]
+  · simp [sy, syncCredit, keyCredit]
   have zero : e.creditLimit = 0 := by
     by_contra pos
     rcases positive (Nat.pos_of_ne_zero pos) with h | h | h | h | h
@@ -992,7 +993,7 @@ private theorem slot_event_credit {g m n : ForkedBeaconState preset}
     · exact pos (slot_slashing_credit early replayed e member h)
     · exact cd (.inr h)
     · exact cd (.inl h)
-  rw [if_neg cd]
+  simp only [cd, ↓reduceIte]
   omega
 
 /-- The events that a filter selects sum as the events with the others at zero. -/
@@ -1004,8 +1005,8 @@ private theorem sum_filter_ite (events : List (BalanceEvent preset))
   | nil => rfl
   | cons e rest ih =>
     by_cases h : p e.source = true
-    · simp [List.filter_cons, h, ih]
-    · simp [List.filter_cons, h, ih]
+    · simp [h, ih]
+    · simp [h, ih]
 
 /-- A bound for each selected event gives the bound for the sums of the credits that it splits. -/
 private theorem sum_credits_split (events : List (BalanceEvent preset))
@@ -1018,9 +1019,9 @@ private theorem sum_credits_split (events : List (BalanceEvent preset))
   rw [sum_filter_ite, sum_filter_ite, sum_filter_ite, ← List.sum_map_add, ← List.sum_map_add]
   refine List.sum_le_sum fun e member => ?_
   by_cases hr : r e.source = true
-  · rw [if_pos hr]
+  · simp only [hr, ↓reduceIte]
     exact each e member hr
-  · rw [if_neg hr]
+  · simp only [hr, ↓reduceIte]
     exact Nat.zero_le _
 
 /-- A bound for each event of a list gives the bound for the sum of all its credits. -/
@@ -1040,7 +1041,7 @@ private theorem sum_filter_none (events : List (BalanceEvent preset))
     ((events.filter fun _ => false).map f).sum = 0 := by
   induction events with
   | nil => rfl
-  | cons e rest ih => simpa [List.filter_cons] using ih
+  | cons e rest ih => simp [List.filter_cons]
 
 /-- The events of a step are within their credit limits. -/
 private theorem step_events_bounded {g m n : ForkedBeaconState preset}
@@ -1070,7 +1071,7 @@ private theorem step_credit_le_sources {g m n : ForkedBeaconState preset}
       stepCredit (fun s => decide (s = .slashings)) (fun _ => false) i step +
       (events.map (syncCredit i)).sum := by
   have bounded := step_events_bounded shared genesis step early replayed
-  have base := step_balance_le_events step early i replayed
+  have base := PinSplit2.step_balance_le_events step early i replayed
   cases step with
   | block engine signed due ok =>
     have each := block_event_credit shared genesis early electra i replayed bounded
